@@ -255,6 +255,72 @@ describe('dependsOn parsing', () => {
 });
 
 // ---------------------------------------------------------------------------
+// listClosedWork
+// ---------------------------------------------------------------------------
+
+describe('listClosedWork', () => {
+  it('fetches closed issues for the given milestone number', async () => {
+    const closedIssues = [
+      makeIssue({
+        number: 20,
+        title: 'Done feature',
+        labels: [{ name: 'factory:done' }],
+        milestone: { number: 2, title: 'M2', description: null, due_on: null, state: 'closed' },
+      }),
+      makeIssue({
+        number: 21,
+        title: 'Archived chore',
+        labels: [{ name: 'factory:archived' }, { name: 'type:chore' }],
+        milestone: { number: 2, title: 'M2', description: null, due_on: null, state: 'closed' },
+      }),
+    ];
+
+    vi.stubGlobal(
+      'fetch',
+      mockFetchByUrl((url) => {
+        expect(url).toContain('state=closed');
+        expect(url).toContain('milestone=2');
+        return new Response(JSON.stringify(closedIssues), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }),
+    );
+
+    const source = makeSource();
+    const items = await source.listClosedWork(2);
+
+    expect(items).toHaveLength(2);
+    expect(items[0].externalId).toBe('20');
+    expect(items[0].state).toBe('factory:done');
+    expect(items[1].externalId).toBe('21');
+    expect(items[1].type).toBe('chore');
+  });
+
+  it('filters out pull requests from closed issues', async () => {
+    const mixed = [
+      makeIssue({ number: 30, labels: [{ name: 'factory:done' }] }),
+      { ...makeIssue({ number: 31 }), pull_request: {} },
+    ];
+
+    vi.stubGlobal(
+      'fetch',
+      mockFetchByUrl(() =>
+        new Response(JSON.stringify(mixed), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+
+    const source = makeSource();
+    const items = await source.listClosedWork(2);
+    expect(items).toHaveLength(1);
+    expect(items[0].externalId).toBe('30');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Auth failure
 // ---------------------------------------------------------------------------
 
