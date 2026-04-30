@@ -12,6 +12,7 @@ import { isLegalTransition, legalTargets } from '@goose-hub/core/state-machine/t
 import { readActiveMilestone, writeActiveMilestone } from './active-milestone.js';
 import { getProject, listProjects } from './projects.js';
 import { getSourceForSlug } from './source.js';
+import { bustCache, getCached } from './cache.js';
 
 const app = new Hono();
 app.use('*', cors());
@@ -27,7 +28,7 @@ app.get('/projects/:slug/issues', async (c) => {
   const slug = c.req.param('slug');
   const source = await getSourceForSlug(slug);
   if (source == null) return c.json({ error: 'project not found' }, 404);
-  const items = await source.listOpenWork();
+  const items = await getCached(`issues:${slug}`, 60_000, () => source.listOpenWork());
   return c.json({ items });
 });
 
@@ -44,7 +45,7 @@ app.get('/projects/:slug/milestones', async (c) => {
   const slug = c.req.param('slug');
   const source = await getSourceForSlug(slug);
   if (source == null) return c.json({ error: 'project not found' }, 404);
-  const milestones = await source.listMilestones();
+  const milestones = await getCached(`milestones:${slug}`, 60_000, () => source.listMilestones());
   return c.json({ milestones });
 });
 
@@ -112,6 +113,8 @@ app.post('/projects/:slug/issues/:id/transition', async (c) => {
     kind: 'state.transitioned',
     payload: { from, to, by: 'ui' },
   });
+
+  bustCache(`issues:${slug}`);
 
   return c.json({ ok: true, from, to });
 });
