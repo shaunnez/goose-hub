@@ -1,8 +1,9 @@
 import { type WorkItemDto, fetchIssue, fetchIssues } from '@/lib/api';
 import { LANES, laneForState, sortLaneItems } from '@/lib/lanes.config';
 import { useActiveMilestone } from '@/state/active-milestone';
+import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DeferredSurface } from './DeferredSurface';
 import { LeftRail } from './LeftRail';
@@ -20,53 +21,35 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
   const { slug = 'goose-hub-self', id = '' } = useParams<{ slug: string; id: string }>();
   const navigate = useNavigate();
   const { activeNumber } = useActiveMilestone();
-  const [item, setItem] = useState<WorkItemDto | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [siblings, setSiblings] = useState<string[]>([]);
+
+  const { data: item, isLoading, isError, error } = useQuery({
+    queryKey: ['issue', slug, id],
+    queryFn: () => fetchIssue(slug, id),
+    enabled: id.length > 0,
+  });
+
+  // Reuse the board's cached issues list for sibling navigation — no extra fetch.
+  const { data: allIssues = [] } = useQuery({
+    queryKey: ['issues', slug],
+    queryFn: () => fetchIssues(slug),
+  });
+
+  const siblings = useMemo(() => {
+    const filtered =
+      activeNumber != null
+        ? allIssues.filter((it) => it.milestoneId === String(activeNumber))
+        : allIssues;
+    const ordered: string[] = [];
+    for (const lane of LANES) {
+      const inLane = filtered.filter((it) => laneForState(it.state) === lane.key);
+      for (const it of sortLaneItems(inLane)) ordered.push(it.externalId);
+    }
+    return ordered;
+  }, [allIssues, activeNumber]);
 
   const onBack = useCallback(() => {
     navigate(`/projects/${slug}`);
   }, [navigate, slug]);
-
-  // Load the work item.
-  useEffect(() => {
-    let cancelled = false;
-    setError(null);
-    setItem(null);
-    fetchIssue(slug, id)
-      .then((next) => {
-        if (!cancelled) setItem(next);
-      })
-      .catch((err: Error) => {
-        if (!cancelled) setError(err.message);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [slug, id]);
-
-  // Load sibling order in current lane within active milestone — used for J/K nav.
-  useEffect(() => {
-    let cancelled = false;
-    fetchIssues(slug)
-      .then((list) => {
-        if (cancelled) return;
-        const filtered =
-          activeNumber != null
-            ? list.filter((it) => it.milestoneId === String(activeNumber))
-            : list;
-        const ordered: string[] = [];
-        for (const lane of LANES) {
-          const inLane = filtered.filter((it) => laneForState(it.state) === lane.key);
-          for (const it of sortLaneItems(inLane)) ordered.push(it.externalId);
-        }
-        setSiblings(ordered);
-      })
-      .catch(() => setSiblings([]));
-    return () => {
-      cancelled = true;
-    };
-  }, [slug, activeNumber]);
 
   const onPrev = useCallback(() => {
     if (siblings.length === 0) return;
@@ -105,12 +88,20 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onBack, onNext, onPrev]);
 
-  if (error != null) {
+  if (isLoading) {
+    return (
+      <div className="h-full flex items-center justify-center text-fg-3 text-sm">
+        Loading issue…
+      </div>
+    );
+  }
+
+  if (isError) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-3 text-center px-8">
         <div className="text-[color:var(--danger)] text-sm">Couldn't load this issue.</div>
         <pre className="font-mono text-[11.5px] text-fg-3 max-w-2xl whitespace-pre-wrap">
-          {error}
+          {error instanceof Error ? error.message : String(error)}
         </pre>
         <button
           type="button"
@@ -123,20 +114,14 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
     );
   }
 
-  if (item == null) {
-    return (
-      <div className="h-full flex items-center justify-center text-fg-3 text-sm">
-        Loading issue…
-      </div>
-    );
-  }
+  if (item == null) return null;
 
   const currentSection = SECTIONS.find((s) => s.key === section) ?? SECTIONS[0];
   const workItemId = `github:${item.repoRef}#${item.externalId}`;
 
   return (
     <div className="h-full flex flex-col" data-testid="detail-page">
-      {/* breadcrumb (full takeover) */}
+      {/* breadcrumb */}
       <div className="h-[40px] flex items-center gap-3 px-3 border-b border-line bg-bg-glass shrink-0">
         <button
           type="button"
@@ -185,11 +170,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
         </button>
       </div>
 
-      <TaskHeader
-        item={item}
-        projectSlug={slug}
-        onStateChanged={(next) => setItem({ ...item, state: next })}
-      />
+      <TaskHeader item={item} projectSlug={slug} />
 
       <div className="flex-1 min-h-0 flex">
         <LeftRail />

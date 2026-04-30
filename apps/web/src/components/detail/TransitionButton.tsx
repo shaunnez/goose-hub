@@ -1,5 +1,6 @@
-import { transitionState } from '@/lib/api';
+import { type WorkItemDto, transitionState } from '@/lib/api';
 import { LEGAL_TARGETS } from '@/lib/transitions';
+import { useQueryClient } from '@tanstack/react-query';
 import { ArrowRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -7,15 +8,10 @@ interface TransitionButtonProps {
   projectSlug: string;
   id: string;
   currentState: string;
-  onStateChanged: (next: string) => void;
 }
 
-export function TransitionButton({
-  projectSlug,
-  id,
-  currentState,
-  onStateChanged,
-}: TransitionButtonProps) {
+export function TransitionButton({ projectSlug, id, currentState }: TransitionButtonProps) {
+  const queryClient = useQueryClient();
   const targets = LEGAL_TARGETS[currentState] ?? [];
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -47,15 +43,25 @@ export function TransitionButton({
   const onPick = async (to: string) => {
     setBusy(true);
     setError(null);
-    // Optimistic: flip the state pill immediately so the UI feels instant.
     const original = currentState;
-    onStateChanged(to);
+
+    // Optimistic: update the cached item immediately.
+    queryClient.setQueryData<WorkItemDto>(['issue', projectSlug, id], (prev) =>
+      prev != null ? { ...prev, state: to } : prev,
+    );
     setOpen(false);
+
     const { status, data } = await transitionState(projectSlug, id, original, to);
     setBusy(false);
-    if (status >= 200 && status < 300) return;
-    // Roll back.
-    onStateChanged(original);
+
+    if (status >= 200 && status < 300) {
+      // Bust the board cache so it reflects the new state on next visit.
+      void queryClient.invalidateQueries({ queryKey: ['issues', projectSlug] });
+      return;
+    }
+
+    // Revert: refetch the true state from the server.
+    void queryClient.invalidateQueries({ queryKey: ['issue', projectSlug, id] });
     setOpen(true);
     setError(data.error ?? `Transition failed (${status})`);
   };

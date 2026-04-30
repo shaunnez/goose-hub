@@ -31,10 +31,9 @@ const STATE_LABEL: Record<string, string> = {
 interface TaskHeaderProps {
   item: WorkItemDto;
   projectSlug: string;
-  onStateChanged: (next: string) => void;
 }
 
-export function TaskHeader({ item, projectSlug, onStateChanged }: TaskHeaderProps) {
+export function TaskHeader({ item, projectSlug }: TaskHeaderProps) {
   return (
     <div data-testid="task-header" className="px-6 py-4 border-b border-line bg-bg-elev shrink-0">
       <div className="flex items-start gap-4">
@@ -63,7 +62,6 @@ export function TaskHeader({ item, projectSlug, onStateChanged }: TaskHeaderProp
             projectSlug={projectSlug}
             id={item.externalId}
             currentState={item.state}
-            onStateChanged={onStateChanged}
           />
         </div>
       </div>
