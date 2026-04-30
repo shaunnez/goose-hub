@@ -1,18 +1,18 @@
-import { config } from 'dotenv';
 import { resolve } from 'node:path';
+import { config } from 'dotenv';
 config({ path: resolve(import.meta.dirname, '../../../.env') });
 
-import { serve } from '@hono/node-server';
-import { Hono } from 'hono';
-import { cors } from 'hono/cors';
 import { buildSseStream } from '@goose-hub/core/event-stream/sse.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { isLegalTransition, legalTargets } from '@goose-hub/core/state-machine/transitions.js';
+import { serve } from '@hono/node-server';
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import { readActiveMilestone, writeActiveMilestone } from './active-milestone.js';
+import { bustCache, getCached } from './cache.js';
 import { getProject, listProjects } from './projects.js';
 import { getSourceForSlug } from './source.js';
-import { bustCache, getCached } from './cache.js';
 
 const app = new Hono();
 app.use('*', cors());
@@ -39,6 +39,20 @@ app.get('/projects/:slug/issues/:id', async (c) => {
   if (source == null) return c.json({ error: 'project not found' }, 404);
   const item = await source.getItem(id);
   return c.json({ item });
+});
+
+app.get('/projects/:slug/milestones/:milestone/closed-issues', async (c) => {
+  const slug = c.req.param('slug');
+  const milestone = Number(c.req.param('milestone'));
+  if (Number.isNaN(milestone)) return c.json({ error: 'invalid milestone number' }, 400);
+  const source = await getSourceForSlug(slug);
+  if (source == null) return c.json({ error: 'project not found' }, 404);
+  const items = await getCached(
+    `closed-issues:${slug}:${milestone}`,
+    60_000,
+    () => source.listClosedWork(milestone),
+  );
+  return c.json({ items });
 });
 
 app.get('/projects/:slug/milestones', async (c) => {
@@ -142,8 +156,10 @@ app.get('/events', (c) => {
   });
 });
 
-const port = Number(process.env.PORT ?? 3001);
-serve({ fetch: app.fetch, port });
-console.log(`apps/server listening on http://localhost:${port}`);
+if (process.env.VITEST == null) {
+  const port = Number(process.env.PORT ?? 3001);
+  serve({ fetch: app.fetch, port });
+  console.log(`apps/server listening on http://localhost:${port}`);
+}
 
 export { app };
