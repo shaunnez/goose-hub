@@ -2,8 +2,9 @@ import { type WorkItemDto, fetchIssues } from '@/lib/api';
 import { LANES, laneForState, sortLaneItems } from '@/lib/lanes.config';
 import { useActiveMilestone } from '@/state/active-milestone';
 import { useLaneVisibility } from '@/state/lane-visibility';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, RefreshCw } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { BoardColumn } from './BoardColumn';
 
 interface BoardProps {
@@ -11,38 +12,22 @@ interface BoardProps {
 }
 
 export function Board({ projectSlug }: BoardProps) {
-  const [items, setItems] = useState<WorkItemDto[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const queryClient = useQueryClient();
   const { hidden, toggle, reset } = useLaneVisibility();
   const { activeNumber: resolvedMilestone } = useActiveMilestone();
 
-  useEffect(() => {
-    // reloadKey participates so the Retry button can trigger a re-fetch.
-    void reloadKey;
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    fetchIssues(projectSlug)
-      .then((list) => {
-        if (cancelled) return;
-        setItems(list);
-        setLoading(false);
-      })
-      .catch((err: Error) => {
-        if (cancelled) return;
-        setError(err.message);
-        setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectSlug, reloadKey]);
+  const {
+    data: items = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['issues', projectSlug],
+    queryFn: () => fetchIssues(projectSlug),
+  });
 
-  // Listen for state.transitioned events from the SSE stream and patch the
-  // affected card in place. Keeps the Board fresh without re-fetching the
-  // entire issue list.
+  // SSE: patch board state in-place on transition events.
   useEffect(() => {
     const url = `/events?projectId=${encodeURIComponent(projectSlug)}`;
     const es = new EventSource(url);
@@ -55,13 +40,15 @@ export function Board({ projectSlug }: BoardProps) {
         if (payload.workItemId == null || payload.payload?.to == null) return;
         const externalId = payload.workItemId.split('#').pop();
         if (externalId == null) return;
-        setItems((prev) =>
-          prev.map((it) =>
-            it.externalId === externalId ? { ...it, state: payload.payload.to as string } : it,
-          ),
+        queryClient.setQueryData<WorkItemDto[]>(['issues', projectSlug], (prev) =>
+          prev?.map((it) =>
+            it.externalId === externalId
+              ? { ...it, state: payload.payload.to as string }
+              : it,
+          ) ?? prev,
         );
       } catch {
-        // ignore
+        // ignore malformed events
       }
     };
     es.addEventListener('state.transitioned', onTransition as EventListener);
@@ -69,7 +56,7 @@ export function Board({ projectSlug }: BoardProps) {
       es.removeEventListener('state.transitioned', onTransition as EventListener);
       es.close();
     };
-  }, [projectSlug]);
+  }, [projectSlug, queryClient]);
 
   const filtered = useMemo(() => {
     if (resolvedMilestone == null) return items;
@@ -94,7 +81,7 @@ export function Board({ projectSlug }: BoardProps) {
   const visibleLanes = useMemo(() => LANES.filter((l) => !hidden.has(l.key)), [hidden]);
   const hiddenLanes = useMemo(() => LANES.filter((l) => hidden.has(l.key)), [hidden]);
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="h-full flex items-center justify-center text-fg-3 text-sm">
         Loading issues from GitHub…
@@ -102,16 +89,16 @@ export function Board({ projectSlug }: BoardProps) {
     );
   }
 
-  if (error != null) {
+  if (isError) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-3 text-center px-8">
         <div className="text-[color:var(--danger)] text-sm">Couldn't load issues.</div>
         <pre className="font-mono text-[11.5px] text-fg-3 max-w-2xl whitespace-pre-wrap">
-          {error}
+          {error instanceof Error ? error.message : String(error)}
         </pre>
         <button
           type="button"
-          onClick={() => setReloadKey((k) => k + 1)}
+          onClick={() => void refetch()}
           className="h-7 px-3 rounded-md border border-line text-[12px] hover:bg-bg-hover"
         >
           <RefreshCw size={12} className="inline mr-1" /> Retry
