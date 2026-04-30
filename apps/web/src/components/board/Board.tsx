@@ -1,4 +1,4 @@
-import { type WorkItemDto, fetchIssues } from '@/lib/api';
+import { type WorkItemDto, fetchClosedIssues, fetchIssues } from '@/lib/api';
 import { LANES, laneForState, sortLaneItems } from '@/lib/lanes.config';
 import { useActiveMilestone } from '@/state/active-milestone';
 import { useLaneVisibility } from '@/state/lane-visibility';
@@ -15,7 +15,13 @@ interface BoardProps {
 export function Board({ projectSlug }: BoardProps) {
   const queryClient = useQueryClient();
   const { hidden, toggle, reset } = useLaneVisibility();
-  const { activeNumber: resolvedMilestone } = useActiveMilestone();
+  const { activeNumber: resolvedMilestone, milestones } = useActiveMilestone();
+
+  const activeMilestone = useMemo(
+    () => milestones.find((m) => m.number === resolvedMilestone) ?? null,
+    [milestones, resolvedMilestone],
+  );
+  const isClosed = activeMilestone != null && !activeMilestone.isActive;
 
   const {
     data: items = [],
@@ -24,8 +30,14 @@ export function Board({ projectSlug }: BoardProps) {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['issues', projectSlug],
-    queryFn: () => fetchIssues(projectSlug),
+    queryKey:
+      isClosed && resolvedMilestone != null
+        ? ['closed-issues', projectSlug, resolvedMilestone]
+        : ['issues', projectSlug],
+    queryFn: () =>
+      isClosed && resolvedMilestone != null
+        ? fetchClosedIssues(projectSlug, resolvedMilestone)
+        : fetchIssues(projectSlug),
   });
 
   // SSE: patch board state in-place on transition events.
