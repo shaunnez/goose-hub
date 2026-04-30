@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { Board } from './components/board/Board';
 import { AppShell } from './components/chrome/AppShell';
+import { ActiveMilestoneProvider } from './state/active-milestone';
 import { ActiveProjectProvider } from './state/active-project';
 import { LaneVisibilityProvider } from './state/lane-visibility';
 
@@ -23,11 +24,14 @@ function KanbanPage() {
 
 function ProjectRoutes() {
   const params = useParams<{ slug?: string }>();
+  const slug = params.slug ?? 'goose-hub-self';
   return (
-    <ActiveProjectProvider initialSlug={params.slug}>
-      <LaneVisibilityProvider>
-        <KanbanPage />
-      </LaneVisibilityProvider>
+    <ActiveProjectProvider initialSlug={slug}>
+      <ActiveMilestoneProvider projectSlug={slug}>
+        <LaneVisibilityProvider>
+          <KanbanPage />
+        </LaneVisibilityProvider>
+      </ActiveMilestoneProvider>
     </ActiveProjectProvider>
   );
 }

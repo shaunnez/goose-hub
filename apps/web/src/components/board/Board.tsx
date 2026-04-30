@@ -1,5 +1,6 @@
-import { type WorkItemDto, fetchActiveMilestone, fetchIssues } from '@/lib/api';
+import { type WorkItemDto, fetchIssues } from '@/lib/api';
 import { LANES, laneForState, sortLaneItems } from '@/lib/lanes.config';
+import { useActiveMilestone } from '@/state/active-milestone';
 import { useLaneVisibility } from '@/state/lane-visibility';
 import { Eye, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -7,38 +8,15 @@ import { BoardColumn } from './BoardColumn';
 
 interface BoardProps {
   projectSlug: string;
-  milestoneFilter?: number | null;
 }
 
-export function Board({ projectSlug, milestoneFilter }: BoardProps) {
+export function Board({ projectSlug }: BoardProps) {
   const [items, setItems] = useState<WorkItemDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const [resolvedMilestone, setResolvedMilestone] = useState<number | null | undefined>(
-    milestoneFilter,
-  );
   const { hidden, toggle, reset } = useLaneVisibility();
-
-  // Resolve milestone: explicit filter wins; otherwise use server's
-  // active-milestone (project_state, falling back to GitHub default).
-  useEffect(() => {
-    if (milestoneFilter !== undefined) {
-      setResolvedMilestone(milestoneFilter);
-      return;
-    }
-    let cancelled = false;
-    fetchActiveMilestone(projectSlug)
-      .then(({ milestoneNumber }) => {
-        if (!cancelled) setResolvedMilestone(milestoneNumber);
-      })
-      .catch(() => {
-        if (!cancelled) setResolvedMilestone(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectSlug, milestoneFilter]);
+  const { activeNumber: resolvedMilestone } = useActiveMilestone();
 
   useEffect(() => {
     // reloadKey participates so the Retry button can trigger a re-fetch.
