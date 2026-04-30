@@ -244,7 +244,9 @@ export class GitHubLabelsSource implements StateSource {
   async listMilestones(): Promise<Milestone[]> {
     const url = `https://api.github.com/repos/${this.repoRef}/milestones?state=all&per_page=100`;
     const milestones = await this.paginateAll<GithubMilestone>(url);
-    return milestones.map(mapGithubMilestone);
+    return milestones
+      .filter((m) => !m.title.startsWith('[E2E]'))
+      .map(mapGithubMilestone);
   }
 
   async getActiveMilestone(): Promise<Milestone | null> {
@@ -292,6 +294,34 @@ export class GitHubLabelsSource implements StateSource {
 
     if (note != null && note.length > 0) {
       await this.comment(itemId, note);
+    }
+  }
+
+  async forceState(itemId: string, to: StateName): Promise<void> {
+    const match = itemId.match(/#(\d+)$/);
+    const number = match != null ? match[1] : itemId;
+
+    const labelsUrl = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels`;
+    const labelsRes = await this.ghFetch(labelsUrl);
+    const currentLabels = (await labelsRes.json()) as { name: string }[];
+
+    for (const label of currentLabels) {
+      if (!label.name.startsWith('factory:')) continue;
+      const removeUrl = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels/${encodeURIComponent(label.name)}`;
+      const res = await fetch(removeUrl, { method: 'DELETE', headers: this.baseHeaders });
+      if (!res.ok && res.status !== 404) {
+        throw new Error(`Failed to remove label ${label.name}: ${res.status} ${res.statusText}`);
+      }
+    }
+
+    const addUrl = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels`;
+    const addRes = await fetch(addUrl, {
+      method: 'POST',
+      headers: { ...this.baseHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ labels: [to] }),
+    });
+    if (!addRes.ok) {
+      throw new Error(`Failed to add label ${to}: ${addRes.status} ${addRes.statusText}`);
     }
   }
 
