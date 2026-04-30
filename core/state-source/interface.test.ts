@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { StateName } from '../state-machine/states.js';
 import type {
   Artifact,
   CreateIssueInput,
@@ -8,7 +9,6 @@ import type {
   Subscription,
   WorkItem,
 } from './interface.js';
-import type { StateName } from '../state-machine/states.js';
 
 class StubStateSource implements StateSource {
   projectId = 'stub-project';

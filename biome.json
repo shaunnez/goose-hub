@@ -20,6 +20,6 @@
     "formatter": { "quoteStyle": "single", "trailingCommas": "all", "semicolons": "always" }
   },
   "files": {
-    "ignore": ["**/dist/**", "**/node_modules/**", "**/*.json", "scripts/"]
+    "ignore": ["**/dist/**", "**/node_modules/**", "**/*.json", "scripts/", ".claude/"]
   }
 }
