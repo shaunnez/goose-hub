@@ -43,11 +43,12 @@ Use these. Don't introduce new heavyweight dependencies without an ADR.
 
 When prompted with "start the next issue" (or similar), resolve the issue to work on as follows:
 
-1. Run: `gh issue list --milestone "M1: Bootstrap Source of Truth" --label "schedule:current" --state open --json number,title,labels --jq 'sort_by(.number)'`
+1. Run: `gh issue list --milestone "M1: Bootstrap Source of Truth" --label "schedule:current" --state open --json number,title,body,labels --jq 'sort_by(.number)'`
 2. Skip any issue already labeled `factory:in-progress`.
-3. Pick the lowest-numbered remaining issue.
-4. Label it `factory:in-progress` on GitHub immediately: `gh issue edit <N> --add-label "factory:in-progress"`
-5. Then follow "How to approach a task" below.
+3. For each remaining issue in ascending number order, check its body for `Depends on #N` lines. Fetch each referenced issue number with `gh issue view <N> --json state` and skip this issue if any dependency is still open.
+4. Pick the lowest-numbered issue that passes the dependency check.
+5. Label it `factory:in-progress` on GitHub immediately: `gh issue edit <N> --add-label "factory:in-progress"`
+6. Then follow "How to approach a task" below.
 
 Update the milestone name as the active milestone advances.
 
