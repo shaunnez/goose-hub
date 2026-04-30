@@ -47,7 +47,13 @@ Use these. Don't introduce new heavyweight dependencies without an ADR.
 6. If still unsure, label the issue `factory:gate-pending` and request human input. Do not guess on architectural decisions.
 7. Follow TDD: write the failing test first, then the implementation, then refactor.
 8. Run lint and tests before opening a PR.
-9. Open PR with a clear description linking back to the issue. Do not include implementation reasoning the QA/Reviewer agents shouldn't see — that goes in `agent.decision-summary` events, not PR descriptions.
+9. Open PR with a clear description linking back to the issue. Always include `Closes #N` (where N is the issue number) in the PR body so GitHub auto-closes the issue on merge. Do not include implementation reasoning the QA/Reviewer agents shouldn't see — that goes in `agent.decision-summary` events, not PR descriptions.
+
+## PR conventions
+
+- Title format: `M<milestone>.<task>: <short description>` — e.g. `M1.01: state enum`
+- Body must contain `Closes #N` on its own line to trigger GitHub's auto-close on merge
+- No implementation reasoning in the body (QA/Review are holdouts)
 
 ## Decision summaries
 
