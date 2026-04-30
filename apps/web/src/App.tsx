@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { AppShell } from './components/chrome/AppShell';
+import { ActiveProjectProvider } from './state/active-project';
 
 function KanbanPlaceholder() {
   const { slug = 'goose-hub-self' } = useParams<{ slug: string }>();
@@ -20,12 +21,21 @@ function KanbanPlaceholder() {
   );
 }
 
+function ProjectRoutes() {
+  const params = useParams<{ slug?: string }>();
+  return (
+    <ActiveProjectProvider initialSlug={params.slug}>
+      <KanbanPlaceholder />
+    </ActiveProjectProvider>
+  );
+}
+
 export function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Navigate to="/projects/goose-hub-self" replace />} />
-        <Route path="/projects/:slug" element={<KanbanPlaceholder />} />
+        <Route path="/projects/:slug" element={<ProjectRoutes />} />
       </Routes>
     </BrowserRouter>
   );
