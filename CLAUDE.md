@@ -37,6 +37,18 @@ You execute one narrow GitHub issue at a time. The issue is your build spec.
 
 Use these. Don't introduce new heavyweight dependencies without an ADR.
 
+## Starting the next issue
+
+When prompted with "start the next issue" (or similar), resolve the issue to work on as follows:
+
+1. Run: `gh issue list --milestone "M1: Bootstrap Source of Truth" --label "schedule:current" --state open --json number,title,labels --jq 'sort_by(.number)'`
+2. Skip any issue already labeled `factory:in-progress`.
+3. Pick the lowest-numbered remaining issue.
+4. Label it `factory:in-progress` on GitHub immediately: `gh issue edit <N> --add-label "factory:in-progress"`
+5. Then follow "How to approach a task" below.
+
+Update the milestone name as the active milestone advances.
+
 ## How to approach a task
 
 1. Read the issue carefully. Identify the acceptance criteria.
