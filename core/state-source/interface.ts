@@ -1,5 +1,6 @@
 import type { StateName } from '../state-machine/states.js';
 
+// Supporting types
 export type WorkItemType = 'feature' | 'bug' | 'chore' | 'research';
 export type Priority = 'critical' | 'high' | 'medium' | 'low';
 export type Mode = 'interactive' | 'supervised' | 'autonomous';
@@ -7,9 +8,9 @@ export type Schedule = 'current' | 'next' | 'later' | 'blocked-by';
 export type ExecMode = 'serial' | 'parallel';
 
 export interface WorkItem {
-  id: string;
-  externalId: string;
-  repoRef: string;
+  id: string; // global: "github:shaunnez/goose-hub#42"
+  externalId: string; // "42" or "PROJ-123"
+  repoRef: string; // "shaunnez/goose-hub"
   title: string;
   body: string;
   type: WorkItemType;
@@ -21,7 +22,7 @@ export interface WorkItem {
   milestoneId?: string;
   schedule: Schedule;
   exec: ExecMode;
-  dependsOn: string[];
+  dependsOn: string[]; // repo-qualified refs parsed from body
   blocks: string[];
   createdAt: Date;
 }
@@ -61,13 +62,16 @@ export interface Subscription {
 export interface StateSource {
   projectId: string;
   repoRef: string;
+
   listOpenWork(): Promise<WorkItem[]>;
   getItem(itemId: string): Promise<WorkItem>;
   listMilestones(): Promise<Milestone[]>;
   getActiveMilestone(): Promise<Milestone | null>;
+
   transitionState(itemId: string, from: StateName, to: StateName, note?: string): Promise<void>;
   comment(itemId: string, body: string): Promise<void>;
   attach(itemId: string, artifact: Artifact): Promise<void>;
   createIssue(input: CreateIssueInput): Promise<WorkItem>;
+
   watchForUpdates(callback: (event: SourceEvent) => void): Promise<Subscription>;
 }

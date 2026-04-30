@@ -8,19 +8,29 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "install-labels": "tsx scripts/install-labels.ts",
+    "db:migrate": "drizzle-kit push --config=drizzle.config.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.0.0",
+    "drizzle-kit": "^0.31.10",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vitest": "^3.0.0"
   },
   "dependencies": {
-    "dotenv": "^16.4.7"
+    "better-sqlite3": "^12.9.0",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.45.2"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["@biomejs/biome", "esbuild"]
+    "onlyBuiltDependencies": [
+      "@biomejs/biome",
+      "better-sqlite3",
+      "esbuild"
+    ]
   }
 }

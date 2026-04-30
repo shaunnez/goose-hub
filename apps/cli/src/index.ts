@@ -1,44 +1,13 @@
 #!/usr/bin/env tsx
 import 'dotenv/config';
 import { STATES } from '../../../core/state-machine/states.js';
-import type { StateName } from '../../../core/state-machine/states.js';
 import type { ProjectConfig } from '../../../core/types.js';
 import gooseHubSelf from '../../../target-projects/goose-hub-self/project.config.js';
+import { groupIssues, resolveState } from './lib.js';
+import type { GHIssue } from './lib.js';
 
 const registry: Record<string, ProjectConfig> = {
   'goose-hub-self': gooseHubSelf,
-};
-
-const STATE_SET = new Set<string>(STATES);
-
-type StateResolution = {
-  state: StateName;
-  conflict: boolean;
-  raw: StateName[];
-};
-
-function resolveState(labelNames: string[]): StateResolution {
-  const stateLabels = labelNames.filter((l) => STATE_SET.has(l)) as StateName[];
-
-  if (stateLabels.length === 0) {
-    return { state: 'factory:triaging', conflict: true, raw: [] };
-  }
-  if (stateLabels.length === 1) {
-    return { state: stateLabels[0] as StateName, conflict: false, raw: stateLabels };
-  }
-  // archived always wins
-  if (stateLabels.includes('factory:archived')) {
-    return { state: 'factory:archived', conflict: true, raw: stateLabels };
-  }
-  // pick most-advanced (highest canonical index)
-  const advanced = stateLabels.reduce((a, b) => (STATES.indexOf(a) >= STATES.indexOf(b) ? a : b));
-  return { state: advanced, conflict: true, raw: stateLabels };
-}
-
-type GHIssue = {
-  number: number;
-  title: string;
-  labels: Array<{ name: string }>;
 };
 
 async function fetchIssues(repo: string, token: string): Promise<GHIssue[]> {
@@ -57,6 +26,9 @@ async function fetchIssues(repo: string, token: string): Promise<GHIssue[]> {
       },
     );
     if (!res.ok) {
+      if (res.status === 401) {
+        throw new Error('GitHub authentication failed. Check your GITHUB_TOKEN.');
+      }
       throw new Error(`GitHub API error: ${res.status} ${await res.text()}`);
     }
     const batch = (await res.json()) as GHIssue[];
@@ -65,6 +37,30 @@ async function fetchIssues(repo: string, token: string): Promise<GHIssue[]> {
     page++;
   }
   return all;
+}
+
+async function fetchActiveMilestone(repo: string, token: string): Promise<string | null> {
+  const res = await fetch(
+    `https://api.github.com/repos/${repo}/milestones?state=open&per_page=50&sort=number&direction=asc`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'goose-hub-cli',
+      },
+    },
+  );
+  if (!res.ok) return null;
+  const milestones = (await res.json()) as Array<{
+    title: string;
+    number: number;
+    open_issues: number;
+    closed_issues: number;
+  }>;
+  if (milestones.length === 0) return null;
+  const m = milestones[0]; // lowest number = active
+  return `${m.title} (${m.open_issues} open, ${m.closed_issues} closed)`;
 }
 
 async function statusCommand(slug: string): Promise<void> {
@@ -88,31 +84,67 @@ async function statusCommand(slug: string): Promise<void> {
   }
 
   const { repo } = config.source;
+
+  let issues: GHIssue[];
+  let activeMilestone: string | null;
+
+  try {
+    [issues, activeMilestone] = await Promise.all([
+      fetchIssues(repo, token),
+      fetchActiveMilestone(repo, token),
+    ]);
+  } catch (err) {
+    console.error((err as Error).message);
+    process.exit(1);
+  }
+
   console.log(`${config.name} (${repo})`);
+  if (activeMilestone) {
+    console.log(`Active milestone: ${activeMilestone}`);
+  }
   console.log('─'.repeat(70));
 
-  const issues = await fetchIssues(repo, token);
-  let conflicts = 0;
+  const resolved = issues.map((issue) => ({
+    issue,
+    resolution: resolveState(issue.labels.map((l) => l.name)),
+  }));
 
-  for (const issue of issues) {
-    const labelNames = issue.labels.map((l) => l.name);
-    const { state, conflict, raw } = resolveState(labelNames);
-    const num = `#${issue.number}`.padStart(5);
-    const title = issue.title.slice(0, 42).padEnd(42);
+  const { byState, conflicts } = groupIssues(resolved);
 
-    if (conflict && raw.length > 1) {
-      conflicts++;
-      console.log(`  ⚠  ${num}  ${title}  CONFLICT [${raw.join(' + ')}] → ${state}`);
-    } else if (conflict && raw.length === 0) {
-      console.log(`  ⚠  ${num}  ${title}  ${state.padEnd(30)}  (no factory label)`);
-    } else {
-      console.log(`     ${num}  ${title}  ${state}`);
+  // Print groups in canonical STATES order, skipping empty groups
+  for (const state of STATES) {
+    const group = byState.get(state);
+    if (!group || group.length === 0) continue;
+
+    console.log(`\n  ${state} (${group.length})`);
+    for (const { issue, resolution } of group) {
+      const num = `#${issue.number}`.padStart(5);
+      const title = issue.title.slice(0, 50);
+      if (resolution.conflict && resolution.raw.length === 0) {
+        console.log(`     ${num}  ${title}  (no factory label)`);
+      } else {
+        console.log(`     ${num}  ${title}`);
+      }
     }
   }
 
-  console.log('─'.repeat(70));
+  // Print conflicts section
+  if (conflicts.length > 0) {
+    console.log(`\n  CONFLICTS (${conflicts.length})`);
+    for (const { issue, resolution } of conflicts) {
+      const num = `#${issue.number}`.padStart(5);
+      const title = issue.title.slice(0, 42).padEnd(42);
+      console.log(
+        `  ⚠  ${num}  ${title}  CONFLICT [${resolution.raw.join(' + ')}] → ${resolution.state}`,
+      );
+    }
+  }
+
+  console.log(`\n${'─'.repeat(70)}`);
   const conflictSuffix =
-    conflicts > 0 ? `, ${conflicts} conflict${conflicts !== 1 ? 's' : ''}` : '';
+    conflicts.length > 0
+      ? `, ${conflicts.length} conflict${conflicts.length !== 1 ? 's' : ''}`
+      : '';
   console.log(
     `Total: ${issues.length} open issue${issues.length !== 1 ? 's' : ''}${conflictSuffix}`,
   );
