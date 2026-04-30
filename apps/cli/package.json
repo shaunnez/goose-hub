@@ -1,0 +1,9 @@
+{
+  "name": "@goose-hub/cli",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "goose": "./src/index.ts"
+  }
+}
