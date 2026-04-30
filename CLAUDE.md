@@ -12,6 +12,8 @@ You execute one narrow GitHub issue at a time. The issue is your build spec.
 
 `docs/PLAN.md` is **the constitution**, not a build spec. Read it for context, vocabulary, and architectural decisions. Do not try to build "from the document." Build from the issue.
 
+`CONTEXT.md` (repo root) records **resolved implementation decisions and canonical domain vocabulary** from design sessions. Read it before writing any code in `core/` or `apps/`. It answers questions like "how does the SSE event stream work," "what format does context take in agent prompts," and "where do improvement candidates get filed." If the code you're about to write touches a decision recorded there, follow it — don't re-litigate it.
+
 ## Hard rules to remember
 
 `FACTORY_RULES.md` lists 28 non-negotiable rules. The ones most likely to bite you:
@@ -49,6 +51,23 @@ When prompted with "start the next issue" (or similar), resolve the issue to wor
 
 Update the milestone name as the active milestone advances.
 
+## When there is no next issue
+
+If the `gh issue list` command above returns no eligible issues — meaning all open issues in the active milestone either:
+- Don't exist (the milestone has no remaining open issues), OR
+- Have unmet `Depends on #N` references pointing at still-open issues
+
+— then the milestone is structurally complete.
+
+Run the exit audit per `docs/exit-audit.md`. That file describes the generic checks. It also instructs you to read the milestone-specific exit criteria from `docs/PLAN.md` section 28 for the active milestone, and combine both.
+
+Report findings using the structured format `docs/exit-audit.md` specifies. Do NOT close the milestone yourself. Do NOT start work on the next milestone. The human reviews the audit and decides.
+
+## Recovering a stuck issue
+
+If you see an issue labelled `factory:in-progress` with no recent activity (no PR opened, no commits, no comments since last session), it's likely orphaned from a previous session. Ask the human before picking it up — they may want you to resume the work, or to remove the label and start fresh.
+
+
 ## How to approach a task
 
 1. Read the issue carefully. Identify the acceptance criteria.
@@ -60,6 +79,11 @@ Update the milestone name as the active milestone advances.
 7. Follow TDD: write the failing test first, then the implementation, then refactor.
 8. Run lint and tests before opening a PR.
 9. Open PR with a clear description linking back to the issue. Always include `Closes #N` (where N is the issue number) in the PR body so GitHub auto-closes the issue on merge. Do not include implementation reasoning the QA/Reviewer agents shouldn't see — that goes in `agent.decision-summary` events, not PR descriptions.
+
+## Recovering a stuck issue
+
+If you see an issue labelled `factory:in-progress` with no recent activity (no PR opened, no commits), it's likely orphaned from a 
+previous session. Ask the human before picking it up — they may want you to resume the work, or to remove the label and start fresh.
 
 ## PR conventions
 
