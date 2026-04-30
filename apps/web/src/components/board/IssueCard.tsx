@@ -3,11 +3,13 @@ import type { WorkItemDto } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { Link } from 'react-router-dom';
 
+// Priority colour-coding per #32:
+// critical = red, high = orange, medium = yellow, low = grey.
 const PRIORITY_COLOR: Record<string, string> = {
-  critical: 'var(--danger)',
-  high: 'oklch(0.74 0.15 50)',
-  medium: 'var(--warning)',
-  low: 'var(--fg-3)',
+  critical: 'oklch(0.66 0.20 22)', // red
+  high: 'oklch(0.74 0.15 50)', // orange
+  medium: 'oklch(0.78 0.14 78)', // yellow
+  low: 'var(--fg-3)', // grey
 };
 
 function ageLabel(createdAt: string): string {
@@ -84,7 +86,7 @@ export function IssueCard({
         <span className="font-mono tnum text-[10.5px] text-fg-4">{ageStr}</span>
       </div>
       <div className="text-[12.5px] text-fg leading-snug font-medium mb-2">
-        {truncate(item.title, 64)}
+        {truncate(item.title, 55)}
       </div>
       <div className="flex items-center gap-1.5 flex-wrap">
         <Pill tone="default" className="h-5 text-[10.5px] px-2">
