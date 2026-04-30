@@ -1,18 +1,31 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { AppShell } from './components/chrome/AppShell';
+
+function KanbanPlaceholder() {
+  const { slug = 'goose-hub-self' } = useParams<{ slug: string }>();
+  return (
+    <AppShell
+      breadcrumb={
+        <>
+          <span className="font-mono text-fg-3">{slug}</span>
+          <span className="mx-2 text-fg-4">/</span>
+          <span>Kanban</span>
+        </>
+      }
+    >
+      <div className="h-full flex items-center justify-center text-fg-3 text-sm">
+        Kanban arrives in M2.06 (#31).
+      </div>
+    </AppShell>
+  );
+}
 
 export function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Navigate to="/projects/goose-hub-self" replace />} />
-        <Route
-          path="/projects/:slug"
-          element={
-            <div className="flex h-full items-center justify-center text-fg-2">
-              <span className="text-xl">Goose Hub</span>
-            </div>
-          }
-        />
+        <Route path="/projects/:slug" element={<KanbanPlaceholder />} />
       </Routes>
     </BrowserRouter>
   );
