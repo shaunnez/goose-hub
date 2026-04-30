@@ -1,10 +1,10 @@
 #!/usr/bin/env tsx
 import 'dotenv/config';
-import { STATES } from '../../../core/state-machine/states.js';
-import type { StateName } from '../../../core/state-machine/states.js';
-import { GitHubLabelsSource } from '../../../core/state-source/github-labels.js';
-import type { WorkItem } from '../../../core/state-source/interface.js';
-import type { ProjectConfig } from '../../../core/types.js';
+import { STATES } from '@goose-hub/core/state-machine/states.js';
+import type { StateName } from '@goose-hub/core/state-machine/states.js';
+import { GitHubLabelsSource } from '@goose-hub/core/state-source/github-labels.js';
+import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
+import type { ProjectConfig } from '@goose-hub/core/types.js';
 import gooseHubSelf from '../../../target-projects/goose-hub-self/project.config.js';
 
 const registry: Record<string, ProjectConfig> = {

@@ -354,3 +354,13 @@ improvement_candidate:
 - **M5**: `WorkflowContext` type shape — what does a workflow receive (source, project, workItem, emit, runtime, budgets…)?
 - **M12**: Governance PR check CI wiring — how does `core/governance/pr-check.ts` get access to the PR diff and labels in GitHub Actions?
 - **Post-v0**: Claude CLI vs Claude Agent SDK — reference audit (#10) said "compare honestly." SDK lacks subprocess overhead and suits non-coding skills (triage, retro) better. Decision point before M4.
+
+## Monorepo import convention (established M2)
+
+`core/` is the `@goose-hub/core` workspace package. Apps (`apps/server`, `apps/cli`) import it as:
+
+```ts
+import { ... } from '@goose-hub/core/state-machine/states.js';
+```
+
+Never via `../../../core/` paths. The wildcard export `"./*": "./*"` in `core/package.json` covers all subpaths. New top-level directories imported by multiple apps must get their own `package.json` with `"name": "@goose-hub/<name>"` before the first cross-app import is written (per FACTORY_RULES.md rule 28a).

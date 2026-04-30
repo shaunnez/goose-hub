@@ -48,6 +48,7 @@ These rules are immutable. Factory cannot modify this file. Humans can modify it
 25. Autonomous mode requires Docker isolation. Supervised mode runs natively (and is observational, not isolated — the human PR review is the real safety mechanism).
 26. CI YAML in `.github/workflows/` is allowed. Product workflows are TypeScript modules in `core/orchestrator/workflows/` — never YAML.
 27. No new heavyweight dependencies (vector DB, embedding service, etc.) without explicit human approval and an ADR.
+28a. **Monorepo package boundaries.** Every top-level directory imported by two or more apps must be a pnpm workspace package (`package.json` with `"name": "@goose-hub/<name>"` and a wildcard `"exports": { "./*": "./*" }`). Apps import it by package name, never by relative path. Intra-package imports stay relative. New shared modules must have their `package.json` before the first cross-app import lands.
 
 ## Feedback loop
 

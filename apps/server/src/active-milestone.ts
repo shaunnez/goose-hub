@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
-import { db } from '../../../core/db/db.js';
-import { projectState } from '../../../core/db/schema.js';
+import { db } from '@goose-hub/core/db/db.js';
+import { projectState } from '@goose-hub/core/db/schema.js';
 
 export async function readActiveMilestone(projectId: string): Promise<number | null> {
   const rows = db.select().from(projectState).where(eq(projectState.projectId, projectId)).all();

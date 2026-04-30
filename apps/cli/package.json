@@ -5,5 +5,8 @@
   "type": "module",
   "bin": {
     "goose": "./src/index.ts"
+  },
+  "dependencies": {
+    "@goose-hub/core": "workspace:*"
   }
 }

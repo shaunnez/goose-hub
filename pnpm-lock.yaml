@@ -40,10 +40,17 @@ importers:
         specifier: ^3.0.0
         version: 3.2.4(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.21.0)
 
-  apps/cli: {}
+  apps/cli:
+    dependencies:
+      '@goose-hub/core':
+        specifier: workspace:*
+        version: link:../../core
 
   apps/server:
     dependencies:
+      '@goose-hub/core':
+        specifier: workspace:*
+        version: link:../../core
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.14(hono@4.12.16)
@@ -108,6 +115,8 @@ importers:
       vite:
         specifier: ^6.0.7
         version: 6.4.2(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.21.0)
+
+  core: {}
 
 packages:
 

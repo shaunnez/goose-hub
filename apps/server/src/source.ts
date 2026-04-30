@@ -1,5 +1,5 @@
-import { GitHubLabelsSource } from '../../../core/state-source/github-labels.js';
-import type { StateSource } from '../../../core/state-source/interface.js';
+import { GitHubLabelsSource } from '@goose-hub/core/state-source/github-labels.js';
+import type { StateSource } from '@goose-hub/core/state-source/interface.js';
 import { getProject } from './projects.js';
 
 const sourceCache = new Map<string, StateSource>();

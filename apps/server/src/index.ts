@@ -1,10 +1,14 @@
+import { config } from 'dotenv';
+import { resolve } from 'node:path';
+config({ path: resolve(import.meta.dirname, '../../../.env') });
+
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { buildSseStream } from '../../../core/event-stream/sse.js';
-import { eventStore } from '../../../core/event-stream/store.js';
-import type { StateName } from '../../../core/state-machine/states.js';
-import { isLegalTransition, legalTargets } from '../../../core/state-machine/transitions.js';
+import { buildSseStream } from '@goose-hub/core/event-stream/sse.js';
+import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import type { StateName } from '@goose-hub/core/state-machine/states.js';
+import { isLegalTransition, legalTargets } from '@goose-hub/core/state-machine/transitions.js';
 import { readActiveMilestone, writeActiveMilestone } from './active-milestone.js';
 import { getProject, listProjects } from './projects.js';
 import { getSourceForSlug } from './source.js';
