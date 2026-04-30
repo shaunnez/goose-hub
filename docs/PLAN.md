@@ -182,6 +182,8 @@ This distinction matters: agents and future you should not underbuild durability
 
 ## 6. Repository layout
 
+This reflects the actual layout as of M2. Future directories are annotated with the milestone that introduces them.
+
 ```
 goose-hub/
 ├── MISSION.md                           # immutable: what this system is for
@@ -190,125 +192,110 @@ goose-hub/
 ├── README.md
 ├── package.json
 ├── pnpm-workspace.yaml
-├── tsconfig.base.json
+├── tsconfig.json
 ├── biome.json
 ├── .github/
-│   ├── workflows/                       # CI YAML — allowed, expected
-│   └── ISSUE_TEMPLATE/
-│       ├── feature.md
-│       ├── bug.md
-│       ├── research.md
-│       └── chore.md
+│   └── workflows/                       # CI YAML — allowed, expected
 ├── target-projects/                     # config + governance per project
-│   ├── goose-hub-self/
-│   │   ├── MISSION.md
-│   │   ├── FACTORY_RULES.md
-│   │   ├── project.config.ts
-│   │   └── personas/
-│   ├── personal-monorepo/
-│   ├── phaser-game/
-│   └── diamond-ingestion/
-├── prompts/                             # rare; prefer skills/
-├── skills/                              # composable skill packages
+│   └── goose-hub-self/
+│       ├── MISSION.md
+│       ├── FACTORY_RULES.md
+│       ├── project.config.ts
+│       └── personas/
+├── skills/                              # composable skill packages (M5+)
 │   ├── triage/
 │   │   ├── skill.config.ts
 │   │   ├── prompt.md
 │   │   ├── schema.ts
 │   │   ├── examples/
 │   │   └── README.md
-│   ├── grill-me/
-│   ├── write-prd/
-│   ├── advise-on-prd/
-│   ├── decompose-issues/
-│   ├── investigate/
-│   ├── implement/
-│   ├── advise-on-plan/
-│   ├── qa/
-│   ├── review/
-│   ├── retrospective-light/
-│   ├── retrospective-deep/
-│   ├── research-analysis/
-│   ├── playwright-repro/
-│   └── bootstrap-project/
-├── slices/                              # vertical slices of Goose Hub itself
+│   └── ...
+├── slices/                              # orchestrator workflow slices (M5+)
+│   │                                    # NOT UI component slices — those live in apps/web/src/components/
 │   ├── 0001-cli-status/
 │   │   ├── slice.config.ts
 │   │   ├── api.ts                       # only files that exist for this slice
 │   │   ├── slice.test.ts
 │   │   └── README.md
 │   └── ...
-├── core/
+├── core/                                # @goose-hub/core workspace package
+│   ├── package.json
+│   ├── types.ts
 │   ├── state-machine/
 │   │   ├── states.ts                    # canonical state enum
 │   │   ├── transitions.ts               # legal transition table
 │   │   └── conflict-resolver.ts         # label conflict rules
-│   ├── orchestrator/
-│   │   ├── tick.ts
-│   │   ├── workflows/
-│   │   ├── locks.ts
-│   │   └── scheduler.ts
 │   ├── state-source/
 │   │   ├── interface.ts
 │   │   ├── github-labels.ts
 │   │   ├── jira.ts                      # M14
 │   │   └── linear.ts                    # stub
-│   ├── agent-runtime/
+│   ├── event-stream/
+│   │   ├── store.ts
+│   │   └── sse.ts
+│   ├── db/
+│   │   ├── schema.ts
+│   │   ├── db.ts
+│   │   └── migrate.ts
+│   ├── orchestrator/                    # M5+
+│   │   ├── tick.ts
+│   │   ├── workflows/
+│   │   ├── locks.ts
+│   │   └── scheduler.ts
+│   ├── agent-runtime/                   # M4+
 │   │   ├── interface.ts
 │   │   ├── claude-cli.ts
 │   │   ├── advisor.ts
 │   │   ├── fallback.ts
-│   │   ├── fresh-context.ts             # context allowlist enforcement
+│   │   ├── fresh-context.ts
 │   │   └── hooks/
-│   ├── tool-layer/
+│   ├── tool-layer/                      # M4+
 │   │   ├── interface.ts
 │   │   ├── bundles.ts
 │   │   ├── allowlist.ts
 │   │   ├── sandbox.ts
 │   │   ├── bash-denylist.ts
-│   │   ├── secret-redaction.ts          # redacts before persisting events
+│   │   ├── secret-redaction.ts
 │   │   └── tools/
-│   ├── workspaces/
-│   │   ├── worktree.ts
-│   │   └── cleanup.ts
-│   ├── event-stream/
-│   │   ├── store.ts
-│   │   ├── sse.ts
-│   │   └── events.ts
-│   ├── budgets/
-│   │   ├── tokens.ts
-│   │   ├── parallel.ts
-│   │   ├── advisor-budget.ts
-│   │   ├── fallback-policy.ts           # priority-aware fallback rules
-│   │   └── flood-protection.ts
-│   ├── governance/
-│   │   ├── immutable-paths.ts
-│   │   └── pr-check.ts                  # bootstrap-aware
-│   ├── personas/
-│   ├── milestones/
-│   ├── retrospective/
+│   ├── workspaces/                      # M4+
+│   ├── budgets/                         # M4+
+│   ├── governance/                      # M4+
+│   ├── personas/                        # M6+
+│   ├── milestones/                      # M6+
+│   ├── retrospective/                   # M9+
 │   ├── bootstrap/
 │   └── connectors/
-├── ui/
-│   ├── chrome/
-│   ├── kanban/
-│   ├── inbox/
-│   ├── task-detail/
-│   ├── roster/
-│   ├── settings/
-│   ├── milestones/
-│   └── office/                          # M17 skin
 ├── apps/
-│   ├── server/                          # orchestrator + API + SSE
-│   ├── web/                             # the UI
-│   └── cli/                             # `goose status`, `goose tick`, etc.
-├── tests/
-│   ├── integration/
-│   └── e2e/
+│   ├── cli/                             # `goose status`, `goose tick`, etc.
+│   │   └── src/index.ts
+│   ├── server/                          # Hono API + SSE event stream
+│   │   └── src/
+│   │       ├── index.ts
+│   │       ├── projects.ts
+│   │       ├── source.ts
+│   │       └── active-milestone.ts
+│   └── web/                             # React + Vite + shadcn/ui (introduced M2)
+│       ├── index.html
+│       ├── vite.config.ts
+│       ├── playwright.config.ts
+│       ├── e2e/                         # Playwright specs
+│       └── src/
+│           ├── App.tsx
+│           ├── main.tsx
+│           ├── components/
+│           │   ├── board/               # Kanban board + issue cards
+│           │   ├── chrome/              # app shell, sidebar, top bar
+│           │   │   └── slots/           # project switcher, milestone selector
+│           │   ├── detail/              # full-takeover issue detail page
+│           │   └── ui/                  # shared primitives (Pill, Button, etc.)
+│           ├── lib/                     # api client, lane config, utilities
+│           └── state/                   # React context providers
 └── docs/
     ├── PLAN.md                          # this document
+    ├── exit-audit.md
     ├── reference-audit.md               # produced in M1
     ├── adr/
-    └── runbooks/
+    └── retros/
 ```
 
 ### 6.1 Slices include only relevant surfaces
