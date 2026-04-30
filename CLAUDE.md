@@ -72,6 +72,7 @@ If you see an issue labelled `factory:in-progress` with no recent activity (no P
 1. Read the issue carefully. Identify the acceptance criteria.
 2. Read this file (`CLAUDE.md`) and the relevant section of `docs/PLAN.md`.
 3. Check `FACTORY_RULES.md` for any rule that bears on this task.
+3a. If the task touches `core/` and requires a new architectural decision not already covered by `CONTEXT.md`, write an ADR in `docs/adr/` before opening the PR.
 4. If the task contradicts a rule or principle, reject it with a comment citing the violation. Do not proceed.
 5. If the task is ambiguous, look up the domain model (PLAN section 4) and interfaces (PLAN section 7). Most ambiguity is resolved there.
 6. If still unsure, label the issue `factory:gate-pending` and request human input. Do not guess on architectural decisions.

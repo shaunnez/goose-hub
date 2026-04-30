@@ -28,3 +28,7 @@ GitHub labels are mutable by humans at any time. An issue can end up with zero, 
 - `archived-wins` is checked before `multiple-state-labels` — archived is a terminal state and must not be overridden by any active state label regardless of canonical index.
 - The "highest index wins" rule makes conflict resolution deterministic and stable across concurrent label edits.
 - `checkTransition` is separate from `resolveState` so the CLI (read-only) can call `resolveState` without importing transition logic.
+
+## Known gap (M1 cleanup)
+
+`core/state-source/github-labels.ts` line ~74 uses a naive `labels.find()` for single-label state resolution instead of calling `resolveState()`. This works for single-label issues but silently produces wrong results on multi-label conflicts. Must be corrected before M2 consumes `listOpenWork()` — tracked in CONTEXT.md deferred items.
