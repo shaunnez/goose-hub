@@ -1,8 +1,10 @@
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { Board } from './components/board/Board';
 import { AppShell } from './components/chrome/AppShell';
 import { ActiveProjectProvider } from './state/active-project';
+import { LaneVisibilityProvider } from './state/lane-visibility';
 
-function KanbanPlaceholder() {
+function KanbanPage() {
   const { slug = 'goose-hub-self' } = useParams<{ slug: string }>();
   return (
     <AppShell
@@ -14,9 +16,7 @@ function KanbanPlaceholder() {
         </>
       }
     >
-      <div className="h-full flex items-center justify-center text-fg-3 text-sm">
-        Kanban arrives in M2.06 (#31).
-      </div>
+      <Board projectSlug={slug} />
     </AppShell>
   );
 }
@@ -25,7 +25,9 @@ function ProjectRoutes() {
   const params = useParams<{ slug?: string }>();
   return (
     <ActiveProjectProvider initialSlug={params.slug}>
-      <KanbanPlaceholder />
+      <LaneVisibilityProvider>
+        <KanbanPage />
+      </LaneVisibilityProvider>
     </ActiveProjectProvider>
   );
 }
