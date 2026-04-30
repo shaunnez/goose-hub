@@ -9,6 +9,7 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "test": "vitest run",
+    "test:e2e": "echo 'E2E coming in M2'",
     "install-labels": "tsx scripts/install-labels.ts",
     "db:migrate": "drizzle-kit push --config=drizzle.config.ts"
   },
