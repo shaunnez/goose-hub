@@ -1,0 +1,75 @@
+name: Issue close automation
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  close-issues:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Label and tick issues closed by this PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body ?? '';
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Match: closes/fixes/resolves #N (same-repo only, not owner/repo#N)
+            const pattern = /(?:closes|fixes|resolves)\s+#(\d+)/gi;
+            const issueNumbers = [];
+            let match;
+            while ((match = pattern.exec(body)) !== null) {
+              issueNumbers.push(parseInt(match[1], 10));
+            }
+
+            if (issueNumbers.length === 0) {
+              console.log('No closing references found in PR body.');
+              return;
+            }
+
+            console.log(`Found closing references for issues: ${issueNumbers.join(', ')}`);
+
+            for (const issueNumber of issueNumbers) {
+              // 1. Add factory:done label (idempotent).
+              try {
+                await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  labels: ['factory:done'],
+                });
+                console.log(`#${issueNumber}: added factory:done label`);
+              } catch (err) {
+                console.error(`#${issueNumber}: failed to add label — ${err.message}`);
+              }
+
+              // 2. Tick checkboxes in the issue body.
+              try {
+                const { data: issue } = await github.rest.issues.get({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                });
+                const originalBody = issue.body ?? '';
+                const tickedBody = originalBody.replace(/- \[ \]/g, '- [x]');
+                if (tickedBody === originalBody) {
+                  console.log(`#${issueNumber}: no unchecked boxes, skipping body update`);
+                } else {
+                  await github.rest.issues.update({
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    body: tickedBody,
+                  });
+                  console.log(`#${issueNumber}: ticked checkboxes in issue body`);
+                }
+              } catch (err) {
+                console.error(`#${issueNumber}: failed to tick checkboxes — ${err.message}`);
+              }
+            }
