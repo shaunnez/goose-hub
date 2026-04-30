@@ -1,4 +1,4 @@
-import { STATES } from '../state-machine/states.js';
+import { resolveState } from '../state-machine/conflict-resolver.js';
 import type { StateName } from '../state-machine/states.js';
 import type {
   Artifact,
@@ -14,9 +14,6 @@ import type {
   WorkItem,
   WorkItemType,
 } from './interface.js';
-
-// Set of all valid factory state label names for O(1) lookup.
-const STATE_SET: ReadonlySet<string> = new Set(STATES);
 
 interface GithubIssueLabel {
   name: string;
@@ -69,9 +66,8 @@ function parseBlocks(body: string): string[] {
 function mapIssueToWorkItem(issue: GithubIssue, repoRef: string, ownerLogin: string): WorkItem {
   const labelNames = issue.labels.map((l) => l.name);
 
-  // State: first factory:* label present in STATES; default to entry state.
-  const stateLabel = labelNames.find((n) => STATE_SET.has(n));
-  const state: StateName = (stateLabel as StateName | undefined) ?? 'factory:triaging';
+  // State: run full conflict resolver; handles multi-label, archived-wins, zero-label cases.
+  const { state } = resolveState(labelNames);
 
   // Type
   const typeLabel = labelNames.find((n) => n.startsWith('type:'));
