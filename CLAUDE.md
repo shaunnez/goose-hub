@@ -56,7 +56,6 @@ Update the milestone name as the active milestone advances.
 If the `gh issue list` command above returns no eligible issues — meaning all open issues in the active milestone either:
 - Don't exist (the milestone has no remaining open issues), OR
 - Have unmet `Depends on #N` references pointing at still-open issues
-
 — then the milestone is structurally complete.
 
 Run the exit audit per `docs/exit-audit.md`. That file describes the generic checks. It also instructs you to read the milestone-specific exit criteria from `docs/PLAN.md` section 28 for the active milestone, and combine both.
@@ -79,11 +78,6 @@ If you see an issue labelled `factory:in-progress` with no recent activity (no P
 7. Follow TDD: write the failing test first, then the implementation, then refactor.
 8. Run lint and tests before opening a PR.
 9. Open PR with a clear description linking back to the issue. Always include `Closes #N` (where N is the issue number) in the PR body so GitHub auto-closes the issue on merge. Do not include implementation reasoning the QA/Reviewer agents shouldn't see — that goes in `agent.decision-summary` events, not PR descriptions.
-
-## Recovering a stuck issue
-
-If you see an issue labelled `factory:in-progress` with no recent activity (no PR opened, no commits), it's likely orphaned from a 
-previous session. Ask the human before picking it up — they may want you to resume the work, or to remove the label and start fresh.
 
 ## PR conventions
 
