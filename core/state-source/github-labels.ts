@@ -249,16 +249,56 @@ export class GitHubLabelsSource implements StateSource {
   }
 
   async transitionState(
-    _itemId: string,
-    _from: StateName,
-    _to: StateName,
-    _note?: string,
+    itemId: string,
+    from: StateName,
+    to: StateName,
+    note?: string,
   ): Promise<void> {
-    throw new Error('not implemented in M1');
+    const { isLegalTransition } = await import('../state-machine/transitions.js');
+    if (!isLegalTransition(from, to)) {
+      throw new Error(`Illegal transition: ${from} -> ${to}`);
+    }
+    const match = itemId.match(/#(\d+)$/);
+    const number = match != null ? match[1] : itemId;
+
+    // Remove the old state label, then add the new one. Do removal first so
+    // the conflict-resolver never sees both labels at once.
+    const removeUrl = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels/${encodeURIComponent(from)}`;
+    const removeRes = await fetch(removeUrl, { method: 'DELETE', headers: this.baseHeaders });
+    // 404 is acceptable — label may already be off (idempotent).
+    if (!removeRes.ok && removeRes.status !== 404) {
+      throw new Error(
+        `Failed to remove label ${from}: ${removeRes.status} ${removeRes.statusText}`,
+      );
+    }
+
+    const addUrl = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels`;
+    const addRes = await fetch(addUrl, {
+      method: 'POST',
+      headers: { ...this.baseHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ labels: [to] }),
+    });
+    if (!addRes.ok) {
+      throw new Error(`Failed to add label ${to}: ${addRes.status} ${addRes.statusText}`);
+    }
+
+    if (note != null && note.length > 0) {
+      await this.comment(itemId, note);
+    }
   }
 
-  async comment(_itemId: string, _body: string): Promise<void> {
-    throw new Error('not implemented in M1');
+  async comment(itemId: string, body: string): Promise<void> {
+    const match = itemId.match(/#(\d+)$/);
+    const number = match != null ? match[1] : itemId;
+    const url = `https://api.github.com/repos/${this.repoRef}/issues/${number}/comments`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { ...this.baseHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body }),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to post comment: ${res.status} ${res.statusText}`);
+    }
   }
 
   async attach(_itemId: string, _artifact: Artifact): Promise<void> {
