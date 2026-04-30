@@ -1,7 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { bustCache, getCached } from './cache.js';
 
 describe('getCached', () => {
+  beforeEach(() => {
+    bustCache('t1');
+    bustCache('t2');
+    bustCache('t3');
+    bustCache('t4');
+  });
+
   it('calls fetcher on first call and returns its value', async () => {
     const fetcher = vi.fn().mockResolvedValue('hello');
     const result = await getCached('t1', 60_000, fetcher);
