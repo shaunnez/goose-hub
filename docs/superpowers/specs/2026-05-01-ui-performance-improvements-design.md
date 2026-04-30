@@ -5,10 +5,10 @@
 
 ## Overview
 
-Three independent improvements to Goose Hub's web UI:
+Four improvements to Goose Hub's web UI, foundational for a growing number of API surfaces:
 
 1. **Server-side TTL cache** — eliminates repeated GitHub API round-trips
-2. **Client-side stale-while-revalidate** — board appears instantly on repeat visits
+2. **TanStack Query** — client-side data fetching with per-query caching, background refresh, and manual invalidation; replaces ad-hoc `useEffect` fetches across all surfaces
 3. **Boneyard skeleton loading** — replaces spinner text with shimmer skeletons on board and detail page
 4. **Minimal scrollbar styling** — thin, on-theme scrollbars via CSS
 
@@ -38,33 +38,38 @@ None — plain in-memory Map.
 
 ---
 
-## 2. Client-side Stale-While-Revalidate
+## 2. TanStack Query
 
-### Location
-`apps/web/src/lib/cache.ts` — new module.
+### Rationale
+The app will grow to many API surfaces with mixed caching strategies (some need a TTL cache, some need live polling, some need manual refresh buttons). A custom SWR helper would eventually replicate what TanStack Query already provides. Better to adopt it now as the standard data-fetching layer.
 
-### Interface
-```ts
-staleWhileRevalidate<T>(
-  key: string,
-  ttlMs: number,
-  fetcher: () => Promise<T>,
-  onUpdate: (data: T) => void,
-): void
-```
+### Dependency
+`@tanstack/react-query` added to `apps/web/package.json`.  
+`@tanstack/react-query-devtools` added as a dev dependency.
 
-Behaviour:
-- If an entry exists in the module-level cache (even stale), call `onUpdate` synchronously with the cached data.
-- If the entry is missing or older than `ttlMs`, kick off a background fetch and call `onUpdate` again when it resolves, updating the cache entry.
-- First visit: no cache entry → shows skeleton, fetches, populates.
-- Repeat visit (< 60s): returns instantly, no background fetch.
-- Repeat visit (> 60s): returns stale data instantly (no skeleton), silently refetches in background.
+### Provider setup
+`QueryClientProvider` added at the root in `apps/web/src/App.tsx` with a `QueryClient` configured with sensible defaults:
+- `staleTime: 60_000` — global default; cached surfaces need no extra config
+- `refetchOnWindowFocus: false` — local-first tool, no surprise refetches
 
-### Applied to
-`Board.tsx` `useEffect` — replaces the current `fetchIssues(projectSlug).then(...)` call.
+### Per-query configuration
+| Surface | `staleTime` | `refetchInterval` | Notes |
+|---|---|---|---|
+| Board issues | 60s | — | Server cache does the work |
+| Milestones | 60s | — | Rarely changes |
+| Detail issue | 60s | — | |
+| Live surfaces (future) | 0 | configurable | Opt-in per query |
 
-### `fetchIssues` in `api.ts`
-Unchanged. The SWR wrapper lives entirely in the component.
+### Migration
+- `Board.tsx` `useEffect` fetch replaced with `useQuery({ queryKey: ['issues', projectSlug], queryFn: () => fetchIssues(projectSlug) })`
+- `DetailPage.tsx` fetch replaced similarly
+- `fetchIssues`, `fetchIssue`, `fetchMilestones` in `api.ts` remain unchanged — they become query functions
+
+### Manual refresh
+Refresh buttons call `queryClient.invalidateQueries({ queryKey: ['issues', projectSlug] })`. The board re-fetches immediately and shows fresh data without a full skeleton.
+
+### Transition invalidation
+After a successful `POST /transition`, invalidate `['issues', projectSlug]` so the board reflects the new state on next render — replaces the current SSE-only patch approach (SSE still works as a fast path).
 
 ---
 
@@ -129,5 +134,5 @@ Appended to `apps/web/src/styles/tokens.css`.
 ## Out of scope
 
 - Persistent cache (localStorage, SQLite) — in-memory is sufficient for a local-first single-user tool
-- Cache for `getItem` (detail fetch) — low priority, can be added later using the same helpers
-- React Query / SWR library — unnecessary overhead given the simple custom solution
+- Custom SWR helper — superseded by TanStack Query
+- Polling for existing surfaces — SSE stream already handles real-time state transitions on the board
