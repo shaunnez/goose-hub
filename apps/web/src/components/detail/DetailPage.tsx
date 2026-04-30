@@ -1,0 +1,213 @@
+import { type WorkItemDto, fetchIssue, fetchIssues } from '@/lib/api';
+import { LANES, laneForState, sortLaneItems } from '@/lib/lanes.config';
+import { useActiveMilestone } from '@/state/active-milestone';
+import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { DeferredSurface } from './DeferredSurface';
+import { LeftRail } from './LeftRail';
+import { OverviewSection } from './OverviewSection';
+import { RightRail } from './RightRail';
+import { TaskHeader } from './TaskHeader';
+import { TimelineSection } from './TimelineSection';
+import { SECTIONS } from './sections';
+
+interface DetailPageProps {
+  section?: string;
+}
+
+export function DetailPage({ section = 'overview' }: DetailPageProps) {
+  const { slug = 'goose-hub-self', id = '' } = useParams<{ slug: string; id: string }>();
+  const navigate = useNavigate();
+  const { activeNumber } = useActiveMilestone();
+  const [item, setItem] = useState<WorkItemDto | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [siblings, setSiblings] = useState<string[]>([]);
+
+  const onBack = useCallback(() => {
+    navigate(`/projects/${slug}`);
+  }, [navigate, slug]);
+
+  // Load the work item.
+  useEffect(() => {
+    let cancelled = false;
+    setError(null);
+    setItem(null);
+    fetchIssue(slug, id)
+      .then((next) => {
+        if (!cancelled) setItem(next);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, id]);
+
+  // Load sibling order in current lane within active milestone — used for J/K nav.
+  useEffect(() => {
+    let cancelled = false;
+    fetchIssues(slug)
+      .then((list) => {
+        if (cancelled) return;
+        const filtered =
+          activeNumber != null
+            ? list.filter((it) => it.milestoneId === String(activeNumber))
+            : list;
+        const ordered: string[] = [];
+        for (const lane of LANES) {
+          const inLane = filtered.filter((it) => laneForState(it.state) === lane.key);
+          for (const it of sortLaneItems(inLane)) ordered.push(it.externalId);
+        }
+        setSiblings(ordered);
+      })
+      .catch(() => setSiblings([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, activeNumber]);
+
+  const onPrev = useCallback(() => {
+    if (siblings.length === 0) return;
+    const idx = siblings.indexOf(id);
+    if (idx <= 0) return;
+    navigate(`/projects/${slug}/items/${siblings[idx - 1]}`);
+  }, [navigate, siblings, id, slug]);
+
+  const onNext = useCallback(() => {
+    if (siblings.length === 0) return;
+    const idx = siblings.indexOf(id);
+    if (idx === -1 || idx >= siblings.length - 1) return;
+    navigate(`/projects/${slug}/items/${siblings[idx + 1]}`);
+  }, [navigate, siblings, id, slug]);
+
+  // Keyboard: J / K / ⌘[ / Esc.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return;
+      if ((e.target as HTMLElement | null)?.tagName === 'TEXTAREA') return;
+      if (e.key === 'j') {
+        e.preventDefault();
+        onNext();
+      } else if (e.key === 'k') {
+        e.preventDefault();
+        onPrev();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        onBack();
+      } else if (e.key === '[' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        onBack();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onBack, onNext, onPrev]);
+
+  if (error != null) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center gap-3 text-center px-8">
+        <div className="text-[color:var(--danger)] text-sm">Couldn't load this issue.</div>
+        <pre className="font-mono text-[11.5px] text-fg-3 max-w-2xl whitespace-pre-wrap">
+          {error}
+        </pre>
+        <button
+          type="button"
+          onClick={onBack}
+          className="h-7 px-3 rounded-md border border-line text-[12px] hover:bg-bg-hover"
+        >
+          Back to Board
+        </button>
+      </div>
+    );
+  }
+
+  if (item == null) {
+    return (
+      <div className="h-full flex items-center justify-center text-fg-3 text-sm">
+        Loading issue…
+      </div>
+    );
+  }
+
+  const currentSection = SECTIONS.find((s) => s.key === section) ?? SECTIONS[0];
+  const workItemId = `github:${item.repoRef}#${item.externalId}`;
+
+  return (
+    <div className="h-full flex flex-col" data-testid="detail-page">
+      {/* breadcrumb (full takeover) */}
+      <div className="h-[40px] flex items-center gap-3 px-3 border-b border-line bg-bg-glass shrink-0">
+        <button
+          type="button"
+          onClick={onBack}
+          data-testid="back-to-board"
+          className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-[12px] text-fg-2 hover:text-fg hover:bg-bg-hover"
+        >
+          <ArrowLeft size={13} />
+          Board
+        </button>
+        <span aria-hidden className="w-[1px] h-4 bg-line" />
+        <span className="font-mono text-[12px] text-fg-3 truncate">
+          <span className="text-fg-3">{slug}</span>
+          <span className="mx-1.5 text-fg-4">/</span>
+          <span className="text-fg-3">{item.repoRef}</span>
+          <span className="mx-1.5 text-fg-4">/</span>
+          <span className="text-fg font-semibold">#{item.externalId}</span>
+        </span>
+        <span className="grow" />
+        <button
+          type="button"
+          onClick={onPrev}
+          aria-label="Previous issue (K)"
+          title="Previous issue (K)"
+          className="h-7 w-7 inline-flex items-center justify-center rounded-md text-fg-3 hover:text-fg hover:bg-bg-hover"
+        >
+          <ChevronLeft size={14} />
+        </button>
+        <button
+          type="button"
+          onClick={onNext}
+          aria-label="Next issue (J)"
+          title="Next issue (J)"
+          className="h-7 w-7 inline-flex items-center justify-center rounded-md text-fg-3 hover:text-fg hover:bg-bg-hover"
+        >
+          <ChevronRight size={14} />
+        </button>
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Close (⌘[ )"
+          title="Close (⌘[)"
+          className="h-7 w-7 inline-flex items-center justify-center rounded-md text-fg-3 hover:text-fg hover:bg-bg-hover"
+        >
+          <X size={13} />
+        </button>
+      </div>
+
+      <TaskHeader
+        item={item}
+        projectSlug={slug}
+        onStateChanged={(next) => setItem({ ...item, state: next })}
+      />
+
+      <div className="flex-1 min-h-0 flex">
+        <LeftRail />
+        <main className="flex-1 min-w-0 overflow-y-auto">
+          {currentSection.key === 'overview' ? (
+            <OverviewSection item={item} />
+          ) : currentSection.key === 'timeline' ? (
+            <TimelineSection projectSlug={slug} id={id} workItemId={workItemId} />
+          ) : (
+            <DeferredSurface
+              surface={currentSection.label}
+              milestone={currentSection.milestone ?? 'later'}
+              description={currentSection.description}
+            />
+          )}
+        </main>
+        <RightRail />
+      </div>
+    </div>
+  );
+}

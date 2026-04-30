@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { Board } from './components/board/Board';
 import { AppShell } from './components/chrome/AppShell';
+import { DetailPage } from './components/detail/DetailPage';
 import { ActiveMilestoneProvider } from './state/active-milestone';
 import { ActiveProjectProvider } from './state/active-project';
 import { LaneVisibilityProvider } from './state/lane-visibility';
@@ -22,15 +23,21 @@ function KanbanPage() {
   );
 }
 
-function ProjectRoutes() {
+function DetailPageRoute({ section }: { section?: string }) {
+  return (
+    <AppShell breadcrumb={<span className="text-fg-3">Detail</span>}>
+      <DetailPage section={section} />
+    </AppShell>
+  );
+}
+
+function ProjectShell({ children }: { children: React.ReactNode }) {
   const params = useParams<{ slug?: string }>();
   const slug = params.slug ?? 'goose-hub-self';
   return (
     <ActiveProjectProvider initialSlug={slug}>
       <ActiveMilestoneProvider projectSlug={slug}>
-        <LaneVisibilityProvider>
-          <KanbanPage />
-        </LaneVisibilityProvider>
+        <LaneVisibilityProvider>{children}</LaneVisibilityProvider>
       </ActiveMilestoneProvider>
     </ActiveProjectProvider>
   );
@@ -41,8 +48,36 @@ export function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Navigate to="/projects/goose-hub-self" replace />} />
-        <Route path="/projects/:slug" element={<ProjectRoutes />} />
+        <Route
+          path="/projects/:slug"
+          element={
+            <ProjectShell>
+              <KanbanPage />
+            </ProjectShell>
+          }
+        />
+        <Route
+          path="/projects/:slug/items/:id"
+          element={
+            <ProjectShell>
+              <DetailPageRoute section="overview" />
+            </ProjectShell>
+          }
+        />
+        <Route
+          path="/projects/:slug/items/:id/:section"
+          element={
+            <ProjectShell>
+              <DetailPageRouteWithSection />
+            </ProjectShell>
+          }
+        />
       </Routes>
     </BrowserRouter>
   );
+}
+
+function DetailPageRouteWithSection() {
+  const { section } = useParams<{ section: string }>();
+  return <DetailPageRoute section={section} />;
 }
