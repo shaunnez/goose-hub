@@ -15,15 +15,24 @@ export function buildSseStream(
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
 
+  // Hoisted so both start() and cancel() share the same reference.
+  let cleanup: (() => void) | null = null;
+
   return new ReadableStream({
     start(controller) {
       const send = (event: AgentEvent) => {
         if (filter.projectId != null && event.projectId !== filter.projectId) return;
         if (filter.workItemId != null && event.workItemId !== filter.workItemId) return;
-        const payload = JSON.stringify(event);
-        controller.enqueue(
-          encoder.encode(`id: ${event.id}\nevent: ${event.kind}\ndata: ${payload}\n\n`),
-        );
+        try {
+          const payload = JSON.stringify(event);
+          controller.enqueue(
+            encoder.encode(`id: ${event.id}\nevent: ${event.kind}\ndata: ${payload}\n\n`),
+          );
+        } catch {
+          // Controller closed before cancel() fired — clean up now.
+          cleanup?.();
+          cleanup = null;
+        }
       };
 
       // 1. Replay durable events past the last seen id.
@@ -42,20 +51,15 @@ export function buildSseStream(
       // 3. Tail live events.
       const unsubscribe = eventStore.subscribe(send);
 
-      // 4. Clean up when stream is cancelled.
-      const cleanup = () => {
+      cleanup = () => {
         clearInterval(heartbeat);
         unsubscribe();
       };
-
-      // ReadableStream's cancel() runs on consumer disconnect.
-      (controller as unknown as { _cleanup?: () => void })._cleanup = cleanup;
     },
 
     cancel() {
-      // node:undici will call this when the response is aborted.
-      const ctrl = this as unknown as { _cleanup?: () => void };
-      ctrl._cleanup?.();
+      cleanup?.();
+      cleanup = null;
     },
   });
 }
