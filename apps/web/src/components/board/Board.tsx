@@ -40,6 +40,37 @@ export function Board({ projectSlug }: BoardProps) {
     };
   }, [projectSlug, reloadKey]);
 
+  // Listen for state.transitioned events from the SSE stream and patch the
+  // affected card in place. Keeps the Board fresh without re-fetching the
+  // entire issue list.
+  useEffect(() => {
+    const url = `/events?projectId=${encodeURIComponent(projectSlug)}`;
+    const es = new EventSource(url);
+    const onTransition = (msg: MessageEvent<string>) => {
+      try {
+        const payload = JSON.parse(msg.data) as {
+          workItemId: string | null;
+          payload: { from?: string; to?: string };
+        };
+        if (payload.workItemId == null || payload.payload?.to == null) return;
+        const externalId = payload.workItemId.split('#').pop();
+        if (externalId == null) return;
+        setItems((prev) =>
+          prev.map((it) =>
+            it.externalId === externalId ? { ...it, state: payload.payload.to as string } : it,
+          ),
+        );
+      } catch {
+        // ignore
+      }
+    };
+    es.addEventListener('state.transitioned', onTransition as EventListener);
+    return () => {
+      es.removeEventListener('state.transitioned', onTransition as EventListener);
+      es.close();
+    };
+  }, [projectSlug]);
+
   const filtered = useMemo(() => {
     if (resolvedMilestone == null) return items;
     return items.filter((item) => item.milestoneId === String(resolvedMilestone));

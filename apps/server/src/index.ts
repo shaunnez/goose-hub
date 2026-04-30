@@ -6,7 +6,7 @@ import { eventStore } from '../../../core/event-stream/store.js';
 import type { StateName } from '../../../core/state-machine/states.js';
 import { isLegalTransition, legalTargets } from '../../../core/state-machine/transitions.js';
 import { readActiveMilestone, writeActiveMilestone } from './active-milestone.js';
-import { listProjects } from './projects.js';
+import { getProject, listProjects } from './projects.js';
 import { getSourceForSlug } from './source.js';
 
 const app = new Hono();
@@ -72,8 +72,13 @@ app.get('/projects/:slug/issues/:id/events', async (c) => {
   const slug = c.req.param('slug');
   const id = c.req.param('id');
   const projectId = slug;
-  const items = eventStore.replay({ projectId, workItemId: `github:${slug}#${id}` });
-  return c.json({ events: items });
+  const cfg = await getProject(slug);
+  const repoRef = cfg?.source.kind === 'github' ? cfg.source.repo : slug;
+  const workItemId = `github:${repoRef}#${id}`;
+  const ascending = eventStore.replay({ projectId, workItemId });
+  // #34 acceptance: ordered by createdAt desc (newest first).
+  const events = [...ascending].reverse();
+  return c.json({ events });
 });
 
 app.post('/projects/:slug/issues/:id/transition', async (c) => {

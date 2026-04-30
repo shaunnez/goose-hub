@@ -47,13 +47,16 @@ export function TransitionButton({
   const onPick = async (to: string) => {
     setBusy(true);
     setError(null);
-    const { status, data } = await transitionState(projectSlug, id, currentState, to);
+    // Optimistic: flip the state pill immediately so the UI feels instant.
+    const original = currentState;
+    onStateChanged(to);
+    setOpen(false);
+    const { status, data } = await transitionState(projectSlug, id, original, to);
     setBusy(false);
-    if (status >= 200 && status < 300) {
-      onStateChanged(to);
-      setOpen(false);
-      return;
-    }
+    if (status >= 200 && status < 300) return;
+    // Roll back.
+    onStateChanged(original);
+    setOpen(true);
     setError(data.error ?? `Transition failed (${status})`);
   };
 
