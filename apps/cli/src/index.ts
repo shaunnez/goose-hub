@@ -37,14 +37,14 @@ async function statusCommand(slug: string): Promise<void> {
   let milestoneLabel: string | null = null;
 
   try {
-    const [work, milestone] = await Promise.all([
-      source.listOpenWork(),
-      source.getActiveMilestone(),
-    ]);
-    items = work;
-    if (milestone) {
+    const milestone = await source.getActiveMilestone();
+    if (milestone != null) {
       milestoneLabel = milestone.title;
     }
+    items =
+      milestone != null && !milestone.isActive
+        ? await source.listClosedWork(milestone.number)
+        : await source.listOpenWork();
   } catch (err) {
     console.error((err as Error).message);
     process.exit(1);
