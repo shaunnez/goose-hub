@@ -43,6 +43,10 @@ class StubStateSource implements StateSource {
     return Promise.resolve();
   }
 
+  forceState(_itemId: string, _to: StateName): Promise<void> {
+    return Promise.resolve();
+  }
+
   comment(_itemId: string, _body: string): Promise<void> {
     return Promise.resolve();
   }

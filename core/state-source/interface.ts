@@ -70,6 +70,7 @@ export interface StateSource {
   getActiveMilestone(): Promise<Milestone | null>;
 
   transitionState(itemId: string, from: StateName, to: StateName, note?: string): Promise<void>;
+  forceState(itemId: string, to: StateName): Promise<void>;
   comment(itemId: string, body: string): Promise<void>;
   attach(itemId: string, artifact: Artifact): Promise<void>;
   createIssue(input: CreateIssueInput): Promise<WorkItem>;
