@@ -223,6 +223,14 @@ export class GitHubLabelsSource implements StateSource {
       .map((i) => mapIssueToWorkItem(i, this.repoRef, this.ownerLogin));
   }
 
+  async listClosedWork(milestoneNumber: number): Promise<WorkItem[]> {
+    const url = `https://api.github.com/repos/${this.repoRef}/issues?state=closed&milestone=${milestoneNumber}&per_page=100`;
+    const issues = await this.paginateAll<GithubIssue>(url);
+    return issues
+      .filter((i) => i.pull_request == null)
+      .map((i) => mapIssueToWorkItem(i, this.repoRef, this.ownerLogin));
+  }
+
   async getItem(itemId: string): Promise<WorkItem> {
     // itemId may be "github:owner/repo#42" or a raw number string.
     const match = itemId.match(/#(\d+)$/);
@@ -236,7 +244,7 @@ export class GitHubLabelsSource implements StateSource {
   async listMilestones(): Promise<Milestone[]> {
     const url = `https://api.github.com/repos/${this.repoRef}/milestones?state=all&per_page=100`;
     const milestones = await this.paginateAll<GithubMilestone>(url);
-    return milestones.map(mapGithubMilestone);
+    return milestones.filter((m) => !m.title.startsWith('[E2E]')).map(mapGithubMilestone);
   }
 
   async getActiveMilestone(): Promise<Milestone | null> {
@@ -249,16 +257,84 @@ export class GitHubLabelsSource implements StateSource {
   }
 
   async transitionState(
-    _itemId: string,
-    _from: StateName,
-    _to: StateName,
-    _note?: string,
+    itemId: string,
+    from: StateName,
+    to: StateName,
+    note?: string,
   ): Promise<void> {
-    throw new Error('not implemented in M1');
+    const { isLegalTransition } = await import('../state-machine/transitions.js');
+    if (!isLegalTransition(from, to)) {
+      throw new Error(`Illegal transition: ${from} -> ${to}`);
+    }
+    const match = itemId.match(/#(\d+)$/);
+    const number = match != null ? match[1] : itemId;
+
+    // Remove the old state label, then add the new one. Do removal first so
+    // the conflict-resolver never sees both labels at once.
+    const removeUrl = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels/${encodeURIComponent(from)}`;
+    const removeRes = await fetch(removeUrl, { method: 'DELETE', headers: this.baseHeaders });
+    // 404 is acceptable — label may already be off (idempotent).
+    if (!removeRes.ok && removeRes.status !== 404) {
+      throw new Error(
+        `Failed to remove label ${from}: ${removeRes.status} ${removeRes.statusText}`,
+      );
+    }
+
+    const addUrl = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels`;
+    const addRes = await fetch(addUrl, {
+      method: 'POST',
+      headers: { ...this.baseHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ labels: [to] }),
+    });
+    if (!addRes.ok) {
+      throw new Error(`Failed to add label ${to}: ${addRes.status} ${addRes.statusText}`);
+    }
+
+    if (note != null && note.length > 0) {
+      await this.comment(itemId, note);
+    }
   }
 
-  async comment(_itemId: string, _body: string): Promise<void> {
-    throw new Error('not implemented in M1');
+  async forceState(itemId: string, to: StateName): Promise<void> {
+    const match = itemId.match(/#(\d+)$/);
+    const number = match != null ? match[1] : itemId;
+
+    const labelsUrl = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels`;
+    const labelsRes = await this.ghFetch(labelsUrl);
+    const currentLabels = (await labelsRes.json()) as { name: string }[];
+
+    for (const label of currentLabels) {
+      if (!label.name.startsWith('factory:')) continue;
+      const removeUrl = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels/${encodeURIComponent(label.name)}`;
+      const res = await fetch(removeUrl, { method: 'DELETE', headers: this.baseHeaders });
+      if (!res.ok && res.status !== 404) {
+        throw new Error(`Failed to remove label ${label.name}: ${res.status} ${res.statusText}`);
+      }
+    }
+
+    const addUrl = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels`;
+    const addRes = await fetch(addUrl, {
+      method: 'POST',
+      headers: { ...this.baseHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ labels: [to] }),
+    });
+    if (!addRes.ok) {
+      throw new Error(`Failed to add label ${to}: ${addRes.status} ${addRes.statusText}`);
+    }
+  }
+
+  async comment(itemId: string, body: string): Promise<void> {
+    const match = itemId.match(/#(\d+)$/);
+    const number = match != null ? match[1] : itemId;
+    const url = `https://api.github.com/repos/${this.repoRef}/issues/${number}/comments`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { ...this.baseHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body }),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to post comment: ${res.status} ${res.statusText}`);
+    }
   }
 
   async attach(_itemId: string, _artifact: Artifact): Promise<void> {

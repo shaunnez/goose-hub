@@ -64,11 +64,13 @@ export interface StateSource {
   repoRef: string;
 
   listOpenWork(): Promise<WorkItem[]>;
+  listClosedWork(milestoneNumber: number): Promise<WorkItem[]>;
   getItem(itemId: string): Promise<WorkItem>;
   listMilestones(): Promise<Milestone[]>;
   getActiveMilestone(): Promise<Milestone | null>;
 
   transitionState(itemId: string, from: StateName, to: StateName, note?: string): Promise<void>;
+  forceState(itemId: string, to: StateName): Promise<void>;
   comment(itemId: string, body: string): Promise<void>;
   attach(itemId: string, artifact: Artifact): Promise<void>;
   createIssue(input: CreateIssueInput): Promise<WorkItem>;
