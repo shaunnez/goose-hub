@@ -1,6 +1,7 @@
 #!/usr/bin/env tsx
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { assembleSpawnContext } from '@goose-hub/core/agent-runtime/context-assembly.js';
@@ -219,6 +220,17 @@ async function runAgentCommand(rawArgs: string[]): Promise<void> {
     process.exit(1);
   }
 
+  // Load skill's prompt.md as system prompt (CONTEXT.md: --append-system-prompt channel)
+  let appendSystemPrompt: string | undefined;
+  try {
+    appendSystemPrompt = readFileSync(
+      new URL(`../../../skills/${skillName}/prompt.md`, import.meta.url),
+      'utf8',
+    );
+  } catch {
+    // no prompt.md — skill runs without system prompt
+  }
+
   const runId = randomUUID();
   const spec: AgentSpec = {
     runId,
@@ -231,6 +243,7 @@ async function runAgentCommand(rawArgs: string[]): Promise<void> {
     toolExtras: [],
     budgets: { maxTurns: 10, maxBudgetUsd: 1.0 },
     modelOverride: undefined,
+    appendSystemPrompt,
   };
 
   if (dryRun) {
@@ -248,12 +261,14 @@ async function runAgentCommand(rawArgs: string[]): Promise<void> {
     schemaModule = {};
   }
 
-  // Find a ZodType-shaped export
+  // Find the last ZodType export (outermost output schema is always last).
+  // 'default' export takes precedence if present.
+  const isZodType = (v: unknown): v is import('zod').ZodType =>
+    v != null && typeof (v as Record<string, unknown>).safeParse === 'function';
   const outputSchema =
-    Object.values(schemaModule).find(
-      (v): v is import('zod').ZodType =>
-        v != null && typeof (v as Record<string, unknown>).safeParse === 'function',
-    ) ?? null;
+    (isZodType(schemaModule.default) ? schemaModule.default : null) ??
+    [...Object.values(schemaModule)].reverse().find(isZodType) ??
+    null;
 
   if (outputSchema != null) {
     spec.outputJsonSchema = toJsonSchema(outputSchema);

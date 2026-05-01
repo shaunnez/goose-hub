@@ -64,7 +64,9 @@ A self-contained, end-to-end feature folder. Includes only the surfaces it genui
 
 ## Prompt and Context Architecture
 
-**Channel split:** `--append-system-prompt` carries the skill's `prompt.md` verbatim (stable, cacheable, never mutated by per-run data). `-p "<context>"` carries the per-run task context as the user message. Mirrors Anthropic's canonical pattern.
+**Channel split:** `--system-prompt` carries the skill's `prompt.md` verbatim (stable, cacheable, never mutated by per-run data). `-p "<context>"` carries the per-run task context as the user message. Mirrors Anthropic's canonical pattern.
+
+> **Correction (M4 integration):** Originally documented as `--append-system-prompt`. Empirically, `--append-system-prompt` appends to the default Claude Code IDE system prompt, causing the agent to respond as a general coding assistant rather than follow the skill instructions. `--system-prompt` (full replacement) is required.
 
 **Prompt caching benefit:** system prompt is identical across all runs of a given skill → fully cacheable. Per-run context in user message does not invalidate the system prompt cache.
 
@@ -86,9 +88,9 @@ A self-contained, end-to-end feature folder. Includes only the surfaces it genui
 
 **Pattern-level deny rules** (e.g. `Read(./.env*)`, `Bash(sudo *)`) live in workspace `.claude/settings.json`, written once at workspace bootstrap, not mutated per run.
 
-**Other flags at spawn:** `--max-turns`, `--max-budget-usd` (mapped from `AgentSpec.budgets`), `--no-session-persistence`, `--append-system-prompt` (skill-specific guidance, never replaces).
+**Other flags at spawn:** `--max-turns`, `--max-budget-usd` (mapped from `AgentSpec.budgets`), `--no-session-persistence`, `--system-prompt` (skill-specific guidance, full replacement — see channel split above). Spawn env requires `HOME`, `USER`, `TMPDIR`, `PATH` plus `FACTORY_RUN_ID`, `FACTORY_RUN_ALLOWLIST`; `USER` and `TMPDIR` are required for macOS OAuth keychain credential lookup.
 
-**Structured output:** `--output-format json --json-schema <schema>` for the terminal envelope. Native CC schema validation.
+**Structured output:** `--output-format json --json-schema <schema>` for the terminal envelope. The model returns the JSON inside a markdown code fence in the `result` field (not via a `StructuredOutput` tool call). Runtime must extract JSON from the fence: try direct `JSON.parse`, then strip ` ```json ... ``` `, then fall back to raw string.
 
 **Zod ↔ JSON Schema:** Spike at M4 (echo-test). Strategy: author in Zod, emit via `zod-to-json-schema`, pass to `--json-schema`. Fall back to Zod-only post-hoc validation if roundtrip is lossy.
 

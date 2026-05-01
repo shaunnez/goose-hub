@@ -1,6 +1,6 @@
 # apps/cli
 
-The `goose` command-line tool. Read-only in M1; the UI in M2 takes over for write paths.
+The `goose` command-line tool for Goose Hub Factory operations.
 
 ## Commands
 
@@ -12,22 +12,38 @@ Prints the live state of a target project's GitHub issues:
 - Open issues grouped by `factory:*` state in canonical order.
 - Total count.
 
-Issue state is resolved through `core/state-source/GitHubLabelsSource`, which delegates to `core/state-machine/conflict-resolver.resolveState` — so multi-label, archived-wins, and zero-label cases all produce the right state.
+.State is resolved through `core/state-source/GitHubLabelsSource` → `core/state-machine/conflict-resolver.resolveState`
+
+### `goose sweep <project-slug> <milestone-number>`
+
+Lists all non-terminal issues in a milestone, then prompts to bulk-archive them. Used at milestone exit to clean up stale issues before closing.
+
+### `goose run-agent --skill=<name> --input='<json>' [--dry-run]`
+
+Runs a named skill against the Claude CLI runtime.
+
+- Loads `skills/<name>/skill.config.js` and `skills/<name>/schema.js`.
+- Validates `--input` against the skill's context schema before spawning.
+- Validates output against the skill's output schema after the run.
+- `--dry-run` prints the assembled `AgentSpec` + context XML without spawning.
+- Uses `withFallback` (allows down-tier retry) wrapping `ClaudeCliRuntime`.
 
 ## Configuration
 
-Requires `GITHUB_TOKEN` in the environment (or `.env`). The token needs `repo` scope to read issues.
+Requires `GITHUB_TOKEN` in the environment (or `.env`) with `repo` scope to read/write issues.
 
-Known projects are loaded from a hardcoded registry in `src/index.ts` for M1. M2.01 replaces this with the `apps/server` `GET /projects` route, which loads from `target-projects/*/project.config.ts` dynamically.
+Known projects are loaded from a hardcoded registry in `src/index.ts`. Adding a project: import its `project.config.ts` from `target-projects/<slug>/` and add it to the registry map.
 
 ## Run
 
 ```bash
 pnpm goose status goose-hub-self
+pnpm goose sweep goose-hub-self 5
+pnpm goose run-agent --skill=triage --input='{"projectId":"goose-hub-self","workItemId":"123"}'
 ```
 
 ## Boundaries
 
-- Never calls the GitHub API directly — always goes through `core/state-source/`.
+- Never calls GitHub API directly — always through `core/state-source/`.
 - Never re-implements state resolution — always uses `core/state-machine/`.
-- No write operations except via `StateSource.transitionState()` (not exposed in M1).
+- Never spawns Claude CLI directly — always through `core/agent-runtime/ClaudeCliRuntime`.

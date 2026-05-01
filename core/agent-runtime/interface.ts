@@ -37,6 +37,8 @@ export type AgentSpec<R extends RoleSpec = RoleSpec> = {
   modelOverride?: string;
   /** JSON Schema derived from the skill's output Zod schema, passed to --json-schema */
   outputJsonSchema?: Record<string, unknown>;
+  /** Skill's prompt.md content, passed via --append-system-prompt */
+  appendSystemPrompt?: string;
 };
 
 export interface AgentResult {

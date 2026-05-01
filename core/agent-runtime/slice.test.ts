@@ -23,7 +23,7 @@ vi.mock('node:child_process', () => ({
   execFileSync: vi.fn().mockReturnValue('/mock/bin/claude'),
   spawn: vi.fn(),
 }));
-vi.mock('node:fs', () => ({ mkdirSync: vi.fn() }));
+vi.mock('node:fs', () => ({ mkdirSync: vi.fn(), writeFileSync: vi.fn() }));
 vi.mock('node:os', () => ({ homedir: vi.fn().mockReturnValue('/mock-home') }));
 vi.mock('../event-stream/store.js', () => ({
   eventStore: {
