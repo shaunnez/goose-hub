@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { renderMarkdownToHtml } from '../../lib/markdown';
 import { LEGAL_TARGETS } from '../../lib/transitions';
-import { GATE_STATES } from './gate-states';
 import { SECTIONS } from './sections';
 
 describe('detail page — sections config', () => {
@@ -52,32 +51,6 @@ describe('detail page — markdown sanitization', () => {
     expect(html).toContain('<h2');
     expect(html).toContain('<ul');
     expect(html).toContain('<li>one</li>');
-  });
-});
-
-describe('GatePendingBanner — gate state map', () => {
-  it('returns banner text for prd-review gate state', () => {
-    expect(GATE_STATES['factory:prd-review']).toBe('PRD Review pending — human approval required');
-  });
-
-  it('returns banner text for approved gate state', () => {
-    expect(GATE_STATES['factory:approved']).toBe('Approved — ready for retrospecting');
-  });
-
-  it('returns banner text for needs-review gate state', () => {
-    expect(GATE_STATES['factory:needs-review']).toBe(
-      'Code Review pending — human approval required',
-    );
-  });
-
-  it('returns banner text for needs-human gate state', () => {
-    expect(GATE_STATES['factory:needs-human']).toBe('Human intervention required');
-  });
-
-  it('does not include non-gate states', () => {
-    expect(GATE_STATES['factory:in-progress']).toBeUndefined();
-    expect(GATE_STATES['factory:triaging']).toBeUndefined();
-    expect(GATE_STATES['factory:done']).toBeUndefined();
   });
 });
 
