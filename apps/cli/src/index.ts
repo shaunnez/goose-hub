@@ -133,7 +133,10 @@ async function sweepCommand(slug: string, milestoneArg: string): Promise<void> {
 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const answer = await new Promise<string>((resolve) => {
-    rl.question(`\nArchive all ${nonTerminal.length} issue${nonTerminal.length === 1 ? '' : 's'}? [y/N] `, resolve);
+    rl.question(
+      `\nArchive all ${nonTerminal.length} issue${nonTerminal.length === 1 ? '' : 's'}? [y/N] `,
+      resolve,
+    );
   });
   rl.close();
 
@@ -158,7 +161,9 @@ async function sweepCommand(slug: string, milestoneArg: string): Promise<void> {
     process.exit(1);
   }
 
-  console.log(`\nDone. ${nonTerminal.length} issue${nonTerminal.length === 1 ? '' : 's'} archived.`);
+  console.log(
+    `\nDone. ${nonTerminal.length} issue${nonTerminal.length === 1 ? '' : 's'} archived.`,
+  );
 }
 
 const [, , command, ...args] = process.argv;

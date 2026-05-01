@@ -47,10 +47,8 @@ app.get('/projects/:slug/milestones/:milestone/closed-issues', async (c) => {
   if (Number.isNaN(milestone)) return c.json({ error: 'invalid milestone number' }, 400);
   const source = await getSourceForSlug(slug);
   if (source == null) return c.json({ error: 'project not found' }, 404);
-  const items = await getCached(
-    `closed-issues:${slug}:${milestone}`,
-    60_000,
-    () => source.listClosedWork(milestone),
+  const items = await getCached(`closed-issues:${slug}:${milestone}`, 60_000, () =>
+    source.listClosedWork(milestone),
   );
   return c.json({ items });
 });

@@ -305,11 +305,12 @@ describe('listClosedWork', () => {
 
     vi.stubGlobal(
       'fetch',
-      mockFetchByUrl(() =>
-        new Response(JSON.stringify(mixed), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
+      mockFetchByUrl(
+        () =>
+          new Response(JSON.stringify(mixed), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
       ),
     );
 
@@ -332,7 +333,7 @@ describe('forceState', () => {
       { name: 'priority:high' },
     ];
 
-    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
       const method = (init?.method ?? 'GET').toUpperCase();
 
       if (method === 'GET') {
@@ -368,14 +369,24 @@ describe('forceState', () => {
       .map(([url]) => url as string);
 
     // Must have deleted factory:in-progress.
-    expect(deletedUrls.some((u) => u.includes('factory%3Ain-progress') || u.includes('factory:in-progress'))).toBe(true);
+    expect(
+      deletedUrls.some(
+        (u) => u.includes('factory%3Ain-progress') || u.includes('factory:in-progress'),
+      ),
+    ).toBe(true);
 
     // Must NOT have deleted non-factory labels.
-    expect(deletedUrls.some((u) => u.includes('type%3Afeature') || u.includes('type:feature'))).toBe(false);
-    expect(deletedUrls.some((u) => u.includes('priority%3Ahigh') || u.includes('priority:high'))).toBe(false);
+    expect(
+      deletedUrls.some((u) => u.includes('type%3Afeature') || u.includes('type:feature')),
+    ).toBe(false);
+    expect(
+      deletedUrls.some((u) => u.includes('priority%3Ahigh') || u.includes('priority:high')),
+    ).toBe(false);
 
     // Must have posted the target label.
-    const postCalls = fetchMock.mock.calls.filter(([, init]) => (init?.method ?? 'GET').toUpperCase() === 'POST');
+    const postCalls = fetchMock.mock.calls.filter(
+      ([, init]) => (init?.method ?? 'GET').toUpperCase() === 'POST',
+    );
     expect(postCalls).toHaveLength(1);
     const postBody = JSON.parse(postCalls[0][1].body as string) as { labels: string[] };
     expect(postBody.labels).toContain('factory:archived');

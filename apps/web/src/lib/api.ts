@@ -80,7 +80,10 @@ export async function fetchIssue(slug: string, id: string): Promise<WorkItemDto>
   return item;
 }
 
-export async function fetchClosedIssues(slug: string, milestoneNumber: number): Promise<WorkItemDto[]> {
+export async function fetchClosedIssues(
+  slug: string,
+  milestoneNumber: number,
+): Promise<WorkItemDto[]> {
   const { items } = await getJson<{ items: WorkItemDto[] }>(
     `/projects/${slug}/milestones/${milestoneNumber}/closed-issues`,
   );

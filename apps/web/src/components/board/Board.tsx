@@ -3,7 +3,6 @@ import { LANES, laneForState, sortLaneItems } from '@/lib/lanes.config';
 import { useActiveMilestone } from '@/state/active-milestone';
 import { useLaneVisibility } from '@/state/lane-visibility';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Skeleton } from 'boneyard-js/react';
 import { Eye, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import { BoardColumn } from './BoardColumn';
@@ -53,12 +52,12 @@ export function Board({ projectSlug }: BoardProps) {
         if (payload.workItemId == null || payload.payload?.to == null) return;
         const externalId = payload.workItemId.split('#').pop();
         if (externalId == null) return;
-        queryClient.setQueryData<WorkItemDto[]>(['issues', projectSlug], (prev) =>
-          prev?.map((it) =>
-            it.externalId === externalId
-              ? { ...it, state: payload.payload.to as string }
-              : it,
-          ) ?? prev,
+        queryClient.setQueryData<WorkItemDto[]>(
+          ['issues', projectSlug],
+          (prev) =>
+            prev?.map((it) =>
+              it.externalId === externalId ? { ...it, state: payload.payload.to as string } : it,
+            ) ?? prev,
         );
       } catch {
         // ignore malformed events
@@ -113,57 +112,55 @@ export function Board({ projectSlug }: BoardProps) {
   }
 
   return (
-    <Skeleton name="board" loading={isLoading} animate="shimmer" color="var(--bg-elev)">
-      <div className="h-full flex flex-col" data-testid="board">
-        <div className="flex items-center gap-2 px-4 py-2 border-b border-line shrink-0 text-[12px] text-fg-3">
-          <span data-testid="board-issue-count">
-            {filtered.length} issue{filtered.length === 1 ? '' : 's'}
+    <div className="h-full flex flex-col" data-testid="board">
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-line shrink-0 text-[12px] text-fg-3">
+        <span data-testid="board-issue-count">
+          {filtered.length} issue{filtered.length === 1 ? '' : 's'}
+        </span>
+        {resolvedMilestone != null && (
+          <span>
+            · milestone <span className="font-mono tnum">#{resolvedMilestone}</span>
           </span>
-          {resolvedMilestone != null && (
-            <span>
-              · milestone <span className="font-mono tnum">#{resolvedMilestone}</span>
-            </span>
-          )}
-          <span className="grow" />
-          {hiddenLanes.length > 0 && (
-            <details className="relative">
-              <summary className="cursor-pointer list-none flex items-center gap-1.5 hover:text-fg">
-                <Eye size={12} /> Hidden lanes ({hiddenLanes.length})
-              </summary>
-              <div className="absolute right-0 mt-1 z-10 min-w-[180px] rounded-md border border-line bg-bg-elev shadow-md p-1.5 flex flex-col gap-0.5">
-                {hiddenLanes.map((lane) => (
-                  <button
-                    key={lane.key}
-                    type="button"
-                    onClick={() => toggle(lane.key)}
-                    className="text-left px-2 py-1 text-[12px] text-fg-2 hover:text-fg hover:bg-bg-hover rounded"
-                  >
-                    Show {lane.label}
-                  </button>
-                ))}
+        )}
+        <span className="grow" />
+        {hiddenLanes.length > 0 && (
+          <details className="relative">
+            <summary className="cursor-pointer list-none flex items-center gap-1.5 hover:text-fg">
+              <Eye size={12} /> Hidden lanes ({hiddenLanes.length})
+            </summary>
+            <div className="absolute right-0 mt-1 z-10 min-w-[180px] rounded-md border border-line bg-bg-elev shadow-md p-1.5 flex flex-col gap-0.5">
+              {hiddenLanes.map((lane) => (
                 <button
+                  key={lane.key}
                   type="button"
-                  onClick={reset}
-                  className="text-left px-2 py-1 text-[11px] text-fg-3 hover:text-fg hover:bg-bg-hover rounded mt-1 border-t border-line"
+                  onClick={() => toggle(lane.key)}
+                  className="text-left px-2 py-1 text-[12px] text-fg-2 hover:text-fg hover:bg-bg-hover rounded"
                 >
-                  Reset to defaults
+                  Show {lane.label}
                 </button>
-              </div>
-            </details>
-          )}
-        </div>
-        <div className="flex-1 min-h-0 px-3 py-3 flex gap-3 overflow-x-auto">
-          {visibleLanes.map((lane) => (
-            <BoardColumn
-              key={lane.key}
-              lane={lane}
-              items={itemsByLane.get(lane.key) ?? []}
-              projectSlug={projectSlug}
-              onHide={toggle}
-            />
-          ))}
-        </div>
+              ))}
+              <button
+                type="button"
+                onClick={reset}
+                className="text-left px-2 py-1 text-[11px] text-fg-3 hover:text-fg hover:bg-bg-hover rounded mt-1 border-t border-line"
+              >
+                Reset to defaults
+              </button>
+            </div>
+          </details>
+        )}
       </div>
-    </Skeleton>
+      <div className="flex-1 min-h-0 px-3 py-3 flex gap-3 overflow-x-auto">
+        {visibleLanes.map((lane) => (
+          <BoardColumn
+            key={lane.key}
+            lane={lane}
+            items={itemsByLane.get(lane.key) ?? []}
+            projectSlug={projectSlug}
+            onHide={toggle}
+          />
+        ))}
+      </div>
+    </div>
   );
 }

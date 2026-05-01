@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 const REPO = 'shaunnez/goose-hub';
-const TEST_MILESTONE_TITLE = 'E2E Test Fixture';
+const TEST_MILESTONE_TITLE = '[E2E] Test Fixture';
 const TOKEN = process.env.GITHUB_TOKEN ?? '';
 
 async function gh(path: string, method = 'GET', body?: unknown) {
@@ -48,7 +48,14 @@ test.describe('M2 happy path', () => {
       title: '[E2E] Test issue — safe to close',
       body: 'Automated fixture created by the happy-path E2E test.',
       milestone: milestoneNumber,
-      labels: ['factory:triaging', 'priority:high', 'type:chore', 'schedule:current', 'mode:supervised', 'exec:serial'],
+      labels: [
+        'factory:triaging',
+        'priority:high',
+        'type:chore',
+        'schedule:current',
+        'mode:supervised',
+        'exec:serial',
+      ],
     })) as { number: number };
     issueNumber = issue.number;
   });
@@ -82,14 +89,10 @@ test.describe('M2 happy path', () => {
     const board = page.getByTestId('board');
     await expect(board).toBeVisible();
     const cards = page.getByTestId('issue-card');
-    await expect
-      .poll(async () => cards.count(), { timeout: 15_000 })
-      .toBeGreaterThan(0);
+    await expect.poll(async () => cards.count(), { timeout: 15_000 }).toBeGreaterThan(0);
 
     // 5. Click the seeded issue card.
-    const target = cards
-      .filter({ hasText: '[E2E]' })
-      .first();
+    const target = cards.filter({ hasText: '[E2E]' }).first();
     const cardNumber = await target.getAttribute('data-issue-number');
     await target.click();
 

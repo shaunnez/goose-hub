@@ -1,5 +1,4 @@
 import { type WorkItemDto, fetchIssue, fetchIssues } from '@/lib/api';
-import { Skeleton } from 'boneyard-js/react';
 import { LANES, laneForState, sortLaneItems } from '@/lib/lanes.config';
 import { useActiveMilestone } from '@/state/active-milestone';
 import { useQuery } from '@tanstack/react-query';
@@ -23,7 +22,12 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
   const navigate = useNavigate();
   const { activeNumber } = useActiveMilestone();
 
-  const { data: item, isLoading, isError, error } = useQuery({
+  const {
+    data: item,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
     queryKey: ['issue', slug, id],
     queryFn: () => fetchIssue(slug, id),
     enabled: id.length > 0,
@@ -111,7 +115,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
   }
 
   return (
-    <Skeleton name="detail" loading={isLoading} animate="shimmer" color="var(--bg-elev)">
+    <div>
       {item != null && (
         <div className="h-full flex flex-col" data-testid="detail-page">
           <div className="h-[40px] flex items-center gap-3 px-3 border-b border-line bg-bg-glass shrink-0">
@@ -183,6 +187,6 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
           </div>
         </div>
       )}
-    </Skeleton>
+    </div>
   );
 }

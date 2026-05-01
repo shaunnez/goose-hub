@@ -1,5 +1,6 @@
 import { useActiveMilestone } from '@/state/active-milestone';
 import { ChevronDown } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 
 interface MilestoneSelectorSlotProps {
   activeSlug?: string;
@@ -7,6 +8,8 @@ interface MilestoneSelectorSlotProps {
 
 export function MilestoneSelectorSlot({ activeSlug: _activeSlug }: MilestoneSelectorSlotProps) {
   const { milestones, loading, error, activeNumber, setActiveNumber } = useActiveMilestone();
+  const { slug = 'goose-hub-self' } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
 
   if (loading) {
     return (
@@ -53,10 +56,10 @@ export function MilestoneSelectorSlot({ activeSlug: _activeSlug }: MilestoneSele
             const raw = e.target.value;
             const next = raw === '' ? null : Number(raw);
             void setActiveNumber(next);
+            navigate(`/projects/${slug}`);
           }}
           className="appearance-none w-full h-8 pl-3 pr-8 bg-bg border border-line rounded-md text-[12.5px] text-fg focus:outline-none focus:border-accent-line cursor-pointer"
         >
-          <option value="">All milestones</option>
           {milestones.map((m) => (
             <option key={m.id} value={m.number}>
               {m.title}
