@@ -1,3 +1,6 @@
+// Shared display constants for work-item state and priority.
+// Priority colour-coding per issue #32: critical=red, high=orange, medium=yellow, low=grey.
+// These replace local duplicates in TaskHeader.tsx, IssueCard.tsx, and gate-states.ts.
 export const STATE_LABEL: Record<string, string> = {
   'factory:triaging': 'triaging',
   'factory:accepted': 'accepted',
