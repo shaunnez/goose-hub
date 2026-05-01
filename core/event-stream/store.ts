@@ -8,6 +8,7 @@ export type EventKind =
   | 'milestone.activated'
   | 'agent.spawned'
   | 'agent.decision-summary'
+  | 'agent.log'
   | 'agent.terminated'
   | 'gate.awaiting-human'
   | 'system.note'
