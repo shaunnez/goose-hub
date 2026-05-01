@@ -274,6 +274,15 @@ app.post('/inbox', async (c) => {
   return c.json({ item }, 201);
 });
 
+const OUTPUT_FIXTURES: Record<string, unknown> = {
+  triage: { priority: 'high', type: 'feature', decision: 'accept' },
+  investigate: {
+    findings: 'Root cause identified',
+    confidence: 'high',
+    recommendation: 'fix in core',
+  },
+};
+
 app.post('/projects/:slug/issues/:id/fake-run', async (c) => {
   const slug = c.req.param('slug');
   const id = c.req.param('id');
@@ -303,7 +312,7 @@ app.post('/projects/:slug/issues/:id/fake-run', async (c) => {
       projectId,
       workItemId,
       kind: 'agent.terminated',
-      payload: { skill, status: 'completed' },
+      payload: { skill, status: 'completed', output: OUTPUT_FIXTURES[skill] },
     });
   })();
 

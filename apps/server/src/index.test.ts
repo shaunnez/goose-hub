@@ -146,6 +146,59 @@ describe('POST /projects/:slug/issues/:id/fake-run', () => {
     });
     expect(res.status).toBe(404);
   });
+
+  it('attaches structured output to agent.terminated event for triage skill', async () => {
+    vi.useFakeTimers();
+    try {
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      vi.mocked(eventStore.appendEvent).mockClear();
+
+      await app.request('/projects/goose-hub-self/issues/1/fake-run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skill: 'triage' }),
+      });
+
+      // Advance all fake timers so the fire-and-forget async IIFE completes.
+      await vi.runAllTimersAsync();
+
+      const calls = vi.mocked(eventStore.appendEvent).mock.calls;
+      const terminatedCall = calls.find(([arg]) => arg.kind === 'agent.terminated');
+      expect(terminatedCall).toBeDefined();
+      const payload = terminatedCall?.[0].payload as { output: unknown };
+      expect(payload.output).toEqual({ priority: 'high', type: 'feature', decision: 'accept' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('attaches structured output to agent.terminated event for investigate skill', async () => {
+    vi.useFakeTimers();
+    try {
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      vi.mocked(eventStore.appendEvent).mockClear();
+
+      await app.request('/projects/goose-hub-self/issues/1/fake-run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skill: 'investigate' }),
+      });
+
+      await vi.runAllTimersAsync();
+
+      const calls = vi.mocked(eventStore.appendEvent).mock.calls;
+      const terminatedCall = calls.find(([arg]) => arg.kind === 'agent.terminated');
+      expect(terminatedCall).toBeDefined();
+      const payload = terminatedCall?.[0].payload as { output: unknown };
+      expect(payload.output).toEqual({
+        findings: 'Root cause identified',
+        confidence: 'high',
+        recommendation: 'fix in core',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('GET /projects/:slug/milestones/:milestone/closed-issues', () => {

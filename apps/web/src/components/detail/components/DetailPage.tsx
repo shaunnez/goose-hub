@@ -205,7 +205,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
               />
             )}
           </main>
-          <RightRail />
+          <RightRail projectSlug={slug} id={id} workItemId={workItemId} />
         </div>
       </div>
     </div>
