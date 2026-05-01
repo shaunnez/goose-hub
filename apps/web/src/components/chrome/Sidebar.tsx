@@ -25,8 +25,7 @@ function buildItems(slug: string | undefined): SidebarItem[] {
       to: `/projects/${project}/inbox`,
       label: 'Inbox',
       icon: <Inbox size={14} />,
-      available: false,
-      milestone: 'M3',
+      available: true,
     },
     {
       to: `/projects/${project}/roster`,

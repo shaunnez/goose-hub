@@ -274,6 +274,40 @@ app.post('/inbox', async (c) => {
   return c.json({ item }, 201);
 });
 
+app.get('/inbox', async (c) => {
+  const { db } = await import('@goose-hub/core/db/db.js');
+  const { inboxItems } = await import('@goose-hub/core/db/schema.js');
+  const { desc } = await import('drizzle-orm');
+  const items = await db.select().from(inboxItems).orderBy(desc(inboxItems.createdAt));
+  return c.json({ items });
+});
+
+app.post('/inbox/:id/promote', async (c) => {
+  const itemId = Number(c.req.param('id'));
+  if (Number.isNaN(itemId)) return c.json({ error: 'invalid id' }, 400);
+  const body = (await c.req.json().catch(() => ({}))) as { projectSlug?: string };
+  const slug = body.projectSlug ?? 'goose-hub-self';
+
+  const { db } = await import('@goose-hub/core/db/db.js');
+  const { inboxItems } = await import('@goose-hub/core/db/schema.js');
+  const { eq } = await import('drizzle-orm');
+
+  const [item] = await db.select().from(inboxItems).where(eq(inboxItems.id, itemId));
+  if (item == null) return c.json({ error: 'not found' }, 404);
+
+  const source = await getSourceForSlug(slug);
+  if (source == null) return c.json({ error: 'project not found' }, 404);
+
+  await source.createIssue({
+    title: item.title,
+    body: item.body ?? '',
+    type: item.type as 'feature' | 'bug' | 'chore' | 'research',
+  });
+  await db.delete(inboxItems).where(eq(inboxItems.id, itemId));
+
+  return c.json({ ok: true });
+});
+
 app.post('/projects/:slug/issues/:id/fake-run', async (c) => {
   const slug = c.req.param('slug');
   const id = c.req.param('id');

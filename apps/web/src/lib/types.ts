@@ -55,3 +55,11 @@ export interface TransitionResult {
   error?: string;
   legalTargets?: string[];
 }
+
+export interface InboxItemDto {
+  id: number;
+  title: string;
+  body: string;
+  type: string;
+  createdAt: string;
+}
