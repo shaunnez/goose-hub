@@ -7,3 +7,4 @@ dist
 goose-hub.db
 claude-design/
 docs/steves-training-materials/
+coverage/

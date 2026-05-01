@@ -26,7 +26,8 @@
       "**/*.json",
       "scripts/",
       ".claude/",
-      "claude-design/"
+      "claude-design/",
+      "coverage/"
     ]
   }
 }
