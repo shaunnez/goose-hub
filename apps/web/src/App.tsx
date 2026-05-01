@@ -61,10 +61,9 @@ function DetailPageRouteWithSection() {
 }
 
 function InboxPage() {
-  const { slug = 'goose-hub-self' } = useParams<{ slug: string }>();
   return (
     <AppShell breadcrumb={<span>Inbox</span>}>
-      <InboxList projectSlug={slug} />
+      <InboxList />
     </AppShell>
   );
 }
