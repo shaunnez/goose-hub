@@ -1,10 +1,10 @@
-# listClosedWork Implementation Plan
+# listClosedWorkByMilstone Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** When a closed milestone is selected, fetch closed GitHub issues via a new `listClosedWork(milestoneNumber)` API instead of filtering from the open-issues list.
+**Goal:** When a closed milestone is selected, fetch closed GitHub issues via a new `listClosedWorkByMilstone(milestoneNumber)` API instead of filtering from the open-issues list.
 
-**Architecture:** Add `listClosedWork(milestoneNumber: number)` to the `StateSource` interface and implement it in `GitHubLabelsSource` using `?state=closed&milestone=<n>`. Expose it via a new server route `GET /projects/:slug/milestones/:milestone/closed-issues`. In `Board.tsx`, detect when the active milestone is closed (using `milestones` from `useActiveMilestone`) and switch the fetch source accordingly. The CLI's `statusCommand` similarly switches to `listClosedWork` when the active milestone is closed.
+**Architecture:** Add `listClosedWorkByMilstone(milestoneNumber: number)` to the `StateSource` interface and implement it in `GitHubLabelsSource` using `?state=closed&milestone=<n>`. Expose it via a new server route `GET /projects/:slug/milestones/:milestone/closed-issues`. In `Board.tsx`, detect when the active milestone is closed (using `milestones` from `useActiveMilestone`) and switch the fetch source accordingly. The CLI's `statusCommand` similarly switches to `listClosedWorkByMilstone` when the active milestone is closed.
 
 **Tech Stack:** TypeScript, Vitest, Hono, React, GitHub REST API v3
 
@@ -14,14 +14,14 @@
 
 | File | Change |
 |------|--------|
-| `core/state-source/interface.ts` | Add `listClosedWork(milestoneNumber: number): Promise<WorkItem[]>` to `StateSource` |
-| `core/state-source/github-labels.ts` | Implement `listClosedWork` using `?state=closed&milestone=<n>` |
-| `core/state-source/interface.test.ts` | Add `listClosedWork` stub to `StubStateSource` |
-| `core/state-source/github-labels.test.ts` | Add `listClosedWork` unit tests |
+| `core/state-source/interface.ts` | Add `listClosedWorkByMilstone(milestoneNumber: number): Promise<WorkItem[]>` to `StateSource` |
+| `core/state-source/github-labels.ts` | Implement `listClosedWorkByMilstone` using `?state=closed&milestone=<n>` |
+| `core/state-source/interface.test.ts` | Add `listClosedWorkByMilstone` stub to `StubStateSource` |
+| `core/state-source/github-labels.test.ts` | Add `listClosedWorkByMilstone` unit tests |
 | `apps/server/src/index.ts` | Add `GET /projects/:slug/milestones/:milestone/closed-issues` |
 | `apps/web/src/lib/api.ts` | Add `fetchClosedIssues(slug, milestoneNumber)` |
 | `apps/web/src/components/board/Board.tsx` | Detect closed milestone and call `fetchClosedIssues` |
-| `apps/cli/src/index.ts` | Switch to `listClosedWork` when active milestone is closed |
+| `apps/cli/src/index.ts` | Switch to `listClosedWorkByMilstone` when active milestone is closed |
 
 ---
 
@@ -35,7 +35,7 @@
 
 Open `core/state-source/interface.test.ts`. The `StubStateSource` class must implement `StateSource`. Adding the method to the interface will break the typecheck because the stub won't have it yet — so add the method to the interface first, then update the stub.
 
-Add `listClosedWork` to `StateSource` in `core/state-source/interface.ts`:
+Add `listClosedWorkByMilstone` to `StateSource` in `core/state-source/interface.ts`:
 
 ```typescript
 export interface StateSource {
@@ -43,7 +43,7 @@ export interface StateSource {
   repoRef: string;
 
   listOpenWork(): Promise<WorkItem[]>;
-  listClosedWork(milestoneNumber: number): Promise<WorkItem[]>;
+  listClosedWorkByMilstone(milestoneNumber: number): Promise<WorkItem[]>;
   getItem(itemId: string): Promise<WorkItem>;
   listMilestones(): Promise<Milestone[]>;
   getActiveMilestone(): Promise<Milestone | null>;
@@ -63,14 +63,14 @@ export interface StateSource {
 cd /Users/shaunnesbitt/projects/goose-hub && pnpm tsc --noEmit 2>&1 | head -20
 ```
 
-Expected: errors in `github-labels.ts` and `interface.test.ts` about missing `listClosedWork`.
+Expected: errors in `github-labels.ts` and `interface.test.ts` about missing `listClosedWorkByMilstone`.
 
 - [ ] **Step 3: Update the stub in interface.test.ts**
 
 Add the stub method to `StubStateSource` in `core/state-source/interface.test.ts`:
 
 ```typescript
-listClosedWork(_milestoneNumber: number): Promise<WorkItem[]> {
+listClosedWorkByMilstone(_milestoneNumber: number): Promise<WorkItem[]> {
   return Promise.resolve([]);
 }
 ```
@@ -83,11 +83,11 @@ Insert it after `listOpenWork()` (currently line 17).
 cd /Users/shaunnesbitt/projects/goose-hub && pnpm tsc --noEmit 2>&1 | head -20
 ```
 
-Expected: only `github-labels.ts` error about missing `listClosedWork`.
+Expected: only `github-labels.ts` error about missing `listClosedWorkByMilstone`.
 
 ---
 
-### Task 2: Implement listClosedWork in GitHubLabelsSource
+### Task 2: Implement listClosedWorkByMilstone in GitHubLabelsSource
 
 **Files:**
 - Modify: `core/state-source/github-labels.ts`
@@ -98,10 +98,10 @@ Add to `core/state-source/github-labels.test.ts`, after the `getActiveMilestone`
 
 ```typescript
 // ---------------------------------------------------------------------------
-// listClosedWork
+// listClosedWorkByMilstone
 // ---------------------------------------------------------------------------
 
-describe('listClosedWork', () => {
+describe('listClosedWorkByMilstone', () => {
   it('fetches closed issues for the given milestone number', async () => {
     const closedIssues = [
       makeIssue({
@@ -132,7 +132,7 @@ describe('listClosedWork', () => {
     );
 
     const source = makeSource();
-    const items = await source.listClosedWork(2);
+    const items = await source.listClosedWorkByMilstone(2);
 
     expect(items).toHaveLength(2);
     expect(items[0].externalId).toBe('20');
@@ -158,7 +158,7 @@ describe('listClosedWork', () => {
     );
 
     const source = makeSource();
-    const items = await source.listClosedWork(2);
+    const items = await source.listClosedWorkByMilstone(2);
     expect(items).toHaveLength(1);
     expect(items[0].externalId).toBe('30');
   });
@@ -171,14 +171,14 @@ describe('listClosedWork', () => {
 cd /Users/shaunnesbitt/projects/goose-hub && pnpm vitest run core/state-source/github-labels.test.ts 2>&1 | tail -20
 ```
 
-Expected: FAIL — `listClosedWork is not a function`.
+Expected: FAIL — `listClosedWorkByMilstone is not a function`.
 
-- [ ] **Step 3: Implement listClosedWork**
+- [ ] **Step 3: Implement listClosedWorkByMilstone**
 
 Add this method to `GitHubLabelsSource` in `core/state-source/github-labels.ts`, after `listOpenWork()` (currently line 217–223):
 
 ```typescript
-async listClosedWork(milestoneNumber: number): Promise<WorkItem[]> {
+async listClosedWorkByMilstone(milestoneNumber: number): Promise<WorkItem[]> {
   const url = `https://api.github.com/repos/${this.repoRef}/issues?state=closed&milestone=${milestoneNumber}&per_page=100`;
   const issues = await this.paginateAll<GithubIssue>(url);
   return issues
@@ -207,7 +207,7 @@ Expected: no errors.
 
 ```bash
 git add core/state-source/interface.ts core/state-source/interface.test.ts core/state-source/github-labels.ts core/state-source/github-labels.test.ts
-git commit -m "feat(core): add listClosedWork to StateSource and GitHubLabelsSource"
+git commit -m "feat(core): add listClosedWorkByMilstone to StateSource and GitHubLabelsSource"
 ```
 
 ---
@@ -229,7 +229,7 @@ import { app } from './index.js';
 vi.mock('./source.js', () => ({
   getSourceForSlug: vi.fn().mockResolvedValue({
     repoRef: 'owner/repo',
-    listClosedWork: vi.fn().mockResolvedValue([
+    listClosedWorkByMilstone: vi.fn().mockResolvedValue([
       {
         id: 'github:owner/repo#5',
         externalId: '5',
@@ -291,7 +291,7 @@ app.get('/projects/:slug/milestones/:milestone/closed-issues', async (c) => {
   const items = await getCached(
     `closed-issues:${slug}:${milestone}`,
     60_000,
-    () => source.listClosedWork(milestone),
+    () => source.listClosedWorkByMilstone(milestone),
   );
   return c.json({ items });
 });
@@ -445,12 +445,12 @@ git commit -m "feat(web): switch Board to fetchClosedIssues when active mileston
 
 ---
 
-### Task 6: Update CLI statusCommand to use listClosedWork
+### Task 6: Update CLI statusCommand to use listClosedWorkByMilstone
 
 **Files:**
 - Modify: `apps/cli/src/index.ts`
 
-The CLI's `statusCommand` uses `listOpenWork` unconditionally. If the active milestone is closed, switch to `listClosedWork`.
+The CLI's `statusCommand` uses `listOpenWork` unconditionally. If the active milestone is closed, switch to `listClosedWorkByMilstone`.
 
 - [ ] **Step 1: Update statusCommand**
 
@@ -466,7 +466,7 @@ try {
     milestoneLabel = work.title;
     if (!work.isActive) {
       // Active milestone is closed — fetch closed issues for it.
-      items = await source.listClosedWork(work.number);
+      items = await source.listClosedWorkByMilstone(work.number);
     } else {
       items = await source.listOpenWork();
     }
@@ -492,7 +492,7 @@ try {
   }
   items =
     milestone != null && !milestone.isActive
-      ? await source.listClosedWork(milestone.number)
+      ? await source.listClosedWorkByMilstone(milestone.number)
       : await source.listOpenWork();
 } catch (err) {
   console.error((err as Error).message);
@@ -512,7 +512,7 @@ try {
   }
   items =
     milestone != null && !milestone.isActive
-      ? await source.listClosedWork(milestone.number)
+      ? await source.listClosedWorkByMilstone(milestone.number)
       : await source.listOpenWork();
 } catch (err) {
   console.error((err as Error).message);
@@ -532,7 +532,7 @@ Expected: no errors.
 
 ```bash
 git add apps/cli/src/index.ts
-git commit -m "feat(cli): use listClosedWork when active milestone is closed"
+git commit -m "feat(cli): use listClosedWorkByMilstone when active milestone is closed"
 ```
 
 ---
@@ -568,7 +568,7 @@ Expected: clean.
 ## Self-Review
 
 **Spec coverage:**
-- `listClosedWork(milestoneNumber)` added to `StateSource` interface — Task 1
+- `listClosedWorkByMilstone(milestoneNumber)` added to `StateSource` interface — Task 1
 - Implemented in `GitHubLabelsSource` — Task 2
 - Server route `GET /projects/:slug/milestones/:milestone/closed-issues` — Task 3
 - Web API helper `fetchClosedIssues` — Task 4
@@ -578,4 +578,4 @@ Expected: clean.
 
 **Placeholder scan:** No TBDs, no "similar to Task N", all code shown.
 
-**Type consistency:** `listClosedWork(milestoneNumber: number): Promise<WorkItem[]>` is consistent across interface, implementation, and server. `fetchClosedIssues(slug: string, milestoneNumber: number): Promise<WorkItemDto[]>` is consistent between api.ts and Board.tsx usage.
+**Type consistency:** `listClosedWorkByMilstone(milestoneNumber: number): Promise<WorkItem[]>` is consistent across interface, implementation, and server. `fetchClosedIssues(slug: string, milestoneNumber: number): Promise<WorkItemDto[]>` is consistent between api.ts and Board.tsx usage.

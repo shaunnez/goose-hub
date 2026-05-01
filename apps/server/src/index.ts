@@ -48,7 +48,7 @@ app.get('/projects/:slug/milestones/:milestone/closed-issues', async (c) => {
   const source = await getSourceForSlug(slug);
   if (source == null) return c.json({ error: 'project not found' }, 404);
   const items = await getCached(`closed-issues:${slug}:${milestone}`, 60_000, () =>
-    source.listClosedWork(milestone),
+    source.listClosedWorkByMilestone(milestone),
   );
   return c.json({ items });
 });

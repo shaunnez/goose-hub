@@ -18,7 +18,7 @@ class StubStateSource implements StateSource {
     return Promise.resolve([]);
   }
 
-  listClosedWork(_milestoneNumber: number): Promise<WorkItem[]> {
+  listClosedWorkByMilestone(_milestoneNumber: number): Promise<WorkItem[]> {
     return Promise.resolve([]);
   }
 

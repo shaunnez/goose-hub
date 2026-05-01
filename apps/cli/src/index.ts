@@ -42,10 +42,7 @@ async function statusCommand(slug: string): Promise<void> {
     if (milestone != null) {
       milestoneLabel = milestone.title;
     }
-    items =
-      milestone != null && !milestone.isActive
-        ? await source.listClosedWork(milestone.number)
-        : await source.listOpenWork();
+    items = await source.listOpenWork();
   } catch (err) {
     console.error((err as Error).message);
     process.exit(1);

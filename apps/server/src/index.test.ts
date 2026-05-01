@@ -4,7 +4,7 @@ import { app } from './index.js';
 vi.mock('./source.js', () => ({
   getSourceForSlug: vi.fn().mockResolvedValue({
     repoRef: 'owner/repo',
-    listClosedWork: vi.fn().mockResolvedValue([
+    listClosedWorkByMilestone: vi.fn().mockResolvedValue([
       {
         id: 'github:owner/repo#5',
         externalId: '5',

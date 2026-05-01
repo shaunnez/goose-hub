@@ -38,7 +38,7 @@ export interface StateSource {
   repoRef: string;
 
   listOpenWork(): Promise<WorkItem[]>;
-  listClosedWork(milestoneNumber: number): Promise<WorkItem[]>;
+  listClosedWorkByMilstone(milestoneNumber: number): Promise<WorkItem[]>;
   getItem(itemId: string): Promise<WorkItem>;
   listMilestones(): Promise<Milestone[]>;
   getActiveMilestone(): Promise<Milestone | null>;
@@ -109,7 +109,7 @@ cd /Users/shaunnesbitt/projects/goose-hub && git add core/state-source/interface
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `core/state-source/github-labels.test.ts`, after the `listClosedWork` describe block:
+Add to `core/state-source/github-labels.test.ts`, after the `listClosedWorkByMilstone` describe block:
 
 ```typescript
 // ---------------------------------------------------------------------------
@@ -453,4 +453,4 @@ cd /Users/shaunnesbitt/projects/goose-hub && git add apps/cli/src/index.ts && gi
 - `itemId` as plain number or `github:owner/repo#N` format handled in `forceState` (same as `transitionState`) ✓
 
 **What this does NOT handle:**
-- Closed issues that slipped through with wrong state — use the GitHub Action plan to prevent future occurrences; for existing ones, close them manually or add a second sweep pass that calls `listClosedWork` and force-states any non-done/archived ones
+- Closed issues that slipped through with wrong state — use the GitHub Action plan to prevent future occurrences; for existing ones, close them manually or add a second sweep pass that calls `listClosedWorkByMilstone` and force-states any non-done/archived ones

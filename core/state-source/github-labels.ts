@@ -223,7 +223,7 @@ export class GitHubLabelsSource implements StateSource {
       .map((i) => mapIssueToWorkItem(i, this.repoRef, this.ownerLogin));
   }
 
-  async listClosedWork(milestoneNumber: number): Promise<WorkItem[]> {
+  async listClosedWorkByMilestone(milestoneNumber: number): Promise<WorkItem[]> {
     const url = `https://api.github.com/repos/${this.repoRef}/issues?state=closed&milestone=${milestoneNumber}&per_page=100`;
     const issues = await this.paginateAll<GithubIssue>(url);
     return issues

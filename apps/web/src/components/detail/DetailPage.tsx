@@ -115,7 +115,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
   }
 
   return (
-    <div>
+    <div className="h-full">
       {item != null && (
         <div className="h-full flex flex-col" data-testid="detail-page">
           <div className="h-[40px] flex items-center gap-3 px-3 border-b border-line bg-bg-glass shrink-0">

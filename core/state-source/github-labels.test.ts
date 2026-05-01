@@ -255,10 +255,10 @@ describe('dependsOn parsing', () => {
 });
 
 // ---------------------------------------------------------------------------
-// listClosedWork
+// listClosedWorkByMilestone
 // ---------------------------------------------------------------------------
 
-describe('listClosedWork', () => {
+describe('listClosedWorkByMilestone', () => {
   it('fetches closed issues for the given milestone number', async () => {
     const closedIssues = [
       makeIssue({
@@ -288,7 +288,7 @@ describe('listClosedWork', () => {
     );
 
     const source = makeSource();
-    const items = await source.listClosedWork(2);
+    const items = await source.listClosedWorkByMilestone(2);
 
     expect(items).toHaveLength(2);
     expect(items[0].externalId).toBe('20');
@@ -315,7 +315,7 @@ describe('listClosedWork', () => {
     );
 
     const source = makeSource();
-    const items = await source.listClosedWork(2);
+    const items = await source.listClosedWorkByMilestone(2);
     expect(items).toHaveLength(1);
     expect(items[0].externalId).toBe('30');
   });
