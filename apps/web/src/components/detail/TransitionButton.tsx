@@ -1,7 +1,6 @@
 import { type WorkItemDto, transitionState } from '@/lib/api';
 import { LEGAL_TARGETS } from '@/lib/transitions';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 interface TransitionButtonProps {
@@ -33,7 +32,7 @@ export function TransitionButton({ projectSlug, id, currentState }: TransitionBu
         disabled
         title={`Terminal state: ${currentState} has no legal next states`}
         data-testid="transition-button-disabled"
-        className="h-7 px-2.5 rounded-md text-[12px] border border-line text-fg-4 cursor-not-allowed"
+        className="h-6 px-2.5 rounded-full text-[11.5px] border border-line text-fg-4 cursor-not-allowed"
       >
         No transitions
       </button>
@@ -73,10 +72,9 @@ export function TransitionButton({ projectSlug, id, currentState }: TransitionBu
         data-testid="transition-button"
         onClick={() => setOpen((o) => !o)}
         disabled={busy}
-        className="h-7 px-2.5 rounded-md text-[12px] bg-accent text-[color:var(--accent-fg)] hover:brightness-110 disabled:opacity-60 inline-flex items-center gap-1.5 font-medium"
+        className="h-6 px-2.5 rounded-full text-[11.5px] bg-accent text-[color:var(--accent-fg)] hover:brightness-110 disabled:opacity-60 inline-flex items-center font-medium border border-accent-line"
       >
         Transition
-        <ArrowRight size={12} />
       </button>
       {open && (
         <div

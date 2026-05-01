@@ -90,9 +90,9 @@ function PillSelect({
         data-testid={testId}
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          'inline-flex items-center gap-1.5 h-6 px-2 rounded-full text-[11.5px] border cursor-pointer',
-          'hover:brightness-110 transition-all',
-          saving && 'opacity-60 cursor-wait',
+          'inline-flex items-center gap-1 h-6 px-2.5 rounded-full text-[11.5px] border cursor-pointer',
+          'hover:brightness-110 hover:opacity-90 transition-opacity',
+          saving && 'opacity-50 cursor-wait',
         )}
         style={pillStyle}
         title={`Change ${label}`}
@@ -206,13 +206,18 @@ export function TaskHeader({ item, projectSlug }: TaskHeaderProps) {
             {item?.title}
           </h1>
         </div>
-        <div className="flex items-center gap-1.5 flex-wrap shrink-0 justify-end">
+        <div className="flex items-center gap-2 flex-wrap shrink-0 justify-end">
+          {/* Type — static, leftmost */}
+          <span className="inline-flex items-center h-6 px-2.5 rounded-full text-[11.5px] bg-bg-elev border border-line text-fg-2 capitalize">
+            {item?.type}
+          </span>
+
           {/* State — static accent pill */}
           <span
             data-testid="state-pill"
-            className="inline-flex items-center gap-1.5 h-6 px-2 rounded-full text-[11.5px] bg-accent-soft border border-accent-line text-fg"
+            className="inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full text-[11.5px] bg-accent-soft border border-accent-line text-fg"
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+            <span className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
             <span className="font-medium">
               {item?.state ? (STATE_LABEL[item?.state] ?? item?.state) : ''}
             </span>
@@ -277,11 +282,6 @@ export function TaskHeader({ item, projectSlug }: TaskHeaderProps) {
               onSelect={(v) => void onMilestone(v)}
             />
           )}
-
-          {/* Type — static */}
-          <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-full text-[11.5px] bg-bg-elev border border-line text-fg-2 capitalize">
-            {item?.type}
-          </span>
 
           {item && (
             <TransitionButton
