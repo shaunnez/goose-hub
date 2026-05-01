@@ -231,7 +231,7 @@ test.describe('M3 happy path', () => {
     test.setTimeout(60_000);
 
     const gateIssue = (await gh(`/repos/${REPO}/issues`, 'POST', {
-      title: '[E2E Gate] ' + Date.now(),
+      title: `[E2E Gate] ${Date.now()}`,
       body: 'E2E fixture',
       milestone: milestoneNumber,
       labels: [
