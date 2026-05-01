@@ -154,6 +154,64 @@ app.get('/events', (c) => {
   });
 });
 
+app.post('/inbox', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    title?: string;
+    body?: string;
+    type?: string;
+  };
+  if (!body.title?.trim()) return c.json({ error: 'title is required' }, 400);
+  const validTypes = ['feature', 'bug', 'chore', 'research'];
+  const type = validTypes.includes(body.type ?? '') ? (body.type as string) : 'feature';
+  const { db } = await import('@goose-hub/core/db/db.js');
+  const { inboxItems } = await import('@goose-hub/core/db/schema.js');
+  const [item] = await db
+    .insert(inboxItems)
+    .values({
+      title: body.title.trim(),
+      body: body.body ?? '',
+      type,
+    })
+    .returning();
+  return c.json({ item }, 201);
+});
+
+app.post('/projects/:slug/issues/:id/fake-run', async (c) => {
+  const slug = c.req.param('slug');
+  const id = c.req.param('id');
+  const body = (await c.req.json().catch(() => ({}))) as { skill?: string };
+  const skill = body.skill === 'investigate' ? 'investigate' : 'triage';
+
+  const source = await getSourceForSlug(slug);
+  if (source == null) return c.json({ error: 'project not found' }, 404);
+
+  const projectId = slug;
+  const cfg = await getProject(slug);
+  const repoRef = cfg?.source.kind === 'github' ? cfg.source.repo : slug;
+  const workItemId = `github:${repoRef}#${id}`;
+
+  // Fire-and-forget: emit events with delays
+  (async () => {
+    eventStore.appendEvent({ projectId, workItemId, kind: 'agent.spawned', payload: { skill } });
+    await new Promise((r) => setTimeout(r, 1500));
+    eventStore.appendEvent({
+      projectId,
+      workItemId,
+      kind: 'agent.decision-summary',
+      payload: { summary: `Running ${skill} skill on issue #${id}` },
+    });
+    await new Promise((r) => setTimeout(r, 1500));
+    eventStore.appendEvent({
+      projectId,
+      workItemId,
+      kind: 'agent.terminated',
+      payload: { skill, status: 'completed' },
+    });
+  })();
+
+  return c.json({ ok: true, skill });
+});
+
 if (process.env.VITEST == null) {
   const port = Number(process.env.PORT ?? 3001);
   serve({ fetch: app.fetch, port });
