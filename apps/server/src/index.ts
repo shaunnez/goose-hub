@@ -53,6 +53,18 @@ app.get('/projects/:slug/milestones/:milestone/closed-issues', async (c) => {
   return c.json({ items });
 });
 
+app.get('/projects/:slug/milestones/:milestone/issues', async (c) => {
+  const slug = c.req.param('slug');
+  const milestone = Number(c.req.param('milestone'));
+  if (Number.isNaN(milestone)) return c.json({ error: 'invalid milestone number' }, 400);
+  const source = await getSourceForSlug(slug);
+  if (source == null) return c.json({ error: 'project not found' }, 404);
+  const items = await getCached(`milestone-issues:${slug}:${milestone}`, 60_000, () =>
+    source.listWorkByMilestone(milestone),
+  );
+  return c.json({ items });
+});
+
 app.get('/projects/:slug/milestones', async (c) => {
   const slug = c.req.param('slug');
   const source = await getSourceForSlug(slug);

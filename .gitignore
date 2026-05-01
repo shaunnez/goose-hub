@@ -4,3 +4,4 @@ node_modules
 dist
 .claude/worktrees/
 goose-hub.db
+claude-design/

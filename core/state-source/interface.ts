@@ -72,6 +72,7 @@ export interface StateSource {
 
   listOpenWork(): Promise<WorkItem[]>;
   listClosedWorkByMilestone(milestoneNumber: number): Promise<WorkItem[]>;
+  listWorkByMilestone(milestoneNumber: number): Promise<WorkItem[]>;
   getItem(itemId: string): Promise<WorkItem>;
   listMilestones(): Promise<Milestone[]>;
   getActiveMilestone(): Promise<Milestone | null>;

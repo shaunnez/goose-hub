@@ -23,6 +23,10 @@ class StubStateSource implements StateSource {
     return Promise.resolve([]);
   }
 
+  listWorkByMilestone(_milestoneNumber: number): Promise<WorkItem[]> {
+    return Promise.resolve([]);
+  }
+
   getItem(_itemId: string): Promise<WorkItem> {
     return Promise.reject(new Error('not implemented'));
   }

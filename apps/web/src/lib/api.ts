@@ -97,6 +97,16 @@ export async function fetchClosedIssues(
   return items;
 }
 
+export async function fetchMilestoneIssues(
+  slug: string,
+  milestoneNumber: number,
+): Promise<WorkItemDto[]> {
+  const { items } = await getJson<{ items: WorkItemDto[] }>(
+    `/projects/${slug}/milestones/${milestoneNumber}/issues`,
+  );
+  return items;
+}
+
 export async function fetchMilestones(slug: string): Promise<MilestoneDto[]> {
   const { milestones } = await getJson<{ milestones: MilestoneDto[] }>(
     `/projects/${slug}/milestones`,

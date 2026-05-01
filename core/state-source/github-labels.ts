@@ -232,6 +232,14 @@ export class GitHubLabelsSource implements StateSource {
       .map((i) => mapIssueToWorkItem(i, this.repoRef, this.ownerLogin));
   }
 
+  async listWorkByMilestone(milestoneNumber: number): Promise<WorkItem[]> {
+    const url = `https://api.github.com/repos/${this.repoRef}/issues?state=all&milestone=${milestoneNumber}&per_page=100`;
+    const issues = await this.paginateAll<GithubIssue>(url);
+    return issues
+      .filter((i) => i.pull_request == null)
+      .map((i) => mapIssueToWorkItem(i, this.repoRef, this.ownerLogin));
+  }
+
   async getItem(itemId: string): Promise<WorkItem> {
     // itemId may be "github:owner/repo#42" or a raw number string.
     const match = itemId.match(/#(\d+)$/);
