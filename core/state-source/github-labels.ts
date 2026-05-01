@@ -385,7 +385,7 @@ export class GitHubLabelsSource implements StateSource {
 
   async setLabelInGroup(
     itemId: string,
-    group: 'priority' | 'schedule',
+    group: 'priority' | 'schedule' | 'type',
     value: string,
   ): Promise<void> {
     const number = parseIssueNumber(itemId);

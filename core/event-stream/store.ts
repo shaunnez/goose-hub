@@ -20,7 +20,9 @@ export type EventKind =
   | 'agent.run-started'
   | 'agent.run-completed'
   | 'agent.run-failed'
-  | 'agent.fallback-triggered';
+  | 'agent.fallback-triggered'
+  | 'agent.triage-complete'
+  | 'agent.repo-override';
 
 export interface AgentEvent {
   id: number;
