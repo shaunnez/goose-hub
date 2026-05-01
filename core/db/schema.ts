@@ -32,3 +32,11 @@ export const governanceAudit = sqliteTable('governance_audit', {
   violations: text('violations').notNull(),
   checkedAt: text('checked_at').notNull().default(sql`(current_timestamp)`),
 });
+
+export const inboxItems = sqliteTable('inbox_items', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  title: text('title').notNull(),
+  body: text('body').notNull().default(''),
+  type: text('type').notNull().default('feature'), // feature | bug | chore | research
+  createdAt: text('created_at').notNull().default(sql`(current_timestamp)`),
+});

@@ -131,6 +131,80 @@ app.post('/projects/:slug/issues/:id/transition', async (c) => {
   return c.json({ ok: true, from, to });
 });
 
+app.post('/projects/:slug/issues/:id/comment', async (c) => {
+  const slug = c.req.param('slug');
+  const id = c.req.param('id');
+  const body = (await c.req.json().catch(() => ({}))) as { body?: string };
+  if (!body.body?.trim()) return c.json({ error: 'body is required' }, 400);
+  const source = await getSourceForSlug(slug);
+  if (source == null) return c.json({ error: 'project not found' }, 404);
+  const cfg = await getProject(slug);
+  const repoRef = cfg?.source.kind === 'github' ? cfg.source.repo : slug;
+  const workItemId = `github:${repoRef}#${id}`;
+  await source.comment(workItemId, body.body.trim());
+  eventStore.appendEvent({
+    projectId: slug,
+    workItemId,
+    kind: 'manual.action',
+    payload: { action: 'comment', preview: body.body.trim().slice(0, 80) },
+  });
+  return c.json({ ok: true });
+});
+
+app.post('/projects/:slug/issues/:id/set-milestone', async (c) => {
+  const slug = c.req.param('slug');
+  const id = c.req.param('id');
+  const body = (await c.req.json().catch(() => ({}))) as { milestoneNumber?: number | null };
+  const source = await getSourceForSlug(slug);
+  if (source == null) return c.json({ error: 'project not found' }, 404);
+  const cfg = await getProject(slug);
+  const repoRef = cfg?.source.kind === 'github' ? cfg.source.repo : slug;
+  const workItemId = `github:${repoRef}#${id}`;
+  await source.setMilestone(workItemId, body.milestoneNumber ?? null);
+  eventStore.appendEvent({
+    projectId: slug,
+    workItemId,
+    kind: 'manual.action',
+    payload: { action: 'set-milestone', milestoneNumber: body.milestoneNumber ?? null },
+  });
+  bustCache(`issues:${slug}`);
+  return c.json({ ok: true });
+});
+
+app.post('/projects/:slug/issues/:id/set-label', async (c) => {
+  const slug = c.req.param('slug');
+  const id = c.req.param('id');
+  const body = (await c.req.json().catch(() => ({}))) as { group?: string; value?: string };
+  const validPriority = ['low', 'medium', 'high', 'critical'];
+  // Note: schedule values here are the UI labels (current/backlog/icebox). The parser in
+  // github-labels.ts maps to the internal Schedule type (current/next/later/blocked-by).
+  // backlog→next, icebox→later when read back. This is intentional per issue #55 spec.
+  const validSchedule = ['current', 'backlog', 'icebox'];
+  if (body.group === 'priority' && !validPriority.includes(body.value ?? '')) {
+    return c.json({ error: 'invalid priority' }, 400);
+  }
+  if (body.group === 'schedule' && !validSchedule.includes(body.value ?? '')) {
+    return c.json({ error: 'invalid schedule' }, 400);
+  }
+  if (body.group !== 'priority' && body.group !== 'schedule') {
+    return c.json({ error: 'group must be priority or schedule' }, 400);
+  }
+  const source = await getSourceForSlug(slug);
+  if (source == null) return c.json({ error: 'project not found' }, 404);
+  const cfg = await getProject(slug);
+  const repoRef = cfg?.source.kind === 'github' ? cfg.source.repo : slug;
+  const workItemId = `github:${repoRef}#${id}`;
+  await source.setLabelInGroup(workItemId, body.group, body.value ?? '');
+  eventStore.appendEvent({
+    projectId: slug,
+    workItemId,
+    kind: 'manual.action',
+    payload: { action: `set-${body.group}`, value: body.value },
+  });
+  bustCache(`issues:${slug}`);
+  return c.json({ ok: true });
+});
+
 app.get('/events', (c) => {
   const projectId = c.req.query('projectId') ?? undefined;
   const workItemId = c.req.query('workItemId') ?? undefined;
