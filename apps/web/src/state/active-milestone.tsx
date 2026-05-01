@@ -1,9 +1,9 @@
-import type { MilestoneDto } from '@/lib/types';
 import {
   setActiveMilestone as apiSetActiveMilestone,
   fetchActiveMilestone,
   fetchMilestones,
 } from '@/lib/api';
+import type { MilestoneDto } from '@/lib/types';
 import {
   type ReactNode,
   createContext,

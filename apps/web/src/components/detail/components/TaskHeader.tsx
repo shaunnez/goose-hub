@@ -1,7 +1,7 @@
-import type { MilestoneDto, WorkItemDto } from '@/lib/types';
 import { fetchMilestones, setLabel, setMilestone } from '@/lib/api';
-import { STATE_LABEL, PRIORITY_COLOR, PRIORITY_BG, PRIORITY_BORDER } from '@/lib/constants';
 import { cn } from '@/lib/cn';
+import { PRIORITY_BG, PRIORITY_BORDER, PRIORITY_COLOR, STATE_LABEL } from '@/lib/constants';
+import type { MilestoneDto, WorkItemDto } from '@/lib/types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { TransitionButton } from './TransitionButton';

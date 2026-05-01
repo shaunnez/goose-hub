@@ -1,13 +1,35 @@
 import { describe, expect, it } from 'vitest';
-import { STATE_LABEL, PRIORITY_COLOR, PRIORITY_BG, PRIORITY_BORDER, GATE_STATES } from './constants';
+import {
+  GATE_STATES,
+  PRIORITY_BG,
+  PRIORITY_BORDER,
+  PRIORITY_COLOR,
+  STATE_LABEL,
+} from './constants';
 
 const ALL_FACTORY_STATES = [
-  'factory:triaging', 'factory:accepted', 'factory:rejected', 'factory:grilling',
-  'factory:prd-drafting', 'factory:prd-review', 'factory:decomposing', 'factory:issues-created',
-  'factory:research-pending', 'factory:research-complete', 'factory:investigating',
-  'factory:investigation-complete', 'factory:dev-ready', 'factory:in-progress',
-  'factory:needs-qa', 'factory:qa-failed', 'factory:needs-review', 'factory:needs-fix',
-  'factory:approved', 'factory:retrospecting', 'factory:needs-human', 'factory:done',
+  'factory:triaging',
+  'factory:accepted',
+  'factory:rejected',
+  'factory:grilling',
+  'factory:prd-drafting',
+  'factory:prd-review',
+  'factory:decomposing',
+  'factory:issues-created',
+  'factory:research-pending',
+  'factory:research-complete',
+  'factory:investigating',
+  'factory:investigation-complete',
+  'factory:dev-ready',
+  'factory:in-progress',
+  'factory:needs-qa',
+  'factory:qa-failed',
+  'factory:needs-review',
+  'factory:needs-fix',
+  'factory:approved',
+  'factory:retrospecting',
+  'factory:needs-human',
+  'factory:done',
   'factory:archived',
 ];
 

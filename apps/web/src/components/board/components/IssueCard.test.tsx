@@ -1,10 +1,10 @@
+import type { WorkItemDto } from '@/lib/types';
 /** @vitest-environment jsdom */
 import { render, screen } from '@testing-library/react';
+import { cleanup } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup } from '@testing-library/react';
 import { IssueCard } from './IssueCard';
-import type { WorkItemDto } from '@/lib/types';
 
 afterEach(cleanup);
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { GATE_STATES } from '../../lib/constants';
 import { renderMarkdownToHtml } from '../../lib/markdown';
 import { LEGAL_TARGETS } from '../../lib/transitions';
-import { GATE_STATES } from '../../lib/constants';
 import { SECTIONS } from './lib/sections';
 
 describe('detail page — sections config', () => {

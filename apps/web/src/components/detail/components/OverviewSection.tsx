@@ -1,5 +1,5 @@
-import type { WorkItemDto } from '@/lib/types';
 import { renderMarkdownToHtml } from '@/lib/markdown';
+import type { WorkItemDto } from '@/lib/types';
 import { CommentsSection } from './CommentsSection';
 
 interface OverviewSectionProps {

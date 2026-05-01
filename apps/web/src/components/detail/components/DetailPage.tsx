@@ -1,11 +1,12 @@
-import type { WorkItemDto } from '@/lib/types';
 import { fetchIssue, fetchIssues, startFakeRun } from '@/lib/api';
 import { LANES, laneForState, sortLaneItems } from '@/lib/lanes.config';
+import type { WorkItemDto } from '@/lib/types';
 import { useActiveMilestone } from '@/state/active-milestone';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { SECTIONS } from '../lib/sections';
 import { DeferredSurface } from './DeferredSurface';
 import { GatePendingBanner } from './GatePendingBanner';
 import { LeftRail } from './LeftRail';
@@ -13,7 +14,6 @@ import { OverviewSection } from './OverviewSection';
 import { RightRail } from './RightRail';
 import { TaskHeader } from './TaskHeader';
 import { TimelineSection } from './TimelineSection';
-import { SECTIONS } from '../lib/sections';
 
 interface DetailPageProps {
   section?: string;

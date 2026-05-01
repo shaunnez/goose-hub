@@ -1,7 +1,7 @@
-import type { IssueCommentDto } from '@/lib/types';
 import { fetchComments } from '@/lib/api';
-import { timeAgo } from '@/lib/utils';
 import { renderMarkdownToHtml } from '@/lib/markdown';
+import type { IssueCommentDto } from '@/lib/types';
+import { timeAgo } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { CommentComposer } from './CommentComposer';
 
@@ -53,11 +53,7 @@ export function CommentsSection({ projectSlug, id, externalId }: CommentsSection
 
             <div className="relative pl-8">
               <div className="absolute left-[5px] top-[13px] w-[13px] h-[13px] rounded-full border-2 border-accent bg-bg" />
-              <CommentComposer
-                projectSlug={projectSlug}
-                externalId={externalId}
-                issueId={id}
-              />
+              <CommentComposer projectSlug={projectSlug} externalId={externalId} issueId={id} />
             </div>
           </div>
         </div>

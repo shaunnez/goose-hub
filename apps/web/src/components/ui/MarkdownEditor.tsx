@@ -5,10 +5,31 @@ import { useRef } from 'react';
 const TOOLBAR = [
   { label: 'B', prefix: '**', suffix: '**', placeholder: 'bold', title: 'Bold', cls: 'font-bold' },
   { label: 'I', prefix: '*', suffix: '*', placeholder: 'italic', title: 'Italic', cls: 'italic' },
-  { label: '`', prefix: '`', suffix: '`', placeholder: 'code', title: 'Inline code', cls: 'font-mono' },
-  { label: '```', prefix: '```\n', suffix: '\n```', placeholder: 'code block', title: 'Code block', cls: 'font-mono' },
+  {
+    label: '`',
+    prefix: '`',
+    suffix: '`',
+    placeholder: 'code',
+    title: 'Inline code',
+    cls: 'font-mono',
+  },
+  {
+    label: '```',
+    prefix: '```\n',
+    suffix: '\n```',
+    placeholder: 'code block',
+    title: 'Code block',
+    cls: 'font-mono',
+  },
   { label: 'link', prefix: '[', suffix: '](url)', placeholder: 'text', title: 'Link', cls: '' },
-  { label: '- ', prefix: '\n- ', suffix: '', placeholder: '', title: 'List item', cls: 'font-mono' },
+  {
+    label: '- ',
+    prefix: '\n- ',
+    suffix: '',
+    placeholder: '',
+    title: 'List item',
+    cls: 'font-mono',
+  },
 ] as const;
 
 function applyFormat(

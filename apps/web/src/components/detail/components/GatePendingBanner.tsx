@@ -1,6 +1,6 @@
 import { cn } from '@/lib/cn';
-import { ShieldAlert } from 'lucide-react';
 import { GATE_STATES } from '@/lib/constants';
+import { ShieldAlert } from 'lucide-react';
 
 export { GATE_STATES } from '@/lib/constants';
 

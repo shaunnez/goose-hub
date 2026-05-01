@@ -1,8 +1,8 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 /** @vitest-environment jsdom */
 import { render, screen } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CommentsSection } from './CommentsSection';
 
 afterEach(cleanup);
@@ -27,8 +27,18 @@ vi.mock('./CommentComposer', () => ({
 }));
 
 const MOCK_COMMENTS = [
-  { id: 1, body: '**Hello**', authorLogin: 'alice', createdAt: new Date(Date.now() - 3600000).toISOString() },
-  { id: 2, body: 'World', authorLogin: 'bob', createdAt: new Date(Date.now() - 7200000).toISOString() },
+  {
+    id: 1,
+    body: '**Hello**',
+    authorLogin: 'alice',
+    createdAt: new Date(Date.now() - 3600000).toISOString(),
+  },
+  {
+    id: 2,
+    body: 'World',
+    authorLogin: 'bob',
+    createdAt: new Date(Date.now() - 7200000).toISOString(),
+  },
 ];
 
 function renderSection(comments = MOCK_COMMENTS) {
