@@ -99,10 +99,7 @@ export async function setActiveMilestone(
   await postJson(`/projects/${slug}/active-milestone`, { milestoneNumber });
 }
 
-export async function fetchTriageResult(
-  slug: string,
-  id: string,
-): Promise<TriageResultDto | null> {
+export async function fetchTriageResult(slug: string, id: string): Promise<TriageResultDto | null> {
   const { triage } = await getJson<{ triage: TriageResultDto | null }>(
     `/projects/${slug}/issues/${id}/triage`,
   );

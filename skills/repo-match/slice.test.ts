@@ -2,26 +2,21 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
-import { RepoMatchOutputSchema } from './schema.js';
-import config, { RepoMatchContextSchema } from './skill.config.js';
 import {
   parseReposRegistry,
   runKeywordTier,
   scoreRepo,
   scoreToConfidence,
 } from './keyword-tier.js';
+import { RepoMatchOutputSchema } from './schema.js';
+import config, { RepoMatchContextSchema } from './skill.config.js';
 
-const REPOS_MD_PATH = join(
-  import.meta.dirname,
-  '../../target-projects/goose-hub-self/repos.md',
-);
+const REPOS_MD_PATH = join(import.meta.dirname, '../../target-projects/goose-hub-self/repos.md');
 
 describe('repo-match schema', () => {
   it('accepts valid output with candidates and decisionSummaries', () => {
     const result = RepoMatchOutputSchema.safeParse({
-      candidates: [
-        { repo: 'shaunnez/goose-hub', confidence: 85, evidence: 'slug match', tier: 1 },
-      ],
+      candidates: [{ repo: 'shaunnez/goose-hub', confidence: 85, evidence: 'slug match', tier: 1 }],
       decisionSummaries: [{ step: 'keyword-match', summary: 'Matched via slug token' }],
     });
     expect(result.success).toBe(true);
@@ -111,7 +106,10 @@ describe('repo-match skill config', () => {
 });
 
 describe('keyword tier scoring', () => {
-  const repo = { slug: 'shaunnez/goose-hub', description: 'Personal command centre for AI-assisted software delivery.' };
+  const repo = {
+    slug: 'shaunnez/goose-hub',
+    description: 'Personal command centre for AI-assisted software delivery.',
+  };
 
   it('slug token match in title scores higher than description token match', () => {
     const slugResult = scoreRepo(repo, 'goose-hub triage fix', '');
@@ -132,10 +130,7 @@ describe('keyword tier scoring', () => {
   });
 
   it('returns sorted results descending by score', () => {
-    const repos = [
-      { slug: 'other/repo', description: 'Unrelated service.' },
-      repo,
-    ];
+    const repos = [{ slug: 'other/repo', description: 'Unrelated service.' }, repo];
     const results = runKeywordTier(repos, 'goose-hub triage fix', '');
     expect(results[0].repo).toBe('shaunnez/goose-hub');
   });
@@ -151,7 +146,8 @@ describe('keyword tier scoring', () => {
 
 describe('parseReposRegistry', () => {
   it('parses repos.md and extracts slug and description', () => {
-    const md = `### [shaunnez/goose-hub](https://github.com/shaunnez/goose-hub)\n**Description:** Personal command centre.\n`;
+    const md =
+      '### [shaunnez/goose-hub](https://github.com/shaunnez/goose-hub)\n**Description:** Personal command centre.\n';
     const repos = parseReposRegistry(md);
     expect(repos).toHaveLength(1);
     expect(repos[0].slug).toBe('shaunnez/goose-hub');

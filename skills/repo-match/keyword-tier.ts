@@ -99,7 +99,8 @@ export function scoreRepo(
   return {
     repo: repo.slug,
     score,
-    evidence: evidenceParts.length > 0 ? evidenceParts.slice(0, 3).join('; ') : 'no keyword matches',
+    evidence:
+      evidenceParts.length > 0 ? evidenceParts.slice(0, 3).join('; ') : 'no keyword matches',
   };
 }
 

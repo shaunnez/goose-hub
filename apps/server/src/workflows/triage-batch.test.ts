@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentResult } from '@goose-hub/core/agent-runtime/interface.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ─── module mocks ──────────────────────────────────────────────────────────────
 
@@ -16,7 +16,9 @@ vi.mock('@goose-hub/core/agent-runtime/schema-bridge.js', () => ({
 
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   eventStore: {
-    appendEvent: vi.fn().mockReturnValue({ id: 1, kind: 'agent.triage-complete', payload: {}, createdAt: '' }),
+    appendEvent: vi
+      .fn()
+      .mockReturnValue({ id: 1, kind: 'agent.triage-complete', payload: {}, createdAt: '' }),
   },
 }));
 
@@ -60,7 +62,9 @@ function makeTriageOutput() {
 
 function makeRepoMatchOutput() {
   return {
-    candidates: [{ repo: 'shaunnez/goose-hub', confidence: 90, evidence: 'slug match', tier: 1 as const }],
+    candidates: [
+      { repo: 'shaunnez/goose-hub', confidence: 90, evidence: 'slug match', tier: 1 as const },
+    ],
     decisionSummaries: [{ step: 'keyword-match', summary: 'Matched via slug token' }],
   };
 }
@@ -111,8 +115,16 @@ describe('runTriageBatch', () => {
     const source = makeMockSource([item]);
 
     mockRuntime.run
-      .mockResolvedValueOnce({ output: makeTriageOutput(), decisionSummaries: [], events: [] } satisfies AgentResult)
-      .mockResolvedValueOnce({ output: makeRepoMatchOutput(), decisionSummaries: [], events: [] } satisfies AgentResult);
+      .mockResolvedValueOnce({
+        output: makeTriageOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeRepoMatchOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
 
     const { runTriageBatch } = await import('./triage-batch.js');
     await runTriageBatch('goose-hub-self', source);
@@ -125,8 +137,16 @@ describe('runTriageBatch', () => {
     const source = makeMockSource([item]);
 
     mockRuntime.run
-      .mockResolvedValueOnce({ output: makeTriageOutput(), decisionSummaries: [], events: [] } satisfies AgentResult)
-      .mockResolvedValueOnce({ output: makeRepoMatchOutput(), decisionSummaries: [], events: [] } satisfies AgentResult);
+      .mockResolvedValueOnce({
+        output: makeTriageOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeRepoMatchOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
 
     const { runTriageBatch } = await import('./triage-batch.js');
     await runTriageBatch('goose-hub-self', source);
@@ -152,8 +172,16 @@ describe('runTriageBatch', () => {
       const rt = new (ClaudeCliRuntime as unknown as new () => typeof mockRuntime)();
       vi.mocked(ClaudeCliRuntime).mockImplementation(() => rt as never);
       rt.run
-        .mockResolvedValueOnce({ output: { ...makeTriageOutput(), priority: p }, decisionSummaries: [], events: [] } satisfies AgentResult)
-        .mockResolvedValueOnce({ output: makeRepoMatchOutput(), decisionSummaries: [], events: [] } satisfies AgentResult);
+        .mockResolvedValueOnce({
+          output: { ...makeTriageOutput(), priority: p },
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult)
+        .mockResolvedValueOnce({
+          output: makeRepoMatchOutput(),
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult);
 
       const { runTriageBatch } = await import('./triage-batch.js');
       await runTriageBatch('goose-hub-self', source);
@@ -166,8 +194,16 @@ describe('runTriageBatch', () => {
     const source = makeMockSource([item]);
 
     mockRuntime.run
-      .mockResolvedValueOnce({ output: makeTriageOutput(), decisionSummaries: [], events: [] } satisfies AgentResult)
-      .mockResolvedValueOnce({ output: makeRepoMatchOutput(), decisionSummaries: [], events: [] } satisfies AgentResult);
+      .mockResolvedValueOnce({
+        output: makeTriageOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeRepoMatchOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
 
     const { runTriageBatch } = await import('./triage-batch.js');
     await runTriageBatch('goose-hub-self', source);
@@ -184,8 +220,16 @@ describe('runTriageBatch', () => {
     const source = makeMockSource([item]);
 
     mockRuntime.run
-      .mockResolvedValueOnce({ output: makeTriageOutput(), decisionSummaries: [], events: [] } satisfies AgentResult)
-      .mockResolvedValueOnce({ output: makeRepoMatchOutput(), decisionSummaries: [], events: [] } satisfies AgentResult);
+      .mockResolvedValueOnce({
+        output: makeTriageOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeRepoMatchOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
 
     const { runTriageBatch } = await import('./triage-batch.js');
     const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
@@ -202,8 +246,16 @@ describe('runTriageBatch', () => {
     const source = makeMockSource([item]);
 
     mockRuntime.run
-      .mockResolvedValueOnce({ output: makeTriageOutput(), decisionSummaries: [], events: [] } satisfies AgentResult)
-      .mockResolvedValueOnce({ output: makeRepoMatchOutput(), decisionSummaries: [], events: [] } satisfies AgentResult);
+      .mockResolvedValueOnce({
+        output: makeTriageOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeRepoMatchOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
 
     const { runTriageBatch } = await import('./triage-batch.js');
     await runTriageBatch('goose-hub-self', source);
@@ -220,9 +272,21 @@ describe('runTriageBatch', () => {
     const source = makeMockSource(items);
 
     mockRuntime.run
-      .mockResolvedValueOnce({ output: { bad: 'data' }, decisionSummaries: [], events: [] } satisfies AgentResult)
-      .mockResolvedValueOnce({ output: makeTriageOutput(), decisionSummaries: [], events: [] } satisfies AgentResult)
-      .mockResolvedValueOnce({ output: makeRepoMatchOutput(), decisionSummaries: [], events: [] } satisfies AgentResult);
+      .mockResolvedValueOnce({
+        output: { bad: 'data' },
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeTriageOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeRepoMatchOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
 
     const { runTriageBatch } = await import('./triage-batch.js');
     await runTriageBatch('goose-hub-self', source);
@@ -237,7 +301,7 @@ describe('POST /projects/:slug/tick', () => {
     const { app } = await import('../index.js');
     const res = await app.request('/projects/goose-hub-self/tick', { method: 'POST' });
     expect(res.status).toBe(202);
-    const body = await res.json() as { ok: boolean; slug: string };
+    const body = (await res.json()) as { ok: boolean; slug: string };
     expect(body.ok).toBe(true);
     expect(body.slug).toBe('goose-hub-self');
   });

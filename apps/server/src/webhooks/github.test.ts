@@ -57,12 +57,15 @@ describe('POST /webhooks/github', () => {
     const body = JSON.stringify({ action: 'opened' });
     const res = await postWebhook(body, { event: 'push' });
     expect(res.status).toBe(200);
-    const json = await res.json() as { ok: boolean };
+    const json = (await res.json()) as { ok: boolean };
     expect(json.ok).toBe(true);
   });
 
   it('returns 200 for issues events with non-opened action', async () => {
-    const body = JSON.stringify({ action: 'closed', repository: { full_name: 'shaunnez/goose-hub' } });
+    const body = JSON.stringify({
+      action: 'closed',
+      repository: { full_name: 'shaunnez/goose-hub' },
+    });
     const res = await postWebhook(body, { event: 'issues' });
     expect(res.status).toBe(200);
   });
@@ -74,7 +77,7 @@ describe('POST /webhooks/github', () => {
     });
     const res = await postWebhook(body, { event: 'issues' });
     expect(res.status).toBe(200);
-    const json = await res.json() as { ok: boolean; action: string };
+    const json = (await res.json()) as { ok: boolean; action: string };
     expect(json.ok).toBe(true);
     expect(json.action).toBe('dispatched');
   });
@@ -86,7 +89,7 @@ describe('POST /webhooks/github', () => {
     });
     const res = await postWebhook(body, { event: 'issues' });
     expect(res.status).toBe(200);
-    const json = await res.json() as { action: string };
+    const json = (await res.json()) as { action: string };
     expect(json.action).toBe('ignored');
   });
 });

@@ -432,9 +432,7 @@ app.get('/projects/:slug/issues/:id/triage', async (c) => {
   const allEvents = eventStore.replay({ projectId, workItemId });
 
   // Most recent triage-complete event
-  const triageEvent = allEvents
-    .filter((e) => e.kind === 'agent.triage-complete')
-    .at(-1);
+  const triageEvent = allEvents.filter((e) => e.kind === 'agent.triage-complete').at(-1);
 
   if (triageEvent == null) {
     return c.json({ triage: null });
@@ -442,13 +440,13 @@ app.get('/projects/:slug/issues/:id/triage', async (c) => {
 
   const payload = triageEvent.payload as {
     triage: { type: string; priority: string };
-    repoMatch: { candidates: Array<{ repo: string; confidence: number; evidence: string; tier: number }> };
+    repoMatch: {
+      candidates: Array<{ repo: string; confidence: number; evidence: string; tier: number }>;
+    };
   };
 
   // Check for repo override
-  const overrideEvent = allEvents
-    .filter((e) => e.kind === 'agent.repo-override')
-    .at(-1);
+  const overrideEvent = allEvents.filter((e) => e.kind === 'agent.repo-override').at(-1);
 
   const overridePayload = overrideEvent?.payload as { repo?: string } | undefined;
 
@@ -468,7 +466,7 @@ app.post('/projects/:slug/issues/:id/repo-override', async (c) => {
   const source = await getSourceForSlug(slug);
   if (source == null) return c.json({ error: 'project not found' }, 404);
 
-  const body = await c.req.json().catch(() => null) as { repo?: unknown } | null;
+  const body = (await c.req.json().catch(() => null)) as { repo?: unknown } | null;
   const repo = typeof body?.repo === 'string' ? body.repo : null;
   if (repo == null) return c.json({ error: 'repo is required' }, 400);
 
@@ -478,7 +476,10 @@ app.post('/projects/:slug/issues/:id/repo-override', async (c) => {
   const { fileURLToPath } = await import('node:url');
   const repoRoot = join(fileURLToPath(import.meta.url), '../../../../../..');
   const reposMd = readFileSync(join(repoRoot, 'target-projects', slug, 'repos.md'), 'utf8');
-  const allowedRepos = reposMd.match(/^###\s+\[([^\]]+)\]/gm)?.map((m) => m.replace(/^###\s+\[/, '').replace(/\]$/, '')) ?? [];
+  const allowedRepos =
+    reposMd
+      .match(/^###\s+\[([^\]]+)\]/gm)
+      ?.map((m) => m.replace(/^###\s+\[/, '').replace(/\]$/, '')) ?? [];
   if (!allowedRepos.includes(repo)) {
     return c.json({ error: `repo '${repo}' not in allowlist` }, 400);
   }
@@ -500,7 +501,9 @@ app.post('/projects/:slug/issues/:id/repo-override', async (c) => {
 
   const payload = triageEvent.payload as {
     triage: { type: string; priority: string };
-    repoMatch: { candidates: Array<{ repo: string; confidence: number; evidence: string; tier: number }> };
+    repoMatch: {
+      candidates: Array<{ repo: string; confidence: number; evidence: string; tier: number }>;
+    };
   };
 
   return c.json({

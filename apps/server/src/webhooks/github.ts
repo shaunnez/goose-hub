@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import type { Context } from 'hono';
 import { logger } from '@goose-hub/core/logger.js';
+import type { Context } from 'hono';
 
 /** Map from GitHub repo full name → project slug */
 const REPO_TO_SLUG: Record<string, string> = {
@@ -47,14 +47,24 @@ export async function handleGitHubWebhook(c: Context): Promise<Response> {
   }
 
   if (payload.action !== 'opened') {
-    return c.json({ ok: true, event: eventType, action: payload.action ?? 'unknown', status: 'ignored' });
+    return c.json({
+      ok: true,
+      event: eventType,
+      action: payload.action ?? 'unknown',
+      status: 'ignored',
+    });
   }
 
   const repoName = payload.repository?.full_name ?? '';
   const slug = REPO_TO_SLUG[repoName];
 
   if (slug == null) {
-    return c.json({ ok: true, event: eventType, action: 'ignored', reason: 'repo not in allowlist' });
+    return c.json({
+      ok: true,
+      event: eventType,
+      action: 'ignored',
+      reason: 'repo not in allowlist',
+    });
   }
 
   // Dispatch async — do not await

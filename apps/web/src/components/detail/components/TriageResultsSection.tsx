@@ -62,9 +62,7 @@ export function TriageResultsSection({ projectSlug, id }: TriageResultsSectionPr
 
   return (
     <div data-testid="triage-results-section" className="px-8 py-4 border-t border-border/40">
-      <h3 className="text-[12px] font-semibold text-fg-3 uppercase tracking-wide mb-3">
-        Triage
-      </h3>
+      <h3 className="text-[12px] font-semibold text-fg-3 uppercase tracking-wide mb-3">Triage</h3>
       <div className="flex items-center gap-2 mb-4">
         <Badge
           label={triage.type}
