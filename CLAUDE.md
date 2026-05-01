@@ -80,6 +80,15 @@ If you see an issue labelled `factory:in-progress` with no recent activity (no P
 7. Follow TDD: write the failing test first, then the implementation, then refactor.
 8. Run lint and tests before opening a PR.
 9. Open PR with a clear description linking back to the issue. Always include `Closes #N` (where N is the issue number) in the PR body so GitHub auto-closes the issue on merge. Do not include implementation reasoning the QA/Reviewer agents shouldn't see — that goes in `agent.decision-summary` events, not PR descriptions.
+10. After opening the PR, update the issue body to check off all completed acceptance criteria (`[ ]` → `[x]`). Use `gh issue view N --json body` to fetch the current body, flip the boxes, and `gh issue edit N --body "..."` to write it back. Then post a structured transition comment to the issue:
+    ```
+    Transitioned to `factory:needs-qa`
+    PR: #<pr-number>
+    Completed criteria:
+    - <criterion 1>
+    - <criterion 2>
+    ```
+    Do not repeat implementation reasoning here — just which criteria are satisfied and where the PR is.
 
 ## PR conventions
 
