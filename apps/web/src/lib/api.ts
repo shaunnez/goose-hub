@@ -5,6 +5,7 @@ export type {
   MilestoneDto,
   AgentEventDto,
   TransitionResult,
+  InboxItemDto,
 } from './types';
 
 async function getJson<T>(path: string): Promise<T> {
@@ -135,6 +136,15 @@ export async function createInboxItem(data: {
   type: string;
 }): Promise<void> {
   await postJson('/inbox', data);
+}
+
+export async function fetchInboxItems(): Promise<InboxItemDto[]> {
+  const { items } = await getJson<{ items: InboxItemDto[] }>('/inbox');
+  return items;
+}
+
+export async function promoteInboxItem(id: number, projectSlug = 'goose-hub-self'): Promise<void> {
+  await postJson(`/inbox/${id}/promote`, { projectSlug });
 }
 
 export async function transitionState(
