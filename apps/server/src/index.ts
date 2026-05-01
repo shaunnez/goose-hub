@@ -53,6 +53,18 @@ app.get('/projects/:slug/milestones/:milestone/closed-issues', async (c) => {
   return c.json({ items });
 });
 
+app.get('/projects/:slug/milestones/:milestone/issues', async (c) => {
+  const slug = c.req.param('slug');
+  const milestone = Number(c.req.param('milestone'));
+  if (Number.isNaN(milestone)) return c.json({ error: 'invalid milestone number' }, 400);
+  const source = await getSourceForSlug(slug);
+  if (source == null) return c.json({ error: 'project not found' }, 404);
+  const items = await getCached(`milestone-issues:${slug}:${milestone}`, 60_000, () =>
+    source.listWorkByMilestone(milestone),
+  );
+  return c.json({ items });
+});
+
 app.get('/projects/:slug/milestones', async (c) => {
   const slug = c.req.param('slug');
   const source = await getSourceForSlug(slug);
@@ -129,6 +141,18 @@ app.post('/projects/:slug/issues/:id/transition', async (c) => {
   bustCache(`issues:${slug}`);
 
   return c.json({ ok: true, from, to });
+});
+
+app.get('/projects/:slug/issues/:id/comments', async (c) => {
+  const slug = c.req.param('slug');
+  const id = c.req.param('id');
+  const source = await getSourceForSlug(slug);
+  if (source == null) return c.json({ error: 'project not found' }, 404);
+  const cfg = await getProject(slug);
+  const repoRef = cfg?.source.kind === 'github' ? cfg.source.repo : slug;
+  const workItemId = `github:${repoRef}#${id}`;
+  const comments = await source.listComments(workItemId);
+  return c.json({ comments });
 });
 
 app.post('/projects/:slug/issues/:id/comment', async (c) => {

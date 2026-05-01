@@ -1,4 +1,4 @@
-import { type WorkItemDto, fetchClosedIssues, fetchIssues } from '@/lib/api';
+import { type WorkItemDto, fetchIssues, fetchMilestoneIssues } from '@/lib/api';
 import { LANES, laneForState, sortLaneItems } from '@/lib/lanes.config';
 import { useActiveMilestone } from '@/state/active-milestone';
 import { useLaneVisibility } from '@/state/lane-visibility';
@@ -14,13 +14,7 @@ interface BoardProps {
 export function Board({ projectSlug }: BoardProps) {
   const queryClient = useQueryClient();
   const { hidden, toggle, reset } = useLaneVisibility();
-  const { activeNumber: resolvedMilestone, milestones } = useActiveMilestone();
-
-  const activeMilestone = useMemo(
-    () => milestones.find((m) => m.number === resolvedMilestone) ?? null,
-    [milestones, resolvedMilestone],
-  );
-  const isClosed = activeMilestone != null && !activeMilestone.isActive;
+  const { activeNumber: resolvedMilestone } = useActiveMilestone();
 
   const {
     data: items = [],
@@ -30,12 +24,12 @@ export function Board({ projectSlug }: BoardProps) {
     refetch,
   } = useQuery({
     queryKey:
-      isClosed && resolvedMilestone != null
-        ? ['closed-issues', projectSlug, resolvedMilestone]
+      resolvedMilestone != null
+        ? ['milestone-issues', projectSlug, resolvedMilestone]
         : ['issues', projectSlug],
     queryFn: () =>
-      isClosed && resolvedMilestone != null
-        ? fetchClosedIssues(projectSlug, resolvedMilestone)
+      resolvedMilestone != null
+        ? fetchMilestoneIssues(projectSlug, resolvedMilestone)
         : fetchIssues(projectSlug),
   });
 
@@ -52,8 +46,12 @@ export function Board({ projectSlug }: BoardProps) {
         if (payload.workItemId == null || payload.payload?.to == null) return;
         const externalId = payload.workItemId.split('#').pop();
         if (externalId == null) return;
+        const cacheKey =
+          resolvedMilestone != null
+            ? ['milestone-issues', projectSlug, resolvedMilestone]
+            : ['issues', projectSlug];
         queryClient.setQueryData<WorkItemDto[]>(
-          ['issues', projectSlug],
+          cacheKey,
           (prev) =>
             prev?.map((it) =>
               it.externalId === externalId ? { ...it, state: payload.payload.to as string } : it,
@@ -68,17 +66,12 @@ export function Board({ projectSlug }: BoardProps) {
       es.removeEventListener('state.transitioned', onTransition as EventListener);
       es.close();
     };
-  }, [projectSlug, queryClient]);
-
-  const filtered = useMemo(() => {
-    if (resolvedMilestone == null) return items;
-    return items.filter((item) => item.milestoneId === String(resolvedMilestone));
-  }, [items, resolvedMilestone]);
+  }, [projectSlug, resolvedMilestone, queryClient]);
 
   const itemsByLane = useMemo(() => {
     const out = new Map<string, WorkItemDto[]>();
     for (const lane of LANES) out.set(lane.key, []);
-    for (const item of filtered) {
+    for (const item of items) {
       const laneKey = laneForState(item.state);
       if (laneKey == null) continue;
       out.get(laneKey)?.push(item);
@@ -88,7 +81,7 @@ export function Board({ projectSlug }: BoardProps) {
       if (arr != null) out.set(key, sortLaneItems(arr));
     }
     return out;
-  }, [filtered]);
+  }, [items]);
 
   const visibleLanes = useMemo(() => LANES.filter((l) => !hidden.has(l.key)), [hidden]);
   const hiddenLanes = useMemo(() => LANES.filter((l) => hidden.has(l.key)), [hidden]);
@@ -115,7 +108,7 @@ export function Board({ projectSlug }: BoardProps) {
     <div className="h-full flex flex-col" data-testid="board">
       <div className="flex items-center gap-2 px-4 py-2 border-b border-line shrink-0 text-[12px] text-fg-3">
         <span data-testid="board-issue-count">
-          {filtered.length} issue{filtered.length === 1 ? '' : 's'}
+          {items.length} issue{items.length === 1 ? '' : 's'}
         </span>
         {resolvedMilestone != null && (
           <span>

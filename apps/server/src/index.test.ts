@@ -37,6 +37,7 @@ vi.mock('./source.js', () => ({
   getSourceForSlug: vi.fn().mockResolvedValue({
     repoRef: 'owner/repo',
     comment: vi.fn().mockResolvedValue(undefined),
+    listComments: vi.fn().mockResolvedValue([]),
     setMilestone: vi.fn().mockResolvedValue(undefined),
     setLabelInGroup: vi.fn().mockResolvedValue(undefined),
     listClosedWorkByMilestone: vi.fn().mockResolvedValue([
@@ -57,6 +58,44 @@ vi.mock('./source.js', () => ({
         dependsOn: [],
         blocks: [],
         createdAt: new Date('2024-01-01'),
+      },
+    ]),
+    listWorkByMilestone: vi.fn().mockResolvedValue([
+      {
+        id: 'github:owner/repo#5',
+        externalId: '5',
+        repoRef: 'owner/repo',
+        title: 'Done item',
+        body: '',
+        type: 'feature',
+        priority: 'medium',
+        mode: 'supervised',
+        state: 'factory:done',
+        authorIsOwner: true,
+        milestoneId: '3',
+        schedule: 'current',
+        exec: 'parallel',
+        dependsOn: [],
+        blocks: [],
+        createdAt: new Date('2024-01-01'),
+      },
+      {
+        id: 'github:owner/repo#6',
+        externalId: '6',
+        repoRef: 'owner/repo',
+        title: 'Open item',
+        body: '',
+        type: 'feature',
+        priority: 'medium',
+        mode: 'supervised',
+        state: 'factory:in-progress',
+        authorIsOwner: true,
+        milestoneId: '3',
+        schedule: 'current',
+        exec: 'parallel',
+        dependsOn: [],
+        blocks: [],
+        createdAt: new Date('2024-01-02'),
       },
     ]),
   }),
@@ -126,6 +165,27 @@ describe('GET /projects/:slug/milestones/:milestone/closed-issues', () => {
     const { getSourceForSlug } = await import('./source.js');
     vi.mocked(getSourceForSlug).mockResolvedValueOnce(null);
     const res = await app.request('/projects/unknown/milestones/3/closed-issues');
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('GET /projects/:slug/milestones/:milestone/issues', () => {
+  it('returns all work items (open and closed) for the milestone', async () => {
+    const res = await app.request('/projects/goose-hub-self/milestones/3/issues');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { items: unknown[] };
+    expect(body.items).toHaveLength(2);
+  });
+
+  it('returns 400 for a non-numeric milestone', async () => {
+    const res = await app.request('/projects/goose-hub-self/milestones/abc/issues');
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 for unknown project', async () => {
+    const { getSourceForSlug } = await import('./source.js');
+    vi.mocked(getSourceForSlug).mockResolvedValueOnce(null);
+    const res = await app.request('/projects/unknown/milestones/3/issues');
     expect(res.status).toBe(404);
   });
 });

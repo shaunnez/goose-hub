@@ -25,6 +25,13 @@ export interface WorkItemDto {
   createdAt: string;
 }
 
+export interface IssueCommentDto {
+  id: number;
+  body: string;
+  authorLogin: string;
+  createdAt: string;
+}
+
 export interface MilestoneDto {
   id: string;
   title: string;
@@ -90,6 +97,16 @@ export async function fetchClosedIssues(
   return items;
 }
 
+export async function fetchMilestoneIssues(
+  slug: string,
+  milestoneNumber: number,
+): Promise<WorkItemDto[]> {
+  const { items } = await getJson<{ items: WorkItemDto[] }>(
+    `/projects/${slug}/milestones/${milestoneNumber}/issues`,
+  );
+  return items;
+}
+
 export async function fetchMilestones(slug: string): Promise<MilestoneDto[]> {
   const { milestones } = await getJson<{ milestones: MilestoneDto[] }>(
     `/projects/${slug}/milestones`,
@@ -117,6 +134,13 @@ export async function fetchEvents(slug: string, id: string): Promise<AgentEventD
     `/projects/${slug}/issues/${id}/events`,
   );
   return events;
+}
+
+export async function fetchComments(slug: string, id: string): Promise<IssueCommentDto[]> {
+  const { comments } = await getJson<{ comments: IssueCommentDto[] }>(
+    `/projects/${slug}/issues/${id}/comments`,
+  );
+  return comments;
 }
 
 export async function addComment(slug: string, id: string, body: string): Promise<void> {

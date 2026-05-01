@@ -4,6 +4,7 @@ import type {
   Artifact,
   CreateIssueInput,
   ExecMode,
+  IssueComment,
   Milestone,
   Mode,
   Priority,
@@ -231,6 +232,14 @@ export class GitHubLabelsSource implements StateSource {
       .map((i) => mapIssueToWorkItem(i, this.repoRef, this.ownerLogin));
   }
 
+  async listWorkByMilestone(milestoneNumber: number): Promise<WorkItem[]> {
+    const url = `https://api.github.com/repos/${this.repoRef}/issues?state=all&milestone=${milestoneNumber}&per_page=100`;
+    const issues = await this.paginateAll<GithubIssue>(url);
+    return issues
+      .filter((i) => i.pull_request == null)
+      .map((i) => mapIssueToWorkItem(i, this.repoRef, this.ownerLogin));
+  }
+
   async getItem(itemId: string): Promise<WorkItem> {
     // itemId may be "github:owner/repo#42" or a raw number string.
     const match = itemId.match(/#(\d+)$/);
@@ -321,6 +330,25 @@ export class GitHubLabelsSource implements StateSource {
     if (!addRes.ok) {
       throw new Error(`Failed to add label ${to}: ${addRes.status} ${addRes.statusText}`);
     }
+  }
+
+  async listComments(itemId: string): Promise<IssueComment[]> {
+    const match = itemId.match(/#(\d+)$/);
+    const number = match != null ? match[1] : itemId;
+    const url = `https://api.github.com/repos/${this.repoRef}/issues/${number}/comments?per_page=100`;
+    const res = await this.ghFetch(url);
+    const raw = (await res.json()) as {
+      id: number;
+      body: string;
+      user: { login: string } | null;
+      created_at: string;
+    }[];
+    return raw.map((c) => ({
+      id: c.id,
+      body: c.body,
+      authorLogin: c.user?.login ?? 'unknown',
+      createdAt: c.created_at,
+    }));
   }
 
   async comment(itemId: string, body: string): Promise<void> {
