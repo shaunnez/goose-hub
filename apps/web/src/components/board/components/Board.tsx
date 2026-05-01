@@ -1,5 +1,6 @@
 import { fetchIssues, fetchMilestoneIssues } from '@/lib/api';
 import { LANES, laneForState, sortLaneItems } from '@/lib/lanes.config';
+import { logger } from '@/lib/logger';
 import type { WorkItemDto } from '@/lib/types';
 import { useActiveMilestone } from '@/state/active-milestone';
 import { useLaneVisibility } from '@/state/lane-visibility';
@@ -58,8 +59,8 @@ export function Board({ projectSlug }: BoardProps) {
               it.externalId === externalId ? { ...it, state: payload.payload.to as string } : it,
             ) ?? prev,
         );
-      } catch {
-        // ignore malformed events
+      } catch (err) {
+        logger.warn('Board: failed to parse SSE event', { err: String(err) });
       }
     };
     es.addEventListener('state.transitioned', onTransition as EventListener);
