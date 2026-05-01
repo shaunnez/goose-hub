@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-
 import { Board } from './components/board/components/Board';
 import { AppShell } from './components/chrome/AppShell';
 import { DetailPage } from './components/detail/components/DetailPage';
+import { InboxList } from './components/inbox/InboxList';
 import { ActiveMilestoneProvider } from './state/active-milestone';
 import { ActiveProjectProvider } from './state/active-project';
 import { LaneVisibilityProvider } from './state/lane-visibility';
@@ -59,6 +60,15 @@ function DetailPageRouteWithSection() {
   return <DetailPageRoute section={section} />;
 }
 
+function InboxPage() {
+  const { slug = 'goose-hub-self' } = useParams<{ slug: string }>();
+  return (
+    <AppShell breadcrumb={<span>Inbox</span>}>
+      <InboxList projectSlug={slug} />
+    </AppShell>
+  );
+}
+
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -70,6 +80,14 @@ export function App() {
             element={
               <ProjectShell>
                 <KanbanPage />
+              </ProjectShell>
+            }
+          />
+          <Route
+            path="/projects/:slug/inbox"
+            element={
+              <ProjectShell>
+                <InboxPage />
               </ProjectShell>
             }
           />
