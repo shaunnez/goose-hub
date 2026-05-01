@@ -1,6 +1,6 @@
 import { cn } from '@/lib/cn';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { SECTIONS } from './sections';
+import { SECTIONS } from '../lib/sections';
 
 export function LeftRail() {
   const { slug = 'goose-hub-self', id = '' } = useParams<{ slug: string; id: string }>();

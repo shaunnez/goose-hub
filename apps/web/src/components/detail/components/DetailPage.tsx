@@ -12,7 +12,7 @@ import { OverviewSection } from './OverviewSection';
 import { RightRail } from './RightRail';
 import { TaskHeader } from './TaskHeader';
 import { TimelineSection } from './TimelineSection';
-import { SECTIONS } from './sections';
+import { SECTIONS } from '../lib/sections';
 
 interface DetailPageProps {
   section?: string;

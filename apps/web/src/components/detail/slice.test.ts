@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { renderMarkdownToHtml } from '../../lib/markdown';
 import { LEGAL_TARGETS } from '../../lib/transitions';
-import { GATE_STATES } from './gate-states';
-import { SECTIONS } from './sections';
+import { GATE_STATES } from '../../lib/constants';
+import { SECTIONS } from './lib/sections';
 
 describe('detail page — sections config', () => {
   it('lists the 10 design sections in order', () => {
