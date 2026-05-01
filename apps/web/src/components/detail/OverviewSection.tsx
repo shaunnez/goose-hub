@@ -44,10 +44,31 @@ function applyFormat(
 const TOOLBAR = [
   { label: 'B', prefix: '**', suffix: '**', placeholder: 'bold', title: 'Bold', cls: 'font-bold' },
   { label: 'I', prefix: '*', suffix: '*', placeholder: 'italic', title: 'Italic', cls: 'italic' },
-  { label: '`', prefix: '`', suffix: '`', placeholder: 'code', title: 'Inline code', cls: 'font-mono' },
-  { label: '```', prefix: '```\n', suffix: '\n```', placeholder: 'code block', title: 'Code block', cls: 'font-mono' },
+  {
+    label: '`',
+    prefix: '`',
+    suffix: '`',
+    placeholder: 'code',
+    title: 'Inline code',
+    cls: 'font-mono',
+  },
+  {
+    label: '```',
+    prefix: '```\n',
+    suffix: '\n```',
+    placeholder: 'code block',
+    title: 'Code block',
+    cls: 'font-mono',
+  },
   { label: 'link', prefix: '[', suffix: '](url)', placeholder: 'text', title: 'Link', cls: '' },
-  { label: '- ', prefix: '\n- ', suffix: '', placeholder: '', title: 'List item', cls: 'font-mono' },
+  {
+    label: '- ',
+    prefix: '\n- ',
+    suffix: '',
+    placeholder: '',
+    title: 'List item',
+    cls: 'font-mono',
+  },
 ] as const;
 
 function CommentComposer({
@@ -85,7 +106,10 @@ function CommentComposer({
   };
 
   return (
-    <form onSubmit={(e) => void onSubmit(e)} className="rounded-md border border-line overflow-hidden">
+    <form
+      onSubmit={(e) => void onSubmit(e)}
+      className="rounded-md border border-line overflow-hidden"
+    >
       {/* Tab bar + toolbar */}
       <div className="flex items-center justify-between px-2 py-1.5 bg-bg-elev border-b border-line">
         <div className="flex gap-0.5">
@@ -112,7 +136,8 @@ function CommentComposer({
                 type="button"
                 title={title}
                 onClick={() => {
-                  if (taRef.current) applyFormat(taRef.current, setText, prefix, suffix, placeholder);
+                  if (taRef.current)
+                    applyFormat(taRef.current, setText, prefix, suffix, placeholder);
                 }}
                 className={`px-2 py-0.5 text-[11.5px] text-fg-3 hover:text-fg-2 hover:bg-bg-hover rounded ${cls}`}
               >
@@ -185,7 +210,7 @@ function CommentsSection({
       ) : (
         <div className="relative">
           {/* Vertical timeline line */}
-          {(comments.length > 0) && (
+          {comments.length > 0 && (
             <div className="absolute left-[11px] top-3 bottom-3 w-px bg-line" />
           )}
 
@@ -215,11 +240,7 @@ function CommentsSection({
             {/* Composer */}
             <div className="relative pl-8">
               <div className="absolute left-[5px] top-[13px] w-[13px] h-[13px] rounded-full border-2 border-accent bg-bg" />
-              <CommentComposer
-                projectSlug={projectSlug}
-                externalId={externalId}
-                issueId={id}
-              />
+              <CommentComposer projectSlug={projectSlug} externalId={externalId} issueId={id} />
             </div>
           </div>
         </div>
