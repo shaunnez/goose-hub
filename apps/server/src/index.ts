@@ -288,17 +288,29 @@ app.post('/projects/:slug/issues/:id/fake-run', async (c) => {
   const repoRef = cfg?.source.kind === 'github' ? cfg.source.repo : slug;
   const workItemId = `github:${repoRef}#${id}`;
 
+  const LOG_LINES = [
+    'Fetching issue metadata from GitHub...',
+    'Parsing labels and body content...',
+    'Scoring priority and work type...',
+    'Drafting decision summary...',
+    'Finalising structured output...',
+  ];
+
   // Fire-and-forget: emit events with delays
   (async () => {
     eventStore.appendEvent({ projectId, workItemId, kind: 'agent.spawned', payload: { skill } });
-    await new Promise((r) => setTimeout(r, 1500));
+    await new Promise((r) => setTimeout(r, 700));
+    for (const line of LOG_LINES) {
+      eventStore.appendEvent({ projectId, workItemId, kind: 'agent.log', payload: { line } });
+      await new Promise((r) => setTimeout(r, 600));
+    }
     eventStore.appendEvent({
       projectId,
       workItemId,
       kind: 'agent.decision-summary',
       payload: { summary: `Running ${skill} skill on issue #${id}` },
     });
-    await new Promise((r) => setTimeout(r, 1500));
+    await new Promise((r) => setTimeout(r, 700));
     eventStore.appendEvent({
       projectId,
       workItemId,

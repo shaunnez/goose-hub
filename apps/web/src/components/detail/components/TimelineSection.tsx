@@ -1,4 +1,5 @@
 import { fetchEvents } from '@/lib/api';
+import { cn } from '@/lib/cn';
 import type { AgentEventDto } from '@/lib/types';
 import { useEffect, useRef, useState } from 'react';
 
@@ -14,6 +15,7 @@ const STATE_LABEL: Record<string, string> = {
   'agent.spawned': 'Agent spawned',
   'agent.decision-summary': 'Decision summary',
   'agent.terminated': 'Agent terminated',
+  'agent.log': 'Agent log',
   'gate.awaiting-human': 'Gate — awaiting human',
   'system.note': 'Note',
 };
@@ -24,6 +26,10 @@ function summarizePayload(kind: string, payload: unknown): string {
     if (p.from != null && p.to != null) {
       return `${p.from} → ${p.to}${p.by != null ? ` (by ${p.by})` : ''}`;
     }
+  }
+  if (kind === 'agent.log' && payload != null && typeof payload === 'object') {
+    const p = payload as { line?: string };
+    if (p.line != null) return p.line;
   }
   const text = typeof payload === 'string' ? payload : JSON.stringify(payload ?? {});
   return text.length <= 80 ? text : `${text.slice(0, 79)}…`;
@@ -114,7 +120,12 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
           <li
             key={event.id}
             data-event-kind={event.kind}
-            className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+            className={cn(
+              'rounded-md border px-4 py-3',
+              event.kind === 'agent.log'
+                ? 'border-line/50 bg-bg/40 text-fg-4'
+                : 'border-line bg-bg-elev/60',
+            )}
           >
             <div className="flex items-center gap-2 mb-1 text-[11px] text-fg-3">
               <span className="font-mono uppercase tracking-wider">
@@ -123,7 +134,12 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
               <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
               <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
             </div>
-            <div className="text-[12.5px] text-fg-2">
+            <div
+              className={cn(
+                'text-fg-2',
+                event.kind === 'agent.log' ? 'font-mono text-[11.5px]' : 'text-[12.5px]',
+              )}
+            >
               {summarizePayload(event.kind, event.payload)}
             </div>
           </li>
