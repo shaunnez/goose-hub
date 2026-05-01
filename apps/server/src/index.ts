@@ -4,6 +4,8 @@ config({ path: resolve(import.meta.dirname, '../../../.env') });
 
 import { buildSseStream } from '@goose-hub/core/event-stream/sse.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { logger } from '@goose-hub/core/logger.js';
+import { STATES } from '@goose-hub/core/state-machine/states.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { isLegalTransition, legalTargets } from '@goose-hub/core/state-machine/transitions.js';
 import { serve } from '@hono/node-server';
@@ -13,6 +15,13 @@ import { readActiveMilestone, writeActiveMilestone } from './active-milestone.js
 import { bustCache, getCached } from './cache.js';
 import { getProject, listProjects } from './projects.js';
 import { getSourceForSlug } from './source.js';
+
+const CACHE_KEY = {
+  issues: (slug: string) => `issues:${slug}`,
+  milestones: (slug: string) => `milestones:${slug}`,
+  closedIssues: (slug: string, ms: number) => `closed-issues:${slug}:${ms}`,
+  milestoneIssues: (slug: string, ms: number) => `milestone-issues:${slug}:${ms}`,
+} as const;
 
 const app = new Hono();
 app.use('*', cors());
@@ -28,7 +37,7 @@ app.get('/projects/:slug/issues', async (c) => {
   const slug = c.req.param('slug');
   const source = await getSourceForSlug(slug);
   if (source == null) return c.json({ error: 'project not found' }, 404);
-  const items = await getCached(`issues:${slug}`, 60_000, () => source.listOpenWork());
+  const items = await getCached(CACHE_KEY.issues(slug), 60_000, () => source.listOpenWork());
   return c.json({ items });
 });
 
@@ -47,7 +56,7 @@ app.get('/projects/:slug/milestones/:milestone/closed-issues', async (c) => {
   if (Number.isNaN(milestone)) return c.json({ error: 'invalid milestone number' }, 400);
   const source = await getSourceForSlug(slug);
   if (source == null) return c.json({ error: 'project not found' }, 404);
-  const items = await getCached(`closed-issues:${slug}:${milestone}`, 60_000, () =>
+  const items = await getCached(CACHE_KEY.closedIssues(slug, milestone), 60_000, () =>
     source.listClosedWorkByMilestone(milestone),
   );
   return c.json({ items });
@@ -59,7 +68,7 @@ app.get('/projects/:slug/milestones/:milestone/issues', async (c) => {
   if (Number.isNaN(milestone)) return c.json({ error: 'invalid milestone number' }, 400);
   const source = await getSourceForSlug(slug);
   if (source == null) return c.json({ error: 'project not found' }, 404);
-  const items = await getCached(`milestone-issues:${slug}:${milestone}`, 60_000, () =>
+  const items = await getCached(CACHE_KEY.milestoneIssues(slug, milestone), 60_000, () =>
     source.listWorkByMilestone(milestone),
   );
   return c.json({ items });
@@ -69,7 +78,9 @@ app.get('/projects/:slug/milestones', async (c) => {
   const slug = c.req.param('slug');
   const source = await getSourceForSlug(slug);
   if (source == null) return c.json({ error: 'project not found' }, 404);
-  const milestones = await getCached(`milestones:${slug}`, 60_000, () => source.listMilestones());
+  const milestones = await getCached(CACHE_KEY.milestones(slug), 60_000, () =>
+    source.listMilestones(),
+  );
   return c.json({ milestones });
 });
 
@@ -86,7 +97,10 @@ app.get('/projects/:slug/active-milestone', async (c) => {
 
 app.post('/projects/:slug/active-milestone', async (c) => {
   const slug = c.req.param('slug');
-  const body = (await c.req.json().catch(() => ({}))) as { milestoneNumber?: number | null };
+  const body = (await c.req.json().catch((err) => {
+    logger.warn('request body parse failed', { err: String(err) });
+    return {};
+  })) as { milestoneNumber?: number | null };
   const projectId = slug;
   await writeActiveMilestone(projectId, body.milestoneNumber ?? null, 'ui');
   eventStore.appendEvent({
@@ -113,15 +127,29 @@ app.get('/projects/:slug/issues/:id/events', async (c) => {
 app.post('/projects/:slug/issues/:id/transition', async (c) => {
   const slug = c.req.param('slug');
   const id = c.req.param('id');
-  const body = (await c.req.json().catch(() => ({}))) as { from?: string; to?: string };
-  const from = body.from as StateName | undefined;
-  const to = body.to as StateName | undefined;
+  const body = (await c.req.json().catch((err) => {
+    logger.warn('request body parse failed', { err: String(err) });
+    return {};
+  })) as { from?: string; to?: string };
+  const from = body.from;
+  const to = body.to;
   if (from == null || to == null) {
     return c.json({ error: "missing 'from' or 'to'" }, 400);
   }
-  if (!isLegalTransition(from, to)) {
-    const legal = legalTargets(from);
-    return c.json({ error: 'illegal transition', from, to, legalTargets: legal }, 422);
+  if (!(STATES as readonly string[]).includes(from)) {
+    return c.json({ error: `invalid state name for 'from': ${from}` }, 400);
+  }
+  if (!(STATES as readonly string[]).includes(to)) {
+    return c.json({ error: `invalid state name for 'to': ${to}` }, 400);
+  }
+  const fromState = from as StateName;
+  const toState = to as StateName;
+  if (!isLegalTransition(fromState, toState)) {
+    const legal = legalTargets(fromState);
+    return c.json(
+      { error: 'illegal transition', from: fromState, to: toState, legalTargets: legal },
+      422,
+    );
   }
 
   const source = await getSourceForSlug(slug);
@@ -129,18 +157,18 @@ app.post('/projects/:slug/issues/:id/transition', async (c) => {
 
   const projectId = slug;
   const workItemId = `github:${source.repoRef}#${id}`;
-  await source.transitionState(workItemId, from, to);
+  await source.transitionState(workItemId, fromState, toState);
 
   eventStore.appendEvent({
     projectId,
     workItemId,
     kind: 'state.transitioned',
-    payload: { from, to, by: 'ui' },
+    payload: { from: fromState, to: toState, by: 'ui' },
   });
 
-  bustCache(`issues:${slug}`);
+  bustCache(CACHE_KEY.issues(slug));
 
-  return c.json({ ok: true, from, to });
+  return c.json({ ok: true, from: fromState, to: toState });
 });
 
 app.get('/projects/:slug/issues/:id/comments', async (c) => {
@@ -158,7 +186,10 @@ app.get('/projects/:slug/issues/:id/comments', async (c) => {
 app.post('/projects/:slug/issues/:id/comment', async (c) => {
   const slug = c.req.param('slug');
   const id = c.req.param('id');
-  const body = (await c.req.json().catch(() => ({}))) as { body?: string };
+  const body = (await c.req.json().catch((err) => {
+    logger.warn('request body parse failed', { err: String(err) });
+    return {};
+  })) as { body?: string };
   if (!body.body?.trim()) return c.json({ error: 'body is required' }, 400);
   const source = await getSourceForSlug(slug);
   if (source == null) return c.json({ error: 'project not found' }, 404);
@@ -178,7 +209,10 @@ app.post('/projects/:slug/issues/:id/comment', async (c) => {
 app.post('/projects/:slug/issues/:id/set-milestone', async (c) => {
   const slug = c.req.param('slug');
   const id = c.req.param('id');
-  const body = (await c.req.json().catch(() => ({}))) as { milestoneNumber?: number | null };
+  const body = (await c.req.json().catch((err) => {
+    logger.warn('request body parse failed', { err: String(err) });
+    return {};
+  })) as { milestoneNumber?: number | null };
   const source = await getSourceForSlug(slug);
   if (source == null) return c.json({ error: 'project not found' }, 404);
   const cfg = await getProject(slug);
@@ -191,14 +225,17 @@ app.post('/projects/:slug/issues/:id/set-milestone', async (c) => {
     kind: 'manual.action',
     payload: { action: 'set-milestone', milestoneNumber: body.milestoneNumber ?? null },
   });
-  bustCache(`issues:${slug}`);
+  bustCache(CACHE_KEY.issues(slug));
   return c.json({ ok: true });
 });
 
 app.post('/projects/:slug/issues/:id/set-label', async (c) => {
   const slug = c.req.param('slug');
   const id = c.req.param('id');
-  const body = (await c.req.json().catch(() => ({}))) as { group?: string; value?: string };
+  const body = (await c.req.json().catch((err) => {
+    logger.warn('request body parse failed', { err: String(err) });
+    return {};
+  })) as { group?: string; value?: string };
   const validPriority = ['low', 'medium', 'high', 'critical'];
   // Note: schedule values here are the UI labels (current/backlog/icebox). The parser in
   // github-labels.ts maps to the internal Schedule type (current/next/later/blocked-by).
@@ -225,7 +262,7 @@ app.post('/projects/:slug/issues/:id/set-label', async (c) => {
     kind: 'manual.action',
     payload: { action: `set-${body.group}`, value: body.value },
   });
-  bustCache(`issues:${slug}`);
+  bustCache(CACHE_KEY.issues(slug));
   return c.json({ ok: true });
 });
 
@@ -253,7 +290,10 @@ app.get('/events', (c) => {
 });
 
 app.post('/inbox', async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as {
+  const body = (await c.req.json().catch((err) => {
+    logger.warn('request body parse failed', { err: String(err) });
+    return {};
+  })) as {
     title?: string;
     body?: string;
     type?: string;
@@ -294,7 +334,10 @@ app.get('/inbox', async (c) => {
 app.post('/inbox/:id/promote', async (c) => {
   const itemId = Number(c.req.param('id'));
   if (Number.isNaN(itemId)) return c.json({ error: 'invalid id' }, 400);
-  const body = (await c.req.json().catch(() => ({}))) as { projectSlug?: string };
+  const body = (await c.req.json().catch((err) => {
+    logger.warn('request body parse failed', { err: String(err) });
+    return {};
+  })) as { projectSlug?: string };
   const slug = body.projectSlug ?? 'goose-hub-self';
 
   const { db } = await import('@goose-hub/core/db/db.js');
@@ -312,7 +355,15 @@ app.post('/inbox/:id/promote', async (c) => {
     body: item.body ?? '',
     type: item.type as 'feature' | 'bug' | 'chore' | 'research',
   });
-  await db.delete(inboxItems).where(eq(inboxItems.id, itemId));
+  try {
+    await db.delete(inboxItems).where(eq(inboxItems.id, itemId));
+  } catch (err) {
+    logger.error('inbox promotion: GitHub issue created but inbox delete failed', {
+      itemId,
+      err: String(err),
+    });
+    // still return ok — the issue exists in GitHub
+  }
 
   return c.json({ ok: true });
 });
@@ -320,7 +371,10 @@ app.post('/inbox/:id/promote', async (c) => {
 app.post('/projects/:slug/issues/:id/fake-run', async (c) => {
   const slug = c.req.param('slug');
   const id = c.req.param('id');
-  const body = (await c.req.json().catch(() => ({}))) as { skill?: string };
+  const body = (await c.req.json().catch((err) => {
+    logger.warn('request body parse failed', { err: String(err) });
+    return {};
+  })) as { skill?: string };
   const skill = body.skill === 'investigate' ? 'investigate' : 'triage';
 
   const source = await getSourceForSlug(slug);
@@ -368,7 +422,7 @@ app.post('/projects/:slug/issues/:id/fake-run', async (c) => {
 if (process.env.VITEST == null) {
   const port = Number(process.env.PORT ?? 3001);
   serve({ fetch: app.fetch, port });
-  console.log(`apps/server listening on http://localhost:${port}`);
+  logger.info('server started', { port });
 }
 
 export { app };

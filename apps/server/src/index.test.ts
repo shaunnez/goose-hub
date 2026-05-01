@@ -40,6 +40,8 @@ vi.mock('./source.js', () => ({
     listComments: vi.fn().mockResolvedValue([]),
     setMilestone: vi.fn().mockResolvedValue(undefined),
     setLabelInGroup: vi.fn().mockResolvedValue(undefined),
+    transitionState: vi.fn().mockResolvedValue(undefined),
+    listOpenWork: vi.fn().mockResolvedValue([]),
     listClosedWorkByMilestone: vi.fn().mockResolvedValue([
       {
         id: 'github:owner/repo#5',
@@ -408,5 +410,27 @@ describe('POST /projects/:slug/issues/:id/set-label', () => {
       body: JSON.stringify({ group: 'priority', value: 'high' }),
     });
     expect(res.status).toBe(404);
+  });
+});
+
+describe('POST /projects/:slug/issues/:id/transition — state validation', () => {
+  it('returns 400 when "from" is not a valid state name', async () => {
+    const res = await app.request('/projects/goose-hub-self/issues/1/transition', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: 'factory:fake-unknown', to: 'factory:triaging' }),
+    });
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { error: string };
+    expect(data.error).toMatch(/invalid.*state|unknown.*state/i);
+  });
+
+  it('returns 400 when "to" is not a valid state name', async () => {
+    const res = await app.request('/projects/goose-hub-self/issues/1/transition', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: 'factory:triaging', to: 'not-a-real-state' }),
+    });
+    expect(res.status).toBe(400);
   });
 });
