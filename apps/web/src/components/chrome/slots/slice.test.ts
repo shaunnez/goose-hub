@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 describe('project switcher data contract', () => {
   it('ProjectSummary requires id, name, slug, color, source', () => {
-    type ProjectSummary = import('../../../lib/api').ProjectSummary;
+    type ProjectSummary = import('../../../lib/types').ProjectSummary;
     const sample: ProjectSummary = {
       id: 'goose-hub-self',
       name: 'Goose Hub (self)',

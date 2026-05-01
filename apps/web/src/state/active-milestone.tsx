@@ -1,5 +1,5 @@
+import type { MilestoneDto } from '@/lib/types';
 import {
-  type MilestoneDto,
   setActiveMilestone as apiSetActiveMilestone,
   fetchActiveMilestone,
   fetchMilestones,

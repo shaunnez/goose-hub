@@ -1,5 +1,5 @@
-import { type IssueCommentDto, addComment, fetchComments } from '@/lib/api';
-import type { WorkItemDto } from '@/lib/api';
+import type { IssueCommentDto, WorkItemDto } from '@/lib/types';
+import { addComment, fetchComments } from '@/lib/api';
 import { renderMarkdownToHtml } from '@/lib/markdown';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';

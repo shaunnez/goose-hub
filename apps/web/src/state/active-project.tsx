@@ -1,4 +1,5 @@
-import { type ProjectSummary, fetchProjects } from '@/lib/api';
+import type { ProjectSummary } from '@/lib/types';
+import { fetchProjects } from '@/lib/api';
 import { type ReactNode, createContext, useContext, useEffect, useState } from 'react';
 
 interface ActiveProjectState {

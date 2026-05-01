@@ -1,4 +1,5 @@
-import { type AgentEventDto, fetchEvents } from '@/lib/api';
+import type { AgentEventDto } from '@/lib/types';
+import { fetchEvents } from '@/lib/api';
 import { useEffect, useRef, useState } from 'react';
 
 interface TimelineSectionProps {

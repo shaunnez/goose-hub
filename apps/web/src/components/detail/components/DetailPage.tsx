@@ -1,4 +1,5 @@
-import { type WorkItemDto, fetchIssue, fetchIssues, startFakeRun } from '@/lib/api';
+import type { WorkItemDto } from '@/lib/types';
+import { fetchIssue, fetchIssues, startFakeRun } from '@/lib/api';
 import { LANES, laneForState, sortLaneItems } from '@/lib/lanes.config';
 import { useActiveMilestone } from '@/state/active-milestone';
 import { useQuery } from '@tanstack/react-query';
