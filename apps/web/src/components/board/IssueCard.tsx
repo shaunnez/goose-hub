@@ -2,6 +2,7 @@ import { Pill } from '@/components/ui/pill';
 import type { WorkItemDto } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { Link } from 'react-router-dom';
+import { COST_PLACEHOLDER } from './placeholders';
 
 // Priority colour-coding per #32:
 // critical = red, high = orange, medium = yellow, low = grey.
@@ -98,6 +99,13 @@ export function IssueCard({
         <Pill tone="default" className="h-5 text-[10.5px] px-2 capitalize">
           {item.priority}
         </Pill>
+        <span
+          className="ml-auto font-mono text-[10.5px] text-fg-4"
+          title="Cost tracking available in M9"
+          data-testid="cost-placeholder"
+        >
+          {COST_PLACEHOLDER}
+        </span>
       </div>
     </Link>
   );
