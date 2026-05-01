@@ -141,6 +141,27 @@ export async function createInboxItem(data: {
   await postJson('/inbox', data);
 }
 
+export async function addComment(slug: string, id: string, body: string): Promise<void> {
+  await postJson(`/projects/${slug}/issues/${id}/comment`, { body });
+}
+
+export async function setMilestone(
+  slug: string,
+  id: string,
+  milestoneNumber: number | null,
+): Promise<void> {
+  await postJson(`/projects/${slug}/issues/${id}/set-milestone`, { milestoneNumber });
+}
+
+export async function setLabel(
+  slug: string,
+  id: string,
+  group: 'priority' | 'schedule',
+  value: string,
+): Promise<void> {
+  await postJson(`/projects/${slug}/issues/${id}/set-label`, { group, value });
+}
+
 export async function transitionState(
   slug: string,
   id: string,
