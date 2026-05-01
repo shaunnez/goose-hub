@@ -1,6 +1,9 @@
-import { describe, expect, it, vi } from 'vitest';
+import { EventEmitter } from 'node:events';
+import { spawn } from 'node:child_process';
+import { describe, beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { assembleSpawnContext } from './context-assembly.js';
+import { ClaudeCliRuntime } from './claude-cli.js';
 import { withFallback } from './fallback.js';
 import type { AgentResult, AgentRuntime, AgentSpec, DecisionSummary } from './interface.js';
 import {
@@ -13,6 +16,24 @@ import {
 } from './models.js';
 import { OutputValidationError, validateOutput } from './output-validator.js';
 import { toJsonSchema } from './schema-bridge.js';
+import { eventStore } from '../event-stream/store.js';
+
+// ─── module mocks (hoisted by vitest) ────────────────────────────────────────
+vi.mock('node:child_process', () => ({
+  execFileSync: vi.fn().mockReturnValue('/mock/bin/claude'),
+  spawn: vi.fn(),
+}));
+vi.mock('node:fs', () => ({ mkdirSync: vi.fn() }));
+vi.mock('node:os', () => ({ homedir: vi.fn().mockReturnValue('/mock-home') }));
+vi.mock('../event-stream/store.js', () => ({
+  eventStore: {
+    appendEvent: vi.fn().mockReturnValue({ id: 1, kind: 'agent.run-started', payload: {}, createdAt: '' }),
+    replay: vi.fn().mockReturnValue([]),
+  },
+}));
+vi.mock('../tool-layer/allowlist.js', () => ({ computeAllowlist: vi.fn().mockReturnValue([]) }));
+vi.mock('../tool-layer/pre-tool-use-hook.js', () => ({ deployHooks: vi.fn() }));
+vi.mock('../tool-layer/sandbox.js', () => ({ writeWorkspaceSandbox: vi.fn() }));
 
 // ─── interface types ──────────────────────────────────────────────────────────
 
@@ -347,5 +368,103 @@ describe('withFallback', () => {
     const wrapped = withFallback(runtime, { allowDownTier: false, maxAttempts: 2 });
     await expect(wrapped.run(makeSpec())).rejects.toThrow();
     expect(vi.mocked(runtime.run)).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── ClaudeCliRuntime subprocess security ────────────────────────────────────
+
+function createMockProcess() {
+  const proc = {
+    stdout: new EventEmitter(),
+    kill: vi.fn<(signal?: string) => void>(),
+    _closeHandlers: [] as Array<(code: number | null) => void>,
+    on(event: string, handler: (...args: unknown[]) => void) {
+      if (event === 'close') this._closeHandlers.push(handler as (code: number | null) => void);
+    },
+    simulateClose(code: number | null = 0) {
+      for (const h of this._closeHandlers) h(code);
+    },
+  };
+  return proc;
+}
+
+function makeSecuritySpec(): AgentSpec {
+  return {
+    runId: 'sec-test-run-01',
+    role: 'developer',
+    skill: 'test',
+    context: { projectId: 'proj-test', workItemId: 'item-1' },
+    contextAllowlist: ['projectId', 'workItemId'],
+    freshContext: false,
+    toolBundles: [],
+    toolExtras: [],
+    budgets: { maxTurns: 5, maxBudgetUsd: 0.1 },
+  };
+}
+
+describe('ClaudeCliRuntime subprocess security', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(spawn).mockReturnValue(undefined as any);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('spawns with argv array and shell: false (FACTORY_RULES §29)', async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+
+    const runtime = new ClaudeCliRuntime();
+    const runPromise = runtime.run(makeSecuritySpec());
+
+    // spawn is called synchronously inside the Promise constructor
+    expect(vi.mocked(spawn)).toHaveBeenCalledOnce();
+    const [, spawnArgv, spawnOpts] = vi.mocked(spawn).mock.calls[0];
+    expect(Array.isArray(spawnArgv)).toBe(true);
+    expect((spawnOpts as { shell: unknown }).shell).toBe(false);
+
+    proc.simulateClose(0);
+    await runPromise;
+  });
+
+  it('truncates stdout at 4 MB and emits tool.stdout-truncated (FACTORY_RULES §31)', async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+
+    const runtime = new ClaudeCliRuntime();
+    const runPromise = runtime.run(makeSecuritySpec());
+
+    // Fill to exactly 4 MB cap, then emit another chunk to trigger truncation
+    proc.stdout.emit('data', Buffer.alloc(4 * 1024 * 1024, 97));
+    proc.stdout.emit('data', Buffer.alloc(1024, 98));
+    proc.simulateClose(0);
+
+    await runPromise;
+
+    const truncatedCall = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'tool.stdout-truncated');
+    expect(truncatedCall).toBeDefined();
+  });
+
+  it('kills process and emits tool.timeout after 30 s (FACTORY_RULES §32)', async () => {
+    vi.useFakeTimers();
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+
+    const runtime = new ClaudeCliRuntime();
+    const runPromise = runtime.run(makeSecuritySpec());
+
+    vi.advanceTimersByTime(30_001);
+
+    await expect(runPromise).rejects.toThrow(/timed out/);
+
+    expect(proc.kill).toHaveBeenCalledWith('SIGKILL');
+    const timeoutCall = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'tool.timeout');
+    expect(timeoutCall).toBeDefined();
   });
 });

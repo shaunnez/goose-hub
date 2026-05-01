@@ -50,6 +50,14 @@ These rules are immutable. Factory cannot modify this file. Humans can modify it
 27. No new heavyweight dependencies (vector DB, embedding service, etc.) without explicit human approval and an ADR.
 28a. **Monorepo package boundaries.** Every top-level directory imported by two or more apps must be a pnpm workspace package (`package.json` with `"name": "@goose-hub/<name>"` and a wildcard `"exports": { "./*": "./*" }`). Apps import it by package name, never by relative path. Intra-package imports stay relative. New shared modules must have their `package.json` before the first cross-app import lands.
 
+## Subprocess Security
+
+29. Never spawn with `shell: true`. Always pass argv as an array. Shell-string invocations allow injection via crafted argument values.
+30. Resolve binaries to an absolute path before spawn (via `which` / `shutil.which` equivalent). Never rely on implicit PATH resolution.
+31. Cap subprocess stdout at 4 MB. Truncate on overflow and emit a `tool.stdout-truncated` event. Unbounded stdout exhausts memory and enables side-channel abuse.
+32. Kill subprocesses after 30 seconds and emit a `tool.timeout` event. Hanging subprocesses block the orchestrator tick.
+33. Spawn with a minimal explicit env. Never forward the parent process's full environment to a child. The spawned process receives only the vars it needs (HOME, PATH, ANTHROPIC_API_KEY if present, FACTORY_RUN_ID, FACTORY_RUN_ALLOWLIST).
+
 ## Feedback loop
 
 28. Retrospective runs after every successful merge. Light by default; deep on triggers. Improvement candidates surface as Factory issues in the relevant target repo, never auto-applied.
