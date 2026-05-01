@@ -16,6 +16,16 @@ import type {
   WorkItemType,
 } from './interface.js';
 
+function parseIssueNumber(itemId: string): string {
+  return itemId.match(/#(\d+)$/)?.[1] ?? itemId;
+}
+
+export const SCHEDULE_UI_TO_LABEL: Record<string, string> = {
+  current: 'schedule:current',
+  backlog: 'schedule:next',
+  icebox: 'schedule:later',
+};
+
 interface GithubIssueLabel {
   name: string;
 }
@@ -242,8 +252,7 @@ export class GitHubLabelsSource implements StateSource {
 
   async getItem(itemId: string): Promise<WorkItem> {
     // itemId may be "github:owner/repo#42" or a raw number string.
-    const match = itemId.match(/#(\d+)$/);
-    const number = match != null ? match[1] : itemId;
+    const number = parseIssueNumber(itemId);
     const url = `https://api.github.com/repos/${this.repoRef}/issues/${number}`;
     const response = await this.ghFetch(url);
     const issue = (await response.json()) as GithubIssue;
@@ -275,8 +284,7 @@ export class GitHubLabelsSource implements StateSource {
     if (!isLegalTransition(from, to)) {
       throw new Error(`Illegal transition: ${from} -> ${to}`);
     }
-    const match = itemId.match(/#(\d+)$/);
-    const number = match != null ? match[1] : itemId;
+    const number = parseIssueNumber(itemId);
 
     // Remove the old state label, then add the new one. Do removal first so
     // the conflict-resolver never sees both labels at once.
@@ -305,8 +313,7 @@ export class GitHubLabelsSource implements StateSource {
   }
 
   async forceState(itemId: string, to: StateName): Promise<void> {
-    const match = itemId.match(/#(\d+)$/);
-    const number = match != null ? match[1] : itemId;
+    const number = parseIssueNumber(itemId);
 
     const labelsUrl = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels`;
     const labelsRes = await this.ghFetch(labelsUrl);
@@ -333,8 +340,7 @@ export class GitHubLabelsSource implements StateSource {
   }
 
   async listComments(itemId: string): Promise<IssueComment[]> {
-    const match = itemId.match(/#(\d+)$/);
-    const number = match != null ? match[1] : itemId;
+    const number = parseIssueNumber(itemId);
     const url = `https://api.github.com/repos/${this.repoRef}/issues/${number}/comments?per_page=100`;
     const res = await this.ghFetch(url);
     const raw = (await res.json()) as {
@@ -352,8 +358,7 @@ export class GitHubLabelsSource implements StateSource {
   }
 
   async comment(itemId: string, body: string): Promise<void> {
-    const match = itemId.match(/#(\d+)$/);
-    const number = match != null ? match[1] : itemId;
+    const number = parseIssueNumber(itemId);
     const url = `https://api.github.com/repos/${this.repoRef}/issues/${number}/comments`;
     const res = await fetch(url, {
       method: 'POST',
@@ -366,8 +371,7 @@ export class GitHubLabelsSource implements StateSource {
   }
 
   async setMilestone(itemId: string, milestoneNumber: number | null): Promise<void> {
-    const match = itemId.match(/#(\d+)$/);
-    const number = match != null ? match[1] : itemId;
+    const number = parseIssueNumber(itemId);
     const url = `https://api.github.com/repos/${this.repoRef}/issues/${number}`;
     const res = await fetch(url, {
       method: 'PATCH',
@@ -384,8 +388,7 @@ export class GitHubLabelsSource implements StateSource {
     group: 'priority' | 'schedule',
     value: string,
   ): Promise<void> {
-    const match = itemId.match(/#(\d+)$/);
-    const number = match != null ? match[1] : itemId;
+    const number = parseIssueNumber(itemId);
     const prefix = `${group}:`;
 
     // Fetch current labels, remove any with the matching prefix, then add the new one.

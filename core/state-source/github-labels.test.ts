@@ -464,3 +464,96 @@ describe('rate limit', () => {
     await expect(source.listOpenWork()).rejects.toThrow('rate limit');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Edge cases
+// ---------------------------------------------------------------------------
+
+describe('github-labels — edge cases', () => {
+  it('sets authorIsOwner to false when user is null', async () => {
+    // The GithubIssue interface allows user: null; cast to bypass the helper's stricter type.
+    const issue = {
+      ...makeIssue({ number: 50, title: 'Anonymous issue', labels: [] }),
+      user: null,
+    } as ReturnType<typeof makeIssue> & { user: null };
+    const issues = [issue];
+
+    vi.stubGlobal('fetch', mockFetchOnce(issues));
+    const source = makeSource();
+    const items = await source.listOpenWork();
+
+    const item = items.find((i) => i.externalId === '50');
+    if (item == null) throw new Error('expected item 50');
+    expect(item.authorIsOwner).toBe(false);
+  });
+
+  it('parseRefs returns empty array for empty body', async () => {
+    const issues = [
+      makeIssue({
+        number: 51,
+        body: '',
+        labels: [],
+      }),
+    ];
+
+    vi.stubGlobal('fetch', mockFetchOnce(issues));
+    const source = makeSource();
+    const items = await source.listOpenWork();
+
+    const item = items.find((i) => i.externalId === '51');
+    if (item == null) throw new Error('expected item 51');
+    expect(item.dependsOn).toEqual([]);
+    expect(item.blocks).toEqual([]);
+  });
+
+  it('issue without any state label falls back to factory:triaging', async () => {
+    const issues = [
+      makeIssue({
+        number: 52,
+        labels: [],
+      }),
+    ];
+
+    vi.stubGlobal('fetch', mockFetchOnce(issues));
+    const source = makeSource();
+    const items = await source.listOpenWork();
+
+    const item = items.find((i) => i.externalId === '52');
+    if (item == null) throw new Error('expected item 52');
+    expect(item.state).toBe('factory:triaging');
+  });
+
+  it('type label missing falls back to feature', async () => {
+    const issues = [
+      makeIssue({
+        number: 53,
+        labels: [{ name: 'factory:accepted' }],
+      }),
+    ];
+
+    vi.stubGlobal('fetch', mockFetchOnce(issues));
+    const source = makeSource();
+    const items = await source.listOpenWork();
+
+    const item = items.find((i) => i.externalId === '53');
+    if (item == null) throw new Error('expected item 53');
+    expect(item.type).toBe('feature');
+  });
+
+  it('priority label missing falls back to medium', async () => {
+    const issues = [
+      makeIssue({
+        number: 54,
+        labels: [{ name: 'factory:accepted' }, { name: 'type:bug' }],
+      }),
+    ];
+
+    vi.stubGlobal('fetch', mockFetchOnce(issues));
+    const source = makeSource();
+    const items = await source.listOpenWork();
+
+    const item = items.find((i) => i.externalId === '54');
+    if (item == null) throw new Error('expected item 54');
+    expect(item.priority).toBe('medium');
+  });
+});
