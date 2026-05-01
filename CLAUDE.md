@@ -14,6 +14,8 @@ You execute one narrow GitHub issue at a time. The issue is your build spec.
 
 `CONTEXT.md` (repo root) records **resolved implementation decisions and canonical domain vocabulary** from design sessions. Read it before writing any code in `core/` or `apps/`. It answers questions like "how does the SSE event stream work," "what format does context take in agent prompts," and "where do improvement candidates get filed." If the code you're about to write touches a decision recorded there, follow it — don't re-litigate it.
 
+`apps/web/STANDARDS.md` is the **frontend rulebook**. Read it before touching any file in `apps/web/src/`. It covers feature folder structure, the shared `lib/` and `components/ui/` boundary, naming conventions (`*Section`, `*Slot`), import rules (no cross-feature imports), and where new constants/utilities belong. If you're adding a util or constant, grep first — duplication across feature folders is a violation.
+
 ## Hard rules to remember
 
 `FACTORY_RULES.md` lists 28 non-negotiable rules. The ones most likely to bite you:
