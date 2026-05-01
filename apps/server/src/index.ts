@@ -15,6 +15,7 @@ import { readActiveMilestone, writeActiveMilestone } from './active-milestone.js
 import { bustCache, getCached } from './cache.js';
 import { getProject, listProjects } from './projects.js';
 import { getSourceForSlug } from './source.js';
+import { handleGitHubWebhook } from './webhooks/github.js';
 
 const CACHE_KEY = {
   issues: (slug: string) => `issues:${slug}`,
@@ -430,7 +431,12 @@ app.post('/projects/:slug/tick', async (c) => {
   return c.json({ ok: true, slug }, 202);
 });
 
+app.post('/webhooks/github', handleGitHubWebhook);
+
 if (process.env.VITEST == null) {
+  if (process.env.GITHUB_WEBHOOK_SECRET == null || process.env.GITHUB_WEBHOOK_SECRET.length === 0) {
+    throw new Error('GITHUB_WEBHOOK_SECRET env var is required to start the server');
+  }
   const port = Number(process.env.PORT ?? 3001);
   serve({ fetch: app.fetch, port });
   logger.info('server started', { port });
