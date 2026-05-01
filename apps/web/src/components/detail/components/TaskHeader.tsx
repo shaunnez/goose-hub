@@ -1,56 +1,10 @@
-import { type MilestoneDto, fetchMilestones, setLabel, setMilestone } from '@/lib/api';
-import type { WorkItemDto } from '@/lib/api';
+import type { MilestoneDto, WorkItemDto } from '@/lib/types';
+import { fetchMilestones, setLabel, setMilestone } from '@/lib/api';
+import { STATE_LABEL, PRIORITY_COLOR, PRIORITY_BG, PRIORITY_BORDER } from '@/lib/constants';
 import { cn } from '@/lib/cn';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { TransitionButton } from './TransitionButton';
-
-const STATE_LABEL: Record<string, string> = {
-  'factory:triaging': 'triaging',
-  'factory:accepted': 'accepted',
-  'factory:rejected': 'rejected',
-  'factory:grilling': 'grilling',
-  'factory:prd-drafting': 'prd-drafting',
-  'factory:prd-review': 'prd-review',
-  'factory:decomposing': 'decomposing',
-  'factory:issues-created': 'issues-created',
-  'factory:research-pending': 'research-pending',
-  'factory:research-complete': 'research-complete',
-  'factory:investigating': 'investigating',
-  'factory:investigation-complete': 'investigation-complete',
-  'factory:dev-ready': 'dev-ready',
-  'factory:in-progress': 'in-progress',
-  'factory:needs-qa': 'needs-qa',
-  'factory:qa-failed': 'qa-failed',
-  'factory:needs-review': 'needs-review',
-  'factory:needs-fix': 'needs-fix',
-  'factory:approved': 'approved',
-  'factory:retrospecting': 'retrospecting',
-  'factory:needs-human': 'needs-human',
-  'factory:done': 'done',
-  'factory:archived': 'archived',
-};
-
-const PRIORITY_COLOR: Record<string, string> = {
-  critical: 'oklch(0.66 0.20 22)',
-  high: 'oklch(0.74 0.15 50)',
-  medium: 'oklch(0.78 0.14 78)',
-  low: 'var(--fg-3)',
-};
-
-const PRIORITY_BG: Record<string, string> = {
-  critical: 'oklch(0.66 0.20 22 / 0.12)',
-  high: 'oklch(0.74 0.15 50 / 0.12)',
-  medium: 'oklch(0.78 0.14 78 / 0.12)',
-  low: 'oklch(0.42 0.01 260 / 0.12)',
-};
-
-const PRIORITY_BORDER: Record<string, string> = {
-  critical: 'oklch(0.66 0.20 22 / 0.4)',
-  high: 'oklch(0.74 0.15 50 / 0.4)',
-  medium: 'oklch(0.78 0.14 78 / 0.4)',
-  low: 'oklch(0.42 0.01 260 / 0.4)',
-};
 
 interface PillSelectProps {
   value: string;
