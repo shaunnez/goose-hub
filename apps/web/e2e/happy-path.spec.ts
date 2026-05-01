@@ -155,4 +155,153 @@ test.describe('M3 happy path', () => {
     await page.getByTestId('back-to-board').click();
     await expect(page.getByTestId('board')).toBeVisible();
   });
+
+  test('capture → inbox → promote → gone', async ({ page }) => {
+    test.setTimeout(60_000);
+
+    const captureTitle = `[E2E Capture] ${Date.now()}`;
+
+    try {
+      // 1. Navigate to the board.
+      await page.goto('/projects/goose-hub-self');
+
+      // 2. Click the Capture button in the TopBar.
+      await page.getByRole('button', { name: /capture/i }).click();
+
+      // 3. Fill the title input.
+      await page.locator('#capture-title').fill(captureTitle);
+
+      // 4. Submit — click the "Capture" button inside the modal.
+      await page.getByRole('button', { name: 'Capture' }).click();
+
+      // 5. Wait for the modal to close.
+      await expect(page.locator('#capture-title')).not.toBeVisible({ timeout: 10_000 });
+
+      // 6. Navigate to the inbox.
+      await page.goto('/projects/goose-hub-self/inbox');
+
+      // 7. Wait for the inbox list to be visible.
+      await expect(page.getByTestId('inbox-list')).toBeVisible({ timeout: 15_000 });
+
+      // 8. The newly captured item should be visible.
+      const capturedItem = page
+        .locator('[data-testid="inbox-list"] li')
+        .filter({ hasText: '[E2E Capture]' });
+      await expect(capturedItem).toBeVisible({ timeout: 10_000 });
+
+      // 9. Click "Promote" on that item.
+      await capturedItem.getByRole('button', { name: /promote/i }).click();
+
+      // 10. Wait for the promote modal — select project.
+      const projectPicker = page.locator('select[aria-label="Select project"]');
+      await expect(projectPicker).toBeVisible({ timeout: 10_000 });
+      await projectPicker.selectOption('goose-hub-self');
+
+      // 11. Click "Next".
+      await page.getByRole('button', { name: /next/i }).click();
+
+      // 12. Confirm screen — click the accent "Promote" button.
+      await page.getByRole('button', { name: 'Promote' }).click();
+
+      // 13. Wait for the modal to close.
+      await expect(projectPicker).not.toBeVisible({ timeout: 10_000 });
+
+      // 14. Assert the item is no longer in the inbox list.
+      const stillPresent = page
+        .locator('[data-testid="inbox-list"] li')
+        .filter({ hasText: captureTitle });
+      await expect(stillPresent).not.toBeVisible({ timeout: 10_000 });
+    } finally {
+      // cleanup: close the issue created by promote
+      try {
+        const open = (await gh(
+          `/repos/${REPO}/issues?state=open&per_page=100`,
+        )) as unknown as Array<{ number: number; title: string }>;
+        const created = open.find((i) => i.title.startsWith('[E2E Capture]'));
+        if (created) {
+          await gh(`/repos/${REPO}/issues/${created.number}`, 'PATCH', { state: 'closed' });
+        }
+      } catch {
+        /* best-effort */
+      }
+    }
+  });
+
+  test('gate-pending banner → approve → transitions state', async ({ page }) => {
+    test.setTimeout(60_000);
+
+    const gateIssue = (await gh(`/repos/${REPO}/issues`, 'POST', {
+      title: `[E2E Gate] ${Date.now()}`,
+      body: 'E2E fixture',
+      milestone: milestoneNumber,
+      labels: [
+        'factory:needs-review',
+        'priority:medium',
+        'type:chore',
+        'schedule:current',
+        'mode:supervised',
+        'exec:serial',
+      ],
+    })) as { number: number };
+
+    try {
+      // 1. Navigate directly to the detail page.
+      await page.goto(`/projects/goose-hub-self/items/${gateIssue.number}`);
+
+      // 2. Wait for the detail page to be visible.
+      await expect(page.getByTestId('detail-page')).toBeVisible({ timeout: 15_000 });
+
+      // 3. Wait for the gate-pending banner.
+      await expect(page.getByTestId('gate-pending-banner')).toBeVisible({ timeout: 15_000 });
+
+      // 4. Click Approve.
+      await page.getByTestId('gate-action-approve').click();
+
+      // 5. Wait for the banner to disappear.
+      await expect(page.getByTestId('gate-pending-banner')).not.toBeVisible({ timeout: 15_000 });
+    } finally {
+      // cleanup: close the gate issue
+      try {
+        await gh(`/repos/${REPO}/issues/${gateIssue.number}`, 'PATCH', { state: 'closed' });
+      } catch {
+        /* best-effort */
+      }
+    }
+  });
+
+  test('fake-run → agent events appear in timeline → structured output in right rail', async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+
+    // 1. Navigate to the detail page for the issue created in beforeAll.
+    await page.goto(`/projects/goose-hub-self/items/${issueNumber}`);
+
+    // 2. Wait for the detail page.
+    await expect(page.getByTestId('detail-page')).toBeVisible({ timeout: 15_000 });
+
+    // 3. Navigate to the Timeline section.
+    await page.getByRole('link', { name: 'Timeline' }).click();
+
+    // 4. Wait for the timeline section.
+    await expect(page.getByTestId('timeline-section')).toBeVisible({ timeout: 10_000 });
+
+    // 5. Click the fake-run button to start the fake agent run.
+    await page.getByTestId('fake-run-btn').first().click();
+
+    // 6. Wait for agent.spawned event in the timeline.
+    await expect(page.locator('[data-event-kind="agent.spawned"]')).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // 7. Wait for agent.terminated event (fake run takes ~5–6s with 600ms delays per log line).
+    await expect(page.locator('[data-event-kind="agent.terminated"]')).toBeVisible({
+      timeout: 30_000,
+    });
+
+    // 8. Verify the right rail has structured output.
+    await expect(page.getByTestId('detail-right-rail')).toContainText(/"decision"\s*:/, {
+      timeout: 10_000,
+    });
+  });
 });
