@@ -20,6 +20,13 @@
     "formatter": { "quoteStyle": "single", "trailingCommas": "all", "semicolons": "always" }
   },
   "files": {
-    "ignore": ["**/dist/**", "**/node_modules/**", "**/*.json", "scripts/", ".claude/"]
+    "ignore": [
+      "**/dist/**",
+      "**/node_modules/**",
+      "**/*.json",
+      "scripts/",
+      ".claude/",
+      "claude-design/"
+    ]
   }
 }

@@ -1,5 +1,6 @@
-import { type WorkItemDto, fetchIssues, fetchMilestoneIssues } from '@/lib/api';
+import { fetchIssues, fetchMilestoneIssues } from '@/lib/api';
 import { LANES, laneForState, sortLaneItems } from '@/lib/lanes.config';
+import type { WorkItemDto } from '@/lib/types';
 import { useActiveMilestone } from '@/state/active-milestone';
 import { useLaneVisibility } from '@/state/lane-visibility';
 import { useQuery, useQueryClient } from '@tanstack/react-query';

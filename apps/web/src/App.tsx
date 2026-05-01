@@ -1,9 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
-import { Board } from './components/board/Board';
+import { Board } from './components/board/components/Board';
 import { AppShell } from './components/chrome/AppShell';
-import { DetailPage } from './components/detail/DetailPage';
+import { DetailPage } from './components/detail/components/DetailPage';
 import { ActiveMilestoneProvider } from './state/active-milestone';
 import { ActiveProjectProvider } from './state/active-project';
 import { LaneVisibilityProvider } from './state/lane-visibility';

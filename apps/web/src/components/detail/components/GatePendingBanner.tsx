@@ -1,8 +1,8 @@
 import { cn } from '@/lib/cn';
+import { GATE_STATES } from '@/lib/constants';
 import { ShieldAlert } from 'lucide-react';
-import { GATE_STATES } from './gate-states';
 
-export { GATE_STATES } from './gate-states';
+export { GATE_STATES } from '@/lib/constants';
 
 interface GatePendingBannerProps {
   state?: string;

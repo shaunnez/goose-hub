@@ -18,7 +18,7 @@ async function gh(path: string, method = 'GET', body?: unknown) {
   return res.json() as Promise<Record<string, unknown>>;
 }
 
-test.describe('M2 happy path', () => {
+test.describe('M3 happy path', () => {
   test.skip(!TOKEN, 'GITHUB_TOKEN is required.');
 
   let milestoneNumber: number;
@@ -106,6 +106,30 @@ test.describe('M2 happy path', () => {
 
     // 8. Right rail empty-state present.
     await expect(page.getByTestId('detail-right-rail')).toContainText(/No agent runs/i);
+
+    // 8a. Post a comment via the CommentComposer.
+    const composer = page.getByTestId('comment-composer');
+    await expect(composer).toBeVisible();
+
+    const textarea = composer.locator('textarea');
+    await textarea.fill('E2E test comment — safe to ignore');
+
+    // Submit button should now be enabled.
+    const submitBtn = composer.getByTestId('comment-submit');
+    await expect(submitBtn).toBeEnabled();
+    await submitBtn.click();
+
+    // After submit: textarea clears.
+    await expect(textarea).toHaveValue('', { timeout: 5000 });
+
+    // 8b. Markdown preview tab works.
+    await textarea.fill('**bold test**');
+    await composer.getByRole('button', { name: 'preview' }).click();
+    const preview = page.getByTestId('markdown-preview');
+    await expect(preview).toBeVisible();
+    await expect(preview).toContainText('bold test');
+    // Switch back to write tab.
+    await composer.getByRole('button', { name: 'write' }).click();
 
     // 9. Navigate to Timeline section.
     await page.getByRole('link', { name: 'Timeline' }).click();

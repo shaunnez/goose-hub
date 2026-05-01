@@ -1,5 +1,6 @@
-import { type WorkItemDto, transitionState } from '@/lib/api';
+import { transitionState } from '@/lib/api';
 import { LEGAL_TARGETS } from '@/lib/transitions';
+import type { WorkItemDto } from '@/lib/types';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 

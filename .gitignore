@@ -3,5 +3,6 @@ node_modules
 .vscode
 dist
 .claude/worktrees/
+.worktrees/
 goose-hub.db
 claude-design/
