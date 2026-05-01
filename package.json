@@ -13,6 +13,7 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "test": "vitest run",
+    "coverage": "vitest run --coverage",
     "test:e2e": "pnpm --filter @goose-hub/web test:e2e",
     "install-labels": "tsx scripts/install-labels.ts",
     "db:migrate": "drizzle-kit push --config=drizzle.config.ts",
@@ -28,6 +29,7 @@
     "jsdom": "^29.1.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
+    "@vitest/coverage-v8": "^3.0.0",
     "vitest": "^3.0.0"
   },
   "dependencies": {

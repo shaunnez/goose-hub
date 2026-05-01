@@ -1,4 +1,5 @@
 import { fetchEvents } from '@/lib/api';
+import { logger } from '@/lib/logger';
 import type { AgentEventDto } from '@/lib/types';
 import { useEffect, useRef, useState } from 'react';
 
@@ -19,8 +20,8 @@ export function RightRail({ projectSlug, id, workItemId }: RightRailProps) {
         if (cancelled) return;
         setEvents(list);
       })
-      .catch(() => {
-        // silently ignore — this rail is best-effort
+      .catch((err: unknown) => {
+        logger.error('RightRail: failed to fetch initial events', { err: String(err) });
       });
     return () => {
       cancelled = true;
@@ -40,8 +41,8 @@ export function RightRail({ projectSlug, id, workItemId }: RightRailProps) {
           if (prev.find((e) => e.id === parsed.id) != null) return prev;
           return [...prev, parsed];
         });
-      } catch {
-        // ignore malformed SSE
+      } catch (err) {
+        logger.warn('RightRail: failed to parse SSE event', { err: String(err) });
       }
     };
     es.addEventListener('agent.terminated', handler as EventListener);
