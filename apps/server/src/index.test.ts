@@ -199,6 +199,38 @@ describe('POST /projects/:slug/issues/:id/fake-run', () => {
       vi.useRealTimers();
     }
   });
+
+  it('emits agent.log events with line payloads in the async sequence', async () => {
+    vi.useFakeTimers();
+    try {
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      vi.mocked(eventStore.appendEvent).mockClear();
+
+      await app.request('/projects/goose-hub-self/issues/99/fake-run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skill: 'triage' }),
+      });
+
+      // Flush the async IIFE (runs with setTimeout delays — advance fake timers)
+      await vi.runAllTimersAsync();
+
+      const calls = vi.mocked(eventStore.appendEvent).mock.calls;
+      const logCalls = calls.filter((c) => c[0].kind === 'agent.log');
+      expect(logCalls.length).toBeGreaterThanOrEqual(3);
+      expect(logCalls.length).toBeLessThanOrEqual(5);
+      for (const [arg] of logCalls) {
+        expect(arg.payload).toMatchObject({ line: expect.any(String) });
+      }
+
+      // Verify ordering: spawned first, terminated last
+      const kinds = calls.map((c) => c[0].kind);
+      expect(kinds[0]).toBe('agent.spawned');
+      expect(kinds[kinds.length - 1]).toBe('agent.terminated');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('GET /projects/:slug/milestones/:milestone/closed-issues', () => {
