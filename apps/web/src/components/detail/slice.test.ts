@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { GATE_STATES } from '../../lib/constants';
 import { renderMarkdownToHtml } from '../../lib/markdown';
 import { LEGAL_TARGETS } from '../../lib/transitions';
+import { GATE_ACTIONS } from './components/GatePendingBanner';
 import { SECTIONS } from './lib/sections';
 
 describe('detail page — sections config', () => {
@@ -78,6 +79,45 @@ describe('GatePendingBanner — gate state map', () => {
     expect(GATE_STATES['factory:in-progress']).toBeUndefined();
     expect(GATE_STATES['factory:triaging']).toBeUndefined();
     expect(GATE_STATES['factory:done']).toBeUndefined();
+  });
+});
+
+describe('gate actions — GATE_ACTIONS mapping', () => {
+  it('prd-review has only approve → decomposing', () => {
+    const actions = GATE_ACTIONS['factory:prd-review'];
+    expect(actions.approve).toBe('factory:decomposing');
+    expect(actions.reject).toBeUndefined();
+    expect(actions.requestChanges).toBeUndefined();
+  });
+
+  it('needs-review has all three actions', () => {
+    const actions = GATE_ACTIONS['factory:needs-review'];
+    expect(actions.approve).toBe('factory:approved');
+    expect(actions.reject).toBe('factory:rejected');
+    expect(actions.requestChanges).toBe('factory:needs-fix');
+  });
+
+  it('approved has only approve → retrospecting', () => {
+    const actions = GATE_ACTIONS['factory:approved'];
+    expect(actions.approve).toBe('factory:retrospecting');
+    expect(actions.reject).toBeUndefined();
+    expect(actions.requestChanges).toBeUndefined();
+  });
+
+  it('needs-human has no actions', () => {
+    const actions = GATE_ACTIONS['factory:needs-human'];
+    expect(actions.approve).toBeUndefined();
+    expect(actions.reject).toBeUndefined();
+    expect(actions.requestChanges).toBeUndefined();
+  });
+
+  it('reject and requestChanges are absent for non-needs-review gate states', () => {
+    const nonNeedsReviewGates = ['factory:prd-review', 'factory:approved', 'factory:needs-human'];
+    for (const gate of nonNeedsReviewGates) {
+      const actions = GATE_ACTIONS[gate];
+      expect(actions.reject).toBeUndefined();
+      expect(actions.requestChanges).toBeUndefined();
+    }
   });
 });
 

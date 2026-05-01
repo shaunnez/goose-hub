@@ -2,7 +2,7 @@ import { fetchIssue, fetchIssues, startFakeRun } from '@/lib/api';
 import { LANES, laneForState, sortLaneItems } from '@/lib/lanes.config';
 import type { WorkItemDto } from '@/lib/types';
 import { useActiveMilestone } from '@/state/active-milestone';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -23,6 +23,8 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
   const { slug = 'goose-hub-self', id = '' } = useParams<{ slug: string; id: string }>();
   const navigate = useNavigate();
   const { activeNumber } = useActiveMilestone();
+
+  const queryClient = useQueryClient();
 
   const {
     data: item,
@@ -188,7 +190,15 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
 
         <TaskHeader item={item} projectSlug={slug} />
 
-        <GatePendingBanner state={item?.state} />
+        <GatePendingBanner
+          state={item?.state}
+          projectSlug={slug}
+          id={id}
+          onTransitioned={() => {
+            void queryClient.invalidateQueries({ queryKey: ['issue', slug, id] });
+            void queryClient.invalidateQueries({ queryKey: ['issues', slug] });
+          }}
+        />
 
         <div className="flex-1 min-h-0 flex">
           <LeftRail />
