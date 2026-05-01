@@ -55,6 +55,13 @@ export interface SourceEvent {
   item: WorkItem;
 }
 
+export interface IssueComment {
+  id: number;
+  body: string;
+  authorLogin: string;
+  createdAt: string;
+}
+
 export interface Subscription {
   unsubscribe(): void;
 }
@@ -72,6 +79,7 @@ export interface StateSource {
   transitionState(itemId: string, from: StateName, to: StateName, note?: string): Promise<void>;
   forceState(itemId: string, to: StateName): Promise<void>;
   comment(itemId: string, body: string): Promise<void>;
+  listComments(itemId: string): Promise<IssueComment[]>;
   setMilestone(itemId: string, milestoneNumber: number | null): Promise<void>;
   setLabelInGroup(itemId: string, group: 'priority' | 'schedule', value: string): Promise<void>;
   attach(itemId: string, artifact: Artifact): Promise<void>;

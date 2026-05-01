@@ -1,10 +1,96 @@
+import { type IssueCommentDto, addComment, fetchComments } from '@/lib/api';
 import type { WorkItemDto } from '@/lib/api';
 import { renderMarkdownToHtml } from '@/lib/markdown';
-import { ManualActions } from './ManualActions';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 
 interface OverviewSectionProps {
   item?: WorkItemDto;
   projectSlug?: string;
+}
+
+function CommentsSection({
+  projectSlug,
+  id,
+  externalId,
+}: {
+  projectSlug: string;
+  id: string;
+  externalId: string;
+}) {
+  const queryClient = useQueryClient();
+  const { data: comments = [], isLoading } = useQuery<IssueCommentDto[]>({
+    queryKey: ['comments', projectSlug, id],
+    queryFn: () => fetchComments(projectSlug, id),
+  });
+
+  const [text, setText] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await addComment(projectSlug, externalId, trimmed);
+      setText('');
+      void queryClient.invalidateQueries({ queryKey: ['comments', projectSlug, id] });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to post comment');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-8">
+      <h2 className="text-[11px] font-medium text-fg-3 uppercase tracking-wider mb-4">Comments</h2>
+
+      {isLoading ? (
+        <p className="text-[12.5px] text-fg-4">Loading comments…</p>
+      ) : comments.length === 0 ? (
+        <p className="text-[12.5px] text-fg-4">No comments yet.</p>
+      ) : (
+        <ol className="flex flex-col gap-3 mb-6">
+          {comments.map((c) => (
+            <li key={c.id} className="flex flex-col gap-1">
+              <div className="flex items-center gap-2 text-[11px] text-fg-4">
+                <span className="font-mono font-medium text-fg-3">{c.authorLogin}</span>
+                <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+                <span>{new Date(c.createdAt).toLocaleString()}</span>
+              </div>
+              <p className="text-[13px] text-fg-2 whitespace-pre-wrap leading-relaxed">{c.body}</p>
+            </li>
+          ))}
+        </ol>
+      )}
+
+      <form onSubmit={(e) => void onSubmit(e)} className="flex flex-col gap-2 mt-4">
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Add a comment…"
+          rows={3}
+          className="w-full rounded-md border border-line bg-bg text-[13px] px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-accent placeholder:text-fg-4"
+        />
+        <div className="flex items-center gap-3">
+          <button
+            type="submit"
+            disabled={saving || !text.trim()}
+            className="h-7 px-3 rounded-md text-[12px] border border-line bg-bg-elev text-fg-2 hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+          {error != null && (
+            <span className="text-[11.5px] text-[color:var(--danger)]">{error}</span>
+          )}
+        </div>
+      </form>
+    </div>
+  );
 }
 
 export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
@@ -44,9 +130,11 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
       />
 
       {item != null && projectSlug != null && (
-        <div className="mt-6">
-          <ManualActions projectSlug={projectSlug} id={item.externalId} />
-        </div>
+        <CommentsSection
+          projectSlug={projectSlug}
+          id={item.externalId}
+          externalId={item.externalId}
+        />
       )}
     </div>
   );

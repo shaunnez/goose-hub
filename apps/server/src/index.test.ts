@@ -37,6 +37,7 @@ vi.mock('./source.js', () => ({
   getSourceForSlug: vi.fn().mockResolvedValue({
     repoRef: 'owner/repo',
     comment: vi.fn().mockResolvedValue(undefined),
+    listComments: vi.fn().mockResolvedValue([]),
     setMilestone: vi.fn().mockResolvedValue(undefined),
     setLabelInGroup: vi.fn().mockResolvedValue(undefined),
     listClosedWorkByMilestone: vi.fn().mockResolvedValue([

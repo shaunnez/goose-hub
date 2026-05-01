@@ -25,6 +25,13 @@ export interface WorkItemDto {
   createdAt: string;
 }
 
+export interface IssueCommentDto {
+  id: number;
+  body: string;
+  authorLogin: string;
+  createdAt: string;
+}
+
 export interface MilestoneDto {
   id: string;
   title: string;
@@ -117,6 +124,13 @@ export async function fetchEvents(slug: string, id: string): Promise<AgentEventD
     `/projects/${slug}/issues/${id}/events`,
   );
   return events;
+}
+
+export async function fetchComments(slug: string, id: string): Promise<IssueCommentDto[]> {
+  const { comments } = await getJson<{ comments: IssueCommentDto[] }>(
+    `/projects/${slug}/issues/${id}/comments`,
+  );
+  return comments;
 }
 
 export async function addComment(slug: string, id: string, body: string): Promise<void> {

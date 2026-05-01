@@ -131,6 +131,18 @@ app.post('/projects/:slug/issues/:id/transition', async (c) => {
   return c.json({ ok: true, from, to });
 });
 
+app.get('/projects/:slug/issues/:id/comments', async (c) => {
+  const slug = c.req.param('slug');
+  const id = c.req.param('id');
+  const source = await getSourceForSlug(slug);
+  if (source == null) return c.json({ error: 'project not found' }, 404);
+  const cfg = await getProject(slug);
+  const repoRef = cfg?.source.kind === 'github' ? cfg.source.repo : slug;
+  const workItemId = `github:${repoRef}#${id}`;
+  const comments = await source.listComments(workItemId);
+  return c.json({ comments });
+});
+
 app.post('/projects/:slug/issues/:id/comment', async (c) => {
   const slug = c.req.param('slug');
   const id = c.req.param('id');

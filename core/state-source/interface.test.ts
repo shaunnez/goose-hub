@@ -3,6 +3,7 @@ import type { StateName } from '../state-machine/states.js';
 import type {
   Artifact,
   CreateIssueInput,
+  IssueComment,
   Milestone,
   SourceEvent,
   StateSource,
@@ -49,6 +50,10 @@ class StubStateSource implements StateSource {
 
   comment(_itemId: string, _body: string): Promise<void> {
     return Promise.resolve();
+  }
+
+  listComments(_itemId: string): Promise<IssueComment[]> {
+    return Promise.resolve([]);
   }
 
   setMilestone(_itemId: string, _milestoneNumber: number | null): Promise<void> {
