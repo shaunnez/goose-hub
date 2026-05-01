@@ -420,6 +420,16 @@ app.post('/projects/:slug/issues/:id/fake-run', async (c) => {
   return c.json({ ok: true, skill });
 });
 
+app.post('/projects/:slug/tick', async (c) => {
+  const slug = c.req.param('slug');
+  const { runTriageBatch } = await import('./workflows/triage-batch.js');
+  // Fire-and-forget: return 202 immediately, batch runs async
+  runTriageBatch(slug).catch((err: unknown) => {
+    logger.error('triage-batch failed', { slug, error: String(err) });
+  });
+  return c.json({ ok: true, slug }, 202);
+});
+
 if (process.env.VITEST == null) {
   const port = Number(process.env.PORT ?? 3001);
   serve({ fetch: app.fetch, port });

@@ -82,7 +82,7 @@ export interface StateSource {
   comment(itemId: string, body: string): Promise<void>;
   listComments(itemId: string): Promise<IssueComment[]>;
   setMilestone(itemId: string, milestoneNumber: number | null): Promise<void>;
-  setLabelInGroup(itemId: string, group: 'priority' | 'schedule', value: string): Promise<void>;
+  setLabelInGroup(itemId: string, group: 'priority' | 'schedule' | 'type', value: string): Promise<void>;
   attach(itemId: string, artifact: Artifact): Promise<void>;
   createIssue(input: CreateIssueInput): Promise<WorkItem>;
 
