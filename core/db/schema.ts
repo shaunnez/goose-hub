@@ -17,6 +17,7 @@ export const events = sqliteTable(
     workItemId: text('work_item_id'),
     kind: text('kind').notNull(),
     payload: text('payload').notNull(),
+    runId: text('run_id'),
     createdAt: text('created_at').notNull().default(sql`(current_timestamp)`),
   },
   (table) => ({

@@ -76,6 +76,8 @@ A self-contained, end-to-end feature folder. Includes only the surfaces it genui
 
 ## Agent Runtime — Resolved Decisions
 
+**`runId`:** canonical workflow isolation key. Generated once per `AgentRuntime.run()` call (ULID or UUID v4). Declared as `runId: string` on `AgentSpec`. Passed to all subprocess calls, workspace dir paths (`~/.factory/workspaces/<runId>/`), event emission, and hook scripts (via env var). All downstream components — tool layer, event store, hooks — use `runId` as the traceability key. Resolved at M4.01.
+
 **Spawn mechanism:** `claude -p` (`--print` mode, non-interactive subprocess).
 
 **Tool allowlist enforcement:** Belt-and-braces, two layers:
