@@ -24,7 +24,7 @@ export function Board({ projectSlug }: BoardProps) {
 
   const {
     data: items = [],
-    isLoading,
+    // isLoading,
     isError,
     error,
     refetch,

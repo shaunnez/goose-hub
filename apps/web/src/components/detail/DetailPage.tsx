@@ -24,7 +24,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
 
   const {
     data: item,
-    isLoading,
+    // isLoading,
     isError,
     error,
   } = useQuery({
