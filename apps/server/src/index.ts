@@ -462,6 +462,57 @@ app.get('/projects/:slug/issues/:id/triage', async (c) => {
   });
 });
 
+app.post('/projects/:slug/issues/:id/repo-override', async (c) => {
+  const slug = c.req.param('slug');
+  const id = c.req.param('id');
+  const source = await getSourceForSlug(slug);
+  if (source == null) return c.json({ error: 'project not found' }, 404);
+
+  const body = await c.req.json().catch(() => null) as { repo?: unknown } | null;
+  const repo = typeof body?.repo === 'string' ? body.repo : null;
+  if (repo == null) return c.json({ error: 'repo is required' }, 400);
+
+  // Validate repo is in allowlist (repos.md)
+  const { readFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const repoRoot = join(fileURLToPath(import.meta.url), '../../../../../..');
+  const reposMd = readFileSync(join(repoRoot, 'target-projects', slug, 'repos.md'), 'utf8');
+  const allowedRepos = reposMd.match(/^###\s+\[([^\]]+)\]/gm)?.map((m) => m.replace(/^###\s+\[/, '').replace(/\]$/, '')) ?? [];
+  if (!allowedRepos.includes(repo)) {
+    return c.json({ error: `repo '${repo}' not in allowlist` }, 400);
+  }
+
+  const workItemId = `github:${source.repoRef}#${id}`;
+  const projectId = source.projectId;
+
+  eventStore.appendEvent({
+    projectId,
+    workItemId,
+    kind: 'agent.repo-override',
+    payload: { repo },
+  });
+
+  // Return updated triage data
+  const allEvents = eventStore.replay({ projectId, workItemId });
+  const triageEvent = allEvents.filter((e) => e.kind === 'agent.triage-complete').at(-1);
+  if (triageEvent == null) return c.json({ triage: null });
+
+  const payload = triageEvent.payload as {
+    triage: { type: string; priority: string };
+    repoMatch: { candidates: Array<{ repo: string; confidence: number; evidence: string; tier: number }> };
+  };
+
+  return c.json({
+    triage: {
+      type: payload.triage.type,
+      priority: payload.triage.priority,
+      candidates: payload.repoMatch.candidates ?? [],
+      overrideRepo: repo,
+    },
+  });
+});
+
 app.post('/projects/:slug/tick', async (c) => {
   const slug = c.req.param('slug');
   const { runTriageBatch } = await import('./workflows/triage-batch.js');
