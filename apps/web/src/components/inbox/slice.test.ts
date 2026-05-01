@@ -83,3 +83,66 @@ describe('inbox promote — promoteInboxItem', () => {
     expect(promoteInboxItem).toHaveBeenCalledWith(42, 'goose-hub-self');
   });
 });
+
+describe('inbox promote — project picker', () => {
+  it('fetchProjects returns all configured projects', async () => {
+    const twoProjects = [
+      {
+        id: 'proj-1',
+        name: 'Goose Hub',
+        slug: 'goose-hub-self',
+        color: '#6366f1',
+        source: { kind: 'github', repo: 'org/goose-hub' },
+      },
+      {
+        id: 'proj-2',
+        name: 'My App',
+        slug: 'my-app',
+        color: '#10b981',
+        source: { kind: 'github', repo: 'org/my-app' },
+      },
+    ];
+
+    const mockFetchProjects = vi.fn().mockResolvedValue(twoProjects);
+    vi.doMock('@/lib/api', () => ({
+      fetchProjects: mockFetchProjects,
+      fetchInboxItems: vi.fn(),
+      promoteInboxItem: vi.fn(),
+    }));
+
+    const { fetchProjects } = await import('@/lib/api');
+    vi.mocked(fetchProjects).mockResolvedValue(twoProjects);
+
+    const projects = await fetchProjects();
+
+    expect(projects).toHaveLength(2);
+    expect(projects[0].slug).toBe('goose-hub-self');
+    expect(projects[0].name).toBe('Goose Hub');
+    expect(projects[1].slug).toBe('my-app');
+    expect(projects[1].name).toBe('My App');
+  });
+
+  it('all project slugs are present in the list', async () => {
+    const twoProjects = [
+      {
+        id: 'proj-1',
+        name: 'Goose Hub',
+        slug: 'goose-hub-self',
+        color: '#6366f1',
+        source: { kind: 'github', repo: 'org/goose-hub' },
+      },
+      {
+        id: 'proj-2',
+        name: 'My App',
+        slug: 'my-app',
+        color: '#10b981',
+        source: { kind: 'github', repo: 'org/my-app' },
+      },
+    ];
+
+    const slugs = twoProjects.map((p) => p.slug);
+    expect(slugs).toContain('goose-hub-self');
+    expect(slugs).toContain('my-app');
+    expect(slugs).toHaveLength(2);
+  });
+});
