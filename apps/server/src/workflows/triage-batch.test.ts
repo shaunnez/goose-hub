@@ -132,6 +132,33 @@ describe('runTriageBatch', () => {
     expect(mockRuntime.run).toHaveBeenCalledTimes(2);
   });
 
+  it('passes repos context to repo-match skill', async () => {
+    const item = makeWorkItem();
+    const source = makeMockSource([item]);
+
+    mockRuntime.run
+      .mockResolvedValueOnce({
+        output: makeTriageOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeRepoMatchOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+    const { runTriageBatch } = await import('./triage-batch.js');
+    await runTriageBatch('goose-hub-self', source);
+
+    const repoMatchCall = mockRuntime.run.mock.calls[1][0] as {
+      context: Record<string, unknown>;
+      contextAllowlist: string[];
+    };
+    expect(repoMatchCall.context).toHaveProperty('repos');
+    expect(repoMatchCall.contextAllowlist).toContain('repos');
+  });
+
   it('applies type and priority labels', async () => {
     const item = makeWorkItem();
     const source = makeMockSource([item]);

@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
@@ -9,7 +8,7 @@ import { RepoMatchOutputSchema } from '../../../../skills/repo-match/schema.js';
 import { TriageOutputSchema } from '../../../../skills/triage/schema.js';
 import { getSourceForSlug } from '../source.js';
 
-const REPO_ROOT = join(fileURLToPath(import.meta.url), '../../../../../..');
+const REPO_ROOT = join(import.meta.dirname, '../../../..');
 
 function readPrompt(skillName: string): string {
   return readFileSync(join(REPO_ROOT, 'skills', skillName, 'prompt.md'), 'utf8');
@@ -32,12 +31,22 @@ function buildTriageComment(
   return `**Triage complete**\nType: ${type} | Priority: ${priority}\n\n**Repo candidates:**\n${candidateLines || '- none'}`;
 }
 
+function readReposContext(slug: string): string {
+  const reposFile = join(REPO_ROOT, 'target-projects', slug, 'repos.md');
+  try {
+    return readFileSync(reposFile, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
 export async function runTriageBatch(slug: string, source?: StateSource): Promise<void> {
   const stateSource = source ?? (await getSourceForSlug(slug));
   if (stateSource == null) {
     throw new Error(`Project not found: ${slug}`);
   }
 
+  const reposContext = readReposContext(slug);
   const runtime = new ClaudeCliRuntime();
   const triagePrompt = readPrompt('triage');
   const repoMatchPrompt = readPrompt('repo-match');
@@ -86,8 +95,13 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       runId: repoMatchRunId,
       role: 'researcher',
       skill: 'repo-match',
-      context: { projectId, workItemId, workItem: { title: item.title, body: item.body } },
-      contextAllowlist: ['workItem'],
+      context: {
+        projectId,
+        workItemId,
+        workItem: { title: item.title, body: item.body },
+        repos: reposContext,
+      },
+      contextAllowlist: ['workItem', 'repos'],
       freshContext: false,
       toolBundles: [],
       toolExtras: [],
