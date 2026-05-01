@@ -10,7 +10,13 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
 // destructures [item] from the result. A plain array resolves immediately
 // when awaited (non-Promises do), and array destructuring works natively.
 vi.mock('@goose-hub/core/db/db.js', () => {
-  const inboxRow = { id: 1, title: 'Test idea', body: '', type: 'feature', createdAt: '2026-05-01 00:00:00' };
+  const inboxRow = {
+    id: 1,
+    title: 'Test idea',
+    body: '',
+    type: 'feature',
+    createdAt: '2026-05-01 00:00:00',
+  };
   return {
     db: {
       insert: vi.fn().mockReturnValue({
@@ -157,7 +163,6 @@ describe('POST /inbox', () => {
     expect(res.status).toBe(400);
   });
 });
-
 
 describe('POST /projects/:slug/issues/:id/comment', () => {
   it('returns 200 when body is valid', async () => {
