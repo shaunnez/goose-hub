@@ -1,0 +1,69 @@
+import { describe, expect, it } from 'vitest';
+import { STATE_LABEL, PRIORITY_COLOR, PRIORITY_BG, PRIORITY_BORDER, GATE_STATES } from './constants';
+
+const ALL_FACTORY_STATES = [
+  'factory:triaging', 'factory:accepted', 'factory:rejected', 'factory:grilling',
+  'factory:prd-drafting', 'factory:prd-review', 'factory:decomposing', 'factory:issues-created',
+  'factory:research-pending', 'factory:research-complete', 'factory:investigating',
+  'factory:investigation-complete', 'factory:dev-ready', 'factory:in-progress',
+  'factory:needs-qa', 'factory:qa-failed', 'factory:needs-review', 'factory:needs-fix',
+  'factory:approved', 'factory:retrospecting', 'factory:needs-human', 'factory:done',
+  'factory:archived',
+];
+
+const PRIORITIES = ['critical', 'high', 'medium', 'low'];
+
+describe('STATE_LABEL', () => {
+  it('covers all 23 factory states', () => {
+    for (const state of ALL_FACTORY_STATES) {
+      expect(STATE_LABEL[state], `missing state: ${state}`).toBeDefined();
+    }
+  });
+
+  it('has no extra unknown states', () => {
+    expect(Object.keys(STATE_LABEL)).toHaveLength(ALL_FACTORY_STATES.length);
+  });
+});
+
+describe('PRIORITY_COLOR', () => {
+  it('covers all four priority levels', () => {
+    for (const p of PRIORITIES) {
+      expect(PRIORITY_COLOR[p], `missing priority: ${p}`).toBeDefined();
+    }
+  });
+});
+
+describe('PRIORITY_BG', () => {
+  it('covers all four priority levels', () => {
+    for (const p of PRIORITIES) {
+      expect(PRIORITY_BG[p], `missing priority: ${p}`).toBeDefined();
+    }
+  });
+});
+
+describe('PRIORITY_BORDER', () => {
+  it('covers all four priority levels', () => {
+    for (const p of PRIORITIES) {
+      expect(PRIORITY_BORDER[p], `missing priority: ${p}`).toBeDefined();
+    }
+  });
+});
+
+describe('GATE_STATES', () => {
+  it('covers exactly four blocking states', () => {
+    expect(Object.keys(GATE_STATES)).toHaveLength(4);
+  });
+
+  it('does not include non-gate states', () => {
+    expect(GATE_STATES['factory:in-progress']).toBeUndefined();
+    expect(GATE_STATES['factory:triaging']).toBeUndefined();
+    expect(GATE_STATES['factory:done']).toBeUndefined();
+  });
+
+  it('includes all four known gate states', () => {
+    expect(GATE_STATES['factory:prd-review']).toBeTruthy();
+    expect(GATE_STATES['factory:needs-review']).toBeTruthy();
+    expect(GATE_STATES['factory:approved']).toBeTruthy();
+    expect(GATE_STATES['factory:needs-human']).toBeTruthy();
+  });
+});
