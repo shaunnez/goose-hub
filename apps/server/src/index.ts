@@ -103,6 +103,7 @@ app.post('/projects/:slug/active-milestone', async (c) => {
   })) as { milestoneNumber?: number | null };
   const projectId = slug;
   await writeActiveMilestone(projectId, body.milestoneNumber ?? null, 'ui');
+  bustCache(CACHE_KEY.milestones(slug));
   eventStore.appendEvent({
     projectId,
     kind: 'milestone.activated',

@@ -1,9 +1,10 @@
-import { EventEmitter } from 'node:events';
 import { spawn } from 'node:child_process';
-import { describe, beforeEach, afterEach, expect, it, vi } from 'vitest';
+import { EventEmitter } from 'node:events';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { assembleSpawnContext } from './context-assembly.js';
+import { eventStore } from '../event-stream/store.js';
 import { ClaudeCliRuntime } from './claude-cli.js';
+import { assembleSpawnContext } from './context-assembly.js';
 import { withFallback } from './fallback.js';
 import type { AgentResult, AgentRuntime, AgentSpec, DecisionSummary } from './interface.js';
 import {
@@ -16,7 +17,6 @@ import {
 } from './models.js';
 import { OutputValidationError, validateOutput } from './output-validator.js';
 import { toJsonSchema } from './schema-bridge.js';
-import { eventStore } from '../event-stream/store.js';
 
 // ─── module mocks (hoisted by vitest) ────────────────────────────────────────
 vi.mock('node:child_process', () => ({
@@ -27,7 +27,9 @@ vi.mock('node:fs', () => ({ mkdirSync: vi.fn() }));
 vi.mock('node:os', () => ({ homedir: vi.fn().mockReturnValue('/mock-home') }));
 vi.mock('../event-stream/store.js', () => ({
   eventStore: {
-    appendEvent: vi.fn().mockReturnValue({ id: 1, kind: 'agent.run-started', payload: {}, createdAt: '' }),
+    appendEvent: vi
+      .fn()
+      .mockReturnValue({ id: 1, kind: 'agent.run-started', payload: {}, createdAt: '' }),
     replay: vi.fn().mockReturnValue([]),
   },
 }));
@@ -373,11 +375,19 @@ describe('withFallback', () => {
 
 // ─── ClaudeCliRuntime subprocess security ────────────────────────────────────
 
-function createMockProcess() {
-  const proc = {
+interface MockProcess {
+  stdout: EventEmitter;
+  kill: ReturnType<typeof vi.fn<(signal?: string) => void>>;
+  _closeHandlers: Array<(code: number | null) => void>;
+  on(event: string, handler: (...args: unknown[]) => void): void;
+  simulateClose(code?: number | null): void;
+}
+
+function createMockProcess(): MockProcess {
+  return {
     stdout: new EventEmitter(),
     kill: vi.fn<(signal?: string) => void>(),
-    _closeHandlers: [] as Array<(code: number | null) => void>,
+    _closeHandlers: [],
     on(event: string, handler: (...args: unknown[]) => void) {
       if (event === 'close') this._closeHandlers.push(handler as (code: number | null) => void);
     },
@@ -385,7 +395,6 @@ function createMockProcess() {
       for (const h of this._closeHandlers) h(code);
     },
   };
-  return proc;
 }
 
 function makeSecuritySpec(): AgentSpec {
@@ -405,7 +414,7 @@ function makeSecuritySpec(): AgentSpec {
 describe('ClaudeCliRuntime subprocess security', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(spawn).mockReturnValue(undefined as any);
+    vi.mocked(spawn).mockReturnValue(undefined as unknown as ReturnType<typeof spawn>);
   });
 
   afterEach(() => {
@@ -414,7 +423,7 @@ describe('ClaudeCliRuntime subprocess security', () => {
 
   it('spawns with argv array and shell: false (FACTORY_RULES §29)', async () => {
     const proc = createMockProcess();
-    vi.mocked(spawn).mockReturnValue(proc as any);
+    vi.mocked(spawn).mockReturnValue(proc as unknown as ReturnType<typeof spawn>);
 
     const runtime = new ClaudeCliRuntime();
     const runPromise = runtime.run(makeSecuritySpec());
@@ -431,7 +440,7 @@ describe('ClaudeCliRuntime subprocess security', () => {
 
   it('truncates stdout at 4 MB and emits tool.stdout-truncated (FACTORY_RULES §31)', async () => {
     const proc = createMockProcess();
-    vi.mocked(spawn).mockReturnValue(proc as any);
+    vi.mocked(spawn).mockReturnValue(proc as unknown as ReturnType<typeof spawn>);
 
     const runtime = new ClaudeCliRuntime();
     const runPromise = runtime.run(makeSecuritySpec());
@@ -452,7 +461,7 @@ describe('ClaudeCliRuntime subprocess security', () => {
   it('kills process and emits tool.timeout after 30 s (FACTORY_RULES §32)', async () => {
     vi.useFakeTimers();
     const proc = createMockProcess();
-    vi.mocked(spawn).mockReturnValue(proc as any);
+    vi.mocked(spawn).mockReturnValue(proc as unknown as ReturnType<typeof spawn>);
 
     const runtime = new ClaudeCliRuntime();
     const runPromise = runtime.run(makeSecuritySpec());

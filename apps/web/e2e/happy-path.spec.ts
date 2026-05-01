@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test';
 
 const REPO = 'shaunnez/goose-hub';
-const TEST_MILESTONE_TITLE = '[E2E] Test Fixture';
+const PROJECT_SLUG = 'goose-hub-self';
+const SERVER_URL = 'http://localhost:3001';
+const TEST_MILESTONE_TITLE = 'E2E Test Fixture';
 const TOKEN = process.env.GITHUB_TOKEN ?? '';
 
 async function gh(path: string, method = 'GET', body?: unknown) {
@@ -58,6 +60,15 @@ test.describe('M3 happy path', () => {
       ],
     })) as { number: number };
     issueNumber = issue.number;
+
+    // Set this as the active milestone via the app server. This also busts the
+    // server-side milestones cache so the fresh list (including the E2E fixture
+    // milestone) is returned on the next request.
+    await fetch(`${SERVER_URL}/projects/${PROJECT_SLUG}/active-milestone`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ milestoneNumber }),
+    });
   });
 
   test.afterAll(async () => {
@@ -171,8 +182,8 @@ test.describe('M3 happy path', () => {
       // 3. Fill the title input.
       await page.locator('#capture-title').fill(captureTitle);
 
-      // 4. Submit — click the "Capture" button inside the modal.
-      await page.getByRole('button', { name: 'Capture' }).click();
+      // 4. Submit — click the "Capture" button inside the modal (not the TopBar one).
+      await page.locator('form button[type="submit"]').click();
 
       // 5. Wait for the modal to close.
       await expect(page.locator('#capture-title')).not.toBeVisible({ timeout: 10_000 });
@@ -186,7 +197,7 @@ test.describe('M3 happy path', () => {
       // 8. The newly captured item should be visible.
       const capturedItem = page
         .locator('[data-testid="inbox-list"] li')
-        .filter({ hasText: '[E2E Capture]' });
+        .filter({ hasText: captureTitle });
       await expect(capturedItem).toBeVisible({ timeout: 10_000 });
 
       // 9. Click "Promote" on that item.
@@ -200,8 +211,8 @@ test.describe('M3 happy path', () => {
       // 11. Click "Next".
       await page.getByRole('button', { name: /next/i }).click();
 
-      // 12. Confirm screen — click the accent "Promote" button.
-      await page.getByRole('button', { name: 'Promote' }).click();
+      // 12. Confirm screen — click the accent "Promote" button inside the modal.
+      await page.getByTestId('promote-modal').getByRole('button', { name: 'Promote' }).click();
 
       // 13. Wait for the modal to close.
       await expect(projectPicker).not.toBeVisible({ timeout: 10_000 });
@@ -217,10 +228,10 @@ test.describe('M3 happy path', () => {
         const open = (await gh(
           `/repos/${REPO}/issues?state=open&per_page=100`,
         )) as unknown as Array<{ number: number; title: string }>;
-        const created = open.find((i) => i.title.startsWith('[E2E Capture]'));
-        if (created) {
-          await gh(`/repos/${REPO}/issues/${created.number}`, 'PATCH', { state: 'closed' });
-        }
+        const stale = open.filter((i) => i.title.startsWith('[E2E Capture]'));
+        await Promise.all(
+          stale.map((i) => gh(`/repos/${REPO}/issues/${i.number}`, 'PATCH', { state: 'closed' })),
+        );
       } catch {
         /* best-effort */
       }
@@ -235,7 +246,10 @@ test.describe('M3 happy path', () => {
       body: 'E2E fixture',
       milestone: milestoneNumber,
       labels: [
-        'factory:needs-review',
+        // Use factory:approved — Approve transitions to factory:retrospecting which
+        // is not a gate state, so the banner disappears. factory:needs-review would
+        // transition to factory:approved which is still a gate state (banner stays).
+        'factory:approved',
         'priority:medium',
         'type:chore',
         'schedule:current',
@@ -254,10 +268,10 @@ test.describe('M3 happy path', () => {
       // 3. Wait for the gate-pending banner.
       await expect(page.getByTestId('gate-pending-banner')).toBeVisible({ timeout: 15_000 });
 
-      // 4. Click Approve.
+      // 4. Click Approve — transitions to factory:retrospecting (not a gate state).
       await page.getByTestId('gate-action-approve').click();
 
-      // 5. Wait for the banner to disappear.
+      // 5. Wait for the banner to disappear (factory:retrospecting is not a gate state).
       await expect(page.getByTestId('gate-pending-banner')).not.toBeVisible({ timeout: 15_000 });
     } finally {
       // cleanup: close the gate issue

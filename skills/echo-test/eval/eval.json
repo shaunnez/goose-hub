@@ -1,0 +1,38 @@
+{
+  "description": "Binary assertions for echo-test skill. Proves runtime pipeline end-to-end and serves as template for M5+ skill evals.",
+  "test_cases": [
+    {
+      "prompt": "Run echo-test with message 'hello world'",
+      "context": { "message": "hello world" },
+      "assertions": [
+        "output is valid JSON",
+        "output contains an 'echo' field",
+        "echo field value is 'hello world'",
+        "output contains a 'decisionSummaries' field",
+        "decisionSummaries is an array with exactly one entry",
+        "decisionSummaries[0] has a 'step' field equal to 'echo'",
+        "decisionSummaries[0] has a 'summary' field that is non-empty"
+      ]
+    },
+    {
+      "prompt": "Run echo-test with message 'test 123'",
+      "context": { "message": "test 123" },
+      "assertions": [
+        "output is valid JSON",
+        "echo field value is 'test 123'",
+        "decisionSummaries array has exactly one entry",
+        "output does not contain any field not in the schema (echo, decisionSummaries)"
+      ]
+    },
+    {
+      "prompt": "Run echo-test with an empty message",
+      "context": { "message": "" },
+      "assertions": [
+        "output is valid JSON",
+        "echo field exists in output",
+        "decisionSummaries array has exactly one entry",
+        "run completes without timeout error"
+      ]
+    }
+  ]
+}

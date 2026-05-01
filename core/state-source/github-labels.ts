@@ -422,8 +422,26 @@ export class GitHubLabelsSource implements StateSource {
     throw new Error('not implemented in M1');
   }
 
-  async createIssue(_input: CreateIssueInput): Promise<WorkItem> {
-    throw new Error('not implemented in M1');
+  async createIssue(input: CreateIssueInput): Promise<WorkItem> {
+    const labels: string[] = [
+      'factory:triaging',
+      `type:${input.type ?? 'feature'}`,
+      `priority:${input.priority ?? 'medium'}`,
+      'schedule:later',
+      'mode:supervised',
+      'exec:serial',
+    ];
+    const url = `https://api.github.com/repos/${this.repoRef}/issues`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { ...this.baseHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: input.title, body: input.body, labels }),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to create issue: ${res.status} ${res.statusText}`);
+    }
+    const issue = (await res.json()) as GithubIssue;
+    return mapIssueToWorkItem(issue, this.repoRef, this.ownerLogin);
   }
 
   async watchForUpdates(_callback: (event: SourceEvent) => void): Promise<Subscription> {

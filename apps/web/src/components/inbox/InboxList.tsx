@@ -71,6 +71,7 @@ function PromoteModal({
       onKeyDown={(e) => e.key === 'Escape' && onClose()}
     >
       <div
+        data-testid="promote-modal"
         style={{
           background: 'var(--bg-elev)',
           border: '1px solid var(--line)',

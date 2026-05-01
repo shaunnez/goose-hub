@@ -1,3 +1,5 @@
+import type { AgentEventDto, InboxItemDto, IssueCommentDto, MilestoneDto, ProjectSummary, TransitionResult, WorkItemDto } from './types';
+
 export type {
   ProjectSummary,
   WorkItemDto,
