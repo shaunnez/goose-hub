@@ -5,6 +5,7 @@ import type {
   MilestoneDto,
   ProjectSummary,
   TransitionResult,
+  TriageResultDto,
   WorkItemDto,
 } from './types';
 
@@ -16,6 +17,7 @@ export type {
   AgentEventDto,
   TransitionResult,
   InboxItemDto,
+  TriageResultDto,
 } from './types';
 
 async function getJson<T>(path: string): Promise<T> {
@@ -95,6 +97,28 @@ export async function setActiveMilestone(
   milestoneNumber: number | null,
 ): Promise<void> {
   await postJson(`/projects/${slug}/active-milestone`, { milestoneNumber });
+}
+
+export async function fetchTriageResult(
+  slug: string,
+  id: string,
+): Promise<TriageResultDto | null> {
+  const { triage } = await getJson<{ triage: TriageResultDto | null }>(
+    `/projects/${slug}/issues/${id}/triage`,
+  );
+  return triage;
+}
+
+export async function setRepoOverride(
+  slug: string,
+  id: string,
+  repo: string,
+): Promise<TriageResultDto | null> {
+  const { triage } = await postJson<{ triage: TriageResultDto | null }>(
+    `/projects/${slug}/issues/${id}/repo-override`,
+    { repo },
+  );
+  return triage ?? null;
 }
 
 export async function fetchEvents(slug: string, id: string): Promise<AgentEventDto[]> {

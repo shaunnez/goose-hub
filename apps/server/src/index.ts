@@ -421,6 +421,47 @@ app.post('/projects/:slug/issues/:id/fake-run', async (c) => {
   return c.json({ ok: true, skill });
 });
 
+app.get('/projects/:slug/issues/:id/triage', async (c) => {
+  const slug = c.req.param('slug');
+  const id = c.req.param('id');
+  const source = await getSourceForSlug(slug);
+  if (source == null) return c.json({ error: 'project not found' }, 404);
+  const workItemId = `github:${source.repoRef}#${id}`;
+  const projectId = source.projectId;
+
+  const allEvents = eventStore.replay({ projectId, workItemId });
+
+  // Most recent triage-complete event
+  const triageEvent = allEvents
+    .filter((e) => e.kind === 'agent.triage-complete')
+    .at(-1);
+
+  if (triageEvent == null) {
+    return c.json({ triage: null });
+  }
+
+  const payload = triageEvent.payload as {
+    triage: { type: string; priority: string };
+    repoMatch: { candidates: Array<{ repo: string; confidence: number; evidence: string; tier: number }> };
+  };
+
+  // Check for repo override
+  const overrideEvent = allEvents
+    .filter((e) => e.kind === 'agent.repo-override')
+    .at(-1);
+
+  const overridePayload = overrideEvent?.payload as { repo?: string } | undefined;
+
+  return c.json({
+    triage: {
+      type: payload.triage.type,
+      priority: payload.triage.priority,
+      candidates: payload.repoMatch.candidates ?? [],
+      overrideRepo: overridePayload?.repo ?? null,
+    },
+  });
+});
+
 app.post('/projects/:slug/tick', async (c) => {
   const slug = c.req.param('slug');
   const { runTriageBatch } = await import('./workflows/triage-batch.js');
