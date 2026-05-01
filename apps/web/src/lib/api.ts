@@ -125,6 +125,22 @@ export interface TransitionResult {
   legalTargets?: string[];
 }
 
+export async function startFakeRun(
+  slug: string,
+  id: string,
+  skill: 'triage' | 'investigate',
+): Promise<void> {
+  await postJson(`/projects/${slug}/issues/${id}/fake-run`, { skill });
+}
+
+export async function createInboxItem(data: {
+  title: string;
+  body?: string;
+  type: string;
+}): Promise<void> {
+  await postJson('/inbox', data);
+}
+
 export async function transitionState(
   slug: string,
   id: string,

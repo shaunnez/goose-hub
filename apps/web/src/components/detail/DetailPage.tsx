@@ -1,11 +1,12 @@
-import { type WorkItemDto, fetchIssue, fetchIssues } from '@/lib/api';
+import { type WorkItemDto, fetchIssue, fetchIssues, startFakeRun } from '@/lib/api';
 import { LANES, laneForState, sortLaneItems } from '@/lib/lanes.config';
 import { useActiveMilestone } from '@/state/active-milestone';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DeferredSurface } from './DeferredSurface';
+import { GatePendingBanner } from './GatePendingBanner';
 import { LeftRail } from './LeftRail';
 import { OverviewSection } from './OverviewSection';
 import { RightRail } from './RightRail';
@@ -93,6 +94,16 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onBack, onNext, onPrev]);
 
+  const [fakeRunInProgress, setFakeRunInProgress] = useState(false);
+
+  const onFakeRun = useCallback(() => {
+    if (fakeRunInProgress) return;
+    setFakeRunInProgress(true);
+    startFakeRun(slug, id, 'triage').finally(() => {
+      setTimeout(() => setFakeRunInProgress(false), 4000);
+    });
+  }, [fakeRunInProgress, slug, id]);
+
   const currentSection = SECTIONS.find((s) => s.key === section) ?? SECTIONS[0];
   const workItemId = item != null ? `github:${item.repoRef}#${item.externalId}` : '';
 
@@ -138,6 +149,15 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
           <span className="grow" />
           <button
             type="button"
+            onClick={onFakeRun}
+            disabled={fakeRunInProgress}
+            data-testid="fake-run-btn"
+            className="h-7 px-2.5 rounded-md border border-line text-[12px] text-fg-2 hover:text-fg hover:bg-bg-hover disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {fakeRunInProgress ? 'Running...' : 'Start fake triage'}
+          </button>
+          <button
+            type="button"
             onClick={onPrev}
             aria-label="Previous issue (K)"
             title="Previous issue (K)"
@@ -166,6 +186,8 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
         </div>
 
         <TaskHeader item={item} projectSlug={slug} />
+
+        <GatePendingBanner state={item?.state} />
 
         <div className="flex-1 min-h-0 flex">
           <LeftRail />

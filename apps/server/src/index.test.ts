@@ -27,6 +27,53 @@ vi.mock('./source.js', () => ({
   }),
 }));
 
+describe('POST /projects/:slug/issues/:id/fake-run', () => {
+  it('returns 200 with ok and skill for a valid project', async () => {
+    const res = await app.request('/projects/goose-hub-self/issues/1/fake-run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ skill: 'triage' }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; skill: string };
+    expect(body.ok).toBe(true);
+    expect(body.skill).toBe('triage');
+  });
+
+  it('defaults skill to triage when unrecognised value is sent', async () => {
+    const res = await app.request('/projects/goose-hub-self/issues/1/fake-run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ skill: 'unknown' }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; skill: string };
+    expect(body.skill).toBe('triage');
+  });
+
+  it('accepts investigate as skill', async () => {
+    const res = await app.request('/projects/goose-hub-self/issues/1/fake-run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ skill: 'investigate' }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; skill: string };
+    expect(body.skill).toBe('investigate');
+  });
+
+  it('returns 404 for unknown project', async () => {
+    const { getSourceForSlug } = await import('./source.js');
+    vi.mocked(getSourceForSlug).mockResolvedValueOnce(null);
+    const res = await app.request('/projects/unknown/issues/1/fake-run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ skill: 'triage' }),
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
 describe('GET /projects/:slug/milestones/:milestone/closed-issues', () => {
   it('returns closed work items for the milestone', async () => {
     const res = await app.request('/projects/goose-hub-self/milestones/3/closed-issues');
