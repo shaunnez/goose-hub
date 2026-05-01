@@ -81,6 +81,14 @@ export function TaskHeader({ item, projectSlug }: TaskHeaderProps) {
             </span>
           </>
         )}
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span title="Cost tracking available in M9" data-testid="cost-placeholder">
+          cost <span className="font-mono">$—</span>
+        </span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span title="Duration tracking available in M9" data-testid="duration-placeholder">
+          duration <span className="font-mono">—</span>
+        </span>
       </div>
     </div>
   );
