@@ -245,18 +245,19 @@ goose-hub/
 │   ├── agent-runtime/                   # M4+
 │   │   ├── interface.ts
 │   │   ├── claude-cli.ts
-│   │   ├── advisor.ts
+│   │   ├── context-assembly.ts          # was fresh-context.ts in plan; see ADR 0009
+│   │   ├── advisor.ts                   # M7
 │   │   ├── fallback.ts
-│   │   ├── fresh-context.ts
-│   │   └── hooks/
+│   │   ├── models.ts
+│   │   ├── output-validator.ts
+│   │   ├── schema-bridge.ts
+│   │   └── hooks/                       # future
 │   ├── tool-layer/                      # M4+
-│   │   ├── interface.ts
 │   │   ├── bundles.ts
 │   │   ├── allowlist.ts
-│   │   ├── sandbox.ts
-│   │   ├── bash-denylist.ts
+│   │   ├── sandbox.ts                   # includes denylist; see ADR 0010
 │   │   ├── secret-redaction.ts
-│   │   └── tools/
+│   │   └── pre-tool-use-hook.ts
 │   ├── workspaces/                      # M4+
 │   ├── budgets/                         # M4+
 │   ├── governance/                      # M4+

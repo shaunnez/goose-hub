@@ -20,4 +20,6 @@ The `goose` CLI (built with `pnpm --filter cli build`, then `node apps/cli/dist/
 - `goose status <project-slug>` — prints open issues grouped by factory state for the given project, with the active milestone shown at the top.
 - `goose sweep <project-slug> <milestone-number>` — lists all non-terminal issues in the given milestone, prompts for confirmation, then bulk-archives them by forcing the `factory:archived` label.
 
-Both commands require `GITHUB_TOKEN` set in the environment or a `.env` file.
+- `goose run-agent --skill=<name> --input='<json>' [--dry-run]` — runs a skill agent against the Claude CLI. `--dry-run` prints the assembled AgentSpec without spawning. Requires `ANTHROPIC_API_KEY`.
+
+Both `status` and `sweep` require `GITHUB_TOKEN` set in the environment or a `.env` file.
