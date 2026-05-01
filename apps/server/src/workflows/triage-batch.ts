@@ -52,8 +52,6 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
     const projectId = stateSource.projectId;
     const workItemId = item.id;
 
-    const contextXml = `<work_item><title>${item.title}</title><body>${item.body}</body></work_item>`;
-
     // Run triage skill
     const triageResult = await runtime.run({
       runId,
