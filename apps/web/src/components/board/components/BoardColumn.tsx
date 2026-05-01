@@ -1,4 +1,4 @@
-import type { WorkItemDto } from '@/lib/api';
+import type { WorkItemDto } from '@/lib/types';
 import type { LaneConfig } from '@/lib/lanes.config';
 import { Eye, EyeOff } from 'lucide-react';
 import { IssueCard } from './IssueCard';
