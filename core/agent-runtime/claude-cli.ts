@@ -41,8 +41,8 @@ export class ClaudeCliRuntime implements AgentRuntime {
 
     // Emit run-started
     eventStore.appendEvent({
-      projectId: spec.context['projectId'] as string ?? 'unknown',
-      workItemId: spec.context['workItemId'] as string ?? null,
+      projectId: (spec.context.projectId as string) ?? 'unknown',
+      workItemId: (spec.context.workItemId as string) ?? null,
       kind: 'agent.run-started',
       payload: { skill: spec.skill, runId },
       runId,
@@ -57,10 +57,14 @@ export class ClaudeCliRuntime implements AgentRuntime {
     const argv: string[] = [
       '--print',
       '--no-session-persistence',
-      '--max-turns', String(spec.budgets.maxTurns),
-      '--max-budget-usd', String(spec.budgets.maxBudgetUsd),
-      '--model', model,
-      '--output-format', 'json',
+      '--max-turns',
+      String(spec.budgets.maxTurns),
+      '--max-budget-usd',
+      String(spec.budgets.maxBudgetUsd),
+      '--model',
+      model,
+      '--output-format',
+      'json',
     ];
 
     if (allowedTools.length > 0) {
@@ -74,8 +78,8 @@ export class ClaudeCliRuntime implements AgentRuntime {
     // Per-run context as the user message
     argv.push(contextXml);
 
-    const projectId = spec.context['projectId'] as string ?? 'unknown';
-    const workItemId = spec.context['workItemId'] as string ?? null;
+    const projectId = (spec.context.projectId as string) ?? 'unknown';
+    const workItemId = (spec.context.workItemId as string) ?? null;
 
     return new Promise((resolve, reject) => {
       // Security rule: minimal explicit env, no parent process.env passthrough
@@ -103,7 +107,13 @@ export class ClaudeCliRuntime implements AgentRuntime {
         if (remaining <= 0) {
           if (!truncated) {
             truncated = true;
-            eventStore.appendEvent({ projectId, workItemId, kind: 'tool.stdout-truncated', payload: { runId }, runId });
+            eventStore.appendEvent({
+              projectId,
+              workItemId,
+              kind: 'tool.stdout-truncated',
+              payload: { runId },
+              runId,
+            });
           }
           return;
         }
@@ -112,7 +122,13 @@ export class ClaudeCliRuntime implements AgentRuntime {
 
       const timeout = setTimeout(() => {
         child.kill('SIGKILL');
-        eventStore.appendEvent({ projectId, workItemId, kind: 'tool.timeout', payload: { runId }, runId });
+        eventStore.appendEvent({
+          projectId,
+          workItemId,
+          kind: 'tool.timeout',
+          payload: { runId },
+          runId,
+        });
         reject(new Error(`Agent run ${runId} timed out after ${TIMEOUT_MS}ms`));
       }, TIMEOUT_MS);
 
@@ -120,14 +136,32 @@ export class ClaudeCliRuntime implements AgentRuntime {
         clearTimeout(timeout);
 
         if (code !== 0) {
-          eventStore.appendEvent({ projectId, workItemId, kind: 'agent.run-failed', payload: { runId, exitCode: code }, runId });
+          eventStore.appendEvent({
+            projectId,
+            workItemId,
+            kind: 'agent.run-failed',
+            payload: { runId, exitCode: code },
+            runId,
+          });
           reject(new Error(`Claude CLI exited with code ${code}`));
           return;
         }
 
-        eventStore.appendEvent({ projectId, workItemId, kind: 'agent.run-completed', payload: { runId }, runId });
+        eventStore.appendEvent({
+          projectId,
+          workItemId,
+          kind: 'agent.run-completed',
+          payload: { runId },
+          runId,
+        });
         resolve({
-          output: (() => { try { return JSON.parse(stdout); } catch { return stdout; } })(),
+          output: (() => {
+            try {
+              return JSON.parse(stdout);
+            } catch {
+              return stdout;
+            }
+          })(),
           decisionSummaries: [],
           events: eventStore.replay({ runId }),
         });

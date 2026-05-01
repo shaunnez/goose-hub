@@ -1,4 +1,4 @@
-import { TOOL_BUNDLES, type BundleName } from './bundles.js';
+import { type BundleName, TOOL_BUNDLES } from './bundles.js';
 
 export { TOOL_BUNDLES };
 

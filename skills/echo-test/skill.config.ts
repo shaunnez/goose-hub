@@ -1,5 +1,5 @@
-import { z } from 'zod';
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
+import { z } from 'zod';
 
 export const EchoContextSchema = z.object({
   message: z.string(),

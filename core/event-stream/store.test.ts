@@ -21,7 +21,11 @@ describe('eventStore.appendEvent', () => {
       sql`CREATE INDEX IF NOT EXISTS events_project_created_idx ON events (project_id, created_at)`,
     );
     // Migrate existing DBs that pre-date the run_id column
-    try { db.run(sql`ALTER TABLE events ADD COLUMN run_id TEXT`); } catch { /* already exists */ }
+    try {
+      db.run(sql`ALTER TABLE events ADD COLUMN run_id TEXT`);
+    } catch {
+      /* already exists */
+    }
     db.delete(events).where(sql`project_id = ${PROJECT}`).run();
   });
 
@@ -206,8 +210,18 @@ describe('EventStore — M4 runtime events', () => {
     const FILTER_PROJECT = 'test-event-store-runid';
     db.delete(events).where(sql`project_id = ${FILTER_PROJECT}`).run();
 
-    eventStore.appendEvent({ projectId: FILTER_PROJECT, kind: 'agent.run-started', payload: {}, runId: runA });
-    eventStore.appendEvent({ projectId: FILTER_PROJECT, kind: 'agent.run-started', payload: {}, runId: runB });
+    eventStore.appendEvent({
+      projectId: FILTER_PROJECT,
+      kind: 'agent.run-started',
+      payload: {},
+      runId: runA,
+    });
+    eventStore.appendEvent({
+      projectId: FILTER_PROJECT,
+      kind: 'agent.run-started',
+      payload: {},
+      runId: runB,
+    });
 
     const results = eventStore.replay({ projectId: FILTER_PROJECT, runId: runA });
     expect(results).toHaveLength(1);

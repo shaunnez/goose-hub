@@ -1,13 +1,13 @@
 #!/usr/bin/env tsx
 import 'dotenv/config';
-import { createInterface } from 'node:readline';
 import { randomUUID } from 'node:crypto';
+import { createInterface } from 'node:readline';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
-import type { AgentSpec } from '@goose-hub/core/agent-runtime/interface.js';
 import { assembleSpawnContext } from '@goose-hub/core/agent-runtime/context-assembly.js';
-import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
-import { validateOutput } from '@goose-hub/core/agent-runtime/output-validator.js';
 import { withFallback } from '@goose-hub/core/agent-runtime/fallback.js';
+import type { AgentSpec } from '@goose-hub/core/agent-runtime/interface.js';
+import { validateOutput } from '@goose-hub/core/agent-runtime/output-validator.js';
+import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { STATES } from '@goose-hub/core/state-machine/states.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { GitHubLabelsSource } from '@goose-hub/core/state-source/github-labels.js';
@@ -213,7 +213,9 @@ async function runAgentCommand(rawArgs: string[]): Promise<void> {
   const contextResult = skillConfig.contextSchema.safeParse(inputData);
   if (!contextResult.success) {
     console.error('Input does not match skill context schema:');
-    console.error(JSON.stringify((contextResult as { success: false; error: unknown }).error, null, 2));
+    console.error(
+      JSON.stringify((contextResult as { success: false; error: unknown }).error, null, 2),
+    );
     process.exit(1);
   }
 
@@ -247,9 +249,11 @@ async function runAgentCommand(rawArgs: string[]): Promise<void> {
   }
 
   // Find a ZodType-shaped export
-  const outputSchema = Object.values(schemaModule).find(
-    (v): v is import('zod').ZodType => v != null && typeof (v as Record<string, unknown>).safeParse === 'function',
-  ) ?? null;
+  const outputSchema =
+    Object.values(schemaModule).find(
+      (v): v is import('zod').ZodType =>
+        v != null && typeof (v as Record<string, unknown>).safeParse === 'function',
+    ) ?? null;
 
   if (outputSchema != null) {
     spec.outputJsonSchema = toJsonSchema(outputSchema);

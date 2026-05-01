@@ -311,18 +311,15 @@ function AgentToolCallEvent({ event }: { event: AgentEventDto }) {
           <Wrench size={11} className="shrink-0" />
           <span>Tool call: {toolName}</span>
         </summary>
-        <div className="mt-1 font-mono text-[11px] text-fg-4">
-          {getPayloadStr(event.payload)}
-        </div>
+        <div className="mt-1 font-mono text-[11px] text-fg-4">{getPayloadStr(event.payload)}</div>
       </details>
     </li>
   );
 }
 
 function ToolWarningEvent({ event }: { event: AgentEventDto }) {
-  const label = event.kind === 'tool.stdout-truncated'
-    ? 'Stdout truncated at 4 MB'
-    : 'Process timed out (30s)';
+  const label =
+    event.kind === 'tool.stdout-truncated' ? 'Stdout truncated at 4 MB' : 'Process timed out (30s)';
   return (
     <li
       data-event-kind={event.kind}
@@ -338,7 +335,11 @@ function ToolWarningEvent({ event }: { event: AgentEventDto }) {
   );
 }
 
-function RunGroupWrapper({ runId, items, idx }: { runId: string; items: RenderItem[]; idx: number }) {
+function RunGroupWrapper({
+  runId,
+  items,
+  idx,
+}: { runId: string; items: RenderItem[]; idx: number }) {
   const [open, setOpen] = useState(true);
   return (
     <li data-run-id={runId} className="rounded-md border border-line/70 bg-bg/30">
@@ -362,7 +363,14 @@ function renderItem(item: RenderItem, idx: number) {
     return <AgentLogGroupEvent key={`log-group-${idx}`} events={item.events} />;
   }
   if (item.kind === 'run-group') {
-    return <RunGroupWrapper key={`run-group-${item.runId}`} runId={item.runId} items={item.items} idx={idx} />;
+    return (
+      <RunGroupWrapper
+        key={`run-group-${item.runId}`}
+        runId={item.runId}
+        items={item.items}
+        idx={idx}
+      />
+    );
   }
   const { event } = item;
   switch (event.kind) {

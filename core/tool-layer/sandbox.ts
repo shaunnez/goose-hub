@@ -3,11 +3,7 @@ import { join } from 'node:path';
 
 const DENYLIST = ['Read(./.env*)', 'Bash(sudo *)', 'Bash(rm -rf *)'];
 
-const SETTINGS = JSON.stringify(
-  { permissions: { deny: DENYLIST } },
-  null,
-  2,
-);
+const SETTINGS = JSON.stringify({ permissions: { deny: DENYLIST } }, null, 2);
 
 /** Writes workspace .claude/settings.json with pattern-level deny rules. Idempotent. */
 export function writeWorkspaceSandbox(workspacePath: string): void {

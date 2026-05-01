@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
-import { redactSecrets } from './secret-redaction.js';
-import { TOOL_BUNDLES, computeAllowlist } from './allowlist.js';
-import { writeWorkspaceSandbox } from './sandbox.js';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { TOOL_BUNDLES, computeAllowlist } from './allowlist.js';
+import { writeWorkspaceSandbox } from './sandbox.js';
+import { redactSecrets } from './secret-redaction.js';
 
 // ─── secret-redaction ────────────────────────────────────────────────────────
 

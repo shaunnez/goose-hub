@@ -15,14 +15,11 @@ const CRITICAL_PRIORITIES = new Set(['critical', 'high']);
  * - Critical/high priority: no fallback, fail loudly
  * - Standard role + non-critical: one down-tier retry, emits agent.fallback-triggered
  */
-export function withFallback(
-  runtime: AgentRuntime,
-  policy: FallbackPolicy,
-): AgentRuntime {
+export function withFallback(runtime: AgentRuntime, policy: FallbackPolicy): AgentRuntime {
   return {
     async run(spec: AgentSpec): Promise<AgentResult> {
       const isHoldout = HOLDOUT_ROLES.has(spec.role);
-      const priority = (spec.context['priority'] as string | undefined) ?? 'medium';
+      const priority = (spec.context.priority as string | undefined) ?? 'medium';
       const isCriticalOrHigh = CRITICAL_PRIORITIES.has(priority);
 
       // Holdout and critical/high: no fallback

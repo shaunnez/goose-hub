@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
 import { assembleSpawnContext } from '@goose-hub/core/agent-runtime/context-assembly.js';
 import type { AgentSpec } from '@goose-hub/core/agent-runtime/interface.js';
 import { redactSecrets } from '@goose-hub/core/tool-layer/secret-redaction.js';
+import { describe, expect, it } from 'vitest';
 import { EchoOutputSchema } from './schema.js';
 import config from './skill.config.js';
 

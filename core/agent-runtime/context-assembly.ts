@@ -19,15 +19,11 @@ export function assembleSpawnContext(spec: AgentSpec): SpawnContext {
   return base;
 }
 
-function renderManifest(
-  context: Record<string, unknown>,
-  allowlist: string[],
-): SpawnContext {
-  const filtered = allowlist.length === 0
-    ? {}
-    : Object.fromEntries(
-        Object.entries(context).filter(([k]) => allowlist.includes(k)),
-      );
+function renderManifest(context: Record<string, unknown>, allowlist: string[]): SpawnContext {
+  const filtered =
+    allowlist.length === 0
+      ? {}
+      : Object.fromEntries(Object.entries(context).filter(([k]) => allowlist.includes(k)));
 
   const inner = Object.entries(filtered)
     .map(([k, v]) => {

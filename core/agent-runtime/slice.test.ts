@@ -5,11 +5,11 @@ import { withFallback } from './fallback.js';
 import type { AgentResult, AgentRuntime, AgentSpec, DecisionSummary } from './interface.js';
 import {
   MODELS,
+  type ModelEntry,
+  type ModelTier,
   defaultModelForTier,
   modelsAtOrAboveTier,
   tierOf,
-  type ModelEntry,
-  type ModelTier,
 } from './models.js';
 import { OutputValidationError, validateOutput } from './output-validator.js';
 import { toJsonSchema } from './schema-bridge.js';
@@ -18,7 +18,11 @@ import { toJsonSchema } from './schema-bridge.js';
 
 describe('interface types', () => {
   it('DecisionSummary has step, summary, and optional evidence', () => {
-    const full: DecisionSummary = { step: 'search', summary: 'Found 3 results', evidence: 'grep output' };
+    const full: DecisionSummary = {
+      step: 'search',
+      summary: 'Found 3 results',
+      evidence: 'grep output',
+    };
     const minimal: DecisionSummary = { step: 'search', summary: 'Found 3 results' };
     expect(full.step).toBe('search');
     expect(minimal.evidence).toBeUndefined();
@@ -151,7 +155,10 @@ describe('models registry', () => {
       const result = modelsAtOrAboveTier('opus');
       expect(result.every((m) => !m.deprecated)).toBe(true);
       // suppress unused variable warning
-      const _withDeprecated: ModelEntry[] = [...MODELS, { id: 'old', tier: 'opus', deprecated: true }];
+      const _withDeprecated: ModelEntry[] = [
+        ...MODELS,
+        { id: 'old', tier: 'opus', deprecated: true },
+      ];
       void _withDeprecated;
     });
   });
@@ -277,7 +284,7 @@ describe('toJsonSchema', () => {
 
 describe('withFallback', () => {
   const makeRuntime = (shouldFail = false): AgentRuntime => ({
-    run: vi.fn().mockImplementation(async (spec: AgentSpec): Promise<AgentResult> => {
+    run: vi.fn().mockImplementation(async (_spec: AgentSpec): Promise<AgentResult> => {
       if (shouldFail) throw new Error('Model unavailable');
       return { output: { ok: true }, decisionSummaries: [], events: [] };
     }),
