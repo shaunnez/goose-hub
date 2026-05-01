@@ -337,6 +337,56 @@ export class GitHubLabelsSource implements StateSource {
     }
   }
 
+  async setMilestone(itemId: string, milestoneNumber: number | null): Promise<void> {
+    const match = itemId.match(/#(\d+)$/);
+    const number = match != null ? match[1] : itemId;
+    const url = `https://api.github.com/repos/${this.repoRef}/issues/${number}`;
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: { ...this.baseHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ milestone: milestoneNumber }),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to set milestone: ${res.status} ${res.statusText}`);
+    }
+  }
+
+  async setLabelInGroup(
+    itemId: string,
+    group: 'priority' | 'schedule',
+    value: string,
+  ): Promise<void> {
+    const match = itemId.match(/#(\d+)$/);
+    const number = match != null ? match[1] : itemId;
+    const prefix = `${group}:`;
+
+    // Fetch current labels, remove any with the matching prefix, then add the new one.
+    const labelsUrl = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels`;
+    const labelsRes = await this.ghFetch(labelsUrl);
+    const currentLabels = (await labelsRes.json()) as { name: string }[];
+
+    for (const label of currentLabels) {
+      if (!label.name.startsWith(prefix)) continue;
+      const removeUrl = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels/${encodeURIComponent(label.name)}`;
+      const res = await fetch(removeUrl, { method: 'DELETE', headers: this.baseHeaders });
+      if (!res.ok && res.status !== 404) {
+        throw new Error(`Failed to remove label ${label.name}: ${res.status} ${res.statusText}`);
+      }
+    }
+
+    const addUrl = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels`;
+    const addRes = await fetch(addUrl, {
+      method: 'POST',
+      headers: { ...this.baseHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ labels: [`${prefix}${value}`] }),
+    });
+    if (!addRes.ok) {
+      throw new Error(
+        `Failed to add label ${prefix}${value}: ${addRes.status} ${addRes.statusText}`,
+      );
+    }
+  }
+
   async attach(_itemId: string, _artifact: Artifact): Promise<void> {
     throw new Error('not implemented in M1');
   }

@@ -10,7 +10,8 @@ export type EventKind =
   | 'agent.decision-summary'
   | 'agent.terminated'
   | 'gate.awaiting-human'
-  | 'system.note';
+  | 'system.note'
+  | 'manual.action';
 
 export interface AgentEvent {
   id: number;

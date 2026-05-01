@@ -158,6 +158,7 @@ describe('POST /inbox', () => {
   });
 });
 
+
 describe('POST /projects/:slug/issues/:id/comment', () => {
   it('returns 200 when body is valid', async () => {
     const res = await app.request('/projects/goose-hub-self/issues/1/comment', {

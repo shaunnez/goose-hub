@@ -193,7 +193,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
           <LeftRail />
           <main className="flex-1 min-w-0 overflow-y-auto">
             {currentSection.key === 'overview' ? (
-              <OverviewSection item={item} />
+              <OverviewSection item={item} projectSlug={slug} />
             ) : currentSection.key === 'timeline' ? (
               <TimelineSection projectSlug={slug} id={id} workItemId={workItemId} />
             ) : (
