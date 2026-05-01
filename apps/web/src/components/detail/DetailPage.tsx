@@ -116,77 +116,75 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
 
   return (
     <div className="h-full">
-      {item != null && (
-        <div className="h-full flex flex-col" data-testid="detail-page">
-          <div className="h-[40px] flex items-center gap-3 px-3 border-b border-line bg-bg-glass shrink-0">
-            <button
-              type="button"
-              onClick={onBack}
-              data-testid="back-to-board"
-              className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-[12px] text-fg-2 hover:text-fg hover:bg-bg-hover"
-            >
-              <ArrowLeft size={13} />
-              Board
-            </button>
-            <span aria-hidden className="w-[1px] h-4 bg-line" />
-            <span className="font-mono text-[12px] text-fg-3 truncate">
-              <span className="text-fg-3">{slug}</span>
-              <span className="mx-1.5 text-fg-4">/</span>
-              <span className="text-fg-3">{item.repoRef}</span>
-              <span className="mx-1.5 text-fg-4">/</span>
-              <span className="text-fg font-semibold">#{item.externalId}</span>
-            </span>
-            <span className="grow" />
-            <button
-              type="button"
-              onClick={onPrev}
-              aria-label="Previous issue (K)"
-              title="Previous issue (K)"
-              className="h-7 w-7 inline-flex items-center justify-center rounded-md text-fg-3 hover:text-fg hover:bg-bg-hover"
-            >
-              <ChevronLeft size={14} />
-            </button>
-            <button
-              type="button"
-              onClick={onNext}
-              aria-label="Next issue (J)"
-              title="Next issue (J)"
-              className="h-7 w-7 inline-flex items-center justify-center rounded-md text-fg-3 hover:text-fg hover:bg-bg-hover"
-            >
-              <ChevronRight size={14} />
-            </button>
-            <button
-              type="button"
-              onClick={onBack}
-              aria-label="Close (⌘[ )"
-              title="Close (⌘[)"
-              className="h-7 w-7 inline-flex items-center justify-center rounded-md text-fg-3 hover:text-fg hover:bg-bg-hover"
-            >
-              <X size={13} />
-            </button>
-          </div>
-
-          <TaskHeader item={item} projectSlug={slug} />
-
-          <div className="flex-1 min-h-0 flex">
-            <LeftRail />
-            <main className="flex-1 min-w-0 overflow-y-auto">
-              {currentSection.key === 'overview' ? (
-                <OverviewSection item={item} />
-              ) : currentSection.key === 'timeline' ? (
-                <TimelineSection projectSlug={slug} id={id} workItemId={workItemId} />
-              ) : (
-                <DeferredSurface
-                  surface={currentSection.label}
-                  milestone={currentSection.milestone ?? 'later'}
-                  description={currentSection.description}
-                />
-              )}
-            </main>
-            <RightRail />
-          </div>
+      <div className="h-full flex flex-col" data-testid="detail-page">
+        <div className="h-[40px] flex items-center gap-3 px-3 border-b border-line bg-bg-glass shrink-0">
+          <button
+            type="button"
+            onClick={onBack}
+            data-testid="back-to-board"
+            className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-[12px] text-fg-2 hover:text-fg hover:bg-bg-hover"
+          >
+            <ArrowLeft size={13} />
+            Board
+          </button>
+          <span aria-hidden className="w-[1px] h-4 bg-line" />
+          <span className="font-mono text-[12px] text-fg-3 truncate">
+            <span className="text-fg-3">{slug}</span>
+            <span className="mx-1.5 text-fg-4">/</span>
+            <span className="text-fg-3">{item?.repoRef}</span>
+            <span className="mx-1.5 text-fg-4">/</span>
+            <span className="text-fg font-semibold">#{item?.externalId}</span>
+          </span>
+          <span className="grow" />
+          <button
+            type="button"
+            onClick={onPrev}
+            aria-label="Previous issue (K)"
+            title="Previous issue (K)"
+            className="h-7 w-7 inline-flex items-center justify-center rounded-md text-fg-3 hover:text-fg hover:bg-bg-hover"
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={onNext}
+            aria-label="Next issue (J)"
+            title="Next issue (J)"
+            className="h-7 w-7 inline-flex items-center justify-center rounded-md text-fg-3 hover:text-fg hover:bg-bg-hover"
+          >
+            <ChevronRight size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label="Close (⌘[ )"
+            title="Close (⌘[)"
+            className="h-7 w-7 inline-flex items-center justify-center rounded-md text-fg-3 hover:text-fg hover:bg-bg-hover"
+          >
+            <X size={13} />
+          </button>
         </div>
-      )}
+
+        <TaskHeader item={item} projectSlug={slug} />
+
+        <div className="flex-1 min-h-0 flex">
+          <LeftRail />
+          <main className="flex-1 min-w-0 overflow-y-auto">
+            {currentSection.key === 'overview' ? (
+              <OverviewSection item={item} />
+            ) : currentSection.key === 'timeline' ? (
+              <TimelineSection projectSlug={slug} id={id} workItemId={workItemId} />
+            ) : (
+              <DeferredSurface
+                surface={currentSection.label}
+                milestone={currentSection.milestone ?? 'later'}
+                description={currentSection.description}
+              />
+            )}
+          </main>
+          <RightRail />
+        </div>
+      </div>
     </div>
   );
 }

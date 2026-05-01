@@ -29,7 +29,7 @@ const STATE_LABEL: Record<string, string> = {
 };
 
 interface TaskHeaderProps {
-  item: WorkItemDto;
+  item?: WorkItemDto;
   projectSlug: string;
 }
 
@@ -39,41 +39,45 @@ export function TaskHeader({ item, projectSlug }: TaskHeaderProps) {
       <div className="flex items-start gap-4">
         <div className="grow min-w-0">
           <div className="flex items-center gap-2 mb-1.5 text-[11px] text-fg-3">
-            <span className="font-mono uppercase tracking-wider">#{item.externalId}</span>
+            <span className="font-mono uppercase tracking-wider">#{item?.externalId}</span>
             <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
-            <span className="font-mono">{item.repoRef}</span>
+            <span className="font-mono">{item?.repoRef}</span>
           </div>
           <h1 className="text-[22px] font-semibold tracking-tight leading-tight text-fg">
-            {item.title}
+            {item?.title}
           </h1>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap shrink-0 justify-end">
           <Pill tone="accent" data-testid="state-pill">
             <span className="w-1.5 h-1.5 rounded-full bg-accent" />
-            <span className="font-medium">{STATE_LABEL[item.state] ?? item.state}</span>
+            <span className="font-medium">
+              {item?.state ? (STATE_LABEL[item?.state] ?? item?.state) : ''}
+            </span>
           </Pill>
           <Pill data-testid="priority-pill" className="capitalize">
-            {item.priority}
+            {item?.priority}
           </Pill>
           <Pill data-testid="type-pill" className="capitalize">
-            {item.type}
+            {item?.type}
           </Pill>
-          <TransitionButton
-            projectSlug={projectSlug}
-            id={item.externalId}
-            currentState={item.state}
-          />
+          {item && (
+            <TransitionButton
+              projectSlug={projectSlug}
+              id={item?.externalId}
+              currentState={item?.state}
+            />
+          )}
         </div>
       </div>
       <div className="flex items-center gap-3 mt-3 text-[11.5px] text-fg-3 flex-wrap">
-        <span>by {item.authorIsOwner ? 'owner' : 'guest'}</span>
+        <span>by {item?.authorIsOwner ? 'owner' : 'guest'}</span>
         <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
-        <span>opened {new Date(item.createdAt).toLocaleString()}</span>
-        {item.milestoneId != null && (
+        <span>opened {item?.createdAt ? new Date(item?.createdAt).toLocaleString() : ''}</span>
+        {item?.milestoneId != null && (
           <>
             <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
             <span>
-              milestone <span className="font-mono tnum">#{item.milestoneId}</span>
+              milestone <span className="font-mono tnum">#{item?.milestoneId}</span>
             </span>
           </>
         )}
