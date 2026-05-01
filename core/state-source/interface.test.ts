@@ -51,6 +51,14 @@ class StubStateSource implements StateSource {
     return Promise.resolve();
   }
 
+  setMilestone(_itemId: string, _milestoneNumber: number | null): Promise<void> {
+    return Promise.resolve();
+  }
+
+  setLabelInGroup(_itemId: string, _group: 'priority' | 'schedule', _value: string): Promise<void> {
+    return Promise.resolve();
+  }
+
   attach(_itemId: string, _artifact: Artifact): Promise<void> {
     return Promise.resolve();
   }
