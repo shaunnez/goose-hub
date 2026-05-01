@@ -3,7 +3,10 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   resolve: {
-    alias: { '@': path.resolve(__dirname, 'apps/web/src') },
+    alias: {
+      '@': path.resolve(__dirname, 'apps/web/src'),
+      '@goose-hub/core': path.resolve(__dirname, 'core'),
+    },
   },
   test: {
     include: ['**/*.test.ts', '**/*.test.tsx'],

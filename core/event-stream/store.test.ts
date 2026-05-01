@@ -14,11 +14,14 @@ describe('eventStore.appendEvent', () => {
       work_item_id TEXT,
       kind TEXT NOT NULL,
       payload TEXT NOT NULL,
+      run_id TEXT,
       created_at TEXT NOT NULL DEFAULT (current_timestamp)
     )`);
     db.run(
       sql`CREATE INDEX IF NOT EXISTS events_project_created_idx ON events (project_id, created_at)`,
     );
+    // Migrate existing DBs that pre-date the run_id column
+    try { db.run(sql`ALTER TABLE events ADD COLUMN run_id TEXT`); } catch { /* already exists */ }
     db.delete(events).where(sql`project_id = ${PROJECT}`).run();
   });
 
@@ -152,5 +155,75 @@ describe('EventStore — subscriber edge cases', () => {
     expect(result.map((e) => e.id)).not.toContain(e1.id);
 
     db.delete(events).where(sql`project_id = ${SINCE_PROJECT}`).run();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// M4 runtime event kinds + runId field
+// ---------------------------------------------------------------------------
+
+describe('EventStore — M4 runtime events', () => {
+  const RUN_PROJECT = 'test-event-store-m4';
+
+  beforeAll(() => {
+    db.delete(events).where(sql`project_id = ${RUN_PROJECT}`).run();
+  });
+
+  afterAll(() => {
+    db.delete(events).where(sql`project_id = ${RUN_PROJECT}`).run();
+  });
+
+  it('accepts all M4 runtime event kinds', () => {
+    const kinds = [
+      'agent.run-started',
+      'agent.run-completed',
+      'agent.run-failed',
+      'agent.tool-call',
+      'tool.stdout-truncated',
+      'tool.timeout',
+      'agent.fallback-triggered',
+    ] as const;
+    for (const kind of kinds) {
+      const e = eventStore.appendEvent({ projectId: RUN_PROJECT, kind, payload: {} });
+      expect(e.kind).toBe(kind);
+    }
+  });
+
+  it('stores and retrieves runId on events', () => {
+    const runId = 'run-test-abc123';
+    const e = eventStore.appendEvent({
+      projectId: RUN_PROJECT,
+      kind: 'agent.run-started',
+      payload: { skill: 'echo-test' },
+      runId,
+    });
+    expect(e.runId).toBe(runId);
+  });
+
+  it('replay filters by runId', () => {
+    const runA = 'run-filter-a';
+    const runB = 'run-filter-b';
+    const FILTER_PROJECT = 'test-event-store-runid';
+    db.delete(events).where(sql`project_id = ${FILTER_PROJECT}`).run();
+
+    eventStore.appendEvent({ projectId: FILTER_PROJECT, kind: 'agent.run-started', payload: {}, runId: runA });
+    eventStore.appendEvent({ projectId: FILTER_PROJECT, kind: 'agent.run-started', payload: {}, runId: runB });
+
+    const results = eventStore.replay({ projectId: FILTER_PROJECT, runId: runA });
+    expect(results).toHaveLength(1);
+    expect(results[0].runId).toBe(runA);
+
+    db.delete(events).where(sql`project_id = ${FILTER_PROJECT}`).run();
+  });
+
+  it('redacts secrets in payload before persisting', () => {
+    const e = eventStore.appendEvent({
+      projectId: RUN_PROJECT,
+      kind: 'agent.tool-call',
+      payload: { token: 'AKIAIOSFODNN7EXAMPLE' },
+      runId: 'run-redact-test',
+    });
+    const p = e.payload as { token: string };
+    expect(p.token).toBe('[REDACTED]');
   });
 });

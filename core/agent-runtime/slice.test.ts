@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
+import { assembleSpawnContext } from './context-assembly.js';
+import { withFallback } from './fallback.js';
 import type { AgentResult, AgentRuntime, AgentSpec, DecisionSummary } from './interface.js';
 import {
   MODELS,
@@ -8,6 +11,10 @@ import {
   type ModelEntry,
   type ModelTier,
 } from './models.js';
+import { OutputValidationError, validateOutput } from './output-validator.js';
+import { toJsonSchema } from './schema-bridge.js';
+
+// ─── interface types ──────────────────────────────────────────────────────────
 
 describe('interface types', () => {
   it('DecisionSummary has step, summary, and optional evidence', () => {
@@ -58,6 +65,8 @@ describe('interface types', () => {
     expect(typeof mockRuntime.run).toBe('function');
   });
 });
+
+// ─── models registry ──────────────────────────────────────────────────────────
 
 describe('models registry', () => {
   it('contains exactly the three current Claude model IDs', () => {
@@ -139,16 +148,197 @@ describe('models registry', () => {
     });
 
     it('excludes deprecated models', () => {
-      const withDeprecated: ModelEntry[] = [
-        ...MODELS,
-        { id: 'claude-old-opus', tier: 'opus', deprecated: true },
-      ];
-      // modelsAtOrAboveTier uses the exported MODELS constant, not a parameter,
-      // so we verify the contract holds for the real registry
       const result = modelsAtOrAboveTier('opus');
       expect(result.every((m) => !m.deprecated)).toBe(true);
       // suppress unused variable warning
-      void withDeprecated;
+      const _withDeprecated: ModelEntry[] = [...MODELS, { id: 'old', tier: 'opus', deprecated: true }];
+      void _withDeprecated;
     });
+  });
+});
+
+// ─── context assembly ─────────────────────────────────────────────────────────
+
+describe('assembleSpawnContext', () => {
+  const makeSpec = (overrides: Partial<AgentSpec> = {}): AgentSpec => ({
+    runId: 'test-run',
+    role: 'developer',
+    skill: 'echo-test',
+    context: { message: 'hello', secret: 'tok_abc' },
+    contextAllowlist: ['message'],
+    freshContext: false,
+    toolBundles: [],
+    toolExtras: [],
+    budgets: { maxTurns: 5, maxBudgetUsd: 0.1 },
+    ...overrides,
+  });
+
+  it('includes allowlisted key in XML output', () => {
+    const { contextXml } = assembleSpawnContext(makeSpec());
+    expect(contextXml).toContain('message');
+    expect(contextXml).toContain('hello');
+  });
+
+  it('excludes non-allowlisted key from XML output', () => {
+    const { contextXml } = assembleSpawnContext(makeSpec());
+    expect(contextXml).not.toContain('secret');
+    expect(contextXml).not.toContain('tok_abc');
+  });
+
+  it('freshContext: true produces same output (no ambient injection at M4)', () => {
+    const fresh = assembleSpawnContext(makeSpec({ freshContext: true }));
+    const nonfresh = assembleSpawnContext(makeSpec({ freshContext: false }));
+    expect(fresh.contextXml).toBe(nonfresh.contextXml);
+  });
+
+  it('escapes XML special chars in context values', () => {
+    const spec = makeSpec({
+      context: { note: '<b>bold</b> & "quoted"' },
+      contextAllowlist: ['note'],
+    });
+    const { contextXml } = assembleSpawnContext(spec);
+    expect(contextXml).not.toContain('<b>');
+    expect(contextXml).toContain('&lt;b&gt;');
+    expect(contextXml).toContain('&amp;');
+  });
+
+  it('renders empty task element when allowlist excludes all keys', () => {
+    const spec = makeSpec({ contextAllowlist: [] });
+    const { contextXml } = assembleSpawnContext(spec);
+    expect(contextXml).toBe('<task></task>');
+  });
+});
+
+// ─── output validator ─────────────────────────────────────────────────────────
+
+describe('validateOutput', () => {
+  const EchoSchema = z.object({
+    echo: z.string(),
+    decisionSummaries: z.array(z.object({ step: z.string(), summary: z.string() })).min(1),
+  });
+
+  it('returns typed output for valid JSON matching schema', () => {
+    const raw = JSON.stringify({ echo: 'hello', decisionSummaries: [{ step: 'a', summary: 'b' }] });
+    const result = validateOutput(raw, EchoSchema);
+    expect(result.echo).toBe('hello');
+    expect(result.decisionSummaries).toHaveLength(1);
+  });
+
+  it('throws OutputValidationError for invalid JSON', () => {
+    expect(() => validateOutput('not-json', EchoSchema)).toThrow(OutputValidationError);
+    expect(() => validateOutput('not-json', EchoSchema)).toThrow(/Invalid JSON/);
+  });
+
+  it('throws OutputValidationError when JSON does not match schema', () => {
+    const raw = JSON.stringify({ echo: 'hi' }); // missing decisionSummaries
+    expect(() => validateOutput(raw, EchoSchema)).toThrow(OutputValidationError);
+  });
+
+  it('throws OutputValidationError when decisionSummaries is empty', () => {
+    const raw = JSON.stringify({ echo: 'hi', decisionSummaries: [] });
+    expect(() => validateOutput(raw, EchoSchema)).toThrow(OutputValidationError);
+  });
+
+  it('OutputValidationError carries received string and errors array', () => {
+    try {
+      validateOutput('bad', EchoSchema);
+    } catch (err) {
+      expect(err).toBeInstanceOf(OutputValidationError);
+      const e = err as OutputValidationError;
+      expect(e.received).toBe('bad');
+      expect(Array.isArray(e.errors)).toBe(true);
+    }
+  });
+});
+
+// ─── schema bridge ────────────────────────────────────────────────────────────
+
+describe('toJsonSchema', () => {
+  it('converts a simple Zod object schema to JSON Schema', () => {
+    const schema = z.object({ echo: z.string() });
+    const result = toJsonSchema(schema);
+    expect(result).toBeDefined();
+    expect(typeof result).toBe('object');
+  });
+
+  it('handles discriminated union schema (echo-test shape)', () => {
+    const DecisionSummaryZ = z.object({ step: z.string(), summary: z.string() });
+    const EchoOutput = z.object({
+      echo: z.string(),
+      decisionSummaries: z.array(DecisionSummaryZ).min(1),
+    });
+    const result = toJsonSchema(EchoOutput);
+    expect(result).toBeDefined();
+    expect(typeof result).toBe('object');
+  });
+});
+
+// ─── fallback policy ──────────────────────────────────────────────────────────
+
+describe('withFallback', () => {
+  const makeRuntime = (shouldFail = false): AgentRuntime => ({
+    run: vi.fn().mockImplementation(async (spec: AgentSpec): Promise<AgentResult> => {
+      if (shouldFail) throw new Error('Model unavailable');
+      return { output: { ok: true }, decisionSummaries: [], events: [] };
+    }),
+  });
+
+  const makeSpec = (overrides: Partial<AgentSpec> = {}): AgentSpec => ({
+    runId: 'fb-test',
+    role: 'developer',
+    skill: 'test',
+    context: { priority: 'medium' },
+    contextAllowlist: [],
+    freshContext: false,
+    toolBundles: [],
+    toolExtras: [],
+    budgets: { maxTurns: 5, maxBudgetUsd: 0.1 },
+    modelOverride: 'claude-opus-4-7',
+    ...overrides,
+  });
+
+  it('returns result directly when runtime succeeds', async () => {
+    const runtime = makeRuntime(false);
+    const wrapped = withFallback(runtime, { allowDownTier: true, maxAttempts: 2 });
+    const result = await wrapped.run(makeSpec());
+    expect((result.output as { ok: boolean }).ok).toBe(true);
+  });
+
+  it('holdout role: does not retry on failure', async () => {
+    const runtime = makeRuntime(true);
+    const wrapped = withFallback(runtime, { allowDownTier: true, maxAttempts: 2 });
+    const qaSpec = makeSpec({ role: 'qa' });
+    await expect(wrapped.run(qaSpec)).rejects.toThrow('Model unavailable');
+    expect(vi.mocked(runtime.run)).toHaveBeenCalledTimes(1);
+  });
+
+  it('critical priority: does not retry on failure', async () => {
+    const runtime = makeRuntime(true);
+    const wrapped = withFallback(runtime, { allowDownTier: true, maxAttempts: 2 });
+    const critSpec = makeSpec({ context: { priority: 'critical' } });
+    await expect(wrapped.run(critSpec)).rejects.toThrow('Model unavailable');
+    expect(vi.mocked(runtime.run)).toHaveBeenCalledTimes(1);
+  });
+
+  it('standard role + non-critical: falls back to lower tier on failure', async () => {
+    let attempt = 0;
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockImplementation(async (spec: AgentSpec): Promise<AgentResult> => {
+        attempt++;
+        if (attempt === 1) throw new Error('Model unavailable');
+        return { output: { model: spec.modelOverride }, decisionSummaries: [], events: [] };
+      }),
+    };
+    const wrapped = withFallback(runtime, { allowDownTier: true, maxAttempts: 2 });
+    const result = await wrapped.run(makeSpec());
+    expect(vi.mocked(runtime.run)).toHaveBeenCalledTimes(2);
+    expect((result.output as { model: string }).model).toBe('claude-sonnet-4-6');
+  });
+
+  it('allowDownTier: false — does not retry even for standard roles', async () => {
+    const runtime = makeRuntime(true);
+    const wrapped = withFallback(runtime, { allowDownTier: false, maxAttempts: 2 });
+    await expect(wrapped.run(makeSpec())).rejects.toThrow();
+    expect(vi.mocked(runtime.run)).toHaveBeenCalledTimes(1);
   });
 });

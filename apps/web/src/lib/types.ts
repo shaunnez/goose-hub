@@ -47,6 +47,7 @@ export interface AgentEventDto {
   workItemId: string | null;
   kind: string;
   payload: unknown;
+  runId?: string | null;
   createdAt: string;
 }
 

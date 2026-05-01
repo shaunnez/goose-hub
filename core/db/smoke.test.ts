@@ -24,6 +24,7 @@ describe('core/db smoke', () => {
         work_item_id TEXT,
         kind TEXT NOT NULL,
         payload TEXT NOT NULL,
+        run_id TEXT,
         created_at TEXT NOT NULL DEFAULT (current_timestamp)
       );
 

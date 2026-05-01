@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { type SQL, and, asc, eq, gt } from 'drizzle-orm';
 import { db } from '../db/db.js';
 import { events } from '../db/schema.js';
+import { redactSecrets } from '../tool-layer/secret-redaction.js';
 
 export type EventKind =
   | 'state.transitioned'
@@ -12,7 +13,14 @@ export type EventKind =
   | 'agent.terminated'
   | 'gate.awaiting-human'
   | 'system.note'
-  | 'manual.action';
+  | 'manual.action'
+  | 'agent.tool-call'
+  | 'tool.stdout-truncated'
+  | 'tool.timeout'
+  | 'agent.run-started'
+  | 'agent.run-completed'
+  | 'agent.run-failed'
+  | 'agent.fallback-triggered';
 
 export interface AgentEvent {
   id: number;
@@ -20,6 +28,7 @@ export interface AgentEvent {
   workItemId: string | null;
   kind: EventKind;
   payload: unknown;
+  runId?: string | null;
   createdAt: string;
 }
 
@@ -28,6 +37,7 @@ export interface AppendEventInput {
   workItemId?: string | null;
   kind: EventKind;
   payload: unknown;
+  runId?: string | null;
 }
 
 class EventStore {
@@ -43,7 +53,8 @@ class EventStore {
    * `events` directly; the linter enforces this in CI.
    */
   appendEvent(input: AppendEventInput): AgentEvent {
-    const payload = JSON.stringify(input.payload ?? {});
+    const redacted = redactSecrets(input.payload);
+    const payload = JSON.stringify(redacted ?? {});
     const inserted = db
       .insert(events)
       .values({
@@ -51,6 +62,7 @@ class EventStore {
         workItemId: input.workItemId ?? null,
         kind: input.kind,
         payload,
+        runId: input.runId ?? null,
       })
       .returning()
       .all();
@@ -62,6 +74,7 @@ class EventStore {
       workItemId: row.workItemId,
       kind: row.kind as EventKind,
       payload: JSON.parse(row.payload),
+      runId: row.runId,
       createdAt: row.createdAt,
     };
 
@@ -73,11 +86,14 @@ class EventStore {
    * Replay events with id > sinceId, ordered by id ascending. Used by SSE for
    * Last-Event-ID resumption.
    */
-  replay(filter: { projectId?: string; workItemId?: string; sinceId?: number } = {}): AgentEvent[] {
+  replay(
+    filter: { projectId?: string; workItemId?: string; sinceId?: number; runId?: string } = {},
+  ): AgentEvent[] {
     const conditions: SQL[] = [];
     if (filter.projectId != null) conditions.push(eq(events.projectId, filter.projectId));
     if (filter.workItemId != null) conditions.push(eq(events.workItemId, filter.workItemId));
     if (filter.sinceId != null) conditions.push(gt(events.id, filter.sinceId));
+    if (filter.runId != null) conditions.push(eq(events.runId, filter.runId));
 
     const where =
       conditions.length === 0
@@ -97,6 +113,7 @@ class EventStore {
       workItemId: r.workItemId,
       kind: r.kind as EventKind,
       payload: JSON.parse(r.payload),
+      runId: r.runId,
       createdAt: r.createdAt,
     }));
   }
