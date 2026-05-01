@@ -57,6 +57,20 @@ export interface TransitionResult {
   legalTargets?: string[];
 }
 
+export interface TriageRepoCandidate {
+  repo: string;
+  confidence: number;
+  evidence: string;
+  tier: number;
+}
+
+export interface TriageResultDto {
+  type: string;
+  priority: string;
+  candidates: TriageRepoCandidate[];
+  overrideRepo: string | null;
+}
+
 export interface InboxItemDto {
   id: number;
   title: string;
