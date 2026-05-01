@@ -6,6 +6,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DeferredSurface } from './DeferredSurface';
+import { GatePendingBanner } from './GatePendingBanner';
 import { LeftRail } from './LeftRail';
 import { OverviewSection } from './OverviewSection';
 import { RightRail } from './RightRail';
@@ -166,6 +167,8 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
         </div>
 
         <TaskHeader item={item} projectSlug={slug} />
+
+        <GatePendingBanner state={item?.state} />
 
         <div className="flex-1 min-h-0 flex">
           <LeftRail />
