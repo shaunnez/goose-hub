@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
+import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import type { StateSource } from '@goose-hub/core/state-source/interface.js';
 import { RepoMatchOutputSchema } from '../../../../../skills/repo-match/schema.js';
@@ -61,6 +62,8 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
     const projectId = stateSource.projectId;
     const workItemId = item.id;
 
+    const triagerPersonaId = selectPersona(projectId, 'triager');
+
     // Run triage skill
     const triageResult = await runtime.run({
       runId,
@@ -72,6 +75,7 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       toolBundles: [],
       toolExtras: [],
       budgets: { maxTurns: 5, maxBudgetUsd: 0.05 },
+      personaId: triagerPersonaId,
       outputJsonSchema: triageJsonSchema,
       appendSystemPrompt: triagePrompt,
     });
@@ -91,6 +95,7 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
 
     // Run repo-match skill
     const repoMatchRunId = crypto.randomUUID();
+    const researcherPersonaId = selectPersona(projectId, 'researcher');
     const repoMatchResult = await runtime.run({
       runId: repoMatchRunId,
       role: 'researcher',
@@ -106,6 +111,7 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       toolBundles: [],
       toolExtras: [],
       budgets: { maxTurns: 5, maxBudgetUsd: 0.05 },
+      personaId: researcherPersonaId,
       outputJsonSchema: repoMatchJsonSchema,
       appendSystemPrompt: repoMatchPrompt,
     });
