@@ -1,11 +1,15 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { join } from 'node:path';
 import { logger } from '@goose-hub/core/logger.js';
 import type { Context } from 'hono';
+import { getSourceForSlug } from '../../shared/source.js';
 
 /** Map from GitHub repo full name → project slug */
 const REPO_TO_SLUG: Record<string, string> = {
   'shaunnez/goose-hub': 'goose-hub-self',
 };
+
+const REPO_ROOT = join(import.meta.dirname, '../../../../..');
 
 export function verifyGitHubSignature(body: string, signature: string, secret: string): boolean {
   const expected = `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
@@ -14,6 +18,41 @@ export function verifyGitHubSignature(body: string, signature: string, secret: s
   } catch {
     return false;
   }
+}
+
+type WebhookPayload = {
+  action?: string;
+  repository?: { full_name?: string };
+  issue?: { number?: number };
+  label?: { name?: string };
+};
+
+async function dispatchForLabel(
+  slug: string,
+  issueNumber: number,
+  labelName: string,
+): Promise<void> {
+  if (labelName === 'factory:triaging') {
+    const { runTriageBatch } = await import('../workflows/triage-batch.js');
+    await runTriageBatch(slug);
+    return;
+  }
+
+  if (labelName === 'factory:investigating') {
+    const { runInvestigateWorkflow } = await import(
+      '../../../../../slices/investigate/workflow.js'
+    );
+    const source = await getSourceForSlug(slug);
+    if (source == null) {
+      logger.error('dispatchForLabel: no source for slug', { slug });
+      return;
+    }
+    const item = await source.getItem(issueNumber.toString());
+    await runInvestigateWorkflow(item, source, slug, REPO_ROOT);
+    return;
+  }
+
+  logger.info('dispatchForLabel: no workflow for label', { slug, labelName });
 }
 
 export async function handleGitHubWebhook(c: Context): Promise<Response> {
@@ -39,20 +78,11 @@ export async function handleGitHubWebhook(c: Context): Promise<Response> {
     return c.json({ ok: true, event: eventType, action: 'ignored' });
   }
 
-  let payload: { action?: string; repository?: { full_name?: string } };
+  let payload: WebhookPayload;
   try {
-    payload = JSON.parse(rawBody) as typeof payload;
+    payload = JSON.parse(rawBody) as WebhookPayload;
   } catch {
     return c.json({ error: 'invalid JSON' }, 400);
-  }
-
-  if (payload.action !== 'opened') {
-    return c.json({
-      ok: true,
-      event: eventType,
-      action: payload.action ?? 'unknown',
-      status: 'ignored',
-    });
   }
 
   const repoName = payload.repository?.full_name ?? '';
@@ -67,12 +97,44 @@ export async function handleGitHubWebhook(c: Context): Promise<Response> {
     });
   }
 
-  // Dispatch async — do not await
-  import('../workflows/triage-batch.js')
-    .then(({ runTriageBatch }) => runTriageBatch(slug))
-    .catch((err: unknown) => {
-      logger.error('webhook triage-batch failed', { slug, error: String(err) });
+  // issues.opened → run triage batch
+  if (payload.action === 'opened') {
+    import('../workflows/triage-batch.js')
+      .then(({ runTriageBatch }) => runTriageBatch(slug))
+      .catch((err: unknown) => {
+        logger.error('webhook triage-batch failed', { slug, error: String(err) });
+      });
+    return c.json({ ok: true, event: eventType, action: 'dispatched', slug });
+  }
+
+  // issues.labeled with a factory:* label → route to appropriate workflow
+  if (payload.action === 'labeled') {
+    const labelName = payload.label?.name ?? '';
+    if (!labelName.startsWith('factory:')) {
+      return c.json({
+        ok: true,
+        event: eventType,
+        action: 'labeled',
+        status: 'ignored-non-factory',
+      });
+    }
+
+    const issueNumber = payload.issue?.number;
+    if (issueNumber == null) {
+      return c.json({ ok: true, event: eventType, action: 'labeled', status: 'no-issue-number' });
+    }
+
+    dispatchForLabel(slug, issueNumber, labelName).catch((err: unknown) => {
+      logger.error('webhook dispatch failed', { slug, labelName, issueNumber, error: String(err) });
     });
 
-  return c.json({ ok: true, event: eventType, action: 'dispatched', slug });
+    return c.json({ ok: true, event: eventType, action: 'dispatched', label: labelName, slug });
+  }
+
+  return c.json({
+    ok: true,
+    event: eventType,
+    action: payload.action ?? 'unknown',
+    status: 'ignored',
+  });
 }

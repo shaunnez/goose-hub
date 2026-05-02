@@ -1,9 +1,26 @@
 import { createHmac } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// ─── module mocks ──────────────────────────────────────────────────────────────
+
+const mockRunTriageBatch = vi.fn().mockResolvedValue(undefined);
+const mockRunInvestigateWorkflow = vi.fn().mockResolvedValue(undefined);
+const mockGetSourceForSlug = vi.fn();
+const mockGetItem = vi.fn();
+
 vi.mock('../workflows/triage-batch.js', () => ({
-  runTriageBatch: vi.fn().mockResolvedValue(undefined),
+  runTriageBatch: mockRunTriageBatch,
 }));
+
+vi.mock('../../../../../slices/investigate/workflow.js', () => ({
+  runInvestigateWorkflow: mockRunInvestigateWorkflow,
+}));
+
+vi.mock('../../shared/source.js', () => ({
+  getSourceForSlug: mockGetSourceForSlug,
+}));
+
+// ─── helpers ──────────────────────────────────────────────────────────────────
 
 function sign(body: string, secret: string): string {
   return `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
@@ -32,10 +49,23 @@ async function postWebhook(
   });
 }
 
+function makeSource() {
+  return { getItem: mockGetItem };
+}
+
+// ─── tests ────────────────────────────────────────────────────────────────────
+
 describe('POST /webhooks/github', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.GITHUB_WEBHOOK_SECRET = SECRET;
+    mockGetSourceForSlug.mockResolvedValue(makeSource());
+    mockGetItem.mockResolvedValue({
+      id: 'github:shaunnez/goose-hub#42',
+      externalId: '42',
+      type: 'bug',
+      state: 'factory:investigating',
+    });
   });
 
   it('returns 401 when X-Hub-Signature-256 header is missing', async () => {
@@ -61,14 +91,18 @@ describe('POST /webhooks/github', () => {
     expect(json.ok).toBe(true);
   });
 
-  it('returns 200 for issues events with non-opened action', async () => {
+  it('ignores issues events with unhandled action', async () => {
     const body = JSON.stringify({
       action: 'closed',
       repository: { full_name: 'shaunnez/goose-hub' },
     });
     const res = await postWebhook(body, { event: 'issues' });
     expect(res.status).toBe(200);
+    const json = (await res.json()) as { status: string };
+    expect(json.status).toBe('ignored');
   });
+
+  // ─── issues.opened ──────────────────────────────────────────────────────────
 
   it('dispatches runTriageBatch for issues.opened on allowlisted repo', async () => {
     const body = JSON.stringify({
@@ -82,9 +116,84 @@ describe('POST /webhooks/github', () => {
     expect(json.action).toBe('dispatched');
   });
 
-  it('returns 200 and ignores issues.opened for non-allowlisted repo', async () => {
+  it('ignores issues.opened for non-allowlisted repo', async () => {
     const body = JSON.stringify({
       action: 'opened',
+      repository: { full_name: 'other/repo' },
+    });
+    const res = await postWebhook(body, { event: 'issues' });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { action: string };
+    expect(json.action).toBe('ignored');
+  });
+
+  // ─── issues.labeled — factory:investigating ─────────────────────────────────
+
+  it('dispatches runInvestigateWorkflow for issues.labeled factory:investigating', async () => {
+    const body = JSON.stringify({
+      action: 'labeled',
+      label: { name: 'factory:investigating' },
+      issue: { number: 42 },
+      repository: { full_name: 'shaunnez/goose-hub' },
+    });
+    const res = await postWebhook(body, { event: 'issues' });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { ok: boolean; action: string; label: string };
+    expect(json.ok).toBe(true);
+    expect(json.action).toBe('dispatched');
+    expect(json.label).toBe('factory:investigating');
+  });
+
+  it('calls getSourceForSlug and getItem when dispatching investigation', async () => {
+    const body = JSON.stringify({
+      action: 'labeled',
+      label: { name: 'factory:investigating' },
+      issue: { number: 42 },
+      repository: { full_name: 'shaunnez/goose-hub' },
+    });
+    await postWebhook(body, { event: 'issues' });
+    // Allow the async dispatch to settle
+    await vi.waitFor(() => expect(mockGetSourceForSlug).toHaveBeenCalledWith('goose-hub-self'));
+    await vi.waitFor(() => expect(mockGetItem).toHaveBeenCalledWith('42'));
+    await vi.waitFor(() => expect(mockRunInvestigateWorkflow).toHaveBeenCalled());
+  });
+
+  // ─── issues.labeled — factory:triaging ──────────────────────────────────────
+
+  it('dispatches runTriageBatch for issues.labeled factory:triaging', async () => {
+    const body = JSON.stringify({
+      action: 'labeled',
+      label: { name: 'factory:triaging' },
+      issue: { number: 7 },
+      repository: { full_name: 'shaunnez/goose-hub' },
+    });
+    const res = await postWebhook(body, { event: 'issues' });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { action: string; label: string };
+    expect(json.action).toBe('dispatched');
+    expect(json.label).toBe('factory:triaging');
+  });
+
+  // ─── issues.labeled — non-factory label ─────────────────────────────────────
+
+  it('ignores issues.labeled for non-factory labels', async () => {
+    const body = JSON.stringify({
+      action: 'labeled',
+      label: { name: 'priority:high' },
+      issue: { number: 42 },
+      repository: { full_name: 'shaunnez/goose-hub' },
+    });
+    const res = await postWebhook(body, { event: 'issues' });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { status: string };
+    expect(json.status).toBe('ignored-non-factory');
+  });
+
+  it('ignores issues.labeled for non-allowlisted repo', async () => {
+    const body = JSON.stringify({
+      action: 'labeled',
+      label: { name: 'factory:investigating' },
+      issue: { number: 42 },
       repository: { full_name: 'other/repo' },
     });
     const res = await postWebhook(body, { event: 'issues' });
