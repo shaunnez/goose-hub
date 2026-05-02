@@ -20,7 +20,7 @@ async function postWebhook(
   }: { signature?: string; event?: string; secret?: string } = {},
 ) {
   process.env.GITHUB_WEBHOOK_SECRET = secret;
-  const { app } = await import('../index.js');
+  const { app } = await import('../../server.js');
   return app.request('/webhooks/github', {
     method: 'POST',
     headers: {
@@ -39,7 +39,7 @@ describe('POST /webhooks/github', () => {
   });
 
   it('returns 401 when X-Hub-Signature-256 header is missing', async () => {
-    const { app } = await import('../index.js');
+    const { app } = await import('../../server.js');
     const res = await app.request('/webhooks/github', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-GitHub-Event': 'issues' },
@@ -96,21 +96,21 @@ describe('POST /webhooks/github', () => {
 
 describe('verifyGitHubSignature', () => {
   it('accepts valid signature', async () => {
-    const { verifyGitHubSignature } = await import('./github.js');
+    const { verifyGitHubSignature } = await import('./handler.js');
     const body = '{"action":"opened"}';
     const sig = sign(body, SECRET);
     expect(verifyGitHubSignature(body, sig, SECRET)).toBe(true);
   });
 
   it('rejects tampered payload', async () => {
-    const { verifyGitHubSignature } = await import('./github.js');
+    const { verifyGitHubSignature } = await import('./handler.js');
     const body = '{"action":"opened"}';
     const sig = sign(body, SECRET);
     expect(verifyGitHubSignature('{"action":"tampered"}', sig, SECRET)).toBe(false);
   });
 
   it('rejects wrong secret', async () => {
-    const { verifyGitHubSignature } = await import('./github.js');
+    const { verifyGitHubSignature } = await import('./handler.js');
     const body = '{"action":"opened"}';
     const sig = sign(body, 'wrong-secret');
     expect(verifyGitHubSignature(body, sig, SECRET)).toBe(false);

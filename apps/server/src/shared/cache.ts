@@ -41,3 +41,10 @@ export function bustCache(key: string): void {
 export function getCacheSize(): number {
   return store.size;
 }
+
+export const CACHE_KEY = {
+  issues: (slug: string) => `issues:${slug}`,
+  milestones: (slug: string) => `milestones:${slug}`,
+  closedIssues: (slug: string, ms: number) => `closed-issues:${slug}:${ms}`,
+  milestoneIssues: (slug: string, ms: number) => `milestone-issues:${slug}:${ms}`,
+} as const;

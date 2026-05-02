@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { app } from './index.js';
+import { app } from './server.js';
 
 // Mock the event store so appendEvent is a no-op in tests.
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
@@ -33,7 +33,7 @@ vi.mock('@goose-hub/core/db/schema.js', async (importOriginal) => {
   return { ...actual };
 });
 
-vi.mock('./source.js', () => ({
+vi.mock('./shared/source.js', () => ({
   getSourceForSlug: vi.fn().mockResolvedValue({
     repoRef: 'owner/repo',
     comment: vi.fn().mockResolvedValue(undefined),
@@ -139,7 +139,7 @@ describe('POST /projects/:slug/issues/:id/fake-run', () => {
   });
 
   it('returns 404 for unknown project', async () => {
-    const { getSourceForSlug } = await import('./source.js');
+    const { getSourceForSlug } = await import('./shared/source.js');
     vi.mocked(getSourceForSlug).mockResolvedValueOnce(null);
     const res = await app.request('/projects/unknown/issues/1/fake-run', {
       method: 'POST',
@@ -249,7 +249,7 @@ describe('GET /projects/:slug/milestones/:milestone/closed-issues', () => {
   });
 
   it('returns 404 for unknown project', async () => {
-    const { getSourceForSlug } = await import('./source.js');
+    const { getSourceForSlug } = await import('./shared/source.js');
     vi.mocked(getSourceForSlug).mockResolvedValueOnce(null);
     const res = await app.request('/projects/unknown/milestones/3/closed-issues');
     expect(res.status).toBe(404);
@@ -270,7 +270,7 @@ describe('GET /projects/:slug/milestones/:milestone/issues', () => {
   });
 
   it('returns 404 for unknown project', async () => {
-    const { getSourceForSlug } = await import('./source.js');
+    const { getSourceForSlug } = await import('./shared/source.js');
     vi.mocked(getSourceForSlug).mockResolvedValueOnce(null);
     const res = await app.request('/projects/unknown/milestones/3/issues');
     expect(res.status).toBe(404);
@@ -342,7 +342,7 @@ describe('POST /projects/:slug/issues/:id/comment', () => {
   });
 
   it('returns 404 for unknown project', async () => {
-    const { getSourceForSlug } = await import('./source.js');
+    const { getSourceForSlug } = await import('./shared/source.js');
     vi.mocked(getSourceForSlug).mockResolvedValueOnce(null);
     const res = await app.request('/projects/unknown/issues/1/comment', {
       method: 'POST',
@@ -402,7 +402,7 @@ describe('POST /projects/:slug/issues/:id/set-label', () => {
   });
 
   it('returns 404 for unknown project', async () => {
-    const { getSourceForSlug } = await import('./source.js');
+    const { getSourceForSlug } = await import('./shared/source.js');
     vi.mocked(getSourceForSlug).mockResolvedValueOnce(null);
     const res = await app.request('/projects/unknown/issues/1/set-label', {
       method: 'POST',

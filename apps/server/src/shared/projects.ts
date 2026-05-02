@@ -16,7 +16,7 @@ export interface ProjectSummary {
 // scripts from the package dir, not the monorepo root).
 const PROJECTS_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  '../../../target-projects',
+  '../../../../target-projects',
 );
 
 const cache = new Map<string, ProjectConfig>();

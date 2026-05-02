@@ -39,6 +39,13 @@ You execute one narrow GitHub issue at a time. The issue is your build spec.
 
 Use these. Don't introduce new heavyweight dependencies without an ADR.
 
+## App conventions
+
+Before touching any file in an app, read its `README.md` first. The README will tell you what else to read.
+
+- Touching `apps/server/` → read `apps/server/README.md`
+- Touching `apps/web/` → read `apps/web/README.md`
+
 ## Starting the next issue
 
 When prompted with "start the next issue" (or similar), resolve the issue to work on as follows:

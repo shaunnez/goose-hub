@@ -49,7 +49,7 @@ vi.mock('@goose-hub/core/db/schema.js', async (importOriginal) => {
 });
 
 // Import after mocks are set up.
-const { readActiveMilestone, writeActiveMilestone } = await import('./active-milestone.js');
+const { readActiveMilestone, writeActiveMilestone } = await import('./repository.js');
 
 describe('readActiveMilestone', () => {
   beforeEach(() => {

@@ -325,7 +325,7 @@ describe('runTriageBatch', () => {
 
 describe('POST /projects/:slug/tick', () => {
   it('returns 202 with ok: true', async () => {
-    const { app } = await import('../index.js');
+    const { app } = await import('../../server.js');
     const res = await app.request('/projects/goose-hub-self/tick', { method: 'POST' });
     expect(res.status).toBe(202);
     const body = (await res.json()) as { ok: boolean; slug: string };

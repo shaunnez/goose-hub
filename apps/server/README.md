@@ -28,6 +28,10 @@ GITHUB_TOKEN=ghp_… pnpm --filter @goose-hub/server dev
 curl -N http://localhost:3001/events?projectId=goose-hub-self
 ```
 
+## Conventions
+
+See [`STANDARDS.md`](./STANDARDS.md) for the domain-module architecture, layer contracts, import rules, and test coverage requirements. Read it before touching any file in `src/`.
+
 ## Slice notes
 
 - ADR `docs/adr/0006-server-framework-hono.md` records the framework choice (Hono).
