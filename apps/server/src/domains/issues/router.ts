@@ -51,9 +51,17 @@ router.post('/:slug/issues/:id/transition', async (c) => {
     body.data.to,
   );
   if (!result.ok) {
-    const errResult = result as { ok: false; error: string; status: number; legalTargets?: unknown[] };
+    const errResult = result as {
+      ok: false;
+      error: string;
+      status: number;
+      legalTargets?: unknown[];
+    };
     return c.json(
-      { error: errResult.error, ...(errResult.legalTargets ? { legalTargets: errResult.legalTargets } : {}) },
+      {
+        error: errResult.error,
+        ...(errResult.legalTargets ? { legalTargets: errResult.legalTargets } : {}),
+      },
       errResult.status as 400 | 404 | 422,
     );
   }
@@ -106,11 +114,7 @@ router.post('/:slug/issues/:id/repo-override', async (c) => {
 router.post('/:slug/issues/:id/fake-run', async (c) => {
   const body = await parseBody<{ skill?: string }>(c);
   if (!body.ok) return body.error;
-  const result = await fakeRun(
-    c.req.param('slug'),
-    c.req.param('id'),
-    body.data.skill ?? '',
-  );
+  const result = await fakeRun(c.req.param('slug'), c.req.param('id'), body.data.skill ?? '');
   return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);
 });
 

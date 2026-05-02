@@ -65,7 +65,11 @@ describe('transitionIssue — validation', () => {
 
   it('returns 400 when from is not a valid state', async () => {
     const result = await transitionIssue('proj', '1', 'not-a-state', 'factory:triaging');
-    expect(result).toMatchObject({ ok: false, status: 400, error: expect.stringMatching(/invalid.*from/i) });
+    expect(result).toMatchObject({
+      ok: false,
+      status: 400,
+      error: expect.stringMatching(/invalid.*from/i),
+    });
   });
 
   it('returns 400 when to is not a valid state', async () => {

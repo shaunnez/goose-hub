@@ -4,7 +4,7 @@ import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { STATES } from '@goose-hub/core/state-machine/states.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { isLegalTransition, legalTargets } from '@goose-hub/core/state-machine/transitions.js';
-import { bustCache, getCached, CACHE_KEY } from '../../shared/cache.js';
+import { CACHE_KEY, bustCache, getCached } from '../../shared/cache.js';
 import type { Result } from '../../shared/middleware.js';
 import { getProject } from '../../shared/projects.js';
 import { getSourceForSlug } from '../../shared/source.js';
@@ -82,7 +82,9 @@ export async function getIssueTriage(
 
   const payload = triageEvent.payload as {
     triage: { type: string; priority: string };
-    repoMatch: { candidates: Array<{ repo: string; confidence: number; evidence: string; tier: number }> };
+    repoMatch: {
+      candidates: Array<{ repo: string; confidence: number; evidence: string; tier: number }>;
+    };
   };
 
   const overrideEvent = allEvents.filter((e) => e.kind === 'agent.repo-override').at(-1);
@@ -255,7 +257,9 @@ export async function overrideIssueRepo(
 
   const payload = triageEvent.payload as {
     triage: { type: string; priority: string };
-    repoMatch: { candidates: Array<{ repo: string; confidence: number; evidence: string; tier: number }> };
+    repoMatch: {
+      candidates: Array<{ repo: string; confidence: number; evidence: string; tier: number }>;
+    };
   };
 
   return {
@@ -293,7 +297,12 @@ export async function fakeRun(
   ];
 
   (async () => {
-    eventStore.appendEvent({ projectId: slug, workItemId, kind: 'agent.spawned', payload: { skill: safeSkill } });
+    eventStore.appendEvent({
+      projectId: slug,
+      workItemId,
+      kind: 'agent.spawned',
+      payload: { skill: safeSkill },
+    });
     await new Promise((r) => setTimeout(r, 700));
     for (const line of LOG_LINES) {
       eventStore.appendEvent({ projectId: slug, workItemId, kind: 'agent.log', payload: { line } });
