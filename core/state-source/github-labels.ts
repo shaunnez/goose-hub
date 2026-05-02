@@ -67,7 +67,7 @@ function parseRefs(body: string, prefix: RegExp): string[] {
 }
 
 function parseDependsOn(body: string): string[] {
-  return parseRefs(body, /depends\s+on\s*:/i);
+  return parseRefs(body, /depends[\s-]+on\s*:?\s/i);
 }
 
 function parseBlocks(body: string): string[] {

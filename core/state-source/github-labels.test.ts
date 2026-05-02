@@ -237,6 +237,36 @@ describe('dependsOn parsing', () => {
     expect(items[0].dependsOn).toEqual(['12', '3']);
   });
 
+  it('parses "Depends on #5" without colon (actual GitHub issue format)', async () => {
+    const issues = [
+      makeIssue({
+        number: 9,
+        body: 'Some intro.\n\nDepends on #5\n\nMore text.',
+      }),
+    ];
+
+    vi.stubGlobal('fetch', mockFetchOnce(issues));
+    const source = makeSource();
+    const items = await source.listOpenWork();
+
+    expect(items[0].dependsOn).toEqual(['5']);
+  });
+
+  it('parses "Depends-On #5" hyphen variant', async () => {
+    const issues = [
+      makeIssue({
+        number: 10,
+        body: 'Depends-On #5',
+      }),
+    ];
+
+    vi.stubGlobal('fetch', mockFetchOnce(issues));
+    const source = makeSource();
+    const items = await source.listOpenWork();
+
+    expect(items[0].dependsOn).toEqual(['5']);
+  });
+
   it('parses Blocks: from issue body', async () => {
     const issues = [
       makeIssue({

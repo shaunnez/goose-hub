@@ -57,7 +57,7 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
   const repoMatchJsonSchema = toJsonSchema(RepoMatchOutputSchema);
 
   const allItems = await stateSource.listOpenWork();
-  const triagingItems = allItems.filter((item) => item.state === 'factory:triaging');
+  const triagingItems = allItems.filter((item) => item.state === 'factory:triaging').slice(0, 10);
   logger.info('triage-batch items found', {
     slug,
     total: allItems.length,
