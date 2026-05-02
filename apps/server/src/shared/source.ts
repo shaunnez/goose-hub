@@ -4,6 +4,18 @@ import { getProject } from './projects.js';
 
 const sourceCache = new Map<string, StateSource>();
 
+/**
+ * Defence-in-depth slug validator. Run BEFORE any `path.join` that includes
+ * the slug — even if `getSourceForSlug` already filtered unknown slugs, we
+ * never want to touch the filesystem with a slug containing `..`, `/`, NUL,
+ * or other path-traversal characters (#201).
+ */
+const SLUG_PATTERN = /^[a-z0-9-]+$/;
+
+export function isValidSlug(slug: string): boolean {
+  return SLUG_PATTERN.test(slug);
+}
+
 export async function getSourceForSlug(slug: string): Promise<StateSource | null> {
   const cached = sourceCache.get(slug);
   if (cached != null) return cached;

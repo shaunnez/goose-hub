@@ -8,7 +8,7 @@ import { logger } from '@goose-hub/core/logger.js';
 import type { StateSource } from '@goose-hub/core/state-source/interface.js';
 import { RepoMatchOutputSchema } from '../../../../../skills/repo-match/schema.js';
 import { TriageOutputSchema } from '../../../../../skills/triage/schema.js';
-import { getSourceForSlug } from '../../shared/source.js';
+import { getSourceForSlug, isValidSlug } from '../../shared/source.js';
 
 const REPO_ROOT = join(import.meta.dirname, '../../../../..');
 
@@ -34,6 +34,12 @@ function buildTriageComment(
 }
 
 function readReposContext(slug: string): string {
+  if (!isValidSlug(slug)) {
+    // Defence-in-depth (#201). Caller's getSourceForSlug already filtered
+    // unknowns, but never touch the filesystem with a slug containing path
+    // metacharacters.
+    throw new Error(`Invalid slug for path construction: ${slug}`);
+  }
   const reposFile = join(REPO_ROOT, 'target-projects', slug, 'repos.md');
   try {
     return readFileSync(reposFile, 'utf8');
@@ -44,6 +50,9 @@ function readReposContext(slug: string): string {
 
 export async function runTriageBatch(slug: string, source?: StateSource): Promise<void> {
   logger.info('triage-batch started', { slug });
+  if (!isValidSlug(slug)) {
+    throw new Error(`Invalid slug: ${slug}`);
+  }
   const stateSource = source ?? (await getSourceForSlug(slug));
   if (stateSource == null) {
     throw new Error(`Project not found: ${slug}`);

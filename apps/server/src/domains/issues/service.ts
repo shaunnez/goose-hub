@@ -7,7 +7,7 @@ import { isLegalTransition, legalTargets } from '@goose-hub/core/state-machine/t
 import { CACHE_KEY, bustCache, getCached } from '../../shared/cache.js';
 import type { Result } from '../../shared/middleware.js';
 import { getProject } from '../../shared/projects.js';
-import { getSourceForSlug } from '../../shared/source.js';
+import { getSourceForSlug, isValidSlug } from '../../shared/source.js';
 
 // File is at apps/server/src/domains/issues/service.ts
 // 5 levels up from service.ts to apps/, then 1 more to repo root = 6 levels from the FILE
@@ -238,6 +238,7 @@ export async function overrideIssueRepo(
   repo: unknown,
 ): Promise<Result<{ triage: unknown }>> {
   if (typeof repo !== 'string') return { ok: false, error: 'repo is required', status: 400 };
+  if (!isValidSlug(slug)) return { ok: false, error: 'invalid slug', status: 400 };
 
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };

@@ -337,3 +337,25 @@ describe('POST /projects/:slug/tick', () => {
     expect(body.slug).toBe('goose-hub-self');
   });
 });
+
+describe('runTriageBatch slug guard (#201)', () => {
+  it('throws Invalid slug for path-traversal slug, before touching the filesystem', async () => {
+    const { runTriageBatch } = await import('./triage-batch.js');
+    // Provide an explicit (mock) source so we know the failure is from the slug
+    // guard, not from getSourceForSlug returning null.
+    const stubSource = {} as unknown as StateSource;
+    await expect(runTriageBatch('../etc/hosts', stubSource)).rejects.toThrow(/Invalid slug/);
+  });
+
+  it('throws Invalid slug for empty slug', async () => {
+    const { runTriageBatch } = await import('./triage-batch.js');
+    const stubSource = {} as unknown as StateSource;
+    await expect(runTriageBatch('', stubSource)).rejects.toThrow(/Invalid slug/);
+  });
+
+  it('throws Invalid slug for slashes in slug', async () => {
+    const { runTriageBatch } = await import('./triage-batch.js');
+    const stubSource = {} as unknown as StateSource;
+    await expect(runTriageBatch('foo/bar', stubSource)).rejects.toThrow(/Invalid slug/);
+  });
+});
