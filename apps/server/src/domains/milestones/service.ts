@@ -24,6 +24,11 @@ export async function setActiveMilestone(
   slug: string,
   milestoneNumber: number | null,
 ): Promise<Result<{ ok: true; milestoneNumber: number | null }>> {
+  // Project-existence guard — mirror getActiveMilestone (#196). Without this,
+  // any caller could persist project_state rows and emit milestone.activated
+  // events for non-existent slugs.
+  const source = await getSourceForSlug(slug);
+  if (source == null) return { ok: false, error: 'project not found', status: 404 };
   await writeActiveMilestone(slug, milestoneNumber, 'ui');
   bustCache(CACHE_KEY.milestones(slug));
   eventStore.appendEvent({
