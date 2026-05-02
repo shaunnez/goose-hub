@@ -15,7 +15,7 @@ router.post('/', async (c) => {
 
 router.get('/', async (c) => {
   const result = await getInboxItems();
-  return c.json(result.data);
+  return result.ok ? c.json(result.data) : c.json({ items: [] });
 });
 
 router.post('/:id/promote', async (c) => {

@@ -105,7 +105,7 @@ export async function getIssueTriage(
 
 export type TransitionResult =
   | { ok: true; data: { ok: true; from: StateName; to: StateName } }
-  | { ok: false; error: string; status: number; legalTargets?: StateName[] };
+  | { ok: false; error: string; status: number; legalTargets?: readonly StateName[] };
 
 export async function transitionIssue(
   slug: string,
@@ -214,7 +214,7 @@ export async function setIssueLabel(
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
   const repoRef = await getRepoRef(slug);
   const workItemId = `github:${repoRef}#${id}`;
-  await source.setLabelInGroup(workItemId, group as string, value as string);
+  await source.setLabelInGroup(workItemId, group, value as string);
   eventStore.appendEvent({
     projectId: slug,
     workItemId,
