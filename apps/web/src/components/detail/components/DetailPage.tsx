@@ -12,6 +12,7 @@ import { GatePendingBanner } from './GatePendingBanner';
 import { InvestigationSection } from './InvestigationSection';
 import { LeftRail } from './LeftRail';
 import { OverviewSection } from './OverviewSection';
+import { PlaywrightCaptureSection } from './PlaywrightCaptureSection';
 import { RightRail } from './RightRail';
 import { TaskHeader } from './TaskHeader';
 import { TimelineSection } from './TimelineSection';
@@ -214,6 +215,12 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
               <TimelineSection projectSlug={slug} id={id} workItemId={workItemId} />
             ) : currentSection.key === 'investigation' ? (
               <InvestigationSection projectSlug={slug} id={id} />
+            ) : currentSection.key === 'code' ? (
+              <PlaywrightCaptureSection
+                projectSlug={slug}
+                id={id}
+                itemType={item?.type ?? ''}
+              />
             ) : (
               <DeferredSurface
                 surface={currentSection.label}
