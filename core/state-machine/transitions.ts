@@ -16,7 +16,7 @@ const TRANSITIONS: Readonly<Record<StateName, readonly StateName[]>> = {
   'factory:issues-created': ['factory:dev-ready'],
   'factory:research-pending': ['factory:research-complete'],
   'factory:research-complete': ['factory:dev-ready'],
-  'factory:investigating': ['factory:investigation-complete'],
+  'factory:investigating': ['factory:investigation-complete', 'factory:needs-human'],
   'factory:investigation-complete': ['factory:dev-ready'],
   'factory:dev-ready': ['factory:in-progress'],
   'factory:in-progress': ['factory:needs-qa'],

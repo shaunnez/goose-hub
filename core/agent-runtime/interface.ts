@@ -11,6 +11,7 @@ export interface DecisionSummary {
 export interface AgentBudgets {
   maxTurns: number;
   maxBudgetUsd: number;
+  timeoutMs?: number;
 }
 
 // ─── Role spec (discriminated union for type-level holdout enforcement) ────────

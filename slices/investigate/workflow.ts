@@ -64,7 +64,7 @@ export async function runInvestigateWorkflow(
       freshContext: false,
       toolBundles: ['read'],
       toolExtras: [],
-      budgets: { maxTurns: 20, maxBudgetUsd: 0.5 },
+      budgets: { maxTurns: 100, maxBudgetUsd: 0.5, timeoutMs: 300_000 },
       personaId,
       modelOverride: 'claude-opus-4-7',
       outputJsonSchema: investigateJsonSchema,

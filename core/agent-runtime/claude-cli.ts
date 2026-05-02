@@ -178,6 +178,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
         stdout += chunk.slice(0, remaining).toString();
       });
 
+      const effectiveTimeoutMs = spec.budgets.timeoutMs ?? TIMEOUT_MS;
       const timeout = setTimeout(() => {
         child.kill('SIGKILL');
         eventStore.appendEvent({
@@ -187,8 +188,8 @@ export class ClaudeCliRuntime implements AgentRuntime {
           payload: { runId },
           runId,
         });
-        reject(new Error(`Agent run ${runId} timed out after ${TIMEOUT_MS}ms`));
-      }, TIMEOUT_MS);
+        reject(new Error(`Agent run ${runId} timed out after ${effectiveTimeoutMs}ms`));
+      }, effectiveTimeoutMs);
 
       child.on('close', (code) => {
         clearTimeout(timeout);
