@@ -139,10 +139,7 @@ describe('detail page — legal-target table mirrors core', () => {
 
 // ─── M6.07: PlaywrightCaptureSection — extractPlaywrightRepro ────────────────
 
-function makeInvestigationEvent(
-  id: number,
-  playwrightRepro?: unknown,
-) {
+function makeInvestigationEvent(id: number, playwrightRepro?: unknown) {
   return {
     id,
     projectId: 'proj',

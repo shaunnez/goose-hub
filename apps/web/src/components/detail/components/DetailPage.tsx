@@ -216,11 +216,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
             ) : currentSection.key === 'investigation' ? (
               <InvestigationSection projectSlug={slug} id={id} />
             ) : currentSection.key === 'code' ? (
-              <PlaywrightCaptureSection
-                projectSlug={slug}
-                id={id}
-                itemType={item?.type ?? ''}
-              />
+              <PlaywrightCaptureSection projectSlug={slug} id={id} itemType={item?.type ?? ''} />
             ) : (
               <DeferredSurface
                 surface={currentSection.label}

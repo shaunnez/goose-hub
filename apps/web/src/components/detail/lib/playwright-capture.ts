@@ -30,12 +30,8 @@ interface InvestigationCompletePayload {
  * Scans events for the latest `agent.investigation-complete` event that
  * contains a `playwrightRepro` payload. Returns null if none is found.
  */
-export function extractPlaywrightRepro(
-  events: AgentEventDto[],
-): PlaywrightReproPayload | null {
-  const investigationEvents = events.filter(
-    (e) => e.kind === 'agent.investigation-complete',
-  );
+export function extractPlaywrightRepro(events: AgentEventDto[]): PlaywrightReproPayload | null {
+  const investigationEvents = events.filter((e) => e.kind === 'agent.investigation-complete');
   for (let i = investigationEvents.length - 1; i >= 0; i--) {
     const payload = investigationEvents[i].payload as InvestigationCompletePayload;
     if (payload?.playwrightRepro != null) {

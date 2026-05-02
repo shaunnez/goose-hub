@@ -38,9 +38,7 @@ export function PlaywrightCaptureSection({
   }
 
   if (isLoading) {
-    return (
-      <div className="px-8 py-10 text-center text-fg-3 text-[13px]">Loading captures…</div>
-    );
+    return <div className="px-8 py-10 text-center text-fg-3 text-[13px]">Loading captures…</div>;
   }
 
   const repro = extractPlaywrightRepro(events);
@@ -93,7 +91,10 @@ export function PlaywrightCaptureSection({
           </h3>
           <div className="space-y-4">
             {repro.screenshots.map((shot) => (
-              <div key={shot.path} className="rounded-md border border-line bg-bg-elev p-3 space-y-2">
+              <div
+                key={shot.path}
+                className="rounded-md border border-line bg-bg-elev p-3 space-y-2"
+              >
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-mono bg-bg-glass px-1.5 py-0.5 rounded text-fg-3">
                     step {shot.step}
@@ -128,11 +129,7 @@ export function PlaywrightCaptureSection({
           </h3>
           <div className="rounded-md border border-line bg-bg-elev p-3 space-y-2">
             {/* Video may not load since videoPath is a local disk path */}
-            <video
-              src={repro.videoPath}
-              controls
-              className="max-w-full rounded border border-line"
-            >
+            <video src={repro.videoPath} controls className="max-w-full rounded border border-line">
               <track kind="captions" />
               Your browser does not support the video element.
             </video>
@@ -153,9 +150,8 @@ export function PlaywrightCaptureSection({
           </h3>
           <div className="space-y-1.5">
             {repro.consoleErrors.map((err, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: console errors are ordered and stable
               <div
-                key={i}
+                key={`${err.type}-${i}`}
                 className="flex items-start gap-2 rounded-md border border-line bg-bg-elev px-3 py-2"
               >
                 <span
