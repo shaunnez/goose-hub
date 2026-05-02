@@ -22,9 +22,7 @@ export const SECTIONS: readonly DetailSection[] = [
   {
     key: 'investigation',
     label: 'Investigation',
-    available: false,
-    milestone: 'M6',
-    description: 'Reproduction artefacts, suspect surfaces, evidence trail.',
+    available: true,
   },
   {
     key: 'prd',
@@ -36,9 +34,8 @@ export const SECTIONS: readonly DetailSection[] = [
   {
     key: 'code',
     label: 'Code',
-    available: false,
-    milestone: 'M7',
-    description: 'PR diff, file-by-file commentary, test coverage.',
+    available: true,
+    description: 'Playwright captures: screenshots, video, and console errors for bug reproduction.',
   },
   {
     key: 'qa',

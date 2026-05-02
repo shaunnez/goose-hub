@@ -3,6 +3,7 @@ import { GATE_STATES } from '../../lib/constants';
 import { renderMarkdownToHtml } from '../../lib/markdown';
 import { LEGAL_TARGETS } from '../../lib/transitions';
 import { GATE_ACTIONS } from './components/GatePendingBanner';
+import { extractPlaywrightRepro } from './lib/playwright-capture';
 import { SECTIONS } from './lib/sections';
 
 describe('detail page — sections config', () => {
@@ -21,9 +22,12 @@ describe('detail page — sections config', () => {
     ]);
   });
 
-  it('Overview and Timeline are the only available sections in M2', () => {
+  it('overview, investigation, code, and timeline are the available sections in M6', () => {
     const available = SECTIONS.filter((s) => s.available).map((s) => s.key);
-    expect(available).toEqual(['overview', 'timeline']);
+    expect(available).toContain('overview');
+    expect(available).toContain('investigation');
+    expect(available).toContain('code');
+    expect(available).toContain('timeline');
   });
 
   it('every deferred section carries a milestone tag', () => {
@@ -130,5 +134,80 @@ describe('detail page — legal-target table mirrors core', () => {
   });
   it('needs-human is fully terminal in the UI table', () => {
     expect(LEGAL_TARGETS['factory:needs-human']).toEqual([]);
+  });
+});
+
+// ─── M6.07: PlaywrightCaptureSection — extractPlaywrightRepro ────────────────
+
+function makeInvestigationEvent(
+  id: number,
+  playwrightRepro?: unknown,
+) {
+  return {
+    id,
+    projectId: 'proj',
+    workItemId: 'wi-1',
+    kind: 'agent.investigation-complete',
+    payload: { investigate: {}, ...(playwrightRepro != null ? { playwrightRepro } : {}) },
+    createdAt: new Date().toISOString(),
+  };
+}
+
+const FULL_REPRO = {
+  screenshots: [{ path: '/tmp/shot.png', caption: 'Login page', step: 1 }],
+  videoPath: '/tmp/repro.webm',
+  consoleErrors: [{ message: 'TypeError: x is undefined', type: 'error' as const }],
+  reproSteps: ['Navigate to /login', 'Click submit'],
+  reproduced: true,
+};
+
+describe('extractPlaywrightRepro', () => {
+  it('returns null when no events are present', () => {
+    expect(extractPlaywrightRepro([])).toBeNull();
+  });
+
+  it('returns null when no investigation-complete events are present', () => {
+    const events = [
+      { id: 1, projectId: 'p', workItemId: 'w', kind: 'agent.log', payload: {}, createdAt: '' },
+    ];
+    expect(extractPlaywrightRepro(events)).toBeNull();
+  });
+
+  it('returns null when investigation-complete has no playwrightRepro', () => {
+    const events = [makeInvestigationEvent(1)];
+    expect(extractPlaywrightRepro(events)).toBeNull();
+  });
+
+  it('returns the playwrightRepro payload when present', () => {
+    const events = [makeInvestigationEvent(1, FULL_REPRO)];
+    const result = extractPlaywrightRepro(events);
+    expect(result).not.toBeNull();
+    expect(result?.reproduced).toBe(true);
+    expect(result?.reproSteps).toEqual(['Navigate to /login', 'Click submit']);
+    expect(result?.screenshots).toHaveLength(1);
+    expect(result?.consoleErrors).toHaveLength(1);
+    expect(result?.videoPath).toBe('/tmp/repro.webm');
+  });
+
+  it('picks the latest investigation-complete event with a playwrightRepro', () => {
+    const older = makeInvestigationEvent(1, { ...FULL_REPRO, reproduced: false, notes: 'old' });
+    const newer = makeInvestigationEvent(2, { ...FULL_REPRO, reproduced: true, notes: 'new' });
+    const result = extractPlaywrightRepro([older, newer]);
+    expect(result?.reproduced).toBe(true);
+    expect(result?.notes).toBe('new');
+  });
+
+  it('skips investigation events without playwrightRepro and returns the one that has it', () => {
+    const noRepro = makeInvestigationEvent(1);
+    const withRepro = makeInvestigationEvent(2, FULL_REPRO);
+    const result = extractPlaywrightRepro([noRepro, withRepro]);
+    expect(result?.reproduced).toBe(true);
+  });
+
+  it('returns reproduced: false payload without error', () => {
+    const repro = { ...FULL_REPRO, reproduced: false, notes: 'Could not trigger the error' };
+    const result = extractPlaywrightRepro([makeInvestigationEvent(1, repro)]);
+    expect(result?.reproduced).toBe(false);
+    expect(result?.notes).toBe('Could not trigger the error');
   });
 });

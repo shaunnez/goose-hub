@@ -1,0 +1,136 @@
+import { fetchEvents } from '@/lib/api';
+import { renderMarkdownToHtml } from '@/lib/markdown';
+import type { AgentEventDto } from '@/lib/types';
+import { useQuery } from '@tanstack/react-query';
+
+interface InvestigationSectionProps {
+  projectSlug: string;
+  id: string;
+  itemType?: string;
+}
+
+interface KeyFile {
+  path: string;
+  reason: string;
+}
+
+interface InvestigationPayload {
+  investigate: {
+    findings: string;
+    keyFiles: KeyFile[];
+    confidence: 'low' | 'medium' | 'high';
+    openQuestions: string[];
+    decisionSummaries: Array<{ step: string; summary: string; evidence?: string }>;
+  };
+}
+
+const CONFIDENCE_COLOR: Record<string, string> = {
+  high: 'bg-green-500/15 text-green-400',
+  medium: 'bg-yellow-500/15 text-yellow-400',
+  low: 'bg-red-500/15 text-red-400',
+};
+
+function ConfidenceBadge({ level }: { level: string }) {
+  return (
+    <span
+      data-testid="confidence-badge"
+      className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${CONFIDENCE_COLOR[level] ?? 'bg-gray-500/15 text-gray-400'}`}
+    >
+      {level} confidence
+    </span>
+  );
+}
+
+function extractPayload(event: AgentEventDto): InvestigationPayload | null {
+  const p = event.payload as Record<string, unknown>;
+  if (p == null || typeof p !== 'object') return null;
+  if (!('investigate' in p)) return null;
+  return p as InvestigationPayload;
+}
+
+export function InvestigationSection({ projectSlug, id }: InvestigationSectionProps) {
+  const { data: events = [], isLoading } = useQuery<AgentEventDto[]>({
+    queryKey: ['events', projectSlug, id],
+    queryFn: () => fetchEvents(projectSlug, id),
+  });
+
+  if (isLoading) return null;
+
+  const investigationEvents = events.filter((e) => e.kind === 'agent.investigation-complete');
+  const latest = investigationEvents.at(-1);
+
+  if (latest == null) {
+    return (
+      <div
+        data-testid="investigation-empty-state"
+        className="px-8 py-8 flex flex-col items-center justify-center gap-2 text-center"
+      >
+        <p className="text-[13px] text-fg-3">Investigation has not run yet.</p>
+        <p className="text-[12px] text-fg-4">Run the investigator agent to populate this tab.</p>
+      </div>
+    );
+  }
+
+  const payload = extractPayload(latest);
+  if (payload == null) return null;
+
+  const { investigate } = payload;
+
+  return (
+    <div data-testid="investigation-section" className="px-8 py-6 space-y-6">
+      {/* Header row: confidence badge */}
+      <div className="flex items-center gap-3">
+        <h3 className="text-[12px] font-semibold text-fg-3 uppercase tracking-wide">
+          Investigation
+        </h3>
+        <ConfidenceBadge level={investigate.confidence} />
+      </div>
+
+      {/* Findings */}
+      <div>
+        <h4 className="text-[11px] font-medium text-fg-3 mb-2 uppercase tracking-wide">Findings</h4>
+        <div
+          data-testid="findings-content"
+          className="prose prose-sm prose-invert max-w-none text-[13px] text-fg-2 [&_p]:mb-2 [&_ul]:mb-2 [&_li]:ml-4 [&_li]:list-disc [&_code]:font-mono [&_code]:text-[12px]"
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized by renderMarkdownToHtml
+          dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(investigate.findings) }}
+        />
+      </div>
+
+      {/* Key files */}
+      {investigate.keyFiles.length > 0 && (
+        <div>
+          <h4 className="text-[11px] font-medium text-fg-3 mb-2 uppercase tracking-wide">
+            Key Files
+          </h4>
+          <ul data-testid="key-files-list" className="space-y-2">
+            {investigate.keyFiles.map((f) => (
+              <li key={f.path} className="text-[12px]">
+                <span className="font-mono text-fg bg-bg-hover px-1.5 py-0.5 rounded text-[11px]">
+                  {f.path}
+                </span>
+                {f.reason && <span className="ml-2 text-fg-3">{f.reason}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Open questions */}
+      {investigate.openQuestions.length > 0 && (
+        <div>
+          <h4 className="text-[11px] font-medium text-fg-3 mb-2 uppercase tracking-wide">
+            Open Questions
+          </h4>
+          <ul data-testid="open-questions-list" className="space-y-1 list-disc list-inside">
+            {investigate.openQuestions.map((q) => (
+              <li key={q} className="text-[12px] text-fg-2">
+                {q}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
