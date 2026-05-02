@@ -313,8 +313,8 @@ test.describe('M3 happy path', () => {
       timeout: 30_000,
     });
 
-    // 8. Verify the right rail has structured output.
-    await expect(page.getByTestId('detail-right-rail')).toContainText(/"decision"\s*:/, {
+    // 8. Verify the right rail has structured output (triage fixture output).
+    await expect(page.getByTestId('detail-right-rail')).toContainText(/"triage"\s*:/, {
       timeout: 10_000,
     });
   });

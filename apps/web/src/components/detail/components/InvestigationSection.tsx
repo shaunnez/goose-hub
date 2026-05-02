@@ -45,7 +45,7 @@ function extractPayload(event: AgentEventDto): InvestigationPayload | null {
   const p = event.payload as Record<string, unknown>;
   if (p == null || typeof p !== 'object') return null;
   if (!('investigate' in p)) return null;
-  return p as InvestigationPayload;
+  return p as unknown as InvestigationPayload;
 }
 
 export function InvestigationSection({ projectSlug, id }: InvestigationSectionProps) {
