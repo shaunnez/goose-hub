@@ -41,10 +41,10 @@ Use these. Don't introduce new heavyweight dependencies without an ADR.
 
 ## App conventions
 
-Before touching any file inside an app, read its standards file:
+Each app has a `README.md` and a `STANDARDS.md`. Read only the one that matches the app you are about to touch — do not load both at once.
 
-- **`apps/server/STANDARDS.md`** — domain-module architecture, layer contracts (router → service → repository), import rules, test requirements
-- **`apps/web/STANDARDS.md`** — feature folder structure, shared lib rules, component naming, import rules
+- Touching `apps/server/` → read `apps/server/README.md`, then `apps/server/STANDARDS.md`
+- Touching `apps/web/` → read `apps/web/README.md`, then `apps/web/STANDARDS.md`
 
 ## Starting the next issue
 
