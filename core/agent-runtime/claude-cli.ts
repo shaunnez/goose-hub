@@ -161,6 +161,9 @@ export class ClaudeCliRuntime implements AgentRuntime {
             }),
         FACTORY_RUN_ALLOWLIST: allowedTools.join(','),
         FACTORY_RUN_ID: runId,
+        // Where the pre-tool-use-hook posts tool-call audit events (#209).
+        // Falls back to 3001 if FACTORY_SERVER_PORT isn't set in the parent.
+        FACTORY_SERVER_PORT: process.env.FACTORY_SERVER_PORT ?? '3001',
       };
       if (process.env.ANTHROPIC_API_KEY != null) {
         minimalEnv.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
