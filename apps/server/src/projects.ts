@@ -1,6 +1,6 @@
 import { readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { logger } from '@goose-hub/core/logger.js';
 import type { ProjectConfig } from '@goose-hub/core/types.js';
 
@@ -32,7 +32,7 @@ async function loadProject(slug: string): Promise<ProjectConfig | null> {
     return null;
   }
 
-  const mod = (await import(file)) as { default: ProjectConfig };
+  const mod = (await import(pathToFileURL(file).href)) as { default: ProjectConfig };
   if (mod.default == null) {
     logger.warn('project config has no default export', { slug, file });
     return null;
