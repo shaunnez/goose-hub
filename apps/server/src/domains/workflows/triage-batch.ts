@@ -122,6 +122,18 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       priority: triageOutput.priority,
     });
 
+    // Emit each decision summary as a separate event so the timeline UI and
+    // retro skill can replay them per CLAUDE.md (#206).
+    for (const summary of triageOutput.decisionSummaries ?? []) {
+      eventStore.appendEvent({
+        projectId,
+        workItemId,
+        kind: 'agent.decision-summary',
+        payload: { skill: 'triage', ...summary },
+        runId,
+      });
+    }
+
     // Run repo-match skill
     const repoMatchRunId = crypto.randomUUID();
     const researcherPersonaId = selectPersona(projectId, 'researcher');
@@ -156,6 +168,15 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
         slug,
         workItemId,
       });
+      // Surface the parse failure as an event so the timeline records it
+      // (currently silent — #206).
+      eventStore.appendEvent({
+        projectId,
+        workItemId,
+        kind: 'agent.run-failed',
+        payload: { runId: repoMatchRunId, error: 'repo-match output validation failed' },
+        runId: repoMatchRunId,
+      });
     }
     const repoMatchOutput = repoMatchParsed.success
       ? repoMatchParsed.data
@@ -165,6 +186,17 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       workItemId,
       candidates: repoMatchOutput.candidates.length,
     });
+
+    // Emit repo-match decision summaries the same way as triage (#206).
+    for (const summary of repoMatchOutput.decisionSummaries ?? []) {
+      eventStore.appendEvent({
+        projectId,
+        workItemId,
+        kind: 'agent.decision-summary',
+        payload: { skill: 'repo-match', ...summary },
+        runId: repoMatchRunId,
+      });
+    }
 
     // Apply labels
     await stateSource.setLabelInGroup(item.externalId, 'type', triageOutput.type);
