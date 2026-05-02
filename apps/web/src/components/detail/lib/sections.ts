@@ -22,9 +22,7 @@ export const SECTIONS: readonly DetailSection[] = [
   {
     key: 'investigation',
     label: 'Investigation',
-    available: false,
-    milestone: 'M6',
-    description: 'Reproduction artefacts, suspect surfaces, evidence trail.',
+    available: true,
   },
   {
     key: 'prd',

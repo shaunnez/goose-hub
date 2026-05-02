@@ -16,7 +16,8 @@ Components:
 - `RightRail.tsx` — empty-state for live activity; lights up in M3+.
 - `OverviewSection.tsx` — renders the issue body via the lightweight Markdown helper.
 - `TimelineSection.tsx` — fetches `events` for the work item; subscribes to `/events?workItemId=…` SSE so new transitions appear without a refresh.
-- `DeferredSurface.tsx` — small "Available in M&lt;N&gt;" empty-state for the 8 inert sections.
+- `DeferredSurface.tsx` — small "Available in M&lt;N&gt;" empty-state for the inert sections.
 - `sections.ts` — single source of truth for the 10-section list, milestone tags, descriptions.
+- `InvestigationSection.tsx` — renders structured investigation findings from `agent.investigation-complete` events: confidence badge (low/medium/high), markdown findings, key files list, and open questions. Shows empty state if no investigation has run. Added in M6.06 (#190).
 - `GatePendingBanner.tsx` — amber callout rendered between `TaskHeader` and the main content rails when the issue is in a gate state (a state requiring human action). Renders null for non-gate states.
 - `gate-states.ts` — pure-logic map of gate state keys to human-readable banner messages. Kept separate from the component so the vitest suite (no `@/` alias resolution) can import it directly.

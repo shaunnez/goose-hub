@@ -9,6 +9,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { SECTIONS } from '../lib/sections';
 import { DeferredSurface } from './DeferredSurface';
 import { GatePendingBanner } from './GatePendingBanner';
+import { InvestigationSection } from './InvestigationSection';
 import { LeftRail } from './LeftRail';
 import { OverviewSection } from './OverviewSection';
 import { RightRail } from './RightRail';
@@ -211,6 +212,8 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
               </>
             ) : currentSection.key === 'timeline' ? (
               <TimelineSection projectSlug={slug} id={id} workItemId={workItemId} />
+            ) : currentSection.key === 'investigation' ? (
+              <InvestigationSection projectSlug={slug} id={id} />
             ) : (
               <DeferredSurface
                 surface={currentSection.label}

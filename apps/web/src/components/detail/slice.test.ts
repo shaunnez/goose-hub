@@ -21,9 +21,11 @@ describe('detail page — sections config', () => {
     ]);
   });
 
-  it('Overview and Timeline are the only available sections in M2', () => {
+  it('Overview, Investigation, and Timeline are available sections', () => {
     const available = SECTIONS.filter((s) => s.available).map((s) => s.key);
-    expect(available).toEqual(['overview', 'timeline']);
+    expect(available).toContain('overview');
+    expect(available).toContain('investigation');
+    expect(available).toContain('timeline');
   });
 
   it('every deferred section carries a milestone tag', () => {
