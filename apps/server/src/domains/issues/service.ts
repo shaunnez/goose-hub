@@ -74,6 +74,36 @@ export async function getIssueComments(
   return { ok: true, data: { comments } };
 }
 
+interface TriageEventPayload {
+  triage: { type: string; priority: string };
+  repoMatch: {
+    candidates: Array<{ repo: string; confidence: number; evidence: string; tier: number }>;
+  };
+}
+
+interface TriageDto {
+  type: string;
+  priority: string;
+  candidates: Array<{ repo: string; confidence: number; evidence: string; tier: number }>;
+  overrideRepo: string | null;
+}
+
+/**
+ * Build a TriageDto from a triage-complete event payload (#204).
+ * Both getIssueTriage and overrideIssueRepo construct identical-shaped
+ * triage payloads from the latest agent.triage-complete event; this helper
+ * keeps them in sync as the triage schema evolves.
+ */
+function buildTriageDto(payload: unknown, overrideRepo: string | null): TriageDto {
+  const p = payload as TriageEventPayload;
+  return {
+    type: p.triage.type,
+    priority: p.triage.priority,
+    candidates: p.repoMatch.candidates ?? [],
+    overrideRepo,
+  };
+}
+
 export async function getIssueTriage(
   slug: string,
   id: string,
@@ -87,25 +117,13 @@ export async function getIssueTriage(
   const triageEvent = allEvents.filter((e) => e.kind === 'agent.triage-complete').at(-1);
   if (triageEvent == null) return { ok: true, data: { triage: null } };
 
-  const payload = triageEvent.payload as {
-    triage: { type: string; priority: string };
-    repoMatch: {
-      candidates: Array<{ repo: string; confidence: number; evidence: string; tier: number }>;
-    };
-  };
-
   const overrideEvent = allEvents.filter((e) => e.kind === 'agent.repo-override').at(-1);
   const overridePayload = overrideEvent?.payload as { repo?: string } | undefined;
 
   return {
     ok: true,
     data: {
-      triage: {
-        type: payload.triage.type,
-        priority: payload.triage.priority,
-        candidates: payload.repoMatch.candidates ?? [],
-        overrideRepo: overridePayload?.repo ?? null,
-      },
+      triage: buildTriageDto(triageEvent.payload, overridePayload?.repo ?? null),
     },
   };
 }
@@ -263,22 +281,10 @@ export async function overrideIssueRepo(
   const triageEvent = allEvents.filter((e) => e.kind === 'agent.triage-complete').at(-1);
   if (triageEvent == null) return { ok: true, data: { triage: null } };
 
-  const payload = triageEvent.payload as {
-    triage: { type: string; priority: string };
-    repoMatch: {
-      candidates: Array<{ repo: string; confidence: number; evidence: string; tier: number }>;
-    };
-  };
-
   return {
     ok: true,
     data: {
-      triage: {
-        type: payload.triage.type,
-        priority: payload.triage.priority,
-        candidates: payload.repoMatch.candidates ?? [],
-        overrideRepo: repo,
-      },
+      triage: buildTriageDto(triageEvent.payload, repo),
     },
   };
 }
