@@ -23,7 +23,11 @@ export type EventKind =
   | 'agent.fallback-triggered'
   | 'agent.triage-complete'
   | 'agent.repo-override'
-  | 'agent.investigation-complete';
+  | 'agent.investigation-complete'
+  // Three-tier verification framework — see docs/standards/verification.md
+  | 'qa.structural-failed'
+  | 'qa.functional-failed'
+  | 'qa.regression-failed';
 
 export interface AgentEvent {
   id: number;
