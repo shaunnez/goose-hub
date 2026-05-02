@@ -39,6 +39,13 @@ You execute one narrow GitHub issue at a time. The issue is your build spec.
 
 Use these. Don't introduce new heavyweight dependencies without an ADR.
 
+## App conventions
+
+Before touching any file inside an app, read its standards file:
+
+- **`apps/server/STANDARDS.md`** — domain-module architecture, layer contracts (router → service → repository), import rules, test requirements
+- **`apps/web/STANDARDS.md`** — feature folder structure, shared lib rules, component naming, import rules
+
 ## Starting the next issue
 
 When prompted with "start the next issue" (or similar), resolve the issue to work on as follows:
