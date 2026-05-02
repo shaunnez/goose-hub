@@ -193,6 +193,14 @@ describe('EventStore — M4 runtime events', () => {
     }
   });
 
+  it('accepts the three-tier QA verification event kinds (docs/standards/verification.md)', () => {
+    const kinds = ['qa.structural-failed', 'qa.functional-failed', 'qa.regression-failed'] as const;
+    for (const kind of kinds) {
+      const e = eventStore.appendEvent({ projectId: RUN_PROJECT, kind, payload: {} });
+      expect(e.kind).toBe(kind);
+    }
+  });
+
   it('stores and retrieves runId on events', () => {
     const runId = 'run-test-abc123';
     const e = eventStore.appendEvent({

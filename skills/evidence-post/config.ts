@@ -1,0 +1,58 @@
+import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
+import { z } from 'zod';
+
+/**
+ * Context expected by the evidence-post agent. Rendered as XML in the user prompt:
+ *
+ *   <task>
+ *     <work_item>
+ *       <number>...</number>
+ *       <repo>owner/repo</repo>
+ *       <title>...</title>
+ *     </work_item>
+ *     <pr_number>...</pr_number>
+ *     <pr_head_sha>...</pr_head_sha>
+ *     <spec_path>apps/web/e2e/issue-N.spec.ts</spec_path>
+ *   </task>
+ */
+export const EvidencePostContextSchema = z.object({
+  workItem: z.object({
+    number: z.number().describe('Issue number to comment on'),
+    repo: z.string().describe('owner/repo, e.g. shaunnez/goose-hub'),
+    title: z.string(),
+  }),
+  prNumber: z.number().describe('Pull request number that closes this issue'),
+  prHeadSha: z
+    .string()
+    .min(7)
+    .describe('Head commit SHA of the PR — every raw URL must pin to this SHA, never the branch'),
+  specPath: z
+    .string()
+    .describe(
+      'Workspace-relative path to the Playwright spec to run, e.g. apps/web/e2e/issue-N.spec.ts',
+    ),
+});
+
+const config: SkillConfig = {
+  contextSchema: EvidencePostContextSchema,
+  contextAllowlist: [
+    'workItem.number',
+    'workItem.repo',
+    'workItem.title',
+    'prNumber',
+    'prHeadSha',
+    'specPath',
+  ],
+  /**
+   * `validate` bundle — Playwright invocation, evidence I/O, git push of
+   * artefacts, and SHA resolution. The skill posts the issue comment via
+   * a separate workflow-layer GitHub call (NOT a tool the agent invokes
+   * directly), so no GitHub MCP/CLI access is needed in the bundle.
+   */
+  toolBundles: ['validate'],
+  modelPin: 'sonnet',
+  freshContext: false,
+  role: 'developer',
+};
+
+export default config;

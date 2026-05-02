@@ -13,6 +13,29 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
+/**
+ * Hosts whose images we are willing to inline as <img>. Other hosts render
+ * as a plain link to defend against XSS via attacker-controlled comment bodies
+ * (a posted `![](javascript:...)` would not match, since the regex requires
+ * https?://; but we also restrict the host to known-safe origins).
+ */
+const TRUSTED_IMAGE_HOSTS = new Set([
+  'raw.githubusercontent.com',
+  'user-images.githubusercontent.com',
+  'camo.githubusercontent.com',
+  'github.com',
+]);
+
+function isTrustedImageUrl(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
+    return TRUSTED_IMAGE_HOSTS.has(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 function renderInline(value: string): string {
   let out = escapeHtml(value);
   out = out.replace(
@@ -21,6 +44,17 @@ function renderInline(value: string): string {
   );
   out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   out = out.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
+  // Image syntax — must run BEFORE the link rule so the leading `!` is consumed.
+  // Trusted hosts → <img>. Untrusted hosts → plain link (alt text as link label).
+  out = out.replace(
+    /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g,
+    (_match, alt: string, url: string) => {
+      if (isTrustedImageUrl(url)) {
+        return `<img src="${url}" alt="${alt}" loading="lazy" class="my-3 max-w-full rounded border border-line" />`;
+      }
+      return `<a href="${url}" class="text-accent hover:underline" target="_blank" rel="noreferrer noopener">${alt || url}</a>`;
+    },
+  );
   out = out.replace(
     /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
     '<a href="$2" class="text-accent hover:underline" target="_blank" rel="noreferrer noopener">$1</a>',

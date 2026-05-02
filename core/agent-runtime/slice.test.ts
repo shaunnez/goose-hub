@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { eventStore } from '../event-stream/store.js';
-import { ClaudeCliRuntime } from './claude-cli.js';
+import { ClaudeCliRuntime, resolveMcpConfigPath } from './claude-cli.js';
 import { assembleSpawnContext } from './context-assembly.js';
 import { withFallback } from './fallback.js';
 import type { AgentResult, AgentRuntime, AgentSpec, DecisionSummary } from './interface.js';
@@ -23,7 +23,11 @@ vi.mock('node:child_process', () => ({
   execFileSync: vi.fn().mockReturnValue('/mock/bin/claude'),
   spawn: vi.fn(),
 }));
-vi.mock('node:fs', () => ({ mkdirSync: vi.fn(), writeFileSync: vi.fn() }));
+vi.mock('node:fs', () => ({
+  mkdirSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  existsSync: vi.fn().mockReturnValue(false),
+}));
 vi.mock('node:os', () => ({ homedir: vi.fn().mockReturnValue('/mock-home') }));
 vi.mock('../event-stream/store.js', () => ({
   eventStore: {
@@ -415,6 +419,40 @@ function makeSecuritySpec(): AgentSpec {
     personaId: 'test-project/developer/0',
   };
 }
+
+// ─── resolveMcpConfigPath ─────────────────────────────────────────────────────
+
+describe('resolveMcpConfigPath', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns workspace mcp.json when playwright-mcp bundle is present and file exists', async () => {
+    const fs = await import('node:fs');
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    const result = resolveMcpConfigPath('/work/dir', ['playwright-mcp']);
+    expect(result).toBe('/work/dir/apps/web/.mcp.json');
+  });
+
+  it('falls back to global empty config when bundle file does not exist', async () => {
+    const fs = await import('node:fs');
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    const result = resolveMcpConfigPath('/work/dir', ['playwright-mcp']);
+    expect(result).toBe('/mock-home/.factory/mcp-config.json');
+  });
+
+  it('falls back to global empty config when no MCP-mapped bundle is present', () => {
+    const result = resolveMcpConfigPath('/work/dir', ['read-only', 'validate']);
+    expect(result).toBe('/mock-home/.factory/mcp-config.json');
+  });
+
+  it('returns first matching bundle when multiple are present', async () => {
+    const fs = await import('node:fs');
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    const result = resolveMcpConfigPath('/work/dir', ['validate', 'playwright-mcp']);
+    expect(result).toBe('/work/dir/apps/web/.mcp.json');
+  });
+});
 
 describe('ClaudeCliRuntime subprocess security', () => {
   beforeEach(() => {

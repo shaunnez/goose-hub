@@ -86,6 +86,32 @@ describe('TOOL_BUNDLES', () => {
     expect(TOOL_BUNDLES['read-write']).toContain('Write');
     expect(TOOL_BUNDLES['read-write']).toContain('Edit');
   });
+
+  it('validate bundle contains Read, Write, and scoped Bash patterns', () => {
+    expect(TOOL_BUNDLES.validate).toContain('Read');
+    expect(TOOL_BUNDLES.validate).toContain('Write');
+    expect(TOOL_BUNDLES.validate).toContain('Bash(pnpm test:e2e*)');
+    expect(TOOL_BUNDLES.validate).toContain('Bash(git push*)');
+  });
+
+  it('validate bundle does not include unrestricted Bash', () => {
+    expect(TOOL_BUNDLES.validate).not.toContain('Bash');
+  });
+
+  it('playwright-mcp bundle contains browser_* and planner_* and generator_* tools', () => {
+    expect(TOOL_BUNDLES['playwright-mcp']).toContain('mcp__playwright-test__browser_navigate');
+    expect(TOOL_BUNDLES['playwright-mcp']).toContain(
+      'mcp__playwright-test__browser_take_screenshot',
+    );
+    expect(TOOL_BUNDLES['playwright-mcp']).toContain('mcp__playwright-test__planner_save_plan');
+    expect(TOOL_BUNDLES['playwright-mcp']).toContain('mcp__playwright-test__generator_write_test');
+  });
+
+  it('playwright-mcp bundle entries are all mcp__playwright-test__ prefixed', () => {
+    for (const tool of TOOL_BUNDLES['playwright-mcp']) {
+      expect(tool.startsWith('mcp__playwright-test__')).toBe(true);
+    }
+  });
 });
 
 describe('computeAllowlist', () => {
