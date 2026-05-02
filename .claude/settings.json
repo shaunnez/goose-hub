@@ -1,5 +1,12 @@
 {
   "defaultMode": "auto",
+  "permissions": {
+    "allow": [
+      "Bash(pnpm biome check *)",
+      "Bash(pnpm test *)",
+      "Bash(pnpm tsc --noEmit *)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {

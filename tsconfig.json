@@ -7,12 +7,17 @@
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "noEmit": true
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@goose-hub/core/*": ["./core/*"]
+    }
   },
   "include": [
     "core/**/*.ts",
     "apps/cli/**/*.ts",
     "apps/server/**/*.ts",
+    "slices/**/*.ts",
     "target-projects/**/*.ts",
     "vitest.config.ts",
     "drizzle.config.ts"

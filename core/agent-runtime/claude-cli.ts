@@ -1,7 +1,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { eventStore } from '../event-stream/store.js';
 import { computeAllowlist } from '../tool-layer/allowlist.js';
 import { deployHooks } from '../tool-layer/pre-tool-use-hook.js';
@@ -19,10 +19,14 @@ const MCP_CONFIG_PATH = join(homedir(), '.factory', 'mcp-config.json');
 /**
  * Resolves the absolute path to the `claude` binary.
  * Security rule: never rely on implicit PATH — resolve explicitly.
+ * Uses `where` on Windows, `which` on Unix.
  */
 function resolveBinary(name: string): string {
+  const cmd = process.platform === 'win32' ? 'where' : 'which';
   try {
-    return execFileSync('which', [name], { encoding: 'utf8' }).trim();
+    const result = execFileSync(cmd, [name], { encoding: 'utf8' }).trim();
+    // `where` on Windows may return multiple lines; take the first match.
+    return result.split(/\r?\n/)[0];
   } catch {
     throw new Error(`Binary '${name}' not found on PATH. Install the Claude CLI first.`);
   }
@@ -114,12 +118,26 @@ export class ClaudeCliRuntime implements AgentRuntime {
 
     return new Promise((resolve, reject) => {
       // Security rule: minimal explicit env, no parent process.env passthrough.
-      // USER and TMPDIR are required for macOS OAuth keychain credential lookup.
+      // USER/USERNAME and TMPDIR/TEMP are required for OAuth keychain credential lookup.
+      const isWindows = process.platform === 'win32';
       const minimalEnv: Record<string, string> = {
         HOME: homedir(),
-        USER: process.env.USER ?? '',
-        TMPDIR: process.env.TMPDIR ?? '/tmp',
-        PATH: '/usr/local/bin:/usr/bin:/bin',
+        ...(isWindows
+          ? {
+              USERNAME: process.env.USERNAME ?? '',
+              USERPROFILE: homedir(),
+              TEMP: process.env.TEMP ?? homedir(),
+              TMP: process.env.TMP ?? homedir(),
+              // Include the binary's directory plus Windows system dirs for Claude CLI's own needs.
+              PATH: `${dirname(binaryPath)};C:\\Windows\\System32;C:\\Windows`,
+              APPDATA: process.env.APPDATA ?? '',
+              LOCALAPPDATA: process.env.LOCALAPPDATA ?? '',
+            }
+          : {
+              USER: process.env.USER ?? '',
+              TMPDIR: process.env.TMPDIR ?? '/tmp',
+              PATH: '/usr/local/bin:/usr/bin:/bin',
+            }),
         FACTORY_RUN_ALLOWLIST: allowedTools.join(','),
         FACTORY_RUN_ID: runId,
       };
@@ -206,7 +224,8 @@ export class ClaudeCliRuntime implements AgentRuntime {
             payload: { runId, exitCode: code },
             runId,
           });
-          reject(new Error(`Claude reported an error: ${envelope.result}`));
+          const detail = envelope.result ?? (stderr.trim() || 'no detail available');
+          reject(new Error(`Claude reported an error: ${detail}`));
           return;
         }
 

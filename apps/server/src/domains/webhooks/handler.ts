@@ -40,7 +40,7 @@ async function dispatchForLabel(
 
   if (labelName === 'factory:investigating') {
     const { runInvestigateWorkflow } = await import(
-      '../../../../../slices/investigate/workflow.js'
+      new URL('../../../../../slices/investigate/workflow.js', import.meta.url).href
     );
     const source = await getSourceForSlug(slug);
     if (source == null) {

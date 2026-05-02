@@ -15,9 +15,7 @@ export const SECTIONS: readonly DetailSection[] = [
   {
     key: 'repo',
     label: 'Repo Selection',
-    available: false,
-    milestone: 'M5',
-    description: 'Three-tier repo matching, candidate scoring, and final pick.',
+    available: true,
   },
   {
     key: 'investigation',

@@ -15,7 +15,14 @@ import { getSourceForSlug } from '../../shared/source.js';
 const REPO_ROOT = join(import.meta.dirname, '../../../../..');
 
 const OUTPUT_FIXTURES: Record<string, unknown> = {
-  triage: { priority: 'high', type: 'feature', decision: 'accept' },
+  triage: {
+    triage: { type: 'feature', priority: 'high' },
+    repoMatch: {
+      candidates: [
+        { repo: 'shaunnez/goose-hub', confidence: 87, evidence: 'keyword match', tier: 1 },
+      ],
+    },
+  },
   investigate: {
     findings: 'Root cause identified',
     confidence: 'high',
@@ -315,6 +322,15 @@ export async function fakeRun(
       payload: { summary: `Running ${safeSkill} skill on issue #${id}` },
     });
     await new Promise((r) => setTimeout(r, 700));
+    if (safeSkill === 'triage') {
+      const fixture = OUTPUT_FIXTURES.triage as { triage: unknown; repoMatch: unknown };
+      eventStore.appendEvent({
+        projectId: slug,
+        workItemId,
+        kind: 'agent.triage-complete',
+        payload: fixture,
+      });
+    }
     eventStore.appendEvent({
       projectId: slug,
       workItemId,

@@ -159,7 +159,7 @@ type AdvisorVerdict =
 
 **Selection strategy:** round-robin within role (option a). Orchestrator tracks `lastPersonaIndex` per `(projectId, role)` in `project_state` table. Next run picks `(lastIndex + 1) % personaCount`, stores updated index. Simple, deterministic, equal exposure. No stats weighting until M9 provides enough data to know if it matters.
 
-**Pending:** does `AgentSpec` get a `personaId` field, or does persona connect at the workflow layer above it? (Not yet resolved — flag for M5 implementation.)
+**`personaId` on `AgentSpec` (resolved M6):** `AgentSpec` carries a required `personaId: string` field. The workflow layer is responsible for selection — call `selectPersona(projectId, role)` in `core/agent-runtime/` before building the spec. The runtime's `assembleSpawnContext` uses `personaId` to load persona history on the non-fresh path. Every emitted `agent.*` event carries `personaId` for M9 stats. Field is required (not optional) so it cannot be silently skipped. `triage-batch.ts` backfilled as part of M6.05.
 
 ## Model Tier Registry
 
@@ -350,14 +350,9 @@ improvement_candidate:
 
 ## Deferred / Open Questions (to resolve at their milestone)
 
-- **M1 cleanup**: `core/state-source/github-labels.ts:74` uses naive `find()` for state resolution instead of calling `resolveState()` from `core/state-machine/conflict-resolver.ts`. Works for single-label issues; breaks multi-label conflict cases. Must fix before M2 consumes `listOpenWork()`.
-- **M1 cleanup**: `apps/cli/src/lib.ts` has a duplicate `resolveState` that predates M1.03. Should import from `core/state-machine/conflict-resolver.ts`. Not breaking for M1 CLI, but the duplication is a lint smell.
-- **M1 cleanup**: `parseDependsOn` regex in `github-labels.ts` requires a colon (`depends on:`). Plan examples use `Depends on #42` (no colon). Tolerant parser spec says also accept `Depends-On`, `blocked by`. Not breaking until M11, but correct before then.
-- **M4**: Hook script deployment — where does the orchestrator's `PreToolUse` script live (`~/.factory/hooks/`? relative to install?). Decide at M4 spike.
-- **M5**: Does `AgentSpec` get a `personaId` field, or does persona connect at the workflow layer above it?
-- **M5**: `WorkflowContext` type shape — what does a workflow receive (source, project, workItem, emit, runtime, budgets…)?
+- **M11**: `parseDependsOn` regex in `github-labels.ts` requires a colon (`depends on:`). Plan examples use `Depends on #42` (no colon). Tolerant parser spec says also accept `Depends-On`, `blocked by`. Fix before M11 dependency checks go live.
 - **M12**: Governance PR check CI wiring — how does `core/governance/pr-check.ts` get access to the PR diff and labels in GitHub Actions?
-- **Post-v0**: Claude CLI vs Claude Agent SDK — reference audit (#10) said "compare honestly." SDK lacks subprocess overhead and suits non-coding skills (triage, retro) better. Decision point before M4.
+- **Post-v0**: Claude CLI vs Claude Agent SDK — reference audit (#10) said "compare honestly." SDK lacks subprocess overhead and suits non-coding skills (triage, retro) better. Revisit when v0 ships.
 
 ## Monorepo import convention (established M2)
 

@@ -1,3 +1,4 @@
+import { logger } from '@goose-hub/core/logger.js';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { eventsRouter } from './domains/events/router.js';
@@ -10,6 +11,16 @@ import { workflowsRouter } from './domains/workflows/router.js';
 
 const app = new Hono();
 app.use('*', cors());
+app.use('*', async (c, next) => {
+  const start = Date.now();
+  await next();
+  logger.info('request', {
+    method: c.req.method,
+    path: c.req.path,
+    status: c.res.status,
+    ms: Date.now() - start,
+  });
+});
 
 app.route('/', projectsRouter); // GET /health, GET /projects
 app.route('/projects', milestonesRouter); // GET/POST /projects/:slug/milestones/**, /active-milestone

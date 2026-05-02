@@ -4,6 +4,7 @@ import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { logger } from '@goose-hub/core/logger.js';
 import type { StateSource } from '@goose-hub/core/state-source/interface.js';
 import { RepoMatchOutputSchema } from '../../../../../skills/repo-match/schema.js';
 import { TriageOutputSchema } from '../../../../../skills/triage/schema.js';
@@ -42,6 +43,7 @@ function readReposContext(slug: string): string {
 }
 
 export async function runTriageBatch(slug: string, source?: StateSource): Promise<void> {
+  logger.info('triage-batch started', { slug });
   const stateSource = source ?? (await getSourceForSlug(slug));
   if (stateSource == null) {
     throw new Error(`Project not found: ${slug}`);
@@ -56,15 +58,22 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
 
   const allItems = await stateSource.listOpenWork();
   const triagingItems = allItems.filter((item) => item.state === 'factory:triaging');
+  logger.info('triage-batch items found', {
+    slug,
+    total: allItems.length,
+    triaging: triagingItems.length,
+  });
 
   for (const item of triagingItems) {
     const runId = crypto.randomUUID();
     const projectId = stateSource.projectId;
     const workItemId = item.id;
 
+    logger.info('triage-batch processing item', { slug, workItemId, title: item.title });
     const triagerPersonaId = selectPersona(projectId, 'triager');
 
     // Run triage skill
+    logger.info('triage-batch running triage skill', { slug, workItemId, runId });
     const triageResult = await runtime.run({
       runId,
       role: 'triager',
@@ -82,6 +91,11 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
 
     const triageParsed = TriageOutputSchema.safeParse(triageResult.output);
     if (!triageParsed.success) {
+      logger.error('triage-batch triage output invalid', {
+        slug,
+        workItemId,
+        errors: triageParsed.error.issues,
+      });
       eventStore.appendEvent({
         projectId,
         workItemId,
@@ -92,10 +106,21 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       continue;
     }
     const triageOutput = triageParsed.data;
+    logger.info('triage-batch triage complete', {
+      slug,
+      workItemId,
+      type: triageOutput.type,
+      priority: triageOutput.priority,
+    });
 
     // Run repo-match skill
     const repoMatchRunId = crypto.randomUUID();
     const researcherPersonaId = selectPersona(projectId, 'researcher');
+    logger.info('triage-batch running repo-match skill', {
+      slug,
+      workItemId,
+      runId: repoMatchRunId,
+    });
     const repoMatchResult = await runtime.run({
       runId: repoMatchRunId,
       role: 'researcher',
@@ -117,9 +142,20 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
     });
 
     const repoMatchParsed = RepoMatchOutputSchema.safeParse(repoMatchResult.output);
+    if (!repoMatchParsed.success) {
+      logger.warn('triage-batch repo-match output invalid, using empty candidates', {
+        slug,
+        workItemId,
+      });
+    }
     const repoMatchOutput = repoMatchParsed.success
       ? repoMatchParsed.data
       : { candidates: [], decisionSummaries: [] };
+    logger.info('triage-batch repo-match complete', {
+      slug,
+      workItemId,
+      candidates: repoMatchOutput.candidates.length,
+    });
 
     // Apply labels
     await stateSource.setLabelInGroup(item.externalId, 'type', triageOutput.type);
@@ -148,5 +184,8 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
 
     // Transition state: factory:triaging → factory:accepted
     await stateSource.transitionState(item.externalId, 'factory:triaging', 'factory:accepted');
+    logger.info('triage-batch item complete', { slug, workItemId, externalId: item.externalId });
   }
+
+  logger.info('triage-batch finished', { slug, processed: triagingItems.length });
 }
