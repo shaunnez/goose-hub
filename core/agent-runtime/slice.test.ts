@@ -17,6 +17,15 @@ import {
 } from './models.js';
 import { OutputValidationError, validateOutput } from './output-validator.js';
 import { toJsonSchema } from './schema-bridge.js';
+import {
+  AgentSpawnTimeoutError,
+  DEFAULT_TIMEOUTS,
+  HookExecTimeoutError,
+  LifecycleTimeoutError,
+  ToolCallTimeoutError,
+  WorktreeCreateTimeoutError,
+  withTimeout,
+} from './with-timeout.js';
 
 // ─── module mocks (hoisted by vitest) ────────────────────────────────────────
 vi.mock('node:child_process', () => ({
@@ -518,5 +527,111 @@ describe('ClaudeCliRuntime subprocess security', () => {
       .mocked(eventStore.appendEvent)
       .mock.calls.find(([e]) => e.kind === 'tool.timeout');
     expect(timeoutCall).toBeDefined();
+  });
+});
+
+// ─── withTimeout (#219) ───────────────────────────────────────────────────────
+
+describe('withTimeout', () => {
+  it('resolves with the wrapped promise value when it completes in time', async () => {
+    vi.useFakeTimers();
+    const promise = withTimeout(Promise.resolve('hello'), {
+      timeoutMs: 1000,
+      errorFactory: () => new ToolCallTimeoutError(1000),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(promise).resolves.toBe('hello');
+    vi.useRealTimers();
+  });
+
+  it('rejects with the typed error when the timer wins', async () => {
+    vi.useFakeTimers();
+    const slow = new Promise<string>((resolve) => setTimeout(() => resolve('late'), 5000));
+    const promise = withTimeout(slow, {
+      timeoutMs: 100,
+      errorFactory: () => new WorktreeCreateTimeoutError(100, { repo: '/work/repo' }),
+    });
+    vi.advanceTimersByTime(101);
+    await expect(promise).rejects.toBeInstanceOf(WorktreeCreateTimeoutError);
+    await expect(promise).rejects.toMatchObject({
+      _tag: 'WorktreeCreateTimeout',
+      timeoutMs: 100,
+      context: { repo: '/work/repo' },
+    });
+    vi.useRealTimers();
+  });
+
+  it('propagates rejection from the wrapped promise (not a timeout)', async () => {
+    const failing = Promise.reject(new Error('underlying failure'));
+    await expect(
+      withTimeout(failing, {
+        timeoutMs: 1000,
+        errorFactory: () => new ToolCallTimeoutError(1000),
+      }),
+    ).rejects.toThrow(/underlying failure/);
+  });
+
+  it('honours an AbortSignal: abort beats timeout', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const slow = new Promise<string>((resolve) => setTimeout(() => resolve('late'), 5000));
+    const promise = withTimeout(slow, {
+      timeoutMs: 1000,
+      errorFactory: () => new HookExecTimeoutError(1000),
+      signal: controller.signal,
+    });
+    controller.abort(new Error('explicit abort'));
+    await expect(promise).rejects.toThrow(/explicit abort/);
+    // Crucially, the rejection is the abort reason, NOT the timeout error.
+    await expect(promise).rejects.not.toBeInstanceOf(HookExecTimeoutError);
+    vi.useRealTimers();
+  });
+
+  it('rejects immediately if the signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('pre-aborted'));
+    await expect(
+      withTimeout(Promise.resolve('x'), {
+        timeoutMs: 1000,
+        errorFactory: () => new ToolCallTimeoutError(1000),
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow(/pre-aborted/);
+  });
+
+  it('does not call errorFactory if the wrapped promise resolves first', async () => {
+    const factorySpy = vi.fn(() => new ToolCallTimeoutError(1000));
+    await withTimeout(Promise.resolve('done'), {
+      timeoutMs: 1000,
+      errorFactory: factorySpy,
+    });
+    expect(factorySpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('LifecycleTimeoutError variants (#219)', () => {
+  it('subclasses share the LifecycleTimeoutError base + carry _tag and context', () => {
+    const e1 = new WorktreeCreateTimeoutError(123, { repo: '/work' });
+    expect(e1).toBeInstanceOf(LifecycleTimeoutError);
+    expect(e1._tag).toBe('WorktreeCreateTimeout');
+    expect(e1.timeoutMs).toBe(123);
+    expect(e1.context).toEqual({ repo: '/work' });
+
+    const e2 = new HookExecTimeoutError(456);
+    expect(e2._tag).toBe('HookExecTimeout');
+
+    const e3 = new AgentSpawnTimeoutError(789, { runId: 'run-1' });
+    expect(e3._tag).toBe('AgentSpawnTimeout');
+
+    const e4 = new ToolCallTimeoutError(30_000, { tool: 'bash' });
+    expect(e4._tag).toBe('ToolCallTimeout');
+  });
+
+  it('exposes the defaults table', () => {
+    expect(DEFAULT_TIMEOUTS.WorktreeCreateTimeout).toBe(10_000);
+    expect(DEFAULT_TIMEOUTS.HookExecTimeout).toBe(5_000);
+    expect(DEFAULT_TIMEOUTS.AgentSpawnTimeout).toBe(60_000);
+    expect(DEFAULT_TIMEOUTS.AgentIdleTimeout).toBe(60_000);
+    expect(DEFAULT_TIMEOUTS.ToolCallTimeout).toBe(30_000);
   });
 });
