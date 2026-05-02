@@ -41,10 +41,10 @@ Use these. Don't introduce new heavyweight dependencies without an ADR.
 
 ## App conventions
 
-Each app has a `README.md` and a `STANDARDS.md`. Read only the one that matches the app you are about to touch — do not load both at once.
+Before touching any file in an app, read its `README.md` first. The README will tell you what else to read.
 
-- Touching `apps/server/` → read `apps/server/README.md`, then `apps/server/STANDARDS.md`
-- Touching `apps/web/` → read `apps/web/README.md`, then `apps/web/STANDARDS.md`
+- Touching `apps/server/` → read `apps/server/README.md`
+- Touching `apps/web/` → read `apps/web/README.md`
 
 ## Starting the next issue
 
