@@ -9,6 +9,13 @@ export const TOOL_BUNDLES = {
    */
   read: ['read', 'search', 'work-item-read'],
   /**
+   * Sandboxed developer bundle. Superset of `read` plus `write`, `bash`, `test`.
+   * The lowercase names map to the in-process implementations under
+   * `core/tool-layer/tools/`, all enforcing workspace-bound paths and the
+   * bash denylist (FACTORY_RULES rules 29, 31, 32).
+   */
+  'dev-tools': ['read', 'search', 'work-item-read', 'write', 'bash', 'test'],
+  /**
    * Playwright validation bundle. Used by skills that run e2e specs and
    * commit/push evidence artefacts (skills/playwright-repro, skills/evidence-post).
    * Bash patterns scoped to test invocation, evidence I/O, and git push of evidence.

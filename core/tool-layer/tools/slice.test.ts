@@ -1,9 +1,12 @@
 import { execSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_BASH_DENYLIST, runBash } from './bash.js';
 import { SandboxViolationError, readFile, searchFiles } from './read.js';
+import { runTests } from './test.js';
+import { writeFile } from './write.js';
 
 const rgAvailable = (() => {
   try {
@@ -156,6 +159,281 @@ describe.skipIf(!rgAvailable)('searchFiles', () => {
       });
       expect(results).toContain('app.ts');
       expect(results).not.toContain('app.txt');
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+});
+
+// ─── writeFile ────────────────────────────────────────────────────────────────
+
+describe('writeFile', () => {
+  it('writes a file within the workspace root', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'write-tool-test-'));
+    try {
+      await writeFile({ workspaceRoot: dir, path: 'hello.txt', content: 'hello world' });
+      expect(readFileSync(join(dir, 'hello.txt'), 'utf8')).toBe('hello world');
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('creates parent directories by default', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'write-tool-test-'));
+    try {
+      await writeFile({
+        workspaceRoot: dir,
+        path: 'src/deep/nested/file.ts',
+        content: 'export const x = 1;',
+      });
+      expect(statSync(join(dir, 'src/deep/nested/file.ts')).isFile()).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('overwrites existing files', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'write-tool-test-'));
+    try {
+      writeFileSync(join(dir, 'a.txt'), 'old');
+      await writeFile({ workspaceRoot: dir, path: 'a.txt', content: 'new' });
+      expect(readFileSync(join(dir, 'a.txt'), 'utf8')).toBe('new');
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('rejects absolute paths', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'write-tool-test-'));
+    try {
+      await expect(
+        writeFile({ workspaceRoot: dir, path: '/etc/passwd', content: 'pwned' }),
+      ).rejects.toThrow(SandboxViolationError);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('rejects ../ traversal', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'write-tool-test-'));
+    try {
+      await expect(
+        writeFile({ workspaceRoot: dir, path: '../escape.txt', content: 'pwned' }),
+      ).rejects.toThrow(SandboxViolationError);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('rejects deeply nested traversal that escapes root', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'write-tool-test-'));
+    try {
+      await expect(
+        writeFile({
+          workspaceRoot: dir,
+          path: 'sub/../../escape.txt',
+          content: 'pwned',
+        }),
+      ).rejects.toThrow(SandboxViolationError);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('rejects empty path', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'write-tool-test-'));
+    try {
+      await expect(writeFile({ workspaceRoot: dir, path: '', content: 'x' })).rejects.toThrow(
+        SandboxViolationError,
+      );
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+});
+
+// ─── runBash ──────────────────────────────────────────────────────────────────
+
+describe('runBash', () => {
+  it('runs a simple command and captures stdout', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'bash-tool-test-'));
+    try {
+      const result = await runBash({ workspaceRoot: dir, argv: ['echo', 'hello bash tool'] });
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('hello bash tool');
+      expect(result.timedOut).toBe(false);
+      expect(result.truncated).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('captures non-zero exit codes', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'bash-tool-test-'));
+    try {
+      const result = await runBash({ workspaceRoot: dir, argv: ['false'] });
+      expect(result.exitCode).not.toBe(0);
+      // BashResult intentionally has no `passed` field — that's runTests' job.
+      expect('passed' in result).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('runs in the workspace cwd', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'bash-tool-test-'));
+    try {
+      writeFileSync(join(dir, 'marker.txt'), '');
+      const result = await runBash({ workspaceRoot: dir, argv: ['ls'] });
+      expect(result.stdout).toContain('marker.txt');
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('rejects empty argv', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'bash-tool-test-'));
+    try {
+      await expect(runBash({ workspaceRoot: dir, argv: [] })).rejects.toThrow(
+        SandboxViolationError,
+      );
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('rejects denylisted patterns (sudo)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'bash-tool-test-'));
+    try {
+      await expect(
+        runBash({ workspaceRoot: dir, argv: ['sudo', 'rm', 'file.txt'] }),
+      ).rejects.toThrow(SandboxViolationError);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('rejects denylisted patterns (rm -rf /)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'bash-tool-test-'));
+    try {
+      await expect(runBash({ workspaceRoot: dir, argv: ['rm', '-rf', '/'] })).rejects.toThrow(
+        SandboxViolationError,
+      );
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('rejects git push --force', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'bash-tool-test-'));
+    try {
+      await expect(
+        runBash({ workspaceRoot: dir, argv: ['git', 'push', '--force'] }),
+      ).rejects.toThrow(SandboxViolationError);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('honours a custom denylist', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'bash-tool-test-'));
+    try {
+      await expect(
+        runBash({ workspaceRoot: dir, argv: ['echo', 'forbidden'], denylist: ['forbidden'] }),
+      ).rejects.toThrow(SandboxViolationError);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('does not invoke a shell (argv strings remain literal)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'bash-tool-test-'));
+    try {
+      // Shell-metachar in an argv element should be literal text — no command substitution.
+      const result = await runBash({
+        workspaceRoot: dir,
+        argv: ['echo', '$(whoami)'],
+      });
+      expect(result.stdout).toContain('$(whoami)');
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('kills runaway processes after the timeout and reports timedOut', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'bash-tool-test-'));
+    try {
+      const result = await runBash({
+        workspaceRoot: dir,
+        argv: ['sleep', '10'],
+        timeoutMs: 100,
+      });
+      expect(result.timedOut).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('exposes a default denylist that includes sudo and rm -rf /', () => {
+    expect(DEFAULT_BASH_DENYLIST).toContain('sudo ');
+    expect(DEFAULT_BASH_DENYLIST).toContain('rm -rf /');
+  });
+});
+
+// ─── runTests ─────────────────────────────────────────────────────────────────
+
+describe('runTests', () => {
+  it('returns passed: true on exit code 0', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'test-tool-test-'));
+    try {
+      const result = await runTests({ workspaceRoot: dir, testCommand: 'true' });
+      expect(result.passed).toBe(true);
+      expect(result.exitCode).toBe(0);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('returns passed: false on non-zero exit', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'test-tool-test-'));
+    try {
+      const result = await runTests({ workspaceRoot: dir, testCommand: 'false' });
+      expect(result.passed).toBe(false);
+      expect(result.exitCode).not.toBe(0);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('tokenises a multi-word testCommand into argv', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'test-tool-test-'));
+    try {
+      // `echo` with several args reaches the spawned process as discrete argv tokens.
+      const result = await runTests({ workspaceRoot: dir, testCommand: 'echo a b c' });
+      expect(result.stdout.trim()).toBe('a b c');
+      expect(result.passed).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('rejects empty testCommand', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'test-tool-test-'));
+    try {
+      await expect(runTests({ workspaceRoot: dir, testCommand: '   ' })).rejects.toThrow(
+        SandboxViolationError,
+      );
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('inherits the bash denylist (rejects sudo testCommand)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'test-tool-test-'));
+    try {
+      await expect(runTests({ workspaceRoot: dir, testCommand: 'sudo make test' })).rejects.toThrow(
+        SandboxViolationError,
+      );
     } finally {
       rmSync(dir, { recursive: true });
     }
