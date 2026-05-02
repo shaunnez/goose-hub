@@ -12,7 +12,7 @@ import { PlaywrightReproSchema } from '../../skills/playwright-repro/schema.js';
 const REPO_ROOT = join(import.meta.dirname, '../..');
 
 function readPrompt(skillName: string): string {
-  return readFileSync(join(REPO_ROOT, 'skills', skillName, 'prompt.md'), 'utf8');
+  return readFileSync(join(REPO_ROOT, 'skills', skillName, 'skill.md'), 'utf8');
 }
 
 /**
