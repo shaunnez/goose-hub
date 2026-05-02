@@ -199,6 +199,24 @@ describe('fakeRun', () => {
     const result = await fakeRun('proj', '1', 'investigate');
     expect(result).toMatchObject({ ok: true, data: { skill: 'investigate' } });
   });
+
+  it('returns 404 in production, refusing to emit synthetic events (#203)', async () => {
+    const original = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      const result = await fakeRun('proj', '1', 'triage');
+      expect(result).toMatchObject({
+        ok: false,
+        error: 'fake-run is disabled in production',
+        status: 404,
+      });
+      // Confirm getSourceForSlug is never called — the production guard
+      // short-circuits before any side effect.
+      expect(getSourceForSlug).not.toHaveBeenCalled();
+    } finally {
+      process.env.NODE_ENV = original;
+    }
+  });
 });
 
 describe('overrideIssueRepo (#201 slug guard)', () => {

@@ -288,6 +288,13 @@ export async function fakeRun(
   id: string,
   skill: string,
 ): Promise<Result<{ ok: true; skill: string }>> {
+  // NODE_ENV guard (#203). fakeRun emits synthetic agent.* events that
+  // pollute the durable SQLite event log. Disable in production so a
+  // misrouted call cannot corrupt timeline debugging.
+  if (process.env.NODE_ENV === 'production') {
+    return { ok: false, error: 'fake-run is disabled in production', status: 404 };
+  }
+
   const safeSkill = skill === 'investigate' ? 'investigate' : 'triage';
 
   const source = await getSourceForSlug(slug);
