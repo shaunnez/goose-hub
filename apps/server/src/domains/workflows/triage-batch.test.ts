@@ -14,6 +14,10 @@ vi.mock('@goose-hub/core/agent-runtime/schema-bridge.js', () => ({
   toJsonSchema: vi.fn().mockReturnValue({}),
 }));
 
+vi.mock('@goose-hub/core/agent-runtime/select-persona.js', () => ({
+  selectPersona: vi.fn().mockReturnValue('goose-hub-self/triager/0'),
+}));
+
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   eventStore: {
     appendEvent: vi

@@ -62,6 +62,7 @@ describe('interface types', () => {
       toolBundles: ['read-only'],
       toolExtras: [],
       budgets: { maxTurns: 10, maxBudgetUsd: 1.0 },
+      personaId: 'test-project/developer/0',
     };
     expect(spec.runId).toBe('01HZQKG8APXV3TYS2EW4VR6MSB');
   });
@@ -77,6 +78,7 @@ describe('interface types', () => {
       toolBundles: [],
       toolExtras: [],
       budgets: { maxTurns: 5, maxBudgetUsd: 0.5 },
+      personaId: 'test-project/developer/0',
     };
     expect(spec.modelOverride).toBeUndefined();
   });
@@ -200,6 +202,7 @@ describe('assembleSpawnContext', () => {
     toolBundles: [],
     toolExtras: [],
     budgets: { maxTurns: 5, maxBudgetUsd: 0.1 },
+    personaId: 'test-project/developer/0',
     ...overrides,
   });
 
@@ -323,6 +326,7 @@ describe('withFallback', () => {
     toolBundles: [],
     toolExtras: [],
     budgets: { maxTurns: 5, maxBudgetUsd: 0.1 },
+    personaId: 'test-project/developer/0',
     modelOverride: 'claude-opus-4-7',
     ...overrides,
   });
@@ -408,6 +412,7 @@ function makeSecuritySpec(): AgentSpec {
     toolBundles: [],
     toolExtras: [],
     budgets: { maxTurns: 5, maxBudgetUsd: 0.1 },
+    personaId: 'test-project/developer/0',
   };
 }
 

@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const projectState = sqliteTable('project_state', {
   projectId: text('project_id').primaryKey(),
@@ -41,3 +41,13 @@ export const inboxItems = sqliteTable('inbox_items', {
   type: text('type').notNull().default('feature'), // feature | bug | chore | research
   createdAt: text('created_at').notNull().default(sql`(current_timestamp)`),
 });
+
+export const personaRouting = sqliteTable(
+  'persona_routing',
+  {
+    projectId: text('project_id').notNull(),
+    role: text('role').notNull(),
+    lastIndex: integer('last_index').notNull().default(0),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.projectId, t.role] }) }),
+);
