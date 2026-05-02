@@ -1,54 +1,31 @@
 import { buildSseStream } from '@goose-hub/core/event-stream/sse.js';
-import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { Hono } from 'hono';
+import { parseSseFilter, recordToolCall } from './service.js';
 
 const router = new Hono();
 
-interface ToolCallHookPayload {
-  tool_name?: string;
-  run_id?: string;
-  input_summary?: unknown;
-  // Other fields may be present; we redact via secret-redaction in appendEvent.
-  [key: string]: unknown;
-}
-
 /**
- * Tool-call audit endpoint (#209). The pre-tool-use-hook posts here on every
- * tool invocation. Records the event via eventStore.appendEvent (which applies
- * secret redaction) so the agent.tool-call audit trail is durable.
+ * Tool-call audit endpoint (#209). Thin delegator to recordToolCall (#208).
  */
 router.post('/tool-call', async (c) => {
-  let body: ToolCallHookPayload;
+  let body: Record<string, unknown>;
   try {
-    body = (await c.req.json()) as ToolCallHookPayload;
+    body = (await c.req.json()) as Record<string, unknown>;
   } catch {
     return c.json({ ok: false, error: 'invalid JSON' }, 400);
   }
-
-  const runId = typeof body.run_id === 'string' ? body.run_id : null;
-  eventStore.appendEvent({
-    projectId: 'unknown',
-    workItemId: null,
-    kind: 'agent.tool-call',
-    payload: body,
-    runId,
-  });
-
-  return c.json({ ok: true }, 202);
+  return c.json(recordToolCall(body), 202);
 });
 
 router.get('/', (c) => {
-  const projectId = c.req.query('projectId') ?? undefined;
-  const workItemId = c.req.query('workItemId') ?? undefined;
-  const lastEventIdHeader = c.req.header('Last-Event-ID');
-  const lastEventIdQuery = c.req.query('lastEventId');
-  const lastEventId = lastEventIdHeader ?? lastEventIdQuery;
-  const sinceId = lastEventId != null ? Number.parseInt(lastEventId, 10) : undefined;
+  const { filter, sinceId } = parseSseFilter({
+    projectId: c.req.query('projectId') ?? undefined,
+    workItemId: c.req.query('workItemId') ?? undefined,
+    lastEventIdHeader: c.req.header('Last-Event-ID'),
+    lastEventIdQuery: c.req.query('lastEventId'),
+  });
 
-  const stream = buildSseStream(
-    { projectId, workItemId },
-    Number.isNaN(sinceId) ? undefined : sinceId,
-  );
+  const stream = buildSseStream(filter, sinceId);
 
   return new Response(stream, {
     headers: {

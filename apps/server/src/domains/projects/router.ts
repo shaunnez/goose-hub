@@ -1,13 +1,13 @@
 import { Hono } from 'hono';
-import { listProjects } from '../../shared/projects.js';
+import { listProjectsService } from './service.js';
 
 const router = new Hono();
 
 router.get('/health', (c) => c.json({ ok: true }));
 
 router.get('/projects', async (c) => {
-  const projects = await listProjects();
-  return c.json({ projects });
+  const result = await listProjectsService();
+  return c.json(result);
 });
 
 export { router as projectsRouter };
