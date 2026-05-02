@@ -6,8 +6,8 @@ import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import type { StateSource } from '@goose-hub/core/state-source/interface.js';
-import { RepoMatchOutputSchema } from '../../../../../skills/repo-match/schema.js';
-import { TriageOutputSchema } from '../../../../../skills/triage/schema.js';
+import { RepoMatchOutputSchema } from '@goose-hub/skills/repo-match/schema.js';
+import { TriageOutputSchema } from '@goose-hub/skills/triage/schema.js';
 import { getSourceForSlug, isValidSlug } from '../../shared/source.js';
 
 const REPO_ROOT = join(import.meta.dirname, '../../../../..');
