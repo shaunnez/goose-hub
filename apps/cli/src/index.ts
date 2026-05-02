@@ -242,6 +242,8 @@ async function runAgentCommand(rawArgs: string[]): Promise<void> {
     toolBundles: skillConfig.toolBundles,
     toolExtras: [],
     budgets: { maxTurns: 10, maxBudgetUsd: 1.0 },
+    // CLI runs don't use persona routing — use a placeholder persona ID
+    personaId: `cli/${skillConfig.role ?? 'developer'}/0`,
     modelOverride: undefined,
     appendSystemPrompt,
   };
