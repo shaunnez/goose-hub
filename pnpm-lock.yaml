@@ -143,7 +143,11 @@ importers:
         specifier: ^6.0.7
         version: 6.4.2(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.21.0)
 
-  core: {}
+  core:
+    dependencies:
+      '@goose-hub/skills':
+        specifier: workspace:*
+        version: link:../skills
 
   skills: {}
 

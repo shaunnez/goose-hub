@@ -635,3 +635,128 @@ describe('LifecycleTimeoutError variants (#219)', () => {
     expect(DEFAULT_TIMEOUTS.ToolCallTimeout).toBe(30_000);
   });
 });
+
+// ─── adviseOnPlan wrapper (#182) ──────────────────────────────────────────────
+
+vi.mock('node:fs', () => ({
+  mkdirSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  existsSync: vi.fn().mockReturnValue(false),
+  readFileSync: vi.fn().mockReturnValue('# advise-on-plan skill\n\n... mock prompt body ...'),
+}));
+
+vi.mock('./select-persona.js', () => ({
+  selectPersona: vi.fn().mockReturnValue('proj/researcher/0'),
+}));
+
+describe('adviseOnPlan (#182)', () => {
+  const baseInput = {
+    runId: 'run-advisor-1',
+    projectId: 'proj',
+    workItemId: 'github:owner/repo#42',
+    workItem: { title: 't', body: 'b', number: 42, priority: 'high' as const },
+    plan: '1. Step one. 2. Step two.',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('rejects priorities other than high or critical', async () => {
+    const { adviseOnPlan } = await import('./advisor.js');
+    await expect(
+      adviseOnPlan({
+        ...baseInput,
+        workItem: { ...baseInput.workItem, priority: 'medium' as unknown as 'high' },
+      }),
+    ).rejects.toThrow(/only high\/critical are advisor-gated/);
+  });
+
+  it('returns the typed advisor verdict and emits one event per decisionSummary', async () => {
+    const { adviseOnPlan } = await import('./advisor.js');
+    const stubRuntime: AgentRuntime = {
+      run: vi.fn().mockResolvedValue({
+        output: {
+          verdict: 'proceed',
+          confidence: 'high',
+          decisionSummaries: [
+            { step: 'review', summary: 'Plan looks sound; no conflicts' },
+            { step: 'cross-check', summary: 'No file collisions in target dir' },
+          ],
+        },
+        decisionSummaries: [],
+        events: [],
+      }),
+    };
+
+    const result = await adviseOnPlan({ ...baseInput, runtime: stubRuntime });
+    expect(result.verdict).toBe('proceed');
+
+    const decisionEvents = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(([e]) => e.kind === 'agent.decision-summary');
+    expect(decisionEvents).toHaveLength(2);
+    for (const [e] of decisionEvents) {
+      expect((e.payload as { skill?: string }).skill).toBe('advise-on-plan');
+    }
+  });
+
+  it('rejects on schema-invalid output and emits agent.run-failed', async () => {
+    const { adviseOnPlan } = await import('./advisor.js');
+    const stubRuntime: AgentRuntime = {
+      run: vi.fn().mockResolvedValue({
+        output: { verdict: 'unknown-variant', confidence: 'high' },
+        decisionSummaries: [],
+        events: [],
+      }),
+    };
+
+    await expect(adviseOnPlan({ ...baseInput, runtime: stubRuntime })).rejects.toThrow(
+      /advise-on-plan output validation failed/,
+    );
+    const failedEvents = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(([e]) => e.kind === 'agent.run-failed');
+    expect(failedEvents).toHaveLength(1);
+  });
+
+  it('rejects revise verdict missing required feedback', async () => {
+    const { adviseOnPlan } = await import('./advisor.js');
+    const stubRuntime: AgentRuntime = {
+      run: vi.fn().mockResolvedValue({
+        output: {
+          verdict: 'revise',
+          confidence: 'medium',
+          // feedback intentionally missing — schema must reject
+          decisionSummaries: [{ step: 'r', summary: 's' }],
+        },
+        decisionSummaries: [],
+        events: [],
+      }),
+    };
+    await expect(adviseOnPlan({ ...baseInput, runtime: stubRuntime })).rejects.toThrow();
+  });
+
+  it('forwards revisionPass + previousAdvisorFeedback into the spec context', async () => {
+    const { adviseOnPlan } = await import('./advisor.js');
+    const runMock = vi.fn().mockResolvedValue({
+      output: {
+        verdict: 'proceed',
+        confidence: 'high',
+        decisionSummaries: [{ step: 'r', summary: 's' }],
+      },
+      decisionSummaries: [],
+      events: [],
+    });
+    const stubRuntime: AgentRuntime = { run: runMock };
+    await adviseOnPlan({
+      ...baseInput,
+      revisionPass: 1,
+      previousAdvisorFeedback: 'last time I said X',
+      runtime: stubRuntime,
+    });
+    const spec = runMock.mock.calls[0][0] as { context: Record<string, unknown> };
+    expect(spec.context.revisionPass).toBe(1);
+    expect(spec.context.previousAdvisorFeedback).toBe('last time I said X');
+  });
+});
