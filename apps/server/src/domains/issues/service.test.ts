@@ -159,6 +159,16 @@ describe('setIssueLabel — validation', () => {
     const result = await setIssueLabel('proj', '1', 'schedule', 'current');
     expect(result.ok).toBe(true);
   });
+
+  it('accepts schedule:blocked-by and writes the correct label (#202)', async () => {
+    const result = await setIssueLabel('proj', '1', 'schedule', 'blocked-by');
+    expect(result.ok).toBe(true);
+    expect(mockSource.setLabelInGroup).toHaveBeenCalledWith(
+      'github:owner/repo#1',
+      'schedule',
+      'blocked-by',
+    );
+  });
 });
 
 describe('listIssues', () => {

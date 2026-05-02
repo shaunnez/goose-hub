@@ -200,7 +200,7 @@ export async function setIssueMilestone(
 }
 
 const VALID_PRIORITY = ['low', 'medium', 'high', 'critical'] as const;
-const VALID_SCHEDULE = ['current', 'backlog', 'icebox'] as const;
+const VALID_SCHEDULE = ['current', 'backlog', 'icebox', 'blocked-by'] as const;
 
 export async function setIssueLabel(
   slug: string,
