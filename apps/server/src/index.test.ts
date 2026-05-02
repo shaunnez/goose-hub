@@ -168,7 +168,14 @@ describe('POST /projects/:slug/issues/:id/fake-run', () => {
       const terminatedCall = calls.find(([arg]) => arg.kind === 'agent.terminated');
       expect(terminatedCall).toBeDefined();
       const payload = terminatedCall?.[0].payload as { output: unknown };
-      expect(payload.output).toEqual({ priority: 'high', type: 'feature', decision: 'accept' });
+      expect(payload.output).toEqual({
+        triage: { type: 'feature', priority: 'high' },
+        repoMatch: {
+          candidates: [
+            { repo: 'shaunnez/goose-hub', confidence: 87, evidence: 'keyword match', tier: 1 },
+          ],
+        },
+      });
     } finally {
       vi.useRealTimers();
     }

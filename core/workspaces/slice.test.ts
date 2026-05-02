@@ -1,5 +1,9 @@
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanupWorktree, createWorktree } from './worktree.js';
+
+const WT = (runId: string) => join('/mock-home', '.factory', 'workspaces', runId);
+const WORKSPACES_DIR = join('/mock-home', '.factory', 'workspaces');
 
 // ─── module mocks (hoisted by vitest) ────────────────────────────────────────
 vi.mock('node:child_process', () => ({
@@ -29,7 +33,7 @@ describe('createWorktree', () => {
   it('creates the parent directory before calling git worktree add', () => {
     createWorktree('/repo/path', 'run-abc-123');
 
-    expect(vi.mocked(mkdirSync)).toHaveBeenCalledWith('/mock-home/.factory/workspaces', {
+    expect(vi.mocked(mkdirSync)).toHaveBeenCalledWith(WORKSPACES_DIR, {
       recursive: true,
     });
   });
@@ -39,14 +43,14 @@ describe('createWorktree', () => {
 
     expect(vi.mocked(execFileSync)).toHaveBeenCalledWith(
       'git',
-      ['worktree', 'add', '--detach', '/mock-home/.factory/workspaces/run-abc-123'],
+      ['worktree', 'add', '--detach', WT('run-abc-123')],
       expect.objectContaining({ cwd: '/repo/path' }),
     );
   });
 
   it('returns the worktree path', () => {
     const result = createWorktree('/repo/path', 'run-abc-123');
-    expect(result).toBe('/mock-home/.factory/workspaces/run-abc-123');
+    expect(result).toBe(WT('run-abc-123'));
   });
 
   it('propagates errors from git worktree add', () => {
@@ -74,7 +78,7 @@ describe('cleanupWorktree', () => {
 
     expect(vi.mocked(execFileSync)).toHaveBeenCalledWith(
       'git',
-      ['worktree', 'remove', '--force', '/mock-home/.factory/workspaces/run-abc-123'],
+      ['worktree', 'remove', '--force', WT('run-abc-123')],
       expect.any(Object),
     );
   });
@@ -84,7 +88,7 @@ describe('cleanupWorktree', () => {
 
     cleanupWorktree('run-abc-123');
 
-    expect(vi.mocked(rmSync)).toHaveBeenCalledWith('/mock-home/.factory/workspaces/run-abc-123', {
+    expect(vi.mocked(rmSync)).toHaveBeenCalledWith(WT('run-abc-123'), {
       recursive: true,
       force: true,
     });
@@ -115,7 +119,7 @@ describe('cleanupWorktree', () => {
 
     // Should still not throw — git error is swallowed, rmSync with force cleans up
     expect(() => cleanupWorktree('run-abc-123')).not.toThrow();
-    expect(vi.mocked(rmSync)).toHaveBeenCalledWith('/mock-home/.factory/workspaces/run-abc-123', {
+    expect(vi.mocked(rmSync)).toHaveBeenCalledWith(WT('run-abc-123'), {
       recursive: true,
       force: true,
     });

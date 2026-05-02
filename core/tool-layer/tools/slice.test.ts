@@ -1,8 +1,18 @@
+import { execSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { SandboxViolationError, readFile, searchFiles } from './read.js';
+
+const rgAvailable = (() => {
+  try {
+    execSync('rg --version', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+})();
 
 // ─── readFile ─────────────────────────────────────────────────────────────────
 
@@ -77,7 +87,7 @@ describe('readFile', () => {
 
 // ─── searchFiles ──────────────────────────────────────────────────────────────
 
-describe('searchFiles', () => {
+describe.skipIf(!rgAvailable)('searchFiles', () => {
   it('returns grep matches within the workspace', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'search-tool-test-'));
     try {

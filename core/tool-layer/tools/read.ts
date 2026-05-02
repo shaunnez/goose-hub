@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { readFile as fsReadFile } from 'node:fs/promises';
-import { isAbsolute, resolve } from 'node:path';
+import { isAbsolute, resolve, sep } from 'node:path';
 
 /**
  * Typed error thrown when a tool call attempts to escape the workspace root.
@@ -48,7 +48,7 @@ export async function readFile(params: ReadFileParams): Promise<string> {
   const resolved = resolve(workspaceRoot, path);
   const rootNormalized = resolve(workspaceRoot);
 
-  if (!resolved.startsWith(`${rootNormalized}/`) && resolved !== rootNormalized) {
+  if (!resolved.startsWith(`${rootNormalized}${sep}`) && resolved !== rootNormalized) {
     throw new SandboxViolationError(
       `Path traversal detected: "${path}" resolves outside workspace root "${workspaceRoot}".`,
     );
