@@ -125,9 +125,33 @@ class EventStore {
     }));
   }
 
+  /**
+   * Subscribe to live events. The supplied listener is wrapped so that any
+   * error it throws is caught and logged ONCE per error-shape (deduped on
+   * `name + message`). A broken forwarder must not be able to abort the
+   * orchestrator run that's producing the events (#220).
+   *
+   * Trade-off: dedup is process-lifetime — long-lived processes will not
+   * re-warn about the same error after the first occurrence. Acceptable for
+   * a single-user local-first tool; revisit if log noise becomes a problem.
+   */
   subscribe(listener: (event: AgentEvent) => void): () => void {
-    this.emitter.on('event', listener);
-    return () => this.emitter.off('event', listener);
+    const seenErrorShapes = new Set<string>();
+    const safeListener = (event: AgentEvent): void => {
+      try {
+        listener(event);
+      } catch (err) {
+        const e = err as { name?: string; message?: string };
+        const shape = `${e?.name ?? 'Error'}: ${e?.message ?? '<no message>'}`;
+        if (!seenErrorShapes.has(shape)) {
+          seenErrorShapes.add(shape);
+          // biome-ignore lint/suspicious/noConsole: subscriber-error reporting is intentional
+          console.error(`[event-stream] subscriber threw (logged once): ${shape}`);
+        }
+      }
+    };
+    this.emitter.on('event', safeListener);
+    return () => this.emitter.off('event', safeListener);
   }
 }
 
