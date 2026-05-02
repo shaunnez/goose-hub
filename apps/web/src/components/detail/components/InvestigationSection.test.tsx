@@ -87,7 +87,7 @@ describe('InvestigationSection', () => {
       ...INVESTIGATION_EVENT,
       payload: {
         investigate: {
-          ...(INVESTIGATION_EVENT.payload as { investigate: unknown }).investigate,
+          ...(INVESTIGATION_EVENT.payload as { investigate: Record<string, unknown> }).investigate,
           confidence: 'low',
         },
       },
@@ -103,7 +103,7 @@ describe('InvestigationSection', () => {
       ...INVESTIGATION_EVENT,
       payload: {
         investigate: {
-          ...(INVESTIGATION_EVENT.payload as { investigate: unknown }).investigate,
+          ...(INVESTIGATION_EVENT.payload as { investigate: Record<string, unknown> }).investigate,
           confidence: 'medium',
         },
       },
@@ -119,7 +119,7 @@ describe('InvestigationSection', () => {
       ...INVESTIGATION_EVENT,
       payload: {
         investigate: {
-          ...(INVESTIGATION_EVENT.payload as { investigate: unknown }).investigate,
+          ...(INVESTIGATION_EVENT.payload as { investigate: Record<string, unknown> }).investigate,
           keyFiles: [],
         },
       },
@@ -133,7 +133,7 @@ describe('InvestigationSection', () => {
       ...INVESTIGATION_EVENT,
       payload: {
         investigate: {
-          ...(INVESTIGATION_EVENT.payload as { investigate: unknown }).investigate,
+          ...(INVESTIGATION_EVENT.payload as { investigate: Record<string, unknown> }).investigate,
           openQuestions: [],
         },
       },
