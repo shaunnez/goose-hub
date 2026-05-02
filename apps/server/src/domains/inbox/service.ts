@@ -2,11 +2,11 @@ import { logger } from '@goose-hub/core/logger.js';
 import type { Result } from '../../shared/middleware.js';
 import { getSourceForSlug } from '../../shared/source.js';
 import {
+  type InboxItem,
   deleteInboxItem,
   getInboxItem,
   insertInboxItem,
   listInboxItems,
-  type InboxItem,
 } from './repository.js';
 
 const VALID_TYPES = ['feature', 'bug', 'chore', 'research'] as const;

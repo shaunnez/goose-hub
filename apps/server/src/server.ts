@@ -11,12 +11,12 @@ import { workflowsRouter } from './domains/workflows/router.js';
 const app = new Hono();
 app.use('*', cors());
 
-app.route('/', projectsRouter);            // GET /health, GET /projects
-app.route('/projects', milestonesRouter);  // GET/POST /projects/:slug/milestones/**, /active-milestone
-app.route('/projects', issuesRouter);      // GET/POST /projects/:slug/issues/**
-app.route('/projects', workflowsRouter);   // POST /projects/:slug/tick
-app.route('/inbox', inboxRouter);          // GET/POST /inbox/**
-app.route('/events', eventsRouter);        // GET /events
-app.route('/webhooks', webhooksRouter);    // POST /webhooks/github
+app.route('/', projectsRouter); // GET /health, GET /projects
+app.route('/projects', milestonesRouter); // GET/POST /projects/:slug/milestones/**, /active-milestone
+app.route('/projects', issuesRouter); // GET/POST /projects/:slug/issues/**
+app.route('/projects', workflowsRouter); // POST /projects/:slug/tick
+app.route('/inbox', inboxRouter); // GET/POST /inbox/**
+app.route('/events', eventsRouter); // GET /events
+app.route('/webhooks', webhooksRouter); // POST /webhooks/github
 
 export { app };

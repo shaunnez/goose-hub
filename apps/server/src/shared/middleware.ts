@@ -3,9 +3,7 @@ import type { Context } from 'hono';
 
 export type Result<T> = { ok: true; data: T } | { ok: false; error: string; status: number };
 
-export type ParsedBody<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: Response };
+export type ParsedBody<T> = { ok: true; data: T } | { ok: false; error: Response };
 
 export async function parseBody<T>(c: Context): Promise<ParsedBody<T>> {
   try {

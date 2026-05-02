@@ -37,25 +37,19 @@ describe('createInboxItem', () => {
   it('defaults type to feature for unknown type', async () => {
     vi.mocked(insertInboxItem).mockResolvedValueOnce(mockItem);
     await createInboxItem('Some title', '', 'invalid-type');
-    expect(insertInboxItem).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'feature' }),
-    );
+    expect(insertInboxItem).toHaveBeenCalledWith(expect.objectContaining({ type: 'feature' }));
   });
 
   it('uses provided valid type', async () => {
     vi.mocked(insertInboxItem).mockResolvedValueOnce(mockItem);
     await createInboxItem('Fix this', '', 'bug');
-    expect(insertInboxItem).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'bug' }),
-    );
+    expect(insertInboxItem).toHaveBeenCalledWith(expect.objectContaining({ type: 'bug' }));
   });
 
   it('trims title before insert', async () => {
     vi.mocked(insertInboxItem).mockResolvedValueOnce(mockItem);
     await createInboxItem('  My Title  ', '', 'feature');
-    expect(insertInboxItem).toHaveBeenCalledWith(
-      expect.objectContaining({ title: 'My Title' }),
-    );
+    expect(insertInboxItem).toHaveBeenCalledWith(expect.objectContaining({ title: 'My Title' }));
   });
 });
 
