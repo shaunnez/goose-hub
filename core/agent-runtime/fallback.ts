@@ -1,4 +1,6 @@
+export { HoldoutFallbackForbiddenError } from './interface.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
+import { HoldoutFallbackForbiddenError } from './interface.js';
 import { modelsAtOrAboveTier, tierOf } from './models.js';
 
 export interface FallbackPolicy {
@@ -22,8 +24,17 @@ export function withFallback(runtime: AgentRuntime, policy: FallbackPolicy): Age
       const priority = (spec.context.priority as string | undefined) ?? 'medium';
       const isCriticalOrHigh = CRITICAL_PRIORITIES.has(priority);
 
-      // Holdout and critical/high: no fallback
-      if (isHoldout || isCriticalOrHigh || !policy.allowDownTier) {
+      // Holdout roles: no fallback — catch primary failure and surface as typed error
+      if (isHoldout) {
+        try {
+          return await runtime.run(spec);
+        } catch {
+          throw new HoldoutFallbackForbiddenError(spec.role);
+        }
+      }
+
+      // Critical/high priority or policy disallows down-tier: no fallback
+      if (isCriticalOrHigh || !policy.allowDownTier) {
         return runtime.run(spec);
       }
 
