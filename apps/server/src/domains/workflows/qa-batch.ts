@@ -1,0 +1,19 @@
+import { logger } from '@goose-hub/core/logger.js';
+import type { StateSource } from '@goose-hub/core/state-source/interface.js';
+import { runQaWorkflow } from '../../../../slices/qa/workflow.js';
+import { getSourceForSlug } from '../../shared/source.js';
+
+export async function runQaBatch(slug: string, source?: StateSource): Promise<void> {
+  logger.info('qa-batch started', { slug });
+  const stateSource = source ?? (await getSourceForSlug(slug));
+  if (stateSource == null) throw new Error(`Project not found: ${slug}`);
+
+  const allItems = await stateSource.listOpenWork();
+  const qaItems = allItems.filter((item) => item.state === 'factory:needs-qa');
+  logger.info('qa-batch items', { slug, count: qaItems.length });
+
+  for (const item of qaItems) {
+    await runQaWorkflow(item, stateSource, stateSource.projectId, item.repoRef ?? slug);
+  }
+  logger.info('qa-batch finished', { slug, processed: qaItems.length });
+}
