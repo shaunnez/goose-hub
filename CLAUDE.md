@@ -50,7 +50,7 @@ Before touching any file in an app, read its `README.md` first. The README will 
 
 When prompted with "start the next issue" (or similar), resolve the issue to work on as follows:
 
-1. Run: `gh issue list --milestone "M8: QA and Review Holdouts" --label "schedule:current" --state open --json number,title,body,labels --jq 'sort_by(.number)'`
+1. Run: `gh issue list --milestone "M9: Retrospective and Learning Loop" --label "schedule:current" --state open --json number,title,body,labels --jq 'sort_by(.number)'`
 2. Skip any issue already labeled `factory:in-progress`.
 3. For each remaining issue in ascending number order, check its body for `Depends on #N` lines. Fetch each referenced issue number with `gh issue view <N> --json state` and skip this issue if any dependency is still open.
 4. Pick the lowest-numbered issue that passes the dependency check.
