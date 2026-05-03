@@ -84,6 +84,48 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
   await runFixIssueWorkflow(item, source, slug, REPO_ROOT, mockDeps);
 }
 
+/** Run the QA holdout workflow for a single issue. */
+export async function dispatchQa(slug: string, issueNumber: number): Promise<void> {
+  const { runQaWorkflow } = (await import(
+    new URL('../../../../slices/qa/workflow.js', import.meta.url).href
+  )) as {
+    runQaWorkflow: (
+      item: unknown,
+      source: unknown,
+      projectId: string,
+      targetRepo: string,
+    ) => Promise<unknown>;
+  };
+  const source = await getSourceForSlug(slug);
+  if (source == null) {
+    logger.error('dispatchQa: no source for slug', { slug });
+    return;
+  }
+  const item = await source.getItem(issueNumber.toString());
+  await runQaWorkflow(item, source, source.projectId, item.repoRef ?? slug);
+}
+
+/** Run the Review holdout workflow for a single issue. */
+export async function dispatchReview(slug: string, issueNumber: number): Promise<void> {
+  const { runReviewWorkflow } = (await import(
+    new URL('../../../../slices/review/workflow.js', import.meta.url).href
+  )) as {
+    runReviewWorkflow: (
+      item: unknown,
+      source: unknown,
+      projectId: string,
+      targetRepo: string,
+    ) => Promise<unknown>;
+  };
+  const source = await getSourceForSlug(slug);
+  if (source == null) {
+    logger.error('dispatchReview: no source for slug', { slug });
+    return;
+  }
+  const item = await source.getItem(issueNumber.toString());
+  await runReviewWorkflow(item, source, source.projectId, item.repoRef ?? slug);
+}
+
 /**
  * Webhook label-driven dispatcher. Routes the factory:* label to the right
  * workflow without requiring the webhook handler to know about the
@@ -104,6 +146,14 @@ export async function dispatchForLabel(
   }
   if (labelName === 'factory:dev-ready') {
     await dispatchFixIssue(slug, issueNumber);
+    return;
+  }
+  if (labelName === 'factory:needs-qa') {
+    await dispatchQa(slug, issueNumber);
+    return;
+  }
+  if (labelName === 'factory:needs-review') {
+    await dispatchReview(slug, issueNumber);
     return;
   }
   logger.info('dispatchForLabel: no workflow for label', { slug, labelName });

@@ -141,11 +141,11 @@ test.describe('Pipeline e2e (MOCK_AGENTS=true)', () => {
     await postServer(`/projects/${PROJECT_SLUG}/dispatch/${choreIssueNumber}`);
     await expect(statePill).toHaveText('factory:needs-qa', { timeout: 60_000 });
 
-    // 9. Drive QA and review via their batch endpoints.
-    await postServer(`/projects/${PROJECT_SLUG}/run-qa`);
+    // 9. Drive QA and Review per-issue (no cross-bleed onto other items).
+    await postServer(`/projects/${PROJECT_SLUG}/run-qa/${choreIssueNumber}`);
     await expect(statePill).toHaveText('factory:needs-review', { timeout: 60_000 });
 
-    await postServer(`/projects/${PROJECT_SLUG}/run-review`);
+    await postServer(`/projects/${PROJECT_SLUG}/run-review/${choreIssueNumber}`);
     await expect(statePill).toHaveText('factory:approved', { timeout: 60_000 });
 
     // 9. Spot-check the timeline shows the agent + PR events the mocks produce.
