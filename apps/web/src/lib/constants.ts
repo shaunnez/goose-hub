@@ -48,6 +48,17 @@ export const PRIORITY_BORDER: Record<string, string> = {
   low: 'oklch(0.42 0.01 260 / 0.4)',
 };
 
+export const CODE_ACTIVE_STATES = new Set([
+  'factory:in-progress',
+  'factory:needs-qa',
+  'factory:qa-failed',
+  'factory:needs-review',
+  'factory:needs-fix',
+  'factory:approved',
+  'factory:retrospecting',
+  'factory:done',
+]);
+
 export const GATE_STATES: Record<string, string> = {
   'factory:prd-review': 'PRD Review pending — human approval required',
   'factory:needs-review': 'Code Review pending — human approval required',

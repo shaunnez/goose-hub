@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CODE_ACTIVE_STATES,
   GATE_STATES,
   PRIORITY_BG,
   PRIORITY_BORDER,
@@ -68,6 +69,27 @@ describe('PRIORITY_BORDER', () => {
     for (const p of PRIORITIES) {
       expect(PRIORITY_BORDER[p], `missing priority: ${p}`).toBeDefined();
     }
+  });
+});
+
+describe('CODE_ACTIVE_STATES', () => {
+  it('contains only valid factory states', () => {
+    for (const state of CODE_ACTIVE_STATES) {
+      expect(ALL_FACTORY_STATES, `unknown state in CODE_ACTIVE_STATES: ${state}`).toContain(state);
+    }
+  });
+
+  it('excludes pre-coding states', () => {
+    expect(CODE_ACTIVE_STATES.has('factory:triaging')).toBe(false);
+    expect(CODE_ACTIVE_STATES.has('factory:accepted')).toBe(false);
+    expect(CODE_ACTIVE_STATES.has('factory:dev-ready')).toBe(false);
+  });
+
+  it('includes all post-coding-start states', () => {
+    expect(CODE_ACTIVE_STATES.has('factory:in-progress')).toBe(true);
+    expect(CODE_ACTIVE_STATES.has('factory:needs-qa')).toBe(true);
+    expect(CODE_ACTIVE_STATES.has('factory:needs-review')).toBe(true);
+    expect(CODE_ACTIVE_STATES.has('factory:done')).toBe(true);
   });
 });
 

@@ -1,8 +1,13 @@
 import { cn } from '@/lib/cn';
+import { CODE_ACTIVE_STATES } from '@/lib/constants';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { SECTIONS } from '../lib/sections';
 
-export function LeftRail() {
+interface LeftRailProps {
+  itemState?: string;
+}
+
+export function LeftRail({ itemState }: LeftRailProps) {
   const { slug = 'goose-hub-self', id = '' } = useParams<{ slug: string; id: string }>();
   const location = useLocation();
 
@@ -26,13 +31,22 @@ export function LeftRail() {
               : `/projects/${slug}/items/${id}/${section.key}`;
           const isActive = activeKey === section.key;
           const number = String(idx + 1).padStart(2, '0');
+          const available =
+            section.key === 'code'
+              ? itemState != null && CODE_ACTIVE_STATES.has(itemState)
+              : section.available;
 
-          if (!section.available) {
+          const unavailableTitle =
+            section.key === 'code'
+              ? 'Available once coding has started'
+              : `Available in ${section.milestone}`;
+
+          if (!available) {
             return (
               <Link
                 key={section.key}
                 to={target}
-                title={`Available in ${section.milestone}`}
+                title={unavailableTitle}
                 className={cn(
                   'flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] transition-colors',
                   isActive
