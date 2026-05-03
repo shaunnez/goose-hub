@@ -59,13 +59,42 @@ function renderManifest(
 
   if (allowlist.length === 0) {
     // empty allowlist = nothing passes; no user keys to flag as violations
-  } else {
-    for (const [k, v] of Object.entries(context)) {
-      if (allowlist.includes(k)) {
-        filtered[k] = v;
-      } else if (!SYSTEM_KEYS.has(k)) {
-        disallowedKeys.push(k);
+    return { contextXml: '<task></task>', disallowedKeys };
+  }
+
+  // Partition allowlist into exact top-level keys vs dotted sub-key paths.
+  const exactKeys = new Set<string>();
+  const dottedSubKeys = new Map<string, Set<string>>();
+  for (const entry of allowlist) {
+    const dot = entry.indexOf('.');
+    if (dot === -1) {
+      exactKeys.add(entry);
+    } else {
+      const top = entry.slice(0, dot);
+      const sub = entry.slice(dot + 1);
+      let subs = dottedSubKeys.get(top);
+      if (subs == null) {
+        subs = new Set();
+        dottedSubKeys.set(top, subs);
       }
+      subs.add(sub);
+    }
+  }
+
+  for (const [k, v] of Object.entries(context)) {
+    if (exactKeys.has(k)) {
+      filtered[k] = v;
+    } else if (dottedSubKeys.has(k) && typeof v === 'object' && v !== null) {
+      const subs = dottedSubKeys.get(k)!;
+      const projected: Record<string, unknown> = {};
+      for (const sub of subs) {
+        if (Object.prototype.hasOwnProperty.call(v, sub)) {
+          projected[sub] = (v as Record<string, unknown>)[sub];
+        }
+      }
+      filtered[k] = projected;
+    } else if (!SYSTEM_KEYS.has(k)) {
+      disallowedKeys.push(k);
     }
   }
 
