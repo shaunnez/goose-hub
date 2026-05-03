@@ -162,7 +162,6 @@ class EventStore {
         const shape = `${e?.name ?? 'Error'}: ${e?.message ?? '<no message>'}`;
         if (!seenErrorShapes.has(shape)) {
           seenErrorShapes.add(shape);
-          // biome-ignore lint/suspicious/noConsole: subscriber-error reporting is intentional
           console.error(`[event-stream] subscriber threw (logged once): ${shape}`);
         }
       }
