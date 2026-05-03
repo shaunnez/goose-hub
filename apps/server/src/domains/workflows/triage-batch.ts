@@ -223,8 +223,23 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       runId,
     });
 
-    // Transition state: factory:triaging → factory:accepted
+    // Transition state: factory:triaging → factory:accepted → next state
     await stateSource.transitionState(item.externalId, 'factory:triaging', 'factory:accepted');
+    if (triageOutput.type === 'bug') {
+      await stateSource.transitionState(
+        item.externalId,
+        'factory:accepted',
+        'factory:investigating',
+      );
+    } else if (triageOutput.type === 'research') {
+      await stateSource.transitionState(
+        item.externalId,
+        'factory:accepted',
+        'factory:research-pending',
+      );
+    } else {
+      await stateSource.transitionState(item.externalId, 'factory:accepted', 'factory:dev-ready');
+    }
     logger.info('triage-batch item complete', { slug, workItemId, externalId: item.externalId });
   }
 

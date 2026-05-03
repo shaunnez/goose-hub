@@ -70,6 +70,7 @@ function renderManifest(
   }
 
   const inner = Object.entries(filtered)
+    .filter(([, v]) => v !== undefined)
     .map(([k, v]) => {
       const safe = escapeXml(typeof v === 'string' ? v : JSON.stringify(v));
       return `  <${k}>${safe}</${k}>`;

@@ -322,8 +322,17 @@ describe('runTriageBatch', () => {
     const { runTriageBatch } = await import('./triage-batch.js');
     await runTriageBatch('goose-hub-self', source);
 
-    // Second item still processed
-    expect(source.transitionState).toHaveBeenCalledTimes(1);
+    // First item skipped (invalid output), second item fully processed
+    expect(source.transitionState).not.toHaveBeenCalledWith(
+      '1',
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '2',
+      'factory:triaging',
+      'factory:accepted',
+    );
   });
 });
 
@@ -444,6 +453,113 @@ describe('runTriageBatch decision-summary events (#206)', () => {
           (e.payload as { error?: string }).error === 'repo-match output validation failed',
       );
     expect(failedEvents).toHaveLength(1);
+  });
+});
+
+describe('runTriageBatch onward routing after accept', () => {
+  let mockRuntime: { run: ReturnType<typeof vi.fn> };
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const { ClaudeCliRuntime } = await import('@goose-hub/core/agent-runtime/claude-cli.js');
+    mockRuntime = new (ClaudeCliRuntime as unknown as new () => typeof mockRuntime)();
+    vi.mocked(ClaudeCliRuntime).mockImplementation(() => mockRuntime as never);
+  });
+
+  it('routes type:bug to factory:investigating after accepting', async () => {
+    const source = makeMockSource([makeWorkItem()]);
+    mockRuntime.run
+      .mockResolvedValueOnce({
+        output: { ...makeTriageOutput(), type: 'bug' },
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeRepoMatchOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+    const { runTriageBatch } = await import('./triage-batch.js');
+    await runTriageBatch('goose-hub-self', source);
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:accepted',
+      'factory:investigating',
+    );
+  });
+
+  it('routes type:chore to factory:dev-ready after accepting', async () => {
+    const source = makeMockSource([makeWorkItem()]);
+    mockRuntime.run
+      .mockResolvedValueOnce({
+        output: { ...makeTriageOutput(), type: 'chore' },
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeRepoMatchOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+    const { runTriageBatch } = await import('./triage-batch.js');
+    await runTriageBatch('goose-hub-self', source);
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:accepted',
+      'factory:dev-ready',
+    );
+  });
+
+  it('routes type:feature to factory:dev-ready after accepting', async () => {
+    const source = makeMockSource([makeWorkItem()]);
+    mockRuntime.run
+      .mockResolvedValueOnce({
+        output: { ...makeTriageOutput(), type: 'feature' },
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeRepoMatchOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+    const { runTriageBatch } = await import('./triage-batch.js');
+    await runTriageBatch('goose-hub-self', source);
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:accepted',
+      'factory:dev-ready',
+    );
+  });
+
+  it('routes type:research to factory:research-pending after accepting', async () => {
+    const source = makeMockSource([makeWorkItem()]);
+    mockRuntime.run
+      .mockResolvedValueOnce({
+        output: { ...makeTriageOutput(), type: 'research' },
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeRepoMatchOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+    const { runTriageBatch } = await import('./triage-batch.js');
+    await runTriageBatch('goose-hub-self', source);
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:accepted',
+      'factory:research-pending',
+    );
   });
 });
 
