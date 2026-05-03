@@ -6,6 +6,7 @@ import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { DEFAULT_MAX_RETRIES, shouldEscalateQa } from '@goose-hub/core/retry/retry-counter.js';
+import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { QaOutputSchema } from '@goose-hub/skills/qa/schema.js';
 
@@ -123,7 +124,7 @@ export async function runQaWorkflow(
       qaOutput.verdict === 'pass' ||
       (qaOutput.verdict === 'partial' && qaOutput.overallScore >= 70);
 
-    let nextState: string;
+    let nextState: StateName;
     if (passes) {
       nextState = 'factory:needs-review';
     } else {

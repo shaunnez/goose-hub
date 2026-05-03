@@ -6,6 +6,7 @@ import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { DEFAULT_MAX_RETRIES, shouldEscalateReview } from '@goose-hub/core/retry/retry-counter.js';
+import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { ReviewOutputSchema } from '@goose-hub/skills/review/schema.js';
 
@@ -97,7 +98,7 @@ export async function runReviewWorkflow(
     const comment = buildReviewComment(reviewOutput);
     await stateSource.comment(workItem.externalId, comment);
 
-    let nextState: string;
+    let nextState: StateName;
     if (reviewOutput.verdict === 'needs-fix') {
       // Check retry count using events already in the store (including the one just appended)
       const existingEvents = eventStore.replay({ workItemId: workItem.id });
@@ -113,7 +114,7 @@ export async function runReviewWorkflow(
         });
       }
     } else {
-      const VERDICT_TO_STATE: Record<string, string> = {
+      const VERDICT_TO_STATE: Record<string, StateName> = {
         approved: 'factory:approved',
         'needs-human': 'factory:needs-human',
       };
