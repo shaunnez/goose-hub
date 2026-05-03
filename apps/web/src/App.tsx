@@ -5,6 +5,7 @@ import { Board } from './components/board/components/Board';
 import { AppShell } from './components/chrome/AppShell';
 import { DetailPage } from './components/detail/components/DetailPage';
 import { InboxList } from './components/inbox/InboxList';
+import { RosterPage } from './components/roster/components/RosterPage';
 import { ActiveMilestoneProvider } from './state/active-milestone';
 import { ActiveProjectProvider } from './state/active-project';
 import { LaneVisibilityProvider } from './state/lane-visibility';
@@ -68,6 +69,14 @@ function InboxPage() {
   );
 }
 
+function RosterPageRoute() {
+  return (
+    <AppShell breadcrumb={<span>Roster</span>}>
+      <RosterPage />
+    </AppShell>
+  );
+}
+
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -87,6 +96,14 @@ export function App() {
             element={
               <ProjectShell>
                 <InboxPage />
+              </ProjectShell>
+            }
+          />
+          <Route
+            path="/projects/:slug/roster"
+            element={
+              <ProjectShell>
+                <RosterPageRoute />
               </ProjectShell>
             }
           />
