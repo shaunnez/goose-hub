@@ -8,6 +8,7 @@ import { deployHooks } from '../tool-layer/pre-tool-use-hook.js';
 import { writeWorkspaceSandbox } from '../tool-layer/sandbox.js';
 import { assembleSpawnContext } from './context-assembly.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
+import { resolveMockOutput } from './mock-outputs.js';
 import { defaultModelForTier } from './models.js';
 import type { JsonSchema } from './schema-bridge.js';
 
@@ -75,6 +76,10 @@ function extractResultJson(text: string): unknown {
 
 export class ClaudeCliRuntime implements AgentRuntime {
   async run(spec: AgentSpec): Promise<AgentResult> {
+    if (process.env.MOCK_AGENTS === 'true') {
+      return resolveMockOutput(spec);
+    }
+
     const jsonSchema = spec.outputJsonSchema;
     const { runId } = spec;
     const workspaceDir = join(WORKSPACES_DIR, runId);

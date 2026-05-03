@@ -55,6 +55,7 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
       source: unknown,
       slug: string,
       repoRoot: string,
+      deps?: Record<string, unknown>,
     ) => Promise<unknown>;
   };
   const source = await getSourceForSlug(slug);
@@ -63,7 +64,24 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
     return;
   }
   const item = await source.getItem(issueNumber.toString());
-  await runFixIssueWorkflow(item, source, slug, REPO_ROOT);
+
+  const mockDeps: Record<string, unknown> | undefined =
+    process.env.MOCK_OPEN_PR === 'true'
+      ? {
+          openPRImpl: () =>
+            Promise.resolve({
+              prNumber: 999,
+              prUrl: 'https://github.com/shaunnez/goose-hub/pull/999',
+              branch: 'factory/mock-run',
+              base: 'main',
+            }),
+          createWorktreeImpl: () => '/mock/worktree',
+          cleanupWorktreeImpl: () => undefined,
+          resolveWorktreeHeadShaImpl: () => 'mock-sha-abc123',
+        }
+      : undefined;
+
+  await runFixIssueWorkflow(item, source, slug, REPO_ROOT, mockDeps);
 }
 
 /**
