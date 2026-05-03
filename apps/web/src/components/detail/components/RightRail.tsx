@@ -45,7 +45,7 @@ export function RightRail({ projectSlug, id, workItemId }: RightRailProps) {
         logger.warn('RightRail: failed to parse SSE event', { err: String(err) });
       }
     };
-    es.addEventListener('agent.terminated', handler as EventListener);
+    es.addEventListener('agent.run-completed', handler as EventListener);
     es.onmessage = handler;
     es.onerror = () => {
       // EventSource auto-reconnects on error
@@ -56,12 +56,12 @@ export function RightRail({ projectSlug, id, workItemId }: RightRailProps) {
     };
   }, [projectSlug, workItemId]);
 
-  // Find the latest agent.terminated event with a non-null output field.
+  // Find the latest agent.run-completed event with a non-null output field.
   const terminatedWithOutput = [...events]
     .reverse()
     .find(
       (e) =>
-        e.kind === 'agent.terminated' &&
+        e.kind === 'agent.run-completed' &&
         e.payload != null &&
         typeof e.payload === 'object' &&
         'output' in (e.payload as object) &&
@@ -96,10 +96,9 @@ export function RightRail({ projectSlug, id, workItemId }: RightRailProps) {
           </div>
         ) : (
           <div className="rounded-md border border-line bg-bg p-3">
-            <div className="text-fg-2 mb-1.5">No agent runs yet</div>
+            <div className="text-fg-2 mb-1.5">No agent output yet</div>
             <p className="text-[11.5px] text-fg-3">
-              The runtime that spawns agents arrives in M4. Once it does, this rail will stream tool
-              calls and decision summaries from the running personas.
+              Output appears here when an agent run completes.
             </p>
           </div>
         )}
@@ -107,7 +106,9 @@ export function RightRail({ projectSlug, id, workItemId }: RightRailProps) {
       <div className="px-4 py-3 border-t border-line text-[10.5px] uppercase tracking-wider text-fg-4">
         Personas
       </div>
-      <div className="px-4 pb-4 text-[11.5px] text-fg-3">Persona roster lights up in M5.</div>
+      <div className="px-4 pb-4 text-[11.5px] text-fg-3">
+        Persona roster available in the Roster tab.
+      </div>
     </aside>
   );
 }

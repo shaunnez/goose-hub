@@ -258,7 +258,7 @@ describe('state transitions', () => {
       .mocked(eventStore.appendEvent)
       .mock.calls.find(([e]) => e.kind === 'retrospective.completed');
     expect(retroEvent).toBeDefined();
-    const payload = retroEvent![0].payload as { tier: string };
+    const payload = retroEvent?.[0].payload as { tier: string };
     expect(payload.tier).toBe('light');
   });
 });

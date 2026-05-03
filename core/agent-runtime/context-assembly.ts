@@ -85,7 +85,7 @@ function renderManifest(
     if (exactKeys.has(k)) {
       filtered[k] = v;
     } else if (dottedSubKeys.has(k) && typeof v === 'object' && v !== null) {
-      const subs = dottedSubKeys.get(k)!;
+      const subs = dottedSubKeys.get(k) as Set<string>;
       const projected: Record<string, unknown> = {};
       for (const sub of subs) {
         if (Object.prototype.hasOwnProperty.call(v, sub)) {

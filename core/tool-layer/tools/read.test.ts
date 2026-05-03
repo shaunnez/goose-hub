@@ -181,8 +181,8 @@ describe('searchFiles — spawn paths', () => {
     const promise = searchFiles({ workspaceRoot: '/w', pattern: 'x' });
 
     // Manually emit two chunks then close
-    child.stdout!.emit('data', Buffer.from('chunk1'));
-    child.stdout!.emit('data', Buffer.from('chunk2'));
+    child.stdout?.emit('data', Buffer.from('chunk1'));
+    child.stdout?.emit('data', Buffer.from('chunk2'));
     child.emit('close', 0);
 
     const result = await promise;

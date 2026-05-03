@@ -58,12 +58,12 @@ describe('deployHooks', () => {
     );
   });
 
-  it('does NOT overwrite the script when it already exists (idempotent)', () => {
+  it('always overwrites the script to pick up hook changes', () => {
     vi.mocked(existsSync).mockReturnValue(true);
 
     deployHooks();
 
-    expect(writeFileSync).not.toHaveBeenCalled();
+    expect(writeFileSync).toHaveBeenCalledOnce();
   });
 
   it('still creates the directory even when the hook file already exists', () => {

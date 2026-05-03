@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
-  eventStore: { appendEvent: vi.fn().mockReturnValue({ id: 1 }) },
+  eventStore: {
+    appendEvent: vi.fn().mockReturnValue({ id: 1 }),
+    replay: vi.fn().mockReturnValue([]),
+  },
 }));
 
 import { eventStore } from '@goose-hub/core/event-stream/store.js';

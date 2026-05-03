@@ -273,7 +273,13 @@ async function runImplement(input: RunImplementInput): Promise<ImplementOutputSh
 
   const parsed = ImplementSchema.safeParse(result.output);
   if (!parsed.success) {
-    throw new Error(`implement output validation failed: ${JSON.stringify(parsed.error.issues)}`);
+    const rawPreview =
+      typeof result.output === 'string'
+        ? (result.output as string).slice(0, 800)
+        : JSON.stringify(result.output).slice(0, 800);
+    throw new Error(
+      `implement output validation failed: ${JSON.stringify(parsed.error.issues)}\nRaw output (first 800 chars): ${rawPreview}`,
+    );
   }
   return parsed.data;
 }
@@ -345,6 +351,11 @@ async function afterImplement(input: AfterImplementInput): Promise<void> {
     payload: { prNumber: prResult.prNumber, prUrl: prResult.prUrl, branch: prResult.branch },
     runId,
   });
+
+  await stateSource.comment(
+    workItem.externalId,
+    `PR #${prResult.prNumber} opened: ${prResult.prUrl}\n\nTransitioning to \`factory:needs-qa\`.`,
+  );
 
   // Step 6: evidence-post wiring (#234) — best-effort.
   // Resolve the worktree HEAD to the real commit SHA so evidence-post pins

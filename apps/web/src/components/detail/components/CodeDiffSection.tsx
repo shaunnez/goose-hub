@@ -1,4 +1,5 @@
-import { type IssueDiffDto, fetchIssueDiff } from '@/lib/api';
+import { type IssueDiffDto, fetchEvents, fetchIssueDiff } from '@/lib/api';
+import type { AgentEventDto } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
 
 interface CodeDiffSectionProps {
@@ -22,6 +23,18 @@ export function CodeDiffSection({ projectSlug, id }: CodeDiffSectionProps) {
     refetchInterval: POLL_INTERVAL_MS,
     refetchIntervalInBackground: false,
   });
+  const { data: events } = useQuery<AgentEventDto[]>({
+    queryKey: ['events', projectSlug, id],
+    queryFn: () => fetchEvents(projectSlug, id),
+    staleTime: 10_000,
+  });
+  const prOpenedEvent = events?.findLast(
+    (e): e is AgentEventDto & { payload: { prNumber: number; prUrl: string } } =>
+      e.kind === 'pr.opened' && typeof (e.payload as Record<string, unknown>)?.prUrl === 'string',
+  );
+  const prUrl = prOpenedEvent != null ? (prOpenedEvent.payload as { prUrl: string }).prUrl : null;
+  const prNumber =
+    prOpenedEvent != null ? (prOpenedEvent.payload as { prNumber?: number }).prNumber : null;
 
   if (isLoading) {
     return (
@@ -40,6 +53,21 @@ export function CodeDiffSection({ projectSlug, id }: CodeDiffSectionProps) {
   }
 
   if (data == null || data.diff == null || data.diff.length === 0) {
+    if (prUrl != null) {
+      return (
+        <div data-testid="code-diff-pr" className="px-8 py-10 text-center text-[13px]">
+          <div className="text-fg-3 mb-2">Worktree closed — PR opened.</div>
+          <a
+            href={prUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[color:var(--accent)] hover:underline"
+          >
+            View PR{prNumber != null ? ` #${prNumber}` : ''} on GitHub
+          </a>
+        </div>
+      );
+    }
     return (
       <div data-testid="code-diff-empty" className="px-8 py-10 text-center text-fg-3 text-[13px]">
         {data?.reason ?? 'No active worktree for this issue.'}

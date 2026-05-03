@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -48,8 +48,7 @@ async function main() {
     const payload = {
       tool_name: toolName,
       run_id: runId,
-      // input is redacted by the server-side appendEvent
-      input_summary: typeof call?.tool_input === 'object' ? Object.keys(call.tool_input ?? {}) : [],
+      tool_input: call?.tool_input ?? {},
     };
     await fetch(\`http://localhost:\${serverPort}/events/tool-call\`, {
       method: 'POST',
@@ -65,13 +64,11 @@ async function main() {
 main().catch(() => process.exit(0));
 `;
 
-/** Writes the PreToolUse hook script to ~/.factory/hooks/. Idempotent. */
+/** Writes the PreToolUse hook script to ~/.factory/hooks/. Always overwrites to pick up changes. */
 export function deployHooks(): void {
   mkdirSync(HOOKS_DIR, { recursive: true });
   const hookPath = join(HOOKS_DIR, 'pre-tool-use.js');
-  if (!existsSync(hookPath)) {
-    writeFileSync(hookPath, HOOK_SCRIPT, { encoding: 'utf8', mode: 0o755 });
-  }
+  writeFileSync(hookPath, HOOK_SCRIPT, { encoding: 'utf8', mode: 0o755 });
 }
 
 export const HOOK_PATH = join(HOOKS_DIR, 'pre-tool-use.js');

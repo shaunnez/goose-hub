@@ -83,7 +83,7 @@ export async function runQaWorkflow(
       freshContext: true,
       toolBundles: ['read', 'shell', 'validate'],
       toolExtras: [],
-      budgets: { maxTurns: 50, maxBudgetUsd: 0.5, timeoutMs: 300_000 },
+      budgets: { maxTurns: 50, maxBudgetUsd: 5, timeoutMs: 600_000 },
       personaId,
       outputJsonSchema: qaJsonSchema,
       appendSystemPrompt: qaPrompt,

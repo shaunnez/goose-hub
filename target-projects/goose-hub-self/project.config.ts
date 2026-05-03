@@ -85,8 +85,8 @@ const config: ProjectConfig = {
     maxIssuesPerDayFromNonOwners: 3,
     maxBashSeconds: 120,
     perWorkflowMaxUsd: 5,
-    perAgentMaxUsd: 2,
-    perAdvisorMaxUsd: 1,
+    perAgentMaxUsd: 5,
+    perAdvisorMaxUsd: 5,
   },
   governance: {
     immutablePaths: [
