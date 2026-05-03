@@ -7,8 +7,7 @@ const mockDispatchTriageBatch = vi.fn().mockResolvedValue(undefined);
 const mockDispatchForLabel = vi.fn().mockResolvedValue(undefined);
 const mockGetSourceForSlug = vi.fn();
 const mockGetItem = vi.fn();
-// Backwards-compat aliases — kept so unrelated tests below need no rename.
-const mockRunTriageBatch = mockDispatchTriageBatch;
+// Note: legacy alias kept for unrelated assertions in this file.
 const mockRunInvestigateWorkflow = vi.fn().mockResolvedValue(undefined);
 void mockRunInvestigateWorkflow;
 

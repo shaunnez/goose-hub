@@ -87,7 +87,7 @@ describe('openPR (#184)', () => {
 
   it('rejects titles longer than 70 chars', async () => {
     await expect(
-      openPR({ ...baseInput, title: 'M7.99: ' + 'x'.repeat(80), gitExec: () => '' }),
+      openPR({ ...baseInput, title: `M7.99: ${'x'.repeat(80)}`, gitExec: () => '' }),
     ).rejects.toThrow(/title must be 1–70 chars/);
   });
 
