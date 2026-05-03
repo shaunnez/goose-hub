@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { eventStore } from '../event-stream/store.js';
@@ -546,26 +547,26 @@ describe('resolveMcpConfigPath', () => {
     const fs = await import('node:fs');
     vi.mocked(fs.existsSync).mockReturnValue(true);
     const result = resolveMcpConfigPath('/work/dir', ['playwright-mcp']);
-    expect(result).toBe('/work/dir/apps/web/.mcp.json');
+    expect(result).toBe(join('/work/dir', 'apps/web/.mcp.json'));
   });
 
   it('falls back to global empty config when bundle file does not exist', async () => {
     const fs = await import('node:fs');
     vi.mocked(fs.existsSync).mockReturnValue(false);
     const result = resolveMcpConfigPath('/work/dir', ['playwright-mcp']);
-    expect(result).toBe('/mock-home/.factory/mcp-config.json');
+    expect(result).toBe(join('/mock-home', '.factory', 'mcp-config.json'));
   });
 
   it('falls back to global empty config when no MCP-mapped bundle is present', () => {
     const result = resolveMcpConfigPath('/work/dir', ['read-only', 'validate']);
-    expect(result).toBe('/mock-home/.factory/mcp-config.json');
+    expect(result).toBe(join('/mock-home', '.factory', 'mcp-config.json'));
   });
 
   it('returns first matching bundle when multiple are present', async () => {
     const fs = await import('node:fs');
     vi.mocked(fs.existsSync).mockReturnValue(true);
     const result = resolveMcpConfigPath('/work/dir', ['validate', 'playwright-mcp']);
-    expect(result).toBe('/work/dir/apps/web/.mcp.json');
+    expect(result).toBe(join('/work/dir', 'apps/web/.mcp.json'));
   });
 });
 
