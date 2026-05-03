@@ -2,18 +2,25 @@ import type { AgentResult, AgentSpec } from './interface.js';
 
 export function resolveMockOutput(spec: AgentSpec): AgentResult {
   switch (spec.skill) {
-    case 'triage':
+    case 'triage': {
+      const workItem = (spec.context?.workItem ?? {}) as { type?: string };
+      const incoming = workItem.type;
+      const type =
+        incoming === 'bug' || incoming === 'research' || incoming === 'feature'
+          ? incoming
+          : 'chore';
       return {
         output: {
-          type: 'chore',
+          type,
           priority: 'p3',
           labels: [],
           reasoning: 'e2e fixture',
-          decisionSummaries: [{ step: 'classify', summary: 'Classified as chore for e2e' }],
+          decisionSummaries: [{ step: 'classify', summary: `Classified as ${type} for e2e` }],
         },
-        decisionSummaries: [{ step: 'classify', summary: 'Classified as chore for e2e' }],
+        decisionSummaries: [{ step: 'classify', summary: `Classified as ${type} for e2e` }],
         events: [],
       };
+    }
 
     case 'repo-match':
       return {

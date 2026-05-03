@@ -106,6 +106,7 @@ function PromoteModal({
               <div style={{ position: 'relative', marginBottom: 16 }}>
                 <select
                   aria-label="Select project"
+                  data-testid="promote-project-select"
                   value={selectedSlug}
                   onChange={(e) => setSelectedSlug(e.target.value)}
                   style={{
@@ -162,6 +163,7 @@ function PromoteModal({
               </button>
               <button
                 type="button"
+                data-testid="promote-next"
                 onClick={handlePickerNext}
                 disabled={!selectedSlug}
                 style={{
@@ -225,6 +227,7 @@ function PromoteModal({
               </button>
               <button
                 type="button"
+                data-testid="promote-confirm"
                 onClick={() => mutation.mutate()}
                 disabled={mutation.isPending}
                 style={{
@@ -278,6 +281,8 @@ export function InboxList() {
         {items.map((item) => (
           <li
             key={item.id}
+            data-testid="inbox-item"
+            data-inbox-id={item.id}
             className="flex items-center gap-4 rounded-md border border-line bg-bg-elev/60 px-4 py-3"
           >
             <div className="flex-1 min-w-0">
@@ -293,6 +298,7 @@ export function InboxList() {
             </div>
             <button
               type="button"
+              data-testid="promote-button"
               onClick={() => setPromoting(item)}
               className="h-7 px-3 rounded-md border border-line text-[12px] text-fg-2 hover:text-fg hover:bg-bg-hover shrink-0"
             >

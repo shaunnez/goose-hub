@@ -87,7 +87,11 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       runId,
       role: 'triager',
       skill: 'triage',
-      context: { projectId, workItemId, workItem: { title: item.title, body: item.body } },
+      context: {
+        projectId,
+        workItemId,
+        workItem: { title: item.title, body: item.body, type: item.type },
+      },
       contextAllowlist: ['workItem'],
       freshContext: false,
       toolBundles: [],
