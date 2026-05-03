@@ -33,6 +33,7 @@ function renderManifest(context: Record<string, unknown>, allowlist: string[]): 
       : Object.fromEntries(Object.entries(context).filter(([k]) => allowlist.includes(k)));
 
   const inner = Object.entries(filtered)
+    .filter(([, v]) => v !== undefined)
     .map(([k, v]) => {
       const safe = escapeXml(typeof v === 'string' ? v : JSON.stringify(v));
       return `  <${k}>${safe}</${k}>`;
