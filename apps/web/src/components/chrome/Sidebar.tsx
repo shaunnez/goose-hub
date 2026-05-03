@@ -31,8 +31,7 @@ function buildItems(slug: string | undefined): SidebarItem[] {
       to: `/projects/${project}/roster`,
       label: 'Roster',
       icon: <Users size={14} />,
-      available: false,
-      milestone: 'M5',
+      available: true,
     },
     {
       to: `/projects/${project}/milestones`,

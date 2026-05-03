@@ -78,3 +78,32 @@ export interface InboxItemDto {
   type: string;
   createdAt: string;
 }
+
+export interface PersonaStatDto {
+  id: number;
+  personaName: string;
+  role: string;
+  runsTotal: number;
+  runsSucceeded: number;
+  runsFailed: number;
+  avgQualityScore: number;
+  lastRunAt: string;
+}
+
+export interface PersonaRunDto {
+  runId: string;
+  workItemId: string | null;
+  outcome: string;
+  qualityScore: number;
+  createdAt: string;
+}
+
+export interface ImprovementCandidateDto {
+  id: number;
+  personaName: string;
+  sourceTaskId: string | null;
+  suggestionText: string;
+  suggestionType: string;
+  status: string;
+  createdAt: string;
+}

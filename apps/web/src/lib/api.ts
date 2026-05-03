@@ -1,8 +1,11 @@
 import type {
   AgentEventDto,
+  ImprovementCandidateDto,
   InboxItemDto,
   IssueCommentDto,
   MilestoneDto,
+  PersonaRunDto,
+  PersonaStatDto,
   ProjectSummary,
   TransitionResult,
   TriageResultDto,
@@ -18,6 +21,9 @@ export type {
   TransitionResult,
   InboxItemDto,
   TriageResultDto,
+  PersonaStatDto,
+  PersonaRunDto,
+  ImprovementCandidateDto,
 } from './types';
 
 async function getJson<T>(path: string): Promise<T> {
@@ -215,4 +221,25 @@ export async function transitionState(
   });
   const data = (await res.json().catch(() => ({}))) as TransitionResult;
   return { status: res.status, data };
+}
+
+export async function fetchRoster(): Promise<PersonaStatDto[]> {
+  const { personas } = await getJson<{ personas: PersonaStatDto[] }>('/roster');
+  return personas;
+}
+
+export async function fetchPersonaRuns(personaName: string): Promise<PersonaRunDto[]> {
+  const { runs } = await getJson<{ runs: PersonaRunDto[] }>(
+    `/roster/runs?persona=${encodeURIComponent(personaName)}`,
+  );
+  return runs;
+}
+
+export async function fetchPersonaCandidates(
+  personaName: string,
+): Promise<ImprovementCandidateDto[]> {
+  const { candidates } = await getJson<{ candidates: ImprovementCandidateDto[] }>(
+    `/roster/candidates?persona=${encodeURIComponent(personaName)}`,
+  );
+  return candidates;
 }
