@@ -514,6 +514,735 @@ describe('rate limit', () => {
 });
 
 // ---------------------------------------------------------------------------
+// listWorkByMilestone
+// ---------------------------------------------------------------------------
+
+describe('listWorkByMilestone', () => {
+  it('fetches all-state issues for the given milestone', async () => {
+    const issues = [
+      makeIssue({
+        number: 60,
+        title: 'Open feature',
+        labels: [{ name: 'factory:in-progress' }],
+        milestone: { number: 3, title: 'M3', description: null, due_on: null, state: 'open' },
+      }),
+      makeIssue({
+        number: 61,
+        title: 'Done chore',
+        labels: [{ name: 'factory:done' }, { name: 'type:chore' }],
+        milestone: { number: 3, title: 'M3', description: null, due_on: null, state: 'open' },
+      }),
+    ];
+
+    vi.stubGlobal(
+      'fetch',
+      mockFetchByUrl((url) => {
+        expect(url).toContain('state=all');
+        expect(url).toContain('milestone=3');
+        return new Response(JSON.stringify(issues), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }),
+    );
+
+    const source = makeSource();
+    const items = await source.listWorkByMilestone(3);
+    expect(items).toHaveLength(2);
+    expect(items[0].externalId).toBe('60');
+    expect(items[1].type).toBe('chore');
+  });
+
+  it('filters out pull requests', async () => {
+    const mixed = [makeIssue({ number: 62 }), { ...makeIssue({ number: 63 }), pull_request: {} }];
+
+    vi.stubGlobal(
+      'fetch',
+      mockFetchByUrl(
+        () =>
+          new Response(JSON.stringify(mixed), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      ),
+    );
+
+    const source = makeSource();
+    const items = await source.listWorkByMilestone(3);
+    expect(items).toHaveLength(1);
+    expect(items[0].externalId).toBe('62');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getItem
+// ---------------------------------------------------------------------------
+
+describe('getItem', () => {
+  it('fetches a single issue by its full id (github:owner/repo#N)', async () => {
+    const issue = makeIssue({
+      number: 42,
+      title: 'Single item',
+      labels: [{ name: 'factory:accepted' }],
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      mockFetchByUrl((url) => {
+        expect(url).toContain('/issues/42');
+        return new Response(JSON.stringify(issue), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }),
+    );
+
+    const source = makeSource();
+    const item = await source.getItem('github:shaunnez/goose-hub#42');
+    expect(item.externalId).toBe('42');
+    expect(item.title).toBe('Single item');
+  });
+
+  it('fetches a single issue by its plain number string', async () => {
+    const issue = makeIssue({ number: 7, title: 'Plain number' });
+
+    vi.stubGlobal(
+      'fetch',
+      mockFetchByUrl((url) => {
+        expect(url).toContain('/issues/7');
+        return new Response(JSON.stringify(issue), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }),
+    );
+
+    const source = makeSource();
+    const item = await source.getItem('7');
+    expect(item.externalId).toBe('7');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// listMilestones
+// ---------------------------------------------------------------------------
+
+describe('listMilestones', () => {
+  it('returns all milestones filtered through mapGithubMilestone', async () => {
+    const milestones = [
+      {
+        number: 1,
+        title: 'M1',
+        description: 'First',
+        due_on: '2024-03-01T00:00:00Z',
+        state: 'closed',
+      },
+      { number: 2, title: 'M2', description: null, due_on: null, state: 'open' },
+    ];
+
+    vi.stubGlobal('fetch', mockFetchOnce(milestones));
+
+    const source = makeSource();
+    const result = await source.listMilestones();
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe('1');
+    expect(result[0].isActive).toBe(false);
+    expect(result[0].dueOn).toBeInstanceOf(Date);
+    expect(result[1].isActive).toBe(true);
+    expect(result[1].dueOn).toBeUndefined();
+  });
+
+  it('filters out milestones whose title starts with [E2E]', async () => {
+    const milestones = [
+      { number: 1, title: 'M1', description: null, due_on: null, state: 'open' },
+      { number: 2, title: '[E2E] test milestone', description: null, due_on: null, state: 'open' },
+    ];
+
+    vi.stubGlobal('fetch', mockFetchOnce(milestones));
+
+    const source = makeSource();
+    const result = await source.listMilestones();
+    expect(result).toHaveLength(1);
+    expect(result[0].title).toBe('M1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// transitionState
+// ---------------------------------------------------------------------------
+
+describe('transitionState', () => {
+  it('removes the old label and adds the new one for a legal transition', async () => {
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method === 'DELETE') {
+        return Promise.resolve(new Response('', { status: 200 }));
+      }
+      if (method === 'POST') {
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      return Promise.resolve(new Response('[]', { status: 200 }));
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const source = makeSource();
+    // factory:triaging -> factory:accepted is a legal transition
+    await expect(
+      source.transitionState('github:shaunnez/goose-hub#5', 'factory:triaging', 'factory:accepted'),
+    ).resolves.toBeUndefined();
+
+    const deleteCalls = fetchMock.mock.calls.filter(
+      ([, init]) => (init?.method ?? 'GET').toUpperCase() === 'DELETE',
+    );
+    expect(deleteCalls).toHaveLength(1);
+    expect(deleteCalls[0][0]).toContain('factory%3Atriaging');
+
+    const postCalls = fetchMock.mock.calls.filter(
+      ([, init]) => (init?.method ?? 'GET').toUpperCase() === 'POST',
+    );
+    expect(postCalls).toHaveLength(1);
+    const body = JSON.parse(postCalls[0][1].body as string) as { labels: string[] };
+    expect(body.labels).toContain('factory:accepted');
+  });
+
+  it('throws on an illegal transition', async () => {
+    const source = makeSource();
+    // factory:done -> factory:triaging is not a legal transition
+    await expect(source.transitionState('42', 'factory:done', 'factory:triaging')).rejects.toThrow(
+      'Illegal transition',
+    );
+  });
+
+  it('tolerates 404 when removing the old label (idempotent)', async () => {
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method === 'DELETE') {
+        return Promise.resolve(new Response('', { status: 404 }));
+      }
+      if (method === 'POST') {
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      return Promise.resolve(new Response('[]', { status: 200 }));
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const source = makeSource();
+    await expect(
+      source.transitionState('5', 'factory:triaging', 'factory:accepted'),
+    ).resolves.toBeUndefined();
+  });
+
+  it('throws when removing the old label fails with a non-404 error', async () => {
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method === 'DELETE') {
+        return Promise.resolve(
+          new Response('', { status: 500, statusText: 'Internal Server Error' }),
+        );
+      }
+      return Promise.resolve(new Response('[]', { status: 200 }));
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const source = makeSource();
+    await expect(
+      source.transitionState('5', 'factory:triaging', 'factory:accepted'),
+    ).rejects.toThrow('Failed to remove label');
+  });
+
+  it('throws when adding the new label fails', async () => {
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method === 'DELETE') {
+        return Promise.resolve(new Response('', { status: 200 }));
+      }
+      if (method === 'POST') {
+        return Promise.resolve(
+          new Response('', { status: 422, statusText: 'Unprocessable Entity' }),
+        );
+      }
+      return Promise.resolve(new Response('[]', { status: 200 }));
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const source = makeSource();
+    await expect(
+      source.transitionState('5', 'factory:triaging', 'factory:accepted'),
+    ).rejects.toThrow('Failed to add label');
+  });
+
+  it('posts a comment when a note is supplied', async () => {
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method === 'DELETE') {
+        return Promise.resolve(new Response('', { status: 200 }));
+      }
+      if (method === 'POST') {
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      return Promise.resolve(new Response('[]', { status: 200 }));
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const source = makeSource();
+    await source.transitionState(
+      '5',
+      'factory:triaging',
+      'factory:accepted',
+      'Transitioned by agent',
+    );
+
+    const postCalls = fetchMock.mock.calls.filter(
+      ([, init]) => (init?.method ?? 'GET').toUpperCase() === 'POST',
+    );
+    // First POST = add label, second POST = comment
+    expect(postCalls).toHaveLength(2);
+    const commentBody = JSON.parse(postCalls[1][1].body as string) as { body: string };
+    expect(commentBody.body).toBe('Transitioned by agent');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// comment
+// ---------------------------------------------------------------------------
+
+describe('comment', () => {
+  it('posts a comment to the given issue', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: 1 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const source = makeSource();
+    await expect(source.comment('github:shaunnez/goose-hub#10', 'hello')).resolves.toBeUndefined();
+
+    const call = fetchMock.mock.calls[0];
+    expect(call[0]).toContain('/issues/10/comments');
+    const body = JSON.parse(call[1].body as string) as { body: string };
+    expect(body.body).toBe('hello');
+  });
+
+  it('throws when the comment POST fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('', { status: 403, statusText: 'Forbidden' })),
+    );
+
+    const source = makeSource();
+    await expect(source.comment('10', 'fail')).rejects.toThrow('Failed to post comment');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// setMilestone
+// ---------------------------------------------------------------------------
+
+describe('setMilestone', () => {
+  it('sends a PATCH request with the milestone number', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const source = makeSource();
+    await expect(source.setMilestone('github:shaunnez/goose-hub#10', 3)).resolves.toBeUndefined();
+
+    const call = fetchMock.mock.calls[0];
+    expect(call[0]).toContain('/issues/10');
+    expect(call[1].method).toBe('PATCH');
+    const body = JSON.parse(call[1].body as string) as { milestone: number };
+    expect(body.milestone).toBe(3);
+  });
+
+  it('sends null to clear the milestone', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const source = makeSource();
+    await source.setMilestone('10', null);
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string) as { milestone: null };
+    expect(body.milestone).toBeNull();
+  });
+
+  it('throws when the PATCH fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('', { status: 404, statusText: 'Not Found' })),
+    );
+
+    const source = makeSource();
+    await expect(source.setMilestone('10', 1)).rejects.toThrow('Failed to set milestone');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// setLabelInGroup
+// ---------------------------------------------------------------------------
+
+describe('setLabelInGroup', () => {
+  it('removes old group labels and adds the new value', async () => {
+    const existingLabels = [
+      { name: 'priority:medium' },
+      { name: 'type:feature' },
+      { name: 'factory:accepted' },
+    ];
+
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method === 'GET') {
+        return Promise.resolve(
+          new Response(JSON.stringify(existingLabels), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      if (method === 'DELETE') {
+        return Promise.resolve(new Response('', { status: 200 }));
+      }
+      if (method === 'POST') {
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      return Promise.resolve(new Response('[]', { status: 200 }));
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const source = makeSource();
+    await source.setLabelInGroup('10', 'priority', 'high');
+
+    const deleteCalls = fetchMock.mock.calls.filter(
+      ([, init]) => (init?.method ?? 'GET').toUpperCase() === 'DELETE',
+    );
+    // Only 'priority:medium' should be deleted — not type or factory labels
+    expect(deleteCalls).toHaveLength(1);
+    expect(deleteCalls[0][0]).toContain('priority%3Amedium');
+
+    const postCalls = fetchMock.mock.calls.filter(
+      ([, init]) => (init?.method ?? 'GET').toUpperCase() === 'POST',
+    );
+    const body = JSON.parse(postCalls[0][1].body as string) as { labels: string[] };
+    expect(body.labels).toContain('priority:high');
+  });
+
+  it('throws when removing an old group label fails with non-404', async () => {
+    const existingLabels = [{ name: 'schedule:current' }];
+
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method === 'GET') {
+        return Promise.resolve(
+          new Response(JSON.stringify(existingLabels), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      if (method === 'DELETE') {
+        return Promise.resolve(
+          new Response('', { status: 500, statusText: 'Internal Server Error' }),
+        );
+      }
+      return Promise.resolve(new Response('[]', { status: 200 }));
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const source = makeSource();
+    await expect(source.setLabelInGroup('10', 'schedule', 'next')).rejects.toThrow(
+      'Failed to remove label',
+    );
+  });
+
+  it('throws when adding the new group label fails', async () => {
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method === 'GET') {
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      if (method === 'POST') {
+        return Promise.resolve(
+          new Response('', { status: 422, statusText: 'Unprocessable Entity' }),
+        );
+      }
+      return Promise.resolve(new Response('[]', { status: 200 }));
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const source = makeSource();
+    await expect(source.setLabelInGroup('10', 'type', 'bug')).rejects.toThrow(
+      'Failed to add label',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createIssue
+// ---------------------------------------------------------------------------
+
+describe('createIssue', () => {
+  it('creates an issue with default labels and returns the mapped WorkItem', async () => {
+    const createdIssue = makeIssue({
+      number: 99,
+      title: 'New feature',
+      labels: [
+        { name: 'factory:triaging' },
+        { name: 'type:feature' },
+        { name: 'priority:medium' },
+        { name: 'schedule:later' },
+        { name: 'mode:supervised' },
+        { name: 'exec:serial' },
+      ],
+    });
+
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(createdIssue), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const source = makeSource();
+    const item = await source.createIssue({ title: 'New feature', body: '' });
+
+    expect(item.externalId).toBe('99');
+    expect(item.title).toBe('New feature');
+    expect(item.state).toBe('factory:triaging');
+
+    const call = fetchMock.mock.calls[0];
+    expect(call[1].method).toBe('POST');
+    const body = JSON.parse(call[1].body as string) as { title: string; labels: string[] };
+    expect(body.title).toBe('New feature');
+    expect(body.labels).toContain('factory:triaging');
+  });
+
+  it('uses provided type and priority', async () => {
+    const createdIssue = makeIssue({ number: 100, title: 'Bug report', labels: [] });
+
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(createdIssue), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const source = makeSource();
+    await source.createIssue({ title: 'Bug report', body: '', type: 'bug', priority: 'critical' });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string) as { labels: string[] };
+    expect(body.labels).toContain('type:bug');
+    expect(body.labels).toContain('priority:critical');
+  });
+
+  it('throws when the create request fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(new Response('', { status: 422, statusText: 'Unprocessable Entity' })),
+    );
+
+    const source = makeSource();
+    await expect(source.createIssue({ title: 'Bad issue', body: '' })).rejects.toThrow(
+      'Failed to create issue',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// listComments
+// ---------------------------------------------------------------------------
+
+describe('listComments', () => {
+  it('fetches and maps comments for an issue', async () => {
+    const rawComments = [
+      {
+        id: 1,
+        body: 'First comment',
+        user: { login: 'alice' },
+        created_at: '2024-01-01T00:00:00Z',
+      },
+      { id: 2, body: 'Second comment', user: null, created_at: '2024-01-02T00:00:00Z' },
+    ];
+
+    vi.stubGlobal('fetch', mockFetchOnce(rawComments));
+
+    const source = makeSource();
+    const comments = await source.listComments('github:shaunnez/goose-hub#10');
+
+    expect(comments).toHaveLength(2);
+    expect(comments[0].id).toBe(1);
+    expect(comments[0].body).toBe('First comment');
+    expect(comments[0].authorLogin).toBe('alice');
+    expect(comments[1].authorLogin).toBe('unknown');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// attach and watchForUpdates (not-implemented stubs)
+// ---------------------------------------------------------------------------
+
+describe('not-implemented stubs', () => {
+  it('attach throws "not implemented"', async () => {
+    const source = makeSource();
+    await expect(source.attach('10', { kind: 'file', url: 'https://example.com' })).rejects.toThrow(
+      'not implemented',
+    );
+  });
+
+  it('watchForUpdates throws "not implemented"', async () => {
+    const source = makeSource();
+    await expect(source.watchForUpdates(() => {})).rejects.toThrow('not implemented');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ghFetch — rate limit with reset timestamp
+// ---------------------------------------------------------------------------
+
+describe('ghFetch — rate limit reset timestamp', () => {
+  it('includes the reset time in the error message when X-RateLimit-Reset is present', async () => {
+    const resetEpoch = String(Math.floor(Date.now() / 1000) + 3600);
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response('', {
+          status: 429,
+          headers: {
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': resetEpoch,
+          },
+        }),
+      ),
+    );
+
+    const source = makeSource();
+    await expect(source.listOpenWork()).rejects.toThrow('resets at');
+  });
+
+  it('throws a generic API error on non-rate-limit, non-auth failure', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('', { status: 404, statusText: 'Not Found' })),
+    );
+
+    const source = makeSource();
+    await expect(source.listOpenWork()).rejects.toThrow('GitHub API error: 404');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// forceState — error handling
+// ---------------------------------------------------------------------------
+
+describe('forceState — error handling', () => {
+  it('throws when adding the forced label fails', async () => {
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method === 'GET') {
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      if (method === 'POST') {
+        return Promise.resolve(
+          new Response('', { status: 422, statusText: 'Unprocessable Entity' }),
+        );
+      }
+      return Promise.resolve(new Response('[]', { status: 200 }));
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const source = makeSource();
+    await expect(source.forceState('10', 'factory:archived')).rejects.toThrow(
+      'Failed to add label',
+    );
+  });
+
+  it('throws when removing a factory label fails with non-404', async () => {
+    const existingLabels = [{ name: 'factory:in-progress' }];
+
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method === 'GET') {
+        return Promise.resolve(
+          new Response(JSON.stringify(existingLabels), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      if (method === 'DELETE') {
+        return Promise.resolve(new Response('', { status: 500, statusText: 'Server Error' }));
+      }
+      return Promise.resolve(new Response('[]', { status: 200 }));
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const source = makeSource();
+    await expect(source.forceState('10', 'factory:archived')).rejects.toThrow(
+      'Failed to remove label',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Edge cases
 // ---------------------------------------------------------------------------
 
