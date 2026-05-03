@@ -115,4 +115,28 @@ test.describe('M9 Roster UI', () => {
 
     await expect(page.getByTestId('roster-empty-state')).toBeVisible();
   });
+
+  test('drill-in shows approve and reject buttons for a pending candidate', async ({ page }) => {
+    const candidate = {
+      id: 1,
+      personaName: 'alice',
+      sourceTaskId: 'github:owner/repo#42',
+      suggestionText: 'Improve error handling in the implement skill',
+      suggestionType: 'skill-prompt',
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
+
+    await page.route('**/roster/candidates**', (route: Route) =>
+      route.fulfill({ json: { candidates: [candidate] } }),
+    );
+
+    await page.goto(`/projects/${slug}/roster`);
+    await page.getByTestId('persona-card').first().click();
+
+    await expect(page.getByTestId('candidate-row')).toBeVisible();
+    await expect(page.getByTestId('approve-btn')).toBeVisible();
+    await expect(page.getByTestId('reject-btn')).toBeVisible();
+    await expect(page.getByText('Improve error handling in the implement skill')).toBeVisible();
+  });
 });

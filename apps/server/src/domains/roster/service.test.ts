@@ -23,15 +23,37 @@ const mockStats = [
   },
 ];
 
-const { mockListPersonaStats } = vi.hoisted(() => ({
-  mockListPersonaStats: vi.fn(),
-}));
+const mockCandidateRow = {
+  id: 1,
+  personaName: 'goose-hub-self/retrospector/0',
+  sourceTaskId: 'github:owner/repo#42',
+  suggestionText: 'Add error handling to the implement skill',
+  suggestionType: 'skill-prompt',
+  status: 'pending',
+  createdAt: '2026-05-01T00:00:00Z',
+};
+
+const { mockListPersonaStats, mockListCandidatesByPersona, mockUpdateCandidateStatus } = vi.hoisted(
+  () => ({
+    mockListPersonaStats: vi.fn(),
+    mockListCandidatesByPersona: vi.fn(),
+    mockUpdateCandidateStatus: vi.fn(),
+  }),
+);
 
 vi.mock('./repository.js', () => ({
   listPersonaStats: mockListPersonaStats,
+  listCandidatesByPersona: mockListCandidatesByPersona,
+  updateCandidateStatus: mockUpdateCandidateStatus,
 }));
 
-import { getPersonaCandidates, getPersonaRuns, listPersonas } from './service.js';
+import {
+  approveCandidate,
+  getPersonaCandidates,
+  getPersonaRuns,
+  listPersonas,
+  rejectCandidate,
+} from './service.js';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -67,24 +89,75 @@ describe('getPersonaRuns', () => {
       expect(result.data.runs).toEqual([]);
     }
   });
-
-  it('accepts any persona name without error', async () => {
-    const result = await getPersonaRuns('unknown-persona');
-    expect(result.ok).toBe(true);
-  });
 });
 
 describe('getPersonaCandidates', () => {
-  it('returns empty candidates list (table created in #264)', async () => {
+  it('returns pending candidates for a persona from the DB', async () => {
+    mockListCandidatesByPersona.mockResolvedValue([mockCandidateRow]);
+    const result = await getPersonaCandidates('goose-hub-self/retrospector/0');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.candidates).toHaveLength(1);
+      expect(result.data.candidates[0].suggestionType).toBe('skill-prompt');
+      expect(result.data.candidates[0].status).toBe('pending');
+    }
+    expect(mockListCandidatesByPersona).toHaveBeenCalledWith(
+      'goose-hub-self/retrospector/0',
+      'pending',
+    );
+  });
+
+  it('returns empty array when no candidates exist', async () => {
+    mockListCandidatesByPersona.mockResolvedValue([]);
     const result = await getPersonaCandidates('alice');
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.candidates).toEqual([]);
     }
   });
+});
 
-  it('accepts any persona name without error', async () => {
-    const result = await getPersonaCandidates('unknown-persona');
+describe('approveCandidate', () => {
+  it('returns updated candidate with approved status', async () => {
+    const approved = { ...mockCandidateRow, status: 'approved' };
+    mockUpdateCandidateStatus.mockResolvedValue(approved);
+    const result = await approveCandidate(1);
     expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.candidate.status).toBe('approved');
+      expect(result.data.candidate.id).toBe(1);
+    }
+    expect(mockUpdateCandidateStatus).toHaveBeenCalledWith(1, 'approved');
+  });
+
+  it('returns 404 when candidate not found', async () => {
+    mockUpdateCandidateStatus.mockResolvedValue(null);
+    const result = await approveCandidate(999);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(404);
+    }
+  });
+});
+
+describe('rejectCandidate', () => {
+  it('returns updated candidate with rejected status', async () => {
+    const rejected = { ...mockCandidateRow, status: 'rejected' };
+    mockUpdateCandidateStatus.mockResolvedValue(rejected);
+    const result = await rejectCandidate(1);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.candidate.status).toBe('rejected');
+    }
+    expect(mockUpdateCandidateStatus).toHaveBeenCalledWith(1, 'rejected');
+  });
+
+  it('returns 404 when candidate not found', async () => {
+    mockUpdateCandidateStatus.mockResolvedValue(null);
+    const result = await rejectCandidate(999);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(404);
+    }
   });
 });

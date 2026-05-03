@@ -1,6 +1,11 @@
-import { fetchPersonaCandidates, fetchPersonaRuns } from '@/lib/api';
+import {
+  approveCandidateById,
+  fetchPersonaCandidates,
+  fetchPersonaRuns,
+  rejectCandidateById,
+} from '@/lib/api';
 import type { ImprovementCandidateDto, PersonaRunDto, PersonaStatDto } from '@/lib/types';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 
 interface PersonaDrillInProps {
@@ -78,6 +83,73 @@ function RunHistory({ personaName }: { personaName: string }) {
   );
 }
 
+function CandidateRow({
+  candidate,
+  personaName,
+}: {
+  candidate: ImprovementCandidateDto;
+  personaName: string;
+}) {
+  const queryClient = useQueryClient();
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ['persona-candidates', personaName] });
+
+  const approve = useMutation({
+    mutationFn: () => approveCandidateById(candidate.id),
+    onSuccess: invalidate,
+  });
+  const reject = useMutation({
+    mutationFn: () => rejectCandidateById(candidate.id),
+    onSuccess: invalidate,
+  });
+
+  return (
+    <li
+      data-testid="candidate-row"
+      className="px-3 py-2 rounded-md border border-line bg-bg text-[12px]"
+    >
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="px-1.5 py-0.5 rounded text-[10.5px] uppercase font-mono bg-bg-elev text-fg-3 border border-line">
+          {candidate.suggestionType}
+        </span>
+        <span
+          className="px-1.5 py-0.5 rounded text-[10.5px] uppercase font-mono"
+          style={{
+            background:
+              candidate.status === 'pending' ? 'var(--warning-soft, #fef3c7)' : 'var(--bg-elev)',
+            color: candidate.status === 'pending' ? 'var(--warning, #92400e)' : 'var(--fg-3)',
+          }}
+        >
+          {candidate.status}
+        </span>
+      </div>
+      <p className="text-fg leading-snug mb-2">{candidate.suggestionText}</p>
+      {candidate.status === 'pending' && (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            data-testid="approve-btn"
+            onClick={() => approve.mutate()}
+            disabled={approve.isPending || reject.isPending}
+            className="h-6 px-2.5 rounded text-[11px] border border-line bg-bg text-fg-2 hover:bg-bg-hover disabled:opacity-50"
+          >
+            {approve.isPending ? 'Approving…' : 'Approve'}
+          </button>
+          <button
+            type="button"
+            data-testid="reject-btn"
+            onClick={() => reject.mutate()}
+            disabled={approve.isPending || reject.isPending}
+            className="h-6 px-2.5 rounded text-[11px] border border-line bg-bg text-fg-2 hover:bg-bg-hover disabled:opacity-50"
+          >
+            {reject.isPending ? 'Rejecting…' : 'Reject'}
+          </button>
+        </div>
+      )}
+    </li>
+  );
+}
+
 function CandidatesList({ personaName }: { personaName: string }) {
   const { data: candidates = [], isLoading } = useQuery<ImprovementCandidateDto[]>({
     queryKey: ['persona-candidates', personaName],
@@ -100,26 +172,9 @@ function CandidatesList({ personaName }: { personaName: string }) {
   }
 
   return (
-    <ol className="flex flex-col gap-1.5">
+    <ol className="flex flex-col gap-2">
       {candidates.map((c) => (
-        <li key={c.id} className="px-3 py-2 rounded-md border border-line bg-bg text-[12px]">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="px-1.5 py-0.5 rounded text-[10.5px] uppercase font-mono bg-bg-elev text-fg-3 border border-line">
-              {c.suggestionType}
-            </span>
-            <span
-              className="px-1.5 py-0.5 rounded text-[10.5px] uppercase font-mono"
-              style={{
-                background:
-                  c.status === 'pending' ? 'var(--warning-soft, #fef3c7)' : 'var(--bg-elev)',
-                color: c.status === 'pending' ? 'var(--warning, #92400e)' : 'var(--fg-3)',
-              }}
-            >
-              {c.status}
-            </span>
-          </div>
-          <p className="text-fg leading-snug">{c.suggestionText}</p>
-        </li>
+        <CandidateRow key={c.id} candidate={c} personaName={personaName} />
       ))}
     </ol>
   );

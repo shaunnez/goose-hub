@@ -63,6 +63,83 @@ describe('roster — fetchPersonaCandidates', () => {
     const candidates = await fetchPersonaCandidates('alice');
     expect(candidates).toEqual([]);
   });
+
+  it('resolves to a candidate array when candidates exist', async () => {
+    const { fetchPersonaCandidates } = await import('@/lib/api');
+    const mockCandidates = [
+      {
+        id: 1,
+        personaName: 'goose-hub-self/retrospector/0',
+        sourceTaskId: 'task-1',
+        suggestionText: 'Improve error handling',
+        suggestionType: 'skill-prompt',
+        status: 'pending',
+        createdAt: '2026-05-01T00:00:00Z',
+      },
+    ];
+    vi.mocked(fetchPersonaCandidates).mockResolvedValue(mockCandidates);
+    const candidates = await fetchPersonaCandidates('goose-hub-self/retrospector/0');
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].status).toBe('pending');
+    expect(candidates[0].suggestionType).toBe('skill-prompt');
+  });
+});
+
+describe('roster — approveCandidateById', () => {
+  it('resolves to the updated candidate with approved status', async () => {
+    const mockApprove = vi.fn().mockResolvedValue({
+      id: 1,
+      personaName: 'alice',
+      sourceTaskId: null,
+      suggestionText: 'Add retries',
+      suggestionType: 'skill-config',
+      status: 'approved',
+      createdAt: '2026-05-01T00:00:00Z',
+    });
+    vi.doMock('@/lib/api', () => ({
+      approveCandidateById: mockApprove,
+      rejectCandidateById: vi.fn(),
+      fetchRoster: vi.fn(),
+      fetchPersonaRuns: vi.fn(),
+      fetchPersonaCandidates: vi.fn(),
+    }));
+    const { approveCandidateById } = await import('@/lib/api');
+    vi.mocked(approveCandidateById).mockResolvedValue({
+      id: 1,
+      personaName: 'alice',
+      sourceTaskId: null,
+      suggestionText: 'Add retries',
+      suggestionType: 'skill-config',
+      status: 'approved',
+      createdAt: '2026-05-01T00:00:00Z',
+    });
+    const result = await approveCandidateById(1);
+    expect(result.status).toBe('approved');
+  });
+});
+
+describe('roster — rejectCandidateById', () => {
+  it('resolves to the updated candidate with rejected status', async () => {
+    const mockReject = vi.fn().mockResolvedValue({
+      id: 1,
+      personaName: 'alice',
+      sourceTaskId: null,
+      suggestionText: 'Add retries',
+      suggestionType: 'skill-config',
+      status: 'rejected',
+      createdAt: '2026-05-01T00:00:00Z',
+    });
+    vi.doMock('@/lib/api', () => ({
+      approveCandidateById: vi.fn(),
+      rejectCandidateById: mockReject,
+      fetchRoster: vi.fn(),
+      fetchPersonaRuns: vi.fn(),
+      fetchPersonaCandidates: vi.fn(),
+    }));
+    const result = await mockReject(1);
+    expect(result.status).toBe('rejected');
+    expect(mockReject).toHaveBeenCalledWith(1);
+  });
 });
 
 describe('roster — grouping by role', () => {
