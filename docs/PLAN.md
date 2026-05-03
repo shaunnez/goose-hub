@@ -202,20 +202,27 @@ goose-hub/
 │       ├── FACTORY_RULES.md
 │       ├── project.config.ts
 │       └── personas/
-├── skills/                              # composable skill packages (M5+)
+├── skills/                              # composable skill packages (M5+, @goose-hub/skills workspace pkg)
+│   ├── package.json                     # exports: { "./*": "./*" }
 │   ├── triage/
-│   │   ├── skill.config.ts
-│   │   ├── prompt.md
-│   │   ├── schema.ts
-│   │   ├── examples/
-│   │   └── README.md
+│   │   ├── config.ts                    # SkillConfig (toolBundles, modelPin, freshContext, role, contextSchema)
+│   │   ├── skill.md                     # versioned system prompt; ends with [decision] footer
+│   │   ├── schema.ts                    # Zod output schema
+│   │   ├── slice.test.ts                # always required
+│   │   ├── eval/eval.json               # at least one eval case
+│   │   └── README.md                    # always required
 │   └── ...
-├── slices/                              # orchestrator workflow slices (M5+)
+├── slices/                              # named orchestrator workflow slices (M5+)
+│   │                                    # Each slice is one workflow; named by what it does (NOT numbered).
 │   │                                    # NOT UI component slices — those live in apps/web/src/components/
-│   ├── 0001-cli-status/
-│   │   ├── slice.config.ts
-│   │   ├── api.ts                       # only files that exist for this slice
+│   ├── investigate/                     # M6 (#197)
+│   │   ├── workflow.ts                  # exports runInvestigateWorkflow(item, source, projectId, repo)
+│   │   ├── slice.test.ts                # always required
+│   │   └── README.md                    # always required
+│   ├── fix-issue/                       # M7 supervised dev (#183)
+│   │   ├── workflow.ts                  # exports runFixIssueWorkflow(item, source, projectId, repo, deps?)
 │   │   ├── slice.test.ts
+│   │   ├── chore-shipping.test.ts       # full state-machine integration test (#187)
 │   │   └── README.md
 │   └── ...
 ├── core/                                # @goose-hub/core workspace package
@@ -239,9 +246,11 @@ goose-hub/
 │   │   └── migrate.ts
 │   ├── orchestrator/                    # M5+
 │   │   ├── tick.ts
-│   │   ├── workflows/
 │   │   ├── locks.ts
 │   │   └── scheduler.ts
+│   │                                    # NOTE: workflow modules live in /slices/<name>/workflow.ts,
+│   │                                    # NOT under core/orchestrator/workflows/. The orchestrator
+│   │                                    # tick dispatches to slice workflows via apps/server/src/shared/dispatch.ts.
 │   ├── agent-runtime/                   # M4+
 │   │   ├── interface.ts
 │   │   ├── claude-cli.ts
@@ -266,6 +275,9 @@ goose-hub/
 │   ├── retrospective/                   # M9+
 │   ├── bootstrap/
 │   └── connectors/
+│       └── github/                      # M7+ (#184/#186)
+│           ├── open-pr.ts
+│           └── merge-pr.ts
 ├── apps/
 │   ├── cli/                             # `goose status`, `goose tick`, etc.
 │   │   └── src/index.ts

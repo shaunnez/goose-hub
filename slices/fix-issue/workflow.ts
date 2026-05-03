@@ -9,8 +9,8 @@ import { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { cleanupWorktree, createWorktree } from '@goose-hub/core/workspaces/worktree.js';
-import { EvidencePostSchema } from '../../skills/evidence-post/schema.js';
-import { ImplementSchema } from '../../skills/implement/schema.js';
+import { EvidencePostSchema } from '@goose-hub/skills/evidence-post/schema.js';
+import { ImplementSchema } from '@goose-hub/skills/implement/schema.js';
 
 const REPO_ROOT = join(import.meta.dirname, '../..');
 

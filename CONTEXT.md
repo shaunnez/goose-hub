@@ -350,6 +350,7 @@ improvement_candidate:
 
 ## Deferred / Open Questions (to resolve at their milestone)
 
+- **M8**: starting M8 work — read `docs/m8-handoff.md` first. Lists outstanding M7 follow-ups, the M8 issue picking order (#239–#249), recommended PR groupings, holdout-discipline reminders, and the still-required real-Claude chore-shipping demo for M7 close.
 - **M11**: `parseDependsOn` regex in `github-labels.ts` requires a colon (`depends on:`). Plan examples use `Depends on #42` (no colon). Tolerant parser spec says also accept `Depends-On`, `blocked by`. Fix before M11 dependency checks go live.
 - **M12**: Governance PR check CI wiring — how does `core/governance/pr-check.ts` get access to the PR diff and labels in GitHub Actions?
 - **Post-v0**: Claude CLI vs Claude Agent SDK — reference audit (#10) said "compare honestly." SDK lacks subprocess overhead and suits non-coding skills (triage, retro) better. Revisit when v0 ships.

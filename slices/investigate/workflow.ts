@@ -6,8 +6,8 @@ import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { cleanupWorktree, createWorktree } from '@goose-hub/core/workspaces/worktree.js';
-import { InvestigateSchema } from '../../skills/investigate/schema.js';
-import { PlaywrightReproSchema } from '../../skills/playwright-repro/schema.js';
+import { InvestigateSchema } from '@goose-hub/skills/investigate/schema.js';
+import { PlaywrightReproSchema } from '@goose-hub/skills/playwright-repro/schema.js';
 
 const REPO_ROOT = join(import.meta.dirname, '../..');
 
