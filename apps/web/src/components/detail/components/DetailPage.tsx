@@ -15,6 +15,8 @@ import { InvestigationSection } from './InvestigationSection';
 import { LeftRail } from './LeftRail';
 import { OverviewSection } from './OverviewSection';
 import { PlaywrightCaptureSection } from './PlaywrightCaptureSection';
+import { QASection } from './QASection';
+import { ReviewSection } from './ReviewSection';
 import { RightRail } from './RightRail';
 import { TaskHeader } from './TaskHeader';
 import { TimelineSection } from './TimelineSection';
@@ -223,6 +225,10 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
                 <CodeDiffSection projectSlug={slug} id={id} />
                 <PlaywrightCaptureSection projectSlug={slug} id={id} itemType={item?.type ?? ''} />
               </div>
+            ) : currentSection.key === 'qa' ? (
+              <QASection projectSlug={slug} id={id} />
+            ) : currentSection.key === 'review' ? (
+              <ReviewSection projectSlug={slug} id={id} />
             ) : (
               <DeferredSurface
                 surface={currentSection.label}
