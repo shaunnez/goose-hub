@@ -130,16 +130,18 @@ test.describe('Pipeline e2e (MOCK_AGENTS=true)', () => {
     await page.getByRole('link', { name: 'Timeline' }).click();
     await expect(page.getByTestId('timeline-section')).toBeVisible({ timeout: 10_000 });
 
-    // 7. Kick off the triage batch. With MOCK_AGENTS=true the mock honours type:chore
-    //    and routes the issue: triaging → accepted → dev-ready. The dev-ready label
-    //    triggers the webhook dispatch into runFixIssueWorkflow, which then lands at
-    //    needs-qa. This step relies on GitHub webhooks reaching the local server.
+    // 7. Kick off triage. With MOCK_AGENTS=true the mock honours the issue's
+    //    type:chore label and routes: triaging → accepted → dev-ready.
     await postServer(`/projects/${PROJECT_SLUG}/tick`);
 
     const statePill = page.getByTestId('state-pill');
+    await expect(statePill).toHaveText('factory:dev-ready', { timeout: 60_000 });
+
+    // 8. Dispatch fix-issue directly (no webhook reliance): in-progress → needs-qa.
+    await postServer(`/projects/${PROJECT_SLUG}/dispatch/${choreIssueNumber}`);
     await expect(statePill).toHaveText('factory:needs-qa', { timeout: 60_000 });
 
-    // 8. Drive QA and review via their batch endpoints (no auto-chain for these).
+    // 9. Drive QA and review via their batch endpoints.
     await postServer(`/projects/${PROJECT_SLUG}/run-qa`);
     await expect(statePill).toHaveText('factory:needs-review', { timeout: 60_000 });
 
@@ -184,12 +186,15 @@ test.describe('Pipeline e2e (MOCK_AGENTS=true)', () => {
     await expect(page.getByTestId('timeline-section')).toBeVisible({ timeout: 10_000 });
 
     // 3. Trigger triage. The label-aware mock returns type:bug, so triage routes
-    //    triaging → accepted → investigating. The investigating label then auto-
-    //    dispatches the investigate workflow → investigation-complete.
+    //    triaging → accepted → investigating.
     await postServer(`/projects/${PROJECT_SLUG}/tick`);
 
     const statePill = page.getByTestId('state-pill');
-    await expect(statePill).toHaveText('factory:investigation-complete', { timeout: 90_000 });
+    await expect(statePill).toHaveText('factory:investigating', { timeout: 60_000 });
+
+    // 4. Dispatch investigate directly: investigating → investigation-complete.
+    await postServer(`/projects/${PROJECT_SLUG}/dispatch/${bugIssueNumber}`);
+    await expect(statePill).toHaveText('factory:investigation-complete', { timeout: 60_000 });
 
     await expect(page.locator('[data-event-kind="agent.triage-complete"]').first()).toBeVisible({
       timeout: 15_000,

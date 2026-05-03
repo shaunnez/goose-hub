@@ -30,4 +30,17 @@ router.post('/:slug/run-review', async (c) => {
   return c.json({ ok: true, slug }, 202);
 });
 
+router.post('/:slug/dispatch/:n', async (c) => {
+  const slug = c.req.param('slug');
+  const n = Number(c.req.param('n'));
+  if (!Number.isFinite(n)) {
+    return c.json({ ok: false, error: 'invalid issue number' }, 400);
+  }
+  const { dispatchForIssue } = await import('../../shared/dispatch.js');
+  dispatchForIssue(slug, n).catch((err: unknown) => {
+    logger.error('dispatchForIssue failed', { slug, n, error: String(err) });
+  });
+  return c.json({ ok: true, slug, issueNumber: n }, 202);
+});
+
 export { router as workflowsRouter };

@@ -108,3 +108,18 @@ export async function dispatchForLabel(
   }
   logger.info('dispatchForLabel: no workflow for label', { slug, labelName });
 }
+
+/**
+ * Dispatch the workflow that matches an issue's current factory:* state.
+ * Webhook-free escape hatch used by e2e tests so they don't depend on
+ * GitHub webhook delivery to the local server.
+ */
+export async function dispatchForIssue(slug: string, issueNumber: number): Promise<void> {
+  const source = await getSourceForSlug(slug);
+  if (source == null) {
+    logger.error('dispatchForIssue: no source for slug', { slug });
+    return;
+  }
+  const item = await source.getItem(issueNumber.toString());
+  await dispatchForLabel(slug, issueNumber, item.state);
+}
