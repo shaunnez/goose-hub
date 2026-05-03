@@ -211,6 +211,140 @@ beforeEach(() => {
 // ─── tests ────────────────────────────────────────────────────────────────────
 
 describe('runQaWorkflow', () => {
+  describe('qa output validation failure', () => {
+    it('transitions to needs-human when QA output schema validation fails', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce({
+        output: { bad: 'data', missing: 'required' },
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo');
+
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-qa',
+        'factory:needs-human',
+      );
+    });
+
+    it('emits agent.run-failed when QA output schema validation fails', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce({
+        output: { invalid: true },
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const failed = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'agent.run-failed');
+      expect(failed).toBeDefined();
+    });
+  });
+
+  describe('tier failure events', () => {
+    it('emits qa.structural-failed when structural tier fails', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce(makeFailResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const structuralFailed = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'qa.structural-failed');
+      expect(structuralFailed).toBeDefined();
+    });
+
+    it('emits qa.functional-failed when functional tier fails', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce(makeFailResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const functionalFailed = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'qa.functional-failed');
+      expect(functionalFailed).toBeDefined();
+    });
+
+    it('does NOT emit qa.structural-failed when structural tier passes', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const structuralFailed = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'qa.structural-failed');
+      expect(structuralFailed).toBeUndefined();
+    });
+
+    it('emits qa.completed with full payload including qualityScores on pass', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const completed = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'qa.completed');
+      expect(completed).toBeDefined();
+      const payload = completed?.[0].payload as Record<string, unknown>;
+      expect(payload.verdict).toBe('pass');
+      expect(payload.qualityScores).toBeDefined();
+    });
+
+    it('emits agent.decision-summary per decisionSummary entry', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      const resultWithSummaries: AgentResult = {
+        output: {
+          ...(makePassResult().output as object),
+          decisionSummaries: [
+            { step: 's1', summary: 'passed lint' },
+            { step: 's2', summary: 'tests passed' },
+          ],
+        },
+        decisionSummaries: [],
+        events: [],
+      };
+      mockRun.mockResolvedValueOnce(resultWithSummaries);
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const decisionEvents = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.filter(
+          ([e]) =>
+            e.kind === 'agent.decision-summary' && (e.payload as { skill?: string }).skill === 'qa',
+        );
+      expect(decisionEvents).toHaveLength(2);
+    });
+  });
+
   describe('pass verdict', () => {
     it('transitions state to factory:needs-review on pass', async () => {
       const item = makeWorkItem();
@@ -403,6 +537,29 @@ describe('runQaWorkflow', () => {
         '42',
         'factory:needs-qa',
         'factory:qa-failed',
+      );
+    });
+  });
+
+  describe('non-Error thrown (line 174 branch)', () => {
+    it('wraps non-Error thrown value as Error and transitions to needs-human', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      // Throw a string instead of an Error object — covers line 174
+      // eslint-disable-next-line prefer-promise-reject-errors
+      mockRun.mockRejectedValueOnce('string error from qa runtime');
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo');
+
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-qa',
+        'factory:needs-human',
+      );
+      expect(source.comment).toHaveBeenCalledWith(
+        '42',
+        expect.stringContaining('string error from qa runtime'),
       );
     });
   });
