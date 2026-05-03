@@ -100,6 +100,7 @@ export interface PersonaRunDto {
 
 export interface ImprovementCandidateDto {
   id: number;
+  projectId: string;
   personaName: string;
   sourceTaskId: string | null;
   suggestionText: string;

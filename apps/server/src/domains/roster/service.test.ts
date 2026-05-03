@@ -25,6 +25,7 @@ const mockStats = [
 
 const mockCandidateRow = {
   id: 1,
+  projectId: 'goose-hub-self',
   personaName: 'goose-hub-self/retrospector/0',
   sourceTaskId: 'github:owner/repo#42',
   suggestionText: 'Add error handling to the implement skill',

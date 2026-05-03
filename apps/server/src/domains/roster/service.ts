@@ -84,7 +84,7 @@ export async function approveCandidate(
   const candidate = await updateCandidateStatus(id, 'approved');
   if (!candidate) return { ok: false, error: 'candidate not found', status: 404 };
 
-  const slug = existing.personaName.split('/')[0];
+  const slug = existing.projectId;
   const token = process.env.GITHUB_TOKEN;
 
   try {

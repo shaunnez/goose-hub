@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 const mockCandidate = {
   id: 1,
+  projectId: 'goose-hub-self',
   personaName: 'goose-hub-self/retrospector/0',
   sourceTaskId: 'github:owner/repo#42',
   suggestionText: 'Improve error handling in the implement skill prompt',

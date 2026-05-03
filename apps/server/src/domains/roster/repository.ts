@@ -15,6 +15,7 @@ export interface PersonaStat {
 
 export interface ImprovementCandidateRow {
   id: number;
+  projectId: string;
   personaName: string;
   sourceTaskId: string | null;
   suggestionText: string;
@@ -85,6 +86,7 @@ export async function updateCandidateGithubIssue(
 }
 
 export async function insertCandidate(data: {
+  projectId: string;
   personaName: string;
   sourceTaskId: string | null;
   suggestionText: string;
