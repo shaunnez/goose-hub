@@ -115,7 +115,7 @@ describe('chore-shipping end-to-end (#187)', () => {
     process.env.GITHUB_TOKEN = undefined;
   });
 
-  it('ships a chore: dev-ready → in-progress → PR open → approved → done', async () => {
+  it('ships a chore: dev-ready → in-progress → PR open → needs-qa → done', async () => {
     const item = makeChoreItem();
     const source = makeStateSource();
 
@@ -193,10 +193,10 @@ describe('chore-shipping end-to-end (#187)', () => {
     // ── Acceptance: state transitions in order ────────────────────────────
     const transitions = vi.mocked(source.transitionState).mock.calls;
     expect(transitions[0]).toEqual(['9999', 'factory:dev-ready', 'factory:in-progress']);
-    expect(transitions[1]).toEqual(['9999', 'factory:in-progress', 'factory:approved']);
+    expect(transitions[1]).toEqual(['9999', 'factory:in-progress', 'factory:needs-qa']);
 
     // ── Step 8: human approves at the gate; PR merges; issue closes ──────
-    // The workflow leaves the issue in factory:approved with a recorded
+    // The workflow leaves the issue in factory:needs-qa with a recorded
     // pr.opened payload (asserted above). The ApprovalGateSection UI test
     // (apps/web/src/components/.../ApprovalGateSection.test.tsx) covers
     // the click-Approve → POST /approve flow. The approveIssue / rejectIssue

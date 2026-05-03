@@ -87,7 +87,7 @@ describe('runFixIssueWorkflow (#183)', () => {
     process.env.GITHUB_TOKEN = undefined;
   });
 
-  it('happy path (priority:medium, no advisor): worktree → in-progress → implement → PR → approved', async () => {
+  it('happy path (priority:medium, no advisor): worktree → in-progress → implement → PR → needs-qa', async () => {
     const item = makeWorkItem({ priority: 'medium' });
     const source = makeStateSource();
 
@@ -136,7 +136,7 @@ describe('runFixIssueWorkflow (#183)', () => {
     expect(source.transitionState).toHaveBeenLastCalledWith(
       '42',
       'factory:in-progress',
-      'factory:approved',
+      'factory:needs-qa',
     );
     expect(cleanupWorktreeImpl).toHaveBeenCalled();
     // pr.opened event recorded

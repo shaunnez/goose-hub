@@ -357,9 +357,8 @@ async function afterImplement(input: AfterImplementInput): Promise<void> {
     evidenceSpecPath: implementOutput.evidenceSpecPath,
   });
 
-  // Step 7: transition to factory:approved (M7 path; M8 will insert
-  // factory:needs-qa → factory:needs-review before this).
-  await stateSource.transitionState(workItem.externalId, 'factory:in-progress', 'factory:approved');
+  // Step 7: M8 path — route through QA before approval (factory:in-progress → factory:needs-qa)
+  await stateSource.transitionState(workItem.externalId, 'factory:in-progress', 'factory:needs-qa');
 }
 
 interface RunEvidencePostInput {
