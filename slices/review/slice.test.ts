@@ -135,6 +135,162 @@ beforeEach(() => {
 // ─── tests ────────────────────────────────────────────────────────────────────
 
 describe('runReviewWorkflow', () => {
+  describe('getPrDiff — stateSource with getPrDiff method', () => {
+    it('calls stateSource.getPrDiff when the method exists', async () => {
+      const item = makeWorkItem();
+      const getPrDiff = vi.fn().mockResolvedValue('diff --git ...');
+      const source = makeMockSource({ getPrDiff } as never);
+      mockRun.mockResolvedValueOnce(makeApprovedResult());
+
+      const { runReviewWorkflow } = await import('./workflow.js');
+      await runReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+      expect(getPrDiff).toHaveBeenCalledWith('42');
+    });
+
+    it('passes empty prDiff when stateSource has no getPrDiff method', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce(makeApprovedResult());
+
+      const { runReviewWorkflow } = await import('./workflow.js');
+      await runReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const spec = mockRun.mock.calls[0][0] as { context: Record<string, unknown> };
+      expect(spec.context.prDiff).toBe('');
+    });
+  });
+
+  describe('review output with decisionSummaries', () => {
+    it('emits one agent.decision-summary per review decision summary', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      const resultWithSummaries: AgentResult = {
+        output: {
+          verdict: 'approved',
+          confidence: 0.9,
+          criteriaChecks: [{ criterion: 'Add foo', status: 'met' }],
+          findings: [],
+          decisionSummaries: [
+            { step: 'check-1', summary: 'criteria met' },
+            { step: 'check-2', summary: 'no regressions' },
+          ],
+        },
+        decisionSummaries: [],
+        events: [],
+      };
+      mockRun.mockResolvedValueOnce(resultWithSummaries);
+
+      const { runReviewWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const decisionEvents = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.filter(
+          ([e]) =>
+            e.kind === 'agent.decision-summary' &&
+            (e.payload as { skill?: string }).skill === 'review',
+        );
+      expect(decisionEvents).toHaveLength(2);
+    });
+  });
+
+  describe('buildReviewComment format', () => {
+    it('formats approved comment with checkmarks and confidence', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce(makeApprovedResult());
+
+      const { runReviewWorkflow } = await import('./workflow.js');
+      await runReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const commentCall = vi.mocked(source.comment).mock.calls[0];
+      const comment = commentCall[1];
+      expect(comment).toContain('APPROVED');
+      expect(comment).toContain('confidence');
+    });
+
+    it('truncates findings to first 5 in comment', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      const resultWith6Findings: AgentResult = {
+        output: {
+          verdict: 'needs-fix',
+          confidence: 0.5,
+          criteriaChecks: [{ criterion: 'Add foo', status: 'unmet' }],
+          findings: [
+            { severity: 'blocker', description: 'issue 1' },
+            { severity: 'blocker', description: 'issue 2' },
+            { severity: 'major', description: 'issue 3' },
+            { severity: 'major', description: 'issue 4' },
+            { severity: 'minor', description: 'issue 5' },
+            { severity: 'minor', description: 'issue 6 should not appear' },
+          ],
+          decisionSummaries: [],
+        },
+        decisionSummaries: [],
+        events: [],
+      };
+      mockRun.mockResolvedValueOnce(resultWith6Findings);
+
+      const { runReviewWorkflow } = await import('./workflow.js');
+      await runReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const commentCall = vi.mocked(source.comment).mock.calls[0];
+      const comment = commentCall[1];
+      expect(comment).toContain('issue 5');
+      expect(comment).not.toContain('issue 6');
+    });
+
+    it('uses needs-human fallback for unknown verdict (VERDICT_TO_STATE fallback)', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      const unknownVerdictResult: AgentResult = {
+        output: {
+          verdict: 'unknown-future-verdict',
+          confidence: 0.5,
+          criteriaChecks: [],
+          findings: [],
+          decisionSummaries: [],
+        },
+        decisionSummaries: [],
+        events: [],
+      };
+      mockRun.mockResolvedValueOnce(unknownVerdictResult);
+
+      const { runReviewWorkflow } = await import('./workflow.js');
+      await runReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-review',
+        'factory:needs-human',
+      );
+    });
+  });
+
+  describe('review output validation failure', () => {
+    it('transitions to needs-human when review output schema validation fails', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce({
+        output: { bad: 'data', missing: 'required' },
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+      const { runReviewWorkflow } = await import('./workflow.js');
+      await runReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-review',
+        'factory:needs-human',
+      );
+    });
+  });
+
   describe('approved verdict', () => {
     it('transitions state to factory:approved on approved verdict', async () => {
       const item = makeWorkItem();
@@ -322,6 +478,29 @@ describe('runReviewWorkflow', () => {
         '42',
         'factory:needs-review',
         'factory:needs-fix',
+      );
+    });
+  });
+
+  describe('non-Error thrown (line 127 branch)', () => {
+    it('wraps non-Error thrown value as Error and transitions to needs-human', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      // Throw a string instead of an Error object — covers line 127
+      // eslint-disable-next-line prefer-promise-reject-errors
+      mockRun.mockRejectedValueOnce('string error from review runtime');
+
+      const { runReviewWorkflow } = await import('./workflow.js');
+      await runReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-review',
+        'factory:needs-human',
+      );
+      expect(source.comment).toHaveBeenCalledWith(
+        '42',
+        expect.stringContaining('string error from review runtime'),
       );
     });
   });

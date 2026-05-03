@@ -8,7 +8,7 @@ export async function runQaBatch(slug: string, source?: StateSource): Promise<vo
   if (stateSource == null) throw new Error(`Project not found: ${slug}`);
 
   const { runQaWorkflow } = (await import(
-    new URL('../../../../slices/qa/workflow.js', import.meta.url).href
+    new URL('../../../../../slices/qa/workflow.js', import.meta.url).href
   )) as {
     runQaWorkflow: (
       item: WorkItem,

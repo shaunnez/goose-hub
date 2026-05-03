@@ -316,3 +316,121 @@ describe('EventStore — M4 runtime events', () => {
     expect(p.token).toBe('[REDACTED]');
   });
 });
+
+// ---------------------------------------------------------------------------
+// replay branch coverage — zero conditions, single workItemId, multi-condition
+// ---------------------------------------------------------------------------
+
+describe('EventStore — replay branch coverage', () => {
+  const BRANCH_PROJECT = 'test-event-store-branch';
+
+  beforeAll(() => {
+    db.delete(events).where(sql`project_id = ${BRANCH_PROJECT}`).run();
+  });
+
+  afterAll(() => {
+    db.delete(events).where(sql`project_id = ${BRANCH_PROJECT}`).run();
+  });
+
+  it('replay with no filter (zero conditions) returns all stored events', () => {
+    const before = eventStore.replay({}).length;
+    const e = eventStore.appendEvent({
+      projectId: BRANCH_PROJECT,
+      kind: 'system.note',
+      payload: { zero: true },
+    });
+    const after = eventStore.replay({}).length;
+    // At least one more row than before
+    expect(after).toBeGreaterThan(before);
+    expect(eventStore.replay({}).map((ev) => ev.id)).toContain(e.id);
+  });
+
+  it('replay filtered by workItemId only (single condition path)', () => {
+    const workItemId = 'github:test/repo#777';
+    const e = eventStore.appendEvent({
+      projectId: BRANCH_PROJECT,
+      workItemId,
+      kind: 'state.transitioned',
+      payload: { from: 'factory:triaging', to: 'factory:accepted' },
+    });
+
+    const result = eventStore.replay({ workItemId });
+    expect(result.map((ev) => ev.id)).toContain(e.id);
+    // All returned rows must match the workItemId
+    for (const row of result) {
+      expect(row.workItemId).toBe(workItemId);
+    }
+  });
+
+  it('replay filtered by projectId + workItemId (two conditions → and() branch)', () => {
+    const workItemId = 'github:test/repo#888';
+    const eA = eventStore.appendEvent({
+      projectId: BRANCH_PROJECT,
+      workItemId,
+      kind: 'system.note',
+      payload: { n: 'a' },
+    });
+    // Noise: same workItemId, different project
+    eventStore.appendEvent({
+      projectId: 'test-event-store-branch-other',
+      workItemId,
+      kind: 'system.note',
+      payload: { n: 'b' },
+    });
+
+    const result = eventStore.replay({ projectId: BRANCH_PROJECT, workItemId });
+    const ids = result.map((ev) => ev.id);
+    expect(ids).toContain(eA.id);
+    // All returned rows must belong to our project
+    for (const row of result) {
+      expect(row.projectId).toBe(BRANCH_PROJECT);
+    }
+  });
+
+  it('replay filtered by projectId + sinceId + runId (three conditions → and() branch)', () => {
+    const runId = 'branch-run-999';
+    const e1 = eventStore.appendEvent({
+      projectId: BRANCH_PROJECT,
+      kind: 'agent.run-started',
+      payload: {},
+      runId,
+    });
+    const e2 = eventStore.appendEvent({
+      projectId: BRANCH_PROJECT,
+      kind: 'agent.run-completed',
+      payload: {},
+      runId,
+    });
+
+    const result = eventStore.replay({
+      projectId: BRANCH_PROJECT,
+      sinceId: e1.id,
+      runId,
+    });
+    expect(result.map((ev) => ev.id)).toContain(e2.id);
+    expect(result.map((ev) => ev.id)).not.toContain(e1.id);
+  });
+
+  it('subscribe: logs with <no message> when thrown error has no message property', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const unsub = eventStore.subscribe(() => {
+      // Throw a plain object that has no .name or .message
+      // biome-ignore lint/suspicious/noExplicitAny: intentional for branch coverage
+      throw { code: 'CUSTOM_ERROR' } as any;
+    });
+
+    eventStore.appendEvent({
+      projectId: BRANCH_PROJECT,
+      kind: 'system.note',
+      payload: { branch: 'no-message' },
+    });
+
+    // The error shape should include 'Error' (fallback name) and '<no message>'
+    const call = errorSpy.mock.calls.find((args) => String(args[0]).includes('<no message>'));
+    expect(call).toBeDefined();
+
+    unsub();
+    errorSpy.mockRestore();
+  });
+});

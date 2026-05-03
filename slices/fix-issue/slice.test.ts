@@ -8,10 +8,35 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
 vi.mock('@goose-hub/core/agent-runtime/select-persona.js', () => ({
   selectPersona: vi.fn().mockReturnValue('proj/developer/0'),
 }));
+vi.mock('@goose-hub/core/agent-runtime/schema-bridge.js', () => ({
+  toJsonSchema: vi.fn().mockReturnValue({}),
+}));
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
   return { ...actual, readFileSync: vi.fn().mockReturnValue('# mock skill prompt') };
 });
+
+// Mock default dep implementations so the ?? fallback branches (lines 68-73) are reachable
+const mockClaudeCliRun = vi.fn();
+vi.mock('@goose-hub/core/agent-runtime/claude-cli.js', () => ({
+  ClaudeCliRuntime: vi.fn().mockImplementation(() => ({ run: mockClaudeCliRun })),
+}));
+const mockOpenPR = vi
+  .fn()
+  .mockResolvedValue({ prNumber: 1, prUrl: 'u', branch: 'b', base: 'main' });
+vi.mock('@goose-hub/core/connectors/github/open-pr.js', () => ({
+  openPR: (...args: unknown[]) => mockOpenPR(...args),
+}));
+const mockAdviseOnPlan = vi.fn();
+vi.mock('@goose-hub/core/agent-runtime/advisor.js', () => ({
+  adviseOnPlan: (...args: unknown[]) => mockAdviseOnPlan(...args),
+}));
+const mockCreateWorktree = vi.fn().mockReturnValue('/work/wt');
+const mockCleanupWorktree = vi.fn();
+vi.mock('@goose-hub/core/workspaces/worktree.js', () => ({
+  createWorktree: (...args: unknown[]) => mockCreateWorktree(...args),
+  cleanupWorktree: (...args: unknown[]) => mockCleanupWorktree(...args),
+}));
 
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 
@@ -76,6 +101,40 @@ function makeImplementOutput(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+describe('runFixIssueWorkflow — default deps (lines 68-73 ?? fallbacks)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.GITHUB_TOKEN = 'ghp_test';
+    mockClaudeCliRun.mockResolvedValueOnce({
+      output: makeImplementOutput(),
+      decisionSummaries: [],
+      events: [],
+    } satisfies AgentResult);
+  });
+
+  afterEach(() => {
+    process.env.GITHUB_TOKEN = undefined;
+  });
+
+  it('uses default implementations when no deps provided (covers ?? fallback branches)', async () => {
+    const item = makeWorkItem({ priority: 'medium' });
+    const source = makeStateSource();
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    // Call with no deps — exercises lines 68-73 ?? fallbacks for all default values
+    await runFixIssueWorkflow(item, source, 'proj', '/repo');
+
+    // ClaudeCliRuntime was used (default runtime dep)
+    expect(mockClaudeCliRun).toHaveBeenCalledTimes(1);
+    // createWorktree was called (default worktree dep)
+    expect(mockCreateWorktree).toHaveBeenCalledWith('/repo', expect.any(String));
+    // openPR was called (default openPR dep)
+    expect(mockOpenPR).toHaveBeenCalled();
+    // cleanupWorktree was called (default cleanup dep)
+    expect(mockCleanupWorktree).toHaveBeenCalled();
+  });
+});
 
 describe('runFixIssueWorkflow (#183)', () => {
   beforeEach(() => {
@@ -363,6 +422,442 @@ describe('runFixIssueWorkflow (#183)', () => {
       .mocked(eventStore.appendEvent)
       .mock.calls.find(([e]) => e.kind === 'agent.implement-complete');
     expect(completeEvent).toBeDefined();
+  });
+});
+
+describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.GITHUB_TOKEN = 'ghp_test';
+  });
+
+  afterEach(() => {
+    process.env.GITHUB_TOKEN = undefined;
+  });
+
+  it('with evidenceSpecPath set: runs evidence-post skill and emits evidence.posted on success', async () => {
+    const item = makeWorkItem({ priority: 'medium' });
+    const source = makeStateSource();
+
+    const evidenceOutput = {
+      screenshots: [{ path: 'evidence/issue-42/step-1.png', caption: 'Initial state', step: 1 }],
+      videoPath: null,
+      commentUrl: 'https://github.com/owner/repo/issues/42#issuecomment-1',
+      commitSha: 'abc1234567890abcdef',
+      decisionSummaries: [{ step: 'post', summary: 'Posted evidence comment' }],
+    };
+
+    const runtime: AgentRuntime = {
+      run: vi
+        .fn()
+        .mockResolvedValueOnce({
+          output: makeImplementOutput({ evidenceSpecPath: 'evidence/spec.json' }),
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult)
+        .mockResolvedValueOnce({
+          output: evidenceOutput,
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult),
+    };
+
+    const openPRImpl = vi.fn().mockResolvedValue({
+      prNumber: 10,
+      prUrl: 'https://github.com/owner/repo/pull/10',
+      branch: 'factory/abc',
+      base: 'main',
+    });
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    // Two runtime.run calls: implement + evidence-post
+    expect(vi.mocked(runtime.run)).toHaveBeenCalledTimes(2);
+
+    const evidencePosted = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'evidence.posted');
+    expect(evidencePosted).toBeDefined();
+  });
+
+  it('with evidenceSpecPath null: emits evidence.no-spec-declared and skips evidence-post run', async () => {
+    const item = makeWorkItem({ priority: 'medium' });
+    const source = makeStateSource();
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockResolvedValueOnce({
+        output: makeImplementOutput({ evidenceSpecPath: null }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult),
+    };
+
+    const openPRImpl = vi.fn().mockResolvedValue({
+      prNumber: 10,
+      prUrl: 'https://github.com/owner/repo/pull/10',
+      branch: 'factory/abc',
+      base: 'main',
+    });
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    // Only implement run — no evidence-post
+    expect(vi.mocked(runtime.run)).toHaveBeenCalledTimes(1);
+
+    const noSpec = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'evidence.no-spec-declared');
+    expect(noSpec).toBeDefined();
+  });
+
+  it('evidence-post runtime failure: emits evidence.post-failed and still transitions to needs-qa (best-effort)', async () => {
+    const item = makeWorkItem({ priority: 'medium' });
+    const source = makeStateSource();
+
+    const runtime: AgentRuntime = {
+      run: vi
+        .fn()
+        .mockResolvedValueOnce({
+          output: makeImplementOutput({ evidenceSpecPath: 'evidence/spec.json' }),
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult)
+        .mockRejectedValueOnce(new Error('evidence-post timed out')),
+    };
+
+    const openPRImpl = vi.fn().mockResolvedValue({
+      prNumber: 10,
+      prUrl: 'https://github.com/owner/repo/pull/10',
+      branch: 'factory/abc',
+      base: 'main',
+    });
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    // evidence-post failure is swallowed — workflow still completes
+    const postFailed = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'evidence.post-failed');
+    expect(postFailed).toBeDefined();
+
+    // Still transitions to needs-qa despite evidence-post failure
+    expect(source.transitionState).toHaveBeenLastCalledWith(
+      '42',
+      'factory:in-progress',
+      'factory:needs-qa',
+    );
+  });
+
+  it('evidence-post invalid output: emits evidence.post-failed and still transitions to needs-qa', async () => {
+    const item = makeWorkItem({ priority: 'medium' });
+    const source = makeStateSource();
+
+    const runtime: AgentRuntime = {
+      run: vi
+        .fn()
+        .mockResolvedValueOnce({
+          output: makeImplementOutput({ evidenceSpecPath: 'evidence/spec.json' }),
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult)
+        .mockResolvedValueOnce({
+          // Bad output that will fail EvidencePostSchema
+          output: { bad: 'data' },
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult),
+    };
+
+    const openPRImpl = vi.fn().mockResolvedValue({
+      prNumber: 10,
+      prUrl: 'https://github.com/owner/repo/pull/10',
+      branch: 'factory/abc',
+      base: 'main',
+    });
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    const postFailed = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'evidence.post-failed');
+    expect(postFailed).toBeDefined();
+
+    expect(source.transitionState).toHaveBeenLastCalledWith(
+      '42',
+      'factory:in-progress',
+      'factory:needs-qa',
+    );
+  });
+
+  it('undefined GITHUB_TOKEN (removed from env): fails via ?? empty string fallback (line 322)', async () => {
+    // Use Reflect.deleteProperty to truly remove the env key (not set to "undefined" string)
+    const savedToken = process.env.GITHUB_TOKEN;
+    Reflect.deleteProperty(process.env, 'GITHUB_TOKEN');
+    const item = makeWorkItem({ priority: 'medium' });
+    const source = makeStateSource();
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockResolvedValueOnce({
+        output: makeImplementOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult),
+    };
+
+    const openPRImpl = vi.fn();
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    try {
+      await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+        runtime,
+        openPRImpl,
+        adviseOnPlanImpl: vi.fn(),
+        createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+        cleanupWorktreeImpl: vi.fn(),
+        resolveWorktreeHeadShaImpl: vi
+          .fn()
+          .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+      });
+    } finally {
+      if (savedToken !== undefined) process.env.GITHUB_TOKEN = savedToken;
+    }
+
+    // token = undefined ?? '' = '' → length === 0 → throws
+    expect(openPRImpl).not.toHaveBeenCalled();
+    expect(source.transitionState).toHaveBeenLastCalledWith(
+      '42',
+      'factory:in-progress',
+      'factory:needs-human',
+    );
+  });
+
+  it('missing GITHUB_TOKEN: fails and transitions to needs-human', async () => {
+    process.env.GITHUB_TOKEN = '';
+    const item = makeWorkItem({ priority: 'medium' });
+    const source = makeStateSource();
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockResolvedValueOnce({
+        output: makeImplementOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult),
+    };
+
+    const openPRImpl = vi.fn();
+    const cleanupWorktreeImpl = vi.fn();
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      cleanupWorktreeImpl,
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    expect(openPRImpl).not.toHaveBeenCalled();
+    expect(source.transitionState).toHaveBeenLastCalledWith(
+      '42',
+      'factory:in-progress',
+      'factory:needs-human',
+    );
+    expect(cleanupWorktreeImpl).toHaveBeenCalled();
+  });
+
+  it('implement output validation failure: emits agent.run-failed and transitions to needs-human', async () => {
+    const item = makeWorkItem({ priority: 'medium' });
+    const source = makeStateSource();
+
+    const runtime: AgentRuntime = {
+      // Returns output that fails ImplementSchema validation
+      run: vi.fn().mockResolvedValueOnce({
+        output: { bad: 'data', missing: 'required fields' },
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult),
+    };
+
+    const openPRImpl = vi.fn();
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    expect(openPRImpl).not.toHaveBeenCalled();
+    const failed = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'agent.run-failed');
+    expect(failed).toBeDefined();
+    expect(source.transitionState).toHaveBeenLastCalledWith(
+      '42',
+      'factory:in-progress',
+      'factory:needs-human',
+    );
+  });
+
+  it('PR body lists no files/tests when arrays are empty', async () => {
+    const item = makeWorkItem({ priority: 'medium' });
+    const source = makeStateSource();
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockResolvedValueOnce({
+        output: makeImplementOutput({ filesWritten: [], testsWritten: [] }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult),
+    };
+
+    const openPRImpl = vi.fn().mockResolvedValue({
+      prNumber: 1,
+      prUrl: 'u',
+      branch: 'b',
+      base: 'main',
+    });
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    const prCall = vi.mocked(openPRImpl).mock.calls[0][0];
+    expect(prCall.body).toContain('_no files reported_');
+    expect(prCall.body).toContain('_no tests reported_');
+  });
+
+  it('non-Error thrown (string): wraps as Error and transitions to needs-human', async () => {
+    // Covers line 191: the `err instanceof Error ? err : new Error(String(err))` non-Error branch
+    const item = makeWorkItem({ priority: 'medium' });
+    const source = makeStateSource();
+
+    const runtime: AgentRuntime = {
+      // eslint-disable-next-line prefer-promise-reject-errors
+      run: vi.fn().mockRejectedValueOnce('string error — not an Error object'),
+    };
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl: vi.fn(),
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    // agent.run-failed should be emitted with string converted to Error message
+    const failed = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'agent.run-failed');
+    expect(failed).toBeDefined();
+    expect(source.transitionState).toHaveBeenLastCalledWith(
+      '42',
+      'factory:in-progress',
+      'factory:needs-human',
+    );
+  });
+
+  it('evidence-post: non-Error thrown wraps as Error (covers line 448)', async () => {
+    // Covers line 448: `err instanceof Error ? err : new Error(String(err))` in runEvidencePost
+    const item = makeWorkItem({ priority: 'medium' });
+    const source = makeStateSource();
+
+    const runtime: AgentRuntime = {
+      run: vi
+        .fn()
+        .mockResolvedValueOnce({
+          output: makeImplementOutput({ evidenceSpecPath: 'evidence/spec.json' }),
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult)
+        // evidence-post throws a non-Error (string)
+        // eslint-disable-next-line prefer-promise-reject-errors
+        .mockRejectedValueOnce('network timeout string'),
+    };
+
+    const openPRImpl = vi.fn().mockResolvedValue({
+      prNumber: 10,
+      prUrl: 'https://github.com/owner/repo/pull/10',
+      branch: 'factory/abc',
+      base: 'main',
+    });
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    const postFailed = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'evidence.post-failed');
+    expect(postFailed).toBeDefined();
   });
 });
 

@@ -1,5 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...actual,
+    // Default: pass through to real readFileSync; individual tests can override
+    readFileSync: vi.fn().mockImplementation(actual.readFileSync),
+    existsSync: vi.fn().mockImplementation(actual.existsSync),
+  };
+});
+
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   eventStore: { appendEvent: vi.fn(), replay: vi.fn().mockReturnValue([]) },
 }));
@@ -29,6 +39,7 @@ vi.mock('../../shared/cache.js', () => ({
   },
 }));
 
+import { readFileSync } from 'node:fs';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { isLegalTransition } from '@goose-hub/core/state-machine/transitions.js';
 import { bustCache } from '../../shared/cache.js';
@@ -353,6 +364,296 @@ describe('approveIssue / rejectIssue (#186)', () => {
       .mocked(eventStore.appendEvent)
       .mock.calls.find(([e]) => e.kind === 'pr.merged');
     expect(merged).toBeDefined();
+  });
+});
+
+describe('getIssueEvents', () => {
+  it('returns 404 for unknown project', async () => {
+    vi.mocked(getSourceForSlug).mockResolvedValueOnce(null);
+    const { getIssueEvents } = await import('./service.js');
+    const result = await getIssueEvents('unknown', '1');
+    expect(result).toMatchObject({ ok: false, status: 404 });
+  });
+
+  it('returns events in reverse order (newest first)', async () => {
+    vi.mocked(eventStore.replay).mockReturnValueOnce([
+      {
+        id: 1,
+        kind: 'agent.spawned',
+        payload: {},
+        projectId: 'proj',
+        workItemId: 'x',
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+      {
+        id: 2,
+        kind: 'agent.terminated',
+        payload: {},
+        projectId: 'proj',
+        workItemId: 'x',
+        createdAt: '2026-01-01T00:00:01Z',
+      },
+    ] as never);
+    const { getIssueEvents } = await import('./service.js');
+    const result = await getIssueEvents('proj', '1');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const events = result.data.events as Array<{ id: number }>;
+      expect(events[0].id).toBe(2);
+      expect(events[1].id).toBe(1);
+    }
+  });
+});
+
+describe('getIssueComments', () => {
+  it('returns 404 for unknown project', async () => {
+    vi.mocked(getSourceForSlug).mockResolvedValueOnce(null);
+    const { getIssueComments } = await import('./service.js');
+    const result = await getIssueComments('unknown', '1');
+    expect(result).toMatchObject({ ok: false, status: 404 });
+  });
+
+  it('returns comments from source', async () => {
+    const comments = [{ id: 1, body: 'hello' }];
+    mockSource.listComments.mockResolvedValueOnce(comments);
+    const { getIssueComments } = await import('./service.js');
+    const result = await getIssueComments('proj', '1');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.comments).toEqual(comments);
+    }
+  });
+});
+
+describe('getIssueTriage', () => {
+  it('returns 404 for unknown project', async () => {
+    vi.mocked(getSourceForSlug).mockResolvedValueOnce(null);
+    const { getIssueTriage } = await import('./service.js');
+    const result = await getIssueTriage('unknown', '1');
+    expect(result).toMatchObject({ ok: false, status: 404 });
+  });
+
+  it('returns triage: null when no triage event exists', async () => {
+    vi.mocked(eventStore.replay).mockReturnValueOnce([]);
+    const { getIssueTriage } = await import('./service.js');
+    const result = await getIssueTriage('proj', '1');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.triage).toBeNull();
+    }
+  });
+
+  it('returns triage dto when agent.triage-complete event exists', async () => {
+    vi.mocked(eventStore.replay).mockReturnValueOnce([
+      {
+        id: 1,
+        projectId: 'proj',
+        workItemId: 'github:owner/repo#1',
+        kind: 'agent.triage-complete',
+        runId: null,
+        payload: {
+          triage: { type: 'bug', priority: 'high' },
+          repoMatch: {
+            candidates: [{ repo: 'owner/repo', confidence: 90, evidence: 'match', tier: 1 }],
+          },
+        },
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+    ] as never);
+    const { getIssueTriage } = await import('./service.js');
+    const result = await getIssueTriage('proj', '1');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const triage = result.data.triage as Record<string, unknown>;
+      expect(triage.type).toBe('bug');
+      expect(triage.priority).toBe('high');
+      expect(triage.overrideRepo).toBeNull();
+    }
+  });
+
+  it('returns triage with overrideRepo when agent.repo-override event exists', async () => {
+    vi.mocked(eventStore.replay).mockReturnValueOnce([
+      {
+        id: 1,
+        projectId: 'proj',
+        workItemId: 'github:owner/repo#1',
+        kind: 'agent.triage-complete',
+        runId: null,
+        payload: {
+          triage: { type: 'feature', priority: 'medium' },
+          repoMatch: { candidates: [] },
+        },
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+      {
+        id: 2,
+        projectId: 'proj',
+        workItemId: 'github:owner/repo#1',
+        kind: 'agent.repo-override',
+        runId: null,
+        payload: { repo: 'owner/other-repo' },
+        createdAt: '2026-01-01T00:00:01Z',
+      },
+    ] as never);
+    const { getIssueTriage } = await import('./service.js');
+    const result = await getIssueTriage('proj', '1');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const triage = result.data.triage as Record<string, unknown>;
+      expect(triage.overrideRepo).toBe('owner/other-repo');
+    }
+  });
+});
+
+describe('setIssueMilestone', () => {
+  it('returns 404 for unknown project', async () => {
+    vi.mocked(getSourceForSlug).mockResolvedValueOnce(null);
+    const { setIssueMilestone } = await import('./service.js');
+    const result = await setIssueMilestone('unknown', '1', 5);
+    expect(result).toMatchObject({ ok: false, status: 404 });
+  });
+
+  it('calls setMilestone and emits manual.action event on success', async () => {
+    const { setIssueMilestone } = await import('./service.js');
+    const result = await setIssueMilestone('proj', '1', 3);
+    expect(result.ok).toBe(true);
+    expect(mockSource.setMilestone).toHaveBeenCalledWith('github:owner/repo#1', 3);
+    expect(eventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'manual.action' }),
+    );
+  });
+
+  it('can set milestone to null to clear it', async () => {
+    const { setIssueMilestone } = await import('./service.js');
+    const result = await setIssueMilestone('proj', '1', null);
+    expect(result.ok).toBe(true);
+    expect(mockSource.setMilestone).toHaveBeenCalledWith('github:owner/repo#1', null);
+  });
+});
+
+describe('approveIssue — edge cases', () => {
+  it('returns 404 when project not found', async () => {
+    vi.mocked(getSourceForSlug).mockResolvedValueOnce(null);
+    const { approveIssue } = await import('./service.js');
+    const result = await approveIssue('unknown', '1');
+    expect(result).toMatchObject({ ok: false, status: 404 });
+  });
+
+  it('returns 500 when pr.opened event has no prNumber', async () => {
+    vi.mocked(eventStore.replay).mockReturnValueOnce([
+      {
+        id: 1,
+        projectId: 'proj',
+        workItemId: 'github:owner/repo#1',
+        kind: 'pr.opened',
+        runId: 'run-1',
+        payload: {}, // no prNumber
+        createdAt: '2026-05-02T22:00:00Z',
+      },
+    ] as never);
+    const { approveIssue } = await import('./service.js');
+    const result = await approveIssue('proj', '1');
+    expect(result).toMatchObject({
+      ok: false,
+      status: 500,
+      error: expect.stringContaining('prNumber'),
+    });
+  });
+
+  it('returns 500 when GITHUB_TOKEN is not set', async () => {
+    const savedToken = process.env.GITHUB_TOKEN;
+    process.env.GITHUB_TOKEN = '';
+    try {
+      vi.mocked(eventStore.replay).mockReturnValueOnce([
+        {
+          id: 1,
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#1',
+          kind: 'pr.opened',
+          runId: 'run-1',
+          payload: { prNumber: 5 },
+          createdAt: '2026-05-02T22:00:00Z',
+        },
+      ] as never);
+      const { approveIssue } = await import('./service.js');
+      const result = await approveIssue('proj', '1');
+      expect(result).toMatchObject({
+        ok: false,
+        status: 500,
+        error: expect.stringContaining('GITHUB_TOKEN'),
+      });
+    } finally {
+      if (savedToken !== undefined) process.env.GITHUB_TOKEN = savedToken;
+    }
+  });
+});
+
+describe('overrideIssueRepo — body (requires repos.md mock)', () => {
+  it('returns 404 when source not found after valid slug', async () => {
+    vi.mocked(getSourceForSlug).mockResolvedValueOnce(null);
+    const result = await overrideIssueRepo('valid-slug', '1', 'owner/repo');
+    // source is null so returns 404
+    expect(result).toMatchObject({ ok: false, status: 404 });
+  });
+
+  it('returns 400 when repo is not in the allowlist', async () => {
+    vi.mocked(readFileSync).mockReturnValueOnce('### [owner/allowed-repo]\n' as never);
+    const result = await overrideIssueRepo('proj', '1', 'owner/not-allowed');
+    expect(result).toMatchObject({
+      ok: false,
+      status: 400,
+      error: expect.stringContaining('not in allowlist'),
+    });
+  });
+
+  it('returns triage null when repo is allowed but no triage event exists', async () => {
+    vi.mocked(readFileSync).mockReturnValueOnce('### [owner/repo]\n' as never);
+    vi.mocked(eventStore.replay).mockReturnValueOnce([]);
+    const result = await overrideIssueRepo('proj', '1', 'owner/repo');
+    expect(result).toMatchObject({ ok: true, data: { triage: null } });
+  });
+
+  it('returns triage dto when repo is allowed and triage event exists', async () => {
+    vi.mocked(readFileSync).mockReturnValueOnce('### [owner/repo]\n' as never);
+    vi.mocked(eventStore.replay).mockReturnValueOnce([
+      {
+        id: 1,
+        kind: 'agent.triage-complete',
+        payload: {
+          triage: { type: 'bug', priority: 'high' },
+          repoMatch: { candidates: [] },
+        },
+        projectId: 'proj',
+        workItemId: 'x',
+        createdAt: '2026-01-01',
+      },
+    ] as never);
+    const result = await overrideIssueRepo('proj', '1', 'owner/repo');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const triage = result.data.triage as Record<string, unknown>;
+      expect(triage.type).toBe('bug');
+      expect(triage.overrideRepo).toBe('owner/repo');
+    }
+  });
+});
+
+describe('fakeRun — async event emission (#203)', () => {
+  it('emits agent.spawned synchronously relative to return value, not waiting for setTimeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const result = await fakeRun('proj', '1', 'triage');
+      expect(result).toMatchObject({ ok: true, data: { skill: 'triage' } });
+      // Advance timers to let the async IIFE complete
+      await vi.runAllTimersAsync();
+      // agent.spawned should have been emitted
+      const spawnedCall = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'agent.spawned');
+      expect(spawnedCall).toBeDefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
