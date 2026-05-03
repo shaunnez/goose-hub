@@ -8,6 +8,7 @@ import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { cleanupWorktree, createWorktree } from '@goose-hub/core/workspaces/worktree.js';
 import { EvidencePostSchema } from '@goose-hub/skills/evidence-post/schema.js';
@@ -131,6 +132,11 @@ export async function runFixIssueWorkflow(
           'factory:in-progress',
           'factory:needs-human',
         );
+        accumulatePersonaStats({
+          personaName: implementPersonaId,
+          role: 'developer',
+          outcome: 'failure',
+        });
         return;
       }
 
@@ -153,6 +159,11 @@ export async function runFixIssueWorkflow(
           evidencePostPrompt,
           evidencePostJsonSchema,
           resolveHeadShaFn,
+        });
+        accumulatePersonaStats({
+          personaName: implementPersonaId,
+          role: 'developer',
+          outcome: 'success',
         });
         return;
       }
@@ -187,7 +198,17 @@ export async function runFixIssueWorkflow(
       evidencePostJsonSchema,
       resolveHeadShaFn,
     });
+    accumulatePersonaStats({
+      personaName: implementPersonaId,
+      role: 'developer',
+      outcome: 'success',
+    });
   } catch (err) {
+    accumulatePersonaStats({
+      personaName: implementPersonaId,
+      role: 'developer',
+      outcome: 'failure',
+    });
     const error = err instanceof Error ? err : new Error(String(err));
     eventStore.appendEvent({
       projectId,
