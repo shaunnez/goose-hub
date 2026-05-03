@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
+import config from './config.js';
 import { DeepRetroSchema } from './schema.js';
 
 const ISO = '2026-05-03T12:00:00.000Z';
@@ -131,5 +132,19 @@ describe('DeepRetroSchema', () => {
     const jsonSchema = toJSONSchema(DeepRetroSchema);
     expect(typeof jsonSchema).toBe('object');
     expect(jsonSchema).not.toBeNull();
+  });
+});
+
+describe('retrospective-deep skill config', () => {
+  it('has role retrospector', () => {
+    expect(config.role).toBe('retrospector');
+  });
+
+  it('is pinned to sonnet (deep retro is structured analysis, not coding)', () => {
+    expect(config.modelPin).toBe('sonnet');
+  });
+
+  it('is not a holdout (retrospector sees run history and decision summaries)', () => {
+    expect(config.freshContext).toBe(false);
   });
 });

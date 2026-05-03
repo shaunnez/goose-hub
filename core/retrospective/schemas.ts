@@ -57,11 +57,30 @@ export const DecisionPatternSchema = z.object({
   surfacedAt: z.string().datetime(),
 });
 
+export const DecisionSummarySchema = z.object({
+  step: z.string(),
+  summary: z.string(),
+  evidence: z.string().optional(),
+});
+
+export const ImprovementCandidateSchema = z.object({
+  kind: ImprovementKindSchema,
+  targetPath: z.string(),
+  sourceRunId: z.string(),
+  sourceProject: z.string(),
+  sourceWorkItem: z.string(),
+  suggestionText: z.string(),
+  confidence: ConfidenceSchema,
+  proposedDiff: z.string().optional(),
+});
+
 export type DecisionRecord = z.infer<typeof DecisionRecordSchema>;
 export type LearningEntry = z.infer<typeof LearningEntrySchema>;
 export type QualityScore = z.infer<typeof QualityScoreSchema>;
 export type DecisionPattern = z.infer<typeof DecisionPatternSchema>;
 export type ImprovementKind = z.infer<typeof ImprovementKindSchema>;
+export type ImprovementCandidate = z.infer<typeof ImprovementCandidateSchema>;
+export type DecisionSummary = z.infer<typeof DecisionSummarySchema>;
 export type Confidence = z.infer<typeof ConfidenceSchema>;
 
 // Patterns must reach this confidence level before surfacing as improvement candidates.

@@ -1,28 +1,13 @@
 import {
-  ConfidenceSchema,
   DecisionPatternSchema,
-  ImprovementKindSchema,
+  DecisionSummarySchema,
+  ImprovementCandidateSchema,
   LearningEntrySchema,
   QualityScoreSchema,
 } from '@goose-hub/core/retrospective/schemas.js';
 import { z } from 'zod';
 
-const DecisionSummarySchema = z.object({
-  step: z.string(),
-  summary: z.string(),
-  evidence: z.string().optional(),
-});
-
-export const ImprovementCandidateSchema = z.object({
-  kind: ImprovementKindSchema,
-  targetPath: z.string(),
-  sourceRunId: z.string(),
-  sourceProject: z.string(),
-  sourceWorkItem: z.string(),
-  suggestionText: z.string(),
-  confidence: ConfidenceSchema,
-  proposedDiff: z.string().optional(),
-});
+export { ImprovementCandidateSchema };
 
 export const DeepRetroSchema = z.object({
   summary: z.string().min(1).describe('3-bullet summary of what went well, what did not, and why'),
