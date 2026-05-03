@@ -6,6 +6,7 @@ import { eventStore } from '../event-stream/store.js';
 import { ClaudeCliRuntime, resolveMcpConfigPath } from './claude-cli.js';
 import { assembleSpawnContext } from './context-assembly.js';
 import { withFallback } from './fallback.js';
+import { HoldoutFallbackForbiddenError } from './interface.js';
 import type { AgentResult, AgentRuntime, AgentSpec, DecisionSummary } from './interface.js';
 import {
   MODELS,
@@ -456,11 +457,11 @@ describe('withFallback', () => {
     expect((result.output as { ok: boolean }).ok).toBe(true);
   });
 
-  it('holdout role: does not retry on failure', async () => {
+  it('holdout role: does not retry on failure — throws HoldoutFallbackForbiddenError', async () => {
     const runtime = makeRuntime(true);
     const wrapped = withFallback(runtime, { allowDownTier: true, maxAttempts: 2 });
     const qaSpec = makeSpec({ role: 'qa' });
-    await expect(wrapped.run(qaSpec)).rejects.toThrow('Model unavailable');
+    await expect(wrapped.run(qaSpec)).rejects.toThrow(HoldoutFallbackForbiddenError);
     expect(vi.mocked(runtime.run)).toHaveBeenCalledTimes(1);
   });
 
