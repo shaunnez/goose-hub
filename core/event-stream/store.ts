@@ -39,7 +39,12 @@ export type EventKind =
   | 'gate.rejected'
   | 'pr.merged'
   // M8 holdout enforcement — context injection boundary violations
-  | 'tool.violation';
+  | 'tool.violation'
+  // M8 QA/Review lifecycle events
+  | 'qa.completed'
+  | 'review.completed'
+  // M8 retry-and-escalate
+  | 'agent.retry-escalated';
 
 export interface AgentEvent {
   id: number;
