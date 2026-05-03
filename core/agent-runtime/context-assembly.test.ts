@@ -66,10 +66,10 @@ describe('assembleSpawnContext', () => {
 
   it('projects dotted-path sub-keys from nested objects', () => {
     const { contextXml } = assembleSpawnContext(
-      makeSpec(
-        { workItem: { title: 'Fix bug', body: 'Details', number: 42, priority: 'low' } },
-        ['workItem.title', 'workItem.body'],
-      ),
+      makeSpec({ workItem: { title: 'Fix bug', body: 'Details', number: 42, priority: 'low' } }, [
+        'workItem.title',
+        'workItem.body',
+      ]),
     );
     // JSON keys are XML-escaped: " → &quot;
     expect(contextXml).toContain('<workItem>');
