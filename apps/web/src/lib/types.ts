@@ -100,10 +100,13 @@ export interface PersonaRunDto {
 
 export interface ImprovementCandidateDto {
   id: number;
+  projectId: string;
   personaName: string;
   sourceTaskId: string | null;
   suggestionText: string;
   suggestionType: string;
   status: string;
+  githubIssueUrl: string | null;
+  errorNote: string | null;
   createdAt: string;
 }

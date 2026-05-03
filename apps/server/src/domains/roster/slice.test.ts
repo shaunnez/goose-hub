@@ -2,16 +2,20 @@ import { describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Slice-level tests for the improvement candidates lifecycle.
-// These test public slice behaviour: creation from retro output, approve/reject.
+// These test public slice behaviour: creation from retro output, approve/reject,
+// and the promotion flow that creates a GitHub issue on approval.
 // ---------------------------------------------------------------------------
 
 const mockCandidate = {
   id: 1,
+  projectId: 'goose-hub-self',
   personaName: 'goose-hub-self/retrospector/0',
   sourceTaskId: 'github:owner/repo#42',
   suggestionText: 'Improve error handling in the implement skill prompt',
   suggestionType: 'skill-prompt',
   status: 'pending',
+  githubIssueUrl: null,
+  errorNote: null,
   createdAt: '2026-05-01T00:00:00Z',
 };
 
@@ -56,17 +60,24 @@ describe('candidate creation from retro output', () => {
   });
 });
 
-describe('status update — approved', () => {
-  it('approveCandidate returns ok:true with status approved', async () => {
+describe('status update — approved (happy path: GitHub issue created)', () => {
+  it('approveCandidate returns ok:true with status approved and githubIssueUrl', async () => {
     const { approveCandidate } = await import('./service.js');
     vi.mocked(approveCandidate).mockResolvedValue({
       ok: true,
-      data: { candidate: { ...mockCandidate, status: 'approved' } },
+      data: {
+        candidate: {
+          ...mockCandidate,
+          status: 'approved',
+          githubIssueUrl: 'https://github.com/owner/repo/issues/10',
+        },
+      },
     });
     const result = await approveCandidate(1);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.candidate.status).toBe('approved');
+      expect(result.data.candidate.githubIssueUrl).toBe('https://github.com/owner/repo/issues/10');
     }
   });
 
@@ -81,6 +92,30 @@ describe('status update — approved', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.status).toBe(404);
+    }
+  });
+});
+
+describe('status update — approved (failure path: GitHub issue creation fails)', () => {
+  it('approveCandidate returns ok:true with status approved and errorNote when issue creation fails', async () => {
+    const { approveCandidate } = await import('./service.js');
+    vi.mocked(approveCandidate).mockResolvedValue({
+      ok: true,
+      data: {
+        candidate: {
+          ...mockCandidate,
+          status: 'approved',
+          githubIssueUrl: null,
+          errorNote: 'GitHub API error: 422 Unprocessable Entity',
+        },
+      },
+    });
+    const result = await approveCandidate(1);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.candidate.status).toBe('approved');
+      expect(result.data.candidate.githubIssueUrl).toBeNull();
+      expect(result.data.candidate.errorNote).toBeTruthy();
     }
   });
 });

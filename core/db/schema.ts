@@ -85,10 +85,16 @@ export const improvementCandidates = sqliteTable(
     sourceTaskId: text('source_task_id'),
     suggestionText: text('suggestion_text').notNull(),
     suggestionType: text('suggestion_type').notNull(),
+    projectId: text('project_id').notNull().default(''),
     status: text('status').notNull().default('pending'), // pending | approved | rejected
+    githubIssueUrl: text('github_issue_url'),
+    errorNote: text('error_note'),
     createdAt: text('created_at').notNull().default(sql`(current_timestamp)`),
   },
   (t) => ({
-    personaStatusIdx: index('improvement_candidates_persona_status_idx').on(t.personaName, t.status),
+    personaStatusIdx: index('improvement_candidates_persona_status_idx').on(
+      t.personaName,
+      t.status,
+    ),
   }),
 );

@@ -6,10 +6,10 @@ import { ClaudeCliRuntime } from '../agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
 import { toJsonSchema } from '../agent-runtime/schema-bridge.js';
 import { selectPersona } from '../agent-runtime/select-persona.js';
-import type { ImprovementCandidate } from '../retrospective/schemas.js';
 import { db } from '../db/db.js';
 import { improvementCandidates } from '../db/schema.js';
 import { eventStore } from '../event-stream/store.js';
+import type { ImprovementCandidate } from '../retrospective/schemas.js';
 import type { StateSource, WorkItem } from '../state-source/interface.js';
 
 const REPO_ROOT = join(import.meta.dirname, '../..');
@@ -37,6 +37,7 @@ export interface RunRetrospectiveInput {
 }
 
 function persistCandidates(
+  projectId: string,
   personaId: string,
   workItemId: string | null,
   candidates: ImprovementCandidate[],
@@ -44,6 +45,7 @@ function persistCandidates(
   for (const c of candidates) {
     db.insert(improvementCandidates)
       .values({
+        projectId,
         personaName: personaId,
         sourceTaskId: workItemId,
         suggestionText: c.suggestionText,
@@ -122,7 +124,7 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
         ? DeepRetroSchema.safeParse(result.output)
         : LightRetroSchema.safeParse(result.output);
     if (parsed.success && parsed.data.improvementCandidates.length > 0) {
-      persistCandidates(personaId, workItem.id, parsed.data.improvementCandidates);
+      persistCandidates(projectId, personaId, workItem.id, parsed.data.improvementCandidates);
     }
 
     for (const ds of result.decisionSummaries) {
