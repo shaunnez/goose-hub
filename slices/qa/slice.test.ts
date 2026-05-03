@@ -18,11 +18,14 @@ vi.mock('@goose-hub/core/agent-runtime/select-persona.js', () => ({
   selectPersona: vi.fn().mockReturnValue('test-project/qa/0'),
 }));
 
+const mockReplay = vi.fn().mockReturnValue([]);
+
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   eventStore: {
     appendEvent: vi
       .fn()
       .mockReturnValue({ id: 1, kind: 'qa.completed', payload: {}, createdAt: '' }),
+    replay: (...args: unknown[]) => mockReplay(...args),
   },
 }));
 
@@ -200,6 +203,8 @@ function makeMockSource(overrides: Partial<StateSource> = {}): StateSource {
 
 beforeEach(() => {
   mockRun.mockReset();
+  mockReplay.mockReset();
+  mockReplay.mockReturnValue([]);
   vi.clearAllMocks();
 });
 
@@ -342,6 +347,54 @@ describe('runQaWorkflow', () => {
       const item = makeWorkItem();
       const source = makeMockSource();
       mockRun.mockResolvedValueOnce(makePartialLowResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo');
+
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-qa',
+        'factory:qa-failed',
+      );
+    });
+  });
+
+  describe('retry-and-escalate', () => {
+    it('transitions to factory:needs-human and emits agent.retry-escalated when qa-fail count >= maxRetries', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce(makeFailResult());
+      // Simulate 2 prior qa.completed fail events already in the store
+      mockReplay.mockReturnValue([
+        { kind: 'qa.completed', payload: JSON.stringify({ verdict: 'fail', overallScore: 40 }) },
+        { kind: 'qa.completed', payload: JSON.stringify({ verdict: 'fail', overallScore: 35 }) },
+      ]);
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo');
+
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-qa',
+        'factory:needs-human',
+      );
+      expect(eventStore.appendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'agent.retry-escalated',
+          payload: expect.objectContaining({ stage: 'qa' }),
+        }),
+      );
+    });
+
+    it('transitions to factory:qa-failed when qa-fail count < maxRetries', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce(makeFailResult());
+      // Only 1 prior qa.completed fail event — under the maxRetries threshold
+      mockReplay.mockReturnValue([
+        { kind: 'qa.completed', payload: JSON.stringify({ verdict: 'fail', overallScore: 40 }) },
+      ]);
 
       const { runQaWorkflow } = await import('./workflow.js');
       await runQaWorkflow(item, source, 'test-project', 'owner/repo');

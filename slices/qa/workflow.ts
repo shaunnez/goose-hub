@@ -7,6 +7,7 @@ import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { QaOutputSchema } from '@goose-hub/skills/qa/schema.js';
+import { DEFAULT_MAX_RETRIES, shouldEscalateQa } from '../retry-escalate/retry-counter.js';
 
 const REPO_ROOT = join(import.meta.dirname, '../..');
 
@@ -121,7 +122,25 @@ export async function runQaWorkflow(
     const passes =
       qaOutput.verdict === 'pass' ||
       (qaOutput.verdict === 'partial' && qaOutput.overallScore >= 70);
-    const nextState = passes ? 'factory:needs-review' : 'factory:qa-failed';
+
+    let nextState: string;
+    if (passes) {
+      nextState = 'factory:needs-review';
+    } else {
+      // Check retry count using events already in the store (including the one just appended)
+      const existingEvents = eventStore.replay({ workItemId: workItem.id });
+      const needsEscalation = shouldEscalateQa(existingEvents);
+      nextState = needsEscalation ? 'factory:needs-human' : 'factory:qa-failed';
+      if (needsEscalation) {
+        eventStore.appendEvent({
+          projectId,
+          workItemId: workItem.id,
+          kind: 'agent.retry-escalated',
+          payload: { stage: 'qa', maxRetries: DEFAULT_MAX_RETRIES, runId },
+          runId,
+        });
+      }
+    }
 
     // Post summary comment
     const scoreLabel = `${qaOutput.overallScore}/${qaOutput.threshold}`;

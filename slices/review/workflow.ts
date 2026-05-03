@@ -7,6 +7,7 @@ import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { ReviewOutputSchema } from '@goose-hub/skills/review/schema.js';
+import { DEFAULT_MAX_RETRIES, shouldEscalateReview } from '../retry-escalate/retry-counter.js';
 
 const REPO_ROOT = join(import.meta.dirname, '../..');
 
@@ -96,12 +97,28 @@ export async function runReviewWorkflow(
     const comment = buildReviewComment(reviewOutput);
     await stateSource.comment(workItem.externalId, comment);
 
-    const VERDICT_TO_STATE: Record<string, string> = {
-      approved: 'factory:approved',
-      'needs-fix': 'factory:needs-fix',
-      'needs-human': 'factory:needs-human',
-    };
-    const nextState = VERDICT_TO_STATE[reviewOutput.verdict] ?? 'factory:needs-human';
+    let nextState: string;
+    if (reviewOutput.verdict === 'needs-fix') {
+      // Check retry count using events already in the store (including the one just appended)
+      const existingEvents = eventStore.replay({ workItemId: workItem.id });
+      const needsEscalation = shouldEscalateReview(existingEvents);
+      nextState = needsEscalation ? 'factory:needs-human' : 'factory:needs-fix';
+      if (needsEscalation) {
+        eventStore.appendEvent({
+          projectId,
+          workItemId: workItem.id,
+          kind: 'agent.retry-escalated',
+          payload: { stage: 'review', maxRetries: DEFAULT_MAX_RETRIES, runId },
+          runId,
+        });
+      }
+    } else {
+      const VERDICT_TO_STATE: Record<string, string> = {
+        approved: 'factory:approved',
+        'needs-human': 'factory:needs-human',
+      };
+      nextState = VERDICT_TO_STATE[reviewOutput.verdict] ?? 'factory:needs-human';
+    }
     await stateSource.transitionState(workItem.externalId, 'factory:needs-review', nextState);
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));

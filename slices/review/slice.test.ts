@@ -18,11 +18,14 @@ vi.mock('@goose-hub/core/agent-runtime/select-persona.js', () => ({
   selectPersona: vi.fn().mockReturnValue('test-project/reviewer/0'),
 }));
 
+const mockReplay = vi.fn().mockReturnValue([]);
+
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   eventStore: {
     appendEvent: vi
       .fn()
       .mockReturnValue({ id: 1, kind: 'review.completed', payload: {}, createdAt: '' }),
+    replay: (...args: unknown[]) => mockReplay(...args),
   },
 }));
 
@@ -124,6 +127,8 @@ function makeMockSource(overrides: Partial<StateSource> = {}): StateSource {
 
 beforeEach(() => {
   mockRun.mockReset();
+  mockReplay.mockReset();
+  mockReplay.mockReturnValue([]);
   vi.clearAllMocks();
 });
 
@@ -261,6 +266,63 @@ describe('runReviewWorkflow', () => {
       expect(specUsed.contextAllowlist).toContain('prDiff');
       expect(specUsed.contextAllowlist).toContain('qaVerdict');
       expect(specUsed.contextAllowlist).not.toContain('devDecisionSummaries');
+    });
+  });
+
+  describe('retry-and-escalate', () => {
+    it('transitions to factory:needs-human and emits agent.retry-escalated when review needs-fix count >= maxRetries', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce(makeNeedsFixResult());
+      // Simulate 2 prior review.completed needs-fix events already in the store
+      mockReplay.mockReturnValue([
+        {
+          kind: 'review.completed',
+          payload: JSON.stringify({ verdict: 'needs-fix', confidence: 0.7 }),
+        },
+        {
+          kind: 'review.completed',
+          payload: JSON.stringify({ verdict: 'needs-fix', confidence: 0.6 }),
+        },
+      ]);
+
+      const { runReviewWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-review',
+        'factory:needs-human',
+      );
+      expect(eventStore.appendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'agent.retry-escalated',
+          payload: expect.objectContaining({ stage: 'review' }),
+        }),
+      );
+    });
+
+    it('transitions to factory:needs-fix when review needs-fix count < maxRetries', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce(makeNeedsFixResult());
+      // Only 1 prior review.completed needs-fix event — under the maxRetries threshold
+      mockReplay.mockReturnValue([
+        {
+          kind: 'review.completed',
+          payload: JSON.stringify({ verdict: 'needs-fix', confidence: 0.7 }),
+        },
+      ]);
+
+      const { runReviewWorkflow } = await import('./workflow.js');
+      await runReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-review',
+        'factory:needs-fix',
+      );
     });
   });
 });
