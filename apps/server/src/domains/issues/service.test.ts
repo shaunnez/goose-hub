@@ -280,6 +280,82 @@ describe('getIssueWorktreeDiff (#185)', () => {
   });
 });
 
+describe('approveIssue / rejectIssue (#186)', () => {
+  beforeEach(() => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    process.env.GITHUB_TOKEN = 'ghp_test';
+  });
+
+  it('rejectIssue rejects empty / whitespace reason with 400', async () => {
+    const { rejectIssue } = await import('./service.js');
+    expect(await rejectIssue('proj', '1', '')).toMatchObject({ ok: false, status: 400 });
+    expect(await rejectIssue('proj', '1', '   ')).toMatchObject({ ok: false, status: 400 });
+    expect(await rejectIssue('proj', '1', undefined)).toMatchObject({ ok: false, status: 400 });
+  });
+
+  it('rejectIssue posts a comment, emits gate.rejected, transitions to needs-fix', async () => {
+    const { rejectIssue } = await import('./service.js');
+    const result = await rejectIssue('proj', '1', 'tests are flaky');
+    expect(result).toMatchObject({ ok: true });
+    expect(mockSource.comment).toHaveBeenCalledWith(
+      '1',
+      expect.stringContaining('tests are flaky'),
+    );
+    expect(mockSource.transitionState).toHaveBeenCalledWith(
+      '1',
+      'factory:approved',
+      'factory:needs-fix',
+    );
+    const rejected = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'gate.rejected');
+    expect(rejected).toBeDefined();
+  });
+
+  it('approveIssue rejects when no pr.opened event exists', async () => {
+    vi.mocked(eventStore.replay).mockReturnValueOnce([]);
+    const { approveIssue } = await import('./service.js');
+    const result = await approveIssue('proj', '1');
+    expect(result).toMatchObject({ ok: false, status: 400 });
+  });
+
+  it('approveIssue merges via the connector and transitions to factory:done', async () => {
+    vi.mocked(eventStore.replay).mockReturnValueOnce([
+      {
+        id: 1,
+        projectId: 'proj',
+        workItemId: 'github:owner/repo#1',
+        kind: 'pr.opened',
+        runId: 'run-1',
+        payload: { prNumber: 99, prUrl: 'u', branch: 'b' },
+        createdAt: '2026-05-02T22:00:00Z',
+      },
+    ] as never);
+
+    const mergePRImpl = vi.fn().mockResolvedValueOnce({ sha: 'abc1234', merged: true });
+
+    const { approveIssue } = await import('./service.js');
+    const result = await approveIssue('proj', '1', { mergePRImpl });
+    expect(result).toMatchObject({ ok: true, data: { sha: 'abc1234', prNumber: 99 } });
+    expect(mergePRImpl).toHaveBeenCalledWith(
+      expect.objectContaining({ repo: 'owner/repo', prNumber: 99 }),
+    );
+    expect(mockSource.transitionState).toHaveBeenCalledWith(
+      '1',
+      'factory:approved',
+      'factory:done',
+    );
+    const approved = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'gate.approved');
+    expect(approved).toBeDefined();
+    const merged = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'pr.merged');
+    expect(merged).toBeDefined();
+  });
+});
+
 describe('overrideIssueRepo (#201 slug guard)', () => {
   it('rejects path-traversal slug with 400', async () => {
     const result = await overrideIssueRepo('../etc/hosts', '1', 'owner/repo');

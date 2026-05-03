@@ -7,6 +7,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { SECTIONS } from '../lib/sections';
+import { ApprovalGateSection } from './ApprovalGateSection';
 import { CodeDiffSection } from './CodeDiffSection';
 import { DeferredSurface } from './DeferredSurface';
 import { GatePendingBanner } from './GatePendingBanner';
@@ -203,6 +204,8 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
             void queryClient.invalidateQueries({ queryKey: ['issues', slug] });
           }}
         />
+
+        <ApprovalGateSection projectSlug={slug} id={id} state={item?.state} />
 
         <div className="flex-1 min-h-0 flex">
           <LeftRail />

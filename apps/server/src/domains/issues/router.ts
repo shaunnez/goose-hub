@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { parseBody } from '../../shared/middleware.js';
 import {
+  approveIssue,
   commentOnIssue,
   fakeRun,
   getIssue,
@@ -10,6 +11,7 @@ import {
   getIssueWorktreeDiff,
   listIssues,
   overrideIssueRepo,
+  rejectIssue,
   setIssueLabel,
   setIssueMilestone,
   transitionIssue,
@@ -115,6 +117,23 @@ router.post('/:slug/issues/:id/repo-override', async (c) => {
   const rawBody = (await c.req.json().catch(() => null)) as { repo?: unknown } | null;
   const repo = typeof rawBody?.repo === 'string' ? rawBody.repo : null;
   const result = await overrideIssueRepo(c.req.param('slug'), c.req.param('id'), repo);
+  return result.ok
+    ? c.json(result.data)
+    : c.json({ error: result.error }, result.status as 400 | 404);
+});
+
+// Approval gate (#186) — UI-only routes, no agent caller.
+router.post('/:slug/issues/:id/approve', async (c) => {
+  const result = await approveIssue(c.req.param('slug'), c.req.param('id'));
+  return result.ok
+    ? c.json(result.data)
+    : c.json({ error: result.error }, result.status as 400 | 404 | 500);
+});
+
+router.post('/:slug/issues/:id/reject', async (c) => {
+  const body = await parseBody<{ reason?: string }>(c);
+  if (!body.ok) return body.error;
+  const result = await rejectIssue(c.req.param('slug'), c.req.param('id'), body.data.reason);
   return result.ok
     ? c.json(result.data)
     : c.json({ error: result.error }, result.status as 400 | 404);

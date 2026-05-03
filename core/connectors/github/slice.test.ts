@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { mergePR } from './merge-pr.js';
 import { openPR, validatePrBody } from './open-pr.js';
 
 describe('validatePrBody (#184)', () => {
@@ -113,5 +114,61 @@ describe('openPR (#184)', () => {
     await expect(openPR({ ...baseInput, gitExec, fetchImpl })).rejects.toThrow(
       /403 Forbidden — rate limit exceeded/,
     );
+  });
+});
+
+describe('mergePR (#186)', () => {
+  it('PUTs to /pulls/N/merge with merge method, returns sha + merged', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ sha: 'abc1234', merged: true }), { status: 200 }),
+      ) as unknown as typeof fetch;
+    const result = await mergePR({
+      repo: 'owner/repo',
+      prNumber: 99,
+      token: 'ghp_test',
+      fetchImpl,
+    });
+    expect(result.sha).toBe('abc1234');
+    expect(result.merged).toBe(true);
+
+    const fetchMock = fetchImpl as unknown as ReturnType<typeof vi.fn>;
+    const [url, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.github.com/repos/owner/repo/pulls/99/merge');
+    expect(opts.method).toBe('PUT');
+    const sent = JSON.parse(opts.body as string) as { merge_method: string };
+    expect(sent.merge_method).toBe('merge');
+  });
+
+  it('honours an explicit merge method (squash)', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ sha: 'def5678', merged: true }), { status: 200 }),
+      ) as unknown as typeof fetch;
+    await mergePR({
+      repo: 'owner/repo',
+      prNumber: 99,
+      token: 'ghp_test',
+      mergeMethod: 'squash',
+      fetchImpl,
+    });
+    const sent = JSON.parse(
+      ((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as RequestInit)
+        .body as string,
+    ) as { merge_method: string };
+    expect(sent.merge_method).toBe('squash');
+  });
+
+  it('throws on non-2xx', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response('not mergeable', { status: 405, statusText: 'Method Not Allowed' }),
+      ) as unknown as typeof fetch;
+    await expect(
+      mergePR({ repo: 'owner/repo', prNumber: 99, token: 'ghp_test', fetchImpl }),
+    ).rejects.toThrow(/405 Method Not Allowed — not mergeable/);
   });
 });

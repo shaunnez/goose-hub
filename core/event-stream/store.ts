@@ -33,7 +33,11 @@ export type EventKind =
   | 'pr.opened'
   | 'evidence.posted'
   | 'evidence.post-failed'
-  | 'evidence.no-spec-declared';
+  | 'evidence.no-spec-declared'
+  // M7 approval gate (#186)
+  | 'gate.approved'
+  | 'gate.rejected'
+  | 'pr.merged';
 
 export interface AgentEvent {
   id: number;
