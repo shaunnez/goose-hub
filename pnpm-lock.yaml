@@ -8,6 +8,12 @@ importers:
 
   .:
     dependencies:
+      '@goose-hub/core':
+        specifier: workspace:*
+        version: link:core
+      '@goose-hub/skills':
+        specifier: workspace:*
+        version: link:skills
       better-sqlite3:
         specifier: ^12.9.0
         version: 12.9.0

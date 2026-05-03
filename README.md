@@ -13,13 +13,36 @@ See `docs/PLAN.md` for the full plan and milestone ladder.
 
 A Kanban-style board at `/projects/<slug>` shows all open issues grouped by factory state (backlog → in-progress → needs-qa → needs-review → done). Click any card to open the detail page, which shows the issue description, a state-transition panel (to manually advance or force-state an issue), and a timeline of events. Run the dev server with `pnpm --filter web dev`.
 
+The detail page also exposes:
+
+- **Investigation tab** (M6) — root-cause findings + key files + before-state Playwright captures for `type:bug` issues
+- **Code tab** (M7) — live worktree diff polled every 5 s while the dev workflow is running, plus per-step Playwright captures
+- **Approval gate** (M7) — when an issue reaches `factory:approved`, the gate banner shows Approve / Reject buttons (Approve merges the linked PR via the GitHub connector; Reject takes a required note and routes to `factory:needs-fix`)
+- **Markdown image rendering** in overview comments — screenshots posted by `evidence-post` from `raw.githubusercontent.com` / `github.com` / `user-images.githubusercontent.com` render inline
+
 ### CLI
 
-The `goose` CLI (built with `pnpm --filter cli build`, then `node apps/cli/dist/index.js`) has two commands:
+The `goose` CLI (built with `pnpm --filter cli build`, then `node apps/cli/dist/index.js`) has these commands:
 
 - `goose status <project-slug>` — prints open issues grouped by factory state for the given project, with the active milestone shown at the top.
 - `goose sweep <project-slug> <milestone-number>` — lists all non-terminal issues in the given milestone, prompts for confirmation, then bulk-archives them by forcing the `factory:archived` label.
-
 - `goose run-agent --skill=<name> --input='<json>' [--dry-run]` — runs a skill agent against the Claude CLI. `--dry-run` prints the assembled AgentSpec without spawning. Requires `ANTHROPIC_API_KEY`.
 
 Both `status` and `sweep` require `GITHUB_TOKEN` set in the environment or a `.env` file.
+
+### Workflows (orchestrator)
+
+End-to-end workflows live in `slices/<name>/workflow.ts` and are dispatched by webhook label flips via `apps/server/src/shared/dispatch.ts`:
+
+- **`triage-batch`** (M5) — picks up `factory:triaging` issues, runs the triage + repo-match skills, applies type/priority labels, transitions to `factory:accepted`.
+- **`investigate`** (M6) — picks up `factory:investigating` issues, runs the investigate skill (with playwright-repro for `type:bug`), records findings, transitions to `factory:investigation-complete`.
+- **`fix-issue`** (M7) — picks up `factory:dev-ready` issues, creates a worktree, runs the advisor for `priority:high|critical`, runs the implement skill (TDD-first), opens a PR via the GitHub connector, runs `evidence-post` (best-effort), transitions to `factory:approved` for the human gate.
+
+### Skills (`@goose-hub/skills`)
+
+Versioned markdown prompts + Zod schemas under `skills/<name>/`. Current set: `triage`, `repo-match`, `investigate`, `playwright-repro`, `spec-author`, `evidence-post`, `implement`, `advise-on-plan`. Each ships with `slice.test.ts`, `eval/eval.json`, and `README.md`. Skills follow the channel-split convention from CONTEXT.md: `skill.md` is the system prompt, per-run context is rendered as XML in the user message.
+
+### Standards & ADRs
+
+- `docs/standards/verification.md` — the three-tier (Structural / Functional / Regression) verification framework + 8-category code-quality rubric (≥ 70/100 threshold). Ships ahead of the M8 QA holdout.
+- `docs/adr/` — architectural decisions in chronological order. M7 added ADR 0011 (Playwright agents), 0012 (advisor wrapping + per-step typed timeouts), 0013 (GitHub connectors + fix-issue workflow shape).

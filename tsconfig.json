@@ -10,7 +10,8 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "@goose-hub/core/*": ["./core/*"]
+      "@goose-hub/core/*": ["./core/*"],
+      "@goose-hub/skills/*": ["./skills/*"]
     }
   },
   "include": [
