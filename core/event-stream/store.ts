@@ -27,7 +27,13 @@ export type EventKind =
   // Three-tier verification framework — see docs/standards/verification.md
   | 'qa.structural-failed'
   | 'qa.functional-failed'
-  | 'qa.regression-failed';
+  | 'qa.regression-failed'
+  // M7 fix-issue workflow lifecycle (#183) + evidence-post wiring (#234)
+  | 'agent.implement-complete'
+  | 'pr.opened'
+  | 'evidence.posted'
+  | 'evidence.post-failed'
+  | 'evidence.no-spec-declared';
 
 export interface AgentEvent {
   id: number;
