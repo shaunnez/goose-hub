@@ -1,7 +1,33 @@
 import { cn } from '@/lib/cn';
 import { CODE_ACTIVE_STATES } from '@/lib/constants';
+import {
+  Brain,
+  Bug,
+  Clock,
+  Code2,
+  Coins,
+  Eye,
+  FileText,
+  Folder,
+  Layers,
+  type LucideIcon,
+  MessageSquare,
+} from 'lucide-react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { SECTIONS } from '../lib/sections';
+
+const SECTION_ICONS: Record<string, LucideIcon> = {
+  overview: Layers,
+  repo: Folder,
+  investigation: Brain,
+  prd: FileText,
+  code: Code2,
+  qa: Bug,
+  review: Eye,
+  timeline: Clock,
+  chat: MessageSquare,
+  costs: Coins,
+};
 
 interface LeftRailProps {
   itemState?: string;
@@ -31,6 +57,7 @@ export function LeftRail({ itemState }: LeftRailProps) {
               : `/projects/${slug}/items/${id}/${section.key}`;
           const isActive = activeKey === section.key;
           const number = String(idx + 1).padStart(2, '0');
+          const Icon = SECTION_ICONS[section.key];
           const available =
             section.key === 'code'
               ? itemState != null && CODE_ACTIVE_STATES.has(itemState)
@@ -55,6 +82,7 @@ export function LeftRail({ itemState }: LeftRailProps) {
                 )}
               >
                 <span className="font-mono tnum text-[10.5px] text-fg-4 w-5">{number}</span>
+                {Icon && <Icon size={13} className="shrink-0" />}
                 <span className="grow">{section.label}</span>
                 <span className="text-[10px] uppercase tracking-wider text-fg-4">
                   {section.milestone}
@@ -75,6 +103,7 @@ export function LeftRail({ itemState }: LeftRailProps) {
               )}
             >
               <span className="font-mono tnum text-[10.5px] text-fg-3 w-5">{number}</span>
+              {Icon && <Icon size={13} className="shrink-0" />}
               <span>{section.label}</span>
             </Link>
           );

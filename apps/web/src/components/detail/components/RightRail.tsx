@@ -76,7 +76,7 @@ export function RightRail({ projectSlug, id, workItemId }: RightRailProps) {
   return (
     <aside
       data-testid="detail-right-rail"
-      className="w-[260px] shrink-0 flex flex-col border-l border-line bg-bg-elev/40"
+      className="w-[320px] shrink-0 flex flex-col border-l border-line bg-bg-elev/40"
     >
       <div className="px-4 py-3 border-b border-line">
         <div className="text-[10.5px] uppercase tracking-wider text-fg-4">Live activity</div>

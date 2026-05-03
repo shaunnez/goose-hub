@@ -1,0 +1,2459 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Harness — Task Detail</title>
+<style id="tokens-inline">
+/* Harness — design tokens (Apple/Win11 inspired, dark-first) */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  /* Type */
+  --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "Cascadia Mono", monospace;
+
+  /* Type scale (production-feel — no micro text) */
+  --t-xs: 11.5px;   /* meta/labels — used sparingly */
+  --t-sm: 12.5px;   /* secondary UI */
+  --t-base: 13.5px; /* body */
+  --t-md: 14.5px;
+  --t-lg: 16px;
+  --t-xl: 18px;
+  --t-2xl: 22px;
+  --t-3xl: 28px;
+
+  /* Spacing */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-10: 40px;
+  --s-12: 48px;
+
+  /* Radii */
+  --r-sm: 5px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+
+  /* Motion */
+  --motion-fast: 140ms cubic-bezier(0.2, 0.7, 0.3, 1);
+  --motion: 200ms cubic-bezier(0.2, 0.7, 0.3, 1);
+  --motion-slow: 320ms cubic-bezier(0.2, 0.7, 0.3, 1);
+  --spring: 380ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Dark theme (default) — cool slate */
+:root, .theme-dark, [data-theme="dark"] {
+  --bg: oklch(0.16 0.005 260);
+  --bg-elev: oklch(0.19 0.006 260);
+  --bg-elev-2: oklch(0.22 0.007 260);
+  --bg-glass: oklch(0.18 0.005 260 / 0.72);
+  --bg-hover: oklch(0.24 0.008 260);
+  --bg-active: oklch(0.28 0.01 260);
+
+  --fg: oklch(0.96 0.005 260);
+  --fg-2: oklch(0.78 0.008 260);
+  --fg-3: oklch(0.58 0.01 260);
+  --fg-4: oklch(0.42 0.01 260);
+
+  --line: oklch(0.28 0.01 260);
+  --line-2: oklch(0.34 0.012 260);
+  --line-strong: oklch(0.42 0.014 260);
+
+  --accent: oklch(0.68 0.16 264);
+  --accent-fg: oklch(0.18 0.04 264);
+  --accent-soft: oklch(0.68 0.16 264 / 0.14);
+  --accent-soft-2: oklch(0.68 0.16 264 / 0.22);
+  --accent-line: oklch(0.68 0.16 264 / 0.42);
+
+  --success: oklch(0.74 0.16 152);
+  --warning: oklch(0.78 0.14 78);
+  --danger: oklch(0.66 0.20 22);
+  --info: oklch(0.74 0.12 220);
+
+  /* persona hues — share chroma & lightness, vary hue */
+  --p-aster: oklch(0.74 0.13 200); /* cyan — researcher */
+  --p-vega:  oklch(0.74 0.13 290); /* violet — researcher */
+  --p-bram:  oklch(0.74 0.13 32);  /* warm orange — dev */
+  --p-niko:  oklch(0.74 0.13 142); /* green — qa */
+  --p-cyra:  oklch(0.74 0.13 340); /* magenta — pm */
+
+  --shadow-sm: 0 1px 0 oklch(0 0 0 / 0.4), 0 1px 2px oklch(0 0 0 / 0.2);
+  --shadow-md: 0 8px 24px oklch(0 0 0 / 0.32), 0 2px 4px oklch(0 0 0 / 0.16);
+  --shadow-lg: 0 24px 64px oklch(0 0 0 / 0.5), 0 4px 12px oklch(0 0 0 / 0.24);
+  --shadow-inset: inset 0 1px 0 oklch(1 0 0 / 0.04);
+
+  --code-add: oklch(0.32 0.08 152 / 0.4);
+  --code-add-line: oklch(0.74 0.16 152 / 0.5);
+  --code-del: oklch(0.32 0.10 22 / 0.4);
+  --code-del-line: oklch(0.66 0.20 22 / 0.5);
+  --code-num: oklch(0.42 0.01 260);
+}
+
+/* Light theme — warm whisper of cream, not pure white */
+.theme-light, [data-theme="light"] {
+  --bg: oklch(0.985 0.003 80);
+  --bg-elev: oklch(1 0 0);
+  --bg-elev-2: oklch(0.97 0.004 80);
+  --bg-glass: oklch(1 0 0 / 0.72);
+  --bg-hover: oklch(0.96 0.005 260);
+  --bg-active: oklch(0.93 0.008 260);
+
+  --fg: oklch(0.22 0.01 260);
+  --fg-2: oklch(0.42 0.01 260);
+  --fg-3: oklch(0.58 0.008 260);
+  --fg-4: oklch(0.72 0.005 260);
+
+  --line: oklch(0.92 0.005 260);
+  --line-2: oklch(0.86 0.006 260);
+  --line-strong: oklch(0.78 0.008 260);
+
+  --accent: oklch(0.54 0.18 264);
+  --accent-fg: oklch(0.99 0 0);
+  --accent-soft: oklch(0.54 0.18 264 / 0.10);
+  --accent-soft-2: oklch(0.54 0.18 264 / 0.18);
+  --accent-line: oklch(0.54 0.18 264 / 0.4);
+
+  --success: oklch(0.52 0.16 152);
+  --warning: oklch(0.62 0.16 64);
+  --danger: oklch(0.54 0.20 22);
+  --info: oklch(0.52 0.14 220);
+
+  --p-aster: oklch(0.54 0.13 200);
+  --p-vega:  oklch(0.54 0.13 290);
+  --p-bram:  oklch(0.58 0.15 32);
+  --p-niko:  oklch(0.52 0.13 142);
+  --p-cyra:  oklch(0.54 0.15 340);
+
+  --shadow-sm: 0 1px 0 oklch(0 0 0 / 0.04), 0 1px 2px oklch(0 0 0 / 0.06);
+  --shadow-md: 0 4px 14px oklch(0 0 0 / 0.06), 0 1px 3px oklch(0 0 0 / 0.05);
+  --shadow-lg: 0 24px 48px oklch(0 0 0 / 0.08), 0 4px 12px oklch(0 0 0 / 0.06);
+  --shadow-inset: inset 0 1px 0 oklch(1 0 0 / 0.6);
+
+  --code-add: oklch(0.94 0.04 152 / 0.7);
+  --code-add-line: oklch(0.62 0.14 152 / 0.5);
+  --code-del: oklch(0.94 0.04 22 / 0.7);
+  --code-del-line: oklch(0.6 0.18 22 / 0.5);
+  --code-num: oklch(0.62 0.008 260);
+}
+
+/* Density — scales typography and spacing globally.
+   --d-scale multiplies card padding & gaps via the calc()s below.
+   font-size on :root rescales every rem-based size; we also nudge
+   the 13.5px body baseline by class so px-sized text shifts too. */
+.density-comfortable { --d-scale: 1.18; --row-h: 36px; }
+.density-balanced    { --d-scale: 1.00; --row-h: 30px; }
+.density-dense       { --d-scale: 0.86; --row-h: 26px; }
+
+.density-comfortable body { font-size: 14.5px; }
+.density-balanced    body { font-size: 13.5px; }
+.density-dense       body { font-size: 12.5px; }
+
+/* Component-level reactions to density */
+.density-dense .btn      { height: 26px; padding: 0 10px; font-size: 11.5px; }
+.density-dense .btn.sm   { height: 22px; padding: 0 7px; font-size: 11px; }
+.density-comfortable .btn    { height: 34px; padding: 0 14px; font-size: 13.5px; }
+.density-comfortable .btn.sm { height: 30px; padding: 0 11px; font-size: 12.5px; }
+
+.density-dense .pill        { height: 19px; padding: 0 7px; font-size: 10.5px; }
+.density-comfortable .pill  { height: 25px; padding: 0 11px; font-size: 12px; }
+
+.density-dense .avatar      { width: 22px; height: 22px; font-size: 9.5px; }
+.density-dense .avatar.lg   { width: 28px; height: 28px; font-size: 10.5px; }
+.density-dense .avatar.sm   { width: 18px; height: 18px; font-size: 9px; }
+.density-comfortable .avatar    { width: 28px; height: 28px; font-size: 11px; }
+.density-comfortable .avatar.lg { width: 36px; height: 36px; font-size: 12.5px; }
+.density-comfortable .avatar.sm { width: 22px; height: 22px; font-size: 10px; }
+
+.density-dense .card        { border-radius: 6px; }
+.density-comfortable .card  { border-radius: 10px; }
+
+/* Scale gap utility classes by density */
+.density-dense .gap-2 { gap: 6px; } .density-dense .gap-3 { gap: 9px; } .density-dense .gap-4 { gap: 12px; } .density-dense .gap-6 { gap: 18px; }
+.density-comfortable .gap-2 { gap: 10px; } .density-comfortable .gap-3 { gap: 14px; } .density-comfortable .gap-4 { gap: 20px; } .density-comfortable .gap-6 { gap: 28px; }
+
+/* Section header scales with density */
+.density-dense .section-h        { font-size: 16px; }
+.density-comfortable .section-h  { font-size: 20px; }
+
+/* Accent variants — override hue */
+[data-accent="indigo"] { --accent: oklch(0.68 0.16 264); --accent-fg: oklch(0.18 0.04 264); --accent-soft: oklch(0.68 0.16 264 / 0.14); --accent-soft-2: oklch(0.68 0.16 264 / 0.22); --accent-line: oklch(0.68 0.16 264 / 0.42); }
+[data-accent="violet"] { --accent: oklch(0.7 0.18 300); --accent-fg: oklch(0.18 0.04 300); --accent-soft: oklch(0.7 0.18 300 / 0.14); --accent-soft-2: oklch(0.7 0.18 300 / 0.22); --accent-line: oklch(0.7 0.18 300 / 0.42); }
+[data-accent="cyan"]   { --accent: oklch(0.78 0.13 200); --accent-fg: oklch(0.18 0.04 200); --accent-soft: oklch(0.78 0.13 200 / 0.14); --accent-soft-2: oklch(0.78 0.13 200 / 0.22); --accent-line: oklch(0.78 0.13 200 / 0.42); }
+[data-accent="amber"]  { --accent: oklch(0.78 0.14 78); --accent-fg: oklch(0.2 0.04 78); --accent-soft: oklch(0.78 0.14 78 / 0.14); --accent-soft-2: oklch(0.78 0.14 78 / 0.22); --accent-line: oklch(0.78 0.14 78 / 0.42); }
+[data-theme="light"][data-accent="indigo"] { --accent: oklch(0.54 0.18 264); --accent-fg: oklch(0.99 0 0); --accent-soft: oklch(0.54 0.18 264 / 0.10); --accent-soft-2: oklch(0.54 0.18 264 / 0.18); --accent-line: oklch(0.54 0.18 264 / 0.4); }
+[data-theme="light"][data-accent="violet"] { --accent: oklch(0.5 0.2 300); --accent-fg: oklch(0.99 0 0); --accent-soft: oklch(0.5 0.2 300 / 0.10); --accent-soft-2: oklch(0.5 0.2 300 / 0.18); --accent-line: oklch(0.5 0.2 300 / 0.4); }
+[data-theme="light"][data-accent="cyan"]   { --accent: oklch(0.5 0.14 200); --accent-fg: oklch(0.99 0 0); --accent-soft: oklch(0.5 0.14 200 / 0.10); --accent-soft-2: oklch(0.5 0.14 200 / 0.18); --accent-line: oklch(0.5 0.14 200 / 0.4); }
+[data-theme="light"][data-accent="amber"]  { --accent: oklch(0.6 0.16 64); --accent-fg: oklch(0.99 0 0); --accent-soft: oklch(0.6 0.16 64 / 0.10); --accent-soft-2: oklch(0.6 0.16 64 / 0.18); --accent-line: oklch(0.6 0.16 64 / 0.4); }
+
+/* Reduced motion */
+.reduce-motion *, .reduce-motion *::before, .reduce-motion *::after {
+  animation-duration: 1ms !important;
+  transition-duration: 80ms !important;
+}
+
+/* Reset + base */
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  font-family: var(--font-ui);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: var(--t-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.005em;
+  font-feature-settings: "cv11", "ss01";
+  overflow: hidden;
+}
+* { box-sizing: border-box; }
+button { font: inherit; color: inherit; }
+
+/* Utility classes */
+.mono { font-family: var(--font-mono); letter-spacing: -0.01em; font-feature-settings: "ss02", "cv11"; }
+.row { display: flex; align-items: center; }
+.col { display: flex; flex-direction: column; }
+.gap-1 { gap: 4px; } .gap-2 { gap: 8px; } .gap-3 { gap: 12px; } .gap-4 { gap: 16px; } .gap-6 { gap: 24px; }
+.grow { flex: 1 1 auto; min-width: 0; min-height: 0; }
+.nowrap { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Pill */
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 22px; padding: 0 9px;
+  border-radius: 999px;
+  font-size: var(--t-xs); font-weight: 500;
+  border: 1px solid var(--line);
+  color: var(--fg-2);
+  background: var(--bg-elev);
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.pill.sm { height: 19px; padding: 0 7px; font-size: 11px; }
+.pill.accent { border-color: var(--accent-line); color: var(--accent); background: var(--accent-soft); }
+.pill.success { border-color: oklch(from var(--success) l c h / 0.4); color: var(--success); background: oklch(from var(--success) l c h / 0.12); }
+.pill.warning { border-color: oklch(from var(--warning) l c h / 0.4); color: var(--warning); background: oklch(from var(--warning) l c h / 0.12); }
+.pill.danger  { border-color: oklch(from var(--danger)  l c h / 0.4); color: var(--danger);  background: oklch(from var(--danger)  l c h / 0.12); }
+
+.dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--fg-3); display: inline-block; }
+.dot.live { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--accent-soft-2); }
+  50%      { box-shadow: 0 0 0 5px transparent; }
+}
+
+/* Kbd */
+.kbd {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-bottom-width: 1.5px;
+  border-radius: 4px;
+  color: var(--fg-2);
+  background: var(--bg-elev);
+  line-height: 1.5;
+  min-width: 16px;
+  text-align: center;
+  display: inline-block;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 30px; padding: 0 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--fg);
+  font-size: var(--t-sm); font-weight: 500;
+  cursor: pointer;
+  transition: background var(--motion-fast), border-color var(--motion-fast), transform var(--motion-fast);
+  white-space: nowrap;
+}
+.btn:hover { background: var(--bg-hover); border-color: var(--line-2); }
+.btn:active { transform: scale(0.98); }
+.btn.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; box-shadow: var(--shadow-inset), 0 1px 2px oklch(0 0 0 / 0.2); }
+.btn.primary:hover { background: oklch(from var(--accent) calc(l + 0.04) c h); }
+.btn.ghost { background: transparent; border-color: transparent; }
+.btn.ghost:hover { background: var(--bg-hover); }
+.btn.sm { height: 26px; padding: 0 9px; font-size: var(--t-xs); }
+
+/* Card surfaces */
+.card {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Glass surface */
+.glass {
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--line);
+}
+
+/* Scrollbars */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: oklch(from var(--fg-3) l c h / 0.25);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover { background: oklch(from var(--fg-3) l c h / 0.4); background-clip: content-box; border: 2px solid transparent; }
+
+/* Section enter animation */
+@keyframes section-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.section-anim { animation: section-in 240ms cubic-bezier(0.2, 0.7, 0.3, 1); }
+
+/* Rail item active stripe */
+@keyframes stripe-in { from { transform: scaleY(0.3); opacity: 0; } to { transform: scaleY(1); opacity: 1; } }
+
+/* Diff hunks */
+.diff-line { display: grid; grid-template-columns: 44px 44px 1fr; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.55; }
+.diff-line .ln { color: var(--code-num); text-align: right; padding-right: 10px; user-select: none; font-variant-numeric: tabular-nums; }
+.diff-line.add { background: var(--code-add); }
+.diff-line.add .ln { color: var(--code-add-line); }
+.diff-line.del { background: var(--code-del); }
+.diff-line.del .ln { color: var(--code-del-line); }
+.diff-line .code { padding-left: 12px; white-space: pre; overflow-x: auto; }
+
+/* Token highlight (very light syntax) */
+.tok-kw { color: oklch(0.74 0.13 290); }
+.tok-fn { color: oklch(0.78 0.13 200); }
+.tok-str { color: oklch(0.78 0.13 64); }
+.tok-num { color: oklch(0.74 0.13 32); }
+.tok-com { color: var(--fg-3); font-style: italic; }
+.tok-typ { color: oklch(0.78 0.10 142); }
+.theme-light .tok-kw { color: oklch(0.46 0.18 290); }
+.theme-light .tok-fn { color: oklch(0.5 0.14 220); }
+.theme-light .tok-str { color: oklch(0.46 0.14 32); }
+.theme-light .tok-num { color: oklch(0.5 0.18 22); }
+.theme-light .tok-com { color: var(--fg-3); }
+.theme-light .tok-typ { color: oklch(0.46 0.14 142); }
+
+/* Avatar */
+.avatar {
+  width: 24px; height: 24px; border-radius: 50%;
+  display: inline-grid; place-items: center;
+  font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+  letter-spacing: 0;
+  color: oklch(0.18 0 0);
+  flex-shrink: 0;
+}
+.avatar.lg { width: 32px; height: 32px; font-size: 11.5px; }
+.avatar.sm { width: 20px; height: 20px; font-size: 9.5px; }
+.avatar.aster { background: var(--p-aster); }
+.avatar.vega  { background: var(--p-vega); }
+.avatar.bram  { background: var(--p-bram); }
+.avatar.niko  { background: var(--p-niko); }
+.avatar.cyra  { background: var(--p-cyra); }
+
+/* Subtle divider */
+.divider { height: 1px; background: var(--line); width: 100%; }
+
+/* Section header */
+.section-h {
+  font-size: var(--t-xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+}
+.section-sub { font-size: var(--t-sm); color: var(--fg-3); letter-spacing: 0; }
+.eyebrow { font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-3); }
+
+/* Tabs underline */
+.fade-mask {
+  -webkit-mask-image: linear-gradient(to bottom, black 80%, transparent);
+          mask-image: linear-gradient(to bottom, black 80%, transparent);
+}
+
+/* Focus ring */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+/* Specific tweak: tabular numbers everywhere it matters */
+.tnum { font-variant-numeric: tabular-nums; }
+
+</style>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #28292d; color: #f4f4f5; font-family: var(--font-ui); }
+  html, body { background: var(--bg); color: var(--fg); }
+  * { box-sizing: border-box; }
+  #root, .app { height: 100%; }
+  .app { display: flex; flex-direction: column; min-height: 0; }
+  .body { flex: 1; display: flex; min-height: 0; }
+  .scroll { flex: 1; overflow: auto; min-height: 0; }
+
+  /* Mobile (<760px): stack header, hide rails, show floating nav button.
+     `.force-mobile` on <html> applies the same rules at any viewport so
+     a Tweaks toggle can preview the small layout on a desktop. */
+  @media (max-width: 759px) {
+    .body { position: relative; }
+    .body > nav { display: none; }            /* left rail */
+    .body > aside { display: none; }          /* right rail */
+    .mobile-nav-btn { display: flex; }
+  }
+  @media (min-width: 760px) {
+    .mobile-nav-btn { display: none; }
+  }
+  html.force-mobile .body { position: relative; }
+  html.force-mobile .body > nav { display: none !important; }
+  html.force-mobile .body > aside { display: none !important; }
+  html.force-mobile .mobile-nav-btn { display: flex !important; }
+
+  .mobile-nav-btn {
+    position: fixed; bottom: 18px; right: 18px; z-index: 40;
+    width: 48px; height: 48px; border-radius: 24px;
+    background: var(--accent); color: var(--accent-fg);
+    border: none; box-shadow: var(--shadow-md);
+    display: none; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .mobile-nav-sheet {
+    position: fixed; inset: 0; z-index: 50;
+    background: oklch(from var(--bg) l c h / 0.7); backdrop-filter: blur(8px);
+    display: none; align-items: flex-end;
+  }
+  .mobile-nav-sheet[data-open="true"] { display: flex; }
+  .mobile-nav-sheet__panel {
+    width: 100%; max-height: 70vh; overflow: auto;
+    background: var(--bg-elev); border-top-left-radius: 16px; border-top-right-radius: 16px;
+    border-top: 1px solid var(--line);
+    padding: 12px 8px 24px;
+  }
+  .mobile-nav-sheet__handle {
+    width: 36px; height: 4px; border-radius: 2px; background: var(--line-2);
+    margin: 4px auto 12px;
+  }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script id="data-inline">
+// data.js — fixture data for the task detail surface
+
+window.HARNESS_DATA = {
+  task: {
+    id: 'TAS-1662',
+    title: 'Investigate cart abandonment metric drift',
+    subtitle: 'Implementation subtask · smartpay-platform / transaction-verification-api',
+    status: 'running',
+    stage: 'dev',
+    priority: 'medium',
+    requestedBy: 'cto',
+    elapsed: '5m 40s',
+    cost: 1.20,
+    branch: 'tas-1662/cart-abandonment-fix',
+    onDeck: 'bram',
+    progress: 0.42,
+  },
+  personas: [
+    { id: 'aster', name: 'Aster', initials: 'AS', role: 'Researcher',  state: 'investigating', pronouns: 'they/them', focus: 'metrics ingestion path', cls: 'aster' },
+    { id: 'bram',  name: 'Bram',  initials: 'BR', role: 'Developer',   state: 'patching',      pronouns: 'he/him',    focus: 'apply patch · 3/12 files', cls: 'bram'  },
+    { id: 'niko',  name: 'Niko',  initials: 'NK', role: 'QA',          state: 'queued',        pronouns: 'she/her',   focus: 'awaiting Bram',           cls: 'niko'  },
+    { id: 'vega',  name: 'Vega',  initials: 'VG', role: 'Researcher',  state: 'idle',          pronouns: 'she/her',   focus: 'standby — escalation',    cls: 'vega'  },
+    { id: 'cyra',  name: 'Cyra',  initials: 'CY', role: 'PM',          state: 'reviewing PRD', pronouns: 'they/them', focus: 'acceptance criteria',     cls: 'cyra'  },
+  ],
+  sections: [
+    { k: 'overview',  label: 'Overview',       n: 1 },
+    { k: 'repo',      label: 'Repo Selection', n: 2 },
+    { k: 'invest',    label: 'Investigation',  n: 3 },
+    { k: 'prd',       label: 'PRD',            n: 4 },
+    { k: 'code',      label: 'Code',           n: 5, badge: '12' },
+    { k: 'qa',        label: 'QA',             n: 6 },
+    { k: 'review',    label: 'Review',         n: 7 },
+    { k: 'timeline',  label: 'Timeline',       n: 8, badge: '247' },
+    { k: 'chat',      label: 'Chat',           n: 9, badge: '4' },
+    { k: 'costs',     label: 'Costs',          n: 10 },
+  ],
+  // Right rail live ticker (most recent first)
+  ticker: [
+    { t: '0s',   p: 'bram',  verb: 'apply_patch', obj: 'src/metrics/cart.ts', kind: 'tool' },
+    { t: '4s',   p: 'aster', verb: 'web_fetch',   obj: 'mixpanel.com/docs/funnels', kind: 'tool' },
+    { t: '12s',  p: 'aster', verb: 'note',        obj: 'event drift starts 04/12 14:02 UTC', kind: 'msg' },
+    { t: '28s',  p: 'bram',  verb: 'read',        obj: 'src/metrics/cart.ts:88-142', kind: 'tool' },
+    { t: '41s',  p: 'aster', verb: 'rg',          obj: '"abandon" → 23 hits', kind: 'tool' },
+    { t: '1m',   p: 'cyra',  verb: 'comment',     obj: '"need acceptance criteria"', kind: 'msg' },
+    { t: '1m 8s',p: 'bram',  verb: 'plan',        obj: 'subtask 1/3 · normalize timestamps', kind: 'plan' },
+    { t: '1m 22s',p:'aster', verb: 'read',        obj: 'src/lib/funnel.ts', kind: 'tool' },
+    { t: '2m',   p: 'aster', verb: 'spawned',     obj: 'investigation start', kind: 'sys' },
+    { t: '2m 14s',p:'niko',  verb: 'queued',      obj: 'qa pending dev', kind: 'sys' },
+  ],
+  repos: [
+    { name: 'smartpay-platform/transaction-verification-api', kw: 0.94, code: 87, sem: 0.91, picked: true },
+    { name: 'smartpay-platform/checkout-orchestrator',         kw: 0.78, code: 24, sem: 0.74 },
+    { name: 'smartpay-platform/metrics-pipeline',              kw: 0.66, code: 12, sem: 0.81 },
+    { name: 'smartpay-platform/billing-events',                kw: 0.42, code:  3, sem: 0.55 },
+    { name: 'smartpay-platform/web-checkout-ui',               kw: 0.38, code:  8, sem: 0.41 },
+    { name: 'smartpay-platform/api-gateway',                   kw: 0.32, code:  2, sem: 0.38 },
+    { name: 'smartpay-platform/risk-scoring',                  kw: 0.21, code:  0, sem: 0.30 },
+  ],
+  files: [
+    { path: 'src/metrics/cart.ts',           add: 42, del: 18, hunks: 6, status: 'mod' },
+    { path: 'src/metrics/funnel.ts',         add: 28, del:  4, hunks: 3, status: 'mod' },
+    { path: 'src/lib/timestamps.ts',         add: 64, del:  0, hunks: 1, status: 'new' },
+    { path: 'src/lib/funnel.ts',             add: 12, del: 12, hunks: 4, status: 'mod' },
+    { path: 'src/api/events.ts',             add:  8, del:  6, hunks: 2, status: 'mod' },
+    { path: 'src/api/__tests__/cart.test.ts',add: 96, del:  0, hunks: 1, status: 'new' },
+    { path: 'src/api/__tests__/funnel.test.ts', add: 22, del:  8, hunks: 3, status: 'mod' },
+    { path: 'src/types/metrics.ts',          add:  6, del:  2, hunks: 1, status: 'mod' },
+    { path: 'src/config/sources.ts',         add:  4, del:  4, hunks: 1, status: 'mod' },
+    { path: 'docs/metrics.md',               add: 18, del:  6, hunks: 2, status: 'mod' },
+    { path: 'CHANGELOG.md',                  add:  3, del:  0, hunks: 1, status: 'mod' },
+    { path: 'package.json',                  add:  1, del:  1, hunks: 1, status: 'mod' },
+  ],
+  costs: {
+    total: 1.20,
+    tokens: { in: 142800, out: 38240 },
+    breakdown: [
+      { p: 'aster', model: 'sonnet-4.5', tokensIn:  68200, tokensOut: 14800, calls: 12, cost: 0.48 },
+      { p: 'bram',  model: 'sonnet-4.5', tokensIn:  52400, tokensOut: 18200, calls:  9, cost: 0.42 },
+      { p: 'cyra',  model: 'haiku-4.5',  tokensIn:  14600, tokensOut:  3100, calls:  4, cost: 0.08 },
+      { p: 'niko',  model: 'haiku-4.5',  tokensIn:   5800, tokensOut:  1140, calls:  2, cost: 0.04 },
+      { p: 'vega',  model: 'sonnet-4.5', tokensIn:   1800, tokensOut:  1000, calls:  1, cost: 0.18 },
+    ],
+  },
+};
+
+</script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" id="all-jsx-inlined">
+
+/* ===== icons.jsx ===== */
+(function() {
+// icons.jsx — shared icon set, stroke-based, 16px native, currentColor
+const Ico = ({ d, size = 16, sw = 1.5, ch }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none"
+    stroke="currentColor" strokeWidth={sw}
+    strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    {ch || (typeof d === 'string' ? <path d={d} /> : d)}
+  </svg>
+);
+
+const Icons = {
+  ArrowL:    (p) => <Ico {...p} d="M10 12L6 8l4-4" />,
+  ArrowR:    (p) => <Ico {...p} d="M6 4l4 4-4 4" />,
+  ArrowU:    (p) => <Ico {...p} d="M4 10l4-4 4 4" />,
+  ArrowD:    (p) => <Ico {...p} d="M4 6l4 4 4-4" />,
+  Close:     (p) => <Ico {...p} d="M3 3l10 10M13 3L3 13" />,
+  Check:     (p) => <Ico {...p} d="M3 8.5l3 3 7-7" />,
+  Search:    (p) => <Ico {...p} ch={<><circle cx="7" cy="7" r="4.5"/><path d="M13.5 13.5l-3-3"/></>} />,
+  Filter:    (p) => <Ico {...p} d="M2 4h12M4 8h8M6 12h4" />,
+  Plus:      (p) => <Ico {...p} d="M8 3v10M3 8h10" />,
+  More:      (p) => <Ico {...p} ch={<><circle cx="3" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="13" cy="8" r="1"/></>} />,
+  Expand:    (p) => <Ico {...p} d="M9 2h5v5M7 14H2V9M14 2L9 7M2 14l5-5" />,
+  Collapse:  (p) => <Ico {...p} d="M14 6h-4V2M2 10h4v4M9 7l5-5M7 9l-5 5" />,
+  Side:      (p) => <Ico {...p} ch={<><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M10 3v10"/></>} />,
+  Take:      (p) => <Ico {...p} ch={<><rect x="2" y="3" width="12" height="10" rx="1.5"/></>} />,
+  Run:       (p) => <Ico {...p} d="M5 3l8 5-8 5z" />,
+  Pause:     (p) => <Ico {...p} d="M5 3v10M11 3v10" />,
+  Stop:      (p) => <Ico {...p} ch={<rect x="4" y="4" width="8" height="8" rx="1"/>} />,
+  Sun:       (p) => <Ico {...p} ch={<><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M3 13l1.4-1.4M11.6 4.4L13 3"/></>} />,
+  Moon:      (p) => <Ico {...p} d="M13 9.5A5.5 5.5 0 016.5 3a6 6 0 106.5 6.5z" />,
+  GitBranch: (p) => <Ico {...p} ch={<><circle cx="4" cy="3" r="1.5"/><circle cx="4" cy="13" r="1.5"/><circle cx="12" cy="6" r="1.5"/><path d="M4 4.5v7M12 7.5c0 3.5-4 2.5-8 5.5"/></>} />,
+  File:      (p) => <Ico {...p} d="M9 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6L9 2zM9 2v4h4" />,
+  FilePlus:  (p) => <Ico {...p} d="M9 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6L9 2zM9 2v4h4M8 9v3M6.5 10.5h3" />,
+  Folder:    (p) => <Ico {...p} d="M2 4a1 1 0 011-1h3l1.5 1.5H13a1 1 0 011 1V12a1 1 0 01-1 1H3a1 1 0 01-1-1V4z" />,
+  Code:      (p) => <Ico {...p} d="M5 5L2 8l3 3M11 5l3 3-3 3M9.5 4l-3 8" />,
+  Bug:       (p) => <Ico {...p} ch={<><rect x="5" y="5" width="6" height="8" rx="3"/><path d="M5 8H2M11 8h3M5 11H2M11 11h3M3 5l2 2M11 7l2-2M6 5V3M10 5V3"/></>} />,
+  Brain:     (p) => <Ico {...p} d="M5.5 3a2 2 0 00-2 2v.5a2 2 0 00-1 1.7v.6a2 2 0 001 1.7v.5a2 2 0 002 2h0M10.5 3a2 2 0 012 2v.5a2 2 0 011 1.7v.6a2 2 0 01-1 1.7v.5a2 2 0 01-2 2M8 3.5v9" />,
+  Doc:       (p) => <Ico {...p} d="M3 2h7l3 3v9a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1zM5 7h6M5 9.5h6M5 12h4" />,
+  Clock:     (p) => <Ico {...p} ch={<><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></>} />,
+  Chat:      (p) => <Ico {...p} d="M2 4a1 1 0 011-1h10a1 1 0 011 1v6a1 1 0 01-1 1H6l-3 3v-3H3a1 1 0 01-1-1V4z" />,
+  Coin:      (p) => <Ico {...p} ch={<><circle cx="8" cy="8" r="6"/><path d="M6 9.5c0 1 1 1.5 2 1.5s2-.4 2-1.4S9 8.5 8 8.5 6 8 6 7s1-1.5 2-1.5 2 .5 2 1.5M8 4.5v7"/></>} />,
+  CheckList: (p) => <Ico {...p} d="M2 4l1.5 1.5L6 3M2 8.5l1.5 1.5L6 7.5M2 13l1.5 1.5L6 12M9 4h5M9 8.5h5M9 13h5" />,
+  Eye:       (p) => <Ico {...p} ch={<><path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></>} />,
+  Spark:     (p) => <Ico {...p} d="M8 2v3M8 11v3M2 8h3M11 8h3M4 4l2 2M10 10l2 2M4 12l2-2M10 6l2-2" />,
+  Cmd:       (p) => <Ico {...p} d="M5 3a2 2 0 00-2 2v0a2 2 0 002 2h6a2 2 0 002-2v0a2 2 0 00-2-2v0a2 2 0 00-2 2v6a2 2 0 002 2v0a2 2 0 002-2v0a2 2 0 00-2-2H5a2 2 0 00-2 2v0a2 2 0 002 2v0a2 2 0 002-2V5a2 2 0 00-2-2z" sw={1.2} />,
+  Bolt:      (p) => <Ico {...p} d="M9 2L3 9h4l-1 5 6-7H8l1-5z" />,
+  Globe:     (p) => <Ico {...p} ch={<><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 3 4 3 6s-1 4-3 6c-2-2-3-4-3-6s1-4 3-6z"/></>} />,
+  Link:      (p) => <Ico {...p} d="M7 9.5L9.5 7M6.5 5L8 3.5a2.1 2.1 0 013 3L9.5 8M9.5 11L8 12.5a2.1 2.1 0 01-3-3L6.5 8" />,
+  Term:      (p) => <Ico {...p} d="M2 4a1 1 0 011-1h10a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V4zM4.5 6.5l2 1.5-2 1.5M8 10h3" />,
+  Tools:     (p) => <Ico {...p} d="M3 13l3-3M5 11l-2 2-1-1 2-2M9 5l4-2-1 4-3 1-1-3zM6 8l3 3" />,
+  Sliders:   (p) => <Ico {...p} d="M3 5h10M3 11h10" ch={<><path d="M3 5h10M3 11h10"/><circle cx="6" cy="5" r="1.5" fill="currentColor"/><circle cx="10" cy="11" r="1.5" fill="currentColor"/></>} />,
+  Tag:       (p) => <Ico {...p} d="M2 8V3h5l7 7-5 5-7-7zM5 5h.01" />,
+  Refresh:   (p) => <Ico {...p} d="M13 4v3h-3M3 12V9h3M3 9a5 5 0 019-2M13 7a5 5 0 01-9 2" />,
+  Layers:    (p) => <Ico {...p} d="M8 2l6 3-6 3-6-3 6-3zM2 8l6 3 6-3M2 11l6 3 6-3" />,
+  Trend:     (p) => <Ico {...p} d="M2 12l4-4 3 3 5-6M9 5h4v4" />,
+  Bell:      (p) => <Ico {...p} d="M4 11V7a4 4 0 018 0v4l1 2H3l1-2zM6.5 13a1.5 1.5 0 003 0" />,
+  Person:    (p) => <Ico {...p} ch={<><circle cx="8" cy="5" r="2.5"/><path d="M3 13a5 5 0 0110 0"/></>} />,
+  Pen:       (p) => <Ico {...p} d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5zM10 4l2 2" />,
+  History:   (p) => <Ico {...p} ch={<><path d="M2 8a6 6 0 106-6V0M2 4v3h3"/><path d="M8 5v3l2 2"/></>} />,
+};
+
+window.Icons = Icons;
+window.Ico = Ico;
+
+})();
+
+/* ===== chrome.jsx ===== */
+(function() {
+// chrome.jsx — top breadcrumb bar, task header, left rail, right rail
+const { Icons } = window;
+
+// ── Breadcrumb bar ─────────────────────────────────────────────
+function BreadcrumbBar({ task, onClose, onBack, onPrev, onNext, surface, onSurface, theme, onTheme }) {
+  return (
+    <div className="hb-crumb glass" style={{
+      height: 38, display: 'flex', alignItems: 'center',
+      padding: '0 12px 0 14px', gap: 14,
+      borderBottom: '1px solid var(--line)',
+      flexShrink: 0,
+      position: 'relative', zIndex: 5,
+    }}>
+      <button className="btn ghost sm" onClick={onBack} style={{ gap: 6, paddingLeft: 6, paddingRight: 10 }}>
+        <Icons.ArrowL size={13} />
+        <span>Board</span>
+      </button>
+      <span style={{ width: 1, height: 16, background: 'var(--line)' }} />
+      <span className="row gap-2" style={{ minWidth: 0 }}>
+        <span className="mono" style={{ color: 'var(--fg-3)', fontSize: 12 }}>smartpay-platform</span>
+        <span style={{ color: 'var(--fg-4)' }}>/</span>
+        <span className="mono" style={{ color: 'var(--fg-3)', fontSize: 12 }}>transaction-verification-api</span>
+        <span style={{ color: 'var(--fg-4)' }}>/</span>
+        <span className="mono" style={{ color: 'var(--fg)', fontSize: 12, fontWeight: 600 }}>{task.id}</span>
+      </span>
+      <span className="grow" />
+      <span className="row gap-2" style={{ color: 'var(--fg-3)', fontSize: 12 }}>
+        <span className="kbd">⌘</span><span className="kbd">[</span>
+        <span style={{ marginLeft: 2 }}>back</span>
+      </span>
+      <span className="row gap-2" style={{ color: 'var(--fg-3)', fontSize: 12, marginLeft: 4 }}>
+        <button className="btn ghost sm" onClick={onPrev} style={{ padding: '0 6px', gap: 4 }} title="Previous task (K)"><span className="kbd">K</span></button>
+        <button className="btn ghost sm" onClick={onNext} style={{ padding: '0 6px', gap: 4 }} title="Next task (J)"><span className="kbd">J</span></button>
+      </span>
+      <span style={{ width: 1, height: 16, background: 'var(--line)', marginLeft: 4 }} />
+      <button className="btn ghost sm" onClick={onTheme} title="Toggle theme" style={{ padding: '0 8px' }}>
+        {theme === 'dark' ? <Icons.Sun size={14} /> : <Icons.Moon size={14} />}
+      </button>
+      <button className="btn ghost sm" onClick={onSurface} title="Toggle surface" style={{ padding: '0 8px' }}>
+        {surface === 'takeover' ? <Icons.Side size={14} /> : <Icons.Take size={14} />}
+      </button>
+      <button className="btn ghost sm" onClick={onClose} title="Close" style={{ padding: '0 8px' }}>
+        <Icons.Close size={13} />
+      </button>
+    </div>
+  );
+}
+
+// ── Task header ────────────────────────────────────────────────
+function TaskHeader({ task, personas, compact }) {
+  const onDeck = personas.find(p => p.id === task.onDeck);
+  return (
+    <div style={{
+      padding: compact ? '14px 22px 14px' : '18px 22px 16px',
+      borderBottom: '1px solid var(--line)',
+      background: 'var(--bg-elev)',
+      flexShrink: 0,
+      display: 'flex', flexDirection: 'column', gap: 12,
+    }}>
+      <div className="row gap-3" style={{ alignItems: 'flex-start' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="row gap-2" style={{ marginBottom: 6 }}>
+            <span className="mono" style={{ fontSize: 11, color: 'var(--fg-3)', letterSpacing: 0.04 }}>{task.id}</span>
+            <span style={{ width: 3, height: 3, borderRadius: 2, background: 'var(--fg-4)' }} />
+            <span style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>opened by {task.requestedBy} · {task.elapsed} ago</span>
+          </div>
+          <h1 style={{
+            margin: 0,
+            fontSize: compact ? 22 : 26,
+            fontWeight: 600,
+            letterSpacing: -0.024 + 'em',
+            color: 'var(--fg)',
+            lineHeight: 1.2,
+          }}>{task.title}</h1>
+          {!compact && (
+            <div style={{ fontSize: 13, color: 'var(--fg-3)', marginTop: 6 }}>{task.subtitle}</div>
+          )}
+        </div>
+        <div className="row gap-2" style={{ flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <span className="pill accent">
+            <span className="dot live" style={{ background: 'var(--accent)' }} />
+            <span style={{ fontWeight: 600 }}>running</span>
+            <span className="mono" style={{ opacity: 0.7, marginLeft: 2 }}>· dev</span>
+          </span>
+          <span className="pill"><Icons.Bolt size={11} /> {task.priority}</span>
+          <span className="pill mono tnum"><Icons.Coin size={11} /> ${task.cost.toFixed(2)}</span>
+          <span className="pill" style={{ paddingLeft: 4 }}>
+            <span className={`avatar sm ${onDeck.cls}`}>{onDeck.initials}</span>
+            <span style={{ marginLeft: 2 }}>{onDeck.name} on deck</span>
+          </span>
+        </div>
+      </div>
+      {/* progress strip */}
+      <div className="row gap-3" style={{ alignItems: 'center' }}>
+        <span className="eyebrow">Progress</span>
+        <div className="row gap-1" style={{ flex: 1, height: 4, borderRadius: 2, background: 'var(--bg)', overflow: 'hidden' }}>
+          {[
+            { k: 'invest',  done: true,  label: 'Investigation' },
+            { k: 'prd',     done: true,  label: 'PRD' },
+            { k: 'dev',     done: false, label: 'Dev', active: true, prog: 0.6 },
+            { k: 'qa',      done: false, label: 'QA' },
+            { k: 'review',  done: false, label: 'Review' },
+          ].map((s, i) => (
+            <div key={s.k} style={{
+              flex: 1,
+              height: '100%',
+              borderRadius: 2,
+              background: s.done ? 'var(--accent)' : s.active ? 'transparent' : 'transparent',
+              position: 'relative',
+              overflow: 'hidden',
+            }}>
+              {s.active && (
+                <div style={{
+                  position: 'absolute', inset: 0,
+                  background: 'linear-gradient(90deg, var(--accent) 0%, var(--accent) 60%, var(--accent-soft) 60%)',
+                  width: `${(s.prog) * 100}%`,
+                }} />
+              )}
+            </div>
+          ))}
+        </div>
+        <span className="mono tnum" style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>3/5 stages</span>
+        <span className="mono" style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>·</span>
+        <span className="row gap-1" style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>
+          <Icons.GitBranch size={11} />
+          <span className="mono">{task.branch}</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── Left rail (vertical nav) ─────────────────────────────────────
+const RAIL_ICONS = {
+  overview: 'Layers', repo: 'Folder', invest: 'Brain', prd: 'Doc',
+  code: 'Code', qa: 'Bug', review: 'Eye', timeline: 'Clock',
+  chat: 'Chat', costs: 'Coin',
+};
+
+function LeftRail({ sections, active, onChange, expanded, onExpandToggle }) {
+  return (
+    <nav style={{
+      width: expanded ? 196 : 56,
+      flexShrink: 0,
+      borderRight: '1px solid var(--line)',
+      background: 'var(--bg-elev)',
+      display: 'flex', flexDirection: 'column',
+      padding: '14px 8px',
+      gap: 2,
+      transition: 'width var(--motion)',
+      overflow: 'hidden',
+    }}>
+      {expanded && (
+        <div className="eyebrow" style={{ padding: '4px 10px 8px' }}>Sections</div>
+      )}
+      {sections.map(s => {
+        const Icon = Icons[RAIL_ICONS[s.k]];
+        const isActive = active === s.k;
+        return (
+          <button key={s.k} onClick={() => onChange(s.k)}
+            className="rail-item"
+            style={{
+              position: 'relative',
+              display: 'flex', alignItems: 'center', gap: 10,
+              height: 34,
+              padding: expanded ? '0 10px' : '0',
+              justifyContent: expanded ? 'flex-start' : 'center',
+              border: 'none', background: 'transparent',
+              borderRadius: 6,
+              cursor: 'pointer',
+              color: isActive ? 'var(--fg)' : 'var(--fg-3)',
+              transition: 'background var(--motion-fast), color var(--motion-fast)',
+              fontSize: 13,
+              fontWeight: isActive ? 500 : 400,
+              backgroundColor: isActive ? 'var(--accent-soft)' : 'transparent',
+            }}
+            onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--bg-hover)'; }}
+            onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+            title={!expanded ? s.label : undefined}
+          >
+            {isActive && (
+              <span style={{
+                position: 'absolute', left: -8, top: 6, bottom: 6, width: 3,
+                background: 'var(--accent)', borderRadius: 2,
+                animation: 'stripe-in 220ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+              }} />
+            )}
+            <Icon size={15} />
+            {expanded && (
+              <>
+                <span style={{ flex: 1, textAlign: 'left' }}>{s.label}</span>
+                {s.badge && (
+                  <span className="mono tnum" style={{
+                    fontSize: 10.5, padding: '1px 6px', borderRadius: 999,
+                    background: isActive ? 'var(--accent-soft-2)' : 'var(--bg)',
+                    color: isActive ? 'var(--accent)' : 'var(--fg-3)',
+                    border: '1px solid var(--line)',
+                  }}>{s.badge}</span>
+                )}
+                <span className="kbd" style={{ opacity: 0.5, fontSize: 10 }}>{s.n}</span>
+              </>
+            )}
+          </button>
+        );
+      })}
+      <div className="grow" />
+      <button onClick={onExpandToggle}
+        style={{
+          height: 30, border: 'none', background: 'transparent',
+          color: 'var(--fg-3)', cursor: 'pointer', borderRadius: 6,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+        }}
+        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+      >
+        {expanded ? <Icons.Collapse size={14} /> : <Icons.Expand size={14} />}
+        {expanded && <span style={{ fontSize: 12 }}>Collapse</span>}
+      </button>
+    </nav>
+  );
+}
+
+// ── Right rail: live ticker + persona roster ─────────────────────
+function PersonaChip({ p, size = 'sm' }) {
+  return <span className={`avatar ${size} ${p.cls}`}>{p.initials}</span>;
+}
+
+function TickerRow({ ev, personas }) {
+  const p = personas.find(x => x.id === ev.p);
+  const verbCol = ev.kind === 'tool' ? 'var(--fg-2)' : ev.kind === 'msg' ? 'var(--accent)' : ev.kind === 'plan' ? 'var(--p-cyra)' : 'var(--fg-3)';
+  return (
+    <div className="row gap-3" style={{ padding: '6px 0', alignItems: 'flex-start', fontSize: 12 }}>
+      <span className="mono tnum" style={{ width: 38, color: 'var(--fg-4)', flexShrink: 0, paddingTop: 3 }}>{ev.t}</span>
+      <PersonaChip p={p} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="row gap-2" style={{ alignItems: 'baseline' }}>
+          <span style={{ fontWeight: 500, color: 'var(--fg)' }}>{p.name}</span>
+          <span className="mono" style={{ fontSize: 11, color: verbCol }}>{ev.verb}</span>
+        </div>
+        <div className="mono nowrap" style={{ fontSize: 11.5, color: 'var(--fg-3)', marginTop: 1 }}>{ev.obj}</div>
+      </div>
+    </div>
+  );
+}
+
+function PersonaRow({ p }) {
+  const stateCol = p.state === 'idle' ? 'var(--fg-4)' : p.state === 'queued' ? 'var(--warning)' : 'var(--accent)';
+  return (
+    <div className="row gap-3" style={{ padding: '8px 0', alignItems: 'center' }}>
+      <PersonaChip p={p} size="" />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="row gap-2" style={{ alignItems: 'baseline' }}>
+          <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg)' }}>{p.name}</span>
+          <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>{p.role}</span>
+        </div>
+        <div className="row gap-2" style={{ marginTop: 1 }}>
+          <span style={{ width: 6, height: 6, borderRadius: 3, background: stateCol, flexShrink: 0 }} />
+          <span className="nowrap" style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>{p.focus}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RightRail({ ticker, personas }) {
+  return (
+    <aside style={{
+      width: 320, flexShrink: 0,
+      borderLeft: '1px solid var(--line)',
+      background: 'var(--bg-elev)',
+      display: 'flex', flexDirection: 'column',
+      minHeight: 0,
+    }}>
+      <div style={{ padding: '14px 18px 8px', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
+        <div className="row gap-2">
+          <span className="eyebrow">Activity</span>
+          <span className="grow" />
+          <span className="pill accent sm" style={{ height: 18, padding: '0 6px', fontSize: 10 }}>
+            <span className="dot live" /> live
+          </span>
+        </div>
+      </div>
+      <div style={{ flex: 1, overflow: 'auto', padding: '4px 18px', minHeight: 0 }}>
+        {ticker.map((ev, i) => <TickerRow key={i} ev={ev} personas={personas} />)}
+      </div>
+      <div style={{ padding: '14px 18px 6px', borderTop: '1px solid var(--line)', flexShrink: 0 }}>
+        <div className="row gap-2" style={{ marginBottom: 4 }}>
+          <span className="eyebrow">Personas</span>
+          <span className="grow" />
+          <span className="mono" style={{ fontSize: 10.5, color: 'var(--fg-3)' }}>{personas.length} on team</span>
+        </div>
+        {personas.map(p => <PersonaRow key={p.id} p={p} />)}
+      </div>
+    </aside>
+  );
+}
+
+window.BreadcrumbBar = BreadcrumbBar;
+window.TaskHeader = TaskHeader;
+window.LeftRail = LeftRail;
+window.RightRail = RightRail;
+window.PersonaChip = PersonaChip;
+
+})();
+
+/* ===== sections.jsx ===== */
+(function() {
+// sections.jsx — all 10 task-detail section pages
+const { Icons } = window;
+const D = window.HARNESS_DATA;
+const personaById = (id) => D.personas.find(p => p.id === id);
+
+// ── Shared atoms ────────────────────────────────────────────
+function Shell({ eyebrow, title, hint, actions, children }) {
+  return (
+    <div className="section-anim" style={{
+      padding: '24px 28px 40px', display: 'flex', flexDirection: 'column', gap: 18,
+      maxWidth: 1100, margin: '0 auto',
+    }}>
+      <div className="row gap-3" style={{ alignItems: 'flex-end' }}>
+        <div style={{ flex: 1 }}>
+          {eyebrow && <div className="eyebrow" style={{ marginBottom: 6 }}>{eyebrow}</div>}
+          <div className="section-h">{title}</div>
+          {hint && <div className="section-sub" style={{ marginTop: 4 }}>{hint}</div>}
+        </div>
+        {actions && <div className="row gap-2">{actions}</div>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Card({ title, eyebrow, right, children, style, pad = 16 }) {
+  return (
+    <div className="card" style={{ overflow: 'hidden', ...style }}>
+      {(title || eyebrow || right) && (
+        <div className="row gap-3" style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)', alignItems: 'center' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {eyebrow && <div className="eyebrow" style={{ marginBottom: 1 }}>{eyebrow}</div>}
+            {title && <div style={{ fontSize: 13.5, fontWeight: 600 }}>{title}</div>}
+          </div>
+          {right}
+        </div>
+      )}
+      <div style={{ padding: pad }}>{children}</div>
+    </div>
+  );
+}
+
+function StatRow({ items }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${items.length}, 1fr)`, gap: 12 }}>
+      {items.map((s, i) => (
+        <div key={i} className="card" style={{ padding: '14px 16px' }}>
+          <div className="eyebrow" style={{ marginBottom: 4 }}>{s.label}</div>
+          <div className="row gap-2" style={{ alignItems: 'baseline' }}>
+            <span className="mono tnum" style={{ fontSize: 22, fontWeight: 600, letterSpacing: -0.02, color: s.color || 'var(--fg)' }}>{s.v}</span>
+            {s.suffix && <span style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>{s.suffix}</span>}
+          </div>
+          {s.sub && <div style={{ fontSize: 11.5, color: 'var(--fg-3)', marginTop: 2 }}>{s.sub}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PInline({ id, suffix }) {
+  const p = personaById(id);
+  if (!p) return null;
+  return <span className="row gap-2" style={{ display: 'inline-flex' }}>
+    <span className={`avatar sm ${p.cls}`}>{p.initials}</span>
+    <span style={{ color: 'var(--fg-2)', fontWeight: 500, fontSize: 12.5 }}>{p.name}</span>
+    {suffix && <span style={{ color: 'var(--fg-3)', fontSize: 12 }}>· {suffix}</span>}
+  </span>;
+}
+
+// ─── 1. Overview ────────────────────────────────────────────
+function Overview({ go }) {
+  const t = D.task;
+  return (
+    <Shell eyebrow="01 · Overview" title="What's happening on this task"
+      hint={`${t.id} · started 5m 40s ago · $${t.cost.toFixed(2)} of $5.00 budget consumed`}
+      actions={<>
+        <button className="btn sm"><Icons.Refresh size={12}/>Refresh</button>
+        <button className="btn sm primary"><Icons.Eye size={12}/>Watch live</button>
+      </>}
+    >
+      <StatRow items={[
+        { label: 'Stage',      v: 'Dev',          suffix: '· 60%', sub: 'Bram, subtask 2/3' },
+        { label: 'Spent',      v: `$${t.cost.toFixed(2)}`, suffix: '/ $5.00', sub: 'projecting $2.10' },
+        { label: 'Files',      v: '12', sub: '+284 / −91 lines' },
+        { label: 'Tests',      v: '38', suffix: 'pass', sub: '0 failing · 0 skipped', color: 'var(--success)' },
+      ]} />
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 16 }}>
+        <Card eyebrow="Brief" pad={18}>
+          <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: 'var(--fg)', textWrap: 'pretty' }}>
+            Cart-abandonment metric on the BI dashboard diverges from the in-product analytics by 11–14% MoM,
+            undermining trust in both surfaces. Find the source, propose a fix, ship it behind a feature flag.
+          </p>
+          <div className="row gap-3" style={{ paddingTop: 14, marginTop: 14, borderTop: '1px solid var(--line)' }}>
+            <PInline id="aster" suffix="found cause" />
+            <span style={{ width: 1, height: 12, background: 'var(--line)' }} />
+            <PInline id="bram" suffix="patching" />
+            <span style={{ width: 1, height: 12, background: 'var(--line)' }} />
+            <PInline id="cyra" suffix="PRD owner" />
+          </div>
+          <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
+            <div className="eyebrow" style={{ marginBottom: 8 }}>Hypothesis (Aster, confirmed by Vega)</div>
+            <p style={{ margin: 0, fontSize: 13.5, color: 'var(--fg-2)', lineHeight: 1.55 }}>
+              <span style={{ color: 'var(--fg)', fontWeight: 500 }}>Timer window leaks across UTC midnight.</span>
+              <code style={{ background: 'var(--bg-active)', padding: '1px 5px', borderRadius: 3, margin: '0 4px' }}>cart.ts</code>
+              uses local time for the 30-minute abandonment window. After 23:30 local, sessions split across two day-buckets and double-count.
+              Fix is one helper module + 2 call-site updates.
+            </p>
+          </div>
+        </Card>
+
+        <Card eyebrow="Quick jump" pad={10}>
+          {[
+            { k: 'invest', i: 'Brain', l: 'Investigation', s: '4 findings · 1 high-sev' },
+            { k: 'prd',    i: 'Doc',   l: 'PRD',           s: 'v3 · approved by Cyra' },
+            { k: 'code',   i: 'Code',  l: 'Code diff',     s: '12 files · +284 / −91' },
+            { k: 'qa',     i: 'Bug',   l: 'QA',            s: '38 / 38 passing' },
+            { k: 'review', i: 'Eye',   l: 'Review',        s: '8 of 9 checks pass' },
+            { k: 'costs',  i: 'Coin',  l: 'Costs',         s: '$1.20 spent · $0.90 left' },
+          ].map(j => {
+            const I = Icons[j.i];
+            return (
+              <button key={j.k} onClick={() => go(j.k)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12, width: '100%',
+                  background: 'transparent', border: 'none', padding: '8px 6px',
+                  borderRadius: 6, cursor: 'pointer', textAlign: 'left',
+                  transition: 'background var(--motion-fast)',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <span style={{
+                  width: 28, height: 28, borderRadius: 6, display: 'grid', placeItems: 'center',
+                  background: 'var(--accent-soft)', color: 'var(--accent)',
+                }}><I size={14}/></span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>{j.l}</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>{j.s}</div>
+                </div>
+                <Icons.ArrowR size={11} style={{ color: 'var(--fg-4)' }} />
+              </button>
+            );
+          })}
+        </Card>
+      </div>
+    </Shell>
+  );
+}
+
+// ─── 2. Repo Selection ──────────────────────────────────────
+function RepoSelection() {
+  return (
+    <Shell eyebrow="02 · Repo Selection" title="Three-tier match across the smartpay-platform org"
+      hint="Aster scored 7 candidate repos by keyword density, code-graph proximity, and semantic embedding."
+      actions={<button className="btn sm"><Icons.Refresh size={12}/>Re-score</button>}>
+      <Card pad={0}>
+        <div style={{
+          display: 'grid', gridTemplateColumns: '1.4fr 80px 80px 80px 1.4fr 80px',
+          padding: '11px 16px', borderBottom: '1px solid var(--line)', background: 'var(--bg-elev-2)',
+          fontSize: 11, color: 'var(--fg-3)', fontWeight: 600, letterSpacing: 0.04, textTransform: 'uppercase',
+        }}>
+          <span>Repository</span>
+          <span style={{ textAlign: 'right' }}>Keyword</span>
+          <span style={{ textAlign: 'right' }}>Code</span>
+          <span style={{ textAlign: 'right' }}>Semantic</span>
+          <span style={{ paddingLeft: 16 }}>Why</span>
+          <span style={{ textAlign: 'right' }}>Pick</span>
+        </div>
+        {D.repos.map((r, i) => {
+          const score = r.kw * 0.4 + (r.code / 100) * 0.3 + r.sem * 0.3;
+          const reasons = [
+            'Owns the metric emission path — cart.ts emits the divergent counter.',
+            'Calls into verification but does not own the metric.',
+            'Receives events; aggregation is correct here.',
+            'Tangentially mentioned in comments only.',
+            'Surfaces the metric, does not produce it.',
+            'Read-only consumer of the metric.',
+            'Unrelated event surface.',
+          ];
+          return (
+            <div key={r.name} style={{
+              display: 'grid', gridTemplateColumns: '1.4fr 80px 80px 80px 1.4fr 80px',
+              padding: '12px 16px', alignItems: 'center',
+              borderBottom: i === D.repos.length - 1 ? 'none' : '1px solid var(--line)',
+              background: r.picked ? 'var(--accent-soft)' : 'transparent',
+              fontSize: 13,
+            }}>
+              <div className="row gap-2" style={{ minWidth: 0 }}>
+                <Icons.Folder size={13} style={{ color: r.picked ? 'var(--accent)' : 'var(--fg-3)' }} />
+                <span className="mono nowrap" style={{ color: 'var(--fg)', fontWeight: r.picked ? 500 : 400 }}>{r.name}</span>
+              </div>
+              <Score v={r.kw} />
+              <div className="mono tnum" style={{ textAlign: 'right', color: 'var(--fg-2)' }}>{r.code}</div>
+              <Score v={r.sem} />
+              <div style={{ paddingLeft: 16, fontSize: 12, color: 'var(--fg-3)' }}>{reasons[i]}</div>
+              <div style={{ textAlign: 'right' }}>
+                {r.picked
+                  ? <span className="pill accent" style={{ height: 20 }}><Icons.Check size={10} sw={2.4}/>picked</span>
+                  : <span className="mono tnum" style={{ fontSize: 11, color: 'var(--fg-4)' }}>{score.toFixed(2)}</span>}
+              </div>
+            </div>
+          );
+        })}
+      </Card>
+
+      <div className="row gap-3" style={{ alignItems: 'center' }}>
+        <PInline id="aster" suffix="2.4s · used rg, code-graph, embedding search" />
+        <span className="grow" />
+        <button className="btn sm"><Icons.Plus size={12}/>Add candidate</button>
+        <button className="btn sm"><Icons.Pen size={12}/>Override pick</button>
+      </div>
+    </Shell>
+  );
+}
+
+function Score({ v }) {
+  return (
+    <div className="row gap-2" style={{ justifyContent: 'flex-end', alignItems: 'center' }}>
+      <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--line)', overflow: 'hidden' }}>
+        <div style={{ width: `${v * 100}%`, height: '100%', background: v > 0.7 ? 'var(--accent)' : v > 0.4 ? 'var(--info)' : 'var(--fg-4)' }} />
+      </div>
+      <span className="mono tnum" style={{ fontSize: 11.5, color: 'var(--fg-2)', minWidth: 30, textAlign: 'right' }}>{v.toFixed(2)}</span>
+    </div>
+  );
+}
+
+window.Sec = window.Sec || {};
+window.Sec.Overview = Overview;
+window.Sec.RepoSelection = RepoSelection;
+window.Sec._helpers = { Shell, Card, StatRow, PInline };
+
+})();
+
+/* ===== sections-b.jsx ===== */
+(function() {
+// sections-b.jsx — sections 3, 4 (Investigation, PRD)
+const { Icons } = window;
+const D = window.HARNESS_DATA;
+const { Shell, Card, StatRow, PInline } = window.Sec._helpers;
+const personaById = (id) => D.personas.find(p => p.id === id);
+
+// ─── 3. Investigation ─────────────────────────────────────────
+function Investigation() {
+  const findings = [
+    { sev: 'high', by: 'aster', t: 'Timer window leaks across UTC midnight',
+      file: 'src/metrics/cart.ts:142', body: 'cart.ts uses local time for the 30-min abandonment window. After 23:30 local, sessions split across day-buckets and double-count.', conf: 0.94 },
+    { sev: 'med', by: 'vega', t: 'sendBeacon flush race on tab unload',
+      file: 'src/api/events.ts:54', body: 'flush() resolves before sendBeacon completes when tab unloads <80ms after event. ~0.4pp drift independently.', conf: 0.78 },
+    { sev: 'low', by: 'aster', t: 'Funnel SQL aliases timestamp column',
+      file: 'analytics/funnel.sql:22', body: 'Pre-existing, unrelated to drift. Worth filing as TAS-1671.', conf: 0.52 },
+  ];
+  const sevC = { high: 'var(--danger)', med: 'var(--warning)', low: 'var(--fg-3)' };
+  const trail = [
+    { t: '0:04', who: 'aster', verb: 'rg',  obj: '"abandon" → 23 hits across 4 files' },
+    { t: '0:31', who: 'aster', verb: 'read', obj: 'src/metrics/cart.ts:88-180' },
+    { t: '1:12', who: 'aster', verb: 'web', obj: 'mixpanel docs · funnels · timezone handling' },
+    { t: '1:48', who: 'vega',  verb: 'note', obj: 'reproduced double-count in 23:45→00:15 session' },
+    { t: '2:14', who: 'aster', verb: 'finding', obj: 'high-sev #1 filed' },
+  ];
+  return (
+    <Shell eyebrow="03 · Investigation" title="What Aster found"
+      hint="47 file reads · 12 searches · 3 web fetches · cross-checked by Vega"
+      actions={<><button className="btn sm"><Icons.Filter size={12}/>Filter</button><button className="btn sm"><Icons.Refresh size={12}/>Re-run</button></>}>
+      <StatRow items={[
+        { label: 'Findings', v: '3', sub: '1 high · 1 med · 1 low' },
+        { label: 'Reads',    v: '47', sub: 'across 12 files' },
+        { label: 'Searches', v: '12', sub: 'rg + ast-grep' },
+        { label: 'Conf avg', v: '0.75', sub: 'weighted by severity' },
+      ]}/>
+      {findings.map((f, i) => {
+        const p = personaById(f.by);
+        return (
+          <Card key={i} pad={0}>
+            <div style={{ display: 'grid', gridTemplateColumns: '4px 1fr', minHeight: 90 }}>
+              <div style={{ background: sevC[f.sev] }} />
+              <div style={{ padding: 16 }}>
+                <div className="row gap-2" style={{ marginBottom: 6 }}>
+                  <span className="pill" style={{ borderColor: `oklch(from ${sevC[f.sev]} l c h / 0.4)`, color: sevC[f.sev], background: `oklch(from ${sevC[f.sev]} l c h / 0.1)`, fontWeight: 600, letterSpacing: 0.06 }}>{f.sev.toUpperCase()}</span>
+                  <span style={{ fontSize: 14.5, fontWeight: 600 }}>{f.t}</span>
+                </div>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--fg-2)', lineHeight: 1.55 }}>{f.body}</p>
+                <div className="row gap-3" style={{ marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span className="mono" style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>{f.file}</span>
+                  <span style={{ width: 1, height: 12, background: 'var(--line)' }} />
+                  <span className="row gap-2" style={{ fontSize: 11.5 }}>
+                    <span className={`avatar sm ${p.cls}`}>{p.initials}</span>
+                    <span style={{ color: 'var(--fg-2)' }}>{p.name}</span>
+                  </span>
+                  <span className="grow" />
+                  <span className="row gap-2" style={{ fontSize: 11 }}>
+                    <span style={{ color: 'var(--fg-3)' }}>conf</span>
+                    <div style={{ width: 60, height: 4, background: 'var(--line)', borderRadius: 2 }}>
+                      <div style={{ width: `${f.conf * 100}%`, height: '100%', background: 'var(--accent)', borderRadius: 2 }} />
+                    </div>
+                    <span className="mono tnum" style={{ color: 'var(--fg-2)' }}>{f.conf.toFixed(2)}</span>
+                  </span>
+                  <button className="btn sm"><Icons.Code size={11}/>View</button>
+                </div>
+              </div>
+            </div>
+          </Card>
+        );
+      })}
+      <Card eyebrow="Investigation trail" title="What was looked at, in order">
+        <div className="col gap-2">
+          {trail.map((s, i) => {
+            const p = personaById(s.who);
+            return (
+              <div key={i} className="row gap-3" style={{ fontSize: 12.5, padding: '4px 0' }}>
+                <span className="mono tnum" style={{ width: 38, color: 'var(--fg-4)' }}>{s.t}</span>
+                <span className={`avatar sm ${p.cls}`}>{p.initials}</span>
+                <span className="mono" style={{ width: 60, color: 'var(--fg-3)' }}>{s.verb}</span>
+                <span style={{ flex: 1, color: 'var(--fg-2)' }}>{s.obj}</span>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+    </Shell>
+  );
+}
+
+// ─── 4. PRD ───────────────────────────────────────────────────
+function PRD() {
+  const ac = [
+    { ok: true,  t: 'BI dashboard cart-abandon counter matches in-product analytics within ±1.5pp over 7d window' },
+    { ok: true,  t: 'Fix is gated behind cart_abandon_v2 feature flag with 1% → 100% ramp' },
+    { ok: true,  t: 'No retroactive backfill — historical drift acknowledged in CHANGELOG' },
+    { ok: false, t: 'Property tests cover UTC-midnight, DST, and concurrent session edge cases' },
+  ];
+  return (
+    <Shell eyebrow="04 · PRD" title="Restore parity in cart-abandonment counter"
+      hint="v3 · approved by Cyra 2m ago"
+      actions={<><button className="btn sm"><Icons.Pen size={12}/>Edit</button><button className="btn sm"><Icons.History size={12}/>v1 · v2 · v3</button></>}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 14 }}>
+        <Card pad={20}>
+          <div className="eyebrow" style={{ marginBottom: 8 }}>Goal</div>
+          <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: 'var(--fg)' }}>
+            Eliminate the 11–14% drift between BI's cart-abandonment metric and in-product analytics so finance, growth, and product can share a single source of truth.
+          </p>
+          <div className="eyebrow" style={{ marginTop: 18, marginBottom: 8 }}>Non-goals</div>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--fg-2)', lineHeight: 1.7 }}>
+            <li>Re-architecting the metrics transport layer.</li>
+            <li>Backfilling historical events (acknowledged loss).</li>
+            <li>Changing the in-product analytics SDK.</li>
+          </ul>
+          <div className="eyebrow" style={{ marginTop: 18, marginBottom: 10 }}>Acceptance criteria</div>
+          <div className="col gap-2">
+            {ac.map((c, i) => (
+              <div key={i} className="row gap-3" style={{ alignItems: 'flex-start' }}>
+                <span style={{
+                  width: 18, height: 18, borderRadius: 9, flexShrink: 0, marginTop: 1,
+                  background: c.ok ? 'var(--success)' : 'transparent',
+                  border: c.ok ? 'none' : '1.5px dashed var(--line-2)',
+                  display: 'grid', placeItems: 'center',
+                }}>
+                  {c.ok && <Icons.Check size={11} sw={2.4}/>}
+                </span>
+                <span style={{ fontSize: 13, color: c.ok ? 'var(--fg-2)' : 'var(--fg-3)', lineHeight: 1.5 }}>{c.t}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+        <div className="col gap-3">
+          <Card eyebrow="Owner" pad={14}>
+            <div className="row gap-3" style={{ alignItems: 'center' }}>
+              <span className="avatar lg cyra">CY</span>
+              <div>
+                <div style={{ fontSize: 13.5, fontWeight: 600 }}>Cyra</div>
+                <div style={{ fontSize: 12, color: 'var(--fg-3)' }}>PM persona · approved v3</div>
+              </div>
+            </div>
+          </Card>
+          <Card eyebrow="Stakeholders" pad={14}>
+            <div className="col gap-2" style={{ fontSize: 12.5 }}>
+              {[['cto','requested'],['growth lead','consulted'],['data eng','informed']].map(([r,o], i) => (
+                <div key={i} className="row gap-2">
+                  <span style={{ width: 6, height: 6, borderRadius: 3, background: 'var(--accent)' }} />
+                  <span style={{ color: 'var(--fg-2)', fontWeight: 500 }}>{r}</span>
+                  <span style={{ color: 'var(--fg-3)' }}>· {o}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+          <Card eyebrow="Rollout plan" pad={14}>
+            <div className="col gap-2" style={{ fontSize: 12.5 }}>
+              {[['day 1','1% cohort'],['day 3','10% cohort'],['day 5','50% cohort'],['day 7','100% — flag retired']].map(([d,t], i) => (
+                <div key={i} className="row gap-3">
+                  <span className="mono" style={{ width: 50, color: 'var(--fg-3)' }}>{d}</span>
+                  <span style={{ color: 'var(--fg)' }}>{t}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      </div>
+    </Shell>
+  );
+}
+
+window.Sec.Investigation = Investigation;
+window.Sec.PRD = PRD;
+
+})();
+
+/* ===== sections-c.jsx ===== */
+(function() {
+// sections-c.jsx — sections 5-7
+const { Icons } = window;
+const D = window.HARNESS_DATA;
+const { Shell, Card, StatRow, PInline } = window.Sec._helpers;
+
+function Code() {
+  const [active, setActive] = React.useState(D.files[0].path);
+  const file = D.files.find(f => f.path === active);
+  const adds = D.files.reduce((a, f) => a + f.add, 0);
+  const dels = D.files.reduce((a, f) => a + f.del, 0);
+  return (
+    <Shell eyebrow="05 · Code" title="Patch in flight"
+      hint={`Bram · 12 files · +${adds} / −${dels} · branch tas-1662/cart-abandonment-fix`}
+      actions={<><button className="btn sm"><Icons.Term size={12}/>Editor</button><button className="btn sm primary"><Icons.GitBranch size={12}/>Open PR</button></>}>
+      <Card pad={0}>
+        <div style={{ display: 'grid', gridTemplateColumns: '270px 1fr', minHeight: 460 }}>
+          <div style={{ borderRight: '1px solid var(--line)' }}>
+            <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--line)' }}><div className="eyebrow">Files · 12</div></div>
+            {D.files.map(f => (
+              <button key={f.path} onClick={() => setActive(f.path)} style={{
+                display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 14px', border: 'none',
+                background: active === f.path ? 'var(--accent-soft)' : 'transparent', textAlign: 'left', cursor: 'pointer',
+                borderLeft: active === f.path ? '2px solid var(--accent)' : '2px solid transparent',
+              }}>
+                <span className="mono" style={{ fontSize: 9, fontWeight: 700, width: 12, color: f.status === 'new' ? 'var(--success)' : 'var(--warning)' }}>{f.status === 'new' ? 'A' : 'M'}</span>
+                <span className="mono nowrap" style={{ flex: 1, fontSize: 11.5, color: active === f.path ? 'var(--fg)' : 'var(--fg-2)' }}>{f.path.split('/').slice(-1)[0]}</span>
+                <span className="mono tnum" style={{ fontSize: 10, color: 'var(--success)' }}>+{f.add}</span>
+                <span className="mono tnum" style={{ fontSize: 10, color: 'var(--danger)' }}>−{f.del}</span>
+              </button>
+            ))}
+          </div>
+          <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            <div className="row gap-3" style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)' }}>
+              <span className="mono" style={{ fontSize: 12.5 }}>{file.path}</span>
+              <span className="grow" />
+              <span className="mono tnum" style={{ fontSize: 11.5 }}><span style={{ color: 'var(--success)' }}>+{file.add}</span> <span style={{ color: 'var(--danger)' }}>−{file.del}</span></span>
+            </div>
+            <Diff />
+          </div>
+        </div>
+      </Card>
+    </Shell>
+  );
+}
+
+function Diff() {
+  const lines = [
+    { k: 'meta', c: '@@ -134,12 +134,18 @@ src/metrics/cart.ts' },
+    { k: 'ctx', l: 134, r: 134, c: 'export class CartTracker {' },
+    { k: 'ctx', l: 135, r: 135, c: '  private windows = new Map<string, AbandonWindow>();' },
+    { k: 'del', l: 137, r: '',  c: '  shouldAbandon(s: Session): boolean {' },
+    { k: 'del', l: 138, r: '',  c: '    const start = new Date(s.lastEvent).getTime();' },
+    { k: 'del', l: 139, r: '',  c: '    return Date.now() - start > 30 * 60 * 1000;' },
+    { k: 'del', l: 140, r: '',  c: '  }' },
+    { k: 'add', l: '',  r: 137, c: '  shouldAbandon(s: Session): boolean {' },
+    { k: 'add', l: '',  r: 138, c: '    // FIX: pin to UTC; window must not cross day-boundary' },
+    { k: 'add', l: '',  r: 139, c: '    const start = utcMillis(s.lastEvent);' },
+    { k: 'add', l: '',  r: 140, c: '    const now   = utcMillis(new Date());' },
+    { k: 'add', l: '',  r: 141, c: '    return (now - start) > THIRTY_MIN_MS;' },
+    { k: 'add', l: '',  r: 142, c: '  }' },
+    { k: 'ctx', l: 141, r: 143, c: '' },
+    { k: 'ctx', l: 142, r: 144, c: '  emit(s: Session) {' },
+  ];
+  const bg = { add: 'oklch(0.68 0.16 156 / 0.12)', del: 'oklch(0.65 0.20 28 / 0.12)' };
+  return (
+    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, lineHeight: 1.55 }}>
+      {lines.map((l, i) => l.k === 'meta' ? (
+        <div key={i} style={{ padding: '6px 16px', color: 'var(--fg-3)', background: 'var(--bg-elev-2)' }}>{l.c}</div>
+      ) : (
+        <div key={i} style={{ display: 'grid', gridTemplateColumns: '40px 40px 14px 1fr', padding: '0 8px', background: bg[l.k] }}>
+          <span className="mono tnum" style={{ color: 'var(--fg-4)', textAlign: 'right', paddingRight: 6 }}>{l.l}</span>
+          <span className="mono tnum" style={{ color: 'var(--fg-4)', textAlign: 'right', paddingRight: 6 }}>{l.r}</span>
+          <span style={{ color: 'var(--fg-3)', textAlign: 'center' }}>{l.k === 'add' ? '+' : l.k === 'del' ? '−' : ' '}</span>
+          <span style={{ color: l.k === 'ctx' ? 'var(--fg-2)' : 'var(--fg)', whiteSpace: 'pre' }}>{l.c}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function QA() {
+  const suites = [
+    { n: 'cart.test.ts',     tot: 18, p: 18, ms: 412,  s: 'pass' },
+    { n: 'funnel.test.ts',   tot: 12, p: 12, ms: 288,  s: 'pass' },
+    { n: 'abandon.int.ts',   tot: 6,  p: 6,  ms: 1840, s: 'pass' },
+    { n: 'timestamps.prop',  tot: 2,  p: 2,  ms: 5120, s: 'pass' },
+    { n: '24h-replay.ts',    tot: 1,  p: 0,  ms: 0,    s: 'queue' },
+  ];
+  return (
+    <Shell eyebrow="06 · QA" title="Niko's regression sweep"
+      hint="38 of 39 passing · 1 queued · 0 failing"
+      actions={<><button className="btn sm"><Icons.Refresh size={12}/>Re-run</button><button className="btn sm primary"><Icons.Plus size={12}/>Add test</button></>}>
+      <StatRow items={[
+        { label: 'Pass / Fail', v: '38 / 0', sub: 'queued: 1', color: 'var(--success)' },
+        { label: 'Coverage', v: '94.2%', sub: '+1.8 baseline' },
+        { label: 'Wall time', v: '7.7s', sub: '4 workers' },
+        { label: 'Flake risk', v: 'low', sub: '0 reruns', color: 'var(--success)' },
+      ]} />
+      <Card pad={0}>
+        {suites.map((s, i) => (
+          <div key={s.n} style={{
+            display: 'grid', gridTemplateColumns: '1.5fr 1fr 100px 100px 100px',
+            padding: '12px 16px', alignItems: 'center',
+            borderTop: i ? '1px solid var(--line)' : 'none',
+          }}>
+            <div className="row gap-3">
+              <span style={{ width: 8, height: 8, borderRadius: 4, background: s.s === 'pass' ? 'var(--success)' : 'var(--warning)' }} />
+              <span className="mono" style={{ fontSize: 12.5 }}>{s.n}</span>
+            </div>
+            <div className="row gap-1">
+              {Array.from({ length: s.tot }).map((_, j) => (
+                <span key={j} style={{ width: 8, height: 14, borderRadius: 1.5, background: j < s.p ? 'var(--success)' : 'var(--line-2)' }} />
+              ))}
+            </div>
+            <span className="mono tnum" style={{ textAlign: 'right', fontSize: 12, color: 'var(--fg-2)' }}>{s.p}/{s.tot}</span>
+            <span className="mono tnum" style={{ textAlign: 'right', fontSize: 12, color: 'var(--fg-3)' }}>{s.ms ? `${s.ms}ms` : '—'}</span>
+            <span style={{ textAlign: 'right' }}>
+              {s.s === 'pass'
+                ? <span className="pill" style={{ color: 'var(--success)', borderColor: 'oklch(from var(--success) l c h / 0.4)', background: 'oklch(from var(--success) l c h / 0.1)' }}>passing</span>
+                : <span className="pill" style={{ color: 'var(--warning)', borderColor: 'oklch(from var(--warning) l c h / 0.4)', background: 'oklch(from var(--warning) l c h / 0.1)' }}>queued</span>}
+            </span>
+          </div>
+        ))}
+      </Card>
+    </Shell>
+  );
+}
+
+function Review() {
+  const checks = [
+    { ok: true, t: 'Lint clean (0 errors, 0 warnings)' },
+    { ok: true, t: 'Type check passes (tsc --strict)' },
+    { ok: true, t: 'All tests passing (38/38)' },
+    { ok: true, t: 'Bundle size delta within budget (+0.4kb)' },
+    { ok: true, t: 'No new accessibility regressions' },
+    { ok: true, t: 'No secrets / PII in diff' },
+    { ok: true, t: 'Feature flag wired correctly' },
+    { ok: true, t: 'Migration plan documented in PR body' },
+    { ok: false, t: 'Replay against 24h traffic (queued — runs on PR open)' },
+  ];
+  return (
+    <Shell eyebrow="07 · Review" title="Cyra's pre-merge checklist"
+      hint="8 of 9 checks pass · 1 queued. Open PR to run the final replay."
+      actions={<><button className="btn sm"><Icons.Refresh size={12}/>Re-run</button><button className="btn sm primary"><Icons.GitBranch size={12}/>Open PR</button></>}>
+      <Card pad={0}>
+        {checks.map((c, i) => (
+          <div key={i} className="row gap-3" style={{ padding: '12px 16px', borderTop: i ? '1px solid var(--line)' : 'none', alignItems: 'center' }}>
+            <span style={{ width: 22, height: 22, borderRadius: 11, flexShrink: 0,
+              background: c.ok ? 'var(--success)' : 'transparent',
+              border: c.ok ? 'none' : '1.5px dashed var(--line-2)',
+              display: 'grid', placeItems: 'center' }}>
+              {c.ok && <Icons.Check size={12} sw={2.4}/>}
+            </span>
+            <span style={{ flex: 1, fontSize: 13, color: c.ok ? 'var(--fg)' : 'var(--fg-3)' }}>{c.t}</span>
+            <button className="btn sm" style={{ opacity: c.ok ? 0.6 : 1 }}><Icons.Term size={11}/>Log</button>
+          </div>
+        ))}
+      </Card>
+    </Shell>
+  );
+}
+
+window.Sec.Investigation = window.Sec.Investigation;  // already set in sections-b
+window.Sec.PRD = window.Sec.PRD;
+window.Sec.Code = Code;
+window.Sec.QA = QA;
+window.Sec.Review = Review;
+
+})();
+
+/* ===== sections-d.jsx ===== */
+(function() {
+// sections-d.jsx — sections 8, 9, 10 (Timeline, Chat, Costs)
+const { Icons } = window;
+const D = window.HARNESS_DATA;
+const { Shell, Card, StatRow, PInline } = window.Sec._helpers;
+const personaById = (id) => D.personas.find(p => p.id === id);
+
+// ─── 8. Timeline ─────────────────────────────────────────────
+function Timeline() {
+  const events = [
+    { t: '00:00', who: 'system', verb: 'Task created from #cart-bug', ic: 'Spark' },
+    { t: '00:08', who: 'aster',  verb: 'Began investigation · 7 repos scored', ic: 'Brain' },
+    { t: '01:22', who: 'aster',  verb: 'Identified high-sev finding · cart.ts:142', ic: 'Bug' },
+    { t: '02:40', who: 'cyra',   verb: 'Drafted PRD v1', ic: 'Doc' },
+    { t: '02:58', who: 'cto',    verb: 'Requested AC for DST + concurrent sessions', ic: 'Chat' },
+    { t: '03:14', who: 'cyra',   verb: 'PRD v3 · approved', ic: 'Check' },
+    { t: '03:20', who: 'bram',   verb: 'Started patch · branch tas-1662/cart-abandonment-fix', ic: 'Code' },
+    { t: '04:55', who: 'bram',   verb: 'Subtask 1/3 complete · cart.ts patched', ic: 'Check' },
+    { t: '05:20', who: 'niko',   verb: 'Test suites running · 38/38 pass', ic: 'Check' },
+    { t: '05:38', who: 'bram',   verb: 'Subtask 2/3 in flight · funnel.ts call sites', ic: 'Code' },
+    { t: '05:40', who: 'system', verb: 'PR draft prepared', ic: 'GitBranch' },
+  ];
+  return (
+    <Shell eyebrow="08 · Timeline" title="Everything that happened on this task"
+      hint="11 events · 5 personas · 5m 40s elapsed"
+      actions={<><button className="btn sm"><Icons.Filter size={12}/>Filter</button><button className="btn sm"><Icons.Eye size={12}/>Watch live</button></>}>
+      <Card pad={0}>
+        {events.map((e, i) => {
+          const p = e.who === 'system' ? null : e.who === 'cto' ? null : personaById(e.who);
+          const I = Icons[e.ic] || Icons.Spark;
+          return (
+            <div key={i} style={{
+              display: 'grid', gridTemplateColumns: '60px 24px 1fr 80px',
+              padding: '12px 16px', alignItems: 'center', gap: 12,
+              borderTop: i ? '1px solid var(--line)' : 'none',
+            }}>
+              <span className="mono tnum" style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>{e.t}</span>
+              <span style={{
+                width: 22, height: 22, borderRadius: 11, display: 'grid', placeItems: 'center',
+                background: 'var(--bg-active)', color: 'var(--accent)',
+              }}><I size={11}/></span>
+              <div className="row gap-2">
+                {p ? <span className={`avatar sm ${p.cls}`}>{p.initials}</span>
+                   : e.who === 'cto' ? <span className="avatar sm" style={{ background: 'oklch(0.42 0.02 260)' }}>JS</span>
+                   : <span className="avatar sm" style={{ background: 'transparent', border: '1px dashed var(--line-2)', color: 'var(--fg-3)' }}>SY</span>}
+                <span style={{ fontSize: 13, color: 'var(--fg)', fontWeight: 500 }}>
+                  {p ? p.name : e.who === 'cto' ? 'You' : 'system'}
+                </span>
+                <span style={{ fontSize: 13, color: 'var(--fg-2)' }}>{e.verb}</span>
+              </div>
+              <span style={{ textAlign: 'right' }}>
+                <Icons.ArrowR size={11} style={{ color: 'var(--fg-4)' }}/>
+              </span>
+            </div>
+          );
+        })}
+      </Card>
+    </Shell>
+  );
+}
+
+// ─── 9. Chat ─────────────────────────────────────────────────
+function Chat() {
+  const msgs = [
+    { who: 'cto', t: 'Why does the metric drift?', tm: '03:01' },
+    { who: 'aster', t: 'Timer window for the abandon event uses local time. After UTC midnight, sessions get split across day-buckets and counted twice. I traced it to cart.ts:142.', tm: '03:02' },
+    { who: 'cto', t: 'Confidence?', tm: '03:03' },
+    { who: 'aster', t: '0.94. Vega cross-checked. Drift trend matches DST boundary on 04/12.', tm: '03:03' },
+    { who: 'cto', t: 'Cyra — make sure the AC includes DST + concurrent sessions.', tm: '03:05' },
+    { who: 'cyra', t: 'On it. Adding to v3 now. PRD will be ready in ~1 min.', tm: '03:06' },
+    { who: 'cyra', t: 'PRD v3 ready. 4 acceptance criteria, behind cart_abandon_v2 flag. Approved on my side.', tm: '03:14' },
+    { who: 'cto', t: 'Approved. Bram, ship it.', tm: '03:18' },
+  ];
+  return (
+    <Shell eyebrow="09 · Chat" title="Conversation with the harness"
+      hint="@-mention any persona to delegate. Decisions and approvals live here."
+      actions={<button className="btn sm"><Icons.Plus size={12}/>New thread</button>}>
+      <Card pad={0}>
+        <div style={{ padding: '0 0' }}>
+          {msgs.map((m, i) => {
+            const isUser = m.who === 'cto';
+            const p = isUser ? null : personaById(m.who);
+            return (
+              <div key={i} style={{
+                padding: '12px 18px',
+                borderTop: i ? '1px solid var(--line)' : 'none',
+                background: isUser ? 'var(--bg-elev-2)' : 'transparent',
+              }}>
+                <div className="row gap-3" style={{ alignItems: 'flex-start' }}>
+                  {isUser
+                    ? <span className="avatar" style={{ background: 'oklch(0.42 0.02 260)', color: 'var(--fg)' }}>JS</span>
+                    : <span className={`avatar ${p.cls}`}>{p.initials}</span>}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="row gap-2" style={{ marginBottom: 4 }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 600 }}>{isUser ? 'You' : p.name}</span>
+                      <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>· {isUser ? 'Engineering Lead' : p.role}</span>
+                      <span className="grow"/>
+                      <span className="mono tnum" style={{ fontSize: 10.5, color: 'var(--fg-4)' }}>{m.tm}</span>
+                    </div>
+                    <p style={{ margin: 0, fontSize: 13.5, color: 'var(--fg-2)', lineHeight: 1.55, textWrap: 'pretty' }}>{m.t}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ borderTop: '1px solid var(--line)', padding: 14, background: 'var(--bg-elev-2)' }}>
+          <div className="row gap-2" style={{ alignItems: 'center', background: 'var(--bg)', border: '1px solid var(--line-2)', borderRadius: 8, padding: '8px 12px' }}>
+            <Icons.Spark size={13} style={{ color: 'var(--accent)' }} />
+            <span style={{ flex: 1, fontSize: 13, color: 'var(--fg-3)' }}>Reply to the harness… use @ to mention a persona</span>
+            <span className="kbd">⌘</span><span className="kbd">↵</span>
+          </div>
+        </div>
+      </Card>
+    </Shell>
+  );
+}
+
+// ─── 10. Costs ───────────────────────────────────────────────
+function Costs() {
+  const t = D.task;
+  const breakdown = [
+    { who: 'aster', model: 'sonnet 4.5', tok: 142_000, dol: 0.62, op: 'investigation, repo selection' },
+    { who: 'cyra',  model: 'opus 4',     tok:  48_000, dol: 0.34, op: 'PRD drafting, review' },
+    { who: 'bram',  model: 'sonnet 4.5', tok: 188_000, dol: 0.18, op: 'patching, tests' },
+    { who: 'vega',  model: 'sonnet 4.5', tok:  62_000, dol: 0.06, op: 'cross-check' },
+    { who: 'niko',  model: 'haiku 4.5',  tok:  24_000, dol: 0.00, op: 'idle until QA' },
+  ];
+  return (
+    <Shell eyebrow="10 · Costs" title="Token economics for this task"
+      hint={`$${t.cost.toFixed(2)} of $5.00 budget · projecting $2.10 at PR-ready`}
+      actions={<><button className="btn sm"><Icons.Pen size={12}/>Set budget</button><button className="btn sm"><Icons.Coin size={12}/>Per-persona caps</button></>}>
+      <StatRow items={[
+        { label: 'Spent',     v: `$${t.cost.toFixed(2)}`, sub: `of $5.00 (${Math.round(t.cost/5*100)}%)`, color: 'var(--accent)' },
+        { label: 'Tokens',    v: '464k', sub: 'across 5 personas' },
+        { label: 'Projected', v: '$2.10', sub: 'at PR-ready' },
+        { label: 'Cost/loc',  v: '$0.0048', sub: '+284 lines added' },
+      ]}/>
+      <Card pad={0}>
+        <div style={{
+          display: 'grid', gridTemplateColumns: '180px 130px 100px 100px 1fr',
+          padding: '11px 16px', borderBottom: '1px solid var(--line)', background: 'var(--bg-elev-2)',
+          fontSize: 11, fontWeight: 600, letterSpacing: 0.05, textTransform: 'uppercase', color: 'var(--fg-3)',
+        }}>
+          <span>Persona</span>
+          <span>Model</span>
+          <span style={{ textAlign: 'right' }}>Tokens</span>
+          <span style={{ textAlign: 'right' }}>Cost</span>
+          <span style={{ paddingLeft: 14 }}>Operations</span>
+        </div>
+        {breakdown.map((b, i) => {
+          const p = personaById(b.who);
+          const max = Math.max(...breakdown.map(x => x.dol));
+          return (
+            <div key={i} style={{
+              display: 'grid', gridTemplateColumns: '180px 130px 100px 100px 1fr',
+              padding: '12px 16px', borderTop: i ? '1px solid var(--line)' : 'none', alignItems: 'center',
+            }}>
+              <div className="row gap-2"><span className={`avatar sm ${p.cls}`}>{p.initials}</span><span style={{ fontSize: 12.5 }}>{p.name}</span></div>
+              <span className="mono" style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>{b.model}</span>
+              <span className="mono tnum" style={{ textAlign: 'right', fontSize: 12 }}>{(b.tok/1000).toFixed(0)}k</span>
+              <div className="row gap-2" style={{ justifyContent: 'flex-end' }}>
+                <div style={{ width: 36, height: 4, background: 'var(--line)', borderRadius: 2 }}>
+                  <div style={{ width: `${(b.dol / max) * 100}%`, height: '100%', background: 'var(--accent)', borderRadius: 2 }} />
+                </div>
+                <span className="mono tnum" style={{ fontSize: 12, minWidth: 44, textAlign: 'right' }}>${b.dol.toFixed(2)}</span>
+              </div>
+              <span style={{ paddingLeft: 14, fontSize: 12, color: 'var(--fg-3)' }}>{b.op}</span>
+            </div>
+          );
+        })}
+      </Card>
+    </Shell>
+  );
+}
+
+window.Sec.Timeline = Timeline;
+window.Sec.Chat = Chat;
+window.Sec.Costs = Costs;
+
+})();
+
+/* ===== board.jsx ===== */
+(function() {
+// board.jsx — Kanban board surface (parent of task detail)
+const Bd = {};
+const D = window.HARNESS_DATA;
+const BIcons = window.Icons;
+
+const COLUMNS = [
+  { k: 'triage',    label: 'Triage',       n: 3 },
+  { k: 'invest',    label: 'Investigating', n: 4 },
+  { k: 'building',  label: 'Building',      n: 3 },
+  { k: 'reviewing', label: 'Reviewing',     n: 2 },
+  { k: 'done',      label: 'Done',          n: 5 },
+];
+
+// Synthesized board fixtures — varied tasks across 5 columns
+const BOARD_TASKS = [
+  // Triage
+  { id: 'TAS-1671', col: 'triage', title: 'Funnel SQL aliases timestamp column inconsistently',     priority: 'p3', cost: 0.00, age: '12m', persona: null, repo: 'analytics-funnel',     spark: [1,1,2,1,1] },
+  { id: 'TAS-1670', col: 'triage', title: 'iOS 17.4 swipe gesture conflicts with cart drawer',      priority: 'p2', cost: 0.00, age: '34m', persona: null, repo: 'ios-shop',             spark: [1,2,1,2,2] },
+  { id: 'TAS-1669', col: 'triage', title: 'Vendor portal: bulk-edit margin shows stale on save',    priority: 'p2', cost: 0.00, age: '1h',  persona: null, repo: 'vendor-portal',        spark: [1,1,1,2,1] },
+
+  // Investigating
+  { id: 'TAS-1665', col: 'invest', title: 'Auth tokens leak into Datadog logs on 4xx response',     priority: 'p1', cost: 1.42, age: '18m', persona: 'aster', repo: 'auth-service',       spark: [2,4,3,5,7] },
+  { id: 'TAS-1664', col: 'invest', title: 'Webhook deliveries delayed by 9 mins after region failover', priority: 'p2', cost: 0.84, age: '42m', persona: 'aster', repo: 'webhook-router',  spark: [1,3,3,4,4] },
+  { id: 'TAS-1663', col: 'invest', title: 'Gift card redemption double-charges on retry',           priority: 'p1', cost: 2.10, age: '54m', persona: 'vega',  repo: 'payments-core',    spark: [3,5,7,8,9] },
+  { id: 'TAS-1660', col: 'invest', title: 'Search ranking suddenly down-weights branded queries',   priority: 'p2', cost: 0.36, age: '1h',  persona: 'aster', repo: 'search-rank',      spark: [2,2,3,3,4] },
+
+  // Building (current task lives here)
+  { id: 'TAS-1662', col: 'building', title: 'Investigate cart abandonment metric drift in BI dashboard', priority: 'p2', cost: 1.20, age: '5m', persona: 'bram', repo: 'transaction-verification-api', spark: [3,5,4,6,7], current: true },
+  { id: 'TAS-1658', col: 'building', title: 'Migrate billing emails to new template engine',         priority: 'p3', cost: 0.62, age: '2h',  persona: 'bram', repo: 'comms-service',    spark: [2,3,2,3,3] },
+  { id: 'TAS-1655', col: 'building', title: 'Adaptive image CDN: switch to AVIF where supported',    priority: 'p3', cost: 0.94, age: '3h',  persona: 'bram', repo: 'cdn-edge',         spark: [4,4,5,5,6] },
+
+  // Reviewing
+  { id: 'TAS-1653', col: 'reviewing', title: 'Strip PII from session replay before sampling',       priority: 'p1', cost: 1.88, age: '4h',  persona: 'cyra', repo: 'session-replay',    spark: [5,6,5,6,6] },
+  { id: 'TAS-1651', col: 'reviewing', title: 'Reduce checkout TBT from 412ms to <200ms',            priority: 'p2', cost: 2.40, age: '6h',  persona: 'cyra', repo: 'checkout-web',      spark: [6,5,6,6,5] },
+
+  // Done
+  { id: 'TAS-1647', col: 'done', title: 'Order status email subject line A/B test',                  priority: 'p3', cost: 0.18, age: 'yday', persona: 'niko',  repo: 'comms-service',    spark: [3,3,3,3,3] },
+  { id: 'TAS-1645', col: 'done', title: 'Fix flaky webdriver test in cart-suite (race on cookie banner)', priority: 'p3', cost: 0.42, age: 'yday', persona: 'niko', repo: 'qa-suite',     spark: [2,2,2,3,3] },
+  { id: 'TAS-1644', col: 'done', title: 'Promote inventory-cache rollout flag to 100%',              priority: 'p2', cost: 0.06, age: 'yday', persona: 'bram',  repo: 'inventory-cache',  spark: [1,2,2,3,4] },
+  { id: 'TAS-1640', col: 'done', title: 'Add idempotency keys to refund endpoint',                   priority: 'p1', cost: 1.10, age: '2d',   persona: 'bram',  repo: 'payments-core',    spark: [3,4,4,5,5] },
+  { id: 'TAS-1638', col: 'done', title: 'Move marketing pixel out of critical render path',          priority: 'p3', cost: 0.32, age: '2d',   persona: 'bram',  repo: 'checkout-web',     spark: [2,3,3,3,4] },
+];
+
+const PR_COLOR = {
+  p1: 'var(--danger)', p2: 'var(--warning)', p3: 'var(--fg-3)',
+};
+
+function Sparkline({ data, color = 'var(--accent)' }) {
+  const w = 56, h = 16, max = Math.max(...data, 1);
+  const step = w / (data.length - 1);
+  const pts = data.map((v, i) => `${i * step},${h - (v / max) * h}`).join(' ');
+  return (
+    <svg width={w} height={h} style={{ flexShrink: 0 }}>
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function PersonaDot({ id }) {
+  const p = D.personas.find(x => x.id === id);
+  if (!p) return null;
+  return <span className={`avatar sm ${p.cls}`}>{p.initials}</span>;
+}
+
+function BoardCard({ t, onOpen }) {
+  return (
+    <button onClick={() => onOpen(t)} className="bd-card" style={{
+      display: 'block', width: '100%', padding: 12,
+      background: t.current ? 'var(--accent-soft)' : 'var(--bg-elev)',
+      border: t.current ? '1px solid var(--accent-line)' : '1px solid var(--line)',
+      borderRadius: 8, textAlign: 'left', cursor: 'pointer',
+      transition: 'transform var(--motion-fast), border-color var(--motion-fast), box-shadow var(--motion-fast)',
+      boxShadow: t.current ? 'var(--shadow-sm)' : 'none',
+    }}>
+      <div className="row gap-2" style={{ marginBottom: 7 }}>
+        <span style={{ width: 6, height: 6, borderRadius: 3, background: PR_COLOR[t.priority], flexShrink: 0 }} />
+        <span className="mono" style={{ fontSize: 10.5, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: 0.05 }}>{t.id}</span>
+        <span className="grow" />
+        {t.current && <span className="pill accent" style={{ height: 17, fontSize: 9.5, padding: '0 6px', letterSpacing: 0.05 }}>OPEN</span>}
+        <span className="mono tnum" style={{ fontSize: 10.5, color: 'var(--fg-4)' }}>{t.age}</span>
+      </div>
+      <div style={{ fontSize: 12.5, color: 'var(--fg)', lineHeight: 1.4, fontWeight: 500, textWrap: 'pretty', marginBottom: 10 }}>
+        {t.title}
+      </div>
+      <div className="row gap-2" style={{ alignItems: 'center' }}>
+        {t.persona ? <PersonaDot id={t.persona} /> : <span className="avatar sm" style={{ background: 'transparent', border: '1px dashed var(--line-2)', color: 'var(--fg-3)' }}>—</span>}
+        <span className="mono" style={{ fontSize: 10.5, color: 'var(--fg-3)' }}>{t.repo}</span>
+        <span className="grow" />
+        <Sparkline data={t.spark} color={t.persona ? `var(--p-${t.persona})` : 'var(--fg-4)'} />
+        <span className="mono tnum" style={{ fontSize: 10.5, color: 'var(--fg-3)', minWidth: 32, textAlign: 'right' }}>${t.cost.toFixed(2)}</span>
+      </div>
+    </button>
+  );
+}
+
+function BoardColumn({ col, tasks, onOpen }) {
+  const list = tasks.filter(t => t.col === col.k);
+  return (
+    <div style={{
+      flex: '1 1 0', minWidth: 260, display: 'flex', flexDirection: 'column',
+      background: 'var(--bg)', borderRadius: 10, border: '1px solid var(--line)',
+      maxHeight: '100%', minHeight: 0,
+    }}>
+      <div className="row gap-2" style={{
+        padding: '12px 14px', borderBottom: '1px solid var(--line)', flexShrink: 0,
+      }}>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--fg)', letterSpacing: 0.01 }}>{col.label}</span>
+        <span className="mono tnum" style={{ fontSize: 11, color: 'var(--fg-3)' }}>{list.length}</span>
+        <span className="grow" />
+        <button className="btn ghost sm" style={{ height: 22, padding: '0 6px' }}><BIcons.Plus size={11} /></button>
+      </div>
+      <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto', minHeight: 0 }}>
+        {list.map(t => <BoardCard key={t.id} t={t} onOpen={onOpen} />)}
+      </div>
+    </div>
+  );
+}
+
+function BoardView({ onOpenTask }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: 'var(--bg-elev-2)' }} data-screen-label="Board">
+      <div className="row gap-3" style={{ padding: '14px 22px', borderBottom: '1px solid var(--line)', flexShrink: 0, background: 'var(--bg-elev)' }}>
+        <div className="row gap-2">
+          <BIcons.Layers size={15} style={{ color: 'var(--accent)' }} />
+          <span style={{ fontSize: 14.5, fontWeight: 600 }}>smartpay-platform</span>
+          <span style={{ color: 'var(--fg-4)' }}>·</span>
+          <span style={{ fontSize: 14, color: 'var(--fg-2)' }}>This week</span>
+        </div>
+        <span className="grow" />
+        <div className="row gap-2">
+          <span className="pill"><span className="dot live" />17 active</span>
+          <span className="pill mono tnum"><BIcons.Coin size={11} /> $14.62 today</span>
+          <span style={{ width: 1, height: 18, background: 'var(--line)' }} />
+          <button className="btn sm"><BIcons.Filter size={12} />Filter</button>
+          <button className="btn sm"><BIcons.Sliders size={12} />Group</button>
+          <button className="btn sm primary"><BIcons.Plus size={12} />New task</button>
+        </div>
+      </div>
+      <div style={{ flex: 1, padding: 16, display: 'flex', gap: 12, overflowX: 'auto', minHeight: 0 }}>
+        {COLUMNS.map(c => (
+          <BoardColumn key={c.k} col={c} tasks={BOARD_TASKS} onOpen={onOpenTask} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+window.BoardView = BoardView;
+window.BOARD_TASKS = BOARD_TASKS;
+
+})();
+
+/* ===== tweaks-panel.jsx ===== */
+(function() {
+
+// tweaks-panel.jsx
+// Reusable Tweaks shell + form-control helpers.
+//
+// Owns the host protocol (listens for __activate_edit_mode / __deactivate_edit_mode,
+// posts __edit_mode_available / __edit_mode_set_keys / __edit_mode_dismissed) so
+// individual prototypes don't re-roll it. Ships a consistent set of controls so you
+// don't hand-draw <input type="range">, segmented radios, steppers, etc.
+//
+// Usage (in an HTML file that loads React + Babel):
+//
+//   const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+//     "primaryColor": "#D97757",
+//     "fontSize": 16,
+//     "density": "regular",
+//     "dark": false
+//   }/*EDITMODE-END*/;
+//
+//   function App() {
+//     const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+//     return (
+//       <div style={{ fontSize: t.fontSize, color: t.primaryColor }}>
+//         Hello
+//         <TweaksPanel>
+//           <TweakSection label="Typography" />
+//           <TweakSlider label="Font size" value={t.fontSize} min={10} max={32} unit="px"
+//                        onChange={(v) => setTweak('fontSize', v)} />
+//           <TweakRadio  label="Density" value={t.density}
+//                        options={['compact', 'regular', 'comfy']}
+//                        onChange={(v) => setTweak('density', v)} />
+//           <TweakSection label="Theme" />
+//           <TweakColor  label="Primary" value={t.primaryColor}
+//                        onChange={(v) => setTweak('primaryColor', v)} />
+//           <TweakToggle label="Dark mode" value={t.dark}
+//                        onChange={(v) => setTweak('dark', v)} />
+//         </TweaksPanel>
+//       </div>
+//     );
+//   }
+//
+// ─────────────────────────────────────────────────────────────────────────────
+
+const __TWEAKS_STYLE = `
+  .twk-panel{position:fixed;right:16px;bottom:16px;z-index:2147483646;width:280px;
+    max-height:calc(100vh - 32px);display:flex;flex-direction:column;
+    background:rgba(250,249,247,.78);color:#29261b;
+    -webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);
+    border:.5px solid rgba(255,255,255,.6);border-radius:14px;
+    box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 12px 40px rgba(0,0,0,.18);
+    font:11.5px/1.4 ui-sans-serif,system-ui,-apple-system,sans-serif;overflow:hidden}
+  .twk-hd{display:flex;align-items:center;justify-content:space-between;
+    padding:10px 8px 10px 14px;cursor:move;user-select:none}
+  .twk-hd b{font-size:12px;font-weight:600;letter-spacing:.01em}
+  .twk-x{appearance:none;border:0;background:transparent;color:rgba(41,38,27,.55);
+    width:22px;height:22px;border-radius:6px;cursor:default;font-size:13px;line-height:1}
+  .twk-x:hover{background:rgba(0,0,0,.06);color:#29261b}
+  .twk-body{padding:2px 14px 14px;display:flex;flex-direction:column;gap:10px;
+    overflow-y:auto;overflow-x:hidden;min-height:0;
+    scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.15) transparent}
+  .twk-body::-webkit-scrollbar{width:8px}
+  .twk-body::-webkit-scrollbar-track{background:transparent;margin:2px}
+  .twk-body::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:4px;
+    border:2px solid transparent;background-clip:content-box}
+  .twk-body::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.25);
+    border:2px solid transparent;background-clip:content-box}
+  .twk-row{display:flex;flex-direction:column;gap:5px}
+  .twk-row-h{flex-direction:row;align-items:center;justify-content:space-between;gap:10px}
+  .twk-lbl{display:flex;justify-content:space-between;align-items:baseline;
+    color:rgba(41,38,27,.72)}
+  .twk-lbl>span:first-child{font-weight:500}
+  .twk-val{color:rgba(41,38,27,.5);font-variant-numeric:tabular-nums}
+
+  .twk-sect{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:rgba(41,38,27,.45);padding:10px 0 0}
+  .twk-sect:first-child{padding-top:0}
+
+  .twk-field{appearance:none;width:100%;height:26px;padding:0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;
+    background:rgba(255,255,255,.6);color:inherit;font:inherit;outline:none}
+  .twk-field:focus{border-color:rgba(0,0,0,.25);background:rgba(255,255,255,.85)}
+  select.twk-field{padding-right:22px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='rgba(0,0,0,.5)' d='M0 0h10L5 6z'/></svg>");
+    background-repeat:no-repeat;background-position:right 8px center}
+
+  .twk-slider{appearance:none;-webkit-appearance:none;width:100%;height:4px;margin:6px 0;
+    border-radius:999px;background:rgba(0,0,0,.12);outline:none}
+  .twk-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+    width:14px;height:14px;border-radius:50%;background:#fff;
+    border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+  .twk-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
+    background:#fff;border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+
+  .twk-seg{position:relative;display:flex;padding:2px;border-radius:8px;
+    background:rgba(0,0,0,.06);user-select:none}
+  .twk-seg-thumb{position:absolute;top:2px;bottom:2px;border-radius:6px;
+    background:rgba(255,255,255,.9);box-shadow:0 1px 2px rgba(0,0,0,.12);
+    transition:left .15s cubic-bezier(.3,.7,.4,1),width .15s}
+  .twk-seg.dragging .twk-seg-thumb{transition:none}
+  .twk-seg button{appearance:none;position:relative;z-index:1;flex:1;border:0;
+    background:transparent;color:inherit;font:inherit;font-weight:500;min-height:22px;
+    border-radius:6px;cursor:default;padding:4px 6px;line-height:1.2;
+    overflow-wrap:anywhere}
+
+  .twk-toggle{position:relative;width:32px;height:18px;border:0;border-radius:999px;
+    background:rgba(0,0,0,.15);transition:background .15s;cursor:default;padding:0}
+  .twk-toggle[data-on="1"]{background:#34c759}
+  .twk-toggle i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+    background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+  .twk-toggle[data-on="1"] i{transform:translateX(14px)}
+
+  .twk-num{display:flex;align-items:center;height:26px;padding:0 0 0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;background:rgba(255,255,255,.6)}
+  .twk-num-lbl{font-weight:500;color:rgba(41,38,27,.6);cursor:ew-resize;
+    user-select:none;padding-right:8px}
+  .twk-num input{flex:1;min-width:0;height:100%;border:0;background:transparent;
+    font:inherit;font-variant-numeric:tabular-nums;text-align:right;padding:0 8px 0 0;
+    outline:none;color:inherit;-moz-appearance:textfield}
+  .twk-num input::-webkit-inner-spin-button,.twk-num input::-webkit-outer-spin-button{
+    -webkit-appearance:none;margin:0}
+  .twk-num-unit{padding-right:8px;color:rgba(41,38,27,.45)}
+
+  .twk-btn{appearance:none;height:26px;padding:0 12px;border:0;border-radius:7px;
+    background:rgba(0,0,0,.78);color:#fff;font:inherit;font-weight:500;cursor:default}
+  .twk-btn:hover{background:rgba(0,0,0,.88)}
+  .twk-btn.secondary{background:rgba(0,0,0,.06);color:inherit}
+  .twk-btn.secondary:hover{background:rgba(0,0,0,.1)}
+
+  .twk-swatch{appearance:none;-webkit-appearance:none;width:56px;height:22px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:6px;padding:0;cursor:default;
+    background:transparent;flex-shrink:0}
+  .twk-swatch::-webkit-color-swatch-wrapper{padding:0}
+  .twk-swatch::-webkit-color-swatch{border:0;border-radius:5.5px}
+  .twk-swatch::-moz-color-swatch{border:0;border-radius:5.5px}
+`;
+
+// ── useTweaks ───────────────────────────────────────────────────────────────
+// Single source of truth for tweak values. setTweak persists via the host
+// (__edit_mode_set_keys → host rewrites the EDITMODE block on disk).
+function useTweaks(defaults) {
+  const [values, setValues] = React.useState(defaults);
+  // Accepts either setTweak('key', value) or setTweak({ key: value, ... }) so a
+  // useState-style call doesn't write a "[object Object]" key into the persisted
+  // JSON block.
+  const setTweak = React.useCallback((keyOrEdits, val) => {
+    const edits = typeof keyOrEdits === 'object' && keyOrEdits !== null
+      ? keyOrEdits : { [keyOrEdits]: val };
+    setValues((prev) => ({ ...prev, ...edits }));
+    window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*');
+  }, []);
+  return [values, setTweak];
+}
+
+// ── TweaksPanel ─────────────────────────────────────────────────────────────
+// Floating shell. Registers the protocol listener BEFORE announcing
+// availability — if the announce ran first, the host's activate could land
+// before our handler exists and the toolbar toggle would silently no-op.
+// The close button posts __edit_mode_dismissed so the host's toolbar toggle
+// flips off in lockstep; the host echoes __deactivate_edit_mode back which
+// is what actually hides the panel.
+function TweaksPanel({ title = 'Tweaks', children }) {
+  const [open, setOpen] = React.useState(false);
+  const dragRef = React.useRef(null);
+  const offsetRef = React.useRef({ x: 16, y: 16 });
+  const PAD = 16;
+
+  const clampToViewport = React.useCallback(() => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const w = panel.offsetWidth, h = panel.offsetHeight;
+    const maxRight = Math.max(PAD, window.innerWidth - w - PAD);
+    const maxBottom = Math.max(PAD, window.innerHeight - h - PAD);
+    offsetRef.current = {
+      x: Math.min(maxRight, Math.max(PAD, offsetRef.current.x)),
+      y: Math.min(maxBottom, Math.max(PAD, offsetRef.current.y)),
+    };
+    panel.style.right = offsetRef.current.x + 'px';
+    panel.style.bottom = offsetRef.current.y + 'px';
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    clampToViewport();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', clampToViewport);
+      return () => window.removeEventListener('resize', clampToViewport);
+    }
+    const ro = new ResizeObserver(clampToViewport);
+    ro.observe(document.documentElement);
+    return () => ro.disconnect();
+  }, [open, clampToViewport]);
+
+  React.useEffect(() => {
+    const onMsg = (e) => {
+      const t = e?.data?.type;
+      if (t === '__activate_edit_mode') setOpen(true);
+      else if (t === '__deactivate_edit_mode') setOpen(false);
+    };
+    window.addEventListener('message', onMsg);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  const dismiss = () => {
+    setOpen(false);
+    window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*');
+  };
+
+  const onDragStart = (e) => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const r = panel.getBoundingClientRect();
+    const sx = e.clientX, sy = e.clientY;
+    const startRight = window.innerWidth - r.right;
+    const startBottom = window.innerHeight - r.bottom;
+    const move = (ev) => {
+      offsetRef.current = {
+        x: startRight - (ev.clientX - sx),
+        y: startBottom - (ev.clientY - sy),
+      };
+      clampToViewport();
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
+  if (!open) return null;
+  return (
+    <>
+      <style>{__TWEAKS_STYLE}</style>
+      <div ref={dragRef} className="twk-panel" data-noncommentable=""
+           style={{ right: offsetRef.current.x, bottom: offsetRef.current.y }}>
+        <div className="twk-hd" onMouseDown={onDragStart}>
+          <b>{title}</b>
+          <button className="twk-x" aria-label="Close tweaks"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={dismiss}>✕</button>
+        </div>
+        <div className="twk-body">{children}</div>
+      </div>
+    </>
+  );
+}
+
+// ── Layout helpers ──────────────────────────────────────────────────────────
+
+function TweakSection({ label, children }) {
+  return (
+    <>
+      <div className="twk-sect">{label}</div>
+      {children}
+    </>
+  );
+}
+
+function TweakRow({ label, value, children, inline = false }) {
+  return (
+    <div className={inline ? 'twk-row twk-row-h' : 'twk-row'}>
+      <div className="twk-lbl">
+        <span>{label}</span>
+        {value != null && <span className="twk-val">{value}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ── Controls ────────────────────────────────────────────────────────────────
+
+function TweakSlider({ label, value, min = 0, max = 100, step = 1, unit = '', onChange }) {
+  return (
+    <TweakRow label={label} value={`${value}${unit}`}>
+      <input type="range" className="twk-slider" min={min} max={max} step={step}
+             value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </TweakRow>
+  );
+}
+
+function TweakToggle({ label, value, onChange }) {
+  return (
+    <div className="twk-row twk-row-h">
+      <div className="twk-lbl"><span>{label}</span></div>
+      <button type="button" className="twk-toggle" data-on={value ? '1' : '0'}
+              role="switch" aria-checked={!!value}
+              onClick={() => onChange(!value)}><i /></button>
+    </div>
+  );
+}
+
+function TweakRadio({ label, value, options, onChange }) {
+  const trackRef = React.useRef(null);
+  const [dragging, setDragging] = React.useState(false);
+  const opts = options.map((o) => (typeof o === 'object' ? o : { value: o, label: o }));
+  const idx = Math.max(0, opts.findIndex((o) => o.value === value));
+  const n = opts.length;
+
+  // The active value is read by pointer-move handlers attached for the lifetime
+  // of a drag — ref it so a stale closure doesn't fire onChange for every move.
+  const valueRef = React.useRef(value);
+  valueRef.current = value;
+
+  const segAt = (clientX) => {
+    const r = trackRef.current.getBoundingClientRect();
+    const inner = r.width - 4;
+    const i = Math.floor(((clientX - r.left - 2) / inner) * n);
+    return opts[Math.max(0, Math.min(n - 1, i))].value;
+  };
+
+  const onPointerDown = (e) => {
+    setDragging(true);
+    const v0 = segAt(e.clientX);
+    if (v0 !== valueRef.current) onChange(v0);
+    const move = (ev) => {
+      if (!trackRef.current) return;
+      const v = segAt(ev.clientX);
+      if (v !== valueRef.current) onChange(v);
+    };
+    const up = () => {
+      setDragging(false);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  return (
+    <TweakRow label={label}>
+      <div ref={trackRef} role="radiogroup" onPointerDown={onPointerDown}
+           className={dragging ? 'twk-seg dragging' : 'twk-seg'}>
+        <div className="twk-seg-thumb"
+             style={{ left: `calc(2px + ${idx} * (100% - 4px) / ${n})`,
+                      width: `calc((100% - 4px) / ${n})` }} />
+        {opts.map((o) => (
+          <button key={o.value} type="button" role="radio" aria-checked={o.value === value}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </TweakRow>
+  );
+}
+
+function TweakSelect({ label, value, options, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <select className="twk-field" value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => {
+          const v = typeof o === 'object' ? o.value : o;
+          const l = typeof o === 'object' ? o.label : o;
+          return <option key={v} value={v}>{l}</option>;
+        })}
+      </select>
+    </TweakRow>
+  );
+}
+
+function TweakText({ label, value, placeholder, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <input className="twk-field" type="text" value={value} placeholder={placeholder}
+             onChange={(e) => onChange(e.target.value)} />
+    </TweakRow>
+  );
+}
+
+function TweakNumber({ label, value, min, max, step = 1, unit = '', onChange }) {
+  const clamp = (n) => {
+    if (min != null && n < min) return min;
+    if (max != null && n > max) return max;
+    return n;
+  };
+  const startRef = React.useRef({ x: 0, val: 0 });
+  const onScrubStart = (e) => {
+    e.preventDefault();
+    startRef.current = { x: e.clientX, val: value };
+    const decimals = (String(step).split('.')[1] || '').length;
+    const move = (ev) => {
+      const dx = ev.clientX - startRef.current.x;
+      const raw = startRef.current.val + dx * step;
+      const snapped = Math.round(raw / step) * step;
+      onChange(clamp(Number(snapped.toFixed(decimals))));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  return (
+    <div className="twk-num">
+      <span className="twk-num-lbl" onPointerDown={onScrubStart}>{label}</span>
+      <input type="number" value={value} min={min} max={max} step={step}
+             onChange={(e) => onChange(clamp(Number(e.target.value)))} />
+      {unit && <span className="twk-num-unit">{unit}</span>}
+    </div>
+  );
+}
+
+function TweakColor({ label, value, onChange }) {
+  return (
+    <div className="twk-row twk-row-h">
+      <div className="twk-lbl"><span>{label}</span></div>
+      <input type="color" className="twk-swatch" value={value}
+             onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
+function TweakButton({ label, onClick, secondary = false }) {
+  return (
+    <button type="button" className={secondary ? 'twk-btn secondary' : 'twk-btn'}
+            onClick={onClick}>{label}</button>
+  );
+}
+
+Object.assign(window, {
+  useTweaks, TweaksPanel, TweakSection, TweakRow,
+  TweakSlider, TweakToggle, TweakRadio, TweakSelect,
+  TweakText, TweakNumber, TweakColor, TweakButton,
+});
+
+})();
+
+</script>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo } = React;
+const D = window.HARNESS_DATA;
+
+class SectionBoundary extends React.Component {
+  constructor(p) { super(p); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  componentDidUpdate(prev) { if (prev.k !== this.props.k && this.state.err) this.setState({ err: null }); }
+  render() {
+    if (this.state.err) {
+      return (
+        <div style={{ padding: 36, maxWidth: 720, margin: '40px auto' }}>
+          <div className="eyebrow" style={{ color: 'var(--danger)' }}>Section error</div>
+          <div style={{ fontSize: 18, fontWeight: 600, marginTop: 6 }}>This section failed to render.</div>
+          <pre className="mono" style={{
+            marginTop: 12, padding: 14, fontSize: 12,
+            background: 'var(--bg-elev-2)', border: '1px solid var(--line)', borderRadius: 8,
+            color: 'var(--fg-2)', whiteSpace: 'pre-wrap',
+          }}>{String(this.state.err && this.state.err.message || this.state.err)}</pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const SECTION_RENDERERS = {
+  overview: (props) => <window.Sec.Overview {...props} />,
+  repo:     () => <window.Sec.RepoSelection />,
+  invest:   () => <window.Sec.Investigation />,
+  prd:      () => <window.Sec.PRD />,
+  code:     () => <window.Sec.Code />,
+  qa:       () => <window.Sec.QA />,
+  review:   () => <window.Sec.Review />,
+  timeline: () => <window.Sec.Timeline />,
+  chat:     () => <window.Sec.Chat />,
+  costs:    () => <window.Sec.Costs />,
+};
+
+const TWEAKS = /*EDITMODE-BEGIN*/{
+  "theme": "dark",
+  "density": "balanced",
+  "accent": "indigo",
+  "rail_expanded": true,
+  "right_rail": false
+}/*EDITMODE-END*/;
+
+function App() {
+  const [tweaks, setTweaks] = window.useTweaks ? window.useTweaks(TWEAKS) : useState(TWEAKS);
+  const setTweak = window.useTweaks ? setTweaks : (kOrObj, v) => {
+    const updates = typeof kOrObj === 'string' ? { [kOrObj]: v } : kOrObj;
+    setTweaks(s => ({ ...s, ...updates }));
+  };
+
+  const [active, setActive] = useState('overview');
+  const [view, setView] = useState('detail'); // 'board' | 'detail'
+  const [railExpanded, setRailExpanded] = useState(tweaks.rail_expanded);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const forceMobile = !!tweaks.force_mobile;
+  const [isMobile, setIsMobile] = useState(forceMobile || (typeof window !== 'undefined' && window.innerWidth < 760));
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(forceMobile || window.innerWidth < 760);
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [forceMobile]);
+
+  // Apply force-mobile class on root so CSS media query is bypassed
+  useEffect(() => {
+    document.documentElement.classList.toggle('force-mobile', forceMobile);
+  }, [forceMobile]);
+
+  // Apply theme + accent
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.theme = tweaks.theme === 'light' ? 'light' : 'dark';
+    root.dataset.accent = tweaks.accent || 'indigo';
+    root.dataset.density = tweaks.density || 'balanced';
+    // Density classes (CSS uses .density-X selectors)
+    root.classList.remove('density-dense', 'density-balanced', 'density-comfortable');
+    root.classList.add(`density-${tweaks.density || 'balanced'}`);
+    // Theme class (CSS also accepts .theme-light)
+    root.classList.toggle('theme-light', tweaks.theme === 'light');
+    root.classList.toggle('theme-dark', tweaks.theme !== 'light');
+  }, [tweaks.theme, tweaks.accent, tweaks.density]);
+
+  // Keyboard shortcuts: g+letter to jump
+  useEffect(() => {
+    let g = false; let timer = null;
+    const onKey = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === 'g') { g = true; clearTimeout(timer); timer = setTimeout(() => g = false, 800); return; }
+      if (g) {
+        const map = { o: 'overview', r: 'repo', i: 'invest', p: 'prd', c: 'code',
+                      q: 'qa', v: 'review', t: 'timeline', m: 'chat', $: 'costs' };
+        if (map[e.key]) { setActive(map[e.key]); g = false; }
+      }
+      if (e.key === '[' && (e.metaKey || e.ctrlKey)) {
+        const i = D.sections.findIndex(s => s.k === active);
+        if (i > 0) setActive(D.sections[i - 1].k);
+      }
+      if (e.key === ']' && (e.metaKey || e.ctrlKey)) {
+        const i = D.sections.findIndex(s => s.k === active);
+        if (i >= 0 && i < D.sections.length - 1) setActive(D.sections[i + 1].k);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [active]);
+
+  return (
+    <div className="app" data-screen-label="Harness Task Detail">
+      {view === 'board' ? (
+        <window.BoardView onOpenTask={(t) => { setView('detail'); setActive('overview'); }} />
+      ) : (
+        <>
+          <window.BreadcrumbBar
+            task={D.task}
+            onBack={() => setView('board')}
+            theme={tweaks.theme}
+            onTheme={() => setTweak('theme', tweaks.theme === 'dark' ? 'light' : 'dark')}
+          />
+          <window.TaskHeader task={D.task} personas={D.personas} />
+          <div className="body">
+            <window.LeftRail
+              sections={D.sections}
+              active={active}
+              onChange={setActive}
+              expanded={railExpanded}
+              onExpandToggle={() => setRailExpanded(e => !e)}
+            />
+            <main className="scroll" data-screen-label={`Section · ${active}`}>
+              <SectionBoundary k={active}>
+                {(SECTION_RENDERERS[active] || (() => null))({ go: setActive })}
+              </SectionBoundary>
+            </main>
+            {tweaks.right_rail && <window.RightRail ticker={D.ticker} personas={D.personas} />}
+          </div>
+
+          {/* Mobile nav: floating button + bottom sheet */}
+          <button className="mobile-nav-btn" aria-label="Sections" onClick={() => setMobileNavOpen(true)}>
+            <window.Icons.Layers size={18} />
+          </button>
+          <div className="mobile-nav-sheet" data-open={mobileNavOpen} onClick={(e) => { if (e.target.classList.contains('mobile-nav-sheet')) setMobileNavOpen(false); }}>
+            <div className="mobile-nav-sheet__panel">
+              <div className="mobile-nav-sheet__handle" />
+              <div className="eyebrow" style={{ padding: '6px 14px 10px' }}>Sections</div>
+              {D.sections.map(s => {
+                const isActive = active === s.k;
+                return (
+                  <button key={s.k} onClick={() => { setActive(s.k); setMobileNavOpen(false); }} style={{
+                    display: 'flex', alignItems: 'center', gap: 12, width: '100%',
+                    padding: '12px 16px', border: 'none', background: isActive ? 'var(--accent-soft)' : 'transparent',
+                    borderRadius: 8, textAlign: 'left', cursor: 'pointer', minHeight: 44,
+                  }}>
+                    <span className="mono" style={{ width: 20, fontSize: 11, color: 'var(--fg-3)' }}>{String(s.n).padStart(2, '0')}</span>
+                    <span style={{ fontSize: 14.5, color: isActive ? 'var(--fg)' : 'var(--fg-2)', fontWeight: isActive ? 600 : 500 }}>{s.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
+
+      {window.TweaksPanel && (
+        <window.TweaksPanel title="Tweaks">
+          <window.TweakSection title="Appearance">
+            <window.TweakRadio label="Theme" value={tweaks.theme} options={[
+              { value: 'dark', label: 'Dark' }, { value: 'light', label: 'Light' }
+            ]} onChange={(v) => setTweak('theme', v)} />
+            <window.TweakSelect label="Accent" value={tweaks.accent} options={[
+              { value: 'indigo', label: 'Indigo' }, { value: 'violet', label: 'Violet' }, { value: 'cyan', label: 'Cyan' }, { value: 'amber', label: 'Amber' }
+            ]} onChange={(v) => setTweak('accent', v)} />
+            <window.TweakRadio label="Density" value={tweaks.density} options={[
+              { value: 'dense', label: 'Dense' }, { value: 'balanced', label: 'Balanced' }, { value: 'comfortable', label: 'Comfy' }
+            ]} onChange={(v) => setTweak('density', v)} />
+          </window.TweakSection>
+          <window.TweakSection title="View">
+            <window.TweakRadio label="Surface" value={view} options={[
+              { value: 'detail', label: 'Task detail' }, { value: 'board', label: 'Board' }
+            ]} onChange={setView} />
+          </window.TweakSection>
+          <window.TweakSection title="Layout">
+            <window.TweakToggle label="Force mobile view" value={!!tweaks.force_mobile} onChange={(v) => setTweak('force_mobile', v)} />
+            <window.TweakToggle label="Right rail" value={tweaks.right_rail} onChange={(v) => setTweak('right_rail', v)} />
+            <window.TweakToggle label="Left rail expanded" value={railExpanded} onChange={setRailExpanded} />
+          </window.TweakSection>
+        </window.TweaksPanel>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
