@@ -8,7 +8,7 @@ export async function runReviewBatch(slug: string, source?: StateSource): Promis
   if (stateSource == null) throw new Error(`Project not found: ${slug}`);
 
   const { runReviewWorkflow } = (await import(
-    new URL('../../../../slices/review/workflow.js', import.meta.url).href
+    new URL('../../../../../slices/review/workflow.js', import.meta.url).href
   )) as {
     runReviewWorkflow: (
       item: WorkItem,

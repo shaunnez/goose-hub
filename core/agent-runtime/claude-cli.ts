@@ -8,8 +8,8 @@ import { deployHooks } from '../tool-layer/pre-tool-use-hook.js';
 import { writeWorkspaceSandbox } from '../tool-layer/sandbox.js';
 import { assembleSpawnContext } from './context-assembly.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
-import { defaultModelForTier } from './models.js';
 import { resolveMockOutput } from './mock-outputs.js';
+import { defaultModelForTier } from './models.js';
 import type { JsonSchema } from './schema-bridge.js';
 
 const STDOUT_CAP = 4 * 1024 * 1024; // 4 MB
