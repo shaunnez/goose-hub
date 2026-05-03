@@ -34,6 +34,8 @@ export interface FixIssueDeps {
   createWorktreeImpl?: typeof createWorktree;
   /** Override cleanupWorktree (used by tests). */
   cleanupWorktreeImpl?: typeof cleanupWorktree;
+  /** Override resolveWorktreeHeadSha (used by tests to avoid real git subprocess). */
+  resolveWorktreeHeadShaImpl?: typeof resolveWorktreeHeadSha;
 }
 
 /**
@@ -68,6 +70,7 @@ export async function runFixIssueWorkflow(
   const advisorFn = deps.adviseOnPlanImpl ?? adviseOnPlan;
   const createWtFn = deps.createWorktreeImpl ?? createWorktree;
   const cleanupWtFn = deps.cleanupWorktreeImpl ?? cleanupWorktree;
+  const resolveHeadShaFn = deps.resolveWorktreeHeadShaImpl ?? resolveWorktreeHeadSha;
 
   const implementPrompt = readPrompt('implement');
   const implementJsonSchema = toJsonSchema(ImplementSchema);
@@ -149,6 +152,7 @@ export async function runFixIssueWorkflow(
           runtime,
           evidencePostPrompt,
           evidencePostJsonSchema,
+          resolveHeadShaFn,
         });
         return;
       }
@@ -181,6 +185,7 @@ export async function runFixIssueWorkflow(
       runtime,
       evidencePostPrompt,
       evidencePostJsonSchema,
+      resolveHeadShaFn,
     });
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
@@ -285,6 +290,7 @@ interface AfterImplementInput {
   runtime: AgentRuntime;
   evidencePostPrompt: string;
   evidencePostJsonSchema: Record<string, unknown>;
+  resolveHeadShaFn: typeof resolveWorktreeHeadSha;
 }
 
 async function afterImplement(input: AfterImplementInput): Promise<void> {
@@ -343,7 +349,7 @@ async function afterImplement(input: AfterImplementInput): Promise<void> {
   // Step 6: evidence-post wiring (#234) — best-effort.
   // Resolve the worktree HEAD to the real commit SHA so evidence-post pins
   // its raw URLs to an immutable ref (#233 SHA-pinning contract).
-  const prHeadSha = resolveWorktreeHeadSha(worktreePath);
+  const prHeadSha = input.resolveHeadShaFn(worktreePath);
   await runEvidencePost({
     workItem,
     projectId,

@@ -42,6 +42,9 @@ export async function runReviewWorkflow(
   const reviewJsonSchema = toJsonSchema(ReviewOutputSchema);
   const personaId = selectPersona(projectId, 'reviewer');
 
+  // Snapshot prior events BEFORE this run's outcome is appended (same pattern as QA workflow).
+  const priorEvents = eventStore.replay({ workItemId: workItem.id });
+
   try {
     const prDiff = await getPrDiff(workItem, stateSource);
     const qaVerdict = getQaVerdict(workItem);
@@ -100,9 +103,8 @@ export async function runReviewWorkflow(
 
     let nextState: StateName;
     if (reviewOutput.verdict === 'needs-fix') {
-      // Check retry count using events already in the store (including the one just appended)
-      const existingEvents = eventStore.replay({ workItemId: workItem.id });
-      const needsEscalation = shouldEscalateReview(existingEvents);
+      // Use priorEvents (snapshotted before this run) for retry count.
+      const needsEscalation = shouldEscalateReview(priorEvents);
       nextState = needsEscalation ? 'factory:needs-human' : 'factory:needs-fix';
       if (needsEscalation) {
         eventStore.appendEvent({
