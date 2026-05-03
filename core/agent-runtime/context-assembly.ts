@@ -1,8 +1,14 @@
+import { eventStore } from '../event-stream/store.js';
 import type { AgentSpec } from './interface.js';
 
 export interface SpawnContext {
   contextXml: string;
 }
+
+// Holdout roles that enforce strict context isolation
+const HOLDOUT_ROLES = new Set(['qa', 'reviewer']);
+// Keys managed by the runtime itself — not user-injected, so not violations
+const SYSTEM_KEYS = new Set(['projectId', 'workItemId']);
 
 /**
  * Centralised context injection point. All ambient injection routes through here.
@@ -12,6 +18,9 @@ export interface SpawnContext {
  * `spec.personaId` is accepted here and will be used to load persona history in M9+.
  * For now, the non-fresh path is a no-op stub.
  *
+ * For holdout roles (qa, reviewer), any context key that is not in contextAllowlist and
+ * is not a system-internal key (projectId, workItemId) triggers a tool.violation event.
+ *
  * ESLint rule: any access to event-stream or persona-history from core/agent-runtime/
  * outside this file should be flagged (enforced manually until ESLint plugin is wired).
  */
@@ -20,17 +29,45 @@ export function assembleSpawnContext(spec: AgentSpec): SpawnContext {
   // At M6, persona history loading is a stub — the field is wired into AgentSpec
   // so the runtime can record persona attribution in events without injecting history.
   void spec.personaId; // consumed in M9 persona history injection
-  const base = renderManifest(spec.context, spec.contextAllowlist);
-  if (spec.freshContext) return base;
+  const { contextXml, disallowedKeys } = renderManifest(spec.context, spec.contextAllowlist);
+
+  // Emit tool.violation for disallowed keys on holdout roles
+  if (HOLDOUT_ROLES.has(spec.role) && disallowedKeys.length > 0) {
+    for (const key of disallowedKeys) {
+      eventStore.appendEvent({
+        projectId: typeof spec.context.projectId === 'string' ? spec.context.projectId : 'unknown',
+        workItemId:
+          typeof spec.context.workItemId === 'string' ? spec.context.workItemId : undefined,
+        kind: 'tool.violation',
+        payload: { role: spec.role, disallowedKey: key, runId: spec.runId },
+        runId: spec.runId,
+      });
+    }
+  }
+
+  if (spec.freshContext) return { contextXml };
   // Non-fresh ambient injection (event stream, persona history) deferred to M9+
-  return base;
+  return { contextXml };
 }
 
-function renderManifest(context: Record<string, unknown>, allowlist: string[]): SpawnContext {
-  const filtered =
-    allowlist.length === 0
-      ? {}
-      : Object.fromEntries(Object.entries(context).filter(([k]) => allowlist.includes(k)));
+function renderManifest(
+  context: Record<string, unknown>,
+  allowlist: string[],
+): { contextXml: string; disallowedKeys: string[] } {
+  const disallowedKeys: string[] = [];
+  const filtered: Record<string, unknown> = {};
+
+  if (allowlist.length === 0) {
+    // empty allowlist = nothing passes; no user keys to flag as violations
+  } else {
+    for (const [k, v] of Object.entries(context)) {
+      if (allowlist.includes(k)) {
+        filtered[k] = v;
+      } else if (!SYSTEM_KEYS.has(k)) {
+        disallowedKeys.push(k);
+      }
+    }
+  }
 
   const inner = Object.entries(filtered)
     .filter(([, v]) => v !== undefined)
@@ -41,7 +78,7 @@ function renderManifest(context: Record<string, unknown>, allowlist: string[]): 
     .join('\n');
 
   const contextXml = inner.length > 0 ? `<task>\n${inner}\n</task>` : '<task></task>';
-  return { contextXml };
+  return { contextXml, disallowedKeys };
 }
 
 function escapeXml(s: string): string {

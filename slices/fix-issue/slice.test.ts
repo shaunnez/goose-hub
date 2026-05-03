@@ -87,7 +87,7 @@ describe('runFixIssueWorkflow (#183)', () => {
     process.env.GITHUB_TOKEN = undefined;
   });
 
-  it('happy path (priority:medium, no advisor): worktree → in-progress → implement → PR → approved', async () => {
+  it('happy path (priority:medium, no advisor): worktree → in-progress → implement → PR → needs-qa', async () => {
     const item = makeWorkItem({ priority: 'medium' });
     const source = makeStateSource();
 
@@ -108,6 +108,9 @@ describe('runFixIssueWorkflow (#183)', () => {
     const adviseOnPlanImpl = vi.fn();
     const createWorktreeImpl = vi.fn().mockReturnValue('/work/wt');
     const cleanupWorktreeImpl = vi.fn();
+    const resolveWorktreeHeadShaImpl = vi
+      .fn()
+      .mockReturnValue('abc1234567890abcdef1234567890abcdef1234');
 
     const { runFixIssueWorkflow } = await import('./workflow.js');
     await runFixIssueWorkflow(item, source, 'proj', '/repo', {
@@ -116,6 +119,7 @@ describe('runFixIssueWorkflow (#183)', () => {
       adviseOnPlanImpl,
       createWorktreeImpl,
       cleanupWorktreeImpl,
+      resolveWorktreeHeadShaImpl,
     });
 
     expect(createWorktreeImpl).toHaveBeenCalledWith('/repo', expect.any(String));
@@ -136,7 +140,7 @@ describe('runFixIssueWorkflow (#183)', () => {
     expect(source.transitionState).toHaveBeenLastCalledWith(
       '42',
       'factory:in-progress',
-      'factory:approved',
+      'factory:needs-qa',
     );
     expect(cleanupWorktreeImpl).toHaveBeenCalled();
     // pr.opened event recorded
@@ -175,6 +179,9 @@ describe('runFixIssueWorkflow (#183)', () => {
       adviseOnPlanImpl,
       createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
       cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
     });
 
     expect(adviseOnPlanImpl).toHaveBeenCalledTimes(1);
@@ -218,6 +225,9 @@ describe('runFixIssueWorkflow (#183)', () => {
       adviseOnPlanImpl,
       createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
       cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
     });
 
     expect(runMock).toHaveBeenCalledTimes(2);
@@ -252,6 +262,9 @@ describe('runFixIssueWorkflow (#183)', () => {
       adviseOnPlanImpl,
       createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
       cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
     });
 
     expect(openPRImpl).not.toHaveBeenCalled();
@@ -274,6 +287,9 @@ describe('runFixIssueWorkflow (#183)', () => {
     };
     const openPRImpl = vi.fn();
     const cleanupWorktreeImpl = vi.fn();
+    const resolveWorktreeHeadShaImpl = vi
+      .fn()
+      .mockReturnValue('abc1234567890abcdef1234567890abcdef1234');
 
     const { runFixIssueWorkflow } = await import('./workflow.js');
     await runFixIssueWorkflow(item, source, 'proj', '/repo', {
@@ -282,6 +298,7 @@ describe('runFixIssueWorkflow (#183)', () => {
       adviseOnPlanImpl: vi.fn(),
       createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
       cleanupWorktreeImpl,
+      resolveWorktreeHeadShaImpl,
     });
 
     expect(openPRImpl).not.toHaveBeenCalled();
@@ -328,6 +345,9 @@ describe('runFixIssueWorkflow (#183)', () => {
       adviseOnPlanImpl: vi.fn(),
       createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
       cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
     });
 
     const decisionEvents = vi

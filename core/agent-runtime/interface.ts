@@ -64,3 +64,12 @@ export interface SkillConfig {
   role?: Role;
   contextAllowlist?: string[];
 }
+
+export class HoldoutFallbackForbiddenError extends Error {
+  constructor(role: string) {
+    super(
+      `Fallback is forbidden for holdout role '${role}' — escalate to factory:needs-human instead`,
+    );
+    this.name = 'HoldoutFallbackForbiddenError';
+  }
+}
