@@ -7,6 +7,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { SECTIONS } from '../lib/sections';
+import { CodeDiffSection } from './CodeDiffSection';
 import { DeferredSurface } from './DeferredSurface';
 import { GatePendingBanner } from './GatePendingBanner';
 import { InvestigationSection } from './InvestigationSection';
@@ -215,7 +216,10 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
             ) : currentSection.key === 'investigation' ? (
               <InvestigationSection projectSlug={slug} id={id} />
             ) : currentSection.key === 'code' ? (
-              <PlaywrightCaptureSection projectSlug={slug} id={id} itemType={item?.type ?? ''} />
+              <div>
+                <CodeDiffSection projectSlug={slug} id={id} />
+                <PlaywrightCaptureSection projectSlug={slug} id={id} itemType={item?.type ?? ''} />
+              </div>
             ) : (
               <DeferredSurface
                 surface={currentSection.label}

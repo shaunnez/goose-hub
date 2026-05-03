@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { STATES } from '@goose-hub/core/state-machine/states.js';
@@ -60,6 +62,77 @@ export async function getIssueEvents(
   const ascending = eventStore.replay({ projectId: slug, workItemId });
   const events = [...ascending].reverse();
   return { ok: true, data: { events } };
+}
+
+/**
+ * Live diff for the Code tab (#185). Returns the unified diff of the
+ * current worktree for the most recent in-flight run on this issue, or
+ * `{ diff: null }` when no worktree exists.
+ *
+ * Active-runId resolution: pick the latest event whose payload carries
+ * a runId — preferring `pr.opened`, then `agent.implement-complete`,
+ * then `agent.run-started` — and look for a worktree at
+ * `~/.factory/workspaces/<runId>/`. If absent, return `{ diff: null }`.
+ *
+ * Trade-off: this is a one-shot diff, not a true SSE stream. The UI
+ * polls (5 s default) — adequate for M2-style live UX. SSE-streamed
+ * diff is M11+ work.
+ */
+export async function getIssueWorktreeDiff(
+  slug: string,
+  id: string,
+): Promise<Result<{ diff: string | null; runId: string | null; reason?: string }>> {
+  const source = await getSourceForSlug(slug);
+  if (source == null) return { ok: false, error: 'project not found', status: 404 };
+  if (!isValidSlug(slug)) return { ok: false, error: 'invalid slug', status: 400 };
+
+  const repoRef = await getRepoRef(slug);
+  const workItemId = `github:${repoRef}#${id}`;
+  const ascending = eventStore.replay({ projectId: slug, workItemId });
+
+  // Newest-first scan for a runId on a fix-issue lifecycle event.
+  const lifecycleKinds = new Set(['pr.opened', 'agent.implement-complete', 'agent.run-started']);
+  let runId: string | null = null;
+  for (let i = ascending.length - 1; i >= 0; i -= 1) {
+    const e = ascending[i];
+    if (lifecycleKinds.has(e.kind) && typeof e.runId === 'string' && e.runId.length > 0) {
+      runId = e.runId;
+      break;
+    }
+  }
+
+  if (runId == null) {
+    return {
+      ok: true,
+      data: { diff: null, runId: null, reason: 'no in-flight run for this issue' },
+    };
+  }
+
+  const worktreePath = join(homedir(), '.factory', 'workspaces', runId);
+  if (!existsSync(worktreePath)) {
+    return {
+      ok: true,
+      data: { diff: null, runId, reason: 'worktree not found (cleaned up or pre-creation)' },
+    };
+  }
+
+  try {
+    const diff = execFileSync('git', ['diff', 'HEAD'], {
+      cwd: worktreePath,
+      encoding: 'utf8',
+      maxBuffer: 4 * 1024 * 1024,
+    });
+    return { ok: true, data: { diff, runId } };
+  } catch (err) {
+    return {
+      ok: true,
+      data: {
+        diff: null,
+        runId,
+        reason: `git diff failed: ${(err as Error).message}`,
+      },
+    };
+  }
 }
 
 export async function getIssueComments(

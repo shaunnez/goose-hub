@@ -7,6 +7,7 @@ import {
   getIssueComments,
   getIssueEvents,
   getIssueTriage,
+  getIssueWorktreeDiff,
   listIssues,
   overrideIssueRepo,
   setIssueLabel,
@@ -39,6 +40,14 @@ router.get('/:slug/issues/:id/comments', async (c) => {
 router.get('/:slug/issues/:id/triage', async (c) => {
   const result = await getIssueTriage(c.req.param('slug'), c.req.param('id'));
   return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);
+});
+
+// Live diff for the Code tab (#185). Polled by the UI every 5 s.
+router.get('/:slug/issues/:id/diff', async (c) => {
+  const result = await getIssueWorktreeDiff(c.req.param('slug'), c.req.param('id'));
+  return result.ok
+    ? c.json(result.data)
+    : c.json({ error: result.error }, result.status as 400 | 404);
 });
 
 router.post('/:slug/issues/:id/transition', async (c) => {

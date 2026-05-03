@@ -125,6 +125,16 @@ export async function fetchEvents(slug: string, id: string): Promise<AgentEventD
   return events;
 }
 
+export interface IssueDiffDto {
+  diff: string | null;
+  runId: string | null;
+  reason?: string;
+}
+
+export async function fetchIssueDiff(slug: string, id: string): Promise<IssueDiffDto> {
+  return getJson<IssueDiffDto>(`/projects/${slug}/issues/${id}/diff`);
+}
+
 export async function fetchComments(slug: string, id: string): Promise<IssueCommentDto[]> {
   const { comments } = await getJson<{ comments: IssueCommentDto[] }>(
     `/projects/${slug}/issues/${id}/comments`,

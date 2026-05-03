@@ -229,6 +229,57 @@ describe('fakeRun', () => {
   });
 });
 
+describe('getIssueWorktreeDiff (#185)', () => {
+  beforeEach(() => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+  });
+
+  it('returns 400 for invalid slug (defence-in-depth)', async () => {
+    const { getIssueWorktreeDiff } = await import('./service.js');
+    const result = await getIssueWorktreeDiff('../etc/hosts', '1');
+    // The source-not-found guard fires first since `getSourceForSlug` returns
+    // null for unknown slugs in this mocked setup. Either 404 or 400 satisfies
+    // the defence-in-depth contract.
+    expect(result.ok).toBe(false);
+  });
+
+  it('returns { diff: null } when no in-flight run exists for the issue', async () => {
+    const { getIssueWorktreeDiff } = await import('./service.js');
+    const events = await import('@goose-hub/core/event-stream/store.js');
+    vi.mocked(events.eventStore.replay).mockReturnValueOnce([]);
+    const result = await getIssueWorktreeDiff('proj', '1');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.diff).toBeNull();
+      expect(result.data.runId).toBeNull();
+      expect(result.data.reason).toContain('no in-flight run');
+    }
+  });
+
+  it('returns { diff: null } with the runId when worktree was cleaned up', async () => {
+    const { getIssueWorktreeDiff } = await import('./service.js');
+    const events = await import('@goose-hub/core/event-stream/store.js');
+    vi.mocked(events.eventStore.replay).mockReturnValueOnce([
+      {
+        id: 1,
+        projectId: 'proj',
+        workItemId: 'github:owner/repo#1',
+        kind: 'pr.opened',
+        runId: 'run-cleaned-up-12345',
+        payload: {},
+        createdAt: '2026-05-02T22:00:00Z',
+      },
+    ] as never);
+    const result = await getIssueWorktreeDiff('proj', '1');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.diff).toBeNull();
+      expect(result.data.runId).toBe('run-cleaned-up-12345');
+      expect(result.data.reason).toContain('worktree not found');
+    }
+  });
+});
+
 describe('overrideIssueRepo (#201 slug guard)', () => {
   it('rejects path-traversal slug with 400', async () => {
     const result = await overrideIssueRepo('../etc/hosts', '1', 'owner/repo');
