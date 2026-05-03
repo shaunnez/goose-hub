@@ -76,3 +76,19 @@ export const personaStats = sqliteTable(
     personaRoleUniq: uniqueIndex('persona_stats_persona_role_uniq').on(t.personaName, t.role),
   }),
 );
+
+export const improvementCandidates = sqliteTable(
+  'improvement_candidates',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    personaName: text('persona_name').notNull(),
+    sourceTaskId: text('source_task_id'),
+    suggestionText: text('suggestion_text').notNull(),
+    suggestionType: text('suggestion_type').notNull(),
+    status: text('status').notNull().default('pending'), // pending | approved | rejected
+    createdAt: text('created_at').notNull().default(sql`(current_timestamp)`),
+  },
+  (t) => ({
+    personaStatusIdx: index('improvement_candidates_persona_status_idx').on(t.personaName, t.status),
+  }),
+);

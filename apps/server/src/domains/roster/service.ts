@@ -1,6 +1,6 @@
 import type { Result } from '../../shared/middleware.js';
-import type { PersonaStat } from './repository.js';
-import { listPersonaStats } from './repository.js';
+import type { ImprovementCandidateRow, PersonaStat } from './repository.js';
+import { listCandidatesByPersona, listPersonaStats, updateCandidateStatus } from './repository.js';
 
 export interface PersonaRunDto {
   runId: string;
@@ -10,15 +10,7 @@ export interface PersonaRunDto {
   createdAt: string;
 }
 
-export interface ImprovementCandidateDto {
-  id: number;
-  personaName: string;
-  sourceTaskId: string | null;
-  suggestionText: string;
-  suggestionType: string;
-  status: string;
-  createdAt: string;
-}
+export type { ImprovementCandidateRow as ImprovementCandidateDto };
 
 export async function listPersonas(): Promise<Result<{ personas: PersonaStat[] }>> {
   const personas = await listPersonaStats();
@@ -33,8 +25,24 @@ export async function getPersonaRuns(
 }
 
 export async function getPersonaCandidates(
-  _personaName: string,
-): Promise<Result<{ candidates: ImprovementCandidateDto[] }>> {
-  // improvement_candidates table is created in #264; return empty for now.
-  return { ok: true, data: { candidates: [] } };
+  personaName: string,
+): Promise<Result<{ candidates: ImprovementCandidateRow[] }>> {
+  const candidates = await listCandidatesByPersona(personaName, 'pending');
+  return { ok: true, data: { candidates } };
+}
+
+export async function approveCandidate(
+  id: number,
+): Promise<Result<{ candidate: ImprovementCandidateRow }>> {
+  const candidate = await updateCandidateStatus(id, 'approved');
+  if (!candidate) return { ok: false, error: 'candidate not found', status: 404 };
+  return { ok: true, data: { candidate } };
+}
+
+export async function rejectCandidate(
+  id: number,
+): Promise<Result<{ candidate: ImprovementCandidateRow }>> {
+  const candidate = await updateCandidateStatus(id, 'rejected');
+  if (!candidate) return { ok: false, error: 'candidate not found', status: 404 };
+  return { ok: true, data: { candidate } };
 }
