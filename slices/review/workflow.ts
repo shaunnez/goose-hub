@@ -5,9 +5,9 @@ import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { DEFAULT_MAX_RETRIES, shouldEscalateReview } from '@goose-hub/core/retry/retry-counter.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { ReviewOutputSchema } from '@goose-hub/skills/review/schema.js';
-import { DEFAULT_MAX_RETRIES, shouldEscalateReview } from '../retry-escalate/retry-counter.js';
 
 const REPO_ROOT = join(import.meta.dirname, '../..');
 
