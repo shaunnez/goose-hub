@@ -258,7 +258,10 @@ describe('runBash', () => {
   it('runs a simple command and captures stdout', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'bash-tool-test-'));
     try {
-      const result = await runBash({ workspaceRoot: dir, argv: ['echo', 'hello bash tool'] });
+      const result = await runBash({
+        workspaceRoot: dir,
+        argv: ['node', '-e', "process.stdout.write('hello bash tool')"],
+      });
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('hello bash tool');
       expect(result.timedOut).toBe(false);
@@ -271,7 +274,7 @@ describe('runBash', () => {
   it('captures non-zero exit codes', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'bash-tool-test-'));
     try {
-      const result = await runBash({ workspaceRoot: dir, argv: ['false'] });
+      const result = await runBash({ workspaceRoot: dir, argv: ['node', '-e', 'process.exit(1)'] });
       expect(result.exitCode).not.toBe(0);
       // BashResult intentionally has no `passed` field — that's runTests' job.
       expect('passed' in result).toBe(false);
@@ -284,7 +287,14 @@ describe('runBash', () => {
     const dir = mkdtempSync(join(tmpdir(), 'bash-tool-test-'));
     try {
       writeFileSync(join(dir, 'marker.txt'), '');
-      const result = await runBash({ workspaceRoot: dir, argv: ['ls'] });
+      const result = await runBash({
+        workspaceRoot: dir,
+        argv: [
+          'node',
+          '-e',
+          "const fs=require('node:fs');process.stdout.write(fs.readdirSync('.').join('\\n'))",
+        ],
+      });
       expect(result.stdout).toContain('marker.txt');
     } finally {
       rmSync(dir, { recursive: true });
@@ -350,9 +360,11 @@ describe('runBash', () => {
     const dir = mkdtempSync(join(tmpdir(), 'bash-tool-test-'));
     try {
       // Shell-metachar in an argv element should be literal text — no command substitution.
+      // JSON.stringify(process.argv) surfaces all argv elements so the assertion
+      // doesn't depend on a specific index position.
       const result = await runBash({
         workspaceRoot: dir,
-        argv: ['echo', '$(whoami)'],
+        argv: ['node', '-e', 'process.stdout.write(JSON.stringify(process.argv))', '$(whoami)'],
       });
       expect(result.stdout).toContain('$(whoami)');
     } finally {
@@ -365,7 +377,7 @@ describe('runBash', () => {
     try {
       const result = await runBash({
         workspaceRoot: dir,
-        argv: ['sleep', '10'],
+        argv: ['node', '-e', 'setTimeout(()=>{},10000)'],
         timeoutMs: 100,
       });
       expect(result.timedOut).toBe(true);
@@ -445,7 +457,7 @@ describe('runTests', () => {
   it('returns passed: true on exit code 0', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'test-tool-test-'));
     try {
-      const result = await runTests({ workspaceRoot: dir, testCommand: 'true' });
+      const result = await runTests({ workspaceRoot: dir, testCommand: 'node -e process.exit(0)' });
       expect(result.passed).toBe(true);
       expect(result.exitCode).toBe(0);
     } finally {
@@ -456,7 +468,7 @@ describe('runTests', () => {
   it('returns passed: false on non-zero exit', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'test-tool-test-'));
     try {
-      const result = await runTests({ workspaceRoot: dir, testCommand: 'false' });
+      const result = await runTests({ workspaceRoot: dir, testCommand: 'node -e process.exit(1)' });
       expect(result.passed).toBe(false);
       expect(result.exitCode).not.toBe(0);
     } finally {
@@ -467,10 +479,10 @@ describe('runTests', () => {
   it('tokenises a multi-word testCommand into argv', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'test-tool-test-'));
     try {
-      // `echo` with several args reaches the spawned process as discrete argv tokens.
-      const result = await runTests({ workspaceRoot: dir, testCommand: 'echo a b c' });
-      expect(result.stdout.trim()).toBe('a b c');
+      // A two-token command reaches spawn as discrete argv elements — verified by --version output.
+      const result = await runTests({ workspaceRoot: dir, testCommand: 'node --version' });
       expect(result.passed).toBe(true);
+      expect(result.stdout.trim()).toMatch(/^v\d+/);
     } finally {
       rmSync(dir, { recursive: true });
     }
