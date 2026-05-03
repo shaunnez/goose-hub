@@ -209,6 +209,17 @@ export async function getIssueWorktreeDiff(
     };
   }
 
+  if (!existsSync(join(worktreePath, '.git'))) {
+    return {
+      ok: true,
+      data: {
+        diff: null,
+        runId,
+        reason: 'worktree directory exists but git repo not yet initialised',
+      },
+    };
+  }
+
   try {
     const diff = execFileSync('git', ['diff', 'HEAD'], {
       cwd: worktreePath,

@@ -19,7 +19,7 @@ const TRANSITIONS: Readonly<Record<StateName, readonly StateName[]>> = {
   'factory:investigating': ['factory:investigation-complete', 'factory:needs-human'],
   'factory:investigation-complete': ['factory:dev-ready'],
   'factory:dev-ready': ['factory:in-progress'],
-  'factory:in-progress': ['factory:needs-qa'],
+  'factory:in-progress': ['factory:needs-qa', 'factory:needs-human'],
   'factory:needs-qa': ['factory:qa-failed', 'factory:needs-review'],
   'factory:qa-failed': ['factory:needs-fix'],
   // needs-review → rejected covers the "human explicitly cancelled" case from section 9.2
