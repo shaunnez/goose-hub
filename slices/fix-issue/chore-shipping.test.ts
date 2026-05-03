@@ -38,6 +38,9 @@ vi.mock('@goose-hub/core/agent-runtime/select-persona.js', () => ({
 vi.mock('node:fs', () => ({
   readFileSync: vi.fn().mockReturnValue('# mock skill prompt'),
 }));
+vi.mock('@goose-hub/core/persona/accumulate.js', () => ({
+  accumulatePersonaStats: vi.fn(),
+}));
 
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { runFixIssueWorkflow } from './workflow.js';
