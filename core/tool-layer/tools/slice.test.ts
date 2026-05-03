@@ -378,6 +378,65 @@ describe('runBash', () => {
     expect(DEFAULT_BASH_DENYLIST).toContain('sudo ');
     expect(DEFAULT_BASH_DENYLIST).toContain('rm -rf /');
   });
+
+  it('captures stderr output from the child process', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'bash-tool-test-'));
+    try {
+      // sh -c 'echo err >&2' writes to stderr; on all platforms 'node' is available
+      const result = await runBash({
+        workspaceRoot: dir,
+        argv: ['node', '-e', 'process.stderr.write("err output")'],
+      });
+      expect(result.stderr).toContain('err output');
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('truncates stdout at BASH_STDOUT_CAP and sets truncated: true', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'bash-tool-test-'));
+    try {
+      // Generate ~5 MB of output (> 4 MB cap) with node so it's cross-platform
+      const result = await runBash({
+        workspaceRoot: dir,
+        argv: [
+          'node',
+          '-e',
+          // Write 5 MB in chunks to exceed the 4 MB cap
+          `const chunk = 'x'.repeat(1024 * 1024); for(let i=0;i<5;i++) process.stdout.write(chunk);`,
+        ],
+        timeoutMs: 10_000,
+      });
+      expect(result.truncated).toBe(true);
+      // stdout length should be at most 4 MB
+      expect(result.stdout.length).toBeLessThanOrEqual(4 * 1024 * 1024);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('rejects with an error when the command cannot be spawned', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'bash-tool-test-'));
+    try {
+      await expect(
+        runBash({ workspaceRoot: dir, argv: ['__no_such_command_xyz__'] }),
+      ).rejects.toThrow('__no_such_command_xyz__');
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('rejects argv entries that are not strings', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'bash-tool-test-'));
+    try {
+      // biome-ignore lint/suspicious/noExplicitAny: intentional bad arg for test
+      await expect(runBash({ workspaceRoot: dir, argv: [42 as any] })).rejects.toThrow(
+        SandboxViolationError,
+      );
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
 });
 
 // ─── runTests ─────────────────────────────────────────────────────────────────

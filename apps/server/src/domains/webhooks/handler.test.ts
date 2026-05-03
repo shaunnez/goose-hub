@@ -209,6 +209,94 @@ describe('POST /webhooks/github', () => {
   });
 });
 
+describe('handleGitHubWebhook — additional branch coverage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.GITHUB_WEBHOOK_SECRET = SECRET;
+    mockGetSourceForSlug.mockResolvedValue(makeSource());
+  });
+
+  it('returns 500 when GITHUB_WEBHOOK_SECRET env var is not configured', async () => {
+    const savedSecret = process.env.GITHUB_WEBHOOK_SECRET;
+    process.env.GITHUB_WEBHOOK_SECRET = '';
+    try {
+      const { app } = await import('../../server.js');
+      const body = JSON.stringify({ action: 'opened' });
+      const res = await app.request('/webhooks/github', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Hub-Signature-256': sign(body, SECRET),
+          'X-GitHub-Event': 'issues',
+        },
+        body,
+      });
+      expect(res.status).toBe(500);
+      const json = (await res.json()) as { error: string };
+      expect(json.error).toContain('webhook secret not configured');
+    } finally {
+      process.env.GITHUB_WEBHOOK_SECRET = savedSecret;
+    }
+  });
+
+  it('returns 400 when JSON body is malformed (issues event)', async () => {
+    const rawBody = 'this is not json {{{';
+    const res = await postWebhook(rawBody, { event: 'issues' });
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error: string };
+    expect(json.error).toContain('invalid JSON');
+  });
+
+  it('returns no-issue-number when issues.labeled has no issue in payload', async () => {
+    const body = JSON.stringify({
+      action: 'labeled',
+      label: { name: 'factory:dev-ready' },
+      // No issue property
+      repository: { full_name: 'shaunnez/goose-hub' },
+    });
+    const res = await postWebhook(body, { event: 'issues' });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { status: string };
+    expect(json.status).toBe('no-issue-number');
+  });
+
+  it('dispatchForLabel rejection is caught and response still succeeds', async () => {
+    mockDispatchForLabel.mockRejectedValueOnce(new Error('dispatch error'));
+    const body = JSON.stringify({
+      action: 'labeled',
+      label: { name: 'factory:dev-ready' },
+      issue: { number: 55 },
+      repository: { full_name: 'shaunnez/goose-hub' },
+    });
+    const res = await postWebhook(body, { event: 'issues' });
+    expect(res.status).toBe(200);
+  });
+
+  it('issues event with no repository in payload returns ignored (line 57: repo ?? fallback)', async () => {
+    // payload.repository is undefined — hits the ?? '' fallback on line 57
+    // repo slug lookup returns undefined (not in REPO_TO_SLUG) → ignored
+    const body = JSON.stringify({ action: 'opened' });
+    const res = await postWebhook(body, { event: 'issues' });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { action: string };
+    expect(json.action).toBe('ignored');
+  });
+
+  it('issues event with unknown action and no action field returns action:unknown (line 102: payload.action ?? unknown)', async () => {
+    // payload has no action field — hits `payload.action ?? 'unknown'` on line 102
+    const body = JSON.stringify({
+      repository: { full_name: 'shaunnez/goose-hub' },
+      // no action field
+    });
+    const res = await postWebhook(body, { event: 'issues' });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { action: string; status: string };
+    // action is undefined in payload → ?? 'unknown' → but 'unknown' != 'opened' and != 'labeled'
+    // so falls through to the final return with action:'unknown' and status:'ignored'
+    expect(json.status).toBe('ignored');
+  });
+});
+
 describe('verifyGitHubSignature', () => {
   it('accepts valid signature', async () => {
     const { verifyGitHubSignature } = await import('./handler.js');
