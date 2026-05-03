@@ -1,5 +1,13 @@
 import { sql } from 'drizzle-orm';
-import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import {
+  index,
+  integer,
+  primaryKey,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core';
 
 export const projectState = sqliteTable('project_state', {
   projectId: text('project_id').primaryKey(),
@@ -50,4 +58,21 @@ export const personaRouting = sqliteTable(
     lastIndex: integer('last_index').notNull().default(0),
   },
   (t) => ({ pk: primaryKey({ columns: [t.projectId, t.role] }) }),
+);
+
+export const personaStats = sqliteTable(
+  'persona_stats',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    personaName: text('persona_name').notNull(),
+    role: text('role').notNull(),
+    runsTotal: integer('runs_total').notNull().default(0),
+    runsSucceeded: integer('runs_succeeded').notNull().default(0),
+    runsFailed: integer('runs_failed').notNull().default(0),
+    avgQualityScore: real('avg_quality_score').notNull().default(1.0),
+    lastRunAt: text('last_run_at').notNull().default(sql`(current_timestamp)`),
+  },
+  (t) => ({
+    personaRoleUniq: uniqueIndex('persona_stats_persona_role_uniq').on(t.personaName, t.role),
+  }),
 );
