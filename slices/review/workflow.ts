@@ -5,6 +5,7 @@ import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { DEFAULT_MAX_RETRIES, shouldEscalateReview } from '@goose-hub/core/retry/retry-counter.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
@@ -122,8 +123,15 @@ export async function runReviewWorkflow(
       };
       nextState = VERDICT_TO_STATE[reviewOutput.verdict] ?? 'factory:needs-human';
     }
+    accumulatePersonaStats({
+      personaName: personaId,
+      role: 'reviewer',
+      outcome: reviewOutput.verdict === 'approved' ? 'success' : 'failure',
+      qualityScore: reviewOutput.confidence,
+    });
     await stateSource.transitionState(workItem.externalId, 'factory:needs-review', nextState);
   } catch (err) {
+    accumulatePersonaStats({ personaName: personaId, role: 'reviewer', outcome: 'failure' });
     const error = err instanceof Error ? err : new Error(String(err));
 
     eventStore.appendEvent({
