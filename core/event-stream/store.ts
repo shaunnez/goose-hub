@@ -44,7 +44,9 @@ export type EventKind =
   | 'qa.completed'
   | 'review.completed'
   // M8 retry-and-escalate
-  | 'agent.retry-escalated';
+  | 'agent.retry-escalated'
+  // M9 retrospective lifecycle
+  | 'retrospective.completed';
 
 export interface AgentEvent {
   id: number;
