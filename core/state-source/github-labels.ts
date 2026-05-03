@@ -438,7 +438,12 @@ export class GitHubLabelsSource implements StateSource {
     const res = await fetch(url, {
       method: 'POST',
       headers: { ...this.baseHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: input.title, body: input.body, labels }),
+      body: JSON.stringify({
+        title: input.title,
+        body: input.body,
+        labels,
+        ...(input.milestoneId != null ? { milestone: Number(input.milestoneId) } : {}),
+      }),
     });
     if (!res.ok) {
       throw new Error(`Failed to create issue: ${res.status} ${res.statusText}`);

@@ -229,21 +229,40 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
 
     // Transition state: factory:triaging → factory:accepted → next state
     await stateSource.transitionState(item.externalId, 'factory:triaging', 'factory:accepted');
+    eventStore.appendEvent({
+      projectId,
+      workItemId,
+      kind: 'state.transitioned',
+      payload: { from: 'factory:triaging', to: 'factory:accepted', by: 'agent' },
+      runId,
+    });
+
+    let finalState: string;
     if (triageOutput.type === 'bug') {
       await stateSource.transitionState(
         item.externalId,
         'factory:accepted',
         'factory:investigating',
       );
+      finalState = 'factory:investigating';
     } else if (triageOutput.type === 'research') {
       await stateSource.transitionState(
         item.externalId,
         'factory:accepted',
         'factory:research-pending',
       );
+      finalState = 'factory:research-pending';
     } else {
       await stateSource.transitionState(item.externalId, 'factory:accepted', 'factory:dev-ready');
+      finalState = 'factory:dev-ready';
     }
+    eventStore.appendEvent({
+      projectId,
+      workItemId,
+      kind: 'state.transitioned',
+      payload: { from: 'factory:accepted', to: finalState, by: 'agent' },
+      runId,
+    });
     logger.info('triage-batch item complete', { slug, workItemId, externalId: item.externalId });
   }
 
