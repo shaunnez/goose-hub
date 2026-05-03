@@ -82,9 +82,11 @@ Before M8 closes (or before M7 closes per the audit), a real Claude-driven `fix-
 ## Outstanding M7 follow-ups (filed but not done)
 
 - **M7.exit:** real chore-shipping demo run (above)
-- **M7.adr:** ADRs 0012 + 0013 (✅ done in this PR)
-- **M7.docs:** README + PLAN §6 updates (✅ done in this PR)
-- **M7.skills-alias:** slice imports via `@goose-hub/skills/*` (✅ done in this PR)
+- **M7.adr:** ADRs 0012 + 0013 (✅ done in PR #251)
+- **M7.docs:** README + PLAN §6 updates (✅ done in PR #251)
+- **M7.skills-alias:** slice imports via `@goose-hub/skills/*` (✅ done in PR #251)
+- **M7.bug:** `prHeadSha` placeholder in `slices/fix-issue/workflow.ts` — actual SHA from `git rev-parse HEAD` (✅ done in PR #253)
+- **CLAUDE.md milestone marker:** flipped M5 → M8 (✅ done in PR #252)
 
 ## When M8 issues are exhausted
 

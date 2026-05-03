@@ -8,9 +8,10 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
 vi.mock('@goose-hub/core/agent-runtime/select-persona.js', () => ({
   selectPersona: vi.fn().mockReturnValue('proj/developer/0'),
 }));
-vi.mock('node:fs', () => ({
-  readFileSync: vi.fn().mockReturnValue('# mock skill prompt'),
-}));
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return { ...actual, readFileSync: vi.fn().mockReturnValue('# mock skill prompt') };
+});
 
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 
@@ -342,5 +343,71 @@ describe('runFixIssueWorkflow (#183)', () => {
       .mocked(eventStore.appendEvent)
       .mock.calls.find(([e]) => e.kind === 'agent.implement-complete');
     expect(completeEvent).toBeDefined();
+  });
+});
+
+describe('resolveWorktreeHeadSha (M7.bug fix — #233 SHA pinning)', () => {
+  it('returns the real HEAD SHA from a git repo', async () => {
+    const { execFileSync } = await import('node:child_process');
+    const { mkdtempSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+
+    const dir = mkdtempSync(join(tmpdir(), 'wt-sha-'));
+    try {
+      // Run all git commands in this throwaway fixture repo with global +
+      // system config disabled so the host's commit-signing setup doesn't
+      // bleed in. Signing is off; user identity is set per-call via
+      // -c flags.
+      const isolatedEnv = {
+        ...process.env,
+        GIT_CONFIG_GLOBAL: '/dev/null',
+        GIT_CONFIG_SYSTEM: '/dev/null',
+      };
+      execFileSync('git', ['init', '-q'], { cwd: dir, env: isolatedEnv });
+      execFileSync(
+        'git',
+        [
+          '-c',
+          'commit.gpgsign=false',
+          '-c',
+          'user.email=test@example.com',
+          '-c',
+          'user.name=Test',
+          'commit',
+          '--allow-empty',
+          '-m',
+          'seed',
+        ],
+        { cwd: dir, env: isolatedEnv },
+      );
+
+      const { resolveWorktreeHeadSha } = await import('./workflow.js');
+      const sha = resolveWorktreeHeadSha(dir);
+
+      expect(sha).toMatch(/^[0-9a-f]{40}$/);
+      // Must satisfy EvidencePostSchema's >= 7 char constraint (#233 contract).
+      expect(sha.length).toBeGreaterThanOrEqual(7);
+      expect(sha).not.toBe('HEAD');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to "HEAD" when the path is not a git repo (loud failure path)', async () => {
+    const { mkdtempSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'wt-sha-bad-'));
+    try {
+      const { resolveWorktreeHeadSha } = await import('./workflow.js');
+      const sha = resolveWorktreeHeadSha(dir);
+      // Fallback is intentionally invalid — fails EvidencePostSchema.prHeadSha
+      // (>= 7 chars) so runEvidencePost surfaces the failure as
+      // evidence.post-failed instead of silently posting a broken URL.
+      expect(sha).toBe('HEAD');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

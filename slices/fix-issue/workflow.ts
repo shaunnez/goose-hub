@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { adviseOnPlan } from '@goose-hub/core/agent-runtime/advisor.js';
@@ -340,6 +341,9 @@ async function afterImplement(input: AfterImplementInput): Promise<void> {
   });
 
   // Step 6: evidence-post wiring (#234) — best-effort.
+  // Resolve the worktree HEAD to the real commit SHA so evidence-post pins
+  // its raw URLs to an immutable ref (#233 SHA-pinning contract).
+  const prHeadSha = resolveWorktreeHeadSha(worktreePath);
   await runEvidencePost({
     workItem,
     projectId,
@@ -348,7 +352,7 @@ async function afterImplement(input: AfterImplementInput): Promise<void> {
     appendSystemPrompt: input.evidencePostPrompt,
     outputJsonSchema: input.evidencePostJsonSchema,
     prNumber: prResult.prNumber,
-    prHeadSha: 'HEAD', // placeholder — real SHA comes from a follow-up `git rev-parse` on the worktree
+    prHeadSha,
     repoRef,
     evidenceSpecPath: implementOutput.evidenceSpecPath,
   });
@@ -475,6 +479,32 @@ ${testsList || '_no tests reported_'}
 
 Closes #${opts.workItem.externalId}
 `;
+}
+
+/**
+ * Resolves the worktree's current HEAD to a 40-char commit SHA so
+ * evidence-post can pin raw.githubusercontent.com URLs to an immutable
+ * ref (the #233 SHA-pinning contract). Falls back to `'HEAD'` only if
+ * `git rev-parse` fails — the EvidencePostSchema requires `prHeadSha.length >= 7`,
+ * which `'HEAD'` does NOT satisfy, so a fallback there will surface as
+ * a schema validation error and be caught by runEvidencePost's
+ * best-effort handler. That's intentional: a missing SHA is loud, not silent.
+ *
+ * Exported for test access — the chore-shipping path needs a real git repo
+ * to exercise the rev-parse, and isolating the call here keeps the
+ * workflow tests deps-injected for everything else.
+ */
+export function resolveWorktreeHeadSha(worktreePath: string): string {
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: worktreePath,
+      encoding: 'utf8',
+    }).trim();
+  } catch {
+    // Triggers a schema validation failure inside runEvidencePost,
+    // which emits evidence.post-failed and continues.
+    return 'HEAD';
+  }
 }
 
 function deriveStack(): {
