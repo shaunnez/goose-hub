@@ -15,6 +15,9 @@ const require = createRequire(import.meta.url);
 
 const allowlist = (process.env.FACTORY_RUN_ALLOWLIST ?? '').split(',').filter(Boolean);
 const runId = process.env.FACTORY_RUN_ID ?? 'unknown';
+// FACTORY_SERVER_PORT is set by ClaudeCliRuntime when spawning the agent
+// subprocess (#209). Falls back to 3001 for backwards compatibility.
+const serverPort = process.env.FACTORY_SERVER_PORT ?? '3001';
 
 async function main() {
   let input = '';
@@ -48,7 +51,7 @@ async function main() {
       // input is redacted by the server-side appendEvent
       input_summary: typeof call?.tool_input === 'object' ? Object.keys(call.tool_input ?? {}) : [],
     };
-    await fetch('http://localhost:3001/events/tool-call', {
+    await fetch(\`http://localhost:\${serverPort}/events/tool-call\`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

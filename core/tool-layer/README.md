@@ -12,6 +12,9 @@ Tool management and security infrastructure for agent runtime.
 | `sandbox.ts` | `writeWorkspaceSandbox` | M4.08 |
 | `pre-tool-use-hook.ts` | `deployHooks`, `HOOK_PATH` | M4.08 |
 | `tools/read.ts` | `readFile`, `searchFiles`, `SandboxViolationError` | M6.02 |
+| `tools/write.ts` | `writeFile` | M7.01 |
+| `tools/bash.ts` | `runBash`, `BashResult`, `DEFAULT_BASH_DENYLIST` | M7.01 |
+| `tools/test.ts` | `runTests`, `TestResult` | M7.01 |
 
 ## Secret Redaction
 
@@ -29,6 +32,9 @@ Named bundles passed via `AgentSpec.toolBundles`. At spawn, `computeAllowlist(sp
 | `read-write` | `Read`, `Write`, `Edit`, `Glob`, `Grep` | Developer agents |
 | `bash-restricted` | `Bash` | Shell agents |
 | `read` | `read`, `search`, `work-item-read` | Investigator agents (sandboxed) |
+| `dev-tools` | `read`, `search`, `work-item-read`, `write`, `bash`, `test` | Developer agents (sandboxed superset of `read`) |
+| `validate` | `Read`, `Write`, `Edit`, `Glob`, `Grep`, scoped `Bash(pnpm test:e2e*)`, evidence I/O, git push | Playwright skills (`evidence-post`, `playwright-repro`) |
+| `playwright-mcp` | `mcp__playwright-test__*` (browser/planner/generator) | `spec-author` skill (auto-merges `apps/web/.mcp.json`) |
 
 ## Workspace Sandbox
 
@@ -103,3 +109,81 @@ try {
   }
 }
 ```
+
+## Sandboxed Write Tool
+
+`tools/write.ts` provides workspace-bound file writes for the developer agent. Same path-validation contract as `readFile`.
+
+### `writeFile({ workspaceRoot, path, content, createParents? })`
+
+Writes UTF-8 `content` to `path` relative to `workspaceRoot`. Parent directories are created by default. Existing files are overwritten.
+
+```ts
+import { writeFile } from './tools/write.js';
+
+await writeFile({
+  workspaceRoot: '/home/user/.factory/workspaces/run-123/repo',
+  path: 'src/new-feature.ts',
+  content: 'export const x = 1;\n',
+});
+```
+
+Throws `SandboxViolationError` on absolute paths or `../` traversal.
+
+## Sandboxed Bash Tool
+
+`tools/bash.ts` provides shell-free command execution for the developer agent.
+
+### `runBash({ workspaceRoot, argv, denylist?, env?, timeoutMs? })`
+
+Spawns `argv[0]` with `argv.slice(1)` as positional arguments. Never invokes a shell (FACTORY_RULES rule 29 — `shell: false`). Cwd is `workspaceRoot`; env is minimal (`HOME`, `PATH`) plus any caller-supplied keys.
+
+Returns `BashResult`:
+
+```ts
+interface BashResult {
+  stdout: string;       // capped at 4 MB (FACTORY_RULES rule 31)
+  stderr: string;
+  exitCode: number;
+  truncated: boolean;   // true if stdout was capped
+  timedOut: boolean;    // true if killed by 30 s default timeout (FACTORY_RULES rule 32)
+}
+```
+
+The default denylist (`DEFAULT_BASH_DENYLIST`) rejects `sudo `, `rm -rf /`, `git push --force`, `mkfs`, fork-bomb, etc. — case-insensitive substring match against the joined argv. Override per-call with the `denylist` parameter.
+
+```ts
+import { runBash } from './tools/bash.js';
+
+const result = await runBash({
+  workspaceRoot: '/work/repo',
+  argv: ['pnpm', 'lint'],
+});
+if (result.exitCode !== 0) {
+  throw new Error(`lint failed: ${result.stderr}`);
+}
+```
+
+## Test Tool
+
+`tools/test.ts` is a thin wrapper around `runBash` that runs the project's `testCommand` (from `StackConfig`).
+
+### `runTests({ workspaceRoot, testCommand, timeoutMs? })`
+
+Tokenises `testCommand` on whitespace into argv, then delegates to `runBash`. Default timeout is **5 minutes** (test runs legitimately exceed the 30 s default).
+
+Returns `TestResult` (extends `BashResult` with a boolean `passed` field — `true` iff `exitCode === 0`).
+
+```ts
+import { runTests } from './tools/test.js';
+
+const result = await runTests({
+  workspaceRoot: '/work/repo',
+  testCommand: 'pnpm test',
+});
+if (!result.passed) {
+  // surface result.stderr to the agent
+}
+```
+
+Quoted arguments in `testCommand` are NOT supported; projects with complex test commands should wrap them in a `package.json` script and pass the script invocation here.

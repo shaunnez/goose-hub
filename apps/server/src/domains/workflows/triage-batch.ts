@@ -6,9 +6,9 @@ import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import type { StateSource } from '@goose-hub/core/state-source/interface.js';
-import { RepoMatchOutputSchema } from '../../../../../skills/repo-match/schema.js';
-import { TriageOutputSchema } from '../../../../../skills/triage/schema.js';
-import { getSourceForSlug } from '../../shared/source.js';
+import { RepoMatchOutputSchema } from '@goose-hub/skills/repo-match/schema.js';
+import { TriageOutputSchema } from '@goose-hub/skills/triage/schema.js';
+import { getSourceForSlug, isValidSlug } from '../../shared/source.js';
 
 const REPO_ROOT = join(import.meta.dirname, '../../../../..');
 
@@ -34,6 +34,12 @@ function buildTriageComment(
 }
 
 function readReposContext(slug: string): string {
+  if (!isValidSlug(slug)) {
+    // Defence-in-depth (#201). Caller's getSourceForSlug already filtered
+    // unknowns, but never touch the filesystem with a slug containing path
+    // metacharacters.
+    throw new Error(`Invalid slug for path construction: ${slug}`);
+  }
   const reposFile = join(REPO_ROOT, 'target-projects', slug, 'repos.md');
   try {
     return readFileSync(reposFile, 'utf8');
@@ -44,6 +50,9 @@ function readReposContext(slug: string): string {
 
 export async function runTriageBatch(slug: string, source?: StateSource): Promise<void> {
   logger.info('triage-batch started', { slug });
+  if (!isValidSlug(slug)) {
+    throw new Error(`Invalid slug: ${slug}`);
+  }
   const stateSource = source ?? (await getSourceForSlug(slug));
   if (stateSource == null) {
     throw new Error(`Project not found: ${slug}`);
@@ -113,6 +122,18 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       priority: triageOutput.priority,
     });
 
+    // Emit each decision summary as a separate event so the timeline UI and
+    // retro skill can replay them per CLAUDE.md (#206).
+    for (const summary of triageOutput.decisionSummaries ?? []) {
+      eventStore.appendEvent({
+        projectId,
+        workItemId,
+        kind: 'agent.decision-summary',
+        payload: { skill: 'triage', ...summary },
+        runId,
+      });
+    }
+
     // Run repo-match skill
     const repoMatchRunId = crypto.randomUUID();
     const researcherPersonaId = selectPersona(projectId, 'researcher');
@@ -147,6 +168,15 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
         slug,
         workItemId,
       });
+      // Surface the parse failure as an event so the timeline records it
+      // (currently silent — #206).
+      eventStore.appendEvent({
+        projectId,
+        workItemId,
+        kind: 'agent.run-failed',
+        payload: { runId: repoMatchRunId, error: 'repo-match output validation failed' },
+        runId: repoMatchRunId,
+      });
     }
     const repoMatchOutput = repoMatchParsed.success
       ? repoMatchParsed.data
@@ -156,6 +186,17 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       workItemId,
       candidates: repoMatchOutput.candidates.length,
     });
+
+    // Emit repo-match decision summaries the same way as triage (#206).
+    for (const summary of repoMatchOutput.decisionSummaries ?? []) {
+      eventStore.appendEvent({
+        projectId,
+        workItemId,
+        kind: 'agent.decision-summary',
+        payload: { skill: 'repo-match', ...summary },
+        runId: repoMatchRunId,
+      });
+    }
 
     // Apply labels
     await stateSource.setLabelInGroup(item.externalId, 'type', triageOutput.type);

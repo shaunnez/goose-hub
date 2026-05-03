@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { db } from '../db/db.js';
 import { events } from '../db/schema.js';
 import { type AgentEvent, eventStore } from './store.js';
@@ -132,6 +132,73 @@ describe('EventStore — subscriber edge cases', () => {
     eventStore.appendEvent({ projectId: SUB_PROJECT, kind: 'system.note', payload: {} });
 
     expect(received).toHaveLength(1);
+  });
+
+  it('swallows errors from a broken subscriber and keeps delivering to others (#220)', () => {
+    const received: AgentEvent[] = [];
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {
+      /* silence */
+    });
+
+    const unsubBad = eventStore.subscribe(() => {
+      throw new Error('subscriber error: do not propagate');
+    });
+    const unsubGood = eventStore.subscribe((e) => {
+      if (e.projectId === SUB_PROJECT) received.push(e);
+    });
+
+    eventStore.appendEvent({ projectId: SUB_PROJECT, kind: 'system.note', payload: { n: 1 } });
+
+    expect(received).toHaveLength(1);
+    expect(errorSpy).toHaveBeenCalled();
+
+    unsubBad();
+    unsubGood();
+    errorSpy.mockRestore();
+  });
+
+  it('does not propagate subscriber errors to the producing run (#220)', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {
+      /* silence */
+    });
+
+    const unsub = eventStore.subscribe(() => {
+      throw new Error('boom');
+    });
+
+    expect(() => {
+      eventStore.appendEvent({ projectId: SUB_PROJECT, kind: 'system.note', payload: {} });
+    }).not.toThrow();
+
+    unsub();
+    errorSpy.mockRestore();
+  });
+
+  it('logs once per error-shape (no log spam from a persistently broken subscriber) (#220)', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {
+      /* silence */
+    });
+
+    const unsub = eventStore.subscribe(() => {
+      throw new Error('repeating boom');
+    });
+
+    for (let i = 0; i < 5; i += 1) {
+      eventStore.appendEvent({
+        projectId: SUB_PROJECT,
+        kind: 'system.note',
+        payload: { n: i },
+      });
+    }
+
+    // Error shape ('Error: repeating boom') should be logged exactly once.
+    const matchingCalls = errorSpy.mock.calls.filter((args) =>
+      String(args[0]).includes('repeating boom'),
+    );
+    expect(matchingCalls).toHaveLength(1);
+
+    unsub();
+    errorSpy.mockRestore();
   });
 
   it('replay returns empty array when no events match filter', () => {

@@ -12,6 +12,8 @@ vi.mock('@goose-hub/core/state-machine/transitions.js', () => ({
 }));
 vi.mock('../../shared/source.js', () => ({
   getSourceForSlug: vi.fn(),
+  // Use the real implementation — defence-in-depth check is just a regex (#201).
+  isValidSlug: (slug: string) => /^[a-z0-9-]+$/.test(slug),
 }));
 vi.mock('../../shared/projects.js', () => ({
   getProject: vi.fn().mockResolvedValue({ source: { kind: 'github', repo: 'owner/repo' } }),
@@ -36,6 +38,7 @@ import {
   fakeRun,
   getIssue,
   listIssues,
+  overrideIssueRepo,
   setIssueLabel,
   transitionIssue,
 } from './service.js';
@@ -156,6 +159,16 @@ describe('setIssueLabel — validation', () => {
     const result = await setIssueLabel('proj', '1', 'schedule', 'current');
     expect(result.ok).toBe(true);
   });
+
+  it('accepts schedule:blocked-by and writes the correct label (#202)', async () => {
+    const result = await setIssueLabel('proj', '1', 'schedule', 'blocked-by');
+    expect(result.ok).toBe(true);
+    expect(mockSource.setLabelInGroup).toHaveBeenCalledWith(
+      'github:owner/repo#1',
+      'schedule',
+      'blocked-by',
+    );
+  });
 });
 
 describe('listIssues', () => {
@@ -195,5 +208,47 @@ describe('fakeRun', () => {
   it('uses investigate when requested', async () => {
     const result = await fakeRun('proj', '1', 'investigate');
     expect(result).toMatchObject({ ok: true, data: { skill: 'investigate' } });
+  });
+
+  it('returns 404 in production, refusing to emit synthetic events (#203)', async () => {
+    const original = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      const result = await fakeRun('proj', '1', 'triage');
+      expect(result).toMatchObject({
+        ok: false,
+        error: 'fake-run is disabled in production',
+        status: 404,
+      });
+      // Confirm getSourceForSlug is never called — the production guard
+      // short-circuits before any side effect.
+      expect(getSourceForSlug).not.toHaveBeenCalled();
+    } finally {
+      process.env.NODE_ENV = original;
+    }
+  });
+});
+
+describe('overrideIssueRepo (#201 slug guard)', () => {
+  it('rejects path-traversal slug with 400', async () => {
+    const result = await overrideIssueRepo('../etc/hosts', '1', 'owner/repo');
+    expect(result).toEqual({ ok: false, error: 'invalid slug', status: 400 });
+    // Importantly, getSourceForSlug is never called for an invalid slug.
+    expect(getSourceForSlug).not.toHaveBeenCalled();
+  });
+
+  it('rejects slug with slashes with 400', async () => {
+    const result = await overrideIssueRepo('foo/bar', '1', 'owner/repo');
+    expect(result).toEqual({ ok: false, error: 'invalid slug', status: 400 });
+  });
+
+  it('rejects empty slug with 400', async () => {
+    const result = await overrideIssueRepo('', '1', 'owner/repo');
+    expect(result).toEqual({ ok: false, error: 'invalid slug', status: 400 });
+  });
+
+  it('still rejects when repo is not provided (repo guard fires first)', async () => {
+    const result = await overrideIssueRepo('valid-slug', '1', undefined);
+    expect(result).toMatchObject({ ok: false, error: 'repo is required', status: 400 });
   });
 });

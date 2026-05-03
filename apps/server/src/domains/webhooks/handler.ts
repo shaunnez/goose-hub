@@ -1,15 +1,12 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { join } from 'node:path';
 import { logger } from '@goose-hub/core/logger.js';
 import type { Context } from 'hono';
-import { getSourceForSlug } from '../../shared/source.js';
+import { dispatchForLabel, dispatchTriageBatch } from '../../shared/dispatch.js';
 
 /** Map from GitHub repo full name → project slug */
 const REPO_TO_SLUG: Record<string, string> = {
   'shaunnez/goose-hub': 'goose-hub-self',
 };
-
-const REPO_ROOT = join(import.meta.dirname, '../../../../..');
 
 export function verifyGitHubSignature(body: string, signature: string, secret: string): boolean {
   const expected = `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
@@ -26,34 +23,6 @@ type WebhookPayload = {
   issue?: { number?: number };
   label?: { name?: string };
 };
-
-async function dispatchForLabel(
-  slug: string,
-  issueNumber: number,
-  labelName: string,
-): Promise<void> {
-  if (labelName === 'factory:triaging') {
-    const { runTriageBatch } = await import('../workflows/triage-batch.js');
-    await runTriageBatch(slug);
-    return;
-  }
-
-  if (labelName === 'factory:investigating') {
-    const { runInvestigateWorkflow } = await import(
-      new URL('../../../../../slices/investigate/workflow.js', import.meta.url).href
-    );
-    const source = await getSourceForSlug(slug);
-    if (source == null) {
-      logger.error('dispatchForLabel: no source for slug', { slug });
-      return;
-    }
-    const item = await source.getItem(issueNumber.toString());
-    await runInvestigateWorkflow(item, source, slug, REPO_ROOT);
-    return;
-  }
-
-  logger.info('dispatchForLabel: no workflow for label', { slug, labelName });
-}
 
 export async function handleGitHubWebhook(c: Context): Promise<Response> {
   const secret = process.env.GITHUB_WEBHOOK_SECRET;
@@ -97,13 +66,9 @@ export async function handleGitHubWebhook(c: Context): Promise<Response> {
     });
   }
 
-  // issues.opened → run triage batch
+  // issues.opened → run triage batch (via shared dispatcher per #207)
   if (payload.action === 'opened') {
-    import('../workflows/triage-batch.js')
-      .then(({ runTriageBatch }) => runTriageBatch(slug))
-      .catch((err: unknown) => {
-        logger.error('webhook triage-batch failed', { slug, error: String(err) });
-      });
+    void dispatchTriageBatch(slug);
     return c.json({ ok: true, event: eventType, action: 'dispatched', slug });
   }
 

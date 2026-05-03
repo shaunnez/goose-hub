@@ -3,17 +3,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ─── module mocks ──────────────────────────────────────────────────────────────
 
-const mockRunTriageBatch = vi.fn().mockResolvedValue(undefined);
-const mockRunInvestigateWorkflow = vi.fn().mockResolvedValue(undefined);
+const mockDispatchTriageBatch = vi.fn().mockResolvedValue(undefined);
+const mockDispatchForLabel = vi.fn().mockResolvedValue(undefined);
 const mockGetSourceForSlug = vi.fn();
 const mockGetItem = vi.fn();
+// Backwards-compat aliases — kept so unrelated tests below need no rename.
+const mockRunTriageBatch = mockDispatchTriageBatch;
+const mockRunInvestigateWorkflow = vi.fn().mockResolvedValue(undefined);
+void mockRunInvestigateWorkflow;
 
-vi.mock('../workflows/triage-batch.js', () => ({
-  runTriageBatch: mockRunTriageBatch,
-}));
-
-vi.mock('../../../../../slices/investigate/workflow.js', () => ({
-  runInvestigateWorkflow: mockRunInvestigateWorkflow,
+vi.mock('../../shared/dispatch.js', () => ({
+  dispatchTriageBatch: mockDispatchTriageBatch,
+  dispatchForLabel: mockDispatchForLabel,
+  dispatchInvestigate: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../shared/source.js', () => ({
@@ -144,7 +146,7 @@ describe('POST /webhooks/github', () => {
     expect(json.label).toBe('factory:investigating');
   });
 
-  it('calls getSourceForSlug and getItem when dispatching investigation', async () => {
+  it('calls dispatchForLabel with the slug, issue number, and label (#207)', async () => {
     const body = JSON.stringify({
       action: 'labeled',
       label: { name: 'factory:investigating' },
@@ -152,10 +154,15 @@ describe('POST /webhooks/github', () => {
       repository: { full_name: 'shaunnez/goose-hub' },
     });
     await postWebhook(body, { event: 'issues' });
-    // Allow the async dispatch to settle
-    await vi.waitFor(() => expect(mockGetSourceForSlug).toHaveBeenCalledWith('goose-hub-self'));
-    await vi.waitFor(() => expect(mockGetItem).toHaveBeenCalledWith('42'));
-    await vi.waitFor(() => expect(mockRunInvestigateWorkflow).toHaveBeenCalled());
+    // The webhook handler delegates to the shared dispatcher rather than
+    // importing the workflow directly (#207).
+    await vi.waitFor(() =>
+      expect(mockDispatchForLabel).toHaveBeenCalledWith(
+        'goose-hub-self',
+        42,
+        'factory:investigating',
+      ),
+    );
   });
 
   // ─── issues.labeled — factory:triaging ──────────────────────────────────────

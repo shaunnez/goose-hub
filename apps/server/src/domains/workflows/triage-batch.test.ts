@@ -337,3 +337,134 @@ describe('POST /projects/:slug/tick', () => {
     expect(body.slug).toBe('goose-hub-self');
   });
 });
+
+describe('runTriageBatch decision-summary events (#206)', () => {
+  let mockRuntime: { run: ReturnType<typeof vi.fn> };
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const { ClaudeCliRuntime } = await import('@goose-hub/core/agent-runtime/claude-cli.js');
+    mockRuntime = new (ClaudeCliRuntime as unknown as new () => typeof mockRuntime)();
+    vi.mocked(ClaudeCliRuntime).mockImplementation(() => mockRuntime as never);
+  });
+
+  it('emits one agent.decision-summary per triage decisionSummaries entry', async () => {
+    const item = makeWorkItem();
+    const source = makeMockSource([item]);
+
+    const triageOut = makeTriageOutput();
+    triageOut.decisionSummaries = [
+      { step: 'type-classification', summary: 'Bug — code error in service' },
+      { step: 'priority-classification', summary: 'p1 — blocks production' },
+    ];
+
+    mockRuntime.run
+      .mockResolvedValueOnce({
+        output: triageOut,
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeRepoMatchOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+    const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+    const { runTriageBatch } = await import('./triage-batch.js');
+    await runTriageBatch('goose-hub-self', source);
+
+    const calls = vi.mocked(eventStore.appendEvent).mock.calls;
+    const triageDecisionEvents = calls.filter(
+      ([e]) =>
+        e.kind === 'agent.decision-summary' && (e.payload as { skill?: string }).skill === 'triage',
+    );
+    expect(triageDecisionEvents).toHaveLength(2);
+    expect((triageDecisionEvents[0][0].payload as { step: string }).step).toBe(
+      'type-classification',
+    );
+  });
+
+  it('emits agent.decision-summary events for repo-match decisionSummaries', async () => {
+    const item = makeWorkItem();
+    const source = makeMockSource([item]);
+
+    mockRuntime.run
+      .mockResolvedValueOnce({
+        output: makeTriageOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeRepoMatchOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+    const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+    const { runTriageBatch } = await import('./triage-batch.js');
+    await runTriageBatch('goose-hub-self', source);
+
+    const repoMatchDecisionEvents = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(
+        ([e]) =>
+          e.kind === 'agent.decision-summary' &&
+          (e.payload as { skill?: string }).skill === 'repo-match',
+      );
+    expect(repoMatchDecisionEvents).toHaveLength(1);
+    expect((repoMatchDecisionEvents[0][0].payload as { step: string }).step).toBe('keyword-match');
+  });
+
+  it('emits agent.run-failed when repo-match output fails to parse', async () => {
+    const item = makeWorkItem();
+    const source = makeMockSource([item]);
+
+    mockRuntime.run
+      .mockResolvedValueOnce({
+        output: makeTriageOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: { not: 'a-valid-repo-match-output' },
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+    const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+    const { runTriageBatch } = await import('./triage-batch.js');
+    await runTriageBatch('goose-hub-self', source);
+
+    const failedEvents = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(
+        ([e]) =>
+          e.kind === 'agent.run-failed' &&
+          (e.payload as { error?: string }).error === 'repo-match output validation failed',
+      );
+    expect(failedEvents).toHaveLength(1);
+  });
+});
+
+describe('runTriageBatch slug guard (#201)', () => {
+  it('throws Invalid slug for path-traversal slug, before touching the filesystem', async () => {
+    const { runTriageBatch } = await import('./triage-batch.js');
+    // Provide an explicit (mock) source so we know the failure is from the slug
+    // guard, not from getSourceForSlug returning null.
+    const stubSource = {} as unknown as StateSource;
+    await expect(runTriageBatch('../etc/hosts', stubSource)).rejects.toThrow(/Invalid slug/);
+  });
+
+  it('throws Invalid slug for empty slug', async () => {
+    const { runTriageBatch } = await import('./triage-batch.js');
+    const stubSource = {} as unknown as StateSource;
+    await expect(runTriageBatch('', stubSource)).rejects.toThrow(/Invalid slug/);
+  });
+
+  it('throws Invalid slug for slashes in slug', async () => {
+    const { runTriageBatch } = await import('./triage-batch.js');
+    const stubSource = {} as unknown as StateSource;
+    await expect(runTriageBatch('foo/bar', stubSource)).rejects.toThrow(/Invalid slug/);
+  });
+});

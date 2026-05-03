@@ -129,6 +129,24 @@ describe('listOpenWork — label parsing', () => {
 });
 
 // ---------------------------------------------------------------------------
+// SCHEDULE_UI_TO_LABEL — blocked-by mapping (#202)
+// ---------------------------------------------------------------------------
+
+describe('SCHEDULE_UI_TO_LABEL (#202)', () => {
+  it('maps blocked-by to schedule:blocked-by', async () => {
+    const { SCHEDULE_UI_TO_LABEL } = await import('./github-labels.js');
+    expect(SCHEDULE_UI_TO_LABEL['blocked-by']).toBe('schedule:blocked-by');
+  });
+
+  it('maps the original three UI values too (regression check)', async () => {
+    const { SCHEDULE_UI_TO_LABEL } = await import('./github-labels.js');
+    expect(SCHEDULE_UI_TO_LABEL.current).toBe('schedule:current');
+    expect(SCHEDULE_UI_TO_LABEL.backlog).toBe('schedule:next');
+    expect(SCHEDULE_UI_TO_LABEL.icebox).toBe('schedule:later');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Pagination
 // ---------------------------------------------------------------------------
 

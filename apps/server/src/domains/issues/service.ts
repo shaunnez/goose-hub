@@ -7,7 +7,7 @@ import { isLegalTransition, legalTargets } from '@goose-hub/core/state-machine/t
 import { CACHE_KEY, bustCache, getCached } from '../../shared/cache.js';
 import type { Result } from '../../shared/middleware.js';
 import { getProject } from '../../shared/projects.js';
-import { getSourceForSlug } from '../../shared/source.js';
+import { getSourceForSlug, isValidSlug } from '../../shared/source.js';
 
 // File is at apps/server/src/domains/issues/service.ts
 // 5 levels up from service.ts to apps/, then 1 more to repo root = 6 levels from the FILE
@@ -74,6 +74,36 @@ export async function getIssueComments(
   return { ok: true, data: { comments } };
 }
 
+interface TriageEventPayload {
+  triage: { type: string; priority: string };
+  repoMatch: {
+    candidates: Array<{ repo: string; confidence: number; evidence: string; tier: number }>;
+  };
+}
+
+interface TriageDto {
+  type: string;
+  priority: string;
+  candidates: Array<{ repo: string; confidence: number; evidence: string; tier: number }>;
+  overrideRepo: string | null;
+}
+
+/**
+ * Build a TriageDto from a triage-complete event payload (#204).
+ * Both getIssueTriage and overrideIssueRepo construct identical-shaped
+ * triage payloads from the latest agent.triage-complete event; this helper
+ * keeps them in sync as the triage schema evolves.
+ */
+function buildTriageDto(payload: unknown, overrideRepo: string | null): TriageDto {
+  const p = payload as TriageEventPayload;
+  return {
+    type: p.triage.type,
+    priority: p.triage.priority,
+    candidates: p.repoMatch.candidates ?? [],
+    overrideRepo,
+  };
+}
+
 export async function getIssueTriage(
   slug: string,
   id: string,
@@ -87,25 +117,13 @@ export async function getIssueTriage(
   const triageEvent = allEvents.filter((e) => e.kind === 'agent.triage-complete').at(-1);
   if (triageEvent == null) return { ok: true, data: { triage: null } };
 
-  const payload = triageEvent.payload as {
-    triage: { type: string; priority: string };
-    repoMatch: {
-      candidates: Array<{ repo: string; confidence: number; evidence: string; tier: number }>;
-    };
-  };
-
   const overrideEvent = allEvents.filter((e) => e.kind === 'agent.repo-override').at(-1);
   const overridePayload = overrideEvent?.payload as { repo?: string } | undefined;
 
   return {
     ok: true,
     data: {
-      triage: {
-        type: payload.triage.type,
-        priority: payload.triage.priority,
-        candidates: payload.repoMatch.candidates ?? [],
-        overrideRepo: overridePayload?.repo ?? null,
-      },
+      triage: buildTriageDto(triageEvent.payload, overridePayload?.repo ?? null),
     },
   };
 }
@@ -200,7 +218,7 @@ export async function setIssueMilestone(
 }
 
 const VALID_PRIORITY = ['low', 'medium', 'high', 'critical'] as const;
-const VALID_SCHEDULE = ['current', 'backlog', 'icebox'] as const;
+const VALID_SCHEDULE = ['current', 'backlog', 'icebox', 'blocked-by'] as const;
 
 export async function setIssueLabel(
   slug: string,
@@ -238,6 +256,7 @@ export async function overrideIssueRepo(
   repo: unknown,
 ): Promise<Result<{ triage: unknown }>> {
   if (typeof repo !== 'string') return { ok: false, error: 'repo is required', status: 400 };
+  if (!isValidSlug(slug)) return { ok: false, error: 'invalid slug', status: 400 };
 
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
@@ -262,22 +281,10 @@ export async function overrideIssueRepo(
   const triageEvent = allEvents.filter((e) => e.kind === 'agent.triage-complete').at(-1);
   if (triageEvent == null) return { ok: true, data: { triage: null } };
 
-  const payload = triageEvent.payload as {
-    triage: { type: string; priority: string };
-    repoMatch: {
-      candidates: Array<{ repo: string; confidence: number; evidence: string; tier: number }>;
-    };
-  };
-
   return {
     ok: true,
     data: {
-      triage: {
-        type: payload.triage.type,
-        priority: payload.triage.priority,
-        candidates: payload.repoMatch.candidates ?? [],
-        overrideRepo: repo,
-      },
+      triage: buildTriageDto(triageEvent.payload, repo),
     },
   };
 }
@@ -287,6 +294,13 @@ export async function fakeRun(
   id: string,
   skill: string,
 ): Promise<Result<{ ok: true; skill: string }>> {
+  // NODE_ENV guard (#203). fakeRun emits synthetic agent.* events that
+  // pollute the durable SQLite event log. Disable in production so a
+  // misrouted call cannot corrupt timeline debugging.
+  if (process.env.NODE_ENV === 'production') {
+    return { ok: false, error: 'fake-run is disabled in production', status: 404 };
+  }
+
   const safeSkill = skill === 'investigate' ? 'investigate' : 'triage';
 
   const source = await getSourceForSlug(slug);

@@ -1,0 +1,66 @@
+{
+  "description": "Eval cases for implement skill. Verifies the TDD output shape and the evidenceSpecPath contract.",
+  "test_cases": [
+    {
+      "prompt": "Ship a small chore that adds a helper with three test cases",
+      "context": {
+        "workItem": {
+          "title": "Add capitalize helper",
+          "body": "Add `capitalize(s)` to core/utils/strings.ts. Tests cover empty string, single char, multi-word.",
+          "number": 9101,
+          "priority": "medium"
+        },
+        "worktreePath": "/work/repo",
+        "stack": { "testCommand": "pnpm test", "lintCommand": "pnpm lint" }
+      },
+      "assertions": [
+        "output is valid JSON",
+        "plan field is non-empty",
+        "filesWritten includes core/utils/strings.ts and a test file",
+        "testsWritten includes a file with cases >= 3",
+        "prUrl is a valid URL",
+        "evidenceSpecPath is null (chore did not author a Playwright spec)",
+        "decisionSummaries has at least 2 entries (plan, green)"
+      ]
+    },
+    {
+      "prompt": "Ship a UI slice that authors a Playwright spec demonstrating the change",
+      "context": {
+        "workItem": {
+          "title": "Add evidence panel to project overview",
+          "body": "Render an evidence panel under the overview that shows linked PR screenshots. Add a Playwright spec that exercises the panel.",
+          "number": 9102,
+          "priority": "medium"
+        },
+        "worktreePath": "/work/repo",
+        "stack": { "testCommand": "pnpm test", "lintCommand": "pnpm lint" }
+      },
+      "assertions": [
+        "filesWritten includes a file under apps/web/src/components/",
+        "evidenceSpecPath is a string ending with .spec.ts under apps/web/e2e/",
+        "decisionSummaries includes a step describing the spec authoring",
+        "confidence is one of 'low'|'medium'|'high'"
+      ]
+    },
+    {
+      "prompt": "Ship a revision pass after advisor returned revise feedback",
+      "context": {
+        "workItem": {
+          "title": "Add caching to X",
+          "body": "Add a small LRU cache to module X.",
+          "number": 9103,
+          "priority": "high"
+        },
+        "worktreePath": "/work/repo",
+        "stack": { "testCommand": "pnpm test" },
+        "revisionPass": 1,
+        "advisorFeedback": "Use core/cache/lru.ts; do not introduce a new lru-cache dependency."
+      },
+      "assertions": [
+        "plan acknowledges or implies the advisor feedback (no new lru-cache dep)",
+        "filesWritten does NOT include a package.json modification adding lru-cache",
+        "decisionSummaries includes a step that references the revision pass"
+      ]
+    }
+  ]
+}

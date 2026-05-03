@@ -92,6 +92,14 @@ describe('setActiveMilestone', () => {
       expect.objectContaining({ kind: 'milestone.activated', payload: { milestoneNumber: 7 } }),
     );
   });
+
+  it('returns 404 for unknown project (#196)', async () => {
+    vi.mocked(getSourceForSlug).mockResolvedValueOnce(null);
+    const result = await setActiveMilestone('unknown', 7);
+    expect(result).toEqual({ ok: false, error: 'project not found', status: 404 });
+    expect(writeActiveMilestone).not.toHaveBeenCalled();
+    expect(eventStore.appendEvent).not.toHaveBeenCalled();
+  });
 });
 
 describe('listMilestones', () => {

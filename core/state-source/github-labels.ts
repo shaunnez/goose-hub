@@ -24,6 +24,9 @@ export const SCHEDULE_UI_TO_LABEL: Record<string, string> = {
   current: 'schedule:current',
   backlog: 'schedule:next',
   icebox: 'schedule:later',
+  // 'blocked-by' is a manual override label set by the human; the API must
+  // accept it so the UI can roundtrip the value (#202).
+  'blocked-by': 'schedule:blocked-by',
 };
 
 interface GithubIssueLabel {
