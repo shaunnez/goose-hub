@@ -7,7 +7,7 @@ import { extractPlaywrightRepro } from './lib/playwright-capture';
 import { SECTIONS } from './lib/sections';
 
 describe('detail page — sections config', () => {
-  it('lists the 10 design sections in order', () => {
+  it('lists the 11 design sections in order (retrospective added in M9)', () => {
     expect(SECTIONS.map((s) => s.key)).toEqual([
       'overview',
       'repo',
@@ -16,6 +16,7 @@ describe('detail page — sections config', () => {
       'code',
       'qa',
       'review',
+      'retrospective',
       'timeline',
       'chat',
       'costs',

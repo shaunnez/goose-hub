@@ -1,4 +1,4 @@
-// 10-section left rail keys for the full-takeover detail page.
+// 11-section left rail keys for the full-takeover detail page.
 // Order and keys come from the Harness 2.1 design; M2 only lights up
 // `overview` and `timeline`. Other sections render a DeferredSurface stub.
 
@@ -33,8 +33,7 @@ export const SECTIONS: readonly DetailSection[] = [
     key: 'code',
     label: 'Code',
     available: true,
-    description:
-      'Playwright captures: screenshots, video, and console errors for bug reproduction.',
+    description: 'Playwright captures: screenshots, video, and console errors for bug reproduction.',
   },
   {
     key: 'qa',
@@ -47,6 +46,12 @@ export const SECTIONS: readonly DetailSection[] = [
     label: 'Review',
     available: true,
     description: 'Holdout review verdict, requested changes.',
+  },
+  {
+    key: 'retrospective',
+    label: 'Retrospective',
+    available: true,
+    description: 'Post-merge learning loop — light or deep retrospective output.',
   },
   { key: 'timeline', label: 'Timeline', available: true },
   {

@@ -1,5 +1,5 @@
 import { cn } from '@/lib/cn';
-import { CODE_ACTIVE_STATES } from '@/lib/constants';
+import { CODE_ACTIVE_STATES, RETRO_ACTIVE_STATES } from '@/lib/constants';
 import {
   Brain,
   Bug,
@@ -12,6 +12,7 @@ import {
   Layers,
   type LucideIcon,
   MessageSquare,
+  RotateCcw,
 } from 'lucide-react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { SECTIONS } from '../lib/sections';
@@ -24,6 +25,7 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   code: Code2,
   qa: Bug,
   review: Eye,
+  retrospective: RotateCcw,
   timeline: Clock,
   chat: MessageSquare,
   costs: Coins,
@@ -61,12 +63,16 @@ export function LeftRail({ itemState }: LeftRailProps) {
           const available =
             section.key === 'code'
               ? itemState != null && CODE_ACTIVE_STATES.has(itemState)
-              : section.available;
+              : section.key === 'retrospective'
+                ? itemState != null && RETRO_ACTIVE_STATES.has(itemState)
+                : section.available;
 
           const unavailableTitle =
             section.key === 'code'
               ? 'Available once coding has started'
-              : `Available in ${section.milestone}`;
+              : section.key === 'retrospective'
+                ? 'Available after the PR merges'
+                : `Available in ${section.milestone}`;
 
           if (!available) {
             return (
