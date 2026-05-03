@@ -48,6 +48,8 @@ export const PRIORITY_BORDER: Record<string, string> = {
   low: 'oklch(0.42 0.01 260 / 0.4)',
 };
 
+export const RETRO_ACTIVE_STATES = new Set(['factory:retrospecting', 'factory:done']);
+
 export const CODE_ACTIVE_STATES = new Set([
   'factory:in-progress',
   'factory:needs-qa',

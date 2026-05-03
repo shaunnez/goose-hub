@@ -229,6 +229,8 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
               <QASection projectSlug={slug} id={id} />
             ) : currentSection.key === 'review' ? (
               <ReviewSection projectSlug={slug} id={id} />
+            ) : currentSection.key === 'retrospective' ? (
+              <RetrospectiveSection projectSlug={slug} id={id} />
             ) : (
               <DeferredSurface
                 surface={currentSection.label}
