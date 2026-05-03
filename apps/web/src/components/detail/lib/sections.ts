@@ -39,15 +39,13 @@ export const SECTIONS: readonly DetailSection[] = [
   {
     key: 'qa',
     label: 'QA',
-    available: false,
-    milestone: 'M8',
+    available: true,
     description: 'Holdout QA report — outcome assessed against the original issue.',
   },
   {
     key: 'review',
     label: 'Review',
-    available: false,
-    milestone: 'M8',
+    available: true,
     description: 'Holdout review verdict, requested changes.',
   },
   { key: 'timeline', label: 'Timeline', available: true },
