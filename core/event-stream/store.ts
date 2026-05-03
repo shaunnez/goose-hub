@@ -37,7 +37,9 @@ export type EventKind =
   // M7 approval gate (#186)
   | 'gate.approved'
   | 'gate.rejected'
-  | 'pr.merged';
+  | 'pr.merged'
+  // M8 holdout enforcement — context injection boundary violations
+  | 'tool.violation';
 
 export interface AgentEvent {
   id: number;

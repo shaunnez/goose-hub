@@ -255,6 +255,111 @@ describe('assembleSpawnContext', () => {
   });
 });
 
+// ─── holdout enforcement (tool.violation events) ──────────────────────────────
+
+describe('assembleSpawnContext — holdout enforcement', () => {
+  const makeHoldoutSpec = (overrides: Partial<AgentSpec> = {}): AgentSpec => ({
+    runId: 'holdout-run-01',
+    role: 'qa',
+    skill: 'qa-test',
+    context: {
+      projectId: 'proj-abc',
+      workItemId: 'item-42',
+      message: 'allowed',
+      secret: 'tok_injected',
+      implementationReasoning: 'should not pass through',
+    },
+    contextAllowlist: ['message'],
+    freshContext: true,
+    toolBundles: [],
+    toolExtras: [],
+    budgets: { maxTurns: 5, maxBudgetUsd: 0.1 },
+    personaId: 'proj-abc/qa/0',
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('disallowed keys are absent from the rendered XML', () => {
+    const { contextXml } = assembleSpawnContext(makeHoldoutSpec());
+    expect(contextXml).not.toContain('secret');
+    expect(contextXml).not.toContain('tok_injected');
+    expect(contextXml).not.toContain('implementationReasoning');
+  });
+
+  it('allowed keys remain in the rendered XML', () => {
+    const { contextXml } = assembleSpawnContext(makeHoldoutSpec());
+    expect(contextXml).toContain('message');
+    expect(contextXml).toContain('allowed');
+  });
+
+  it('emits tool.violation for each disallowed key on a qa holdout role', () => {
+    assembleSpawnContext(makeHoldoutSpec());
+    const violations = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(([e]) => e.kind === 'tool.violation');
+    // 'secret' and 'implementationReasoning' are disallowed; projectId/workItemId are system keys
+    expect(violations).toHaveLength(2);
+    const keys = violations.map(([e]) => (e.payload as { disallowedKey: string }).disallowedKey);
+    expect(keys).toContain('secret');
+    expect(keys).toContain('implementationReasoning');
+  });
+
+  it('emits tool.violation with correct role and runId in payload', () => {
+    assembleSpawnContext(makeHoldoutSpec());
+    const violations = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(([e]) => e.kind === 'tool.violation');
+    for (const [e] of violations) {
+      const payload = e.payload as { role: string; runId: string };
+      expect(payload.role).toBe('qa');
+      expect(payload.runId).toBe('holdout-run-01');
+    }
+  });
+
+  it('emits tool.violation on reviewer role too', () => {
+    assembleSpawnContext(makeHoldoutSpec({ role: 'reviewer' }));
+    const violations = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(([e]) => e.kind === 'tool.violation');
+    expect(violations.length).toBeGreaterThan(0);
+    const [e] = violations[0];
+    expect((e.payload as { role: string }).role).toBe('reviewer');
+  });
+
+  it('does NOT emit tool.violation for a non-holdout (developer) role', () => {
+    assembleSpawnContext(makeHoldoutSpec({ role: 'developer' }));
+    const violations = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(([e]) => e.kind === 'tool.violation');
+    expect(violations).toHaveLength(0);
+  });
+
+  it('does NOT flag system keys (projectId, workItemId) as violations', () => {
+    assembleSpawnContext(makeHoldoutSpec());
+    const violations = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(([e]) => e.kind === 'tool.violation');
+    const keys = violations.map(([e]) => (e.payload as { disallowedKey: string }).disallowedKey);
+    expect(keys).not.toContain('projectId');
+    expect(keys).not.toContain('workItemId');
+  });
+
+  it('emits no violations when all non-system keys are allowlisted', () => {
+    const spec = makeHoldoutSpec({
+      context: { projectId: 'proj-abc', workItemId: 'item-42', message: 'allowed' },
+      contextAllowlist: ['message'],
+    });
+    assembleSpawnContext(spec);
+    const violations = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(([e]) => e.kind === 'tool.violation');
+    expect(violations).toHaveLength(0);
+  });
+});
+
 // ─── output validator ─────────────────────────────────────────────────────────
 
 describe('validateOutput', () => {
