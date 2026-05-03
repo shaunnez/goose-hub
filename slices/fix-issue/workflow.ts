@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { adviseOnPlan } from '@goose-hub/core/agent-runtime/advisor.js';
+import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
@@ -131,6 +132,7 @@ export async function runFixIssueWorkflow(
           'factory:in-progress',
           'factory:needs-human',
         );
+        accumulatePersonaStats({ personaName: implementPersonaId, role: 'developer', outcome: 'failure' });
         return;
       }
 
@@ -154,6 +156,7 @@ export async function runFixIssueWorkflow(
           evidencePostJsonSchema,
           resolveHeadShaFn,
         });
+        accumulatePersonaStats({ personaName: implementPersonaId, role: 'developer', outcome: 'success' });
         return;
       }
     }
@@ -187,7 +190,9 @@ export async function runFixIssueWorkflow(
       evidencePostJsonSchema,
       resolveHeadShaFn,
     });
+    accumulatePersonaStats({ personaName: implementPersonaId, role: 'developer', outcome: 'success' });
   } catch (err) {
+    accumulatePersonaStats({ personaName: implementPersonaId, role: 'developer', outcome: 'failure' });
     const error = err instanceof Error ? err : new Error(String(err));
     eventStore.appendEvent({
       projectId,
