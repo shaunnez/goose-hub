@@ -71,13 +71,16 @@ Recommended grouping for PR efficiency (mirrors how M7 was shipped):
 
 Before M8 closes (or before M7 closes per the audit), a real Claude-driven `fix-issue` run on a `type:chore` issue must land a merged PR. The recipe:
 
-1. Set `ANTHROPIC_API_KEY` and `GITHUB_TOKEN` in `.env`.
-2. Pick or file a small `type:chore` issue (e.g. "rename a constant in `core/utils/`").
-3. Label it `factory:dev-ready`.
-4. Trigger the workflow via webhook (label flip) or directly: `pnpm tsx -e "import { runFixIssueWorkflow } from './slices/fix-issue/workflow.js'; …"`.
-5. Watch the timeline for `pr.opened`, `agent.implement-complete`, `evidence.posted` (or `evidence.no-spec-declared`).
-6. Open the PR in GitHub, click Approve in the gate UI, confirm `pr.merged` event.
-7. Attach the merged PR URL + the timeline events to issue `M7.exit: real chore-shipping demo run` as evidence.
+1. **Auth.** Pick one:
+   - **Pro/Max OAuth (recommended for local dev):** make sure `claude login` has succeeded recently — the runtime forwards `USER` + `TMPDIR` to the subprocess so it can read keychain creds (see CONTEXT.md "Spawn mechanism"). Nothing else needed for Claude.
+   - **API-key billing:** set `ANTHROPIC_API_KEY` in `.env`. The runtime forwards it to the subprocess only when present (`core/agent-runtime/claude-cli.ts:144`).
+2. **Set `GITHUB_TOKEN`** in `.env` — required by `openPR` and `mergePR` (no OAuth path for these).
+3. Pick or file a small `type:chore` issue (e.g. "rename a constant in `core/utils/`").
+4. Label it `factory:dev-ready`.
+5. Trigger the workflow via webhook (label flip) or directly: `pnpm tsx -e "import { runFixIssueWorkflow } from './slices/fix-issue/workflow.js'; …"`.
+6. Watch the timeline for `pr.opened`, `agent.implement-complete`, `evidence.posted` (or `evidence.no-spec-declared`).
+7. Open the PR in GitHub, click Approve in the gate UI, confirm `pr.merged` event.
+8. Attach the merged PR URL + the timeline events to issue `M7.exit: real chore-shipping demo run` as evidence.
 
 ## Outstanding M7 follow-ups (filed but not done)
 
