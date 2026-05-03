@@ -19,6 +19,7 @@ export function TopBar({ breadcrumb }: TopBarProps) {
         <span className="grow" />
         <button
           type="button"
+          data-testid="capture-button"
           onClick={() => setShowCapture(true)}
           title="Capture an idea or task"
           className="flex items-center gap-2 h-7 px-2.5 rounded-md text-[12px] text-fg-2 border border-line bg-bg hover:bg-bg-elev cursor-pointer"

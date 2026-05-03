@@ -96,6 +96,7 @@ export function CaptureModal({ open, onClose }: CaptureModalProps) {
           </label>
           <input
             id="capture-title"
+            data-testid="capture-title-input"
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -196,6 +197,7 @@ export function CaptureModal({ open, onClose }: CaptureModalProps) {
             </button>
             <button
               type="submit"
+              data-testid="capture-submit"
               disabled={submitting}
               style={{
                 padding: '5px 14px',
