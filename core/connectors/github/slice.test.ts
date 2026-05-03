@@ -117,6 +117,35 @@ describe('openPR (#184)', () => {
   });
 });
 
+describe('defaultGitExec via openPR without gitExec override', () => {
+  const baseInput = {
+    worktreePath: '/work/wt',
+    repo: 'shaunnez/goose-hub',
+    issueNumber: 42,
+    title: 'M7.05: example chore',
+    body: '## Summary\n\nDone\n\nCloses #42\n',
+    branchName: 'factory/run-abc',
+    token: 'ghp_test',
+  } as const;
+
+  it('throws when git is invoked on a non-existent path (exercises defaultGitExec)', async () => {
+    // Don't supply gitExec — this exercises the defaultGitExec branch (lines 109-111).
+    // It will call execFileSync('git', [...]) with a non-existent cwd and throw.
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
+    await expect(
+      openPR({
+        ...baseInput,
+        worktreePath: '/path/that/does/not/exist/for/test',
+        fetchImpl,
+        // no gitExec — exercises defaultGitExec
+      }),
+    ).rejects.toThrow();
+    // fetchImpl should NOT have been called (failure is in the git push step)
+    const fetchMock = fetchImpl as unknown as ReturnType<typeof vi.fn>;
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
 describe('mergePR (#186)', () => {
   it('PUTs to /pulls/N/merge with merge method, returns sha + merged', async () => {
     const fetchImpl = vi

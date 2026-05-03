@@ -494,6 +494,71 @@ describe('runInvestigateWorkflow', () => {
   });
 });
 
+describe('investigate — line 138 non-Error catch branch', () => {
+  it('wraps non-Error thrown value as Error and transitions to needs-human', async () => {
+    const item = makeWorkItem({ type: 'chore' });
+    const source = makeMockSource();
+
+    // Throw a string (not an Error object) to cover the false branch of `err instanceof Error`
+    // eslint-disable-next-line prefer-promise-reject-errors
+    mockRun.mockRejectedValueOnce('string error — not an Error instance');
+
+    const { runInvestigateWorkflow } = await import('./workflow.js');
+    await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:investigating',
+      'factory:needs-human',
+    );
+    expect(source.comment).toHaveBeenCalledWith(
+      '42',
+      expect.stringContaining('Investigation failed'),
+    );
+  });
+});
+
+describe('investigate — playwright-repro parse failure (line 138 branch)', () => {
+  it('continues to success when playwright-repro output parse fails (non-fatal)', async () => {
+    const item = makeWorkItem({ type: 'bug' });
+    const source = makeMockSource();
+
+    mockRun
+      .mockResolvedValueOnce({
+        output: makeInvestigateOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        // Invalid output — PlaywrightReproSchema.safeParse will return success:false
+        output: { bad: 'schema', missingFields: true },
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+    const { runInvestigateWorkflow } = await import('./workflow.js');
+    const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+    await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
+
+    // Should still transition successfully (playwright-repro failure is non-fatal)
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:investigating',
+      'factory:investigation-complete',
+    );
+
+    // investigation-complete event should still be emitted
+    const call = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'agent.investigation-complete');
+    expect(call).toBeDefined();
+
+    // playwrightRepro should be undefined (parse failed but non-fatal)
+    const payload = call?.[0].payload as { playwrightRepro: unknown };
+    expect(payload.playwrightRepro).toBeUndefined();
+  });
+});
+
 describe('selectPersona', () => {
   it('returns round-robin persona IDs for sequential calls (mocked)', async () => {
     // The actual round-robin is DB-backed; here we verify the mock integration

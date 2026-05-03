@@ -84,4 +84,42 @@ describe('promoteInboxItem', () => {
     );
     expect(deleteInboxItem).toHaveBeenCalledWith(1);
   });
+
+  it('still returns ok:true when deleteInboxItem throws (GitHub issue was created)', async () => {
+    vi.mocked(getInboxItem).mockResolvedValueOnce(mockItem);
+    vi.mocked(deleteInboxItem).mockRejectedValueOnce(new Error('DB locked'));
+
+    const result = await promoteInboxItem(1, 'my-proj');
+    // The GitHub issue was created; delete failure is logged but swallowed
+    expect(result).toEqual({ ok: true, data: { ok: true } });
+    expect(mockSource.createIssue).toHaveBeenCalled();
+  });
+
+  it('creates issue with type from item', async () => {
+    const researchItem = {
+      id: 2,
+      title: 'Research X',
+      body: 'Details',
+      type: 'research',
+      createdAt: '2026-05-01',
+    };
+    vi.mocked(getInboxItem).mockResolvedValueOnce(researchItem);
+    await promoteInboxItem(2, 'my-proj');
+    expect(mockSource.createIssue).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'research', title: 'Research X' }),
+    );
+  });
+
+  it('defaults body to empty string when item body is falsy', async () => {
+    const itemWithNullBody = {
+      id: 3,
+      title: 'No body',
+      body: null as unknown as string,
+      type: 'chore',
+      createdAt: '2026-05-01',
+    };
+    vi.mocked(getInboxItem).mockResolvedValueOnce(itemWithNullBody);
+    await promoteInboxItem(3, 'my-proj');
+    expect(mockSource.createIssue).toHaveBeenCalledWith(expect.objectContaining({ body: '' }));
+  });
 });

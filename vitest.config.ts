@@ -10,21 +10,22 @@ export default defineConfig({
   },
   test: {
     include: ['**/*.test.ts', '**/*.test.tsx'],
-    exclude: ['**/node_modules/**', '**/dist/**', '**/.claude/**'],
+    exclude: ['**/node_modules/**', '**/dist/**', '**/.claude/**', '**/.worktrees/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       reportsDirectory: './coverage',
       thresholds: {
-        lines: 40,
-        functions: 55,
-        branches: 45,
-        statements: 40,
+        lines: 90,
+        functions: 90,
+        branches: 90,
+        statements: 90,
       },
       exclude: [
         '**/node_modules/**',
         '**/dist/**',
         '**/.claude/**',
+        '**/.worktrees/**',
         '**/*.test.ts',
         '**/*.test.tsx',
         '**/*.spec.ts',
@@ -46,6 +47,12 @@ export default defineConfig({
         '**/target-projects/**',
         // React components — covered by Playwright e2e, not unit tests
         '**/*.tsx',
+        // Entry points — not unit-testable (process lifecycle, HTTP server boot)
+        'apps/server/src/index.ts',
+        'apps/cli/src/index.ts',
+        'apps/web/src/lib/api.ts',
+        'core/db/migrate.ts',
+        'drizzle.config.ts',
       ],
     },
   },

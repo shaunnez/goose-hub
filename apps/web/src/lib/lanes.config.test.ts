@@ -32,4 +32,30 @@ describe('lanes config', () => {
     ]);
     expect(sorted.map((s) => s.externalId)).toEqual(['99', '5', '7', '40', '12']);
   });
+
+  it('sortLaneItems treats unknown priority as rank 9 (sorts last)', () => {
+    // Line 126: the ?? 9 fallback branch — items with unknown priority rank last
+    const sorted = sortLaneItems([
+      { externalId: '1', priority: 'high' },
+      { externalId: '2', priority: 'unknown-future-priority' },
+      { externalId: '3', priority: 'critical' },
+    ]);
+    // critical(0) < high(1) < unknown(9)
+    expect(sorted[0].externalId).toBe('3');
+    expect(sorted[1].externalId).toBe('1');
+    expect(sorted[2].externalId).toBe('2');
+  });
+
+  it('sortLaneItems stable-sorts items with the same priority by externalId ascending', () => {
+    const sorted = sortLaneItems([
+      { externalId: '30', priority: 'medium' },
+      { externalId: '10', priority: 'medium' },
+      { externalId: '20', priority: 'medium' },
+    ]);
+    expect(sorted.map((s) => s.externalId)).toEqual(['10', '20', '30']);
+  });
+
+  it('laneForState returns undefined for an unknown state', () => {
+    expect(laneForState('factory:nonexistent')).toBeUndefined();
+  });
 });
