@@ -105,5 +105,7 @@ export interface ImprovementCandidateDto {
   suggestionText: string;
   suggestionType: string;
   status: string;
+  githubIssueUrl: string | null;
+  errorNote: string | null;
   createdAt: string;
 }

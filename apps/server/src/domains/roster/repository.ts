@@ -20,6 +20,8 @@ export interface ImprovementCandidateRow {
   suggestionText: string;
   suggestionType: string;
   status: string;
+  githubIssueUrl: string | null;
+  errorNote: string | null;
   createdAt: string;
 }
 
@@ -46,11 +48,35 @@ export async function listCandidatesByPersona(
     .orderBy(asc(improvementCandidates.createdAt));
 }
 
+export async function getCandidateById(id: number): Promise<ImprovementCandidateRow | null> {
+  const [row] = await db
+    .select()
+    .from(improvementCandidates)
+    .where(eq(improvementCandidates.id, id));
+  return row ?? null;
+}
+
 export async function updateCandidateStatus(
   id: number,
   status: 'approved' | 'rejected',
 ): Promise<ImprovementCandidateRow | null> {
   await db.update(improvementCandidates).set({ status }).where(eq(improvementCandidates.id, id));
+  const [row] = await db
+    .select()
+    .from(improvementCandidates)
+    .where(eq(improvementCandidates.id, id));
+  return row ?? null;
+}
+
+export async function updateCandidateGithubIssue(
+  id: number,
+  githubIssueUrl: string | null,
+  errorNote: string | null,
+): Promise<ImprovementCandidateRow | null> {
+  await db
+    .update(improvementCandidates)
+    .set({ githubIssueUrl, errorNote })
+    .where(eq(improvementCandidates.id, id));
   const [row] = await db
     .select()
     .from(improvementCandidates)

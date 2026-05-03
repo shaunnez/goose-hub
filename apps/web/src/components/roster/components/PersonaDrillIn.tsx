@@ -124,6 +124,25 @@ function CandidateRow({
         </span>
       </div>
       <p className="text-fg leading-snug mb-2">{candidate.suggestionText}</p>
+      {candidate.githubIssueUrl && (
+        <a
+          href={candidate.githubIssueUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          data-testid="github-issue-link"
+          className="inline-flex items-center gap-1 text-[11px] text-fg-3 hover:text-fg underline mb-2"
+        >
+          View GitHub issue
+        </a>
+      )}
+      {candidate.errorNote && (
+        <p
+          data-testid="candidate-error-note"
+          className="text-[11px] text-[color:var(--danger,#ef4444)] mb-2"
+        >
+          {candidate.errorNote}
+        </p>
+      )}
       {candidate.status === 'pending' && (
         <div className="flex gap-2">
           <button

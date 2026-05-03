@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockStats = [
   {
@@ -30,21 +30,40 @@ const mockCandidateRow = {
   suggestionText: 'Add error handling to the implement skill',
   suggestionType: 'skill-prompt',
   status: 'pending',
+  githubIssueUrl: null,
+  errorNote: null,
   createdAt: '2026-05-01T00:00:00Z',
 };
 
-const { mockListPersonaStats, mockListCandidatesByPersona, mockUpdateCandidateStatus } = vi.hoisted(
-  () => ({
-    mockListPersonaStats: vi.fn(),
-    mockListCandidatesByPersona: vi.fn(),
-    mockUpdateCandidateStatus: vi.fn(),
-  }),
-);
+const {
+  mockListPersonaStats,
+  mockListCandidatesByPersona,
+  mockUpdateCandidateStatus,
+  mockGetCandidateById,
+  mockUpdateCandidateGithubIssue,
+} = vi.hoisted(() => ({
+  mockListPersonaStats: vi.fn(),
+  mockListCandidatesByPersona: vi.fn(),
+  mockUpdateCandidateStatus: vi.fn(),
+  mockGetCandidateById: vi.fn(),
+  mockUpdateCandidateGithubIssue: vi.fn(),
+}));
 
 vi.mock('./repository.js', () => ({
   listPersonaStats: mockListPersonaStats,
   listCandidatesByPersona: mockListCandidatesByPersona,
   updateCandidateStatus: mockUpdateCandidateStatus,
+  getCandidateById: mockGetCandidateById,
+  updateCandidateGithubIssue: mockUpdateCandidateGithubIssue,
+}));
+
+const { mockGetProject } = vi.hoisted(() => ({
+  mockGetProject: vi.fn(),
+}));
+
+vi.mock('../../shared/projects.js', () => ({
+  getProject: mockGetProject,
+  listProjects: vi.fn(),
 }));
 
 import {
@@ -57,6 +76,11 @@ import {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('listPersonas', () => {
@@ -118,24 +142,99 @@ describe('getPersonaCandidates', () => {
 });
 
 describe('approveCandidate', () => {
-  it('returns updated candidate with approved status', async () => {
-    const approved = { ...mockCandidateRow, status: 'approved' };
-    mockUpdateCandidateStatus.mockResolvedValue(approved);
-    const result = await approveCandidate(1);
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.data.candidate.status).toBe('approved');
-      expect(result.data.candidate.id).toBe(1);
-    }
-    expect(mockUpdateCandidateStatus).toHaveBeenCalledWith(1, 'approved');
-  });
-
   it('returns 404 when candidate not found', async () => {
-    mockUpdateCandidateStatus.mockResolvedValue(null);
+    mockGetCandidateById.mockResolvedValue(null);
     const result = await approveCandidate(999);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.status).toBe(404);
+    }
+  });
+
+  it('creates GitHub issue and stores url on success', async () => {
+    const approved = { ...mockCandidateRow, status: 'approved' };
+    const withUrl = { ...approved, githubIssueUrl: 'https://github.com/owner/repo/issues/99' };
+    mockGetCandidateById.mockResolvedValue(mockCandidateRow);
+    mockUpdateCandidateStatus.mockResolvedValue(approved);
+    mockGetProject.mockResolvedValue({
+      id: 'goose-hub-self',
+      source: { kind: 'github', repo: 'owner/repo' },
+    });
+    mockUpdateCandidateGithubIssue.mockResolvedValue(withUrl);
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ html_url: 'https://github.com/owner/repo/issues/99', number: 99 }),
+      }),
+    );
+    vi.stubEnv('GITHUB_TOKEN', 'test-token');
+
+    const result = await approveCandidate(1);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.candidate.status).toBe('approved');
+      expect(result.data.candidate.githubIssueUrl).toBe('https://github.com/owner/repo/issues/99');
+    }
+    expect(mockUpdateCandidateGithubIssue).toHaveBeenCalledWith(
+      1,
+      'https://github.com/owner/repo/issues/99',
+      null,
+    );
+  });
+
+  it('stores error note when GitHub API call fails', async () => {
+    const approved = { ...mockCandidateRow, status: 'approved' };
+    const withError = { ...approved, errorNote: 'GitHub API error: 422 Unprocessable Entity' };
+    mockGetCandidateById.mockResolvedValue(mockCandidateRow);
+    mockUpdateCandidateStatus.mockResolvedValue(approved);
+    mockGetProject.mockResolvedValue({
+      id: 'goose-hub-self',
+      source: { kind: 'github', repo: 'owner/repo' },
+    });
+    mockUpdateCandidateGithubIssue.mockResolvedValue(withError);
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 422,
+        statusText: 'Unprocessable Entity',
+      }),
+    );
+    vi.stubEnv('GITHUB_TOKEN', 'test-token');
+
+    const result = await approveCandidate(1);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.candidate.status).toBe('approved');
+      expect(result.data.candidate.errorNote).toBeTruthy();
+    }
+    expect(mockUpdateCandidateGithubIssue).toHaveBeenCalledWith(
+      1,
+      null,
+      expect.stringContaining('422'),
+    );
+  });
+
+  it('stores error note when project config is not found', async () => {
+    const approved = { ...mockCandidateRow, status: 'approved' };
+    const withError = {
+      ...approved,
+      errorNote: 'Could not resolve project config or GitHub token',
+    };
+    mockGetCandidateById.mockResolvedValue(mockCandidateRow);
+    mockUpdateCandidateStatus.mockResolvedValue(approved);
+    mockGetProject.mockResolvedValue(null);
+    mockUpdateCandidateGithubIssue.mockResolvedValue(withError);
+
+    vi.stubEnv('GITHUB_TOKEN', 'test-token');
+
+    const result = await approveCandidate(1);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.candidate.errorNote).toBeTruthy();
     }
   });
 });
