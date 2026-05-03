@@ -1,4 +1,7 @@
+import { db } from '@goose-hub/core/db/db.js';
+import { projectState } from '@goose-hub/core/db/schema.js';
 import { logger } from '@goose-hub/core/logger.js';
+import { eq } from 'drizzle-orm';
 import type { Result } from '../../shared/middleware.js';
 import { getSourceForSlug } from '../../shared/source.js';
 import {
@@ -37,10 +40,18 @@ export async function promoteInboxItem(
   const source = await getSourceForSlug(projectSlug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
 
+  const stateRows = db
+    .select()
+    .from(projectState)
+    .where(eq(projectState.projectId, source.projectId))
+    .all();
+  const activeMilestoneNumber = stateRows[0]?.activeMilestoneNumber ?? null;
+
   await source.createIssue({
     title: item.title,
     body: item.body ?? '',
     type: item.type as 'feature' | 'bug' | 'chore' | 'research',
+    ...(activeMilestoneNumber != null ? { milestoneId: String(activeMilestoneNumber) } : {}),
   });
 
   try {

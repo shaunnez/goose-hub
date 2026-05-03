@@ -117,6 +117,19 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
   const currentSection = SECTIONS.find((s) => s.key === section) ?? SECTIONS[0];
   const workItemId = item != null ? `github:${item.repoRef}#${item.externalId}` : '';
 
+  // Re-fetch the issue when an agent transitions its state (e.g. after triage).
+  useEffect(() => {
+    if (!workItemId) return;
+    const url = `/events?projectId=${encodeURIComponent(slug)}&workItemId=${encodeURIComponent(workItemId)}`;
+    const es = new EventSource(url);
+    const onTransitioned = () => {
+      void queryClient.invalidateQueries({ queryKey: ['issue', slug, id] });
+      void queryClient.invalidateQueries({ queryKey: ['issues', slug] });
+    };
+    es.addEventListener('state.transitioned', onTransitioned);
+    return () => es.close();
+  }, [slug, id, workItemId, queryClient]);
+
   if (isError) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-3 text-center px-8">
