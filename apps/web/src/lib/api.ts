@@ -243,3 +243,19 @@ export async function fetchPersonaCandidates(
   );
   return candidates;
 }
+
+export async function approveCandidateById(id: number): Promise<ImprovementCandidateDto> {
+  const { candidate } = await postJson<{ candidate: ImprovementCandidateDto }>(
+    `/roster/candidates/${id}/approve`,
+    {},
+  );
+  return candidate;
+}
+
+export async function rejectCandidateById(id: number): Promise<ImprovementCandidateDto> {
+  const { candidate } = await postJson<{ candidate: ImprovementCandidateDto }>(
+    `/roster/candidates/${id}/reject`,
+    {},
+  );
+  return candidate;
+}

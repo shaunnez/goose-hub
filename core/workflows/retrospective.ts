@@ -6,6 +6,9 @@ import { ClaudeCliRuntime } from '../agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
 import { toJsonSchema } from '../agent-runtime/schema-bridge.js';
 import { selectPersona } from '../agent-runtime/select-persona.js';
+import type { ImprovementCandidate } from '../retrospective/schemas.js';
+import { db } from '../db/db.js';
+import { improvementCandidates } from '../db/schema.js';
 import { eventStore } from '../event-stream/store.js';
 import type { StateSource, WorkItem } from '../state-source/interface.js';
 
@@ -31,6 +34,23 @@ export interface RunRetrospectiveInput {
   policy: RetrospectivePolicy;
   triggers?: TriggerContext;
   deps?: { runtime?: AgentRuntime };
+}
+
+function persistCandidates(
+  personaId: string,
+  workItemId: string | null,
+  candidates: ImprovementCandidate[],
+): void {
+  for (const c of candidates) {
+    db.insert(improvementCandidates)
+      .values({
+        personaName: personaId,
+        sourceTaskId: workItemId,
+        suggestionText: c.suggestionText,
+        suggestionType: c.kind,
+      })
+      .run();
+  }
 }
 
 function selectTier(policy: RetrospectivePolicy, triggers: TriggerContext): 'light' | 'deep' {
@@ -96,6 +116,14 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
       runId,
       payload: { tier, output: result.output },
     });
+
+    const parsed =
+      tier === 'deep'
+        ? DeepRetroSchema.safeParse(result.output)
+        : LightRetroSchema.safeParse(result.output);
+    if (parsed.success && parsed.data.improvementCandidates.length > 0) {
+      persistCandidates(personaId, workItem.id, parsed.data.improvementCandidates);
+    }
 
     for (const ds of result.decisionSummaries) {
       eventStore.appendEvent({
