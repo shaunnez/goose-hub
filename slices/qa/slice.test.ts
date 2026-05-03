@@ -4,6 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ─── module mocks ─────────────────────────────────────────────────────────────
 
+const mockAccumulatePersonaStats = vi.fn();
+vi.mock('@goose-hub/core/persona/accumulate.js', () => ({
+  accumulatePersonaStats: (...args: unknown[]) => mockAccumulatePersonaStats(...args),
+}));
+
 const mockRun = vi.fn();
 
 vi.mock('@goose-hub/core/agent-runtime/claude-cli.js', () => ({
@@ -205,6 +210,7 @@ beforeEach(() => {
   mockRun.mockReset();
   mockReplay.mockReset();
   mockReplay.mockReturnValue([]);
+  mockAccumulatePersonaStats.mockClear();
   vi.clearAllMocks();
 });
 
@@ -359,6 +365,12 @@ describe('runQaWorkflow', () => {
         'factory:needs-qa',
         'factory:needs-review',
       );
+      expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
+        personaName: 'test-project/qa/0',
+        role: 'qa',
+        outcome: 'success',
+        qualityScore: 0.85,
+      });
     });
 
     it('posts a comment on pass verdict', async () => {
@@ -387,6 +399,12 @@ describe('runQaWorkflow', () => {
         'factory:needs-qa',
         'factory:qa-failed',
       );
+      expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
+        personaName: 'test-project/qa/0',
+        role: 'qa',
+        outcome: 'failure',
+        qualityScore: expect.any(Number),
+      });
     });
   });
 
@@ -404,6 +422,11 @@ describe('runQaWorkflow', () => {
         'factory:needs-qa',
         'factory:needs-human',
       );
+      expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
+        personaName: 'test-project/qa/0',
+        role: 'qa',
+        outcome: 'failure',
+      });
     });
 
     it('posts a comment with error message on runtime error', async () => {
