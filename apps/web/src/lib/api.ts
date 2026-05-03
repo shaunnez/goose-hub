@@ -125,6 +125,30 @@ export async function fetchEvents(slug: string, id: string): Promise<AgentEventD
   return events;
 }
 
+export interface IssueDiffDto {
+  diff: string | null;
+  runId: string | null;
+  reason?: string;
+}
+
+export async function fetchIssueDiff(slug: string, id: string): Promise<IssueDiffDto> {
+  return getJson<IssueDiffDto>(`/projects/${slug}/issues/${id}/diff`);
+}
+
+export async function approveIssue(
+  slug: string,
+  id: string,
+): Promise<{ ok: true; sha: string; prNumber: number }> {
+  return postJson<{ ok: true; sha: string; prNumber: number }>(
+    `/projects/${slug}/issues/${id}/approve`,
+    {},
+  );
+}
+
+export async function rejectIssue(slug: string, id: string, reason: string): Promise<{ ok: true }> {
+  return postJson<{ ok: true }>(`/projects/${slug}/issues/${id}/reject`, { reason });
+}
+
 export async function fetchComments(slug: string, id: string): Promise<IssueCommentDto[]> {
   const { comments } = await getJson<{ comments: IssueCommentDto[] }>(
     `/projects/${slug}/issues/${id}/comments`,

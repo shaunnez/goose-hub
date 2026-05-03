@@ -7,6 +7,8 @@ import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { SECTIONS } from '../lib/sections';
+import { ApprovalGateSection } from './ApprovalGateSection';
+import { CodeDiffSection } from './CodeDiffSection';
 import { DeferredSurface } from './DeferredSurface';
 import { GatePendingBanner } from './GatePendingBanner';
 import { InvestigationSection } from './InvestigationSection';
@@ -203,6 +205,8 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
           }}
         />
 
+        <ApprovalGateSection projectSlug={slug} id={id} state={item?.state} />
+
         <div className="flex-1 min-h-0 flex">
           <LeftRail />
           <main className="flex-1 min-w-0 overflow-y-auto">
@@ -215,7 +219,10 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
             ) : currentSection.key === 'investigation' ? (
               <InvestigationSection projectSlug={slug} id={id} />
             ) : currentSection.key === 'code' ? (
-              <PlaywrightCaptureSection projectSlug={slug} id={id} itemType={item?.type ?? ''} />
+              <div>
+                <CodeDiffSection projectSlug={slug} id={id} />
+                <PlaywrightCaptureSection projectSlug={slug} id={id} itemType={item?.type ?? ''} />
+              </div>
             ) : (
               <DeferredSurface
                 surface={currentSection.label}

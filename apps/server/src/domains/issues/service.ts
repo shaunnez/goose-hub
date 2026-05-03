@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { STATES } from '@goose-hub/core/state-machine/states.js';
@@ -60,6 +62,170 @@ export async function getIssueEvents(
   const ascending = eventStore.replay({ projectId: slug, workItemId });
   const events = [...ascending].reverse();
   return { ok: true, data: { events } };
+}
+
+/**
+ * Approve gate (#186). Looks up the most recent `pr.opened` event for the
+ * issue, merges that PR via the GitHub connector, emits `gate.approved` +
+ * `pr.merged` events, and transitions factory:approved → factory:done.
+ *
+ * Optional `mergePRImpl` is dependency-injected so tests can stub the
+ * REST call.
+ */
+export async function approveIssue(
+  slug: string,
+  id: string,
+  options: {
+    mergePRImpl?: typeof import('@goose-hub/core/connectors/github/merge-pr.js').mergePR;
+  } = {},
+): Promise<Result<{ ok: true; sha: string; prNumber: number }>> {
+  const source = await getSourceForSlug(slug);
+  if (source == null) return { ok: false, error: 'project not found', status: 404 };
+  const repoRef = await getRepoRef(slug);
+  const workItemId = `github:${repoRef}#${id}`;
+
+  // Find the most recent pr.opened event for this issue.
+  const events = eventStore.replay({ projectId: slug, workItemId });
+  const prEvent = [...events].reverse().find((e) => e.kind === 'pr.opened');
+  if (prEvent == null) {
+    return {
+      ok: false,
+      error: 'no pr.opened event found — cannot approve without a PR',
+      status: 400,
+    };
+  }
+  const prNumber = (prEvent.payload as { prNumber?: number }).prNumber;
+  if (typeof prNumber !== 'number') {
+    return { ok: false, error: 'pr.opened event missing prNumber', status: 500 };
+  }
+
+  const token = process.env.GITHUB_TOKEN ?? '';
+  if (token.length === 0) {
+    return { ok: false, error: 'GITHUB_TOKEN env var not set', status: 500 };
+  }
+
+  const mergePR =
+    options.mergePRImpl ?? (await import('@goose-hub/core/connectors/github/merge-pr.js')).mergePR;
+
+  const merged = await mergePR({ repo: repoRef, prNumber, token });
+
+  eventStore.appendEvent({
+    projectId: slug,
+    workItemId,
+    kind: 'gate.approved',
+    payload: { source: 'ui', prNumber },
+  });
+  eventStore.appendEvent({
+    projectId: slug,
+    workItemId,
+    kind: 'pr.merged',
+    payload: { prNumber, sha: merged.sha },
+  });
+  await source.transitionState(id, 'factory:approved', 'factory:done');
+  await source.comment(id, `Approved via Goose Hub UI; PR #${prNumber} merged (${merged.sha}).`);
+
+  return { ok: true, data: { ok: true, sha: merged.sha, prNumber } };
+}
+
+/**
+ * Reject gate (#186). Records a rejection note as a GitHub comment, emits
+ * `gate.rejected`, and transitions factory:approved → factory:needs-fix.
+ * Does NOT touch the PR (humans handle PR closure manually if needed).
+ */
+export async function rejectIssue(
+  slug: string,
+  id: string,
+  reason: unknown,
+): Promise<Result<{ ok: true }>> {
+  if (typeof reason !== 'string' || reason.trim().length === 0) {
+    return { ok: false, error: 'rejection reason is required', status: 400 };
+  }
+  const source = await getSourceForSlug(slug);
+  if (source == null) return { ok: false, error: 'project not found', status: 404 };
+  const repoRef = await getRepoRef(slug);
+  const workItemId = `github:${repoRef}#${id}`;
+
+  eventStore.appendEvent({
+    projectId: slug,
+    workItemId,
+    kind: 'gate.rejected',
+    payload: { source: 'ui', reason },
+  });
+  await source.comment(id, `Rejected at approval gate: ${reason}`);
+  await source.transitionState(id, 'factory:approved', 'factory:needs-fix');
+
+  return { ok: true, data: { ok: true } };
+}
+
+/**
+ * Live diff for the Code tab (#185). Returns the unified diff of the
+ * current worktree for the most recent in-flight run on this issue, or
+ * `{ diff: null }` when no worktree exists.
+ *
+ * Active-runId resolution: pick the latest event whose payload carries
+ * a runId — preferring `pr.opened`, then `agent.implement-complete`,
+ * then `agent.run-started` — and look for a worktree at
+ * `~/.factory/workspaces/<runId>/`. If absent, return `{ diff: null }`.
+ *
+ * Trade-off: this is a one-shot diff, not a true SSE stream. The UI
+ * polls (5 s default) — adequate for M2-style live UX. SSE-streamed
+ * diff is M11+ work.
+ */
+export async function getIssueWorktreeDiff(
+  slug: string,
+  id: string,
+): Promise<Result<{ diff: string | null; runId: string | null; reason?: string }>> {
+  const source = await getSourceForSlug(slug);
+  if (source == null) return { ok: false, error: 'project not found', status: 404 };
+  if (!isValidSlug(slug)) return { ok: false, error: 'invalid slug', status: 400 };
+
+  const repoRef = await getRepoRef(slug);
+  const workItemId = `github:${repoRef}#${id}`;
+  const ascending = eventStore.replay({ projectId: slug, workItemId });
+
+  // Newest-first scan for a runId on a fix-issue lifecycle event.
+  const lifecycleKinds = new Set(['pr.opened', 'agent.implement-complete', 'agent.run-started']);
+  let runId: string | null = null;
+  for (let i = ascending.length - 1; i >= 0; i -= 1) {
+    const e = ascending[i];
+    if (lifecycleKinds.has(e.kind) && typeof e.runId === 'string' && e.runId.length > 0) {
+      runId = e.runId;
+      break;
+    }
+  }
+
+  if (runId == null) {
+    return {
+      ok: true,
+      data: { diff: null, runId: null, reason: 'no in-flight run for this issue' },
+    };
+  }
+
+  const worktreePath = join(homedir(), '.factory', 'workspaces', runId);
+  if (!existsSync(worktreePath)) {
+    return {
+      ok: true,
+      data: { diff: null, runId, reason: 'worktree not found (cleaned up or pre-creation)' },
+    };
+  }
+
+  try {
+    const diff = execFileSync('git', ['diff', 'HEAD'], {
+      cwd: worktreePath,
+      encoding: 'utf8',
+      maxBuffer: 4 * 1024 * 1024,
+    });
+    return { ok: true, data: { diff, runId } };
+  } catch (err) {
+    return {
+      ok: true,
+      data: {
+        diff: null,
+        runId,
+        reason: `git diff failed: ${(err as Error).message}`,
+      },
+    };
+  }
 }
 
 export async function getIssueComments(
