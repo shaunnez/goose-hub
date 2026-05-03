@@ -3,9 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // ─── module mocks ─────────────────────────────────────────────────────────────
 
 const mockRun = vi.fn();
+const mockAccumulatePersonaStats = vi.fn();
 
 vi.mock('../agent-runtime/claude-cli.js', () => ({
   ClaudeCliRuntime: vi.fn().mockImplementation(() => ({ run: mockRun })),
+}));
+vi.mock('../persona/accumulate.js', () => ({
+  accumulatePersonaStats: (...args: unknown[]) => mockAccumulatePersonaStats(...args),
 }));
 vi.mock('../agent-runtime/schema-bridge.js', () => ({
   toJsonSchema: vi.fn().mockReturnValue({}),
@@ -103,6 +107,7 @@ function makeDeepResult() {
 
 beforeEach(() => {
   mockRun.mockReset();
+  mockAccumulatePersonaStats.mockClear();
   vi.clearAllMocks();
 });
 
@@ -240,6 +245,11 @@ describe('state transitions', () => {
       'factory:retrospecting',
       'factory:done',
     );
+    expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
+      personaName: 'test-project/retrospector/0',
+      role: 'retrospector',
+      outcome: 'success',
+    });
   });
 
   it('emits retrospective.completed event with tier info', async () => {
@@ -260,5 +270,29 @@ describe('state transitions', () => {
     expect(retroEvent).toBeDefined();
     const payload = retroEvent?.[0].payload as { tier: string };
     expect(payload.tier).toBe('light');
+  });
+
+  it('transitions to factory:needs-human and accumulates failure stat on error', async () => {
+    const { runRetrospectiveWorkflow } = await import('./retrospective.js');
+    const source = makeSource();
+    mockRun.mockRejectedValueOnce(new Error('agent exploded'));
+
+    await runRetrospectiveWorkflow({
+      workItem: makeWorkItem(),
+      stateSource: source,
+      projectId: 'test-project',
+      policy: 'always-light',
+    });
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:retrospecting',
+      'factory:needs-human',
+    );
+    expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
+      personaName: 'test-project/retrospector/0',
+      role: 'retrospector',
+      outcome: 'failure',
+    });
   });
 });
