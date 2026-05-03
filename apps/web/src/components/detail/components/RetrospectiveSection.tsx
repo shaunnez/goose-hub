@@ -1,7 +1,7 @@
 import { fetchEvents } from '@/lib/api';
 import type { AgentEventDto } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
-import { Clock, TrendingDown, TrendingUp, Minus } from 'lucide-react';
+import { Clock, Minus, TrendingDown, TrendingUp } from 'lucide-react';
 
 interface RetrospectiveSectionProps {
   projectSlug: string;

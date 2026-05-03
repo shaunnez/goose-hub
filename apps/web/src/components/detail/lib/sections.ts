@@ -33,7 +33,8 @@ export const SECTIONS: readonly DetailSection[] = [
     key: 'code',
     label: 'Code',
     available: true,
-    description: 'Playwright captures: screenshots, video, and console errors for bug reproduction.',
+    description:
+      'Playwright captures: screenshots, video, and console errors for bug reproduction.',
   },
   {
     key: 'qa',

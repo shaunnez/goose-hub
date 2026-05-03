@@ -10,7 +10,13 @@ export default defineConfig({
   },
   test: {
     include: ['**/*.test.ts', '**/*.test.tsx'],
-    exclude: ['**/node_modules/**', '**/dist/**', '**/.claude/**', '**/.worktrees/**'],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/.claude/**',
+      '**/.worktrees/**',
+      'docs/design/**',
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
@@ -45,6 +51,8 @@ export default defineConfig({
         '**/apps/web/src/state/**',
         // Config files
         '**/target-projects/**',
+        // Design reference docs — not code
+        'docs/design/**',
         // React components — covered by Playwright e2e, not unit tests
         '**/*.tsx',
         // Entry points — not unit-testable (process lifecycle, HTTP server boot)
