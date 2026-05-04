@@ -117,3 +117,31 @@ export const personaNames = sqliteTable(
     ),
   }),
 );
+
+// One row per agent run. `runId` is unique — the same run is never recorded twice.
+// `costLabel`: 'exact' when the source provided authoritative usage metadata
+// (direct API), 'estimated' when only the Claude CLI's reported totals are
+// available. UI must surface this distinction (see M9.09).
+export const agentRunCosts = sqliteTable(
+  'agent_run_costs',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    runId: text('run_id').notNull(),
+    projectId: text('project_id').notNull(),
+    workItemId: text('work_item_id'),
+    stage: text('stage').notNull(),
+    skill: text('skill').notNull(),
+    modelId: text('model_id').notNull(),
+    inputTokens: integer('input_tokens').notNull().default(0),
+    outputTokens: integer('output_tokens').notNull().default(0),
+    costUsd: real('cost_usd').notNull().default(0),
+    costLabel: text('cost_label').notNull().default('estimated'), // estimated | exact
+    personaId: text('persona_id'),
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  },
+  (t) => ({
+    runIdUniq: uniqueIndex('agent_run_costs_run_id_uniq').on(t.runId),
+    projectCreatedIdx: index('agent_run_costs_project_created_idx').on(t.projectId, t.createdAt),
+    workItemIdx: index('agent_run_costs_work_item_idx').on(t.workItemId),
+  }),
+);

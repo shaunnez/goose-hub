@@ -2,6 +2,7 @@ import { cn } from '@/lib/cn';
 import {
   ChevronLeft,
   ChevronRight,
+  Coins,
   Inbox,
   KanbanSquare,
   ListChecks,
@@ -40,6 +41,12 @@ function buildItems(slug: string | undefined): SidebarItem[] {
       to: `/projects/${project}/roster`,
       label: 'Roster',
       icon: <Users size={14} />,
+      available: true,
+    },
+    {
+      to: `/projects/${project}/costs`,
+      label: 'Costs',
+      icon: <Coins size={14} />,
       available: true,
     },
     {

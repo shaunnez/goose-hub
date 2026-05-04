@@ -1,5 +1,6 @@
 import type {
   AgentEventDto,
+  CostSummaryDto,
   ImprovementCandidateDto,
   InboxItemDto,
   IssueCommentDto,
@@ -11,6 +12,7 @@ import type {
   ProjectSummary,
   TransitionResult,
   TriageResultDto,
+  WorkItemCostsDto,
   WorkItemDto,
 } from './types';
 
@@ -28,6 +30,8 @@ export type {
   PersonaNameDto,
   PersonaRunDto,
   ImprovementCandidateDto,
+  CostSummaryDto,
+  WorkItemCostsDto,
 } from './types';
 
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -285,4 +289,12 @@ export async function rejectCandidateById(id: number): Promise<ImprovementCandid
     {},
   );
   return candidate;
+}
+
+export async function fetchCostSummary(slug: string): Promise<CostSummaryDto> {
+  return getJson<CostSummaryDto>(`/projects/${slug}/costs/summary`);
+}
+
+export async function fetchIssueCosts(slug: string, id: string): Promise<WorkItemCostsDto> {
+  return getJson<WorkItemCostsDto>(`/projects/${slug}/issues/${id}/costs`);
 }

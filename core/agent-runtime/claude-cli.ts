@@ -2,6 +2,9 @@ import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { costFromCliEnvelope } from '../cost/extract.js';
+import { recordCost } from '../cost/repository.js';
+import { stageForSkill } from '../cost/skill-stage.js';
 import { eventStore } from '../event-stream/store.js';
 import { computeAllowlist } from '../tool-layer/allowlist.js';
 import { deployHooks } from '../tool-layer/pre-tool-use-hook.js';
@@ -286,11 +289,36 @@ export class ClaudeCliRuntime implements AgentRuntime {
           return;
         }
 
+        const usage = envelope ? costFromCliEnvelope(envelope) : null;
+        recordCost({
+          runId,
+          projectId,
+          workItemId,
+          stage: stageForSkill(spec.skill),
+          skill: spec.skill,
+          modelId: model,
+          inputTokens: usage?.inputTokens ?? 0,
+          outputTokens: usage?.outputTokens ?? 0,
+          costUsd: usage?.costUsd ?? 0,
+          // No CLI usage data → still 'estimated', just zeroed.
+          costLabel: usage?.costLabel ?? 'estimated',
+          personaId: personaId ?? null,
+        });
+
         eventStore.appendEvent({
           projectId,
           workItemId,
           kind: 'agent.run-completed',
-          payload: { runId, skill: spec.skill },
+          payload: {
+            runId,
+            skill: spec.skill,
+            cost: {
+              usd: usage?.costUsd ?? 0,
+              inputTokens: usage?.inputTokens ?? 0,
+              outputTokens: usage?.outputTokens ?? 0,
+              label: usage?.costLabel ?? 'estimated',
+            },
+          },
           runId,
           personaId,
         });

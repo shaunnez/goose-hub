@@ -65,8 +65,7 @@ export const SECTIONS: readonly DetailSection[] = [
   {
     key: 'costs',
     label: 'Costs',
-    available: false,
-    milestone: 'M9',
+    available: true,
     description: 'Per-agent token spend, per-run cost, daily budget burn.',
   },
 ] as const;

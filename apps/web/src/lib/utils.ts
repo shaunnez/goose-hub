@@ -39,3 +39,21 @@ export function truncate(value: string, max: number): string {
   if (value.length <= max) return value;
   return `${value.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
 }
+
+/**
+ * Formats a USD amount. When `label` is `'estimated'`, prefixes a tilde so the
+ * user knows the figure is a Claude CLI rollup rather than authoritative API
+ * metadata. See M9.09 for the labelling convention.
+ */
+export function formatCost(usd: number, label: 'estimated' | 'exact' = 'exact'): string {
+  const abs = Math.abs(usd);
+  const formatted = abs < 0.01 && abs > 0 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(2)}`;
+  return label === 'estimated' ? `~${formatted}` : formatted;
+}
+
+/** Formats large token counts as e.g. "1.2k", "464k", "1.3M". */
+export function formatTokens(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k`;
+  return `${(n / 1_000_000).toFixed(1)}M`;
+}

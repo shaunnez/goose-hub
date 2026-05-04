@@ -15,6 +15,7 @@ Every feature in the server MUST be placed into one of the domain folders under 
 | `projects/` | `/projects`, `/health` | No |
 | `webhooks/` | `/webhooks/**` | No |
 | `workflows/` | `/projects/:slug/tick` | No |
+| `costs/` | `/projects/:slug/costs/**`, `/projects/:slug/issues/:id/costs` | Reads only (writes from `core/cost`) |
 
 Each domain folder contains:
 

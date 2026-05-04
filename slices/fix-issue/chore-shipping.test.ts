@@ -37,9 +37,10 @@ vi.mock('@goose-hub/core/agent-runtime/select-persona.js', () => ({
     .fn()
     .mockReturnValue({ personaId: 'proj/developer/0', codename: 'Grey Honker' }),
 }));
-vi.mock('node:fs', () => ({
-  readFileSync: vi.fn().mockReturnValue('# mock skill prompt'),
-}));
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return { ...actual, readFileSync: vi.fn().mockReturnValue('# mock skill prompt') };
+});
 vi.mock('@goose-hub/core/persona/accumulate.js', () => ({
   accumulatePersonaStats: vi.fn(),
 }));
