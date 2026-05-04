@@ -1,7 +1,13 @@
-import { fetchInboxItems, fetchMilestones, fetchProjects, promoteInboxItem } from '@/lib/api';
+import {
+  deleteInboxItem,
+  fetchInboxItems,
+  fetchMilestones,
+  fetchProjects,
+  promoteInboxItem,
+} from '@/lib/api';
 import type { InboxItemDto, MilestoneDto, ProjectSummary } from '@/lib/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, ChevronDown, Inbox } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Inbox, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 // ---------------------------------------------------------------------------
@@ -28,7 +34,7 @@ function PromoteModal({
     error: projectsError,
   } = useQuery<ProjectSummary[]>({
     queryKey: ['projects'],
-    queryFn: fetchProjects,
+    queryFn: () => fetchProjects(),
   });
 
   const {
@@ -349,9 +355,11 @@ function PromoteModal({
 function InboxDetail({
   item,
   onPromote,
+  onDelete,
 }: {
   item: InboxItemDto;
   onPromote: (item: InboxItemDto) => void;
+  onDelete: (item: InboxItemDto) => void;
 }) {
   return (
     <div className="flex flex-col h-full overflow-y-auto px-8 py-6">
@@ -371,14 +379,25 @@ function InboxDetail({
             </span>
           </div>
         </div>
-        <button
-          type="button"
-          data-testid="promote-button"
-          onClick={() => onPromote(item)}
-          className="shrink-0 h-8 px-4 rounded-md border border-line text-[12px] text-fg-2 hover:text-fg hover:bg-bg-hover"
-        >
-          Promote
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            data-testid="promote-button"
+            onClick={() => onPromote(item)}
+            className="h-8 px-4 rounded-md border border-line text-[12px] text-fg-2 hover:text-fg hover:bg-bg-hover"
+          >
+            Promote
+          </button>
+          <button
+            type="button"
+            data-testid="delete-button"
+            onClick={() => onDelete(item)}
+            aria-label="Delete inbox item"
+            className="h-8 w-8 flex items-center justify-center rounded-md border border-line text-fg-3 hover:text-danger hover:border-danger/50 hover:bg-danger/5"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
       </div>
 
       <div className="border-t border-line pt-6">
@@ -436,6 +455,20 @@ export function InboxList() {
     return () => window.removeEventListener('inbox:item-created', handleCreated);
   }, []);
 
+  const queryClient = useQueryClient();
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deleteInboxItem(id),
+    onSuccess: () => {
+      setSelectedId(null);
+      void queryClient.invalidateQueries({ queryKey: ['inbox'] });
+    },
+  });
+
+  function handleDelete(item: InboxItemDto) {
+    if (!window.confirm(`Delete "${item.title}"? This cannot be undone.`)) return;
+    deleteMutation.mutate(item.id);
+  }
+
   if (isLoading) return <div className="px-8 py-10 text-fg-3">Loading inbox…</div>;
   if (error)
     return <div className="px-8 py-10 text-[color:var(--danger)]">Failed to load inbox.</div>;
@@ -491,7 +524,7 @@ export function InboxList() {
 
       {/* Right panel — detail */}
       <div className="flex-1 min-w-0 min-h-0 bg-bg-elev/30">
-        <InboxDetail item={selectedItem} onPromote={setPromoting} />
+        <InboxDetail item={selectedItem} onPromote={setPromoting} onDelete={handleDelete} />
       </div>
 
       {promoting && <PromoteModal item={promoting} onClose={() => setPromoting(null)} />}

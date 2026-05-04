@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
@@ -65,7 +66,7 @@ export async function runInvestigateWorkflow(
       freshContext: false,
       toolBundles: ['read-only'],
       toolExtras: [],
-      budgets: { maxTurns: 100, maxBudgetUsd: 0.5, timeoutMs: 300_000 },
+      budgets: { maxTurns: 100, maxBudgetUsd: 2, timeoutMs: 300_000 },
       personaId,
       modelOverride: 'claude-opus-4-7',
       outputJsonSchema: investigateJsonSchema,
@@ -87,6 +88,35 @@ export async function runInvestigateWorkflow(
       const { personaId: playwrightPersonaId } = selectPersona(projectId, 'investigator');
       const playwrightRunId = crypto.randomUUID();
 
+      // Write a runtime MCP config that invokes playwright via pnpm from the
+      // actual repo root (where node_modules exist). The worktree is isolated
+      // from node_modules, so npx/direct invocation fails there.
+      const playwrightMcpConfigPath = join(
+        homedir(),
+        '.factory',
+        'workspaces',
+        `${playwrightRunId}-mcp.json`,
+      );
+      writeFileSync(
+        playwrightMcpConfigPath,
+        JSON.stringify({
+          mcpServers: {
+            'playwright-test': {
+              command: 'pnpm',
+              args: [
+                '--filter',
+                '@goose-hub/web',
+                'exec',
+                'playwright',
+                'run-test-mcp-server',
+                '--headless',
+              ],
+              cwd: REPO_ROOT,
+            },
+          },
+        }),
+      );
+
       try {
         const playwrightResult = await runtime.run({
           runId: playwrightRunId,
@@ -105,10 +135,11 @@ export async function runInvestigateWorkflow(
           },
           contextAllowlist: ['workItem', 'appUrl'],
           freshContext: false,
-          toolBundles: ['validate'],
+          toolBundles: ['playwright-mcp'],
           toolExtras: [],
           budgets: { maxTurns: 25, maxBudgetUsd: 5, timeoutMs: 120_000 },
           personaId: playwrightPersonaId,
+          mcpConfigPath: playwrightMcpConfigPath,
           outputJsonSchema: playwrightReproJsonSchema,
           appendSystemPrompt: playwrightReproPrompt,
         });

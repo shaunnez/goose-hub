@@ -56,6 +56,9 @@ const STATE_LABEL: Record<string, string> = {
   'agent.investigation-complete': 'Investigation complete',
   'agent.implement-complete': 'Implement complete',
   'pr.opened': 'PR opened',
+  'pr.merged': 'PR merged',
+  'gate.approved': 'Gate approved',
+  'review.completed': 'Review completed',
   'evidence.no-spec-declared': 'Evidence — no spec declared',
   'evidence.posted': 'Evidence posted',
   'evidence.post-failed': 'Evidence post failed',
@@ -511,6 +514,85 @@ function AgentInvestigationCompleteEvent({ event }: { event: AgentEventDto }) {
   );
 }
 
+function ReviewCompletedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as { verdict?: string; confidence?: number } | null;
+  const verdict = p?.verdict ?? 'unknown';
+  const isApproved = verdict === 'approved';
+  const confidencePct = p?.confidence != null ? `${Math.round(p.confidence * 100)}%` : null;
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex items-center gap-2 text-[11px] text-fg-3">
+        {isApproved ? (
+          <CheckCircle size={13} className="shrink-0 text-green-400" />
+        ) : (
+          <XCircle size={13} className="shrink-0 text-[color:var(--danger)]" />
+        )}
+        <span className="font-mono uppercase tracking-wider">Review</span>
+        <span
+          className={`font-mono font-medium ${isApproved ? 'text-green-400' : 'text-[color:var(--danger)]'}`}
+        >
+          {verdict}
+        </span>
+        {confidencePct != null && (
+          <>
+            <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+            <span className="font-mono text-fg-3">{confidencePct} confidence</span>
+          </>
+        )}
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+    </li>
+  );
+}
+
+function PrMergedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as { prNumber?: number; sha?: string } | null;
+  const shortSha = p?.sha != null ? p.sha.slice(0, 7) : null;
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex items-center gap-2 text-[11px] text-fg-3">
+        <GitPullRequest size={13} className="shrink-0 text-purple-400" />
+        <span className="font-mono uppercase tracking-wider">PR merged</span>
+        {p?.prNumber != null && <span className="font-mono text-fg-2">#{p.prNumber}</span>}
+        {shortSha != null && (
+          <>
+            <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+            <span className="font-mono text-fg-3">{shortSha}</span>
+          </>
+        )}
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+    </li>
+  );
+}
+
+function GateApprovedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as { source?: string; prNumber?: number } | null;
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-green-500/20 bg-green-500/5 px-4 py-3"
+    >
+      <div className="flex items-center gap-2 text-[11px] text-fg-3">
+        <CheckCircle size={13} className="shrink-0 text-green-400" />
+        <span className="font-mono uppercase tracking-wider">Approved</span>
+        {p?.prNumber != null && <span className="font-mono text-fg-2">#{p.prNumber}</span>}
+        {p?.source != null && <span className="font-mono text-fg-4">via {p.source}</span>}
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+    </li>
+  );
+}
+
 function PrOpenedEvent({ event }: { event: AgentEventDto }) {
   const p = event.payload as { prNumber?: number; prUrl?: string; branch?: string } | null;
   return (
@@ -890,6 +972,12 @@ function renderItem(item: RenderItem, idx: number) {
       return <AgentInvestigationCompleteEvent key={event.id} event={event} />;
     case 'pr.opened':
       return <PrOpenedEvent key={event.id} event={event} />;
+    case 'review.completed':
+      return <ReviewCompletedEvent key={event.id} event={event} />;
+    case 'pr.merged':
+      return <PrMergedEvent key={event.id} event={event} />;
+    case 'gate.approved':
+      return <GateApprovedEvent key={event.id} event={event} />;
     case 'agent.implement-complete':
       return <AgentImplementCompleteEvent key={event.id} event={event} />;
     case 'evidence.no-spec-declared':
@@ -905,6 +993,7 @@ function renderItem(item: RenderItem, idx: number) {
 
 // ─── main component ───────────────────────────────────────────────────────────
 
+// Counters for tracing — module-level so they persist across remounts.
 export function TimelineSection({ projectSlug, id, workItemId }: TimelineSectionProps) {
   const [events, setEvents] = useState<AgentEventDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -912,12 +1001,15 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
   const eventSourceRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchEvents(projectSlug, id)
+    fetchEvents(projectSlug, id, controller.signal)
       .then((list) => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         // Server returns ascending; render newest first.
         const sorted = [...list].sort(
           (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -932,8 +1024,13 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
       });
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [projectSlug, id]);
+
+  // Render tracer — fires on every render so you can see if loading flips back to true.
+  const renderCount = useRef(0);
+  renderCount.current += 1;
 
   // Live updates via SSE filtered to this work item.
   useEffect(() => {
@@ -978,8 +1075,7 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
   if (events.length === 0) {
     return (
       <div data-testid="timeline-section" className="px-8 py-10 text-center text-fg-3 text-[13px]">
-        No timeline events yet. Transition the state or wait for the orchestrator (M4+) to populate
-        this view.
+        No timeline events yet.
       </div>
     );
   }

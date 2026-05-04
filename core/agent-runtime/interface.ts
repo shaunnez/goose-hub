@@ -48,6 +48,13 @@ export type AgentSpec<R extends RoleSpec = RoleSpec> = {
    * Used by QA to reuse the dev agent's worktree rather than creating a fresh one.
    */
   workspaceDir?: string;
+  /**
+   * Explicit MCP config path to pass via --mcp-config. Bypasses the bundle-based
+   * resolution in resolveMcpConfigPath. Used when the MCP server must run from a
+   * directory other than the workspace (e.g. playwright-repro needs the actual
+   * repo node_modules, not a worktree).
+   */
+  mcpConfigPath?: string;
 };
 
 export interface AgentResult {

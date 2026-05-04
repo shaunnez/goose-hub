@@ -170,8 +170,8 @@ describe('playwright-repro skill config', () => {
     expect(config.role).toBe('investigator');
   });
 
-  it('has validate tool bundle', () => {
-    expect(config.toolBundles).toContain('validate');
+  it('has playwright-mcp tool bundle', () => {
+    expect(config.toolBundles).toContain('playwright-mcp');
   });
 
   it('is pinned to sonnet model', () => {
