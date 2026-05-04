@@ -69,6 +69,8 @@ export function deployHooks(): void {
   mkdirSync(HOOKS_DIR, { recursive: true });
   const hookPath = join(HOOKS_DIR, 'pre-tool-use.js');
   writeFileSync(hookPath, HOOK_SCRIPT, { encoding: 'utf8', mode: 0o755 });
+  // Required so Node loads the hook as ESM (import syntax).
+  writeFileSync(join(HOOKS_DIR, 'package.json'), '{"type":"module"}', 'utf8');
 }
 
 export const HOOK_PATH = join(HOOKS_DIR, 'pre-tool-use.js');

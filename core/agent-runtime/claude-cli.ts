@@ -278,7 +278,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
           projectId,
           workItemId,
           kind: 'agent.run-completed',
-          payload: { runId },
+          payload: { runId, skill: spec.skill },
           runId,
         });
 

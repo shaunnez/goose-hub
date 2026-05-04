@@ -285,7 +285,8 @@ function FallbackEvent({ event }: { event: AgentEventDto }) {
 function AgentRunStatusEvent({ event }: { event: AgentEventDto }) {
   const isCompleted = event.kind === 'agent.run-completed';
   const isFailed = event.kind === 'agent.run-failed';
-  const p = event.payload as { runId?: string; error?: string } | null;
+  const p = event.payload as { runId?: string; error?: string; skill?: string } | null;
+  const skillSuffix = p?.skill != null ? `: ${p.skill}` : '';
   return (
     <li
       data-event-kind={event.kind}
@@ -301,7 +302,8 @@ function AgentRunStatusEvent({ event }: { event: AgentEventDto }) {
         )}
         <span className="font-mono uppercase tracking-wider">
           {STATE_LABEL[event.kind] ?? event.kind}
-          {isFailed && p?.error != null ? `: ${p.error}` : ''}
+          {skillSuffix}
+          {isFailed && p?.error != null ? ` — ${p.error}` : ''}
         </span>
         <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
         <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
@@ -547,14 +549,13 @@ function RunGroupWrapper({
 }: { runId: string; items: RenderItem[]; idx: number }) {
   const [open, setOpen] = useState(true);
   // Float terminal status events to the top so run outcome is immediately visible.
-  const sorted = [...items].sort((a, b) => {
-    const isTerminal = (item: RenderItem) =>
-      item.kind === 'event' &&
-      (item.event.kind === 'agent.run-completed' || item.event.kind === 'agent.run-failed');
-    if (isTerminal(a) && !isTerminal(b)) return -1;
-    if (!isTerminal(a) && isTerminal(b)) return 1;
-    return 0;
-  });
+  const rank = (item: RenderItem) => {
+    if (item.kind !== 'event') return 2;
+    if (item.event.kind === 'agent.run-completed') return 0;
+    if (item.event.kind === 'agent.run-failed') return 1;
+    return 2;
+  };
+  const sorted = [...items].sort((a, b) => rank(a) - rank(b));
   return (
     <li data-run-id={runId} className="rounded-md border border-line/70 bg-bg/30">
       <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>

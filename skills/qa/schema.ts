@@ -7,7 +7,10 @@ export const DecisionSummarySchema = z.object({
 });
 
 export const FindingSchema = z.object({
-  tier: z.enum(['structural', 'functional', 'regression']),
+  tier: z
+    .string()
+    .transform((s) => s.toLowerCase())
+    .pipe(z.enum(['structural', 'functional', 'regression'])),
   severity: z.enum(['error', 'warning', 'info']),
   file: z.string().optional(),
   line: z.number().int().optional(),
@@ -18,8 +21,8 @@ export const FindingSchema = z.object({
 export const TierResultSchema = z.object({
   passed: z.boolean(),
   findings: z.array(FindingSchema),
-  command: z.string().optional(),
-  output: z.string().optional(),
+  command: z.string().nullable().optional(),
+  output: z.string().nullable().optional(),
 });
 
 /**

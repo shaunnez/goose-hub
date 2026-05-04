@@ -245,10 +245,12 @@ Return a JSON object conforming exactly to this structure:
   "threshold": 70,
   "tierResults": {
     "structural": {
-      "passed": true,
-      "findings": [],
+      "passed": false,
+      "findings": [
+        { "tier": "structural", "severity": "error", "description": "Type error in src/foo.ts: Property 'x' does not exist on type 'Bar'", "file": "src/foo.ts", "line": 12 }
+      ],
       "command": "pnpm biome check .",
-      "output": "Checked 42 files. No errors found."
+      "output": "src/foo.ts:12 error TS2339: Property 'x' does not exist on type 'Bar'"
     },
     "functional": {
       "passed": true,
@@ -273,7 +275,10 @@ Return a JSON object conforming exactly to this structure:
     "gallsLaw": 0,
     "cyclomaticComplexity": 0
   },
-  "findings": [],
+  "findings": [
+    { "tier": "structural", "severity": "error", "description": "Type error in src/foo.ts: Property 'x' does not exist on type 'Bar'", "file": "src/foo.ts", "line": 12 },
+    { "tier": "functional", "severity": "warning", "description": "Acceptance criterion 3 not covered by any test" }
+  ],
   "decisionSummaries": [
     { "step": "issue-read", "summary": "<one sentence>", "evidence": "<optional>" }
   ]

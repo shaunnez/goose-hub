@@ -10,6 +10,14 @@ vi.mock('node:fs', async (importOriginal) => {
   };
 });
 
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  return {
+    ...actual,
+    execFileSync: vi.fn().mockImplementation(actual.execFileSync),
+  };
+});
+
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   eventStore: { appendEvent: vi.fn(), replay: vi.fn().mockReturnValue([]) },
 }));
@@ -39,7 +47,8 @@ vi.mock('../../shared/cache.js', () => ({
   },
 }));
 
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { isLegalTransition } from '@goose-hub/core/state-machine/transitions.js';
 import { bustCache } from '../../shared/cache.js';
@@ -288,6 +297,67 @@ describe('getIssueWorktreeDiff (#185)', () => {
       expect(result.data.runId).toBe('run-cleaned-up-12345');
       expect(result.data.reason).toContain('worktree not found');
     }
+  });
+
+  it('git diff args exclude .claude/ directory', async () => {
+    const { getIssueWorktreeDiff } = await import('./service.js');
+    const events = await import('@goose-hub/core/event-stream/store.js');
+    vi.mocked(events.eventStore.replay).mockReturnValueOnce([
+      {
+        id: 1,
+        projectId: 'proj',
+        workItemId: 'github:owner/repo#1',
+        kind: 'agent.run-started',
+        runId: 'run-live-aabbcc',
+        payload: {},
+        createdAt: '2026-05-02T22:00:00Z',
+      },
+    ] as never);
+    vi.mocked(existsSync).mockImplementation((p) => String(p).includes('run-live-aabbcc'));
+    vi.mocked(execFileSync).mockReturnValueOnce(
+      'diff --git a/src/foo.ts b/src/foo.ts\n+added line' as never,
+    );
+    const result = await getIssueWorktreeDiff('proj', '1');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data.diff).toContain('+added line');
+    expect(vi.mocked(execFileSync)).toHaveBeenCalledWith(
+      'git',
+      expect.arrayContaining([':(exclude).claude/']),
+      expect.any(Object),
+    );
+  });
+
+  it('fetches diff from GitHub PR when worktree is gone and pr.opened event has prNumber', async () => {
+    const { getIssueWorktreeDiff } = await import('./service.js');
+    const events = await import('@goose-hub/core/event-stream/store.js');
+    process.env.GITHUB_TOKEN = 'ghp_test';
+    vi.mocked(events.eventStore.replay).mockReturnValueOnce([
+      {
+        id: 1,
+        projectId: 'proj',
+        workItemId: 'github:owner/repo#1',
+        kind: 'pr.opened',
+        runId: 'run-pr-gone-99887',
+        payload: { prNumber: 42, prUrl: 'https://github.com/owner/repo/pull/42' },
+        createdAt: '2026-05-02T22:00:00Z',
+      },
+    ] as never);
+    const mockFetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      text: () => Promise.resolve('diff --git a/src/bar.ts b/src/bar.ts\n+github line'),
+    });
+    const result = await getIssueWorktreeDiff('proj', '1', { fetchImpl: mockFetch as typeof fetch });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.diff).toBe('diff --git a/src/bar.ts b/src/bar.ts\n+github line');
+      expect(result.data.runId).toBe('run-pr-gone-99887');
+    }
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://api.github.com/repos/owner/repo/pulls/42',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Accept: 'application/vnd.github.v3.diff' }),
+      }),
+    );
   });
 });
 
