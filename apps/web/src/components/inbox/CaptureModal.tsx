@@ -1,4 +1,5 @@
 import { createInboxItem } from '@/lib/api';
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 const TYPES = ['feature', 'bug', 'chore', 'research'] as const;
@@ -15,6 +16,7 @@ export function CaptureModal({ open, onClose }: CaptureModalProps) {
   const [type, setType] = useState<ItemType>('feature');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const queryClient = useQueryClient();
 
   if (!open) return null;
 
@@ -40,7 +42,9 @@ export function CaptureModal({ open, onClose }: CaptureModalProps) {
     setError('');
     setSubmitting(true);
     try {
-      await createInboxItem({ title: title.trim(), body, type });
+      const item = await createInboxItem({ title: title.trim(), body, type });
+      await queryClient.invalidateQueries({ queryKey: ['inbox'] });
+      window.dispatchEvent(new CustomEvent('inbox:item-created', { detail: { id: item.id } }));
       reset();
       onClose();
     } catch (err) {

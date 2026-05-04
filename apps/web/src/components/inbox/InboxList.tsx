@@ -427,6 +427,15 @@ export function InboxList() {
     queryFn: fetchInboxItems,
   });
 
+  useEffect(() => {
+    function handleCreated(e: Event) {
+      const { id } = (e as CustomEvent<{ id: number }>).detail;
+      setSelectedId(id);
+    }
+    window.addEventListener('inbox:item-created', handleCreated);
+    return () => window.removeEventListener('inbox:item-created', handleCreated);
+  }, []);
+
   if (isLoading) return <div className="px-8 py-10 text-fg-3">Loading inbox…</div>;
   if (error)
     return <div className="px-8 py-10 text-[color:var(--danger)]">Failed to load inbox.</div>;
