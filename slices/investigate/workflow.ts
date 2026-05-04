@@ -105,7 +105,7 @@ export async function runInvestigateWorkflow(
           },
           contextAllowlist: ['workItem', 'appUrl'],
           freshContext: false,
-          toolBundles: ['playwright-mcp'],
+          toolBundles: ['validate'],
           toolExtras: [],
           budgets: { maxTurns: 25, maxBudgetUsd: 5, timeoutMs: 120_000 },
           personaId: playwrightPersonaId,

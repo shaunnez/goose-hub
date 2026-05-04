@@ -1,12 +1,14 @@
-import { fetchEvents } from '@/lib/api';
+import { addComment, fetchEvents, transitionState } from '@/lib/api';
 import { renderMarkdownToHtml } from '@/lib/markdown';
 import type { AgentEventDto } from '@/lib/types';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 
 interface InvestigationSectionProps {
   projectSlug: string;
   id: string;
   itemType?: string;
+  itemState?: string;
 }
 
 interface KeyFile {
@@ -48,11 +50,45 @@ function extractPayload(event: AgentEventDto): InvestigationPayload | null {
   return p as unknown as InvestigationPayload;
 }
 
-export function InvestigationSection({ projectSlug, id }: InvestigationSectionProps) {
+export function InvestigationSection({ projectSlug, id, itemState }: InvestigationSectionProps) {
+  const queryClient = useQueryClient();
+  const [notes, setNotes] = useState('');
+  const [proceeding, setProceeding] = useState(false);
+  const [proceedError, setProceedError] = useState<string | null>(null);
+
   const { data: events = [], isLoading } = useQuery<AgentEventDto[]>({
     queryKey: ['events', projectSlug, id],
     queryFn: () => fetchEvents(projectSlug, id),
   });
+
+  const canProceed =
+    itemState === 'factory:investigation-complete' || itemState === 'factory:gate-pending';
+
+  async function handleProceed() {
+    if (!canProceed || proceeding) return;
+    setProceeding(true);
+    setProceedError(null);
+    try {
+      if (notes.trim()) {
+        await addComment(projectSlug, id, `Human review notes:\n\n${notes.trim()}`);
+      }
+      const result = await transitionState(
+        projectSlug,
+        id,
+        itemState as string,
+        'factory:dev-ready',
+      );
+      if (result.status >= 400) {
+        setProceedError((result.data as { error?: string }).error ?? 'Transition failed');
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ['issue', projectSlug, id] });
+    } catch (err) {
+      setProceedError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setProceeding(false);
+    }
+  }
 
   if (isLoading) return null;
 
@@ -129,6 +165,54 @@ export function InvestigationSection({ projectSlug, id }: InvestigationSectionPr
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Human proceed gate */}
+      {canProceed && (
+        <div
+          data-testid="investigation-proceed-gate"
+          className={`rounded-md border px-4 py-4 space-y-3 ${
+            itemState === 'factory:gate-pending'
+              ? 'border-yellow-500/30 bg-yellow-500/5'
+              : 'border-line bg-bg-elev/40'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <h4 className="text-[11px] font-medium text-fg-3 uppercase tracking-wide">
+              {itemState === 'factory:gate-pending' ? 'Human review required' : 'Ready to proceed'}
+            </h4>
+            {itemState === 'factory:gate-pending' && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400 font-medium">
+                low confidence
+              </span>
+            )}
+          </div>
+          {itemState === 'factory:gate-pending' && (
+            <p className="text-[12px] text-fg-3">
+              Investigation confidence is low. Review the open questions above before proceeding.
+            </p>
+          )}
+          <textarea
+            data-testid="investigation-notes-input"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Optional notes or answers to open questions…"
+            rows={3}
+            className="w-full rounded border border-line bg-bg px-3 py-2 text-[12px] text-fg placeholder:text-fg-4 focus:outline-none focus:border-[color:var(--accent)] resize-none"
+          />
+          {proceedError != null && (
+            <p className="text-[11px] text-[color:var(--danger)]">{proceedError}</p>
+          )}
+          <button
+            type="button"
+            data-testid="investigation-proceed-button"
+            onClick={handleProceed}
+            disabled={proceeding}
+            className="px-3 py-1.5 rounded text-[11px] font-medium bg-[color:var(--accent)]/15 text-[color:var(--accent)] border border-[color:var(--accent)]/30 hover:bg-[color:var(--accent)]/25 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {proceeding ? 'Proceeding…' : 'Proceed to dev-ready'}
+          </button>
         </div>
       )}
     </div>

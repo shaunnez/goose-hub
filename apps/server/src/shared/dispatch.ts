@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { getSourceForSlug } from './source.js';
 
@@ -127,6 +128,60 @@ export async function dispatchReview(slug: string, issueNumber: number): Promise
 }
 
 /**
+ * Auto-transition from investigation-complete based on confidence.
+ * Low confidence → gate-pending (human review required).
+ * Medium/high → dev-ready (proceed automatically).
+ */
+async function dispatchInvestigationComplete(slug: string, issueNumber: number): Promise<void> {
+  const source = await getSourceForSlug(slug);
+  if (source == null) {
+    logger.error('dispatchInvestigationComplete: no source for slug', { slug });
+    return;
+  }
+
+  const item = await source.getItem(issueNumber.toString());
+  if (item.state !== 'factory:investigation-complete') {
+    logger.info('dispatchInvestigationComplete: state already moved', {
+      slug,
+      issueNumber,
+      state: item.state,
+    });
+    return;
+  }
+
+  const workItemId = `github:${source.repoRef}#${issueNumber}`;
+  const allEvents = eventStore.replay({ projectId: slug, workItemId });
+  const investigationEvents = allEvents.filter((e) => e.kind === 'agent.investigation-complete');
+  const latest = investigationEvents.at(-1);
+  const confidence =
+    (latest?.payload as { investigate?: { confidence?: string } } | null)?.investigate
+      ?.confidence ?? 'medium';
+
+  const targetState = confidence === 'low' ? 'factory:gate-pending' : 'factory:dev-ready';
+  await source.transitionState(workItemId, 'factory:investigation-complete', targetState);
+
+  eventStore.appendEvent({
+    projectId: slug,
+    workItemId,
+    kind: 'state.transitioned',
+    payload: { from: 'factory:investigation-complete', to: targetState, by: 'orchestrator' },
+  });
+
+  if (targetState === 'factory:gate-pending') {
+    eventStore.appendEvent({
+      projectId: slug,
+      workItemId,
+      kind: 'gate.awaiting-human',
+      payload: {
+        reason: 'Investigation confidence is low — human review required before proceeding to dev.',
+      },
+    });
+  }
+
+  logger.info('dispatchInvestigationComplete: transitioned', { slug, issueNumber, targetState });
+}
+
+/**
  * Webhook label-driven dispatcher. Routes the factory:* label to the right
  * workflow without requiring the webhook handler to know about the
  * `workflows` or `slices` directory layout.
@@ -142,6 +197,10 @@ export async function dispatchForLabel(
   }
   if (labelName === 'factory:investigating') {
     await dispatchInvestigate(slug, issueNumber);
+    return;
+  }
+  if (labelName === 'factory:investigation-complete') {
+    await dispatchInvestigationComplete(slug, issueNumber);
     return;
   }
   if (labelName === 'factory:dev-ready') {

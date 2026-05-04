@@ -11,6 +11,7 @@ export const STATES = Object.freeze([
   'factory:research-complete',
   'factory:investigating',
   'factory:investigation-complete',
+  'factory:gate-pending',
   'factory:dev-ready',
   'factory:in-progress',
   'factory:needs-qa',
