@@ -15,6 +15,7 @@ describe('eventStore.appendEvent', () => {
       kind TEXT NOT NULL,
       payload TEXT NOT NULL,
       run_id TEXT,
+      persona_id TEXT,
       created_at TEXT NOT NULL DEFAULT (current_timestamp)
     )`);
     db.run(
@@ -23,6 +24,12 @@ describe('eventStore.appendEvent', () => {
     // Migrate existing DBs that pre-date the run_id column
     try {
       db.run(sql`ALTER TABLE events ADD COLUMN run_id TEXT`);
+    } catch {
+      /* already exists */
+    }
+    // Migrate existing DBs that pre-date the persona_id column
+    try {
+      db.run(sql`ALTER TABLE events ADD COLUMN persona_id TEXT`);
     } catch {
       /* already exists */
     }

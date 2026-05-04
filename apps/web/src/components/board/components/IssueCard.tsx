@@ -2,6 +2,7 @@ import { Pill } from '@/components/ui/pill';
 import { cn } from '@/lib/cn';
 import { PRIORITY_COLOR, STATE_LABEL } from '@/lib/constants';
 import type { WorkItemDto } from '@/lib/types';
+import { getPersonaInitials, usePersonaMap } from '@/lib/usePersonaMap';
 import { ageLabel } from '@/lib/utils';
 import { Link } from 'react-router-dom';
 
@@ -16,6 +17,8 @@ export function IssueCard({
   projectSlug: string;
 }) {
   const ageStr = ageLabel(item.createdAt);
+  const personaMap = usePersonaMap();
+  const initials = getPersonaInitials(personaMap, item.lastPersonaId);
   return (
     <Link
       to={`/projects/${projectSlug}/items/${item.externalId}`}
@@ -52,6 +55,15 @@ export function IssueCard({
         <Pill tone="default" className="h-5 text-[10.5px] px-2 capitalize">
           {item.priority}
         </Pill>
+        {initials != null && (
+          <span
+            title={item.lastPersonaId ?? undefined}
+            className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[color:var(--accent)]/15 text-[color:var(--accent)] font-mono text-[9px] font-bold shrink-0"
+            data-testid="persona-initials"
+          >
+            {initials}
+          </span>
+        )}
         <span
           className="ml-auto font-mono text-[10.5px] text-fg-4"
           title="Cost tracking available in M9"

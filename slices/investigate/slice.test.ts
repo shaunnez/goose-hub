@@ -21,7 +21,9 @@ vi.mock('@goose-hub/core/agent-runtime/schema-bridge.js', () => ({
 }));
 
 vi.mock('@goose-hub/core/agent-runtime/select-persona.js', () => ({
-  selectPersona: vi.fn().mockReturnValue('test-project/investigator/0'),
+  selectPersona: vi
+    .fn()
+    .mockReturnValue({ personaId: 'test-project/investigator/0', codename: 'Grey Honker' }),
 }));
 
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
@@ -581,7 +583,7 @@ describe('selectPersona', () => {
     const { selectPersona } = await import('@goose-hub/core/agent-runtime/select-persona.js');
 
     const result = selectPersona('test-project', 'investigator');
-    expect(result).toBe('test-project/investigator/0');
+    expect(result).toEqual({ personaId: 'test-project/investigator/0', codename: 'Grey Honker' });
     expect(selectPersona).toHaveBeenCalledWith('test-project', 'investigator');
   });
 });

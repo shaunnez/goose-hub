@@ -55,6 +55,7 @@ export interface AgentEvent {
   kind: EventKind;
   payload: unknown;
   runId?: string | null;
+  personaId?: string | null;
   createdAt: string;
 }
 
@@ -64,6 +65,7 @@ export interface AppendEventInput {
   kind: EventKind;
   payload: unknown;
   runId?: string | null;
+  personaId?: string | null;
 }
 
 class EventStore {
@@ -89,6 +91,7 @@ class EventStore {
         kind: input.kind,
         payload,
         runId: input.runId ?? null,
+        personaId: input.personaId ?? null,
       })
       .returning()
       .all();
@@ -101,6 +104,7 @@ class EventStore {
       kind: row.kind as EventKind,
       payload: JSON.parse(row.payload),
       runId: row.runId,
+      personaId: row.personaId,
       createdAt: row.createdAt,
     };
 
@@ -140,6 +144,7 @@ class EventStore {
       kind: r.kind as EventKind,
       payload: JSON.parse(r.payload),
       runId: r.runId,
+      personaId: r.personaId,
       createdAt: r.createdAt,
     }));
   }

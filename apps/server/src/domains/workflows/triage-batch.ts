@@ -79,7 +79,7 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
     const workItemId = item.id;
 
     logger.info('triage-batch processing item', { slug, workItemId, title: item.title });
-    const triagerPersonaId = selectPersona(projectId, 'triager');
+    const { personaId: triagerPersonaId } = selectPersona(projectId, 'triager');
 
     // Run triage skill
     logger.info('triage-batch running triage skill', { slug, workItemId, runId });
@@ -140,7 +140,7 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
 
     // Run repo-match skill
     const repoMatchRunId = crypto.randomUUID();
-    const researcherPersonaId = selectPersona(projectId, 'researcher');
+    const { personaId: researcherPersonaId } = selectPersona(projectId, 'researcher');
     logger.info('triage-batch running repo-match skill', {
       slug,
       workItemId,

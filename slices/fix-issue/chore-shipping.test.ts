@@ -33,7 +33,9 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   },
 }));
 vi.mock('@goose-hub/core/agent-runtime/select-persona.js', () => ({
-  selectPersona: vi.fn().mockReturnValue('proj/developer/0'),
+  selectPersona: vi
+    .fn()
+    .mockReturnValue({ personaId: 'proj/developer/0', codename: 'Grey Honker' }),
 }));
 vi.mock('node:fs', () => ({
   readFileSync: vi.fn().mockReturnValue('# mock skill prompt'),

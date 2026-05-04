@@ -42,7 +42,7 @@ export async function runInvestigateWorkflow(
   const investigateJsonSchema = toJsonSchema(InvestigateSchema);
   const playwrightReproJsonSchema = toJsonSchema(PlaywrightReproSchema);
 
-  const personaId = selectPersona(projectId, 'investigator');
+  const { personaId } = selectPersona(projectId, 'investigator');
   const worktreePath = createWorktree(targetRepo, runId);
 
   try {
@@ -84,7 +84,7 @@ export async function runInvestigateWorkflow(
     // Step c: If type:bug, run playwright-repro skill
     let reproOutput: unknown | undefined;
     if (workItem.type === 'bug') {
-      const playwrightPersonaId = selectPersona(projectId, 'investigator');
+      const { personaId: playwrightPersonaId } = selectPersona(projectId, 'investigator');
       const playwrightRunId = crypto.randomUUID();
 
       try {

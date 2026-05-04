@@ -23,6 +23,7 @@ export interface WorkItemDto {
   dependsOn: string[];
   blocks: string[];
   createdAt: string;
+  lastPersonaId?: string | null;
 }
 
 export interface IssueCommentDto {
@@ -48,6 +49,7 @@ export interface AgentEventDto {
   kind: string;
   payload: unknown;
   runId?: string | null;
+  personaId?: string | null;
   createdAt: string;
 }
 
@@ -82,6 +84,7 @@ export interface InboxItemDto {
 export interface PersonaStatDto {
   id: number;
   personaName: string;
+  codename: string | null;
   role: string;
   runsTotal: number;
   runsSucceeded: number;
