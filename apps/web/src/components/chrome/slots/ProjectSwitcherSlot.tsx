@@ -17,7 +17,10 @@ export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSl
 
   if (loading) {
     return (
-      <div data-testid="project-switcher" className={cn('text-[11.5px] text-fg-4', collapsed ? 'flex justify-center' : 'px-2')}>
+      <div
+        data-testid="project-switcher"
+        className={cn('text-[11.5px] text-fg-4', collapsed ? 'flex justify-center' : 'px-2')}
+      >
         {collapsed ? <FolderGit2 size={16} className="animate-pulse" /> : 'Loading projects…'}
       </div>
     );
@@ -25,7 +28,13 @@ export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSl
 
   if (error != null) {
     return (
-      <div data-testid="project-switcher" className={cn('text-[11.5px] text-[color:var(--danger)]', collapsed ? 'flex justify-center' : 'px-2')}>
+      <div
+        data-testid="project-switcher"
+        className={cn(
+          'text-[11.5px] text-[color:var(--danger)]',
+          collapsed ? 'flex justify-center' : 'px-2',
+        )}
+      >
         {collapsed ? <FolderGit2 size={16} /> : 'Projects unavailable'}
       </div>
     );
@@ -33,7 +42,10 @@ export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSl
 
   if (current == null) {
     return (
-      <div data-testid="project-switcher" className={cn('text-[11.5px] text-fg-4', collapsed ? 'flex justify-center' : 'px-2')}>
+      <div
+        data-testid="project-switcher"
+        className={cn('text-[11.5px] text-fg-4', collapsed ? 'flex justify-center' : 'px-2')}
+      >
         {collapsed ? <FolderGit2 size={16} /> : 'No projects configured'}
       </div>
     );
@@ -44,6 +56,7 @@ export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSl
       <Popover.Root>
         <Popover.Trigger asChild>
           <button
+            type="button"
             data-testid="project-switcher"
             title={`Project: ${current.name}`}
             className="flex items-center justify-center w-9 h-9 mx-auto rounded-md hover:bg-bg-hover transition-colors"
@@ -61,6 +74,7 @@ export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSl
             <p className="text-[10px] uppercase tracking-wider text-fg-4 px-2 py-1">Project</p>
             {projects.map((p) => (
               <button
+                type="button"
                 key={p.slug}
                 onClick={() => {
                   setActiveSlug(p.slug);
@@ -73,10 +87,7 @@ export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSl
                     : 'text-fg-2 hover:text-fg hover:bg-bg-hover',
                 )}
               >
-                <span
-                  className="w-1.5 h-4 rounded-sm shrink-0"
-                  style={{ background: p.color }}
-                />
+                <span className="w-1.5 h-4 rounded-sm shrink-0" style={{ background: p.color }} />
                 {p.name}
               </button>
             ))}
