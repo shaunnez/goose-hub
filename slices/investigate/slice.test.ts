@@ -310,7 +310,7 @@ describe('runInvestigateWorkflow', () => {
       await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
 
       const playwrightCall = mockRun.mock.calls[1][0] as { toolBundles: string[] };
-      expect(playwrightCall.toolBundles).toContain('validate');
+      expect(playwrightCall.toolBundles).toContain('playwright-mcp');
     });
 
     it('does NOT run playwright-repro for non-bug items', async () => {
@@ -505,7 +505,7 @@ describe('runInvestigateWorkflow', () => {
       await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
 
       const callArg = mockRun.mock.calls[0][0] as { toolBundles: string[] };
-      expect(callArg.toolBundles).toContain('read');
+      expect(callArg.toolBundles).toContain('read-only');
     });
   });
 });

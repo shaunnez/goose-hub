@@ -63,7 +63,7 @@ export async function runInvestigateWorkflow(
       },
       contextAllowlist: ['workItem', 'worktreePath'],
       freshContext: false,
-      toolBundles: ['read'],
+      toolBundles: ['read-only'],
       toolExtras: [],
       budgets: { maxTurns: 100, maxBudgetUsd: 0.5, timeoutMs: 300_000 },
       personaId,
@@ -87,34 +87,39 @@ export async function runInvestigateWorkflow(
       const playwrightPersonaId = selectPersona(projectId, 'investigator');
       const playwrightRunId = crypto.randomUUID();
 
-      const playwrightResult = await runtime.run({
-        runId: playwrightRunId,
-        role: 'investigator',
-        skill: 'playwright-repro',
-        context: {
-          projectId,
-          workItemId: workItem.id,
-          workItem: {
-            title: workItem.title,
-            body: workItem.body,
-            reproSteps: workItem.body, // repro steps extracted from body
+      try {
+        const playwrightResult = await runtime.run({
+          runId: playwrightRunId,
+          role: 'investigator',
+          skill: 'playwright-repro',
+          workspaceDir: worktreePath,
+          context: {
+            projectId,
+            workItemId: workItem.id,
+            workItem: {
+              title: workItem.title,
+              body: workItem.body,
+              reproSteps: workItem.body,
+            },
+            appUrl: 'http://localhost:5173',
           },
-        },
-        contextAllowlist: ['workItem'],
-        freshContext: false,
-        toolBundles: ['validate'],
-        toolExtras: [],
-        budgets: { maxTurns: 15, maxBudgetUsd: 0.3, timeoutMs: 120_000 },
-        personaId: playwrightPersonaId,
-        outputJsonSchema: playwrightReproJsonSchema,
-        appendSystemPrompt: playwrightReproPrompt,
-      });
+          contextAllowlist: ['workItem', 'appUrl'],
+          freshContext: false,
+          toolBundles: ['playwright-mcp'],
+          toolExtras: [],
+          budgets: { maxTurns: 25, maxBudgetUsd: 5, timeoutMs: 120_000 },
+          personaId: playwrightPersonaId,
+          outputJsonSchema: playwrightReproJsonSchema,
+          appendSystemPrompt: playwrightReproPrompt,
+        });
 
-      const reproparsed = PlaywrightReproSchema.safeParse(playwrightResult.output);
-      if (reproparsed.success) {
-        reproOutput = reproparsed.data;
+        const reproparsed = PlaywrightReproSchema.safeParse(playwrightResult.output);
+        if (reproparsed.success) {
+          reproOutput = reproparsed.data;
+        }
+      } catch {
+        // playwright-repro failure is non-fatal — investigate findings are persisted regardless
       }
-      // playwright-repro failure is non-fatal — we still persist investigate findings
     }
 
     // Step d: Persist findings as agent.investigation-complete event
