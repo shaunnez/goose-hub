@@ -1,8 +1,9 @@
 import { readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
 import { logger } from '@goose-hub/core/logger.js';
 import type { ProjectConfig } from '@goose-hub/core/types.js';
+import { targetProjectsRoot } from '@goose-hub/target-projects';
 
 export interface ProjectSummary {
   id: string;
@@ -12,12 +13,7 @@ export interface ProjectSummary {
   source: ProjectConfig['source'];
 }
 
-// Anchor to this file's location so the path is correct regardless of cwd (pnpm runs
-// scripts from the package dir, not the monorepo root).
-const PROJECTS_DIR = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '../../../../target-projects',
-);
+const PROJECTS_DIR = targetProjectsRoot;
 
 const cache = new Map<string, ProjectConfig>();
 

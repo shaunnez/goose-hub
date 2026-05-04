@@ -3,6 +3,7 @@ import type {
   ImprovementCandidateDto,
   InboxItemDto,
   IssueCommentDto,
+  IssueDiffDto,
   MilestoneDto,
   PersonaNameDto,
   PersonaRunDto,
@@ -17,6 +18,7 @@ export type {
   ProjectSummary,
   WorkItemDto,
   IssueCommentDto,
+  IssueDiffDto,
   MilestoneDto,
   AgentEventDto,
   TransitionResult,
@@ -139,12 +141,6 @@ export async function fetchEvents(
     signal,
   );
   return events;
-}
-
-export interface IssueDiffDto {
-  diff: string | null;
-  runId: string | null;
-  reason?: string;
 }
 
 export async function fetchIssueDiff(slug: string, id: string): Promise<IssueDiffDto> {

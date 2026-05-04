@@ -1,5 +1,6 @@
 import { buildSseStream } from '@goose-hub/core/event-stream/sse.js';
 import { Hono } from 'hono';
+import { parseBody } from '../../shared/middleware.js';
 import { parseSseFilter, recordToolCall } from './service.js';
 
 const router = new Hono();
@@ -8,13 +9,9 @@ const router = new Hono();
  * Tool-call audit endpoint (#209). Thin delegator to recordToolCall (#208).
  */
 router.post('/tool-call', async (c) => {
-  let body: Record<string, unknown>;
-  try {
-    body = (await c.req.json()) as Record<string, unknown>;
-  } catch {
-    return c.json({ ok: false, error: 'invalid JSON' }, 400);
-  }
-  return c.json(recordToolCall(body), 202);
+  const body = await parseBody<Record<string, unknown>>(c);
+  if (!body.ok) return body.error;
+  return c.json(recordToolCall(body.data), 202);
 });
 
 router.get('/', (c) => {

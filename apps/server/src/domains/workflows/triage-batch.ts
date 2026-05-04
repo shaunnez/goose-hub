@@ -6,14 +6,14 @@ import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import type { StateSource } from '@goose-hub/core/state-source/interface.js';
+import { skillsRoot } from '@goose-hub/skills';
 import { RepoMatchOutputSchema } from '@goose-hub/skills/repo-match/schema.js';
 import { TriageOutputSchema } from '@goose-hub/skills/triage/schema.js';
+import { targetProjectsRoot } from '@goose-hub/target-projects';
 import { getSourceForSlug, isValidSlug } from '../../shared/source.js';
 
-const REPO_ROOT = join(import.meta.dirname, '../../../../..');
-
 function readPrompt(skillName: string): string {
-  return readFileSync(join(REPO_ROOT, 'skills', skillName, 'prompt.md'), 'utf8');
+  return readFileSync(join(skillsRoot, skillName, 'prompt.md'), 'utf8');
 }
 
 // Maps triage priority (p0–p3) to GitHub label values (critical/high/medium/low)
@@ -40,7 +40,7 @@ function readReposContext(slug: string): string {
     // metacharacters.
     throw new Error(`Invalid slug for path construction: ${slug}`);
   }
-  const reposFile = join(REPO_ROOT, 'target-projects', slug, 'repos.md');
+  const reposFile = join(targetProjectsRoot, slug, 'repos.md');
   try {
     return readFileSync(reposFile, 'utf8');
   } catch {

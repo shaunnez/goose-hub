@@ -10,6 +10,7 @@
   "dependencies": {
     "@goose-hub/core": "workspace:*",
     "@goose-hub/skills": "workspace:*",
+    "@goose-hub/target-projects": "workspace:*",
     "@hono/node-server": "^1.13.7",
     "hono": "^4.6.14"
   }

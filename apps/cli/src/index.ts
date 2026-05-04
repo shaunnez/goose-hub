@@ -2,7 +2,9 @@
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { createInterface } from 'node:readline';
+import { pathToFileURL } from 'node:url';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { assembleSpawnContext } from '@goose-hub/core/agent-runtime/context-assembly.js';
 import { withFallback } from '@goose-hub/core/agent-runtime/fallback.js';
@@ -14,7 +16,8 @@ import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { GitHubLabelsSource } from '@goose-hub/core/state-source/github-labels.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
 import type { ProjectConfig } from '@goose-hub/core/types.js';
-import gooseHubSelf from '../../../target-projects/goose-hub-self/project.config.js';
+import { skillsRoot } from '@goose-hub/skills';
+import gooseHubSelf from '@goose-hub/target-projects/goose-hub-self/project.config.js';
 
 const registry: Record<string, ProjectConfig> = {
   'goose-hub-self': gooseHubSelf,
@@ -194,7 +197,7 @@ async function runAgentCommand(rawArgs: string[]): Promise<void> {
   // Dynamic import of skill config
   let skillModule: { default: import('@goose-hub/core/agent-runtime/interface.js').SkillConfig };
   try {
-    skillModule = await import(`../../../skills/${skillName}/skill.config.js`);
+    skillModule = await import(`@goose-hub/skills/${skillName}/skill.config.js`);
   } catch {
     console.error(`Skill '${skillName}' not found at skills/${skillName}/skill.config.js`);
     process.exit(1);
@@ -224,7 +227,7 @@ async function runAgentCommand(rawArgs: string[]): Promise<void> {
   let appendSystemPrompt: string | undefined;
   try {
     appendSystemPrompt = readFileSync(
-      new URL(`../../../skills/${skillName}/prompt.md`, import.meta.url),
+      pathToFileURL(path.join(skillsRoot, skillName, 'prompt.md')),
       'utf8',
     );
   } catch {
@@ -258,7 +261,7 @@ async function runAgentCommand(rawArgs: string[]): Promise<void> {
   // Load skill output schema
   let schemaModule: { default?: unknown; [key: string]: unknown };
   try {
-    schemaModule = await import(`../../../skills/${skillName}/schema.js`);
+    schemaModule = await import(`@goose-hub/skills/${skillName}/schema.js`);
   } catch {
     schemaModule = {};
   }

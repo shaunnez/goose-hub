@@ -7,6 +7,8 @@
     "goose": "./src/index.ts"
   },
   "dependencies": {
-    "@goose-hub/core": "workspace:*"
+    "@goose-hub/core": "workspace:*",
+    "@goose-hub/skills": "workspace:*",
+    "@goose-hub/target-projects": "workspace:*"
   }
 }

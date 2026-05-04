@@ -1,4 +1,4 @@
-import { CaptureModal } from '@/components/inbox/CaptureModal';
+import { CaptureModal } from '@/components/ui/CaptureModal';
 import { Plus, Search, Terminal } from 'lucide-react';
 import { useState } from 'react';
 

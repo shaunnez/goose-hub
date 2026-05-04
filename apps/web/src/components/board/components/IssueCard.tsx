@@ -1,13 +1,10 @@
 import { Pill } from '@/components/ui/pill';
 import { cn } from '@/lib/cn';
-import { PRIORITY_COLOR, STATE_LABEL } from '@/lib/constants';
+import { COST_PLACEHOLDER, PRIORITY_COLOR, STATE_LABEL } from '@/lib/constants';
 import type { WorkItemDto } from '@/lib/types';
 import { getPersonaInitials, usePersonaMap } from '@/lib/usePersonaMap';
 import { ageLabel } from '@/lib/utils';
 import { Link } from 'react-router-dom';
-
-// Placeholder until M9 wires real cost data.
-const COST_PLACEHOLDER = '$—';
 
 export function IssueCard({
   item,
