@@ -104,7 +104,7 @@ export async function runInvestigateWorkflow(
         freshContext: false,
         toolBundles: ['validate'],
         toolExtras: [],
-        budgets: { maxTurns: 15, maxBudgetUsd: 0.3 },
+        budgets: { maxTurns: 15, maxBudgetUsd: 0.3, timeoutMs: 120_000 },
         personaId: playwrightPersonaId,
         outputJsonSchema: playwrightReproJsonSchema,
         appendSystemPrompt: playwrightReproPrompt,
