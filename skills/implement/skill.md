@@ -66,12 +66,23 @@ The context contains a `<task>` block with:
 - If `<typecheck_command>` is provided, run it. Fix any errors.
 - Re-run the test command one final time to confirm nothing regressed.
 
-### 7 — Optional: name the evidence spec
+### 7 — Commit
+
+All tests pass and lint is clean. Commit your changes now — the orchestrator pushes this commit to open the PR.
+
+- Stage everything: `git add -A` (separate `bash` call)
+- Commit with a message derived from the issue title and number:
+  `git commit -m "fix(#<number>): <concise description of what changed>"`
+- Emit: `[decision] Committed changes for #<number>`
+
+> **This step is required.** If you skip it, the orchestrator pushes an empty branch and the PR creation fails with a 422.
+
+### 8 — Optional: name the evidence spec
 
 - If you wrote (or modified) a Playwright spec under `apps/web/e2e/` that demonstrates the slice end-to-end, set `evidenceSpecPath` to the workspace-relative path. The orchestrator will pass this to the `evidence-post` skill (#234) to generate visual evidence on the PR.
 - If you did not author a spec, set `evidenceSpecPath: null`. The orchestrator logs `evidence.no-spec-declared` and skips evidence posting (no failure).
 
-### 8 — Return
+### 9 — Return
 
 Return a JSON object conforming to `ImplementSchema`. The orchestrator opens the PR after this return — your `prUrl` field is filled in by the orchestrator post-return; your job is to return a placeholder URL conforming to the schema (e.g. the workItem URL plus `/pull/PENDING`).
 
