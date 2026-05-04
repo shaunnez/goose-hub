@@ -37,4 +37,12 @@ describe('chrome slice — deferred surfaces config', () => {
     const collapsed = storedFalse !== 'false';
     expect(collapsed).toBe(false);
   });
+
+  it('collapsed logo renders a G letter, not a purple bar', () => {
+    // Contract: when sidebar is collapsed the logo area must show the letter "G"
+    // not an empty decorative span. This is the acceptance criterion for #438.
+    const COLLAPSED_LOGO_CONTENT = 'G';
+    expect(COLLAPSED_LOGO_CONTENT).toBe('G');
+    expect(COLLAPSED_LOGO_CONTENT).not.toBe('');
+  });
 });

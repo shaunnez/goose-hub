@@ -117,10 +117,12 @@ export function Sidebar({ activeSlug }: SidebarProps) {
       >
         {collapsed ? (
           <span
-            aria-hidden
-            className="inline-block w-1.5 h-4 rounded-sm"
+            aria-label="Goose Hub"
+            className="inline-flex items-center justify-center w-7 h-7 rounded-md text-[13px] font-bold tracking-tight text-white"
             style={{ background: '#7c3aed' }}
-          />
+          >
+            G
+          </span>
         ) : (
           <div className="flex items-center gap-2">
             <span
