@@ -19,7 +19,12 @@ vi.mock('@goose-hub/core/db/db.js', () => ({
 
 import { getSourceForSlug } from '../../shared/source.js';
 import { deleteInboxItem, getInboxItem, insertInboxItem, listInboxItems } from './repository.js';
-import { createInboxItem, getInboxItems, promoteInboxItem } from './service.js';
+import {
+  createInboxItem,
+  deleteInboxItem as deleteInboxItemService,
+  getInboxItems,
+  promoteInboxItem,
+} from './service.js';
 
 const mockItem = { id: 1, title: 'Fix bug', body: '', type: 'bug', createdAt: '2026-05-01' };
 const mockSource = { createIssue: vi.fn().mockResolvedValue(undefined) };
@@ -127,5 +132,22 @@ describe('promoteInboxItem', () => {
     vi.mocked(getInboxItem).mockResolvedValueOnce(itemWithNullBody);
     await promoteInboxItem(3, 'my-proj');
     expect(mockSource.createIssue).toHaveBeenCalledWith(expect.objectContaining({ body: '' }));
+  });
+});
+
+describe('deleteInboxItem (service)', () => {
+  it('returns 404 when item not found', async () => {
+    vi.mocked(getInboxItem).mockResolvedValueOnce(null);
+    const result = await deleteInboxItemService(999);
+    expect(result).toEqual({ ok: false, error: 'not found', status: 404 });
+    expect(deleteInboxItem).not.toHaveBeenCalled();
+  });
+
+  it('returns ok:true and calls repository delete when item exists', async () => {
+    vi.mocked(getInboxItem).mockResolvedValueOnce(mockItem);
+    vi.mocked(deleteInboxItem).mockResolvedValueOnce(undefined);
+    const result = await deleteInboxItemService(1);
+    expect(result).toEqual({ ok: true, data: { ok: true } });
+    expect(deleteInboxItem).toHaveBeenCalledWith(1);
   });
 });

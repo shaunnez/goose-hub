@@ -70,7 +70,7 @@ export async function runReviewWorkflow(
       freshContext: true,
       toolBundles: ['read', 'validate'],
       toolExtras: [],
-      budgets: { maxTurns: 50, maxBudgetUsd: 0.5, timeoutMs: 300_000 },
+      budgets: { maxTurns: 50, maxBudgetUsd: 2, timeoutMs: 300_000 },
       personaId,
       outputJsonSchema: reviewJsonSchema,
       appendSystemPrompt: reviewPrompt,

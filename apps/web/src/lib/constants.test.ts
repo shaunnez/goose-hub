@@ -94,8 +94,8 @@ describe('CODE_ACTIVE_STATES', () => {
 });
 
 describe('GATE_STATES', () => {
-  it('covers exactly four blocking states', () => {
-    expect(Object.keys(GATE_STATES)).toHaveLength(4);
+  it('covers exactly three blocking states', () => {
+    expect(Object.keys(GATE_STATES)).toHaveLength(3);
   });
 
   it('does not include non-gate states', () => {
@@ -104,10 +104,9 @@ describe('GATE_STATES', () => {
     expect(GATE_STATES['factory:done']).toBeUndefined();
   });
 
-  it('includes all four known gate states', () => {
+  it('includes all three known gate states', () => {
     expect(GATE_STATES['factory:prd-review']).toBeTruthy();
     expect(GATE_STATES['factory:needs-review']).toBeTruthy();
-    expect(GATE_STATES['factory:approved']).toBeTruthy();
     expect(GATE_STATES['factory:needs-human']).toBeTruthy();
   });
 });

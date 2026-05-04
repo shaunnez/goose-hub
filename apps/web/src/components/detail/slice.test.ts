@@ -66,8 +66,8 @@ describe('GatePendingBanner — gate state map', () => {
     expect(GATE_STATES['factory:prd-review']).toBe('PRD Review pending — human approval required');
   });
 
-  it('returns banner text for approved gate state', () => {
-    expect(GATE_STATES['factory:approved']).toBe('Approved — ready for retrospecting');
+  it('does not include approved (approved shows no gate banner)', () => {
+    expect(GATE_STATES['factory:approved']).toBeUndefined();
   });
 
   it('returns banner text for needs-review gate state', () => {

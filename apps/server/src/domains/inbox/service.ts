@@ -6,10 +6,10 @@ import type { Result } from '../../shared/middleware.js';
 import { getSourceForSlug } from '../../shared/source.js';
 import {
   type InboxItem,
-  deleteInboxItem,
   getInboxItem,
   insertInboxItem,
   listInboxItems,
+  deleteInboxItem as repoDeleteInboxItem,
 } from './repository.js';
 
 const VALID_TYPES = ['feature', 'bug', 'chore', 'research'] as const;
@@ -62,7 +62,7 @@ export async function promoteInboxItem(
   });
 
   try {
-    await deleteInboxItem(id);
+    await repoDeleteInboxItem(id);
   } catch (err) {
     logger.error('inbox promotion: GitHub issue created but inbox delete failed', {
       id,
@@ -70,5 +70,12 @@ export async function promoteInboxItem(
     });
   }
 
+  return { ok: true, data: { ok: true } };
+}
+
+export async function deleteInboxItem(id: number): Promise<Result<{ ok: true }>> {
+  const item = await getInboxItem(id);
+  if (item == null) return { ok: false, error: 'not found', status: 404 };
+  await repoDeleteInboxItem(id);
   return { ok: true, data: { ok: true } };
 }
