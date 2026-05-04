@@ -1,6 +1,7 @@
 import { fetchEvents } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import type { AgentEventDto } from '@/lib/types';
+import { timeAgo } from '@/lib/utils';
 import {
   AlertCircle,
   ArrowRight,
@@ -9,8 +10,12 @@ import {
   ChevronDown,
   ChevronRight,
   Circle,
+  ExternalLink,
+  FileCode,
+  GitPullRequest,
   Info,
   Sparkles,
+  Tag,
   Target,
   Terminal,
   User,
@@ -45,6 +50,12 @@ const STATE_LABEL: Record<string, string> = {
   'tool.stdout-truncated': 'Stdout truncated',
   'tool.timeout': 'Timeout',
   'agent.fallback-triggered': 'Fallback triggered',
+  'agent.triage-complete': 'Triage complete',
+  'agent.implement-complete': 'Implement complete',
+  'pr.opened': 'PR opened',
+  'evidence.no-spec-declared': 'Evidence — no spec declared',
+  'evidence.posted': 'Evidence posted',
+  'evidence.post-failed': 'Evidence post failed',
 };
 
 // ─── payload helpers ──────────────────────────────────────────────────────────
@@ -251,6 +262,8 @@ function SystemNoteEvent({ event }: { event: AgentEventDto }) {
 }
 
 function FallbackEvent({ event }: { event: AgentEventDto }) {
+  const payloadStr =
+    typeof event.payload === 'string' ? event.payload : JSON.stringify(event.payload, null, 2);
   return (
     <li
       data-event-kind={event.kind}
@@ -263,7 +276,9 @@ function FallbackEvent({ event }: { event: AgentEventDto }) {
         <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
         <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
       </div>
-      <div className="text-[12.5px] text-fg-2">{getPayloadStr(event.payload)}</div>
+      <pre className="mt-1 text-[11px] font-mono text-fg-2 whitespace-pre-wrap overflow-x-auto">
+        {payloadStr}
+      </pre>
     </li>
   );
 }
@@ -271,13 +286,14 @@ function FallbackEvent({ event }: { event: AgentEventDto }) {
 function AgentRunStatusEvent({ event }: { event: AgentEventDto }) {
   const isCompleted = event.kind === 'agent.run-completed';
   const isFailed = event.kind === 'agent.run-failed';
-  const p = event.payload as { runId?: string; error?: string } | null;
+  const p = event.payload as { runId?: string; error?: string; skill?: string } | null;
+  const skillSuffix = p?.skill != null ? `: ${p.skill}` : '';
   return (
     <li
       data-event-kind={event.kind}
       className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
     >
-      <div className="flex items-center gap-2 text-[11px] text-fg-3">
+      <div className="flex items-center gap-2 text-[11px]  ">
         {isCompleted ? (
           <CheckCircle size={13} className="shrink-0 text-green-400" />
         ) : isFailed ? (
@@ -287,7 +303,8 @@ function AgentRunStatusEvent({ event }: { event: AgentEventDto }) {
         )}
         <span className="font-mono uppercase tracking-wider">
           {STATE_LABEL[event.kind] ?? event.kind}
-          {isFailed && p?.error != null ? `: ${p.error}` : ''}
+          {skillSuffix}
+          {isFailed && p?.error != null ? ` — ${p.error}` : ''}
         </span>
         <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
         <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
@@ -298,20 +315,24 @@ function AgentRunStatusEvent({ event }: { event: AgentEventDto }) {
 
 function AgentToolCallEvent({ event }: { event: AgentEventDto }) {
   const [open, setOpen] = useState(false);
-  const p = event.payload as { tool_name?: string; input_summary?: string[] } | null;
+  const p = event.payload as { tool_name?: string; tool_input?: unknown } | null;
   const toolName = p?.tool_name ?? 'unknown';
+  const inputStr =
+    p?.tool_input != null ? JSON.stringify(p.tool_input, null, 2) : getPayloadStr(event.payload);
   return (
     <li
       data-event-kind={event.kind}
       className="rounded-md border border-line/50 bg-bg/40 px-4 py-2"
     >
       <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
-        <summary className="flex items-center gap-1 cursor-pointer list-none font-mono text-[11.5px] text-fg-4 select-none">
+        <summary className="flex items-center gap-1 cursor-pointer list-none font-mono text-[11.5px] select-none">
           {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           <Wrench size={11} className="shrink-0" />
           <span>Tool call: {toolName}</span>
         </summary>
-        <div className="mt-1 font-mono text-[11px] text-fg-4">{getPayloadStr(event.payload)}</div>
+        <pre className="mt-1 font-mono text-[11px]  whitespace-pre-wrap overflow-x-auto">
+          {inputStr}
+        </pre>
       </details>
     </li>
   );
@@ -335,23 +356,244 @@ function ToolWarningEvent({ event }: { event: AgentEventDto }) {
   );
 }
 
+function AgentTriageCompleteEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as {
+    triage?: {
+      type?: string;
+      priority?: string;
+      labels?: string[];
+      reasoning?: string;
+    };
+    repoMatch?: {
+      candidates?: { repo?: string; confidence?: number; tier?: number }[];
+    };
+  } | null;
+  const t = p?.triage;
+  const topRepo = p?.repoMatch?.candidates?.[0];
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex items-center gap-2 mb-2 text-[11px] text-fg-3">
+        <Tag size={13} className="shrink-0 text-[color:var(--accent)]" />
+        <span className="font-mono uppercase tracking-wider">Triage complete</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      {t != null && (
+        <div className="flex flex-wrap gap-2 mb-2">
+          {t.type != null && (
+            <span className="px-1.5 py-0.5 rounded text-[10.5px] font-mono bg-bg border border-line text-fg-2">
+              {t.type}
+            </span>
+          )}
+          {t.priority != null && (
+            <span className="px-1.5 py-0.5 rounded text-[10.5px] font-mono bg-bg border border-line text-fg-2">
+              {t.priority}
+            </span>
+          )}
+          {t.labels?.map((l) => (
+            <span
+              key={l}
+              className="px-1.5 py-0.5 rounded text-[10.5px] font-mono bg-bg border border-line text-fg-3"
+            >
+              {l}
+            </span>
+          ))}
+        </div>
+      )}
+      {t?.reasoning != null && (
+        <p className="text-[11.5px] text-fg-2 mb-2 leading-relaxed">{t.reasoning}</p>
+      )}
+      {topRepo != null && (
+        <div className="text-[11px] text-fg-3 font-mono">
+          repo: <span className="text-fg-2">{topRepo.repo}</span>
+          {topRepo.confidence != null && (
+            <span className="text-fg-4 ml-2">{topRepo.confidence}% confidence</span>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
+
+function PrOpenedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as { prNumber?: number; prUrl?: string; branch?: string } | null;
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <GitPullRequest size={13} className="shrink-0 text-green-400" />
+        <span className="font-mono uppercase tracking-wider">PR opened</span>
+        {p?.prNumber != null && <span className="font-mono text-fg-2">#{p.prNumber}</span>}
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      {p?.prUrl != null && (
+        <a
+          href={p.prUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-1 text-[11.5px] text-[color:var(--accent)] hover:underline"
+        >
+          <ExternalLink size={11} />
+          {p.prUrl}
+        </a>
+      )}
+    </li>
+  );
+}
+
+function AgentImplementCompleteEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as {
+    filesWritten?: number;
+    testsWritten?: number;
+    confidence?: string;
+  } | null;
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex items-center gap-2 mb-1.5 text-[11px] text-fg-3">
+        <FileCode size={13} className="shrink-0 text-[color:var(--accent)]" />
+        <span className="font-mono uppercase tracking-wider">Implement complete</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="flex gap-4 text-[11.5px] text-fg-3">
+        {p?.filesWritten != null && (
+          <span>
+            <span className="text-fg-2 font-medium">{p.filesWritten}</span> files
+          </span>
+        )}
+        {p?.testsWritten != null && (
+          <span>
+            <span className="text-fg-2 font-medium">{p.testsWritten}</span> tests
+          </span>
+        )}
+        {p?.confidence != null && (
+          <span>
+            confidence: <span className="text-fg-2 font-medium">{p.confidence}</span>
+          </span>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function EvidenceNoSpecEvent({ event }: { event: AgentEventDto }) {
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line/50 bg-bg/40 px-4 py-2"
+    >
+      <div className="flex items-center gap-2 text-[11px] ">
+        <Info size={13} className="shrink-0" />
+        <span className="font-mono uppercase tracking-wider">No evidence spec declared</span>
+      </div>
+    </li>
+  );
+}
+
+function EvidencePostedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as { commentUrl?: string } | null;
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <CheckCircle size={13} className="shrink-0 text-green-400" />
+        <span className="font-mono uppercase tracking-wider">Evidence posted</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      {p?.commentUrl != null && (
+        <a
+          href={p.commentUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-1 text-[11.5px] text-[color:var(--accent)] hover:underline"
+        >
+          <ExternalLink size={11} />
+          {p.commentUrl}
+        </a>
+      )}
+    </li>
+  );
+}
+
+function EvidencePostFailedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as { error?: string } | null;
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-yellow-500/30 bg-yellow-500/5 px-4 py-2"
+    >
+      <div className="flex items-center gap-2 text-[11px] text-fg-3">
+        <AlertCircle size={13} className="shrink-0 text-yellow-400" />
+        <span className="font-mono uppercase tracking-wider">Evidence post failed</span>
+        {p?.error != null && <span className="text-fg-3">: {p.error}</span>}
+      </div>
+    </li>
+  );
+}
+
+function getRunStartedAt(items: RenderItem[]): string | null {
+  // Prefer the explicit run-started event; fall back to numeric minimum.
+  for (const item of items) {
+    if (item.kind === 'event' && item.event.kind === 'agent.run-started') {
+      return item.event.createdAt;
+    }
+  }
+  let earliestMs = Number.POSITIVE_INFINITY;
+  let earliestIso: string | null = null;
+  for (const item of items) {
+    if (item.kind !== 'event') continue;
+    const ms = new Date(item.event.createdAt).getTime();
+    if (ms < earliestMs) {
+      earliestMs = ms;
+      earliestIso = item.event.createdAt;
+    }
+  }
+  return earliestIso;
+}
+
 function RunGroupWrapper({
   runId,
   items,
   idx,
 }: { runId: string; items: RenderItem[]; idx: number }) {
   const [open, setOpen] = useState(true);
+  // Float terminal status events to the top so run outcome is immediately visible.
+  const rank = (item: RenderItem) => {
+    if (item.kind !== 'event') return 2;
+    if (item.event.kind === 'agent.run-completed') return 0;
+    if (item.event.kind === 'agent.run-failed') return 1;
+    return 2;
+  };
+  const sorted = [...items].sort((a, b) => rank(a) - rank(b));
+  const startedAt = getRunStartedAt(items);
   return (
     <li data-run-id={runId} className="rounded-md border border-line/70 bg-bg/30">
       <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
-        <summary className="flex items-center gap-1 cursor-pointer list-none px-4 py-2 font-mono text-[11px] text-fg-4 select-none">
+        <summary className="flex items-center gap-1 cursor-pointer list-none px-4 py-2 font-mono text-[11px]  select-none">
           {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-          <Terminal size={11} className="shrink-0" />
-          <span>Run {runId.slice(0, 16)}…</span>
+          <span>Run {runId}</span>
+          {startedAt != null && (
+            <>
+              <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4 ml-4" />
+              <span className="text-fg-5">Started at: {startedAt}</span>
+            </>
+          )}
           <span className="ml-auto text-fg-5">{items.length} events</span>
         </summary>
         <ol className="flex flex-col gap-2 px-3 pb-3">
-          {items.map((item, i) => renderItem(item, idx * 1000 + i))}
+          {sorted.map((item, i) => renderItem(item, idx * 1000 + i))}
         </ol>
       </details>
     </li>
@@ -401,6 +643,18 @@ function renderItem(item: RenderItem, idx: number) {
     case 'tool.stdout-truncated':
     case 'tool.timeout':
       return <ToolWarningEvent key={event.id} event={event} />;
+    case 'agent.triage-complete':
+      return <AgentTriageCompleteEvent key={event.id} event={event} />;
+    case 'pr.opened':
+      return <PrOpenedEvent key={event.id} event={event} />;
+    case 'agent.implement-complete':
+      return <AgentImplementCompleteEvent key={event.id} event={event} />;
+    case 'evidence.no-spec-declared':
+      return <EvidenceNoSpecEvent key={event.id} event={event} />;
+    case 'evidence.posted':
+      return <EvidencePostedEvent key={event.id} event={event} />;
+    case 'evidence.post-failed':
+      return <EvidencePostFailedEvent key={event.id} event={event} />;
     default:
       return <FallbackEvent key={event.id} event={event} />;
   }
@@ -489,7 +743,7 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
   const items = groupEvents(events);
 
   return (
-    <div data-testid="timeline-section" className="px-8 py-6 max-w-[920px]">
+    <div data-testid="timeline-section" className="px-8 py-6">
       <ol className="flex flex-col gap-3">{items.map((item, idx) => renderItem(item, idx))}</ol>
     </div>
   );

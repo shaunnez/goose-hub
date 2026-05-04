@@ -50,20 +50,25 @@ describe('deployHooks', () => {
 
     deployHooks();
 
-    expect(writeFileSync).toHaveBeenCalledOnce();
+    expect(writeFileSync).toHaveBeenCalledTimes(2);
     expect(writeFileSync).toHaveBeenCalledWith(
       expect.stringContaining('pre-tool-use.js'),
       expect.any(String),
       { encoding: 'utf8', mode: 0o755 },
     );
+    expect(writeFileSync).toHaveBeenCalledWith(
+      expect.stringContaining('package.json'),
+      '{"type":"module"}',
+      'utf8',
+    );
   });
 
-  it('does NOT overwrite the script when it already exists (idempotent)', () => {
+  it('always overwrites the script to pick up hook changes', () => {
     vi.mocked(existsSync).mockReturnValue(true);
 
     deployHooks();
 
-    expect(writeFileSync).not.toHaveBeenCalled();
+    expect(writeFileSync).toHaveBeenCalledTimes(2);
   });
 
   it('still creates the directory even when the hook file already exists', () => {

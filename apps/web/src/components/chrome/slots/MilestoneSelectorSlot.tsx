@@ -1,20 +1,31 @@
+import { cn } from '@/lib/cn';
 import { useActiveMilestone } from '@/state/active-milestone';
-import { ChevronDown } from 'lucide-react';
+import * as Popover from '@radix-ui/react-popover';
+import { ChevronDown, Flag } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 interface MilestoneSelectorSlotProps {
   activeSlug?: string;
+  collapsed?: boolean;
 }
 
-export function MilestoneSelectorSlot({ activeSlug: _activeSlug }: MilestoneSelectorSlotProps) {
+export function MilestoneSelectorSlot({
+  activeSlug: _activeSlug,
+  collapsed,
+}: MilestoneSelectorSlotProps) {
   const { milestones, loading, error, activeNumber, setActiveNumber } = useActiveMilestone();
   const { slug = 'goose-hub-self' } = useParams<{ slug: string }>();
   const navigate = useNavigate();
 
+  const activeMilestone = milestones.find((m) => m.number === activeNumber);
+
   if (loading) {
     return (
-      <div data-testid="milestone-selector" className="px-2 text-[11.5px] text-fg-4">
-        Loading milestones…
+      <div
+        data-testid="milestone-selector"
+        className={cn('text-[11.5px] text-fg-4', collapsed ? 'flex justify-center' : 'px-2')}
+      >
+        {collapsed ? <Flag size={16} className="animate-pulse" /> : 'Loading milestones…'}
       </div>
     );
   }
@@ -23,18 +34,71 @@ export function MilestoneSelectorSlot({ activeSlug: _activeSlug }: MilestoneSele
     return (
       <div
         data-testid="milestone-selector"
-        className="px-2 text-[11.5px] text-[color:var(--danger)]"
+        className={cn(
+          'text-[11.5px] text-[color:var(--danger)]',
+          collapsed ? 'flex justify-center' : 'px-2',
+        )}
       >
-        Milestones unavailable
+        {collapsed ? <Flag size={16} /> : 'Milestones unavailable'}
       </div>
     );
   }
 
   if (milestones.length === 0) {
     return (
-      <div data-testid="milestone-selector" className="px-2 text-[11.5px] text-fg-4">
-        No milestones
+      <div
+        data-testid="milestone-selector"
+        className={cn('text-[11.5px] text-fg-4', collapsed ? 'flex justify-center' : 'px-2')}
+      >
+        {collapsed ? <Flag size={16} /> : 'No milestones'}
       </div>
+    );
+  }
+
+  if (collapsed) {
+    return (
+      <Popover.Root>
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            data-testid="milestone-selector"
+            title={activeMilestone ? `Milestone: ${activeMilestone.title}` : 'Select milestone'}
+            className="flex items-center justify-center w-9 h-9 mx-auto rounded-md text-fg-3 hover:text-fg hover:bg-bg-hover transition-colors"
+          >
+            <Flag size={16} />
+          </button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content
+            side="right"
+            sideOffset={8}
+            className="z-50 min-w-[200px] bg-bg-elev border border-line rounded-lg shadow-lg p-1.5 outline-none"
+          >
+            <p className="text-[10px] uppercase tracking-wider text-fg-4 px-2 py-1">Milestone</p>
+            {milestones.map((m) => (
+              <button
+                type="button"
+                key={m.id}
+                onClick={() => {
+                  void setActiveNumber(m.number);
+                  navigate(`/projects/${slug}`);
+                }}
+                className={cn(
+                  'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12.5px] transition-colors text-left',
+                  m.number === activeNumber
+                    ? 'bg-accent-soft text-fg'
+                    : 'text-fg-2 hover:text-fg hover:bg-bg-hover',
+                )}
+              >
+                <span className="truncate">
+                  {m.title}
+                  {m.isActive ? '' : ' (closed)'}
+                </span>
+              </button>
+            ))}
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
     );
   }
 

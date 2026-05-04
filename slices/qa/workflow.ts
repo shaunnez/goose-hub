@@ -5,6 +5,7 @@ import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { DEFAULT_MAX_RETRIES, shouldEscalateQa } from '@goose-hub/core/retry/retry-counter.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
@@ -83,7 +84,7 @@ export async function runQaWorkflow(
       freshContext: true,
       toolBundles: ['read', 'shell', 'validate'],
       toolExtras: [],
-      budgets: { maxTurns: 50, maxBudgetUsd: 0.5, timeoutMs: 300_000 },
+      budgets: { maxTurns: 50, maxBudgetUsd: 5, timeoutMs: 600_000 },
       personaId,
       outputJsonSchema: qaJsonSchema,
       appendSystemPrompt: qaPrompt,
@@ -169,8 +170,15 @@ export async function runQaWorkflow(
       workItem.externalId,
       `**QA ${qaOutput.verdict}** — score ${scoreLabel}\n\nVerdict: ${qaOutput.verdict} → ${nextState}`,
     );
+    accumulatePersonaStats({
+      personaName: personaId,
+      role: 'qa',
+      outcome: passes ? 'success' : 'failure',
+      qualityScore: qaOutput.overallScore / 100,
+    });
     await stateSource.transitionState(workItem.externalId, 'factory:needs-qa', nextState);
   } catch (err) {
+    accumulatePersonaStats({ personaName: personaId, role: 'qa', outcome: 'failure' });
     const error = err instanceof Error ? err : new Error(String(err));
     eventStore.appendEvent({
       projectId,

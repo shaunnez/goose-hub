@@ -9,6 +9,7 @@ afterEach(cleanup);
 
 vi.mock('@/lib/api', () => ({
   fetchIssueDiff: vi.fn(),
+  fetchEvents: vi.fn().mockResolvedValue([]),
 }));
 
 function render_(jsx: React.ReactNode) {
@@ -40,11 +41,13 @@ describe('CodeDiffSection (#185)', () => {
       expect(screen.getByTestId('code-diff-pre')).toBeTruthy();
     });
     const pre = screen.getByTestId('code-diff-pre');
-    expect(pre.textContent).toContain('diff --git');
-    expect(pre.textContent).toContain('+new line');
-    expect(pre.textContent).toContain('-old line');
+    // New design: lines are in separate columns — content without +/- prefix
+    expect(pre.textContent).toContain('new line');
+    expect(pre.textContent).toContain('old line');
+    // Hunk header is shown in the diff viewer
+    expect(pre.textContent).toContain('@@ -1,2 +1,2 @@');
     // The runId is shown truncated to 8 chars in the header.
-    expect(screen.getByText(/run: run-abc1/)).toBeTruthy();
+    expect(screen.getByText(/run:run-abc1/)).toBeTruthy();
   });
 
   it('shows the empty state for an empty-string diff', async () => {

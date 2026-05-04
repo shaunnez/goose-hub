@@ -56,8 +56,9 @@ function resolveBinary(name: string): string {
 /**
  * Extracts a JSON value from a result string.
  * Handles direct JSON and markdown-fenced JSON blocks (```json ... ```).
+ * Returns the raw string when parsing fails — callers must handle this case.
  */
-function extractResultJson(text: string): unknown {
+function extractResultJson(text: string, runId: string): unknown {
   try {
     return JSON.parse(text);
   } catch {
@@ -71,6 +72,13 @@ function extractResultJson(text: string): unknown {
       /* continue */
     }
   }
+  // Could not parse as JSON — return raw string so the schema validator
+  // surfaces a clear type error. Log the preview here so the raw output
+  // is visible in server logs even if the caller's error message is truncated.
+  const preview = text.slice(0, 800);
+  console.error(
+    `[agent-runtime] extractResultJson fallback to raw string runId=${runId} preview=${JSON.stringify(preview)}`,
+  );
   return text;
 }
 
@@ -225,9 +233,11 @@ export class ClaudeCliRuntime implements AgentRuntime {
 
         // --output-format json produces a single JSON envelope:
         // { is_error: bool, result: string, session_id: string, ... }
-        let envelope: { is_error: boolean; result: string } | undefined;
+        let envelope:
+          | { is_error: boolean; result: string | null; subtype?: string; errors?: string[] }
+          | undefined;
         try {
-          envelope = JSON.parse(stdout) as { is_error: boolean; result: string };
+          envelope = JSON.parse(stdout) as typeof envelope;
         } catch {
           /* not valid JSON — fall through to exit-code check */
         }
@@ -254,7 +264,12 @@ export class ClaudeCliRuntime implements AgentRuntime {
             payload: { runId, exitCode: code },
             runId,
           });
-          const detail = envelope.result ?? (stderr.trim() || 'no detail available');
+          const detail =
+            envelope.result ??
+            envelope.errors?.join('; ') ??
+            (envelope.subtype != null ? `subtype: ${envelope.subtype}` : null) ??
+            (stderr.trim() || null) ??
+            'no detail available';
           reject(new Error(`Claude reported an error: ${detail}`));
           return;
         }
@@ -263,12 +278,12 @@ export class ClaudeCliRuntime implements AgentRuntime {
           projectId,
           workItemId,
           kind: 'agent.run-completed',
-          payload: { runId },
+          payload: { runId, skill: spec.skill },
           runId,
         });
 
         resolve({
-          output: extractResultJson(envelope?.result ?? stdout),
+          output: extractResultJson(envelope?.result ?? stdout, runId),
           decisionSummaries: [],
           events: eventStore.replay({ runId }),
         });

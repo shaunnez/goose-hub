@@ -8,6 +8,7 @@ import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { cleanupWorktree, createWorktree } from '@goose-hub/core/workspaces/worktree.js';
 import { EvidencePostSchema } from '@goose-hub/skills/evidence-post/schema.js';
@@ -23,6 +24,17 @@ function isAdvisorGated(priority: string): priority is 'high' | 'critical' {
   return priority === 'high' || priority === 'critical';
 }
 
+function resolveBaseBranch(repoPath: string): string {
+  try {
+    return execFileSync('git', ['symbolic-ref', '--short', 'HEAD'], {
+      cwd: repoPath,
+      encoding: 'utf8',
+    }).trim();
+  } catch {
+    return 'main';
+  }
+}
+
 export interface FixIssueDeps {
   /** Override the runtime (used by tests). Defaults to ClaudeCliRuntime. */
   runtime?: AgentRuntime;
@@ -36,6 +48,8 @@ export interface FixIssueDeps {
   cleanupWorktreeImpl?: typeof cleanupWorktree;
   /** Override resolveWorktreeHeadSha (used by tests to avoid real git subprocess). */
   resolveWorktreeHeadShaImpl?: typeof resolveWorktreeHeadSha;
+  /** Override resolveBaseBranch (used by tests to avoid real git subprocess). */
+  resolveBaseBranchImpl?: (repoPath: string) => string;
 }
 
 /**
@@ -71,6 +85,7 @@ export async function runFixIssueWorkflow(
   const createWtFn = deps.createWorktreeImpl ?? createWorktree;
   const cleanupWtFn = deps.cleanupWorktreeImpl ?? cleanupWorktree;
   const resolveHeadShaFn = deps.resolveWorktreeHeadShaImpl ?? resolveWorktreeHeadSha;
+  const resolveBaseBranchFn = deps.resolveBaseBranchImpl ?? resolveBaseBranch;
 
   const implementPrompt = readPrompt('implement');
   const implementJsonSchema = toJsonSchema(ImplementSchema);
@@ -78,6 +93,7 @@ export async function runFixIssueWorkflow(
   const evidencePostJsonSchema = toJsonSchema(EvidencePostSchema);
 
   const implementPersonaId = selectPersona(projectId, 'developer');
+  const baseBranch = resolveBaseBranchFn(targetRepo);
   const worktreePath = createWtFn(targetRepo, runId);
 
   try {
@@ -131,6 +147,11 @@ export async function runFixIssueWorkflow(
           'factory:in-progress',
           'factory:needs-human',
         );
+        accumulatePersonaStats({
+          personaName: implementPersonaId,
+          role: 'developer',
+          outcome: 'failure',
+        });
         return;
       }
 
@@ -148,11 +169,17 @@ export async function runFixIssueWorkflow(
           targetRepo,
           runId,
           worktreePath,
+          baseBranch,
           openPRFn,
           runtime,
           evidencePostPrompt,
           evidencePostJsonSchema,
           resolveHeadShaFn,
+        });
+        accumulatePersonaStats({
+          personaName: implementPersonaId,
+          role: 'developer',
+          outcome: 'success',
         });
         return;
       }
@@ -181,13 +208,24 @@ export async function runFixIssueWorkflow(
       targetRepo,
       runId,
       worktreePath,
+      baseBranch,
       openPRFn,
       runtime,
       evidencePostPrompt,
       evidencePostJsonSchema,
       resolveHeadShaFn,
     });
+    accumulatePersonaStats({
+      personaName: implementPersonaId,
+      role: 'developer',
+      outcome: 'success',
+    });
   } catch (err) {
+    accumulatePersonaStats({
+      personaName: implementPersonaId,
+      role: 'developer',
+      outcome: 'failure',
+    });
     const error = err instanceof Error ? err : new Error(String(err));
     eventStore.appendEvent({
       projectId,
@@ -273,7 +311,13 @@ async function runImplement(input: RunImplementInput): Promise<ImplementOutputSh
 
   const parsed = ImplementSchema.safeParse(result.output);
   if (!parsed.success) {
-    throw new Error(`implement output validation failed: ${JSON.stringify(parsed.error.issues)}`);
+    const rawPreview =
+      typeof result.output === 'string'
+        ? (result.output as string).slice(0, 800)
+        : JSON.stringify(result.output).slice(0, 800);
+    throw new Error(
+      `implement output validation failed: ${JSON.stringify(parsed.error.issues)}\nRaw output (first 800 chars): ${rawPreview}`,
+    );
   }
   return parsed.data;
 }
@@ -286,6 +330,7 @@ interface AfterImplementInput {
   targetRepo: string;
   runId: string;
   worktreePath: string;
+  baseBranch: string;
   openPRFn: typeof openPR;
   runtime: AgentRuntime;
   evidencePostPrompt: string;
@@ -335,6 +380,7 @@ async function afterImplement(input: AfterImplementInput): Promise<void> {
     title,
     body,
     branchName,
+    baseBranch: input.baseBranch,
     token,
   });
 
@@ -345,6 +391,11 @@ async function afterImplement(input: AfterImplementInput): Promise<void> {
     payload: { prNumber: prResult.prNumber, prUrl: prResult.prUrl, branch: prResult.branch },
     runId,
   });
+
+  await stateSource.comment(
+    workItem.externalId,
+    `PR #${prResult.prNumber} opened: ${prResult.prUrl}\n\nTransitioning to \`factory:needs-qa\`.`,
+  );
 
   // Step 6: evidence-post wiring (#234) — best-effort.
   // Resolve the worktree HEAD to the real commit SHA so evidence-post pins

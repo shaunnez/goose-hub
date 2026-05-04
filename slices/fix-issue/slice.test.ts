@@ -8,6 +8,10 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
 vi.mock('@goose-hub/core/agent-runtime/select-persona.js', () => ({
   selectPersona: vi.fn().mockReturnValue('proj/developer/0'),
 }));
+const mockAccumulatePersonaStats = vi.fn();
+vi.mock('@goose-hub/core/persona/accumulate.js', () => ({
+  accumulatePersonaStats: (...args: unknown[]) => mockAccumulatePersonaStats(...args),
+}));
 vi.mock('@goose-hub/core/agent-runtime/schema-bridge.js', () => ({
   toJsonSchema: vi.fn().mockReturnValue({}),
 }));
@@ -105,6 +109,7 @@ function makeImplementOutput(overrides: Record<string, unknown> = {}) {
 describe('runFixIssueWorkflow — default deps (lines 68-73 ?? fallbacks)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAccumulatePersonaStats.mockClear();
     process.env.GITHUB_TOKEN = 'ghp_test';
     mockClaudeCliRun.mockResolvedValueOnce({
       output: makeImplementOutput(),
@@ -139,6 +144,7 @@ describe('runFixIssueWorkflow — default deps (lines 68-73 ?? fallbacks)', () =
 describe('runFixIssueWorkflow (#183)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAccumulatePersonaStats.mockClear();
     process.env.GITHUB_TOKEN = 'ghp_test';
   });
 
@@ -207,6 +213,11 @@ describe('runFixIssueWorkflow (#183)', () => {
       .mocked(eventStore.appendEvent)
       .mock.calls.find(([e]) => e.kind === 'pr.opened');
     expect(opened).toBeDefined();
+    expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
+      personaName: 'proj/developer/0',
+      role: 'developer',
+      outcome: 'success',
+    });
   });
 
   it('priority:high — advisor proceed verdict short-circuits to PR (no re-spawn)', async () => {
@@ -246,6 +257,11 @@ describe('runFixIssueWorkflow (#183)', () => {
     expect(adviseOnPlanImpl).toHaveBeenCalledTimes(1);
     expect(runtime.run).toHaveBeenCalledTimes(1); // implement once; advisor proceed → no re-spawn
     expect(openPRImpl).toHaveBeenCalled();
+    expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
+      personaName: 'proj/developer/0',
+      role: 'developer',
+      outcome: 'success',
+    });
   });
 
   it('priority:critical — advisor revise verdict re-spawns implement once with feedback', async () => {
@@ -336,6 +352,11 @@ describe('runFixIssueWorkflow (#183)', () => {
       'factory:in-progress',
       'factory:needs-human',
     );
+    expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
+      personaName: 'proj/developer/0',
+      role: 'developer',
+      outcome: 'failure',
+    });
   });
 
   it('on implement failure: emits agent.run-failed and transitions to needs-human', async () => {
@@ -371,6 +392,11 @@ describe('runFixIssueWorkflow (#183)', () => {
       'factory:needs-human',
     );
     expect(cleanupWorktreeImpl).toHaveBeenCalled();
+    expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
+      personaName: 'proj/developer/0',
+      role: 'developer',
+      outcome: 'failure',
+    });
   });
 
   it('emits one agent.decision-summary per implement summary + agent.implement-complete (#206 pattern)', async () => {
@@ -428,6 +454,7 @@ describe('runFixIssueWorkflow (#183)', () => {
 describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAccumulatePersonaStats.mockClear();
     process.env.GITHUB_TOKEN = 'ghp_test';
   });
 

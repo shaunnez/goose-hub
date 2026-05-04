@@ -128,7 +128,7 @@ export function RosterPage() {
         )}
 
         {!isLoading && !error && roles.length > 0 && (
-          <div className="flex flex-col gap-8 max-w-[600px]">
+          <div className="flex flex-col gap-8 ">
             {roles.map((role) => (
               <RoleGroup
                 key={role}

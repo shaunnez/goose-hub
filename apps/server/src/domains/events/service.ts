@@ -41,12 +41,23 @@ export interface RecordToolCallResult {
 /**
  * Records an audit event from the pre-tool-use hook (#209). Extracted
  * from the route handler so the route remains a thin delegator.
+ * Resolves projectId/workItemId from the matching agent.run-started event
+ * so SSE filters on the detail page can match these tool-call events.
  */
 export function recordToolCall(payload: ToolCallHookPayload): RecordToolCallResult {
   const runId = typeof payload.run_id === 'string' ? payload.run_id : null;
+  let projectId = 'unknown';
+  let workItemId: string | null = null;
+  if (runId != null) {
+    const startEvent = eventStore.replay({ runId }).find((e) => e.kind === 'agent.run-started');
+    if (startEvent != null) {
+      projectId = startEvent.projectId;
+      workItemId = startEvent.workItemId;
+    }
+  }
   eventStore.appendEvent({
-    projectId: 'unknown',
-    workItemId: null,
+    projectId,
+    workItemId,
     kind: 'agent.tool-call',
     payload,
     runId,

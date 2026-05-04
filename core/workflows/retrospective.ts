@@ -9,6 +9,7 @@ import { selectPersona } from '../agent-runtime/select-persona.js';
 import { db } from '../db/db.js';
 import { improvementCandidates } from '../db/schema.js';
 import { eventStore } from '../event-stream/store.js';
+import { accumulatePersonaStats } from '../persona/accumulate.js';
 import type { ImprovementCandidate } from '../retrospective/schemas.js';
 import type { StateSource, WorkItem } from '../state-source/interface.js';
 
@@ -137,8 +138,10 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
       });
     }
 
+    accumulatePersonaStats({ personaName: personaId, role: 'retrospector', outcome: 'success' });
     await stateSource.transitionState(workItem.externalId, 'factory:retrospecting', 'factory:done');
   } catch (err) {
+    accumulatePersonaStats({ personaName: personaId, role: 'retrospector', outcome: 'failure' });
     eventStore.appendEvent({
       kind: 'agent.run-failed',
       projectId,

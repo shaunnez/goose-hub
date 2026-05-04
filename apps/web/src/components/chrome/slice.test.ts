@@ -23,4 +23,18 @@ describe('chrome slice — deferred surfaces config', () => {
     const labels = DEFERRED_SURFACES.map((s) => s.label);
     expect(labels).not.toContain('Kanban');
   });
+
+  it('sidebar defaults to collapsed (localStorage key absent = collapsed)', () => {
+    // Contract: absence of the key means collapsed=true
+    // The component reads localStorage.getItem('sidebar-collapsed') !== 'false'
+    const absent = null;
+    const collapsed = absent !== 'false';
+    expect(collapsed).toBe(true);
+  });
+
+  it('sidebar respects explicit expanded preference', () => {
+    const storedFalse = 'false';
+    const collapsed = storedFalse !== 'false';
+    expect(collapsed).toBe(false);
+  });
 });

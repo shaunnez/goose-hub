@@ -16,6 +16,7 @@ import { LeftRail } from './LeftRail';
 import { OverviewSection } from './OverviewSection';
 import { PlaywrightCaptureSection } from './PlaywrightCaptureSection';
 import { QASection } from './QASection';
+import { RetrospectiveSection } from './RetrospectiveSection';
 import { ReviewSection } from './ReviewSection';
 import { RightRail } from './RightRail';
 import { TaskHeader } from './TaskHeader';
@@ -236,7 +237,9 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
             ) : currentSection.key === 'code' ? (
               <div>
                 <CodeDiffSection projectSlug={slug} id={id} />
-                <PlaywrightCaptureSection projectSlug={slug} id={id} itemType={item?.type ?? ''} />
+                {item?.type === 'bug' && (
+                  <PlaywrightCaptureSection projectSlug={slug} id={id} itemType={item.type} />
+                )}
               </div>
             ) : currentSection.key === 'qa' ? (
               <QASection projectSlug={slug} id={id} />

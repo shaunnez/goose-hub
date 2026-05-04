@@ -2,7 +2,10 @@ import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
-  eventStore: { appendEvent: vi.fn().mockReturnValue({ id: 1 }) },
+  eventStore: {
+    appendEvent: vi.fn().mockReturnValue({ id: 1 }),
+    replay: vi.fn().mockReturnValue([]),
+  },
 }));
 vi.mock('@goose-hub/core/event-stream/sse.js', () => ({
   buildSseStream: vi.fn(),

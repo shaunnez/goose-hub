@@ -32,7 +32,7 @@ export function PlaywrightCaptureSection({
         data-testid="playwright-capture-non-bug"
         className="px-8 py-10 text-center text-fg-3 text-[13px]"
       >
-        Code captures are only available for bug issues.
+        Screen captures are only available for bug issues.
       </div>
     );
   }

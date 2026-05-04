@@ -4,6 +4,7 @@ import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { cleanupWorktree, createWorktree } from '@goose-hub/core/workspaces/worktree.js';
 import { InvestigateSchema } from '@goose-hub/skills/investigate/schema.js';
@@ -129,12 +130,14 @@ export async function runInvestigateWorkflow(
     });
 
     // Step e: Transition state
+    accumulatePersonaStats({ personaName: personaId, role: 'investigator', outcome: 'success' });
     await stateSource.transitionState(
       workItem.externalId,
       'factory:investigating',
       'factory:investigation-complete',
     );
   } catch (err) {
+    accumulatePersonaStats({ personaName: personaId, role: 'investigator', outcome: 'failure' });
     const error = err instanceof Error ? err : new Error(String(err));
 
     // Persist failure event

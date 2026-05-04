@@ -52,25 +52,33 @@ function getRunId(item: RenderItem): string | null {
 }
 
 function groupByRunId(items: RenderItem[]): RenderItem[] {
-  const result: RenderItem[] = [];
-  let i = 0;
-  while (i < items.length) {
-    const runId = getRunId(items[i]);
+  // Pass 1: collect all items per runId (order preserved).
+  const byRunId = new Map<string, RenderItem[]>();
+  for (const item of items) {
+    const runId = getRunId(item);
     if (runId != null) {
-      const group: RenderItem[] = [items[i]];
-      i++;
-      while (i < items.length && getRunId(items[i]) === runId) {
-        group.push(items[i]);
-        i++;
-      }
+      const group = byRunId.get(runId) ?? [];
+      group.push(item);
+      byRunId.set(runId, group);
+    }
+  }
+
+  // Pass 2: walk original list; emit full group on first occurrence, skip rest.
+  const seen = new Set<string>();
+  const result: RenderItem[] = [];
+  for (const item of items) {
+    const runId = getRunId(item);
+    if (runId != null) {
+      if (seen.has(runId)) continue;
+      seen.add(runId);
+      const group = byRunId.get(runId) ?? [];
       if (group.length > 1) {
         result.push({ kind: 'run-group', runId, items: group });
       } else {
         result.push(...group);
       }
     } else {
-      result.push(items[i]);
-      i++;
+      result.push(item);
     }
   }
   return result;

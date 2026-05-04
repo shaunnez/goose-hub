@@ -5,6 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // ─── module mocks ─────────────────────────────────────────────────────────────
 
 const mockRun = vi.fn();
+const mockAccumulatePersonaStats = vi.fn();
+vi.mock('@goose-hub/core/persona/accumulate.js', () => ({
+  accumulatePersonaStats: (...args: unknown[]) => mockAccumulatePersonaStats(...args),
+}));
 
 vi.mock('@goose-hub/core/agent-runtime/claude-cli.js', () => ({
   ClaudeCliRuntime: vi.fn().mockImplementation(() => ({ run: mockRun })),
@@ -129,6 +133,7 @@ beforeEach(() => {
   mockRun.mockReset();
   mockReplay.mockReset();
   mockReplay.mockReturnValue([]);
+  mockAccumulatePersonaStats.mockClear();
   vi.clearAllMocks();
 });
 
@@ -305,6 +310,12 @@ describe('runReviewWorkflow', () => {
         'factory:needs-review',
         'factory:approved',
       );
+      expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
+        personaName: 'test-project/reviewer/0',
+        role: 'reviewer',
+        outcome: 'success',
+        qualityScore: 0.9,
+      });
     });
 
     it('posts a comment on approved verdict', async () => {
@@ -333,6 +344,12 @@ describe('runReviewWorkflow', () => {
         'factory:needs-review',
         'factory:needs-fix',
       );
+      expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
+        personaName: 'test-project/reviewer/0',
+        role: 'reviewer',
+        outcome: 'failure',
+        qualityScore: 0.7,
+      });
     });
   });
 
@@ -367,6 +384,11 @@ describe('runReviewWorkflow', () => {
         'factory:needs-review',
         'factory:needs-human',
       );
+      expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
+        personaName: 'test-project/reviewer/0',
+        role: 'reviewer',
+        outcome: 'failure',
+      });
     });
 
     it('posts a comment with error message on runtime error', async () => {

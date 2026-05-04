@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { type AgentEvent, eventStore } from '@goose-hub/core/event-stream/store.js';
 import { STATES } from '@goose-hub/core/state-machine/states.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { isLegalTransition, legalTargets } from '@goose-hub/core/state-machine/transitions.js';
@@ -174,7 +174,9 @@ export async function rejectIssue(
 export async function getIssueWorktreeDiff(
   slug: string,
   id: string,
+  opts?: { fetchImpl?: typeof fetch },
 ): Promise<Result<{ diff: string | null; runId: string | null; reason?: string }>> {
+  const fetchImpl = opts?.fetchImpl ?? fetch;
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
   if (!isValidSlug(slug)) return { ok: false, error: 'invalid slug', status: 400 };
@@ -203,6 +205,8 @@ export async function getIssueWorktreeDiff(
 
   const worktreePath = join(homedir(), '.factory', 'workspaces', runId);
   if (!existsSync(worktreePath)) {
+    const prDiff = await tryGitHubPrDiff(ascending, repoRef, fetchImpl);
+    if (prDiff != null) return { ok: true, data: { diff: prDiff, runId } };
     return {
       ok: true,
       data: { diff: null, runId, reason: 'worktree not found (cleaned up or pre-creation)' },
@@ -210,6 +214,8 @@ export async function getIssueWorktreeDiff(
   }
 
   if (!existsSync(join(worktreePath, '.git'))) {
+    const prDiff = await tryGitHubPrDiff(ascending, repoRef, fetchImpl);
+    if (prDiff != null) return { ok: true, data: { diff: prDiff, runId } };
     return {
       ok: true,
       data: {
@@ -221,12 +227,20 @@ export async function getIssueWorktreeDiff(
   }
 
   try {
-    const diff = execFileSync('git', ['diff', 'HEAD'], {
+    const diff = execFileSync('git', ['diff', 'HEAD', '--', '.', ':(exclude).claude/'], {
       cwd: worktreePath,
       encoding: 'utf8',
       maxBuffer: 4 * 1024 * 1024,
     });
-    return { ok: true, data: { diff, runId } };
+    if (diff.length > 0) return { ok: true, data: { diff, runId } };
+    // Worktree exists but all changes are committed (e.g. PR already opened).
+    // Fall through to the GitHub PR diff.
+    const prDiff = await tryGitHubPrDiff(ascending, repoRef, fetchImpl);
+    if (prDiff != null) return { ok: true, data: { diff: prDiff, runId } };
+    return {
+      ok: true,
+      data: { diff: null, runId, reason: 'no uncommitted changes and no PR diff available' },
+    };
   } catch (err) {
     return {
       ok: true,
@@ -236,6 +250,37 @@ export async function getIssueWorktreeDiff(
         reason: `git diff failed: ${(err as Error).message}`,
       },
     };
+  }
+}
+
+async function tryGitHubPrDiff(
+  ascending: AgentEvent[],
+  repo: string,
+  fetchImpl: typeof fetch,
+): Promise<string | null> {
+  const token = process.env.GITHUB_TOKEN ?? '';
+  if (token.length === 0) return null;
+  const prEvent = [...ascending]
+    .reverse()
+    .find(
+      (e) =>
+        e.kind === 'pr.opened' &&
+        typeof (e.payload as Record<string, unknown>)?.prNumber === 'number',
+    );
+  if (prEvent == null) return null;
+  const prNumber = (prEvent.payload as { prNumber: number }).prNumber;
+  try {
+    const res = await fetchImpl(`https://api.github.com/repos/${repo}/pulls/${prNumber}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github.v3.diff',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    });
+    if (!res.ok) return null;
+    return res.text();
+  } catch {
+    return null;
   }
 }
 

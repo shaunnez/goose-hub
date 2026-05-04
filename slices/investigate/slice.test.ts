@@ -7,6 +7,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // Single shared mock for the runtime run fn — reset in beforeEach
 const mockRun = vi.fn();
 
+const mockAccumulatePersonaStats = vi.fn();
+vi.mock('@goose-hub/core/persona/accumulate.js', () => ({
+  accumulatePersonaStats: (...args: unknown[]) => mockAccumulatePersonaStats(...args),
+}));
+
 vi.mock('@goose-hub/core/agent-runtime/claude-cli.js', () => ({
   ClaudeCliRuntime: vi.fn().mockImplementation(() => ({ run: mockRun })),
 }));
@@ -121,6 +126,7 @@ beforeEach(() => {
   mockRun.mockReset();
   // Clear call history on the module-level mocks so per-test counts are accurate.
   vi.clearAllMocks();
+  mockAccumulatePersonaStats.mockClear();
   // Re-set mockRun after clearAllMocks since clearAllMocks doesn't remove implementations
   // but does reset the cleared call counters — the mockReset above already cleared the queue.
 });
@@ -204,6 +210,11 @@ describe('runInvestigateWorkflow', () => {
         'factory:investigating',
         'factory:investigation-complete',
       );
+      expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
+        personaName: 'test-project/investigator/0',
+        role: 'investigator',
+        outcome: 'success',
+      });
     });
 
     it('always cleans up the worktree via finally block', async () => {
@@ -351,6 +362,11 @@ describe('runInvestigateWorkflow', () => {
         'factory:investigating',
         'factory:needs-human',
       );
+      expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
+        personaName: 'test-project/investigator/0',
+        role: 'investigator',
+        outcome: 'failure',
+      });
     });
 
     it('posts a GitHub comment on failure', async () => {
