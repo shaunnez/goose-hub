@@ -214,6 +214,17 @@ export async function promoteInboxItem(
   await postJson(`/inbox/${id}/promote`, { projectSlug, milestoneNumber });
 }
 
+export async function deleteInboxItem(id: number): Promise<void> {
+  const res = await fetch(`/api/inbox/${id}`, {
+    method: 'DELETE',
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`DELETE /inbox/${id} failed: ${res.status} ${res.statusText} ${text}`);
+  }
+}
+
 export async function transitionState(
   slug: string,
   id: string,

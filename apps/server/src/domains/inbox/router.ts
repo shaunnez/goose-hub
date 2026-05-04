@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { parseBody } from '../../shared/middleware.js';
-import { createInboxItem, getInboxItems, promoteInboxItem } from './service.js';
+import { createInboxItem, deleteInboxItem, getInboxItems, promoteInboxItem } from './service.js';
 
 const router = new Hono();
 
@@ -29,6 +29,13 @@ router.post('/:id/promote', async (c) => {
   return result.ok
     ? c.json(result.data)
     : c.json({ error: result.error }, result.status as 400 | 404);
+});
+
+router.delete('/:id', async (c) => {
+  const id = Number(c.req.param('id'));
+  if (Number.isNaN(id)) return c.json({ error: 'invalid id' }, 400);
+  const result = await deleteInboxItem(id);
+  return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);
 });
 
 export { router as inboxRouter };
