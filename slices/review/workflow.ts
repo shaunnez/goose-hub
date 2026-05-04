@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
@@ -155,7 +156,21 @@ async function getPrDiff(workItem: WorkItem, stateSource: StateSource): Promise<
   if ('getPrDiff' in stateSource && typeof stateSource.getPrDiff === 'function') {
     return (stateSource.getPrDiff as (id: string) => Promise<string>)(workItem.externalId);
   }
-  return '';
+  // Fall back to reading prNumber from the pr.opened event and shelling out to gh.
+  const events = eventStore.replay({ workItemId: workItem.id });
+  const prOpened = events
+    .slice()
+    .reverse()
+    .find((e) => e.kind === 'pr.opened');
+  if (prOpened == null) return '';
+  const payload = prOpened.payload as Record<string, unknown>;
+  const prNumber = typeof payload.prNumber === 'number' ? payload.prNumber : undefined;
+  if (prNumber == null) return '';
+  try {
+    return execSync(`gh pr diff ${prNumber}`, { encoding: 'utf8', timeout: 30_000 });
+  } catch {
+    return '';
+  }
 }
 
 function getQaVerdict(_workItem: WorkItem): { verdict: string; overallScore: number } | undefined {
