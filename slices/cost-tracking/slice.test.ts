@@ -1,4 +1,4 @@
-import { costFromCliEnvelope } from '@goose-hub/core/cost/extract.js';
+import { costFromApiUsage, costFromCliEnvelope } from '@goose-hub/core/cost/extract.js';
 import {
   listCostsForWorkItem,
   recordCost,
@@ -115,6 +115,37 @@ describe('cost-tracking slice — end-to-end lifecycle', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].costUsd).toBe(0);
     expect(rows[0].costLabel).toBe('estimated');
+  });
+
+  it('propagates the exact label end-to-end when authoritative usage metadata is supplied', () => {
+    // Direct API integration — the caller computed the dollar figure from
+    // authoritative `usage.input_tokens` / `output_tokens`, so the row must
+    // be tagged 'exact' and read back that way.
+    const usage = costFromApiUsage({ inputTokens: 800, outputTokens: 200, costUsd: 0.018 });
+    expect(usage.costLabel).toBe('exact');
+
+    recordCost({
+      runId: 'slice-run-exact',
+      projectId: PROJECT,
+      workItemId: 'github:owner/repo#99',
+      stage: stageForSkill('review'),
+      skill: 'review',
+      modelId: 'claude-sonnet-4-6',
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      costUsd: usage.costUsd,
+      costLabel: usage.costLabel,
+      personaId: null,
+    });
+
+    const rows = listCostsForWorkItem('github:owner/repo#99');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].costLabel).toBe('exact');
+
+    // Aggregations must reflect that the project window has at least one
+    // exact row → `hasEstimated` flips to false when the row is exact.
+    const totals = totalsForProjectSince(PROJECT, '1970-01-01T00:00:00Z');
+    expect(totals.hasEstimated).toBe(false);
   });
 
   it('is idempotent on runId — replay does not double-count', () => {
