@@ -42,6 +42,12 @@ export type AgentSpec<R extends RoleSpec = RoleSpec> = {
   outputJsonSchema?: Record<string, unknown>;
   /** Skill's prompt.md content, passed via --append-system-prompt */
   appendSystemPrompt?: string;
+  /**
+   * Override the workspace directory for this run. When provided, the runtime
+   * uses this path as CWD instead of deriving ~/.factory/workspaces/<runId>/.
+   * Used by QA to reuse the dev agent's worktree rather than creating a fresh one.
+   */
+  workspaceDir?: string;
 };
 
 export interface AgentResult {

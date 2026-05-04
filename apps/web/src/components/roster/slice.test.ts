@@ -69,11 +69,14 @@ describe('roster — fetchPersonaCandidates', () => {
     const mockCandidates = [
       {
         id: 1,
+        projectId: 'goose-hub',
         personaName: 'goose-hub-self/retrospector/0',
         sourceTaskId: 'task-1',
         suggestionText: 'Improve error handling',
         suggestionType: 'skill-prompt',
         status: 'pending',
+        githubIssueUrl: null,
+        errorNote: null,
         createdAt: '2026-05-01T00:00:00Z',
       },
     ];
@@ -106,11 +109,14 @@ describe('roster — approveCandidateById', () => {
     const { approveCandidateById } = await import('@/lib/api');
     vi.mocked(approveCandidateById).mockResolvedValue({
       id: 1,
+      projectId: 'goose-hub',
       personaName: 'alice',
       sourceTaskId: null,
       suggestionText: 'Add retries',
       suggestionType: 'skill-config',
       status: 'approved',
+      githubIssueUrl: null,
+      errorNote: null,
       createdAt: '2026-05-01T00:00:00Z',
     });
     const result = await approveCandidateById(1);

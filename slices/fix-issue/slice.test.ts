@@ -136,8 +136,8 @@ describe('runFixIssueWorkflow — default deps (lines 68-73 ?? fallbacks)', () =
     expect(mockCreateWorktree).toHaveBeenCalledWith('/repo', expect.any(String));
     // openPR was called (default openPR dep)
     expect(mockOpenPR).toHaveBeenCalled();
-    // cleanupWorktree was called (default cleanup dep)
-    expect(mockCleanupWorktree).toHaveBeenCalled();
+    // worktree persists until merge — NOT cleaned up after PR open
+    expect(mockCleanupWorktree).not.toHaveBeenCalled();
   });
 });
 
@@ -207,12 +207,16 @@ describe('runFixIssueWorkflow (#183)', () => {
       'factory:in-progress',
       'factory:needs-qa',
     );
-    expect(cleanupWorktreeImpl).toHaveBeenCalled();
-    // pr.opened event recorded
+    // worktree persists until merge — NOT cleaned up after PR open
+    expect(cleanupWorktreeImpl).not.toHaveBeenCalled();
+    // pr.opened event recorded with worktreePath and devRunId for QA and merge cleanup
     const opened = vi
       .mocked(eventStore.appendEvent)
       .mock.calls.find(([e]) => e.kind === 'pr.opened');
     expect(opened).toBeDefined();
+    const openedPayload = opened?.[0].payload as Record<string, unknown>;
+    expect(openedPayload).toHaveProperty('worktreePath');
+    expect(openedPayload).toHaveProperty('devRunId');
     expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
       personaName: 'proj/developer/0',
       role: 'developer',

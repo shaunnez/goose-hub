@@ -672,6 +672,7 @@ function renderItem(item: RenderItem, idx: number) {
     );
   }
   const { event } = item;
+
   switch (event.kind) {
     case 'agent.spawned':
       return <AgentSpawnedEvent key={event.id} event={event} />;
@@ -725,26 +726,32 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
   const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
+  console.log(729, events, loading, error)
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
     fetchEvents(projectSlug, id)
       .then((list) => {
+        console.log(736, 'fetch', cancelled)
         if (cancelled) return;
         // Server returns ascending; render newest first.
         const sorted = [...list].sort(
           (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
         );
+        console.log(742, 'sorted', sorted)
         setEvents(sorted);
+        console.log(744, 'loading false')
         setLoading(false);
       })
       .catch((err: Error) => {
+        console.log(748, 'error', error)
         if (cancelled) return;
         setError(err.message);
         setLoading(false);
       });
     return () => {
+      console.log('deaded')
       cancelled = true;
     };
   }, [projectSlug, id]);
@@ -780,9 +787,11 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
     };
   }, [projectSlug, workItemId]);
 
+  console.log('784', loading)
   if (loading) {
     return <div className="px-8 py-6 text-fg-3">Loading timeline…</div>;
   }
+
   if (error != null) {
     return (
       <div className="px-8 py-6 text-[color:var(--danger)]">Couldn't load timeline: {error}</div>
@@ -799,6 +808,7 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
 
   const items = groupEvents(events);
 
+  console.log(802, items)
   return (
     <div data-testid="timeline-section" className="px-8 py-6">
       <ol className="flex flex-col gap-3">{items.map((item, idx) => renderItem(item, idx))}</ol>

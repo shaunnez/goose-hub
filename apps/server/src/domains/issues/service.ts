@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { type AgentEvent, eventStore } from '@goose-hub/core/event-stream/store.js';
+import { cleanupWorktree } from '@goose-hub/core/workspaces/worktree.js';
 import { STATES } from '@goose-hub/core/state-machine/states.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { isLegalTransition, legalTargets } from '@goose-hub/core/state-machine/transitions.js';
@@ -121,6 +122,15 @@ export async function approveIssue(
     kind: 'pr.merged',
     payload: { prNumber, sha: merged.sha },
   });
+
+  // Clean up the dev worktree now that the PR is merged.
+  const allEvents = eventStore.replay({ workItemId });
+  const prOpenedEvent = allEvents.slice().reverse().find((e) => e.kind === 'pr.opened');
+  if (prOpenedEvent != null) {
+    const { devRunId } = prOpenedEvent.payload as { devRunId?: string };
+    if (typeof devRunId === 'string') cleanupWorktree(devRunId);
+  }
+
   await source.transitionState(id, 'factory:approved', 'factory:done');
   await source.comment(id, `Approved via Goose Hub UI; PR #${prNumber} merged (${merged.sha}).`);
 

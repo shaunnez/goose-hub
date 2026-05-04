@@ -64,7 +64,7 @@ export function GatePendingBanner({
 
   const { data: events = [] } = useQuery({
     queryKey: ['events', projectSlug, id],
-    queryFn: () => fetchEvents(projectSlug!, id!),
+    queryFn: () => fetchEvents(projectSlug ?? '', id ?? ''),
     enabled: isNeedsHuman && !!projectSlug && !!id,
   });
 

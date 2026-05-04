@@ -240,9 +240,11 @@ export async function runFixIssueWorkflow(
       'factory:in-progress',
       'factory:needs-human',
     );
-  } finally {
+    // Error path: no PR was opened, no merge is coming — clean up now.
     cleanupWtFn(runId);
   }
+  // Success path: worktree persists until PR merge so QA can run in the same environment.
+  // Cleanup happens in approveIssue() when the PR is merged.
 }
 
 interface RunImplementInput {
@@ -388,7 +390,13 @@ async function afterImplement(input: AfterImplementInput): Promise<void> {
     projectId,
     workItemId: workItem.id,
     kind: 'pr.opened',
-    payload: { prNumber: prResult.prNumber, prUrl: prResult.prUrl, branch: prResult.branch },
+    payload: {
+      prNumber: prResult.prNumber,
+      prUrl: prResult.prUrl,
+      branch: prResult.branch,
+      worktreePath,
+      devRunId: runId,
+    },
     runId,
   });
 

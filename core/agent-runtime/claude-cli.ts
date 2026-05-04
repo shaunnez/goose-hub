@@ -90,7 +90,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
 
     const jsonSchema = spec.outputJsonSchema;
     const { runId } = spec;
-    const workspaceDir = join(WORKSPACES_DIR, runId);
+    const workspaceDir = spec.workspaceDir ?? join(WORKSPACES_DIR, runId);
 
     // Bootstrap workspace
     mkdirSync(workspaceDir, { recursive: true });
@@ -170,7 +170,12 @@ export class ClaudeCliRuntime implements AgentRuntime {
           : {
               USER: process.env.USER ?? '',
               TMPDIR: process.env.TMPDIR ?? '/tmp',
-              PATH: '/usr/local/bin:/usr/bin:/bin',
+              // /opt/homebrew/bin first so Apple Silicon Homebrew tools (pnpm, gh) resolve
+              // before any shadowing entries in /usr/local/bin.
+              PATH:
+                process.platform === 'darwin'
+                  ? '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin'
+                  : '/usr/local/bin:/usr/bin:/bin',
             }),
         FACTORY_RUN_ALLOWLIST: allowedTools.join(','),
         FACTORY_RUN_ID: runId,

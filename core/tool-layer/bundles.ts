@@ -15,6 +15,20 @@ export const TOOL_BUNDLES = {
    */
   'dev-tools': ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'],
   /**
+   * QA holdout bundle. Read-only access plus scoped bash for running test/lint
+   * commands inside the dev worktree. No Write/Edit — QA must not modify files.
+   */
+  'qa-tools': [
+    'Read',
+    'Glob',
+    'Grep',
+    'Bash(pnpm test*)',
+    'Bash(pnpm --filter*)',
+    'Bash(pnpm biome*)',
+    'Bash(pnpm typecheck*)',
+    'Bash(pnpm lint*)',
+  ],
+  /**
    * Playwright validation bundle. Used by skills that run e2e specs and
    * commit/push evidence artefacts (skills/playwright-repro, skills/evidence-post).
    * Bash patterns scoped to test invocation, evidence I/O, and git push of evidence.

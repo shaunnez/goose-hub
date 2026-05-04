@@ -58,6 +58,7 @@ Purpose: Catch behavior regressions and missing test coverage.
 Steps:
 1. Run `testCommand`. If `sliceTests` are provided, run those first for targeted feedback.
 2. Check test output for failures, errors, and skipped tests.
+   **Known worktree noise — do not report as findings:** Test files that fail with `ERR_DLOPEN_FAILED` or `Error: The module ... better-sqlite3 ...` are caused by the native module not being rebuilt for the worktree's Node version. These are pre-existing environment failures, not regressions introduced by the PR. Filter them out before assessing pass/fail. If ALL failures are of this type, record an `info`-severity finding noting the sqlite noise and mark the tier passed.
 3. Read the diff and verify that the changed behavior is covered by tests in the PR.
 4. Check that every acceptance criterion in `workItem.body` is addressed — either by a passing test or by observable code change.
 5. Verify that new functions, schemas, or modules have corresponding tests.
@@ -300,3 +301,4 @@ Optional fields without a value should be OMITTED, not set to `null`. In particu
 - Score quality honestly. A score of 65 with a clear explanation is more useful than an inflated 80.
 - The threshold is 70. A score of 70 is a pass. A score of 69 is a fail on quality alone.
 - If you cannot run a command (e.g., the shell is unavailable), record it as an `info`-severity finding and proceed to the next step.
+- **Workspace-bound.** You are running inside the PR's worktree. Only read files relative to the current directory. Do not navigate to absolute paths outside the worktree (no `/Users/...`, no `~/`, no `..` traversal outside the root). Do not write or edit any files.

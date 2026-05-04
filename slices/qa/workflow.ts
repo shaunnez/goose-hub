@@ -22,6 +22,14 @@ function getPrDiff(_workItem: WorkItem): string {
   return '';
 }
 
+function findDevWorktreePath(workItemId: string): string | undefined {
+  const events = eventStore.replay({ workItemId });
+  const prOpened = events.slice().reverse().find((e) => e.kind === 'pr.opened');
+  if (prOpened == null) return undefined;
+  const payload = prOpened.payload as Record<string, unknown>;
+  return typeof payload.worktreePath === 'string' ? payload.worktreePath : undefined;
+}
+
 export interface QaWorkflowDeps {
   runtime?: AgentRuntime;
 }
@@ -82,7 +90,8 @@ export async function runQaWorkflow(
       },
       contextAllowlist: ['workItem', 'prDiff', 'projectCommands'],
       freshContext: true,
-      toolBundles: ['read', 'shell', 'validate'],
+      toolBundles: ['read', 'qa-tools'],
+      workspaceDir: findDevWorktreePath(workItem.id),
       toolExtras: [],
       budgets: { maxTurns: 50, maxBudgetUsd: 5, timeoutMs: 600_000 },
       personaId,
