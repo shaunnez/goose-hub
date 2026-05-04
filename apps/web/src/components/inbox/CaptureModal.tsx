@@ -1,3 +1,4 @@
+import { MarkdownEditor } from '@/components/ui/MarkdownEditor';
 import { createInboxItem } from '@/lib/api';
 import { useState } from 'react';
 
@@ -12,6 +13,7 @@ interface CaptureModalProps {
 export function CaptureModal({ open, onClose }: CaptureModalProps) {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [bodyTab, setBodyTab] = useState<'write' | 'preview'>('write');
   const [type, setType] = useState<ItemType>('feature');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -21,6 +23,7 @@ export function CaptureModal({ open, onClose }: CaptureModalProps) {
   function reset() {
     setTitle('');
     setBody('');
+    setBodyTab('write');
     setType('feature');
     setError('');
     setSubmitting(false);
@@ -146,32 +149,26 @@ export function CaptureModal({ open, onClose }: CaptureModalProps) {
             ))}
           </select>
 
-          <label
-            htmlFor="capture-body"
-            style={{ display: 'block', fontSize: 12, color: 'var(--fg-2)', marginBottom: 4 }}
-          >
+          <div style={{ display: 'block', fontSize: 12, color: 'var(--fg-2)', marginBottom: 4 }}>
             Notes (optional)
-          </label>
-          <textarea
-            id="capture-body"
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="Any additional context…"
-            rows={3}
+          </div>
+          <div
             style={{
-              display: 'block',
-              width: '100%',
-              boxSizing: 'border-box',
-              padding: '6px 10px',
               borderRadius: 6,
               border: '1px solid var(--line)',
-              background: 'var(--bg)',
-              color: 'var(--fg)',
-              fontSize: 13,
-              resize: 'vertical',
+              overflow: 'hidden',
               marginBottom: 12,
             }}
-          />
+          >
+            <MarkdownEditor
+              value={body}
+              onChange={setBody}
+              tab={bodyTab}
+              onTabChange={setBodyTab}
+              placeholder="Any additional context…"
+              rows={3}
+            />
+          </div>
 
           {error && (
             <p style={{ fontSize: 12, color: 'var(--danger, #e05)', margin: '0 0 12px' }}>
