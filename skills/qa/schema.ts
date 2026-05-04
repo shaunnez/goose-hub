@@ -30,6 +30,27 @@ export const TierResultSchema = z.object({
  * Maximum aggregate score: 100 points.
  * Pass threshold: >= 70 points.
  */
+export const SuiteResultSchema = z.object({
+  name: z.string(),
+  filePath: z.string(),
+  total: z.number().int().min(0),
+  passed: z.number().int().min(0),
+  failed: z.number().int().min(0),
+  skipped: z.number().int().min(0),
+  durationMs: z.number().int().min(0),
+  status: z.enum(['passed', 'failed', 'skipped']),
+});
+
+export const TestRunSchema = z.object({
+  wallTimeMs: z.number().int().min(0),
+  total: z.number().int().min(0),
+  passed: z.number().int().min(0),
+  failed: z.number().int().min(0),
+  skipped: z.number().int().min(0),
+  success: z.boolean(),
+  suites: z.array(SuiteResultSchema),
+});
+
 export const QualityScoresSchema = z.object({
   /** Open/Closed principle adherence — 0–20 pts */
   openClosed: z.number().int().min(0).max(20),
@@ -68,12 +89,21 @@ export const QaOutputSchema = z.object({
   findings: z.array(FindingSchema),
   /** Per-step audit trail of QA decisions */
   decisionSummaries: z.array(DecisionSummarySchema),
+  /**
+   * Optional: structured test-run data. The QA workflow runs the test
+   * command itself and attaches this; the agent does not need to
+   * populate it (and shouldn't — it's overwritten on the workflow side
+   * after the run validates).
+   */
+  testRun: TestRunSchema.optional(),
 });
 
 export type DecisionSummary = z.infer<typeof DecisionSummarySchema>;
 export type Finding = z.infer<typeof FindingSchema>;
 export type TierResult = z.infer<typeof TierResultSchema>;
 export type QualityScores = z.infer<typeof QualityScoresSchema>;
+export type SuiteResult = z.infer<typeof SuiteResultSchema>;
+export type TestRun = z.infer<typeof TestRunSchema>;
 export type QaOutput = z.infer<typeof QaOutputSchema>;
 
 /**

@@ -87,6 +87,7 @@ The `computeOverallScore` helper in `schema.ts` sums all category values.
 | `qualityScores` | `QualityScores` | All 8 category scores |
 | `findings` | `Finding[]` | Consolidated findings across all tiers |
 | `decisionSummaries` | `DecisionSummary[]` | Per-step audit trail |
+| `testRun` | `TestRun?` | Structured test results — populated by the workflow, not the agent |
 
 `Finding`:
 

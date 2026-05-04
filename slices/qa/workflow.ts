@@ -9,7 +9,8 @@ import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { DEFAULT_MAX_RETRIES, shouldEscalateQa } from '@goose-hub/core/retry/retry-counter.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
-import { QaOutputSchema } from '@goose-hub/skills/qa/schema.js';
+import { runVitest } from '@goose-hub/core/test-runner/run-vitest.js';
+import { QaOutputSchema, type TestRun } from '@goose-hub/skills/qa/schema.js';
 
 const REPO_ROOT = join(import.meta.dirname, '../..');
 
@@ -35,6 +36,23 @@ function findDevWorktreePath(workItemId: string): string | undefined {
 
 export interface QaWorkflowDeps {
   runtime?: AgentRuntime;
+  /**
+   * Override for the test runner. Default uses `runVitest` against the
+   * configured test command. Pass a stub in tests to avoid spawning.
+   * Returning `null` (or throwing) is treated as "no testRun data" — the
+   * QA agent still runs, just without real suite numbers in its context.
+   */
+  runTests?: (cwd: string, command: string) => Promise<TestRun | null>;
+}
+
+const DEFAULT_TEST_COMMAND = 'pnpm test --run';
+
+async function defaultRunTests(cwd: string, command: string): Promise<TestRun | null> {
+  try {
+    return await runVitest({ command, cwd });
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -63,14 +81,22 @@ export async function runQaWorkflow(
 ): Promise<void> {
   const runId = crypto.randomUUID();
   const runtime = deps.runtime ?? new ClaudeCliRuntime();
+  const runTests = deps.runTests ?? defaultRunTests;
   const qaPrompt = readPrompt('qa');
   const qaJsonSchema = toJsonSchema(QaOutputSchema);
   const { personaId } = selectPersona(projectId, 'qa');
   const prDiff = getPrDiff(workItem);
+  const workspaceDir = findDevWorktreePath(workItem.id);
 
   // Snapshot prior events BEFORE this run's outcome is appended.
   // shouldEscalateQa uses this count to decide: Nth failure = N-1 priors.
   const priorEvents = eventStore.replay({ workItemId: workItem.id });
+
+  // Run tests deterministically before invoking the QA agent so the agent
+  // grades against real numbers instead of re-running the suite. Failures
+  // here are non-fatal — the agent still runs without testRun.
+  const testCommand = DEFAULT_TEST_COMMAND;
+  const testRun = workspaceDir != null ? await runTests(workspaceDir, testCommand) : null;
 
   try {
     const qaResult = await runtime.run({
@@ -87,14 +113,15 @@ export async function runQaWorkflow(
         },
         prDiff,
         projectCommands: {
-          testCommand: 'pnpm test --run',
+          testCommand,
           lintCommand: 'pnpm biome check .',
         },
+        testRun,
       },
-      contextAllowlist: ['workItem', 'prDiff', 'projectCommands'],
+      contextAllowlist: ['workItem', 'prDiff', 'projectCommands', 'testRun'],
       freshContext: true,
       toolBundles: ['read', 'qa-tools'],
-      workspaceDir: findDevWorktreePath(workItem.id),
+      workspaceDir,
       toolExtras: [],
       budgets: { maxTurns: 50, maxBudgetUsd: 5, timeoutMs: 600_000 },
       personaId,
@@ -130,6 +157,9 @@ export async function runQaWorkflow(
     }
 
     // Emit qa.completed with full payload (qualityScores included for UI and history).
+    // testRun is the workflow-captured one (deterministic), not whatever the
+    // agent might echo back — even if the schema accepts it from the agent,
+    // we trust our own measurement.
     eventStore.appendEvent({
       projectId,
       workItemId: workItem.id,
@@ -140,6 +170,7 @@ export async function runQaWorkflow(
         threshold: qaOutput.threshold,
         tierResults: qaOutput.tierResults,
         qualityScores: qaOutput.qualityScores,
+        ...(testRun ? { testRun } : {}),
       },
       runId,
     });
