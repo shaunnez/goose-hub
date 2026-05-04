@@ -204,8 +204,12 @@ export async function fetchInboxItems(): Promise<InboxItemDto[]> {
   return items;
 }
 
-export async function promoteInboxItem(id: number, projectSlug = 'goose-hub-self'): Promise<void> {
-  await postJson(`/inbox/${id}/promote`, { projectSlug });
+export async function promoteInboxItem(
+  id: number,
+  projectSlug = 'goose-hub-self',
+  milestoneNumber?: number | null,
+): Promise<void> {
+  await postJson(`/inbox/${id}/promote`, { projectSlug, milestoneNumber });
 }
 
 export async function transitionState(

@@ -33,6 +33,7 @@ export async function getInboxItems(): Promise<Result<{ items: InboxItem[] }>> {
 export async function promoteInboxItem(
   id: number,
   projectSlug: string,
+  milestoneNumber?: number | null,
 ): Promise<Result<{ ok: true }>> {
   const item = await getInboxItem(id);
   if (item == null) return { ok: false, error: 'not found', status: 404 };
@@ -40,18 +41,24 @@ export async function promoteInboxItem(
   const source = await getSourceForSlug(projectSlug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
 
-  const stateRows = db
-    .select()
-    .from(projectState)
-    .where(eq(projectState.projectId, source.projectId))
-    .all();
-  const activeMilestoneNumber = stateRows[0]?.activeMilestoneNumber ?? null;
+  // Use explicit milestone from caller; fall back to project's persisted active milestone
+  let effectiveMilestoneNumber: number | null;
+  if (milestoneNumber !== undefined) {
+    effectiveMilestoneNumber = milestoneNumber;
+  } else {
+    const stateRows = db
+      .select()
+      .from(projectState)
+      .where(eq(projectState.projectId, source.projectId))
+      .all();
+    effectiveMilestoneNumber = stateRows[0]?.activeMilestoneNumber ?? null;
+  }
 
   await source.createIssue({
     title: item.title,
     body: item.body ?? '',
     type: item.type as 'feature' | 'bug' | 'chore' | 'research',
-    ...(activeMilestoneNumber != null ? { milestoneId: String(activeMilestoneNumber) } : {}),
+    ...(effectiveMilestoneNumber != null ? { milestoneId: String(effectiveMilestoneNumber) } : {}),
   });
 
   try {
