@@ -5,7 +5,7 @@ import { getPersonaInitials, getPersonaLabel, usePersonaMap } from '@/lib/usePer
 import { timeAgo } from '@/lib/utils';
 import { useActiveProject } from '@/state/active-project';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Filter, RefreshCw } from 'lucide-react';
+// import { Filter, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import {
   CONFIDENCE_NUM,

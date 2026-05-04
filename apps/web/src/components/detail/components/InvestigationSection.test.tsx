@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 import type { AgentEventDto } from '@/lib/types';
+import { ActiveProjectProvider } from '@/state/active-project';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import { cleanup } from '@testing-library/react';
@@ -12,6 +13,16 @@ vi.mock('@/lib/api', () => ({
   fetchEvents: vi.fn().mockResolvedValue([]),
   fetchComments: vi.fn().mockResolvedValue([]),
   fetchPersonaNames: vi.fn().mockResolvedValue([]),
+  fetchProjects: vi.fn().mockResolvedValue([
+    {
+      id: 'test-proj',
+      name: 'Test Project',
+      slug: 'test-proj',
+      color: '#888888',
+      source: { kind: 'github', repo: 'owner/repo' },
+      defaultBranch: 'main',
+    },
+  ]),
   addComment: vi.fn(),
   transitionState: vi.fn(),
 }));
@@ -46,7 +57,9 @@ function renderSection(events: AgentEventDto[] = []) {
   qc.setQueryData(['events', 'test-proj', '42'], events);
   render(
     <QueryClientProvider client={qc}>
-      <InvestigationSection projectSlug="test-proj" id="42" />
+      <ActiveProjectProvider initialSlug="test-proj">
+        <InvestigationSection projectSlug="test-proj" id="42" />
+      </ActiveProjectProvider>
     </QueryClientProvider>,
   );
 }
