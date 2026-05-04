@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { MilestoneSelectorSlot } from './slots/MilestoneSelectorSlot';
 import { ProjectSwitcherSlot } from './slots/ProjectSwitcherSlot';
 
 interface SidebarItem {
@@ -129,15 +128,9 @@ export function Sidebar({ activeSlug }: SidebarProps) {
         )}
       </div>
 
-      {/* Project + Milestone */}
-      <div
-        className={cn(
-          'border-b border-line',
-          collapsed ? 'px-1.5 py-2 space-y-1' : 'px-2 py-3 space-y-3',
-        )}
-      >
+      {/* Project */}
+      <div className={cn('border-b border-line', collapsed ? 'px-1.5 py-2' : 'px-2 py-3')}>
         <ProjectSwitcherSlot activeSlug={activeSlug} collapsed={collapsed} />
-        <MilestoneSelectorSlot activeSlug={activeSlug} collapsed={collapsed} />
       </div>
 
       {/* Nav */}
