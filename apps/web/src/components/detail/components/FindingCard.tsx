@@ -6,6 +6,7 @@ interface FindingCardProps {
   title: string;
   body: React.ReactNode;
   filePath?: string;
+  viewUrl?: string;
   conf: number;
   personaInitials?: string | null;
   personaName?: string | null;
@@ -16,6 +17,7 @@ export function FindingCard({
   title,
   body,
   filePath,
+  viewUrl,
   conf,
   personaInitials,
   personaName,
@@ -64,14 +66,16 @@ export function FindingCard({
               </span>
               <span className="font-mono tnum text-fg-3">{conf.toFixed(2)}</span>
             </span>
-            {filePath != null && (
-              <button
-                type="button"
+            {filePath != null && viewUrl != null && (
+              <a
+                href={viewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 h-6 px-2 rounded border border-line text-[11px] text-fg-3 hover:text-fg hover:bg-bg-hover"
               >
                 <Code size={11} />
                 View
-              </button>
+              </a>
             )}
           </div>
         </div>

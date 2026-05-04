@@ -208,7 +208,7 @@ export function PersonaDrillIn({ persona, onClose }: PersonaDrillInProps) {
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-line">
         <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-semibold text-fg truncate">{persona.personaName}</div>
+          <div className="text-[13px] font-semibold text-fg truncate">{persona.codename ?? persona.personaName}</div>
           <div className="text-[11px] text-fg-3 capitalize">{persona.role}</div>
         </div>
         <button

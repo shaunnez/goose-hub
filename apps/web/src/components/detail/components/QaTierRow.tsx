@@ -38,7 +38,13 @@ export function QaTierRow({ tier, result, isFirst }: QaTierRowProps) {
             background: passed ? 'var(--success)' : 'var(--danger)',
           }}
         />
-        <span className="mono text-[12.5px] capitalize">{tier}</span>
+        <span className="mono text-[12.5px] capitalize">{tier} </span>
+         <span
+        className="mono tnum text-right text-[12px] text-fg-3 truncate"
+        title={result?.command ?? ''}
+      >
+        {result?.command ?? ''}
+      </span>
       </div>
       <div className="flex items-center gap-1">
         {dots.map((d) => (
@@ -57,13 +63,10 @@ export function QaTierRow({ tier, result, isFirst }: QaTierRowProps) {
       <span className="mono tnum text-right text-[12px] text-fg-2">
         {passed ? 'pass' : `${findings.length} issue${findings.length === 1 ? '' : 's'}`}
       </span>
-      <span
-        className="mono tnum text-right text-[12px] text-fg-3 truncate"
-        title={result?.command ?? ''}
-      >
-        {result?.command ?? '—'}
-      </span>
-      <span className="text-right">
+     
+      <span className="grow flex" />
+      
+      <span className="text-right ">
         <span
           className="inline-flex items-center px-2 py-0.5 rounded-full border text-[10.5px] font-medium uppercase tracking-wide"
           style={{

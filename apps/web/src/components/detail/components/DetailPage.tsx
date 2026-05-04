@@ -259,7 +259,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
             )}
           </main>
           {/* projectSlug={slug} id={id} workItemId={workItemId} */}
-          <RightRail />
+          {/* <RightRail /> */}
         </div>
       </div>
     </div>

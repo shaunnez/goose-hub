@@ -11,6 +11,7 @@ export interface ProjectSummary {
   slug: string;
   color: string;
   source: ProjectConfig['source'];
+  defaultBranch: string;
 }
 
 const PROJECTS_DIR = targetProjectsRoot;
@@ -68,6 +69,7 @@ export async function listProjects(): Promise<ProjectSummary[]> {
       slug: cfg.slug,
       color: COLOR_BY_SLUG[cfg.slug] ?? '#888888',
       source: cfg.source,
+      defaultBranch: cfg.targetRepo?.defaultBranch ?? 'main',
     });
   }
   return projects;

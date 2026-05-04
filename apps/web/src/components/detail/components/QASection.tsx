@@ -95,7 +95,7 @@ export function QASection({ projectSlug, id }: QASectionProps) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          {/* <button
             type="button"
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-line bg-bg-elev hover:bg-bg-hover text-[12px] text-fg-2"
           >
@@ -106,7 +106,7 @@ export function QASection({ projectSlug, id }: QASectionProps) {
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-accent-line bg-accent-soft hover:opacity-80 text-[12px] text-accent"
           >
             <Plus size={12} /> Add test
-          </button>
+          </button> */}
         </div>
       </div>
 

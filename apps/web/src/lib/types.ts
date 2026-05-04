@@ -4,6 +4,7 @@ export interface ProjectSummary {
   slug: string;
   color: string;
   source: { kind: string; repo: string };
+  defaultBranch?: string;
 }
 
 export interface WorkItemDto {

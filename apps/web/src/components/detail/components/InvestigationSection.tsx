@@ -3,6 +3,7 @@ import { renderMarkdownToHtml } from '@/lib/markdown';
 import type { AgentEventDto, IssueCommentDto } from '@/lib/types';
 import { getPersonaInitials, getPersonaLabel, usePersonaMap } from '@/lib/usePersonaMap';
 import { timeAgo } from '@/lib/utils';
+import { useActiveProject } from '@/state/active-project';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Filter, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
@@ -27,6 +28,12 @@ interface InvestigationSectionProps {
 export function InvestigationSection({ projectSlug, id, itemState }: InvestigationSectionProps) {
   const queryClient = useQueryClient();
   const personaMap = usePersonaMap();
+  const { projects } = useActiveProject();
+  const currentProject = projects.find((p) => p.slug === projectSlug);
+  const githubBase =
+    currentProject?.source.kind === 'github'
+      ? `https://github.com/${currentProject.source.repo}/blob/${currentProject.defaultBranch ?? 'main'}`
+      : null;
   const [notes, setNotes] = useState('');
   const [proceeding, setProceeding] = useState(false);
   const [proceedError, setProceedError] = useState<string | null>(null);
@@ -136,7 +143,7 @@ export function InvestigationSection({ projectSlug, id, itemState }: Investigati
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <button
+          {/* <button
             type="button"
             disabled
             className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-line text-[12px] text-fg-3 hover:text-fg hover:bg-bg-hover disabled:opacity-50 disabled:cursor-not-allowed"
@@ -151,7 +158,7 @@ export function InvestigationSection({ projectSlug, id, itemState }: Investigati
           >
             <RefreshCw size={12} />
             Re-run
-          </button>
+          </button> */}
         </div>
       </div>
 
@@ -206,6 +213,7 @@ export function InvestigationSection({ projectSlug, id, itemState }: Investigati
                 title={basename}
                 body={f.reason ? <span>{f.reason}</span> : <span className="text-fg-4">—</span>}
                 filePath={f.path}
+                viewUrl={githubBase != null ? `${githubBase}/${f.path}` : undefined}
                 conf={conf}
                 personaInitials={initials}
                 personaName={personaLabel}
