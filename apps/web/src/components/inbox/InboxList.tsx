@@ -283,7 +283,8 @@ function PromoteModal({
               <strong>{selectedProject?.name ?? selectedSlug}</strong>
               {selectedMilestone ? (
                 <>
-                  {' '}under milestone <strong>{selectedMilestone.title}</strong>
+                  {' '}
+                  under milestone <strong>{selectedMilestone.title}</strong>
                 </>
               ) : null}
               .
