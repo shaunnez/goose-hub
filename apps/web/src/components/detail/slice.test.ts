@@ -109,16 +109,19 @@ describe('gate actions — GATE_ACTIONS mapping', () => {
     expect(actions.requestChanges).toBeUndefined();
   });
 
-  it('needs-human has no actions', () => {
+  it('needs-human has 4 recovery actions', () => {
     const actions = GATE_ACTIONS['factory:needs-human'];
     expect(actions.approve).toBeUndefined();
-    expect(actions.reject).toBeUndefined();
     expect(actions.requestChanges).toBeUndefined();
+    expect(actions.sendToTriage).toBe('factory:triaging');
+    expect(actions.sendToDev).toBe('factory:dev-ready');
+    expect(actions.sendToQA).toBe('factory:needs-qa');
+    expect(actions.reject).toBe('factory:rejected');
   });
 
-  it('reject and requestChanges are absent for non-needs-review gate states', () => {
-    const nonNeedsReviewGates = ['factory:prd-review', 'factory:approved', 'factory:needs-human'];
-    for (const gate of nonNeedsReviewGates) {
+  it('reject and requestChanges are absent for non-needs-review, non-needs-human gate states', () => {
+    const gates = ['factory:prd-review', 'factory:approved'];
+    for (const gate of gates) {
       const actions = GATE_ACTIONS[gate];
       expect(actions.reject).toBeUndefined();
       expect(actions.requestChanges).toBeUndefined();
@@ -133,8 +136,13 @@ describe('detail page — legal-target table mirrors core', () => {
   it('done is terminal-ish: only goes to archived', () => {
     expect(LEGAL_TARGETS['factory:done']).toEqual(['factory:archived']);
   });
-  it('needs-human is fully terminal in the UI table', () => {
-    expect(LEGAL_TARGETS['factory:needs-human']).toEqual([]);
+  it('needs-human has 4 recovery targets in the UI table', () => {
+    expect(LEGAL_TARGETS['factory:needs-human']).toEqual([
+      'factory:dev-ready',
+      'factory:needs-qa',
+      'factory:triaging',
+      'factory:rejected',
+    ]);
   });
 });
 
