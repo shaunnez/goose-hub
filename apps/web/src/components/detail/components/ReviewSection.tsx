@@ -106,7 +106,7 @@ export function ReviewSection({ projectSlug, id }: ReviewSectionProps) {
       )}
 
       {/* Acceptance criteria checks */}
-      {review.criteriaChecks.length > 0 && (
+      {(review.criteriaChecks?.length ?? 0) > 0 && (
         <div>
           <h3 className="text-[11px] font-medium text-fg-3 uppercase tracking-wider mb-3">
             Acceptance Criteria
@@ -134,7 +134,7 @@ export function ReviewSection({ projectSlug, id }: ReviewSectionProps) {
       )}
 
       {/* Findings */}
-      {review.findings.length > 0 && (
+      {(review.findings?.length ?? 0) > 0 && (
         <div>
           <h3 className="text-[11px] font-medium text-fg-3 uppercase tracking-wider mb-3">
             Findings
