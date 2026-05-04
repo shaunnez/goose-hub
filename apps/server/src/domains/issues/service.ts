@@ -244,7 +244,8 @@ export async function getIssueWorktreeDiff(
   const worktreePath = join(homedir(), '.factory', 'workspaces', runId);
   if (!existsSync(worktreePath)) {
     const prResult = await tryGitHubPrDiff(ascending, repoRef, fetchImpl);
-    if (prResult != null) return { ok: true, data: { diff: prResult.diff, runId: prResult.prRunId } };
+    if (prResult != null)
+      return { ok: true, data: { diff: prResult.diff, runId: prResult.prRunId } };
     return {
       ok: true,
       data: { diff: null, runId, reason: 'worktree not found (cleaned up or pre-creation)' },
@@ -253,7 +254,8 @@ export async function getIssueWorktreeDiff(
 
   if (!existsSync(join(worktreePath, '.git'))) {
     const prResult = await tryGitHubPrDiff(ascending, repoRef, fetchImpl);
-    if (prResult != null) return { ok: true, data: { diff: prResult.diff, runId: prResult.prRunId } };
+    if (prResult != null)
+      return { ok: true, data: { diff: prResult.diff, runId: prResult.prRunId } };
     return {
       ok: true,
       data: {
@@ -274,7 +276,8 @@ export async function getIssueWorktreeDiff(
     // Worktree exists but all changes are committed (e.g. PR already opened).
     // Fall through to the GitHub PR diff.
     const prResult = await tryGitHubPrDiff(ascending, repoRef, fetchImpl);
-    if (prResult != null) return { ok: true, data: { diff: prResult.diff, runId: prResult.prRunId } };
+    if (prResult != null)
+      return { ok: true, data: { diff: prResult.diff, runId: prResult.prRunId } };
     return {
       ok: true,
       data: { diff: null, runId, reason: 'no uncommitted changes and no PR diff available' },
