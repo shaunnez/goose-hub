@@ -753,7 +753,9 @@ vi.mock('node:fs', () => ({
 }));
 
 vi.mock('./select-persona.js', () => ({
-  selectPersona: vi.fn().mockReturnValue({ personaId: 'proj/researcher/0', codename: 'Grey Honker' }),
+  selectPersona: vi
+    .fn()
+    .mockReturnValue({ personaId: 'proj/researcher/0', codename: 'Grey Honker' }),
 }));
 
 describe('adviseOnPlan (#182)', () => {

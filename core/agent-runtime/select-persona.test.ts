@@ -25,11 +25,7 @@ describe('selectPersona', () => {
 
   it('creates a personaNames entry on first call for a slot', () => {
     selectPersona('proj', 'qa');
-    const rows = db
-      .select()
-      .from(personaNames)
-      .where(eq(personaNames.projectId, 'proj'))
-      .all();
+    const rows = db.select().from(personaNames).where(eq(personaNames.projectId, 'proj')).all();
     expect(rows.length).toBeGreaterThan(0);
     expect(rows[0].codename).toBeTruthy();
   });

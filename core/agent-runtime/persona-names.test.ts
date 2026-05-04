@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CODENAMES, generateCodename, getInitials, formatPersonaLabel } from './persona-names.js';
+import { CODENAMES, formatPersonaLabel, generateCodename, getInitials } from './persona-names.js';
 
 describe('generateCodename', () => {
   it('returns first name for index 0', () => {

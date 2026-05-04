@@ -5,11 +5,11 @@ import { join } from 'node:path';
 import { db } from '@goose-hub/core/db/db.js';
 import { events } from '@goose-hub/core/db/schema.js';
 import { type AgentEvent, eventStore } from '@goose-hub/core/event-stream/store.js';
-import { and, desc, eq, isNotNull } from 'drizzle-orm';
-import { cleanupWorktree } from '@goose-hub/core/workspaces/worktree.js';
 import { STATES } from '@goose-hub/core/state-machine/states.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { isLegalTransition, legalTargets } from '@goose-hub/core/state-machine/transitions.js';
+import { cleanupWorktree } from '@goose-hub/core/workspaces/worktree.js';
+import { and, desc, eq, isNotNull } from 'drizzle-orm';
 import { CACHE_KEY, bustCache, getCached } from '../../shared/cache.js';
 import type { Result } from '../../shared/middleware.js';
 import { getProject } from '../../shared/projects.js';
@@ -150,7 +150,10 @@ export async function approveIssue(
 
   // Clean up the dev worktree now that the PR is merged.
   const allEvents = eventStore.replay({ workItemId });
-  const prOpenedEvent = allEvents.slice().reverse().find((e) => e.kind === 'pr.opened');
+  const prOpenedEvent = allEvents
+    .slice()
+    .reverse()
+    .find((e) => e.kind === 'pr.opened');
   if (prOpenedEvent != null) {
     const { devRunId } = prOpenedEvent.payload as { devRunId?: string };
     if (typeof devRunId === 'string') cleanupWorktree(devRunId);

@@ -24,7 +24,10 @@ function getPrDiff(_workItem: WorkItem): string {
 
 function findDevWorktreePath(workItemId: string): string | undefined {
   const events = eventStore.replay({ workItemId });
-  const prOpened = events.slice().reverse().find((e) => e.kind === 'pr.opened');
+  const prOpened = events
+    .slice()
+    .reverse()
+    .find((e) => e.kind === 'pr.opened');
   if (prOpened == null) return undefined;
   const payload = prOpened.payload as Record<string, unknown>;
   return typeof payload.worktreePath === 'string' ? payload.worktreePath : undefined;

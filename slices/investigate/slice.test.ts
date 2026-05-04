@@ -21,7 +21,9 @@ vi.mock('@goose-hub/core/agent-runtime/schema-bridge.js', () => ({
 }));
 
 vi.mock('@goose-hub/core/agent-runtime/select-persona.js', () => ({
-  selectPersona: vi.fn().mockReturnValue({ personaId: 'test-project/investigator/0', codename: 'Grey Honker' }),
+  selectPersona: vi
+    .fn()
+    .mockReturnValue({ personaId: 'test-project/investigator/0', codename: 'Grey Honker' }),
 }));
 
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({

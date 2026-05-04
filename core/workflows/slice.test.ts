@@ -15,7 +15,9 @@ vi.mock('../agent-runtime/schema-bridge.js', () => ({
   toJsonSchema: vi.fn().mockReturnValue({}),
 }));
 vi.mock('../agent-runtime/select-persona.js', () => ({
-  selectPersona: vi.fn().mockReturnValue({ personaId: 'test-project/retrospector/0', codename: 'Grey Honker' }),
+  selectPersona: vi
+    .fn()
+    .mockReturnValue({ personaId: 'test-project/retrospector/0', codename: 'Grey Honker' }),
 }));
 vi.mock('../event-stream/store.js', () => ({
   eventStore: {

@@ -106,17 +106,18 @@ describe('core/db smoke', () => {
         personaId: 'test-project/developer/0',
       })
       .run();
-    const rows = db
-      .select()
-      .from(events)
-      .where(eq(events.kind, 'agent.run-started'))
-      .all();
+    const rows = db.select().from(events).where(eq(events.kind, 'agent.run-started')).all();
     expect(rows[0].personaId).toBe('test-project/developer/0');
   });
 
   it('persona_names table stores codename by slot', () => {
     db.insert(personaNames)
-      .values({ projectId: 'test-project', role: 'developer', slotIndex: 0, codename: 'Grey Honker' })
+      .values({
+        projectId: 'test-project',
+        role: 'developer',
+        slotIndex: 0,
+        codename: 'Grey Honker',
+      })
       .run();
     const rows = db
       .select()

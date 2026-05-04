@@ -25,7 +25,10 @@ export function usePersonaMap(): PersonaMap {
   return map;
 }
 
-export function getPersonaLabel(map: PersonaMap, personaId: string | null | undefined): string | null {
+export function getPersonaLabel(
+  map: PersonaMap,
+  personaId: string | null | undefined,
+): string | null {
   if (personaId == null) return null;
   const info = map[personaId];
   if (info == null) return null;
@@ -33,7 +36,10 @@ export function getPersonaLabel(map: PersonaMap, personaId: string | null | unde
   return `${info.codename} (${abbrev})`;
 }
 
-export function getPersonaInitials(map: PersonaMap, personaId: string | null | undefined): string | null {
+export function getPersonaInitials(
+  map: PersonaMap,
+  personaId: string | null | undefined,
+): string | null {
   if (personaId == null) return null;
   const info = map[personaId];
   if (info == null) return null;
