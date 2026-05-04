@@ -104,11 +104,25 @@ describe('isLegalTransition — illegal jumps', () => {
 
 describe('terminal states', () => {
   it('archived has no exits', () => expect(legalTargets('factory:archived')).toHaveLength(0));
-  it('needs-human has no exits', () => expect(legalTargets('factory:needs-human')).toHaveLength(0));
   it('archived → done is illegal', () =>
     expect(isLegalTransition('factory:archived', 'factory:done')).toBe(false));
   it('archived → triaging is illegal', () =>
     expect(isLegalTransition('factory:archived', 'factory:triaging')).toBe(false));
+});
+
+describe('needs-human recovery transitions', () => {
+  it('needs-human → dev-ready', () =>
+    expect(isLegalTransition('factory:needs-human', 'factory:dev-ready')).toBe(true));
+  it('needs-human → needs-qa', () =>
+    expect(isLegalTransition('factory:needs-human', 'factory:needs-qa')).toBe(true));
+  it('needs-human → triaging', () =>
+    expect(isLegalTransition('factory:needs-human', 'factory:triaging')).toBe(true));
+  it('needs-human → rejected', () =>
+    expect(isLegalTransition('factory:needs-human', 'factory:rejected')).toBe(true));
+  it('needs-human → done is still illegal', () =>
+    expect(isLegalTransition('factory:needs-human', 'factory:done')).toBe(false));
+  it('needs-human yields exactly 4 targets', () =>
+    expect(legalTargets('factory:needs-human')).toHaveLength(4));
 });
 
 describe('legalTargets', () => {
