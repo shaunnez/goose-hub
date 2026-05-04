@@ -110,9 +110,49 @@ describe('listMilestones', () => {
   });
 
   it('returns milestones list', async () => {
-    mockSource.listMilestones.mockResolvedValueOnce([{ number: 1 }, { number: 2 }]);
+    mockSource.listMilestones.mockResolvedValueOnce([
+      { number: 1, title: 'M1: State Machine' },
+      { number: 2, title: 'M2: Chrome' },
+    ]);
     const result = await listMilestones('my-proj');
-    expect(result).toEqual({ ok: true, data: { milestones: [{ number: 1 }, { number: 2 }] } });
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        milestones: [
+          { number: 1, title: 'M1: State Machine' },
+          { number: 2, title: 'M2: Chrome' },
+        ],
+      },
+    });
+  });
+
+  it('filters out non-M-prefixed milestones (e.g. E2E)', async () => {
+    mockSource.listMilestones.mockResolvedValueOnce([
+      { number: 10, title: 'M1: State Machine' },
+      { number: 20, title: 'E2E: End-to-End Tests' },
+      { number: 30, title: 'M3: Inbox' },
+      { number: 40, title: 'Internal Tooling' },
+    ]);
+    const result = await listMilestones('my-proj');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const titles = (result.data.milestones as Array<{ title: string }>).map((m) => m.title);
+    expect(titles).toEqual(['M1: State Machine', 'M3: Inbox']);
+    expect(titles).not.toContain('E2E: End-to-End Tests');
+    expect(titles).not.toContain('Internal Tooling');
+  });
+
+  it('sorts milestones numerically by M-number ascending', async () => {
+    mockSource.listMilestones.mockResolvedValueOnce([
+      { number: 30, title: 'M10: Analytics' },
+      { number: 10, title: 'M2: Chrome' },
+      { number: 20, title: 'M1: State Machine' },
+    ]);
+    const result = await listMilestones('my-proj');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const titles = (result.data.milestones as Array<{ title: string }>).map((m) => m.title);
+    expect(titles).toEqual(['M1: State Machine', 'M2: Chrome', 'M10: Analytics']);
   });
 });
 
