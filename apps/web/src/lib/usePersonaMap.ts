@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchRoster } from './api.js';
-import type { PersonaStatDto } from './types.js';
+import { fetchPersonaNames } from './api.js';
+import type { PersonaNameDto } from './types.js';
 
 export interface PersonaInfo {
   codename: string;
@@ -10,17 +10,15 @@ export interface PersonaInfo {
 export type PersonaMap = Record<string, PersonaInfo>;
 
 export function usePersonaMap(): PersonaMap {
-  const { data: personas = [] } = useQuery<PersonaStatDto[]>({
-    queryKey: ['roster'],
-    queryFn: fetchRoster,
+  const { data: names = [] } = useQuery<PersonaNameDto[]>({
+    queryKey: ['persona-names'],
+    queryFn: fetchPersonaNames,
     staleTime: 60_000,
   });
 
   const map: PersonaMap = {};
-  for (const p of personas) {
-    if (p.codename != null) {
-      map[p.personaName] = { codename: p.codename, role: p.role };
-    }
+  for (const n of names) {
+    map[n.personaId] = { codename: n.codename, role: n.role };
   }
   return map;
 }

@@ -4,6 +4,7 @@ import type {
   InboxItemDto,
   IssueCommentDto,
   MilestoneDto,
+  PersonaNameDto,
   PersonaRunDto,
   PersonaStatDto,
   ProjectSummary,
@@ -22,6 +23,7 @@ export type {
   InboxItemDto,
   TriageResultDto,
   PersonaStatDto,
+  PersonaNameDto,
   PersonaRunDto,
   ImprovementCandidateDto,
 } from './types';
@@ -230,6 +232,11 @@ export async function transitionState(
 export async function fetchRoster(): Promise<PersonaStatDto[]> {
   const { personas } = await getJson<{ personas: PersonaStatDto[] }>('/roster');
   return personas;
+}
+
+export async function fetchPersonaNames(): Promise<PersonaNameDto[]> {
+  const { names } = await getJson<{ names: PersonaNameDto[] }>('/roster/names');
+  return names;
 }
 
 export async function fetchPersonaRuns(personaName: string): Promise<PersonaRunDto[]> {

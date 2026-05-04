@@ -27,6 +27,21 @@ export interface ImprovementCandidateRow {
   createdAt: string;
 }
 
+export interface PersonaNameRow {
+  personaId: string;
+  codename: string;
+  role: string;
+}
+
+export async function listPersonaNames(): Promise<PersonaNameRow[]> {
+  const rows = await db.select().from(personaNames);
+  return rows.map((r) => ({
+    personaId: `${r.projectId}/${r.role}/${r.slotIndex}`,
+    codename: r.codename,
+    role: r.role,
+  }));
+}
+
 export async function listPersonaStats(): Promise<PersonaStat[]> {
   const stats = await db
     .select()

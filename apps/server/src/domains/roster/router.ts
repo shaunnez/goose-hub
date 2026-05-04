@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import {
   approveCandidate,
   getPersonaCandidates,
+  getPersonaNames,
   getPersonaRuns,
   listPersonas,
   rejectCandidate,
@@ -12,6 +13,11 @@ const router = new Hono();
 router.get('/', async (c) => {
   const result = await listPersonas();
   return result.ok ? c.json(result.data) : c.json({ personas: [] });
+});
+
+router.get('/names', async (c) => {
+  const result = await getPersonaNames();
+  return result.ok ? c.json(result.data) : c.json({ names: [] });
 });
 
 router.get('/runs', async (c) => {

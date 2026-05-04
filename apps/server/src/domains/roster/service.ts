@@ -1,9 +1,10 @@
 import type { Result } from '../../shared/middleware.js';
 import { getProject } from '../../shared/projects.js';
-import type { ImprovementCandidateRow, PersonaStat } from './repository.js';
+import type { ImprovementCandidateRow, PersonaNameRow, PersonaStat } from './repository.js';
 import {
   getCandidateById,
   listCandidatesByPersona,
+  listPersonaNames,
   listPersonaStats,
   updateCandidateGithubIssue,
   updateCandidateStatus,
@@ -18,6 +19,12 @@ export interface PersonaRunDto {
 }
 
 export type { ImprovementCandidateRow as ImprovementCandidateDto };
+export type { PersonaNameRow as PersonaNameDto };
+
+export async function getPersonaNames(): Promise<Result<{ names: PersonaNameRow[] }>> {
+  const names = await listPersonaNames();
+  return { ok: true, data: { names } };
+}
 
 export async function listPersonas(): Promise<Result<{ personas: PersonaStat[] }>> {
   const personas = await listPersonaStats();

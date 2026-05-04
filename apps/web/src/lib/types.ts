@@ -81,6 +81,12 @@ export interface InboxItemDto {
   createdAt: string;
 }
 
+export interface PersonaNameDto {
+  personaId: string;
+  codename: string;
+  role: string;
+}
+
 export interface PersonaStatDto {
   id: number;
   personaName: string;
