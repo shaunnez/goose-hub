@@ -1,6 +1,7 @@
 import { fetchEvents } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import type { AgentEventDto } from '@/lib/types';
+import { timeAgo } from '@/lib/utils';
 import {
   AlertCircle,
   ArrowRight,
@@ -24,7 +25,6 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { groupEvents } from '../lib/timeline';
 import type { RenderItem } from '../lib/timeline';
-import { timeAgo } from '@/lib/utils';
 export type { RenderItem } from '../lib/timeline';
 
 interface TimelineSectionProps {
@@ -543,16 +543,24 @@ function EvidencePostFailedEvent({ event }: { event: AgentEventDto }) {
   );
 }
 
-function getEarliestCreatedAt(items: RenderItem[]): string | null {
-  let earliest: string | null = null;
+function getRunStartedAt(items: RenderItem[]): string | null {
+  // Prefer the explicit run-started event; fall back to numeric minimum.
   for (const item of items) {
-    let iso: string | null = null;
-    if (item.kind === 'event') iso = item.event.createdAt;
-    else if (item.kind === 'log-group' && item.events.length > 0)
-      iso = item.events[item.events.length - 1].createdAt;
-    if (iso != null && (earliest == null || iso < earliest)) earliest = iso;
+    if (item.kind === 'event' && item.event.kind === 'agent.run-started') {
+      return item.event.createdAt;
+    }
   }
-  return earliest;
+  let earliestMs = Number.POSITIVE_INFINITY;
+  let earliestIso: string | null = null;
+  for (const item of items) {
+    if (item.kind !== 'event') continue;
+    const ms = new Date(item.event.createdAt).getTime();
+    if (ms < earliestMs) {
+      earliestMs = ms;
+      earliestIso = item.event.createdAt;
+    }
+  }
+  return earliestIso;
 }
 
 function RunGroupWrapper({
@@ -569,7 +577,7 @@ function RunGroupWrapper({
     return 2;
   };
   const sorted = [...items].sort((a, b) => rank(a) - rank(b));
-  const startedAt = getEarliestCreatedAt(items);
+  const startedAt = getRunStartedAt(items);
   return (
     <li data-run-id={runId} className="rounded-md border border-line/70 bg-bg/30">
       <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
@@ -578,8 +586,8 @@ function RunGroupWrapper({
           <span>Run {runId}</span>
           {startedAt != null && (
             <>
-              <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
-              <span className="text-fg-5">{timeAgo(startedAt)}</span>
+              <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4 ml-4" />
+              <span className="text-fg-5">Started at: {startedAt}</span>
             </>
           )}
           <span className="ml-auto text-fg-5">{items.length} events</span>

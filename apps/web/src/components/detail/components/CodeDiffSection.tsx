@@ -50,9 +50,21 @@ function parseDiff(raw: string): ParsedFile[] {
       continue;
     }
     if (cur == null) continue;
-    if (line.startsWith('new file mode')) { cur.status = 'new'; continue; }
-    if (line.startsWith('deleted file mode')) { cur.status = 'del'; continue; }
-    if (line.startsWith('--- ') || line.startsWith('+++ ') || line.startsWith('index ') || line.startsWith('Binary ')) continue;
+    if (line.startsWith('new file mode')) {
+      cur.status = 'new';
+      continue;
+    }
+    if (line.startsWith('deleted file mode')) {
+      cur.status = 'del';
+      continue;
+    }
+    if (
+      line.startsWith('--- ') ||
+      line.startsWith('+++ ') ||
+      line.startsWith('index ') ||
+      line.startsWith('Binary ')
+    )
+      continue;
 
     if (line.startsWith('@@ ')) {
       const m = line.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
@@ -66,13 +78,28 @@ function parseDiff(raw: string): ParsedFile[] {
     if (curHunk == null) continue;
 
     if (line.startsWith('+') && !line.startsWith('+++')) {
-      curHunk.lines.push({ kind: 'add', content: line.slice(1), leftLine: null, rightLine: rightLine++ });
+      curHunk.lines.push({
+        kind: 'add',
+        content: line.slice(1),
+        leftLine: null,
+        rightLine: rightLine++,
+      });
       cur.adds++;
     } else if (line.startsWith('-') && !line.startsWith('---')) {
-      curHunk.lines.push({ kind: 'del', content: line.slice(1), leftLine: leftLine++, rightLine: null });
+      curHunk.lines.push({
+        kind: 'del',
+        content: line.slice(1),
+        leftLine: leftLine++,
+        rightLine: null,
+      });
       cur.dels++;
     } else if (line.startsWith(' ') || line === '') {
-      curHunk.lines.push({ kind: 'ctx', content: line.slice(1), leftLine: leftLine++, rightLine: rightLine++ });
+      curHunk.lines.push({
+        kind: 'ctx',
+        content: line.slice(1),
+        leftLine: leftLine++,
+        rightLine: rightLine++,
+      });
     }
   }
 
@@ -182,9 +209,7 @@ export function CodeDiffSection({ projectSlug, id }: CodeDiffSectionProps) {
             </a>
           )}
           {prNumber == null && data?.runId != null && (
-            <span className="font-mono text-[10.5px] text-fg-4">
-              run:{data.runId.slice(0, 8)}
-            </span>
+            <span className="font-mono text-[10.5px] text-fg-4">run:{data.runId.slice(0, 8)}</span>
           )}
         </div>
       </div>
@@ -195,14 +220,8 @@ export function CodeDiffSection({ projectSlug, id }: CodeDiffSectionProps) {
         style={{ display: 'grid', gridTemplateColumns: '240px 1fr', minHeight: 400 }}
       >
         {/* File list */}
-        <div
-          className="overflow-y-auto"
-          style={{ borderRight: '1px solid var(--line)' }}
-        >
-          <div
-            className="px-3 py-2"
-            style={{ borderBottom: '1px solid var(--line)' }}
-          >
+        <div className="overflow-y-auto" style={{ borderRight: '1px solid var(--line)' }}>
+          <div className="px-3 py-2" style={{ borderBottom: '1px solid var(--line)' }}>
             <span className="text-[10px] font-semibold uppercase tracking-wide text-fg-4">
               Files · {files.length}
             </span>
@@ -310,18 +329,20 @@ export function CodeDiffSection({ projectSlug, id }: CodeDiffSectionProps) {
             {/* Hunks */}
             <div
               data-testid="code-diff-pre"
-              style={{ fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.55, overflowX: 'auto' }}
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+                lineHeight: 1.55,
+                overflowX: 'auto',
+              }}
             >
               {currentFile.hunks.length === 0 && (
-                <div
-                  className="px-4 py-6 text-center text-[12px]"
-                  style={{ color: 'var(--fg-4)' }}
-                >
+                <div className="px-4 py-6 text-center text-[12px]" style={{ color: 'var(--fg-4)' }}>
                   No hunks
                 </div>
               )}
-              {currentFile.hunks.map((hunk, hi) => (
-                <div key={`hunk-${hi}`}>
+              {currentFile.hunks.map((hunk) => (
+                <div key={hunk.header}>
                   {/* Hunk meta */}
                   <div
                     style={{
@@ -334,9 +355,9 @@ export function CodeDiffSection({ projectSlug, id }: CodeDiffSectionProps) {
                     {hunk.header}
                   </div>
                   {/* Hunk lines */}
-                  {hunk.lines.map((line, li) => (
+                  {hunk.lines.map((line) => (
                     <div
-                      key={`${hi}-${li}`}
+                      key={`${line.leftLine ?? 'n'}-${line.rightLine ?? 'n'}-${line.kind}`}
                       style={{
                         display: 'grid',
                         gridTemplateColumns: '42px 42px 16px 1fr',
@@ -389,8 +410,7 @@ export function CodeDiffSection({ projectSlug, id }: CodeDiffSectionProps) {
                         style={{
                           whiteSpace: 'pre',
                           paddingLeft: 8,
-                          color:
-                            line.kind === 'ctx' ? 'var(--fg-2)' : 'var(--fg)',
+                          color: line.kind === 'ctx' ? 'var(--fg-2)' : 'var(--fg)',
                           overflowX: 'hidden',
                           textOverflow: 'ellipsis',
                         }}

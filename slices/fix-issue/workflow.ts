@@ -26,7 +26,10 @@ function isAdvisorGated(priority: string): priority is 'high' | 'critical' {
 
 function resolveBaseBranch(repoPath: string): string {
   try {
-    return execFileSync('git', ['symbolic-ref', '--short', 'HEAD'], { cwd: repoPath, encoding: 'utf8' }).trim();
+    return execFileSync('git', ['symbolic-ref', '--short', 'HEAD'], {
+      cwd: repoPath,
+      encoding: 'utf8',
+    }).trim();
   } catch {
     return 'main';
   }

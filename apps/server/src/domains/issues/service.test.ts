@@ -346,7 +346,9 @@ describe('getIssueWorktreeDiff (#185)', () => {
       ok: true,
       text: () => Promise.resolve('diff --git a/src/bar.ts b/src/bar.ts\n+github line'),
     });
-    const result = await getIssueWorktreeDiff('proj', '1', { fetchImpl: mockFetch as typeof fetch });
+    const result = await getIssueWorktreeDiff('proj', '1', {
+      fetchImpl: mockFetch as typeof fetch,
+    });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.diff).toBe('diff --git a/src/bar.ts b/src/bar.ts\n+github line');

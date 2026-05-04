@@ -237,7 +237,10 @@ export async function getIssueWorktreeDiff(
     // Fall through to the GitHub PR diff.
     const prDiff = await tryGitHubPrDiff(ascending, repoRef, fetchImpl);
     if (prDiff != null) return { ok: true, data: { diff: prDiff, runId } };
-    return { ok: true, data: { diff: null, runId, reason: 'no uncommitted changes and no PR diff available' } };
+    return {
+      ok: true,
+      data: { diff: null, runId, reason: 'no uncommitted changes and no PR diff available' },
+    };
   } catch (err) {
     return {
       ok: true,

@@ -107,28 +107,16 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
       {/* Stat row */}
       <div className="grid grid-cols-4 gap-3">
         <StatCard label="Stage" value={lane} />
-        <StatCard
-          label="Priority"
-          value={priority}
-          color={priorityColor}
-        />
+        <StatCard label="Priority" value={priority} color={priorityColor} />
         <StatCard
           label="Depends on"
           value={depsCount === 0 ? '—' : String(depsCount)}
-          sub={
-            depsCount > 0
-              ? item?.dependsOn.map((d) => `#${d}`).join(', ')
-              : undefined
-          }
+          sub={depsCount > 0 ? item?.dependsOn.map((d) => `#${d}`).join(', ') : undefined}
         />
         <StatCard
           label="Blocks"
           value={blocksCount === 0 ? '—' : String(blocksCount)}
-          sub={
-            blocksCount > 0
-              ? item?.blocks.map((d) => `#${d}`).join(', ')
-              : undefined
-          }
+          sub={blocksCount > 0 ? item?.blocks.map((d) => `#${d}`).join(', ') : undefined}
         />
       </div>
 

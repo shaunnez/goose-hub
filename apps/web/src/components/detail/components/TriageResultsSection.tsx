@@ -15,16 +15,13 @@ const ALLOWLISTED_REPOS = ['shaunnez/goose-hub'];
 
 function ScoreBar({ value }: { value: number }) {
   const pct = Math.max(0, Math.min(100, value));
-  const color =
-    pct >= 70 ? 'var(--accent)' : pct >= 40 ? 'oklch(0.74 0.15 200)' : 'var(--fg-4)';
+  const color = pct >= 70 ? 'var(--accent)' : pct >= 40 ? 'oklch(0.74 0.15 200)' : 'var(--fg-4)';
   return (
     <div className="flex items-center gap-2 justify-end">
       <div className="w-9 h-1 rounded-full bg-line overflow-hidden shrink-0">
         <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
       </div>
-      <span className="font-mono text-[11.5px] text-fg-2 tabular-nums w-7 text-right">
-        {pct}
-      </span>
+      <span className="font-mono text-[11.5px] text-fg-2 tabular-nums w-7 text-right">{pct}</span>
     </div>
   );
 }
@@ -127,10 +124,7 @@ export function TriageResultsSection({ projectSlug, id }: TriageResultsSectionPr
                     className="shrink-0"
                     style={{ color: isPicked ? 'var(--accent)' : 'var(--fg-4)' }}
                   />
-                  <span
-                    className="font-mono truncate"
-                    style={{ fontWeight: isPicked ? 500 : 400 }}
-                  >
+                  <span className="font-mono truncate" style={{ fontWeight: isPicked ? 500 : 400 }}>
                     {c.repo}
                   </span>
                 </div>

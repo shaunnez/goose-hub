@@ -71,7 +71,7 @@ function groupByRunId(items: RenderItem[]): RenderItem[] {
     if (runId != null) {
       if (seen.has(runId)) continue;
       seen.add(runId);
-      const group = byRunId.get(runId)!;
+      const group = byRunId.get(runId) ?? [];
       if (group.length > 1) {
         result.push({ kind: 'run-group', runId, items: group });
       } else {
