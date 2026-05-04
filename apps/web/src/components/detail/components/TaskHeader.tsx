@@ -1,82 +1,16 @@
 import { fetchMilestones, setLabel, setMilestone } from '@/lib/api';
-import { cn } from '@/lib/cn';
-import { PRIORITY_BG, PRIORITY_BORDER, PRIORITY_COLOR, STATE_LABEL } from '@/lib/constants';
+import {
+  COST_PLACEHOLDER,
+  PRIORITY_BG,
+  PRIORITY_BORDER,
+  PRIORITY_COLOR,
+  STATE_LABEL,
+} from '@/lib/constants';
 import type { MilestoneDto, WorkItemDto } from '@/lib/types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
+import { PillSelect } from './PillSelect';
 import { TransitionButton } from './TransitionButton';
-
-interface PillSelectProps {
-  value: string;
-  label: string;
-  options: { value: string; label: string }[];
-  onSelect: (value: string) => void;
-  saving?: boolean;
-  pillStyle?: React.CSSProperties;
-  'data-testid'?: string;
-}
-
-function PillSelect({
-  value,
-  label,
-  options,
-  onSelect,
-  saving,
-  pillStyle,
-  'data-testid': testId,
-}: PillSelectProps) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        data-testid={testId}
-        onClick={() => setOpen((o) => !o)}
-        className={cn(
-          'inline-flex items-center gap-1 h-6 px-2.5 rounded-full text-[11.5px] border cursor-pointer',
-          'hover:brightness-110 hover:opacity-90 transition-opacity',
-          saving && 'opacity-50 cursor-wait',
-        )}
-        style={pillStyle}
-        title={`Change ${label}`}
-      >
-        {value}
-        <span className="text-[9px] opacity-60">▾</span>
-      </button>
-      {open && (
-        <div className="absolute top-full mt-1 left-0 z-50 min-w-[120px] rounded-md border border-line bg-bg-elev shadow-md py-1">
-          {options.map((o) => (
-            <button
-              key={o.value}
-              type="button"
-              onClick={() => {
-                onSelect(o.value);
-                setOpen(false);
-              }}
-              className={cn(
-                'w-full text-left px-3 py-1.5 text-[12px] hover:bg-bg-hover',
-                o.value === value ? 'text-fg font-medium' : 'text-fg-2',
-              )}
-            >
-              {o.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 interface TaskHeaderProps {
   item?: WorkItemDto;
@@ -167,7 +101,7 @@ export function TaskHeader({ item, projectSlug }: TaskHeaderProps) {
         <span>opened {item?.createdAt ? new Date(item?.createdAt).toLocaleString() : ''}</span>
         <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
         <span title="Cost tracking available in M9" data-testid="cost-placeholder">
-          cost <span className="font-mono">$—</span>
+          cost <span className="font-mono">{COST_PLACEHOLDER}</span>
         </span>
         <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
         <span title="Duration tracking available in M9" data-testid="duration-placeholder">

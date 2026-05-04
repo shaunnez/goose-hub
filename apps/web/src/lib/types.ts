@@ -107,6 +107,12 @@ export interface PersonaRunDto {
   createdAt: string;
 }
 
+export interface IssueDiffDto {
+  diff: string | null;
+  runId: string | null;
+  reason?: string;
+}
+
 export interface ImprovementCandidateDto {
   id: number;
   projectId: string;

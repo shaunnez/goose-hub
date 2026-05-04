@@ -4,171 +4,24 @@ import type { AgentEventDto, IssueCommentDto } from '@/lib/types';
 import { getPersonaInitials, getPersonaLabel, usePersonaMap } from '@/lib/usePersonaMap';
 import { timeAgo } from '@/lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Code, Filter, RefreshCw } from 'lucide-react';
+import { Filter, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
+import {
+  CONFIDENCE_NUM,
+  READ_TOOLS,
+  SEARCH_TOOLS,
+  countToolCalls,
+  extractInvestigationPayload,
+} from '../lib/investigation';
+import { ConfidenceBadge } from './ConfidenceBadge';
+import { FindingCard } from './FindingCard';
+import { StatCard } from './StatCard';
 
 interface InvestigationSectionProps {
   projectSlug: string;
   id: string;
   itemType?: string;
   itemState?: string;
-}
-
-interface KeyFile {
-  path: string;
-  reason: string;
-}
-
-interface InvestigationPayload {
-  investigate: {
-    findings: string;
-    keyFiles: KeyFile[];
-    confidence: 'low' | 'medium' | 'high';
-    openQuestions: string[];
-    decisionSummaries: Array<{ step: string; summary: string; evidence?: string }>;
-  };
-}
-
-const CONFIDENCE_COLOR: Record<string, string> = {
-  high: 'bg-green-500/15 text-green-400',
-  medium: 'bg-yellow-500/15 text-yellow-400',
-  low: 'bg-red-500/15 text-red-400',
-};
-
-const CONFIDENCE_NUM: Record<string, number> = { high: 0.9, medium: 0.65, low: 0.35 };
-
-const SEV_VAR: Record<string, string> = {
-  high: 'var(--success)',
-  medium: 'var(--warning)',
-  low: 'var(--danger)',
-};
-
-const SEV_LABEL: Record<string, string> = { high: 'HIGH', medium: 'MED', low: 'LOW' };
-
-const READ_TOOLS = new Set(['Read', 'FileRead', 'NotebookRead']);
-const SEARCH_TOOLS = new Set([
-  'Grep',
-  'Glob',
-  'WebSearch',
-  'WebFetch',
-  'work_item_search',
-  'rg',
-  'ast-grep',
-]);
-
-function ConfidenceBadge({ level }: { level: string }) {
-  return (
-    <span
-      data-testid="confidence-badge"
-      className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${CONFIDENCE_COLOR[level] ?? 'bg-gray-500/15 text-gray-400'}`}
-    >
-      {level} confidence
-    </span>
-  );
-}
-
-function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="rounded-lg border border-line bg-bg-elev px-4 py-3">
-      <div className="text-[10.5px] uppercase tracking-wider text-fg-4 mb-1.5">{label}</div>
-      <div className="text-[20px] font-semibold leading-none tracking-tight text-fg">{value}</div>
-      {sub && <div className="text-[11px] text-fg-4 mt-1">{sub}</div>}
-    </div>
-  );
-}
-
-function extractPayload(event: AgentEventDto): InvestigationPayload | null {
-  const p = event.payload as Record<string, unknown>;
-  if (p == null || typeof p !== 'object') return null;
-  if (!('investigate' in p)) return null;
-  return p as unknown as InvestigationPayload;
-}
-
-function countToolCalls(events: AgentEventDto[], names: Set<string>): number {
-  let n = 0;
-  for (const ev of events) {
-    if (ev.kind !== 'agent.tool-call') continue;
-    const p = ev.payload as { tool_name?: string } | null;
-    if (p?.tool_name != null && names.has(p.tool_name)) n++;
-  }
-  return n;
-}
-
-function FindingCard({
-  severity,
-  title,
-  body,
-  filePath,
-  conf,
-  personaInitials,
-  personaName,
-}: {
-  severity: 'low' | 'medium' | 'high';
-  title: string;
-  body: React.ReactNode;
-  filePath?: string;
-  conf: number;
-  personaInitials?: string | null;
-  personaName?: string | null;
-}) {
-  const sevColor = SEV_VAR[severity];
-  return (
-    <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
-      <div className="grid" style={{ gridTemplateColumns: '4px 1fr', minHeight: 90 }}>
-        <div style={{ background: sevColor }} />
-        <div className="p-4">
-          <div className="flex items-center gap-2 mb-1.5">
-            <span
-              className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold tracking-wider border"
-              style={{
-                color: sevColor,
-                background: `oklch(from ${sevColor} l c h / 0.1)`,
-                borderColor: `oklch(from ${sevColor} l c h / 0.4)`,
-              }}
-            >
-              {SEV_LABEL[severity]}
-            </span>
-            <span className="text-[14px] font-semibold text-fg">{title}</span>
-          </div>
-          <div className="text-[13px] text-fg-2 leading-relaxed">{body}</div>
-          <div className="flex items-center gap-3 mt-3 flex-wrap">
-            {filePath != null && (
-              <span className="font-mono text-[11.5px] text-fg-3">{filePath}</span>
-            )}
-            {filePath != null && <span className="w-px h-3 bg-line" />}
-            {personaInitials != null && (
-              <span className="flex items-center gap-1.5 text-[11.5px]">
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-accent-soft text-[9.5px] font-semibold text-[color:var(--accent)]">
-                  {personaInitials}
-                </span>
-                <span className="text-fg-3">{personaName}</span>
-              </span>
-            )}
-            <span className="grow" />
-            <span className="flex items-center gap-2 text-[11px]">
-              <span className="text-fg-4">conf</span>
-              <span className="block w-[60px] h-1 rounded-sm bg-line overflow-hidden">
-                <span
-                  className="block h-full rounded-sm"
-                  style={{ width: `${conf * 100}%`, background: 'var(--accent)' }}
-                />
-              </span>
-              <span className="font-mono tnum text-fg-3">{conf.toFixed(2)}</span>
-            </span>
-            {filePath != null && (
-              <button
-                type="button"
-                className="inline-flex items-center gap-1 h-6 px-2 rounded border border-line text-[11px] text-fg-3 hover:text-fg hover:bg-bg-hover"
-              >
-                <Code size={11} />
-                View
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 export function InvestigationSection({ projectSlug, id, itemState }: InvestigationSectionProps) {
@@ -237,7 +90,7 @@ export function InvestigationSection({ projectSlug, id, itemState }: Investigati
     );
   }
 
-  const payload = extractPayload(latest);
+  const payload = extractInvestigationPayload(latest);
   if (payload == null) return null;
 
   const { investigate } = payload;

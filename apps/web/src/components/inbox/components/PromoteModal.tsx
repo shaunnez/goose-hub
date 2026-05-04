@@ -1,28 +1,18 @@
-import {
-  deleteInboxItem,
-  fetchInboxItems,
-  fetchMilestones,
-  fetchProjects,
-  promoteInboxItem,
-} from '@/lib/api';
+import { fetchMilestones, fetchProjects, promoteInboxItem } from '@/lib/api';
 import type { InboxItemDto, MilestoneDto, ProjectSummary } from '@/lib/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, ChevronDown, Inbox, Trash2 } from 'lucide-react';
+import { ArrowLeft, ChevronDown } from 'lucide-react';
 import { useEffect, useState } from 'react';
-
-// ---------------------------------------------------------------------------
-// Two-step promote modal
-// ---------------------------------------------------------------------------
+import { resolveActiveMilestone } from '../lib/promote';
 
 type ModalStep = 'picker' | 'confirm';
 
-function PromoteModal({
-  item,
-  onClose,
-}: {
+interface PromoteModalProps {
   item: InboxItemDto;
   onClose: () => void;
-}) {
+}
+
+export function PromoteModal({ item, onClose }: PromoteModalProps) {
   const [step, setStep] = useState<ModalStep>('picker');
   const [selectedSlug, setSelectedSlug] = useState<string>('');
   const [selectedMilestoneNumber, setSelectedMilestoneNumber] = useState<number | null>(null);
@@ -55,8 +45,7 @@ function PromoteModal({
       setSelectedMilestoneNumber(null);
       return;
     }
-    const active = milestones.find((m) => m.isActive);
-    setSelectedMilestoneNumber(active?.number ?? null);
+    setSelectedMilestoneNumber(resolveActiveMilestone(milestones));
   }, [selectedSlug, milestones, milestonesLoaded]);
 
   // Only send an explicit milestoneNumber once we have a confirmed loaded list.
@@ -344,190 +333,6 @@ function PromoteModal({
           </>
         )}
       </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Detail panel
-// ---------------------------------------------------------------------------
-
-function InboxDetail({
-  item,
-  onPromote,
-  onDelete,
-}: {
-  item: InboxItemDto;
-  onPromote: (item: InboxItemDto) => void;
-  onDelete: (item: InboxItemDto) => void;
-}) {
-  return (
-    <div className="flex flex-col h-full overflow-y-auto px-8 py-6">
-      <div className="flex items-start justify-between gap-4 mb-6">
-        <div className="flex-1 min-w-0">
-          <h2 className="text-[17px] font-semibold text-fg leading-snug mb-2">{item.title}</h2>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-mono uppercase tracking-wider text-fg-4 border border-line rounded px-1.5 py-0.5">
-              {item.type}
-            </span>
-            <span className="text-[12px] text-fg-4">
-              {new Date(item.createdAt).toLocaleDateString(undefined, {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            data-testid="promote-button"
-            onClick={() => onPromote(item)}
-            className="h-8 px-4 rounded-md border border-line text-[12px] text-fg-2 hover:text-fg hover:bg-bg-hover"
-          >
-            Promote
-          </button>
-          <button
-            type="button"
-            data-testid="delete-button"
-            onClick={() => onDelete(item)}
-            aria-label="Delete inbox item"
-            className="h-8 w-8 flex items-center justify-center rounded-md border border-line text-fg-3 hover:text-danger hover:border-danger/50 hover:bg-danger/5"
-          >
-            <Trash2 size={14} />
-          </button>
-        </div>
-      </div>
-
-      <div className="border-t border-line pt-6">
-        {item.body ? (
-          <p className="text-[13px] text-fg-2 leading-relaxed whitespace-pre-wrap">{item.body}</p>
-        ) : (
-          <p className="text-[13px] text-fg-4 italic">No description.</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Empty state
-// ---------------------------------------------------------------------------
-
-function InboxEmpty() {
-  return (
-    <div data-testid="inbox-empty" className="flex h-full items-center justify-center">
-      <div className="text-center">
-        <div className="flex justify-center mb-4">
-          <Inbox size={40} className="text-fg-4" />
-        </div>
-        <p className="text-[15px] font-medium text-fg-2 mb-1">Inbox is empty</p>
-        <p className="text-[13px] text-fg-4">Use the Capture button in the top bar to add ideas.</p>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Main export
-// ---------------------------------------------------------------------------
-
-export function InboxList() {
-  const [promoting, setPromoting] = useState<InboxItemDto | null>(null);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-
-  const {
-    data: items = [],
-    isLoading,
-    error,
-  } = useQuery({
-    queryKey: ['inbox'],
-    queryFn: fetchInboxItems,
-  });
-
-  useEffect(() => {
-    function handleCreated(e: Event) {
-      const { id } = (e as CustomEvent<{ id: number }>).detail;
-      setSelectedId(id);
-    }
-    window.addEventListener('inbox:item-created', handleCreated);
-    return () => window.removeEventListener('inbox:item-created', handleCreated);
-  }, []);
-
-  const queryClient = useQueryClient();
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => deleteInboxItem(id),
-    onSuccess: () => {
-      setSelectedId(null);
-      void queryClient.invalidateQueries({ queryKey: ['inbox'] });
-    },
-  });
-
-  function handleDelete(item: InboxItemDto) {
-    if (!window.confirm(`Delete "${item.title}"? This cannot be undone.`)) return;
-    deleteMutation.mutate(item.id);
-  }
-
-  if (isLoading) return <div className="px-8 py-10 text-fg-3">Loading inbox…</div>;
-  if (error)
-    return <div className="px-8 py-10 text-[color:var(--danger)]">Failed to load inbox.</div>;
-  if (items.length === 0) return <InboxEmpty />;
-
-  const effectiveId = selectedId ?? items[0].id;
-  const selectedItem = items.find((i) => i.id === effectiveId) ?? items[0];
-
-  return (
-    <div data-testid="inbox-list" className="flex h-full">
-      {/* Left panel — list */}
-      <div className="w-[35%] border-r border-line flex flex-col min-h-0">
-        <div className="px-4 py-4 border-b border-line shrink-0">
-          <h1 className="text-[14px] font-semibold text-fg">Inbox</h1>
-        </div>
-        <ol className="flex-1 overflow-y-auto p-2 flex flex-col gap-0.5">
-          {items.map((item) => {
-            const isSelected = item.id === effectiveId;
-            return (
-              <li key={item.id} data-testid="inbox-item" data-inbox-id={item.id}>
-                <button
-                  type="button"
-                  onClick={() => setSelectedId(item.id)}
-                  className={[
-                    'w-full text-left rounded-md px-3 py-2.5 transition-colors',
-                    isSelected
-                      ? 'bg-accent/10 border border-accent/30'
-                      : 'border border-transparent hover:bg-bg-hover',
-                  ].join(' ')}
-                >
-                  <div
-                    className={[
-                      'text-[12.5px] font-medium truncate',
-                      isSelected ? 'text-fg' : 'text-fg-2',
-                    ].join(' ')}
-                  >
-                    {item.title}
-                  </div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[10.5px] font-mono uppercase tracking-wider text-fg-4 border border-line rounded px-1 py-0.5">
-                      {item.type}
-                    </span>
-                    <span className="text-[11px] text-fg-4">
-                      {new Date(item.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-      </div>
-
-      {/* Right panel — detail */}
-      <div className="flex-1 min-w-0 min-h-0 bg-bg-elev/30">
-        <InboxDetail item={selectedItem} onPromote={setPromoting} onDelete={handleDelete} />
-      </div>
-
-      {promoting && <PromoteModal item={promoting} onClose={() => setPromoting(null)} />}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { COST_PLACEHOLDER } from '../../lib/constants';
 import { sortLaneItems } from '../../lib/lanes.config';
 
 // IssueCard rendering is exercised by the Playwright happy-path (#36)
@@ -7,8 +8,7 @@ import { sortLaneItems } from '../../lib/lanes.config';
 
 describe('IssueCard — cost placeholder', () => {
   it('COST_PLACEHOLDER is "$—"', () => {
-    // Inline constant — no import needed.
-    expect('$—').toBe('$—');
+    expect(COST_PLACEHOLDER).toBe('$—');
   });
 });
 

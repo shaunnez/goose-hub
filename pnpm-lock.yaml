@@ -69,6 +69,12 @@ importers:
       '@goose-hub/core':
         specifier: workspace:*
         version: link:../../core
+      '@goose-hub/skills':
+        specifier: workspace:*
+        version: link:../../skills
+      '@goose-hub/target-projects':
+        specifier: workspace:*
+        version: link:../../target-projects
 
   apps/server:
     dependencies:
@@ -78,6 +84,9 @@ importers:
       '@goose-hub/skills':
         specifier: workspace:*
         version: link:../../skills
+      '@goose-hub/target-projects':
+        specifier: workspace:*
+        version: link:../../target-projects
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.14(hono@4.12.16)
@@ -156,6 +165,8 @@ importers:
         version: link:../skills
 
   skills: {}
+
+  target-projects: {}
 
 packages:
 

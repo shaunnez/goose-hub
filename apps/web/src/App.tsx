@@ -4,7 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-
 import { Board } from './components/board/components/Board';
 import { AppShell } from './components/chrome/AppShell';
 import { DetailPage } from './components/detail/components/DetailPage';
-import { InboxList } from './components/inbox/InboxList';
+import { InboxList } from './components/inbox/components/InboxList';
 import { RosterPage } from './components/roster/components/RosterPage';
 import { ActiveMilestoneProvider } from './state/active-milestone';
 import { ActiveProjectProvider } from './state/active-project';

@@ -11,13 +11,17 @@
     "baseUrl": ".",
     "paths": {
       "@goose-hub/core/*": ["./core/*"],
-      "@goose-hub/skills/*": ["./skills/*"]
+      "@goose-hub/skills": ["./skills/index.ts"],
+      "@goose-hub/skills/*": ["./skills/*"],
+      "@goose-hub/target-projects": ["./target-projects/index.ts"],
+      "@goose-hub/target-projects/*": ["./target-projects/*"]
     }
   },
   "include": [
     "core/**/*.ts",
     "apps/cli/**/*.ts",
     "apps/server/**/*.ts",
+    "skills/index.ts",
     "slices/**/*.ts",
     "target-projects/**/*.ts",
     "vitest.config.ts",

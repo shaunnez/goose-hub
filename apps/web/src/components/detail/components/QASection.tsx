@@ -2,98 +2,16 @@ import { fetchEvents } from '@/lib/api';
 import type { AgentEventDto } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, CheckCircle, Clock, Plus, RefreshCw, XCircle } from 'lucide-react';
+import { TIERS, formatWallTime } from '../lib/qa';
+import type { QaPayload } from '../lib/qa';
+import { QaFindingRow } from './QaFindingRow';
+import { QaTestSuiteRow } from './QaTestSuiteRow';
+import { QaTierRow } from './QaTierRow';
+import { StatCard } from './StatCard';
 
 interface QASectionProps {
   projectSlug: string;
   id: string;
-}
-
-interface Finding {
-  tier: 'structural' | 'functional' | 'regression';
-  severity: 'error' | 'warning' | 'info';
-  file?: string | null;
-  line?: number | null;
-  description: string;
-  suggestion?: string;
-}
-
-interface TierResult {
-  passed: boolean;
-  findings: Finding[];
-  command?: string | null;
-  output?: string | null;
-}
-
-interface SuiteResult {
-  name: string;
-  filePath: string;
-  total: number;
-  passed: number;
-  failed: number;
-  skipped: number;
-  durationMs: number;
-  status: 'passed' | 'failed' | 'skipped';
-}
-
-interface TestRun {
-  wallTimeMs: number;
-  total: number;
-  passed: number;
-  failed: number;
-  skipped: number;
-  success: boolean;
-  suites: SuiteResult[];
-}
-
-interface QaPayload {
-  verdict: 'pass' | 'fail' | 'partial';
-  overallScore: number;
-  threshold?: number;
-  tierResults: {
-    structural: TierResult;
-    functional: TierResult;
-    regression: TierResult;
-  };
-  testRun?: TestRun;
-}
-
-function formatWallTime(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  const s = ms / 1000;
-  return s < 60 ? `${s.toFixed(s < 10 ? 2 : 1)}s` : `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
-}
-
-const TIERS = ['structural', 'functional', 'regression'] as const;
-
-function StatCard({
-  label,
-  value,
-  sub,
-  color,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  color?: string;
-}) {
-  return (
-    <div className="rounded-lg border border-line bg-bg-elev px-4 py-3">
-      <div className="text-[10.5px] uppercase tracking-wider text-fg-4 mb-1.5">{label}</div>
-      <div
-        className="mono tnum text-[22px] font-semibold leading-none tracking-tight"
-        style={{ color: color ?? 'var(--fg)' }}
-      >
-        {value}
-      </div>
-      {sub && <div className="text-[11.5px] text-fg-3 mt-1.5">{sub}</div>}
-    </div>
-  );
-}
-
-function severityColor(sev: Finding['severity']): string {
-  if (sev === 'error') return 'var(--danger)';
-  if (sev === 'warning') return 'var(--warning)';
-  return 'var(--info)';
 }
 
 export function QASection({ projectSlug, id }: QASectionProps) {
@@ -246,77 +164,9 @@ export function QASection({ projectSlug, id }: QASectionProps) {
             </div>
           </div>
           <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
-            {qa.testRun.suites.map((s, i) => {
-              const pillColor =
-                s.status === 'passed'
-                  ? 'var(--success)'
-                  : s.status === 'failed'
-                    ? 'var(--danger)'
-                    : 'var(--warning)';
-              return (
-                <div
-                  key={s.filePath || s.name}
-                  className="grid items-center px-4 py-3"
-                  style={{
-                    gridTemplateColumns: '1.5fr 1fr 100px 90px 90px',
-                    borderTop: i ? '1px solid var(--line)' : 'none',
-                  }}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span
-                      className="inline-block rounded-full shrink-0"
-                      style={{
-                        width: 8,
-                        height: 8,
-                        background: pillColor,
-                      }}
-                    />
-                    <span className="mono text-[12.5px] truncate" title={s.filePath}>
-                      {s.name}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1 flex-wrap">
-                    {Array.from({ length: Math.min(s.total, 24) }, (_, j) => {
-                      const isPass = j < s.passed;
-                      const isFail = j >= s.passed && j < s.passed + s.failed;
-                      const bg = isPass
-                        ? 'var(--success)'
-                        : isFail
-                          ? 'var(--danger)'
-                          : 'var(--warning)';
-                      return (
-                        <span
-                          key={`${s.filePath}-${j}`}
-                          style={{ width: 8, height: 14, borderRadius: 1.5, background: bg }}
-                        />
-                      );
-                    })}
-                  </div>
-                  <span className="mono tnum text-right text-[12px] text-fg-2">
-                    {s.passed}/{s.total}
-                  </span>
-                  <span className="mono tnum text-right text-[12px] text-fg-3">
-                    {s.durationMs > 0 ? `${s.durationMs}ms` : '—'}
-                  </span>
-                  <span className="text-right">
-                    <span
-                      className="inline-flex items-center px-2 py-0.5 rounded-full border text-[10.5px] font-medium uppercase tracking-wide"
-                      style={{
-                        color: pillColor,
-                        borderColor: `oklch(from ${pillColor} l c h / 0.4)`,
-                        background: `oklch(from ${pillColor} l c h / 0.1)`,
-                      }}
-                    >
-                      {s.status === 'passed'
-                        ? 'passing'
-                        : s.status === 'failed'
-                          ? 'failing'
-                          : 'skipped'}
-                    </span>
-                  </span>
-                </div>
-              );
-            })}
+            {qa.testRun.suites.map((s, i) => (
+              <QaTestSuiteRow key={s.filePath || s.name} suite={s} isFirst={i === 0} />
+            ))}
           </div>
         </div>
       )}
@@ -327,82 +177,9 @@ export function QASection({ projectSlug, id }: QASectionProps) {
           Verification Tiers
         </div>
         <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
-          {TIERS.map((tier, i) => {
-            const result = qa.tierResults?.[tier];
-            const findings = result?.findings ?? [];
-            const passed = !!result?.passed;
-            const dots: Array<{ key: string; sev: Finding['severity'] | null }> =
-              findings.length > 0
-                ? findings.slice(0, 16).map((f, idx) => ({
-                    key: `${tier}-f-${idx}-${f.severity}`,
-                    sev: f.severity,
-                  }))
-                : Array.from({ length: 8 }, (_, idx) => ({
-                    key: `${tier}-empty-${idx}`,
-                    sev: null,
-                  }));
-            return (
-              <div
-                key={tier}
-                className="grid items-center px-4 py-3"
-                style={{
-                  gridTemplateColumns: '1.5fr 1fr 90px 90px 90px',
-                  borderTop: i ? '1px solid var(--line)' : 'none',
-                }}
-              >
-                <div className="flex items-center gap-3">
-                  <span
-                    className="inline-block rounded-full"
-                    style={{
-                      width: 8,
-                      height: 8,
-                      background: passed ? 'var(--success)' : 'var(--danger)',
-                    }}
-                  />
-                  <span className="mono text-[12.5px] capitalize">{tier}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  {dots.map((d) => (
-                    <span
-                      key={d.key}
-                      style={{
-                        width: 8,
-                        height: 14,
-                        borderRadius: 1.5,
-                        background: d.sev === null ? 'var(--success)' : severityColor(d.sev),
-                        opacity: d.sev === null ? 0.7 : 1,
-                      }}
-                    />
-                  ))}
-                </div>
-                <span className="mono tnum text-right text-[12px] text-fg-2">
-                  {passed ? 'pass' : `${findings.length} issue${findings.length === 1 ? '' : 's'}`}
-                </span>
-                <span
-                  className="mono tnum text-right text-[12px] text-fg-3 truncate"
-                  title={result?.command ?? ''}
-                >
-                  {result?.command ?? '—'}
-                </span>
-                <span className="text-right">
-                  <span
-                    className="inline-flex items-center px-2 py-0.5 rounded-full border text-[10.5px] font-medium uppercase tracking-wide"
-                    style={{
-                      color: passed ? 'var(--success)' : 'var(--danger)',
-                      borderColor: passed
-                        ? 'oklch(from var(--success) l c h / 0.4)'
-                        : 'oklch(from var(--danger) l c h / 0.4)',
-                      background: passed
-                        ? 'oklch(from var(--success) l c h / 0.1)'
-                        : 'oklch(from var(--danger) l c h / 0.1)',
-                    }}
-                  >
-                    {passed ? 'passing' : 'failing'}
-                  </span>
-                </span>
-              </div>
-            );
-          })}
+          {TIERS.map((tier, i) => (
+            <QaTierRow key={tier} tier={tier} result={qa.tierResults?.[tier]} isFirst={i === 0} />
+          ))}
         </div>
       </div>
 
@@ -419,33 +196,7 @@ export function QASection({ projectSlug, id }: QASectionProps) {
           <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
             {TIERS.flatMap((tier) =>
               (qa.tierResults?.[tier]?.findings ?? []).map((f, idx) => (
-                <div
-                  key={`${tier}:${idx}:${f.description}`}
-                  className="px-4 py-3 border-t border-line first:border-t-0 text-[12.5px]"
-                >
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span
-                      className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide"
-                      style={{
-                        color: severityColor(f.severity),
-                        background: `oklch(from ${severityColor(f.severity)} l c h / 0.12)`,
-                      }}
-                    >
-                      {f.severity}
-                    </span>
-                    <span className="text-[11px] text-fg-4 capitalize">{tier}</span>
-                    {f.file && (
-                      <span className="mono text-[10.5px] text-fg-3 bg-bg-elev-2 px-1.5 py-0.5 rounded">
-                        {f.file}
-                        {f.line != null ? `:${f.line}` : ''}
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-fg-2">{f.description}</div>
-                  {f.suggestion && (
-                    <div className="text-[11.5px] text-fg-3 mt-1">→ {f.suggestion}</div>
-                  )}
-                </div>
+                <QaFindingRow key={`${tier}:${idx}:${f.description}`} finding={f} tier={tier} />
               )),
             )}
           </div>

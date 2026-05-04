@@ -4,17 +4,26 @@
 
 ## Feature Folder Structure
 
-Every feature folder (`chrome/`, `detail/`, `board/`, `inbox/`) MUST use:
+Feature folders live under `src/components/`. Every feature folder
+(`board/`, `detail/`, `inbox/`, `roster/`) MUST use:
 
 ```
-feature/
-  components/   ← React components (.tsx only)
-  lib/          ← TypeScript utilities specific to this feature (.ts only)
+src/components/<feature>/
+  components/   ← React components (.tsx only); REQUIRED
+  lib/          ← TypeScript utilities specific to this feature (.ts only); add when you have them
   slice.test.ts ← Required by FACTORY_RULES; tests public slice behaviour
+  README.md
 ```
 
-Exception: `chrome/slots/` is a chrome-specific subfolder for shell injection points.
-This pattern does **not** generalise to other features.
+`lib/` is added the moment a feature accumulates its own helper, type, or
+constant. Until then, omit the empty folder rather than committing it as a
+placeholder; `board/` and `roster/` legitimately have no `lib/` today.
+
+`chrome/` is the application shell and is the documented exception: its
+top-level files (`AppShell.tsx`, `Sidebar.tsx`, `TopBar.tsx`) sit at the
+folder root, and `chrome/slots/` is a chrome-specific subfolder for shell
+injection points. The `components/`+`lib/` pattern does **not** generalise
+to other features beyond the four listed above.
 
 ## Shared Layer (`lib/`)
 

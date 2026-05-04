@@ -1,5 +1,68 @@
 import type { AgentEventDto } from '@/lib/types';
 
+// ─── display helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Maps event-kind strings (`agent.run-started`, `state.transitioned`, …) to
+ * human-readable labels. Doubles as the canonical list of event kinds the
+ * timeline renders — `Object.keys(EVENT_KIND_LABEL)` is what the SSE listener
+ * subscribes to.
+ *
+ * NOTE: this is event-kind labelling. `STATE_LABEL` in `@/lib/constants`
+ * separately maps `factory:*` work-item state names; keep them apart.
+ */
+export const EVENT_KIND_LABEL: Record<string, string> = {
+  'state.transitioned': 'State transitioned',
+  'milestone.activated': 'Milestone activated',
+  'agent.spawned': 'Agent spawned',
+  'agent.decision-summary': 'Decision summary',
+  'agent.terminated': 'Agent terminated',
+  'agent.log': 'Agent log',
+  'gate.awaiting-human': 'Gate — awaiting human',
+  'system.note': 'Note',
+  'manual.action': 'Manual action',
+  'agent.run-started': 'Agent run started',
+  'agent.run-completed': 'Agent run completed',
+  'agent.run-failed': 'Agent run failed',
+  'agent.tool-call': 'Tool call',
+  'tool.stdout-truncated': 'Stdout truncated',
+  'tool.timeout': 'Timeout',
+  'agent.fallback-triggered': 'Fallback triggered',
+  'agent.triage-complete': 'Triage complete',
+  'agent.investigation-complete': 'Investigation complete',
+  'agent.implement-complete': 'Implement complete',
+  'pr.opened': 'PR opened',
+  'pr.merged': 'PR merged',
+  'gate.approved': 'Gate approved',
+  'review.completed': 'Review completed',
+  'evidence.no-spec-declared': 'Evidence — no spec declared',
+  'evidence.posted': 'Evidence posted',
+  'evidence.post-failed': 'Evidence post failed',
+  'qa.completed': 'QA completed',
+  'qa.structural-failed': 'QA structural failed',
+  'qa.functional-failed': 'QA functional failed',
+  'qa.regression-failed': 'QA regression failed',
+};
+
+export function formatSkillName(skill: string | null): string {
+  if (skill == null) return '(Unknown)';
+  return skill
+    .split('-')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+export function formatDuration(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
+export function getPayloadStr(payload: unknown): string {
+  const text = typeof payload === 'string' ? payload : JSON.stringify(payload ?? {});
+  return text.length <= 80 ? text : `${text.slice(0, 79)}…`;
+}
+
 // ─── grouping ────────────────────────────────────────────────────────────────
 
 export type RenderItem =
