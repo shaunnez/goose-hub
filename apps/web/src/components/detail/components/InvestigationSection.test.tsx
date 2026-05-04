@@ -10,6 +10,10 @@ afterEach(cleanup);
 
 vi.mock('@/lib/api', () => ({
   fetchEvents: vi.fn().mockResolvedValue([]),
+  fetchComments: vi.fn().mockResolvedValue([]),
+  fetchPersonaNames: vi.fn().mockResolvedValue([]),
+  addComment: vi.fn(),
+  transitionState: vi.fn(),
 }));
 
 vi.mock('@/lib/markdown', () => ({
