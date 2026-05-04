@@ -50,11 +50,16 @@ describe('deployHooks', () => {
 
     deployHooks();
 
-    expect(writeFileSync).toHaveBeenCalledOnce();
+    expect(writeFileSync).toHaveBeenCalledTimes(2);
     expect(writeFileSync).toHaveBeenCalledWith(
       expect.stringContaining('pre-tool-use.js'),
       expect.any(String),
       { encoding: 'utf8', mode: 0o755 },
+    );
+    expect(writeFileSync).toHaveBeenCalledWith(
+      expect.stringContaining('package.json'),
+      '{"type":"module"}',
+      'utf8',
     );
   });
 
@@ -63,7 +68,7 @@ describe('deployHooks', () => {
 
     deployHooks();
 
-    expect(writeFileSync).toHaveBeenCalledOnce();
+    expect(writeFileSync).toHaveBeenCalledTimes(2);
   });
 
   it('still creates the directory even when the hook file already exists', () => {

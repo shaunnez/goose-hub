@@ -9,12 +9,11 @@ export const TOOL_BUNDLES = {
    */
   read: ['read', 'search', 'work-item-read'],
   /**
-   * Sandboxed developer bundle. Superset of `read` plus `write`, `bash`, `test`.
-   * The lowercase names map to the in-process implementations under
-   * `core/tool-layer/tools/`, all enforcing workspace-bound paths and the
-   * bash denylist (FACTORY_RULES rules 29, 31, 32).
+   * Developer bundle for the fix-issue agent. Uses Claude's native built-in tools.
+   * The MCP sandboxed tool server (core/tool-layer/tools/) is not yet wired up;
+   * workspace-level deny rules in sandbox.ts provide the safety boundary instead.
    */
-  'dev-tools': ['read', 'search', 'work-item-read', 'write', 'bash', 'test'],
+  'dev-tools': ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'],
   /**
    * Playwright validation bundle. Used by skills that run e2e specs and
    * commit/push evidence artefacts (skills/playwright-repro, skills/evidence-post).

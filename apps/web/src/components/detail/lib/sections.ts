@@ -14,7 +14,7 @@ export const SECTIONS: readonly DetailSection[] = [
   { key: 'overview', label: 'Overview', available: true },
   {
     key: 'repo',
-    label: 'Repo Selection',
+    label: 'Triage',
     available: true,
   },
   {

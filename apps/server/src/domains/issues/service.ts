@@ -214,6 +214,8 @@ export async function getIssueWorktreeDiff(
   }
 
   if (!existsSync(join(worktreePath, '.git'))) {
+    const prDiff = await tryGitHubPrDiff(ascending, repoRef, fetchImpl);
+    if (prDiff != null) return { ok: true, data: { diff: prDiff, runId } };
     return {
       ok: true,
       data: {
@@ -230,7 +232,12 @@ export async function getIssueWorktreeDiff(
       encoding: 'utf8',
       maxBuffer: 4 * 1024 * 1024,
     });
-    return { ok: true, data: { diff, runId } };
+    if (diff.length > 0) return { ok: true, data: { diff, runId } };
+    // Worktree exists but all changes are committed (e.g. PR already opened).
+    // Fall through to the GitHub PR diff.
+    const prDiff = await tryGitHubPrDiff(ascending, repoRef, fetchImpl);
+    if (prDiff != null) return { ok: true, data: { diff: prDiff, runId } };
+    return { ok: true, data: { diff: null, runId, reason: 'no uncommitted changes and no PR diff available' } };
   } catch (err) {
     return {
       ok: true,

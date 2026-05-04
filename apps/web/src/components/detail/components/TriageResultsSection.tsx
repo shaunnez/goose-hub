@@ -1,6 +1,8 @@
 import { fetchTriageResult, setRepoOverride } from '@/lib/api';
+import { PRIORITY_BG, PRIORITY_BORDER, PRIORITY_COLOR } from '@/lib/constants';
 import type { TriageResultDto } from '@/lib/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Check, Folder, Plus } from 'lucide-react';
 import { useState } from 'react';
 
 interface TriageResultsSectionProps {
@@ -8,39 +10,28 @@ interface TriageResultsSectionProps {
   id: string;
 }
 
-const TYPE_COLOR: Record<string, string> = {
-  feature: 'bg-blue-500/15 text-blue-400',
-  bug: 'bg-red-500/15 text-red-400',
-  chore: 'bg-gray-500/15 text-gray-400',
-  research: 'bg-purple-500/15 text-purple-400',
-};
-
-const PRIORITY_COLOR: Record<string, string> = {
-  p0: 'bg-red-600/20 text-red-400',
-  p1: 'bg-orange-500/20 text-orange-400',
-  p2: 'bg-yellow-500/20 text-yellow-400',
-  p3: 'bg-gray-500/15 text-gray-400',
-  critical: 'bg-red-600/20 text-red-400',
-  high: 'bg-orange-500/20 text-orange-400',
-  medium: 'bg-yellow-500/20 text-yellow-400',
-  low: 'bg-gray-500/15 text-gray-400',
-};
-
 // Static allowlist — mirrors target-projects/goose-hub-self/repos.md
 const ALLOWLISTED_REPOS = ['shaunnez/goose-hub'];
 
-function Badge({ label, colorClass }: { label: string; colorClass: string }) {
+function ScoreBar({ value }: { value: number }) {
+  const pct = Math.max(0, Math.min(100, value));
+  const color =
+    pct >= 70 ? 'var(--accent)' : pct >= 40 ? 'oklch(0.74 0.15 200)' : 'var(--fg-4)';
   return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${colorClass}`}
-    >
-      {label}
-    </span>
+    <div className="flex items-center gap-2 justify-end">
+      <div className="w-9 h-1 rounded-full bg-line overflow-hidden shrink-0">
+        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+      </div>
+      <span className="font-mono text-[11.5px] text-fg-2 tabular-nums w-7 text-right">
+        {pct}
+      </span>
+    </div>
   );
 }
 
 export function TriageResultsSection({ projectSlug, id }: TriageResultsSectionProps) {
   const queryClient = useQueryClient();
+  const [overrideMode, setOverrideMode] = useState(false);
   const [selectedRepo, setSelectedRepo] = useState('');
 
   const { data, isLoading } = useQuery<TriageResultDto | null>({
@@ -53,74 +44,185 @@ export function TriageResultsSection({ projectSlug, id }: TriageResultsSectionPr
     onSuccess: (updated) => {
       queryClient.setQueryData(['triage', projectSlug, id], updated);
       setSelectedRepo('');
+      setOverrideMode(false);
     },
   });
 
-  if (isLoading || data == null) return null;
+  if (isLoading) {
+    return (
+      <div data-testid="triage-results-section" className="px-8 py-6 ">
+        <div className="h-8 w-32 rounded bg-bg-elev animate-pulse mb-4" />
+        <div className="rounded-lg border border-line bg-bg-elev h-48 animate-pulse" />
+      </div>
+    );
+  }
+
+  if (data == null) return null;
 
   const triage: TriageResultDto = data;
+  const pickedRepo = triage.overrideRepo ?? triage.candidates[0]?.repo;
+
+  const priorityColor = PRIORITY_COLOR[triage.priority];
+  const priorityBg = PRIORITY_BG[triage.priority];
+  const priorityBorder = PRIORITY_BORDER[triage.priority];
 
   return (
-    <div data-testid="triage-results-section" className="px-8 py-4 border-t border-border/40">
-      <h3 className="text-[12px] font-semibold text-fg-3 uppercase tracking-wide mb-3">Triage</h3>
-      <div className="flex items-center gap-2 mb-4">
-        <Badge
-          label={triage.type}
-          colorClass={TYPE_COLOR[triage.type] ?? 'bg-gray-500/15 text-gray-400'}
-        />
-        <Badge
-          label={triage.priority}
-          colorClass={PRIORITY_COLOR[triage.priority] ?? 'bg-gray-500/15 text-gray-400'}
-        />
+    <div data-testid="triage-results-section" className="px-8 py-6 flex flex-col gap-5">
+      {/* Section header */}
+      <div>
+        <div className="text-[10.5px] uppercase tracking-wider text-fg-4 mb-1">02. Triage</div>
+        <h2 className="text-[17px] font-semibold text-fg leading-snug">
+          Repo candidates &amp; classification
+        </h2>
+        <div className="flex items-center gap-2 mt-2">
+          <span
+            className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border"
+            style={{
+              color: priorityColor,
+              background: priorityBg,
+              borderColor: priorityBorder,
+            }}
+          >
+            {triage.priority}
+          </span>
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border border-line bg-bg-elev text-fg-2">
+            {triage.type}
+          </span>
+        </div>
       </div>
 
+      {/* Candidates table */}
       {triage.candidates.length > 0 && (
-        <div className="mb-4">
-          <p className="text-[11px] font-medium text-fg-3 mb-2">Repo candidates</p>
-          <ul className="space-y-1">
-            {triage.candidates.map((c) => (
-              <li
+        <div className="rounded-lg border border-line overflow-hidden">
+          {/* Table header */}
+          <div
+            className="grid text-[10.5px] uppercase tracking-wider text-fg-4 font-semibold bg-bg-elev-2 px-4 py-2.5 border-b border-line"
+            style={{ gridTemplateColumns: '1fr 100px 60px 1.4fr 80px' }}
+          >
+            <span>Repository</span>
+            <span className="text-right">Confidence</span>
+            <span className="text-right">Tier</span>
+            <span className="pl-4">Evidence</span>
+            <span className="text-right">Pick</span>
+          </div>
+
+          {/* Rows */}
+          {triage.candidates.map((c, i) => {
+            const isPicked = c.repo === pickedRepo;
+            const isLast = i === triage.candidates.length - 1;
+            return (
+              <div
                 key={c.repo}
-                className={`text-[12px] flex items-start gap-2 ${triage.overrideRepo === c.repo ? 'text-fg-1 font-medium' : 'text-fg-2'}`}
+                className="grid px-4 py-3 items-center text-[13px] transition-colors"
+                style={{
+                  gridTemplateColumns: '1fr 100px 60px 1.4fr 80px',
+                  background: isPicked ? 'var(--accent-soft)' : 'transparent',
+                  borderBottom: isLast ? 'none' : '1px solid var(--line)',
+                }}
               >
-                <span className="font-mono">{c.repo}</span>
-                <span className="text-fg-3">
-                  {c.confidence}% · {c.evidence} · tier {c.tier}
-                  {triage.overrideRepo === c.repo && (
-                    <span className="ml-1 text-blue-400">(confirmed)</span>
+                {/* Repo name */}
+                <div className="flex items-center gap-2 min-w-0">
+                  <Folder
+                    size={13}
+                    className="shrink-0"
+                    style={{ color: isPicked ? 'var(--accent)' : 'var(--fg-4)' }}
+                  />
+                  <span
+                    className="font-mono truncate"
+                    style={{ fontWeight: isPicked ? 500 : 400 }}
+                  >
+                    {c.repo}
+                  </span>
+                </div>
+
+                {/* Confidence bar */}
+                <ScoreBar value={c.confidence} />
+
+                {/* Tier */}
+                <div className="text-right font-mono text-[11.5px] text-fg-3 tabular-nums">
+                  {c.tier != null ? `T${c.tier}` : '—'}
+                </div>
+
+                {/* Evidence */}
+                <div className="pl-4 text-[12px] text-fg-3 leading-snug">{c.evidence}</div>
+
+                {/* Pick indicator */}
+                <div className="flex justify-end">
+                  {isPicked ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-accent/15 text-accent border border-accent/30">
+                      <Check size={10} strokeWidth={2.5} />
+                      picked
+                    </span>
+                  ) : (
+                    <span className="font-mono text-[11px] text-fg-5 tabular-nums">
+                      {c.confidence}
+                    </span>
                   )}
-                </span>
-              </li>
-            ))}
-          </ul>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
-      <div className="flex items-center gap-2 mt-3">
-        <select
-          data-testid="repo-override-select"
-          value={selectedRepo}
-          onChange={(e) => setSelectedRepo(e.target.value)}
-          className="text-[12px] bg-surface-2 border border-border/60 rounded px-2 py-1 text-fg-2 focus:outline-none focus:border-border"
-        >
-          <option value="">Select repo to override…</option>
-          {ALLOWLISTED_REPOS.map((r) => (
-            <option key={r} value={r}>
-              {r}
-            </option>
-          ))}
-        </select>
-        <button
-          data-testid="repo-override-button"
-          type="button"
-          disabled={selectedRepo === '' || overrideMutation.isPending}
-          onClick={() => {
-            if (selectedRepo) overrideMutation.mutate(selectedRepo);
-          }}
-          className="text-[12px] px-3 py-1 rounded bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          Set repo
-        </button>
+      {/* Footer actions */}
+      <div className="flex items-center gap-2">
+        <span className="grow" />
+        {overrideMode ? (
+          <>
+            <select
+              data-testid="repo-override-select"
+              value={selectedRepo}
+              onChange={(e) => setSelectedRepo(e.target.value)}
+              className="text-[12px] bg-bg-elev border border-line rounded-md px-2 py-1.5 text-fg-2 focus:outline-none focus:border-accent"
+            >
+              <option value="">Select repo to override…</option>
+              {ALLOWLISTED_REPOS.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+            <button
+              data-testid="repo-override-button"
+              type="button"
+              disabled={selectedRepo === '' || overrideMutation.isPending}
+              onClick={() => {
+                if (selectedRepo) overrideMutation.mutate(selectedRepo);
+              }}
+              className="h-7 px-3 rounded-md text-[12px] bg-accent/15 text-accent border border-accent/30 hover:bg-accent/25 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Set repo
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setOverrideMode(false);
+                setSelectedRepo('');
+              }}
+              className="h-7 px-3 rounded-md text-[12px] border border-line text-fg-3 hover:bg-bg-hover transition-colors"
+            >
+              Cancel
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="h-7 px-3 rounded-md text-[12px] border border-line text-fg-2 hover:bg-bg-hover transition-colors inline-flex items-center gap-1.5"
+            >
+              <Plus size={11} />
+              Add candidate
+            </button>
+            <button
+              type="button"
+              onClick={() => setOverrideMode(true)}
+              className="h-7 px-3 rounded-md text-[12px] border border-line text-fg-2 hover:bg-bg-hover transition-colors"
+            >
+              Override pick
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

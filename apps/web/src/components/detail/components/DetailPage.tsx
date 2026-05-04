@@ -237,7 +237,9 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
             ) : currentSection.key === 'code' ? (
               <div>
                 <CodeDiffSection projectSlug={slug} id={id} />
-                <PlaywrightCaptureSection projectSlug={slug} id={id} itemType={item?.type ?? ''} />
+                {item?.type === 'bug' && (
+                  <PlaywrightCaptureSection projectSlug={slug} id={id} itemType={item.type} />
+                )}
               </div>
             ) : currentSection.key === 'qa' ? (
               <QASection projectSlug={slug} id={id} />

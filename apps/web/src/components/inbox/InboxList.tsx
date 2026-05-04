@@ -1,13 +1,11 @@
 import { fetchInboxItems, fetchProjects, promoteInboxItem } from '@/lib/api';
 import type { InboxItemDto, ProjectSummary } from '@/lib/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, ChevronDown } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Inbox } from 'lucide-react';
 import { useState } from 'react';
 
 // ---------------------------------------------------------------------------
 // Two-step promote modal
-// Step 1 (picker): list projects from fetchProjects(), let user select one
-// Step 2 (confirm): show confirmation for selected project, call promote
 // ---------------------------------------------------------------------------
 
 type ModalStep = 'picker' | 'confirm';
@@ -251,8 +249,82 @@ function PromoteModal({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Detail panel
+// ---------------------------------------------------------------------------
+
+function InboxDetail({
+  item,
+  onPromote,
+}: {
+  item: InboxItemDto;
+  onPromote: (item: InboxItemDto) => void;
+}) {
+  return (
+    <div className="flex flex-col h-full overflow-y-auto px-8 py-6">
+      <div className="flex items-start justify-between gap-4 mb-6">
+        <div className="flex-1 min-w-0">
+          <h2 className="text-[17px] font-semibold text-fg leading-snug mb-2">{item.title}</h2>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-mono uppercase tracking-wider text-fg-4 border border-line rounded px-1.5 py-0.5">
+              {item.type}
+            </span>
+            <span className="text-[12px] text-fg-4">
+              {new Date(item.createdAt).toLocaleDateString(undefined, {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              })}
+            </span>
+          </div>
+        </div>
+        <button
+          type="button"
+          data-testid="promote-button"
+          onClick={() => onPromote(item)}
+          className="shrink-0 h-8 px-4 rounded-md border border-line text-[12px] text-fg-2 hover:text-fg hover:bg-bg-hover"
+        >
+          Promote
+        </button>
+      </div>
+
+      <div className="border-t border-line pt-6">
+        {item.body ? (
+          <p className="text-[13px] text-fg-2 leading-relaxed whitespace-pre-wrap">{item.body}</p>
+        ) : (
+          <p className="text-[13px] text-fg-4 italic">No description.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Empty state
+// ---------------------------------------------------------------------------
+
+function InboxEmpty() {
+  return (
+    <div data-testid="inbox-empty" className="flex h-full items-center justify-center">
+      <div className="text-center">
+        <div className="flex justify-center mb-4">
+          <Inbox size={40} className="text-fg-4" />
+        </div>
+        <p className="text-[15px] font-medium text-fg-2 mb-1">Inbox is empty</p>
+        <p className="text-[13px] text-fg-4">Use the Capture button in the top bar to add ideas.</p>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main export
+// ---------------------------------------------------------------------------
+
 export function InboxList() {
   const [promoting, setPromoting] = useState<InboxItemDto | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+
   const {
     data: items = [],
     isLoading,
@@ -265,48 +337,61 @@ export function InboxList() {
   if (isLoading) return <div className="px-8 py-10 text-fg-3">Loading inbox…</div>;
   if (error)
     return <div className="px-8 py-10 text-[color:var(--danger)]">Failed to load inbox.</div>;
-  if (items.length === 0) {
-    return (
-      <div data-testid="inbox-empty" className="px-8 py-16 text-center text-fg-3 text-[13px]">
-        <p className="mb-2 font-medium text-fg-2">Inbox is empty</p>
-        <p>Use the Capture button in the top bar to add ideas.</p>
-      </div>
-    );
-  }
+  if (items.length === 0) return <InboxEmpty />;
+
+  const effectiveId = selectedId ?? items[0].id;
+  const selectedItem = items.find((i) => i.id === effectiveId) ?? items[0];
 
   return (
-    <div data-testid="inbox-list" className="px-8 py-6 max-w-[860px]">
-      <h1 className="text-[15px] font-semibold mb-6">Inbox</h1>
-      <ol className="flex flex-col gap-2">
-        {items.map((item) => (
-          <li
-            key={item.id}
-            data-testid="inbox-item"
-            data-inbox-id={item.id}
-            className="flex items-center gap-4 rounded-md border border-line bg-bg-elev/60 px-4 py-3"
-          >
-            <div className="flex-1 min-w-0">
-              <div className="text-[13px] font-medium text-fg truncate">{item.title}</div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[11px] font-mono uppercase tracking-wider text-fg-4 border border-line rounded px-1.5 py-0.5">
-                  {item.type}
-                </span>
-                <span className="text-[11px] text-fg-4">
-                  {new Date(item.createdAt).toLocaleDateString()}
-                </span>
-              </div>
-            </div>
-            <button
-              type="button"
-              data-testid="promote-button"
-              onClick={() => setPromoting(item)}
-              className="h-7 px-3 rounded-md border border-line text-[12px] text-fg-2 hover:text-fg hover:bg-bg-hover shrink-0"
-            >
-              Promote
-            </button>
-          </li>
-        ))}
-      </ol>
+    <div data-testid="inbox-list" className="flex h-full">
+      {/* Left panel — list */}
+      <div className="w-[35%] border-r border-line flex flex-col min-h-0">
+        <div className="px-4 py-4 border-b border-line shrink-0">
+          <h1 className="text-[14px] font-semibold text-fg">Inbox</h1>
+        </div>
+        <ol className="flex-1 overflow-y-auto p-2 flex flex-col gap-0.5">
+          {items.map((item) => {
+            const isSelected = item.id === effectiveId;
+            return (
+              <li key={item.id} data-testid="inbox-item" data-inbox-id={item.id}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(item.id)}
+                  className={[
+                    'w-full text-left rounded-md px-3 py-2.5 transition-colors',
+                    isSelected
+                      ? 'bg-accent/10 border border-accent/30'
+                      : 'border border-transparent hover:bg-bg-hover',
+                  ].join(' ')}
+                >
+                  <div
+                    className={[
+                      'text-[12.5px] font-medium truncate',
+                      isSelected ? 'text-fg' : 'text-fg-2',
+                    ].join(' ')}
+                  >
+                    {item.title}
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-[10.5px] font-mono uppercase tracking-wider text-fg-4 border border-line rounded px-1 py-0.5">
+                      {item.type}
+                    </span>
+                    <span className="text-[11px] text-fg-4">
+                      {new Date(item.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+
+      {/* Right panel — detail */}
+      <div className="flex-1 min-w-0 min-h-0 bg-bg-elev/30">
+        <InboxDetail item={selectedItem} onPromote={setPromoting} />
+      </div>
+
       {promoting && <PromoteModal item={promoting} onClose={() => setPromoting(null)} />}
     </div>
   );

@@ -24,6 +24,14 @@ function isAdvisorGated(priority: string): priority is 'high' | 'critical' {
   return priority === 'high' || priority === 'critical';
 }
 
+function resolveBaseBranch(repoPath: string): string {
+  try {
+    return execFileSync('git', ['symbolic-ref', '--short', 'HEAD'], { cwd: repoPath, encoding: 'utf8' }).trim();
+  } catch {
+    return 'main';
+  }
+}
+
 export interface FixIssueDeps {
   /** Override the runtime (used by tests). Defaults to ClaudeCliRuntime. */
   runtime?: AgentRuntime;
@@ -37,6 +45,8 @@ export interface FixIssueDeps {
   cleanupWorktreeImpl?: typeof cleanupWorktree;
   /** Override resolveWorktreeHeadSha (used by tests to avoid real git subprocess). */
   resolveWorktreeHeadShaImpl?: typeof resolveWorktreeHeadSha;
+  /** Override resolveBaseBranch (used by tests to avoid real git subprocess). */
+  resolveBaseBranchImpl?: (repoPath: string) => string;
 }
 
 /**
@@ -72,6 +82,7 @@ export async function runFixIssueWorkflow(
   const createWtFn = deps.createWorktreeImpl ?? createWorktree;
   const cleanupWtFn = deps.cleanupWorktreeImpl ?? cleanupWorktree;
   const resolveHeadShaFn = deps.resolveWorktreeHeadShaImpl ?? resolveWorktreeHeadSha;
+  const resolveBaseBranchFn = deps.resolveBaseBranchImpl ?? resolveBaseBranch;
 
   const implementPrompt = readPrompt('implement');
   const implementJsonSchema = toJsonSchema(ImplementSchema);
@@ -79,6 +90,7 @@ export async function runFixIssueWorkflow(
   const evidencePostJsonSchema = toJsonSchema(EvidencePostSchema);
 
   const implementPersonaId = selectPersona(projectId, 'developer');
+  const baseBranch = resolveBaseBranchFn(targetRepo);
   const worktreePath = createWtFn(targetRepo, runId);
 
   try {
@@ -154,6 +166,7 @@ export async function runFixIssueWorkflow(
           targetRepo,
           runId,
           worktreePath,
+          baseBranch,
           openPRFn,
           runtime,
           evidencePostPrompt,
@@ -192,6 +205,7 @@ export async function runFixIssueWorkflow(
       targetRepo,
       runId,
       worktreePath,
+      baseBranch,
       openPRFn,
       runtime,
       evidencePostPrompt,
@@ -313,6 +327,7 @@ interface AfterImplementInput {
   targetRepo: string;
   runId: string;
   worktreePath: string;
+  baseBranch: string;
   openPRFn: typeof openPR;
   runtime: AgentRuntime;
   evidencePostPrompt: string;
@@ -362,6 +377,7 @@ async function afterImplement(input: AfterImplementInput): Promise<void> {
     title,
     body,
     branchName,
+    baseBranch: input.baseBranch,
     token,
   });
 

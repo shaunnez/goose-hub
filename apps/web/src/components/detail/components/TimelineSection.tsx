@@ -24,6 +24,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { groupEvents } from '../lib/timeline';
 import type { RenderItem } from '../lib/timeline';
+import { timeAgo } from '@/lib/utils';
 export type { RenderItem } from '../lib/timeline';
 
 interface TimelineSectionProps {
@@ -292,7 +293,7 @@ function AgentRunStatusEvent({ event }: { event: AgentEventDto }) {
       data-event-kind={event.kind}
       className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
     >
-      <div className="flex items-center gap-2 text-[11px] text-fg-3">
+      <div className="flex items-center gap-2 text-[11px]  ">
         {isCompleted ? (
           <CheckCircle size={13} className="shrink-0 text-green-400" />
         ) : isFailed ? (
@@ -324,12 +325,12 @@ function AgentToolCallEvent({ event }: { event: AgentEventDto }) {
       className="rounded-md border border-line/50 bg-bg/40 px-4 py-2"
     >
       <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
-        <summary className="flex items-center gap-1 cursor-pointer list-none font-mono text-[11.5px] text-fg-4 select-none">
+        <summary className="flex items-center gap-1 cursor-pointer list-none font-mono text-[11.5px] select-none">
           {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           <Wrench size={11} className="shrink-0" />
           <span>Tool call: {toolName}</span>
         </summary>
-        <pre className="mt-1 font-mono text-[11px] text-fg-4 whitespace-pre-wrap overflow-x-auto">
+        <pre className="mt-1 font-mono text-[11px]  whitespace-pre-wrap overflow-x-auto">
           {inputStr}
         </pre>
       </details>
@@ -490,7 +491,7 @@ function EvidenceNoSpecEvent({ event }: { event: AgentEventDto }) {
       data-event-kind={event.kind}
       className="rounded-md border border-line/50 bg-bg/40 px-4 py-2"
     >
-      <div className="flex items-center gap-2 text-[11px] text-fg-4">
+      <div className="flex items-center gap-2 text-[11px] ">
         <Info size={13} className="shrink-0" />
         <span className="font-mono uppercase tracking-wider">No evidence spec declared</span>
       </div>
@@ -542,6 +543,18 @@ function EvidencePostFailedEvent({ event }: { event: AgentEventDto }) {
   );
 }
 
+function getEarliestCreatedAt(items: RenderItem[]): string | null {
+  let earliest: string | null = null;
+  for (const item of items) {
+    let iso: string | null = null;
+    if (item.kind === 'event') iso = item.event.createdAt;
+    else if (item.kind === 'log-group' && item.events.length > 0)
+      iso = item.events[item.events.length - 1].createdAt;
+    if (iso != null && (earliest == null || iso < earliest)) earliest = iso;
+  }
+  return earliest;
+}
+
 function RunGroupWrapper({
   runId,
   items,
@@ -556,13 +569,19 @@ function RunGroupWrapper({
     return 2;
   };
   const sorted = [...items].sort((a, b) => rank(a) - rank(b));
+  const startedAt = getEarliestCreatedAt(items);
   return (
     <li data-run-id={runId} className="rounded-md border border-line/70 bg-bg/30">
       <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
-        <summary className="flex items-center gap-1 cursor-pointer list-none px-4 py-2 font-mono text-[11px] text-fg-4 select-none">
+        <summary className="flex items-center gap-1 cursor-pointer list-none px-4 py-2 font-mono text-[11px]  select-none">
           {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-          <Terminal size={11} className="shrink-0" />
-          <span>Run {runId.slice(0, 16)}…</span>
+          <span>Run {runId}</span>
+          {startedAt != null && (
+            <>
+              <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+              <span className="text-fg-5">{timeAgo(startedAt)}</span>
+            </>
+          )}
           <span className="ml-auto text-fg-5">{items.length} events</span>
         </summary>
         <ol className="flex flex-col gap-2 px-3 pb-3">
@@ -716,7 +735,7 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
   const items = groupEvents(events);
 
   return (
-    <div data-testid="timeline-section" className="px-8 py-6 max-w-[920px]">
+    <div data-testid="timeline-section" className="px-8 py-6">
       <ol className="flex flex-col gap-3">{items.map((item, idx) => renderItem(item, idx))}</ol>
     </div>
   );
