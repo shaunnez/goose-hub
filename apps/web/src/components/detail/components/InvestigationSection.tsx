@@ -3,6 +3,7 @@ import { renderMarkdownToHtml } from '@/lib/markdown';
 import type { AgentEventDto, IssueCommentDto } from '@/lib/types';
 import { timeAgo } from '@/lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Search } from 'lucide-react';
 import { useState } from 'react';
 
 interface InvestigationSectionProps {
@@ -106,12 +107,30 @@ export function InvestigationSection({ projectSlug, id, itemState }: Investigati
 
   if (latest == null) {
     return (
-      <div
-        data-testid="investigation-empty-state"
-        className="px-8 py-8 flex flex-col items-center justify-center gap-2 text-center"
-      >
-        <p className="text-[13px] text-fg-3">Investigation has not run yet.</p>
-        <p className="text-[12px] text-fg-4">Run the investigator agent to populate this tab.</p>
+      <div data-testid="investigation-empty-state" className="px-8 py-6 flex flex-col gap-5">
+        {/* Section header */}
+        <div>
+          <div className="text-[10.5px] uppercase tracking-wider text-fg-4 mb-1">
+            03. Investigation
+          </div>
+          <h2 className="text-[17px] font-semibold text-fg leading-snug">Codebase investigation</h2>
+        </div>
+
+        {/* Empty body */}
+        <div className="flex flex-col items-center justify-center gap-4 py-14 rounded-lg border border-dashed border-line bg-bg-elev/20 text-center">
+          <div className="w-10 h-10 rounded-full bg-bg-elev flex items-center justify-center">
+            <Search size={20} className="text-fg-4" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <p className="text-[13px] font-medium text-fg-3">No investigation yet</p>
+            <p
+              data-testid="investigation-empty-description"
+              className="text-[12px] text-fg-4 max-w-xs leading-snug"
+            >
+              The investigator agent analyses key files and surfaces findings for this issue.
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
