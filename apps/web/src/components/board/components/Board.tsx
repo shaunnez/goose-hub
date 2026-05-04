@@ -5,7 +5,7 @@ import type { WorkItemDto } from '@/lib/types';
 import { useActiveMilestone } from '@/state/active-milestone';
 import { useLaneVisibility } from '@/state/lane-visibility';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, RefreshCw } from 'lucide-react';
+import { ChevronDown, Eye, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import { BoardColumn } from './BoardColumn';
 
@@ -16,7 +16,7 @@ interface BoardProps {
 export function Board({ projectSlug }: BoardProps) {
   const queryClient = useQueryClient();
   const { hidden, toggle, reset } = useLaneVisibility();
-  const { activeNumber: resolvedMilestone } = useActiveMilestone();
+  const { activeNumber: resolvedMilestone, milestones, setActiveNumber } = useActiveMilestone();
 
   const {
     data: items = [],
@@ -109,14 +109,33 @@ export function Board({ projectSlug }: BoardProps) {
   return (
     <div className="h-full flex flex-col" data-testid="board">
       <div className="flex items-center gap-2 px-4 py-2 border-b border-line shrink-0 text-[12px] text-fg-3">
+        {milestones.length > 0 && (
+          <div className="relative">
+            <select
+              aria-label="Active milestone"
+              value={resolvedMilestone ?? ''}
+              onChange={(e) => {
+                const raw = e.target.value;
+                void setActiveNumber(raw === '' ? null : Number(raw));
+              }}
+              className="appearance-none h-6 pl-2 pr-6 bg-transparent border border-line rounded text-[12px] text-fg focus:outline-none focus:border-accent-line cursor-pointer"
+            >
+              {milestones.map((m) => (
+                <option key={m.id} value={m.number}>
+                  {m.title}
+                  {m.isActive ? '' : ' (closed)'}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              size={11}
+              className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-fg-3"
+            />
+          </div>
+        )}
         <span data-testid="board-issue-count">
           {items.length} issue{items.length === 1 ? '' : 's'}
         </span>
-        {resolvedMilestone != null && (
-          <span>
-            · milestone <span className="font-mono tnum">#{resolvedMilestone}</span>
-          </span>
-        )}
         <span className="grow" />
         {hiddenLanes.length > 0 && (
           <details className="relative">
