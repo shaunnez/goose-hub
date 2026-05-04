@@ -28,6 +28,7 @@ async function loadProject(slug: string): Promise<ProjectConfig | null> {
     return null;
   }
 
+  // Runtime-resolved path: each project's config lives in target-projects/<slug>/.
   const mod = (await import(pathToFileURL(file).href)) as { default: ProjectConfig };
   if (mod.default == null) {
     logger.warn('project config has no default export', { slug, file });

@@ -17,7 +17,7 @@ vi.mock('@goose-hub/core/db/db.js', () => ({
   },
 }));
 
-import { getSourceForSlug } from '../../shared/source.js';
+import { getSourceForSlug } from '#shared/source.js';
 import { deleteInboxItem, getInboxItem, insertInboxItem, listInboxItems } from './repository.js';
 import {
   createInboxItem,

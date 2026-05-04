@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
+import { runTriageBatch } from '../domains/workflows/triage-batch.js';
 import { getSourceForSlug } from './source.js';
 
 const _triageBatchInFlight = new Set<string>();
@@ -16,10 +17,10 @@ function issueKey(slug: string, issueNumber: number): string {
  * domains (STANDARDS.md). Webhooks, the projects router, and any other
  * caller that needs to kick off a workflow goes through these helpers.
  *
- * Implementation note: workflow modules are dynamic-imported here (one
- * indirection layer above the previous `webhooks → workflows` direct
- * import). The webhook handler now depends only on `shared/`, which is
- * domain-agnostic.
+ * Slice workflows are dynamic-imported by URL because `slices/` lives at the
+ * repo root (outside any workspace package) — see FACTORY_RULES rule 28a.
+ * Resolving them via `import.meta.url` keeps the dispatcher portable across
+ * worktrees.
  */
 
 const REPO_ROOT = join(import.meta.dirname, '../../../..');
@@ -31,8 +32,8 @@ export function dispatchTriageBatch(slug: string): Promise<void> {
     return Promise.resolve();
   }
   _triageBatchInFlight.add(slug);
-  return import('../domains/workflows/triage-batch.js')
-    .then(({ runTriageBatch }) => runTriageBatch(slug))
+  return Promise.resolve()
+    .then(() => runTriageBatch(slug))
     .catch((err: unknown) => {
       logger.error('dispatchTriageBatch failed', { slug, error: String(err) });
     })
@@ -56,6 +57,7 @@ export async function dispatchInvestigate(slug: string, issueNumber: number): Pr
   }
   _issueInFlight.add(key);
   try {
+    // Cross-package boundary: slices/ is not a workspace package (rule 28a).
     const { runInvestigateWorkflow } = (await import(
       new URL('../../../../slices/investigate/workflow.js', import.meta.url).href
     )) as {
@@ -87,6 +89,7 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
   }
   _issueInFlight.add(key);
   try {
+    // Cross-package boundary: slices/ is not a workspace package (rule 28a).
     const { runFixIssueWorkflow } = (await import(
       new URL('../../../../slices/fix-issue/workflow.js', import.meta.url).href
     )) as {
@@ -136,6 +139,7 @@ export async function dispatchQa(slug: string, issueNumber: number): Promise<voi
   }
   _issueInFlight.add(key);
   try {
+    // Cross-package boundary: slices/ is not a workspace package (rule 28a).
     const { runQaWorkflow } = (await import(
       new URL('../../../../slices/qa/workflow.js', import.meta.url).href
     )) as {
@@ -167,6 +171,7 @@ export async function dispatchReview(slug: string, issueNumber: number): Promise
   }
   _issueInFlight.add(key);
   try {
+    // Cross-package boundary: slices/ is not a workspace package (rule 28a).
     const { runReviewWorkflow } = (await import(
       new URL('../../../../slices/review/workflow.js', import.meta.url).href
     )) as {

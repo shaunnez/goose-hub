@@ -3,8 +3,8 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { type AgentEvent, eventStore } from '@goose-hub/core/event-stream/store.js';
-import type { Result } from '../../shared/middleware.js';
-import { getSourceForSlug, isValidSlug } from '../../shared/source.js';
+import type { Result } from '#shared/middleware.js';
+import { getSourceForSlug, isValidSlug } from '#shared/source.js';
 import { getRepoRef } from './internal.js';
 
 /**

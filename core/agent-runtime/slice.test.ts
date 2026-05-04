@@ -51,6 +51,9 @@ vi.mock('../event-stream/store.js', () => ({
 vi.mock('../tool-layer/allowlist.js', () => ({ computeAllowlist: vi.fn().mockReturnValue([]) }));
 vi.mock('../tool-layer/pre-tool-use-hook.js', () => ({ deployHooks: vi.fn() }));
 vi.mock('../tool-layer/sandbox.js', () => ({ writeWorkspaceSandbox: vi.fn() }));
+// Stub the cost recorder so it doesn't pull `core/db/db.ts` (which would need
+// node:fs / node:os to be fully mocked).
+vi.mock('../cost/repository.js', () => ({ recordCost: vi.fn() }));
 
 // ─── interface types ──────────────────────────────────────────────────────────
 

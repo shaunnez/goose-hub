@@ -10,7 +10,7 @@ import { skillsRoot } from '@goose-hub/skills';
 import { RepoMatchOutputSchema } from '@goose-hub/skills/repo-match/schema.js';
 import { TriageOutputSchema } from '@goose-hub/skills/triage/schema.js';
 import { targetProjectsRoot } from '@goose-hub/target-projects';
-import { getSourceForSlug, isValidSlug } from '../../shared/source.js';
+import { getSourceForSlug, isValidSlug } from '#shared/source.js';
 
 function readPrompt(skillName: string): string {
   return readFileSync(join(skillsRoot, skillName, 'prompt.md'), 'utf8');

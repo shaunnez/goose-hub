@@ -1,5 +1,5 @@
-import type { Result } from '../../shared/middleware.js';
-import { getProject } from '../../shared/projects.js';
+import type { Result } from '#shared/middleware.js';
+import { getProject } from '#shared/projects.js';
 import type { ImprovementCandidateRow, PersonaNameRow, PersonaStat } from './repository.js';
 import {
   getCandidateById,

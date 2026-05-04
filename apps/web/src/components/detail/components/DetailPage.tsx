@@ -9,6 +9,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { SECTIONS } from '../lib/sections';
 import { ApprovalGateSection } from './ApprovalGateSection';
 import { CodeDiffSection } from './CodeDiffSection';
+import { CostsSection } from './CostsSection';
 import { DeferredSurface } from './DeferredSurface';
 import { GatePendingBanner } from './GatePendingBanner';
 import { InvestigationSection } from './InvestigationSection';
@@ -247,6 +248,8 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
               <ReviewSection projectSlug={slug} id={id} />
             ) : currentSection.key === 'retrospective' ? (
               <RetrospectiveSection projectSlug={slug} id={id} />
+            ) : currentSection.key === 'costs' ? (
+              <CostsSection projectSlug={slug} id={id} />
             ) : (
               <DeferredSurface
                 surface={currentSection.label}

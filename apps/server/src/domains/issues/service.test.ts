@@ -51,8 +51,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { isLegalTransition } from '@goose-hub/core/state-machine/transitions.js';
-import { bustCache } from '../../shared/cache.js';
-import { getSourceForSlug } from '../../shared/source.js';
+import { bustCache } from '#shared/cache.js';
+import { getSourceForSlug } from '#shared/source.js';
 import {
   commentOnIssue,
   fakeRun,

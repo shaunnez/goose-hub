@@ -1,6 +1,6 @@
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
-import type { Result } from '../../shared/middleware.js';
-import { getSourceForSlug } from '../../shared/source.js';
+import type { Result } from '#shared/middleware.js';
+import { getSourceForSlug } from '#shared/source.js';
 import { getRepoRef } from './internal.js';
 
 const OUTPUT_FIXTURES: Record<string, unknown> = {

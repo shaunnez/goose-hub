@@ -1,7 +1,7 @@
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
-import { CACHE_KEY, bustCache, getCached } from '../../shared/cache.js';
-import type { Result } from '../../shared/middleware.js';
-import { getSourceForSlug } from '../../shared/source.js';
+import { CACHE_KEY, bustCache, getCached } from '#shared/cache.js';
+import type { Result } from '#shared/middleware.js';
+import { getSourceForSlug } from '#shared/source.js';
 import { readActiveMilestone, writeActiveMilestone } from './repository.js';
 
 export async function getActiveMilestone(

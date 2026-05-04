@@ -3,9 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ─── module mocks ──────────────────────────────────────────────────────────────
 
-const mockRunTriageBatch = vi.fn().mockResolvedValue(undefined);
-const mockRunQaBatch = vi.fn().mockResolvedValue(undefined);
-const mockRunReviewBatch = vi.fn().mockResolvedValue(undefined);
+const { mockRunTriageBatch, mockRunQaBatch, mockRunReviewBatch } = vi.hoisted(() => ({
+  mockRunTriageBatch: vi.fn().mockResolvedValue(undefined),
+  mockRunQaBatch: vi.fn().mockResolvedValue(undefined),
+  mockRunReviewBatch: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock('./triage-batch.js', () => ({ runTriageBatch: mockRunTriageBatch }));
 vi.mock('./qa-batch.js', () => ({ runQaBatch: mockRunQaBatch }));
@@ -15,7 +17,7 @@ vi.mock('@goose-hub/core/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { workflowsRouter } from './router.js';
+const { workflowsRouter } = await import('./router.js');
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 

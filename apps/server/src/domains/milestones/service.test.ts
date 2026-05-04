@@ -25,8 +25,8 @@ vi.mock('./repository.js', () => ({
 }));
 
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
-import { bustCache } from '../../shared/cache.js';
-import { getSourceForSlug } from '../../shared/source.js';
+import { bustCache } from '#shared/cache.js';
+import { getSourceForSlug } from '#shared/source.js';
 import { readActiveMilestone, writeActiveMilestone } from './repository.js';
 import {
   getActiveMilestone,

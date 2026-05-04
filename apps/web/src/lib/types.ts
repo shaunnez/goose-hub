@@ -113,6 +113,54 @@ export interface IssueDiffDto {
   reason?: string;
 }
 
+export type CostLabel = 'estimated' | 'exact';
+
+export type CostStage =
+  | 'triage'
+  | 'investigate'
+  | 'dev'
+  | 'qa'
+  | 'review'
+  | 'retrospective'
+  | 'other';
+
+export interface CostRowDto {
+  runId: string;
+  workItemId: string | null;
+  stage: CostStage;
+  skill: string;
+  modelId: string;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  costLabel: CostLabel;
+  personaId: string | null;
+  createdAt: string;
+}
+
+export interface CostWindowTotals {
+  totalUsd: number;
+  totalRuns: number;
+  hasEstimated: boolean;
+}
+
+export interface CostStageTotal extends CostWindowTotals {
+  stage: CostStage;
+}
+
+export interface CostSummaryDto {
+  projectId: string;
+  windows: { week: CostWindowTotals; month: CostWindowTotals };
+  byStage: CostStageTotal[];
+}
+
+export interface WorkItemCostsDto {
+  workItemId: string;
+  totalUsd: number;
+  hasEstimated: boolean;
+  rows: CostRowDto[];
+}
+
 export interface ImprovementCandidateDto {
   id: number;
   projectId: string;

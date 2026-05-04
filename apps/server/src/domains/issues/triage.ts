@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { targetProjectsRoot } from '@goose-hub/target-projects';
-import type { Result } from '../../shared/middleware.js';
-import { getSourceForSlug, isValidSlug } from '../../shared/source.js';
+import type { Result } from '#shared/middleware.js';
+import { getSourceForSlug, isValidSlug } from '#shared/source.js';
 
 interface TriageEventPayload {
   triage: { type: string; priority: string };

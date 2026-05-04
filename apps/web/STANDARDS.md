@@ -61,10 +61,36 @@ Leaf components with no feature-specific state or API calls belong in `component
 
 ## Import Rules
 
-- Feature components import shared code from `@/lib/*` or `@/components/ui/*`.
+- Feature components import shared code via the `@/*` path alias —
+  e.g. `@/lib/types`, `@/components/ui/Button`. Resolved by the
+  `paths` entry in `apps/web/tsconfig.json` and the matching alias
+  in `vitest.config.ts`. Never use `'../../lib/*'`.
+- Intra-feature imports stay relative (`./components/...`, `./lib/...`).
 - Types are imported from `@/lib/types` — never from `@/lib/api` for type-only imports.
 - Feature components **never** import from other feature folders.
 - Cross-feature imports are architecture violations.
+
+Greppable invariant for review:
+```sh
+grep -rn "from ['\"]\\.\\./\\.\\./lib" apps/web/src/   # must be 0 hits
+```
+
+## Dynamic Imports
+
+Static imports are the default. `await import(...)` is reserved for the
+following four cases — each occurrence must carry a one-line comment naming
+its case:
+
+1. **Cross-package boundary at runtime path.** Loading code resolved via
+   `import.meta.url` because it lives outside any workspace package.
+2. **Runtime-resolved path.** Loading a module whose path is computed from
+   user input or per-project config.
+3. **Lazy fallback for an optional dependency.** Tolerating a missing or
+   environment-gated module.
+4. **Test stub injection.** A DI parameter whose default is the static
+   import and whose override is supplied dynamically by tests.
+
+If a dynamic import does not match one of these, refactor it to static.
 
 ## Test Coverage Requirements
 

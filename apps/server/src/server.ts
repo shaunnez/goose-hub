@@ -1,6 +1,7 @@
 import { logger } from '@goose-hub/core/logger.js';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { costsRouter } from './domains/costs/router.js';
 import { eventsRouter } from './domains/events/router.js';
 import { inboxRouter } from './domains/inbox/router.js';
 import { issuesRouter } from './domains/issues/router.js';
@@ -27,6 +28,7 @@ app.route('/', projectsRouter); // GET /health, GET /projects
 app.route('/projects', milestonesRouter); // GET/POST /projects/:slug/milestones/**, /active-milestone
 app.route('/projects', issuesRouter); // GET/POST /projects/:slug/issues/**
 app.route('/projects', workflowsRouter); // POST /projects/:slug/tick
+app.route('/projects', costsRouter); // GET /projects/:slug/costs/summary, /projects/:slug/issues/:id/costs
 app.route('/inbox', inboxRouter); // GET/POST /inbox/**
 app.route('/roster', rosterRouter); // GET /roster/**
 app.route('/events', eventsRouter); // GET /events

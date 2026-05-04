@@ -3,6 +3,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { Board } from './components/board/components/Board';
 import { AppShell } from './components/chrome/AppShell';
+import { CostsPage } from './components/costs/CostsPage';
 import { DetailPage } from './components/detail/components/DetailPage';
 import { InboxList } from './components/inbox/components/InboxList';
 import { RosterPage } from './components/roster/components/RosterPage';
@@ -77,6 +78,14 @@ function RosterPageRoute() {
   );
 }
 
+function CostsPageRoute() {
+  return (
+    <AppShell breadcrumb={<span>Costs</span>}>
+      <CostsPage />
+    </AppShell>
+  );
+}
+
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -104,6 +113,14 @@ export function App() {
             element={
               <ProjectShell>
                 <RosterPageRoute />
+              </ProjectShell>
+            }
+          />
+          <Route
+            path="/projects/:slug/costs"
+            element={
+              <ProjectShell>
+                <CostsPageRoute />
               </ProjectShell>
             }
           />

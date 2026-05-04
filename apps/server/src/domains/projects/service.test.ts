@@ -4,7 +4,7 @@ vi.mock('../../shared/projects.js', () => ({
   listProjects: vi.fn(),
 }));
 
-import { listProjects } from '../../shared/projects.js';
+import { listProjects } from '#shared/projects.js';
 import { listProjectsService } from './service.js';
 
 describe('listProjectsService (#208)', () => {

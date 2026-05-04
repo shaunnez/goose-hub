@@ -1,5 +1,6 @@
 import { resolveState } from '../state-machine/conflict-resolver.js';
 import type { StateName } from '../state-machine/states.js';
+import { isLegalTransition } from '../state-machine/transitions.js';
 import type {
   Artifact,
   CreateIssueInput,
@@ -290,7 +291,6 @@ export class GitHubLabelsSource implements StateSource {
     to: StateName,
     note?: string,
   ): Promise<void> {
-    const { isLegalTransition } = await import('../state-machine/transitions.js');
     if (!isLegalTransition(from, to)) {
       throw new Error(`Illegal transition: ${from} -> ${to}`);
     }

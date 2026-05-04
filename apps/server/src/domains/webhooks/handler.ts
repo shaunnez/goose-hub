@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { logger } from '@goose-hub/core/logger.js';
 import type { Context } from 'hono';
-import { dispatchForLabel, dispatchTriageBatch } from '../../shared/dispatch.js';
+import { dispatchForLabel, dispatchTriageBatch } from '#shared/dispatch.js';
 
 /** Map from GitHub repo full name → project slug */
 const REPO_TO_SLUG: Record<string, string> = {
