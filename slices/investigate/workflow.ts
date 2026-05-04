@@ -20,9 +20,11 @@ const REPO_ROOT = join(import.meta.dirname, '../..');
  * detects the same `pnpm`/`playwright` resolution failures the spawn would hit.
  */
 const MINIMAL_PATH =
-  process.platform === 'darwin'
-    ? '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin'
-    : '/usr/local/bin:/usr/bin:/bin';
+  process.platform === 'win32'
+    ? (process.env.PATH ?? 'C:\\Windows\\System32;C:\\Windows')
+    : process.platform === 'darwin'
+      ? '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin'
+      : '/usr/local/bin:/usr/bin:/bin';
 
 function readPrompt(skillName: string): string {
   return readFileSync(join(REPO_ROOT, 'skills', skillName, 'skill.md'), 'utf8');
@@ -52,12 +54,23 @@ async function preflightPlaywrightMcp(
       resolve(result);
     };
 
+    const isWindows = process.platform === 'win32';
     const child = spawn(
-      'pnpm',
+      isWindows ? 'pnpm.cmd' : 'pnpm',
       ['--filter', '@goose-hub/web', 'exec', 'playwright', 'run-test-mcp-server', '--headless'],
       {
         cwd: REPO_ROOT,
-        env: { HOME: homedir(), PATH: MINIMAL_PATH },
+        env: isWindows
+          ? {
+              USERPROFILE: homedir(),
+              HOME: homedir(),
+              TEMP: process.env.TEMP ?? homedir(),
+              TMP: process.env.TMP ?? homedir(),
+              APPDATA: process.env.APPDATA ?? '',
+              LOCALAPPDATA: process.env.LOCALAPPDATA ?? '',
+              PATH: MINIMAL_PATH,
+            }
+          : { HOME: homedir(), PATH: MINIMAL_PATH },
         shell: false,
         // stdin must stay open (pipe, not ignore) — stdio MCP servers exit on EOF
         stdio: ['pipe', 'ignore', 'pipe'],
