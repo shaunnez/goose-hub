@@ -92,7 +92,7 @@ export async function runFixIssueWorkflow(
   const evidencePostPrompt = readPrompt('evidence-post');
   const evidencePostJsonSchema = toJsonSchema(EvidencePostSchema);
 
-  const implementPersonaId = selectPersona(projectId, 'developer');
+  const { personaId: implementPersonaId } = selectPersona(projectId, 'developer');
   const baseBranch = resolveBaseBranchFn(targetRepo);
   const worktreePath = createWtFn(targetRepo, runId);
 
@@ -487,7 +487,7 @@ async function runEvidencePost(input: RunEvidencePostInput): Promise<void> {
       toolBundles: ['validate'],
       toolExtras: [],
       budgets: { maxTurns: 30, maxBudgetUsd: 0.5, timeoutMs: 300_000 },
-      personaId: selectPersona(input.projectId, 'developer'),
+      personaId: selectPersona(input.projectId, 'developer').personaId,
       outputJsonSchema: input.outputJsonSchema,
       appendSystemPrompt: input.appendSystemPrompt,
     });

@@ -3,8 +3,14 @@ import type { WorkItemDto } from '@/lib/types';
 import { render, screen } from '@testing-library/react';
 import { cleanup } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IssueCard } from './IssueCard';
+
+vi.mock('@/lib/usePersonaMap', () => ({
+  usePersonaMap: () => ({}),
+  getPersonaInitials: () => null,
+  getPersonaLabel: () => null,
+}));
 
 afterEach(cleanup);
 

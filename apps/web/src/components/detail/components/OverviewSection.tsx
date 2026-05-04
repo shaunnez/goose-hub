@@ -2,6 +2,7 @@ import { PRIORITY_BG, PRIORITY_BORDER, PRIORITY_COLOR } from '@/lib/constants';
 import { laneForState } from '@/lib/lanes.config';
 import { renderMarkdownToHtml } from '@/lib/markdown';
 import type { WorkItemDto } from '@/lib/types';
+import { getPersonaLabel, usePersonaMap } from '@/lib/usePersonaMap';
 import {
   Brain,
   Bug,
@@ -77,11 +78,13 @@ function StatCard({
 export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
   const { slug = 'goose-hub-self', id = '' } = useParams<{ slug: string; id: string }>();
   const html = renderMarkdownToHtml(item?.body ?? '');
+  const personaMap = usePersonaMap();
 
   const lane = item?.state ? (laneForState(item.state) ?? item.state.replace('factory:', '')) : '—';
   const priority = item?.priority ?? '—';
   const depsCount = item?.dependsOn?.length ?? 0;
   const blocksCount = item?.blocks?.length ?? 0;
+  const lastAgentLabel = getPersonaLabel(personaMap, item?.lastPersonaId) ?? '—';
 
   const priorityColor = PRIORITY_COLOR[priority];
   const priorityBg = PRIORITY_BG[priority];
@@ -105,7 +108,7 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
       </div>
 
       {/* Stat row */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-5 gap-3">
         <StatCard label="Stage" value={lane} />
         <StatCard label="Priority" value={priority} color={priorityColor} />
         <StatCard
@@ -118,6 +121,7 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
           value={blocksCount === 0 ? '—' : String(blocksCount)}
           sub={blocksCount > 0 ? item?.blocks.map((d) => `#${d}`).join(', ') : undefined}
         />
+        <StatCard label="Last agent" value={lastAgentLabel} />
       </div>
 
       {/* Main content grid */}

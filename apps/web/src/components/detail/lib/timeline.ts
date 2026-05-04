@@ -12,6 +12,7 @@ export type RenderItem =
       skill: string | null;
       startedAt: string | null;
       endedAt: string | null;
+      personaId: string | null;
     };
 
 /**
@@ -62,10 +63,12 @@ function extractRunMeta(items: RenderItem[]): {
   skill: string | null;
   startedAt: string | null;
   endedAt: string | null;
+  personaId: string | null;
 } {
   let skill: string | null = null;
   let startedAt: string | null = null;
   let endedAt: string | null = null;
+  let personaId: string | null = null;
   let earliestMs = Number.POSITIVE_INFINITY;
   let earliestIso: string | null = null;
 
@@ -80,6 +83,8 @@ function extractRunMeta(items: RenderItem[]): {
       earliestIso = ev.createdAt;
     }
 
+    if (personaId == null && ev.personaId != null) personaId = ev.personaId;
+
     if (ev.kind === 'agent.run-started') {
       if (startedAt == null) startedAt = ev.createdAt;
       if (skill == null && p?.skill != null) skill = p.skill;
@@ -93,7 +98,7 @@ function extractRunMeta(items: RenderItem[]): {
     }
   }
 
-  return { skill, startedAt: startedAt ?? earliestIso, endedAt };
+  return { skill, startedAt: startedAt ?? earliestIso, endedAt, personaId };
 }
 
 function groupByRunId(items: RenderItem[]): RenderItem[] {

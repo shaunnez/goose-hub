@@ -4,6 +4,7 @@ const mockPersonas = [
   {
     id: 1,
     personaName: 'alice',
+    codename: null,
     role: 'developer',
     runsTotal: 5,
     runsSucceeded: 4,
@@ -14,6 +15,7 @@ const mockPersonas = [
   {
     id: 2,
     personaName: 'bob',
+    codename: null,
     role: 'qa',
     runsTotal: 3,
     runsSucceeded: 3,

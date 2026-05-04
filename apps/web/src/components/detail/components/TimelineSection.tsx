@@ -1,6 +1,7 @@
 import { fetchEvents } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import type { AgentEventDto } from '@/lib/types';
+import { getPersonaLabel, usePersonaMap } from '@/lib/usePersonaMap';
 import { timeAgo } from '@/lib/utils';
 import {
   AlertCircle,
@@ -565,6 +566,7 @@ function RunGroupWrapper({
   skill,
   startedAt,
   endedAt,
+  personaId,
 }: {
   runId: string;
   items: RenderItem[];
@@ -572,7 +574,9 @@ function RunGroupWrapper({
   skill: string | null;
   startedAt: string | null;
   endedAt: string | null;
+  personaId: string | null;
 }) {
+  const personaMap = usePersonaMap();
   const [open, setOpen] = useState(true);
   const [now, setNow] = useState(() => Date.now());
   const isLive = endedAt == null;
@@ -635,6 +639,14 @@ function RunGroupWrapper({
           <span title={runId} className="cursor-help border-b border-dashed border-fg-5/40">
             {formatSkillName(skill)} Run
           </span>
+          {getPersonaLabel(personaMap, personaId) != null && (
+            <>
+              <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+              <span className="text-[color:var(--accent)] text-[10px]">
+                {getPersonaLabel(personaMap, personaId)}
+              </span>
+            </>
+          )}
           <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
           {statusBadge}
           {metaLine}
@@ -668,6 +680,7 @@ function renderItem(item: RenderItem, idx: number) {
         skill={item.skill}
         startedAt={item.startedAt}
         endedAt={item.endedAt}
+        personaId={item.personaId}
       />
     );
   }

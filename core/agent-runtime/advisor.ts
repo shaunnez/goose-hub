@@ -50,7 +50,7 @@ export async function adviseOnPlan(input: AdviseOnPlanInput): Promise<AdviseOnPl
   }
 
   const runtime = input.runtime ?? new ClaudeCliRuntime();
-  const personaId = selectPersona(input.projectId, 'researcher');
+  const { personaId } = selectPersona(input.projectId, 'researcher');
   const advisorPrompt = readSkillPrompt('advise-on-plan');
   const outputJsonSchema = toJsonSchema(AdviseOnPlanSchema) as Record<string, unknown>;
 

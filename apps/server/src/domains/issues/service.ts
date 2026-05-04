@@ -2,7 +2,10 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { db } from '@goose-hub/core/db/db.js';
+import { events } from '@goose-hub/core/db/schema.js';
 import { type AgentEvent, eventStore } from '@goose-hub/core/event-stream/store.js';
+import { and, desc, eq, isNotNull } from 'drizzle-orm';
 import { cleanupWorktree } from '@goose-hub/core/workspaces/worktree.js';
 import { STATES } from '@goose-hub/core/state-machine/states.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
@@ -38,11 +41,33 @@ async function getRepoRef(slug: string): Promise<string> {
   return cfg?.source.kind === 'github' ? cfg.source.repo : slug;
 }
 
+function getLastPersonaIdsByWorkItem(projectId: string): Map<string, string> {
+  const rows = db
+    .select({ workItemId: events.workItemId, personaId: events.personaId })
+    .from(events)
+    .where(and(eq(events.projectId, projectId), isNotNull(events.personaId)))
+    .orderBy(desc(events.id))
+    .all();
+
+  const map = new Map<string, string>();
+  for (const row of rows) {
+    if (row.workItemId != null && row.personaId != null && !map.has(row.workItemId)) {
+      map.set(row.workItemId, row.personaId);
+    }
+  }
+  return map;
+}
+
 export async function listIssues(slug: string): Promise<Result<{ items: unknown[] }>> {
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
   const items = await getCached(CACHE_KEY.issues(slug), 60_000, () => source.listOpenWork());
-  return { ok: true, data: { items } };
+  const lastPersonaMap = getLastPersonaIdsByWorkItem(slug);
+  const enriched = items.map((item) => ({
+    ...(item as object),
+    lastPersonaId: lastPersonaMap.get((item as { id: string }).id) ?? null,
+  }));
+  return { ok: true, data: { items: enriched } };
 }
 
 export async function getIssue(slug: string, id: string): Promise<Result<{ item: unknown }>> {

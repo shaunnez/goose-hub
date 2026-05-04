@@ -62,7 +62,7 @@ export async function runQaWorkflow(
   const runtime = deps.runtime ?? new ClaudeCliRuntime();
   const qaPrompt = readPrompt('qa');
   const qaJsonSchema = toJsonSchema(QaOutputSchema);
-  const personaId = selectPersona(projectId, 'qa');
+  const { personaId } = selectPersona(projectId, 'qa');
   const prDiff = getPrDiff(workItem);
 
   // Snapshot prior events BEFORE this run's outcome is appended.
