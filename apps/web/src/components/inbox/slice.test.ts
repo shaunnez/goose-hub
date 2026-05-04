@@ -34,6 +34,21 @@ describe('inbox promote — promoteInboxItem', () => {
   });
 });
 
+describe('inbox delete — deleteInboxItem', () => {
+  it('calls DELETE /inbox/:id', async () => {
+    const mockDelete = vi.fn().mockResolvedValue(undefined);
+    vi.doMock('@/lib/api', () => ({
+      deleteInboxItem: mockDelete,
+      fetchInboxItems: vi.fn(),
+      promoteInboxItem: vi.fn(),
+    }));
+    const { deleteInboxItem } = await import('@/lib/api');
+    vi.mocked(deleteInboxItem).mockResolvedValue(undefined);
+    await deleteInboxItem(42);
+    expect(deleteInboxItem).toHaveBeenCalledWith(42);
+  });
+});
+
 describe('inbox promote — project picker', () => {
   it('fetchProjects returns all configured projects', async () => {
     const twoProjects = [

@@ -3,16 +3,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ─── module mocks ──────────────────────────────────────────────────────────────
 
-const { mockCreateInboxItem, mockGetInboxItems, mockPromoteInboxItem } = vi.hoisted(() => ({
-  mockCreateInboxItem: vi.fn(),
-  mockGetInboxItems: vi.fn(),
-  mockPromoteInboxItem: vi.fn(),
-}));
+const { mockCreateInboxItem, mockGetInboxItems, mockPromoteInboxItem, mockDeleteInboxItem } =
+  vi.hoisted(() => ({
+    mockCreateInboxItem: vi.fn(),
+    mockGetInboxItems: vi.fn(),
+    mockPromoteInboxItem: vi.fn(),
+    mockDeleteInboxItem: vi.fn(),
+  }));
 
 vi.mock('./service.js', () => ({
   createInboxItem: mockCreateInboxItem,
   getInboxItems: mockGetInboxItems,
   promoteInboxItem: mockPromoteInboxItem,
+  deleteInboxItem: mockDeleteInboxItem,
 }));
 
 vi.mock('@goose-hub/core/logger.js', () => ({
@@ -211,5 +214,41 @@ describe('POST /inbox/:id/promote', () => {
       body: JSON.stringify({ projectSlug: 'unknown-slug' }),
     });
     expect(res.status).toBe(404);
+  });
+});
+
+describe('DELETE /inbox/:id', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns 200 on success', async () => {
+    mockDeleteInboxItem.mockResolvedValue({ ok: true, data: { ok: true } });
+
+    const app = makeApp();
+    const res = await app.request('/inbox/7', { method: 'DELETE' });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean };
+    expect(body.ok).toBe(true);
+    expect(mockDeleteInboxItem).toHaveBeenCalledWith(7);
+  });
+
+  it('returns 400 for non-numeric id', async () => {
+    const app = makeApp();
+    const res = await app.request('/inbox/not-a-number', { method: 'DELETE' });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('invalid id');
+    expect(mockDeleteInboxItem).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when item not found', async () => {
+    mockDeleteInboxItem.mockResolvedValue({ ok: false, error: 'not found', status: 404 });
+
+    const app = makeApp();
+    const res = await app.request('/inbox/999', { method: 'DELETE' });
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('not found');
   });
 });
