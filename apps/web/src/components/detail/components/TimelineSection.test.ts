@@ -93,15 +93,20 @@ describe('groupEvents — agent.log collapsing', () => {
 
 // ─── M4: run-group grouping by runId ─────────────────────────────────────────
 
-function makeRunEvent(id: number, runId: string, kind = 'agent.run-started'): AgentEventDto {
+function makeRunEvent(
+  id: number,
+  runId: string,
+  kind = 'agent.run-started',
+  skill?: string,
+): AgentEventDto {
   return {
     id,
     projectId: 'proj',
     workItemId: 'wi-1',
     kind,
-    payload: {},
+    payload: skill != null ? { skill } : {},
     runId,
-    createdAt: new Date().toISOString(),
+    createdAt: new Date(Date.now() + id * 1000).toISOString(),
   };
 }
 
@@ -184,6 +189,83 @@ describe('groupEvents — run-group by runId', () => {
     expect(result[0].kind).toBe('event');
     if (result[0].kind === 'event') {
       expect(result[0].event.kind).toBe('agent.tool-call');
+    }
+  });
+});
+
+// ─── run-group metadata ───────────────────────────────────────────────────────
+
+describe('groupEvents — run-group metadata', () => {
+  it('extracts skill from agent.run-started payload', () => {
+    const events: AgentEventDto[] = [
+      makeRunEvent(1, 'run-abc', 'agent.run-started', 'implement'),
+      makeRunEvent(2, 'run-abc', 'agent.tool-call'),
+      makeRunEvent(3, 'run-abc', 'agent.run-completed'),
+    ];
+    const result = groupEvents(events);
+    expect(result).toHaveLength(1);
+    if (result[0].kind === 'run-group') {
+      expect(result[0].skill).toBe('implement');
+      expect(result[0].startedAt).toBe(events[0].createdAt);
+      expect(result[0].endedAt).toBe(events[2].createdAt);
+    }
+  });
+
+  it('falls back to agent.spawned skill when run-started has no skill', () => {
+    const events: AgentEventDto[] = [
+      makeRunEvent(1, 'run-abc', 'agent.run-started'),
+      { ...makeRunEvent(2, 'run-abc', 'agent.spawned'), payload: { skill: 'triage' } },
+      makeRunEvent(3, 'run-abc', 'agent.run-completed'),
+    ];
+    const result = groupEvents(events);
+    if (result[0].kind === 'run-group') {
+      expect(result[0].skill).toBe('triage');
+    }
+  });
+
+  it('sets skill to null when no skill found in any event', () => {
+    const events: AgentEventDto[] = [
+      makeRunEvent(1, 'run-abc', 'agent.run-started'),
+      makeRunEvent(2, 'run-abc', 'agent.run-completed'),
+    ];
+    const result = groupEvents(events);
+    if (result[0].kind === 'run-group') {
+      expect(result[0].skill).toBeNull();
+    }
+  });
+
+  it('sets endedAt to null when run has no completed/failed event', () => {
+    const events: AgentEventDto[] = [
+      makeRunEvent(1, 'run-abc', 'agent.run-started', 'implement'),
+      makeRunEvent(2, 'run-abc', 'agent.tool-call'),
+    ];
+    const result = groupEvents(events);
+    if (result[0].kind === 'run-group') {
+      expect(result[0].endedAt).toBeNull();
+    }
+  });
+
+  it('uses earliest event timestamp as startedAt fallback when no run-started event', () => {
+    const t1 = new Date(Date.now()).toISOString();
+    const t2 = new Date(Date.now() + 2000).toISOString();
+    const events: AgentEventDto[] = [
+      { ...makeRunEvent(1, 'run-abc', 'agent.tool-call'), createdAt: t1 },
+      { ...makeRunEvent(2, 'run-abc', 'agent.run-completed'), createdAt: t2 },
+    ];
+    const result = groupEvents(events);
+    if (result[0].kind === 'run-group') {
+      expect(result[0].startedAt).toBe(t1);
+    }
+  });
+
+  it('extracts endedAt from agent.run-failed', () => {
+    const events: AgentEventDto[] = [
+      makeRunEvent(1, 'run-abc', 'agent.run-started', 'qa'),
+      makeRunEvent(2, 'run-abc', 'agent.run-failed'),
+    ];
+    const result = groupEvents(events);
+    if (result[0].kind === 'run-group') {
+      expect(result[0].endedAt).toBe(events[1].createdAt);
     }
   });
 });

@@ -5,7 +5,14 @@ import type { AgentEventDto } from '@/lib/types';
 export type RenderItem =
   | { kind: 'event'; event: AgentEventDto }
   | { kind: 'log-group'; events: AgentEventDto[] }
-  | { kind: 'run-group'; runId: string; items: RenderItem[] };
+  | {
+      kind: 'run-group';
+      runId: string;
+      items: RenderItem[];
+      skill: string | null;
+      startedAt: string | null;
+      endedAt: string | null;
+    };
 
 /**
  * Pre-processes an events array for rendering.
@@ -51,6 +58,44 @@ function getRunId(item: RenderItem): string | null {
   return null;
 }
 
+function extractRunMeta(items: RenderItem[]): {
+  skill: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+} {
+  let skill: string | null = null;
+  let startedAt: string | null = null;
+  let endedAt: string | null = null;
+  let earliestMs = Number.POSITIVE_INFINITY;
+  let earliestIso: string | null = null;
+
+  for (const item of items) {
+    if (item.kind !== 'event') continue;
+    const ev = item.event;
+    const p = ev.payload as { skill?: string } | null;
+
+    const ms = new Date(ev.createdAt).getTime();
+    if (ms < earliestMs) {
+      earliestMs = ms;
+      earliestIso = ev.createdAt;
+    }
+
+    if (ev.kind === 'agent.run-started') {
+      if (startedAt == null) startedAt = ev.createdAt;
+      if (skill == null && p?.skill != null) skill = p.skill;
+    } else if (ev.kind === 'agent.spawned') {
+      if (skill == null && p?.skill != null) skill = p.skill;
+    } else if (ev.kind === 'agent.run-completed') {
+      if (skill == null && p?.skill != null) skill = p.skill;
+      if (endedAt == null) endedAt = ev.createdAt;
+    } else if (ev.kind === 'agent.run-failed') {
+      if (endedAt == null) endedAt = ev.createdAt;
+    }
+  }
+
+  return { skill, startedAt: startedAt ?? earliestIso, endedAt };
+}
+
 function groupByRunId(items: RenderItem[]): RenderItem[] {
   // Pass 1: collect all items per runId (order preserved).
   const byRunId = new Map<string, RenderItem[]>();
@@ -73,7 +118,8 @@ function groupByRunId(items: RenderItem[]): RenderItem[] {
       seen.add(runId);
       const group = byRunId.get(runId) ?? [];
       if (group.length > 1) {
-        result.push({ kind: 'run-group', runId, items: group });
+        const meta = extractRunMeta(group);
+        result.push({ kind: 'run-group', runId, items: group, ...meta });
       } else {
         result.push(...group);
       }
