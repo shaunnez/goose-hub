@@ -1,6 +1,7 @@
-import { addComment, fetchEvents, transitionState } from '@/lib/api';
+import { addComment, fetchComments, fetchEvents, transitionState } from '@/lib/api';
 import { renderMarkdownToHtml } from '@/lib/markdown';
-import type { AgentEventDto } from '@/lib/types';
+import type { AgentEventDto, IssueCommentDto } from '@/lib/types';
+import { timeAgo } from '@/lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
@@ -61,6 +62,13 @@ export function InvestigationSection({ projectSlug, id, itemState }: Investigati
     queryFn: () => fetchEvents(projectSlug, id),
   });
 
+  const { data: comments = [] } = useQuery<IssueCommentDto[]>({
+    queryKey: ['comments', projectSlug, id],
+    queryFn: () => fetchComments(projectSlug, id),
+  });
+
+  const humanNotes = comments.filter((c) => c.body.startsWith('Human review notes:'));
+
   const canProceed =
     itemState === 'factory:investigation-complete' || itemState === 'factory:gate-pending';
 
@@ -83,6 +91,7 @@ export function InvestigationSection({ projectSlug, id, itemState }: Investigati
         return;
       }
       await queryClient.invalidateQueries({ queryKey: ['issue', projectSlug, id] });
+      await queryClient.invalidateQueries({ queryKey: ['comments', projectSlug, id] });
     } catch (err) {
       setProceedError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -165,6 +174,34 @@ export function InvestigationSection({ projectSlug, id, itemState }: Investigati
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Human review notes posted via the investigation gate */}
+      {humanNotes.length > 0 && (
+        <div data-testid="investigation-human-notes">
+          <h4 className="text-[11px] font-medium text-fg-3 mb-2 uppercase tracking-wide">
+            Human Review Notes
+          </h4>
+          <div className="space-y-2">
+            {humanNotes.map((note) => (
+              <div
+                key={note.id}
+                className="rounded border border-line bg-bg-elev/40 px-3 py-2 text-[12px] text-fg-2"
+              >
+                <div className="text-[11px] text-fg-4 mb-1">{timeAgo(note.createdAt)}</div>
+                <div
+                  className="prose prose-sm prose-invert max-w-none text-[12px] [&_p]:mb-1"
+                  // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized by renderMarkdownToHtml
+                  dangerouslySetInnerHTML={{
+                    __html: renderMarkdownToHtml(
+                      note.body.replace(/^Human review notes:\n\n?/, '').trim(),
+                    ),
+                  }}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
