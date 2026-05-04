@@ -79,7 +79,7 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
   const schema = tier === 'deep' ? DeepRetroSchema : LightRetroSchema;
   const prompt = readPrompt(skillName);
   const jsonSchema = toJsonSchema(schema);
-  const personaId = selectPersona(projectId, 'retrospector');
+  const { personaId } = selectPersona(projectId, 'retrospector');
 
   eventStore.appendEvent({
     kind: 'agent.run-started',

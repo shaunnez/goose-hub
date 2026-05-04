@@ -41,7 +41,7 @@ export async function runReviewWorkflow(
   const runtime = deps.runtime ?? new ClaudeCliRuntime();
   const reviewPrompt = readPrompt('review');
   const reviewJsonSchema = toJsonSchema(ReviewOutputSchema);
-  const personaId = selectPersona(projectId, 'reviewer');
+  const { personaId } = selectPersona(projectId, 'reviewer');
 
   // Snapshot prior events BEFORE this run's outcome is appended (same pattern as QA workflow).
   const priorEvents = eventStore.replay({ workItemId: workItem.id });

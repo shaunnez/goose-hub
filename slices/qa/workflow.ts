@@ -24,7 +24,10 @@ function getPrDiff(_workItem: WorkItem): string {
 
 function findDevWorktreePath(workItemId: string): string | undefined {
   const events = eventStore.replay({ workItemId });
-  const prOpened = events.slice().reverse().find((e) => e.kind === 'pr.opened');
+  const prOpened = events
+    .slice()
+    .reverse()
+    .find((e) => e.kind === 'pr.opened');
   if (prOpened == null) return undefined;
   const payload = prOpened.payload as Record<string, unknown>;
   return typeof payload.worktreePath === 'string' ? payload.worktreePath : undefined;
@@ -62,7 +65,7 @@ export async function runQaWorkflow(
   const runtime = deps.runtime ?? new ClaudeCliRuntime();
   const qaPrompt = readPrompt('qa');
   const qaJsonSchema = toJsonSchema(QaOutputSchema);
-  const personaId = selectPersona(projectId, 'qa');
+  const { personaId } = selectPersona(projectId, 'qa');
   const prDiff = getPrDiff(workItem);
 
   // Snapshot prior events BEFORE this run's outcome is appended.

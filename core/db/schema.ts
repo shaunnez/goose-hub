@@ -26,6 +26,7 @@ export const events = sqliteTable(
     kind: text('kind').notNull(),
     payload: text('payload').notNull(),
     runId: text('run_id'),
+    personaId: text('persona_id'),
     createdAt: text('created_at').notNull().default(sql`(current_timestamp)`),
   },
   (table) => ({
@@ -95,6 +96,24 @@ export const improvementCandidates = sqliteTable(
     personaStatusIdx: index('improvement_candidates_persona_status_idx').on(
       t.personaName,
       t.status,
+    ),
+  }),
+);
+
+export const personaNames = sqliteTable(
+  'persona_names',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    projectId: text('project_id').notNull(),
+    role: text('role').notNull(),
+    slotIndex: integer('slot_index').notNull(),
+    codename: text('codename').notNull(),
+  },
+  (t) => ({
+    personaNameSlotUniq: uniqueIndex('persona_names_slot_uniq').on(
+      t.projectId,
+      t.role,
+      t.slotIndex,
     ),
   }),
 );

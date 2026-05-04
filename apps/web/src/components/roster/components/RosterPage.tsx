@@ -40,8 +40,10 @@ function PersonaCard({
           : 'border-line bg-bg-elev/60 hover:bg-bg-elev hover:border-line',
       ].join(' ')}
     >
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <span className="text-[12.5px] font-medium text-fg truncate">{persona.personaName}</span>
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <span className="text-[12.5px] font-medium text-fg truncate">
+          {persona.codename ?? persona.personaName}
+        </span>
         <span
           className="text-[11px] font-mono shrink-0"
           style={{ color: qualityColor(persona.avgQualityScore) }}
@@ -49,6 +51,9 @@ function PersonaCard({
           {Math.round(persona.avgQualityScore * 100)}%
         </span>
       </div>
+      {persona.codename != null && (
+        <div className="text-[10.5px] text-fg-5 font-mono truncate mb-1">{persona.personaName}</div>
+      )}
       <div className="flex items-center gap-3 text-[11px] text-fg-4">
         <span>{persona.runsTotal} runs</span>
         <span>·</span>

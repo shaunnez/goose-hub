@@ -6,7 +6,9 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   eventStore: { appendEvent: vi.fn().mockReturnValue({ id: 1 }) },
 }));
 vi.mock('@goose-hub/core/agent-runtime/select-persona.js', () => ({
-  selectPersona: vi.fn().mockReturnValue('proj/developer/0'),
+  selectPersona: vi
+    .fn()
+    .mockReturnValue({ personaId: 'proj/developer/0', codename: 'Grey Honker' }),
 }));
 const mockAccumulatePersonaStats = vi.fn();
 vi.mock('@goose-hub/core/persona/accumulate.js', () => ({

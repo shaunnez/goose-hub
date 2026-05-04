@@ -1,6 +1,7 @@
 import { fetchEvents } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import type { AgentEventDto } from '@/lib/types';
+import { getPersonaLabel, usePersonaMap } from '@/lib/usePersonaMap';
 import { timeAgo } from '@/lib/utils';
 import {
   AlertCircle,
@@ -565,6 +566,7 @@ function RunGroupWrapper({
   skill,
   startedAt,
   endedAt,
+  personaId,
 }: {
   runId: string;
   items: RenderItem[];
@@ -572,7 +574,9 @@ function RunGroupWrapper({
   skill: string | null;
   startedAt: string | null;
   endedAt: string | null;
+  personaId: string | null;
 }) {
+  const personaMap = usePersonaMap();
   const [open, setOpen] = useState(true);
   const [now, setNow] = useState(() => Date.now());
   const isLive = endedAt == null;
@@ -635,6 +639,14 @@ function RunGroupWrapper({
           <span title={runId} className="cursor-help border-b border-dashed border-fg-5/40">
             {formatSkillName(skill)} Run
           </span>
+          {getPersonaLabel(personaMap, personaId) != null && (
+            <>
+              <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+              <span className="text-[color:var(--accent)] text-[10px]">
+                {getPersonaLabel(personaMap, personaId)}
+              </span>
+            </>
+          )}
           <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
           {statusBadge}
           {metaLine}
@@ -668,6 +680,7 @@ function renderItem(item: RenderItem, idx: number) {
         skill={item.skill}
         startedAt={item.startedAt}
         endedAt={item.endedAt}
+        personaId={item.personaId}
       />
     );
   }
@@ -726,32 +739,26 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
   const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
-  console.log(729, events, loading, error)
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
     fetchEvents(projectSlug, id)
       .then((list) => {
-        console.log(736, 'fetch', cancelled)
         if (cancelled) return;
         // Server returns ascending; render newest first.
         const sorted = [...list].sort(
           (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
         );
-        console.log(742, 'sorted', sorted)
         setEvents(sorted);
-        console.log(744, 'loading false')
         setLoading(false);
       })
       .catch((err: Error) => {
-        console.log(748, 'error', error)
         if (cancelled) return;
         setError(err.message);
         setLoading(false);
       });
     return () => {
-      console.log('deaded')
       cancelled = true;
     };
   }, [projectSlug, id]);
@@ -787,7 +794,6 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
     };
   }, [projectSlug, workItemId]);
 
-  console.log('784', loading)
   if (loading) {
     return <div className="px-8 py-6 text-fg-3">Loading timeline…</div>;
   }
@@ -808,7 +814,6 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
 
   const items = groupEvents(events);
 
-  console.log(802, items)
   return (
     <div data-testid="timeline-section" className="px-8 py-6">
       <ol className="flex flex-col gap-3">{items.map((item, idx) => renderItem(item, idx))}</ol>

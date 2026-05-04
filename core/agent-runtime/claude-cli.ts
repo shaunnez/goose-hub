@@ -105,6 +105,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
       kind: 'agent.run-started',
       payload: { skill: spec.skill, runId },
       runId,
+      personaId: spec.personaId,
     });
 
     const { contextXml } = assembleSpawnContext(spec);
@@ -149,6 +150,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
 
     const projectId = (spec.context.projectId as string) ?? 'unknown';
     const workItemId = (spec.context.workItemId as string) ?? null;
+    const { personaId } = spec;
 
     return new Promise((resolve, reject) => {
       // Security rule: minimal explicit env, no parent process.env passthrough.
@@ -213,6 +215,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
               kind: 'tool.stdout-truncated',
               payload: { runId },
               runId,
+              personaId,
             });
           }
           return;
@@ -229,6 +232,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
           kind: 'tool.timeout',
           payload: { runId },
           runId,
+          personaId,
         });
         reject(new Error(`Agent run ${runId} timed out after ${effectiveTimeoutMs}ms`));
       }, effectiveTimeoutMs);
@@ -254,6 +258,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
             kind: 'agent.run-failed',
             payload: { runId, exitCode: code },
             runId,
+            personaId,
           });
           reject(
             new Error(`Claude CLI exited with code ${code}${stderr ? `\n${stderr.trim()}` : ''}`),
@@ -268,6 +273,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
             kind: 'agent.run-failed',
             payload: { runId, exitCode: code },
             runId,
+            personaId,
           });
           const detail =
             envelope.result ??
@@ -285,6 +291,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
           kind: 'agent.run-completed',
           payload: { runId, skill: spec.skill },
           runId,
+          personaId,
         });
 
         resolve({

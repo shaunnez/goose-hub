@@ -1,10 +1,11 @@
 import { db } from '@goose-hub/core/db/db.js';
-import { improvementCandidates, personaStats } from '@goose-hub/core/db/schema.js';
+import { improvementCandidates, personaNames, personaStats } from '@goose-hub/core/db/schema.js';
 import { and, asc, eq } from 'drizzle-orm';
 
 export interface PersonaStat {
   id: number;
   personaName: string;
+  codename: string | null;
   role: string;
   runsTotal: number;
   runsSucceeded: number;
@@ -27,10 +28,20 @@ export interface ImprovementCandidateRow {
 }
 
 export async function listPersonaStats(): Promise<PersonaStat[]> {
-  return db
+  const stats = await db
     .select()
     .from(personaStats)
     .orderBy(asc(personaStats.role), asc(personaStats.personaName));
+
+  const names = await db.select().from(personaNames);
+  const codenameMap = new Map(
+    names.map((n) => [`${n.projectId}/${n.role}/${n.slotIndex}`, n.codename]),
+  );
+
+  return stats.map((s) => ({
+    ...s,
+    codename: codenameMap.get(s.personaName) ?? null,
+  }));
 }
 
 export async function listCandidatesByPersona(
