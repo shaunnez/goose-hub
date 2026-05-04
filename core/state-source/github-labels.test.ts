@@ -652,10 +652,11 @@ describe('listMilestones', () => {
     expect(result[1].dueOn).toBeUndefined();
   });
 
-  it('filters out milestones whose title starts with [E2E]', async () => {
+  it('filters out milestones that do not match M<n> prefix ([E2E], Backlog, etc.)', async () => {
     const milestones = [
       { number: 1, title: 'M1', description: null, due_on: null, state: 'open' },
       { number: 2, title: '[E2E] test milestone', description: null, due_on: null, state: 'open' },
+      { number: 3, title: 'Backlog', description: null, due_on: null, state: 'open' },
     ];
 
     vi.stubGlobal('fetch', mockFetchOnce(milestones));
@@ -664,6 +665,22 @@ describe('listMilestones', () => {
     const result = await source.listMilestones();
     expect(result).toHaveLength(1);
     expect(result[0].title).toBe('M1');
+  });
+
+  it('sorts milestones by M-prefix number ascending, not by GitHub id', async () => {
+    // GitHub numbers are in reverse creation order — M10 has id=1, M2 has id=2.
+    // The list must come back M2 before M10.
+    const milestones = [
+      { number: 1, title: 'M10: Late', description: null, due_on: null, state: 'open' },
+      { number: 2, title: 'M2: Early', description: null, due_on: null, state: 'open' },
+      { number: 3, title: 'M9: Middle', description: null, due_on: null, state: 'open' },
+    ];
+
+    vi.stubGlobal('fetch', mockFetchOnce(milestones));
+
+    const source = makeSource();
+    const result = await source.listMilestones();
+    expect(result.map((m) => m.title)).toEqual(['M2: Early', 'M9: Middle', 'M10: Late']);
   });
 });
 

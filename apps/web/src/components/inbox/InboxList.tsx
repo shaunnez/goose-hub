@@ -1,8 +1,8 @@
-import { fetchInboxItems, fetchProjects, promoteInboxItem } from '@/lib/api';
-import type { InboxItemDto, ProjectSummary } from '@/lib/types';
+import { fetchInboxItems, fetchMilestones, fetchProjects, promoteInboxItem } from '@/lib/api';
+import type { InboxItemDto, MilestoneDto, ProjectSummary } from '@/lib/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ChevronDown, Inbox } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 // ---------------------------------------------------------------------------
 // Two-step promote modal
@@ -19,6 +19,7 @@ function PromoteModal({
 }) {
   const [step, setStep] = useState<ModalStep>('picker');
   const [selectedSlug, setSelectedSlug] = useState<string>('');
+  const [selectedMilestoneNumber, setSelectedMilestoneNumber] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const {
@@ -30,9 +31,35 @@ function PromoteModal({
     queryFn: fetchProjects,
   });
 
+  const {
+    data: milestones = [],
+    isLoading: milestonesLoading,
+    isError: milestonesError,
+    isSuccess: milestonesLoaded,
+  } = useQuery<MilestoneDto[]>({
+    queryKey: ['milestones', selectedSlug],
+    queryFn: () => fetchMilestones(selectedSlug),
+    enabled: !!selectedSlug,
+  });
+
+  // Reset to null while milestones are loading (or when no project selected);
+  // auto-select the first active milestone once the list arrives.
+  useEffect(() => {
+    if (!selectedSlug || !milestonesLoaded) {
+      setSelectedMilestoneNumber(null);
+      return;
+    }
+    const active = milestones.find((m) => m.isActive);
+    setSelectedMilestoneNumber(active?.number ?? null);
+  }, [selectedSlug, milestones, milestonesLoaded]);
+
+  // Only send an explicit milestoneNumber once we have a confirmed loaded list.
+  // While loading or on error, omit it so the server falls back to its persisted active milestone.
+  const milestoneArg = milestonesLoaded && !milestonesError ? selectedMilestoneNumber : undefined;
+
   const queryClient = useQueryClient();
   const mutation = useMutation({
-    mutationFn: () => promoteInboxItem(item.id, selectedSlug),
+    mutationFn: () => promoteInboxItem(item.id, selectedSlug, milestoneArg),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['inbox'] });
       onClose();
@@ -43,6 +70,7 @@ function PromoteModal({
   });
 
   const selectedProject = projects.find((p) => p.slug === selectedSlug);
+  const selectedMilestone = milestones.find((m) => m.number === selectedMilestoneNumber);
 
   function handlePickerNext() {
     if (!selectedSlug) return;
@@ -101,47 +129,105 @@ function PromoteModal({
             )}
 
             {!projectsLoading && !projectsError && (
-              <div style={{ position: 'relative', marginBottom: 16 }}>
-                <select
-                  aria-label="Select project"
-                  data-testid="promote-project-select"
-                  value={selectedSlug}
-                  onChange={(e) => setSelectedSlug(e.target.value)}
-                  style={{
-                    appearance: 'none',
-                    width: '100%',
-                    height: 32,
-                    paddingLeft: 12,
-                    paddingRight: 32,
-                    background: 'var(--bg)',
-                    border: '1px solid var(--line)',
-                    borderRadius: 6,
-                    fontSize: 12.5,
-                    color: 'var(--fg)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <option value="" disabled>
-                    — choose a project —
-                  </option>
-                  {projects.map((p) => (
-                    <option key={p.slug} value={p.slug}>
-                      {p.name}
+              <>
+                <div style={{ position: 'relative', marginBottom: 16 }}>
+                  <select
+                    aria-label="Select project"
+                    data-testid="promote-project-select"
+                    value={selectedSlug}
+                    onChange={(e) => setSelectedSlug(e.target.value)}
+                    style={{
+                      appearance: 'none',
+                      width: '100%',
+                      height: 32,
+                      paddingLeft: 12,
+                      paddingRight: 32,
+                      background: 'var(--bg)',
+                      border: '1px solid var(--line)',
+                      borderRadius: 6,
+                      fontSize: 12.5,
+                      color: 'var(--fg)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <option value="" disabled>
+                      — choose a project —
                     </option>
-                  ))}
-                </select>
-                <ChevronDown
-                  size={13}
-                  style={{
-                    pointerEvents: 'none',
-                    position: 'absolute',
-                    right: 8,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    color: 'var(--fg-3)',
-                  }}
-                />
-              </div>
+                    {projects.map((p) => (
+                      <option key={p.slug} value={p.slug}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown
+                    size={13}
+                    style={{
+                      pointerEvents: 'none',
+                      position: 'absolute',
+                      right: 8,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      color: 'var(--fg-3)',
+                    }}
+                  />
+                </div>
+
+                {selectedSlug && (
+                  <div style={{ marginBottom: 16 }}>
+                    <p style={{ margin: '0 0 6px', fontSize: 12, color: 'var(--fg-3)' }}>
+                      Milestone (optional)
+                    </p>
+                    {milestonesLoading ? (
+                      <p style={{ fontSize: 12, color: 'var(--fg-3)', margin: 0 }}>
+                        Loading milestones…
+                      </p>
+                    ) : (
+                      <div style={{ position: 'relative' }}>
+                        <select
+                          aria-label="Select milestone"
+                          data-testid="promote-milestone-select"
+                          value={selectedMilestoneNumber ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setSelectedMilestoneNumber(val === '' ? null : Number(val));
+                          }}
+                          style={{
+                            appearance: 'none',
+                            width: '100%',
+                            height: 32,
+                            paddingLeft: 12,
+                            paddingRight: 32,
+                            background: 'var(--bg)',
+                            border: '1px solid var(--line)',
+                            borderRadius: 6,
+                            fontSize: 12.5,
+                            color: 'var(--fg)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <option value="">— no milestone —</option>
+                          {milestones.map((m) => (
+                            <option key={m.number} value={m.number}>
+                              {m.title}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown
+                          size={13}
+                          style={{
+                            pointerEvents: 'none',
+                            position: 'absolute',
+                            right: 8,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            color: 'var(--fg-3)',
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
             )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
@@ -203,7 +289,14 @@ function PromoteModal({
             </div>
             <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--fg-2)' }}>
               &ldquo;{item.title}&rdquo; will be created as a GitHub issue in{' '}
-              <strong>{selectedProject?.name ?? selectedSlug}</strong>.
+              <strong>{selectedProject?.name ?? selectedSlug}</strong>
+              {selectedMilestone ? (
+                <>
+                  {' '}
+                  under milestone <strong>{selectedMilestone.title}</strong>
+                </>
+              ) : null}
+              .
             </p>
             {error && (
               <p style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 12 }}>{error}</p>

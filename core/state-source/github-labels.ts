@@ -265,7 +265,14 @@ export class GitHubLabelsSource implements StateSource {
   async listMilestones(): Promise<Milestone[]> {
     const url = `https://api.github.com/repos/${this.repoRef}/milestones?state=all&per_page=100`;
     const milestones = await this.paginateAll<GithubMilestone>(url);
-    return milestones.filter((m) => !m.title.startsWith('[E2E]')).map(mapGithubMilestone);
+    return milestones
+      .filter((m) => /^M\d+/.test(m.title))
+      .sort((a, b) => {
+        const aNum = Number.parseInt(a.title.match(/^M(\d+)/)?.[1] ?? '0', 10);
+        const bNum = Number.parseInt(b.title.match(/^M(\d+)/)?.[1] ?? '0', 10);
+        return aNum - bNum;
+      })
+      .map(mapGithubMilestone);
   }
 
   async getActiveMilestone(): Promise<Milestone | null> {
