@@ -25,6 +25,7 @@ const GATE_ACTIONS: Record<
     reject: 'factory:rejected',
     requestChanges: 'factory:needs-fix',
   },
+  'factory:approved': { approve: 'factory:retrospecting' },
   'factory:needs-human': {
     sendToTriage: 'factory:triaging',
     sendToDev: 'factory:dev-ready',
