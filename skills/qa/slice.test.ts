@@ -204,6 +204,17 @@ describe('FindingSchema', () => {
     const result = FindingSchema.safeParse({ tier: 'structural', severity: 'error' });
     expect(result.success).toBe(false);
   });
+
+  it('accepts null file and null line for findings without a source location', () => {
+    const result = FindingSchema.safeParse({
+      tier: 'functional',
+      severity: 'warning',
+      file: null,
+      line: null,
+      description: 'Acceptance criterion 3 not covered by any test',
+    });
+    expect(result.success).toBe(true);
+  });
 });
 
 // ─── TierResultSchema ────────────────────────────────────────────────────────
