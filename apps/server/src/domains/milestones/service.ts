@@ -39,12 +39,20 @@ export async function setActiveMilestone(
   return { ok: true, data: { ok: true, milestoneNumber } };
 }
 
+const MILESTONE_TITLE_RE = /^M(\d+)/;
+
+function extractMilestoneOrder(title: string): number {
+  const m = MILESTONE_TITLE_RE.exec(title);
+  return m != null ? Number.parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
+}
+
 export async function listMilestones(slug: string): Promise<Result<{ milestones: unknown[] }>> {
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
-  const milestones = await getCached(CACHE_KEY.milestones(slug), 60_000, () =>
-    source.listMilestones(),
-  );
+  const raw = await getCached(CACHE_KEY.milestones(slug), 60_000, () => source.listMilestones());
+  const milestones = (raw as Array<{ title: string }>)
+    .filter((m) => MILESTONE_TITLE_RE.test(m.title))
+    .sort((a, b) => extractMilestoneOrder(a.title) - extractMilestoneOrder(b.title));
   return { ok: true, data: { milestones } };
 }
 
