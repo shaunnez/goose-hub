@@ -118,7 +118,7 @@ export function RightRail({ projectSlug, id, workItemId }: RightRailProps) {
     .reverse()
     .find(
       (e) =>
-        e.kind === 'agent.run-completed' &&
+        (e.kind === 'agent.run-completed' || e.kind === 'agent.terminated') &&
         e.payload != null &&
         typeof e.payload === 'object' &&
         'output' in (e.payload as object) &&

@@ -13,7 +13,11 @@ export function writeWorkspaceSandbox(workspacePath: string): void {
         PreToolUse: [
           {
             matcher: '.*',
-            hooks: [{ type: 'command', command: `node ${HOOK_PATH}` }],
+            // process.execPath is the absolute path to the node binary running
+            // the server. Required because the agent subprocess gets a minimal
+            // PATH that omits non-standard install locations (e.g. /opt/homebrew
+            // on Apple Silicon), so bare `node` would not be found.
+            hooks: [{ type: 'command', command: `${process.execPath} ${HOOK_PATH}` }],
           },
         ],
       },
