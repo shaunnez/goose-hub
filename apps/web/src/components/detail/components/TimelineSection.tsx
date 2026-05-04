@@ -14,6 +14,7 @@ import {
   FileCode,
   GitPullRequest,
   Info,
+  Loader2,
   Sparkles,
   Tag,
   Target,
@@ -58,7 +59,21 @@ const STATE_LABEL: Record<string, string> = {
   'evidence.post-failed': 'Evidence post failed',
 };
 
-// ─── payload helpers ──────────────────────────────────────────────────────────
+// ─── display helpers ──────────────────────────────────────────────────────────
+
+function formatSkillName(skill: string | null): string {
+  if (skill == null) return '(Unknown)';
+  return skill
+    .split('-')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+function formatDuration(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${s % 60}s`;
+}
 
 function getPayloadStr(payload: unknown): string {
   const text = typeof payload === 'string' ? payload : JSON.stringify(payload ?? {});
@@ -543,33 +558,31 @@ function EvidencePostFailedEvent({ event }: { event: AgentEventDto }) {
   );
 }
 
-function getRunStartedAt(items: RenderItem[]): string | null {
-  // Prefer the explicit run-started event; fall back to numeric minimum.
-  for (const item of items) {
-    if (item.kind === 'event' && item.event.kind === 'agent.run-started') {
-      return item.event.createdAt;
-    }
-  }
-  let earliestMs = Number.POSITIVE_INFINITY;
-  let earliestIso: string | null = null;
-  for (const item of items) {
-    if (item.kind !== 'event') continue;
-    const ms = new Date(item.event.createdAt).getTime();
-    if (ms < earliestMs) {
-      earliestMs = ms;
-      earliestIso = item.event.createdAt;
-    }
-  }
-  return earliestIso;
-}
-
 function RunGroupWrapper({
   runId,
   items,
   idx,
-}: { runId: string; items: RenderItem[]; idx: number }) {
+  skill,
+  startedAt,
+  endedAt,
+}: {
+  runId: string;
+  items: RenderItem[];
+  idx: number;
+  skill: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+}) {
   const [open, setOpen] = useState(true);
-  // Float terminal status events to the top so run outcome is immediately visible.
+  const [now, setNow] = useState(() => Date.now());
+  const isLive = endedAt == null;
+
+  useEffect(() => {
+    if (!isLive) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [isLive]);
+
   const rank = (item: RenderItem) => {
     if (item.kind !== 'event') return 2;
     if (item.event.kind === 'agent.run-completed') return 0;
@@ -577,22 +590,63 @@ function RunGroupWrapper({
     return 2;
   };
   const sorted = [...items].sort((a, b) => rank(a) - rank(b));
-  const startedAt = getRunStartedAt(items);
+
+  const startMs = startedAt != null ? new Date(startedAt).getTime() : null;
+  const endMs = endedAt != null ? new Date(endedAt).getTime() : null;
+  const liveDuration = startMs != null ? formatDuration(now - startMs) : null;
+  const completeDuration =
+    startMs != null && endMs != null ? formatDuration(endMs - startMs) : null;
+  const isFailed = items.some(
+    (item) => item.kind === 'event' && item.event.kind === 'agent.run-failed',
+  );
+
+  const statusBadge = isLive ? (
+    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/10 text-green-400 border border-green-500/20">
+      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+      Live
+    </span>
+  ) : isFailed ? (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/10 text-[color:var(--danger)] border border-red-500/20">
+      Failed
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-fg-5/10 text-fg-3 border border-line/50">
+      Complete
+    </span>
+  );
+
+  const metaLine = isLive ? (
+    liveDuration != null ? (
+      <span className="text-fg-5 text-[10.5px]">running for {liveDuration}</span>
+    ) : null
+  ) : (
+    <span className="text-fg-5 text-[10.5px]">
+      {completeDuration != null && <>Ran for {completeDuration}</>}
+      {startedAt != null && <> &middot; Started {new Date(startedAt).toLocaleTimeString()}</>}
+      {endedAt != null && <> &middot; Ended {new Date(endedAt).toLocaleTimeString()}</>}
+    </span>
+  );
+
   return (
     <li data-run-id={runId} className="rounded-md border border-line/70 bg-bg/30">
       <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
-        <summary className="flex items-center gap-1 cursor-pointer list-none px-4 py-2 font-mono text-[11px]  select-none">
+        <summary className="flex flex-wrap items-center gap-2 cursor-pointer list-none px-4 py-2 font-mono text-[11px] select-none">
           {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-          <span>Run {runId}</span>
-          {startedAt != null && (
-            <>
-              <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4 ml-4" />
-              <span className="text-fg-5">Started at: {startedAt}</span>
-            </>
-          )}
+          <span title={runId} className="cursor-help border-b border-dashed border-fg-5/40">
+            {formatSkillName(skill)} Run
+          </span>
+          <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+          {statusBadge}
+          {metaLine}
           <span className="ml-auto text-fg-5">{items.length} events</span>
         </summary>
         <ol className="flex flex-col gap-2 px-3 pb-3">
+          {isLive && (
+            <li className="rounded-md border border-dashed border-[color:var(--accent)]/30 bg-[color:var(--accent)]/5 px-3 py-2 flex items-center gap-2 text-[10.5px] text-[color:var(--accent)]">
+              <Loader2 size={12} className="shrink-0 animate-spin" />
+              <span className="font-mono uppercase tracking-wider">Agent running…</span>
+            </li>
+          )}
           {sorted.map((item, i) => renderItem(item, idx * 1000 + i))}
         </ol>
       </details>
@@ -611,6 +665,9 @@ function renderItem(item: RenderItem, idx: number) {
         runId={item.runId}
         items={item.items}
         idx={idx}
+        skill={item.skill}
+        startedAt={item.startedAt}
+        endedAt={item.endedAt}
       />
     );
   }
