@@ -51,7 +51,22 @@ describe('InvestigationSection', () => {
   it('shows empty state when no investigation events exist', () => {
     renderSection([]);
     expect(screen.getByTestId('investigation-empty-state')).toBeTruthy();
-    expect(screen.getByText('Investigation has not run yet.')).toBeTruthy();
+    expect(screen.getByText('No investigation result yet')).toBeTruthy();
+  });
+
+  it('shows section header label in empty state', () => {
+    renderSection([]);
+    expect(screen.getByText('03. Investigation')).toBeTruthy();
+  });
+
+  it('shows section heading in empty state', () => {
+    renderSection([]);
+    expect(screen.getByText('Findings & key files')).toBeTruthy();
+  });
+
+  it('shows description text in empty state', () => {
+    renderSection([]);
+    expect(screen.getByTestId('investigation-empty-description')).toBeTruthy();
   });
 
   it('renders findings when investigation event is present', () => {
