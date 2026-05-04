@@ -131,10 +131,11 @@ export function ReviewSection({ projectSlug, id }: ReviewSectionProps) {
         : 'text-red-500';
 
   const confidencePct = Math.round(review.confidence * 100);
+  const verdictLabel = VERDICT_LABEL[review.verdict] ?? String(review.verdict ?? 'unknown');
   const hint =
     total > 0
-      ? `${metCount} of ${total} checks pass · ${VERDICT_LABEL[review.verdict].toLowerCase()} · ${confidencePct}% confidence`
-      : `${VERDICT_LABEL[review.verdict].toLowerCase()} · ${confidencePct}% confidence`;
+      ? `${metCount} of ${total} checks pass · ${verdictLabel.toLowerCase()} · ${confidencePct}% confidence`
+      : `${verdictLabel.toLowerCase()} · ${confidencePct}% confidence`;
 
   return (
     <div
@@ -181,7 +182,7 @@ export function ReviewSection({ projectSlug, id }: ReviewSectionProps) {
           }`}
         >
           <VerdictIcon size={11} className={verdictColor} />
-          {VERDICT_LABEL[review.verdict]}
+          {verdictLabel}
         </span>
         <span className="text-[11.5px] text-fg-3">Confidence {confidencePct}%</span>
       </div>
