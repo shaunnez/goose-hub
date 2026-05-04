@@ -1,13 +1,14 @@
 /** @vitest-environment jsdom */
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CaptureModal } from './CaptureModal';
 
 afterEach(cleanup);
 
 vi.mock('@/lib/api', () => ({
-  createInboxItem: vi.fn().mockResolvedValue(undefined),
+  createInboxItem: vi.fn().mockResolvedValue({ id: 1 }),
 }));
 
 vi.mock('@/components/ui/MarkdownEditor', () => ({
@@ -34,7 +35,12 @@ vi.mock('@/components/ui/MarkdownEditor', () => ({
 
 function renderModal(open = true) {
   const onClose = vi.fn();
-  render(<CaptureModal open={open} onClose={onClose} />);
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <CaptureModal open={open} onClose={onClose} />
+    </QueryClientProvider>,
+  );
   return { onClose };
 }
 

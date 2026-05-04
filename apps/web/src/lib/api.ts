@@ -205,8 +205,9 @@ export async function createInboxItem(data: {
   title: string;
   body?: string;
   type: string;
-}): Promise<void> {
-  await postJson('/inbox', data);
+}): Promise<InboxItemDto> {
+  const { item } = await postJson<{ item: InboxItemDto }>('/inbox', data);
+  return item;
 }
 
 export async function fetchInboxItems(): Promise<InboxItemDto[]> {
