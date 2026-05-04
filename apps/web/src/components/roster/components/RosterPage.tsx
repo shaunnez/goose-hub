@@ -1,5 +1,6 @@
 import { fetchRoster } from '@/lib/api';
 import type { PersonaStatDto } from '@/lib/types';
+import { timeAgo } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { PersonaDrillIn } from './PersonaDrillIn';
@@ -8,15 +9,6 @@ function qualityColor(score: number): string {
   if (score >= 0.8) return 'var(--success, #22c55e)';
   if (score >= 0.5) return 'var(--warning, #f59e0b)';
   return 'var(--danger, #ef4444)';
-}
-
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const minutes = Math.floor(diff / 60_000);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
 }
 
 function PersonaCard({

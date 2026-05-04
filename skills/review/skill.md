@@ -271,3 +271,4 @@ For `needs-human` (escalationReason is REQUIRED):
 - `confidence` is your honest assessment, not what you wish it were.
 - If a criterion appears trivially met, still document why — "README.md present with all required sections on lines 1–45."
 - The QA verdict is context, not directive. A QA `pass` does not guarantee your `approved`.
+- **Optional fields must be OMITTED, not null.** When a finding has no specific source location, omit `file` and `line` entirely — never write `"file": null` or `"line": null`. Same applies to `escalationReason` on non-`needs-human` verdicts — omit it entirely.

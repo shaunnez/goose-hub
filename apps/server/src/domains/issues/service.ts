@@ -3,10 +3,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { type AgentEvent, eventStore } from '@goose-hub/core/event-stream/store.js';
-import { cleanupWorktree } from '@goose-hub/core/workspaces/worktree.js';
 import { STATES } from '@goose-hub/core/state-machine/states.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { isLegalTransition, legalTargets } from '@goose-hub/core/state-machine/transitions.js';
+import { cleanupWorktree } from '@goose-hub/core/workspaces/worktree.js';
 import { CACHE_KEY, bustCache, getCached } from '../../shared/cache.js';
 import type { Result } from '../../shared/middleware.js';
 import { getProject } from '../../shared/projects.js';
@@ -125,7 +125,10 @@ export async function approveIssue(
 
   // Clean up the dev worktree now that the PR is merged.
   const allEvents = eventStore.replay({ workItemId });
-  const prOpenedEvent = allEvents.slice().reverse().find((e) => e.kind === 'pr.opened');
+  const prOpenedEvent = allEvents
+    .slice()
+    .reverse()
+    .find((e) => e.kind === 'pr.opened');
   if (prOpenedEvent != null) {
     const { devRunId } = prOpenedEvent.payload as { devRunId?: string };
     if (typeof devRunId === 'string') cleanupWorktree(devRunId);
@@ -215,8 +218,8 @@ export async function getIssueWorktreeDiff(
 
   const worktreePath = join(homedir(), '.factory', 'workspaces', runId);
   if (!existsSync(worktreePath)) {
-    const prDiff = await tryGitHubPrDiff(ascending, repoRef, fetchImpl);
-    if (prDiff != null) return { ok: true, data: { diff: prDiff, runId } };
+    const prResult = await tryGitHubPrDiff(ascending, repoRef, fetchImpl);
+    if (prResult != null) return { ok: true, data: { diff: prResult.diff, runId: prResult.prRunId } };
     return {
       ok: true,
       data: { diff: null, runId, reason: 'worktree not found (cleaned up or pre-creation)' },
@@ -224,8 +227,8 @@ export async function getIssueWorktreeDiff(
   }
 
   if (!existsSync(join(worktreePath, '.git'))) {
-    const prDiff = await tryGitHubPrDiff(ascending, repoRef, fetchImpl);
-    if (prDiff != null) return { ok: true, data: { diff: prDiff, runId } };
+    const prResult = await tryGitHubPrDiff(ascending, repoRef, fetchImpl);
+    if (prResult != null) return { ok: true, data: { diff: prResult.diff, runId: prResult.prRunId } };
     return {
       ok: true,
       data: {
@@ -245,8 +248,8 @@ export async function getIssueWorktreeDiff(
     if (diff.length > 0) return { ok: true, data: { diff, runId } };
     // Worktree exists but all changes are committed (e.g. PR already opened).
     // Fall through to the GitHub PR diff.
-    const prDiff = await tryGitHubPrDiff(ascending, repoRef, fetchImpl);
-    if (prDiff != null) return { ok: true, data: { diff: prDiff, runId } };
+    const prResult = await tryGitHubPrDiff(ascending, repoRef, fetchImpl);
+    if (prResult != null) return { ok: true, data: { diff: prResult.diff, runId: prResult.prRunId } };
     return {
       ok: true,
       data: { diff: null, runId, reason: 'no uncommitted changes and no PR diff available' },
@@ -267,7 +270,7 @@ async function tryGitHubPrDiff(
   ascending: AgentEvent[],
   repo: string,
   fetchImpl: typeof fetch,
-): Promise<string | null> {
+): Promise<{ diff: string; prRunId: string | null } | null> {
   const token = process.env.GITHUB_TOKEN ?? '';
   if (token.length === 0) return null;
   const prEvent = [...ascending]
@@ -279,6 +282,7 @@ async function tryGitHubPrDiff(
     );
   if (prEvent == null) return null;
   const prNumber = (prEvent.payload as { prNumber: number }).prNumber;
+  const prRunId = typeof prEvent.runId === 'string' ? prEvent.runId : null;
   try {
     const res = await fetchImpl(`https://api.github.com/repos/${repo}/pulls/${prNumber}`, {
       headers: {
@@ -288,7 +292,8 @@ async function tryGitHubPrDiff(
       },
     });
     if (!res.ok) return null;
-    return res.text();
+    const diff = await res.text();
+    return { diff, prRunId };
   } catch {
     return null;
   }

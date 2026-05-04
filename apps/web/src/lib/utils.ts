@@ -1,8 +1,14 @@
 // apps/web/src/lib/utils.ts
 
+// SQLite current_timestamp emits 'YYYY-MM-DD HH:MM:SS' without timezone — treat as UTC.
+function parseUtc(iso: string): Date {
+  const s = iso.includes('T') ? iso : iso.replace(' ', 'T');
+  return new Date(s.endsWith('Z') || s.includes('+') ? s : `${s}Z`);
+}
+
 /** Full relative time string — e.g. "5m ago", "2h ago", "3d ago". */
 export function timeAgo(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
+  const ms = Date.now() - parseUtc(iso).getTime();
   const s = Math.floor(ms / 1000);
   if (s < 60) return 'just now';
   const m = Math.floor(s / 60);
@@ -18,7 +24,7 @@ export function timeAgo(iso: string): string {
 
 /** Compact age label for kanban cards — e.g. "5m", "2h", "3d". */
 export function ageLabel(createdAt: string): string {
-  const created = new Date(createdAt).getTime();
+  const created = parseUtc(createdAt).getTime();
   const now = Date.now();
   const minutes = Math.max(0, Math.floor((now - created) / 60000));
   if (minutes < 60) return `${minutes}m`;

@@ -26,7 +26,7 @@ export const events = sqliteTable(
     kind: text('kind').notNull(),
     payload: text('payload').notNull(),
     runId: text('run_id'),
-    createdAt: text('created_at').notNull().default(sql`(current_timestamp)`),
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
   },
   (table) => ({
     projectCreatedIdx: index('events_project_created_idx').on(table.projectId, table.createdAt),
@@ -39,7 +39,7 @@ export const governanceAudit = sqliteTable('governance_audit', {
   projectId: text('project_id').notNull(),
   ok: integer('ok').notNull(),
   violations: text('violations').notNull(),
-  checkedAt: text('checked_at').notNull().default(sql`(current_timestamp)`),
+  checkedAt: text('checked_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
 });
 
 export const inboxItems = sqliteTable('inbox_items', {
@@ -47,7 +47,7 @@ export const inboxItems = sqliteTable('inbox_items', {
   title: text('title').notNull(),
   body: text('body').notNull().default(''),
   type: text('type').notNull().default('feature'), // feature | bug | chore | research
-  createdAt: text('created_at').notNull().default(sql`(current_timestamp)`),
+  createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
 });
 
 export const personaRouting = sqliteTable(
@@ -70,7 +70,7 @@ export const personaStats = sqliteTable(
     runsSucceeded: integer('runs_succeeded').notNull().default(0),
     runsFailed: integer('runs_failed').notNull().default(0),
     avgQualityScore: real('avg_quality_score').notNull().default(1.0),
-    lastRunAt: text('last_run_at').notNull().default(sql`(current_timestamp)`),
+    lastRunAt: text('last_run_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
   },
   (t) => ({
     personaRoleUniq: uniqueIndex('persona_stats_persona_role_uniq').on(t.personaName, t.role),
@@ -89,7 +89,7 @@ export const improvementCandidates = sqliteTable(
     status: text('status').notNull().default('pending'), // pending | approved | rejected
     githubIssueUrl: text('github_issue_url'),
     errorNote: text('error_note'),
-    createdAt: text('created_at').notNull().default(sql`(current_timestamp)`),
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
   },
   (t) => ({
     personaStatusIdx: index('improvement_candidates_persona_status_idx').on(

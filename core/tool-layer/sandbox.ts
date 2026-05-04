@@ -17,7 +17,7 @@ export function writeWorkspaceSandbox(workspacePath: string): void {
             // the server. Required because the agent subprocess gets a minimal
             // PATH that omits non-standard install locations (e.g. /opt/homebrew
             // on Apple Silicon), so bare `node` would not be found.
-            hooks: [{ type: 'command', command: `${process.execPath} ${HOOK_PATH}` }],
+            hooks: [{ type: 'command', command: `"${process.execPath}" "${HOOK_PATH}"` }],
           },
         ],
       },

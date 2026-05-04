@@ -57,6 +57,10 @@ const STATE_LABEL: Record<string, string> = {
   'evidence.no-spec-declared': 'Evidence — no spec declared',
   'evidence.posted': 'Evidence posted',
   'evidence.post-failed': 'Evidence post failed',
+  'qa.completed': 'QA completed',
+  'qa.structural-failed': 'QA structural failed',
+  'qa.functional-failed': 'QA functional failed',
+  'qa.regression-failed': 'QA regression failed',
 };
 
 // ─── display helpers ──────────────────────────────────────────────────────────
@@ -500,6 +504,97 @@ function AgentImplementCompleteEvent({ event }: { event: AgentEventDto }) {
   );
 }
 
+type TierResult = {
+  passed: boolean;
+  findings?: { severity: string; description: string }[];
+  command?: string | null;
+};
+
+function QaCompletedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as {
+    verdict?: string;
+    overallScore?: number;
+    threshold?: number;
+    tierResults?: {
+      structural?: TierResult;
+      functional?: TierResult;
+      regression?: TierResult;
+    };
+  } | null;
+
+  const verdict = p?.verdict ?? 'unknown';
+  const score = p?.overallScore;
+  const threshold = p?.threshold ?? 70;
+  const tiers = p?.tierResults;
+
+  const verdictColor =
+    verdict === 'pass'
+      ? 'text-green-400 border-green-500/20 bg-green-500/10'
+      : verdict === 'fail'
+        ? 'text-[color:var(--danger)] border-red-500/20 bg-red-500/10'
+        : 'text-yellow-400 border-yellow-500/20 bg-yellow-500/10';
+
+  const tierRows: { key: 'structural' | 'functional' | 'regression'; label: string }[] = [
+    { key: 'structural', label: 'Structural' },
+    { key: 'functional', label: 'Functional' },
+    { key: 'regression', label: 'Regression (playwright)' },
+  ];
+
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex items-center gap-2 mb-2 text-[11px] text-fg-3">
+        <CheckCircle size={13} className="shrink-0 text-[color:var(--accent)]" />
+        <span className="font-mono uppercase tracking-wider">QA completed</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="flex items-center gap-2 mb-2">
+        <span
+          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${verdictColor}`}
+        >
+          {verdict.toUpperCase()}
+        </span>
+        {score != null && (
+          <span className="text-[11.5px] text-fg-3 font-mono">
+            <span className={score >= threshold ? 'text-green-400' : 'text-[color:var(--danger)]'}>
+              {score}
+            </span>
+            <span className="text-fg-4">/{threshold}</span>
+          </span>
+        )}
+      </div>
+      {tiers != null && (
+        <div className="flex flex-col gap-1">
+          {tierRows.map(({ key, label }) => {
+            const tier = tiers[key];
+            const skipped = tier == null || (tier.command == null && key === 'regression');
+            const passed = tier?.passed ?? false;
+            return (
+              <div key={key} className="flex items-center gap-2 text-[11px]">
+                {skipped ? (
+                  <Circle size={11} className="shrink-0 text-fg-4" />
+                ) : passed ? (
+                  <CheckCircle size={11} className="shrink-0 text-green-400" />
+                ) : (
+                  <XCircle size={11} className="shrink-0 text-[color:var(--danger)]" />
+                )}
+                <span className="text-fg-3 font-mono">{label}</span>
+                {skipped && <span className="text-fg-5 italic">skipped</span>}
+                {!skipped && tier?.command != null && (
+                  <span className="text-fg-5 truncate max-w-[260px]">{tier.command}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </li>
+  );
+}
+
 function EvidenceNoSpecEvent({ event }: { event: AgentEventDto }) {
   return (
     <li
@@ -701,6 +796,8 @@ function renderItem(item: RenderItem, idx: number) {
     case 'tool.stdout-truncated':
     case 'tool.timeout':
       return <ToolWarningEvent key={event.id} event={event} />;
+    case 'qa.completed':
+      return <QaCompletedEvent key={event.id} event={event} />;
     case 'agent.triage-complete':
       return <AgentTriageCompleteEvent key={event.id} event={event} />;
     case 'pr.opened':
@@ -726,32 +823,32 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
   const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
-  console.log(729, events, loading, error)
+  console.log(729, events, loading, error);
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
     fetchEvents(projectSlug, id)
       .then((list) => {
-        console.log(736, 'fetch', cancelled)
+        console.log(736, 'fetch', cancelled);
         if (cancelled) return;
         // Server returns ascending; render newest first.
         const sorted = [...list].sort(
           (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
         );
-        console.log(742, 'sorted', sorted)
+        console.log(742, 'sorted', sorted);
         setEvents(sorted);
-        console.log(744, 'loading false')
+        console.log(744, 'loading false');
         setLoading(false);
       })
       .catch((err: Error) => {
-        console.log(748, 'error', error)
+        console.log(748, 'error', error);
         if (cancelled) return;
         setError(err.message);
         setLoading(false);
       });
     return () => {
-      console.log('deaded')
+      console.log('deaded');
       cancelled = true;
     };
   }, [projectSlug, id]);
@@ -787,7 +884,7 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
     };
   }, [projectSlug, workItemId]);
 
-  console.log('784', loading)
+  console.log('784', loading);
   if (loading) {
     return <div className="px-8 py-6 text-fg-3">Loading timeline…</div>;
   }
@@ -808,7 +905,7 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
 
   const items = groupEvents(events);
 
-  console.log(802, items)
+  console.log(802, items);
   return (
     <div data-testid="timeline-section" className="px-8 py-6">
       <ol className="flex flex-col gap-3">{items.map((item, idx) => renderItem(item, idx))}</ol>
