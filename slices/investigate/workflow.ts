@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
@@ -97,6 +97,7 @@ export async function runInvestigateWorkflow(
         'workspaces',
         `${playwrightRunId}-mcp.json`,
       );
+      mkdirSync(join(homedir(), '.factory', 'workspaces'), { recursive: true });
       writeFileSync(
         playwrightMcpConfigPath,
         JSON.stringify({
