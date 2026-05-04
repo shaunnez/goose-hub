@@ -2,6 +2,7 @@ import { fetchEvents } from '@/lib/api';
 import type { AgentEventDto } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
 import { Clock, Minus, TrendingDown, TrendingUp } from 'lucide-react';
+import { SectionEmptyState } from './SectionEmptyState';
 
 interface RetrospectiveSectionProps {
   projectSlug: string;
@@ -99,15 +100,18 @@ export function RetrospectiveSection({ projectSlug, id }: RetrospectiveSectionPr
 
   if (!retro) {
     return (
-      <div
-        data-testid="retro-empty-state"
-        className="px-8 py-8 flex flex-col items-center justify-center gap-2 text-center"
-      >
-        <Clock size={24} className="text-fg-3 opacity-50" />
-        <p className="text-[13px] text-fg-3">No retrospective yet.</p>
-        <p className="text-[12px] text-fg-4">
-          Runs automatically after the PR merges to <code className="font-mono">factory:done</code>.
-        </p>
+      <div className="px-8 py-6">
+        <SectionEmptyState
+          data-testid="retro-empty-state"
+          icon={Clock}
+          title="No retrospective yet."
+          subtitle={
+            <>
+              Runs automatically after the PR merges to{' '}
+              <code className="font-mono">factory:done</code>.
+            </>
+          }
+        />
       </div>
     );
   }

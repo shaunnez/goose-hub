@@ -1,3 +1,5 @@
+import { SectionEmptyState } from './SectionEmptyState';
+
 interface DeferredSurfaceProps {
   surface: string;
   milestone: string;
@@ -9,13 +11,19 @@ export function DeferredSurface({ surface, milestone, description }: DeferredSur
     <div
       data-testid="deferred-surface"
       data-milestone={milestone}
-      className="h-full flex flex-col items-center justify-center text-center px-8"
+      className="h-full flex flex-col items-center justify-center px-8 py-6"
     >
-      <div className="text-[11px] uppercase tracking-wider text-fg-4 mb-3">{surface}</div>
-      <div className="text-fg-2 text-[14px] mb-2">Available in {milestone}</div>
-      {description != null && (
-        <p className="text-fg-3 text-[12.5px] max-w-md leading-relaxed">{description}</p>
-      )}
+      <SectionEmptyState
+        title={`Available in ${milestone}`}
+        subtitle={
+          <>
+            <span className="uppercase tracking-wider text-[10.5px] text-fg-5">{surface}</span>
+            {description != null && (
+              <span className="block mt-1 text-[12px] text-fg-4">{description}</span>
+            )}
+          </>
+        }
+      />
     </div>
   );
 }

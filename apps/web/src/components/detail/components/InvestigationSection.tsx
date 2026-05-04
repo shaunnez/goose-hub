@@ -6,6 +6,7 @@ import { timeAgo } from '@/lib/utils';
 import { useActiveProject } from '@/state/active-project';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 // import { Filter, RefreshCw } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { useState } from 'react';
 import {
   CONFIDENCE_NUM,
@@ -16,6 +17,7 @@ import {
 } from '../lib/investigation';
 import { ConfidenceBadge } from './ConfidenceBadge';
 import { FindingCard } from './FindingCard';
+import { SectionEmptyState } from './SectionEmptyState';
 import { StatCard } from './StatCard';
 
 interface InvestigationSectionProps {
@@ -87,12 +89,13 @@ export function InvestigationSection({ projectSlug, id, itemState }: Investigati
 
   if (latest == null) {
     return (
-      <div
-        data-testid="investigation-empty-state"
-        className="px-8 py-8 flex flex-col items-center justify-center gap-2 text-center"
-      >
-        <p className="text-[13px] text-fg-3">Investigation has not run yet.</p>
-        <p className="text-[12px] text-fg-4">Run the investigator agent to populate this tab.</p>
+      <div className="px-8 py-6">
+        <SectionEmptyState
+          data-testid="investigation-empty-state"
+          icon={Search}
+          title="Investigation has not run yet."
+          subtitle="Run the investigator agent to populate this tab."
+        />
       </div>
     );
   }

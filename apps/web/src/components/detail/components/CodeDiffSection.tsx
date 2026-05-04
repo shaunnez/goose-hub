@@ -1,11 +1,12 @@
 import { fetchEvents, fetchIssueDiff } from '@/lib/api';
 import type { AgentEventDto, IssueDiffDto } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, FileCode } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { parseDiff } from '../lib/code-diff';
 import { CodeDiffFileList } from './CodeDiffFileList';
 import { CodeDiffViewer } from './CodeDiffViewer';
+import { SectionEmptyState } from './SectionEmptyState';
 
 interface CodeDiffSectionProps {
   projectSlug: string;
@@ -67,20 +68,25 @@ export function CodeDiffSection({ projectSlug, id }: CodeDiffSectionProps) {
 
   if (files.length === 0) {
     return (
-      <div data-testid="code-diff-empty" className="px-8 py-10 text-center text-[13px]">
-        {prUrl != null ? (
-          <a
-            href={prUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 text-[color:var(--accent)] hover:underline"
-          >
-            View PR{prNumber != null ? ` #${prNumber}` : ''} on GitHub
-            <ExternalLink size={12} />
-          </a>
-        ) : (
-          <span className="text-fg-3">{data?.reason ?? 'No active worktree for this issue.'}</span>
-        )}
+      <div className="px-8 py-10">
+        <SectionEmptyState
+          data-testid="code-diff-empty"
+          icon={FileCode}
+          title="No diff available"
+          subtitle={data?.reason ?? 'No active worktree for this issue.'}
+        >
+          {prUrl != null && (
+            <a
+              href={prUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-[13px] text-[color:var(--accent)] hover:underline"
+            >
+              View PR{prNumber != null ? ` #${prNumber}` : ''} on GitHub
+              <ExternalLink size={12} />
+            </a>
+          )}
+        </SectionEmptyState>
       </div>
     );
   }
