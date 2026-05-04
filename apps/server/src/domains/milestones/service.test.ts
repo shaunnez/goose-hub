@@ -110,9 +110,63 @@ describe('listMilestones', () => {
   });
 
   it('returns milestones list', async () => {
-    mockSource.listMilestones.mockResolvedValueOnce([{ number: 1 }, { number: 2 }]);
+    mockSource.listMilestones.mockResolvedValueOnce([
+      { number: 1, title: 'M1: State Enum' },
+      { number: 2, title: 'M2: Chrome' },
+    ]);
     const result = await listMilestones('my-proj');
-    expect(result).toEqual({ ok: true, data: { milestones: [{ number: 1 }, { number: 2 }] } });
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        milestones: [
+          { number: 1, title: 'M1: State Enum' },
+          { number: 2, title: 'M2: Chrome' },
+        ],
+      },
+    });
+  });
+
+  it('filters out non-M milestones (e.g. E2E)', async () => {
+    mockSource.listMilestones.mockResolvedValueOnce([
+      { number: 1, title: 'M1: State Enum' },
+      { number: 99, title: 'E2E: End-to-End Tests' },
+      { number: 3, title: 'M3: Inbox' },
+    ]);
+    const result = await listMilestones('my-proj');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const titles = result.data.milestones.map((m) => (m as { title: string }).title);
+    expect(titles).toEqual(['M1: State Enum', 'M3: Inbox']);
+    expect(titles).not.toContain('E2E: End-to-End Tests');
+  });
+
+  it('sorts M-milestones in ascending numeric order', async () => {
+    mockSource.listMilestones.mockResolvedValueOnce([
+      { number: 9, title: 'M9: Retrospective' },
+      { number: 1, title: 'M1: State Enum' },
+      { number: 5, title: 'M5: Roster' },
+      { number: 3, title: 'M3: Inbox' },
+    ]);
+    const result = await listMilestones('my-proj');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const numbers = result.data.milestones.map((m) => (m as { number: number }).number);
+    expect(numbers).toEqual([1, 3, 5, 9]);
+  });
+
+  it('filters and sorts in one pass: removes non-M and orders remaining', async () => {
+    mockSource.listMilestones.mockResolvedValueOnce([
+      { number: 5, title: 'M5: Roster' },
+      { number: 99, title: 'E2E: Testing' },
+      { number: 1, title: 'M1: State Enum' },
+      { number: 98, title: 'Infra: Setup' },
+      { number: 3, title: 'M3: Inbox' },
+    ]);
+    const result = await listMilestones('my-proj');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const titles = result.data.milestones.map((m) => (m as { title: string }).title);
+    expect(titles).toEqual(['M1: State Enum', 'M3: Inbox', 'M5: Roster']);
   });
 });
 
