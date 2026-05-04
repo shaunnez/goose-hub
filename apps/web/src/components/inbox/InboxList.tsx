@@ -28,7 +28,7 @@ function PromoteModal({
     error: projectsError,
   } = useQuery<ProjectSummary[]>({
     queryKey: ['projects'],
-    queryFn: fetchProjects,
+    queryFn: () => fetchProjects(),
   });
 
   const {

@@ -292,7 +292,7 @@ describe('runInvestigateWorkflow', () => {
       expect(payload.playwrightRepro).toBeDefined();
     });
 
-    it('uses validate tool bundle for playwright-repro skill', async () => {
+    it('uses playwright-mcp tool bundle for playwright-repro skill', async () => {
       const item = makeWorkItem({ type: 'bug' });
       const source = makeMockSource();
 
@@ -311,8 +311,12 @@ describe('runInvestigateWorkflow', () => {
       const { runInvestigateWorkflow } = await import('./workflow.js');
       await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
 
-      const playwrightCall = mockRun.mock.calls[1][0] as { toolBundles: string[] };
-      expect(playwrightCall.toolBundles).toContain('validate');
+      const playwrightCall = mockRun.mock.calls[1][0] as {
+        toolBundles: string[];
+        mcpConfigPath: string;
+      };
+      expect(playwrightCall.toolBundles).toContain('playwright-mcp');
+      expect(playwrightCall.mcpConfigPath).toMatch(/-mcp\.json$/);
     });
 
     it('does NOT run playwright-repro for non-bug items', async () => {

@@ -12,6 +12,7 @@ const mockRunTriageBatch = vi.fn();
 const mockGetSourceForSlug = vi.fn();
 const mockLoggerError = vi.fn();
 const mockLoggerInfo = vi.fn();
+const mockLoggerWarn = vi.fn();
 
 vi.mock('../domains/workflows/triage-batch.js', () => ({
   runTriageBatch: mockRunTriageBatch,
@@ -26,7 +27,7 @@ vi.mock('@goose-hub/core/logger.js', () => ({
   logger: {
     error: mockLoggerError,
     info: mockLoggerInfo,
-    warn: vi.fn(),
+    warn: mockLoggerWarn,
     debug: vi.fn(),
   },
 }));
@@ -34,7 +35,8 @@ vi.mock('@goose-hub/core/logger.js', () => ({
 // ─── helpers ──────────────────────────────────────────────────────────────
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetModules(); // reset module-level in-flight Sets between tests
+  vi.resetAllMocks(); // clears call counts AND implementation queues (once-mocks)
   mockRunTriageBatch.mockResolvedValue(undefined);
   mockGetSourceForSlug.mockResolvedValue(null);
 });
@@ -67,6 +69,55 @@ describe('dispatchTriageBatch', () => {
     expect(mockLoggerError).toHaveBeenCalledOnce();
     expect(mockLoggerError.mock.calls[0][0]).toContain('dispatchTriageBatch failed');
   });
+
+  it('concurrent calls same slug: second coalesces into one deferred run', async () => {
+    let resolveRun: (() => void) | undefined;
+    mockRunTriageBatch
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((r) => {
+            resolveRun = r;
+          }),
+      )
+      .mockResolvedValue(undefined);
+
+    const { dispatchTriageBatch } = await import('./dispatch.js');
+
+    // Fire all three concurrently — p2/p3 return immediately (coalesced to pending)
+    const [p1, p2, p3] = [
+      dispatchTriageBatch('slug'),
+      dispatchTriageBatch('slug'),
+      dispatchTriageBatch('slug'),
+    ];
+    await Promise.all([p2, p3]);
+
+    // Wait until the dynamic import resolves and runTriageBatch is actually in-flight
+    await vi.waitFor(() => {
+      expect(resolveRun).toBeDefined();
+    });
+    expect(mockRunTriageBatch).toHaveBeenCalledTimes(1);
+
+    resolveRun?.();
+    await p1;
+
+    // Wait for the single deferred run to complete (avoids leaked async work)
+    await vi.waitFor(() => {
+      expect(mockRunTriageBatch).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('different slugs do not block each other', async () => {
+    const { dispatchTriageBatch } = await import('./dispatch.js');
+    // Sequential is sufficient: if in-flight check for slug-a blocked slug-b,
+    // slug-b would skip runTriageBatch. Sequential also avoids Vitest concurrent-
+    // mock-cache timing issues with the same dynamic import path.
+    await dispatchTriageBatch('slug-a');
+    await dispatchTriageBatch('slug-b');
+
+    expect(mockRunTriageBatch).toHaveBeenCalledTimes(2);
+    expect(mockRunTriageBatch).toHaveBeenNthCalledWith(1, 'slug-a');
+    expect(mockRunTriageBatch).toHaveBeenNthCalledWith(2, 'slug-b');
+  });
 });
 
 // ─── dispatchInvestigate ──────────────────────────────────────────────────
@@ -82,6 +133,36 @@ describe('dispatchInvestigate', () => {
       expect.objectContaining({ slug: 'no-source' }),
     );
   });
+
+  it('drops duplicate trigger for same issue while in-flight', async () => {
+    let resolveSource!: () => void;
+    mockGetSourceForSlug.mockReturnValueOnce(
+      new Promise<null>((r) => {
+        resolveSource = () => r(null);
+      }),
+    );
+
+    const { dispatchInvestigate } = await import('./dispatch.js');
+    const p1 = dispatchInvestigate('slug', 5);
+    const p2 = dispatchInvestigate('slug', 5); // duplicate — should be dropped
+
+    await p2;
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      'dispatchInvestigate: already in-flight, dropping duplicate',
+      expect.objectContaining({ slug: 'slug', issueNumber: 5 }),
+    );
+
+    resolveSource();
+    await p1;
+    expect(mockGetSourceForSlug).toHaveBeenCalledTimes(1);
+  });
+
+  it('different issue numbers run independently', async () => {
+    const { dispatchInvestigate } = await import('./dispatch.js');
+    await Promise.all([dispatchInvestigate('slug', 1), dispatchInvestigate('slug', 2)]);
+    expect(mockGetSourceForSlug).toHaveBeenCalledTimes(2);
+    expect(mockLoggerWarn).not.toHaveBeenCalled();
+  });
 });
 
 // ─── dispatchFixIssue ─────────────────────────────────────────────────────
@@ -96,6 +177,29 @@ describe('dispatchFixIssue', () => {
       'dispatchFixIssue: no source for slug',
       expect.objectContaining({ slug: 'no-source' }),
     );
+  });
+
+  it('drops duplicate trigger for same issue while in-flight', async () => {
+    let resolveSource!: () => void;
+    mockGetSourceForSlug.mockReturnValueOnce(
+      new Promise<null>((r) => {
+        resolveSource = () => r(null);
+      }),
+    );
+
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    const p1 = dispatchFixIssue('slug', 7);
+    const p2 = dispatchFixIssue('slug', 7);
+
+    await p2;
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      'dispatchFixIssue: already in-flight, dropping duplicate',
+      expect.objectContaining({ slug: 'slug', issueNumber: 7 }),
+    );
+
+    resolveSource();
+    await p1;
+    expect(mockGetSourceForSlug).toHaveBeenCalledTimes(1);
   });
 });
 

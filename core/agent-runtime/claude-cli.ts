@@ -111,7 +111,8 @@ export class ClaudeCliRuntime implements AgentRuntime {
     const { contextXml } = assembleSpawnContext(spec);
     const allowedTools = computeAllowlist(spec);
     const model = spec.modelOverride ?? defaultModelForTier('sonnet');
-    const mcpConfigPath = resolveMcpConfigPath(workspaceDir, spec.toolBundles);
+    const mcpConfigPath =
+      spec.mcpConfigPath ?? resolveMcpConfigPath(workspaceDir, spec.toolBundles);
 
     // Build argv array — Security rule: never use shell: true
     const binaryPath = resolveBinary('claude');

@@ -22,8 +22,9 @@ export function ActiveProjectProvider({
   const [activeSlug, setActiveSlug] = useState<string | null>(initialSlug ?? null);
 
   useEffect(() => {
+    const controller = new AbortController();
     let cancelled = false;
-    fetchProjects()
+    fetchProjects(controller.signal)
       .then((list) => {
         if (cancelled) return;
         setProjects(list);
@@ -37,6 +38,7 @@ export function ActiveProjectProvider({
       });
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [activeSlug]);
 

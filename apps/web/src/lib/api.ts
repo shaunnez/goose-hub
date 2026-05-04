@@ -28,8 +28,8 @@ export type {
   ImprovementCandidateDto,
 } from './types';
 
-async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(`/api${path}`, { headers: { Accept: 'application/json' } });
+async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(`/api${path}`, { headers: { Accept: 'application/json' }, signal });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`GET ${path} failed: ${res.status} ${res.statusText} ${text}`);
@@ -50,8 +50,8 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
-export async function fetchProjects(): Promise<ProjectSummary[]> {
-  const { projects } = await getJson<{ projects: ProjectSummary[] }>('/projects');
+export async function fetchProjects(signal?: AbortSignal): Promise<ProjectSummary[]> {
+  const { projects } = await getJson<{ projects: ProjectSummary[] }>('/projects', signal);
   return projects;
 }
 
@@ -85,18 +85,21 @@ export async function fetchMilestoneIssues(
   return items;
 }
 
-export async function fetchMilestones(slug: string): Promise<MilestoneDto[]> {
+export async function fetchMilestones(slug: string, signal?: AbortSignal): Promise<MilestoneDto[]> {
   const { milestones } = await getJson<{ milestones: MilestoneDto[] }>(
     `/projects/${slug}/milestones`,
+    signal,
   );
   return milestones;
 }
 
 export async function fetchActiveMilestone(
   slug: string,
+  signal?: AbortSignal,
 ): Promise<{ milestoneNumber: number | null; source: string }> {
   return getJson<{ milestoneNumber: number | null; source: string }>(
     `/projects/${slug}/active-milestone`,
+    signal,
   );
 }
 
@@ -126,9 +129,14 @@ export async function setRepoOverride(
   return triage ?? null;
 }
 
-export async function fetchEvents(slug: string, id: string): Promise<AgentEventDto[]> {
+export async function fetchEvents(
+  slug: string,
+  id: string,
+  signal?: AbortSignal,
+): Promise<AgentEventDto[]> {
   const { events } = await getJson<{ events: AgentEventDto[] }>(
     `/projects/${slug}/issues/${id}/events`,
+    signal,
   );
   return events;
 }

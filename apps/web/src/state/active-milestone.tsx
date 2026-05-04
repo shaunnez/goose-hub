@@ -36,10 +36,14 @@ export function ActiveMilestoneProvider({ children, projectSlug }: ProviderProps
   const [activeNumber, setActive] = useState<number | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
     let cancelled = false;
     setLoading(true);
     setError(null);
-    Promise.all([fetchMilestones(projectSlug), fetchActiveMilestone(projectSlug)])
+    Promise.all([
+      fetchMilestones(projectSlug, controller.signal),
+      fetchActiveMilestone(projectSlug, controller.signal),
+    ])
       .then(([list, active]) => {
         if (cancelled) return;
         setMilestones(list);
@@ -53,6 +57,7 @@ export function ActiveMilestoneProvider({ children, projectSlug }: ProviderProps
       });
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [projectSlug]);
 
