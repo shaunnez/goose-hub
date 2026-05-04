@@ -42,6 +42,10 @@ vi.mock('@goose-hub/core/connectors/github/open-pr.js', () => ({
   }),
 }));
 
+vi.mock('@goose-hub/core/persona/accumulate.js', () => ({
+  accumulatePersonaStats: vi.fn(),
+}));
+
 vi.mock('@goose-hub/core/workspaces/worktree.js', () => ({
   createWorktree: vi.fn().mockReturnValue('/mock/worktree'),
   cleanupWorktree: vi.fn(),
