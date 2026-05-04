@@ -286,6 +286,28 @@ export class ClaudeCliRuntime implements AgentRuntime {
           return;
         }
 
+        // Surface non-empty stderr even on successful runs. The Claude CLI
+        // forwards MCP server stderr (startup banners, registration warnings,
+        // failed --strict-mcp-config diagnostics) here. Without this, an agent
+        // can run with a silently-broken MCP server, return a free-text
+        // apology, and leave operators with no signal in the event stream.
+        const stderrTrimmed = stderr.trim();
+        if (stderrTrimmed.length > 0) {
+          eventStore.appendEvent({
+            projectId,
+            workItemId,
+            kind: 'agent.log',
+            payload: {
+              runId,
+              skill: spec.skill,
+              stream: 'stderr',
+              text: stderrTrimmed.slice(0, 4000),
+            },
+            runId,
+            personaId,
+          });
+        }
+
         eventStore.appendEvent({
           projectId,
           workItemId,

@@ -1,6 +1,13 @@
 import type { AgentResult } from '@goose-hub/core/agent-runtime/interface.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Skip the playwright-test MCP pre-flight subprocess in workflow.ts — same
+// convention claude-cli.ts uses to bypass real spawns under tests.
+process.env.MOCK_AGENTS = 'true';
+afterAll(() => {
+  process.env.MOCK_AGENTS = undefined;
+});
 
 // ─── module mocks ──────────────────────────────────────────────────────────────
 
