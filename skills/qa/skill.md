@@ -260,9 +260,7 @@ Return a JSON object conforming exactly to this structure:
     },
     "regression": {
       "passed": true,
-      "findings": [],
-      "command": null,
-      "output": null
+      "findings": []
     }
   },
   "qualityScores": {
@@ -290,6 +288,8 @@ Return a JSON object conforming exactly to this structure:
 `overallScore` must equal the sum of all `qualityScores` values. Do not estimate — compute it.
 
 `decisionSummaries` must have at least one entry per major verification step.
+
+Optional fields without a value should be OMITTED, not set to `null`. In particular, when a finding does not pertain to a specific source location, omit `file` and `line` entirely — do not write `"file": null` or `"line": null`. The same applies to `command` and `output` on tier results when no command was run.
 
 ## Important reminders
 

@@ -12,8 +12,8 @@ export const FindingSchema = z.object({
     .transform((s) => s.toLowerCase())
     .pipe(z.enum(['structural', 'functional', 'regression'])),
   severity: z.enum(['error', 'warning', 'info']),
-  file: z.string().optional(),
-  line: z.number().int().optional(),
+  file: z.string().nullable().optional(),
+  line: z.number().int().nullable().optional(),
   description: z.string(),
   suggestion: z.string().optional(),
 });

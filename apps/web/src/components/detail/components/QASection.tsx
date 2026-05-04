@@ -11,8 +11,8 @@ interface QASectionProps {
 interface Finding {
   tier: 'structural' | 'functional' | 'regression';
   severity: 'error' | 'warning' | 'info';
-  file?: string;
-  line?: number;
+  file?: string | null;
+  line?: number | null;
   description: string;
   suggestion?: string;
 }
@@ -20,8 +20,8 @@ interface Finding {
 interface TierResult {
   passed: boolean;
   findings: Finding[];
-  command?: string;
-  output?: string;
+  command?: string | null;
+  output?: string | null;
 }
 
 interface QaPayload {
