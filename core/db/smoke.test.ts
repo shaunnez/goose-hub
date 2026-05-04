@@ -2,11 +2,11 @@ import Database from 'better-sqlite3';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { events, governanceAudit, projectState } from './schema.js';
+import { events, governanceAudit, personaNames, projectState } from './schema.js';
 
 describe('core/db smoke', () => {
   const sqlite = new Database(':memory:');
-  const db = drizzle(sqlite, { schema: { events, governanceAudit, projectState } });
+  const db = drizzle(sqlite, { schema: { events, governanceAudit, personaNames, projectState } });
 
   beforeAll(() => {
     sqlite.exec(`
@@ -25,6 +25,7 @@ describe('core/db smoke', () => {
         kind TEXT NOT NULL,
         payload TEXT NOT NULL,
         run_id TEXT,
+        persona_id TEXT,
         created_at TEXT NOT NULL DEFAULT (current_timestamp)
       );
 
@@ -38,6 +39,15 @@ describe('core/db smoke', () => {
         ok INTEGER NOT NULL,
         violations TEXT NOT NULL,
         checked_at TEXT NOT NULL DEFAULT (current_timestamp)
+      );
+
+      CREATE TABLE IF NOT EXISTS persona_names (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        slot_index INTEGER NOT NULL,
+        codename TEXT NOT NULL,
+        UNIQUE (project_id, role, slot_index)
       );
     `);
   });
@@ -85,5 +95,36 @@ describe('core/db smoke', () => {
     expect(rows[0].prUrl).toBe('https://github.com/shaunnez/goose-hub/pull/4');
     expect(rows[0].ok).toBe(1);
     expect(rows[0].violations).toBe('[]');
+  });
+
+  it('events row stores personaId', () => {
+    db.insert(events)
+      .values({
+        projectId: 'test-project',
+        kind: 'agent.run-started',
+        payload: '{}',
+        personaId: 'test-project/developer/0',
+      })
+      .run();
+    const rows = db
+      .select()
+      .from(events)
+      .where(eq(events.kind, 'agent.run-started'))
+      .all();
+    expect(rows[0].personaId).toBe('test-project/developer/0');
+  });
+
+  it('persona_names table stores codename by slot', () => {
+    db.insert(personaNames)
+      .values({ projectId: 'test-project', role: 'developer', slotIndex: 0, codename: 'Grey Honker' })
+      .run();
+    const rows = db
+      .select()
+      .from(personaNames)
+      .where(eq(personaNames.projectId, 'test-project'))
+      .all();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].codename).toBe('Grey Honker');
+    expect(rows[0].slotIndex).toBe(0);
   });
 });
