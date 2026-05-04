@@ -1,5 +1,4 @@
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
-import { CACHE_KEY, bustCache, getCached } from '#shared/cache.js';
 import type { Result } from '#shared/middleware.js';
 import { getSourceForSlug } from '#shared/source.js';
 import { getLastPersonaIdsByWorkItem, getRepoRef } from './internal.js';
@@ -16,7 +15,7 @@ export { fakeRun } from './fake-run.js';
 export async function listIssues(slug: string): Promise<Result<{ items: unknown[] }>> {
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
-  const items = await getCached(CACHE_KEY.issues(slug), 60_000, () => source.listOpenWork());
+  const items = await source.listOpenWork();
   const lastPersonaMap = getLastPersonaIdsByWorkItem(slug);
   const enriched = items.map((item) => ({
     ...(item as object),
@@ -93,7 +92,6 @@ export async function setIssueMilestone(
     kind: 'manual.action',
     payload: { action: 'set-milestone', milestoneNumber },
   });
-  bustCache(CACHE_KEY.issues(slug));
   return { ok: true, data: { ok: true } };
 }
 
@@ -126,6 +124,5 @@ export async function setIssueLabel(
     kind: 'manual.action',
     payload: { action: `set-${group}`, value },
   });
-  bustCache(CACHE_KEY.issues(slug));
   return { ok: true, data: { ok: true } };
 }

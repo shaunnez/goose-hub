@@ -8,24 +8,12 @@ vi.mock('../../shared/source.js', () => ({
   getSourceForSlug: vi.fn(),
 }));
 
-vi.mock('../../shared/cache.js', () => ({
-  getCached: vi.fn().mockImplementation((_key, _ttl, fetcher) => fetcher()),
-  bustCache: vi.fn(),
-  CACHE_KEY: {
-    issues: (s: string) => `issues:${s}`,
-    milestones: (s: string) => `milestones:${s}`,
-    closedIssues: (s: string, m: number) => `closed-issues:${s}:${m}`,
-    milestoneIssues: (s: string, m: number) => `milestone-issues:${s}:${m}`,
-  },
-}));
-
 vi.mock('./repository.js', () => ({
   readActiveMilestone: vi.fn().mockResolvedValue(null),
   writeActiveMilestone: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
-import { bustCache } from '#shared/cache.js';
 import { getSourceForSlug } from '#shared/source.js';
 import { readActiveMilestone, writeActiveMilestone } from './repository.js';
 import {
@@ -87,7 +75,6 @@ describe('setActiveMilestone', () => {
     const result = await setActiveMilestone('my-proj', 7);
     expect(result).toEqual({ ok: true, data: { ok: true, milestoneNumber: 7 } });
     expect(writeActiveMilestone).toHaveBeenCalledWith('my-proj', 7, 'ui');
-    expect(bustCache).toHaveBeenCalled();
     expect(eventStore.appendEvent).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'milestone.activated', payload: { milestoneNumber: 7 } }),
     );

@@ -1,5 +1,4 @@
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
-import { CACHE_KEY, bustCache, getCached } from '#shared/cache.js';
 import type { Result } from '#shared/middleware.js';
 import { getSourceForSlug } from '#shared/source.js';
 import { readActiveMilestone, writeActiveMilestone } from './repository.js';
@@ -30,7 +29,6 @@ export async function setActiveMilestone(
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
   await writeActiveMilestone(slug, milestoneNumber, 'ui');
-  bustCache(CACHE_KEY.milestones(slug));
   eventStore.appendEvent({
     projectId: slug,
     kind: 'milestone.activated',
@@ -49,7 +47,7 @@ function extractMilestoneOrder(title: string): number {
 export async function listMilestones(slug: string): Promise<Result<{ milestones: unknown[] }>> {
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
-  const raw = await getCached(CACHE_KEY.milestones(slug), 60_000, () => source.listMilestones());
+  const raw = await source.listMilestones();
   const milestones = (raw as Array<{ title: string }>)
     .filter((m) => MILESTONE_TITLE_RE.test(m.title))
     .sort((a, b) => extractMilestoneOrder(a.title) - extractMilestoneOrder(b.title));
@@ -62,9 +60,7 @@ export async function listMilestoneIssues(
 ): Promise<Result<{ items: unknown[] }>> {
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
-  const items = await getCached(CACHE_KEY.milestoneIssues(slug, milestone), 60_000, () =>
-    source.listWorkByMilestone(milestone),
-  );
+  const items = await source.listWorkByMilestone(milestone);
   return { ok: true, data: { items } };
 }
 
@@ -74,8 +70,6 @@ export async function listClosedMilestoneIssues(
 ): Promise<Result<{ items: unknown[] }>> {
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
-  const items = await getCached(CACHE_KEY.closedIssues(slug, milestone), 60_000, () =>
-    source.listClosedWorkByMilestone(milestone),
-  );
+  const items = await source.listClosedWorkByMilestone(milestone);
   return { ok: true, data: { items } };
 }
