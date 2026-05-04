@@ -1,15 +1,7 @@
 import { fetchEvents } from '@/lib/api';
 import type { AgentEventDto } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
-import {
-  AlertTriangle,
-  Check,
-  CheckCircle,
-  Clock,
-  GitPullRequest,
-  RefreshCw,
-  XCircle,
-} from 'lucide-react';
+import { AlertTriangle, Check, CheckCircle, Clock, GitPullRequest, XCircle } from 'lucide-react';
 
 interface ReviewSectionProps {
   projectSlug: string;
@@ -100,6 +92,15 @@ export function ReviewSection({ projectSlug, id }: ReviewSectionProps) {
   const reviewEvent = [...events].reverse().find((e) => e.kind === 'review.completed');
   const review = reviewEvent?.payload as ReviewPayload | undefined;
 
+  const prOpenedEvent = [...events]
+    .reverse()
+    .find(
+      (e): e is AgentEventDto & { payload: { prNumber?: number; prUrl: string } } =>
+        e.kind === 'pr.opened' && typeof (e.payload as Record<string, unknown>)?.prUrl === 'string',
+    );
+  const prUrl = prOpenedEvent?.payload.prUrl ?? null;
+  const prNumber = prOpenedEvent?.payload.prNumber ?? null;
+
   if (!review) {
     return (
       <div
@@ -151,22 +152,20 @@ export function ReviewSection({ projectSlug, id }: ReviewSectionProps) {
           <h2 className="text-[20px] font-semibold tracking-tight">Pre-merge checklist</h2>
           <div className="text-[12.5px] text-fg-3 mt-1">{hint}</div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-line text-[12px] text-fg-2 hover:text-fg hover:bg-bg-hover"
-          >
-            <RefreshCw size={12} />
-            Re-run
-          </button>
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-[color:var(--accent)] text-[color:var(--accent-fg)] text-[12px] font-medium hover:opacity-90"
-          >
-            <GitPullRequest size={12} />
-            Open PR
-          </button>
-        </div>
+        {prUrl && (
+          <div className="flex items-center gap-2 shrink-0">
+            <a
+              href={prUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              data-testid="review-open-pr"
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-[color:var(--accent)] text-[color:var(--accent-fg)] text-[12px] font-medium hover:opacity-90"
+            >
+              <GitPullRequest size={12} />
+              {prNumber != null ? `Open PR #${prNumber}` : 'Open PR'}
+            </a>
+          </div>
+        )}
       </div>
 
       {/* Verdict pill */}
