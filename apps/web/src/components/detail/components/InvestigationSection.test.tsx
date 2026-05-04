@@ -10,6 +10,9 @@ afterEach(cleanup);
 
 vi.mock('@/lib/api', () => ({
   fetchEvents: vi.fn().mockResolvedValue([]),
+  fetchComments: vi.fn().mockResolvedValue([]),
+  addComment: vi.fn(),
+  transitionState: vi.fn(),
 }));
 
 vi.mock('@/lib/markdown', () => ({
@@ -51,7 +54,26 @@ describe('InvestigationSection', () => {
   it('shows empty state when no investigation events exist', () => {
     renderSection([]);
     expect(screen.getByTestId('investigation-empty-state')).toBeTruthy();
-    expect(screen.getByText('Investigation has not run yet.')).toBeTruthy();
+  });
+
+  it('shows section header label in empty state', () => {
+    renderSection([]);
+    expect(screen.getByText('03. Investigation')).toBeTruthy();
+  });
+
+  it('shows section title in empty state', () => {
+    renderSection([]);
+    expect(screen.getByText('Findings & key files')).toBeTruthy();
+  });
+
+  it('shows "No investigation yet" heading in empty state', () => {
+    renderSection([]);
+    expect(screen.getByText('No investigation yet')).toBeTruthy();
+  });
+
+  it('shows descriptive sub-copy in empty state', () => {
+    renderSection([]);
+    expect(screen.getByTestId('investigation-empty-description')).toBeTruthy();
   });
 
   it('renders findings when investigation event is present', () => {
