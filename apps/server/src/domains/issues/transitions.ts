@@ -1,11 +1,12 @@
+import { mergePR as defaultMergePR } from '@goose-hub/core/connectors/github/merge-pr.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { STATES } from '@goose-hub/core/state-machine/states.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { isLegalTransition, legalTargets } from '@goose-hub/core/state-machine/transitions.js';
 import { cleanupWorktree } from '@goose-hub/core/workspaces/worktree.js';
-import { CACHE_KEY, bustCache } from '../../shared/cache.js';
-import type { Result } from '../../shared/middleware.js';
-import { getSourceForSlug } from '../../shared/source.js';
+import { CACHE_KEY, bustCache } from '#shared/cache.js';
+import type { Result } from '#shared/middleware.js';
+import { getSourceForSlug } from '#shared/source.js';
 import { getRepoRef } from './internal.js';
 
 export type TransitionResult =
@@ -24,7 +25,7 @@ export async function approveIssue(
   slug: string,
   id: string,
   options: {
-    mergePRImpl?: typeof import('@goose-hub/core/connectors/github/merge-pr.js').mergePR;
+    mergePRImpl?: typeof defaultMergePR;
   } = {},
 ): Promise<Result<{ ok: true; sha: string; prNumber: number }>> {
   const source = await getSourceForSlug(slug);
@@ -52,8 +53,7 @@ export async function approveIssue(
     return { ok: false, error: 'GITHUB_TOKEN env var not set', status: 500 };
   }
 
-  const mergePR =
-    options.mergePRImpl ?? (await import('@goose-hub/core/connectors/github/merge-pr.js')).mergePR;
+  const mergePR = options.mergePRImpl ?? defaultMergePR;
 
   const merged = await mergePR({ repo: repoRef, prNumber, token });
 

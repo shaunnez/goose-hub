@@ -1,4 +1,4 @@
-import { listProjects as readProjects } from '../../shared/projects.js';
+import { listProjects as readProjects } from '#shared/projects.js';
 
 /**
  * Returns the list of registered projects (#208). Thin shim today —

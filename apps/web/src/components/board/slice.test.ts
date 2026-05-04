@@ -1,6 +1,6 @@
+import { COST_PLACEHOLDER } from '@/lib/constants';
+import { sortLaneItems } from '@/lib/lanes.config';
 import { describe, expect, it } from 'vitest';
-import { COST_PLACEHOLDER } from '../../lib/constants';
-import { sortLaneItems } from '../../lib/lanes.config';
 
 // IssueCard rendering is exercised by the Playwright happy-path (#36)
 // and by board/components/IssueCard.test.tsx.

@@ -1,6 +1,6 @@
 import { buildSseStream } from '@goose-hub/core/event-stream/sse.js';
 import { Hono } from 'hono';
-import { parseBody } from '../../shared/middleware.js';
+import { parseBody } from '#shared/middleware.js';
 import { parseSseFilter, recordToolCall } from './service.js';
 
 const router = new Hono();

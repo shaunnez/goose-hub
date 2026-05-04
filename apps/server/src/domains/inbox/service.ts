@@ -2,8 +2,8 @@ import { db } from '@goose-hub/core/db/db.js';
 import { projectState } from '@goose-hub/core/db/schema.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { eq } from 'drizzle-orm';
-import type { Result } from '../../shared/middleware.js';
-import { getSourceForSlug } from '../../shared/source.js';
+import type { Result } from '#shared/middleware.js';
+import { getSourceForSlug } from '#shared/source.js';
 import {
   type InboxItem,
   getInboxItem,

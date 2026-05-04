@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { getProject } from '../../shared/projects.js';
+import { getProject } from '#shared/projects.js';
 import { getCostSummary, getCostsForWorkItem } from './service.js';
 
 const router = new Hono();

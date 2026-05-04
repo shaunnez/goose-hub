@@ -1,12 +1,13 @@
 import { logger } from '@goose-hub/core/logger.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
-import { getSourceForSlug } from '../../shared/source.js';
+import { getSourceForSlug } from '#shared/source.js';
 
 export async function runReviewBatch(slug: string, source?: StateSource): Promise<void> {
   logger.info('review-batch started', { slug });
   const stateSource = source ?? (await getSourceForSlug(slug));
   if (stateSource == null) throw new Error(`Project not found: ${slug}`);
 
+  // Cross-package boundary: slices/ is not a workspace package (rule 28a).
   const { runReviewWorkflow } = (await import(
     new URL('../../../../../slices/review/workflow.js', import.meta.url).href
   )) as {

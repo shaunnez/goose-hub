@@ -1,5 +1,5 @@
+import type { AgentEventDto } from '@/lib/types';
 import { describe, expect, it } from 'vitest';
-import type { AgentEventDto } from '../../../lib/types';
 import { groupEvents } from '../lib/timeline';
 
 function makeLogEvent(id: number): AgentEventDto {

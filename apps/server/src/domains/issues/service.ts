@@ -1,7 +1,7 @@
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
-import { CACHE_KEY, bustCache, getCached } from '../../shared/cache.js';
-import type { Result } from '../../shared/middleware.js';
-import { getSourceForSlug } from '../../shared/source.js';
+import { CACHE_KEY, bustCache, getCached } from '#shared/cache.js';
+import type { Result } from '#shared/middleware.js';
+import { getSourceForSlug } from '#shared/source.js';
 import { getLastPersonaIdsByWorkItem, getRepoRef } from './internal.js';
 
 // Public surface for the issues domain. The implementation is split across

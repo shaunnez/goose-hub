@@ -6,6 +6,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, 'apps/web/src'),
       '@goose-hub/core': path.resolve(__dirname, 'core'),
+      '#shared': path.resolve(__dirname, 'apps/server/src/shared'),
     },
   },
   test: {

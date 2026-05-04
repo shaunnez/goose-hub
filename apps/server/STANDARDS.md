@@ -78,14 +78,43 @@ export async function doThing(slug: string, value: string): Promise<Result<{ ok:
 
 ## Import Rules
 
-- Domain files import shared utilities from `../../shared/`.
+- Domain files import shared utilities via the `#shared/*` subpath alias —
+  e.g. `import { parseBody } from '#shared/middleware.js'`. Resolved by the
+  `imports` field in `apps/server/package.json`. Never use `'../../shared/*'`.
+- Cross-package imports use `@goose-hub/<name>/*` (e.g. `@goose-hub/core/...`).
+- Intra-domain imports stay relative (`./service.js`, `./repository.js`).
 - `server.ts` is the only file that imports from multiple domains.
-- Domains **never** import from other domains.
+- Domains **never** import from other domains. Cross-domain coordination
+  goes through `#shared/dispatch.js`.
 - `index.ts` is the entry point only — no logic, no exports.
+
+Greppable invariant for review:
+```sh
+grep -rn "from ['\"]\\.\\./\\.\\./shared" apps/server/src/   # must be 0 hits
+```
+
+## Dynamic Imports
+
+Static imports are the default. `await import(...)` is reserved for the
+following four cases — each occurrence must carry a one-line comment naming
+its case:
+
+1. **Cross-package boundary at runtime path.** Loading code that lives outside
+   any workspace package (e.g. `slices/`) and is resolved via
+   `import.meta.url` so worktree-relative paths stay correct.
+2. **Runtime-resolved path.** Loading a module whose absolute path depends on
+   user input or per-project config (e.g. each project's `project.config.ts`
+   under `target-projects/<slug>/`).
+3. **Lazy fallback for an optional dependency.** Tolerating a missing or
+   environment-gated module (rare; document the fallback inline).
+4. **Test stub injection.** A DI parameter whose default is the static import
+   and whose override is supplied dynamically by tests.
+
+If a dynamic import does not match one of these, refactor it to static.
 
 ## Body Parsing
 
-Always use `parseBody<T>()` from `../../shared/middleware.js`. Never write inline `try/catch` for JSON parsing.
+Always use `parseBody<T>()` from `#shared/middleware.js`. Never write inline `try/catch` for JSON parsing.
 
 ```ts
 const body = await parseBody<{ title: string }>(c);

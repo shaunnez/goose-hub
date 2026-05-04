@@ -1,4 +1,15 @@
 {
   "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "#shared/*": ["./src/shared/*"],
+      "@goose-hub/core/*": ["../../core/*"],
+      "@goose-hub/skills": ["../../skills/index.ts"],
+      "@goose-hub/skills/*": ["../../skills/*"],
+      "@goose-hub/target-projects": ["../../target-projects/index.ts"],
+      "@goose-hub/target-projects/*": ["../../target-projects/*"]
+    }
+  },
   "include": ["src/**/*.ts"]
 }

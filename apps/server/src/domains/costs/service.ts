@@ -1,5 +1,5 @@
 import type { CostLabel, Stage } from '@goose-hub/core/cost/types.js';
-import type { Result } from '../../shared/middleware.js';
+import type { Result } from '#shared/middleware.js';
 import {
   type CostRow,
   listCostsForWorkItem,

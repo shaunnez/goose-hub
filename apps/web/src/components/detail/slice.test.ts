@@ -1,7 +1,7 @@
+import { GATE_STATES } from '@/lib/constants';
+import { renderMarkdownToHtml } from '@/lib/markdown';
+import { LEGAL_TARGETS } from '@/lib/transitions';
 import { describe, expect, it } from 'vitest';
-import { GATE_STATES } from '../../lib/constants';
-import { renderMarkdownToHtml } from '../../lib/markdown';
-import { LEGAL_TARGETS } from '../../lib/transitions';
 import { GATE_ACTIONS } from './components/GatePendingBanner';
 import { extractPlaywrightRepro } from './lib/playwright-capture';
 import { SECTIONS } from './lib/sections';

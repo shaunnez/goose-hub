@@ -1,7 +1,7 @@
 import { db } from '@goose-hub/core/db/db.js';
 import { events } from '@goose-hub/core/db/schema.js';
 import { and, desc, eq, isNotNull } from 'drizzle-orm';
-import { getProject } from '../../shared/projects.js';
+import { getProject } from '#shared/projects.js';
 
 /**
  * Look up the canonical GitHub `owner/repo` for a project slug. Falls back to

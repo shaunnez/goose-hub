@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { parseBody } from '../../shared/middleware.js';
+import { parseBody } from '#shared/middleware.js';
 import {
   approveIssue,
   commentOnIssue,
