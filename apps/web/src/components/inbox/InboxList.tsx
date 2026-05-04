@@ -31,26 +31,35 @@ function PromoteModal({
     queryFn: fetchProjects,
   });
 
-  const { data: milestones = [], isLoading: milestonesLoading } = useQuery<MilestoneDto[]>({
+  const {
+    data: milestones = [],
+    isLoading: milestonesLoading,
+    isError: milestonesError,
+    isSuccess: milestonesLoaded,
+  } = useQuery<MilestoneDto[]>({
     queryKey: ['milestones', selectedSlug],
     queryFn: () => fetchMilestones(selectedSlug),
     enabled: !!selectedSlug,
   });
 
-  // Auto-select the first active milestone when milestones load; reset while loading
+  // Reset to null while milestones are loading (or when no project selected);
+  // auto-select the first active milestone once the list arrives.
   useEffect(() => {
-    if (!selectedSlug) return;
-    if (milestonesLoading) {
+    if (!selectedSlug || !milestonesLoaded) {
       setSelectedMilestoneNumber(null);
       return;
     }
     const active = milestones.find((m) => m.isActive);
     setSelectedMilestoneNumber(active?.number ?? null);
-  }, [selectedSlug, milestones, milestonesLoading]);
+  }, [selectedSlug, milestones, milestonesLoaded]);
+
+  // Only send an explicit milestoneNumber once we have a confirmed loaded list.
+  // While loading or on error, omit it so the server falls back to its persisted active milestone.
+  const milestoneArg = milestonesLoaded && !milestonesError ? selectedMilestoneNumber : undefined;
 
   const queryClient = useQueryClient();
   const mutation = useMutation({
-    mutationFn: () => promoteInboxItem(item.id, selectedSlug, selectedMilestoneNumber),
+    mutationFn: () => promoteInboxItem(item.id, selectedSlug, milestoneArg),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['inbox'] });
       onClose();
