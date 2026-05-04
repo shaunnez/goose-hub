@@ -11,6 +11,12 @@ vi.mock('./repository.js', () => ({
   deleteInboxItem: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('@goose-hub/core/db/db.js', () => ({
+  db: {
+    select: () => ({ from: () => ({ where: () => ({ all: () => [] }) }) }),
+  },
+}));
+
 import { getSourceForSlug } from '../../shared/source.js';
 import { deleteInboxItem, getInboxItem, insertInboxItem, listInboxItems } from './repository.js';
 import { createInboxItem, getInboxItems, promoteInboxItem } from './service.js';
