@@ -28,6 +28,15 @@ Your context contains:
   - `lintCommand` — command to run lint and type-check (optional)
   - `e2eCommand` — command to run Playwright end-to-end tests (optional)
 - `sliceTests` — array of paths to slice-level test files (optional)
+- `testRun` — structured results from `testCommand`, already executed by the
+  workflow before you started (optional; may be `null` if the run failed to
+  produce a report). When present:
+  - `wallTimeMs`, `total`, `passed`, `failed`, `skipped`, `success`
+  - `suites` — per-file: `{ name, filePath, total, passed, failed, skipped, durationMs, status }`
+  Do **not** re-run `testCommand` if `testRun` is present — grade the
+  Functional tier from `testRun` directly. Only re-run if you need to verify a
+  specific test in isolation (e.g. checking that a regression is genuinely
+  fixed rather than skipped).
 
 ## Three-tier verification framework
 
@@ -56,8 +65,8 @@ Record tier result with:
 Purpose: Catch behavior regressions and missing test coverage.
 
 Steps:
-1. Run `testCommand`. If `sliceTests` are provided, run those first for targeted feedback.
-2. Check test output for failures, errors, and skipped tests.
+1. If `testRun` is present in your context, use it as the test result — do not re-run `testCommand`. If `testRun` is absent or `null`, run `testCommand` yourself; if `sliceTests` are provided, run those first for targeted feedback.
+2. Check test output (or `testRun.suites`) for failures, errors, and skipped tests.
    **Known worktree noise — do not report as findings:** Test files that fail with `ERR_DLOPEN_FAILED` or `Error: The module ... better-sqlite3 ...` are caused by the native module not being rebuilt for the worktree's Node version. These are pre-existing environment failures, not regressions introduced by the PR. Filter them out before assessing pass/fail. If ALL failures are of this type, record an `info`-severity finding noting the sqlite noise and mark the tier passed.
 3. Read the diff and verify that the changed behavior is covered by tests in the PR.
 4. Check that every acceptance criterion in `workItem.body` is addressed — either by a passing test or by observable code change.

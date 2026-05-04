@@ -24,6 +24,27 @@ interface TierResult {
   output?: string | null;
 }
 
+interface SuiteResult {
+  name: string;
+  filePath: string;
+  total: number;
+  passed: number;
+  failed: number;
+  skipped: number;
+  durationMs: number;
+  status: 'passed' | 'failed' | 'skipped';
+}
+
+interface TestRun {
+  wallTimeMs: number;
+  total: number;
+  passed: number;
+  failed: number;
+  skipped: number;
+  success: boolean;
+  suites: SuiteResult[];
+}
+
 interface QaPayload {
   verdict: 'pass' | 'fail' | 'partial';
   overallScore: number;
@@ -33,6 +54,13 @@ interface QaPayload {
     functional: TierResult;
     regression: TierResult;
   };
+  testRun?: TestRun;
+}
+
+function formatWallTime(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const s = ms / 1000;
+  return s < 60 ? `${s.toFixed(s < 10 ? 2 : 1)}s` : `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
 }
 
 const TIERS = ['structural', 'functional', 'regression'] as const;
@@ -166,19 +194,40 @@ export function QASection({ projectSlug, id }: QASectionProps) {
 
       {/* Stat row */}
       <div className="grid grid-cols-4 gap-3">
-        <StatCard
-          label="Pass / Fail"
-          value={`${passedTiers} / ${failedTiers}`}
-          sub={`${allFindings.length} findings`}
-          color={failedTiers === 0 ? 'var(--success)' : 'var(--danger)'}
-        />
+        {qa.testRun ? (
+          <StatCard
+            label="Pass / Fail"
+            value={`${qa.testRun.passed} / ${qa.testRun.failed}`}
+            sub={
+              qa.testRun.skipped > 0
+                ? `${qa.testRun.total} total · ${qa.testRun.skipped} skipped`
+                : `${qa.testRun.total} total`
+            }
+            color={qa.testRun.failed === 0 ? 'var(--success)' : 'var(--danger)'}
+          />
+        ) : (
+          <StatCard
+            label="Pass / Fail"
+            value={`${passedTiers} / ${failedTiers}`}
+            sub={`${allFindings.length} findings`}
+            color={failedTiers === 0 ? 'var(--success)' : 'var(--danger)'}
+          />
+        )}
         <StatCard
           label="Score"
           value={`${qa.overallScore}%`}
           sub={`threshold ${threshold}`}
           color={qa.overallScore >= threshold ? 'var(--success)' : 'var(--danger)'}
         />
-        <StatCard label="Wall time" value="—" sub="not tracked" />
+        {qa.testRun ? (
+          <StatCard
+            label="Wall time"
+            value={formatWallTime(qa.testRun.wallTimeMs)}
+            sub={`${qa.testRun.suites.length} ${qa.testRun.suites.length === 1 ? 'suite' : 'suites'}`}
+          />
+        ) : (
+          <StatCard label="Wall time" value="—" sub="not tracked" />
+        )}
         <StatCard
           label="Flake risk"
           value={flakeRisk}
@@ -186,6 +235,91 @@ export function QASection({ projectSlug, id }: QASectionProps) {
           color={flakeColor}
         />
       </div>
+
+      {/* Test suites — when real test-run data is present */}
+      {qa.testRun && qa.testRun.suites.length > 0 && (
+        <div data-testid="qa-test-suites">
+          <div className="flex items-baseline justify-between mb-2">
+            <div className="text-[10.5px] uppercase tracking-wider text-fg-4">Test suites</div>
+            <div className="text-[11px] text-fg-4 mono tnum">
+              {qa.testRun.passed} passed · {qa.testRun.failed} failed · {qa.testRun.skipped} skipped
+            </div>
+          </div>
+          <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
+            {qa.testRun.suites.map((s, i) => {
+              const pillColor =
+                s.status === 'passed'
+                  ? 'var(--success)'
+                  : s.status === 'failed'
+                    ? 'var(--danger)'
+                    : 'var(--warning)';
+              return (
+                <div
+                  key={s.filePath || s.name}
+                  className="grid items-center px-4 py-3"
+                  style={{
+                    gridTemplateColumns: '1.5fr 1fr 100px 90px 90px',
+                    borderTop: i ? '1px solid var(--line)' : 'none',
+                  }}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span
+                      className="inline-block rounded-full shrink-0"
+                      style={{
+                        width: 8,
+                        height: 8,
+                        background: pillColor,
+                      }}
+                    />
+                    <span className="mono text-[12.5px] truncate" title={s.filePath}>
+                      {s.name}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {Array.from({ length: Math.min(s.total, 24) }, (_, j) => {
+                      const isPass = j < s.passed;
+                      const isFail = j >= s.passed && j < s.passed + s.failed;
+                      const bg = isPass
+                        ? 'var(--success)'
+                        : isFail
+                          ? 'var(--danger)'
+                          : 'var(--warning)';
+                      return (
+                        <span
+                          key={`${s.filePath}-${j}`}
+                          style={{ width: 8, height: 14, borderRadius: 1.5, background: bg }}
+                        />
+                      );
+                    })}
+                  </div>
+                  <span className="mono tnum text-right text-[12px] text-fg-2">
+                    {s.passed}/{s.total}
+                  </span>
+                  <span className="mono tnum text-right text-[12px] text-fg-3">
+                    {s.durationMs > 0 ? `${s.durationMs}ms` : '—'}
+                  </span>
+                  <span className="text-right">
+                    <span
+                      className="inline-flex items-center px-2 py-0.5 rounded-full border text-[10.5px] font-medium uppercase tracking-wide"
+                      style={{
+                        color: pillColor,
+                        borderColor: `oklch(from ${pillColor} l c h / 0.4)`,
+                        background: `oklch(from ${pillColor} l c h / 0.1)`,
+                      }}
+                    >
+                      {s.status === 'passed'
+                        ? 'passing'
+                        : s.status === 'failed'
+                          ? 'failing'
+                          : 'skipped'}
+                    </span>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Verification tiers */}
       <div>
