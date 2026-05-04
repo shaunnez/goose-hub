@@ -10,6 +10,8 @@ export default defineConfig({
     },
   },
   test: {
+    maxWorkers: 2,
+    minWorkers: 1,
     include: ['**/*.test.ts', '**/*.test.tsx'],
     exclude: [
       '**/node_modules/**',

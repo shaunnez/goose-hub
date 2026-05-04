@@ -59,7 +59,8 @@ async function preflightPlaywrightMcp(
         cwd: REPO_ROOT,
         env: { HOME: homedir(), PATH: MINIMAL_PATH },
         shell: false,
-        stdio: ['ignore', 'ignore', 'pipe'],
+        // stdin must stay open (pipe, not ignore) — stdio MCP servers exit on EOF
+        stdio: ['pipe', 'ignore', 'pipe'],
       },
     );
 
