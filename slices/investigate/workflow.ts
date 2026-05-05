@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
+import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
@@ -25,10 +26,6 @@ const MINIMAL_PATH =
     : process.platform === 'darwin'
       ? '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin'
       : '/usr/local/bin:/usr/bin:/bin';
-
-function readPrompt(skillName: string): string {
-  return readFileSync(join(REPO_ROOT, 'skills', skillName, 'skill.md'), 'utf8');
-}
 
 /**
  * Spawns the playwright-test MCP server briefly to confirm it can start in the
@@ -112,8 +109,8 @@ export async function runInvestigateWorkflow(
 ): Promise<void> {
   const runId = crypto.randomUUID();
   const runtime = new ClaudeCliRuntime();
-  const investigatePrompt = readPrompt('investigate');
-  const playwrightReproPrompt = readPrompt('playwright-repro');
+  const investigatePrompt = readPromptWithContext('investigate', projectId);
+  const playwrightReproPrompt = readPromptWithContext('playwright-repro', projectId);
   const investigateJsonSchema = toJsonSchema(InvestigateSchema);
   const playwrightReproJsonSchema = toJsonSchema(PlaywrightReproSchema);
 

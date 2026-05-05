@@ -1,9 +1,8 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { DeepRetroSchema } from '../../skills/retrospective-deep/schema.js';
 import { LightRetroSchema } from '../../skills/retrospective-light/schema.js';
 import { ClaudeCliRuntime } from '../agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
+import { readPromptWithContext } from '../agent-runtime/read-prompt.js';
 import { toJsonSchema } from '../agent-runtime/schema-bridge.js';
 import { selectPersona } from '../agent-runtime/select-persona.js';
 import { db } from '../db/db.js';
@@ -12,12 +11,6 @@ import { eventStore } from '../event-stream/store.js';
 import { accumulatePersonaStats } from '../persona/accumulate.js';
 import type { ImprovementCandidate } from '../retrospective/schemas.js';
 import type { StateSource, WorkItem } from '../state-source/interface.js';
-
-const REPO_ROOT = join(import.meta.dirname, '../..');
-
-function readPrompt(skillName: string): string {
-  return readFileSync(join(REPO_ROOT, 'skills', skillName, 'skill.md'), 'utf8');
-}
 
 export type RetrospectivePolicy = 'always-light' | 'always-deep' | 'auto';
 
@@ -77,7 +70,7 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
   const tier = selectTier(policy, triggers);
   const skillName = tier === 'deep' ? 'retrospective-deep' : 'retrospective-light';
   const schema = tier === 'deep' ? DeepRetroSchema : LightRetroSchema;
-  const prompt = readPrompt(skillName);
+  const prompt = readPromptWithContext(skillName, projectId);
   const jsonSchema = toJsonSchema(schema);
   const { personaId } = selectPersona(projectId, 'retrospector');
 

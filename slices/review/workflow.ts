@@ -1,8 +1,7 @@
 import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
+import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
@@ -11,12 +10,6 @@ import { DEFAULT_MAX_RETRIES, shouldEscalateReview } from '@goose-hub/core/retry
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { ReviewOutputSchema } from '@goose-hub/skills/review/schema.js';
-
-const REPO_ROOT = join(import.meta.dirname, '../..');
-
-function readPrompt(skillName: string): string {
-  return readFileSync(join(REPO_ROOT, 'skills', skillName, 'skill.md'), 'utf8');
-}
 
 export interface ReviewWorkflowDeps {
   runtime?: AgentRuntime;
@@ -40,7 +33,7 @@ export async function runReviewWorkflow(
 ): Promise<void> {
   const runId = crypto.randomUUID();
   const runtime = deps.runtime ?? new ClaudeCliRuntime();
-  const reviewPrompt = readPrompt('review');
+  const reviewPrompt = readPromptWithContext('review', projectId);
   const reviewJsonSchema = toJsonSchema(ReviewOutputSchema);
   const { personaId } = selectPersona(projectId, 'reviewer');
 
