@@ -156,8 +156,8 @@ describe('groupEvents — run-group by runId', () => {
     expect(result).toHaveLength(2);
     expect(result[0].kind).toBe('run-group');
     expect(result[1].kind).toBe('run-group');
-    if (result[0].kind === 'run-group') expect(result[0].runId).toBe('run-a');
-    if (result[1].kind === 'run-group') expect(result[1].runId).toBe('run-b');
+    if (result[0].kind === 'run-group') expect(result[0].runId).toBe('run-b');
+    if (result[1].kind === 'run-group') expect(result[1].runId).toBe('run-a');
   });
 
   it('decision-summary event renders with step label and summary text', () => {

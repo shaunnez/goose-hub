@@ -144,5 +144,8 @@ describe('legalTargets', () => {
     expect(legalTargets('factory:accepted')).toHaveLength(5));
 
   it('dev-ready yields in-progress and archived', () =>
-    expect(legalTargets('factory:dev-ready')).toStrictEqual(['factory:in-progress', 'factory:archived']));
+    expect(legalTargets('factory:dev-ready')).toStrictEqual([
+      'factory:in-progress',
+      'factory:archived',
+    ]));
 });

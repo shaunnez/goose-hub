@@ -27,7 +27,9 @@ export const ImplementSchema = z
     filesWritten: z.array(FileWrittenSchema),
     testsWritten: z
       .array(TestWrittenSchema)
-      .describe('Test files written or modified — empty array is valid for chore PRs without tests'),
+      .describe(
+        'Test files written or modified — empty array is valid for chore PRs without tests',
+      ),
     prUrl: z
       .string()
       .url()
@@ -40,7 +42,9 @@ export const ImplementSchema = z
     evidenceSpecPath: z
       .string()
       .nullable()
-      .describe('Workspace-relative spec path; required for any slice touching apps/web/, null otherwise'),
+      .describe(
+        'Workspace-relative spec path; required for any slice touching apps/web/, null otherwise',
+      ),
     confidence: ConfidenceSchema,
     decisionSummaries: z.array(DecisionSummarySchema).min(1),
   })

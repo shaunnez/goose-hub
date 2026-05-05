@@ -820,7 +820,10 @@ function QaFailedEvent({ event }: { event: AgentEventDto }) {
       {findings.length > 0 && (
         <ul className="flex flex-col gap-1.5">
           {findings.map((f, i) => (
-            <li key={i} className="flex items-start gap-2 text-[11.5px]">
+            <li
+              key={`${f.severity}-${f.description}-${i}`}
+              className="flex items-start gap-2 text-[11.5px]"
+            >
               <span
                 className={cn(
                   'mt-0.5 shrink-0 font-mono text-[10px] px-1 py-0.5 rounded',
@@ -1169,7 +1172,7 @@ function RunGroupWrapper({
 export function renderTimelineItem(
   item: RenderItem,
   idx: number,
-  context?: { slug: string; issueId: string },
+  context?: { slug: string; issueId: string; latestRunId: string | null },
 ) {
   if (item.kind === 'log-group') {
     return <AgentLogGroupEvent key={`log-group-${idx}`} events={item.events} />;

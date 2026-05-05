@@ -131,7 +131,11 @@ describe('gate actions — GATE_ACTIONS mapping', () => {
 
 describe('detail page — legal-target table mirrors core', () => {
   it('triaging accepts to-accepted, to-rejected, and to-archived', () => {
-    expect(LEGAL_TARGETS['factory:triaging']).toEqual(['factory:accepted', 'factory:rejected', 'factory:archived']);
+    expect(LEGAL_TARGETS['factory:triaging']).toEqual([
+      'factory:accepted',
+      'factory:rejected',
+      'factory:archived',
+    ]);
   });
   it('done is terminal-ish: only goes to archived', () => {
     expect(LEGAL_TARGETS['factory:done']).toEqual(['factory:archived']);
