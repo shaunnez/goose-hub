@@ -38,6 +38,17 @@ export interface RecordToolCallResult {
   ok: boolean;
 }
 
+interface DecisionSummaryPayload {
+  run_id?: string;
+  summary?: string;
+  timestamp?: string;
+  [key: string]: unknown;
+}
+
+export interface RecordDecisionSummaryResult {
+  ok: boolean;
+}
+
 /**
  * Records an audit event from the pre-tool-use hook (#209). Extracted
  * from the route handler so the route remains a thin delegator.
@@ -59,6 +70,34 @@ export function recordToolCall(payload: ToolCallHookPayload): RecordToolCallResu
     projectId,
     workItemId,
     kind: 'agent.tool-call',
+    payload,
+    runId,
+  });
+  return { ok: true };
+}
+
+/**
+ * Records a live decision-summary event from the PostToolUse hook (#465).
+ * Emits agent.decision-summary-live — distinct from the canonical agent.decision-summary
+ * harvested at end-of-run so retro can reconcile duplicates.
+ */
+export function recordDecisionSummary(
+  payload: DecisionSummaryPayload,
+): RecordDecisionSummaryResult {
+  const runId = typeof payload.run_id === 'string' ? payload.run_id : null;
+  let projectId = 'unknown';
+  let workItemId: string | null = null;
+  if (runId != null) {
+    const startEvent = eventStore.replay({ runId }).find((e) => e.kind === 'agent.run-started');
+    if (startEvent != null) {
+      projectId = startEvent.projectId;
+      workItemId = startEvent.workItemId;
+    }
+  }
+  eventStore.appendEvent({
+    projectId,
+    workItemId,
+    kind: 'agent.decision-summary-live',
     payload,
     runId,
   });

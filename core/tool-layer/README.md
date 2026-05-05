@@ -11,6 +11,7 @@ Tool management and security infrastructure for agent runtime.
 | `allowlist.ts` | `computeAllowlist`, `TOOL_BUNDLES` | M4.08 |
 | `sandbox.ts` | `writeWorkspaceSandbox` | M4.08 |
 | `pre-tool-use-hook.ts` | `deployHooks`, `HOOK_PATH` | M4.08 |
+| `post-tool-use-hook.ts` | `deployPostHook`, `POST_HOOK_PATH` | M9.XX (#465) |
 | `tools/read.ts` | `readFile`, `searchFiles`, `SandboxViolationError` | M6.02 |
 | `tools/write.ts` | `writeFile` | M7.01 |
 | `tools/bash.ts` | `runBash`, `BashResult`, `DEFAULT_BASH_DENYLIST` | M7.01 |
@@ -47,10 +48,22 @@ Called once at workspace bootstrap; never mutated per run.
 
 ## PreToolUse Hook
 
-`deployHooks()` writes `~/.factory/hooks/pre-tool-use.js` (idempotent). The deployed script:
+`deployHooks()` writes both `~/.factory/hooks/pre-tool-use.js` and `~/.factory/hooks/post-tool-use.js` (idempotent). Both are registered in the workspace `.claude/settings.json` by `writeWorkspaceSandbox()`.
+
+The PreToolUse script:
 1. Validates tool name against per-run allowlist (`FACTORY_RUN_ALLOWLIST` env var)
 2. Denies out-of-allowlist tools (exits with block decision)
 3. Audits every call to the event store as `agent.tool-call`
+
+## PostToolUse Hook
+
+The PostToolUse script (`post-tool-use-hook.ts`) fires after each tool call and scans the agent's `transcript_path` for new `[decision] …` marker lines since the last fire:
+
+1. Reads the CC hook JSON from stdin to get `transcript_path`
+2. Maintains a per-run byte-offset cursor at `~/.factory/hooks/state/<runId>.cursor` to avoid re-emitting markers
+3. Extracts markers via `/^\[decision\]\s+(.+)$/gm`
+4. POSTs each marker to `POST /events/decision-summary` as `agent.decision-summary-live`
+5. All failures are best-effort — a failing POST never blocks the agent's tool execution
 
 ## Sandboxed Read and Search Tools
 

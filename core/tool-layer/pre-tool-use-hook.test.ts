@@ -39,7 +39,6 @@ describe('deployHooks', () => {
 
     deployHooks();
 
-    expect(mkdirSync).toHaveBeenCalledOnce();
     expect(mkdirSync).toHaveBeenCalledWith(expect.stringContaining('.factory'), {
       recursive: true,
     });
@@ -50,7 +49,8 @@ describe('deployHooks', () => {
 
     deployHooks();
 
-    expect(writeFileSync).toHaveBeenCalledTimes(2);
+    // 3 writes: pre-tool-use.js, package.json, post-tool-use.js
+    expect(writeFileSync).toHaveBeenCalledTimes(3);
     expect(writeFileSync).toHaveBeenCalledWith(
       expect.stringContaining('pre-tool-use.js'),
       expect.any(String),
@@ -61,6 +61,11 @@ describe('deployHooks', () => {
       '{"type":"module"}',
       'utf8',
     );
+    expect(writeFileSync).toHaveBeenCalledWith(
+      expect.stringContaining('post-tool-use.js'),
+      expect.any(String),
+      { encoding: 'utf8', mode: 0o755 },
+    );
   });
 
   it('always overwrites the script to pick up hook changes', () => {
@@ -68,7 +73,8 @@ describe('deployHooks', () => {
 
     deployHooks();
 
-    expect(writeFileSync).toHaveBeenCalledTimes(2);
+    // 3 writes: pre-tool-use.js, package.json, post-tool-use.js
+    expect(writeFileSync).toHaveBeenCalledTimes(3);
   });
 
   it('still creates the directory even when the hook file already exists', () => {
@@ -76,7 +82,8 @@ describe('deployHooks', () => {
 
     deployHooks();
 
-    expect(mkdirSync).toHaveBeenCalledOnce();
+    // 2 mkdirSync calls: once in deployHooks, once in deployPostHook
+    expect(mkdirSync).toHaveBeenCalledTimes(2);
   });
 
   it('the written script contains allowlist enforcement logic', () => {
@@ -109,5 +116,15 @@ describe('deployHooks', () => {
 
     const scriptContent = vi.mocked(writeFileSync).mock.calls[0][1] as string;
     expect(scriptContent).toContain('3001');
+  });
+
+  it('writes both pre-tool-use.js and post-tool-use.js atomically', () => {
+    vi.mocked(existsSync).mockReturnValue(false);
+
+    deployHooks();
+
+    const writtenPaths = vi.mocked(writeFileSync).mock.calls.map((c) => c[0] as string);
+    expect(writtenPaths.some((p) => p.includes('pre-tool-use.js'))).toBe(true);
+    expect(writtenPaths.some((p) => p.includes('post-tool-use.js'))).toBe(true);
   });
 });

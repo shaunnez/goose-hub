@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { deployPostHook } from './post-tool-use-hook.js';
 
 const HOOKS_DIR = join(homedir(), '.factory', 'hooks');
 
@@ -64,13 +65,14 @@ async function main() {
 main().catch(() => process.exit(0));
 `;
 
-/** Writes the PreToolUse hook script to ~/.factory/hooks/. Always overwrites to pick up changes. */
+/** Writes both PreToolUse and PostToolUse hook scripts to ~/.factory/hooks/. Always overwrites to pick up changes. */
 export function deployHooks(): void {
   mkdirSync(HOOKS_DIR, { recursive: true });
   const hookPath = join(HOOKS_DIR, 'pre-tool-use.js');
   writeFileSync(hookPath, HOOK_SCRIPT, { encoding: 'utf8', mode: 0o755 });
-  // Required so Node loads the hook as ESM (import syntax).
+  // Required so Node loads the hooks as ESM (import syntax).
   writeFileSync(join(HOOKS_DIR, 'package.json'), '{"type":"module"}', 'utf8');
+  deployPostHook();
 }
 
 export const HOOK_PATH = join(HOOKS_DIR, 'pre-tool-use.js');

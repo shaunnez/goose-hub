@@ -72,6 +72,30 @@ function AgentDecisionSummaryEvent({ event }: { event: AgentEventDto }) {
   );
 }
 
+function AgentDecisionSummaryLiveEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as { summary?: string } | null;
+  const summary = p?.summary ?? getPayloadStr(event.payload);
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line/50 bg-bg/40 px-4 py-2"
+    >
+      <details>
+        <summary className="flex items-center gap-1 cursor-pointer list-none font-mono text-[11.5px] select-none">
+          <ChevronRight size={12} />
+          <span className="text-[color:var(--accent)] shrink-0" title="Live decision marker">
+            💭
+          </span>
+          <span className="truncate max-w-[460px]">{summary}</span>
+        </summary>
+        <div className="mt-1.5 text-[11px] text-fg-4 font-mono tnum pl-4">
+          {new Date(event.createdAt).toLocaleString()}
+        </div>
+      </details>
+    </li>
+  );
+}
+
 function AgentLogEvent({ event }: { event: AgentEventDto }) {
   const p = event.payload as { line?: string; text?: string } | null;
   const line = p?.line ?? p?.text ?? getPayloadStr(event.payload);
@@ -1200,6 +1224,8 @@ export function renderTimelineItem(
       return <AgentSpawnedEvent key={event.id} event={event} />;
     case 'agent.decision-summary':
       return <AgentDecisionSummaryEvent key={event.id} event={event} />;
+    case 'agent.decision-summary-live':
+      return <AgentDecisionSummaryLiveEvent key={event.id} event={event} />;
     case 'agent.log':
       return <AgentLogEvent key={event.id} event={event} />;
     case 'agent.terminated':
