@@ -1,4 +1,6 @@
+import { logger } from '@goose-hub/core/logger.js';
 import { Hono } from 'hono';
+import { dispatchResolveConflict } from '#shared/dispatch.js';
 import { parseBody } from '#shared/middleware.js';
 import {
   approveIssue,
@@ -124,10 +126,19 @@ router.post('/:slug/issues/:id/repo-override', async (c) => {
 
 // Approval gate (#186) — UI-only routes, no agent caller.
 router.post('/:slug/issues/:id/approve', async (c) => {
-  const result = await approveIssue(c.req.param('slug'), c.req.param('id'));
+  const slug = c.req.param('slug');
+  const id = c.req.param('id');
+  const result = await approveIssue(slug, id);
+  if (!result.ok && result.error === 'merge-conflict') {
+    // Fire-and-forget: workflow runs out-of-band. UI polls and reflects the
+    // state transition once the worker resolves or escalates.
+    dispatchResolveConflict(slug, Number(id)).catch((err: unknown) => {
+      logger.error('dispatchResolveConflict failed', { slug, id, error: String(err) });
+    });
+  }
   return result.ok
     ? c.json(result.data)
-    : c.json({ error: result.error }, result.status as 400 | 404 | 500);
+    : c.json({ error: result.error }, result.status as 400 | 404 | 409 | 500);
 });
 
 router.post('/:slug/issues/:id/reject', async (c) => {
