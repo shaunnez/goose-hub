@@ -163,6 +163,16 @@ export async function dispatchResolveConflict(slug: string, issueNumber: number)
     }
     const item = await source.getItem(issueNumber.toString());
     await runResolveConflictWorkflow(item, source, slug, REPO_ROOT);
+    // Fire-and-forget retro after conflict resolution + merge, same pattern as
+    // approveIssue. The label-change webhook also triggers dispatchRetro on
+    // factory:retrospecting; running it here avoids waiting for webhook delivery.
+    dispatchRetro(slug, issueNumber).catch((err: unknown) => {
+      logger.error('dispatchRetro after resolve-conflict failed', {
+        slug,
+        issueNumber,
+        error: String(err),
+      });
+    });
   } finally {
     _issueInFlight.delete(key);
   }

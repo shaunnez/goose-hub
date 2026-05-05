@@ -163,7 +163,7 @@ describe('runResolveConflictWorkflow', () => {
     expect(source.transitionState).toHaveBeenCalledWith(
       '42',
       'factory:merge-conflict',
-      'factory:done',
+      'factory:retrospecting',
     );
     const resolvedEvent = vi
       .mocked(eventStore.appendEvent)
