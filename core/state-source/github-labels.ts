@@ -145,6 +145,7 @@ function mapIssueToWorkItem(issue: GithubIssue, repoRef: string, ownerLogin: str
     state,
     authorIsOwner: issue.user?.login === ownerLogin,
     milestoneId: issue.milestone != null ? String(issue.milestone.number) : undefined,
+    milestoneTitle: issue.milestone?.title,
     schedule,
     exec,
     dependsOn: parseDependsOn(body),
@@ -229,8 +230,9 @@ export class GitHubLabelsSource implements StateSource {
     return results;
   }
 
-  async listOpenWork(): Promise<WorkItem[]> {
-    const url = `https://api.github.com/repos/${this.repoRef}/issues?state=open&per_page=100`;
+  async listOpenWork(milestoneNumber?: number): Promise<WorkItem[]> {
+    const milestoneParam = milestoneNumber != null ? `&milestone=${milestoneNumber}` : '';
+    const url = `https://api.github.com/repos/${this.repoRef}/issues?state=open&per_page=100${milestoneParam}`;
     const issues = await this.paginateAll<GithubIssue>(url);
     // GitHub issues endpoint also returns PRs; filter those out.
     return issues

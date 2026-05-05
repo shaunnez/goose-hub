@@ -20,6 +20,7 @@ export interface WorkItem {
   parentId?: string;
   authorIsOwner: boolean;
   milestoneId?: string;
+  milestoneTitle?: string;
   schedule: Schedule;
   exec: ExecMode;
   dependsOn: string[]; // repo-qualified refs parsed from body
@@ -70,7 +71,7 @@ export interface StateSource {
   projectId: string;
   repoRef: string;
 
-  listOpenWork(): Promise<WorkItem[]>;
+  listOpenWork(milestoneNumber?: number): Promise<WorkItem[]>;
   listClosedWorkByMilestone(milestoneNumber: number): Promise<WorkItem[]>;
   listWorkByMilestone(milestoneNumber: number): Promise<WorkItem[]>;
   getItem(itemId: string): Promise<WorkItem>;

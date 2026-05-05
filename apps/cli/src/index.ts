@@ -11,29 +11,28 @@ import { withFallback } from '@goose-hub/core/agent-runtime/fallback.js';
 import type { AgentSpec } from '@goose-hub/core/agent-runtime/interface.js';
 import { validateOutput } from '@goose-hub/core/agent-runtime/output-validator.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
+import { loadProjects } from '@goose-hub/core/projects/loader.js';
 import { STATES } from '@goose-hub/core/state-machine/states.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { GitHubLabelsSource } from '@goose-hub/core/state-source/github-labels.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
-import type { ProjectConfig } from '@goose-hub/core/types.js';
 import { skillsRoot } from '@goose-hub/skills';
-import gooseHubSelf from '@goose-hub/target-projects/goose-hub-self/project.config.js';
-
-const registry: Record<string, ProjectConfig> = {
-  'goose-hub-self': gooseHubSelf,
-};
+import { targetProjectsRoot } from '@goose-hub/target-projects';
 
 async function statusCommand(slug: string): Promise<void> {
+  const projects = await loadProjects(targetProjectsRoot);
+  const knownSlugs = projects.map((p) => p.slug).join(', ');
+
   if (!slug) {
     console.error('Usage: goose status <project-slug>');
-    console.error(`Known projects: ${Object.keys(registry).join(', ')}`);
+    console.error(`Known projects: ${knownSlugs}`);
     process.exit(1);
   }
 
-  const config = registry[slug];
+  const config = projects.find((p) => p.slug === slug);
   if (!config) {
     console.error(`Unknown project: ${slug}`);
-    console.error(`Known projects: ${Object.keys(registry).join(', ')}`);
+    console.error(`Known projects: ${knownSlugs}`);
     process.exit(1);
   }
 
@@ -47,16 +46,23 @@ async function statusCommand(slug: string): Promise<void> {
 
   let items: WorkItem[];
   let milestoneLabel: string | null = null;
+  let milestoneNumber: number | null = null;
 
   try {
-    const milestone = await source.getActiveMilestone();
-    if (milestone != null) {
-      milestoneLabel = milestone.title;
+    if (config.activeMilestone != null) {
+      // Per-project config takes priority over GitHub's default active milestone.
+      milestoneLabel = config.activeMilestone;
+      const milestones = await source.listMilestones();
+      const match = milestones.find((m) => m.title === config.activeMilestone);
+      milestoneNumber = match?.number ?? null;
+    } else {
+      const milestone = await source.getActiveMilestone();
+      if (milestone != null) {
+        milestoneLabel = milestone.title;
+        milestoneNumber = milestone.number;
+      }
     }
-    items =
-      milestone != null && !milestone.isActive
-        ? await source.listClosedWorkByMilestone(milestone.number)
-        : await source.listOpenWork();
+    items = await source.listOpenWork(milestoneNumber ?? undefined);
   } catch (err) {
     console.error((err as Error).message);
     process.exit(1);
@@ -104,10 +110,11 @@ async function sweepCommand(slug: string, milestoneArg: string): Promise<void> {
     process.exit(1);
   }
 
-  const config = registry[slug];
+  const projects = await loadProjects(targetProjectsRoot);
+  const config = projects.find((p) => p.slug === slug);
   if (!config) {
     console.error(`Unknown project: ${slug}`);
-    console.error(`Known projects: ${Object.keys(registry).join(', ')}`);
+    console.error(`Known projects: ${projects.map((p) => p.slug).join(', ')}`);
     process.exit(1);
   }
 

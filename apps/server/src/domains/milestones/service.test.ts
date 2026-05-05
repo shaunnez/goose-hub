@@ -8,14 +8,18 @@ vi.mock('../../shared/source.js', () => ({
   getSourceForSlug: vi.fn(),
 }));
 
+vi.mock('../../shared/resolve-milestone.js', () => ({
+  resolveActiveMilestone: vi.fn(),
+}));
+
 vi.mock('./repository.js', () => ({
-  readActiveMilestone: vi.fn().mockResolvedValue(null),
   writeActiveMilestone: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
 import { getSourceForSlug } from '#shared/source.js';
-import { readActiveMilestone, writeActiveMilestone } from './repository.js';
+import { writeActiveMilestone } from './repository.js';
 import {
   getActiveMilestone,
   listClosedMilestoneIssues,
@@ -34,6 +38,10 @@ const mockSource = {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getSourceForSlug).mockResolvedValue(mockSource as never);
+  vi.mocked(resolveActiveMilestone).mockResolvedValue({
+    milestoneNumber: null,
+    source: 'github-default',
+  });
 });
 
 describe('getActiveMilestone', () => {
@@ -43,15 +51,29 @@ describe('getActiveMilestone', () => {
     expect(result).toEqual({ ok: false, error: 'project not found', status: 404 });
   });
 
-  it('returns persisted milestone when one exists', async () => {
-    vi.mocked(readActiveMilestone).mockResolvedValueOnce(5);
+  it('returns project_state milestone', async () => {
+    vi.mocked(resolveActiveMilestone).mockResolvedValueOnce({
+      milestoneNumber: 5,
+      source: 'project_state',
+    });
     const result = await getActiveMilestone('my-proj');
     expect(result).toEqual({ ok: true, data: { milestoneNumber: 5, source: 'project_state' } });
   });
 
-  it('falls back to github-default when no persisted milestone', async () => {
-    vi.mocked(readActiveMilestone).mockResolvedValueOnce(null);
-    mockSource.getActiveMilestone.mockResolvedValueOnce({ number: 3 });
+  it('returns config-derived milestone', async () => {
+    vi.mocked(resolveActiveMilestone).mockResolvedValueOnce({
+      milestoneNumber: 10,
+      source: 'config',
+    });
+    const result = await getActiveMilestone('my-proj');
+    expect(result).toEqual({ ok: true, data: { milestoneNumber: 10, source: 'config' } });
+  });
+
+  it('falls back to github-default when no persisted or config milestone', async () => {
+    vi.mocked(resolveActiveMilestone).mockResolvedValueOnce({
+      milestoneNumber: 3,
+      source: 'github-default',
+    });
     const result = await getActiveMilestone('my-proj');
     expect(result).toEqual({
       ok: true,
@@ -60,8 +82,10 @@ describe('getActiveMilestone', () => {
   });
 
   it('returns null milestoneNumber when github has no active milestone', async () => {
-    vi.mocked(readActiveMilestone).mockResolvedValueOnce(null);
-    mockSource.getActiveMilestone.mockResolvedValueOnce(null);
+    vi.mocked(resolveActiveMilestone).mockResolvedValueOnce({
+      milestoneNumber: null,
+      source: 'github-default',
+    });
     const result = await getActiveMilestone('my-proj');
     expect(result).toEqual({
       ok: true,
@@ -71,7 +95,7 @@ describe('getActiveMilestone', () => {
 });
 
 describe('setActiveMilestone', () => {
-  it('writes milestone, busts cache, and emits event', async () => {
+  it('writes milestone and emits event', async () => {
     const result = await setActiveMilestone('my-proj', 7);
     expect(result).toEqual({ ok: true, data: { ok: true, milestoneNumber: 7 } });
     expect(writeActiveMilestone).toHaveBeenCalledWith('my-proj', 7, 'ui');

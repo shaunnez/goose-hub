@@ -126,4 +126,17 @@ describe('IssueCard', () => {
     // Title text in the div should be truncated with ellipsis
     expect(link.textContent).toContain('…');
   });
+
+  it('renders a milestone badge when milestoneTitle is set', () => {
+    vi.mocked(fetchIssueCosts).mockResolvedValueOnce(costsResponse([]));
+    renderCard({ ...BASE_ITEM, milestoneTitle: 'M10: Multi-project Orchestration' });
+    const badge = screen.getByTestId('milestone-badge');
+    expect(badge.textContent).toBe('M10: Multi-project Orchestration');
+  });
+
+  it('does not render a milestone badge when milestoneTitle is absent', () => {
+    vi.mocked(fetchIssueCosts).mockResolvedValueOnce(costsResponse([]));
+    renderCard({ ...BASE_ITEM, milestoneTitle: undefined });
+    expect(screen.queryByTestId('milestone-badge')).toBeNull();
+  });
 });

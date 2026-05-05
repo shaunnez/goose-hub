@@ -46,12 +46,18 @@ vi.mock('../../shared/cache.js', () => ({
     milestoneIssues: (s: string, m: number) => `milestone-issues:${s}:${m}`,
   },
 }));
+vi.mock('../../shared/resolve-milestone.js', () => ({
+  resolveActiveMilestone: vi
+    .fn()
+    .mockResolvedValue({ milestoneNumber: null, source: 'github-default' }),
+}));
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { isLegalTransition } from '@goose-hub/core/state-machine/transitions.js';
 import { bustCache } from '#shared/cache.js';
+import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
 import { getSourceForSlug } from '#shared/source.js';
 import {
   commentOnIssue,
@@ -198,10 +204,53 @@ describe('listIssues', () => {
     expect(result).toMatchObject({ ok: false, status: 404 });
   });
 
-  it('returns items from source', async () => {
+  it('calls listOpenWork with no milestone when resolveActiveMilestone returns null', async () => {
+    vi.mocked(resolveActiveMilestone).mockResolvedValueOnce({
+      milestoneNumber: null,
+      source: 'github-default',
+    });
     mockSource.listOpenWork.mockResolvedValueOnce([{ id: 'github:owner/repo#1' }]);
     const result = await listIssues('proj');
+    expect(mockSource.listOpenWork).toHaveBeenCalledWith(undefined);
     expect(result).toMatchObject({ ok: true, data: { items: [{ id: 'github:owner/repo#1' }] } });
+  });
+
+  it('calls listOpenWork with milestone number when resolveActiveMilestone returns one', async () => {
+    vi.mocked(resolveActiveMilestone).mockResolvedValueOnce({
+      milestoneNumber: 10,
+      source: 'config',
+    });
+    mockSource.listOpenWork.mockResolvedValueOnce([{ id: 'github:owner/repo#42' }]);
+    const result = await listIssues('proj');
+    expect(mockSource.listOpenWork).toHaveBeenCalledWith(10);
+    expect(result).toMatchObject({ ok: true, data: { items: [{ id: 'github:owner/repo#42' }] } });
+  });
+
+  it('two projects with different active milestones produce independent filtered sets', async () => {
+    const sourceA = {
+      ...mockSource,
+      listOpenWork: vi.fn().mockResolvedValue([{ id: 'github:owner/repo#1', externalId: '1' }]),
+    };
+    const sourceB = {
+      ...mockSource,
+      listOpenWork: vi.fn().mockResolvedValue([{ id: 'github:owner/repo#99', externalId: '99' }]),
+    };
+    vi.mocked(getSourceForSlug)
+      .mockResolvedValueOnce(sourceA as never)
+      .mockResolvedValueOnce(sourceB as never);
+    vi.mocked(resolveActiveMilestone)
+      .mockResolvedValueOnce({ milestoneNumber: 10, source: 'config' })
+      .mockResolvedValueOnce({ milestoneNumber: 5, source: 'config' });
+
+    const [r1, r2] = await Promise.all([listIssues('proj-a'), listIssues('proj-b')]);
+
+    expect(sourceA.listOpenWork).toHaveBeenCalledWith(10);
+    expect(sourceB.listOpenWork).toHaveBeenCalledWith(5);
+    expect(r1).toMatchObject({ ok: true });
+    expect(r2).toMatchObject({ ok: true });
+    const items1 = (r1 as { ok: true; data: { items: { id: string }[] } }).data.items;
+    const items2 = (r2 as { ok: true; data: { items: { id: string }[] } }).data.items;
+    expect(items1.map((i) => i.id)).not.toEqual(items2.map((i) => i.id));
   });
 });
 

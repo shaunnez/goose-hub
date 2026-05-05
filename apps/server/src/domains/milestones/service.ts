@@ -1,22 +1,16 @@
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import type { Result } from '#shared/middleware.js';
+import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
 import { getSourceForSlug } from '#shared/source.js';
-import { readActiveMilestone, writeActiveMilestone } from './repository.js';
+import { writeActiveMilestone } from './repository.js';
 
 export async function getActiveMilestone(
   slug: string,
 ): Promise<Result<{ milestoneNumber: number | null; source: string }>> {
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
-  const persisted = await readActiveMilestone(slug);
-  if (persisted != null) {
-    return { ok: true, data: { milestoneNumber: persisted, source: 'project_state' } };
-  }
-  const fallback = await source.getActiveMilestone();
-  return {
-    ok: true,
-    data: { milestoneNumber: fallback?.number ?? null, source: 'github-default' },
-  };
+  const resolved = await resolveActiveMilestone(slug);
+  return { ok: true, data: resolved };
 }
 
 export async function setActiveMilestone(
