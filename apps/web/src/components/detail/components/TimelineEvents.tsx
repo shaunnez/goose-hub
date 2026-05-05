@@ -507,6 +507,36 @@ function AgentToolCallEvent({ event }: { event: AgentEventDto }) {
   );
 }
 
+function AgentVerifyCommandEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as {
+    ac?: string;
+    command?: string;
+    actual?: string;
+    passed?: boolean;
+  } | null;
+  const passed = p?.passed ?? false;
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line/50 bg-bg/40 px-4 py-2"
+    >
+      <div className="flex items-center gap-2 text-[11px]">
+        {passed ? (
+          <CheckCircle size={12} style={{ color: 'var(--success)' }} />
+        ) : (
+          <XCircle size={12} style={{ color: 'var(--danger)' }} />
+        )}
+        <span className="font-mono uppercase tracking-wider">Verify AC: {p?.ac ?? '—'}</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      {p?.command != null && (
+        <div className="mt-1 mono text-[10.5px] text-fg-3 truncate">{p.command}</div>
+      )}
+    </li>
+  );
+}
+
 function ToolWarningEvent({ event }: { event: AgentEventDto }) {
   const label =
     event.kind === 'tool.stdout-truncated' ? 'Stdout truncated at 4 MB' : 'Process timed out';
@@ -1261,6 +1291,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <AgentRunStatusEvent key={event.id} event={event} />;
     case 'agent.tool-call':
       return <AgentToolCallEvent key={event.id} event={event} />;
+    case 'agent.verify-command':
+      return <AgentVerifyCommandEvent key={event.id} event={event} />;
     case 'tool.stdout-truncated':
     case 'tool.timeout':
       return <ToolWarningEvent key={event.id} event={event} />;

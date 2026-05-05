@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
+import { parseAcceptanceCriteria } from '../domains/issues/parse-acceptance.js';
 import { runRetroForItem } from '../domains/workflows/retro-batch.js';
 import { runTriageBatch } from '../domains/workflows/triage-batch.js';
 import { getSourceForSlug } from './source.js';
@@ -185,6 +186,14 @@ export async function dispatchQa(slug: string, issueNumber: number): Promise<voi
         source: unknown,
         projectSlug: string,
         targetRepo: string,
+        deps?: {
+          verifyCommands?: Array<{
+            ac: string;
+            command: string;
+            expected: string;
+            tolerance: string;
+          }>;
+        },
       ) => Promise<unknown>;
     };
     const source = await getSourceForSlug(slug);
@@ -193,7 +202,8 @@ export async function dispatchQa(slug: string, issueNumber: number): Promise<voi
       return;
     }
     const item = await source.getItem(issueNumber.toString());
-    await runQaWorkflow(item, source, slug, item.repoRef ?? slug);
+    const verifyCommands = parseAcceptanceCriteria(item.body ?? '');
+    await runQaWorkflow(item, source, slug, item.repoRef ?? slug, { verifyCommands });
   } finally {
     _issueInFlight.delete(key);
   }

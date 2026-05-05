@@ -1,10 +1,10 @@
 import { fetchEvents } from '@/lib/api';
 import type { AgentEventDto } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, CheckCircle, Clock, Plus, RefreshCw, XCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, XCircle } from 'lucide-react';
 import { useIssueCostsBreakdown } from '../lib/costs';
 import { TIERS, formatWallTime } from '../lib/qa';
-import type { QaPayload } from '../lib/qa';
+import type { CriteriaResult, QaPayload } from '../lib/qa';
 import { CostBadge } from './CostBadge';
 import { QaFindingRow } from './QaFindingRow';
 import { QaTestSuiteRow } from './QaTestSuiteRow';
@@ -176,6 +176,67 @@ export function QASection({ projectSlug, id }: QASectionProps) {
           <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
             {qa.testRun.suites.map((s, i) => (
               <QaTestSuiteRow key={s.filePath || s.name} suite={s} isFirst={i === 0} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Acceptance criteria results */}
+      {qa.criteriaResults != null && qa.criteriaResults.length > 0 && (
+        <div data-testid="qa-criteria-results">
+          <div className="flex items-baseline justify-between mb-2">
+            <div className="text-[10.5px] uppercase tracking-wider text-fg-4">
+              Acceptance Criteria
+            </div>
+            <div className="text-[11px] text-fg-4 mono tnum">
+              {qa.criteriaResults.filter((r) => r.passed).length} / {qa.criteriaResults.length}{' '}
+              passed
+            </div>
+          </div>
+          <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
+            {qa.criteriaResults.map((r: CriteriaResult, i: number) => (
+              <div
+                key={`${r.ac}:${i}`}
+                className="px-4 py-3 border-t border-line first:border-t-0 text-[12.5px]"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  {r.passed ? (
+                    <CheckCircle size={12} style={{ color: 'var(--success)' }} />
+                  ) : (
+                    <XCircle size={12} style={{ color: 'var(--danger)' }} />
+                  )}
+                  <span
+                    className="text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded"
+                    style={{
+                      color: r.passed ? 'var(--success)' : 'var(--danger)',
+                      background: r.passed
+                        ? 'oklch(from var(--success) l c h / 0.12)'
+                        : 'oklch(from var(--danger) l c h / 0.12)',
+                    }}
+                  >
+                    {r.passed ? 'pass' : 'fail'}
+                  </span>
+                  <span className="mono text-[10.5px] text-fg-3 bg-bg-elev-2 px-1.5 py-0.5 rounded truncate max-w-[240px]">
+                    {r.command}
+                  </span>
+                </div>
+                <div className="text-fg-2 mb-1">{r.ac}</div>
+                {!r.passed && (
+                  <details className="text-[11.5px] text-fg-3">
+                    <summary className="cursor-pointer">expected vs actual</summary>
+                    <div className="mt-1 space-y-1">
+                      <div>
+                        <span className="text-fg-4">expected: </span>
+                        <span className="mono">{r.expected}</span>
+                      </div>
+                      <div>
+                        <span className="text-fg-4">actual: </span>
+                        <span className="mono">{r.actual}</span>
+                      </div>
+                    </div>
+                  </details>
+                )}
+              </div>
             ))}
           </div>
         </div>

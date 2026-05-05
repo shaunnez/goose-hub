@@ -38,6 +38,45 @@ export interface RecordToolCallResult {
   ok: boolean;
 }
 
+interface VerifyCommandPayload {
+  run_id?: string;
+  ac?: string;
+  command?: string;
+  actual?: string;
+  passed?: boolean;
+  [key: string]: unknown;
+}
+
+export interface RecordVerifyCommandResult {
+  ok: boolean;
+}
+
+/**
+ * Records a live verify-command event emitted by QA as each AC verify
+ * command runs (#469). Resolves projectId/workItemId from the agent.run-started
+ * event so SSE filters on the detail page can match these events.
+ */
+export function recordVerifyCommand(payload: VerifyCommandPayload): RecordVerifyCommandResult {
+  const runId = typeof payload.run_id === 'string' ? payload.run_id : null;
+  let projectId = 'unknown';
+  let workItemId: string | null = null;
+  if (runId != null) {
+    const startEvent = eventStore.replay({ runId }).find((e) => e.kind === 'agent.run-started');
+    if (startEvent != null) {
+      projectId = startEvent.projectId;
+      workItemId = startEvent.workItemId;
+    }
+  }
+  eventStore.appendEvent({
+    projectId,
+    workItemId,
+    kind: 'agent.verify-command',
+    payload,
+    runId,
+  });
+  return { ok: true };
+}
+
 interface DecisionSummaryPayload {
   run_id?: string;
   summary?: string;

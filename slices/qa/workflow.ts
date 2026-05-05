@@ -27,6 +27,13 @@ function findDevWorktreePath(workItemId: string): string | undefined {
   return typeof payload.worktreePath === 'string' ? payload.worktreePath : undefined;
 }
 
+export interface VerifyCommand {
+  ac: string;
+  command: string;
+  expected: string;
+  tolerance: string;
+}
+
 export interface QaWorkflowDeps {
   runtime?: AgentRuntime;
   /**
@@ -36,6 +43,8 @@ export interface QaWorkflowDeps {
    * QA agent still runs, just without real suite numbers in its context.
    */
   runTests?: (cwd: string, command: string) => Promise<TestRun | null>;
+  /** Per-AC verify commands extracted from the issue body before QA spawn. */
+  verifyCommands?: VerifyCommand[];
 }
 
 const DEFAULT_TEST_COMMAND = 'pnpm test --run';
@@ -75,6 +84,7 @@ export async function runQaWorkflow(
   const runId = crypto.randomUUID();
   const runtime = deps.runtime ?? new ClaudeCliRuntime();
   const runTests = deps.runTests ?? defaultRunTests;
+  const verifyCommands = deps.verifyCommands;
   const qaPrompt = readPromptWithContext('qa', projectSlug);
   const qaJsonSchema = toJsonSchema(QaOutputSchema);
   const { personaId } = selectPersona(projectSlug, 'qa');
@@ -113,6 +123,7 @@ export async function runQaWorkflow(
           testCommand,
           lintCommand: 'pnpm biome check .',
         },
+        ...(verifyCommands != null && verifyCommands.length > 0 ? { verifyCommands } : {}),
         testRun,
         ...(evidenceCommentUrl != null ? { evidenceCommentUrl } : {}),
       },
@@ -121,6 +132,7 @@ export async function runQaWorkflow(
         'prDiff',
         'projectCommands',
         'testRun',
+        'verifyCommands',
         ...(evidenceCommentUrl != null ? ['evidenceCommentUrl'] : []),
       ],
       freshContext: true,
@@ -178,6 +190,16 @@ export async function runQaWorkflow(
       },
       runId,
     });
+
+    for (const cr of qaOutput.criteriaResults ?? []) {
+      eventStore.appendEvent({
+        projectId: projectSlug,
+        workItemId: workItem.id,
+        kind: 'agent.verify-command',
+        payload: { runId, ac: cr.ac, command: cr.command, actual: cr.actual, passed: cr.passed },
+        runId,
+      });
+    }
 
     for (const summary of qaOutput.decisionSummaries) {
       eventStore.appendEvent({

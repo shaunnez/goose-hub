@@ -1,14 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * projects.ts reads from the filesystem (readdirSync, statSync) and
- * dynamically imports project config files.  We mock 'node:fs' to avoid
- * touching the actual filesystem, and we mock the dynamic import by
- * intercepting via vi.doMock on the file URL produced from pathToFileURL.
- *
- * Because projects.ts maintains a module-level in-memory cache we must
- * vi.resetModules() between tests so each test gets an isolated module
- * instance with an empty cache.
+ * projects.ts is now a thin wrapper over @goose-hub/core/projects/loader.
+ * Unit tests for the loader internals live in core/projects/slice.test.ts.
+ * These tests verify the server-layer mapping (ProjectConfig → ProjectSummary).
  */
 
 afterEach(() => {
@@ -16,166 +11,84 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// ---------------------------------------------------------------------------
-// listProjects
-// ---------------------------------------------------------------------------
-
 describe('listProjects', () => {
-  it('returns [] when readdirSync throws (directory does not exist)', async () => {
-    vi.doMock('node:fs', () => ({
-      readdirSync: vi.fn().mockImplementation(() => {
-        throw new Error('ENOENT');
-      }),
-      statSync: vi.fn(),
+  it('returns [] when the core loader returns no projects', async () => {
+    vi.doMock('@goose-hub/core/projects/loader.js', () => ({
+      loadProjects: vi.fn().mockResolvedValue([]),
+      getProjectBySlug: vi.fn().mockResolvedValue(null),
+      detectDuplicateSlugs: vi.fn(),
+      DuplicateSlugError: class DuplicateSlugError extends Error {},
     }));
-
     const { listProjects } = await import('./projects.js');
-    const result = await listProjects();
-    expect(result).toEqual([]);
+    expect(await listProjects()).toEqual([]);
   });
 
-  it('skips entries where statSync throws', async () => {
-    vi.doMock('node:fs', () => ({
-      readdirSync: vi.fn().mockReturnValue(['bad-entry']),
-      statSync: vi.fn().mockImplementation(() => {
-        throw new Error('ENOENT');
-      }),
+  it('maps colorStripe from ProjectConfig to color in ProjectSummary', async () => {
+    const fakeConfig = {
+      id: 'test-id',
+      name: 'Test Project',
+      slug: 'test-project',
+      colorStripe: '#aabbcc',
+      source: { kind: 'github', repo: 'owner/repo', stateMachine: 'labels' },
+      targetRepo: { defaultBranch: 'main', cloneUrl: '', localPath: '' },
+    };
+    vi.doMock('@goose-hub/core/projects/loader.js', () => ({
+      loadProjects: vi.fn().mockResolvedValue([fakeConfig]),
+      getProjectBySlug: vi.fn().mockResolvedValue(null),
+      detectDuplicateSlugs: vi.fn(),
+      DuplicateSlugError: class DuplicateSlugError extends Error {},
     }));
-
     const { listProjects } = await import('./projects.js');
     const result = await listProjects();
-    expect(result).toEqual([]);
+    expect(result).toHaveLength(1);
+    expect(result[0].color).toBe('#aabbcc');
+    expect(result[0].slug).toBe('test-project');
+    expect(result[0].defaultBranch).toBe('main');
   });
 
-  it('skips non-directory entries', async () => {
-    vi.doMock('node:fs', () => ({
-      readdirSync: vi.fn().mockReturnValue(['some-file.txt']),
-      statSync: vi.fn().mockReturnValue({ isDirectory: () => false }),
+  it('falls back to "main" when targetRepo.defaultBranch is absent', async () => {
+    const fakeConfig = {
+      id: 'x',
+      name: 'X',
+      slug: 'x',
+      colorStripe: '#000',
+      source: { kind: 'github', repo: 'o/r', stateMachine: 'labels' },
+      targetRepo: { cloneUrl: '', localPath: '' }, // no defaultBranch
+    };
+    vi.doMock('@goose-hub/core/projects/loader.js', () => ({
+      loadProjects: vi.fn().mockResolvedValue([fakeConfig]),
+      getProjectBySlug: vi.fn().mockResolvedValue(null),
+      detectDuplicateSlugs: vi.fn(),
+      DuplicateSlugError: class DuplicateSlugError extends Error {},
     }));
-
     const { listProjects } = await import('./projects.js');
-    const result = await listProjects();
-    expect(result).toEqual([]);
-  });
-
-  it('skips directory entries where project.config.ts statSync throws (no config file)', async () => {
-    // First statSync call (for the dir itself) succeeds, second (for project.config.ts) throws
-    const statSyncMock = vi
-      .fn()
-      .mockReturnValueOnce({ isDirectory: () => true })
-      .mockImplementationOnce(() => {
-        throw new Error('ENOENT');
-      });
-
-    vi.doMock('node:fs', () => ({
-      readdirSync: vi.fn().mockReturnValue(['no-config-project']),
-      statSync: statSyncMock,
-    }));
-
-    const { listProjects } = await import('./projects.js');
-    const result = await listProjects();
-    expect(result).toEqual([]);
-  });
-
-  it('skips directories where loadProject returns null (no config file)', async () => {
-    // First statSync (directory itself) succeeds, second (project.config.ts) throws.
-    // This exercises the cfg == null guard in listProjects.
-    const statSyncMock = vi
-      .fn()
-      .mockReturnValueOnce({ isDirectory: () => true }) // dir check
-      .mockImplementationOnce(() => {
-        throw new Error('ENOENT');
-      }); // config file check
-
-    vi.doMock('node:fs', () => ({
-      readdirSync: vi.fn().mockReturnValue(['config-missing-project']),
-      statSync: statSyncMock,
-    }));
-
-    const { listProjects } = await import('./projects.js');
-    const result = await listProjects();
-    expect(result).toEqual([]);
-  });
-
-  it('uses default color #888888 for unknown slugs', async () => {
-    vi.doMock('node:fs', () => ({
-      readdirSync: vi.fn().mockReturnValue(['unknown-slug-project']),
-      statSync: vi.fn().mockReturnValue({ isDirectory: () => true }),
-    }));
-
-    // We need to exercise the color branch. We do this by spying on loadProject
-    // indirectly: we mock the fs so statSync on the project.config.ts succeeds,
-    // then mock the dynamic import by replacing pathToFileURL.
-    // Because this is hard to intercept cleanly, assert the color fallback
-    // is present in the source via the CACHE_KEY-equivalent constant.
-    // The actual behavior is verified in the integration path below.
-    expect(true).toBe(true); // placeholder — see integration test below
+    const [project] = await listProjects();
+    expect(project.defaultBranch).toBe('main');
   });
 });
-
-// ---------------------------------------------------------------------------
-// getProject
-// ---------------------------------------------------------------------------
 
 describe('getProject', () => {
-  it('returns null when project directory has no config file', async () => {
-    vi.doMock('node:fs', () => ({
-      readdirSync: vi.fn().mockReturnValue([]),
-      statSync: vi.fn().mockImplementation(() => {
-        throw new Error('ENOENT');
-      }),
+  it('returns null when the core loader returns null', async () => {
+    vi.doMock('@goose-hub/core/projects/loader.js', () => ({
+      loadProjects: vi.fn().mockResolvedValue([]),
+      getProjectBySlug: vi.fn().mockResolvedValue(null),
+      detectDuplicateSlugs: vi.fn(),
+      DuplicateSlugError: class DuplicateSlugError extends Error {},
     }));
-
     const { getProject } = await import('./projects.js');
-    const result = await getProject('non-existent-slug');
-    expect(result).toBeNull();
+    expect(await getProject('non-existent')).toBeNull();
   });
 
-  it('returns null for a slug whose config file does not exist', async () => {
-    vi.doMock('node:fs', () => ({
-      readdirSync: vi.fn().mockReturnValue([]),
-      statSync: vi.fn().mockImplementation(() => {
-        throw new Error('ENOENT');
-      }),
+  it('delegates to getProjectBySlug and returns the config', async () => {
+    const fakeConfig = { slug: 'my-project', colorStripe: '#fff' };
+    vi.doMock('@goose-hub/core/projects/loader.js', () => ({
+      loadProjects: vi.fn().mockResolvedValue([]),
+      getProjectBySlug: vi.fn().mockResolvedValue(fakeConfig),
+      detectDuplicateSlugs: vi.fn(),
+      DuplicateSlugError: class DuplicateSlugError extends Error {},
     }));
-
     const { getProject } = await import('./projects.js');
-    const r1 = await getProject('slug-a');
-    expect(r1).toBeNull();
-  });
-
-  it('getProject delegates to loadProject which caches the result', async () => {
-    // statSync succeeds on first call (config file found), then we need dynamic import.
-    // Since we can't easily intercept file:// dynamic imports in vitest without
-    // real files, we test the null path (statSync throws) and verify caching via null.
-    vi.doMock('node:fs', () => ({
-      readdirSync: vi.fn().mockReturnValue([]),
-      statSync: vi.fn().mockImplementation(() => {
-        throw new Error('ENOENT');
-      }),
-    }));
-
-    const { getProject } = await import('./projects.js');
-    // Both calls should return null and not throw
-    const r1 = await getProject('my-slug');
-    const r2 = await getProject('my-slug');
-    expect(r1).toBeNull();
-    expect(r2).toBeNull();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// COLOR_BY_SLUG constant behaviour
-// ---------------------------------------------------------------------------
-
-describe('COLOR_BY_SLUG', () => {
-  it('the goose-hub-self project has color #7c3aed (per issue #29)', async () => {
-    // We test the constant indirectly: listProjects returns #7c3aed for goose-hub-self.
-    // Since we cannot easily mock the dynamic import for a real config file in unit tests,
-    // we verify the constant is correct by reading the source contract.
-    // The acceptance criterion from issue #29 states the color must be #7c3aed.
-    // This test captures the invariant for regression.
-    const COLOR = '#7c3aed';
-    expect(COLOR).toBe('#7c3aed');
+    const result = await getProject('my-project');
+    expect(result).toEqual(fakeConfig);
   });
 });

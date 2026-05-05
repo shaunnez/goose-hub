@@ -52,7 +52,9 @@ export type EventKind =
   // M9 retrospective lifecycle
   | 'retrospective.completed'
   // M9 PostToolUse hook — live decision marker (#465)
-  | 'agent.decision-summary-live';
+  | 'agent.decision-summary-live'
+  // M10 per-AC verify-command live events (#469)
+  | 'agent.verify-command';
 
 export interface AgentEvent {
   id: number;

@@ -35,6 +35,15 @@ export interface TestRun {
   suites: SuiteResult[];
 }
 
+export interface CriteriaResult {
+  ac: string;
+  command: string;
+  expected: string;
+  actual: string;
+  tolerance: string;
+  passed: boolean;
+}
+
 export interface QaPayload {
   verdict: 'pass' | 'fail' | 'partial';
   overallScore: number;
@@ -44,6 +53,7 @@ export interface QaPayload {
     functional: TierResult;
     regression: TierResult;
   };
+  criteriaResults?: CriteriaResult[];
   testRun?: TestRun;
 }
 

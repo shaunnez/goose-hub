@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
 import config, { QaContextSchema } from './config.js';
 import {
+  CriteriaResultSchema,
   FindingSchema,
   QaOutputSchema,
   QualityScoresSchema,
@@ -460,5 +461,132 @@ describe('qa skill config', () => {
       projectCommands: { testCommand: 'pnpm test --run' },
     });
     expect(invalid.success).toBe(false);
+  });
+
+  it('contextSchema accepts optional verifyCommands array', () => {
+    const valid = QaContextSchema.safeParse({
+      workItem: { title: 'title', body: 'body', number: 1 },
+      prDiff: 'diff',
+      projectCommands: { testCommand: 'pnpm test --run' },
+      verifyCommands: [
+        {
+          ac: 'Loader returns two projects',
+          command: 'pnpm test --run',
+          expected: '2 tests passed',
+          tolerance: 'contains',
+        },
+      ],
+    });
+    expect(valid.success).toBe(true);
+  });
+
+  it('contextSchema accepts empty verifyCommands array', () => {
+    const valid = QaContextSchema.safeParse({
+      workItem: { title: 'title', body: 'body', number: 1 },
+      prDiff: 'diff',
+      projectCommands: { testCommand: 'pnpm test --run' },
+      verifyCommands: [],
+    });
+    expect(valid.success).toBe(true);
+  });
+
+  it('contextAllowlist contains verifyCommands', () => {
+    expect(config.contextAllowlist).toContain('verifyCommands');
+  });
+});
+
+// ─── CriteriaResultSchema ─────────────────────────────────────────────────────
+
+describe('CriteriaResultSchema', () => {
+  it('accepts a passing criteria result', () => {
+    const result = CriteriaResultSchema.safeParse({
+      ac: 'Loader returns two projects',
+      command: 'pnpm test --run',
+      expected: '2 tests passed',
+      actual: '2 tests passed, 0 failed',
+      tolerance: 'contains',
+      passed: true,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a failing criteria result', () => {
+    const result = CriteriaResultSchema.safeParse({
+      ac: 'Loader deduplicates slugs',
+      command: 'pnpm test --run core/projects',
+      expected: 'DuplicateSlugError thrown',
+      actual: 'Test failed: expected DuplicateSlugError',
+      tolerance: 'exact',
+      passed: false,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects missing ac field', () => {
+    const result = CriteriaResultSchema.safeParse({
+      command: 'pnpm test',
+      expected: 'pass',
+      actual: 'fail',
+      tolerance: 'exact',
+      passed: false,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects missing passed field', () => {
+    const result = CriteriaResultSchema.safeParse({
+      ac: 'Something',
+      command: 'pnpm test',
+      expected: 'pass',
+      actual: 'pass',
+      tolerance: 'exact',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ─── QaOutputSchema with criteriaResults ─────────────────────────────────────
+
+describe('QaOutputSchema with criteriaResults', () => {
+  it('accepts a valid output with criteriaResults', () => {
+    const result = QaOutputSchema.safeParse(
+      makeValidOutput({
+        criteriaResults: [
+          {
+            ac: 'AC one',
+            command: 'pnpm test',
+            expected: 'pass',
+            actual: 'pass',
+            tolerance: 'exact',
+            passed: true,
+          },
+        ],
+      }),
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a valid output without criteriaResults (optional)', () => {
+    const result = QaOutputSchema.safeParse(makeValidOutput());
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.criteriaResults).toBeUndefined();
+    }
+  });
+
+  it('accepts an empty criteriaResults array', () => {
+    const result = QaOutputSchema.safeParse(makeValidOutput({ criteriaResults: [] }));
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects criteriaResults entry with missing passed field', () => {
+    const result = QaOutputSchema.safeParse(
+      makeValidOutput({
+        criteriaResults: [
+          { ac: 'AC', command: 'cmd', expected: 'exp', actual: 'act', tolerance: 'exact' },
+        ],
+      }),
+    );
+    expect(result.success).toBe(false);
   });
 });

@@ -70,6 +70,15 @@ export const QualityScoresSchema = z.object({
   cyclomaticComplexity: z.number().int().min(0).max(5),
 });
 
+export const CriteriaResultSchema = z.object({
+  ac: z.string(),
+  command: z.string(),
+  expected: z.string(),
+  actual: z.string(),
+  tolerance: z.string(),
+  passed: z.boolean(),
+});
+
 export const QaOutputSchema = z.object({
   /** Overall QA verdict for the PR */
   verdict: z.enum(['pass', 'fail', 'partial']),
@@ -90,6 +99,12 @@ export const QaOutputSchema = z.object({
   /** Per-step audit trail of QA decisions */
   decisionSummaries: z.array(DecisionSummarySchema),
   /**
+   * Optional: per-AC verify-command results. One entry per AC that had a
+   * Verify/Expected/Tolerance block in the issue body. Any `passed: false`
+   * here forces verdict = 'fail' regardless of tier scores.
+   */
+  criteriaResults: z.array(CriteriaResultSchema).optional(),
+  /**
    * Optional: structured test-run data. The QA workflow runs the test
    * command itself and attaches this; the agent does not need to
    * populate it (and shouldn't — it's overwritten on the workflow side
@@ -104,6 +119,7 @@ export type TierResult = z.infer<typeof TierResultSchema>;
 export type QualityScores = z.infer<typeof QualityScoresSchema>;
 export type SuiteResult = z.infer<typeof SuiteResultSchema>;
 export type TestRun = z.infer<typeof TestRunSchema>;
+export type CriteriaResult = z.infer<typeof CriteriaResultSchema>;
 export type QaOutput = z.infer<typeof QaOutputSchema>;
 
 /**
