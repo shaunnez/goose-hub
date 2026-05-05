@@ -32,7 +32,7 @@ const TRANSITIONS: Readonly<Record<StateName, readonly StateName[]>> = {
   ],
   'factory:needs-fix': ['factory:in-progress', 'factory:needs-human'],
   'factory:approved': ['factory:retrospecting', 'factory:merge-conflict', 'factory:needs-fix'],
-  'factory:merge-conflict': ['factory:done', 'factory:needs-human'],
+  'factory:merge-conflict': ['factory:retrospecting', 'factory:needs-human'],
   'factory:retrospecting': ['factory:done'],
   'factory:needs-human': [
     'factory:dev-ready',

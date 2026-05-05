@@ -19,7 +19,9 @@ export type TransitionResult =
 /**
  * Approve gate (#186). Looks up the most recent `pr.opened` event for the
  * issue, merges that PR via the GitHub connector, emits `gate.approved` +
- * `pr.merged` events, and transitions factory:approved → factory:done.
+ * `pr.merged` events, and transitions factory:approved → factory:retrospecting.
+ * The retrospective workflow (M9, not yet wired to dispatch) takes over from
+ * there and transitions to factory:done.
  *
  * Optional `mergePRImpl` is dependency-injected so tests can stub the
  * REST call.
@@ -99,7 +101,7 @@ export async function approveIssue(
     if (typeof devRunId === 'string') cleanupWorktree(devRunId);
   }
 
-  await source.transitionState(id, 'factory:approved', 'factory:done');
+  await source.transitionState(id, 'factory:approved', 'factory:retrospecting');
   await source.comment(id, `Approved via Goose Hub UI; PR #${prNumber} merged (${merged.sha}).`);
 
   return { ok: true, data: { ok: true, sha: merged.sha, prNumber } };

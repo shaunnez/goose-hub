@@ -131,7 +131,7 @@ describe('runResolveConflictWorkflow', () => {
     );
   });
 
-  it('happy path: resolves conflicts, pushes, merges, transitions to done', async () => {
+  it('happy path: resolves conflicts, pushes, merges, transitions to retrospecting', async () => {
     vi.mocked(eventStore.replay).mockReturnValueOnce([PR_OPENED_EVENT] as never);
 
     const gitExecImpl = vi
@@ -163,7 +163,7 @@ describe('runResolveConflictWorkflow', () => {
     expect(source.transitionState).toHaveBeenCalledWith(
       '42',
       'factory:merge-conflict',
-      'factory:done',
+      'factory:retrospecting',
     );
     const resolvedEvent = vi
       .mocked(eventStore.appendEvent)

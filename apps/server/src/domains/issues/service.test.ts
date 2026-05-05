@@ -402,7 +402,7 @@ describe('approveIssue / rejectIssue (#186)', () => {
     expect(result).toMatchObject({ ok: false, status: 400 });
   });
 
-  it('approveIssue merges via the connector and transitions to factory:done', async () => {
+  it('approveIssue merges via the connector and transitions to factory:retrospecting', async () => {
     vi.mocked(eventStore.replay).mockReturnValueOnce([
       {
         id: 1,
@@ -426,7 +426,7 @@ describe('approveIssue / rejectIssue (#186)', () => {
     expect(mockSource.transitionState).toHaveBeenCalledWith(
       '1',
       'factory:approved',
-      'factory:done',
+      'factory:retrospecting',
     );
     const approved = vi
       .mocked(eventStore.appendEvent)

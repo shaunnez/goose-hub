@@ -70,10 +70,12 @@ describe('isLegalTransition — section 9.1 happy paths', () => {
   // merge-conflict path
   it('approved → merge-conflict', () =>
     expect(isLegalTransition('factory:approved', 'factory:merge-conflict')).toBe(true));
-  it('merge-conflict → done', () =>
-    expect(isLegalTransition('factory:merge-conflict', 'factory:done')).toBe(true));
+  it('merge-conflict → retrospecting (agent resolved)', () =>
+    expect(isLegalTransition('factory:merge-conflict', 'factory:retrospecting')).toBe(true));
   it('merge-conflict → needs-human', () =>
     expect(isLegalTransition('factory:merge-conflict', 'factory:needs-human')).toBe(true));
+  it('merge-conflict → done is illegal (must go through retrospecting)', () =>
+    expect(isLegalTransition('factory:merge-conflict', 'factory:done')).toBe(false));
   it('retrospecting → done', () =>
     expect(isLegalTransition('factory:retrospecting', 'factory:done')).toBe(true));
   it('done → archived', () =>

@@ -1,6 +1,6 @@
 # resolve-conflict slice
 
-Triggered when an issue enters `factory:merge-conflict` (set by `approveIssue` after GitHub returns 405 on merge). Replays events to find the open PR, creates a worktree on its branch, runs `git merge origin/<base>`, calls the `resolve-conflict` skill once with the full conflicted-files list, commits, pushes, and re-invokes `mergePR`. On success → `factory:done`. On failure → `factory:needs-human`.
+Triggered when an issue enters `factory:merge-conflict` (set by `approveIssue` after GitHub returns 405 on merge). Replays events to find the open PR, creates a worktree on its branch, runs `git merge origin/<base>`, calls the `resolve-conflict` skill once with the full conflicted-files list, commits, pushes, and re-invokes `mergePR`. On success → `factory:retrospecting`. On failure → `factory:needs-human`.
 
 ## Workflow
 
@@ -29,7 +29,7 @@ git push origin HEAD:refs/heads/<branch>
 mergePR(prNumber)
    │
    ├─ success ─────▶ emit merge.conflict-resolved + pr.merged + gate.approved
-   │                 transition merge-conflict → done
+   │                 transition merge-conflict → retrospecting
    │                 post comment "resolved automatically by agent; PR #<n> merged"
    │
    └─ any failure ─▶ emit merge.conflict-unresolvable
