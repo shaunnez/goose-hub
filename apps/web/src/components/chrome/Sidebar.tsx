@@ -57,11 +57,10 @@ function buildItems(slug: string | undefined): SidebarItem[] {
       milestone: 'later',
     },
     {
-      to: `/projects/${project}/settings`,
+      to: '/settings',
       label: 'Settings',
       icon: <Settings size={14} />,
-      available: false,
-      milestone: 'later',
+      available: true,
     },
     {
       to: `/projects/${project}/bootstrap`,

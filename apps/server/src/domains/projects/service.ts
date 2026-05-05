@@ -1,11 +1,34 @@
 import { listProjects as readProjects } from '#shared/projects.js';
 
-/**
- * Returns the list of registered projects (#208). Thin shim today —
- * exists so the router stays a delegator and future shaping (filtering,
- * pagination, response trimming) lands here, not in the route handler.
- */
 export async function listProjectsService(): Promise<{ projects: unknown[] }> {
   const projects = await readProjects();
   return { projects };
+}
+
+export interface ProjectConfigDto {
+  slug: string;
+  name: string;
+  source: { kind: string; repo: string };
+  activeMilestone: string | null;
+  colorStripe: string;
+  budgets: { perWorkflowMaxUsd: number; dailyTokens: number; perAdvisorMaxUsd: number };
+  mode: string;
+}
+
+export async function listProjectConfigsService(): Promise<{ configs: ProjectConfigDto[] }> {
+  const projects = await readProjects();
+  const configs: ProjectConfigDto[] = projects.map((p) => ({
+    slug: p.slug,
+    name: p.name,
+    source: p.source,
+    activeMilestone: p.activeMilestone ?? null,
+    colorStripe: p.colorStripe,
+    budgets: {
+      perWorkflowMaxUsd: p.budgets.perWorkflowMaxUsd,
+      dailyTokens: p.budgets.dailyTokens,
+      perAdvisorMaxUsd: p.budgets.perAdvisorMaxUsd,
+    },
+    mode: p.mode,
+  }));
+  return { configs };
 }

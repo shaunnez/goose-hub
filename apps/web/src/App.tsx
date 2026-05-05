@@ -7,6 +7,7 @@ import { CostsPage } from './components/costs/CostsPage';
 import { DetailPage } from './components/detail/components/DetailPage';
 import { InboxList } from './components/inbox/components/InboxList';
 import { RosterPage } from './components/roster/components/RosterPage';
+import { SettingsPage } from './components/settings/components/SettingsPage';
 import { ActiveMilestoneProvider } from './state/active-milestone';
 import { ActiveProjectProvider } from './state/active-project';
 import { LaneVisibilityProvider } from './state/lane-visibility';
@@ -86,12 +87,21 @@ function CostsPageRoute() {
   );
 }
 
+function SettingsPageRoute() {
+  return (
+    <AppShell breadcrumb={<span>Settings</span>}>
+      <SettingsPage />
+    </AppShell>
+  );
+}
+
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Navigate to="/projects/goose-hub-self" replace />} />
+          <Route path="/settings" element={<SettingsPageRoute />} />
           <Route
             path="/projects/:slug"
             element={

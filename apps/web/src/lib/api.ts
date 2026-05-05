@@ -9,6 +9,7 @@ import type {
   PersonaNameDto,
   PersonaRunDto,
   PersonaStatDto,
+  ProjectConfigDto,
   ProjectSummary,
   TransitionResult,
   TriageResultDto,
@@ -17,6 +18,7 @@ import type {
 } from './types';
 
 export type {
+  ProjectConfigDto,
   ProjectSummary,
   WorkItemDto,
   IssueCommentDto,
@@ -59,6 +61,11 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
 export async function fetchProjects(signal?: AbortSignal): Promise<ProjectSummary[]> {
   const { projects } = await getJson<{ projects: ProjectSummary[] }>('/projects', signal);
   return projects;
+}
+
+export async function fetchProjectConfigs(signal?: AbortSignal): Promise<ProjectConfigDto[]> {
+  const { configs } = await getJson<{ configs: ProjectConfigDto[] }>('/projects/configs', signal);
+  return configs;
 }
 
 export async function fetchIssues(slug: string): Promise<WorkItemDto[]> {
