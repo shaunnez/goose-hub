@@ -46,6 +46,8 @@ export const QaContextSchema = z.object({
   }),
   /** Paths to slice-level test files for targeted test runs */
   sliceTests: z.array(z.string()).optional(),
+  /** Permalink to the evidence-post comment (screenshots + GIF) on the GitHub issue; absent for backend-only changes or when evidence capture failed */
+  evidenceCommentUrl: z.string().url().optional(),
 });
 
 const config: SkillConfig = {
@@ -75,7 +77,7 @@ const config: SkillConfig = {
    * Explicitly EXCLUDED: devDecisionSummaries, investigationFindings.
    * The QA agent must independently verify, not rubber-stamp developer reasoning.
    */
-  contextAllowlist: ['workItem', 'prDiff', 'projectCommands', 'sliceTests'],
+  contextAllowlist: ['workItem', 'prDiff', 'projectCommands', 'sliceTests', 'evidenceCommentUrl'],
 };
 
 export default config;

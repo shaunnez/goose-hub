@@ -85,6 +85,10 @@ export async function runQaWorkflow(
   // shouldEscalateQa uses this count to decide: Nth failure = N-1 priors.
   const priorEvents = eventStore.replay({ workItemId: workItem.id });
 
+  const evidencePosted = [...priorEvents].reverse().find((e) => e.kind === 'evidence.posted');
+  const evidenceCommentUrl = (evidencePosted?.payload as { commentUrl?: string } | undefined)
+    ?.commentUrl;
+
   // Run tests deterministically before invoking the QA agent so the agent
   // grades against real numbers instead of re-running the suite. Failures
   // here are non-fatal — the agent still runs without testRun.
@@ -110,8 +114,15 @@ export async function runQaWorkflow(
           lintCommand: 'pnpm biome check .',
         },
         testRun,
+        ...(evidenceCommentUrl != null ? { evidenceCommentUrl } : {}),
       },
-      contextAllowlist: ['workItem', 'prDiff', 'projectCommands', 'testRun'],
+      contextAllowlist: [
+        'workItem',
+        'prDiff',
+        'projectCommands',
+        'testRun',
+        ...(evidenceCommentUrl != null ? ['evidenceCommentUrl'] : []),
+      ],
       freshContext: true,
       toolBundles: ['read', 'qa-tools'],
       workspaceDir,

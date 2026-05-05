@@ -704,6 +704,52 @@ describe('runQaWorkflow', () => {
     });
   });
 
+  describe('evidenceCommentUrl propagation', () => {
+    it('passes evidenceCommentUrl into context and allowlist when evidence.posted event is present', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        { id: 1, kind: 'pr.opened', payload: { worktreePath: '/wt/abc' }, createdAt: '' },
+        {
+          id: 2,
+          kind: 'evidence.posted',
+          payload: { commentUrl: 'https://github.com/owner/repo/issues/42#issuecomment-123' },
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const spec = mockRun.mock.calls[0][0] as {
+        context: Record<string, unknown>;
+        contextAllowlist: string[];
+      };
+      expect(spec.context.evidenceCommentUrl).toBe(
+        'https://github.com/owner/repo/issues/42#issuecomment-123',
+      );
+      expect(spec.contextAllowlist).toContain('evidenceCommentUrl');
+    });
+
+    it('omits evidenceCommentUrl from context and allowlist when no evidence.posted event is present', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const spec = mockRun.mock.calls[0][0] as {
+        context: Record<string, unknown>;
+        contextAllowlist: string[];
+      };
+      expect(spec.context.evidenceCommentUrl).toBeUndefined();
+      expect(spec.contextAllowlist).not.toContain('evidenceCommentUrl');
+    });
+  });
+
   describe('non-Error thrown (line 174 branch)', () => {
     it('wraps non-Error thrown value as Error and transitions to needs-human', async () => {
       const item = makeWorkItem();

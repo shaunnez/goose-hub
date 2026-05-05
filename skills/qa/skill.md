@@ -35,6 +35,7 @@ Your context contains:
   - `lintCommand` — command to run lint and type-check (optional)
   - `e2eCommand` — command to run Playwright end-to-end tests (optional)
 - `sliceTests` — array of paths to slice-level test files (optional)
+- `evidenceCommentUrl` — permalink to the evidence-post comment on the GitHub issue, containing SHA-pinned screenshots and a walkthrough GIF (optional; absent for backend-only changes or when evidence capture did not run)
 - `testRun` — structured results from `testCommand`, already executed by the
   workflow before you started (optional; may be `null` if the run failed to
   produce a report). When present:
@@ -96,6 +97,7 @@ Steps:
 2. Read the diff and identify any UI surface changes (component changes, route changes, API changes visible to the frontend).
 3. If no e2e command is provided, assess whether the changes affect any UI flow. If they do, record a warning-severity finding.
 4. Check that any new UI paths introduced by the PR are reachable and render correctly (if e2e tests cover them).
+5. If `evidenceCommentUrl` is present, fetch the comment and review the screenshots and walkthrough GIF for visual AC verification. Note any visible regressions or UI acceptance criteria that are not met in the captured state.
 
 Emit: `[decision] Regression tier <passed|failed|skipped>: <one-sentence summary>`
 
