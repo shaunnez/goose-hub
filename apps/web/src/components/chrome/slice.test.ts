@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 // Chrome is mostly React components; the slice test ensures the public files
@@ -11,6 +13,21 @@ const DEFERRED_SURFACES = [
   { label: 'Settings', milestone: 'later' },
   { label: 'Bootstrap', milestone: 'M12' },
 ];
+
+describe('chrome slice — sidebar brand label', () => {
+  const sidebarSource = readFileSync(join(import.meta.dirname, 'Sidebar.tsx'), 'utf-8');
+
+  it('sidebar header reads "Agentic OS"', () => {
+    expect(sidebarSource).toContain('Agentic OS');
+  });
+
+  it('sidebar header does not read "Goose Hub"', () => {
+    // "Goose Hub" must not appear as the brand label in the sidebar
+    // (checking the specific label span line only — "Goose Hub" may appear in comments elsewhere)
+    const labelMatch = sidebarSource.match(/<span[^>]*text-\[14px\][^>]*>[\s\S]*?<\/span>/);
+    expect(labelMatch?.[0]).not.toContain('Goose Hub');
+  });
+});
 
 describe('chrome slice — deferred surfaces config', () => {
   it('every deferred surface has a milestone tag', () => {
