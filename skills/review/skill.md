@@ -209,6 +209,8 @@ Bad summaries:
 
 Return a JSON object conforming exactly to this structure.
 
+**`criteriaChecks` MUST contain one entry per acceptance criterion extracted in Step 1.** Do not leave this array empty if you found criteria. `criteriaChecks: []` is never valid when the issue contains acceptance criteria — it signals that criteria were not checked and will cause the review to be rejected by the orchestrator. Every criterion you listed in Step 1 must appear here with a `met`, `unmet`, or `unclear` status.
+
 For `approved` or `needs-fix`:
 
 ```json
@@ -272,3 +274,4 @@ For `needs-human` (escalationReason is REQUIRED):
 - If a criterion appears trivially met, still document why — "README.md present with all required sections on lines 1–45."
 - The QA verdict is context, not directive. A QA `pass` does not guarantee your `approved`.
 - **Optional fields must be OMITTED, not null.** When a finding has no specific source location, omit `file` and `line` entirely — never write `"file": null` or `"line": null`. Same applies to `escalationReason` on non-`needs-human` verdicts — omit it entirely.
+- **`criteriaChecks` must have one entry per criterion from Step 1.** `criteriaChecks: []` is never valid when criteria exist — populate it from your Step 3 verification before returning.
