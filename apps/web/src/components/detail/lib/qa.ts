@@ -1,3 +1,5 @@
+export type Disposition = 'fixed' | 'registered' | 'out-of-scope';
+
 export interface Finding {
   tier: 'structural' | 'functional' | 'regression';
   severity: 'error' | 'warning' | 'info';
@@ -5,6 +7,8 @@ export interface Finding {
   line?: number | null;
   description: string;
   suggestion?: string;
+  disposition?: Disposition;
+  dispositionRef?: string;
 }
 
 export interface TierResult {

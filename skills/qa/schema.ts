@@ -3,17 +3,54 @@ import { z } from 'zod';
 
 export { DecisionSummarySchema };
 
-export const FindingSchema = z.object({
-  tier: z
-    .string()
-    .transform((s) => s.toLowerCase())
-    .pipe(z.enum(['structural', 'functional', 'regression'])),
-  severity: z.enum(['error', 'warning', 'info']),
-  file: z.string().nullable().optional(),
-  line: z.number().int().nullable().optional(),
-  description: z.string(),
-  suggestion: z.string().optional(),
-});
+/**
+ * Disposition for a QA finding (#468). Every error-severity finding must be
+ * one of these — no deferral, no "TODO". Warnings/info findings may carry a
+ * disposition but it's optional.
+ *
+ * - `fixed`: addressed in this PR. `dispositionRef` carries the commit SHA.
+ * - `registered`: filed as a follow-up issue. `dispositionRef` carries the
+ *   issue number (e.g. "#234").
+ * - `out-of-scope`: not in scope for this issue. `dispositionRef` carries a
+ *   one-sentence rationale.
+ */
+export const DispositionSchema = z.enum(['fixed', 'registered', 'out-of-scope']);
+
+export const FindingSchema = z
+  .object({
+    tier: z
+      .string()
+      .transform((s) => s.toLowerCase())
+      .pipe(z.enum(['structural', 'functional', 'regression'])),
+    severity: z.enum(['error', 'warning', 'info']),
+    file: z.string().nullable().optional(),
+    line: z.number().int().nullable().optional(),
+    description: z.string(),
+    suggestion: z.string().optional(),
+    /** Disposition required when severity === 'error' (#468) */
+    disposition: DispositionSchema.optional(),
+    /** Commit SHA, issue number, or rationale matching the disposition (#468) */
+    dispositionRef: z.string().optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.severity === 'error') {
+      if (val.disposition == null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'error-severity findings must declare a disposition (fix-or-register, #468)',
+          path: ['disposition'],
+        });
+      }
+      if (val.dispositionRef == null || val.dispositionRef.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'error-severity findings must include dispositionRef (commit SHA, issue #, or rationale, #468)',
+          path: ['dispositionRef'],
+        });
+      }
+    }
+  });
 
 export const TierResultSchema = z.object({
   passed: z.boolean(),
@@ -111,6 +148,7 @@ export const QaOutputSchema = z.object({
 });
 
 export type DecisionSummary = z.infer<typeof DecisionSummarySchema>;
+export type Disposition = z.infer<typeof DispositionSchema>;
 export type Finding = z.infer<typeof FindingSchema>;
 export type TierResult = z.infer<typeof TierResultSchema>;
 export type QualityScores = z.infer<typeof QualityScoresSchema>;

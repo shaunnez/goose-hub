@@ -63,6 +63,8 @@ describe('QaOutputSchema', () => {
             tier: 'structural',
             severity: 'error',
             description: 'TypeScript error: Type "string" is not assignable to type "number"',
+            disposition: 'registered',
+            dispositionRef: '#999',
           },
         ],
       }),
@@ -79,7 +81,15 @@ describe('QaOutputSchema', () => {
           structural: { passed: true, findings: [] },
           functional: {
             passed: false,
-            findings: [{ tier: 'functional', severity: 'error', description: 'Test failed' }],
+            findings: [
+              {
+                tier: 'functional',
+                severity: 'error',
+                description: 'Test failed',
+                disposition: 'fixed',
+                dispositionRef: 'abc1234',
+              },
+            ],
           },
           regression: { passed: false, findings: [] },
         },
@@ -179,11 +189,11 @@ describe('QaOutputSchema decision-kind enum', () => {
 // ─── FindingSchema ───────────────────────────────────────────────────────────
 
 describe('FindingSchema', () => {
-  it('accepts a minimal structural finding', () => {
+  it('accepts a minimal structural finding (warning severity, no disposition required)', () => {
     const result = FindingSchema.safeParse({
       tier: 'structural',
-      severity: 'error',
-      description: 'Biome lint error: missing semicolon',
+      severity: 'warning',
+      description: 'Biome lint warning: missing semicolon',
     });
     expect(result.success).toBe(true);
   });
@@ -242,6 +252,88 @@ describe('FindingSchema', () => {
     });
     expect(result.success).toBe(true);
   });
+
+  // ── #468 — fix-or-register disposition ────────────────────────────────────
+
+  it("accepts an error finding with disposition 'fixed' and a commit SHA dispositionRef (#468)", () => {
+    expect(
+      FindingSchema.safeParse({
+        tier: 'functional',
+        severity: 'error',
+        description: 'Off-by-one in pagination',
+        disposition: 'fixed',
+        dispositionRef: 'abc123def',
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts an error finding with disposition 'registered' and an issue number (#468)", () => {
+    expect(
+      FindingSchema.safeParse({
+        tier: 'structural',
+        severity: 'error',
+        description: 'Missing slice.test.ts',
+        disposition: 'registered',
+        dispositionRef: '#234',
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts an error finding with disposition 'out-of-scope' and a rationale (#468)", () => {
+    expect(
+      FindingSchema.safeParse({
+        tier: 'regression',
+        severity: 'error',
+        description: 'E2e flake outside this slice',
+        disposition: 'out-of-scope',
+        dispositionRef: 'pre-existing flake unrelated to this PR; tracked separately',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects an error finding without a disposition (#468)', () => {
+    expect(
+      FindingSchema.safeParse({
+        tier: 'functional',
+        severity: 'error',
+        description: 'broken thing',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects an error finding with disposition but empty dispositionRef (#468)', () => {
+    expect(
+      FindingSchema.safeParse({
+        tier: 'functional',
+        severity: 'error',
+        description: 'broken thing',
+        disposition: 'registered',
+        dispositionRef: '',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('warning-severity findings do not require disposition (#468)', () => {
+    expect(
+      FindingSchema.safeParse({
+        tier: 'functional',
+        severity: 'warning',
+        description: 'AC 3 not covered by a dedicated test',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('warning-severity findings may carry an optional disposition (#468)', () => {
+    expect(
+      FindingSchema.safeParse({
+        tier: 'functional',
+        severity: 'warning',
+        description: 'minor naming nit',
+        disposition: 'out-of-scope',
+        dispositionRef: 'naming convention is the subject of a separate refactor',
+      }).success,
+    ).toBe(true);
+  });
 });
 
 // ─── TierResultSchema ────────────────────────────────────────────────────────
@@ -255,7 +347,15 @@ describe('TierResultSchema', () => {
   it('accepts a failing tier with findings and optional command/output', () => {
     const result = TierResultSchema.safeParse({
       passed: false,
-      findings: [{ tier: 'structural', severity: 'error', description: 'lint error' }],
+      findings: [
+        {
+          tier: 'structural',
+          severity: 'error',
+          description: 'lint error',
+          disposition: 'fixed',
+          dispositionRef: 'abc123',
+        },
+      ],
       command: 'pnpm biome check .',
       output: 'error: missing semicolon',
     });
@@ -542,6 +642,15 @@ describe('qa skill config', () => {
 
 describe('QaOutputSchema with cross-checked targeted regressions (#467)', () => {
   it('records an error-severity finding when a full-suite failure is outside dev testsRun.paths', () => {
+    const errFinding = {
+      tier: 'functional' as const,
+      severity: 'error' as const,
+      file: 'apps/server/src/unrelated/auth.test.ts',
+      description:
+        'Failure outside dev targeted set (devTestsRun.paths) — high-signal regression dev did not run',
+      disposition: 'registered' as const,
+      dispositionRef: '#1234',
+    };
     const result = QaOutputSchema.safeParse(
       makeValidOutput({
         verdict: 'fail',
@@ -550,27 +659,11 @@ describe('QaOutputSchema with cross-checked targeted regressions (#467)', () => 
           structural: { passed: true, findings: [] },
           functional: {
             passed: false,
-            findings: [
-              {
-                tier: 'functional',
-                severity: 'error',
-                file: 'apps/server/src/unrelated/auth.test.ts',
-                description:
-                  'Failure outside dev targeted set (devTestsRun.paths) — high-signal regression dev did not run',
-              },
-            ],
+            findings: [errFinding],
           },
           regression: { passed: true, findings: [] },
         },
-        findings: [
-          {
-            tier: 'functional',
-            severity: 'error',
-            file: 'apps/server/src/unrelated/auth.test.ts',
-            description:
-              'Failure outside dev targeted set (devTestsRun.paths) — high-signal regression dev did not run',
-          },
-        ],
+        findings: [errFinding],
       }),
     );
     expect(result.success).toBe(true);

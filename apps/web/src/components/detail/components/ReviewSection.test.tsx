@@ -127,6 +127,44 @@ describe('ReviewSection', () => {
     expect(screen.getByText('db/migrations/0042.sql:12')).toBeTruthy();
   });
 
+  it('renders disposition pill on findings (#468)', () => {
+    const REVIEW_WITH_DISPOSITION: AgentEventDto = {
+      ...REVIEW_APPROVED,
+      id: 13,
+      payload: {
+        verdict: 'needs-fix',
+        confidence: 0.7,
+        criteriaChecks: [{ criterion: 'AC 1', status: 'unmet' }],
+        findings: [
+          {
+            severity: 'blocker',
+            description: 'Missing slice.test.ts',
+            disposition: 'registered',
+            dispositionRef: '#234',
+          },
+          {
+            severity: 'blocker',
+            description: 'Inline prompt found',
+            disposition: 'fixed',
+            dispositionRef: 'abc1234',
+          },
+          {
+            severity: 'major',
+            description: 'Drift in naming convention',
+            disposition: 'out-of-scope',
+            dispositionRef: 'cleanup tracked separately',
+          },
+        ],
+      },
+    };
+    renderSection([REVIEW_WITH_DISPOSITION]);
+    const pills = screen.getAllByTestId('review-finding-disposition');
+    expect(pills).toHaveLength(3);
+    expect(pills[0].textContent).toContain('registered #234');
+    expect(pills[1].textContent).toContain('fixed');
+    expect(pills[2].textContent).toContain('out-of-scope');
+  });
+
   it('falls back to raw verdict string when verdict is not in label map', () => {
     renderSection([REVIEW_UNKNOWN_VERDICT]);
     const pill = screen.getByTestId('review-verdict-pill');

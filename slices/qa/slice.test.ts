@@ -102,7 +102,15 @@ function makeFailResult(): AgentResult {
       tierResults: {
         structural: {
           passed: false,
-          findings: [{ tier: 'structural', severity: 'error', description: 'lint error' }],
+          findings: [
+            {
+              tier: 'structural',
+              severity: 'error',
+              description: 'lint error',
+              disposition: 'fixed',
+              dispositionRef: 'abc1234',
+            },
+          ],
         },
         functional: { passed: false, findings: [] },
         regression: { passed: true, findings: [] },

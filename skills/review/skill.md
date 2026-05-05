@@ -124,6 +124,22 @@ Use `minor` when:
 - A test helper could be simpler or more readable
 - An optional field would improve usability but is not required by the issue
 
+## Fix-or-register
+
+Every finding must be classified — fixed in this PR, registered as a follow-up issue, or explicitly out-of-scope-for-this-issue. Never deferred, never "TODO" (#468). Deferred findings are how production drift accumulates.
+
+For each finding, set `disposition` and `dispositionRef`:
+
+| `disposition` | When | `dispositionRef` |
+|---|---|---|
+| `fixed` | The PR already addresses this finding (you observed the fix in the diff). | The commit SHA where the fix landed. |
+| `registered` | The finding is real but out of scope for this PR; a follow-up issue exists. | The follow-up issue number, e.g. `#234`. |
+| `out-of-scope` | The finding is real but explicitly not in scope for this issue. | A one-sentence rationale. |
+
+**Required when `severity === 'blocker'`.** A blocker-severity finding without a disposition fails schema validation. `major` and `minor` findings may carry a disposition but it's optional.
+
+Review records the finding; Review does not file the follow-up issue itself (holdout discipline). The orchestrator or human reviewer is responsible for filing `disposition: 'registered'` issues.
+
 ## Step 5 — Determine the verdict
 
 Set `verdict` using the following rules, evaluated in order:
@@ -144,9 +160,11 @@ When `needs-human`, you MUST populate `escalationReason` — a clear, one-paragr
 
 Use `needs-fix` when **any** criterion is `unmet` AND you are confident (`confidence >= 0.5`) about what needs to change. This means:
 
-- There are `blocker` findings
+- There are `blocker` findings (each with a `disposition` per the fix-or-register rule, #468 — a blocker without a disposition is a schema error, not a verdict signal)
 - The developer can clearly address the findings without architectural decisions
 - No security or governance escalation is needed
+
+A `major` finding with `disposition: 'out-of-scope'` is informational only and does not on its own force `needs-fix`; the rationale captures why it doesn't belong in this PR.
 
 ### approved
 

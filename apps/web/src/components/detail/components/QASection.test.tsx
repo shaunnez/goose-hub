@@ -123,6 +123,55 @@ describe('QASection', () => {
     expect(screen.getByText('7.70s')).toBeTruthy();
   });
 
+  it('renders disposition pill on QA findings (#468)', async () => {
+    vi.mocked(fetchEvents).mockResolvedValueOnce([
+      qaEvent({
+        verdict: 'fail',
+        overallScore: 60,
+        threshold: 70,
+        tierResults: {
+          structural: { passed: true, findings: [] },
+          functional: {
+            passed: false,
+            findings: [
+              {
+                tier: 'functional',
+                severity: 'error',
+                description: 'AC 2 fails — boundary case',
+                disposition: 'registered',
+                dispositionRef: '#345',
+              },
+              {
+                tier: 'functional',
+                severity: 'error',
+                description: 'AC 3 fails — invalid input',
+                disposition: 'fixed',
+                dispositionRef: 'def5678',
+              },
+              {
+                tier: 'functional',
+                severity: 'warning',
+                description: 'naming nit',
+                disposition: 'out-of-scope',
+                dispositionRef: 'cleanup separately',
+              },
+            ],
+          },
+          regression: { passed: true, findings: [] },
+        },
+      }),
+    ]);
+    render_(<QASection projectSlug="proj" id="42" />);
+    await waitFor(() => {
+      const pills = screen.getAllByTestId('qa-finding-disposition');
+      expect(pills.length).toBeGreaterThanOrEqual(3);
+      const text = pills.map((p) => p.textContent ?? '').join('\n');
+      expect(text).toContain('registered #345');
+      expect(text).toContain('fixed');
+      expect(text).toContain('out-of-scope');
+    });
+  });
+
   it('renders the QA cost badge in the header when QA-stage rows exist', async () => {
     vi.mocked(fetchEvents).mockResolvedValueOnce([
       qaEvent({

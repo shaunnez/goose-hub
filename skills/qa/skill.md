@@ -141,6 +141,22 @@ Steps:
 
 ACs without a verify entry in `verifyCommands` are checked via the code-reading AC check above — they are not required to have a `criteriaResult`.
 
+## Fix-or-register
+
+Every finding must be classified — fixed in this PR, registered as a follow-up issue, or explicitly out-of-scope-for-this-issue. Never deferred, never "TODO". Deferred findings are how production drift accumulates; the fix-or-register rule is the primary safety mechanism (#468).
+
+For each finding, set `disposition` and `dispositionRef`:
+
+| `disposition` | When | `dispositionRef` |
+|---|---|---|
+| `fixed` | The PR already addresses this finding (you observed the fix in the diff). | The commit SHA where the fix landed (short or full). |
+| `registered` | The finding is real but out of scope for this PR; a follow-up issue exists. | The follow-up issue number, e.g. `#234`. |
+| `out-of-scope` | The finding is real but explicitly not in scope for this issue. | A one-sentence rationale explaining why it doesn't belong in this PR. |
+
+**Required when `severity === 'error'`.** An error-severity finding without a disposition is a schema-validation failure — the agent's output is rejected. Warning- and info-severity findings may carry a disposition but it's optional (informational findings can stand alone).
+
+QA records the finding; QA does not file the follow-up issue itself (holdout discipline). The orchestrator or the human reviewer is responsible for actually filing `disposition: 'registered'` issues.
+
 ## 8-category quality scoring rubric
 
 Score each category independently. Be honest — low scores are informative, not punitive.
@@ -222,7 +238,7 @@ Are functions and methods simple? Low cyclomatic complexity means fewer branches
 Set `verdict` based on the following rules, in order:
 
 1. **fail** — if any of the following are true:
-   - Any `error`-severity finding exists in any tier
+   - Any `error`-severity finding exists in any tier (and reaches schema validation — meaning it has a `disposition` per fix-or-register, #468)
    - Any acceptance criterion from `workItem.body` is not satisfied
    - Any `criteriaResults[].passed === false`
    - `overallScore < threshold` (default threshold: 70)
@@ -230,7 +246,7 @@ Set `verdict` based on the following rules, in order:
 
 2. **partial** — if any of the following are true (and none of the fail conditions):
    - Tier 2 (functional) failed but Tier 1 passed
-   - `overallScore >= threshold` but there are `warning`-severity findings
+   - `overallScore >= threshold` but there are `warning`-severity findings without `disposition: 'out-of-scope'` (warnings flagged out-of-scope are informational and do NOT downgrade to partial, #468)
    - Some acceptance criteria satisfied but not all (and no `error` findings)
    - E2e tests skipped due to missing `e2eCommand` but UI changes detected
 
