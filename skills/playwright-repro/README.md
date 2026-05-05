@@ -22,6 +22,8 @@ Called AFTER the investigate skill (M6.03) for `type:bug` issues only.
 | `workItem.body` | `string` | Full bug issue body |
 | `workItem.reproSteps` | `string` | Repro steps extracted from the issue body |
 | `workItem.url` | `string` (optional) | URL of the page exhibiting the bug |
+| `workItem.number` | `number` | Issue number — drives the evidence branch name and `gh issue comment` |
+| `workItem.repo` | `string` | `owner/repo` — used in raw URLs and as the `gh --repo` target |
 
 ## Outputs
 
@@ -30,10 +32,11 @@ Called AFTER the investigate skill (M6.03) for `type:bug` issues only.
 | Field | Type | Description |
 |-------|------|-------------|
 | `screenshots` | `Screenshot[]` | Ordered screenshots per repro step |
-| `screenshots[].path` | `string` | Absolute path to screenshot file |
+| `screenshots[].path` | `string` | Workspace-relative path under `evidence/issue-<N>/` |
 | `screenshots[].caption` | `string` | Description of what the screenshot shows |
 | `screenshots[].step` | `number` | Repro step number this screenshot corresponds to |
-| `videoPath` | `string \| null` | Absolute path to video recording, or `null` if not captured |
+| `screenshots[].githubUrl` | `string` (optional) | SHA-pinned `raw.githubusercontent.com` URL once pushed to the evidence branch |
+| `gifPath` | `string \| null` | Workspace-relative path to walkthrough GIF, or `null` if not captured |
 | `consoleErrors` | `ConsoleEntry[]` | Browser console errors/warnings/info captured during the session |
 | `consoleErrors[].message` | `string` | Console message text |
 | `consoleErrors[].type` | `"error" \| "warning" \| "info"` | Console entry type |
@@ -41,6 +44,7 @@ Called AFTER the investigate skill (M6.03) for `type:bug` issues only.
 | `reproSteps` | `string[]` | The steps actually executed (may differ from issue if steps were clarified) |
 | `reproduced` | `boolean` | Whether the bug was successfully reproduced |
 | `notes` | `string` (optional) | Additional context, observations, or explanation if not reproduced |
+| `commentUrl` | `string` (optional URL) | Permalink to the BEFORE-state comment posted on the linked issue |
 
 ## Tool allowlist
 
@@ -51,7 +55,7 @@ This skill uses the `validate` tool bundle, which includes Playwright for browse
 When the bug cannot be reproduced (environment mismatch, flaky timing, missing preconditions):
 - `reproduced` is `false`
 - `screenshots` may be empty (`[]`)
-- `videoPath` is `null` if no recording was made
+- `gifPath` is `null` if no recording was made
 - `notes` should explain why reproduction failed
 
 ## Context allowlist
@@ -62,3 +66,5 @@ When the bug cannot be reproduced (environment mismatch, flaky timing, missing p
 | `workItem.body` | yes |
 | `workItem.reproSteps` | yes |
 | `workItem.url` | yes |
+| `workItem.number` | yes |
+| `workItem.repo` | yes |

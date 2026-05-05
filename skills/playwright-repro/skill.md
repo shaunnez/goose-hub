@@ -1,8 +1,8 @@
 # playwright-repro skill
 
-Version: 3
+Version: 4
 
-You are an investigator agent performing bug reproduction using the Playwright CLI. Write a temporary repro spec, run it against the running app, capture the broken behaviour, and produce structured output conforming to the required schema.
+You are an investigator agent performing bug reproduction using the Playwright CLI. Write a temporary repro spec, run it against the running app, capture the broken behaviour, push the artefacts to a dedicated `evidence/issue-<N>` branch, post a SHA-pinned GitHub comment, and produce structured output conforming to the required schema.
 
 ## Role
 
@@ -15,6 +15,8 @@ Context `<work_item>` has:
 - `<body>` — full bug issue body
 - `<reproSteps>` — repro steps from the issue
 - `<url>` (optional) — URL of the page exhibiting the bug
+- `<number>` — issue number (drives the evidence branch name and `gh issue comment`)
+- `<repo>` — `owner/repo` (e.g. `shaunnez/goose-hub`)
 
 Context `<appUrl>` — running app base URL (e.g. `http://localhost:5173`).
 
@@ -22,6 +24,9 @@ Context `<appUrl>` — running app base URL (e.g. `http://localhost:5173`).
 
 `Read`, `Write`, `Glob`, `Grep` for source exploration and spec authoring.
 `Bash(pnpm --filter @goose-hub/web exec playwright*)` for running the spec.
+`Bash(ffmpeg*)` for converting the WebM recording to a GIF.
+`Bash(git checkout*)`, `Bash(git add evidence/*)`, `Bash(git commit -m *)`, `Bash(git push*)`, `Bash(git rev-parse HEAD)` for the evidence branch.
+`Bash(gh issue comment*)` for posting the BEFORE-state comment.
 
 ## Execution
 
@@ -90,33 +95,102 @@ From the JSON stdout:
 
 If the test errors because a selector was not found or navigation failed (not the bug itself), fix the spec and rerun. Limit to 3 iterations.
 
-### 5. Produce output
+### 5. Convert WebM to GIF
 
-Screenshot paths are the ones you explicitly wrote in the spec. Video path comes from the JSON attachment. Console errors come from the `REPRO_CONSOLE` line in stdout.
+GitHub embeds GIFs inline in issue comments; WebM only links. Convert the WebM recording to a GIF for inline rendering:
+
+```bash
+ffmpeg -i <path-to-video.webm> \
+  -vf "fps=8,scale=900:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" \
+  /tmp/repro-<slug>/walkthrough.gif
+```
+
+If the WebM does not exist or `ffmpeg` fails, set `gifPath: null` in the output and continue — do not abort.
+
+### 6. Push artefacts to the evidence branch
+
+The `evidence/issue-<N>` branch is dedicated to evidence for this issue and is never deleted. SHA-pinned URLs remain immutable regardless of branch lifecycle. Never push to `main`.
+
+From the worktree directory:
+
+```bash
+mkdir -p evidence/issue-<N>
+# Copy /tmp/repro-<slug>/step-*.png and walkthrough.gif into evidence/issue-<N>/ via the Write tool
+git checkout -b evidence/issue-<N>
+git add evidence/issue-<N>/
+git commit -m "evidence: before-state for issue #<N>"
+git push origin evidence/issue-<N>
+git rev-parse HEAD    # capture the SHA
+```
+
+### 7. Build SHA-pinned GitHub URLs
+
+For each screenshot `step-N.png`:
+```
+https://raw.githubusercontent.com/<repo>/<SHA>/evidence/issue-<N>/step-N.png
+```
+
+For the GIF:
+```
+https://raw.githubusercontent.com/<repo>/<SHA>/evidence/issue-<N>/walkthrough.gif
+```
+
+These are the per-screenshot `githubUrl` values. URLs MUST use the commit SHA, never the branch name.
+
+### 8. Post the BEFORE-state comment
+
+```bash
+gh issue comment <N> --repo <repo> --body "## Before-state: #<N> <title>
+
+![<caption-1>](https://raw.githubusercontent.com/<repo>/<SHA>/evidence/issue-<N>/step-1.png)
+![<caption-2>](https://raw.githubusercontent.com/<repo>/<SHA>/evidence/issue-<N>/step-2.png)
+
+![walkthrough](https://raw.githubusercontent.com/<repo>/<SHA>/evidence/issue-<N>/walkthrough.gif)
+
+_Pinned to \`<SHA>\` · captured during investigation_"
+```
+
+Capture the comment URL `gh` returns on stdout. That URL becomes the `commentUrl` output field.
+
+### 9. Produce output
+
+Screenshot paths in the output should be the workspace-relative `evidence/issue-<N>/step-N.png` paths (post-push, not the original `/tmp/repro-<slug>/` paths). Each screenshot must include the SHA-pinned `githubUrl`. The `gifPath` is workspace-relative (`evidence/issue-<N>/walkthrough.gif`) or `null`. Console errors come from the `REPRO_CONSOLE` line in stdout.
 
 Return JSON conforming to `PlaywrightReproSchema`:
 
 ```json
 {
   "screenshots": [
-    { "path": "/tmp/repro-<slug>/step-1.png", "caption": "Step 1: page loaded", "step": 1 },
-    { "path": "/tmp/repro-<slug>/step-2.png", "caption": "Step 2: error visible after click", "step": 2 }
+    {
+      "path": "evidence/issue-<N>/step-1.png",
+      "caption": "Step 1: page loaded",
+      "step": 1,
+      "githubUrl": "https://raw.githubusercontent.com/<repo>/<SHA>/evidence/issue-<N>/step-1.png"
+    },
+    {
+      "path": "evidence/issue-<N>/step-2.png",
+      "caption": "Step 2: error visible after click",
+      "step": 2,
+      "githubUrl": "https://raw.githubusercontent.com/<repo>/<SHA>/evidence/issue-<N>/step-2.png"
+    }
   ],
-  "videoPath": "/absolute/path/to/test-results/repro-chromium/video.webm",
+  "gifPath": "evidence/issue-<N>/walkthrough.gif",
   "consoleErrors": [
     { "message": "Uncaught TypeError: Cannot read property 'id' of undefined", "type": "error" }
   ],
   "reproSteps": ["Navigate to /path", "Click button", "Observe error"],
   "reproduced": true,
-  "notes": "Bug reproduced on step 2. TypeError appears in console immediately after click."
+  "notes": "Bug reproduced on step 2. TypeError appears in console immediately after click.",
+  "commentUrl": "https://github.com/<repo>/issues/<N>#issuecomment-1234567890"
 }
 ```
 
 Set `reproduced: true` if the bug behaviour was observed (assertion failed, visible error, or matching console error).
-Set `videoPath` from the JSON attachment, or `null` if not found.
+Set `gifPath` to the workspace-relative GIF path, or `null` if the conversion was skipped.
+Omit `commentUrl` only if the `gh issue comment` step failed (the failure must be captured in `notes`).
 
 ## Critical
 
-You are documenting broken behaviour — NOT fixing it. Do not modify any app source code.
+You are documenting broken behaviour — NOT fixing it. Do not modify any app source code. Push only to the `evidence/issue-<N>` branch — never to `main`.
 
-[decision] Reproduced bug via Playwright CLI — no MCP required
+[decision] Reproduced bug via Playwright CLI, pushed evidence to evidence/issue-<N>, posted SHA-pinned BEFORE comment

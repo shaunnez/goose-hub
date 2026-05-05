@@ -93,6 +93,8 @@ export async function runInvestigateWorkflow(
               title: workItem.title,
               body: workItem.body,
               reproSteps: workItem.body,
+              number: Number(workItem.externalId),
+              repo: workItem.repoRef,
             },
             appUrl: 'http://localhost:5173',
           },

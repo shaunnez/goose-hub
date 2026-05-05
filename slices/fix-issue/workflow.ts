@@ -414,6 +414,17 @@ async function afterImplement(input: AfterImplementInput): Promise<void> {
   // Resolve the worktree HEAD to the real commit SHA so evidence-post pins
   // its raw URLs to an immutable ref (#233 SHA-pinning contract).
   const prHeadSha = input.resolveHeadShaFn(worktreePath);
+
+  // Look up the BEFORE-state comment posted by playwright-repro during
+  // investigation (type:bug only). Absent for feature/chore.
+  const investigationEvents = eventStore.replay({ workItemId: workItem.id });
+  const investigationComplete = [...investigationEvents]
+    .reverse()
+    .find((e) => e.kind === 'agent.investigation-complete');
+  const beforeCommentUrl = (
+    investigationComplete?.payload as { playwrightRepro?: { commentUrl?: string } } | undefined
+  )?.playwrightRepro?.commentUrl;
+
   await runEvidencePost({
     workItem,
     projectId,
@@ -425,6 +436,7 @@ async function afterImplement(input: AfterImplementInput): Promise<void> {
     prHeadSha,
     repoRef,
     evidenceSpecPath: implementOutput.evidenceSpecPath,
+    beforeCommentUrl,
   });
 
   // Step 7: M8 path — route through QA before approval (factory:in-progress → factory:needs-qa)
@@ -442,6 +454,11 @@ interface RunEvidencePostInput {
   prHeadSha: string;
   repoRef: string;
   evidenceSpecPath: string | null;
+  /**
+   * Permalink to the BEFORE-state comment posted by playwright-repro during
+   * investigation. Present only for type:bug; undefined for feature/chore.
+   */
+  beforeCommentUrl?: string;
 }
 
 /**
@@ -475,6 +492,7 @@ async function runEvidencePost(input: RunEvidencePostInput): Promise<void> {
           number: Number(input.workItem.externalId),
           repo: input.repoRef,
           title: input.workItem.title,
+          beforeCommentUrl: input.beforeCommentUrl,
         },
         prNumber: input.prNumber,
         prHeadSha: input.prHeadSha,
@@ -484,6 +502,7 @@ async function runEvidencePost(input: RunEvidencePostInput): Promise<void> {
         'workItem.number',
         'workItem.repo',
         'workItem.title',
+        'workItem.beforeCommentUrl',
         'prNumber',
         'prHeadSha',
         'specPath',

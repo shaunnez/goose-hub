@@ -43,11 +43,14 @@ export const TOOL_BUNDLES = {
     'Bash(pnpm --filter @goose-hub/web test:e2e*)',
     'Bash(pnpm --filter @goose-hub/web exec playwright*)',
     'Bash(npx playwright*)',
+    'Bash(ffmpeg*)',
     'Bash(mkdir -p evidence/*)',
     'Bash(git add evidence/*)',
+    'Bash(git checkout*)',
     'Bash(git commit -m *)',
     'Bash(git push*)',
     'Bash(git rev-parse HEAD)',
+    'Bash(gh issue comment*)',
   ],
   /**
    * Playwright-test MCP bundle. Tool list extracted from Microsoft's

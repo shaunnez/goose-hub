@@ -14,14 +14,19 @@ export const ScreenshotSchema = z.object({
   path: z.string().describe('Workspace-relative path under evidence/issue-<N>/'),
   caption: z.string().describe('Description of what this screenshot shows'),
   step: z.number().int().describe('Ordinal step in the captured walkthrough'),
+  githubUrl: z
+    .string()
+    .url()
+    .optional()
+    .describe('SHA-pinned raw.githubusercontent.com URL once pushed to evidence branch'),
 });
 
 export const EvidencePostSchema = z.object({
   screenshots: z.array(ScreenshotSchema),
-  videoPath: z
+  gifPath: z
     .string()
     .nullable()
-    .describe('Workspace-relative path to the WebM walkthrough, or null if not captured'),
+    .describe('Workspace-relative path to the GIF walkthrough, or null if not captured'),
   commentUrl: z.string().url().describe('Permalink to the comment posted on the linked issue'),
   commitSha: z
     .string()

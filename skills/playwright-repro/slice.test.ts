@@ -8,17 +8,19 @@ describe('playwright-repro schema', () => {
     const result = PlaywrightReproSchema.safeParse({
       screenshots: [
         {
-          path: '/tmp/repro/step-1.png',
+          path: 'evidence/issue-42/step-1.png',
           caption: 'Step 1: Login form with validation error visible',
           step: 1,
+          githubUrl:
+            'https://raw.githubusercontent.com/shaunnez/goose-hub/abc1234/evidence/issue-42/step-1.png',
         },
         {
-          path: '/tmp/repro/step-2.png',
+          path: 'evidence/issue-42/step-2.png',
           caption: 'Step 2: Dashboard with missing data',
           step: 2,
         },
       ],
-      videoPath: '/tmp/repro/session.webm',
+      gifPath: 'evidence/issue-42/walkthrough.gif',
       consoleErrors: [
         {
           message: 'Uncaught TypeError: Cannot read property id of undefined',
@@ -29,6 +31,7 @@ describe('playwright-repro schema', () => {
       reproSteps: ['Navigate to /login', 'Enter invalid credentials', 'Click Submit'],
       reproduced: true,
       notes: 'Bug reproduced consistently on step 2.',
+      commentUrl: 'https://github.com/shaunnez/goose-hub/issues/42#issuecomment-9876543210',
     });
     expect(result.success).toBe(true);
   });
@@ -36,7 +39,7 @@ describe('playwright-repro schema', () => {
   it('accepts valid output with bug not reproducible', () => {
     const result = PlaywrightReproSchema.safeParse({
       screenshots: [],
-      videoPath: null,
+      gifPath: null,
       consoleErrors: [],
       reproSteps: ['Navigate to /login', 'Enter credentials'],
       reproduced: false,
@@ -45,10 +48,10 @@ describe('playwright-repro schema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('accepts output with null videoPath', () => {
+  it('accepts output with null gifPath', () => {
     const result = PlaywrightReproSchema.safeParse({
-      screenshots: [{ path: '/tmp/repro/step-1.png', caption: 'Initial state', step: 1 }],
-      videoPath: null,
+      screenshots: [{ path: 'evidence/issue-42/step-1.png', caption: 'Initial state', step: 1 }],
+      gifPath: null,
       consoleErrors: [],
       reproSteps: ['Navigate to /dashboard'],
       reproduced: true,
@@ -59,7 +62,7 @@ describe('playwright-repro schema', () => {
   it('accepts output with no notes (notes is optional)', () => {
     const result = PlaywrightReproSchema.safeParse({
       screenshots: [],
-      videoPath: null,
+      gifPath: null,
       consoleErrors: [],
       reproSteps: ['Navigate to /home'],
       reproduced: false,
@@ -70,7 +73,7 @@ describe('playwright-repro schema', () => {
   it('accepts consoleErrors with url as optional', () => {
     const result = PlaywrightReproSchema.safeParse({
       screenshots: [],
-      videoPath: null,
+      gifPath: null,
       consoleErrors: [{ message: 'Warning: something deprecated', type: 'warning' }],
       reproSteps: ['Navigate to /settings'],
       reproduced: false,
@@ -81,7 +84,7 @@ describe('playwright-repro schema', () => {
   it('accepts all console error types', () => {
     const result = PlaywrightReproSchema.safeParse({
       screenshots: [],
-      videoPath: null,
+      gifPath: null,
       consoleErrors: [
         { message: 'An error', type: 'error' },
         { message: 'A warning', type: 'warning' },
@@ -96,7 +99,7 @@ describe('playwright-repro schema', () => {
   it('rejects invalid console error type', () => {
     const result = PlaywrightReproSchema.safeParse({
       screenshots: [],
-      videoPath: null,
+      gifPath: null,
       consoleErrors: [{ message: 'Something', type: 'debug' }],
       reproSteps: ['Navigate to /'],
       reproduced: false,
@@ -106,7 +109,7 @@ describe('playwright-repro schema', () => {
 
   it('rejects missing required screenshots field', () => {
     const result = PlaywrightReproSchema.safeParse({
-      videoPath: null,
+      gifPath: null,
       consoleErrors: [],
       reproSteps: ['Navigate to /'],
       reproduced: false,
@@ -117,7 +120,7 @@ describe('playwright-repro schema', () => {
   it('rejects missing reproduced field', () => {
     const result = PlaywrightReproSchema.safeParse({
       screenshots: [],
-      videoPath: null,
+      gifPath: null,
       consoleErrors: [],
       reproSteps: ['Navigate to /'],
     });
@@ -127,7 +130,7 @@ describe('playwright-repro schema', () => {
   it('rejects screenshot missing path', () => {
     const result = PlaywrightReproSchema.safeParse({
       screenshots: [{ caption: 'Missing path', step: 1 }],
-      videoPath: null,
+      gifPath: null,
       consoleErrors: [],
       reproSteps: ['Navigate to /'],
       reproduced: true,
@@ -138,7 +141,7 @@ describe('playwright-repro schema', () => {
   it('rejects screenshot missing caption', () => {
     const result = PlaywrightReproSchema.safeParse({
       screenshots: [{ path: '/tmp/step-1.png', step: 1 }],
-      videoPath: null,
+      gifPath: null,
       consoleErrors: [],
       reproSteps: ['Navigate to /'],
       reproduced: true,
@@ -149,10 +152,35 @@ describe('playwright-repro schema', () => {
   it('rejects screenshot missing step number', () => {
     const result = PlaywrightReproSchema.safeParse({
       screenshots: [{ path: '/tmp/step-1.png', caption: 'Initial state' }],
-      videoPath: null,
+      gifPath: null,
       consoleErrors: [],
       reproSteps: ['Navigate to /'],
       reproduced: true,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects non-URL githubUrl on a screenshot', () => {
+    const result = PlaywrightReproSchema.safeParse({
+      screenshots: [
+        { path: 'evidence/issue-42/step-1.png', caption: 'c', step: 1, githubUrl: 'not-a-url' },
+      ],
+      gifPath: null,
+      consoleErrors: [],
+      reproSteps: ['Navigate to /'],
+      reproduced: true,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects non-URL commentUrl', () => {
+    const result = PlaywrightReproSchema.safeParse({
+      screenshots: [],
+      gifPath: null,
+      consoleErrors: [],
+      reproSteps: ['Navigate to /'],
+      reproduced: true,
+      commentUrl: 'not-a-url',
     });
     expect(result.success).toBe(false);
   });
@@ -191,6 +219,8 @@ describe('playwright-repro skill config', () => {
     expect(config.contextAllowlist).toContain('workItem.title');
     expect(config.contextAllowlist).toContain('workItem.body');
     expect(config.contextAllowlist).toContain('workItem.reproSteps');
+    expect(config.contextAllowlist).toContain('workItem.number');
+    expect(config.contextAllowlist).toContain('workItem.repo');
   });
 
   it('contextSchema validates required workItem fields', () => {
@@ -199,6 +229,8 @@ describe('playwright-repro skill config', () => {
         title: 'Login page crashes on submit',
         body: 'When I click submit the page crashes.',
         reproSteps: '1. Navigate to /login\n2. Click Submit',
+        number: 42,
+        repo: 'shaunnez/goose-hub',
       },
     });
     expect(valid.success).toBe(true);
@@ -211,6 +243,8 @@ describe('playwright-repro skill config', () => {
         body: 'Dashboard shows nothing.',
         reproSteps: '1. Navigate to /dashboard',
         url: 'https://example.com/dashboard',
+        number: 42,
+        repo: 'shaunnez/goose-hub',
       },
     });
     expect(valid.success).toBe(true);
@@ -221,6 +255,8 @@ describe('playwright-repro skill config', () => {
       workItem: {
         body: 'Some body.',
         reproSteps: '1. Navigate to /login',
+        number: 42,
+        repo: 'shaunnez/goose-hub',
       },
     });
     expect(invalid.success).toBe(false);
@@ -231,6 +267,8 @@ describe('playwright-repro skill config', () => {
       workItem: {
         title: 'Some title',
         reproSteps: '1. Navigate to /login',
+        number: 42,
+        repo: 'shaunnez/goose-hub',
       },
     });
     expect(invalid.success).toBe(false);
@@ -241,6 +279,32 @@ describe('playwright-repro skill config', () => {
       workItem: {
         title: 'Some title',
         body: 'Some body.',
+        number: 42,
+        repo: 'shaunnez/goose-hub',
+      },
+    });
+    expect(invalid.success).toBe(false);
+  });
+
+  it('contextSchema rejects missing workItem.number', () => {
+    const invalid = PlaywrightReproContextSchema.safeParse({
+      workItem: {
+        title: 'Some title',
+        body: 'Some body.',
+        reproSteps: '1. Navigate to /login',
+        repo: 'shaunnez/goose-hub',
+      },
+    });
+    expect(invalid.success).toBe(false);
+  });
+
+  it('contextSchema rejects missing workItem.repo', () => {
+    const invalid = PlaywrightReproContextSchema.safeParse({
+      workItem: {
+        title: 'Some title',
+        body: 'Some body.',
+        reproSteps: '1. Navigate to /login',
+        number: 42,
       },
     });
     expect(invalid.success).toBe(false);
