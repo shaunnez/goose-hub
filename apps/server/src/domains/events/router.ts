@@ -1,7 +1,12 @@
 import { buildSseStream } from '@goose-hub/core/event-stream/sse.js';
 import { Hono } from 'hono';
 import { parseBody } from '#shared/middleware.js';
-import { parseSseFilter, recordDecisionSummary, recordToolCall } from './service.js';
+import {
+  parseSseFilter,
+  recordDecisionSummary,
+  recordToolCall,
+  recordVerifyCommand,
+} from './service.js';
 
 const router = new Hono();
 
@@ -22,6 +27,16 @@ router.post('/decision-summary', async (c) => {
   const body = await parseBody<Record<string, unknown>>(c);
   if (!body.ok) return body.error;
   return c.json(recordDecisionSummary(body.data), 202);
+});
+
+/**
+ * Live verify-command endpoint (#469). Thin delegator to recordVerifyCommand.
+ * Called after each per-AC verify command runs during QA.
+ */
+router.post('/verify-command', async (c) => {
+  const body = await parseBody<Record<string, unknown>>(c);
+  if (!body.ok) return body.error;
+  return c.json(recordVerifyCommand(body.data), 202);
 });
 
 router.get('/', (c) => {

@@ -186,7 +186,14 @@ export async function dispatchQa(slug: string, issueNumber: number): Promise<voi
         source: unknown,
         projectSlug: string,
         targetRepo: string,
-        deps?: Record<string, unknown>,
+        deps?: {
+          verifyCommands?: Array<{
+            ac: string;
+            command: string;
+            expected: string;
+            tolerance: string;
+          }>;
+        },
       ) => Promise<unknown>;
     };
     const source = await getSourceForSlug(slug);

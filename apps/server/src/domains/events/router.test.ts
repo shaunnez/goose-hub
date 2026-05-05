@@ -15,6 +15,56 @@ import { buildSseStream } from '@goose-hub/core/event-stream/sse.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { eventsRouter } from './router.js';
 
+describe('POST /events/verify-command (#469)', () => {
+  beforeEach(() => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+  });
+
+  it('appends an agent.verify-command event and returns 202', async () => {
+    const app = new Hono().route('/events', eventsRouter);
+    const res = await app.request('/events/verify-command', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        run_id: 'run-vc-1',
+        ac: 'Server is reachable',
+        command: 'curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/health',
+        actual: '200',
+        passed: true,
+      }),
+    });
+    expect(res.status).toBe(202);
+    const body = (await res.json()) as { ok: boolean };
+    expect(body.ok).toBe(true);
+    expect(eventStore.appendEvent).toHaveBeenCalledTimes(1);
+    const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
+    expect(arg.kind).toBe('agent.verify-command');
+    expect(arg.runId).toBe('run-vc-1');
+  });
+
+  it('returns 400 for invalid JSON', async () => {
+    const app = new Hono().route('/events', eventsRouter);
+    const res = await app.request('/events/verify-command', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('persists payload even when run_id is missing (runId becomes null)', async () => {
+    const app = new Hono().route('/events', eventsRouter);
+    const res = await app.request('/events/verify-command', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ac: 'No run id', command: 'echo ok', actual: 'ok', passed: true }),
+    });
+    expect(res.status).toBe(202);
+    const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
+    expect(arg.runId).toBeNull();
+  });
+});
+
 describe('POST /events/decision-summary', () => {
   beforeEach(() => {
     vi.mocked(eventStore.appendEvent).mockClear();
