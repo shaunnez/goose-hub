@@ -16,15 +16,20 @@ function readPrompt(): string {
 /**
  * Runs the bug-enhance agent on a UI/web bug report.
  * Returns the markdown string to append after the original body, or null on failure.
+ *
+ * inboxItemId is the local DB id of the inbox item. Because the GitHub issue doesn't
+ * exist yet at promotion time, it is used as "inbox:<id>" for cost/event attribution.
  */
 export async function runBugEnhance(
   projectId: string,
+  inboxItemId: number,
   title: string,
   body: string,
 ): Promise<string | null> {
   const runtime = new ClaudeCliRuntime();
   const runId = crypto.randomUUID();
   const { personaId } = selectPersona(projectId, 'triager');
+  const workItemId = `inbox:${inboxItemId}`;
 
   let prompt: string;
   try {
@@ -39,7 +44,7 @@ export async function runBugEnhance(
       runId,
       role: 'triager',
       skill: 'bug-enhance',
-      context: { workItem: { title, body } },
+      context: { projectId, workItemId, workItem: { title, body } },
       contextAllowlist: ['workItem'],
       freshContext: false,
       toolBundles: [],
