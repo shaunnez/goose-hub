@@ -1,3 +1,5 @@
+export const SIDEBAR_HEADER_LABEL = 'Agentic OS';
+
 import { cn } from '@/lib/cn';
 import {
   ChevronLeft,
@@ -129,7 +131,7 @@ export function Sidebar({ activeSlug }: SidebarProps) {
               style={{ background: '#7c3aed' }}
             />
             <span className="text-[14px] font-semibold tracking-tight whitespace-nowrap">
-              Goose Hub
+              {SIDEBAR_HEADER_LABEL}
             </span>
           </div>
         )}

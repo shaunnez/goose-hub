@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SIDEBAR_HEADER_LABEL } from './Sidebar';
 
 // Chrome is mostly React components; the slice test ensures the public files
 // exist and the milestone-stub configuration stays honest with the M2 plan.
@@ -36,5 +37,9 @@ describe('chrome slice — deferred surfaces config', () => {
     const storedFalse = 'false';
     const collapsed = storedFalse !== 'false';
     expect(collapsed).toBe(false);
+  });
+
+  it('sidebar header label is "Agentic OS"', () => {
+    expect(SIDEBAR_HEADER_LABEL).toBe('Agentic OS');
   });
 });
