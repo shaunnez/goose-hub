@@ -1,9 +1,11 @@
 import { Pill } from '@/components/ui/pill';
+import { fetchIssueCosts } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { COST_PLACEHOLDER, PRIORITY_COLOR, STATE_LABEL } from '@/lib/constants';
-import type { WorkItemDto } from '@/lib/types';
+import { PRIORITY_COLOR, STATE_LABEL } from '@/lib/constants';
+import type { WorkItemCostsDto, WorkItemDto } from '@/lib/types';
 import { getPersonaInitials, usePersonaMap } from '@/lib/usePersonaMap';
-import { ageLabel } from '@/lib/utils';
+import { ageLabel, formatCost } from '@/lib/utils';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
 export function IssueCard({
@@ -16,6 +18,21 @@ export function IssueCard({
   const ageStr = ageLabel(item.createdAt);
   const personaMap = usePersonaMap();
   const initials = getPersonaInitials(personaMap, item.lastPersonaId);
+
+  // Per-card fetch; TanStack Query dedupes by key so the issue detail page
+  // shares the same cache. Boards with many cards trigger N requests on mount —
+  // tracked as a follow-up to add a project-level summary endpoint.
+  const { data: costs } = useQuery<WorkItemCostsDto>({
+    queryKey: ['issue-costs', projectSlug, item.externalId],
+    queryFn: () => fetchIssueCosts(projectSlug, item.externalId),
+    staleTime: 60_000,
+  });
+  const costLabel =
+    costs == null
+      ? '—'
+      : costs.rows.length === 0
+        ? '$—'
+        : formatCost(costs.totalUsd, costs.hasEstimated ? 'estimated' : 'exact');
   return (
     <Link
       to={`/projects/${projectSlug}/items/${item.externalId}`}
@@ -63,10 +80,16 @@ export function IssueCard({
         )}
         <span
           className="ml-auto font-mono text-[10.5px] text-fg-4"
-          title="Cost tracking available in M9"
-          data-testid="cost-placeholder"
+          title={
+            costs == null
+              ? 'Loading…'
+              : costs.rows.length === 0
+                ? 'No agent runs recorded yet'
+                : `${costs.rows.length} run${costs.rows.length === 1 ? '' : 's'}`
+          }
+          data-testid="issue-card-cost"
         >
-          {COST_PLACEHOLDER}
+          {costLabel}
         </span>
       </div>
     </Link>

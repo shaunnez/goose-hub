@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 // import { Filter, RefreshCw } from 'lucide-react';
 import { Search } from 'lucide-react';
 import { useState } from 'react';
+import { useIssueCostsBreakdown } from '../lib/costs';
 import {
   CONFIDENCE_NUM,
   READ_TOOLS,
@@ -16,6 +17,7 @@ import {
   extractInvestigationPayload,
 } from '../lib/investigation';
 import { ConfidenceBadge } from './ConfidenceBadge';
+import { CostBadge } from './CostBadge';
 import { FindingCard } from './FindingCard';
 import { PlaywrightCaptureSection } from './PlaywrightCaptureSection';
 import { SectionEmptyState } from './SectionEmptyState';
@@ -50,6 +52,9 @@ export function InvestigationSection({ projectSlug, id, itemState, itemType }: I
     queryKey: ['comments', projectSlug, id],
     queryFn: () => fetchComments(projectSlug, id),
   });
+
+  const { byStage } = useIssueCostsBreakdown(projectSlug, id);
+  const investigateCost = byStage.get('investigate');
 
   const humanNotes = comments.filter((c) => c.body.startsWith('Human review notes:'));
 
@@ -137,13 +142,24 @@ export function InvestigationSection({ projectSlug, id, itemState, itemType }: I
             03 · Investigation
           </div>
           <h2 className="text-[17px] font-semibold text-fg leading-snug">What was found</h2>
-          <div className="flex items-center gap-3 mt-1.5 text-[12px] text-fg-3">
+          <div className="flex items-center gap-3 mt-1.5 text-[12px] text-fg-3 flex-wrap">
             <span>
               {reads} file read{reads !== 1 ? 's' : ''} · {searches} search
               {searches !== 1 ? 'es' : ''}
             </span>
             <span className="text-fg-5">·</span>
             <ConfidenceBadge level={investigate.confidence} />
+            {investigateCost && (
+              <>
+                <span className="text-fg-5">·</span>
+                <CostBadge
+                  tokens={investigateCost.tokens}
+                  usd={investigateCost.usd}
+                  label={investigateCost.label}
+                  size="sm"
+                />
+              </>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">

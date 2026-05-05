@@ -2,8 +2,10 @@ import { fetchEvents } from '@/lib/api';
 import type { AgentEventDto } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, CheckCircle, Clock, Plus, RefreshCw, XCircle } from 'lucide-react';
+import { useIssueCostsBreakdown } from '../lib/costs';
 import { TIERS, formatWallTime } from '../lib/qa';
 import type { QaPayload } from '../lib/qa';
+import { CostBadge } from './CostBadge';
 import { QaFindingRow } from './QaFindingRow';
 import { QaTestSuiteRow } from './QaTestSuiteRow';
 import { QaTierRow } from './QaTierRow';
@@ -19,6 +21,8 @@ export function QASection({ projectSlug, id }: QASectionProps) {
     queryKey: ['events', projectSlug, id],
     queryFn: () => fetchEvents(projectSlug, id),
   });
+  const { byStage } = useIssueCostsBreakdown(projectSlug, id);
+  const qaCost = byStage.get('qa');
 
   if (isLoading) return null;
 
@@ -79,7 +83,7 @@ export function QASection({ projectSlug, id }: QASectionProps) {
         <div className="flex-1">
           <div className="text-[10.5px] uppercase tracking-wider text-fg-4 mb-1">06 · QA</div>
           <h2 className="text-[17px] font-semibold text-fg leading-snug">Verification sweep</h2>
-          <div className="flex items-center gap-2 text-[12.5px] text-fg-3 mt-1">
+          <div className="flex items-center gap-2 text-[12.5px] text-fg-3 mt-1 flex-wrap">
             <VerdictIcon size={13} style={{ color: verdictColor }} />
             <span style={{ color: verdictColor, textTransform: 'uppercase', fontWeight: 600 }}>
               {qa.verdict}
@@ -92,6 +96,12 @@ export function QASection({ projectSlug, id }: QASectionProps) {
             <span>
               {allFindings.length} {allFindings.length === 1 ? 'finding' : 'findings'}
             </span>
+            {qaCost && (
+              <>
+                <span className="text-fg-4">·</span>
+                <CostBadge tokens={qaCost.tokens} usd={qaCost.usd} label={qaCost.label} size="sm" />
+              </>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">

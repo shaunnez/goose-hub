@@ -4,8 +4,10 @@ import { useQuery } from '@tanstack/react-query';
 import { ExternalLink, FileCode } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { parseDiff } from '../lib/code-diff';
+import { useIssueCostsBreakdown } from '../lib/costs';
 import { CodeDiffFileList } from './CodeDiffFileList';
 import { CodeDiffViewer } from './CodeDiffViewer';
+import { CostBadge } from './CostBadge';
 import { SectionEmptyState } from './SectionEmptyState';
 
 interface CodeDiffSectionProps {
@@ -30,6 +32,9 @@ export function CodeDiffSection({ projectSlug, id }: CodeDiffSectionProps) {
     queryFn: () => fetchEvents(projectSlug, id),
     staleTime: 10_000,
   });
+
+  const { byStage } = useIssueCostsBreakdown(projectSlug, id);
+  const devCost = byStage.get('dev');
 
   const prOpenedEvent = events
     ?.slice()
@@ -106,6 +111,9 @@ export function CodeDiffSection({ projectSlug, id }: CodeDiffSectionProps) {
           <span className="font-mono text-[11px] tabular-nums" style={{ color: 'var(--danger)' }}>
             −{totalDels}
           </span>
+          {devCost && (
+            <CostBadge tokens={devCost.tokens} usd={devCost.usd} label={devCost.label} size="sm" />
+          )}
         </div>
         <div className="flex items-center gap-2">
           {prUrl != null && (

@@ -1,16 +1,26 @@
 /** @vitest-environment jsdom */
-import { fetchEvents } from '@/lib/api';
-import type { AgentEventDto } from '@/lib/types';
+import { fetchEvents, fetchIssueCosts } from '@/lib/api';
+import type { AgentEventDto, WorkItemCostsDto } from '@/lib/types';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QASection } from './QASection';
 
 afterEach(cleanup);
 
 vi.mock('@/lib/api', () => ({
   fetchEvents: vi.fn(),
+  fetchIssueCosts: vi.fn(),
 }));
+
+beforeEach(() => {
+  vi.mocked(fetchIssueCosts).mockResolvedValue({
+    workItemId: 'wi-1',
+    totalUsd: 0,
+    hasEstimated: false,
+    rows: [],
+  });
+});
 
 function render_(jsx: React.ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -111,5 +121,44 @@ describe('QASection', () => {
     expect(screen.getByText('38 / 0')).toBeTruthy();
     // Wall-time card uses the formatted duration.
     expect(screen.getByText('7.70s')).toBeTruthy();
+  });
+
+  it('renders the QA cost badge in the header when QA-stage rows exist', async () => {
+    vi.mocked(fetchEvents).mockResolvedValueOnce([
+      qaEvent({
+        verdict: 'pass',
+        overallScore: 85,
+        threshold: 70,
+        tierResults: passingTiers,
+      }),
+    ]);
+    const costs: WorkItemCostsDto = {
+      workItemId: 'wi-1',
+      totalUsd: 0.05,
+      hasEstimated: false,
+      rows: [
+        {
+          runId: 'r-qa',
+          workItemId: 'wi-1',
+          stage: 'qa',
+          skill: 'qa-test',
+          modelId: 'claude-sonnet-4-6',
+          inputTokens: 600,
+          outputTokens: 200,
+          costUsd: 0.05,
+          costLabel: 'exact',
+          personaId: null,
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    };
+    vi.mocked(fetchIssueCosts).mockResolvedValueOnce(costs);
+
+    render_(<QASection projectSlug="proj" id="42" />);
+    await waitFor(() => {
+      const badge = screen.getByTestId('cost-badge');
+      expect(badge.textContent).toContain('$0.05');
+      expect(badge.textContent).toContain('800');
+    });
   });
 });

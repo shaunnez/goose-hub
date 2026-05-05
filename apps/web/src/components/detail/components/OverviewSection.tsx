@@ -3,6 +3,7 @@ import { laneForState } from '@/lib/lanes.config';
 import { renderMarkdownToHtml } from '@/lib/markdown';
 import type { WorkItemDto } from '@/lib/types';
 import { getPersonaLabel, usePersonaMap } from '@/lib/usePersonaMap';
+import { formatCost, formatTokens } from '@/lib/utils';
 import {
   Brain,
   Bug,
@@ -16,6 +17,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
+import { useIssueCostsBreakdown } from '../lib/costs';
 import { SECTIONS } from '../lib/sections';
 import { CommentsSection } from './CommentsSection';
 
@@ -86,6 +88,13 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
   const blocksCount = item?.blocks?.length ?? 0;
   const lastAgentLabel = getPersonaLabel(personaMap, item?.lastPersonaId) ?? '—';
 
+  const costs = useIssueCostsBreakdown(slug, id);
+  const spentValue = costs.runCount === 0 ? '—' : formatCost(costs.total, costs.totalLabel);
+  const spentSub =
+    costs.runCount === 0
+      ? 'no runs yet'
+      : `${formatTokens(costs.totalTokens)} tokens · ${costs.runCount} run${costs.runCount === 1 ? '' : 's'}`;
+
   const priorityColor = PRIORITY_COLOR[priority];
   const priorityBg = PRIORITY_BG[priority];
   const priorityBorder = PRIORITY_BORDER[priority];
@@ -108,7 +117,7 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
       </div>
 
       {/* Stat row */}
-      <div className="grid grid-cols-5 gap-3">
+      <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
         <StatCard label="Stage" value={lane} />
         <StatCard label="Priority" value={priority} color={priorityColor} />
         <StatCard
@@ -122,6 +131,7 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
           sub={blocksCount > 0 ? item?.blocks.map((d) => `#${d}`).join(', ') : undefined}
         />
         <StatCard label="Last agent" value={lastAgentLabel} />
+        <StatCard label="Spent" value={spentValue} sub={spentSub} />
       </div>
 
       {/* Main content grid */}

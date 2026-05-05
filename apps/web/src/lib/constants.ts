@@ -63,9 +63,6 @@ export const CODE_ACTIVE_STATES = new Set([
   'factory:done',
 ]);
 
-// Placeholder shown wherever cost data will appear once M9 wires it through.
-export const COST_PLACEHOLDER = '$—';
-
 export const GATE_STATES: Record<string, string> = {
   'factory:prd-review': 'PRD Review pending — human approval required',
   'factory:needs-review': 'Code Review pending — human approval required',
