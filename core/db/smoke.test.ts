@@ -1,6 +1,9 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { events, governanceAudit, personaNames, projectState } from './schema.js';
 
@@ -127,5 +130,27 @@ describe('core/db smoke', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].codename).toBe('Grey Honker');
     expect(rows[0].slotIndex).toBe(0);
+  });
+});
+
+describe('drizzle migrations', () => {
+  it('__drizzle_migrations table exists after migrate runs against a fresh DB', () => {
+    const sqlite = new Database(':memory:');
+    const db = drizzle(sqlite);
+    const migrationsFolder = path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      'migrations',
+    );
+    migrate(db, { migrationsFolder });
+
+    const trackingRows = sqlite
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='__drizzle_migrations'")
+      .all();
+    expect(trackingRows).toHaveLength(1);
+
+    const tableRows = sqlite
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='persona_names'")
+      .all();
+    expect(tableRows).toHaveLength(1);
   });
 });
