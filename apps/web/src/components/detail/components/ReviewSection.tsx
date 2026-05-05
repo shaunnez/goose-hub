@@ -2,6 +2,8 @@ import { fetchEvents } from '@/lib/api';
 import type { AgentEventDto } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Check, CheckCircle, Clock, GitPullRequest, XCircle } from 'lucide-react';
+import { useIssueCostsBreakdown } from '../lib/costs';
+import { CostBadge } from './CostBadge';
 import { SectionEmptyState } from './SectionEmptyState';
 
 interface ReviewSectionProps {
@@ -87,6 +89,8 @@ export function ReviewSection({ projectSlug, id }: ReviewSectionProps) {
     queryKey: ['events', projectSlug, id],
     queryFn: () => fetchEvents(projectSlug, id),
   });
+  const { byStage } = useIssueCostsBreakdown(projectSlug, id);
+  const reviewCost = byStage.get('review');
 
   if (isLoading) return null;
 
@@ -151,7 +155,20 @@ export function ReviewSection({ projectSlug, id }: ReviewSectionProps) {
             07 · Review
           </div>
           <h2 className="text-[20px] font-semibold tracking-tight">Pre-merge checklist</h2>
-          <div className="text-[12.5px] text-fg-3 mt-1">{hint}</div>
+          <div className="flex items-center gap-2 text-[12.5px] text-fg-3 mt-1 flex-wrap">
+            <span>{hint}</span>
+            {reviewCost && (
+              <>
+                <span className="text-fg-5">·</span>
+                <CostBadge
+                  tokens={reviewCost.tokens}
+                  usd={reviewCost.usd}
+                  label={reviewCost.label}
+                  size="sm"
+                />
+              </>
+            )}
+          </div>
         </div>
         {prUrl && (
           <div className="flex items-center gap-2 shrink-0">

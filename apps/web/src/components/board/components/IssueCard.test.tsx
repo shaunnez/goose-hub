@@ -1,9 +1,11 @@
-import type { WorkItemDto } from '@/lib/types';
+import { fetchIssueCosts } from '@/lib/api';
+import type { WorkItemCostsDto, WorkItemDto } from '@/lib/types';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 /** @vitest-environment jsdom */
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { cleanup } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IssueCard } from './IssueCard';
 
 vi.mock('@/lib/usePersonaMap', () => ({
@@ -12,7 +14,14 @@ vi.mock('@/lib/usePersonaMap', () => ({
   getPersonaLabel: () => null,
 }));
 
+vi.mock('@/lib/api', () => ({
+  fetchIssueCosts: vi.fn(),
+}));
+
 afterEach(cleanup);
+beforeEach(() => {
+  vi.mocked(fetchIssueCosts).mockReset();
+});
 
 const BASE_ITEM: WorkItemDto = {
   id: '1',
@@ -33,42 +42,84 @@ const BASE_ITEM: WorkItemDto = {
 };
 
 function renderCard(item = BASE_ITEM) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <MemoryRouter>
-      <IssueCard item={item} projectSlug="goose-hub-self" />
-    </MemoryRouter>,
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <IssueCard item={item} projectSlug="goose-hub-self" />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
+}
+
+function costsResponse(rows: WorkItemCostsDto['rows'], totalUsd = 0): WorkItemCostsDto {
+  return { workItemId: 'wi-1', totalUsd, hasEstimated: false, rows };
 }
 
 describe('IssueCard', () => {
   it('renders the issue title', () => {
+    vi.mocked(fetchIssueCosts).mockResolvedValueOnce(costsResponse([]));
     renderCard();
     expect(screen.getByText('Fix the login bug')).toBeTruthy();
   });
 
   it('renders the issue number', () => {
+    vi.mocked(fetchIssueCosts).mockResolvedValueOnce(costsResponse([]));
     renderCard();
     expect(screen.getByText('#42')).toBeTruthy();
   });
 
   it('renders the state label', () => {
+    vi.mocked(fetchIssueCosts).mockResolvedValueOnce(costsResponse([]));
     renderCard();
     expect(screen.getByText('in-progress')).toBeTruthy();
   });
 
   it('renders the priority pill', () => {
+    vi.mocked(fetchIssueCosts).mockResolvedValueOnce(costsResponse([]));
     renderCard();
     // The Pill component renders "high" as text
     const pills = screen.getAllByText('high');
     expect(pills.length).toBeGreaterThan(0);
   });
 
-  it('renders the cost placeholder', () => {
+  it('renders "$—" when there are no cost rows yet', async () => {
+    vi.mocked(fetchIssueCosts).mockResolvedValueOnce(costsResponse([]));
     renderCard();
-    expect(screen.getByTestId('cost-placeholder').textContent).toBe('$—');
+    await waitFor(() => {
+      expect(screen.getByTestId('issue-card-cost').textContent).toBe('$—');
+    });
+  });
+
+  it('renders the formatted total cost when rows are present', async () => {
+    vi.mocked(fetchIssueCosts).mockResolvedValueOnce(
+      costsResponse(
+        [
+          {
+            runId: 'r1',
+            workItemId: 'wi-1',
+            stage: 'dev',
+            skill: 'implement',
+            modelId: 'claude-sonnet-4-6',
+            inputTokens: 800,
+            outputTokens: 400,
+            costUsd: 0.42,
+            costLabel: 'exact',
+            personaId: null,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        0.42,
+      ),
+    );
+    renderCard();
+    await waitFor(() => {
+      expect(screen.getByTestId('issue-card-cost').textContent).toBe('$0.42');
+    });
   });
 
   it('truncates long titles at 55 chars', () => {
+    vi.mocked(fetchIssueCosts).mockResolvedValueOnce(costsResponse([]));
     const longTitle = 'A'.repeat(60);
     renderCard({ ...BASE_ITEM, title: longTitle });
     const link = screen.getByRole('link');

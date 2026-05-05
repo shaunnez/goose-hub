@@ -127,7 +127,7 @@ describe('POST /inbox/:id/promote', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { ok: boolean };
     expect(body.ok).toBe(true);
-    expect(mockPromoteInboxItem).toHaveBeenCalledWith(42, 'goose-hub-self', undefined);
+    expect(mockPromoteInboxItem).toHaveBeenCalledWith(42, 'goose-hub-self', undefined, false);
   });
 
   it('uses default slug "goose-hub-self" when projectSlug is not provided', async () => {
@@ -139,7 +139,7 @@ describe('POST /inbox/:id/promote', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     });
-    expect(mockPromoteInboxItem).toHaveBeenCalledWith(7, 'goose-hub-self', undefined);
+    expect(mockPromoteInboxItem).toHaveBeenCalledWith(7, 'goose-hub-self', undefined, false);
   });
 
   it('passes milestoneNumber to service when provided', async () => {
@@ -151,7 +151,7 @@ describe('POST /inbox/:id/promote', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ projectSlug: 'my-proj', milestoneNumber: 5 }),
     });
-    expect(mockPromoteInboxItem).toHaveBeenCalledWith(10, 'my-proj', 5);
+    expect(mockPromoteInboxItem).toHaveBeenCalledWith(10, 'my-proj', 5, false);
   });
 
   it('passes null milestoneNumber to service when explicitly set to null', async () => {
@@ -163,7 +163,19 @@ describe('POST /inbox/:id/promote', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ projectSlug: 'my-proj', milestoneNumber: null }),
     });
-    expect(mockPromoteInboxItem).toHaveBeenCalledWith(11, 'my-proj', null);
+    expect(mockPromoteInboxItem).toHaveBeenCalledWith(11, 'my-proj', null, false);
+  });
+
+  it('passes enhance: true to service when explicitly set', async () => {
+    mockPromoteInboxItem.mockResolvedValue({ ok: true, data: { ok: true } });
+
+    const app = makeApp();
+    await app.request('/inbox/12/promote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectSlug: 'my-proj', enhance: true }),
+    });
+    expect(mockPromoteInboxItem).toHaveBeenCalledWith(12, 'my-proj', undefined, true);
   });
 
   it('returns 400 for non-numeric id', async () => {

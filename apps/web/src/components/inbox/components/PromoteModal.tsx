@@ -16,6 +16,7 @@ export function PromoteModal({ item, onClose }: PromoteModalProps) {
   const [step, setStep] = useState<ModalStep>('picker');
   const [selectedSlug, setSelectedSlug] = useState<string>('');
   const [selectedMilestoneNumber, setSelectedMilestoneNumber] = useState<number | null>(null);
+  const [enhanceBug, setEnhanceBug] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const {
@@ -54,7 +55,13 @@ export function PromoteModal({ item, onClose }: PromoteModalProps) {
 
   const queryClient = useQueryClient();
   const mutation = useMutation({
-    mutationFn: () => promoteInboxItem(item.id, selectedSlug, milestoneArg),
+    mutationFn: () =>
+      promoteInboxItem(
+        item.id,
+        selectedSlug,
+        milestoneArg,
+        item.type === 'bug' ? enhanceBug : undefined,
+      ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['inbox'] });
       onClose();
@@ -221,6 +228,31 @@ export function PromoteModal({ item, onClose }: PromoteModalProps) {
                       </div>
                     )}
                   </div>
+                )}
+
+                {item.type === 'bug' && (
+                  <label
+                    title="AI will analyze the bug and append structured sections (Repro steps, Expected, Actual, Location) before creating the GitHub issue. Designed for UI/web bugs."
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      marginBottom: 16,
+                      cursor: 'pointer',
+                      fontSize: 12.5,
+                      color: 'var(--fg-2)',
+                      userSelect: 'none',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      data-testid="enhance-bug-checkbox"
+                      checked={enhanceBug}
+                      onChange={(e) => setEnhanceBug(e.target.checked)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    Enhance bug report
+                  </label>
                 )}
               </>
             )}

@@ -14,8 +14,15 @@ const mockLoggerError = vi.fn();
 const mockLoggerInfo = vi.fn();
 const mockLoggerWarn = vi.fn();
 
+const mockRunRetroForItem = vi.fn();
+
 vi.mock('../domains/workflows/triage-batch.js', () => ({
   runTriageBatch: mockRunTriageBatch,
+}));
+
+vi.mock('../domains/workflows/retro-batch.js', () => ({
+  runRetroForItem: mockRunRetroForItem,
+  runRetroBatch: vi.fn(),
 }));
 
 vi.mock('./source.js', () => ({
@@ -38,6 +45,7 @@ beforeEach(() => {
   vi.resetModules(); // reset module-level in-flight Sets between tests
   vi.resetAllMocks(); // clears call counts AND implementation queues (once-mocks)
   mockRunTriageBatch.mockResolvedValue(undefined);
+  mockRunRetroForItem.mockResolvedValue(undefined);
   mockGetSourceForSlug.mockResolvedValue(null);
 });
 
@@ -262,5 +270,48 @@ describe('dispatchForLabel', () => {
     await dispatchForLabel('my-project', 1, 'factory:needs-qa');
 
     expect(mockRunTriageBatch).not.toHaveBeenCalled();
+  });
+});
+
+// ─── dispatchRetro ────────────────────────────────────────────────────────
+
+describe('dispatchRetro', () => {
+  it('returns early and logs when source is null', { timeout: 30_000 }, async () => {
+    mockGetSourceForSlug.mockResolvedValue(null);
+
+    const { dispatchRetro } = await import('./dispatch.js');
+    await expect(dispatchRetro('no-source', 42)).resolves.toBeUndefined();
+    expect(mockLoggerError).toHaveBeenCalledWith(
+      'dispatchRetro: no source for slug',
+      expect.objectContaining({ slug: 'no-source' }),
+    );
+    expect(mockRunRetroForItem).not.toHaveBeenCalled();
+  });
+
+  it('skips items whose state has already advanced past factory:retrospecting', async () => {
+    const source = {
+      getItem: vi.fn().mockResolvedValue({ state: 'factory:done' }),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+
+    const { dispatchRetro } = await import('./dispatch.js');
+    await dispatchRetro('slug', 42);
+
+    expect(mockRunRetroForItem).not.toHaveBeenCalled();
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      'dispatchRetro: state already advanced, skipping',
+      expect.objectContaining({ slug: 'slug', issueNumber: 42, state: 'factory:done' }),
+    );
+  });
+
+  it('runs retro when item is in factory:retrospecting', async () => {
+    const item = { state: 'factory:retrospecting' };
+    const source = { getItem: vi.fn().mockResolvedValue(item) };
+    mockGetSourceForSlug.mockResolvedValue(source);
+
+    const { dispatchRetro } = await import('./dispatch.js');
+    await dispatchRetro('slug', 42);
+
+    expect(mockRunRetroForItem).toHaveBeenCalledWith(item, source, 'slug');
   });
 });

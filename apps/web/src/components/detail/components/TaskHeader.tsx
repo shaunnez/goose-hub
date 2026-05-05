@@ -1,14 +1,10 @@
 import { fetchMilestones, setLabel, setMilestone } from '@/lib/api';
-import {
-  COST_PLACEHOLDER,
-  PRIORITY_BG,
-  PRIORITY_BORDER,
-  PRIORITY_COLOR,
-  STATE_LABEL,
-} from '@/lib/constants';
+import { PRIORITY_BG, PRIORITY_BORDER, PRIORITY_COLOR, STATE_LABEL } from '@/lib/constants';
 import type { MilestoneDto, WorkItemDto } from '@/lib/types';
+import { formatCost, formatTokens } from '@/lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useIssueCostsBreakdown } from '../lib/costs';
 import { PillSelect } from './PillSelect';
 import { TransitionButton } from './TransitionButton';
 
@@ -28,6 +24,8 @@ export function TaskHeader({ item, projectSlug }: TaskHeaderProps) {
     queryFn: () => fetchMilestones(projectSlug),
     enabled: item != null,
   });
+
+  const costs = useIssueCostsBreakdown(projectSlug, item?.externalId ?? '');
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['issue', projectSlug, item?.externalId] });
@@ -100,8 +98,18 @@ export function TaskHeader({ item, projectSlug }: TaskHeaderProps) {
         <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
         <span>opened {item?.createdAt ? new Date(item?.createdAt).toLocaleString() : ''}</span>
         <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
-        <span title="Cost tracking available in M9" data-testid="cost-placeholder">
-          cost <span className="font-mono">{COST_PLACEHOLDER}</span>
+        <span data-testid="task-header-cost">
+          cost{' '}
+          <span
+            className="font-mono"
+            title={
+              costs.runCount === 0
+                ? 'No agent runs recorded yet'
+                : `${formatTokens(costs.totalTokens)} tokens across ${costs.runCount} run${costs.runCount === 1 ? '' : 's'}`
+            }
+          >
+            {costs.runCount === 0 ? '$—' : formatCost(costs.total, costs.totalLabel)}
+          </span>
         </span>
         <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
         <span title="Duration tracking available in M9" data-testid="duration-placeholder">

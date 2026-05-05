@@ -231,7 +231,13 @@ export async function dispatchReview(slug: string, issueNumber: number): Promise
   }
 }
 
-/** Run the retrospective workflow for a single issue. Drops duplicate triggers for the same issue. */
+/**
+ * Run the retrospective workflow for a single issue. Drops concurrent
+ * duplicates via the in-flight guard, AND skips items whose state already
+ * advanced past factory:retrospecting — retro is triggered both directly
+ * from approveIssue and via the factory:retrospecting label webhook, so
+ * sequential duplicate triggers must no-op once the workflow has run.
+ */
 export async function dispatchRetro(slug: string, issueNumber: number): Promise<void> {
   const key = issueKey(slug, issueNumber);
   if (_issueInFlight.has(key)) {
@@ -246,6 +252,14 @@ export async function dispatchRetro(slug: string, issueNumber: number): Promise<
       return;
     }
     const item = await source.getItem(issueNumber.toString());
+    if (item.state !== 'factory:retrospecting') {
+      logger.info('dispatchRetro: state already advanced, skipping', {
+        slug,
+        issueNumber,
+        state: item.state,
+      });
+      return;
+    }
     await runRetroForItem(item, source, slug);
   } finally {
     _issueInFlight.delete(key);

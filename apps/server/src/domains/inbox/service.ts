@@ -4,6 +4,7 @@ import { logger } from '@goose-hub/core/logger.js';
 import { eq } from 'drizzle-orm';
 import type { Result } from '#shared/middleware.js';
 import { getSourceForSlug } from '#shared/source.js';
+import { runBugEnhance } from './enhance.js';
 import {
   type InboxItem,
   getInboxItem,
@@ -34,6 +35,7 @@ export async function promoteInboxItem(
   id: number,
   projectSlug: string,
   milestoneNumber?: number | null,
+  enhance = false,
 ): Promise<Result<{ ok: true }>> {
   const item = await getInboxItem(id);
   if (item == null) return { ok: false, error: 'not found', status: 404 };
@@ -54,9 +56,19 @@ export async function promoteInboxItem(
     effectiveMilestoneNumber = stateRows[0]?.activeMilestoneNumber ?? null;
   }
 
+  let body = item.body ?? '';
+  if (enhance && item.type === 'bug') {
+    const enhancement = await runBugEnhance(source.projectId, item.id, item.title, body);
+    if (enhancement != null) {
+      body = `${body}\n\n---\n\n${enhancement}`;
+    } else {
+      logger.warn('bug-enhance: no enhancement produced, using original body', { id });
+    }
+  }
+
   await source.createIssue({
     title: item.title,
-    body: item.body ?? '',
+    body,
     type: item.type as 'feature' | 'bug' | 'chore' | 'research',
     ...(effectiveMilestoneNumber != null ? { milestoneId: String(effectiveMilestoneNumber) } : {}),
   });

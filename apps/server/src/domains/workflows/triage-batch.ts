@@ -5,6 +5,7 @@ import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
+import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import type { StateSource } from '@goose-hub/core/state-source/interface.js';
 import { skillsRoot } from '@goose-hub/skills';
 import { RepoMatchOutputSchema } from '@goose-hub/skills/repo-match/schema.js';
@@ -116,8 +117,18 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
         payload: { runId, error: 'triage output validation failed' },
         runId,
       });
+      accumulatePersonaStats({
+        personaName: triagerPersonaId,
+        role: 'triager',
+        outcome: 'failure',
+      });
       continue;
     }
+    accumulatePersonaStats({
+      personaName: triagerPersonaId,
+      role: 'triager',
+      outcome: 'success',
+    });
     const triageOutput = triageParsed.data;
     logger.info('triage-batch triage complete', {
       slug,
@@ -180,6 +191,17 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
         kind: 'agent.run-failed',
         payload: { runId: repoMatchRunId, error: 'repo-match output validation failed' },
         runId: repoMatchRunId,
+      });
+      accumulatePersonaStats({
+        personaName: researcherPersonaId,
+        role: 'researcher',
+        outcome: 'failure',
+      });
+    } else {
+      accumulatePersonaStats({
+        personaName: researcherPersonaId,
+        role: 'researcher',
+        outcome: 'success',
       });
     }
     const repoMatchOutput = repoMatchParsed.success
