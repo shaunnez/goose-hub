@@ -17,6 +17,7 @@ import {
 } from '../lib/investigation';
 import { ConfidenceBadge } from './ConfidenceBadge';
 import { FindingCard } from './FindingCard';
+import { PlaywrightCaptureSection } from './PlaywrightCaptureSection';
 import { SectionEmptyState } from './SectionEmptyState';
 import { StatCard } from './StatCard';
 
@@ -27,7 +28,7 @@ interface InvestigationSectionProps {
   itemState?: string;
 }
 
-export function InvestigationSection({ projectSlug, id, itemState }: InvestigationSectionProps) {
+export function InvestigationSection({ projectSlug, id, itemState, itemType }: InvestigationSectionProps) {
   const queryClient = useQueryClient();
   const personaMap = usePersonaMap();
   const { projects } = useActiveProject();
@@ -309,6 +310,11 @@ export function InvestigationSection({ projectSlug, id, itemState }: Investigati
             ))}
           </div>
         </div>
+      )}
+
+      {/* Playwright captures (bug items only) */}
+      {itemType === 'bug' && (
+        <PlaywrightCaptureSection projectSlug={projectSlug} id={id} itemType={itemType} />
       )}
 
       {/* Human proceed gate */}
