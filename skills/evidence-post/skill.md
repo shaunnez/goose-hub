@@ -37,19 +37,35 @@ The context contains a `<task>` block with:
    ```
    If the WebM does not exist or `ffmpeg` fails, set `gifPath: null` and continue — do not abort.
 3. **Move artefacts.** Move every screenshot into `evidence/issue-<N>/`. Create the directory if it does not exist (`mkdir -p evidence/issue-<N>`). Each AFTER screenshot gets a stable filename like `step-1.png`, `step-2.png`, … BEFORE-state screenshots from the investigation are already on the `evidence/issue-<N>` branch under `before-step-N.png` — do not overwrite them.
-4. **Push to the evidence branch.** Switch to (or create) `evidence/issue-<N>` so the AFTER commit lands on top of any BEFORE commit. The remote branch likely already exists (`playwright-repro` pushes the BEFORE state during investigation), so a plain `git checkout -b` would create a fresh branch from PR HEAD and the subsequent push would be rejected as non-fast-forward. Fetch first, then track the remote when present:
+4. **Push to the evidence branch via a dedicated worktree.** The `evidence/issue-<N>` branch is a separate, secondary branch that only holds artefacts. The dev worktree you are running in is the **same worktree QA will use after you exit**, so its HEAD and working tree must NOT be disturbed. Do all evidence operations in a sibling git worktree:
    ```bash
+   EVIDENCE_DIR=/tmp/evidence-issue-<N>
+
+   # Clean up any orphan worktree from a prior failed run.
+   git worktree remove --force "$EVIDENCE_DIR" 2>/dev/null || true
+
+   # The remote branch likely already exists (playwright-repro pushed the
+   # BEFORE state during investigation). Fetch first, then track origin
+   # when present so the subsequent push is a fast-forward.
    git fetch origin evidence/issue-<N> 2>/dev/null || true
    if git show-ref --verify --quiet refs/remotes/origin/evidence/issue-<N>; then
-     git checkout -B evidence/issue-<N> origin/evidence/issue-<N>
+     git worktree add "$EVIDENCE_DIR" -B evidence/issue-<N> origin/evidence/issue-<N>
    else
-     git checkout -b evidence/issue-<N>
+     git worktree add "$EVIDENCE_DIR" -b evidence/issue-<N>
    fi
 
+   cd "$EVIDENCE_DIR"
+   mkdir -p evidence/issue-<N>
+   # Copy AFTER screenshots and walkthrough.gif into evidence/issue-<N>/
+   # using the AFTER prefix step-N.png — never overwrite before-step-N.png
    git add evidence/issue-<N>/
    git commit -m "evidence: after-state for issue #<N>"
    git push origin evidence/issue-<N>
    git rev-parse HEAD    # this SHA pins the AFTER raw URLs
+
+   # Tear down the helper worktree — the dev worktree is untouched.
+   cd -
+   git worktree remove "$EVIDENCE_DIR"
    ```
    Use the resulting SHA for `commitSha` and for every raw URL in the comment. The PR's `prHeadSha` is recorded separately in the comment trailer for traceability.
 5. **Build the comment.** Compose markdown using the format below. When `<beforeCommentUrl>` is present, include a BEFORE section that links back to it; the BEFORE images on the evidence branch use the prefix `before-step-N.png`. The AFTER images use `step-N.png`.

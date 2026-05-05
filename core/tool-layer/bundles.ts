@@ -45,6 +45,8 @@ export const TOOL_BUNDLES = {
     'Bash(npx playwright*)',
     'Bash(ffmpeg*)',
     'Bash(mkdir -p evidence/*)',
+    'Bash(cd /tmp/evidence-*)',
+    'Bash(cd -)',
     'Bash(git add evidence/*)',
     'Bash(git checkout*)',
     'Bash(git commit -m *)',
@@ -52,6 +54,7 @@ export const TOOL_BUNDLES = {
     'Bash(git push*)',
     'Bash(git rev-parse HEAD)',
     'Bash(git show-ref*)',
+    'Bash(git worktree*)',
     'Bash(gh issue comment*)',
   ],
   /**
