@@ -6,7 +6,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 // convention claude-cli.ts uses to bypass real spawns under tests.
 process.env.MOCK_AGENTS = 'true';
 afterAll(() => {
-  delete process.env.MOCK_AGENTS;
+  process.env.MOCK_AGENTS = undefined;
 });
 
 // ─── module mocks ──────────────────────────────────────────────────────────────
