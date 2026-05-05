@@ -34,6 +34,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'pr.opened': 'PR opened',
   'pr.merged': 'PR merged',
   'gate.approved': 'Gate approved',
+  'gate.rejected': 'Gate rejected',
   'review.completed': 'Review completed',
   'evidence.no-spec-declared': 'Evidence — no spec declared',
   'evidence.posted': 'Evidence posted',

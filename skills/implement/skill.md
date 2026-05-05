@@ -40,6 +40,8 @@ The context contains a `<task>` block with:
 3. **Orient first.** First command in the worktree: `cat package.json` (and `cat apps/web/package.json` if touching the web app) to understand available test scripts before running anything.
 4. **Two-rewrite cap.** Before any rewrite, re-read the component under test and grep for the exact state-access pattern you are testing — tests must mirror what the code actually does. Maximum 2 rewrites per file. On a 3rd failure: emit a diagnosis decision summary (exact error, what you tried, what is still unclear), set `confidence: low`, commit what you have, and return — no further rewrites.
 5. **Mock from source.** Before mocking any import, grep the component file for its import statements. Only mock what it actually imports — never mock by assumption.
+6. **No shell syntax.** Never add `2>&1`, `>`, `&&`, `;`, or `|` to commands — `shell: false` passes them as literal arguments to the program, breaking the command. Use separate `bash` calls instead.
+7. **No command retry.** CWD is always the worktree root and cannot change between bash calls. If a command returns output you have already seen, running it again (with any description or "from a different directory") produces identical output. Stop, emit a diagnosis decision summary, set `confidence: low`, and return.
 
 - Emit: `[decision] Loaded acceptance criteria for #<number> and N relevant test files`
 

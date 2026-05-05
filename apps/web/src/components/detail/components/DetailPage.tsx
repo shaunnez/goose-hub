@@ -129,6 +129,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
       void queryClient.invalidateQueries({ queryKey: ['issues', slug] });
     };
     es.addEventListener('state.transitioned', onTransitioned);
+    es.addEventListener('gate.rejected', onTransitioned);
     return () => es.close();
   }, [slug, id, workItemId, queryClient]);
 

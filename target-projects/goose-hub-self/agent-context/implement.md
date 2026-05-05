@@ -13,6 +13,8 @@ Run from worktree **root** using pnpm filter syntax — NOT from `apps/web/`:
 
 **First command in any worktree:** `cat package.json` to verify available scripts.
 
+**Shell syntax is forbidden:** `2>&1`, `&&`, `;`, `|` are literal arguments with `shell: false` — they break the command. CWD is always worktree root, immutable between calls. Same command = same result, always. If a command fails, diagnose — do not retry.
+
 **Reading JSON test output:** check `numFailedTests` first — if `0`, suite is green, stop. If `> 0`, read `testResults[].assertionResults[]` where `status === "failed"` for full error detail and stack traces.
 
 ## Before touching any app

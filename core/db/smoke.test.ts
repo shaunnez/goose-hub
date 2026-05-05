@@ -137,10 +137,7 @@ describe('drizzle migrations', () => {
   it('__drizzle_migrations table exists after migrate runs against a fresh DB', () => {
     const sqlite = new Database(':memory:');
     const db = drizzle(sqlite);
-    const migrationsFolder = path.join(
-      path.dirname(fileURLToPath(import.meta.url)),
-      'migrations',
-    );
+    const migrationsFolder = path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations');
     migrate(db, { migrationsFolder });
 
     const trackingRows = sqlite

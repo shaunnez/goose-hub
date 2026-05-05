@@ -477,7 +477,7 @@ function AgentToolCallEvent({ event }: { event: AgentEventDto }) {
 
 function ToolWarningEvent({ event }: { event: AgentEventDto }) {
   const label =
-    event.kind === 'tool.stdout-truncated' ? 'Stdout truncated at 4 MB' : 'Process timed out (30s)';
+    event.kind === 'tool.stdout-truncated' ? 'Stdout truncated at 4 MB' : 'Process timed out';
   return (
     <li
       data-event-kind={event.kind}
@@ -702,6 +702,27 @@ function GateApprovedEvent({ event }: { event: AgentEventDto }) {
         <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
         <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
       </div>
+    </li>
+  );
+}
+
+function GateRejectedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as { source?: string; reason?: string } | null;
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-red-500/20 bg-red-500/5 px-4 py-3"
+    >
+      <div className="flex items-center gap-2 text-[11px] text-fg-3">
+        <XCircle size={13} className="shrink-0 text-red-400" />
+        <span className="font-mono uppercase tracking-wider">Rejected</span>
+        {p?.source != null && <span className="font-mono text-fg-4">via {p.source}</span>}
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      {p?.reason != null && (
+        <p className="mt-1.5 text-[12px] text-fg-2">{p.reason}</p>
+      )}
     </li>
   );
 }
@@ -1171,6 +1192,8 @@ export function renderTimelineItem(
       return <PrMergedEvent key={event.id} event={event} />;
     case 'gate.approved':
       return <GateApprovedEvent key={event.id} event={event} />;
+    case 'gate.rejected':
+      return <GateRejectedEvent key={event.id} event={event} />;
     case 'agent.implement-complete':
       return <AgentImplementCompleteEvent key={event.id} event={event} />;
     case 'evidence.no-spec-declared':

@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
+import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { runTriageBatch } from '../domains/workflows/triage-batch.js';
 import { getSourceForSlug } from './source.js';
 
@@ -353,12 +354,26 @@ export async function dispatchForIssue(slug: string, issueNumber: number): Promi
   await dispatchForLabel(slug, issueNumber, item.state);
 }
 
+type ResumeEntry = {
+  targetState: StateName;
+  dispatch: (slug: string, issueNumber: number) => Promise<void>;
+};
+
+const RESUME_WORKFLOWS: Partial<Record<StateName, ResumeEntry>> = {
+  'factory:dev-ready':      { targetState: 'factory:dev-ready',      dispatch: dispatchFixIssue },
+  'factory:in-progress':    { targetState: 'factory:dev-ready',      dispatch: dispatchFixIssue },
+  'factory:needs-qa':       { targetState: 'factory:needs-qa',       dispatch: dispatchQa },
+  'factory:needs-review':   { targetState: 'factory:needs-review',   dispatch: dispatchReview },
+  'factory:merge-conflict': { targetState: 'factory:merge-conflict', dispatch: dispatchResolveConflict },
+  'factory:investigating':  { targetState: 'factory:investigating',  dispatch: dispatchInvestigate },
+};
+
 /**
- * Resume an orphaned or stalled fix-issue run. Forces the issue back to
- * factory:dev-ready (stripping whatever factory:* label it currently holds)
- * then re-dispatches the fix-issue workflow. Uses forceState rather than
- * transitionState because in-progress → dev-ready is not a legal transition
- * in the normal workflow graph — this is explicitly a recovery operation.
+ * Resume an orphaned or stalled run. Looks up the issue's current state,
+ * forces it back to the canonical trigger state for that workflow (e.g.
+ * factory:in-progress → factory:dev-ready), then re-dispatches. Uses
+ * forceState rather than transitionState because recovery transitions are
+ * not always legal in the normal workflow graph.
  */
 export async function dispatchResumeIssue(slug: string, issueNumber: number): Promise<void> {
   const key = issueKey(slug, issueNumber);
@@ -378,14 +393,32 @@ export async function dispatchResumeIssue(slug: string, issueNumber: number): Pr
   const item = await source.getItem(issueNumber.toString());
   const fromState = item.state;
 
-  await source.forceState(workItemId, 'factory:dev-ready');
-  eventStore.appendEvent({
-    projectId: slug,
-    workItemId,
-    kind: 'state.transitioned',
-    payload: { from: fromState, to: 'factory:dev-ready', by: 'resume' },
-  });
-  logger.info('dispatchResumeIssue: reset to dev-ready', { slug, issueNumber, fromState });
+  const entry = RESUME_WORKFLOWS[fromState];
+  if (entry == null) {
+    logger.warn('dispatchResumeIssue: no resume handler for state', { slug, issueNumber, fromState });
+    return;
+  }
 
-  await dispatchFixIssue(slug, issueNumber);
+  if (entry.targetState !== fromState) {
+    await source.forceState(workItemId, entry.targetState);
+    eventStore.appendEvent({
+      projectId: slug,
+      workItemId,
+      kind: 'state.transitioned',
+      payload: { from: fromState, to: entry.targetState, by: 'resume' },
+    });
+    logger.info('dispatchResumeIssue: forced state for resume', {
+      slug,
+      issueNumber,
+      fromState,
+      targetState: entry.targetState,
+    });
+  }
+
+  logger.info('dispatchResumeIssue: dispatching workflow', {
+    slug,
+    issueNumber,
+    state: entry.targetState,
+  });
+  await entry.dispatch(slug, issueNumber);
 }
