@@ -99,11 +99,12 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
   }
 
   const items = groupEvents(events);
+  const context = { slug: projectSlug, issueId: id };
 
   return (
     <div data-testid="timeline-section" className="px-8 py-6">
       <ol className="flex flex-col gap-3">
-        {items.map((item, idx) => renderTimelineItem(item, idx))}
+        {items.map((item, idx) => renderTimelineItem(item, idx, context))}
       </ol>
     </div>
   );

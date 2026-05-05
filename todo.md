@@ -10,6 +10,11 @@
 
 9. Probably let people "reinvestigate" or "redev" etc when things arn't going well
 
+
+10. Deny pull request goes from factory-accepted to factory:needs fix.. but then what? Needs to either have dev fix or cancel
+
+11. Timeline: gate.rejected source/reason json to text
+
 Comments in overview wrong way around
 Agent runs not showing
 UI for overview

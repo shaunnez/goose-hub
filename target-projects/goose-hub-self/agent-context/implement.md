@@ -33,6 +33,7 @@ Every new slice at `slices/<name>/` MUST include:
 ## Web component test patterns
 
 - jsdom environment: add `/** @vitest-environment jsdom */` at top of test file
-- localStorage state: use `localStorage.setItem(...)` in `beforeEach`, NOT `vi.spyOn(Storage.prototype, 'getItem')`
+- localStorage state: use `localStorage.setItem(...)` in `beforeEach`, NOT `vi.spyOn(Storage.prototype, 'getItem')` — jsdom provides real localStorage; spyOn only intercepts `getItem` while `setItem` still hits real storage, so reads and writes diverge
 - Before mocking any hook: read the component file and grep its imports first (discipline rule 5)
 - `MemoryRouter` is required for any component that uses `Link` or `useNavigate`
+- **Before any test rewrite:** re-read the component and grep for the exact key/state it reads (e.g. `localStorage.getItem`, `useState`, `useRef`). A test that doesn't mirror the component's actual state access will fail regardless of rewrites.

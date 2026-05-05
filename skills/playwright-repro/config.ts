@@ -13,7 +13,7 @@ export const PlaywrightReproContextSchema = z.object({
 const config: SkillConfig = {
   contextSchema: PlaywrightReproContextSchema,
   contextAllowlist: ['workItem.title', 'workItem.body', 'workItem.reproSteps', 'workItem.url'],
-  toolBundles: ['playwright-mcp'],
+  toolBundles: ['validate'],
   modelPin: 'sonnet',
   freshContext: false,
   role: 'investigator',

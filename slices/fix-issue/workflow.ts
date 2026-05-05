@@ -9,7 +9,11 @@ import { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
-import { cleanupWorktree, createWorktree } from '@goose-hub/core/workspaces/worktree.js';
+import {
+  cleanupWorktree,
+  createWorktree,
+  prewarmWorktree,
+} from '@goose-hub/core/workspaces/worktree.js';
 import { EvidencePostSchema } from '@goose-hub/skills/evidence-post/schema.js';
 import { ImplementSchema } from '@goose-hub/skills/implement/schema.js';
 
@@ -39,6 +43,8 @@ export interface FixIssueDeps {
   createWorktreeImpl?: typeof createWorktree;
   /** Override cleanupWorktree (used by tests). */
   cleanupWorktreeImpl?: typeof cleanupWorktree;
+  /** Override prewarmWorktree (used by tests to skip pnpm install). */
+  prewarmWorktreeImpl?: typeof prewarmWorktree;
   /** Override resolveWorktreeHeadSha (used by tests to avoid real git subprocess). */
   resolveWorktreeHeadShaImpl?: typeof resolveWorktreeHeadSha;
   /** Override resolveBaseBranch (used by tests to avoid real git subprocess). */
@@ -52,6 +58,7 @@ export interface FixIssueDeps {
  *
  *   1. createWorktree
  *   2. Transition factory:dev-ready → factory:in-progress
+ *   2a. prewarmWorktree (pnpm install --frozen-lockfile)
  *   3. (Optional) advisor on plan — only for priority:high/critical
  *      - On `proceed`: continue
  *      - On `revise`: re-spawn implement once with feedback (max 1 pass per FACTORY_RULES rule 21)
@@ -77,6 +84,7 @@ export async function runFixIssueWorkflow(
   const advisorFn = deps.adviseOnPlanImpl ?? adviseOnPlan;
   const createWtFn = deps.createWorktreeImpl ?? createWorktree;
   const cleanupWtFn = deps.cleanupWorktreeImpl ?? cleanupWorktree;
+  const prewarmWtFn = deps.prewarmWorktreeImpl ?? prewarmWorktree;
   const resolveHeadShaFn = deps.resolveWorktreeHeadShaImpl ?? resolveWorktreeHeadSha;
   const resolveBaseBranchFn = deps.resolveBaseBranchImpl ?? resolveBaseBranch;
 
@@ -96,6 +104,10 @@ export async function runFixIssueWorkflow(
       'factory:dev-ready',
       'factory:in-progress',
     );
+
+    // Pre-warm: install dependencies before spawning the agent so it doesn't
+    // waste its first turn running pnpm install.
+    prewarmWtFn(worktreePath);
 
     // Step 3: optional advisor on plan (priority:high/critical only).
     let advisorFeedback: string | undefined;

@@ -1,6 +1,6 @@
 import { logger } from '@goose-hub/core/logger.js';
 import { Hono } from 'hono';
-import { dispatchResolveConflict } from '#shared/dispatch.js';
+import { dispatchResolveConflict, dispatchResumeIssue } from '#shared/dispatch.js';
 import { parseBody } from '#shared/middleware.js';
 import {
   approveIssue,
@@ -148,6 +148,17 @@ router.post('/:slug/issues/:id/reject', async (c) => {
   return result.ok
     ? c.json(result.data)
     : c.json({ error: result.error }, result.status as 400 | 404);
+});
+
+router.post('/:slug/issues/:id/resume', async (c) => {
+  const slug = c.req.param('slug');
+  const id = c.req.param('id');
+  const issueNumber = Number(id);
+  if (Number.isNaN(issueNumber)) return c.json({ error: 'invalid issue id' }, 400);
+  dispatchResumeIssue(slug, issueNumber).catch((err: unknown) => {
+    logger.error('resume: dispatchResumeIssue failed', { slug, id, error: String(err) });
+  });
+  return c.json({ ok: true });
 });
 
 router.post('/:slug/issues/:id/fake-run', async (c) => {

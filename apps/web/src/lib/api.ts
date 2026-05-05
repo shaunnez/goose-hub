@@ -203,6 +203,10 @@ export async function setLabel(
   await postJson(`/projects/${slug}/issues/${id}/set-label`, { group, value });
 }
 
+export async function resumeIssue(slug: string, id: string): Promise<void> {
+  await postJson(`/projects/${slug}/issues/${id}/resume`, {});
+}
+
 export async function startFakeRun(
   slug: string,
   id: string,

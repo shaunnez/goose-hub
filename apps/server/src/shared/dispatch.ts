@@ -352,3 +352,40 @@ export async function dispatchForIssue(slug: string, issueNumber: number): Promi
   const item = await source.getItem(issueNumber.toString());
   await dispatchForLabel(slug, issueNumber, item.state);
 }
+
+/**
+ * Resume an orphaned or stalled fix-issue run. Forces the issue back to
+ * factory:dev-ready (stripping whatever factory:* label it currently holds)
+ * then re-dispatches the fix-issue workflow. Uses forceState rather than
+ * transitionState because in-progress → dev-ready is not a legal transition
+ * in the normal workflow graph — this is explicitly a recovery operation.
+ */
+export async function dispatchResumeIssue(slug: string, issueNumber: number): Promise<void> {
+  const key = issueKey(slug, issueNumber);
+  if (_issueInFlight.has(key)) {
+    logger.warn('dispatchResumeIssue: already in-flight, dropping duplicate', {
+      slug,
+      issueNumber,
+    });
+    return;
+  }
+  const source = await getSourceForSlug(slug);
+  if (source == null) {
+    logger.error('dispatchResumeIssue: no source for slug', { slug });
+    return;
+  }
+  const workItemId = `github:${source.repoRef}#${issueNumber}`;
+  const item = await source.getItem(issueNumber.toString());
+  const fromState = item.state;
+
+  await source.forceState(workItemId, 'factory:dev-ready');
+  eventStore.appendEvent({
+    projectId: slug,
+    workItemId,
+    kind: 'state.transitioned',
+    payload: { from: fromState, to: 'factory:dev-ready', by: 'resume' },
+  });
+  logger.info('dispatchResumeIssue: reset to dev-ready', { slug, issueNumber, fromState });
+
+  await dispatchFixIssue(slug, issueNumber);
+}

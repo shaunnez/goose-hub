@@ -147,6 +147,7 @@ describe('chore-shipping end-to-end (#187)', () => {
       adviseOnPlanImpl: vi.fn(),
       createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
       cleanupWorktreeImpl: vi.fn(),
+      prewarmWorktreeImpl: vi.fn(),
     });
 
     // ── Acceptance: worktree created ───────────────────────────────────────

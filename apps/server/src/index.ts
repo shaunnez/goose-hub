@@ -2,11 +2,16 @@ import { resolve } from 'node:path';
 import { config } from 'dotenv';
 config({ path: resolve(import.meta.dirname, '../../../.env') });
 
+import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { serve } from '@hono/node-server';
 import { app } from './server.js';
 
 if (process.env.VITEST == null) {
+  const closed = eventStore.closeOrphanedRuns();
+  if (closed > 0) {
+    logger.info('startup: closed orphaned agent runs', { count: closed });
+  }
   if (process.env.GITHUB_WEBHOOK_SECRET == null || process.env.GITHUB_WEBHOOK_SECRET.length === 0) {
     throw new Error('GITHUB_WEBHOOK_SECRET env var is required to start the server');
   }

@@ -38,6 +38,17 @@ export function createWorktree(repo: string, runId: string): string {
 }
 
 /**
+ * Runs `pnpm install --frozen-lockfile` in the worktree to warm node_modules before the agent
+ * starts. Eliminates the first wasted turn where the agent discovers and installs dependencies.
+ */
+export function prewarmWorktree(worktreePath: string): void {
+  execFileSync('pnpm', ['install', '--frozen-lockfile'], {
+    cwd: worktreePath,
+    stdio: 'pipe',
+  });
+}
+
+/**
  * Removes the git worktree for the given runId.
  *
  * Idempotent: if the worktree path does not exist, this is a no-op.

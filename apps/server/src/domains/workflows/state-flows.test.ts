@@ -51,6 +51,7 @@ vi.mock('@goose-hub/core/persona/accumulate.js', () => ({
 vi.mock('@goose-hub/core/workspaces/worktree.js', () => ({
   createWorktree: vi.fn().mockReturnValue('/mock/worktree'),
   cleanupWorktree: vi.fn(),
+  prewarmWorktree: vi.fn(),
   resolveWorktreeHeadSha: vi.fn().mockReturnValue('mock-sha-abc123'),
 }));
 

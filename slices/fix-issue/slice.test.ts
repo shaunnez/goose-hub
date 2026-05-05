@@ -39,9 +39,11 @@ vi.mock('@goose-hub/core/agent-runtime/advisor.js', () => ({
 }));
 const mockCreateWorktree = vi.fn().mockReturnValue('/work/wt');
 const mockCleanupWorktree = vi.fn();
+const mockPrewarmWorktree = vi.fn();
 vi.mock('@goose-hub/core/workspaces/worktree.js', () => ({
   createWorktree: (...args: unknown[]) => mockCreateWorktree(...args),
   cleanupWorktree: (...args: unknown[]) => mockCleanupWorktree(...args),
+  prewarmWorktree: (...args: unknown[]) => mockPrewarmWorktree(...args),
 }));
 
 import { eventStore } from '@goose-hub/core/event-stream/store.js';

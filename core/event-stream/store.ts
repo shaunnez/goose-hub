@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { type SQL, and, asc, eq, gt } from 'drizzle-orm';
+import { type SQL, and, asc, eq, gt, inArray, isNotNull } from 'drizzle-orm';
 import { db } from '../db/db.js';
 import { events } from '../db/schema.js';
 import { redactSecrets } from '../tool-layer/secret-redaction.js';
@@ -179,6 +179,53 @@ class EventStore {
     };
     this.emitter.on('event', safeListener);
     return () => this.emitter.off('event', safeListener);
+  }
+
+  /**
+   * On server startup, find any runs that started but never completed (server
+   * crashed mid-run). Emit a synthetic agent.run-failed for each so the UI
+   * doesn't show them as "Live" forever. Returns the number of runs closed.
+   */
+  closeOrphanedRuns(): number {
+    const startedRows = db
+      .select({
+        runId: events.runId,
+        projectId: events.projectId,
+        workItemId: events.workItemId,
+      })
+      .from(events)
+      .where(and(eq(events.kind, 'agent.run-started'), isNotNull(events.runId)))
+      .all();
+
+    if (startedRows.length === 0) return 0;
+
+    const closedRows = db
+      .selectDistinct({ runId: events.runId })
+      .from(events)
+      .where(
+        and(
+          inArray(events.kind, ['agent.run-completed', 'agent.run-failed'] as EventKind[]),
+          isNotNull(events.runId),
+        ),
+      )
+      .all();
+
+    const closedIds = new Set(closedRows.map((r) => r.runId).filter((id) => id != null));
+    const seen = new Set<string>();
+
+    for (const row of startedRows) {
+      if (row.runId == null || seen.has(row.runId) || closedIds.has(row.runId)) continue;
+      seen.add(row.runId);
+      this.appendEvent({
+        projectId: row.projectId,
+        workItemId: row.workItemId,
+        kind: 'agent.run-failed',
+        payload: { error: 'Server restarted — run orphaned', orphaned: true },
+        runId: row.runId,
+      });
+    }
+
+    return seen.size;
   }
 }
 

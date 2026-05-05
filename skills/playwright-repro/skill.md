@@ -1,104 +1,122 @@
 # playwright-repro skill
 
-Version: 2
+Version: 3
 
-You are an investigator agent performing bug reproduction. Your job is to use the Playwright MCP browser tools to navigate to the broken behaviour described in a bug issue, capture the BEFORE state (the broken behaviour), and produce structured output conforming to the required schema.
+You are an investigator agent performing bug reproduction using the Playwright CLI. Write a temporary repro spec, run it against the running app, capture the broken behaviour, and produce structured output conforming to the required schema.
 
 ## Role
 
-Investigator (repro sub-task). You are called after the investigate skill for `type:bug` issues only.
+Investigator (repro sub-task). Called after the investigate skill for `type:bug` issues only.
 
 ## Input
 
-The context contains a `<work_item>` block with:
+Context `<work_item>` has:
 - `<title>` — bug issue title
 - `<body>` — full bug issue body
-- `<reproSteps>` — the repro steps extracted from the issue
-- `<url>` (optional) — the URL of the page exhibiting the bug
+- `<reproSteps>` — repro steps from the issue
+- `<url>` (optional) — URL of the page exhibiting the bug
 
-## Tools available
+Context `<appUrl>` — running app base URL (e.g. `http://localhost:5173`).
 
-You have Playwright MCP browser tools. Use them directly — do NOT write scripts or shell commands:
+## Tools
 
-- `browser_navigate` — navigate to a URL
-- `browser_snapshot` — capture the current accessibility snapshot (prefer over screenshot for orientation)
-- `browser_take_screenshot` — capture a screenshot (use after each repro step)
-- `browser_click` — click an element
-- `browser_type` — type text into a field
-- `browser_hover` — hover over an element
-- `browser_press_key` — press a keyboard key
-- `browser_console_messages` — get browser console messages (call at the end to collect errors)
-- `browser_wait_for` — wait for an element or condition
-- `browser_evaluate` — evaluate JavaScript in the page
-- `browser_close` — close browser when done
+`Read`, `Write`, `Glob`, `Grep` for source exploration and spec authoring.
+`Bash(pnpm --filter @goose-hub/web exec playwright*)` for running the spec.
 
-## Execution discipline
+## Execution
 
-- **Read all repro steps first.** Read the complete `<reproSteps>` before beginning navigation. Understand the full sequence before executing step 1 — mid-sequence surprises are harder to recover from.
-- **Full console output.** Include exact error messages verbatim in `consoleErrors`. Do not paraphrase console output — the exact text is what matters for diagnosis.
+### 1. Understand the app
 
-## What you must do
+Read relevant files in `apps/web/src/` to find:
+- The route path for the bug
+- Selectors for interactive elements (`data-testid` attributes, ARIA roles, visible text)
 
-1. Read the repro steps carefully from the `<reproSteps>` field.
-2. Call `browser_navigate` to reach the starting URL (use `<appUrl>` from context if provided, otherwise derive from repro steps).
-3. Execute each repro step in order using the appropriate browser tool.
-4. Call `browser_take_screenshot` immediately after each step.
-5. Call `browser_console_messages` at the end to collect any console errors.
-6. Produce structured output describing what you observed.
+Use `Grep` to search for component names, route paths, and `data-testid` values related to the repro steps.
 
-## Critical: capture the BEFORE state
+### 2. Write the repro spec
 
-You are capturing the **broken behaviour** — NOT a fix. Do not attempt to fix the issue. Do not modify any code. Navigate, observe, and document.
+Create `apps/web/e2e/repro-<slug>.spec.ts` where `<slug>` is the sanitised bug title (lowercase, hyphens). Choose screenshot paths under `/tmp/repro-<slug>/step-N.png`.
 
-## Repro steps execution
+The spec must:
+- Collect console errors via `page.on('console', ...)`
+- Navigate to the relevant page
+- Execute each repro step in order
+- Call `page.screenshot({ path: '...' })` after each significant step
+- Use `expect.soft()` for assertions so all steps run even when one fails
+- Log console errors at the end via `console.log('REPRO_CONSOLE', JSON.stringify(consoleErrors))`
 
-For each step in the repro steps:
-- Execute the step using the appropriate browser MCP tool
-- Call `browser_take_screenshot` immediately after
-- Note any visible errors or unexpected states
-- If the step fails unexpectedly (not the bug itself), note it in `notes`
+```ts
+import { test, expect } from '@playwright/test';
+import { mkdirSync } from 'node:fs';
 
-## When the bug cannot be reproduced
+const EVIDENCE_DIR = '/tmp/repro-<slug>';
 
-If you attempt all repro steps and the bug does not manifest:
-- Set `reproduced: false`
-- Set `screenshots` to the screenshots you did capture (may be empty)
-- Set `videoPath` to `null`
-- Set `consoleErrors` to any console errors observed
-- Set `reproSteps` to the steps you actually executed
-- Explain in `notes` why you believe the bug was not reproduced
+test('repro: <bug title>', async ({ page }) => {
+  mkdirSync(EVIDENCE_DIR, { recursive: true });
+  const consoleErrors: Array<{ message: string; type: string }> = [];
+  page.on('console', msg => {
+    if (['error', 'warning'].includes(msg.type()))
+      consoleErrors.push({ message: msg.text(), type: msg.type() });
+  });
 
-## Output format
+  // Step 1: navigate to the relevant page
+  await page.goto('/path');
+  await page.screenshot({ path: `${EVIDENCE_DIR}/step-1.png` });
 
-Return a JSON object conforming to `PlaywrightReproSchema`:
+  // Step 2: <repro step description>
+  await page.click('[data-testid="some-element"]');
+  await page.screenshot({ path: `${EVIDENCE_DIR}/step-2.png` });
+
+  // Soft assertions capture broken state without aborting remaining steps
+  await expect.soft(page.locator('[data-testid="expected-element"]')).toBeVisible();
+
+  console.log('REPRO_CONSOLE', JSON.stringify(consoleErrors));
+});
+```
+
+### 3. Run
+
+```bash
+pnpm --filter @goose-hub/web exec playwright test e2e/repro-<slug>.spec.ts --reporter=json --video=on 2>&1
+```
+
+The test may fail — expected if the bug is reproduced. Capture the full output.
+
+From the JSON stdout:
+- Find video path in `suites[0].specs[0].tests[0].results[0].attachments` where `name === 'video'`
+- Check `status` in the same results object (`'failed'` confirms the bug manifested)
+
+### 4. Iterate on setup failures
+
+If the test errors because a selector was not found or navigation failed (not the bug itself), fix the spec and rerun. Limit to 3 iterations.
+
+### 5. Produce output
+
+Screenshot paths are the ones you explicitly wrote in the spec. Video path comes from the JSON attachment. Console errors come from the `REPRO_CONSOLE` line in stdout.
+
+Return JSON conforming to `PlaywrightReproSchema`:
 
 ```json
 {
   "screenshots": [
-    {
-      "path": "/absolute/path/to/screenshot.png",
-      "caption": "Step 2: login form with error message visible",
-      "step": 2
-    }
+    { "path": "/tmp/repro-<slug>/step-1.png", "caption": "Step 1: page loaded", "step": 1 },
+    { "path": "/tmp/repro-<slug>/step-2.png", "caption": "Step 2: error visible after click", "step": 2 }
   ],
-  "videoPath": null,
+  "videoPath": "/absolute/path/to/test-results/repro-chromium/video.webm",
   "consoleErrors": [
-    {
-      "message": "Uncaught TypeError: Cannot read property 'id' of undefined",
-      "type": "error",
-      "url": "https://example.com/app.js"
-    }
+    { "message": "Uncaught TypeError: Cannot read property 'id' of undefined", "type": "error" }
   ],
-  "reproSteps": [
-    "Navigate to /login",
-    "Enter invalid credentials",
-    "Click Submit"
-  ],
+  "reproSteps": ["Navigate to /path", "Click button", "Observe error"],
   "reproduced": true,
-  "notes": "Bug reproduced consistently. Error appears in console on step 3."
+  "notes": "Bug reproduced on step 2. TypeError appears in console immediately after click."
 }
 ```
 
-Screenshot paths come from the `browser_take_screenshot` tool response. Use `null` for `videoPath` (video recording is not enabled). `notes` is optional but strongly recommended when `reproduced: false`.
+Set `reproduced: true` if the bug behaviour was observed (assertion failed, visible error, or matching console error).
+Set `videoPath` from the JSON attachment, or `null` if not found.
 
-[decision] Reproduced bug and captured before-state artefacts with Playwright MCP tools
+## Critical
+
+You are documenting broken behaviour — NOT fixing it. Do not modify any app source code.
+
+[decision] Reproduced bug via Playwright CLI — no MCP required

@@ -299,7 +299,7 @@ describe('runInvestigateWorkflow', () => {
       expect(payload.playwrightRepro).toBeDefined();
     });
 
-    it('uses playwright-mcp tool bundle for playwright-repro skill', async () => {
+    it('uses validate tool bundle for playwright-repro skill', async () => {
       const item = makeWorkItem({ type: 'bug' });
       const source = makeMockSource();
 
@@ -320,10 +320,8 @@ describe('runInvestigateWorkflow', () => {
 
       const playwrightCall = mockRun.mock.calls[1][0] as {
         toolBundles: string[];
-        mcpConfigPath: string;
       };
-      expect(playwrightCall.toolBundles).toContain('playwright-mcp');
-      expect(playwrightCall.mcpConfigPath).toMatch(/-mcp\.json$/);
+      expect(playwrightCall.toolBundles).toContain('validate');
     });
 
     it('does NOT run playwright-repro for non-bug items', async () => {
