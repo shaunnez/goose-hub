@@ -238,13 +238,7 @@ describe('runResolveConflictWorkflow', () => {
         resolved: ['src/foo.ts'],
         unresolvable: [],
         confidence: 'low',
-<<<<<<< HEAD
         decisionSummaries: [{ step: 'resolve', summary: 'Uncertain — picked PR side blindly' }],
-=======
-        decisionSummaries: [
-          { step: 'resolve', summary: 'Uncertain — picked PR side blindly' },
-        ],
->>>>>>> 09a20ab (feat(slices): add resolve-conflict workflow)
       },
       decisionSummaries: [],
       events: [],
@@ -321,13 +315,7 @@ describe('runResolveConflictWorkflow', () => {
       .mockReturnValueOnce('') // push
       .mockReturnValueOnce(''); // worktree remove
 
-<<<<<<< HEAD
     const mergePRImpl = vi.fn().mockRejectedValueOnce(new Error('GitHub 422 — PR already merged'));
-=======
-    const mergePRImpl = vi
-      .fn()
-      .mockRejectedValueOnce(new Error('GitHub 422 — PR already merged'));
->>>>>>> 09a20ab (feat(slices): add resolve-conflict workflow)
 
     const source = makeStateSource();
     await runResolveConflictWorkflow(makeWorkItem(), source, 'proj', '/repo', {
