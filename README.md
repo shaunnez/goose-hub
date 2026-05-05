@@ -65,10 +65,24 @@ QA and Review are **holdouts**: each runs in a fresh agent context with no acces
 ### Standards & ADRs
 
 - `docs/standards/verification.md` — the three-tier (Structural / Functional / Regression) verification framework + 8-category code-quality rubric (≥ 70/100 threshold). Ships ahead of the M8 QA holdout.
-- `docs/adr/` — architectural decisions in chronological order. M7 added ADR 0011 (Playwright agents), 0012 (advisor wrapping + per-step typed timeouts), 0013 (GitHub connectors + fix-issue workflow shape). M8 added ADR 0014 (holdout enforcement architecture). M9 added ADR 0015 (target-projects workspace package), ADR 0016 (cost module architecture), ADR 0017 (core/workflows placement for cross-caller workflows).
+- `docs/adr/` — architectural decisions in chronological order. M7 added ADR 0011 (Playwright agents), 0012 (advisor wrapping + per-step typed timeouts), 0013 (GitHub connectors + fix-issue workflow shape). M8 added ADR 0014 (holdout enforcement architecture). M9 added ADR 0015 (target-projects workspace package), ADR 0016 (cost module architecture), ADR 0017 (core/workflows placement for cross-caller workflows). M10 added ADR 0018 (multi-project loader and per-project scheduler in core/projects/).
 
 ### Retrospective & Learning Loop (M9)
 
 - **Roster** — at `/projects/<slug>/roster`. Per-role list of personas with quality score, run count, and last-run time. Click any card to open a drill-in panel showing run history and pending improvement candidates. Approve a candidate to create a `type:improvement` Factory issue in the target repo; reject to dismiss.
 - **Cost dashboard** — at `/projects/<slug>/costs`. Weekly and monthly spend with per-stage breakdown. Figures sourced from Claude CLI are labelled `~$` (estimated); figures from direct API calls are labelled exact.
 - **Persona stats** — accumulated after every agent run across all workflow stages. `persona_stats` table holds `runs_total`, `runs_succeeded`, `runs_failed`, `avg_quality_score`, and `last_run_at` per persona/role pair.
+
+### Multi-project Orchestration (M10)
+
+Goose Hub can now drive more than one target project simultaneously. Two projects are registered under `target-projects/`: `goose-hub-self` (purple, `#7c3aed`) and `nannymudnz` (emerald, `#059669`). New projects are added by hand-creating a `target-projects/<slug>/` directory with `project.config.ts` — no code changes needed.
+
+- **Project switcher** — sidebar dropdown lists every registered project with its color stripe. Selecting a project scopes the Kanban, Roster, and Settings views immediately. Selection persists across page reload.
+- **All Projects board** — select "All Projects" in the switcher to see a single aggregated Kanban with cards from every registered project, each carrying a left-border color stripe identifying its source project.
+- **Per-project tick scheduler** — each project runs an independent `setInterval` tick loop (configurable via `tickIntervalSeconds` in `project.config.ts`, default 60 s). A crash or long-running workflow in one project never delays another project's tick.
+- **Per-project budgets** — daily token counter, per-workflow budget cap, and per-advisor budget are all keyed by project slug. Exceeding one project's daily limit blocks only that project's ticks; others continue unaffected.
+- **Per-project active milestone** — each project tracks its own `activeMilestone` independently. The Kanban for each project filters to its own milestone's issues.
+- **Cross-project Roster** — at `/projects/all/roster` (or via the project filter dropdown on the Roster page). Shows personas from all registered projects with color-stripe attribution. Filter to a single project to scope the leaderboard.
+- **Settings → Projects** — read-only display of every registered project's config (slug, source, active milestone, budget limits, color). A "Reload" button refreshes without a full page reload. Editing is file-based; the UI includes a prompt directing to `target-projects/<slug>/project.config.ts`.
+
+ADR 0018 covers the `core/projects/` loader and scheduler architecture. See `docs/adr/0018-multi-project-loader-and-scheduler.md`.

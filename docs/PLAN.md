@@ -182,7 +182,7 @@ This distinction matters: agents and future you should not underbuild durability
 
 ## 6. Repository layout
 
-This reflects the actual layout as of M2. Future directories are annotated with the milestone that introduces them.
+This reflects the actual layout as of M10. Future directories are annotated with the milestone that introduces them.
 
 ```
 goose-hub/
@@ -196,10 +196,15 @@ goose-hub/
 ├── biome.json
 ├── .github/
 │   └── workflows/                       # CI YAML — allowed, expected
-├── target-projects/                     # config + governance per project
-│   └── goose-hub-self/
+├── target-projects/                     # config + governance per project (@goose-hub/target-projects, see ADR 0015)
+│   ├── index.ts                         # exports targetProjectsRoot path anchor
+│   ├── goose-hub-self/
+│   │   ├── MISSION.md
+│   │   ├── FACTORY_RULES.md
+│   │   ├── project.config.ts
+│   │   └── personas/
+│   └── nannymudnz/                      # M10: second registered project (color #059669)
 │       ├── MISSION.md
-│       ├── FACTORY_RULES.md
 │       ├── project.config.ts
 │       └── personas/
 ├── skills/                              # composable skill packages (M5+, @goose-hub/skills workspace pkg)
@@ -244,13 +249,11 @@ goose-hub/
 │   │   ├── schema.ts
 │   │   ├── db.ts
 │   │   └── migrate.ts
-│   ├── orchestrator/                    # M5+
-│   │   ├── tick.ts
-│   │   ├── locks.ts
-│   │   └── scheduler.ts
-│   │                                    # NOTE: workflow modules live in /slices/<name>/workflow.ts,
-│   │                                    # NOT under core/orchestrator/workflows/. The orchestrator
-│   │                                    # tick dispatches to slice workflows via apps/server/src/shared/dispatch.ts.
+│   ├── projects/                        # M10+ (see ADR 0018); multi-project loader + per-project scheduler
+│   │   ├── loader.ts                    # loadProjects() / getProjectBySlug() — reads target-projects/*/project.config.ts
+│   │   └── scheduler.ts                 # startPerProjectScheduler() — one independent setInterval per project
+│   │                                    # NOTE: per-project locking and workflow dispatch live in
+│   │                                    # apps/server/src/shared/dispatch.ts, not here.
 │   ├── agent-runtime/                   # M4+
 │   │   ├── interface.ts
 │   │   ├── claude-cli.ts
@@ -268,10 +271,8 @@ goose-hub/
 │   │   ├── secret-redaction.ts
 │   │   └── pre-tool-use-hook.ts
 │   ├── workspaces/                      # M4+
-│   ├── budgets/                         # M4+
-│   ├── governance/                      # M4+
-│   ├── personas/                        # M6+
-│   ├── milestones/                      # M6+
+│   ├── persona/                         # M9+ (singular — accumulatePersonaStats)
+│   │   └── accumulate.ts                # accumulatePersonaStats — called by every workflow
 │   ├── retrospective/                   # M9+ (shared Zod schemas for retro skill output)
 │   │   └── schemas.ts
 │   ├── cost/                            # M9+ (see ADR 0016)
@@ -279,11 +280,8 @@ goose-hub/
 │   │   ├── repository.ts                # recordCost / queryCosts
 │   │   ├── skill-stage.ts               # skill → stage mapping
 │   │   └── types.ts
-│   ├── persona/                         # M9+
-│   │   └── accumulate.ts                # accumulatePersonaStats — called by every workflow
 │   ├── workflows/                       # M9+ (see ADR 0017); cross-caller workflows only
 │   │   └── retrospective.ts             # runRetrospectiveWorkflow — tier selection + skill dispatch
-│   ├── bootstrap/
 │   └── connectors/
 │       └── github/                      # M7+ (#184/#186)
 │           ├── open-pr.ts
