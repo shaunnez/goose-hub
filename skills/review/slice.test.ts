@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import config, { ReviewContextSchema } from './config.js';
 import { CriterionCheckSchema, ReviewFindingSchema, ReviewOutputSchema } from './schema.js';
@@ -288,6 +290,22 @@ describe('confidence range validation', () => {
   it('rejects confidence below 0.0', () => {
     const result = ReviewOutputSchema.safeParse(makeApprovedOutput({ confidence: -0.1 }));
     expect(result.success).toBe(false);
+  });
+});
+
+// ─── skill.md — criteriaChecks output requirement ────────────────────────────
+
+describe('skill.md — criteriaChecks population requirement', () => {
+  const skillMd = readFileSync(join(import.meta.dirname, 'skill.md'), 'utf-8');
+
+  it('output format section explicitly requires one entry per criterion', () => {
+    // Must contain language stating criteriaChecks needs one entry per criterion
+    expect(skillMd).toMatch(/criteriaChecks.*one entry per/s);
+  });
+
+  it('warns that empty criteriaChecks array is never valid when criteria exist', () => {
+    // Must contain a warning that criteriaChecks: [] is never valid
+    expect(skillMd).toMatch(/criteriaChecks.*\[\].*never valid|criteriaChecks: \[\].*never valid/s);
   });
 });
 
