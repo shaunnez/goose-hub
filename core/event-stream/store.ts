@@ -38,6 +38,10 @@ export type EventKind =
   | 'gate.approved'
   | 'gate.rejected'
   | 'pr.merged'
+  // Merge conflict auto-resolution (resolve-conflict slice)
+  | 'merge.conflict'
+  | 'merge.conflict-resolved'
+  | 'merge.conflict-unresolvable'
   // M8 holdout enforcement — context injection boundary violations
   | 'tool.violation'
   // M8 QA/Review lifecycle events
