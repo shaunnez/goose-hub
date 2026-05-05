@@ -134,6 +134,7 @@ function makeImplementOutput() {
     plan: 'Integration test plan',
     filesWritten: [{ path: 'test.ts', reason: 'integration fixture' }],
     testsWritten: [],
+    testsRun: { command: 'pnpm test --run', paths: [] },
     prUrl: 'https://github.com/test/pull/99',
     evidenceSpecPath: null,
     confidence: 'high',

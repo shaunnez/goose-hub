@@ -102,6 +102,10 @@ function makeImplementOutput(overrides: Record<string, unknown> = {}) {
       { path: 'core/utils/strings.test.ts', reason: 'tests' },
     ],
     testsWritten: [{ path: 'core/utils/strings.test.ts', cases: 3 }],
+    testsRun: {
+      command: 'pnpm test --run',
+      paths: ['core/utils/strings.test.ts'],
+    },
     prUrl: 'https://github.com/owner/repo/issues/42',
     evidenceSpecPath: null as string | null,
     confidence: 'high' as const,

@@ -62,6 +62,19 @@ export const QaContextSchema = z.object({
       }),
     )
     .optional(),
+  /**
+   * The targeted test command and paths the developer actually ran (#467).
+   * Sourced from the implement skill's `testsRun` output. QA cross-references
+   * this against its own full-suite run to flag failures outside dev's
+   * targeted set as high-signal regressions. Optional — older runs (or
+   * non-implement workflows) won't have it.
+   */
+  devTestsRun: z
+    .object({
+      command: z.string(),
+      paths: z.array(z.string()),
+    })
+    .optional(),
 });
 
 const config: SkillConfig = {
@@ -98,6 +111,7 @@ const config: SkillConfig = {
     'sliceTests',
     'evidenceCommentUrl',
     'verifyCommands',
+    'devTestsRun',
   ],
 };
 

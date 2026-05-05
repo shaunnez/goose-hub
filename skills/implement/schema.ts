@@ -15,6 +15,19 @@ export const TestWrittenSchema = z.object({
   cases: z.number().int().min(0).describe('Number of test cases added / modified in this file'),
 });
 
+/**
+ * Records the targeted test command the developer actually ran (#467).
+ * Dev runs `<test_command> --run <paths…>` rather than the full suite — QA
+ * runs the full suite and cross-references this against its own results
+ * to flag failures outside the dev-touched surface as high-signal regressions.
+ */
+export const TestsRunSchema = z.object({
+  command: z
+    .string()
+    .describe('The test command the developer actually invoked (without file path arguments)'),
+  paths: z.array(z.string()).describe('Workspace-relative test file paths passed to the command'),
+});
+
 export const ImplementSchema = z
   .object({
     plan: z
@@ -27,6 +40,9 @@ export const ImplementSchema = z
       .describe(
         'Test files written or modified — empty array is valid for chore PRs without tests',
       ),
+    testsRun: TestsRunSchema.describe(
+      'The targeted test command the developer ran, plus the file paths passed to it',
+    ),
     prUrl: z
       .string()
       .url()
@@ -56,4 +72,5 @@ export const ImplementSchema = z
     }
   });
 
+export type TestsRun = z.infer<typeof TestsRunSchema>;
 export type ImplementOutput = z.infer<typeof ImplementSchema>;

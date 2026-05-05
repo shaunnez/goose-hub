@@ -72,13 +72,16 @@ Record tier result with:
 
 Purpose: Catch behavior regressions and missing test coverage.
 
+**QA always runs the full suite.** The dev role only runs targeted tests for the surface it touched (#467). The workflow pre-runs the full `testCommand` and attaches results as `testRun` in your context — even when `testRun` is present, your job is to grade the full result. If you re-run, run the full command, not just dev's targeted set. Cross-reference `testsRun.paths` from the dev output (when present in context) against the full-suite results: failures **outside** dev's targeted set are the high-signal regressions and should be recorded as `error`-severity findings.
+
 Steps:
-1. If `testRun` is present in your context, use it as the test result — do not re-run `testCommand`. If `testRun` is absent or `null`, run `testCommand` yourself; if `sliceTests` are provided, run those first for targeted feedback.
+1. If `testRun` is present in your context, use it as the test result — do not re-run `testCommand`. If `testRun` is absent or `null`, run the full `testCommand` yourself; if `sliceTests` are provided, run those first for targeted feedback before the full suite.
 2. Check test output (or `testRun.suites`) for failures, errors, and skipped tests.
    **Known worktree noise — do not report as findings:** Test files that fail with `ERR_DLOPEN_FAILED` or `Error: The module ... better-sqlite3 ...` are caused by the native module not being rebuilt for the worktree's Node version. These are pre-existing environment failures, not regressions introduced by the PR. Filter them out before assessing pass/fail. If ALL failures are of this type, record an `info`-severity finding noting the sqlite noise and mark the tier passed.
-3. Read the diff and verify that the changed behavior is covered by tests in the PR.
-4. Check that every acceptance criterion in `workItem.body` is addressed — either by a passing test or by observable code change.
-5. Verify that new functions, schemas, or modules have corresponding tests.
+3. **Compare against dev's targeted set.** If `devTestsRun` is present in your context (the `testsRun` field from the implement output), bucket each failing test as either inside-targeted (a file in `devTestsRun.paths`) or outside-targeted. Outside-targeted failures are regressions dev didn't see — flag them as `error`-severity findings with a note that dev's targeted run missed them.
+4. Read the diff and verify that the changed behavior is covered by tests in the PR.
+5. Check that every acceptance criterion in `workItem.body` is addressed — either by a passing test or by observable code change.
+6. Verify that new functions, schemas, or modules have corresponding tests.
 
 Emit: `[decision] FUNCTIONAL_CHECK: <one-sentence summary including passed|failed>`
 

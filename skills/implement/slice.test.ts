@@ -11,6 +11,10 @@ describe('implement output schema', () => {
       { path: 'core/foo/bar.test.ts', reason: 'tests' },
     ],
     testsWritten: [{ path: 'core/foo/bar.test.ts', cases: 3 }],
+    testsRun: {
+      command: 'pnpm test --run',
+      paths: ['core/foo/bar.test.ts'],
+    },
     prUrl: 'https://github.com/owner/repo/issues/123',
     evidenceSpecPath: 'apps/web/e2e/issue-123.spec.ts',
     confidence: 'high' as const,
@@ -65,6 +69,42 @@ describe('implement output schema', () => {
         decisionSummaries: [{ kind: 'plan', summary: 'lowercase rejected' }],
       }).success,
     ).toBe(false);
+  });
+
+  it('records testsRun with command and paths matching what dev actually ran (#467)', () => {
+    const result = ImplementSchema.safeParse({
+      ...baseValid,
+      filesWritten: [
+        { path: 'core/foo/bar.ts', reason: 'new helper' },
+        { path: 'core/foo/bar.test.ts', reason: 'tests' },
+      ],
+      testsRun: {
+        command: 'pnpm vitest --run',
+        paths: ['core/foo/bar.test.ts'],
+      },
+      evidenceSpecPath: null,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.testsRun.command).toBe('pnpm vitest --run');
+      expect(result.data.testsRun.paths).toEqual(['core/foo/bar.test.ts']);
+    }
+  });
+
+  it('rejects output missing testsRun (#467 — required field)', () => {
+    const { testsRun: _omit, ...rest } = baseValid;
+    expect(ImplementSchema.safeParse(rest).success).toBe(false);
+  });
+
+  it('accepts empty testsRun.paths (chore PR that ran no targeted tests)', () => {
+    expect(
+      ImplementSchema.safeParse({
+        ...baseValid,
+        filesWritten: [{ path: 'docs/x.md', reason: 'docs only' }],
+        testsRun: { command: 'pnpm test --run', paths: [] },
+        evidenceSpecPath: null,
+      }).success,
+    ).toBe(true);
   });
 
   it('rejects unknown confidence value', () => {

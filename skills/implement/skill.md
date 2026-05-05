@@ -59,26 +59,26 @@ The context contains a `<task>` block with:
 ### 3 — Red — failing tests first
 
 - Write the test cases that will fail with the current implementation. Cover the acceptance criteria and at least one negative path.
-- Run the test command via the `test` tool. Confirm the new tests fail (and only the new ones — pre-existing tests must still pass or fail for known reasons).
-- Emit: `[decision] RED: Wrote N failing tests for <surface>; baseline test command shows N new failures`
+- Run the **targeted** test command via the `test` tool — pass the new test file path and any test files for surfaces you've modified, e.g. `<test_command> --run path/to/new.test.ts path/to/affected.test.ts`. Do not run the full suite. Confirm the new tests fail (and only the new ones — pre-existing tests must still pass or fail for known reasons).
+- Emit: `[decision] RED: Wrote N failing tests for <surface>; targeted test command shows N new failures`
 
 ### 4 — Green — implementation
 
 - Write the implementation using the `write` tool. Workspace-bound paths only — no absolute paths, no `..` traversal.
-- Re-run the test command. Iterate until all tests pass.
+- Re-run the **targeted** test command (same file paths as in Red). Iterate until all targeted tests pass.
 - **Frontend changes (required):** If any file written is under `apps/web/`, write a Playwright spec at `apps/web/e2e/issue-<number>.spec.ts` now, before proceeding to step 5. The spec must navigate to the affected UI, assert the visible change, and call `page.screenshot({ path: 'evidence/issue-<number>/step-1.png' })`. Use plain `page.goto('/...')` — never `waitForLoadState('networkidle')` (the app's persistent SSE connection prevents it from firing; use `waitForSelector` or time-bounded assertions instead). This spec ships in the same commit as your implementation so the evidence-post skill can run it post-PR.
-- Emit: `[decision] GREEN: Implementation passes all tests including N new cases`
+- Emit: `[decision] GREEN: Implementation passes all targeted tests including N new cases`
 
 ### 5 — Refactor (optional, only if necessary)
 
 - Only refactor surrounding code if doing so is required to make the test pass cleanly. Do NOT do drive-by refactors of unrelated code.
-- Re-run the test command after any refactor.
+- Re-run the **targeted** test command (same paths) after any refactor.
 
 ### 6 — Lint and typecheck
 
 - If `<lint_command>` is provided, run it via the `bash` tool. Fix any failures (auto-fix where possible).
 - If `<typecheck_command>` is provided, run it. Fix any errors.
-- Re-run the test command one final time to confirm nothing regressed.
+- Re-run the **targeted** test command one final time (same paths) to confirm nothing in your surface regressed.
 
 ### 7 — Commit
 
@@ -109,6 +109,8 @@ Return a JSON object conforming to `ImplementSchema`. The orchestrator opens the
 - **TDD-first.** Write the test before the implementation. A test added after the fact does not count.
 - **Workspace-bound.** All paths via the `write` tool are relative to the worktree root. Absolute paths and `..` traversal are rejected at the tool layer.
 - **No shell.** The `bash` tool spawns argv directly with `shell: false`. Do not chain commands with `&&`, `;`, or pipes — invoke them as separate `bash` calls.
+- **Targeted tests only.** QA runs the full suite — your job is to ship green for the surface you touched, not to verify the world. Re-running the entire suite on every Red→Green→Refactor pass burns budget and hides the "did dev break something elsewhere?" signal that QA should be the authority on. If you broke something far away, QA catches it.
+- **Record what you ran.** Populate `testsRun.command` with the test command you actually invoked and `testsRun.paths` with the file paths you passed to it. QA cross-references this against its own full-suite results — failures outside your `paths` are the high-signal regressions.
 - **`decisionSummaries` is required and must be ≥ 1 entry.** Single sentence per entry. No chain-of-thought, no secrets, no PII.
 - **Confidence honestly.** `low` is OK — surface uncertainty; the human reviewer would rather know.
 
@@ -122,19 +124,23 @@ Return a JSON object conforming to `ImplementSchema`. The orchestrator opens the
     { "path": "core/foo/bar.test.ts", "reason": "tests for X" }
   ],
   "testsWritten": [{ "path": "core/foo/bar.test.ts", "cases": 3 }],
+  "testsRun": {
+    "command": "pnpm test --run",
+    "paths": ["core/foo/bar.test.ts"]
+  },
   "prUrl": "https://github.com/owner/repo/issues/123",
   "evidenceSpecPath": "apps/web/e2e/issue-123.spec.ts",
   "confidence": "high",
   "decisionSummaries": [
     { "kind": "PLAN", "summary": "Add helper at core/foo/bar.ts; mirror existing baz pattern" },
     { "kind": "RED", "summary": "Wrote 3 failing tests covering the success and two error paths" },
-    { "kind": "GREEN", "summary": "Implementation passes all 3 new tests; full suite green" },
+    { "kind": "GREEN", "summary": "Implementation passes all 3 targeted tests" },
     { "kind": "LINT", "summary": "Lint and typecheck clean" }
   ]
 }
 ```
 
-`evidenceSpecPath` must be set for any slice touching `apps/web/`; null is only valid for backend-only or chore PRs. `testsWritten` may be `[]` for chore PRs that change no behaviour (rare). `decisionSummaries` must have at least one entry.
+`evidenceSpecPath` must be set for any slice touching `apps/web/`; null is only valid for backend-only or chore PRs. `testsWritten` may be `[]` for chore PRs that change no behaviour (rare). `testsRun.paths` should list every test file you actually passed to the test command — empty `paths` means you ran nothing (only valid for chore PRs that touch no executable code). `decisionSummaries` must have at least one entry.
 
 [decision] VERDICT: Shipped slice with TDD loop and returned structured implement output
 

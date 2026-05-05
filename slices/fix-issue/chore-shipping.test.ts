@@ -97,6 +97,7 @@ const TDD_IMPLEMENT_OUTPUT = {
     { path: 'core/utils/strings.test.ts', reason: 'tests for helper' },
   ],
   testsWritten: [{ path: 'core/utils/strings.test.ts', cases: 3 }],
+  testsRun: { command: 'pnpm test --run', paths: ['core/utils/strings.test.ts'] },
   prUrl: 'https://github.com/owner/repo/issues/9999',
   evidenceSpecPath: null,
   confidence: 'high' as const,

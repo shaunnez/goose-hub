@@ -519,6 +519,67 @@ describe('qa skill config', () => {
   it('contextAllowlist contains verifyCommands', () => {
     expect(config.contextAllowlist).toContain('verifyCommands');
   });
+
+  it('contextAllowlist contains devTestsRun (#467)', () => {
+    expect(config.contextAllowlist).toContain('devTestsRun');
+  });
+
+  it('contextSchema accepts devTestsRun with command and paths (#467)', () => {
+    const valid = QaContextSchema.safeParse({
+      workItem: { title: 't', body: 'b', number: 1 },
+      prDiff: 'diff',
+      projectCommands: { testCommand: 'pnpm test --run' },
+      devTestsRun: {
+        command: 'pnpm test --run',
+        paths: ['core/foo/bar.test.ts', 'core/foo/baz.test.ts'],
+      },
+    });
+    expect(valid.success).toBe(true);
+  });
+});
+
+// ─── #467 — full-suite-fails-outside-dev-paths produces an error finding ─────
+
+describe('QaOutputSchema with cross-checked targeted regressions (#467)', () => {
+  it('records an error-severity finding when a full-suite failure is outside dev testsRun.paths', () => {
+    const result = QaOutputSchema.safeParse(
+      makeValidOutput({
+        verdict: 'fail',
+        overallScore: 60,
+        tierResults: {
+          structural: { passed: true, findings: [] },
+          functional: {
+            passed: false,
+            findings: [
+              {
+                tier: 'functional',
+                severity: 'error',
+                file: 'apps/server/src/unrelated/auth.test.ts',
+                description:
+                  'Failure outside dev targeted set (devTestsRun.paths) — high-signal regression dev did not run',
+              },
+            ],
+          },
+          regression: { passed: true, findings: [] },
+        },
+        findings: [
+          {
+            tier: 'functional',
+            severity: 'error',
+            file: 'apps/server/src/unrelated/auth.test.ts',
+            description:
+              'Failure outside dev targeted set (devTestsRun.paths) — high-signal regression dev did not run',
+          },
+        ],
+      }),
+    );
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const errors = result.data.findings.filter((f) => f.severity === 'error');
+      expect(errors).toHaveLength(1);
+      expect(errors[0].description).toContain('outside dev targeted set');
+    }
+  });
 });
 
 // ─── CriteriaResultSchema ─────────────────────────────────────────────────────

@@ -40,6 +40,7 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
           plan: 'E2E mock plan',
           filesWritten: [{ path: 'e2e-mock.ts', reason: 'e2e fixture' }],
           testsWritten: [],
+          testsRun: { command: 'pnpm test --run', paths: [] },
           prUrl: 'https://github.com/shaunnez/goose-hub/pull/999',
           evidenceSpecPath: null,
           confidence: 'high',
