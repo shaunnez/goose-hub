@@ -27,15 +27,15 @@ export interface ReviewWorkflowDeps {
 export async function runReviewWorkflow(
   workItem: WorkItem,
   stateSource: StateSource,
-  projectId: string,
+  projectSlug: string,
   _targetRepo: string,
   deps: ReviewWorkflowDeps = {},
 ): Promise<void> {
   const runId = crypto.randomUUID();
   const runtime = deps.runtime ?? new ClaudeCliRuntime();
-  const reviewPrompt = readPromptWithContext('review', projectId);
+  const reviewPrompt = readPromptWithContext('review', projectSlug);
   const reviewJsonSchema = toJsonSchema(ReviewOutputSchema);
-  const { personaId } = selectPersona(projectId, 'reviewer');
+  const { personaId } = selectPersona(projectSlug, 'reviewer');
 
   // Snapshot prior events BEFORE this run's outcome is appended (same pattern as QA workflow).
   const priorEvents = eventStore.replay({ workItemId: workItem.id });
@@ -49,7 +49,7 @@ export async function runReviewWorkflow(
       role: 'reviewer',
       skill: 'review',
       context: {
-        projectId,
+        projectId: projectSlug,
         workItemId: workItem.id,
         workItem: {
           title: workItem.title,
@@ -76,7 +76,7 @@ export async function runReviewWorkflow(
     const reviewOutput = parsed.data;
 
     eventStore.appendEvent({
-      projectId,
+      projectId: projectSlug,
       workItemId: workItem.id,
       kind: 'review.completed',
       payload: { verdict: reviewOutput.verdict, confidence: reviewOutput.confidence },
@@ -85,7 +85,7 @@ export async function runReviewWorkflow(
 
     for (const summary of reviewOutput.decisionSummaries) {
       eventStore.appendEvent({
-        projectId,
+        projectId: projectSlug,
         workItemId: workItem.id,
         kind: 'agent.decision-summary',
         payload: { skill: 'review', ...summary },
@@ -103,7 +103,7 @@ export async function runReviewWorkflow(
       nextState = needsEscalation ? 'factory:needs-human' : 'factory:needs-fix';
       if (needsEscalation) {
         eventStore.appendEvent({
-          projectId,
+          projectId: projectSlug,
           workItemId: workItem.id,
           kind: 'agent.retry-escalated',
           payload: { stage: 'review', maxRetries: DEFAULT_MAX_RETRIES, runId },
@@ -129,7 +129,7 @@ export async function runReviewWorkflow(
     const error = err instanceof Error ? err : new Error(String(err));
 
     eventStore.appendEvent({
-      projectId,
+      projectId: projectSlug,
       workItemId: workItem.id,
       kind: 'agent.run-failed',
       payload: { runId, error: error.message, skill: 'review' },
