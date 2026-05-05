@@ -70,6 +70,8 @@ describe('isLegalTransition — section 9.1 happy paths', () => {
   // merge-conflict path
   it('approved → merge-conflict', () =>
     expect(isLegalTransition('factory:approved', 'factory:merge-conflict')).toBe(true));
+  it('merge-conflict → retrospecting', () =>
+    expect(isLegalTransition('factory:merge-conflict', 'factory:retrospecting')).toBe(true));
   it('merge-conflict → done', () =>
     expect(isLegalTransition('factory:merge-conflict', 'factory:done')).toBe(true));
   it('merge-conflict → needs-human', () =>

@@ -23,6 +23,10 @@ export async function listProjects(): Promise<ProjectSummary[]> {
   }));
 }
 
+export async function listProjectConfigs(): Promise<ProjectConfig[]> {
+  return loadProjects(targetProjectsRoot);
+}
+
 export async function getProject(slug: string): Promise<ProjectConfig | null> {
   return getProjectBySlug(slug, targetProjectsRoot);
 }

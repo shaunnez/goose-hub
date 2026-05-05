@@ -1,6 +1,6 @@
 # roster
 
-Roster page — per-role persona list with metrics and history drill-in.
+Roster page — cross-project persona leaderboard with per-role grouping, project filter, and history drill-in. Closes #282.
 
 ## Route
 
@@ -11,9 +11,14 @@ Roster page — per-role persona list with metrics and history drill-in.
 - `RosterPage` — main page; fetches all personas, groups by role, renders `PersonaCard` grid
 - `PersonaDrillIn` — right-side panel with quality stats, run history, and improvement candidates
 
+## Project filter
+
+A filter bar at the top of the page allows scoping to "All Projects" (default) or a single registered project. Project slugs are extracted from the `personaName` field (format: `<slug>/<role>/<index>`). In "All Projects" mode with more than one registered project, each persona card shows a colored attribution tag (dot + project name) sourced from `ProjectConfig.colorStripe`.
+
 ## Data
 
 - `GET /roster` — all personas with aggregate stats (from `persona_stats` table)
+- `GET /projects/configs` — project list and colorStripe map (for filter bar and attribution badges)
 - `GET /roster/runs?persona=<name>` — per-run history (empty until per-run table is added)
 - `GET /roster/candidates?persona=<name>` — pending improvement candidates (from `improvement_candidates` table)
 - `POST /roster/candidates/:id/approve` — approve a candidate (status → approved)

@@ -11,6 +11,8 @@ import { skillsRoot } from '@goose-hub/skills';
 import { RepoMatchOutputSchema } from '@goose-hub/skills/repo-match/schema.js';
 import { TriageOutputSchema } from '@goose-hub/skills/triage/schema.js';
 import { targetProjectsRoot } from '@goose-hub/target-projects';
+import { checkDailyBudget } from '#shared/budget.js';
+import { getProject } from '#shared/projects.js';
 import { getSourceForSlug, isValidSlug } from '#shared/source.js';
 
 function readPrompt(skillName: string): string {
@@ -57,6 +59,30 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
   const stateSource = source ?? (await getSourceForSlug(slug));
   if (stateSource == null) {
     throw new Error(`Project not found: ${slug}`);
+  }
+
+  // Per-project daily budget gate (#283). Skip the tick if today's token usage exceeds the limit.
+  const projectConfig = await getProject(slug);
+  if (projectConfig != null) {
+    const budgetResult = await checkDailyBudget(slug, projectConfig.budgets.dailyTokens);
+    if (budgetResult.exceeded) {
+      logger.warn('triage-batch: daily token budget exceeded, skipping tick', {
+        slug,
+        totalTokens: budgetResult.usage.totalTokens,
+        limitTokens: budgetResult.limitTokens,
+      });
+      eventStore.appendEvent({
+        projectId: slug,
+        workItemId: null,
+        kind: 'project.budget-exceeded',
+        payload: {
+          totalTokens: budgetResult.usage.totalTokens,
+          limitTokens: budgetResult.limitTokens,
+          totalCostUsd: budgetResult.usage.totalCostUsd,
+        },
+      });
+      return;
+    }
   }
 
   const reposContext = readReposContext(slug);

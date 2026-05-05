@@ -163,6 +163,16 @@ export interface WorkItemCostsDto {
   rows: CostRowDto[];
 }
 
+export interface ProjectConfigDto {
+  slug: string;
+  name: string;
+  source: { kind: string; repo: string };
+  activeMilestone: string | null;
+  colorStripe: string;
+  budgets: { perWorkflowMaxUsd: number; dailyTokens: number; perAdvisorMaxUsd: number };
+  mode: string;
+}
+
 export interface ImprovementCandidateDto {
   id: number;
   projectId: string;

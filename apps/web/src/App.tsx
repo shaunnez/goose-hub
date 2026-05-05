@@ -1,12 +1,14 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { AllProjectsBoard } from './components/board/components/AllProjectsBoard';
 import { Board } from './components/board/components/Board';
 import { AppShell } from './components/chrome/AppShell';
 import { CostsPage } from './components/costs/CostsPage';
 import { DetailPage } from './components/detail/components/DetailPage';
 import { InboxList } from './components/inbox/components/InboxList';
 import { RosterPage } from './components/roster/components/RosterPage';
+import { SettingsPage } from './components/settings/components/SettingsPage';
 import { ActiveMilestoneProvider } from './state/active-milestone';
 import { ActiveProjectProvider } from './state/active-project';
 import { LaneVisibilityProvider } from './state/lane-visibility';
@@ -34,6 +36,22 @@ function KanbanPage() {
     >
       <Board projectSlug={slug} />
     </AppShell>
+  );
+}
+
+function GlobalShell({ children }: { children: React.ReactNode }) {
+  return <ActiveProjectProvider>{children}</ActiveProjectProvider>;
+}
+
+function AllProjectsPage() {
+  return (
+    <GlobalShell>
+      <AppShell breadcrumb={<span>All Projects</span>}>
+        <LaneVisibilityProvider>
+          <AllProjectsBoard />
+        </LaneVisibilityProvider>
+      </AppShell>
+    </GlobalShell>
   );
 }
 
@@ -86,12 +104,24 @@ function CostsPageRoute() {
   );
 }
 
+function SettingsPageRoute() {
+  return (
+    <GlobalShell>
+      <AppShell breadcrumb={<span>Settings</span>}>
+        <SettingsPage />
+      </AppShell>
+    </GlobalShell>
+  );
+}
+
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Navigate to="/projects/goose-hub-self" replace />} />
+          <Route path="/settings" element={<SettingsPageRoute />} />
+          <Route path="/projects/all" element={<AllProjectsPage />} />
           <Route
             path="/projects/:slug"
             element={

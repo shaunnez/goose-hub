@@ -181,7 +181,11 @@ export async function runResolveConflictWorkflow(
       payload: { prNumber, sha: merged.sha },
     });
 
-    await stateSource.transitionState(issueNumber, 'factory:merge-conflict', 'factory:done');
+    await stateSource.transitionState(
+      issueNumber,
+      'factory:merge-conflict',
+      'factory:retrospecting',
+    );
     await stateSource.comment(
       issueNumber,
       `Merge conflict resolved automatically by agent; PR #${prNumber} merged (${merged.sha}).`,

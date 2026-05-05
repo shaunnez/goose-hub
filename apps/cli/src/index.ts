@@ -11,6 +11,8 @@ import { withFallback } from '@goose-hub/core/agent-runtime/fallback.js';
 import type { AgentSpec } from '@goose-hub/core/agent-runtime/interface.js';
 import { validateOutput } from '@goose-hub/core/agent-runtime/output-validator.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
+import { db } from '@goose-hub/core/db/db.js';
+import { agentRunCosts } from '@goose-hub/core/db/schema.js';
 import { loadProjects } from '@goose-hub/core/projects/loader.js';
 import { STATES } from '@goose-hub/core/state-machine/states.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
@@ -18,6 +20,7 @@ import { GitHubLabelsSource } from '@goose-hub/core/state-source/github-labels.j
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { skillsRoot } from '@goose-hub/skills';
 import { targetProjectsRoot } from '@goose-hub/target-projects';
+import { and, eq, gte, lt } from 'drizzle-orm';
 
 async function statusCommand(slug: string): Promise<void> {
   const projects = await loadProjects(targetProjectsRoot);
@@ -94,6 +97,34 @@ async function statusCommand(slug: string): Promise<void> {
 
   console.log(`\n${'─'.repeat(70)}`);
   console.log(`Total: ${items.length} open issue${items.length !== 1 ? 's' : ''}`);
+
+  // Per-project daily budget usage
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    const rows = await db
+      .select({
+        costUsd: agentRunCosts.costUsd,
+        inputTokens: agentRunCosts.inputTokens,
+        outputTokens: agentRunCosts.outputTokens,
+      })
+      .from(agentRunCosts)
+      .where(
+        and(
+          eq(agentRunCosts.projectId, config.id),
+          gte(agentRunCosts.createdAt, `${today}T00:00:00Z`),
+          lt(agentRunCosts.createdAt, `${tomorrow}T00:00:00Z`),
+        ),
+      );
+    const totalCostUsd = rows.reduce((acc, r) => acc + r.costUsd, 0);
+    const totalTokens = rows.reduce((acc, r) => acc + r.inputTokens + r.outputTokens, 0);
+    const limitTokens = config.budgets.dailyTokens;
+    console.log(
+      `\nBudget (today): $${totalCostUsd.toFixed(4)} · ${totalTokens.toLocaleString()} / ${limitTokens.toLocaleString()} tokens${totalTokens >= limitTokens && limitTokens > 0 ? '  ⚠ EXCEEDED' : ''}`,
+    );
+  } catch {
+    // DB may not be initialised in CI or dry-run environments — silently skip
+  }
 }
 
 const TERMINAL_STATES = new Set<string>(['factory:done', 'factory:archived', 'factory:rejected']);

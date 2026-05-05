@@ -8,6 +8,7 @@ API + SSE host for the Goose Hub web UI. Stands up the server process the UI tal
 |---|---|---|
 | GET | `/health` | liveness |
 | GET | `/projects` | lists projects from `target-projects/*/project.config.ts` |
+| GET | `/projects/configs` | returns full `ProjectConfigDto[]` for all registered projects (used by Settings UI) |
 | GET | `/projects/:slug/issues` | proxies `StateSource.listOpenWork()` |
 | GET | `/projects/:slug/issues/:id` | proxies `StateSource.getItem()` |
 | GET | `/projects/:slug/milestones` | proxies `StateSource.listMilestones()` |
