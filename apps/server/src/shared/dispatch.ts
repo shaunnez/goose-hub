@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
+import { runRetroForItem } from '../domains/workflows/retro-batch.js';
 import { runTriageBatch } from '../domains/workflows/triage-batch.js';
 import { getSourceForSlug } from './source.js';
 
@@ -230,6 +231,27 @@ export async function dispatchReview(slug: string, issueNumber: number): Promise
   }
 }
 
+/** Run the retrospective workflow for a single issue. Drops duplicate triggers for the same issue. */
+export async function dispatchRetro(slug: string, issueNumber: number): Promise<void> {
+  const key = issueKey(slug, issueNumber);
+  if (_issueInFlight.has(key)) {
+    logger.warn('dispatchRetro: already in-flight, dropping duplicate', { slug, issueNumber });
+    return;
+  }
+  _issueInFlight.add(key);
+  try {
+    const source = await getSourceForSlug(slug);
+    if (source == null) {
+      logger.error('dispatchRetro: no source for slug', { slug });
+      return;
+    }
+    const item = await source.getItem(issueNumber.toString());
+    await runRetroForItem(item, source, slug);
+  } finally {
+    _issueInFlight.delete(key);
+  }
+}
+
 /**
  * Auto-transition from investigation-complete based on confidence.
  * Low confidence → gate-pending (human review required).
@@ -336,6 +358,10 @@ export async function dispatchForLabel(
     await dispatchResolveConflict(slug, issueNumber);
     return;
   }
+  if (labelName === 'factory:retrospecting') {
+    await dispatchRetro(slug, issueNumber);
+    return;
+  }
   logger.info('dispatchForLabel: no workflow for label', { slug, labelName });
 }
 
@@ -369,6 +395,7 @@ const RESUME_WORKFLOWS: Partial<Record<StateName, ResumeEntry>> = {
     dispatch: dispatchResolveConflict,
   },
   'factory:investigating': { targetState: 'factory:investigating', dispatch: dispatchInvestigate },
+  'factory:retrospecting': { targetState: 'factory:retrospecting', dispatch: dispatchRetro },
 };
 
 /**

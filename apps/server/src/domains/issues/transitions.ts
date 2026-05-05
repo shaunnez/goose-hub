@@ -3,11 +3,13 @@ import {
   mergePR as defaultMergePR,
 } from '@goose-hub/core/connectors/github/merge-pr.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { logger } from '@goose-hub/core/logger.js';
 import { STATES } from '@goose-hub/core/state-machine/states.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { isLegalTransition, legalTargets } from '@goose-hub/core/state-machine/transitions.js';
 import { cleanupWorktree } from '@goose-hub/core/workspaces/worktree.js';
 import { CACHE_KEY, bustCache } from '#shared/cache.js';
+import { dispatchRetro } from '#shared/dispatch.js';
 import type { Result } from '#shared/middleware.js';
 import { getSourceForSlug } from '#shared/source.js';
 import { getRepoRef } from './internal.js';
@@ -101,6 +103,14 @@ export async function approveIssue(
 
   await source.transitionState(id, 'factory:approved', 'factory:retrospecting');
   await source.comment(id, `Approved via Goose Hub UI; PR #${prNumber} merged (${merged.sha}).`);
+
+  // Fire-and-forget the retrospective workflow. The webhook label-change
+  // handler will also dispatch retro on the factory:retrospecting label, but
+  // running it here avoids depending on webhook delivery for the post-merge
+  // path. dispatchRetro is idempotent via the in-flight guard.
+  dispatchRetro(slug, Number(id)).catch((err: unknown) => {
+    logger.error('dispatchRetro after approve failed', { slug, id, error: String(err) });
+  });
 
   return { ok: true, data: { ok: true, sha: merged.sha, prNumber } };
 }
