@@ -1,21 +1,15 @@
+import { DispositionSchema } from '@goose-hub/core/findings/disposition.js';
 import { DecisionSummarySchema } from '@goose-hub/core/retrospective/schemas.js';
 import { z } from 'zod';
 
 export { DecisionSummarySchema };
+export { DispositionSchema };
 
 /**
- * Disposition for a QA finding (#468). Every error-severity finding must be
- * one of these — no deferral, no "TODO". Warnings/info findings may carry a
- * disposition but it's optional.
- *
- * - `fixed`: addressed in this PR. `dispositionRef` carries the commit SHA.
- * - `registered`: filed as a follow-up issue. `dispositionRef` carries the
- *   issue number (e.g. "#234").
- * - `out-of-scope`: not in scope for this issue. `dispositionRef` carries a
- *   one-sentence rationale.
+ * QA finding shape (#468). Disposition is required when severity is `error`
+ * (the QA-side fix-or-register rule). The shared `DispositionSchema` lives
+ * in `core/findings/disposition.ts` so QA and Review can't drift.
  */
-export const DispositionSchema = z.enum(['fixed', 'registered', 'out-of-scope']);
-
 export const FindingSchema = z
   .object({
     tier: z
@@ -30,7 +24,7 @@ export const FindingSchema = z
     /** Disposition required when severity === 'error' (#468) */
     disposition: DispositionSchema.optional(),
     /** Commit SHA, issue number, or rationale matching the disposition (#468) */
-    dispositionRef: z.string().optional(),
+    dispositionRef: z.string().min(1).optional(),
   })
   .superRefine((val, ctx) => {
     if (val.severity === 'error') {
@@ -147,8 +141,8 @@ export const QaOutputSchema = z.object({
   testRun: TestRunSchema.optional(),
 });
 
+export type { Disposition } from '@goose-hub/core/findings/disposition.js';
 export type DecisionSummary = z.infer<typeof DecisionSummarySchema>;
-export type Disposition = z.infer<typeof DispositionSchema>;
 export type Finding = z.infer<typeof FindingSchema>;
 export type TierResult = z.infer<typeof TierResultSchema>;
 export type QualityScores = z.infer<typeof QualityScoresSchema>;

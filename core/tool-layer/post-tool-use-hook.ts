@@ -51,8 +51,12 @@ async function main() {
   // Live-marker grammar: \`[decision] KIND: <one-sentence summary>\`
   // (#466). KIND must be uppercase A-Z and underscores; the server validates
   // it against the canonical enum and coerces unknown values to UNKNOWN.
-  const DECISION_TYPED_RE = /^\\[decision\\]\\s+([A-Z_]+):\\s+(.+)$/gm;
+  // Spacing after the colon is tolerant (\\s*) so a missing space doesn't
+  // silently drop the marker.
+  const DECISION_TYPED_RE = /^\\[decision\\]\\s+([A-Z_]+):\\s*(.+)$/gm;
   // Backward-compat: legacy marker with no kind prefix → forwarded as UNKNOWN.
+  // Negative lookahead matches the typed form; if the typed form starts but
+  // is malformed (e.g. lowercase, mixed case, no colon), it falls through here.
   const DECISION_LEGACY_RE = /^\\[decision\\]\\s+(?![A-Z_]+:)(.+)$/gm;
 
   const markers = [];

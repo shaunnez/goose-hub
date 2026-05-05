@@ -367,6 +367,10 @@ async function afterImplement(input: AfterImplementInput): Promise<void> {
       filesWritten: implementOutput.filesWritten.length,
       testsWritten: implementOutput.testsWritten.length,
       confidence: implementOutput.confidence,
+      // #467 — preserved verbatim so QA's workflow can pull dev's targeted
+      // test command + paths into its context as `devTestsRun` and bucket
+      // full-suite failures as inside- vs outside-targeted.
+      testsRun: implementOutput.testsRun,
     },
     runId,
   });

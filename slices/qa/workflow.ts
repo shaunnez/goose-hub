@@ -27,6 +27,33 @@ function findDevWorktreePath(workItemId: string): string | undefined {
   return typeof payload.worktreePath === 'string' ? payload.worktreePath : undefined;
 }
 
+/**
+ * Reads the developer's targeted-test-run record from the most recent
+ * `agent.implement-complete` event for this work item (#467). Returns
+ * undefined if no implement-complete event exists or the payload is
+ * missing/malformed — QA still runs, just without cross-reference data.
+ */
+function findDevTestsRun(workItemId: string): { command: string; paths: string[] } | undefined {
+  const events = eventStore.replay({ workItemId });
+  const implementComplete = events
+    .slice()
+    .reverse()
+    .find((e) => e.kind === 'agent.implement-complete');
+  if (implementComplete == null) return undefined;
+  const payload = implementComplete.payload as Record<string, unknown>;
+  const tr = payload.testsRun;
+  if (
+    tr == null ||
+    typeof tr !== 'object' ||
+    typeof (tr as { command?: unknown }).command !== 'string' ||
+    !Array.isArray((tr as { paths?: unknown }).paths) ||
+    !(tr as { paths: unknown[] }).paths.every((p) => typeof p === 'string')
+  ) {
+    return undefined;
+  }
+  return tr as { command: string; paths: string[] };
+}
+
 export interface VerifyCommand {
   ac: string;
   command: string;
@@ -99,6 +126,8 @@ export async function runQaWorkflow(
   const evidenceCommentUrl = (evidencePosted?.payload as { commentUrl?: string } | undefined)
     ?.commentUrl;
 
+  const devTestsRun = findDevTestsRun(workItem.id);
+
   // Run tests deterministically before invoking the QA agent so the agent
   // grades against real numbers instead of re-running the suite. Failures
   // here are non-fatal — the agent still runs without testRun.
@@ -126,6 +155,7 @@ export async function runQaWorkflow(
         ...(verifyCommands != null && verifyCommands.length > 0 ? { verifyCommands } : {}),
         testRun,
         ...(evidenceCommentUrl != null ? { evidenceCommentUrl } : {}),
+        ...(devTestsRun != null ? { devTestsRun } : {}),
       },
       contextAllowlist: [
         'workItem',
@@ -134,6 +164,7 @@ export async function runQaWorkflow(
         'testRun',
         'verifyCommands',
         ...(evidenceCommentUrl != null ? ['evidenceCommentUrl'] : []),
+        ...(devTestsRun != null ? ['devTestsRun'] : []),
       ],
       freshContext: true,
       toolBundles: ['read', 'qa-tools'],

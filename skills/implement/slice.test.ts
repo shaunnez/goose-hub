@@ -96,15 +96,27 @@ describe('implement output schema', () => {
     expect(ImplementSchema.safeParse(rest).success).toBe(false);
   });
 
-  it('accepts empty testsRun.paths (chore PR that ran no targeted tests)', () => {
+  it('accepts empty testsRun.paths when testsWritten is also empty (chore PR)', () => {
     expect(
       ImplementSchema.safeParse({
         ...baseValid,
         filesWritten: [{ path: 'docs/x.md', reason: 'docs only' }],
+        testsWritten: [],
         testsRun: { command: 'pnpm test --run', paths: [] },
         evidenceSpecPath: null,
       }).success,
     ).toBe(true);
+  });
+
+  it('rejects empty testsRun.paths when testsWritten is non-empty (#467 — must record what dev ran)', () => {
+    expect(
+      ImplementSchema.safeParse({
+        ...baseValid,
+        testsWritten: [{ path: 'core/foo/bar.test.ts', cases: 3 }],
+        testsRun: { command: 'pnpm test --run', paths: [] },
+        evidenceSpecPath: null,
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects unknown confidence value', () => {

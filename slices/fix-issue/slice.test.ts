@@ -463,6 +463,12 @@ describe('runFixIssueWorkflow (#183)', () => {
       .mocked(eventStore.appendEvent)
       .mock.calls.find(([e]) => e.kind === 'agent.implement-complete');
     expect(completeEvent).toBeDefined();
+    // #467 — testsRun is preserved verbatim on agent.implement-complete so
+    // QA can pull it as devTestsRun when grading.
+    expect((completeEvent?.[0].payload as { testsRun: unknown }).testsRun).toEqual({
+      command: 'pnpm test --run',
+      paths: ['core/utils/strings.test.ts'],
+    });
   });
 });
 

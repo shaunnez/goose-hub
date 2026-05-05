@@ -24,8 +24,11 @@ export const TestWrittenSchema = z.object({
 export const TestsRunSchema = z.object({
   command: z
     .string()
+    .min(1)
     .describe('The test command the developer actually invoked (without file path arguments)'),
-  paths: z.array(z.string()).describe('Workspace-relative test file paths passed to the command'),
+  paths: z
+    .array(z.string().min(1))
+    .describe('Workspace-relative test file paths passed to the command'),
 });
 
 export const ImplementSchema = z
@@ -68,6 +71,18 @@ export const ImplementSchema = z
         code: z.ZodIssueCode.custom,
         message: 'evidenceSpecPath is required when filesWritten includes apps/web/ files',
         path: ['evidenceSpecPath'],
+      });
+    }
+    // #467 — empty testsRun.paths is only valid when no test files were
+    // written. A non-empty testsWritten with `paths: []` means dev wrote
+    // tests but reported running none — that's a mis-shaped record, not a
+    // valid chore PR.
+    if (val.testsWritten.length > 0 && val.testsRun.paths.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'testsRun.paths must be non-empty when testsWritten is non-empty (record what dev actually ran, #467)',
+        path: ['testsRun', 'paths'],
       });
     }
   });

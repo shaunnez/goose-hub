@@ -347,6 +347,8 @@ improvement_candidate:
 ## Flagged ambiguities
 
 - **Decision-summary two-stream split**: resolved. Canonical record lives in schema field; live markers from `[decision]` footer in `prompt.md`. Tool-call audit is a third, separate stream. All three distinct concerns at distinct cadences.
+- **Decision-summary `kind` taxonomy**: resolved at M9 (#466). Free-text `step` promoted to a controlled `DecisionKindSchema` enum in `core/agent-runtime/decision-types.ts`, consumed everywhere through `core/retrospective/schemas.ts`. Live-marker grammar is `[decision] KIND: <summary>`. See `docs/adr/0018-decision-kind-taxonomy.md`.
+- **Holdout fix-or-register**: resolved at M9 (#468). Every error-severity QA finding and blocker-severity Review finding must declare `disposition` (`fixed` | `registered` | `out-of-scope`) and a matching `dispositionRef`. Shared `DispositionSchema` lives in `core/findings/disposition.ts`.
 
 ## Deferred / Open Questions (to resolve at their milestone)
 

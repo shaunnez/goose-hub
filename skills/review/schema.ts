@@ -1,7 +1,9 @@
+import { DispositionSchema } from '@goose-hub/core/findings/disposition.js';
 import { DecisionSummarySchema } from '@goose-hub/core/retrospective/schemas.js';
 import { z } from 'zod';
 
 export { DecisionSummarySchema };
+export { DispositionSchema };
 
 export const CriterionCheckSchema = z.object({
   criterion: z.string(),
@@ -10,12 +12,10 @@ export const CriterionCheckSchema = z.object({
 });
 
 /**
- * Disposition for a Review finding (#468). Mirrors `skills/qa/schema.ts`:
- * every blocker-severity finding must be classified — fixed in this PR,
- * registered as a follow-up issue, or explicitly out-of-scope.
+ * Review finding shape (#468). Disposition is required when severity is
+ * `blocker` (the Review-side fix-or-register rule). Shared
+ * `DispositionSchema` lives in `core/findings/disposition.ts`.
  */
-export const DispositionSchema = z.enum(['fixed', 'registered', 'out-of-scope']);
-
 export const ReviewFindingSchema = z
   .object({
     criterion: z.string().optional(),
@@ -27,7 +27,7 @@ export const ReviewFindingSchema = z
     /** Disposition required when severity === 'blocker' (#468) */
     disposition: DispositionSchema.optional(),
     /** Commit SHA, issue number, or rationale matching the disposition (#468) */
-    dispositionRef: z.string().optional(),
+    dispositionRef: z.string().min(1).optional(),
   })
   .superRefine((val, ctx) => {
     if (val.severity === 'blocker') {
@@ -78,8 +78,8 @@ export const ReviewOutputSchema = z.discriminatedUnion('verdict', [
   }),
 ]);
 
+export type { Disposition } from '@goose-hub/core/findings/disposition.js';
 export type DecisionSummary = z.infer<typeof DecisionSummarySchema>;
 export type CriterionCheck = z.infer<typeof CriterionCheckSchema>;
-export type Disposition = z.infer<typeof DispositionSchema>;
 export type ReviewFinding = z.infer<typeof ReviewFindingSchema>;
 export type ReviewOutput = z.infer<typeof ReviewOutputSchema>;
