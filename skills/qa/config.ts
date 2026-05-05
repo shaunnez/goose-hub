@@ -48,6 +48,20 @@ export const QaContextSchema = z.object({
   sliceTests: z.array(z.string()).optional(),
   /** Permalink to the evidence-post comment (screenshots + GIF) on the GitHub issue; absent for backend-only changes or when evidence capture failed */
   evidenceCommentUrl: z.string().url().optional(),
+  /**
+   * Per-AC verify commands extracted from the issue body by the orchestrator.
+   * The QA agent runs each command and records a criteriaResult per entry.
+   */
+  verifyCommands: z
+    .array(
+      z.object({
+        ac: z.string(),
+        command: z.string(),
+        expected: z.string(),
+        tolerance: z.string(),
+      }),
+    )
+    .optional(),
 });
 
 const config: SkillConfig = {
@@ -77,7 +91,14 @@ const config: SkillConfig = {
    * Explicitly EXCLUDED: devDecisionSummaries, investigationFindings.
    * The QA agent must independently verify, not rubber-stamp developer reasoning.
    */
-  contextAllowlist: ['workItem', 'prDiff', 'projectCommands', 'sliceTests', 'evidenceCommentUrl'],
+  contextAllowlist: [
+    'workItem',
+    'prDiff',
+    'projectCommands',
+    'sliceTests',
+    'evidenceCommentUrl',
+    'verifyCommands',
+  ],
 };
 
 export default config;

@@ -119,6 +119,25 @@ For each criterion marked `[ ]` (checkbox syntax):
 
 Do not assume a criterion is satisfied just because the test passes. Read the code.
 
+## Per-AC verification
+
+If `verifyCommands` is present in your context, run each verify command and record a `criteriaResult` per entry.
+
+Steps:
+1. For each entry in `verifyCommands`:
+   a. Run `entry.command` via the `bash` tool. Capture the full output as `actual`.
+   b. Compare `actual` against `entry.expected` per `entry.tolerance`:
+      - `exact` — `actual` must equal `expected` (trimmed)
+      - `contains` — `actual` must contain `expected`
+      - `regex` — `actual` must match `expected` as a regex
+      - Any other value — treat as `contains`
+   c. Set `passed: true` if the comparison passes, `false` otherwise.
+   d. Emit `[decision] CRITERIA_CHECK: <ac text> — <passed|failed>`
+2. Record one `criteriaResult` per entry in the output.
+3. Any `passed: false` entry forces `verdict = 'fail'`, regardless of tier scores.
+
+ACs without a verify entry in `verifyCommands` are checked via the code-reading AC check above — they are not required to have a `criteriaResult`.
+
 ## 8-category quality scoring rubric
 
 Score each category independently. Be honest — low scores are informative, not punitive.
@@ -202,6 +221,7 @@ Set `verdict` based on the following rules, in order:
 1. **fail** — if any of the following are true:
    - Any `error`-severity finding exists in any tier
    - Any acceptance criterion from `workItem.body` is not satisfied
+   - Any `criteriaResults[].passed === false`
    - `overallScore < threshold` (default threshold: 70)
    - Tier 1 (structural) failed
 
