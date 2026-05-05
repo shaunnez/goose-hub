@@ -154,7 +154,7 @@ function makeInvestigateOutput() {
 function makePlaywrightReproOutput() {
   return {
     screenshots: [],
-    videoPath: null,
+    gifPath: null,
     consoleErrors: [],
     reproSteps: ['Navigate to page'],
     reproduced: true,

@@ -160,8 +160,8 @@ function makeInvestigationEvent(id: number, playwrightRepro?: unknown) {
 }
 
 const FULL_REPRO = {
-  screenshots: [{ path: '/tmp/shot.png', caption: 'Login page', step: 1 }],
-  videoPath: '/tmp/repro.webm',
+  screenshots: [{ path: 'evidence/issue-42/step-1.png', caption: 'Login page', step: 1 }],
+  gifPath: 'evidence/issue-42/walkthrough.gif',
   consoleErrors: [{ message: 'TypeError: x is undefined', type: 'error' as const }],
   reproSteps: ['Navigate to /login', 'Click submit'],
   reproduced: true,
@@ -192,7 +192,7 @@ describe('extractPlaywrightRepro', () => {
     expect(result?.reproSteps).toEqual(['Navigate to /login', 'Click submit']);
     expect(result?.screenshots).toHaveLength(1);
     expect(result?.consoleErrors).toHaveLength(1);
-    expect(result?.videoPath).toBe('/tmp/repro.webm');
+    expect(result?.gifPath).toBe('evidence/issue-42/walkthrough.gif');
   });
 
   it('picks the latest investigation-complete event with a playwrightRepro', () => {

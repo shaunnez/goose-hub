@@ -3,7 +3,10 @@ import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interfa
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
-  eventStore: { appendEvent: vi.fn().mockReturnValue({ id: 1 }) },
+  eventStore: {
+    appendEvent: vi.fn().mockReturnValue({ id: 1 }),
+    replay: vi.fn().mockReturnValue([]),
+  },
 }));
 vi.mock('@goose-hub/core/agent-runtime/select-persona.js', () => ({
   selectPersona: vi
@@ -476,7 +479,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
 
     const evidenceOutput = {
       screenshots: [{ path: 'evidence/issue-42/step-1.png', caption: 'Initial state', step: 1 }],
-      videoPath: null,
+      gifPath: null,
       commentUrl: 'https://github.com/owner/repo/issues/42#issuecomment-1',
       commitSha: 'abc1234567890abcdef',
       decisionSummaries: [{ step: 'post', summary: 'Posted evidence comment' }],
@@ -523,6 +526,73 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
       .mocked(eventStore.appendEvent)
       .mock.calls.find(([e]) => e.kind === 'evidence.posted');
     expect(evidencePosted).toBeDefined();
+  });
+
+  it('looks up the BEFORE comment URL from agent.investigation-complete and passes into evidence-post context', async () => {
+    const item = makeWorkItem({ priority: 'medium', type: 'bug' });
+    const source = makeStateSource();
+
+    const evidenceOutput = {
+      screenshots: [],
+      gifPath: null,
+      commentUrl: 'https://github.com/owner/repo/issues/42#issuecomment-2',
+      commitSha: 'abc1234567890abcdef',
+      decisionSummaries: [{ step: 'post', summary: 'Posted evidence comment' }],
+    };
+
+    const runtime: AgentRuntime = {
+      run: vi
+        .fn()
+        .mockResolvedValueOnce({
+          output: makeImplementOutput({ evidenceSpecPath: 'evidence/spec.json' }),
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult)
+        .mockResolvedValueOnce({
+          output: evidenceOutput,
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult),
+    };
+
+    const beforeUrl = 'https://github.com/owner/repo/issues/42#issuecomment-1';
+    vi.mocked(eventStore.replay).mockReturnValueOnce([
+      {
+        id: 1,
+        projectId: 'proj',
+        workItemId: item.id,
+        kind: 'agent.investigation-complete',
+        payload: { investigate: {}, playwrightRepro: { commentUrl: beforeUrl } },
+        createdAt: new Date(),
+        runId: 'r1',
+      },
+    ] as never);
+
+    const openPRImpl = vi.fn().mockResolvedValue({
+      prNumber: 10,
+      prUrl: 'u',
+      branch: 'b',
+      base: 'main',
+    });
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    const evidenceCall = vi.mocked(runtime.run).mock.calls[1][0] as unknown as {
+      context: { workItem: { beforeCommentUrl?: string } };
+      contextAllowlist: string[];
+    };
+    expect(evidenceCall.context.workItem.beforeCommentUrl).toBe(beforeUrl);
+    expect(evidenceCall.contextAllowlist).toContain('workItem.beforeCommentUrl');
   });
 
   it('with evidenceSpecPath null: emits evidence.no-spec-declared and skips evidence-post run', async () => {

@@ -9,6 +9,7 @@ import { z } from 'zod';
  *       <number>...</number>
  *       <repo>owner/repo</repo>
  *       <title>...</title>
+ *       <beforeCommentUrl>...</beforeCommentUrl>  <!-- optional, type:bug only -->
  *     </work_item>
  *     <pr_number>...</pr_number>
  *     <pr_head_sha>...</pr_head_sha>
@@ -20,6 +21,11 @@ export const EvidencePostContextSchema = z.object({
     number: z.number().describe('Issue number to comment on'),
     repo: z.string().describe('owner/repo, e.g. shaunnez/goose-hub'),
     title: z.string(),
+    beforeCommentUrl: z
+      .string()
+      .url()
+      .optional()
+      .describe('Permalink to the BEFORE-state comment posted by playwright-repro (type:bug only)'),
   }),
   prNumber: z.number().describe('Pull request number that closes this issue'),
   prHeadSha: z
@@ -39,6 +45,7 @@ const config: SkillConfig = {
     'workItem.number',
     'workItem.repo',
     'workItem.title',
+    'workItem.beforeCommentUrl',
     'prNumber',
     'prHeadSha',
     'specPath',

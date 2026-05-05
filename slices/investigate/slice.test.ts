@@ -91,8 +91,10 @@ function makeInvestigateOutput() {
 
 function makePlaywrightReproOutput() {
   return {
-    screenshots: [{ path: '/tmp/screenshot.png', caption: 'Login error visible', step: 3 }],
-    videoPath: null,
+    screenshots: [
+      { path: 'evidence/issue-42/step-1.png', caption: 'Login error visible', step: 3 },
+    ],
+    gifPath: null,
     consoleErrors: [
       { message: 'TypeError: Cannot read property of undefined', type: 'error' as const },
     ],
@@ -297,6 +299,32 @@ describe('runInvestigateWorkflow', () => {
       expect(call).toBeDefined();
       const payload = call?.[0].payload as { playwrightRepro: unknown };
       expect(payload.playwrightRepro).toBeDefined();
+    });
+
+    it('passes workItem.number and workItem.repo into playwright-repro context (evidence pipeline)', async () => {
+      const item = makeWorkItem({ type: 'bug' });
+      const source = makeMockSource();
+
+      mockRun
+        .mockResolvedValueOnce({
+          output: makeInvestigateOutput(),
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult)
+        .mockResolvedValueOnce({
+          output: makePlaywrightReproOutput(),
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult);
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
+
+      const playwrightCall = mockRun.mock.calls[1][0] as {
+        context: { workItem: { number?: number; repo?: string } };
+      };
+      expect(playwrightCall.context.workItem.number).toBe(42);
+      expect(playwrightCall.context.workItem.repo).toBe('shaunnez/goose-hub');
     });
 
     it('uses validate tool bundle for playwright-repro skill', async () => {

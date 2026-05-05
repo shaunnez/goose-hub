@@ -23,6 +23,7 @@ Per ADR 0011 §4 and FACTORY_RULES rule 26: posting evidence is a product workfl
 | `workItem.number` | `number` | Issue number to comment on |
 | `workItem.repo` | `string` | `owner/repo`, e.g. `shaunnez/goose-hub` |
 | `workItem.title` | `string` | Issue title (used in the comment header) |
+| `workItem.beforeCommentUrl` | `string` (optional URL) | Permalink to the BEFORE-state comment from `playwright-repro` (`type:bug` only) |
 | `prNumber` | `number` | Pull request number |
 | `prHeadSha` | `string` (≥ 7 chars) | Head commit SHA — every raw URL pins to this SHA |
 | `specPath` | `string` | Workspace-relative path to the Playwright spec to run |
@@ -37,7 +38,8 @@ Per ADR 0011 §4 and FACTORY_RULES rule 26: posting evidence is a product workfl
 | `screenshots[].path` | `string` | e.g. `evidence/issue-233/step-1.png` |
 | `screenshots[].caption` | `string` | What the screenshot shows |
 | `screenshots[].step` | `number` (integer) | Ordinal step in the walkthrough |
-| `videoPath` | `string \| null` | Workspace-relative WebM path, or `null` |
+| `screenshots[].githubUrl` | `string` (optional URL) | SHA-pinned `raw.githubusercontent.com` URL once pushed |
+| `gifPath` | `string \| null` | Workspace-relative GIF path, or `null` |
 | `commentUrl` | `string` (URL) | Permalink to the posted comment |
 | `commitSha` | `string` (≥ 7 chars) | SHA the raw URLs pin to |
 | `decisionSummaries` | `DecisionSummary[]` | Canonical decision-summary record |
@@ -54,11 +56,11 @@ Worktree-based dual-run (BEFORE on `main`, AFTER on PR) is out of scope. File a 
 
 ## SHA pinning
 
-Every URL into the repo MUST pin to `prHeadSha`, never the branch name. Branch URLs break on merge once the branch is deleted. SHA URLs are immutable.
+Every URL into the repo MUST pin to the evidence-branch commit SHA, never the branch name. Branch URLs break the moment the branch is deleted (or moves). SHA URLs are immutable.
 
 ```md
 ![<caption>](https://raw.githubusercontent.com/<repo>/<sha>/evidence/issue-<N>/step-1.png)
-[walkthrough.webm](https://github.com/<repo>/blob/<sha>/evidence/issue-<N>/walkthrough.webm)
+![walkthrough](https://raw.githubusercontent.com/<repo>/<sha>/evidence/issue-<N>/walkthrough.gif)
 ```
 
 ## Operational gotchas (from #217 smoke test)
@@ -74,6 +76,7 @@ Every URL into the repo MUST pin to `prHeadSha`, never the branch name. Branch U
 | `workItem.number` | yes |
 | `workItem.repo` | yes |
 | `workItem.title` | yes |
+| `workItem.beforeCommentUrl` | yes |
 | `prNumber` | yes |
 | `prHeadSha` | yes |
 | `specPath` | yes |

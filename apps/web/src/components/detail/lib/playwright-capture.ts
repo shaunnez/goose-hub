@@ -4,6 +4,7 @@ export interface ScreenshotCapture {
   path: string;
   caption: string;
   step: number;
+  githubUrl?: string;
 }
 
 export interface ConsoleError {
@@ -14,11 +15,12 @@ export interface ConsoleError {
 
 export interface PlaywrightReproPayload {
   screenshots: ScreenshotCapture[];
-  videoPath: string | null;
+  gifPath: string | null;
   consoleErrors: ConsoleError[];
   reproSteps: string[];
   reproduced: boolean;
   notes?: string;
+  commentUrl?: string;
 }
 
 interface InvestigationCompletePayload {

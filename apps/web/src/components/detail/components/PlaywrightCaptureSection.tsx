@@ -101,45 +101,62 @@ export function PlaywrightCaptureSection({
                   </span>
                   <span className="text-[12.5px] text-fg-2">{shot.caption}</span>
                 </div>
-                {/* Image may not load since path is a local disk path — show alt text gracefully */}
                 <img
-                  src={shot.path}
+                  src={shot.githubUrl ?? shot.path}
                   alt={shot.caption}
                   className="max-w-full rounded border border-line"
                   onError={(e) => {
                     (e.currentTarget as HTMLImageElement).style.display = 'none';
                   }}
                 />
-                <p className="text-[11px] text-fg-4">
-                  Saved to:{' '}
-                  <code className="font-mono bg-bg-glass px-1 py-0.5 rounded text-fg-3 break-all">
-                    {shot.path}
-                  </code>
-                </p>
+                {shot.githubUrl == null && (
+                  <p className="text-[11px] text-fg-4">
+                    Saved to:{' '}
+                    <code className="font-mono bg-bg-glass px-1 py-0.5 rounded text-fg-3 break-all">
+                      {shot.path}
+                    </code>
+                  </p>
+                )}
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {repro.videoPath != null && (
-        <div data-testid="playwright-capture-video">
+      {repro.gifPath != null && (
+        <div data-testid="playwright-capture-gif">
           <h3 className="text-[12px] font-semibold text-fg-3 uppercase tracking-wide mb-3">
-            Video
+            Walkthrough
           </h3>
           <div className="rounded-md border border-line bg-bg-elev p-3 space-y-2">
-            {/* Video may not load since videoPath is a local disk path */}
-            <video src={repro.videoPath} controls className="max-w-full rounded border border-line">
-              <track kind="captions" />
-              Your browser does not support the video element.
-            </video>
+            <img
+              src={repro.gifPath}
+              alt="bug walkthrough"
+              className="max-w-full rounded border border-line"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).style.display = 'none';
+              }}
+            />
             <p className="text-[11px] text-fg-4">
               Saved to:{' '}
               <code className="font-mono bg-bg-glass px-1 py-0.5 rounded text-fg-3 break-all">
-                {repro.videoPath}
+                {repro.gifPath}
               </code>
             </p>
           </div>
+        </div>
+      )}
+
+      {repro.commentUrl != null && (
+        <div data-testid="playwright-capture-comment-link">
+          <a
+            href={repro.commentUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[11px] text-blue-400 underline"
+          >
+            View on GitHub →
+          </a>
         </div>
       )}
 
