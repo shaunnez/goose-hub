@@ -17,15 +17,13 @@ const DEFERRED_SURFACES = [
 describe('chrome slice — sidebar brand label', () => {
   const sidebarSource = readFileSync(join(import.meta.dirname, 'Sidebar.tsx'), 'utf-8');
 
-  it('sidebar header reads "Agentic OS"', () => {
-    expect(sidebarSource).toContain('Agentic OS');
+  it('sidebar header reads "Goose Hub"', () => {
+    expect(sidebarSource).toContain('Goose Hub');
   });
 
-  it('sidebar header does not read "Goose Hub"', () => {
-    // "Goose Hub" must not appear as the brand label in the sidebar
-    // (checking the specific label span line only — "Goose Hub" may appear in comments elsewhere)
+  it('sidebar header does not read "Agentic OS"', () => {
     const labelMatch = sidebarSource.match(/<span[^>]*text-\[14px\][^>]*>[\s\S]*?<\/span>/);
-    expect(labelMatch?.[0]).not.toContain('Goose Hub');
+    expect(labelMatch?.[0]).not.toContain('Agentic OS');
   });
 });
 
