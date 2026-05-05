@@ -16,6 +16,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'milestone.activated': 'Milestone activated',
   'agent.spawned': 'Agent spawned',
   'agent.decision-summary': 'Decision summary',
+  'agent.decision-summary-live': 'Decision (live)',
   'agent.terminated': 'Agent terminated',
   'agent.log': 'Agent log',
   'gate.awaiting-human': 'Gate — awaiting human',
