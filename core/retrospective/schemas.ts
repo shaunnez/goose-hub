@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import { DecisionKindSchema } from '../agent-runtime/decision-types.js';
+
+export { DecisionKindSchema } from '../agent-runtime/decision-types.js';
+export type { DecisionKind } from '../agent-runtime/decision-types.js';
 
 export const ConfidenceSchema = z.enum(['low', 'medium', 'high']);
 
@@ -58,7 +62,7 @@ export const DecisionPatternSchema = z.object({
 });
 
 export const DecisionSummarySchema = z.object({
-  step: z.string(),
+  kind: DecisionKindSchema,
   summary: z.string(),
   evidence: z.string().optional(),
 });

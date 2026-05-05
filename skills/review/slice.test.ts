@@ -12,7 +12,7 @@ function makeApprovedOutput(overrides = {}) {
     confidence: 0.9,
     criteriaChecks: [{ criterion: 'Schema exports are valid', status: 'met' }],
     findings: [],
-    decisionSummaries: [{ step: 'issue-read', summary: 'Issue #42 parsed: 1 criterion found' }],
+    decisionSummaries: [{ kind: 'READ', summary: 'Issue #42 parsed: 1 criterion found' }],
     ...overrides,
   };
 }
@@ -28,7 +28,7 @@ function makeNeedsFixOutput(overrides = {}) {
       { severity: 'blocker', description: 'Missing slice.test.ts required by FACTORY_RULES' },
     ],
     decisionSummaries: [
-      { step: 'criteria-check', summary: 'Criterion unmet: slice.test.ts absent' },
+      { kind: 'CRITERIA_CHECK', summary: 'Criterion unmet: slice.test.ts absent' },
     ],
     ...overrides,
   };
@@ -46,7 +46,7 @@ function makeNeedsHumanOutput(overrides = {}) {
       },
     ],
     decisionSummaries: [
-      { step: 'verdict', summary: 'Escalating: confidence below 0.5 on unclear criterion' },
+      { kind: 'VERDICT', summary: 'Escalating: confidence below 0.5 on unclear criterion' },
     ],
     escalationReason:
       'Confidence below 0.5: cannot determine if architectural constraint is satisfied without human input',
@@ -79,6 +79,29 @@ describe('ReviewOutputSchema — approved verdict', () => {
     expect('escalationReason' in output).toBe(false);
     const result = ReviewOutputSchema.safeParse(output);
     expect(result.success).toBe(true);
+  });
+
+  it('accepts decision summaries with valid kinds (#466)', () => {
+    const result = ReviewOutputSchema.safeParse(
+      makeApprovedOutput({
+        decisionSummaries: [
+          { kind: 'READ', summary: 'Read 6 criteria' },
+          { kind: 'DIFF_READ', summary: '5 files changed' },
+          { kind: 'CRITERIA_CHECK', summary: '6 met, 0 unmet' },
+          { kind: 'VERDICT', summary: 'approved' },
+        ],
+      }),
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects decision summaries with an invalid kind (#466)', () => {
+    const result = ReviewOutputSchema.safeParse(
+      makeApprovedOutput({
+        decisionSummaries: [{ kind: 'random-string', summary: 'x' }],
+      }),
+    );
+    expect(result.success).toBe(false);
   });
 });
 

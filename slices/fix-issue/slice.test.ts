@@ -106,8 +106,8 @@ function makeImplementOutput(overrides: Record<string, unknown> = {}) {
     evidenceSpecPath: null as string | null,
     confidence: 'high' as const,
     decisionSummaries: [
-      { step: 'plan', summary: 'Add helper at core/utils/strings.ts' },
-      { step: 'green', summary: 'All 3 tests pass' },
+      { kind: 'PLAN', summary: 'Add helper at core/utils/strings.ts' },
+      { kind: 'GREEN', summary: 'All 3 tests pass' },
     ],
     ...overrides,
   };
@@ -250,7 +250,7 @@ describe('runFixIssueWorkflow (#183)', () => {
     const adviseOnPlanImpl = vi.fn().mockResolvedValue({
       verdict: 'proceed',
       confidence: 'high',
-      decisionSummaries: [{ step: 'review', summary: 'sound' }],
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'sound' }],
     });
 
     const { runFixIssueWorkflow } = await import('./workflow.js');
@@ -301,7 +301,7 @@ describe('runFixIssueWorkflow (#183)', () => {
       verdict: 'revise',
       confidence: 'medium',
       feedback: 'use the existing helper at X',
-      decisionSummaries: [{ step: 'review', summary: 'duplicates X' }],
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'duplicates X' }],
     });
 
     const { runFixIssueWorkflow } = await import('./workflow.js');
@@ -338,7 +338,7 @@ describe('runFixIssueWorkflow (#183)', () => {
       verdict: 'abort',
       confidence: 'high',
       reason: 'plan modifies FACTORY_RULES.md (rule 12)',
-      decisionSummaries: [{ step: 'review', summary: 'governance violation' }],
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'governance violation' }],
     });
 
     const { runFixIssueWorkflow } = await import('./workflow.js');
@@ -415,9 +415,9 @@ describe('runFixIssueWorkflow (#183)', () => {
     const source = makeStateSource();
     const out = makeImplementOutput({
       decisionSummaries: [
-        { step: 'plan', summary: 'a' },
-        { step: 'red', summary: 'b' },
-        { step: 'green', summary: 'c' },
+        { kind: 'PLAN', summary: 'a' },
+        { kind: 'RED', summary: 'b' },
+        { kind: 'GREEN', summary: 'c' },
       ],
     });
     const runtime: AgentRuntime = {
@@ -482,7 +482,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
       gifPath: null,
       commentUrl: 'https://github.com/owner/repo/issues/42#issuecomment-1',
       commitSha: 'abc1234567890abcdef',
-      decisionSummaries: [{ step: 'post', summary: 'Posted evidence comment' }],
+      decisionSummaries: [{ kind: 'COMMIT', summary: 'Posted evidence comment' }],
     };
 
     const runtime: AgentRuntime = {
@@ -537,7 +537,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
       gifPath: null,
       commentUrl: 'https://github.com/owner/repo/issues/42#issuecomment-2',
       commitSha: 'abc1234567890abcdef',
-      decisionSummaries: [{ step: 'post', summary: 'Posted evidence comment' }],
+      decisionSummaries: [{ kind: 'COMMIT', summary: 'Posted evidence comment' }],
     };
 
     const runtime: AgentRuntime = {
@@ -589,7 +589,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
       gifPath: null,
       commentUrl: 'https://github.com/owner/repo/issues/42#issuecomment-2',
       commitSha: 'abc1234567890abcdef',
-      decisionSummaries: [{ step: 'post', summary: 'Posted evidence comment' }],
+      decisionSummaries: [{ kind: 'COMMIT', summary: 'Posted evidence comment' }],
     };
 
     const runtime: AgentRuntime = {

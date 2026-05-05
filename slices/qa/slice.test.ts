@@ -330,8 +330,8 @@ describe('runQaWorkflow', () => {
         output: {
           ...(makePassResult().output as object),
           decisionSummaries: [
-            { step: 's1', summary: 'passed lint' },
-            { step: 's2', summary: 'tests passed' },
+            { kind: 'PLAN', summary: 'passed lint' },
+            { kind: 'PLAN', summary: 'tests passed' },
           ],
         },
         decisionSummaries: [],

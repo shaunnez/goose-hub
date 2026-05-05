@@ -15,8 +15,8 @@ describe('implement output schema', () => {
     evidenceSpecPath: 'apps/web/e2e/issue-123.spec.ts',
     confidence: 'high' as const,
     decisionSummaries: [
-      { step: 'plan', summary: 'Add helper' },
-      { step: 'green', summary: 'All tests pass' },
+      { kind: 'PLAN', summary: 'Add helper' },
+      { kind: 'GREEN', summary: 'All tests pass' },
     ],
   };
 
@@ -42,6 +42,29 @@ describe('implement output schema', () => {
 
   it('rejects empty decisionSummaries (FACTORY_RULES rule 6)', () => {
     expect(ImplementSchema.safeParse({ ...baseValid, decisionSummaries: [] }).success).toBe(false);
+  });
+
+  it('accepts a known-good output with valid decision-kind values (#466)', () => {
+    expect(
+      ImplementSchema.safeParse({
+        ...baseValid,
+        decisionSummaries: [
+          { kind: 'PLAN', summary: 'Add helper at core/foo/bar.ts' },
+          { kind: 'RED', summary: 'Wrote 3 failing tests' },
+          { kind: 'GREEN', summary: 'All tests pass' },
+          { kind: 'LINT', summary: 'biome clean' },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects a decisionSummaries entry with an invalid kind (#466)', () => {
+    expect(
+      ImplementSchema.safeParse({
+        ...baseValid,
+        decisionSummaries: [{ kind: 'plan', summary: 'lowercase rejected' }],
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects unknown confidence value', () => {

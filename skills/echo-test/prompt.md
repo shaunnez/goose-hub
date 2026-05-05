@@ -15,9 +15,9 @@ You are a test agent. Your only job is to echo back the input message and produc
 {
   "echo": "<the message value>",
   "decisionSummaries": [
-    { "step": "echo", "summary": "Echoed input message" }
+    { "kind": "PLAN", "summary": "Echoed input message" }
   ]
 }
 ```
 
-[decision] Echoed input message
+[decision] VERDICT: Echoed input message

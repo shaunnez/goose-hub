@@ -23,10 +23,14 @@ Classifies a work item by type and priority. Produces structured output conformi
 | `reasoning` | `string` | 1–3 sentence explanation of classification |
 | `decisionSummaries` | `DecisionSummary[]` | Per-decision audit trail (min 1) |
 
-## Decision-type taxonomy
+## Decision-summary kinds
 
-| Step | Trigger |
+The `kind` field on each `decisionSummaries` entry is constrained to the shared `DecisionKindSchema` enum in `core/agent-runtime/decision-types.ts` (see ADR 0018). Triage most commonly emits:
+
+| Kind | Trigger |
 |------|---------|
+| `PLAN` | The default classification step — type/priority chosen from issue body |
 | `MODEL_SELECTION` | When the agent chooses between ambiguous type classifications |
 | `SCOPE_CHANGE` | When the work item body reveals broader scope than the title suggests, changing the classification |
-| `ESCALATE` | When the work item contains signals (urgency keywords, blocking dependencies) that elevate the priority above initial assessment |
+| `ESCALATE` | When the work item contains urgency keywords or blocking dependencies that elevate priority above initial assessment |
+| `UNCERTAINTY` | When the issue is too thin to classify confidently |

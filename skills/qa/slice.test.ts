@@ -40,7 +40,7 @@ function makeValidOutput(overrides = {}) {
     },
     qualityScores: makeValidScores(),
     findings: [],
-    decisionSummaries: [{ step: 'structural-check', summary: 'All lint and type-check passed' }],
+    decisionSummaries: [{ kind: 'STRUCTURAL_CHECK', summary: 'All lint and type-check passed' }],
     ...overrides,
   };
 }
@@ -147,6 +147,32 @@ describe('QaOutputSchema', () => {
     expect(typeof jsonSchema).toBe('object');
     expect(jsonSchema).not.toBeNull();
     expect(jsonSchema).toHaveProperty('properties');
+  });
+});
+
+// ─── DecisionSummarySchema (shared kind enum, #466) ─────────────────────────
+
+describe('QaOutputSchema decision-kind enum', () => {
+  it('accepts a known-good output with valid kinds across the verification flow', () => {
+    const result = QaOutputSchema.safeParse(
+      makeValidOutput({
+        decisionSummaries: [
+          { kind: 'STRUCTURAL_CHECK', summary: 'biome and tsc clean' },
+          { kind: 'FUNCTIONAL_CHECK', summary: 'all tests pass' },
+          { kind: 'VERDICT', summary: 'pass' },
+        ],
+      }),
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a decisionSummaries entry with an invalid kind', () => {
+    const result = QaOutputSchema.safeParse(
+      makeValidOutput({
+        decisionSummaries: [{ kind: 'made-up-kind', summary: 'x' }],
+      }),
+    );
+    expect(result.success).toBe(false);
   });
 });
 

@@ -273,7 +273,7 @@ interface ImplementOutputShape {
   prUrl: string;
   evidenceSpecPath: string | null;
   confidence: 'low' | 'medium' | 'high';
-  decisionSummaries: { step: string; summary: string; evidence?: string }[];
+  decisionSummaries: { kind: string; summary: string; evidence?: string }[];
 }
 
 async function runImplement(input: RunImplementInput): Promise<ImplementOutputShape> {

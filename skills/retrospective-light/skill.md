@@ -39,10 +39,10 @@ For each candidate, set:
 
 ### Step 4 — Write decision summary
 
-Emit one decision summary with `step: "retro-complete"` summarising the retrospective outcome.
+Emit one decision summary with `kind: "VERDICT"` summarising the retrospective outcome.
 
 ## Output
 
 Return JSON conforming to the `LightRetroSchema`. No free-text outside the schema fields.
 
-[decision] Retro complete: <one sentence on outcome>
+[decision] VERDICT: Retro complete: <one sentence on outcome>

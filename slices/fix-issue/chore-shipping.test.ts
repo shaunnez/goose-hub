@@ -101,13 +101,13 @@ const TDD_IMPLEMENT_OUTPUT = {
   evidenceSpecPath: null,
   confidence: 'high' as const,
   decisionSummaries: [
-    { step: 'plan', summary: 'Add capitalize at core/utils/strings.ts mirroring existing helpers' },
+    { kind: 'PLAN', summary: 'Add capitalize at core/utils/strings.ts mirroring existing helpers' },
     {
-      step: 'red',
+      kind: 'RED',
       summary: 'Wrote 3 failing tests covering empty string, single char, multi-word',
     },
-    { step: 'green', summary: 'Implementation passes all 3 tests; full suite green' },
-    { step: 'lint', summary: 'Lint and typecheck clean' },
+    { kind: 'GREEN', summary: 'Implementation passes all 3 tests; full suite green' },
+    { kind: 'LINT', summary: 'Lint and typecheck clean' },
   ],
 };
 
@@ -161,15 +161,15 @@ describe('chore-shipping end-to-end (#187)', () => {
     expect(runtime.run).toHaveBeenCalledTimes(1);
 
     // ── Acceptance: TDD ordering — plan/red/green/lint emitted in order ────
-    const decisionSteps = vi
+    const decisionKinds = vi
       .mocked(eventStore.appendEvent)
       .mock.calls.filter(
         ([e]) =>
           e.kind === 'agent.decision-summary' &&
           (e.payload as { skill?: string }).skill === 'implement',
       )
-      .map(([e]) => (e.payload as { step: string }).step);
-    expect(decisionSteps).toEqual(['plan', 'red', 'green', 'lint']);
+      .map(([e]) => (e.payload as { kind: string }).kind);
+    expect(decisionKinds).toEqual(['PLAN', 'RED', 'GREEN', 'LINT']);
 
     // ── Acceptance: implement-complete event recorded ──────────────────────
     const implementComplete = vi

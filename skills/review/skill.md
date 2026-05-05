@@ -44,7 +44,7 @@ Extract ALL criteria — both unchecked `[ ]` and pre-checked `[x]`. Pre-checked
 List the criteria you found. Emit a decision summary:
 
 ```
-[decision] Read issue #<number>: found <N> acceptance criteria to verify
+[decision] READ: Issue #<number> — found <N> acceptance criteria to verify
 ```
 
 If no checkboxes are found, look for numbered lists, bullet points prefixed with "must", "should", or "acceptance criteria" section headers. If truly no criteria are identifiable, record a `needs-human` verdict with `escalationReason: "No acceptance criteria found in workItem.body — cannot verify"`.
@@ -61,7 +61,7 @@ Read `prDiff` in full. Understand:
 Emit:
 
 ```
-[decision] Read PR diff: <N> files changed — <brief description of main change>
+[decision] DIFF_READ: <N> files changed — <brief description of main change>
 ```
 
 Do not rely on the commit message to understand what changed. Read the diff itself.
@@ -90,7 +90,7 @@ Examples of each status:
 Emit after verifying all criteria:
 
 ```
-[decision] Criteria check: <N> met, <N> unmet, <N> unclear
+[decision] CRITERIA_CHECK: <N> met, <N> unmet, <N> unclear
 ```
 
 ## Step 4 — Record findings
@@ -177,27 +177,28 @@ If `confidence < 0.5` and any criterion is `unmet` or `unclear`, use `needs-huma
 After each major step, emit a line in your text turn:
 
 ```
-[decision] <one sentence summary>
+[decision] KIND: <one sentence summary>
 ```
 
-These lines are parsed by the orchestrator and stored as `agent.decision-summary` events. Keep each to a single sentence. Do not include raw output, credentials, or implementation reasoning.
+`KIND` is an uppercase value from the shared decision-kind enum (see `core/agent-runtime/decision-types.ts`). The orchestrator parses these lines and stores them as `agent.decision-summary` events. Keep each to a single sentence. Do not include raw output, credentials, or implementation reasoning.
 
-Standard steps to emit decisions for:
+Standard kinds for Review:
 
-| Step | When to emit |
+| Kind | When to emit |
 |------|-------------|
-| `issue-read` | After parsing the issue and listing acceptance criteria |
-| `diff-read` | After reading and understanding the PR diff |
-| `criteria-check` | After verifying all acceptance criteria |
-| `findings-summary` | After recording all findings |
-| `verdict` | After setting the final verdict and confidence |
+| `READ` | After parsing the issue and listing acceptance criteria |
+| `DIFF_READ` | After reading and understanding the PR diff |
+| `CRITERIA_CHECK` | After verifying all acceptance criteria |
+| `INSIGHT` | After recording findings (one summary per finding cluster) |
+| `VERDICT` | After setting the final verdict and confidence |
+| `ESCALATE` | When choosing `needs-human` over a fixable verdict |
 
 Examples of good Review decision summaries:
-- `[decision] Read issue #240: found 6 acceptance criteria to verify`
-- `[decision] Read PR diff: 5 files changed — new skills/review/ directory with schema, config, tests, skill.md, README`
-- `[decision] Criteria check: 5 met, 1 unmet, 0 unclear`
-- `[decision] 1 blocker finding: README.md missing required escalation policy section`
-- `[decision] Verdict: needs-fix, confidence: 0.85 — README gap is clear and fixable`
+- `[decision] READ: Issue #240 — found 6 acceptance criteria to verify`
+- `[decision] DIFF_READ: 5 files changed — new skills/review/ directory with schema, config, tests, skill.md, README`
+- `[decision] CRITERIA_CHECK: 5 met, 1 unmet, 0 unclear`
+- `[decision] INSIGHT: 1 blocker finding — README.md missing required escalation policy section`
+- `[decision] VERDICT: needs-fix, confidence 0.85 — README gap is clear and fixable`
 
 Bad summaries:
 - More than one sentence
@@ -226,10 +227,10 @@ For `approved` or `needs-fix`:
   ],
   "findings": [],
   "decisionSummaries": [
-    { "step": "issue-read", "summary": "Read issue #240: found 5 acceptance criteria" },
-    { "step": "diff-read", "summary": "Read PR diff: 5 files changed in skills/review/" },
-    { "step": "criteria-check", "summary": "All 5 criteria met: schema, config, tests, skill.md, README present" },
-    { "step": "verdict", "summary": "Verdict: approved, confidence 0.92 — all criteria met, no blockers" }
+    { "kind": "READ", "summary": "Read issue #240: found 5 acceptance criteria" },
+    { "kind": "DIFF_READ", "summary": "Read PR diff: 5 files changed in skills/review/" },
+    { "kind": "CRITERIA_CHECK", "summary": "All 5 criteria met: schema, config, tests, skill.md, README present" },
+    { "kind": "VERDICT", "summary": "Verdict: approved, confidence 0.92 — all criteria met, no blockers" }
   ]
 }
 ```
@@ -255,9 +256,9 @@ For `needs-human` (escalationReason is REQUIRED):
     }
   ],
   "decisionSummaries": [
-    { "step": "issue-read", "summary": "Read issue #240: 3 criteria found" },
-    { "step": "criteria-check", "summary": "Criteria check: 2 met, 0 unmet, 1 unclear" },
-    { "step": "verdict", "summary": "Verdict: needs-human — confidence 0.35 on unclear criterion, architectural risk" }
+    { "kind": "READ", "summary": "Read issue #240: 3 criteria found" },
+    { "kind": "CRITERIA_CHECK", "summary": "Criteria check: 2 met, 0 unmet, 1 unclear" },
+    { "kind": "VERDICT", "summary": "Verdict: needs-human — confidence 0.35 on unclear criterion, architectural risk" }
   ],
   "escalationReason": "The criterion 'no breaking changes' cannot be verified from the diff. The AgentSpec interface in core/agent-runtime/interface.ts has been modified. Downstream consumers are outside the diff scope. A human reviewer with broader codebase knowledge must confirm this change is safe."
 }

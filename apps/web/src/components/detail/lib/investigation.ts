@@ -11,7 +11,7 @@ export interface InvestigationPayload {
     keyFiles: KeyFile[];
     confidence: 'low' | 'medium' | 'high';
     openQuestions: string[];
-    decisionSummaries: Array<{ step: string; summary: string; evidence?: string }>;
+    decisionSummaries: Array<{ kind: string; summary: string; evidence?: string }>;
   };
 }
 

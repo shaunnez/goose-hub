@@ -1,9 +1,10 @@
 import type { ZodType } from 'zod';
 import type { AgentEvent } from '../event-stream/store.js';
 import type { ModelTier, Role } from '../types.js';
+import type { DecisionKind } from './decision-types.js';
 
 export interface DecisionSummary {
-  step: string;
+  kind: DecisionKind;
   summary: string;
   evidence?: string;
 }

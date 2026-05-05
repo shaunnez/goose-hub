@@ -55,10 +55,10 @@ Surface candidates only where `confidence: "high"` (from `CONVERGENCE_THRESHOLD`
 
 ### Step 7 — Write decision summaries
 
-Include at least one decision summary with `step: "retro-complete"` summarising the full analysis.
+Include at least one decision summary with `kind: "VERDICT"` summarising the full analysis.
 
 ## Output
 
 Return JSON conforming to the `DeepRetroSchema`. No free-text outside the schema fields.
 
-[decision] Deep retro complete: <one sentence on key finding>
+[decision] VERDICT: Deep retro complete: <one sentence on key finding>

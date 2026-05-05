@@ -202,8 +202,8 @@ describe('runReviewWorkflow', () => {
           criteriaChecks: [{ criterion: 'Add foo', status: 'met' }],
           findings: [],
           decisionSummaries: [
-            { step: 'check-1', summary: 'criteria met' },
-            { step: 'check-2', summary: 'no regressions' },
+            { kind: 'CRITERIA_CHECK', summary: 'criteria met' },
+            { kind: 'CRITERIA_CHECK', summary: 'no regressions' },
           ],
         },
         decisionSummaries: [],

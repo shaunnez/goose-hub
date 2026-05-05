@@ -1,10 +1,5 @@
+import { DecisionSummarySchema } from '@goose-hub/core/retrospective/schemas.js';
 import { z } from 'zod';
-
-const DecisionSummarySchema = z.object({
-  step: z.string(),
-  summary: z.string(),
-  evidence: z.string().optional(),
-});
 
 export const ResolveConflictContextSchema = z.object({
   worktreePath: z

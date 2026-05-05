@@ -60,7 +60,7 @@ Steps:
 3. If the PR introduces or modifies Zod schemas, verify that the schema exports are valid and correctly typed.
 4. Look for obvious anti-patterns in the diff: inline prompts instead of skill.md files, imports between slices, missing `README.md` or `slice.test.ts` for new slices.
 
-Emit: `[decision] Structural tier <passed|failed>: <one-sentence summary>`
+Emit: `[decision] STRUCTURAL_CHECK: <one-sentence summary including passed|failed>`
 
 Record tier result with:
 - `passed`: true if no errors found, false otherwise
@@ -80,7 +80,7 @@ Steps:
 4. Check that every acceptance criterion in `workItem.body` is addressed — either by a passing test or by observable code change.
 5. Verify that new functions, schemas, or modules have corresponding tests.
 
-Emit: `[decision] Functional tier <passed|failed>: <one-sentence summary>`
+Emit: `[decision] FUNCTIONAL_CHECK: <one-sentence summary including passed|failed>`
 
 Record tier result with:
 - `passed`: true if all tests pass and coverage is adequate
@@ -99,7 +99,7 @@ Steps:
 4. Check that any new UI paths introduced by the PR are reachable and render correctly (if e2e tests cover them).
 5. If `evidenceCommentUrl` is present, fetch the comment and review the screenshots and walkthrough GIF for visual AC verification. Note any visible regressions or UI acceptance criteria that are not met in the captured state.
 
-Emit: `[decision] Regression tier <passed|failed|skipped>: <one-sentence summary>`
+Emit: `[decision] REGRESSION_CHECK: <one-sentence summary including passed|failed|skipped>`
 
 Record tier result with:
 - `passed`: true if all e2e tests pass or no regressions are possible
@@ -242,31 +242,32 @@ Set `verdict` based on the following rules, in order:
 After each major step, emit a line in your text turn:
 
 ```
-[decision] <one sentence summary>
+[decision] KIND: <one sentence summary>
 ```
 
-These lines are parsed by the orchestrator and stored as `agent.decision-summary` events. Keep each to a single sentence. Do not include raw output, credentials, or implementation reasoning.
+`KIND` is an uppercase value from the shared decision-kind enum (see `core/agent-runtime/decision-types.ts`). The orchestrator parses these lines and stores them as `agent.decision-summary` events. Keep each to a single sentence. Do not include raw output, credentials, or implementation reasoning.
 
-Standard steps to emit decisions for:
+Standard kinds for QA:
 
-| Step | When to emit |
+| Kind | When to emit |
 |------|-------------|
-| `issue-read` | After reading and understanding the issue and acceptance criteria |
-| `diff-read` | After reading and understanding the PR diff |
-| `structural-check` | After running lint/typecheck |
-| `functional-check` | After running tests |
-| `regression-check` | After running e2e or assessing regression risk |
-| `criteria-check` | After verifying acceptance criteria against code |
-| `quality-score` | After completing the 8-category scoring |
-| `verdict` | After setting the final verdict |
+| `READ` | After reading and understanding the issue and acceptance criteria |
+| `DIFF_READ` | After reading and understanding the PR diff |
+| `STRUCTURAL_CHECK` | After running lint/typecheck |
+| `FUNCTIONAL_CHECK` | After running tests |
+| `REGRESSION_CHECK` | After running e2e or assessing regression risk |
+| `CRITERIA_CHECK` | After verifying acceptance criteria against code |
+| `QUALITY_SCORE` | After completing the 8-category scoring |
+| `VERDICT` | After setting the final verdict |
 
 Examples of good QA decision summaries:
-- `[decision] Read issue #239: QA holdout skill with 3-tier verification and 8-cat scoring`
-- `[decision] Structural tier passed: biome check and tsc clean`
-- `[decision] Functional tier passed: all 34 tests pass including slice.test.ts`
-- `[decision] Regression tier skipped: no e2eCommand provided, no UI changes in diff`
-- `[decision] All 6 acceptance criteria satisfied by code and tests`
-- `[decision] Quality score: 82/100 — verdict: pass`
+- `[decision] READ: Issue #239 — QA holdout skill with 3-tier verification and 8-cat scoring`
+- `[decision] STRUCTURAL_CHECK: passed — biome check and tsc clean`
+- `[decision] FUNCTIONAL_CHECK: passed — all 34 tests pass including slice.test.ts`
+- `[decision] REGRESSION_CHECK: skipped — no e2eCommand provided, no UI changes in diff`
+- `[decision] CRITERIA_CHECK: all 6 acceptance criteria satisfied by code and tests`
+- `[decision] QUALITY_SCORE: 82/100`
+- `[decision] VERDICT: pass`
 
 Bad summaries:
 - More than one sentence
@@ -317,7 +318,7 @@ Return a JSON object conforming exactly to this structure:
     { "tier": "functional", "severity": "warning", "description": "Acceptance criterion 3 not covered by any test" }
   ],
   "decisionSummaries": [
-    { "step": "issue-read", "summary": "<one sentence>", "evidence": "<optional>" }
+    { "kind": "READ", "summary": "<one sentence>", "evidence": "<optional>" }
   ]
 }
 ```

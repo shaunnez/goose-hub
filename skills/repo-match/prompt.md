@@ -36,7 +36,7 @@ Return a JSON object:
   ],
   "decisionSummaries": [
     {
-      "step": "semantic-match",
+      "kind": "PLAN",
       "summary": "<one sentence describing the match decision>",
       "evidence": "<key signal from work item or repo description>"
     }
@@ -46,4 +46,4 @@ Return a JSON object:
 
 List candidates in descending confidence order. Include at most 3 candidates. Always include at least one.
 
-[decision] Selected repo candidate using semantic reasoning over work item and repo descriptions
+[decision] VERDICT: Selected repo candidate using semantic reasoning over work item and repo descriptions

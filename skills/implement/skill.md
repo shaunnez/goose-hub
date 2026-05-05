@@ -43,7 +43,7 @@ The context contains a `<task>` block with:
 6. **No shell syntax.** Never add `2>&1`, `>`, `&&`, `;`, or `|` to commands — `shell: false` passes them as literal arguments to the program, breaking the command. Use separate `bash` calls instead.
 7. **No command retry.** CWD is always the worktree root and cannot change between bash calls. If a command returns output you have already seen, running it again (with any description or "from a different directory") produces identical output. Stop, emit a diagnosis decision summary, set `confidence: low`, and return.
 
-- Emit: `[decision] Loaded acceptance criteria for #<number> and N relevant test files`
+- Emit: `[decision] READ: Loaded acceptance criteria for #<number> and N relevant test files`
 
 ### 2 — Plan
 
@@ -52,7 +52,7 @@ The context contains a `<task>` block with:
   - Identify the failing tests you will add.
   - Reference any pattern from CONTEXT.md or existing code you will mirror.
 - Stay within the slice. Do not refactor surrounding code, do not add features beyond the acceptance criteria.
-- Emit: `[decision] Plan: <one-sentence summary of the change>`
+- Emit: `[decision] PLAN: <one-sentence summary of the change>`
 
 **Frontend gate — check before writing your plan:** Does this change touch any file under `apps/web/`? If yes, your plan MUST include a step to write `apps/web/e2e/issue-<N>.spec.ts` (step 4 below). A plan that omits this step is incomplete — schema validation will reject the output if `evidenceSpecPath` is null while `filesWritten` includes `apps/web/` paths.
 
@@ -60,14 +60,14 @@ The context contains a `<task>` block with:
 
 - Write the test cases that will fail with the current implementation. Cover the acceptance criteria and at least one negative path.
 - Run the test command via the `test` tool. Confirm the new tests fail (and only the new ones — pre-existing tests must still pass or fail for known reasons).
-- Emit: `[decision] Wrote N failing tests for <surface>; baseline test command shows N new failures`
+- Emit: `[decision] RED: Wrote N failing tests for <surface>; baseline test command shows N new failures`
 
 ### 4 — Green — implementation
 
 - Write the implementation using the `write` tool. Workspace-bound paths only — no absolute paths, no `..` traversal.
 - Re-run the test command. Iterate until all tests pass.
 - **Frontend changes (required):** If any file written is under `apps/web/`, write a Playwright spec at `apps/web/e2e/issue-<number>.spec.ts` now, before proceeding to step 5. The spec must navigate to the affected UI, assert the visible change, and call `page.screenshot({ path: 'evidence/issue-<number>/step-1.png' })`. Use plain `page.goto('/...')` — never `waitForLoadState('networkidle')` (the app's persistent SSE connection prevents it from firing; use `waitForSelector` or time-bounded assertions instead). This spec ships in the same commit as your implementation so the evidence-post skill can run it post-PR.
-- Emit: `[decision] Implementation passes all tests including N new cases`
+- Emit: `[decision] GREEN: Implementation passes all tests including N new cases`
 
 ### 5 — Refactor (optional, only if necessary)
 
@@ -87,7 +87,7 @@ All tests pass and lint is clean. Commit your changes now — the orchestrator p
 - Stage everything: `git add -A` (separate `bash` call)
 - Commit with a message derived from the issue title and number:
   `git commit -m "fix(#<number>): <concise description of what changed>"`
-- Emit: `[decision] Committed changes for #<number>`
+- Emit: `[decision] COMMIT: Committed changes for #<number>`
 
 > **This step is required.** If you skip it, the orchestrator pushes an empty branch and the PR creation fails with a 422.
 
@@ -126,14 +126,23 @@ Return a JSON object conforming to `ImplementSchema`. The orchestrator opens the
   "evidenceSpecPath": "apps/web/e2e/issue-123.spec.ts",
   "confidence": "high",
   "decisionSummaries": [
-    { "step": "plan", "summary": "Add helper at core/foo/bar.ts; mirror existing baz pattern" },
-    { "step": "red", "summary": "Wrote 3 failing tests covering the success and two error paths" },
-    { "step": "green", "summary": "Implementation passes all 3 new tests; full suite green" },
-    { "step": "lint", "summary": "Lint and typecheck clean" }
+    { "kind": "PLAN", "summary": "Add helper at core/foo/bar.ts; mirror existing baz pattern" },
+    { "kind": "RED", "summary": "Wrote 3 failing tests covering the success and two error paths" },
+    { "kind": "GREEN", "summary": "Implementation passes all 3 new tests; full suite green" },
+    { "kind": "LINT", "summary": "Lint and typecheck clean" }
   ]
 }
 ```
 
 `evidenceSpecPath` must be set for any slice touching `apps/web/`; null is only valid for backend-only or chore PRs. `testsWritten` may be `[]` for chore PRs that change no behaviour (rare). `decisionSummaries` must have at least one entry.
 
-[decision] Shipped slice with TDD loop and returned structured implement output
+[decision] VERDICT: Shipped slice with TDD loop and returned structured implement output
+
+## Decision-summary kinds
+
+`kind` is constrained to a shared enum (see `core/agent-runtime/decision-types.ts`). The implement skill most commonly emits:
+
+- **Phase markers:** `READ`, `PLAN`, `RED`, `GREEN`, `REFACTOR`, `LINT`, `COMMIT`
+- **Self-observations:** `BLOCKER`, `RETRY`, `UNCERTAINTY`, `TOOL_FAILURE`, `INSIGHT`
+
+Use uppercase enum values both in the JSON `kind` field and in the live `[decision] KIND: …` marker line. Free-text `step` strings are no longer accepted — schema validation rejects them.

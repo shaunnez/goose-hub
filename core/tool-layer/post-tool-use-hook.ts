@@ -48,21 +48,30 @@ async function main() {
     writeFileSync(cursorFile, String(fileSize), 'utf8');
   } catch { process.exit(0); }
 
-  const DECISION_RE = /^\\[decision\\]\\s+(.+)$/gm;
+  // Live-marker grammar: \`[decision] KIND: <one-sentence summary>\`
+  // (#466). KIND must be uppercase A-Z and underscores; the server validates
+  // it against the canonical enum and coerces unknown values to UNKNOWN.
+  const DECISION_TYPED_RE = /^\\[decision\\]\\s+([A-Z_]+):\\s+(.+)$/gm;
+  // Backward-compat: legacy marker with no kind prefix → forwarded as UNKNOWN.
+  const DECISION_LEGACY_RE = /^\\[decision\\]\\s+(?![A-Z_]+:)(.+)$/gm;
+
   const markers = [];
   let m;
-  while ((m = DECISION_RE.exec(newContent)) !== null) {
-    markers.push(m[1].trim());
+  while ((m = DECISION_TYPED_RE.exec(newContent)) !== null) {
+    markers.push({ kind: m[1].trim(), summary: m[2].trim() });
+  }
+  while ((m = DECISION_LEGACY_RE.exec(newContent)) !== null) {
+    markers.push({ kind: 'UNKNOWN', summary: m[1].trim() });
   }
 
   if (markers.length === 0) process.exit(0);
 
-  for (const summary of markers) {
+  for (const { kind, summary } of markers) {
     try {
       await fetch(\`http://localhost:\${serverPort}/events/decision-summary\`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ run_id: runId, summary, timestamp: new Date().toISOString() }),
+        body: JSON.stringify({ run_id: runId, kind, summary, timestamp: new Date().toISOString() }),
         signal: AbortSignal.timeout(500),
       }).catch(() => {});
     } catch { /* best-effort */ }

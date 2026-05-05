@@ -62,7 +62,30 @@ describe('deployPostHook', () => {
     deployPostHook();
     const script = vi.mocked(writeFileSync).mock.calls[0][1] as string;
     expect(script).toContain('[decision]');
-    expect(script).toContain('DECISION_RE');
+    expect(script).toContain('DECISION_TYPED_RE');
+  });
+
+  it('hook script extracts both kind and summary from typed [decision] markers (#466)', () => {
+    deployPostHook();
+    const script = vi.mocked(writeFileSync).mock.calls[0][1] as string;
+    // Typed regex matches `[decision] KIND: text` form.
+    expect(script).toMatch(/\[A-Z_\]\+/);
+    expect(script).toContain('kind: m[1].trim()');
+  });
+
+  it('hook script forwards untyped legacy markers as kind: UNKNOWN (#466)', () => {
+    deployPostHook();
+    const script = vi.mocked(writeFileSync).mock.calls[0][1] as string;
+    expect(script).toContain('DECISION_LEGACY_RE');
+    expect(script).toContain("kind: 'UNKNOWN'");
+  });
+
+  it('hook script POST payload includes kind alongside summary (#466)', () => {
+    deployPostHook();
+    const script = vi.mocked(writeFileSync).mock.calls[0][1] as string;
+    expect(script).toContain('run_id: runId');
+    expect(script).toContain('kind,');
+    expect(script).toContain('summary,');
   });
 
   it('hook script tracks cursor offset per runId to avoid re-emitting', () => {

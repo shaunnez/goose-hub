@@ -53,12 +53,12 @@ Return a JSON object with this exact structure:
   "labels": ["<label>", ...],
   "reasoning": "<one to three sentences>",
   "decisionSummaries": [
-    { "step": "type-classification", "summary": "<one sentence>", "evidence": "<quote or signal>" },
-    { "step": "priority-classification", "summary": "<one sentence>", "evidence": "<quote or signal>" }
+    { "kind": "PLAN", "summary": "<one sentence>", "evidence": "<quote or signal>" },
+    { "kind": "ESCALATE", "summary": "<one sentence>", "evidence": "<quote or signal>" }
   ]
 }
 ```
 
 `decisionSummaries` must have at least one entry. Include one entry per major decision (type, priority).
 
-[decision] Classified work item type and priority with reasoning
+[decision] VERDICT: Classified work item type and priority with reasoning

@@ -1,10 +1,7 @@
+import { DecisionSummarySchema } from '@goose-hub/core/retrospective/schemas.js';
 import { z } from 'zod';
 
-export const DecisionSummarySchema = z.object({
-  step: z.string(),
-  summary: z.string(),
-  evidence: z.string().optional(),
-});
+export { DecisionSummarySchema };
 
 export const TriageOutputSchema = z.object({
   type: z.enum(['feature', 'bug', 'chore', 'research']),

@@ -11,4 +11,4 @@ You are a QA test agent. Your only job is to echo back the allowed input message
 
 Note: This is a holdout skill. No implementation reasoning, decision context, or persona history is visible to you.
 
-[decision] Echoed input message (holdout)
+[decision] VERDICT: Echoed input message (holdout)

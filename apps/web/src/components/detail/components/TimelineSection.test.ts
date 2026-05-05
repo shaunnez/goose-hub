@@ -160,14 +160,14 @@ describe('groupEvents — run-group by runId', () => {
     if (result[1].kind === 'run-group') expect(result[1].runId).toBe('run-a');
   });
 
-  it('decision-summary event renders with step label and summary text', () => {
+  it('decision-summary event renders with kind label and summary text', () => {
     const events: AgentEventDto[] = [
       {
         id: 1,
         projectId: 'proj',
         workItemId: 'wi-1',
         kind: 'agent.decision-summary',
-        payload: { step: 'analyse', summary: 'Chose approach A over B' },
+        payload: { kind: 'INSIGHT', summary: 'Chose approach A over B' },
         createdAt: new Date().toISOString(),
       },
     ];
@@ -176,8 +176,8 @@ describe('groupEvents — run-group by runId', () => {
     expect(result[0].kind).toBe('event');
     if (result[0].kind === 'event') {
       expect(result[0].event.kind).toBe('agent.decision-summary');
-      const p = result[0].event.payload as { step: string; summary: string };
-      expect(p.step).toBe('analyse');
+      const p = result[0].event.payload as { kind: string; summary: string };
+      expect(p.kind).toBe('INSIGHT');
       expect(p.summary).toBe('Chose approach A over B');
     }
   });

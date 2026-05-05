@@ -33,7 +33,7 @@ Carefully read the issue title and body. Identify:
 - Expected behaviour vs actual behaviour
 - Any specific file paths, function names, or error messages mentioned
 
-Emit: `[decision] Read issue #<number>: <one-sentence summary of the bug>`
+Emit: `[decision] READ: Issue #<number> — <one-sentence summary of the bug>`
 
 ### Step 2 — Identify entry points
 
@@ -42,7 +42,7 @@ Based on the issue text, identify likely entry points in the codebase:
 - Use search tools to locate files relevant to the symptom area
 - Read directory structure to understand the code organisation
 
-Emit: `[decision] Identified entry points: <comma-separated file or directory names>`
+Emit: `[decision] READ: Identified entry points — <comma-separated file or directory names>`
 
 ### Step 3 — Trace the code path
 
@@ -51,7 +51,7 @@ Starting from the entry points, trace the execution path:
 - Follow imports and function calls related to the reported symptom
 - Look for validation logic, error handling, or data transformation that could cause the bug
 
-Emit: `[decision] Traced code path through <key files>: <one-sentence hypothesis>`
+Emit: `[decision] READ: Traced code path through <key files> — <one-sentence hypothesis>`
 
 ### Step 4 — Form root cause hypothesis
 
@@ -60,7 +60,7 @@ Based on your investigation, form a hypothesis:
 - Note any related files that could contribute
 - Assess your confidence: `low` (many unknowns), `medium` (probable cause identified), `high` (root cause clear)
 
-Emit: `[decision] Root cause hypothesis: <one sentence>`
+Emit: `[decision] INSIGHT: Root cause hypothesis — <one sentence>`
 
 ### Step 5 — Record open questions
 
@@ -69,7 +69,7 @@ Note any unresolved questions that would require additional investigation:
 - Ambiguous code paths that need runtime inspection
 - Configuration or data dependencies not visible from static analysis
 
-Emit: `[decision] Recorded <N> open questions`
+Emit: `[decision] INSIGHT: Recorded <N> open questions`
 
 ## Output format
 
@@ -87,10 +87,10 @@ Return a JSON object with this exact structure:
     "<question 2>"
   ],
   "decisionSummaries": [
-    { "step": "issue-read", "summary": "<one sentence>", "evidence": "<quote or signal>" },
-    { "step": "entry-point-identification", "summary": "<one sentence>", "evidence": "<file names or search terms>" },
-    { "step": "code-path-trace", "summary": "<one sentence>", "evidence": "<function or module name>" },
-    { "step": "root-cause-hypothesis", "summary": "<one sentence>", "evidence": "<file:line or code snippet>" }
+    { "kind": "READ", "summary": "<one sentence>", "evidence": "<quote or signal>" },
+    { "kind": "READ", "summary": "<one sentence>", "evidence": "<file names or search terms>" },
+    { "kind": "READ", "summary": "<one sentence>", "evidence": "<function or module name>" },
+    { "kind": "INSIGHT", "summary": "<one sentence>", "evidence": "<file:line or code snippet>" }
   ]
 }
 ```
@@ -109,16 +109,18 @@ Return a JSON object with this exact structure:
 After each major investigation step, emit a line in your text turn:
 
 ```
-[decision] <one sentence summary>
+[decision] KIND: <one sentence summary>
 ```
+
+`KIND` is an uppercase value from the shared decision-kind enum (see `core/agent-runtime/decision-types.ts`). The investigator most commonly emits `READ` (issue/code reads), `INSIGHT` (root-cause hypothesis, open questions), and `UNCERTAINTY` (when evidence is thin).
 
 These marker lines are parsed by the orchestrator and stored as `agent.decision-summary` events. They are NOT forwarded to QA or Reviewer agents. Keep each summary to a single sentence. Do not include credentials, file dumps, or raw chain-of-thought.
 
 Examples of good decision summaries:
-- `[decision] Read issue #42: login endpoint returns 500 when email contains a plus sign`
-- `[decision] Identified entry points: apps/server/src/routes/auth.ts, core/auth/validate.ts`
-- `[decision] Traced code path through email normalisation: plus signs stripped before DB lookup`
-- `[decision] Root cause hypothesis: URL-decode step in normaliseEmail() drops plus sign`
+- `[decision] READ: Issue #42 — login endpoint returns 500 when email contains a plus sign`
+- `[decision] READ: Identified entry points — apps/server/src/routes/auth.ts, core/auth/validate.ts`
+- `[decision] READ: Traced email normalisation — plus signs stripped before DB lookup`
+- `[decision] INSIGHT: Root cause hypothesis — URL-decode step in normaliseEmail() drops plus sign`
 
 Bad decision summaries:
 - More than one sentence

@@ -83,7 +83,7 @@ function makeInvestigateOutput() {
     openQuestions: ['Does this also affect WebSocket upgrade path?'],
     decisionSummaries: [
       {
-        step: 'issue-read',
+        kind: 'READ',
         summary: 'Read issue #42: auth middleware crashes on missing session token',
       },
     ],

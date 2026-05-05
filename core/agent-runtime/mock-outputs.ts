@@ -15,9 +15,9 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
           priority: 'p3',
           labels: [],
           reasoning: 'e2e fixture',
-          decisionSummaries: [{ step: 'classify', summary: `Classified as ${type} for e2e` }],
+          decisionSummaries: [{ kind: 'PLAN', summary: `Classified as ${type} for e2e` }],
         },
-        decisionSummaries: [{ step: 'classify', summary: `Classified as ${type} for e2e` }],
+        decisionSummaries: [{ kind: 'PLAN', summary: `Classified as ${type} for e2e` }],
         events: [],
       };
     }
@@ -43,9 +43,9 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
           prUrl: 'https://github.com/shaunnez/goose-hub/pull/999',
           evidenceSpecPath: null,
           confidence: 'high',
-          decisionSummaries: [{ step: 'implement', summary: 'Mock implementation for e2e test' }],
+          decisionSummaries: [{ kind: 'GREEN', summary: 'Mock implementation for e2e test' }],
         },
-        decisionSummaries: [{ step: 'implement', summary: 'Mock implementation for e2e test' }],
+        decisionSummaries: [{ kind: 'GREEN', summary: 'Mock implementation for e2e test' }],
         events: [],
       };
 
@@ -56,9 +56,9 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
           keyFiles: [],
           confidence: 'high',
           openQuestions: [],
-          decisionSummaries: [{ step: 'investigate', summary: 'Mock investigation for e2e test' }],
+          decisionSummaries: [{ kind: 'INSIGHT', summary: 'Mock investigation for e2e test' }],
         },
-        decisionSummaries: [{ step: 'investigate', summary: 'Mock investigation for e2e test' }],
+        decisionSummaries: [{ kind: 'INSIGHT', summary: 'Mock investigation for e2e test' }],
         events: [],
       };
 
@@ -68,9 +68,9 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
           verdict: 'pass',
           tier: 'functional',
           criteriaResults: [],
-          decisionSummaries: [{ step: 'qa', summary: 'Mock QA pass for e2e test' }],
+          decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock QA pass for e2e test' }],
         },
-        decisionSummaries: [{ step: 'qa', summary: 'Mock QA pass for e2e test' }],
+        decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock QA pass for e2e test' }],
         events: [],
       };
 
@@ -79,9 +79,9 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
         output: {
           verdict: 'approved',
           feedback: null,
-          decisionSummaries: [{ step: 'review', summary: 'Mock review approval for e2e test' }],
+          decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock review approval for e2e test' }],
         },
-        decisionSummaries: [{ step: 'review', summary: 'Mock review approval for e2e test' }],
+        decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock review approval for e2e test' }],
         events: [],
       };
 

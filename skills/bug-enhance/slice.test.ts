@@ -8,7 +8,7 @@ describe('BugEnhanceOutputSchema', () => {
         '**Repro steps**\n1. Navigate to http://localhost:5173/\n2. Observe the sidebar\n\n**Expected**\nSidebar label reads "Goose Hub"\n\n**Actual**\nSidebar label reads "Agentic OS"',
       decisionSummaries: [
         {
-          step: 'sections-added',
+          kind: 'PLAN',
           summary: 'Added Repro steps, Expected, Actual, Location sections',
           evidence: 'sidebar label reads "Agentic OS"',
         },
@@ -20,7 +20,7 @@ describe('BugEnhanceOutputSchema', () => {
   it('rejects output with empty enhancedContent', () => {
     const result = BugEnhanceOutputSchema.safeParse({
       enhancedContent: '',
-      decisionSummaries: [{ step: 'sections-added', summary: 'nothing added' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'nothing added' }],
     });
     // enhancedContent is a string — empty string is technically valid per schema;
     // the prompt instructs the agent to always include content.

@@ -288,8 +288,8 @@ export function InvestigationSection({
                     {initials}
                   </span>
                 )}
-                <span className="font-mono text-fg-3 w-24 shrink-0 truncate" title={s.step}>
-                  {s.step}
+                <span className="font-mono text-fg-3 w-24 shrink-0 truncate" title={s.kind}>
+                  {s.kind}
                 </span>
                 <span className="flex-1 text-fg-2 leading-relaxed">
                   {s.summary}

@@ -29,7 +29,7 @@ A bug is **NOT** a UI/web bug if it describes:
 {
   "enhancedContent": "",
   "decisionSummaries": [
-    { "step": "ui-classification", "summary": "Bug is not a UI/web issue — enhancement skipped.", "evidence": "<quote from title/body that indicates the non-UI nature>" }
+    { "kind": "PLAN", "summary": "Bug is not a UI/web issue — enhancement skipped.", "evidence": "<quote from title/body that indicates the non-UI nature>" }
   ]
 }
 ```
@@ -62,12 +62,12 @@ Return:
 {
   "enhancedContent": "<markdown string — only the new sections>",
   "decisionSummaries": [
-    { "step": "ui-classification", "summary": "Bug confirmed as UI/web issue.", "evidence": "<quote>" },
-    { "step": "sections-added", "summary": "<one sentence listing which sections were added>", "evidence": "<quote from title/body that informed the inference>" }
+    { "kind": "PLAN", "summary": "Bug confirmed as UI/web issue.", "evidence": "<quote>" },
+    { "kind": "PLAN", "summary": "<one sentence listing which sections were added>", "evidence": "<quote from title/body that informed the inference>" }
   ]
 }
 ```
 
 If all sections are already present and adequate, add only a minimal `**Location**` section as the one most likely to be incomplete.
 
-[decision] Classified bug as UI/web or not, then enhanced only if applicable
+[decision] VERDICT: Classified bug as UI/web or not, then enhanced only if applicable

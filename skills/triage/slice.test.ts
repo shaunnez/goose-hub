@@ -12,12 +12,12 @@ describe('triage schema', () => {
       reasoning: 'This is a new capability with no urgency signals.',
       decisionSummaries: [
         {
-          step: 'type-classification',
+          kind: 'PLAN',
           summary: 'Classified as feature',
           evidence: 'new capability',
         },
         {
-          step: 'priority-classification',
+          kind: 'ESCALATE',
           summary: 'Classified as p2',
           evidence: 'no urgency signals',
         },
@@ -32,7 +32,7 @@ describe('triage schema', () => {
       priority: 'p0',
       labels: [],
       reasoning: 'Production regression.',
-      decisionSummaries: [{ step: 'type-classification', summary: 'Bug', evidence: 'broken' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Bug', evidence: 'broken' }],
     });
     expect(result.success).toBe(true);
   });
@@ -43,7 +43,7 @@ describe('triage schema', () => {
       priority: 'p1',
       labels: [],
       reasoning: 'x',
-      decisionSummaries: [{ step: 's', summary: 'ok' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'ok' }],
     });
     expect(result.success).toBe(false);
   });
@@ -54,7 +54,7 @@ describe('triage schema', () => {
       priority: 'critical',
       labels: [],
       reasoning: 'x',
-      decisionSummaries: [{ step: 's', summary: 'ok' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'ok' }],
     });
     expect(result.success).toBe(false);
   });
@@ -81,7 +81,7 @@ describe('triage schema', () => {
       priority: 'p3',
       labels: [],
       reasoning: 'Routine cleanup.',
-      decisionSummaries: [{ step: 'type-classification', summary: 'Chore' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Chore' }],
     });
     expect(result.success).toBe(true);
   });

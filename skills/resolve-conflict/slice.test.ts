@@ -8,7 +8,7 @@ describe('ResolveConflictSchema', () => {
       resolved: ['src/foo.ts', 'src/bar.ts'],
       unresolvable: [],
       confidence: 'high',
-      decisionSummaries: [{ step: 'resolve', summary: 'Merged both sides of foo.ts cleanly' }],
+      decisionSummaries: [{ kind: 'GREEN', summary: 'Merged both sides of foo.ts cleanly' }],
     });
     expect(result.success).toBe(true);
   });
@@ -18,7 +18,7 @@ describe('ResolveConflictSchema', () => {
       resolved: ['src/foo.ts'],
       unresolvable: ['src/complex.ts'],
       confidence: 'low',
-      decisionSummaries: [{ step: 'resolve', summary: 'complex.ts has semantic conflicts' }],
+      decisionSummaries: [{ kind: 'GREEN', summary: 'complex.ts has semantic conflicts' }],
     });
     expect(result.success).toBe(true);
   });
@@ -38,7 +38,7 @@ describe('ResolveConflictSchema', () => {
       resolved: [],
       unresolvable: [],
       confidence: 'very-high',
-      decisionSummaries: [{ step: 'x', summary: 'y' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'y' }],
     });
     expect(result.success).toBe(false);
   });

@@ -100,7 +100,7 @@ function makeLightRetroOutput() {
     whatWorked: ['tests caught the bug'],
     whatDidnt: [],
     improvementCandidates: [],
-    decisionSummaries: [{ step: 'retro', summary: 'Light retro complete' }],
+    decisionSummaries: [{ kind: 'VERDICT', summary: 'Light retro complete' }],
   };
 }
 
@@ -113,7 +113,7 @@ function makeDeepRetroOutput() {
     improvementCandidates: [
       { kind: 'persona-tweak', suggestionText: 'Add empty-input check to QA prompt' },
     ],
-    decisionSummaries: [{ step: 'retro', summary: 'Deep retro complete' }],
+    decisionSummaries: [{ kind: 'VERDICT', summary: 'Deep retro complete' }],
   };
 }
 
