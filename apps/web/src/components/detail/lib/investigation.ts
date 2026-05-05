@@ -5,14 +5,31 @@ export interface KeyFile {
   reason: string;
 }
 
+/**
+ * Decision summary as it appears on the wire. New runs (post-#466) write
+ * `kind`; legacy runs (pre-#466) wrote `step`. Renderers should call
+ * `decisionLabel(s)` to read either, falling back to the empty string.
+ */
+export interface DecisionSummaryWire {
+  kind?: string;
+  step?: string;
+  summary: string;
+  evidence?: string;
+}
+
 export interface InvestigationPayload {
   investigate: {
     findings: string;
     keyFiles: KeyFile[];
     confidence: 'low' | 'medium' | 'high';
     openQuestions: string[];
-    decisionSummaries: Array<{ kind: string; summary: string; evidence?: string }>;
+    decisionSummaries: DecisionSummaryWire[];
   };
+}
+
+/** Returns `kind` (new) or `step` (legacy) for backward compatibility (#466). */
+export function decisionLabel(s: DecisionSummaryWire): string {
+  return s.kind ?? s.step ?? '';
 }
 
 export const CONFIDENCE_COLOR: Record<string, string> = {

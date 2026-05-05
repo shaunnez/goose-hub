@@ -48,24 +48,28 @@ async function main() {
     writeFileSync(cursorFile, String(fileSize), 'utf8');
   } catch { process.exit(0); }
 
-  // Live-marker grammar: \`[decision] KIND: <one-sentence summary>\`
-  // (#466). KIND must be uppercase A-Z and underscores; the server validates
-  // it against the canonical enum and coerces unknown values to UNKNOWN.
-  // Spacing after the colon is tolerant (\\s*) so a missing space doesn't
-  // silently drop the marker.
-  const DECISION_TYPED_RE = /^\\[decision\\]\\s+([A-Z_]+):\\s*(.+)$/gm;
-  // Backward-compat: legacy marker with no kind prefix → forwarded as UNKNOWN.
-  // Negative lookahead matches the typed form; if the typed form starts but
-  // is malformed (e.g. lowercase, mixed case, no colon), it falls through here.
-  const DECISION_LEGACY_RE = /^\\[decision\\]\\s+(?![A-Z_]+:)(.+)$/gm;
+  // Live-marker grammar (#466). Single combined regex so typed and legacy
+  // markers are emitted in transcript order — splitting them across two
+  // passes would re-order mixed-format chunks (typed before legacy regardless
+  // of source position) and break timeline / retro sequence analysis.
+  //
+  //   [decision] KIND: <summary>   ← typed:  group 1 = KIND, group 2 = summary
+  //   [decision] <free text>       ← legacy: group 3 = full summary, kind=UNKNOWN
+  //
+  // Spacing after the colon is tolerant (\\s*) so a missing space after the
+  // colon doesn't silently drop the marker. KIND is uppercase A-Z and
+  // underscores; the server validates it against the canonical enum and
+  // coerces unknown values to UNKNOWN.
+  const DECISION_RE = /^\\[decision\\]\\s+(?:([A-Z_]+):\\s*(.+)|(.+))$/gm;
 
   const markers = [];
   let m;
-  while ((m = DECISION_TYPED_RE.exec(newContent)) !== null) {
-    markers.push({ kind: m[1].trim(), summary: m[2].trim() });
-  }
-  while ((m = DECISION_LEGACY_RE.exec(newContent)) !== null) {
-    markers.push({ kind: 'UNKNOWN', summary: m[1].trim() });
+  while ((m = DECISION_RE.exec(newContent)) !== null) {
+    if (m[1] != null) {
+      markers.push({ kind: m[1].trim(), summary: m[2].trim() });
+    } else {
+      markers.push({ kind: 'UNKNOWN', summary: m[3].trim() });
+    }
   }
 
   if (markers.length === 0) process.exit(0);

@@ -62,9 +62,13 @@ function AgentSpawnedEvent({ event }: { event: AgentEventDto }) {
 }
 
 function AgentDecisionSummaryEvent({ event }: { event: AgentEventDto }) {
-  const p = event.payload as { summary?: string; kind?: string } | null;
+  const p = event.payload as { summary?: string; kind?: string; step?: string } | null;
   const summary = p?.summary ?? getPayloadStr(event.payload);
-  const kind = typeof p?.kind === 'string' ? p.kind : null;
+  // #466 — kind is the post-migration field. step was used pre-migration.
+  // Fall back to step so legacy events still render a label rather than blank.
+  const rawKind =
+    typeof p?.kind === 'string' ? p.kind : typeof p?.step === 'string' ? p.step : null;
+  const kind = rawKind != null && rawKind.length > 0 ? rawKind : null;
   return (
     <li
       data-event-kind={event.kind}
@@ -90,9 +94,13 @@ function AgentDecisionSummaryEvent({ event }: { event: AgentEventDto }) {
 }
 
 function AgentDecisionSummaryLiveEvent({ event }: { event: AgentEventDto }) {
-  const p = event.payload as { summary?: string; kind?: string } | null;
+  const p = event.payload as { summary?: string; kind?: string; step?: string } | null;
   const summary = p?.summary ?? getPayloadStr(event.payload);
-  const kind = typeof p?.kind === 'string' ? p.kind : null;
+  // #466 — kind is the post-migration field. step was used pre-migration.
+  // Fall back to step so legacy events still render a label rather than blank.
+  const rawKind =
+    typeof p?.kind === 'string' ? p.kind : typeof p?.step === 'string' ? p.step : null;
+  const kind = rawKind != null && rawKind.length > 0 ? rawKind : null;
   return (
     <li
       data-event-kind={event.kind}
