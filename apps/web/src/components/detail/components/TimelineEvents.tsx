@@ -1,6 +1,6 @@
 import { resumeIssue } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import type { AgentEventDto } from '@/lib/types';
+import type { AgentEventDto, CostRowDto } from '@/lib/types';
 import { getPersonaLabel, usePersonaMap } from '@/lib/usePersonaMap';
 import {
   AlertCircle,
@@ -31,6 +31,14 @@ import {
   formatSkillName,
   getPayloadStr,
 } from '../lib/timeline';
+import { CostBadge } from './CostBadge';
+
+type TimelineContext = {
+  slug: string;
+  issueId: string;
+  latestRunId: string | null;
+  runCosts?: Map<string, CostRowDto>;
+};
 
 // ─── individual event renderers ───────────────────────────────────────────────
 
@@ -1038,7 +1046,7 @@ function RunGroupWrapper({
   endedAt: string | null;
   lastEventAt: string | null;
   personaId: string | null;
-  context?: { slug: string; issueId: string; latestRunId: string | null };
+  context?: TimelineContext;
 }) {
   const personaMap = usePersonaMap();
   const [open, setOpen] = useState(true);
@@ -1081,6 +1089,9 @@ function RunGroupWrapper({
 
   const isLatestRun = context?.latestRunId === runId;
   const canResume = context != null && (isFailed || isStalled) && isLatestRun && !resumed;
+
+  const costRow = context?.runCosts?.get(runId);
+  const runTokens = costRow ? costRow.inputTokens + costRow.outputTokens : 0;
 
   const handleResume = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1155,6 +1166,14 @@ function RunGroupWrapper({
           )}
           <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
           {statusBadge}
+          {costRow && (
+            <CostBadge
+              tokens={runTokens}
+              usd={costRow.costUsd}
+              label={costRow.costLabel}
+              size="sm"
+            />
+          )}
           {metaLine}
           {canResume && (
             <button
@@ -1193,11 +1212,7 @@ function RunGroupWrapper({
 
 // ─── switch ───────────────────────────────────────────────────────────────────
 
-export function renderTimelineItem(
-  item: RenderItem,
-  idx: number,
-  context?: { slug: string; issueId: string; latestRunId: string | null },
-) {
+export function renderTimelineItem(item: RenderItem, idx: number, context?: TimelineContext) {
   if (item.kind === 'log-group') {
     return <AgentLogGroupEvent key={`log-group-${idx}`} events={item.events} />;
   }

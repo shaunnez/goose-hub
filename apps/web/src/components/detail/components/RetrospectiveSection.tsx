@@ -2,6 +2,8 @@ import { fetchEvents } from '@/lib/api';
 import type { AgentEventDto } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
 import { Clock, Minus, TrendingDown, TrendingUp } from 'lucide-react';
+import { useIssueCostsBreakdown } from '../lib/costs';
+import { CostBadge } from './CostBadge';
 import { SectionEmptyState } from './SectionEmptyState';
 
 interface RetrospectiveSectionProps {
@@ -92,6 +94,8 @@ export function RetrospectiveSection({ projectSlug, id }: RetrospectiveSectionPr
     queryKey: ['events', projectSlug, id],
     queryFn: () => fetchEvents(projectSlug, id),
   });
+  const { byStage } = useIssueCostsBreakdown(projectSlug, id);
+  const retroCost = byStage.get('retrospective');
 
   if (isLoading) return null;
 
@@ -124,7 +128,7 @@ export function RetrospectiveSection({ projectSlug, id }: RetrospectiveSectionPr
   return (
     <div data-testid="retro-section" className="px-8 py-6 space-y-6">
       {/* Tier badge */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <span
           className={`text-[10px] font-medium uppercase px-2 py-0.5 rounded-full ${
             retro.tier === 'deep'
@@ -134,6 +138,14 @@ export function RetrospectiveSection({ projectSlug, id }: RetrospectiveSectionPr
         >
           {retro.tier} retro
         </span>
+        {retroCost && (
+          <CostBadge
+            tokens={retroCost.tokens}
+            usd={retroCost.usd}
+            label={retroCost.label}
+            size="sm"
+          />
+        )}
       </div>
 
       {/* Summary bullets */}

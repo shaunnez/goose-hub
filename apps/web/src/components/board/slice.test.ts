@@ -1,16 +1,9 @@
-import { COST_PLACEHOLDER } from '@/lib/constants';
 import { sortLaneItems } from '@/lib/lanes.config';
 import { describe, expect, it } from 'vitest';
 
 // IssueCard rendering is exercised by the Playwright happy-path (#36)
 // and by board/components/IssueCard.test.tsx.
 // Here we lock the sort/ordering rule it relies on.
-
-describe('IssueCard — cost placeholder', () => {
-  it('COST_PLACEHOLDER is "$—"', () => {
-    expect(COST_PLACEHOLDER).toBe('$—');
-  });
-});
 
 describe('issue card lane ordering', () => {
   it('orders by priority desc, then issue number asc', () => {

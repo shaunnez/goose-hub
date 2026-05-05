@@ -2,6 +2,7 @@ import { fetchEvents } from '@/lib/api';
 import type { AgentEventDto } from '@/lib/types';
 import { Clock } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useIssueCostsBreakdown } from '../lib/costs';
 import { EVENT_KIND_LABEL, groupEvents } from '../lib/timeline';
 import { SectionEmptyState } from './SectionEmptyState';
 import { renderTimelineItem } from './TimelineEvents';
@@ -19,6 +20,7 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const { byRun: runCosts } = useIssueCostsBreakdown(projectSlug, id);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -100,7 +102,7 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
 
   const items = groupEvents(events);
   const latestRunId = items.find((item) => item.kind === 'run-group')?.runId ?? null;
-  const context = { slug: projectSlug, issueId: id, latestRunId };
+  const context = { slug: projectSlug, issueId: id, latestRunId, runCosts };
 
   return (
     <div data-testid="timeline-section" className="px-8 py-6">
