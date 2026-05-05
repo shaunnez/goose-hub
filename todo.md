@@ -25,3 +25,11 @@ UI for repo selection
 UI for investigation
 UI for PRD?
 
+
+Add tokens time timeline headers if possible - fix design - add collapse / expand all in header?
+
+Investigate run - no decision sumary?   
+
+Playwright repo run - decision summary? Maybe seperate sidebar item? before code
+
+Investigate run and playwright repro run showing wrong order? Move the screenshots to investigate not dev
