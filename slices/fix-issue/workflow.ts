@@ -519,6 +519,7 @@ async function runEvidencePost(input: RunEvidencePostInput): Promise<void> {
       freshContext: false,
       toolBundles: ['validate'],
       toolExtras: [],
+      env: { SKIP_WEBSERVER: '1' },
       budgets: { maxTurns: 30, maxBudgetUsd: 2, timeoutMs: 300_000 },
       personaId: selectPersona(input.projectId, 'developer').personaId,
       outputJsonSchema: input.outputJsonSchema,

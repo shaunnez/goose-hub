@@ -360,12 +360,15 @@ type ResumeEntry = {
 };
 
 const RESUME_WORKFLOWS: Partial<Record<StateName, ResumeEntry>> = {
-  'factory:dev-ready':      { targetState: 'factory:dev-ready',      dispatch: dispatchFixIssue },
-  'factory:in-progress':    { targetState: 'factory:dev-ready',      dispatch: dispatchFixIssue },
-  'factory:needs-qa':       { targetState: 'factory:needs-qa',       dispatch: dispatchQa },
-  'factory:needs-review':   { targetState: 'factory:needs-review',   dispatch: dispatchReview },
-  'factory:merge-conflict': { targetState: 'factory:merge-conflict', dispatch: dispatchResolveConflict },
-  'factory:investigating':  { targetState: 'factory:investigating',  dispatch: dispatchInvestigate },
+  'factory:dev-ready': { targetState: 'factory:dev-ready', dispatch: dispatchFixIssue },
+  'factory:in-progress': { targetState: 'factory:dev-ready', dispatch: dispatchFixIssue },
+  'factory:needs-qa': { targetState: 'factory:needs-qa', dispatch: dispatchQa },
+  'factory:needs-review': { targetState: 'factory:needs-review', dispatch: dispatchReview },
+  'factory:merge-conflict': {
+    targetState: 'factory:merge-conflict',
+    dispatch: dispatchResolveConflict,
+  },
+  'factory:investigating': { targetState: 'factory:investigating', dispatch: dispatchInvestigate },
 };
 
 /**
@@ -395,7 +398,11 @@ export async function dispatchResumeIssue(slug: string, issueNumber: number): Pr
 
   const entry = RESUME_WORKFLOWS[fromState];
   if (entry == null) {
-    logger.warn('dispatchResumeIssue: no resume handler for state', { slug, issueNumber, fromState });
+    logger.warn('dispatchResumeIssue: no resume handler for state', {
+      slug,
+      issueNumber,
+      fromState,
+    });
     return;
   }
 

@@ -216,4 +216,6 @@ Omit `commentUrl` only if the `gh issue comment` step failed (the failure must b
 
 You are documenting broken behaviour — NOT fixing it. Do not modify any app source code. Push only to the `evidence/issue-<N>` branch — never to `main`.
 
+**UI-only assumption.** This skill connects to the already-running dev server at `http://localhost:5173` (`SKIP_WEBSERVER=1` is set in the environment). It reproduces UI-layer bugs only. If the bug requires server-side changes to manifest, the repro may show a false negative — record this in `notes` and set `reproduced: false`.
+
 [decision] Reproduced bug via Playwright CLI, pushed evidence to evidence/issue-<N>, posted SHA-pinned BEFORE comment

@@ -40,9 +40,16 @@ export function createWorktree(repo: string, runId: string): string {
 /**
  * Runs `pnpm install --frozen-lockfile` in the worktree to warm node_modules before the agent
  * starts. Eliminates the first wasted turn where the agent discovers and installs dependencies.
+ *
+ * @param worktreePath - Absolute path to the worktree directory.
+ * @param filter - Optional pnpm workspace filter (e.g. `"./apps/web"`). When provided, only that
+ *   package and its dependencies are installed.
  */
-export function prewarmWorktree(worktreePath: string): void {
-  execFileSync('pnpm', ['install', '--frozen-lockfile'], {
+export function prewarmWorktree(worktreePath: string, filter?: string): void {
+  const args = filter
+    ? ['install', '--frozen-lockfile', '--filter', filter]
+    : ['install', '--frozen-lockfile'];
+  execFileSync('pnpm', args, {
     cwd: worktreePath,
     stdio: 'pipe',
   });

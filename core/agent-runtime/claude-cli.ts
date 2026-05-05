@@ -192,6 +192,9 @@ export class ClaudeCliRuntime implements AgentRuntime {
       if (process.env.ANTHROPIC_API_KEY != null) {
         minimalEnv.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
       }
+      if (spec.env) {
+        Object.assign(minimalEnv, spec.env);
+      }
 
       const child = spawn(binaryPath, argv, {
         env: minimalEnv,

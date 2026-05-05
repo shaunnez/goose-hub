@@ -104,6 +104,10 @@ The strategy: stage all artefacts under `/tmp/evidence-staging-<N>/`, then creat
 
 8. **Post the comment.** Post to issue #<N> in <repo>. Capture the returned comment URL.
 
+## UI-only assumption
+
+This skill connects to the already-running dev server at `http://localhost:5173` (`SKIP_WEBSERVER=1` is set in the environment). It captures evidence for UI-layer changes only. If the fix involved server-side changes that require a running API with the new code, the spec may pass against stale server behaviour — record this risk in `decisionSummaries`.
+
 ## Critical: pin URLs to the SHA
 
 Every URL into the repo must use the evidence-branch commit SHA, not the branch name. Branch-pinned URLs break the moment the PR merges and the branch is deleted. SHA-pinned URLs are immutable.

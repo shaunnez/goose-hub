@@ -720,9 +720,7 @@ function GateRejectedEvent({ event }: { event: AgentEventDto }) {
         <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
         <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
       </div>
-      {p?.reason != null && (
-        <p className="mt-1.5 text-[12px] text-fg-2">{p.reason}</p>
-      )}
+      {p?.reason != null && <p className="mt-1.5 text-[12px] text-fg-2">{p.reason}</p>}
     </li>
   );
 }

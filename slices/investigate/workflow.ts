@@ -5,7 +5,11 @@ import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
-import { cleanupWorktree, createWorktree } from '@goose-hub/core/workspaces/worktree.js';
+import {
+  cleanupWorktree,
+  createWorktree,
+  prewarmWorktree,
+} from '@goose-hub/core/workspaces/worktree.js';
 import { InvestigateSchema } from '@goose-hub/skills/investigate/schema.js';
 import { PlaywrightReproSchema } from '@goose-hub/skills/playwright-repro/schema.js';
 
@@ -37,6 +41,9 @@ export async function runInvestigateWorkflow(
 
   const { personaId } = selectPersona(projectId, 'investigator');
   const worktreePath = createWorktree(targetRepo, runId);
+  if (workItem.type === 'bug') {
+    prewarmWorktree(worktreePath, '@goose-hub/web');
+  }
 
   try {
     // Step a: Run the investigate skill
@@ -102,7 +109,8 @@ export async function runInvestigateWorkflow(
           freshContext: false,
           toolBundles: ['validate'],
           toolExtras: [],
-          budgets: { maxTurns: 25, maxBudgetUsd: 5, timeoutMs: 120_000 },
+          env: { SKIP_WEBSERVER: '1' },
+          budgets: { maxTurns: 25, maxBudgetUsd: 5, timeoutMs: 300_000 },
           personaId: playwrightPersonaId,
           outputJsonSchema: playwrightReproJsonSchema,
           appendSystemPrompt: playwrightReproPrompt,

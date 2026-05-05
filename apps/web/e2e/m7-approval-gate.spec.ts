@@ -11,7 +11,7 @@ import { type Route, expect, test } from '@playwright/test';
  * (slices/fix-issue/chore-shipping.test.ts).
  */
 test.describe('M7 approval gate UI', () => {
-  test('approve button merges and transitions issue to factory:done', async ({ page }) => {
+  test('approve button merges and transitions issue to factory:retrospecting', async ({ page }) => {
     const slug = 'goose-hub-self';
     const issueId = '9999';
 

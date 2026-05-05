@@ -17,12 +17,25 @@ const TRANSITIONS: Readonly<Record<StateName, readonly StateName[]>> = {
   'factory:issues-created': ['factory:dev-ready', 'factory:archived'],
   'factory:research-pending': ['factory:research-complete', 'factory:archived'],
   'factory:research-complete': ['factory:dev-ready', 'factory:archived'],
-  'factory:investigating': ['factory:investigation-complete', 'factory:needs-human', 'factory:archived'],
-  'factory:investigation-complete': ['factory:dev-ready', 'factory:gate-pending', 'factory:archived'],
+  'factory:investigating': [
+    'factory:investigation-complete',
+    'factory:needs-human',
+    'factory:archived',
+  ],
+  'factory:investigation-complete': [
+    'factory:dev-ready',
+    'factory:gate-pending',
+    'factory:archived',
+  ],
   'factory:gate-pending': ['factory:dev-ready', 'factory:archived'],
   'factory:dev-ready': ['factory:in-progress', 'factory:archived'],
   'factory:in-progress': ['factory:needs-qa', 'factory:needs-human', 'factory:archived'],
-  'factory:needs-qa': ['factory:qa-failed', 'factory:needs-review', 'factory:needs-human', 'factory:archived'],
+  'factory:needs-qa': [
+    'factory:qa-failed',
+    'factory:needs-review',
+    'factory:needs-human',
+    'factory:archived',
+  ],
   'factory:qa-failed': ['factory:needs-fix', 'factory:needs-human', 'factory:archived'],
   // needs-review → rejected covers the "human explicitly cancelled" case from section 9.2
   'factory:needs-review': [
@@ -33,7 +46,12 @@ const TRANSITIONS: Readonly<Record<StateName, readonly StateName[]>> = {
     'factory:archived',
   ],
   'factory:needs-fix': ['factory:in-progress', 'factory:needs-human', 'factory:archived'],
-  'factory:approved': ['factory:retrospecting', 'factory:merge-conflict', 'factory:needs-fix', 'factory:archived'],
+  'factory:approved': [
+    'factory:retrospecting',
+    'factory:merge-conflict',
+    'factory:needs-fix',
+    'factory:archived',
+  ],
   'factory:merge-conflict': ['factory:done', 'factory:needs-human', 'factory:archived'],
   'factory:retrospecting': ['factory:done', 'factory:archived'],
   'factory:needs-human': [

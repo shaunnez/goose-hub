@@ -48,6 +48,8 @@ export type AgentSpec<R extends RoleSpec = RoleSpec> = {
    * Used by QA to reuse the dev agent's worktree rather than creating a fresh one.
    */
   workspaceDir?: string;
+  /** Additional env vars merged into the subprocess's minimal env at spawn time. */
+  env?: Record<string, string>;
   /**
    * Explicit MCP config path to pass via --mcp-config. Bypasses the bundle-based
    * resolution in resolveMcpConfigPath. Used when the MCP server must run from a
