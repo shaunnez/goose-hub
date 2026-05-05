@@ -51,6 +51,8 @@ export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSl
     );
   }
 
+  const isAllProjects = activeSlug === 'all';
+
   if (collapsed) {
     return (
       <Popover.Root>
@@ -58,9 +60,9 @@ export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSl
           <button
             type="button"
             data-testid="project-switcher"
-            title={`Project: ${current.name}`}
+            title={isAllProjects ? 'All Projects' : `Project: ${current.name}`}
             className="flex items-center justify-center w-9 h-9 mx-auto rounded-md hover:bg-bg-hover transition-colors"
-            style={{ color: current.color }}
+            style={{ color: isAllProjects ? '#6b7280' : current.color }}
           >
             <FolderGit2 size={16} />
           </button>
@@ -72,6 +74,22 @@ export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSl
             className="z-50 min-w-[180px] bg-bg-elev border border-line rounded-lg shadow-lg p-1.5 outline-none"
           >
             <p className="text-[10px] uppercase tracking-wider text-fg-4 px-2 py-1">Project</p>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveSlug('all');
+                navigate('/projects/all');
+              }}
+              className={cn(
+                'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12.5px] transition-colors text-left',
+                isAllProjects
+                  ? 'bg-accent-soft text-fg'
+                  : 'text-fg-2 hover:text-fg hover:bg-bg-hover',
+              )}
+            >
+              <span className="w-1.5 h-4 rounded-sm shrink-0" style={{ background: '#6b7280' }} />
+              All Projects
+            </button>
             {projects.map((p) => (
               <button
                 type="button"
@@ -82,7 +100,7 @@ export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSl
                 }}
                 className={cn(
                   'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12.5px] transition-colors text-left',
-                  p.slug === current.slug
+                  !isAllProjects && p.slug === current.slug
                     ? 'bg-accent-soft text-fg'
                     : 'text-fg-2 hover:text-fg hover:bg-bg-hover',
                 )}
@@ -110,15 +128,16 @@ export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSl
           id="active-project"
           data-testid="project-switcher"
           aria-label="Active project"
-          value={current.slug}
+          value={isAllProjects ? 'all' : current.slug}
           onChange={(e) => {
             const next = e.target.value;
             setActiveSlug(next);
-            navigate(`/projects/${next}`);
+            navigate(next === 'all' ? '/projects/all' : `/projects/${next}`);
           }}
           className="appearance-none w-full h-8 pl-3 pr-8 bg-bg border border-line rounded-md text-[12.5px] text-fg focus:outline-none focus:border-accent-line cursor-pointer"
-          style={{ borderLeft: `3px solid ${current.color}` }}
+          style={{ borderLeft: isAllProjects ? '3px solid #6b7280' : `3px solid ${current.color}` }}
         >
+          <option value="all">All Projects</option>
           {projects.map((p) => (
             <option key={p.slug} value={p.slug}>
               {p.name}

@@ -11,9 +11,11 @@ import { Link } from 'react-router-dom';
 export function IssueCard({
   item,
   projectSlug,
+  projectColor,
 }: {
   item: WorkItemDto;
   projectSlug: string;
+  projectColor?: string;
 }) {
   const ageStr = ageLabel(item.createdAt);
   const personaMap = usePersonaMap();
@@ -39,10 +41,12 @@ export function IssueCard({
       data-testid="issue-card"
       data-issue-number={item.externalId}
       data-state={item.state}
+      data-project={projectColor != null ? projectSlug : undefined}
       className={cn(
         'block rounded-md border border-line bg-bg-elev px-3 py-2.5',
         'hover:border-line-2 hover:bg-bg-hover transition-colors',
       )}
+      style={projectColor != null ? { borderLeft: `3px solid ${projectColor}` } : undefined}
     >
       <div className="flex items-center gap-2 mb-1.5">
         <span

@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { AllProjectsBoard } from './components/board/components/AllProjectsBoard';
 import { Board } from './components/board/components/Board';
 import { AppShell } from './components/chrome/AppShell';
 import { CostsPage } from './components/costs/CostsPage';
@@ -34,6 +35,16 @@ function KanbanPage() {
       }
     >
       <Board projectSlug={slug} />
+    </AppShell>
+  );
+}
+
+function AllProjectsPage() {
+  return (
+    <AppShell breadcrumb={<span>All Projects</span>}>
+      <LaneVisibilityProvider>
+        <AllProjectsBoard />
+      </LaneVisibilityProvider>
     </AppShell>
   );
 }
@@ -102,6 +113,7 @@ export function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/projects/goose-hub-self" replace />} />
           <Route path="/settings" element={<SettingsPageRoute />} />
+          <Route path="/projects/all" element={<AllProjectsPage />} />
           <Route
             path="/projects/:slug"
             element={
