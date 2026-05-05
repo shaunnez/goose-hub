@@ -528,6 +528,58 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
     expect(evidencePosted).toBeDefined();
   });
 
+  it('passes worktreePath as workspaceDir on the evidence-post run spec (so git commands work)', async () => {
+    const item = makeWorkItem({ priority: 'medium' });
+    const source = makeStateSource();
+
+    const evidenceOutput = {
+      screenshots: [],
+      gifPath: null,
+      commentUrl: 'https://github.com/owner/repo/issues/42#issuecomment-2',
+      commitSha: 'abc1234567890abcdef',
+      decisionSummaries: [{ step: 'post', summary: 'Posted evidence comment' }],
+    };
+
+    const runtime: AgentRuntime = {
+      run: vi
+        .fn()
+        .mockResolvedValueOnce({
+          output: makeImplementOutput({ evidenceSpecPath: 'evidence/spec.json' }),
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult)
+        .mockResolvedValueOnce({
+          output: evidenceOutput,
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult),
+    };
+
+    const openPRImpl = vi.fn().mockResolvedValue({
+      prNumber: 10,
+      prUrl: 'u',
+      branch: 'b',
+      base: 'main',
+    });
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    const evidenceCall = vi.mocked(runtime.run).mock.calls[1][0] as unknown as {
+      workspaceDir?: string;
+    };
+    expect(evidenceCall.workspaceDir).toBe('/work/wt');
+  });
+
   it('looks up the BEFORE comment URL from agent.investigation-complete and passes into evidence-post context', async () => {
     const item = makeWorkItem({ priority: 'medium', type: 'bug' });
     const source = makeStateSource();

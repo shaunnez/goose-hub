@@ -28,47 +28,62 @@ The context contains a `<task>` block with:
 
 ## What you must do
 
-1. **Capture.** Run the spec at `<spec_path>` with video recording enabled (`{ video: 'on' }` in the spec's project config or via `PLAYWRIGHT_VIDEO=on`). Use `pnpm --filter @goose-hub/web exec playwright test <spec_path>` — never raw `npx`.
-2. **Convert WebM to GIF.** GitHub embeds GIFs inline in issue comments; WebM only links. Convert:
+You run **inside the dev worktree** (CWD is the dev worktree at runtime). The `evidence/issue-<N>` branch is a separate, secondary branch holding only artefacts; the dev worktree's HEAD and working tree must NOT be disturbed because QA will reuse the same worktree after you exit.
+
+The strategy: stage all artefacts under `/tmp/evidence-staging-<N>/`, then create a sibling git worktree at `/tmp/evidence-issue-<N>` and use `git -C <path>` for every git command on it. The agent never `cd`s.
+
+**Substitute `<N>` with the literal issue number** (e.g. `42`) in every command below. Do not use shell variables; the tool allowlist matches on the literal command text.
+
+1. **Capture.** Run the spec at `<spec_path>` with video recording enabled (`{ video: 'on' }` in the spec's project config or via `PLAYWRIGHT_VIDEO=on`). Use `pnpm --filter @goose-hub/web exec playwright test <spec_path>` — never raw `npx`. Screenshots go where the spec writes them; the WebM video lands under `test-results/`.
+
+2. **Stage artefacts in `/tmp`.**
+   ```bash
+   mkdir -p /tmp/evidence-staging-<N>
+   cp <screenshot-paths> /tmp/evidence-staging-<N>/    # name them step-1.png, step-2.png, …
+   ```
+   These are the AFTER screenshots. Never name them `before-step-*.png` — that prefix belongs to the BEFORE state already on the evidence branch.
+
+3. **Convert WebM to GIF into staging.**
    ```bash
    ffmpeg -i <path-to-video.webm> \
      -vf "fps=8,scale=900:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" \
-     evidence/issue-<N>/walkthrough.gif
+     /tmp/evidence-staging-<N>/walkthrough.gif
    ```
    If the WebM does not exist or `ffmpeg` fails, set `gifPath: null` and continue — do not abort.
-3. **Move artefacts.** Move every screenshot into `evidence/issue-<N>/`. Create the directory if it does not exist (`mkdir -p evidence/issue-<N>`). Each AFTER screenshot gets a stable filename like `step-1.png`, `step-2.png`, … BEFORE-state screenshots from the investigation are already on the `evidence/issue-<N>` branch under `before-step-N.png` — do not overwrite them.
-4. **Push to the evidence branch via a dedicated worktree.** The `evidence/issue-<N>` branch is a separate, secondary branch that only holds artefacts. The dev worktree you are running in is the **same worktree QA will use after you exit**, so its HEAD and working tree must NOT be disturbed. Do all evidence operations in a sibling git worktree:
-   ```bash
-   EVIDENCE_DIR=/tmp/evidence-issue-<N>
 
+4. **Set up the evidence worktree.**
+   ```bash
    # Clean up any orphan worktree from a prior failed run.
-   git worktree remove --force "$EVIDENCE_DIR" 2>/dev/null || true
+   git worktree remove --force /tmp/evidence-issue-<N> 2>/dev/null || true
 
    # The remote branch likely already exists (playwright-repro pushed the
    # BEFORE state during investigation). Fetch first, then track origin
    # when present so the subsequent push is a fast-forward.
    git fetch origin evidence/issue-<N> 2>/dev/null || true
-   if git show-ref --verify --quiet refs/remotes/origin/evidence/issue-<N>; then
-     git worktree add "$EVIDENCE_DIR" -B evidence/issue-<N> origin/evidence/issue-<N>
-   else
-     git worktree add "$EVIDENCE_DIR" -b evidence/issue-<N>
-   fi
+   git show-ref --verify --quiet refs/remotes/origin/evidence/issue-<N> \
+     && git worktree add /tmp/evidence-issue-<N> -B evidence/issue-<N> origin/evidence/issue-<N> \
+     || git worktree add /tmp/evidence-issue-<N> -b evidence/issue-<N>
+   ```
 
-   cd "$EVIDENCE_DIR"
-   mkdir -p evidence/issue-<N>
-   # Copy AFTER screenshots and walkthrough.gif into evidence/issue-<N>/
-   # using the AFTER prefix step-N.png — never overwrite before-step-N.png
-   git add evidence/issue-<N>/
-   git commit -m "evidence: after-state for issue #<N>"
-   git push origin evidence/issue-<N>
-   git rev-parse HEAD    # this SHA pins the AFTER raw URLs
+5. **Move staged artefacts into the evidence worktree, commit, push.**
+   ```bash
+   mkdir -p /tmp/evidence-issue-<N>/evidence/issue-<N>
+   cp /tmp/evidence-staging-<N>/* /tmp/evidence-issue-<N>/evidence/issue-<N>/
 
-   # Tear down the helper worktree — the dev worktree is untouched.
-   cd -
-   git worktree remove "$EVIDENCE_DIR"
+   git -C /tmp/evidence-issue-<N> add evidence/issue-<N>/
+   git -C /tmp/evidence-issue-<N> commit -m "evidence: after-state for issue #<N>"
+   git -C /tmp/evidence-issue-<N> push origin evidence/issue-<N>
+   git -C /tmp/evidence-issue-<N> rev-parse HEAD    # this SHA pins the AFTER raw URLs
    ```
    Use the resulting SHA for `commitSha` and for every raw URL in the comment. The PR's `prHeadSha` is recorded separately in the comment trailer for traceability.
-5. **Build the comment.** Compose markdown using the format below. When `<beforeCommentUrl>` is present, include a BEFORE section that links back to it; the BEFORE images on the evidence branch use the prefix `before-step-N.png`. The AFTER images use `step-N.png`.
+
+6. **Tear down the helper worktree.**
+   ```bash
+   git worktree remove /tmp/evidence-issue-<N>
+   ```
+   The dev worktree is untouched throughout — `git -C` keeps every git operation scoped to the helper, and you never `cd`.
+
+7. **Build the comment.** Compose markdown using the format below. When `<beforeCommentUrl>` is present, include a BEFORE section that links back to it; the BEFORE images on the evidence branch use the prefix `before-step-N.png`. The AFTER images use `step-N.png`.
    ```markdown
    ## Evidence for issue #<N>: <title>
 
@@ -86,7 +101,8 @@ The context contains a `<task>` block with:
    _Pinned to `<commitSha>` · PR #<prNumber>_
    ```
    When `<beforeCommentUrl>` is absent (feature/chore), drop the **Before** section and start with **After** only.
-6. **Post the comment.** Post to issue #<N> in <repo>. Capture the returned comment URL.
+
+8. **Post the comment.** Post to issue #<N> in <repo>. Capture the returned comment URL.
 
 ## Critical: pin URLs to the SHA
 
