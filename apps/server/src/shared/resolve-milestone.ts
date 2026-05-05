@@ -44,9 +44,11 @@ export async function resolveActiveMilestone(slug: string): Promise<ResolvedMile
     if (source != null) {
       const milestones = await source.listMilestones();
       const match = milestones.find((m) => m.title === cfg.activeMilestone);
-      const number = match?.number ?? null;
-      configMilestoneCache.set(cacheKey, number);
-      return { milestoneNumber: number, source: 'config' };
+      if (match != null) {
+        configMilestoneCache.set(cacheKey, match.number);
+        return { milestoneNumber: match.number, source: 'config' };
+      }
+      // Title not found: don't cache (milestone may be created/renamed) — fall through to GitHub default
     }
   }
 

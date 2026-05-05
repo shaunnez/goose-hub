@@ -68,14 +68,15 @@ describe('resolveActiveMilestone', () => {
       expect(result).toEqual({ milestoneNumber: 10, source: 'config' });
     });
 
-    it('returns null when config title has no matching GitHub milestone', async () => {
+    it('falls through to github-default when config title has no matching GitHub milestone', async () => {
       mockDbRows([]);
       vi.mocked(getProject).mockResolvedValue({
         activeMilestone: 'M99: Does Not Exist',
       } as never);
       mockSource.listMilestones.mockResolvedValue([{ number: 1, title: 'M1: Foundation' }]);
+      mockSource.getActiveMilestone.mockResolvedValue({ number: 3, title: 'M3: Inbox' });
       const result = await resolveActiveMilestone('my-proj');
-      expect(result).toEqual({ milestoneNumber: null, source: 'config' });
+      expect(result).toEqual({ milestoneNumber: 3, source: 'github-default' });
     });
 
     it('caches the resolved number so listMilestones is only called once per title', async () => {
