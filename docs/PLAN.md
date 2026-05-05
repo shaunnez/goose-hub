@@ -272,7 +272,17 @@ goose-hub/
 │   ├── governance/                      # M4+
 │   ├── personas/                        # M6+
 │   ├── milestones/                      # M6+
-│   ├── retrospective/                   # M9+
+│   ├── retrospective/                   # M9+ (shared Zod schemas for retro skill output)
+│   │   └── schemas.ts
+│   ├── cost/                            # M9+ (see ADR 0016)
+│   │   ├── extract.ts                   # costFromCliEnvelope / costFromApiUsage
+│   │   ├── repository.ts                # recordCost / queryCosts
+│   │   ├── skill-stage.ts               # skill → stage mapping
+│   │   └── types.ts
+│   ├── persona/                         # M9+
+│   │   └── accumulate.ts                # accumulatePersonaStats — called by every workflow
+│   ├── workflows/                       # M9+ (see ADR 0017); cross-caller workflows only
+│   │   └── retrospective.ts             # runRetrospectiveWorkflow — tier selection + skill dispatch
 │   ├── bootstrap/
 │   └── connectors/
 │       └── github/                      # M7+ (#184/#186)
