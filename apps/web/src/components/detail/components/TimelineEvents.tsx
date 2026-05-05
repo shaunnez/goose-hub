@@ -798,6 +798,50 @@ type TierResult = {
   command?: string | null;
 };
 
+function QaFailedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as {
+    tier?: string;
+    findings?: { tier?: string; severity?: string; description?: string }[];
+  } | null;
+  const tier = p?.tier ?? event.kind.replace('qa.', '').replace('-failed', '');
+  const tierLabel = tier.charAt(0).toUpperCase() + tier.slice(1);
+  const findings = p?.findings ?? [];
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-red-500/20 bg-red-500/5 px-4 py-3"
+    >
+      <div className="flex items-center gap-2 mb-2 text-[11px] text-fg-3">
+        <XCircle size={13} className="shrink-0 text-[color:var(--danger)]" />
+        <span className="font-mono uppercase tracking-wider">QA {tierLabel} failed</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      {findings.length > 0 && (
+        <ul className="flex flex-col gap-1.5">
+          {findings.map((f, i) => (
+            <li key={i} className="flex items-start gap-2 text-[11.5px]">
+              <span
+                className={cn(
+                  'mt-0.5 shrink-0 font-mono text-[10px] px-1 py-0.5 rounded',
+                  f.severity === 'error'
+                    ? 'bg-red-500/10 text-[color:var(--danger)]'
+                    : f.severity === 'warning'
+                      ? 'bg-yellow-500/10 text-yellow-400'
+                      : 'bg-fg-5/10 text-fg-3',
+                )}
+              >
+                {f.severity ?? 'info'}
+              </span>
+              <span className="text-fg-2 leading-relaxed">{f.description}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
 function QaCompletedEvent({ event }: { event: AgentEventDto }) {
   const p = event.payload as {
     verdict?: string;
@@ -1178,6 +1222,10 @@ export function renderTimelineItem(
       return <ToolWarningEvent key={event.id} event={event} />;
     case 'qa.completed':
       return <QaCompletedEvent key={event.id} event={event} />;
+    case 'qa.structural-failed':
+    case 'qa.functional-failed':
+    case 'qa.regression-failed':
+      return <QaFailedEvent key={event.id} event={event} />;
     case 'agent.triage-complete':
       return <AgentTriageCompleteEvent key={event.id} event={event} />;
     case 'agent.investigation-complete':

@@ -130,18 +130,19 @@ describe('gate actions — GATE_ACTIONS mapping', () => {
 });
 
 describe('detail page — legal-target table mirrors core', () => {
-  it('triaging accepts to-accepted and to-rejected', () => {
-    expect(LEGAL_TARGETS['factory:triaging']).toEqual(['factory:accepted', 'factory:rejected']);
+  it('triaging accepts to-accepted, to-rejected, and to-archived', () => {
+    expect(LEGAL_TARGETS['factory:triaging']).toEqual(['factory:accepted', 'factory:rejected', 'factory:archived']);
   });
   it('done is terminal-ish: only goes to archived', () => {
     expect(LEGAL_TARGETS['factory:done']).toEqual(['factory:archived']);
   });
-  it('needs-human has 4 recovery targets in the UI table', () => {
+  it('needs-human has 5 recovery targets in the UI table', () => {
     expect(LEGAL_TARGETS['factory:needs-human']).toEqual([
       'factory:dev-ready',
       'factory:needs-qa',
       'factory:triaging',
       'factory:rejected',
+      'factory:archived',
     ]);
   });
 });

@@ -44,6 +44,7 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
 vi.mock('@goose-hub/core/workspaces/worktree.js', () => ({
   createWorktree: vi.fn().mockReturnValue('/tmp/test-worktree'),
   cleanupWorktree: vi.fn(),
+  prewarmWorktree: vi.fn(),
 }));
 
 vi.mock('node:fs', async (importOriginal) => {

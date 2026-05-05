@@ -50,6 +50,8 @@ The spec must:
 - Use `expect.soft()` for assertions so all steps run even when one fails
 - Log console errors at the end via `console.log('REPRO_CONSOLE', JSON.stringify(consoleErrors))`
 
+**NEVER use `waitForLoadState('networkidle')`** — the app holds a persistent SSE connection (`/api/events`) so networkidle never fires. Use `{ waitUntil: 'domcontentloaded' }` on every `page.goto()` call. If you need to wait for a specific element, use `page.waitForSelector(...)` with an explicit timeout instead.
+
 ```ts
 import { test, expect } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
@@ -64,8 +66,8 @@ test('repro: <bug title>', async ({ page }) => {
       consoleErrors.push({ message: msg.text(), type: msg.type() });
   });
 
-  // Step 1: navigate to the relevant page
-  await page.goto('/path');
+  // Step 1: navigate to the relevant page — always domcontentloaded, never networkidle
+  await page.goto('/path', { waitUntil: 'domcontentloaded' });
   await page.screenshot({ path: `${EVIDENCE_DIR}/step-1.png` });
 
   // Step 2: <repro step description>

@@ -18,27 +18,41 @@ export const TestWrittenSchema = z.object({
   cases: z.number().int().min(0).describe('Number of test cases added / modified in this file'),
 });
 
-export const ImplementSchema = z.object({
-  plan: z
-    .string()
-    .min(1)
-    .describe('The plan the developer wrote and executed (markdown, multi-line allowed)'),
-  filesWritten: z.array(FileWrittenSchema),
-  testsWritten: z
-    .array(TestWrittenSchema)
-    .describe('Test files written or modified — empty array is valid for chore PRs without tests'),
-  prUrl: z
-    .string()
-    .url()
-    .describe('URL of the pull request opened by the workflow after this skill returns'),
-  /**
-   * Workspace-relative path to the Playwright spec that demonstrates the slice
-   * for the evidence-post skill (#234). Optional — when omitted, the workflow
-   * logs `evidence.no-spec-declared` and skips evidence posting (no failure).
-   */
-  evidenceSpecPath: z.string().nullable().describe('Workspace-relative spec path, or null if none'),
-  confidence: ConfidenceSchema,
-  decisionSummaries: z.array(DecisionSummarySchema).min(1),
-});
+export const ImplementSchema = z
+  .object({
+    plan: z
+      .string()
+      .min(1)
+      .describe('The plan the developer wrote and executed (markdown, multi-line allowed)'),
+    filesWritten: z.array(FileWrittenSchema),
+    testsWritten: z
+      .array(TestWrittenSchema)
+      .describe('Test files written or modified — empty array is valid for chore PRs without tests'),
+    prUrl: z
+      .string()
+      .url()
+      .describe('URL of the pull request opened by the workflow after this skill returns'),
+    /**
+     * Workspace-relative path to the Playwright spec for the evidence-post skill (#234).
+     * Required when any file in filesWritten is under apps/web/ — the superRefine below
+     * enforces this. Null only for backend-only or chore PRs with no web files.
+     */
+    evidenceSpecPath: z
+      .string()
+      .nullable()
+      .describe('Workspace-relative spec path; required for any slice touching apps/web/, null otherwise'),
+    confidence: ConfidenceSchema,
+    decisionSummaries: z.array(DecisionSummarySchema).min(1),
+  })
+  .superRefine((val, ctx) => {
+    const touchesWeb = val.filesWritten.some((f) => f.path.startsWith('apps/web/'));
+    if (touchesWeb && val.evidenceSpecPath === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'evidenceSpecPath is required when filesWritten includes apps/web/ files',
+        path: ['evidenceSpecPath'],
+      });
+    }
+  });
 
 export type ImplementOutput = z.infer<typeof ImplementSchema>;

@@ -110,7 +110,7 @@ export async function runInvestigateWorkflow(
           toolBundles: ['validate'],
           toolExtras: [],
           env: { SKIP_WEBSERVER: '1' },
-          budgets: { maxTurns: 25, maxBudgetUsd: 5, timeoutMs: 300_000 },
+          budgets: { maxTurns: 40, maxBudgetUsd: 5, timeoutMs: 300_000 },
           personaId: playwrightPersonaId,
           outputJsonSchema: playwrightReproJsonSchema,
           appendSystemPrompt: playwrightReproPrompt,

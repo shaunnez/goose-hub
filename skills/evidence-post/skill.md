@@ -34,7 +34,7 @@ The strategy: stage all artefacts under `/tmp/evidence-staging-<N>/`, then creat
 
 **Substitute `<N>` with the literal issue number** (e.g. `42`) in every command below. Do not use shell variables; the tool allowlist matches on the literal command text.
 
-1. **Capture.** Run the spec at `<spec_path>` with video recording enabled (`{ video: 'on' }` in the spec's project config or via `PLAYWRIGHT_VIDEO=on`). Use `pnpm --filter @goose-hub/web exec playwright test <spec_path>` — never raw `npx`. Screenshots go where the spec writes them; the WebM video lands under `test-results/`.
+1. **Capture.** Run the spec at `<spec_path>` with video recording enabled (`{ video: 'on' }` in the spec's project config or via `PLAYWRIGHT_VIDEO=on`). Use `pnpm --filter @goose-hub/web exec playwright test <spec_path>` — never raw `npx`. Screenshots go where the spec writes them; the WebM video lands under `test-results/`. If the spec uses `waitForLoadState('networkidle')`, the run will hang — the app holds a persistent SSE connection that prevents networkidle from firing. Specs must use `{ waitUntil: 'domcontentloaded' }` on every `page.goto()` call.
 
 2. **Stage artefacts in `/tmp`.**
    ```bash

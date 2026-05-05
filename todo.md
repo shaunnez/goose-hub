@@ -15,9 +15,13 @@
 
 11. Timeline: gate.rejected source/reason json to text
 
+12. i have to redeploy agent names over and over, lets just make this part of mgiration or server start or something
+
+13. Is retrospective wired in?
 Comments in overview wrong way around
 Agent runs not showing
 UI for overview
 UI for repo selection
 UI for investigation
 UI for PRD?
+

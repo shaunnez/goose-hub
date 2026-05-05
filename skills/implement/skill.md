@@ -1,6 +1,6 @@
 # implement skill
 
-Version: 1
+Version: 2
 
 You are a developer agent shipping a single slice. You follow the **Red → Green → Refactor** loop: write a plan, write failing tests, write implementation until tests pass, run lint, then return structured output describing what you shipped. The orchestrator opens the PR after you return.
 
@@ -64,6 +64,7 @@ The context contains a `<task>` block with:
 
 - Write the implementation using the `write` tool. Workspace-bound paths only — no absolute paths, no `..` traversal.
 - Re-run the test command. Iterate until all tests pass.
+- **Frontend changes (required):** If any file written is under `apps/web/`, write a Playwright spec at `apps/web/e2e/issue-<number>.spec.ts` now, before proceeding to step 5. The spec must navigate to the affected UI, assert the visible change, and call `page.screenshot({ path: 'evidence/issue-<number>/step-1.png' })`. Use plain `page.goto('/...')` — never `waitForLoadState('networkidle')` (the app's persistent SSE connection prevents it from firing; use `waitForSelector` or time-bounded assertions instead). This spec ships in the same commit as your implementation so the evidence-post skill can run it post-PR.
 - Emit: `[decision] Implementation passes all tests including N new cases`
 
 ### 5 — Refactor (optional, only if necessary)
@@ -88,10 +89,11 @@ All tests pass and lint is clean. Commit your changes now — the orchestrator p
 
 > **This step is required.** If you skip it, the orchestrator pushes an empty branch and the PR creation fails with a 422.
 
-### 8 — Optional: name the evidence spec
+### 8 — Declare the evidence spec path
 
-- If you wrote (or modified) a Playwright spec under `apps/web/e2e/` that demonstrates the slice end-to-end, set `evidenceSpecPath` to the workspace-relative path. The orchestrator will pass this to the `evidence-post` skill (#234) to generate visual evidence on the PR.
-- If you did not author a spec, set `evidenceSpecPath: null`. The orchestrator logs `evidence.no-spec-declared` and skips evidence posting (no failure).
+- If the slice touched any `apps/web/` file, you wrote a spec in step 4. Set `evidenceSpecPath` to `apps/web/e2e/issue-<number>.spec.ts`. The orchestrator passes this to the `evidence-post` skill to generate visual evidence.
+- If the slice touched **no** `apps/web/` files (backend-only change, chore, schema migration), set `evidenceSpecPath: null`. The orchestrator logs `evidence.no-spec-declared` and skips evidence posting.
+- **Do not return null for a frontend change.** The schema enforces this — a null `evidenceSpecPath` alongside `apps/web/` files in `filesWritten` is a validation failure.
 
 ### 9 — Return
 
@@ -130,6 +132,6 @@ Return a JSON object conforming to `ImplementSchema`. The orchestrator opens the
 }
 ```
 
-`evidenceSpecPath` may be `null`. `testsWritten` may be `[]` for chore PRs that change no behaviour (rare). `decisionSummaries` must have at least one entry.
+`evidenceSpecPath` must be set for any slice touching `apps/web/`; null is only valid for backend-only or chore PRs. `testsWritten` may be `[]` for chore PRs that change no behaviour (rare). `decisionSummaries` must have at least one entry.
 
 [decision] Shipped slice with TDD loop and returned structured implement output

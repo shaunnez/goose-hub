@@ -97,8 +97,6 @@ describe('isLegalTransition — re-entry loop (needs-fix → in-progress → nee
 describe('isLegalTransition — illegal jumps', () => {
   it('triaging → done', () =>
     expect(isLegalTransition('factory:triaging', 'factory:done')).toBe(false));
-  it('triaging → archived', () =>
-    expect(isLegalTransition('factory:triaging', 'factory:archived')).toBe(false));
   it('in-progress → approved (skips qa/review)', () =>
     expect(isLegalTransition('factory:in-progress', 'factory:approved')).toBe(false));
   it('dev-ready → needs-qa (skips in-progress)', () =>
@@ -130,20 +128,21 @@ describe('needs-human recovery transitions', () => {
     expect(isLegalTransition('factory:needs-human', 'factory:rejected')).toBe(true));
   it('needs-human → done is still illegal', () =>
     expect(isLegalTransition('factory:needs-human', 'factory:done')).toBe(false));
-  it('needs-human yields exactly 4 targets', () =>
-    expect(legalTargets('factory:needs-human')).toHaveLength(4));
+  it('needs-human yields exactly 5 targets', () =>
+    expect(legalTargets('factory:needs-human')).toHaveLength(5));
 });
 
 describe('legalTargets', () => {
-  it('triaging yields accepted and rejected', () =>
+  it('triaging yields accepted, rejected, and archived', () =>
     expect(legalTargets('factory:triaging')).toStrictEqual([
       'factory:accepted',
       'factory:rejected',
+      'factory:archived',
     ]));
 
-  it('accepted yields four targets', () =>
-    expect(legalTargets('factory:accepted')).toHaveLength(4));
+  it('accepted yields five targets', () =>
+    expect(legalTargets('factory:accepted')).toHaveLength(5));
 
-  it('dev-ready yields only in-progress', () =>
-    expect(legalTargets('factory:dev-ready')).toStrictEqual(['factory:in-progress']));
+  it('dev-ready yields in-progress and archived', () =>
+    expect(legalTargets('factory:dev-ready')).toStrictEqual(['factory:in-progress', 'factory:archived']));
 });

@@ -85,11 +85,18 @@ export type RenderItem =
  * - Consecutive `agent.log` events (4+) → collapsible log-group
  * - Events sharing the same runId are grouped into a run-group
  */
+function effectiveTimestamp(item: RenderItem): number {
+  if (item.kind === 'run-group') {
+    return new Date((item.startedAt ?? item.lastEventAt) as string).getTime();
+  }
+  if (item.kind === 'event') return new Date(item.event.createdAt).getTime();
+  return new Date(item.events[0]?.createdAt ?? 0).getTime();
+}
+
 export function groupEvents(events: AgentEventDto[]): RenderItem[] {
-  // First pass: collapse consecutive agent.log runs
   const collapsed = collapseLogRuns(events);
-  // Second pass: group by runId
-  return groupByRunId(collapsed);
+  const grouped = groupByRunId(collapsed);
+  return [...grouped].sort((a, b) => effectiveTimestamp(b) - effectiveTimestamp(a));
 }
 
 function collapseLogRuns(events: AgentEventDto[]): RenderItem[] {
