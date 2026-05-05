@@ -54,7 +54,9 @@ export type EventKind =
   // M9 PostToolUse hook — live decision marker (#465)
   | 'agent.decision-summary-live'
   // M10 per-AC verify-command live events (#469)
-  | 'agent.verify-command';
+  | 'agent.verify-command'
+  // M10 project budget exceeded
+  | 'project.budget-exceeded';
 
 export interface AgentEvent {
   id: number;
