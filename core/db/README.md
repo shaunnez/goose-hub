@@ -18,11 +18,15 @@ Drizzle table definitions. Three tables ship in M1; more land in later milestone
 
 ### `db.ts`
 
-Exports the singleton `db` Drizzle handle bound to `better-sqlite3`. Importing it ensures `~/.factory/data/` exists.
+Exports the singleton `db` Drizzle handle bound to `better-sqlite3`. Importing it ensures `~/.factory/data/` exists and applies any pending migrations from `core/db/migrations/` (tracked in `__drizzle_migrations`).
 
 ### `migrate.ts`
 
-Programmatic entry point that touches the DB so the file is created. Schema migrations are applied via `pnpm db:migrate` (drizzle-kit push).
+Programmatic entry point that touches the DB so the file is created. Migrations auto-apply on import via `db.ts`. To author a new migration after a schema change: `pnpm db:generate`. To apply manually: `pnpm db:migrate`.
+
+### `migrations/`
+
+Generated SQL migration files (committed to git). Drizzle compares the schema snapshot in `meta/` against `schema.ts` to produce additive `ALTER TABLE` statements rather than `drizzle-kit push`'s drop-and-recreate behaviour.
 
 ## Consumers
 
