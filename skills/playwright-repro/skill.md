@@ -116,7 +116,18 @@ From the worktree directory:
 ```bash
 mkdir -p evidence/issue-<N>
 # Copy /tmp/repro-<slug>/step-*.png and walkthrough.gif into evidence/issue-<N>/ via the Write tool
-git checkout -b evidence/issue-<N>
+
+# Reuse the existing evidence branch when it already exists on the remote
+# (e.g. a prior repro run, or AFTER capture from evidence-post). Creating
+# a fresh branch with `checkout -b` would diverge from the remote and the
+# subsequent push would be rejected as non-fast-forward.
+git fetch origin evidence/issue-<N> 2>/dev/null || true
+if git show-ref --verify --quiet refs/remotes/origin/evidence/issue-<N>; then
+  git checkout -B evidence/issue-<N> origin/evidence/issue-<N>
+else
+  git checkout -b evidence/issue-<N>
+fi
+
 git add evidence/issue-<N>/
 git commit -m "evidence: before-state for issue #<N>"
 git push origin evidence/issue-<N>
