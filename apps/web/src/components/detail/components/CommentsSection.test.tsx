@@ -1,7 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 /** @vitest-environment jsdom */
-import { render, screen } from '@testing-library/react';
-import { cleanup } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CommentsSection } from './CommentsSection';
 
@@ -26,18 +25,19 @@ vi.mock('./CommentComposer', () => ({
   CommentComposer: () => <div data-testid="comment-composer-mock">composer</div>,
 }));
 
+// API returns comments oldest-first: bob (2h ago) then alice (1h ago)
 const MOCK_COMMENTS = [
   {
     id: 1,
     body: '**Hello**',
-    authorLogin: 'alice',
-    createdAt: new Date(Date.now() - 3600000).toISOString(),
+    authorLogin: 'bob',
+    createdAt: new Date(Date.now() - 7200000).toISOString(),
   },
   {
     id: 2,
     body: 'World',
-    authorLogin: 'bob',
-    createdAt: new Date(Date.now() - 7200000).toISOString(),
+    authorLogin: 'alice',
+    createdAt: new Date(Date.now() - 3600000).toISOString(),
   },
 ];
 
@@ -77,5 +77,40 @@ describe('CommentsSection', () => {
   it('shows no count when comments array is empty', () => {
     renderSection([]);
     expect(screen.queryByText(/\(\d+\)/)).toBeNull();
+  });
+
+  it('defaults to newest-first order', () => {
+    renderSection();
+    const authors = screen.getAllByText(/alice|bob/).map((el) => el.textContent);
+    // bob is older, alice is newer — newest first means alice before bob
+    expect(authors[0]).toBe('alice');
+    expect(authors[1]).toBe('bob');
+  });
+
+  it('shows the sort toggle when there are multiple comments', () => {
+    renderSection();
+    expect(screen.getByTestId('sort-order-toggle')).toBeTruthy();
+  });
+
+  it('hides the sort toggle when there is only one comment', () => {
+    renderSection([MOCK_COMMENTS[0]]);
+    expect(screen.queryByTestId('sort-order-toggle')).toBeNull();
+  });
+
+  it('reverses order when the toggle is clicked', () => {
+    renderSection();
+    fireEvent.click(screen.getByTestId('sort-order-toggle'));
+    const authors = screen.getAllByText(/alice|bob/).map((el) => el.textContent);
+    // oldest first: bob before alice
+    expect(authors[0]).toBe('bob');
+    expect(authors[1]).toBe('alice');
+  });
+
+  it('toggles label between "Oldest first" and "Newest first"', () => {
+    renderSection();
+    const toggle = screen.getByTestId('sort-order-toggle');
+    expect(toggle.textContent).toBe('Oldest first');
+    fireEvent.click(toggle);
+    expect(toggle.textContent).toBe('Newest first');
   });
 });
