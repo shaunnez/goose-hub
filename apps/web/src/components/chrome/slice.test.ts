@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SIDEBAR_BRAND } from './Sidebar';
 
 // Chrome is mostly React components; the slice test ensures the public files
 // exist and the milestone-stub configuration stays honest with the M2 plan.
@@ -11,6 +12,12 @@ const DEFERRED_SURFACES = [
   { label: 'Settings', milestone: 'later' },
   { label: 'Bootstrap', milestone: 'M12' },
 ];
+
+describe('chrome slice — sidebar brand label', () => {
+  it('sidebar header reads "Agentic OS"', () => {
+    expect(SIDEBAR_BRAND).toBe('Agentic OS');
+  });
+});
 
 describe('chrome slice — deferred surfaces config', () => {
   it('every deferred surface has a milestone tag', () => {

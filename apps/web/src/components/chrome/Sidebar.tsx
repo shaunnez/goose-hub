@@ -14,6 +14,8 @@ import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { ProjectSwitcherSlot } from './slots/ProjectSwitcherSlot';
 
+export const SIDEBAR_BRAND = 'Agentic OS';
+
 interface SidebarItem {
   to: string;
   label: string;
@@ -129,7 +131,7 @@ export function Sidebar({ activeSlug }: SidebarProps) {
               style={{ background: '#7c3aed' }}
             />
             <span className="text-[14px] font-semibold tracking-tight whitespace-nowrap">
-              Goose Hub
+              {SIDEBAR_BRAND}
             </span>
           </div>
         )}
