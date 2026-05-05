@@ -4,13 +4,12 @@ import { type DependencyRef, parseDependencies } from '@/lib/dependency-parser';
 import type { ProjectSummary, WorkItemDto } from '@/lib/types';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, Circle } from 'lucide-react';
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 
 interface DependenciesSectionProps {
   item: WorkItemDto;
   projectSlug: string;
-  onHasOpenDep?: (v: boolean) => void;
 }
 
 function resolveDepTarget(
@@ -31,7 +30,7 @@ function isOpenState(state: string): boolean {
   return state !== 'factory:done' && state !== 'factory:archived';
 }
 
-export function DependenciesSection({ item, projectSlug, onHasOpenDep }: DependenciesSectionProps) {
+export function DependenciesSection({ item, projectSlug }: DependenciesSectionProps) {
   const deps = useMemo(() => parseDependencies(item.body), [item.body]);
 
   const { data: projects = [] } = useQuery<ProjectSummary[]>({
@@ -58,12 +57,6 @@ export function DependenciesSection({ item, projectSlug, onHasOpenDep }: Depende
       };
     }),
   });
-
-  const hasOpenDep = depQueries.some((q) => q.data != null && isOpenState(q.data.state));
-
-  useEffect(() => {
-    onHasOpenDep?.(hasOpenDep);
-  }, [hasOpenDep, onHasOpenDep]);
 
   if (deps.length === 0) return null;
 

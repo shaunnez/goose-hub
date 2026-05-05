@@ -7,6 +7,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { SECTIONS } from '../lib/sections';
+import { useHasOpenDep } from '../lib/useHasOpenDep';
 import { ApprovalGateSection } from './ApprovalGateSection';
 import { CodeDiffSection } from './CodeDiffSection';
 import { CostsSection } from './CostsSection';
@@ -106,7 +107,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
   }, [onBack, onNext, onPrev]);
 
   const [fakeRunInProgress, setFakeRunInProgress] = useState(false);
-  const [hasOpenDep, setHasOpenDep] = useState(false);
+  const hasOpenDep = useHasOpenDep(item, slug);
 
   const onFakeRun = useCallback(() => {
     if (fakeRunInProgress) return;
@@ -229,7 +230,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
           <LeftRail itemState={item?.state} />
           <main className="flex-1 min-w-0 overflow-y-auto">
             {currentSection.key === 'overview' ? (
-              <OverviewSection item={item} projectSlug={slug} onHasOpenDep={setHasOpenDep} />
+              <OverviewSection item={item} projectSlug={slug} />
             ) : currentSection.key === 'repo' ? (
               <TriageResultsSection projectSlug={slug} id={id} />
             ) : currentSection.key === 'timeline' ? (
