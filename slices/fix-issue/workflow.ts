@@ -1,9 +1,8 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { adviseOnPlan } from '@goose-hub/core/agent-runtime/advisor.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
+import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
@@ -13,12 +12,6 @@ import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interfa
 import { cleanupWorktree, createWorktree } from '@goose-hub/core/workspaces/worktree.js';
 import { EvidencePostSchema } from '@goose-hub/skills/evidence-post/schema.js';
 import { ImplementSchema } from '@goose-hub/skills/implement/schema.js';
-
-const REPO_ROOT = join(import.meta.dirname, '../..');
-
-function readPrompt(skillName: string): string {
-  return readFileSync(join(REPO_ROOT, 'skills', skillName, 'skill.md'), 'utf8');
-}
 
 function isAdvisorGated(priority: string): priority is 'high' | 'critical' {
   return priority === 'high' || priority === 'critical';
@@ -87,9 +80,9 @@ export async function runFixIssueWorkflow(
   const resolveHeadShaFn = deps.resolveWorktreeHeadShaImpl ?? resolveWorktreeHeadSha;
   const resolveBaseBranchFn = deps.resolveBaseBranchImpl ?? resolveBaseBranch;
 
-  const implementPrompt = readPrompt('implement');
+  const implementPrompt = readPromptWithContext('implement', projectId);
   const implementJsonSchema = toJsonSchema(ImplementSchema);
-  const evidencePostPrompt = readPrompt('evidence-post');
+  const evidencePostPrompt = readPromptWithContext('evidence-post', projectId);
   const evidencePostJsonSchema = toJsonSchema(EvidencePostSchema);
 
   const { personaId: implementPersonaId } = selectPersona(projectId, 'developer');

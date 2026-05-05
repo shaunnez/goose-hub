@@ -1,7 +1,6 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
+import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
@@ -11,12 +10,6 @@ import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { runVitest } from '@goose-hub/core/test-runner/run-vitest.js';
 import { QaOutputSchema, type TestRun } from '@goose-hub/skills/qa/schema.js';
-
-const REPO_ROOT = join(import.meta.dirname, '../..');
-
-function readPrompt(skillName: string): string {
-  return readFileSync(join(REPO_ROOT, 'skills', skillName, 'skill.md'), 'utf8');
-}
 
 // M9+ will fetch the real diff from GitHub. Until then QA grades on test/lint results only.
 function getPrDiff(_workItem: WorkItem): string {
@@ -82,7 +75,7 @@ export async function runQaWorkflow(
   const runId = crypto.randomUUID();
   const runtime = deps.runtime ?? new ClaudeCliRuntime();
   const runTests = deps.runTests ?? defaultRunTests;
-  const qaPrompt = readPrompt('qa');
+  const qaPrompt = readPromptWithContext('qa', projectId);
   const qaJsonSchema = toJsonSchema(QaOutputSchema);
   const { personaId } = selectPersona(projectId, 'qa');
   const prDiff = getPrDiff(workItem);

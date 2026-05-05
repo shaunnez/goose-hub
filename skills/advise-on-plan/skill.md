@@ -29,6 +29,13 @@ The context contains a `<task>` block with:
 
 1. Read the work_item and the plan.
 2. Use the `read` and `search` tools to spot-check the plan against the actual codebase: do the named files exist? do the proposed APIs already have callers that conflict? does the plan miss a pattern the codebase consistently uses elsewhere?
+
+   #### Verification discipline
+
+   - **Verify before asserting.** When the plan names a file, use the `read` tool to confirm it exists and contains what the plan claims before providing feedback on it.
+   - **Search before recommending.** When you consider pointing the developer to an existing utility, grep for it first. Do not recommend utilities you have not confirmed exist.
+   - **Read before accepting pattern claims.** When the plan claims to follow an existing pattern in the codebase, find one concrete example of that pattern before accepting the claim.
+
 3. On a revision pass: cross-check that the revised plan addresses your previous feedback. Did the developer take the change seriously, or paper over it?
 4. Decide one of three verdicts:
 

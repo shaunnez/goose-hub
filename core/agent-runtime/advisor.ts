@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import advisorConfig from '@goose-hub/skills/advise-on-plan/config.js';
 import {
   type AdviseOnPlanOutput,
@@ -8,6 +6,7 @@ import {
 import { eventStore } from '../event-stream/store.js';
 import { ClaudeCliRuntime } from './claude-cli.js';
 import type { AgentRuntime } from './interface.js';
+import { readPromptWithContext } from './read-prompt.js';
 import { toJsonSchema } from './schema-bridge.js';
 import { selectPersona } from './select-persona.js';
 
@@ -51,7 +50,7 @@ export async function adviseOnPlan(input: AdviseOnPlanInput): Promise<AdviseOnPl
 
   const runtime = input.runtime ?? new ClaudeCliRuntime();
   const { personaId } = selectPersona(input.projectId, 'researcher');
-  const advisorPrompt = readSkillPrompt('advise-on-plan');
+  const advisorPrompt = readPromptWithContext('advise-on-plan', input.projectId);
   const outputJsonSchema = toJsonSchema(AdviseOnPlanSchema) as Record<string, unknown>;
 
   const result = await runtime.run({
@@ -100,9 +99,4 @@ export async function adviseOnPlan(input: AdviseOnPlanInput): Promise<AdviseOnPl
   }
 
   return parsed.data;
-}
-
-function readSkillPrompt(skillName: string): string {
-  const skillRoot = join(import.meta.dirname, '..', '..', 'skills', skillName);
-  return readFileSync(join(skillRoot, 'skill.md'), 'utf8');
 }

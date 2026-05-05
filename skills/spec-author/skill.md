@@ -19,6 +19,11 @@ The context contains a `<task>` block with:
 - `<target_url>` — URL of the running dev server (e.g. `http://localhost:5173/projects/foo`)
 - `<slice_description>` — the user-facing scenario the spec must exercise
 
+## Execution discipline
+
+- **Read playwright config first.** Before writing any spec, read `apps/web/playwright.config.ts` to understand the `webServer` setup, base URL, and project configs. A spec that contradicts the config will fail in ways unrelated to the feature.
+- **Navigate before asserting.** Use `mcp__playwright-test__browser_snapshot` to observe the actual DOM at each step before writing `expect` assertions. Do not write assertions against elements you have not seen.
+
 ## What you must do
 
 1. Read the slice description and identify the user actions that exercise it (navigate, click, type, assert visible text, etc.).
