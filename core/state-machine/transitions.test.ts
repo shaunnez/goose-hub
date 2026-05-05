@@ -76,6 +76,8 @@ describe('isLegalTransition — section 9.1 happy paths', () => {
     expect(isLegalTransition('factory:merge-conflict', 'factory:needs-human')).toBe(true));
   it('retrospecting → done', () =>
     expect(isLegalTransition('factory:retrospecting', 'factory:done')).toBe(true));
+  it('retrospecting → needs-human (escalate on retro failure)', () =>
+    expect(isLegalTransition('factory:retrospecting', 'factory:needs-human')).toBe(true));
   it('done → archived', () =>
     expect(isLegalTransition('factory:done', 'factory:archived')).toBe(true));
 });

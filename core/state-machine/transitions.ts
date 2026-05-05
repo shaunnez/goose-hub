@@ -53,7 +53,7 @@ const TRANSITIONS: Readonly<Record<StateName, readonly StateName[]>> = {
     'factory:archived',
   ],
   'factory:merge-conflict': ['factory:done', 'factory:needs-human', 'factory:archived'],
-  'factory:retrospecting': ['factory:done', 'factory:archived'],
+  'factory:retrospecting': ['factory:done', 'factory:needs-human', 'factory:archived'],
   'factory:needs-human': [
     'factory:dev-ready',
     'factory:needs-qa',
