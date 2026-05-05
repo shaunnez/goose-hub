@@ -191,6 +191,16 @@ export async function runQaWorkflow(
       runId,
     });
 
+    for (const cr of qaOutput.criteriaResults ?? []) {
+      eventStore.appendEvent({
+        projectId: projectSlug,
+        workItemId: workItem.id,
+        kind: 'agent.verify-command',
+        payload: { runId, ac: cr.ac, command: cr.command, actual: cr.actual, passed: cr.passed },
+        runId,
+      });
+    }
+
     for (const summary of qaOutput.decisionSummaries) {
       eventStore.appendEvent({
         projectId: projectSlug,
