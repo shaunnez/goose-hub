@@ -112,7 +112,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  delete process.env.GITHUB_TOKEN;
+  process.env.GITHUB_TOKEN = undefined;
 });
 
 describe('runResolveConflictWorkflow', () => {
@@ -238,9 +238,7 @@ describe('runResolveConflictWorkflow', () => {
         resolved: ['src/foo.ts'],
         unresolvable: [],
         confidence: 'low',
-        decisionSummaries: [
-          { step: 'resolve', summary: 'Uncertain — picked PR side blindly' },
-        ],
+        decisionSummaries: [{ step: 'resolve', summary: 'Uncertain — picked PR side blindly' }],
       },
       decisionSummaries: [],
       events: [],
@@ -317,9 +315,7 @@ describe('runResolveConflictWorkflow', () => {
       .mockReturnValueOnce('') // push
       .mockReturnValueOnce(''); // worktree remove
 
-    const mergePRImpl = vi
-      .fn()
-      .mockRejectedValueOnce(new Error('GitHub 422 — PR already merged'));
+    const mergePRImpl = vi.fn().mockRejectedValueOnce(new Error('GitHub 422 — PR already merged'));
 
     const source = makeStateSource();
     await runResolveConflictWorkflow(makeWorkItem(), source, 'proj', '/repo', {

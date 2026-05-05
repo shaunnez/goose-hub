@@ -451,9 +451,7 @@ describe('approveIssue / rejectIssue (#186)', () => {
       },
     ] as never);
 
-    const { MergeConflictError } = await import(
-      '@goose-hub/core/connectors/github/merge-pr.js'
-    );
+    const { MergeConflictError } = await import('@goose-hub/core/connectors/github/merge-pr.js');
     const mergePRImpl = vi.fn().mockRejectedValueOnce(new MergeConflictError(42));
 
     const { approveIssue } = await import('./service.js');

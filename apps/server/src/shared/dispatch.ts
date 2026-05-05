@@ -131,10 +131,7 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
 }
 
 /** Run the merge conflict resolution workflow for a single issue. Drops duplicate triggers. */
-export async function dispatchResolveConflict(
-  slug: string,
-  issueNumber: number,
-): Promise<void> {
+export async function dispatchResolveConflict(slug: string, issueNumber: number): Promise<void> {
   const key = issueKey(slug, issueNumber);
   if (_issueInFlight.has(key)) {
     logger.warn('dispatchResolveConflict: already in-flight, dropping duplicate', {

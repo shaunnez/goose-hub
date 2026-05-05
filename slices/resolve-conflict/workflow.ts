@@ -62,11 +62,7 @@ export async function runResolveConflictWorkflow(
   const events = eventStore.replay({ workItemId });
   const prEvent = [...events].reverse().find((e) => e.kind === 'pr.opened');
   if (prEvent == null) {
-    await stateSource.transitionState(
-      issueNumber,
-      'factory:merge-conflict',
-      'factory:needs-human',
-    );
+    await stateSource.transitionState(issueNumber, 'factory:merge-conflict', 'factory:needs-human');
     await stateSource.comment(
       issueNumber,
       'Agent could not resolve merge conflict: no pr.opened event found.',
@@ -104,10 +100,7 @@ export async function runResolveConflictWorkflow(
     }
 
     if (hasMergeConflicts) {
-      const conflictedOutput = gitExecImpl(
-        ['diff', '--name-only', '--diff-filter=U'],
-        wtPath,
-      );
+      const conflictedOutput = gitExecImpl(['diff', '--name-only', '--diff-filter=U'], wtPath);
       const conflictedFiles = conflictedOutput
         .split('\n')
         .map((f) => f.trim())
@@ -143,9 +136,7 @@ export async function runResolveConflictWorkflow(
           throw new Error('Agent output failed schema validation');
         }
         if (parsed.data.unresolvable.length > 0) {
-          throw new Error(
-            `Agent could not resolve: ${parsed.data.unresolvable.join(', ')}`,
-          );
+          throw new Error(`Agent could not resolve: ${parsed.data.unresolvable.join(', ')}`);
         }
         if (parsed.data.confidence === 'low') {
           throw new Error('Agent reported low confidence in conflict resolution');
@@ -162,10 +153,7 @@ export async function runResolveConflictWorkflow(
         }
 
         gitExecImpl(['add', '-A'], wtPath);
-        gitExecImpl(
-          ['commit', '-m', `chore: resolve merge conflicts with ${baseBranch}`],
-          wtPath,
-        );
+        gitExecImpl(['commit', '-m', `chore: resolve merge conflicts with ${baseBranch}`], wtPath);
       }
     }
 
@@ -205,11 +193,7 @@ export async function runResolveConflictWorkflow(
       kind: 'merge.conflict-unresolvable',
       payload: { prNumber, prUrl, error: String(err) },
     });
-    await stateSource.transitionState(
-      issueNumber,
-      'factory:merge-conflict',
-      'factory:needs-human',
-    );
+    await stateSource.transitionState(issueNumber, 'factory:merge-conflict', 'factory:needs-human');
     await stateSource.comment(
       issueNumber,
       `Agent could not resolve merge conflict automatically. Manual merge required: ${prUrl}`,
