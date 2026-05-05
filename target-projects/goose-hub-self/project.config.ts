@@ -104,6 +104,8 @@ const config: ProjectConfig = {
   archiveAfterDays: 7,
   visibility: 'always_visible',
   machineScope: undefined,
+  colorStripe: '#7c3aed',
+  activeMilestone: 'M10: Multi-project Orchestration',
 };
 
 export default config;

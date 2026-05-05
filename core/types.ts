@@ -99,4 +99,6 @@ export interface ProjectConfig {
   archiveAfterDays: number;
   visibility: 'always_visible' | 'hidden';
   machineScope?: string;
+  colorStripe: string;
+  activeMilestone?: string;
 }
