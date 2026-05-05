@@ -28,7 +28,6 @@ function resolveBaseBranch(repoPath: string): string {
   }
 }
 
-
 export interface FixIssueDeps {
   /** Override the runtime (used by tests). Defaults to ClaudeCliRuntime. */
   runtime?: AgentRuntime;
