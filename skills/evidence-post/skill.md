@@ -37,9 +37,15 @@ The context contains a `<task>` block with:
    ```
    If the WebM does not exist or `ffmpeg` fails, set `gifPath: null` and continue — do not abort.
 3. **Move artefacts.** Move every screenshot into `evidence/issue-<N>/`. Create the directory if it does not exist (`mkdir -p evidence/issue-<N>`). Each AFTER screenshot gets a stable filename like `step-1.png`, `step-2.png`, … BEFORE-state screenshots from the investigation are already on the `evidence/issue-<N>` branch under `before-step-N.png` — do not overwrite them.
-4. **Push to the evidence branch.** Switch to (or create) `evidence/issue-<N>` so the AFTER commit lands on top of any BEFORE commit. From the worktree:
+4. **Push to the evidence branch.** Switch to (or create) `evidence/issue-<N>` so the AFTER commit lands on top of any BEFORE commit. The remote branch likely already exists (`playwright-repro` pushes the BEFORE state during investigation), so a plain `git checkout -b` would create a fresh branch from PR HEAD and the subsequent push would be rejected as non-fast-forward. Fetch first, then track the remote when present:
    ```bash
-   git checkout evidence/issue-<N> 2>/dev/null || git checkout -b evidence/issue-<N>
+   git fetch origin evidence/issue-<N> 2>/dev/null || true
+   if git show-ref --verify --quiet refs/remotes/origin/evidence/issue-<N>; then
+     git checkout -B evidence/issue-<N> origin/evidence/issue-<N>
+   else
+     git checkout -b evidence/issue-<N>
+   fi
+
    git add evidence/issue-<N>/
    git commit -m "evidence: after-state for issue #<N>"
    git push origin evidence/issue-<N>

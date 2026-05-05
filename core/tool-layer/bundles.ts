@@ -48,8 +48,10 @@ export const TOOL_BUNDLES = {
     'Bash(git add evidence/*)',
     'Bash(git checkout*)',
     'Bash(git commit -m *)',
+    'Bash(git fetch origin evidence/*)',
     'Bash(git push*)',
     'Bash(git rev-parse HEAD)',
+    'Bash(git show-ref*)',
     'Bash(gh issue comment*)',
   ],
   /**
