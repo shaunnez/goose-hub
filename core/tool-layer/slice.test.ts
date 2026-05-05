@@ -164,4 +164,17 @@ describe('writeWorkspaceSandbox', () => {
       rmSync(dir, { recursive: true });
     }
   });
+
+  it('registers PostToolUse hook in workspace settings.json', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sandbox-post-hook-'));
+    try {
+      writeWorkspaceSandbox(dir);
+      const raw = readFileSync(join(dir, '.claude', 'settings.json'), 'utf8');
+      const cfg = JSON.parse(raw) as { hooks?: { PostToolUse?: unknown[] } };
+      expect(cfg.hooks?.PostToolUse).toBeDefined();
+      expect(Array.isArray(cfg.hooks?.PostToolUse)).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
 });

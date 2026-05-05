@@ -8,7 +8,7 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
 }));
 
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
-import { parseSseFilter, recordToolCall } from './service.js';
+import { parseSseFilter, recordDecisionSummary, recordToolCall } from './service.js';
 
 describe('parseSseFilter (#208)', () => {
   it('passes through projectId and workItemId from input', () => {
@@ -53,6 +53,51 @@ describe('recordToolCall (#208)', () => {
   it('uses null runId when run_id is missing', () => {
     vi.mocked(eventStore.appendEvent).mockClear();
     recordToolCall({ tool_name: 'Bash' });
+    const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
+    expect(arg.runId).toBeNull();
+  });
+});
+
+describe('recordDecisionSummary', () => {
+  it('appends an agent.decision-summary-live event with the supplied runId', () => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    const result = recordDecisionSummary({ run_id: 'run-99', summary: 'Chose approach A' });
+    expect(result).toEqual({ ok: true });
+    const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
+    expect(arg.kind).toBe('agent.decision-summary-live');
+    expect(arg.runId).toBe('run-99');
+  });
+
+  it('resolves projectId and workItemId from matching agent.run-started event', () => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    vi.mocked(eventStore.replay).mockReturnValueOnce([
+      {
+        id: 1,
+        kind: 'agent.run-started',
+        projectId: 'proj-abc',
+        workItemId: 'wi-42',
+        runId: 'run-x',
+        payload: {},
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+    recordDecisionSummary({ run_id: 'run-x', summary: 'Phase: PLAN' });
+    const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
+    expect(arg.projectId).toBe('proj-abc');
+    expect(arg.workItemId).toBe('wi-42');
+  });
+
+  it('falls back to unknown projectId when no run-started event exists', () => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    vi.mocked(eventStore.replay).mockReturnValueOnce([]);
+    recordDecisionSummary({ run_id: 'run-missing', summary: 'some decision' });
+    const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
+    expect(arg.projectId).toBe('unknown');
+  });
+
+  it('uses null runId when run_id is missing from payload', () => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    recordDecisionSummary({ summary: 'no run id' });
     const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
     expect(arg.runId).toBeNull();
   });

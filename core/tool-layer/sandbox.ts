@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { POST_HOOK_PATH } from './post-tool-use-hook.js';
 import { HOOK_PATH } from './pre-tool-use-hook.js';
 
 const DENYLIST = ['Read(./.env*)', 'Bash(sudo *)', 'Bash(rm -rf *)'];
@@ -18,6 +19,12 @@ export function writeWorkspaceSandbox(workspacePath: string): void {
             // PATH that omits non-standard install locations (e.g. /opt/homebrew
             // on Apple Silicon), so bare `node` would not be found.
             hooks: [{ type: 'command', command: `"${process.execPath}" "${HOOK_PATH}"` }],
+          },
+        ],
+        PostToolUse: [
+          {
+            matcher: '.*',
+            hooks: [{ type: 'command', command: `"${process.execPath}" "${POST_HOOK_PATH}"` }],
           },
         ],
       },
