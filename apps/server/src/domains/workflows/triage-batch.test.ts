@@ -28,6 +28,11 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   },
 }));
 
+const mockAccumulatePersonaStats = vi.fn();
+vi.mock('@goose-hub/core/persona/accumulate.js', () => ({
+  accumulatePersonaStats: mockAccumulatePersonaStats,
+}));
+
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
   return { ...actual, readFileSync: vi.fn().mockReturnValue('# mock prompt') };
@@ -297,6 +302,77 @@ describe('runTriageBatch', () => {
       '42',
       'factory:triaging',
       'factory:accepted',
+    );
+  });
+
+  it('accumulates persona stats for both triager and researcher on success', async () => {
+    const item = makeWorkItem();
+    const source = makeMockSource([item]);
+
+    mockRuntime.run
+      .mockResolvedValueOnce({
+        output: makeTriageOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeRepoMatchOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+    const { runTriageBatch } = await import('./triage-batch.js');
+    await runTriageBatch('goose-hub-self', source);
+
+    const calls = mockAccumulatePersonaStats.mock.calls.map(([arg]) => arg);
+    expect(calls).toContainEqual(expect.objectContaining({ role: 'triager', outcome: 'success' }));
+    expect(calls).toContainEqual(
+      expect.objectContaining({ role: 'researcher', outcome: 'success' }),
+    );
+  });
+
+  it('records triager failure when triage output validation fails', async () => {
+    const item = makeWorkItem();
+    const source = makeMockSource([item]);
+
+    mockRuntime.run.mockResolvedValueOnce({
+      output: { bad: 'data' },
+      decisionSummaries: [],
+      events: [],
+    } satisfies AgentResult);
+
+    const { runTriageBatch } = await import('./triage-batch.js');
+    await runTriageBatch('goose-hub-self', source);
+
+    const calls = mockAccumulatePersonaStats.mock.calls.map(([arg]) => arg);
+    expect(calls).toContainEqual(expect.objectContaining({ role: 'triager', outcome: 'failure' }));
+    // researcher never ran since triage parse failed and continued
+    expect(calls).not.toContainEqual(expect.objectContaining({ role: 'researcher' }));
+  });
+
+  it('records researcher failure when repo-match output validation fails', async () => {
+    const item = makeWorkItem();
+    const source = makeMockSource([item]);
+
+    mockRuntime.run
+      .mockResolvedValueOnce({
+        output: makeTriageOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: { bad: 'data' },
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+    const { runTriageBatch } = await import('./triage-batch.js');
+    await runTriageBatch('goose-hub-self', source);
+
+    const calls = mockAccumulatePersonaStats.mock.calls.map(([arg]) => arg);
+    expect(calls).toContainEqual(expect.objectContaining({ role: 'triager', outcome: 'success' }));
+    expect(calls).toContainEqual(
+      expect.objectContaining({ role: 'researcher', outcome: 'failure' }),
     );
   });
 
