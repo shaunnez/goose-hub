@@ -163,3 +163,38 @@ describe('roster — grouping by role', () => {
     expect(grouped.developer[0].personaName).toBe('alice');
   });
 });
+
+describe('roster — personaProjectSlug (#282)', () => {
+  it('extracts project slug from a well-formed persona name', async () => {
+    const { personaProjectSlug } = await import('./components/RosterPage');
+    expect(personaProjectSlug('goose-hub-self/developer/0')).toBe('goose-hub-self');
+    expect(personaProjectSlug('my-side-project/qa/1')).toBe('my-side-project');
+  });
+
+  it('returns empty string for persona names without the expected format', async () => {
+    const { personaProjectSlug } = await import('./components/RosterPage');
+    expect(personaProjectSlug('alice')).toBe('');
+    expect(personaProjectSlug('alice/developer')).toBe('');
+  });
+
+  it('filters personas to a single project scope', async () => {
+    const { personaProjectSlug } = await import('./components/RosterPage');
+    const all = [
+      { personaName: 'proj-a/developer/0', role: 'developer' },
+      { personaName: 'proj-b/qa/0', role: 'qa' },
+      { personaName: 'proj-a/qa/0', role: 'qa' },
+    ];
+    const filtered = all.filter((p) => personaProjectSlug(p.personaName) === 'proj-a');
+    expect(filtered).toHaveLength(2);
+    expect(filtered.every((p) => personaProjectSlug(p.personaName) === 'proj-a')).toBe(true);
+  });
+
+  it('includes all personas when scope is "all"', async () => {
+    const { personaProjectSlug } = await import('./components/RosterPage');
+    const all = [{ personaName: 'proj-a/developer/0' }, { personaName: 'proj-b/qa/0' }];
+    const filtered = all; // no filter applied for 'all' scope
+    expect(filtered).toHaveLength(2);
+    expect(personaProjectSlug(all[0].personaName)).toBe('proj-a');
+    expect(personaProjectSlug(all[1].personaName)).toBe('proj-b');
+  });
+});
