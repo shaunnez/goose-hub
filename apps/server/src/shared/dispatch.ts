@@ -182,7 +182,7 @@ export async function dispatchQa(slug: string, issueNumber: number): Promise<voi
       runQaWorkflow: (
         item: unknown,
         source: unknown,
-        projectId: string,
+        projectSlug: string,
         targetRepo: string,
       ) => Promise<unknown>;
     };
@@ -192,7 +192,7 @@ export async function dispatchQa(slug: string, issueNumber: number): Promise<voi
       return;
     }
     const item = await source.getItem(issueNumber.toString());
-    await runQaWorkflow(item, source, source.projectId, item.repoRef ?? slug);
+    await runQaWorkflow(item, source, slug, item.repoRef ?? slug);
   } finally {
     _issueInFlight.delete(key);
   }
@@ -214,7 +214,7 @@ export async function dispatchReview(slug: string, issueNumber: number): Promise
       runReviewWorkflow: (
         item: unknown,
         source: unknown,
-        projectId: string,
+        projectSlug: string,
         targetRepo: string,
       ) => Promise<unknown>;
     };
@@ -224,7 +224,7 @@ export async function dispatchReview(slug: string, issueNumber: number): Promise
       return;
     }
     const item = await source.getItem(issueNumber.toString());
-    await runReviewWorkflow(item, source, source.projectId, item.repoRef ?? slug);
+    await runReviewWorkflow(item, source, slug, item.repoRef ?? slug);
   } finally {
     _issueInFlight.delete(key);
   }
