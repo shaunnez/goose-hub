@@ -11,7 +11,14 @@ Developer (post-implementation evidence). You are NOT a holdout — you run afte
 ## Execution discipline
 
 - **Verify spec path before running.** Before executing Playwright, confirm `<spec_path>` exists using a file read. If the path does not exist, record a decision summary (`spec path <path> not found — skipping Playwright run`) and return early without posting a comment.
+- **Pre-flight server check.** Before running Playwright, verify the dev server is up:
+  ```bash
+  curl -s --max-time 5 http://localhost:5173/ > /dev/null && echo "SERVER OK" || echo "SERVER UNREACHABLE"
+  ```
+  If `SERVER UNREACHABLE`, record a decision summary and return early. Do not run Playwright against a dead server — it will waste turns timing out.
 - **Full Playwright output.** Run Playwright with full output. Do not pipe or grep the result. Read any failure messages completely before deciding how to proceed.
+- **Diagnose before retry.** If the test fails, immediately read `apps/web/test-results/<test-dir>/error-context.md` to understand the failure. Do not re-run Playwright until you have read the error. Maximum **one retry** total — if it fails twice, return early with a decision summary.
+- **Artifact lookup via predictable path.** After a successful run, find artifacts at `apps/web/test-results/` — use `ls apps/web/test-results/` not a recursive `find`. Screenshots the spec writes go to the path the spec declares; the WebM lands under `apps/web/test-results/<test-dir>/`.
 
 ## Input
 

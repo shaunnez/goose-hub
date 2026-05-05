@@ -56,6 +56,8 @@ The spec must:
 import { test, expect } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 
+test.use({ video: 'on' });
+
 const EVIDENCE_DIR = '/tmp/repro-<slug>';
 
 test('repro: <bug title>', async ({ page }) => {
@@ -84,12 +86,12 @@ test('repro: <bug title>', async ({ page }) => {
 ### 3. Run
 
 ```bash
-pnpm --filter @goose-hub/web exec playwright test e2e/repro-<slug>.spec.ts --reporter=json --video=on 2>&1
+pnpm --filter @goose-hub/web exec playwright test e2e/repro-<slug>.spec.ts --reporter=json > /tmp/repro-<slug>/pw-results.json 2>/tmp/repro-<slug>/pw-stderr.txt
 ```
 
-The test may fail — expected if the bug is reproduced. Capture the full output.
+The test may fail — expected if the bug is reproduced.
 
-From the JSON stdout:
+From `/tmp/repro-<slug>/pw-results.json`:
 - Find video path in `suites[0].specs[0].tests[0].results[0].attachments` where `name === 'video'`
 - Check `status` in the same results object (`'failed'` confirms the bug manifested)
 
