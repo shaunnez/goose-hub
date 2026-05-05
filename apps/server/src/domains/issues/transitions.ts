@@ -104,10 +104,11 @@ export async function approveIssue(
   await source.transitionState(id, 'factory:approved', 'factory:retrospecting');
   await source.comment(id, `Approved via Goose Hub UI; PR #${prNumber} merged (${merged.sha}).`);
 
-  // Fire-and-forget the retrospective workflow. The webhook label-change
-  // handler will also dispatch retro on the factory:retrospecting label, but
-  // running it here avoids depending on webhook delivery for the post-merge
-  // path. dispatchRetro is idempotent via the in-flight guard.
+  // Fire-and-forget the retrospective. The label-change webhook will also
+  // dispatch retro on factory:retrospecting; running it here avoids waiting
+  // on webhook delivery. Sequential duplicates no-op via the state check in
+  // dispatchRetro (state advances past factory:retrospecting once the
+  // workflow finishes); concurrent duplicates no-op via _issueInFlight.
   dispatchRetro(slug, Number(id)).catch((err: unknown) => {
     logger.error('dispatchRetro after approve failed', { slug, id, error: String(err) });
   });
