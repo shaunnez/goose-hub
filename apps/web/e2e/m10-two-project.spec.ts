@@ -74,8 +74,8 @@ const PERSONA_B = {
   lastRunAt: new Date(Date.now() - 7_200_000).toISOString(),
 };
 
-function setupCommonRoutes(page: import('@playwright/test').Page) {
-  page.route('**/api/projects', (route: Route) =>
+async function setupCommonRoutes(page: import('@playwright/test').Page) {
+  await page.route('**/api/projects', (route: Route) =>
     route.fulfill({
       json: {
         projects: [
@@ -100,37 +100,48 @@ function setupCommonRoutes(page: import('@playwright/test').Page) {
     }),
   );
 
-  page.route('**/api/projects/configs', (route: Route) =>
+  await page.route('**/api/projects/configs', (route: Route) =>
     route.fulfill({ json: { configs: [PROJ_A, PROJ_B] } }),
   );
 
-  page.route(`**/api/projects/${PROJ_A.slug}/issues`, (route: Route) =>
+  await page.route(`**/api/projects/${PROJ_A.slug}/issues`, (route: Route) =>
     route.fulfill({ json: { items: [ISSUE_A] } }),
   );
 
-  page.route(`**/api/projects/${PROJ_B.slug}/issues`, (route: Route) =>
+  await page.route(`**/api/projects/${PROJ_B.slug}/issues`, (route: Route) =>
     route.fulfill({ json: { items: [ISSUE_B] } }),
   );
 
-  page.route(`**/api/projects/${PROJ_A.slug}/active-milestone`, (route: Route) =>
+  await page.route(`**/api/projects/${PROJ_A.slug}/active-milestone`, (route: Route) =>
     route.fulfill({ json: { milestoneNumber: 10, source: 'config' } }),
   );
 
-  page.route(`**/api/projects/${PROJ_B.slug}/active-milestone`, (route: Route) =>
+  await page.route(`**/api/projects/${PROJ_B.slug}/active-milestone`, (route: Route) =>
     route.fulfill({ json: { milestoneNumber: null, source: 'github-default' } }),
   );
 
-  page.route('**/api/roster', (route: Route) =>
+  // Mock milestone lists so ActiveMilestoneProvider's Promise.all doesn't hit real endpoints.
+  await page.route(`**/api/projects/${PROJ_A.slug}/milestones`, (route: Route) =>
+    route.fulfill({
+      json: { milestones: [{ number: 10, title: 'M10: Multi-project Orchestration', open: true }] },
+    }),
+  );
+
+  await page.route(`**/api/projects/${PROJ_B.slug}/milestones`, (route: Route) =>
+    route.fulfill({ json: { milestones: [] } }),
+  );
+
+  await page.route('**/api/roster', (route: Route) =>
     route.fulfill({ json: { personas: [PERSONA_A, PERSONA_B] } }),
   );
 
-  page.route('**/api/roster/runs**', (route: Route) => route.fulfill({ json: { runs: [] } }));
-  page.route('**/api/roster/candidates**', (route: Route) =>
+  await page.route('**/api/roster/runs**', (route: Route) => route.fulfill({ json: { runs: [] } }));
+  await page.route('**/api/roster/candidates**', (route: Route) =>
     route.fulfill({ json: { candidates: [] } }),
   );
 
   // Suppress SSE — not needed for these tests.
-  page.route('**/events**', (route: Route) => route.fulfill({ status: 200, body: '' }));
+  await page.route('**/events**', (route: Route) => route.fulfill({ status: 200, body: '' }));
 }
 
 test.describe('M10.09: Two-project integration (#285)', () => {
