@@ -4,14 +4,16 @@ Run from worktree **root** using pnpm filter syntax — NOT from `apps/web/`:
 
 | What | Command |
 |---|---|
-| All packages | `pnpm test` |
-| Web only | `pnpm --filter=@goose-hub/web test -- --reporter=verbose` |
-| Server only | `pnpm --filter=@goose-hub/server test -- --reporter=verbose` |
-| Specific file | `pnpm --filter=@goose-hub/web test -- --reporter=verbose <relative-path>` |
+| All packages | `pnpm test -- --reporter=json` |
+| Web only | `pnpm --filter=@goose-hub/web test -- --reporter=json` |
+| Server only | `pnpm --filter=@goose-hub/server test -- --reporter=json` |
+| Specific file | `pnpm --filter=@goose-hub/web test -- --reporter=json <relative-path>` |
 | Lint | `pnpm lint` |
 | Typecheck | `pnpm typecheck` |
 
 **First command in any worktree:** `cat package.json` to verify available scripts.
+
+**Reading JSON test output:** check `numFailedTests` first — if `0`, suite is green, stop. If `> 0`, read `testResults[].assertionResults[]` where `status === "failed"` for full error detail and stack traces.
 
 ## Before touching any app
 

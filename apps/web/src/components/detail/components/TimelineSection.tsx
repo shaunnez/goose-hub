@@ -99,7 +99,8 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
   }
 
   const items = groupEvents(events);
-  const context = { slug: projectSlug, issueId: id };
+  const latestRunId = items.find((item) => item.kind === 'run-group')?.runId ?? null;
+  const context = { slug: projectSlug, issueId: id, latestRunId };
 
   return (
     <div data-testid="timeline-section" className="px-8 py-6">

@@ -948,12 +948,13 @@ function RunGroupWrapper({
   endedAt: string | null;
   lastEventAt: string | null;
   personaId: string | null;
-  context?: { slug: string; issueId: string };
+  context?: { slug: string; issueId: string; latestRunId: string | null };
 }) {
   const personaMap = usePersonaMap();
   const [open, setOpen] = useState(true);
   const [now, setNow] = useState(() => Date.now());
   const [resuming, setResuming] = useState(false);
+  const [resumed, setResumed] = useState(false);
   const isLive = endedAt == null;
 
   useEffect(() => {
@@ -988,12 +989,14 @@ function RunGroupWrapper({
       (item.event.payload as { orphaned?: boolean } | null)?.orphaned === true,
   );
 
-  const canResume = context != null && (isFailed || isStalled);
+  const isLatestRun = context?.latestRunId === runId;
+  const canResume = context != null && (isFailed || isStalled) && isLatestRun && !resumed;
 
   const handleResume = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (context == null || resuming) return;
+    if (context == null || resuming || resumed) return;
     setResuming(true);
+    setResumed(true);
     try {
       await resumeIssue(context.slug, context.issueId);
     } finally {

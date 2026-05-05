@@ -2,10 +2,12 @@
 
 | What | Command |
 |---|---|
-| Full suite | `pnpm test` |
-| Web only | `pnpm --filter=@goose-hub/web test -- --reporter=verbose` |
-| Server only | `pnpm --filter=@goose-hub/server test -- --reporter=verbose` |
+| Full suite | `pnpm test -- --reporter=json` |
+| Web only | `pnpm --filter=@goose-hub/web test -- --reporter=json` |
+| Server only | `pnpm --filter=@goose-hub/server test -- --reporter=json` |
 | E2E | `pnpm test:e2e` (only run if `e2eCommand` is provided) |
+
+**Reading JSON test output:** check `numFailedTests` first — if `0`, suite is green. If `> 0`, read `testResults[].assertionResults[]` where `status === "failed"` for error detail. If `testRun` is injected in context, use it directly — do not re-run.
 
 ## Known noise — do not report as findings
 

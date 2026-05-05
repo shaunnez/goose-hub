@@ -36,7 +36,7 @@ The context contains a `<task>` block with:
 #### Discipline — applied before writing anything
 
 1. **Read before write.** Use the `read` tool on the target component/module before writing any test for it. No exceptions. A test written without reading the component will mock the wrong things.
-2. **Verbose test output.** Run tests with `--reporter=verbose`. Read the full output. Never pipe through `grep` or `head`. One full run beats ten grep loops.
+2. **Structured test output.** Append `--reporter=json` to the test command. The output is JSON — parse it as structured data. Check `numFailedTests` first: if `0`, suite is green, stop. If `> 0`, read `testResults[].assertionResults[]` where `status === "failed"` for full error detail and stack traces. One structured pass beats ten grep loops.
 3. **Orient first.** First command in the worktree: `cat package.json` (and `cat apps/web/package.json` if touching the web app) to understand available test scripts before running anything.
 4. **Two-rewrite cap.** Before any rewrite, re-read the component under test and grep for the exact state-access pattern you are testing — tests must mirror what the code actually does. Maximum 2 rewrites per file. On a 3rd failure: emit a diagnosis decision summary (exact error, what you tried, what is still unclear), set `confidence: low`, commit what you have, and return — no further rewrites.
 5. **Mock from source.** Before mocking any import, grep the component file for its import statements. Only mock what it actually imports — never mock by assumption.
