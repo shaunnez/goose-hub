@@ -30,7 +30,12 @@ interface InvestigationSectionProps {
   itemState?: string;
 }
 
-export function InvestigationSection({ projectSlug, id, itemState, itemType }: InvestigationSectionProps) {
+export function InvestigationSection({
+  projectSlug,
+  id,
+  itemState,
+  itemType,
+}: InvestigationSectionProps) {
   const queryClient = useQueryClient();
   const personaMap = usePersonaMap();
   const { projects } = useActiveProject();
