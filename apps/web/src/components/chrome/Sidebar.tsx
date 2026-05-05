@@ -129,7 +129,7 @@ export function Sidebar({ activeSlug }: SidebarProps) {
               style={{ background: '#7c3aed' }}
             />
             <span className="text-[14px] font-semibold tracking-tight whitespace-nowrap">
-              Agentic OS
+              Goose Hub
             </span>
           </div>
         )}
