@@ -106,6 +106,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
   }, [onBack, onNext, onPrev]);
 
   const [fakeRunInProgress, setFakeRunInProgress] = useState(false);
+  const [hasOpenDep, setHasOpenDep] = useState(false);
 
   const onFakeRun = useCallback(() => {
     if (fakeRunInProgress) return;
@@ -210,7 +211,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
           </button>
         </div>
 
-        <TaskHeader item={item} projectSlug={slug} />
+        <TaskHeader item={item} projectSlug={slug} hasOpenDep={hasOpenDep} />
 
         <GatePendingBanner
           state={item?.state}
@@ -228,7 +229,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
           <LeftRail itemState={item?.state} />
           <main className="flex-1 min-w-0 overflow-y-auto">
             {currentSection.key === 'overview' ? (
-              <OverviewSection item={item} projectSlug={slug} />
+              <OverviewSection item={item} projectSlug={slug} onHasOpenDep={setHasOpenDep} />
             ) : currentSection.key === 'repo' ? (
               <TriageResultsSection projectSlug={slug} id={id} />
             ) : currentSection.key === 'timeline' ? (

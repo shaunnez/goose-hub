@@ -17,6 +17,7 @@ Components:
 - `OverviewSection.tsx` — renders the issue body via the lightweight Markdown helper.
 - `TimelineSection.tsx` — fetches `events` for the work item; subscribes to `/events?workItemId=…` SSE so new transitions appear without a refresh.
 - `DeferredSurface.tsx` — small "Available in M&lt;N&gt;" empty-state for the inert sections.
+- `DependenciesSection.tsx` — renders the "Dependencies" block inside `OverviewSection`. Parses dependency declarations from the issue body using `lib/dependency-parser`, fetches each dep's title and state via React Query, resolves cross-repo deps to registered project slugs. Hidden when the issue has no dep declarations. Calls `onHasOpenDep(bool)` so `DetailPage` can set the "Blocked" badge on `TaskHeader`. Added in M11.04 (#288).
 - `sections.ts` — single source of truth for the 10-section list, milestone tags, descriptions.
 - `InvestigationSection.tsx` — renders structured investigation findings from `agent.investigation-complete` events: confidence badge (low/medium/high), markdown findings, key files list, and open questions. Shows empty state if no investigation has run. Added in M6.06 (#190).
 - `GatePendingBanner.tsx` — amber callout rendered between `TaskHeader` and the main content rails when the issue is in a gate state (a state requiring human action). Renders null for non-gate states.

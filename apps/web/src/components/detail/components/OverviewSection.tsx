@@ -20,10 +20,12 @@ import { Link, useParams } from 'react-router-dom';
 import { useIssueCostsBreakdown } from '../lib/costs';
 import { SECTIONS } from '../lib/sections';
 import { CommentsSection } from './CommentsSection';
+import { DependenciesSection } from './DependenciesSection';
 
 interface OverviewSectionProps {
   item?: WorkItemDto;
   projectSlug?: string;
+  onHasOpenDep?: (v: boolean) => void;
 }
 
 const SECTION_ICONS: Record<string, React.ElementType> = {
@@ -77,7 +79,7 @@ function StatCard({
   );
 }
 
-export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
+export function OverviewSection({ item, projectSlug, onHasOpenDep }: OverviewSectionProps) {
   const { slug = 'goose-hub-self', id = '' } = useParams<{ slug: string; id: string }>();
   const html = renderMarkdownToHtml(item?.body ?? '');
   const personaMap = usePersonaMap();
@@ -198,6 +200,11 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
           </div>
         </div>
       </div>
+
+      {/* Dependencies */}
+      {item != null && projectSlug != null && (
+        <DependenciesSection item={item} projectSlug={projectSlug} onHasOpenDep={onHasOpenDep} />
+      )}
 
       {/* Comments */}
       {item != null && projectSlug != null && (
