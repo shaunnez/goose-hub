@@ -2,9 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../shared/projects.js', () => ({
   listProjects: vi.fn(),
+  listProjectConfigs: vi.fn(),
 }));
 
-import { listProjects } from '#shared/projects.js';
+import { listProjectConfigs, listProjects } from '#shared/projects.js';
 import { listProjectConfigsService, listProjectsService } from './service.js';
 
 describe('listProjectsService (#208)', () => {
@@ -42,7 +43,7 @@ describe('listProjectConfigsService (#280)', () => {
   };
 
   it('maps full ProjectConfig to ProjectConfigDto shape', async () => {
-    vi.mocked(listProjects).mockResolvedValueOnce([mockProject] as never);
+    vi.mocked(listProjectConfigs).mockResolvedValueOnce([mockProject] as never);
     const result = await listProjectConfigsService();
     expect(result).toEqual({
       configs: [
@@ -60,7 +61,7 @@ describe('listProjectConfigsService (#280)', () => {
   });
 
   it('coerces missing activeMilestone to null', async () => {
-    vi.mocked(listProjects).mockResolvedValueOnce([
+    vi.mocked(listProjectConfigs).mockResolvedValueOnce([
       { ...mockProject, activeMilestone: undefined },
     ] as never);
     const result = await listProjectConfigsService();
@@ -68,7 +69,7 @@ describe('listProjectConfigsService (#280)', () => {
   });
 
   it('returns empty configs when no projects are registered', async () => {
-    vi.mocked(listProjects).mockResolvedValueOnce([] as never);
+    vi.mocked(listProjectConfigs).mockResolvedValueOnce([] as never);
     const result = await listProjectConfigsService();
     expect(result).toEqual({ configs: [] });
   });

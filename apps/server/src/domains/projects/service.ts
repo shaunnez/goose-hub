@@ -1,4 +1,4 @@
-import { listProjects as readProjects } from '#shared/projects.js';
+import { listProjectConfigs, listProjects as readProjects } from '#shared/projects.js';
 
 export async function listProjectsService(): Promise<{ projects: unknown[] }> {
   const projects = await readProjects();
@@ -16,7 +16,7 @@ export interface ProjectConfigDto {
 }
 
 export async function listProjectConfigsService(): Promise<{ configs: ProjectConfigDto[] }> {
-  const projects = await readProjects();
+  const projects = await listProjectConfigs();
   const configs: ProjectConfigDto[] = projects.map((p) => ({
     slug: p.slug,
     name: p.name,

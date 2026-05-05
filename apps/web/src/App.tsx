@@ -39,13 +39,19 @@ function KanbanPage() {
   );
 }
 
+function GlobalShell({ children }: { children: React.ReactNode }) {
+  return <ActiveProjectProvider>{children}</ActiveProjectProvider>;
+}
+
 function AllProjectsPage() {
   return (
-    <AppShell breadcrumb={<span>All Projects</span>}>
-      <LaneVisibilityProvider>
-        <AllProjectsBoard />
-      </LaneVisibilityProvider>
-    </AppShell>
+    <GlobalShell>
+      <AppShell breadcrumb={<span>All Projects</span>}>
+        <LaneVisibilityProvider>
+          <AllProjectsBoard />
+        </LaneVisibilityProvider>
+      </AppShell>
+    </GlobalShell>
   );
 }
 
@@ -100,9 +106,11 @@ function CostsPageRoute() {
 
 function SettingsPageRoute() {
   return (
-    <AppShell breadcrumb={<span>Settings</span>}>
-      <SettingsPage />
-    </AppShell>
+    <GlobalShell>
+      <AppShell breadcrumb={<span>Settings</span>}>
+        <SettingsPage />
+      </AppShell>
+    </GlobalShell>
   );
 }
 
