@@ -13,6 +13,17 @@ Defines the abstraction every backend implements.
 - **`Artifact`**, **`CreateIssueInput`**, **`SourceEvent`**, **`Subscription`** — supporting types for write paths and live updates.
 - **`StateSource`** — the interface itself: `listOpenWork`, `getItem`, `listMilestones`, `getActiveMilestone`, `transitionState`, `comment`, `attach`, `createIssue`, `watchForUpdates`.
 
+### `dependency-parser.ts`
+
+`parseDependencies(body: string): DependencyRef[]` — extracts dependency declarations from an issue body into typed `DependencyRef` objects.
+
+- **`DependencyRef`**: `{ type: 'depends-on' | 'blocks', repoRef: string | null, issueNumber: number }`
+- Recognised prefixes (case-insensitive, whitespace-tolerant): `Depends on`, `Depends-on`, `deps:`, `blocked by`, `blocked-by`, `Blocks`, `Blocks:`
+- Cross-repo refs (`owner/repo#N`) populate `repoRef`; same-repo refs (`#N`) set `repoRef: null`
+- `type: 'blocks'` means the current issue blocks the referenced issue (referenced issue depends on current)
+- Malformed or unrecognised lines are silently skipped — never throws
+- Consumed by M11.02 resolver and M11.03 scheduler filter
+
 ### `github-labels.ts`
 
 `GitHubLabelsSource` — `StateSource` backed by the GitHub REST API via native `fetch`.
