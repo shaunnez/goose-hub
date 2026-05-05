@@ -19,6 +19,9 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
   const [events, setEvents] = useState<AgentEventDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandSignal, setExpandSignal] = useState<{ open: boolean; seq: number } | undefined>(
+    undefined,
+  );
   const eventSourceRef = useRef<EventSource | null>(null);
   const { byRun: runCosts } = useIssueCostsBreakdown(projectSlug, id);
 
@@ -102,10 +105,36 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
 
   const items = groupEvents(events);
   const latestRunId = items.find((item) => item.kind === 'run-group')?.runId ?? null;
-  const context = { slug: projectSlug, issueId: id, latestRunId, runCosts };
+  const hasRunGroups = items.some((item) => item.kind === 'run-group');
+  const context = { slug: projectSlug, issueId: id, latestRunId, runCosts, expandSignal };
+
+  const handleExpandAll = () =>
+    setExpandSignal((prev) => ({ open: true, seq: (prev?.seq ?? 0) + 1 }));
+  const handleCollapseAll = () =>
+    setExpandSignal((prev) => ({ open: false, seq: (prev?.seq ?? 0) + 1 }));
 
   return (
     <div data-testid="timeline-section" className="px-8 py-6">
+      {hasRunGroups && (
+        <div className="flex justify-end gap-3 mb-3">
+          <button
+            type="button"
+            data-testid="timeline-expand-all"
+            onClick={handleExpandAll}
+            className="text-[11px] text-fg-4 hover:text-fg-2 transition-colors"
+          >
+            Expand all
+          </button>
+          <button
+            type="button"
+            data-testid="timeline-collapse-all"
+            onClick={handleCollapseAll}
+            className="text-[11px] text-fg-4 hover:text-fg-2 transition-colors"
+          >
+            Collapse all
+          </button>
+        </div>
+      )}
       <ol className="flex flex-col gap-3">
         {items.map((item, idx) => renderTimelineItem(item, idx, context))}
       </ol>

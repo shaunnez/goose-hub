@@ -38,6 +38,7 @@ type TimelineContext = {
   issueId: string;
   latestRunId: string | null;
   runCosts?: Map<string, CostRowDto>;
+  expandSignal?: { open: boolean; seq: number };
 };
 
 // ─── individual event renderers ───────────────────────────────────────────────
@@ -1110,6 +1111,13 @@ function RunGroupWrapper({
   const [resuming, setResuming] = useState(false);
   const [resumed, setResumed] = useState(false);
   const isLive = endedAt == null;
+
+  const expandSignal = context?.expandSignal;
+  useEffect(() => {
+    if (expandSignal != null) {
+      setOpen(expandSignal.open);
+    }
+  }, [expandSignal]);
 
   useEffect(() => {
     if (!isLive) return;
