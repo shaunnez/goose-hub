@@ -18,6 +18,13 @@ The context contains a `<task>` block with:
 
 Follow these steps systematically:
 
+### Discipline — applied throughout
+
+- **Orient first.** Before searching for anything, list the top-level directory structure to understand the codebase layout. Know where `core/`, `apps/`, and `slices/` live before diving in.
+- **Read before hypothesising.** Read actual source files before forming hypotheses. File names and directory names are not evidence. Code is evidence.
+- **Search before assuming location.** Grep for symbol definitions before assuming a file path. A module named `Sidebar` may not be in `sidebar.ts` — search for the export.
+- **Widen before speculating.** If two search attempts return no relevant results, widen the search term or try a synonym. Do not speculate about root cause from empty search results.
+
 ### Step 1 — Read the issue
 
 Carefully read the issue title and body. Identify:
