@@ -2,6 +2,7 @@ import { fetchEvents } from '@/lib/api';
 import type { AgentEventDto } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Check, CheckCircle, Clock, GitPullRequest, XCircle } from 'lucide-react';
+import { SectionEmptyState } from './SectionEmptyState';
 
 interface ReviewSectionProps {
   projectSlug: string;
@@ -103,13 +104,13 @@ export function ReviewSection({ projectSlug, id }: ReviewSectionProps) {
 
   if (!review) {
     return (
-      <div
-        data-testid="review-empty-state"
-        className="px-8 py-8 flex flex-col items-center justify-center gap-2 text-center"
-      >
-        <Clock size={24} className="text-fg-3 opacity-50" />
-        <p className="text-[13px] text-fg-3">Waiting for Review to run…</p>
-        <p className="text-[12px] text-fg-4">Review runs automatically after QA passes.</p>
+      <div className="px-8 py-6">
+        <SectionEmptyState
+          data-testid="review-empty-state"
+          icon={Clock}
+          title="Waiting for Review to run…"
+          subtitle="Review runs automatically after QA passes."
+        />
       </div>
     );
   }

@@ -1,7 +1,9 @@
 import { fetchEvents } from '@/lib/api';
 import type { AgentEventDto } from '@/lib/types';
+import { Clock } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { EVENT_KIND_LABEL, groupEvents } from '../lib/timeline';
+import { SectionEmptyState } from './SectionEmptyState';
 import { renderTimelineItem } from './TimelineEvents';
 
 export type { RenderItem } from '../lib/timeline';
@@ -86,8 +88,12 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
   }
   if (events.length === 0) {
     return (
-      <div data-testid="timeline-section" className="px-8 py-10 text-center text-fg-3 text-[13px]">
-        No timeline events yet.
+      <div data-testid="timeline-section" className="px-8 py-6">
+        <SectionEmptyState
+          icon={Clock}
+          title="No timeline events yet."
+          subtitle="Events are recorded as the issue moves through the pipeline."
+        />
       </div>
     );
   }

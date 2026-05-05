@@ -71,8 +71,8 @@ function AgentDecisionSummaryEvent({ event }: { event: AgentEventDto }) {
 }
 
 function AgentLogEvent({ event }: { event: AgentEventDto }) {
-  const p = event.payload as { line?: string } | null;
-  const line = p?.line ?? getPayloadStr(event.payload);
+  const p = event.payload as { line?: string; text?: string } | null;
+  const line = p?.line ?? p?.text ?? getPayloadStr(event.payload);
   return (
     <li
       data-event-kind={event.kind}
@@ -94,8 +94,8 @@ function AgentLogGroupEvent({ events }: { events: AgentEventDto[] }) {
         </summary>
         <div className="mt-1 flex flex-col gap-0.5">
           {events.map((ev) => {
-            const p = ev.payload as { line?: string } | null;
-            const line = p?.line ?? getPayloadStr(ev.payload);
+            const p = ev.payload as { line?: string; text?: string } | null;
+            const line = p?.line ?? p?.text ?? getPayloadStr(ev.payload);
             return (
               <div key={ev.id} className="font-mono text-[11.5px] text-fg-4">
                 {line}

@@ -4,6 +4,7 @@ import type { CostRowDto, WorkItemCostsDto } from '@/lib/types';
 import { formatCost, formatTokens, timeAgo } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { Coins } from 'lucide-react';
+import { SectionEmptyState } from './SectionEmptyState';
 
 interface CostsSectionProps {
   projectSlug: string;
@@ -54,13 +55,13 @@ export function CostsSection({ projectSlug, id }: CostsSectionProps) {
 
   if (!data || data.rows.length === 0) {
     return (
-      <div
-        data-testid="costs-empty-state"
-        className="px-8 py-8 flex flex-col items-center justify-center gap-2 text-center"
-      >
-        <Coins size={24} className="text-fg-3 opacity-50" />
-        <p className="text-[13px] text-fg-3">No agent runs recorded for this task yet.</p>
-        <p className="text-[12px] text-fg-4">Cost rows are written as runs complete.</p>
+      <div className="px-8 py-6">
+        <SectionEmptyState
+          data-testid="costs-empty-state"
+          icon={Coins}
+          title="No agent runs recorded for this task yet."
+          subtitle="Cost rows are written as runs complete."
+        />
       </div>
     );
   }
