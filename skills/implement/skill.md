@@ -54,6 +54,8 @@ The context contains a `<task>` block with:
 - Stay within the slice. Do not refactor surrounding code, do not add features beyond the acceptance criteria.
 - Emit: `[decision] Plan: <one-sentence summary of the change>`
 
+**Frontend gate — check before writing your plan:** Does this change touch any file under `apps/web/`? If yes, your plan MUST include a step to write `apps/web/e2e/issue-<N>.spec.ts` (step 4 below). A plan that omits this step is incomplete — schema validation will reject the output if `evidenceSpecPath` is null while `filesWritten` includes `apps/web/` paths.
+
 ### 3 — Red — failing tests first
 
 - Write the test cases that will fail with the current implementation. Cover the acceptance criteria and at least one negative path.
