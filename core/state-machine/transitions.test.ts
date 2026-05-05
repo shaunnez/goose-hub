@@ -67,6 +67,13 @@ describe('isLegalTransition — section 9.1 happy paths', () => {
     expect(isLegalTransition('factory:needs-fix', 'factory:needs-human')).toBe(true));
   it('approved → retrospecting', () =>
     expect(isLegalTransition('factory:approved', 'factory:retrospecting')).toBe(true));
+  // merge-conflict path
+  it('approved → merge-conflict', () =>
+    expect(isLegalTransition('factory:approved', 'factory:merge-conflict')).toBe(true));
+  it('merge-conflict → done', () =>
+    expect(isLegalTransition('factory:merge-conflict', 'factory:done')).toBe(true));
+  it('merge-conflict → needs-human', () =>
+    expect(isLegalTransition('factory:merge-conflict', 'factory:needs-human')).toBe(true));
   it('retrospecting → done', () =>
     expect(isLegalTransition('factory:retrospecting', 'factory:done')).toBe(true));
   it('done → archived', () =>
@@ -98,6 +105,8 @@ describe('isLegalTransition — illegal jumps', () => {
     expect(isLegalTransition('factory:dev-ready', 'factory:needs-qa')).toBe(false));
   it('approved → done (skips retrospecting)', () =>
     expect(isLegalTransition('factory:approved', 'factory:done')).toBe(false));
+  it('merge-conflict → in-progress is illegal', () =>
+    expect(isLegalTransition('factory:merge-conflict', 'factory:in-progress')).toBe(false));
   it('accepted → triaging (backwards)', () =>
     expect(isLegalTransition('factory:accepted', 'factory:triaging')).toBe(false));
 });
