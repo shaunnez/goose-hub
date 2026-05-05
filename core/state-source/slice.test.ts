@@ -229,4 +229,12 @@ describe('parseDependencies — malformed input', () => {
     const result = parseDependencies('Depends on #');
     expect(result).toEqual([]);
   });
+
+  it('rejects alphanumeric suffixes — #123abc must not match as 123', () => {
+    expect(parseDependencies('Depends on #123abc')).toEqual([]);
+  });
+
+  it('rejects cross-repo ref with alphanumeric suffix — owner/repo#12foo', () => {
+    expect(parseDependencies('Depends on shaunnez/other-repo#12foo')).toEqual([]);
+  });
 });

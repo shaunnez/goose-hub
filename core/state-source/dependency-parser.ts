@@ -7,7 +7,7 @@ export interface DependencyRef {
 const DEPENDS_ON_PREFIX = /^(?:depends[\s-]+on|deps)\s*:?\s/i;
 const BLOCKS_PREFIX = /^blocks\s*:?\s/i;
 const BLOCKED_BY_PREFIX = /^blocked[\s-]+by\s*:?\s/i;
-const REF_PATTERN = /(?:([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+))?#(\d+)/g;
+const REF_PATTERN = /(?:([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+))?#(\d+)(?!\w)/g;
 
 export function parseDependencies(body: string): DependencyRef[] {
   const results: DependencyRef[] = [];
