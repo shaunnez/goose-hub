@@ -12,7 +12,7 @@ function makeApprovedOutput(overrides = {}) {
     confidence: 0.9,
     criteriaChecks: [{ criterion: 'Schema exports are valid', status: 'met' }],
     findings: [],
-    decisionSummaries: [{ step: 'issue-read', summary: 'Issue #42 parsed: 1 criterion found' }],
+    decisionSummaries: [{ kind: 'READ', summary: 'Issue #42 parsed: 1 criterion found' }],
     ...overrides,
   };
 }
@@ -25,10 +25,17 @@ function makeNeedsFixOutput(overrides = {}) {
       { criterion: 'All tests pass', status: 'unmet', notes: 'slice.test.ts is missing' },
     ],
     findings: [
-      { severity: 'blocker', description: 'Missing slice.test.ts required by FACTORY_RULES' },
+      {
+        severity: 'blocker',
+        description: 'Missing slice.test.ts required by FACTORY_RULES',
+        // #468 — every blocker carries a disposition. Here it's `registered`
+        // because slice.test.ts gap is being filed as a follow-up.
+        disposition: 'registered',
+        dispositionRef: '#999',
+      },
     ],
     decisionSummaries: [
-      { step: 'criteria-check', summary: 'Criterion unmet: slice.test.ts absent' },
+      { kind: 'CRITERIA_CHECK', summary: 'Criterion unmet: slice.test.ts absent' },
     ],
     ...overrides,
   };
@@ -46,7 +53,7 @@ function makeNeedsHumanOutput(overrides = {}) {
       },
     ],
     decisionSummaries: [
-      { step: 'verdict', summary: 'Escalating: confidence below 0.5 on unclear criterion' },
+      { kind: 'VERDICT', summary: 'Escalating: confidence below 0.5 on unclear criterion' },
     ],
     escalationReason:
       'Confidence below 0.5: cannot determine if architectural constraint is satisfied without human input',
@@ -79,6 +86,29 @@ describe('ReviewOutputSchema — approved verdict', () => {
     expect('escalationReason' in output).toBe(false);
     const result = ReviewOutputSchema.safeParse(output);
     expect(result.success).toBe(true);
+  });
+
+  it('accepts decision summaries with valid kinds (#466)', () => {
+    const result = ReviewOutputSchema.safeParse(
+      makeApprovedOutput({
+        decisionSummaries: [
+          { kind: 'READ', summary: 'Read 6 criteria' },
+          { kind: 'DIFF_READ', summary: '5 files changed' },
+          { kind: 'CRITERIA_CHECK', summary: '6 met, 0 unmet' },
+          { kind: 'VERDICT', summary: 'approved' },
+        ],
+      }),
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects decision summaries with an invalid kind (#466)', () => {
+    const result = ReviewOutputSchema.safeParse(
+      makeApprovedOutput({
+        decisionSummaries: [{ kind: 'random-string', summary: 'x' }],
+      }),
+    );
+    expect(result.success).toBe(false);
   });
 });
 
@@ -202,10 +232,12 @@ describe('CriterionCheckSchema', () => {
 // ─── ReviewFindingSchema ──────────────────────────────────────────────────────
 
 describe('ReviewFindingSchema', () => {
-  it('accepts a blocker finding', () => {
+  it('accepts a blocker finding with disposition (fix-or-register, #468)', () => {
     const result = ReviewFindingSchema.safeParse({
       severity: 'blocker',
       description: 'Acceptance criterion unmet: slice.test.ts missing',
+      disposition: 'registered',
+      dispositionRef: '#345',
     });
     expect(result.success).toBe(true);
   });
@@ -255,7 +287,11 @@ describe('ReviewFindingSchema', () => {
   });
 
   it('rejects missing description', () => {
-    const result = ReviewFindingSchema.safeParse({ severity: 'blocker' });
+    const result = ReviewFindingSchema.safeParse({
+      severity: 'blocker',
+      disposition: 'registered',
+      dispositionRef: '#1',
+    });
     expect(result.success).toBe(false);
   });
 
@@ -266,6 +302,70 @@ describe('ReviewFindingSchema', () => {
       line: 3.5,
     });
     expect(result.success).toBe(false);
+  });
+
+  // ── #468 — fix-or-register ────────────────────────────────────────────────
+
+  it("accepts a blocker with disposition 'fixed' and a commit SHA (#468)", () => {
+    expect(
+      ReviewFindingSchema.safeParse({
+        severity: 'blocker',
+        description: 'Inline prompt — moved to skill.md',
+        disposition: 'fixed',
+        dispositionRef: 'd34db33f',
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts a blocker with disposition 'out-of-scope' and a rationale (#468)", () => {
+    expect(
+      ReviewFindingSchema.safeParse({
+        severity: 'blocker',
+        description: 'Workspace lock-file refactor needed',
+        disposition: 'out-of-scope',
+        dispositionRef: 'pre-existing infra concern; tracked in M11 milestone planning',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects a blocker without disposition (#468)', () => {
+    expect(
+      ReviewFindingSchema.safeParse({
+        severity: 'blocker',
+        description: 'Missing slice.test.ts',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects a blocker with disposition but empty dispositionRef (#468)', () => {
+    expect(
+      ReviewFindingSchema.safeParse({
+        severity: 'blocker',
+        description: 'Missing README',
+        disposition: 'registered',
+        dispositionRef: '',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('major-severity findings do not require disposition (#468)', () => {
+    expect(
+      ReviewFindingSchema.safeParse({
+        severity: 'major',
+        description: 'Naming inconsistency',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('minor-severity findings may carry an optional disposition (#468)', () => {
+    expect(
+      ReviewFindingSchema.safeParse({
+        severity: 'minor',
+        description: 'Helper could be simpler',
+        disposition: 'out-of-scope',
+        dispositionRef: 'cleanup tracked separately',
+      }).success,
+    ).toBe(true);
   });
 });
 

@@ -2,59 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   CONVERGENCE_THRESHOLD,
   DecisionPatternSchema,
-  DecisionRecordSchema,
   ImprovementKindSchema,
   LearningEntrySchema,
   QualityScoreSchema,
 } from './schemas.js';
 
 const ISO = '2026-05-03T12:00:00.000Z';
-
-describe('DecisionRecordSchema', () => {
-  const base = {
-    id: 'dr-001',
-    runId: 'run-abc',
-    personaName: 'alice',
-    role: 'developer',
-    step: 'plan',
-    context: 'Implementing feature X',
-    decision: 'Use vertical slice pattern',
-    outcome: 'success' as const,
-    confidence: 'high' as const,
-    timestamp: ISO,
-  };
-
-  it('accepts a fully-populated valid record', () => {
-    expect(DecisionRecordSchema.safeParse(base).success).toBe(true);
-  });
-
-  it('accepts all valid outcome values', () => {
-    for (const outcome of ['success', 'failure', 'partial'] as const) {
-      expect(DecisionRecordSchema.safeParse({ ...base, outcome }).success).toBe(true);
-    }
-  });
-
-  it('rejects an unknown outcome value', () => {
-    expect(DecisionRecordSchema.safeParse({ ...base, outcome: 'unknown' }).success).toBe(false);
-  });
-
-  it('rejects an unknown confidence value', () => {
-    expect(DecisionRecordSchema.safeParse({ ...base, confidence: 'very-high' }).success).toBe(
-      false,
-    );
-  });
-
-  it('rejects missing id', () => {
-    const { id: _omit, ...rest } = base;
-    expect(DecisionRecordSchema.safeParse(rest).success).toBe(false);
-  });
-
-  it('rejects non-datetime timestamp', () => {
-    expect(DecisionRecordSchema.safeParse({ ...base, timestamp: '2026-05-03' }).success).toBe(
-      false,
-    );
-  });
-});
 
 describe('LearningEntrySchema', () => {
   const base = {

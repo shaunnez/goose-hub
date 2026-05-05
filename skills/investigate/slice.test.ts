@@ -16,12 +16,12 @@ describe('investigate schema', () => {
       openQuestions: ['Does this also affect the websocket upgrade path?'],
       decisionSummaries: [
         {
-          step: 'issue-read',
+          kind: 'READ',
           summary: 'Read issue #99: auth middleware crashes on missing session token',
           evidence: 'TypeError: Cannot read properties of undefined',
         },
         {
-          step: 'root-cause-hypothesis',
+          kind: 'INSIGHT',
           summary: 'Null-check missing in auth.ts line 42',
           evidence: 'apps/server/src/middleware/auth.ts:42',
         },
@@ -36,9 +36,7 @@ describe('investigate schema', () => {
       keyFiles: [],
       confidence: 'low',
       openQuestions: ['Need runtime logs to identify the failing code path.'],
-      decisionSummaries: [
-        { step: 'issue-read', summary: 'Read issue but no clear entry point found' },
-      ],
+      decisionSummaries: [{ kind: 'READ', summary: 'Read issue but no clear entry point found' }],
     });
     expect(result.success).toBe(true);
   });
@@ -49,9 +47,7 @@ describe('investigate schema', () => {
       keyFiles: [{ path: 'core/math/ratio.ts', reason: 'Divide-by-zero bug' }],
       confidence: 'high',
       openQuestions: [],
-      decisionSummaries: [
-        { step: 'root-cause-hypothesis', summary: 'Divide-by-zero in calculateRatio()' },
-      ],
+      decisionSummaries: [{ kind: 'INSIGHT', summary: 'Divide-by-zero in calculateRatio()' }],
     });
     expect(result.success).toBe(true);
   });
@@ -62,7 +58,7 @@ describe('investigate schema', () => {
       keyFiles: [],
       confidence: 'medium',
       openQuestions: [],
-      decisionSummaries: [{ step: 'issue-read', summary: 'Read and understood the issue' }],
+      decisionSummaries: [{ kind: 'READ', summary: 'Read and understood the issue' }],
     });
     expect(result.success).toBe(true);
   });
@@ -73,7 +69,7 @@ describe('investigate schema', () => {
       keyFiles: [],
       confidence: 'very-high',
       openQuestions: [],
-      decisionSummaries: [{ step: 's', summary: 'ok' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'ok' }],
     });
     expect(result.success).toBe(false);
   });
@@ -83,7 +79,7 @@ describe('investigate schema', () => {
       keyFiles: [],
       confidence: 'low',
       openQuestions: [],
-      decisionSummaries: [{ step: 's', summary: 'ok' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'ok' }],
     });
     expect(result.success).toBe(false);
   });
@@ -93,7 +89,7 @@ describe('investigate schema', () => {
       findings: 'Some analysis.',
       keyFiles: [],
       openQuestions: [],
-      decisionSummaries: [{ step: 's', summary: 'ok' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'ok' }],
     });
     expect(result.success).toBe(false);
   });
@@ -125,7 +121,7 @@ describe('investigate schema', () => {
       keyFiles: [{ reason: 'missing path' }],
       confidence: 'low',
       openQuestions: [],
-      decisionSummaries: [{ step: 's', summary: 'ok' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'ok' }],
     });
     expect(result.success).toBe(false);
   });
@@ -136,7 +132,7 @@ describe('investigate schema', () => {
       keyFiles: [{ path: 'some/file.ts' }],
       confidence: 'low',
       openQuestions: [],
-      decisionSummaries: [{ step: 's', summary: 'ok' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'ok' }],
     });
     expect(result.success).toBe(false);
   });

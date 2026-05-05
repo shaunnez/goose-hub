@@ -56,7 +56,7 @@ Return a JSON object conforming to `AdviseOnPlanSchema`. The schema is a discrim
   "verdict": "proceed",
   "confidence": "high",
   "decisionSummaries": [
-    { "step": "review", "summary": "Plan correctly targets src/api/handlers.ts; no conflicts with existing patterns" }
+    { "kind": "VERDICT", "summary": "Plan correctly targets src/api/handlers.ts; no conflicts with existing patterns" }
   ]
 }
 ```
@@ -69,7 +69,7 @@ Return a JSON object conforming to `AdviseOnPlanSchema`. The schema is a discrim
   "confidence": "medium",
   "feedback": "The plan adds a new validation helper, but core/validation/zod.ts:42 already exposes parseZodSafe() with the same shape. Re-use the existing helper instead of duplicating.",
   "decisionSummaries": [
-    { "step": "review", "summary": "Plan duplicates existing validation helper in core/validation/zod.ts:42" }
+    { "kind": "VERDICT", "summary": "Plan duplicates existing validation helper in core/validation/zod.ts:42" }
   ]
 }
 ```
@@ -82,7 +82,7 @@ Return a JSON object conforming to `AdviseOnPlanSchema`. The schema is a discrim
   "confidence": "high",
   "reason": "Plan proposes modifying FACTORY_RULES.md to relax rule 12, but per rule 12 itself governance files are immutable from Factory PRs.",
   "decisionSummaries": [
-    { "step": "review", "summary": "Plan violates FACTORY_RULES rule 12 (governance immutability); not revisable" }
+    { "kind": "VERDICT", "summary": "Plan violates FACTORY_RULES rule 12 (governance immutability); not revisable" }
   ]
 }
 ```
@@ -94,4 +94,4 @@ Return a JSON object conforming to `AdviseOnPlanSchema`. The schema is a discrim
 - **Provide concrete `feedback`** on `revise`. "Plan has issues" is useless; "the plan adds a new ..., but file X already exposes Y" is actionable.
 - **`decisionSummaries` is required and must be ≥ 1 entry** (FACTORY_RULES rule 6). Single-sentence per entry, no chain-of-thought, no secrets.
 
-[decision] Reviewed plan and emitted typed advisor verdict
+[decision] VERDICT: Reviewed plan and emitted typed advisor verdict

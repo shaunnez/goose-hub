@@ -14,6 +14,7 @@ import {
   READ_TOOLS,
   SEARCH_TOOLS,
   countToolCalls,
+  decisionLabel,
   extractInvestigationPayload,
 } from '../lib/investigation';
 import { ConfidenceBadge } from './ConfidenceBadge';
@@ -288,8 +289,11 @@ export function InvestigationSection({
                     {initials}
                   </span>
                 )}
-                <span className="font-mono text-fg-3 w-24 shrink-0 truncate" title={s.step}>
-                  {s.step}
+                <span
+                  className="font-mono text-fg-3 w-24 shrink-0 truncate"
+                  title={decisionLabel(s)}
+                >
+                  {decisionLabel(s)}
                 </span>
                 <span className="flex-1 text-fg-2 leading-relaxed">
                   {s.summary}

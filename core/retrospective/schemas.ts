@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import { DecisionKindSchema } from '../agent-runtime/decision-types.js';
+
+export { DecisionKindSchema } from '../agent-runtime/decision-types.js';
+export type { DecisionKind } from '../agent-runtime/decision-types.js';
 
 export const ConfidenceSchema = z.enum(['low', 'medium', 'high']);
 
@@ -12,19 +16,6 @@ export const ImprovementKindSchema = z.enum([
   'workflow',
   'governance-suggestion',
 ]);
-
-export const DecisionRecordSchema = z.object({
-  id: z.string(),
-  runId: z.string(),
-  personaName: z.string(),
-  role: z.string(),
-  step: z.string(),
-  context: z.string(),
-  decision: z.string(),
-  outcome: z.enum(['success', 'failure', 'partial']),
-  confidence: ConfidenceSchema,
-  timestamp: z.string().datetime(),
-});
 
 export const LearningEntrySchema = z.object({
   id: z.string(),
@@ -58,7 +49,7 @@ export const DecisionPatternSchema = z.object({
 });
 
 export const DecisionSummarySchema = z.object({
-  step: z.string(),
+  kind: DecisionKindSchema,
   summary: z.string(),
   evidence: z.string().optional(),
 });
@@ -74,7 +65,6 @@ export const ImprovementCandidateSchema = z.object({
   proposedDiff: z.string().optional(),
 });
 
-export type DecisionRecord = z.infer<typeof DecisionRecordSchema>;
 export type LearningEntry = z.infer<typeof LearningEntrySchema>;
 export type QualityScore = z.infer<typeof QualityScoreSchema>;
 export type DecisionPattern = z.infer<typeof DecisionPatternSchema>;

@@ -64,7 +64,7 @@ describe('echo-test-holdout schema', () => {
   it('accepts valid output shape', () => {
     const result = EchoOutputSchema.safeParse({
       echo: 'hi',
-      decisionSummaries: [{ step: 'echo', summary: 'Echoed input message (holdout)' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Echoed input message (holdout)' }],
     });
     expect(result.success).toBe(true);
   });

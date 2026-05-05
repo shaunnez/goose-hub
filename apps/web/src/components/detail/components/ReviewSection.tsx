@@ -17,6 +17,8 @@ interface CriterionCheck {
   notes?: string;
 }
 
+type ReviewDisposition = 'fixed' | 'registered' | 'out-of-scope';
+
 interface ReviewFinding {
   criterion?: string;
   severity: 'blocker' | 'major' | 'minor';
@@ -24,6 +26,22 @@ interface ReviewFinding {
   suggestion?: string;
   file?: string;
   line?: number;
+  disposition?: ReviewDisposition;
+  dispositionRef?: string;
+}
+
+const DISPOSITION_COLOR: Record<ReviewDisposition, string> = {
+  fixed: 'bg-green-500/15 text-green-400',
+  registered: 'bg-sky-500/15 text-sky-400',
+  'out-of-scope': 'bg-gray-500/15 text-gray-400',
+};
+
+function formatDisposition(d: ReviewDisposition, ref?: string): string {
+  if (d === 'fixed') return 'fixed';
+  if (d === 'out-of-scope') return 'out-of-scope';
+  return ref != null && ref.length > 0
+    ? `registered ${ref.startsWith('#') ? ref : `#${ref}`}`
+    : 'registered';
 }
 
 type ReviewVerdict = 'approved' | 'needs-fix' | 'needs-human';
@@ -234,12 +252,20 @@ export function ReviewSection({ projectSlug, id }: ReviewSectionProps) {
           <div className="space-y-2">
             {review.findings.map((f) => (
               <div key={f.description} className="border border-line rounded-lg p-3 text-[12.5px]">
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span
                     className={`text-[10px] font-medium uppercase px-1.5 py-0.5 rounded ${SEVERITY_COLOR[f.severity] ?? 'bg-gray-500/15 text-gray-400'}`}
                   >
                     {f.severity}
                   </span>
+                  {f.disposition != null && (
+                    <span
+                      className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DISPOSITION_COLOR[f.disposition]}`}
+                      data-testid="review-finding-disposition"
+                    >
+                      {formatDisposition(f.disposition, f.dispositionRef)}
+                    </span>
+                  )}
                   {f.file && (
                     <span className="font-mono text-[10px] text-fg-3 bg-bg-elev-2 px-1 py-0.5 rounded">
                       {f.file}

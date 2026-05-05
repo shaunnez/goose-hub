@@ -85,7 +85,7 @@ function makeLightResult() {
     output: {
       summary: '- All good.\n- No issues.\n- Keep it up.',
       improvementCandidates: [],
-      decisionSummaries: [{ step: 'retro-complete', summary: 'Clean run' }],
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Clean run' }],
     },
     decisionSummaries: [],
     events: [],
@@ -100,7 +100,7 @@ function makeDeepResult() {
       learningEntries: [],
       decisionPatterns: [],
       improvementCandidates: [],
-      decisionSummaries: [{ step: 'retro-complete', summary: 'Deep retro complete' }],
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Deep retro complete' }],
     },
     decisionSummaries: [],
     events: [],

@@ -1,3 +1,4 @@
+import { isDecisionKind } from '@goose-hub/core/agent-runtime/decision-types.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 
 export interface SseFilterInput {
@@ -79,6 +80,7 @@ export function recordVerifyCommand(payload: VerifyCommandPayload): RecordVerify
 
 interface DecisionSummaryPayload {
   run_id?: string;
+  kind?: string;
   summary?: string;
   timestamp?: string;
   [key: string]: unknown;
@@ -116,14 +118,20 @@ export function recordToolCall(payload: ToolCallHookPayload): RecordToolCallResu
 }
 
 /**
- * Records a live decision-summary event from the PostToolUse hook (#465).
+ * Records a live decision-summary event from the PostToolUse hook (#465, #466).
  * Emits agent.decision-summary-live — distinct from the canonical agent.decision-summary
  * harvested at end-of-run so retro can reconcile duplicates.
+ *
+ * `kind` is validated against the canonical enum (#466). Unknown kinds are coerced
+ * to `UNKNOWN` so a malformed marker doesn't drop the event entirely — better
+ * to surface it under UNKNOWN than to lose visibility into the live stream.
  */
 export function recordDecisionSummary(
   payload: DecisionSummaryPayload,
 ): RecordDecisionSummaryResult {
   const runId = typeof payload.run_id === 'string' ? payload.run_id : null;
+  const normalisedKind = isDecisionKind(payload.kind) ? payload.kind : 'UNKNOWN';
+  const normalisedPayload = { ...payload, kind: normalisedKind };
   let projectId = 'unknown';
   let workItemId: string | null = null;
   if (runId != null) {
@@ -137,7 +145,7 @@ export function recordDecisionSummary(
     projectId,
     workItemId,
     kind: 'agent.decision-summary-live',
-    payload,
+    payload: normalisedPayload,
     runId,
   });
   return { ok: true };

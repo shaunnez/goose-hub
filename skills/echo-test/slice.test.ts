@@ -7,7 +7,7 @@ describe('echo-test schema', () => {
   it('accepts valid output with echo and decisionSummaries', () => {
     const result = EchoOutputSchema.safeParse({
       echo: 'hello',
-      decisionSummaries: [{ step: 'echo', summary: 'Echoed input message' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Echoed input message' }],
     });
     expect(result.success).toBe(true);
   });
@@ -25,7 +25,7 @@ describe('echo-test schema', () => {
   it('accepts evidence as optional field on DecisionSummary', () => {
     const result = EchoOutputSchema.safeParse({
       echo: 'test',
-      decisionSummaries: [{ step: 's', summary: 'ok', evidence: 'some proof' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'ok', evidence: 'some proof' }],
     });
     expect(result.success).toBe(true);
   });

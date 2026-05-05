@@ -17,7 +17,7 @@ describe('repo-match schema', () => {
   it('accepts valid output with candidates and decisionSummaries', () => {
     const result = RepoMatchOutputSchema.safeParse({
       candidates: [{ repo: 'shaunnez/goose-hub', confidence: 85, evidence: 'slug match', tier: 1 }],
-      decisionSummaries: [{ step: 'keyword-match', summary: 'Matched via slug token' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Matched via slug token' }],
     });
     expect(result.success).toBe(true);
   });
@@ -25,7 +25,7 @@ describe('repo-match schema', () => {
   it('accepts empty candidates array', () => {
     const result = RepoMatchOutputSchema.safeParse({
       candidates: [],
-      decisionSummaries: [{ step: 'keyword-match', summary: 'No matches found' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'No matches found' }],
     });
     expect(result.success).toBe(true);
   });
@@ -33,7 +33,7 @@ describe('repo-match schema', () => {
   it('rejects invalid tier value', () => {
     const result = RepoMatchOutputSchema.safeParse({
       candidates: [{ repo: 'x/y', confidence: 50, evidence: 'x', tier: 4 }],
-      decisionSummaries: [{ step: 's', summary: 'ok' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'ok' }],
     });
     expect(result.success).toBe(false);
   });
@@ -41,7 +41,7 @@ describe('repo-match schema', () => {
   it('rejects confidence out of range', () => {
     const result = RepoMatchOutputSchema.safeParse({
       candidates: [{ repo: 'x/y', confidence: 150, evidence: 'x', tier: 1 }],
-      decisionSummaries: [{ step: 's', summary: 'ok' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'ok' }],
     });
     expect(result.success).toBe(false);
   });

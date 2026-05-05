@@ -46,10 +46,10 @@ A workflow node that pauses awaiting human approval. In supervised mode, emits `
 A higher-tier model that reviews a primary agent's output in fresh context. Verdict: `proceed`/`revise`/`abort`. Never does work. Never on holdouts.
 
 **Decision Summary (canonical)**:
-`decisionSummaries: Array<{step, summary, evidence?}>` in the skill's Zod schema. Agent populates during run; orchestrator extracts from the validated terminal output and emits as `agent.decision-summary` events post-validation. Schema enforces emission. This is the canonical record.
+`decisionSummaries: Array<{kind, summary, evidence?}>` in the skill's Zod schema (#466). `kind` is constrained to a shared enum (`DecisionKindSchema` in `core/agent-runtime/decision-types.ts`); see ADR 0018. Agent populates during run; orchestrator extracts from the validated terminal output and emits as `agent.decision-summary` events post-validation. Schema enforces emission. This is the canonical record.
 
 **Decision Summary (live)**:
-Best-effort mid-run progress. Agent emits `[decision] <one sentence>` marker lines in its text turn (standardized footer in each skill's `prompt.md`). PostToolUse hook scans `transcript_path` for new markers since last fire and forwards to event stream. Reconciled against canonical record at run end.
+Best-effort mid-run progress. Agent emits `[decision] KIND: <one sentence>` marker lines in its text turn (`KIND` is an uppercase enum value). PostToolUse hook scans `transcript_path` for new markers since last fire and forwards `{kind, summary}` to the event stream; `recordDecisionSummary()` coerces unrecognised kinds to `UNKNOWN` rather than dropping the event. Reconciled against canonical record at run end.
 _Avoid_: "agent thought", "reasoning log"
 
 **Tool-Call Audit** (`agent.tool-call`):
@@ -347,6 +347,8 @@ improvement_candidate:
 ## Flagged ambiguities
 
 - **Decision-summary two-stream split**: resolved. Canonical record lives in schema field; live markers from `[decision]` footer in `prompt.md`. Tool-call audit is a third, separate stream. All three distinct concerns at distinct cadences.
+- **Decision-summary `kind` taxonomy**: resolved at M9 (#466). Free-text `step` promoted to a controlled `DecisionKindSchema` enum in `core/agent-runtime/decision-types.ts`, consumed everywhere through `core/retrospective/schemas.ts`. Live-marker grammar is `[decision] KIND: <summary>`. See `docs/adr/0018-decision-kind-taxonomy.md`.
+- **Holdout fix-or-register**: resolved at M9 (#468). Every error-severity QA finding and blocker-severity Review finding must declare `disposition` (`fixed` | `registered` | `out-of-scope`) and a matching `dispositionRef`. Shared `DispositionSchema` lives in `core/findings/disposition.ts`.
 
 ## Deferred / Open Questions (to resolve at their milestone)
 

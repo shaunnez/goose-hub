@@ -270,10 +270,11 @@ interface ImplementOutputShape {
   plan: string;
   filesWritten: { path: string; reason: string }[];
   testsWritten: { path: string; cases: number }[];
+  testsRun: { command: string; paths: string[] };
   prUrl: string;
   evidenceSpecPath: string | null;
   confidence: 'low' | 'medium' | 'high';
-  decisionSummaries: { step: string; summary: string; evidence?: string }[];
+  decisionSummaries: { kind: string; summary: string; evidence?: string }[];
 }
 
 async function runImplement(input: RunImplementInput): Promise<ImplementOutputShape> {
@@ -366,6 +367,10 @@ async function afterImplement(input: AfterImplementInput): Promise<void> {
       filesWritten: implementOutput.filesWritten.length,
       testsWritten: implementOutput.testsWritten.length,
       confidence: implementOutput.confidence,
+      // #467 — preserved verbatim so QA's workflow can pull dev's targeted
+      // test command + paths into its context as `devTestsRun` and bucket
+      // full-suite failures as inside- vs outside-targeted.
+      testsRun: implementOutput.testsRun,
     },
     runId,
   });

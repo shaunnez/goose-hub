@@ -102,7 +102,15 @@ function makeFailResult(): AgentResult {
       tierResults: {
         structural: {
           passed: false,
-          findings: [{ tier: 'structural', severity: 'error', description: 'lint error' }],
+          findings: [
+            {
+              tier: 'structural',
+              severity: 'error',
+              description: 'lint error',
+              disposition: 'fixed',
+              dispositionRef: 'abc1234',
+            },
+          ],
         },
         functional: { passed: false, findings: [] },
         regression: { passed: true, findings: [] },
@@ -330,8 +338,8 @@ describe('runQaWorkflow', () => {
         output: {
           ...(makePassResult().output as object),
           decisionSummaries: [
-            { step: 's1', summary: 'passed lint' },
-            { step: 's2', summary: 'tests passed' },
+            { kind: 'PLAN', summary: 'passed lint' },
+            { kind: 'PLAN', summary: 'tests passed' },
           ],
         },
         decisionSummaries: [],
@@ -747,6 +755,92 @@ describe('runQaWorkflow', () => {
       };
       expect(spec.context.evidenceCommentUrl).toBeUndefined();
       expect(spec.contextAllowlist).not.toContain('evidenceCommentUrl');
+    });
+  });
+
+  describe('devTestsRun propagation (#467)', () => {
+    it('reads testsRun from agent.implement-complete and passes it as devTestsRun in context', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        { id: 1, kind: 'pr.opened', payload: { worktreePath: '/wt/abc' }, createdAt: '' },
+        {
+          id: 2,
+          kind: 'agent.implement-complete',
+          payload: {
+            filesWritten: 2,
+            testsWritten: 1,
+            confidence: 'high',
+            testsRun: {
+              command: 'pnpm test --run',
+              paths: ['core/foo/bar.test.ts'],
+            },
+          },
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const spec = mockRun.mock.calls[0][0] as {
+        context: Record<string, unknown>;
+        contextAllowlist: string[];
+      };
+      expect(spec.context.devTestsRun).toEqual({
+        command: 'pnpm test --run',
+        paths: ['core/foo/bar.test.ts'],
+      });
+      expect(spec.contextAllowlist).toContain('devTestsRun');
+    });
+
+    it('omits devTestsRun from context when no agent.implement-complete event exists', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        { id: 1, kind: 'pr.opened', payload: { worktreePath: '/wt/abc' }, createdAt: '' },
+      ]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const spec = mockRun.mock.calls[0][0] as {
+        context: Record<string, unknown>;
+        contextAllowlist: string[];
+      };
+      expect(spec.context.devTestsRun).toBeUndefined();
+      expect(spec.contextAllowlist).not.toContain('devTestsRun');
+    });
+
+    it('omits devTestsRun when implement-complete payload is malformed', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        { id: 1, kind: 'pr.opened', payload: { worktreePath: '/wt/abc' }, createdAt: '' },
+        {
+          id: 2,
+          kind: 'agent.implement-complete',
+          payload: {
+            filesWritten: 2,
+            testsWritten: 1,
+            confidence: 'high',
+            testsRun: { command: 'x' },
+          },
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const spec = mockRun.mock.calls[0][0] as {
+        context: Record<string, unknown>;
+        contextAllowlist: string[];
+      };
+      expect(spec.context.devTestsRun).toBeUndefined();
     });
   });
 

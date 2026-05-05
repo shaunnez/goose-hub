@@ -1,4 +1,5 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
+import { DecisionSummarySchema } from '@goose-hub/core/retrospective/schemas.js';
 import { z } from 'zod';
 
 export const DeepRetroContextSchema = z.object({
@@ -11,7 +12,7 @@ export const DeepRetroContextSchema = z.object({
     personaId: z.string(),
     role: z.string(),
     outcome: z.enum(['success', 'failure', 'partial']),
-    decisionSummaries: z.array(z.object({ step: z.string(), summary: z.string() })),
+    decisionSummaries: z.array(DecisionSummarySchema),
     retryCount: z.number().int().min(0),
     qaFailed: z.boolean(),
   }),

@@ -76,7 +76,7 @@ function makeTriageOutput() {
     priority: 'p1',
     labels: [],
     reasoning: 'Clearly a bug.',
-    decisionSummaries: [{ step: 'type-classification', summary: 'Bug' }],
+    decisionSummaries: [{ kind: 'PLAN', summary: 'Bug' }],
   };
 }
 
@@ -85,7 +85,7 @@ function makeRepoMatchOutput() {
     candidates: [
       { repo: 'shaunnez/goose-hub', confidence: 90, evidence: 'slug match', tier: 1 as const },
     ],
-    decisionSummaries: [{ step: 'keyword-match', summary: 'Matched via slug token' }],
+    decisionSummaries: [{ kind: 'PLAN', summary: 'Matched via slug token' }],
   };
 }
 
@@ -450,8 +450,8 @@ describe('runTriageBatch decision-summary events (#206)', () => {
 
     const triageOut = makeTriageOutput();
     triageOut.decisionSummaries = [
-      { step: 'type-classification', summary: 'Bug — code error in service' },
-      { step: 'priority-classification', summary: 'p1 — blocks production' },
+      { kind: 'PLAN', summary: 'Bug — code error in service' },
+      { kind: 'ESCALATE', summary: 'p1 — blocks production' },
     ];
 
     mockRuntime.run
@@ -476,9 +476,7 @@ describe('runTriageBatch decision-summary events (#206)', () => {
         e.kind === 'agent.decision-summary' && (e.payload as { skill?: string }).skill === 'triage',
     );
     expect(triageDecisionEvents).toHaveLength(2);
-    expect((triageDecisionEvents[0][0].payload as { step: string }).step).toBe(
-      'type-classification',
-    );
+    expect((triageDecisionEvents[0][0].payload as { kind: string }).kind).toBe('PLAN');
   });
 
   it('emits agent.decision-summary events for repo-match decisionSummaries', async () => {
@@ -509,7 +507,7 @@ describe('runTriageBatch decision-summary events (#206)', () => {
           (e.payload as { skill?: string }).skill === 'repo-match',
       );
     expect(repoMatchDecisionEvents).toHaveLength(1);
-    expect((repoMatchDecisionEvents[0][0].payload as { step: string }).step).toBe('keyword-match');
+    expect((repoMatchDecisionEvents[0][0].payload as { kind: string }).kind).toBe('PLAN');
   });
 
   it('emits agent.run-failed when repo-match output fails to parse', async () => {

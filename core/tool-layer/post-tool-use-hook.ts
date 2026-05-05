@@ -48,21 +48,38 @@ async function main() {
     writeFileSync(cursorFile, String(fileSize), 'utf8');
   } catch { process.exit(0); }
 
-  const DECISION_RE = /^\\[decision\\]\\s+(.+)$/gm;
+  // Live-marker grammar (#466). Single combined regex so typed and legacy
+  // markers are emitted in transcript order — splitting them across two
+  // passes would re-order mixed-format chunks (typed before legacy regardless
+  // of source position) and break timeline / retro sequence analysis.
+  //
+  //   [decision] KIND: <summary>   ← typed:  group 1 = KIND, group 2 = summary
+  //   [decision] <free text>       ← legacy: group 3 = full summary, kind=UNKNOWN
+  //
+  // Spacing after the colon is tolerant (\\s*) so a missing space after the
+  // colon doesn't silently drop the marker. KIND is uppercase A-Z and
+  // underscores; the server validates it against the canonical enum and
+  // coerces unknown values to UNKNOWN.
+  const DECISION_RE = /^\\[decision\\]\\s+(?:([A-Z_]+):\\s*(.+)|(.+))$/gm;
+
   const markers = [];
   let m;
   while ((m = DECISION_RE.exec(newContent)) !== null) {
-    markers.push(m[1].trim());
+    if (m[1] != null) {
+      markers.push({ kind: m[1].trim(), summary: m[2].trim() });
+    } else {
+      markers.push({ kind: 'UNKNOWN', summary: m[3].trim() });
+    }
   }
 
   if (markers.length === 0) process.exit(0);
 
-  for (const summary of markers) {
+  for (const { kind, summary } of markers) {
     try {
       await fetch(\`http://localhost:\${serverPort}/events/decision-summary\`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ run_id: runId, summary, timestamp: new Date().toISOString() }),
+        body: JSON.stringify({ run_id: runId, kind, summary, timestamp: new Date().toISOString() }),
         signal: AbortSignal.timeout(500),
       }).catch(() => {});
     } catch { /* best-effort */ }

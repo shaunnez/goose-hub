@@ -55,11 +55,11 @@ Return a JSON object conforming to `SpecAuthorSchema`:
   "screenshotsTaken": 4,
   "decisionSummaries": [
     {
-      "step": "explore",
+      "kind": "READ",
       "summary": "Walked the slice scenario via playwright-mcp and captured 4 screenshots at the key transitions"
     },
     {
-      "step": "author",
+      "kind": "GREEN",
       "summary": "Wrote spec at apps/web/e2e/issue-235.spec.ts with 3 expect assertions"
     }
   ]
@@ -68,4 +68,4 @@ Return a JSON object conforming to `SpecAuthorSchema`:
 
 `specPath` must be workspace-relative (start with `apps/web/e2e/`). `screenshotsTaken` must be a non-negative integer. `decisionSummaries` requires at least one entry.
 
-[decision] Authored Playwright spec for slice and captured exploration evidence
+[decision] VERDICT: Authored Playwright spec for slice and captured exploration evidence

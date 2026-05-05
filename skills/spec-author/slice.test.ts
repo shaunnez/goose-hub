@@ -12,11 +12,11 @@ describe('spec-author schema', () => {
       screenshotsTaken: 4,
       decisionSummaries: [
         {
-          step: 'explore',
+          kind: 'READ',
           summary: 'Walked the slice scenario via playwright-mcp and captured 4 screenshots',
         },
         {
-          step: 'author',
+          kind: 'GREEN',
           summary: 'Wrote spec at apps/web/e2e/issue-235.spec.ts with 3 expect assertions',
         },
       ],
@@ -30,7 +30,7 @@ describe('spec-author schema', () => {
       planSummary: 'Asserts API contract via page.evaluate; no visual capture.',
       screenshotsTaken: 0,
       decisionSummaries: [
-        { step: 'author', summary: 'Wrote API-contract spec without screenshots' },
+        { kind: 'GREEN', summary: 'Wrote API-contract spec without screenshots' },
       ],
     });
     expect(result.success).toBe(true);
@@ -42,7 +42,7 @@ describe('spec-author schema', () => {
       planSummary: 'Spec.',
       screenshotsTaken: 1,
       decisionSummaries: [
-        { step: 'explore', summary: 'walked it', evidence: 'screenshot at /tmp/exp.png' },
+        { kind: 'READ', summary: 'walked it', evidence: 'screenshot at /tmp/exp.png' },
       ],
     });
     expect(result.success).toBe(true);
@@ -52,7 +52,7 @@ describe('spec-author schema', () => {
     const result = SpecAuthorSchema.safeParse({
       planSummary: 'Some summary.',
       screenshotsTaken: 2,
-      decisionSummaries: [{ step: 'a', summary: 'b' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'b' }],
     });
     expect(result.success).toBe(false);
   });
@@ -61,7 +61,7 @@ describe('spec-author schema', () => {
     const result = SpecAuthorSchema.safeParse({
       specPath: 'apps/web/e2e/x.spec.ts',
       screenshotsTaken: 2,
-      decisionSummaries: [{ step: 'a', summary: 'b' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'b' }],
     });
     expect(result.success).toBe(false);
   });
@@ -71,7 +71,7 @@ describe('spec-author schema', () => {
       specPath: 'apps/web/e2e/x.spec.ts',
       planSummary: 'p',
       screenshotsTaken: -1,
-      decisionSummaries: [{ step: 'a', summary: 'b' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'b' }],
     });
     expect(result.success).toBe(false);
   });
@@ -81,7 +81,7 @@ describe('spec-author schema', () => {
       specPath: 'apps/web/e2e/x.spec.ts',
       planSummary: 'p',
       screenshotsTaken: 2.5,
-      decisionSummaries: [{ step: 'a', summary: 'b' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'b' }],
     });
     expect(result.success).toBe(false);
   });
@@ -101,7 +101,7 @@ describe('spec-author schema', () => {
       specPath: 'apps/web/e2e/x.spec.ts',
       planSummary: 'p',
       screenshotsTaken: 0,
-      decisionSummaries: [{ step: 'a' }],
+      decisionSummaries: [{ kind: 'PLAN' }],
     });
     expect(missingSummary.success).toBe(false);
 

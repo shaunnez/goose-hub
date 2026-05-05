@@ -20,7 +20,7 @@ test.describe('M9 retrospective tab', () => {
       output: {
         summary: '- All tests pass.\n- No issues.\n- Keep it up.',
         improvementCandidates: [],
-        decisionSummaries: [{ step: 'retro-complete', summary: 'Clean run' }],
+        decisionSummaries: [{ kind: 'VERDICT', summary: 'Clean run' }],
       },
     },
     runId: 'run-abc',

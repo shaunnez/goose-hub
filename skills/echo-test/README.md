@@ -20,5 +20,5 @@ goose run-agent --skill=echo-test --input='{"message":"hello world"}'
 
 Expected output:
 ```json
-{ "echo": "hello world", "decisionSummaries": [{ "step": "echo", "summary": "Echoed input message" }] }
+{ "echo": "hello world", "decisionSummaries": [{ "kind": "PLAN", "summary": "Echoed input message" }] }
 ```

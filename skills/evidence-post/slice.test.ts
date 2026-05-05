@@ -24,8 +24,8 @@ describe('evidence-post schema', () => {
       commentUrl: 'https://github.com/shaunnez/goose-hub/issues/233#issuecomment-9876543210',
       commitSha: 'abc1234def5678901234567890abcdef12345678',
       decisionSummaries: [
-        { step: 'capture', summary: 'Ran spec; captured 2 screenshots and a GIF' },
-        { step: 'post', summary: 'Posted comment on issue #233 with SHA-pinned URLs' },
+        { kind: 'PLAN', summary: 'Ran spec; captured 2 screenshots and a GIF' },
+        { kind: 'COMMIT', summary: 'Posted comment on issue #233 with SHA-pinned URLs' },
       ],
     });
     expect(result.success).toBe(true);
@@ -37,7 +37,7 @@ describe('evidence-post schema', () => {
       gifPath: null,
       commentUrl: 'https://github.com/shaunnez/goose-hub/issues/233#issuecomment-1',
       commitSha: 'abc1234',
-      decisionSummaries: [{ step: 'capture', summary: 'Captured screenshot only' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Captured screenshot only' }],
     });
     expect(result.success).toBe(true);
   });
@@ -48,7 +48,7 @@ describe('evidence-post schema', () => {
       gifPath: 'evidence/issue-233/walkthrough.gif',
       commentUrl: 'https://github.com/shaunnez/goose-hub/issues/233#issuecomment-1',
       commitSha: 'abc1234',
-      decisionSummaries: [{ step: 'capture', summary: 'GIF-only capture' }],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'GIF-only capture' }],
     });
     expect(result.success).toBe(true);
   });
@@ -59,7 +59,7 @@ describe('evidence-post schema', () => {
       gifPath: null,
       commentUrl: 'https://github.com/shaunnez/goose-hub/issues/1#issuecomment-1',
       commitSha: 'abc1234',
-      decisionSummaries: [{ step: 'post', summary: 'posted' }],
+      decisionSummaries: [{ kind: 'COMMIT', summary: 'posted' }],
     });
     expect(result.success).toBe(true);
   });
@@ -70,7 +70,7 @@ describe('evidence-post schema', () => {
       gifPath: null,
       commentUrl: 'https://github.com/shaunnez/goose-hub/issues/1#issuecomment-1',
       commitSha: 'abc12',
-      decisionSummaries: [{ step: 'post', summary: 'posted' }],
+      decisionSummaries: [{ kind: 'COMMIT', summary: 'posted' }],
     });
     expect(result.success).toBe(false);
   });
@@ -81,7 +81,7 @@ describe('evidence-post schema', () => {
       gifPath: null,
       commentUrl: 'not-a-url',
       commitSha: 'abc1234',
-      decisionSummaries: [{ step: 'post', summary: 'posted' }],
+      decisionSummaries: [{ kind: 'COMMIT', summary: 'posted' }],
     });
     expect(result.success).toBe(false);
   });
@@ -103,7 +103,7 @@ describe('evidence-post schema', () => {
       gifPath: null,
       commentUrl: 'https://github.com/shaunnez/goose-hub/issues/1#issuecomment-1',
       commitSha: 'abc1234',
-      decisionSummaries: [{ step: 'post', summary: 'posted' }],
+      decisionSummaries: [{ kind: 'COMMIT', summary: 'posted' }],
     });
     expect(result.success).toBe(false);
   });
@@ -114,7 +114,7 @@ describe('evidence-post schema', () => {
       gifPath: null,
       commentUrl: 'https://github.com/shaunnez/goose-hub/issues/1#issuecomment-1',
       commitSha: 'abc1234',
-      decisionSummaries: [{ step: 'post', summary: 'posted' }],
+      decisionSummaries: [{ kind: 'COMMIT', summary: 'posted' }],
     });
     expect(result.success).toBe(false);
   });
@@ -127,7 +127,7 @@ describe('evidence-post schema', () => {
       gifPath: null,
       commentUrl: 'https://github.com/shaunnez/goose-hub/issues/1#issuecomment-1',
       commitSha: 'abc1234',
-      decisionSummaries: [{ step: 'post', summary: 'posted' }],
+      decisionSummaries: [{ kind: 'COMMIT', summary: 'posted' }],
     });
     expect(result.success).toBe(false);
   });

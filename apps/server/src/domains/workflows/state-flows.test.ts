@@ -118,7 +118,7 @@ function makeTriageOutput(type: 'feature' | 'bug' | 'research' = 'feature') {
     priority: 'p2',
     labels: [],
     reasoning: `Integration test: ${type}`,
-    decisionSummaries: [{ step: 'type-classification', summary: `Classified as ${type}` }],
+    decisionSummaries: [{ kind: 'PLAN', summary: `Classified as ${type}` }],
   };
 }
 
@@ -134,10 +134,11 @@ function makeImplementOutput() {
     plan: 'Integration test plan',
     filesWritten: [{ path: 'test.ts', reason: 'integration fixture' }],
     testsWritten: [],
+    testsRun: { command: 'pnpm test --run', paths: [] },
     prUrl: 'https://github.com/test/pull/99',
     evidenceSpecPath: null,
     confidence: 'high',
-    decisionSummaries: [{ step: 'implement', summary: 'Mock implementation' }],
+    decisionSummaries: [{ kind: 'GREEN', summary: 'Mock implementation' }],
   };
 }
 
@@ -147,7 +148,7 @@ function makeInvestigateOutput() {
     keyFiles: [],
     confidence: 'high',
     openQuestions: [],
-    decisionSummaries: [{ step: 'investigate', summary: 'Mock investigation' }],
+    decisionSummaries: [{ kind: 'INSIGHT', summary: 'Mock investigation' }],
   };
 }
 
@@ -182,7 +183,7 @@ function makeQaOutput() {
       cyclomaticComplexity: 5,
     },
     findings: [],
-    decisionSummaries: [{ step: 'qa', summary: 'Mock QA pass' }],
+    decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock QA pass' }],
   };
 }
 
@@ -192,7 +193,7 @@ function makeReviewOutput() {
     confidence: 0.95,
     criteriaChecks: [],
     findings: [],
-    decisionSummaries: [{ step: 'review', summary: 'Mock review approval' }],
+    decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock review approval' }],
   };
 }
 
@@ -201,7 +202,7 @@ function makeAdvisorOutput(verdict: 'proceed' | 'revise' | 'abort') {
     return {
       verdict: 'proceed' as const,
       confidence: 'high' as const,
-      decisionSummaries: [{ step: 'advise', summary: 'Advisor: proceed' }],
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Advisor: proceed' }],
     };
   }
   if (verdict === 'revise') {
@@ -209,14 +210,14 @@ function makeAdvisorOutput(verdict: 'proceed' | 'revise' | 'abort') {
       verdict: 'revise' as const,
       feedback: 'Revise the approach for integration test',
       confidence: 'medium' as const,
-      decisionSummaries: [{ step: 'advise', summary: 'Advisor: revise' }],
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Advisor: revise' }],
     };
   }
   return {
     verdict: 'abort' as const,
     reason: 'Plan is out of scope for integration test',
     confidence: 'low' as const,
-    decisionSummaries: [{ step: 'advise', summary: 'Advisor: abort' }],
+    decisionSummaries: [{ kind: 'VERDICT', summary: 'Advisor: abort' }],
   };
 }
 

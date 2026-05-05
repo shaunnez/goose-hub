@@ -101,4 +101,25 @@ describe('recordDecisionSummary', () => {
     const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
     expect(arg.runId).toBeNull();
   });
+
+  it('preserves a recognised kind on the event payload (#466)', () => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    recordDecisionSummary({ run_id: 'run-1', kind: 'PLAN', summary: 'plan something' });
+    const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
+    expect((arg.payload as { kind: string }).kind).toBe('PLAN');
+  });
+
+  it('coerces an unrecognised kind to UNKNOWN rather than dropping the event (#466)', () => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    recordDecisionSummary({ run_id: 'run-2', kind: 'made-up', summary: 'still gets through' });
+    const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
+    expect((arg.payload as { kind: string }).kind).toBe('UNKNOWN');
+  });
+
+  it('coerces a missing kind to UNKNOWN (#466)', () => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    recordDecisionSummary({ run_id: 'run-3', summary: 'no kind at all' });
+    const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
+    expect((arg.payload as { kind: string }).kind).toBe('UNKNOWN');
+  });
 });

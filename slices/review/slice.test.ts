@@ -86,7 +86,14 @@ function makeNeedsFixResult(): AgentResult {
       verdict: 'needs-fix',
       confidence: 0.7,
       criteriaChecks: [{ criterion: 'Add foo', status: 'unmet' }],
-      findings: [{ severity: 'blocker', description: 'not implemented' }],
+      findings: [
+        {
+          severity: 'blocker',
+          description: 'not implemented',
+          disposition: 'registered',
+          dispositionRef: '#999',
+        },
+      ],
       decisionSummaries: [],
     },
     decisionSummaries: [],
@@ -202,8 +209,8 @@ describe('runReviewWorkflow', () => {
           criteriaChecks: [{ criterion: 'Add foo', status: 'met' }],
           findings: [],
           decisionSummaries: [
-            { step: 'check-1', summary: 'criteria met' },
-            { step: 'check-2', summary: 'no regressions' },
+            { kind: 'CRITERIA_CHECK', summary: 'criteria met' },
+            { kind: 'CRITERIA_CHECK', summary: 'no regressions' },
           ],
         },
         decisionSummaries: [],
@@ -250,8 +257,18 @@ describe('runReviewWorkflow', () => {
           confidence: 0.5,
           criteriaChecks: [{ criterion: 'Add foo', status: 'unmet' }],
           findings: [
-            { severity: 'blocker', description: 'issue 1' },
-            { severity: 'blocker', description: 'issue 2' },
+            {
+              severity: 'blocker',
+              description: 'issue 1',
+              disposition: 'registered',
+              dispositionRef: '#1',
+            },
+            {
+              severity: 'blocker',
+              description: 'issue 2',
+              disposition: 'registered',
+              dispositionRef: '#2',
+            },
             { severity: 'major', description: 'issue 3' },
             { severity: 'major', description: 'issue 4' },
             { severity: 'minor', description: 'issue 5' },

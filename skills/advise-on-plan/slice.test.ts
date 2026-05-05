@@ -8,7 +8,7 @@ describe('advise-on-plan output schema', () => {
     const result = AdviseOnPlanSchema.safeParse({
       verdict: 'proceed',
       confidence: 'high',
-      decisionSummaries: [{ step: 'review', summary: 'Plan looks sound; no conflicts' }],
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Plan looks sound; no conflicts' }],
     });
     expect(result.success).toBe(true);
   });
@@ -18,7 +18,7 @@ describe('advise-on-plan output schema', () => {
       verdict: 'revise',
       confidence: 'medium',
       feedback: 'Re-use core/validation/zod.ts:42 instead of adding a new helper',
-      decisionSummaries: [{ step: 'review', summary: 'Plan duplicates existing helper' }],
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Plan duplicates existing helper' }],
     });
     expect(result.success).toBe(true);
   });
@@ -28,7 +28,7 @@ describe('advise-on-plan output schema', () => {
       verdict: 'abort',
       confidence: 'high',
       reason: 'Plan modifies FACTORY_RULES.md, violating rule 12',
-      decisionSummaries: [{ step: 'review', summary: 'Plan violates governance immutability' }],
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Plan violates governance immutability' }],
     });
     expect(result.success).toBe(true);
   });
@@ -37,7 +37,7 @@ describe('advise-on-plan output schema', () => {
     const result = AdviseOnPlanSchema.safeParse({
       verdict: 'revise',
       confidence: 'medium',
-      decisionSummaries: [{ step: 'review', summary: 'something' }],
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'something' }],
     });
     expect(result.success).toBe(false);
   });
@@ -47,7 +47,7 @@ describe('advise-on-plan output schema', () => {
       verdict: 'revise',
       confidence: 'medium',
       feedback: '',
-      decisionSummaries: [{ step: 'review', summary: 'something' }],
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'something' }],
     });
     expect(result.success).toBe(false);
   });
@@ -56,7 +56,7 @@ describe('advise-on-plan output schema', () => {
     const result = AdviseOnPlanSchema.safeParse({
       verdict: 'abort',
       confidence: 'high',
-      decisionSummaries: [{ step: 'review', summary: 'something' }],
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'something' }],
     });
     expect(result.success).toBe(false);
   });
@@ -66,7 +66,7 @@ describe('advise-on-plan output schema', () => {
       verdict: 'abort',
       confidence: 'high',
       reason: '',
-      decisionSummaries: [{ step: 'review', summary: 'something' }],
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'something' }],
     });
     expect(result.success).toBe(false);
   });
@@ -77,7 +77,7 @@ describe('advise-on-plan output schema', () => {
       verdict: 'proceed',
       confidence: 'high',
       feedback: 'extra field that should not be present',
-      decisionSummaries: [{ step: 'review', summary: 'something' }],
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'something' }],
     });
     // Zod discriminated unions are non-strict by default — extra fields pass.
     // What we *must* reject is `verdict` not being one of the three literals.
@@ -88,7 +88,7 @@ describe('advise-on-plan output schema', () => {
     const result = AdviseOnPlanSchema.safeParse({
       verdict: 'approved-with-notes',
       confidence: 'high',
-      decisionSummaries: [{ step: 'review', summary: 'x' }],
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'x' }],
     });
     expect(result.success).toBe(false);
   });
@@ -106,7 +106,7 @@ describe('advise-on-plan output schema', () => {
     const result = AdviseOnPlanSchema.safeParse({
       verdict: 'proceed',
       confidence: 'mid',
-      decisionSummaries: [{ step: 'review', summary: 'x' }],
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'x' }],
     });
     expect(result.success).toBe(false);
   });

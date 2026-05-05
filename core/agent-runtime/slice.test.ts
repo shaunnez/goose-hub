@@ -58,14 +58,14 @@ vi.mock('../cost/repository.js', () => ({ recordCost: vi.fn() }));
 // ─── interface types ──────────────────────────────────────────────────────────
 
 describe('interface types', () => {
-  it('DecisionSummary has step, summary, and optional evidence', () => {
+  it('DecisionSummary has kind, summary, and optional evidence', () => {
     const full: DecisionSummary = {
-      step: 'search',
+      kind: 'READ',
       summary: 'Found 3 results',
       evidence: 'grep output',
     };
-    const minimal: DecisionSummary = { step: 'search', summary: 'Found 3 results' };
-    expect(full.step).toBe('search');
+    const minimal: DecisionSummary = { kind: 'READ', summary: 'Found 3 results' };
+    expect(full.kind).toBe('READ');
     expect(minimal.evidence).toBeUndefined();
   });
 
@@ -105,7 +105,7 @@ describe('interface types', () => {
     const mockRuntime: AgentRuntime = {
       run: async (_spec: AgentSpec): Promise<AgentResult> => ({
         output: { echo: 'hello' },
-        decisionSummaries: [{ step: 'echo', summary: 'Echoed input message' }],
+        decisionSummaries: [{ kind: 'PLAN', summary: 'Echoed input message' }],
         events: [],
       }),
     };
@@ -370,11 +370,14 @@ describe('assembleSpawnContext — holdout enforcement', () => {
 describe('validateOutput', () => {
   const EchoSchema = z.object({
     echo: z.string(),
-    decisionSummaries: z.array(z.object({ step: z.string(), summary: z.string() })).min(1),
+    decisionSummaries: z.array(z.object({ kind: z.string(), summary: z.string() })).min(1),
   });
 
   it('returns typed output for valid JSON matching schema', () => {
-    const raw = JSON.stringify({ echo: 'hello', decisionSummaries: [{ step: 'a', summary: 'b' }] });
+    const raw = JSON.stringify({
+      echo: 'hello',
+      decisionSummaries: [{ kind: 'PLAN', summary: 'b' }],
+    });
     const result = validateOutput(raw, EchoSchema);
     expect(result.echo).toBe('hello');
     expect(result.decisionSummaries).toHaveLength(1);
@@ -418,7 +421,7 @@ describe('toJsonSchema', () => {
   });
 
   it('handles discriminated union schema (echo-test shape)', () => {
-    const DecisionSummaryZ = z.object({ step: z.string(), summary: z.string() });
+    const DecisionSummaryZ = z.object({ kind: z.string(), summary: z.string() });
     const EchoOutput = z.object({
       echo: z.string(),
       decisionSummaries: z.array(DecisionSummaryZ).min(1),
@@ -792,8 +795,8 @@ describe('adviseOnPlan (#182)', () => {
           verdict: 'proceed',
           confidence: 'high',
           decisionSummaries: [
-            { step: 'review', summary: 'Plan looks sound; no conflicts' },
-            { step: 'cross-check', summary: 'No file collisions in target dir' },
+            { kind: 'VERDICT', summary: 'Plan looks sound; no conflicts' },
+            { kind: 'STRUCTURAL_CHECK', summary: 'No file collisions in target dir' },
           ],
         },
         decisionSummaries: [],
@@ -840,7 +843,7 @@ describe('adviseOnPlan (#182)', () => {
           verdict: 'revise',
           confidence: 'medium',
           // feedback intentionally missing — schema must reject
-          decisionSummaries: [{ step: 'r', summary: 's' }],
+          decisionSummaries: [{ kind: 'PLAN', summary: 's' }],
         },
         decisionSummaries: [],
         events: [],
@@ -855,7 +858,7 @@ describe('adviseOnPlan (#182)', () => {
       output: {
         verdict: 'proceed',
         confidence: 'high',
-        decisionSummaries: [{ step: 'r', summary: 's' }],
+        decisionSummaries: [{ kind: 'PLAN', summary: 's' }],
       },
       decisionSummaries: [],
       events: [],

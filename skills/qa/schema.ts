@@ -1,22 +1,50 @@
+import { DispositionSchema } from '@goose-hub/core/findings/disposition.js';
+import { DecisionSummarySchema } from '@goose-hub/core/retrospective/schemas.js';
 import { z } from 'zod';
 
-export const DecisionSummarySchema = z.object({
-  step: z.string(),
-  summary: z.string(),
-  evidence: z.string().optional(),
-});
+export { DecisionSummarySchema };
+export { DispositionSchema };
 
-export const FindingSchema = z.object({
-  tier: z
-    .string()
-    .transform((s) => s.toLowerCase())
-    .pipe(z.enum(['structural', 'functional', 'regression'])),
-  severity: z.enum(['error', 'warning', 'info']),
-  file: z.string().nullable().optional(),
-  line: z.number().int().nullable().optional(),
-  description: z.string(),
-  suggestion: z.string().optional(),
-});
+/**
+ * QA finding shape (#468). Disposition is required when severity is `error`
+ * (the QA-side fix-or-register rule). The shared `DispositionSchema` lives
+ * in `core/findings/disposition.ts` so QA and Review can't drift.
+ */
+export const FindingSchema = z
+  .object({
+    tier: z
+      .string()
+      .transform((s) => s.toLowerCase())
+      .pipe(z.enum(['structural', 'functional', 'regression'])),
+    severity: z.enum(['error', 'warning', 'info']),
+    file: z.string().nullable().optional(),
+    line: z.number().int().nullable().optional(),
+    description: z.string(),
+    suggestion: z.string().optional(),
+    /** Disposition required when severity === 'error' (#468) */
+    disposition: DispositionSchema.optional(),
+    /** Commit SHA, issue number, or rationale matching the disposition (#468) */
+    dispositionRef: z.string().min(1).optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.severity === 'error') {
+      if (val.disposition == null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'error-severity findings must declare a disposition (fix-or-register, #468)',
+          path: ['disposition'],
+        });
+      }
+      if (val.dispositionRef == null || val.dispositionRef.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'error-severity findings must include dispositionRef (commit SHA, issue #, or rationale, #468)',
+          path: ['dispositionRef'],
+        });
+      }
+    }
+  });
 
 export const TierResultSchema = z.object({
   passed: z.boolean(),
@@ -113,6 +141,7 @@ export const QaOutputSchema = z.object({
   testRun: TestRunSchema.optional(),
 });
 
+export type { Disposition } from '@goose-hub/core/findings/disposition.js';
 export type DecisionSummary = z.infer<typeof DecisionSummarySchema>;
 export type Finding = z.infer<typeof FindingSchema>;
 export type TierResult = z.infer<typeof TierResultSchema>;

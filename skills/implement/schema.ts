@@ -1,10 +1,7 @@
+import { DecisionSummarySchema } from '@goose-hub/core/retrospective/schemas.js';
 import { z } from 'zod';
 
-export const DecisionSummarySchema = z.object({
-  step: z.string(),
-  summary: z.string(),
-  evidence: z.string().optional(),
-});
+export { DecisionSummarySchema };
 
 const ConfidenceSchema = z.enum(['low', 'medium', 'high']);
 
@@ -16,6 +13,22 @@ export const FileWrittenSchema = z.object({
 export const TestWrittenSchema = z.object({
   path: z.string().describe('Workspace-relative path to the test file'),
   cases: z.number().int().min(0).describe('Number of test cases added / modified in this file'),
+});
+
+/**
+ * Records the targeted test command the developer actually ran (#467).
+ * Dev runs `<test_command> --run <paths…>` rather than the full suite — QA
+ * runs the full suite and cross-references this against its own results
+ * to flag failures outside the dev-touched surface as high-signal regressions.
+ */
+export const TestsRunSchema = z.object({
+  command: z
+    .string()
+    .min(1)
+    .describe('The test command the developer actually invoked (without file path arguments)'),
+  paths: z
+    .array(z.string().min(1))
+    .describe('Workspace-relative test file paths passed to the command'),
 });
 
 export const ImplementSchema = z
@@ -30,6 +43,9 @@ export const ImplementSchema = z
       .describe(
         'Test files written or modified — empty array is valid for chore PRs without tests',
       ),
+    testsRun: TestsRunSchema.describe(
+      'The targeted test command the developer ran, plus the file paths passed to it',
+    ),
     prUrl: z
       .string()
       .url()
@@ -57,6 +73,19 @@ export const ImplementSchema = z
         path: ['evidenceSpecPath'],
       });
     }
+    // #467 — empty testsRun.paths is only valid when no test files were
+    // written. A non-empty testsWritten with `paths: []` means dev wrote
+    // tests but reported running none — that's a mis-shaped record, not a
+    // valid chore PR.
+    if (val.testsWritten.length > 0 && val.testsRun.paths.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'testsRun.paths must be non-empty when testsWritten is non-empty (record what dev actually ran, #467)',
+        path: ['testsRun', 'paths'],
+      });
+    }
   });
 
+export type TestsRun = z.infer<typeof TestsRunSchema>;
 export type ImplementOutput = z.infer<typeof ImplementSchema>;

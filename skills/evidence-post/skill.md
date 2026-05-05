@@ -147,12 +147,12 @@ Return a JSON object conforming to `EvidencePostSchema`:
   "commentUrl": "https://github.com/shaunnez/goose-hub/issues/233#issuecomment-9876543210",
   "commitSha": "abc1234def5678901234567890abcdef12345678",
   "decisionSummaries": [
-    { "step": "capture", "summary": "Ran apps/web/e2e/issue-233.spec.ts; captured 2 screenshots and a GIF walkthrough" },
-    { "step": "post", "summary": "Posted comment on issue #233 with SHA-pinned image URLs and GIF" }
+    { "kind": "PLAN", "summary": "Ran apps/web/e2e/issue-233.spec.ts; captured 2 screenshots and a GIF walkthrough" },
+    { "kind": "COMMIT", "summary": "Posted comment on issue #233 with SHA-pinned image URLs and GIF" }
   ]
 }
 ```
 
 Paths in the schema are workspace-relative. URLs in the rendered comment are absolute and SHA-pinned.
 
-[decision] Captured Playwright evidence for slice and posted SHA-pinned comment to linked issue
+[decision] VERDICT: Captured Playwright evidence for slice and posted SHA-pinned comment to linked issue

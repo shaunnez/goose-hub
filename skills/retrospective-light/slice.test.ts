@@ -17,7 +17,7 @@ const baseValid = {
       confidence: 'high',
     },
   ],
-  decisionSummaries: [{ step: 'tier-select', summary: 'Selected light retro — no deep triggers' }],
+  decisionSummaries: [{ kind: 'PLAN', summary: 'Selected light retro — no deep triggers' }],
 };
 
 describe('LightRetroSchema', () => {

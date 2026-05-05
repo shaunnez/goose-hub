@@ -60,7 +60,7 @@ Steps:
 3. If the PR introduces or modifies Zod schemas, verify that the schema exports are valid and correctly typed.
 4. Look for obvious anti-patterns in the diff: inline prompts instead of skill.md files, imports between slices, missing `README.md` or `slice.test.ts` for new slices.
 
-Emit: `[decision] Structural tier <passed|failed>: <one-sentence summary>`
+Emit: `[decision] STRUCTURAL_CHECK: <one-sentence summary including passed|failed>`
 
 Record tier result with:
 - `passed`: true if no errors found, false otherwise
@@ -72,15 +72,18 @@ Record tier result with:
 
 Purpose: Catch behavior regressions and missing test coverage.
 
+**QA always runs the full suite.** The dev role only runs targeted tests for the surface it touched (#467). The workflow pre-runs the full `testCommand` and attaches results as `testRun` in your context — even when `testRun` is present, your job is to grade the full result. If you re-run, run the full command, not just dev's targeted set. Cross-reference `testsRun.paths` from the dev output (when present in context) against the full-suite results: failures **outside** dev's targeted set are the high-signal regressions and should be recorded as `error`-severity findings.
+
 Steps:
-1. If `testRun` is present in your context, use it as the test result — do not re-run `testCommand`. If `testRun` is absent or `null`, run `testCommand` yourself; if `sliceTests` are provided, run those first for targeted feedback.
+1. If `testRun` is present in your context, use it as the test result — do not re-run `testCommand`. If `testRun` is absent or `null`, run the full `testCommand` yourself; if `sliceTests` are provided, run those first for targeted feedback before the full suite.
 2. Check test output (or `testRun.suites`) for failures, errors, and skipped tests.
    **Known worktree noise — do not report as findings:** Test files that fail with `ERR_DLOPEN_FAILED` or `Error: The module ... better-sqlite3 ...` are caused by the native module not being rebuilt for the worktree's Node version. These are pre-existing environment failures, not regressions introduced by the PR. Filter them out before assessing pass/fail. If ALL failures are of this type, record an `info`-severity finding noting the sqlite noise and mark the tier passed.
-3. Read the diff and verify that the changed behavior is covered by tests in the PR.
-4. Check that every acceptance criterion in `workItem.body` is addressed — either by a passing test or by observable code change.
-5. Verify that new functions, schemas, or modules have corresponding tests.
+3. **Compare against dev's targeted set.** If `devTestsRun` is present in your context (the `testsRun` field from the implement output), bucket each failing test as either inside-targeted (a file in `devTestsRun.paths`) or outside-targeted. Outside-targeted failures are regressions dev didn't see — flag them as `error`-severity findings with a note that dev's targeted run missed them.
+4. Read the diff and verify that the changed behavior is covered by tests in the PR.
+5. Check that every acceptance criterion in `workItem.body` is addressed — either by a passing test or by observable code change.
+6. Verify that new functions, schemas, or modules have corresponding tests.
 
-Emit: `[decision] Functional tier <passed|failed>: <one-sentence summary>`
+Emit: `[decision] FUNCTIONAL_CHECK: <one-sentence summary including passed|failed>`
 
 Record tier result with:
 - `passed`: true if all tests pass and coverage is adequate
@@ -99,7 +102,7 @@ Steps:
 4. Check that any new UI paths introduced by the PR are reachable and render correctly (if e2e tests cover them).
 5. If `evidenceCommentUrl` is present, fetch the comment and review the screenshots and walkthrough GIF for visual AC verification. Note any visible regressions or UI acceptance criteria that are not met in the captured state.
 
-Emit: `[decision] Regression tier <passed|failed|skipped>: <one-sentence summary>`
+Emit: `[decision] REGRESSION_CHECK: <one-sentence summary including passed|failed|skipped>`
 
 Record tier result with:
 - `passed`: true if all e2e tests pass or no regressions are possible
@@ -137,6 +140,22 @@ Steps:
 3. Any `passed: false` entry forces `verdict = 'fail'`, regardless of tier scores.
 
 ACs without a verify entry in `verifyCommands` are checked via the code-reading AC check above — they are not required to have a `criteriaResult`.
+
+## Fix-or-register
+
+Every finding must be classified — fixed in this PR, registered as a follow-up issue, or explicitly out-of-scope-for-this-issue. Never deferred, never "TODO". Deferred findings are how production drift accumulates; the fix-or-register rule is the primary safety mechanism (#468).
+
+For each finding, set `disposition` and `dispositionRef`:
+
+| `disposition` | When | `dispositionRef` |
+|---|---|---|
+| `fixed` | The PR already addresses this finding (you observed the fix in the diff). | The commit SHA where the fix landed (short or full). |
+| `registered` | The finding is real but out of scope for this PR; a follow-up issue exists. | The follow-up issue number, e.g. `#234`. |
+| `out-of-scope` | The finding is real but explicitly not in scope for this issue. | A one-sentence rationale explaining why it doesn't belong in this PR. |
+
+**Required when `severity === 'error'`.** An error-severity finding without a disposition is a schema-validation failure — the agent's output is rejected. Warning- and info-severity findings may carry a disposition but it's optional (informational findings can stand alone).
+
+QA records the finding; QA does not file the follow-up issue itself (holdout discipline). The orchestrator or the human reviewer is responsible for actually filing `disposition: 'registered'` issues.
 
 ## 8-category quality scoring rubric
 
@@ -219,7 +238,7 @@ Are functions and methods simple? Low cyclomatic complexity means fewer branches
 Set `verdict` based on the following rules, in order:
 
 1. **fail** — if any of the following are true:
-   - Any `error`-severity finding exists in any tier
+   - Any `error`-severity finding exists in any tier (and reaches schema validation — meaning it has a `disposition` per fix-or-register, #468)
    - Any acceptance criterion from `workItem.body` is not satisfied
    - Any `criteriaResults[].passed === false`
    - `overallScore < threshold` (default threshold: 70)
@@ -227,7 +246,7 @@ Set `verdict` based on the following rules, in order:
 
 2. **partial** — if any of the following are true (and none of the fail conditions):
    - Tier 2 (functional) failed but Tier 1 passed
-   - `overallScore >= threshold` but there are `warning`-severity findings
+   - `overallScore >= threshold` but there are `warning`-severity findings without `disposition: 'out-of-scope'` (warnings flagged out-of-scope are informational and do NOT downgrade to partial, #468)
    - Some acceptance criteria satisfied but not all (and no `error` findings)
    - E2e tests skipped due to missing `e2eCommand` but UI changes detected
 
@@ -242,31 +261,32 @@ Set `verdict` based on the following rules, in order:
 After each major step, emit a line in your text turn:
 
 ```
-[decision] <one sentence summary>
+[decision] KIND: <one sentence summary>
 ```
 
-These lines are parsed by the orchestrator and stored as `agent.decision-summary` events. Keep each to a single sentence. Do not include raw output, credentials, or implementation reasoning.
+`KIND` is an uppercase value from the shared decision-kind enum (see `core/agent-runtime/decision-types.ts`). The orchestrator parses these lines and stores them as `agent.decision-summary` events. Keep each to a single sentence. Do not include raw output, credentials, or implementation reasoning.
 
-Standard steps to emit decisions for:
+Standard kinds for QA:
 
-| Step | When to emit |
+| Kind | When to emit |
 |------|-------------|
-| `issue-read` | After reading and understanding the issue and acceptance criteria |
-| `diff-read` | After reading and understanding the PR diff |
-| `structural-check` | After running lint/typecheck |
-| `functional-check` | After running tests |
-| `regression-check` | After running e2e or assessing regression risk |
-| `criteria-check` | After verifying acceptance criteria against code |
-| `quality-score` | After completing the 8-category scoring |
-| `verdict` | After setting the final verdict |
+| `READ` | After reading and understanding the issue and acceptance criteria |
+| `DIFF_READ` | After reading and understanding the PR diff |
+| `STRUCTURAL_CHECK` | After running lint/typecheck |
+| `FUNCTIONAL_CHECK` | After running tests |
+| `REGRESSION_CHECK` | After running e2e or assessing regression risk |
+| `CRITERIA_CHECK` | After verifying acceptance criteria against code |
+| `QUALITY_SCORE` | After completing the 8-category scoring |
+| `VERDICT` | After setting the final verdict |
 
 Examples of good QA decision summaries:
-- `[decision] Read issue #239: QA holdout skill with 3-tier verification and 8-cat scoring`
-- `[decision] Structural tier passed: biome check and tsc clean`
-- `[decision] Functional tier passed: all 34 tests pass including slice.test.ts`
-- `[decision] Regression tier skipped: no e2eCommand provided, no UI changes in diff`
-- `[decision] All 6 acceptance criteria satisfied by code and tests`
-- `[decision] Quality score: 82/100 — verdict: pass`
+- `[decision] READ: Issue #239 — QA holdout skill with 3-tier verification and 8-cat scoring`
+- `[decision] STRUCTURAL_CHECK: passed — biome check and tsc clean`
+- `[decision] FUNCTIONAL_CHECK: passed — all 34 tests pass including slice.test.ts`
+- `[decision] REGRESSION_CHECK: skipped — no e2eCommand provided, no UI changes in diff`
+- `[decision] CRITERIA_CHECK: all 6 acceptance criteria satisfied by code and tests`
+- `[decision] QUALITY_SCORE: 82/100`
+- `[decision] VERDICT: pass`
 
 Bad summaries:
 - More than one sentence
@@ -317,7 +337,7 @@ Return a JSON object conforming exactly to this structure:
     { "tier": "functional", "severity": "warning", "description": "Acceptance criterion 3 not covered by any test" }
   ],
   "decisionSummaries": [
-    { "step": "issue-read", "summary": "<one sentence>", "evidence": "<optional>" }
+    { "kind": "READ", "summary": "<one sentence>", "evidence": "<optional>" }
   ]
 }
 ```

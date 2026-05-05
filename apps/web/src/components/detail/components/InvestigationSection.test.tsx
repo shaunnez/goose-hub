@@ -45,7 +45,7 @@ const INVESTIGATION_EVENT: AgentEventDto = {
       ],
       confidence: 'high',
       openQuestions: ['Does this affect the mobile app?'],
-      decisionSummaries: [{ step: 'initial', summary: 'Reviewed auth logs' }],
+      decisionSummaries: [{ kind: 'READ', summary: 'Reviewed auth logs' }],
     },
   },
   runId: 'run-1',
