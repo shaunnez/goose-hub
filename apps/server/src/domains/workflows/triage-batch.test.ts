@@ -4,6 +4,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ─── module mocks ──────────────────────────────────────────────────────────────
 
+vi.mock('#shared/projects.js', () => ({ getProject: vi.fn().mockResolvedValue(null) }));
+vi.mock('#shared/budget.js', () => ({
+  checkDailyBudget: vi.fn().mockResolvedValue({
+    exceeded: false,
+    usage: { totalCostUsd: 0, totalTokens: 0 },
+    limitTokens: 0,
+  }),
+}));
+
 vi.mock('@goose-hub/core/agent-runtime/claude-cli.js', () => ({
   ClaudeCliRuntime: vi.fn().mockImplementation(() => ({
     run: vi.fn(),
@@ -638,6 +647,151 @@ describe('runTriageBatch onward routing after accept', () => {
       'factory:accepted',
       'factory:research-pending',
     );
+  });
+});
+
+describe('runTriageBatch budget gate (#283)', () => {
+  let mockRuntime: { run: ReturnType<typeof vi.fn> };
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const { ClaudeCliRuntime } = await import('@goose-hub/core/agent-runtime/claude-cli.js');
+    mockRuntime = new (ClaudeCliRuntime as unknown as new () => typeof mockRuntime)();
+    vi.mocked(ClaudeCliRuntime).mockImplementation(() => mockRuntime as never);
+  });
+
+  it('skips the tick and emits project.budget-exceeded when daily token limit is exceeded', async () => {
+    const { getProject } = await import('#shared/projects.js');
+    const { checkDailyBudget } = await import('#shared/budget.js');
+    vi.mocked(getProject).mockResolvedValue({
+      id: 'goose-hub-self',
+      slug: 'goose-hub-self',
+      name: 'Goose Hub',
+      source: { kind: 'github-labels', repo: 'shaunnez/goose-hub' },
+      activeMilestone: null,
+      colorStripe: '#000',
+      budgets: { perWorkflowMaxUsd: 1, dailyTokens: 500_000, perAdvisorMaxUsd: 0.5 },
+      mode: 'supervised',
+    } as never);
+    vi.mocked(checkDailyBudget).mockResolvedValue({
+      exceeded: true,
+      reason: 'daily-tokens',
+      usage: { totalCostUsd: 1.5, totalTokens: 550_000 },
+      limitTokens: 500_000,
+    });
+
+    const source = makeMockSource([makeWorkItem()]);
+    const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+    const { runTriageBatch } = await import('./triage-batch.js');
+    await runTriageBatch('goose-hub-self', source);
+
+    expect(mockRuntime.run).not.toHaveBeenCalled();
+    const budgetEvent = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'project.budget-exceeded');
+    expect(budgetEvent).toBeDefined();
+    expect((budgetEvent?.[0].payload as { limitTokens: number }).limitTokens).toBe(500_000);
+  });
+
+  it('proceeds normally when budget is not exceeded', async () => {
+    const { getProject } = await import('#shared/projects.js');
+    const { checkDailyBudget } = await import('#shared/budget.js');
+    vi.mocked(getProject).mockResolvedValue({
+      id: 'goose-hub-self',
+      slug: 'goose-hub-self',
+      name: 'Goose Hub',
+      source: { kind: 'github-labels', repo: 'shaunnez/goose-hub' },
+      activeMilestone: null,
+      colorStripe: '#000',
+      budgets: { perWorkflowMaxUsd: 1, dailyTokens: 500_000, perAdvisorMaxUsd: 0.5 },
+      mode: 'supervised',
+    } as never);
+    vi.mocked(checkDailyBudget).mockResolvedValue({
+      exceeded: false,
+      usage: { totalCostUsd: 0.1, totalTokens: 10_000 },
+      limitTokens: 500_000,
+    });
+
+    mockRuntime.run
+      .mockResolvedValueOnce({
+        output: makeTriageOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeRepoMatchOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+    const source = makeMockSource([makeWorkItem()]);
+    const { runTriageBatch } = await import('./triage-batch.js');
+    await runTriageBatch('goose-hub-self', source);
+
+    expect(mockRuntime.run).toHaveBeenCalledTimes(2);
+  });
+
+  it('skips proj-a when over budget but runs proj-b when under budget', async () => {
+    const { getProject } = await import('#shared/projects.js');
+    const { checkDailyBudget } = await import('#shared/budget.js');
+
+    vi.mocked(getProject).mockResolvedValue({
+      id: 'proj-a',
+      slug: 'proj-a',
+      name: 'Proj A',
+      source: { kind: 'github-labels', repo: 'org/proj-a' },
+      activeMilestone: null,
+      colorStripe: '#f00',
+      budgets: { perWorkflowMaxUsd: 1, dailyTokens: 500_000, perAdvisorMaxUsd: 0.5 },
+      mode: 'supervised',
+    } as never);
+    vi.mocked(checkDailyBudget).mockResolvedValueOnce({
+      exceeded: true,
+      reason: 'daily-tokens',
+      usage: { totalCostUsd: 2, totalTokens: 600_000 },
+      limitTokens: 500_000,
+    });
+
+    const sourceA = makeMockSource([makeWorkItem()]);
+    const { runTriageBatch } = await import('./triage-batch.js');
+    await runTriageBatch('proj-a', sourceA);
+    expect(mockRuntime.run).not.toHaveBeenCalled();
+
+    vi.clearAllMocks();
+    const { ClaudeCliRuntime } = await import('@goose-hub/core/agent-runtime/claude-cli.js');
+    const rt = new (ClaudeCliRuntime as unknown as new () => typeof mockRuntime)();
+    vi.mocked(ClaudeCliRuntime).mockImplementation(() => rt as never);
+    rt.run
+      .mockResolvedValueOnce({
+        output: makeTriageOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeRepoMatchOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+    vi.mocked(getProject).mockResolvedValue({
+      id: 'proj-b',
+      slug: 'proj-b',
+      name: 'Proj B',
+      source: { kind: 'github-labels', repo: 'org/proj-b' },
+      activeMilestone: null,
+      colorStripe: '#0f0',
+      budgets: { perWorkflowMaxUsd: 1, dailyTokens: 500_000, perAdvisorMaxUsd: 0.5 },
+      mode: 'supervised',
+    } as never);
+    vi.mocked(checkDailyBudget).mockResolvedValueOnce({
+      exceeded: false,
+      usage: { totalCostUsd: 0.05, totalTokens: 5_000 },
+      limitTokens: 500_000,
+    });
+
+    const sourceB = makeMockSource([makeWorkItem()]);
+    await runTriageBatch('proj-b', sourceB);
+    expect(rt.run).toHaveBeenCalledTimes(2);
   });
 });
 
