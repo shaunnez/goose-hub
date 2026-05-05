@@ -19,6 +19,7 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
   const [events, setEvents] = useState<AgentEventDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandAll, setExpandAll] = useState<boolean | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const { byRun: runCosts } = useIssueCostsBreakdown(projectSlug, id);
 
@@ -102,10 +103,26 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
 
   const items = groupEvents(events);
   const latestRunId = items.find((item) => item.kind === 'run-group')?.runId ?? null;
-  const context = { slug: projectSlug, issueId: id, latestRunId, runCosts };
+  const context = { slug: projectSlug, issueId: id, latestRunId, runCosts, expandAll };
 
   return (
     <div data-testid="timeline-section" className="px-8 py-6">
+      <div className="flex justify-end gap-4 mb-3">
+        <button
+          type="button"
+          onClick={() => setExpandAll(true)}
+          className="text-[10.5px] font-mono text-fg-4 hover:text-fg-2 transition-colors"
+        >
+          Expand all
+        </button>
+        <button
+          type="button"
+          onClick={() => setExpandAll(false)}
+          className="text-[10.5px] font-mono text-fg-4 hover:text-fg-2 transition-colors"
+        >
+          Collapse all
+        </button>
+      </div>
       <ol className="flex flex-col gap-3">
         {items.map((item, idx) => renderTimelineItem(item, idx, context))}
       </ol>

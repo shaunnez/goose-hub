@@ -38,6 +38,7 @@ type TimelineContext = {
   issueId: string;
   latestRunId: string | null;
   runCosts?: Map<string, CostRowDto>;
+  expandAll?: boolean | null;
 };
 
 // ─── individual event renderers ───────────────────────────────────────────────
@@ -93,7 +94,14 @@ function AgentDecisionSummaryEvent({ event }: { event: AgentEventDto }) {
   );
 }
 
-function AgentDecisionSummaryLiveEvent({ event }: { event: AgentEventDto }) {
+function AgentDecisionSummaryLiveEvent({
+  event,
+  context,
+}: {
+  event: AgentEventDto;
+  context?: TimelineContext;
+}) {
+  const [open, setOpen] = useState(false);
   const p = event.payload as { summary?: string; kind?: string; step?: string } | null;
   const summary = p?.summary ?? getPayloadStr(event.payload);
   // #466 — kind is the post-migration field. step was used pre-migration.
@@ -101,12 +109,23 @@ function AgentDecisionSummaryLiveEvent({ event }: { event: AgentEventDto }) {
   const rawKind =
     typeof p?.kind === 'string' ? p.kind : typeof p?.step === 'string' ? p.step : null;
   const kind = rawKind != null && rawKind.length > 0 ? rawKind : null;
+
+  useEffect(() => {
+    if (context?.expandAll != null) setOpen(context.expandAll);
+  }, [context?.expandAll]);
+
   return (
     <li
       data-event-kind={event.kind}
       className="rounded-md border border-line/50 bg-bg/40 px-4 py-2"
     >
-      <details>
+      <details
+        open={open}
+        onToggle={(e) => {
+          e.stopPropagation();
+          setOpen((e.target as HTMLDetailsElement).open);
+        }}
+      >
         <summary className="flex items-center gap-1 cursor-pointer list-none font-mono text-[11.5px] select-none">
           <ChevronRight size={12} />
           <span className="text-[color:var(--accent)] shrink-0" title="Live decision marker">
@@ -143,8 +162,19 @@ function AgentLogEvent({ event }: { event: AgentEventDto }) {
   );
 }
 
-function AgentLogGroupEvent({ events }: { events: AgentEventDto[] }) {
+function AgentLogGroupEvent({
+  events,
+  context,
+}: {
+  events: AgentEventDto[];
+  context?: TimelineContext;
+}) {
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (context?.expandAll != null) setOpen(context.expandAll);
+  }, [context?.expandAll]);
+
   return (
     <li data-event-kind="agent.log" className="rounded-md border border-line/50 bg-bg/40 px-4 py-2">
       <details
@@ -505,8 +535,19 @@ function normalizeToolInput(
   return fallback;
 }
 
-function AgentToolCallEvent({ event }: { event: AgentEventDto }) {
+function AgentToolCallEvent({
+  event,
+  context,
+}: {
+  event: AgentEventDto;
+  context?: TimelineContext;
+}) {
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (context?.expandAll != null) setOpen(context.expandAll);
+  }, [context?.expandAll]);
+
   const p = event.payload as { tool_name?: string; tool_input?: unknown } | null;
   const toolName = p?.tool_name ?? 'unknown';
   const { summary, body } = normalizeToolInput(toolName, p?.tool_input ?? null);
@@ -1112,6 +1153,10 @@ function RunGroupWrapper({
   const isLive = endedAt == null;
 
   useEffect(() => {
+    if (context?.expandAll != null) setOpen(context.expandAll);
+  }, [context?.expandAll]);
+
+  useEffect(() => {
     if (!isLive) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
@@ -1270,7 +1315,7 @@ function RunGroupWrapper({
 
 export function renderTimelineItem(item: RenderItem, idx: number, context?: TimelineContext) {
   if (item.kind === 'log-group') {
-    return <AgentLogGroupEvent key={`log-group-${idx}`} events={item.events} />;
+    return <AgentLogGroupEvent key={`log-group-${idx}`} events={item.events} context={context} />;
   }
   if (item.kind === 'run-group') {
     return (
@@ -1296,7 +1341,7 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
     case 'agent.decision-summary':
       return <AgentDecisionSummaryEvent key={event.id} event={event} />;
     case 'agent.decision-summary-live':
-      return <AgentDecisionSummaryLiveEvent key={event.id} event={event} />;
+      return <AgentDecisionSummaryLiveEvent key={event.id} event={event} context={context} />;
     case 'agent.log':
       return <AgentLogEvent key={event.id} event={event} />;
     case 'agent.terminated':
@@ -1316,7 +1361,7 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
     case 'agent.run-failed':
       return <AgentRunStatusEvent key={event.id} event={event} />;
     case 'agent.tool-call':
-      return <AgentToolCallEvent key={event.id} event={event} />;
+      return <AgentToolCallEvent key={event.id} event={event} context={context} />;
     case 'agent.verify-command':
       return <AgentVerifyCommandEvent key={event.id} event={event} />;
     case 'tool.stdout-truncated':
