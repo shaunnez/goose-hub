@@ -17,19 +17,6 @@ export const ImprovementKindSchema = z.enum([
   'governance-suggestion',
 ]);
 
-export const DecisionRecordSchema = z.object({
-  id: z.string(),
-  runId: z.string(),
-  personaName: z.string(),
-  role: z.string(),
-  step: z.string(),
-  context: z.string(),
-  decision: z.string(),
-  outcome: z.enum(['success', 'failure', 'partial']),
-  confidence: ConfidenceSchema,
-  timestamp: z.string().datetime(),
-});
-
 export const LearningEntrySchema = z.object({
   id: z.string(),
   sourceRunIds: z.array(z.string()).min(1),
@@ -78,7 +65,6 @@ export const ImprovementCandidateSchema = z.object({
   proposedDiff: z.string().optional(),
 });
 
-export type DecisionRecord = z.infer<typeof DecisionRecordSchema>;
 export type LearningEntry = z.infer<typeof LearningEntrySchema>;
 export type QualityScore = z.infer<typeof QualityScoreSchema>;
 export type DecisionPattern = z.infer<typeof DecisionPatternSchema>;
