@@ -1351,3 +1351,83 @@ describe('github-labels — edge cases', () => {
     expect(item.priority).toBe('medium');
   });
 });
+
+// ---------------------------------------------------------------------------
+// listOpenWork — milestone filtering and milestoneTitle mapping
+// ---------------------------------------------------------------------------
+
+describe('listOpenWork — milestone parameter', () => {
+  it('includes milestone query param when milestoneNumber is provided', async () => {
+    let capturedUrl = '';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        capturedUrl = url;
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }),
+    );
+
+    const source = makeSource();
+    await source.listOpenWork(7);
+
+    expect(capturedUrl).toContain('milestone=7');
+  });
+
+  it('omits milestone query param when milestoneNumber is undefined', async () => {
+    let capturedUrl = '';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        capturedUrl = url;
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }),
+    );
+
+    const source = makeSource();
+    await source.listOpenWork();
+
+    expect(capturedUrl).not.toContain('milestone=');
+  });
+
+  it('maps issue.milestone.title to milestoneTitle on work items', async () => {
+    const issue = makeIssue({
+      number: 100,
+      milestone: {
+        number: 10,
+        title: 'M10: Multi-project Orchestration',
+        description: null,
+        due_on: null,
+        state: 'open',
+      },
+    });
+    vi.stubGlobal('fetch', mockFetchOnce([issue]));
+    const source = makeSource();
+    const items = await source.listOpenWork();
+
+    const item = items.find((i) => i.externalId === '100');
+    if (item == null) throw new Error('expected item 100');
+    expect(item.milestoneTitle).toBe('M10: Multi-project Orchestration');
+    expect(item.milestoneId).toBe('10');
+  });
+
+  it('leaves milestoneTitle undefined when issue has no milestone', async () => {
+    const issue = makeIssue({ number: 101, milestone: null });
+    vi.stubGlobal('fetch', mockFetchOnce([issue]));
+    const source = makeSource();
+    const items = await source.listOpenWork();
+
+    const item = items.find((i) => i.externalId === '101');
+    if (item == null) throw new Error('expected item 101');
+    expect(item.milestoneTitle).toBeUndefined();
+  });
+});

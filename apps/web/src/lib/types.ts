@@ -19,6 +19,7 @@ export interface WorkItemDto {
   state: string;
   authorIsOwner: boolean;
   milestoneId?: string;
+  milestoneTitle?: string;
   schedule: string;
   exec: string;
   dependsOn: string[];

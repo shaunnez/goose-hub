@@ -69,6 +69,15 @@ export function IssueCard({
         <Pill tone="default" className="h-5 text-[10.5px] px-2 capitalize">
           {item.priority}
         </Pill>
+        {item.milestoneTitle != null && (
+          <Pill
+            tone="default"
+            className="h-5 text-[10.5px] px-2 font-mono"
+            data-testid="milestone-badge"
+          >
+            {item.milestoneTitle}
+          </Pill>
+        )}
         {initials != null && (
           <span
             title={item.lastPersonaId ?? undefined}
