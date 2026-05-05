@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { mergePR } from './merge-pr.js';
+import { MergeConflictError, mergePR } from './merge-pr.js';
 import { openPR, validatePrBody } from './open-pr.js';
 
 describe('validatePrBody (#184)', () => {
@@ -190,7 +190,7 @@ describe('mergePR (#186)', () => {
     expect(sent.merge_method).toBe('squash');
   });
 
-  it('throws on non-2xx', async () => {
+  it('throws MergeConflictError (not generic Error) on 405', async () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(
@@ -198,6 +198,38 @@ describe('mergePR (#186)', () => {
       ) as unknown as typeof fetch;
     await expect(
       mergePR({ repo: 'owner/repo', prNumber: 99, token: 'ghp_test', fetchImpl }),
-    ).rejects.toThrow(/405 Method Not Allowed — not mergeable/);
+    ).rejects.toBeInstanceOf(MergeConflictError);
+  });
+
+  it('MergeConflictError carries the prNumber', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response('not mergeable', { status: 405, statusText: 'Method Not Allowed' }),
+      ) as unknown as typeof fetch;
+    const err = await mergePR({
+      repo: 'owner/repo',
+      prNumber: 77,
+      token: 'ghp_test',
+      fetchImpl,
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(MergeConflictError);
+    expect((err as MergeConflictError).prNumber).toBe(77);
+  });
+
+  it('still throws generic Error on other non-2xx (e.g. 403)', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response('rate limited', { status: 403, statusText: 'Forbidden' }),
+      ) as unknown as typeof fetch;
+    const err = await mergePR({
+      repo: 'owner/repo',
+      prNumber: 1,
+      token: 'ghp_test',
+      fetchImpl,
+    }).catch((e: unknown) => e);
+    expect(err).not.toBeInstanceOf(MergeConflictError);
+    expect(String(err)).toContain('403');
   });
 });

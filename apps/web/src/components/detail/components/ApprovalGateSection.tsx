@@ -23,6 +23,7 @@ export function ApprovalGateSection({ projectSlug, id, state }: ApprovalGateSect
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [conflictMsg, setConflictMsg] = useState<string | null>(null);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['issue', projectSlug, id] });
@@ -32,7 +33,14 @@ export function ApprovalGateSection({ projectSlug, id, state }: ApprovalGateSect
 
   const approveMutation = useMutation({
     mutationFn: () => approveIssue(projectSlug, id),
-    onSuccess: invalidate,
+    onSuccess: (result) => {
+      if (!result.ok) {
+        setConflictMsg('Merge conflict detected — agent is resolving…');
+        invalidate();
+        return;
+      }
+      invalidate();
+    },
     onError: (err: unknown) => {
       setErrorMsg(err instanceof Error ? err.message : String(err));
     },
@@ -61,6 +69,12 @@ export function ApprovalGateSection({ projectSlug, id, state }: ApprovalGateSect
         <div className="text-[13px] font-semibold">Approval gate</div>
         <div className="text-fg-3 text-[12px]">PR awaiting your approval before merge</div>
       </div>
+
+      {conflictMsg != null ? (
+        <div data-testid="conflict-banner" className="mb-2 text-[12px] text-fg-3">
+          {conflictMsg}
+        </div>
+      ) : null}
 
       {errorMsg != null ? (
         <div data-testid="approval-gate-error" className="mb-2 text-[12px] text-red-400">

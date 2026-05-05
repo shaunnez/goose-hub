@@ -21,6 +21,7 @@ export const STATE_LABEL: Record<string, string> = {
   'factory:needs-review': 'needs-review',
   'factory:needs-fix': 'needs-fix',
   'factory:approved': 'approved',
+  'factory:merge-conflict': 'merge-conflict',
   'factory:retrospecting': 'retrospecting',
   'factory:needs-human': 'needs-human',
   'factory:done': 'done',
@@ -57,6 +58,7 @@ export const CODE_ACTIVE_STATES = new Set([
   'factory:needs-review',
   'factory:needs-fix',
   'factory:approved',
+  'factory:merge-conflict',
   'factory:retrospecting',
   'factory:done',
 ]);

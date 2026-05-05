@@ -154,11 +154,21 @@ export async function fetchIssueDiff(slug: string, id: string): Promise<IssueDif
 export async function approveIssue(
   slug: string,
   id: string,
-): Promise<{ ok: true; sha: string; prNumber: number }> {
-  return postJson<{ ok: true; sha: string; prNumber: number }>(
-    `/projects/${slug}/issues/${id}/approve`,
-    {},
-  );
+): Promise<{ ok: true; sha: string; prNumber: number } | { ok: false; conflict: true }> {
+  const res = await fetch(`/api/projects/${slug}/issues/${id}/approve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({}),
+  });
+  if (res.status === 409) return { ok: false, conflict: true };
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(
+      `POST /projects/${slug}/issues/${id}/approve failed: ${res.status} ${res.statusText} ${text}`,
+    );
+  }
+  const data = (await res.json()) as { sha: string; prNumber: number };
+  return { ok: true, sha: data.sha, prNumber: data.prNumber };
 }
 
 export async function rejectIssue(slug: string, id: string, reason: string): Promise<{ ok: true }> {

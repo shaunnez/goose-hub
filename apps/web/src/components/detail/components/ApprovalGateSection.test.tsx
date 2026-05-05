@@ -43,6 +43,16 @@ describe('ApprovalGateSection (#186)', () => {
     });
   });
 
+  it('shows conflict banner (not error) when approve returns conflict', async () => {
+    vi.mocked(approveIssue).mockResolvedValueOnce({ ok: false, conflict: true });
+    render_(<ApprovalGateSection projectSlug="proj" id="42" state="factory:approved" />);
+    fireEvent.click(screen.getByTestId('approve-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('conflict-banner')).toBeTruthy();
+      expect(screen.queryByTestId('approval-gate-error')).toBeNull();
+    });
+  });
+
   it('Reject opens the form, requires non-empty reason, and calls rejectIssue', async () => {
     vi.mocked(rejectIssue).mockResolvedValueOnce({ ok: true });
     render_(<ApprovalGateSection projectSlug="proj" id="42" state="factory:approved" />);
@@ -70,13 +80,13 @@ describe('ApprovalGateSection (#186)', () => {
     expect(screen.getByTestId('approve-btn')).toBeTruthy();
   });
 
-  it('shows API error when approve fails', async () => {
-    vi.mocked(approveIssue).mockRejectedValueOnce(new Error('GitHub merge failed: 409'));
+  it('shows API error when approve fails with a non-conflict error', async () => {
+    vi.mocked(approveIssue).mockRejectedValueOnce(new Error('GitHub API unavailable'));
     render_(<ApprovalGateSection projectSlug="proj" id="42" state="factory:approved" />);
     fireEvent.click(screen.getByTestId('approve-btn'));
     await waitFor(() => {
       const el = screen.getByTestId('approval-gate-error');
-      expect(el.textContent).toContain('409');
+      expect(el.textContent).toContain('GitHub API unavailable');
     });
   });
 });

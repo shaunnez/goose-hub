@@ -7,6 +7,18 @@
  * for future use.
  */
 
+/**
+ * Thrown when GitHub rejects the merge with HTTP 405 — i.e. the PR is not
+ * mergeable. Callers (e.g. `approveIssue`) branch on this to dispatch the
+ * resolve-conflict workflow instead of bubbling a 500.
+ */
+export class MergeConflictError extends Error {
+  constructor(public readonly prNumber: number) {
+    super(`PR #${prNumber} is not mergeable (merge conflict)`);
+    this.name = 'MergeConflictError';
+  }
+}
+
 export interface MergePrInput {
   /** Repo full name, e.g. `shaunnez/goose-hub`. */
   repo: string;
@@ -38,6 +50,10 @@ export async function mergePR(input: MergePrInput): Promise<MergePrResult> {
     },
     body: JSON.stringify({ merge_method: mergeMethod }),
   });
+
+  if (response.status === 405) {
+    throw new MergeConflictError(prNumber);
+  }
 
   if (!response.ok) {
     const detail = await response.text().catch(() => '<no body>');

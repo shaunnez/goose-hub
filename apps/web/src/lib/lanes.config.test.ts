@@ -20,6 +20,7 @@ describe('lanes config', () => {
     expect(laneForState('factory:triaging')).toBe('triage');
     expect(laneForState('factory:archived')).toBe('archive');
     expect(laneForState('factory:done')).toBe('done');
+    expect(laneForState('factory:merge-conflict')).toBe('review');
   });
 
   it('sortLaneItems sorts by priority then issue number', () => {

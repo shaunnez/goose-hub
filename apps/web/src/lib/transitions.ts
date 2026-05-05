@@ -32,7 +32,8 @@ export const LEGAL_TARGETS: Readonly<Record<string, readonly string[]>> = {
     'factory:rejected',
   ],
   'factory:needs-fix': ['factory:in-progress', 'factory:needs-human'],
-  'factory:approved': ['factory:retrospecting'],
+  'factory:approved': ['factory:retrospecting', 'factory:merge-conflict'],
+  'factory:merge-conflict': ['factory:done', 'factory:needs-human'],
   'factory:retrospecting': ['factory:done'],
   'factory:needs-human': [
     'factory:dev-ready',

@@ -1,4 +1,7 @@
-import { mergePR as defaultMergePR } from '@goose-hub/core/connectors/github/merge-pr.js';
+import {
+  MergeConflictError,
+  mergePR as defaultMergePR,
+} from '@goose-hub/core/connectors/github/merge-pr.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { STATES } from '@goose-hub/core/state-machine/states.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
@@ -55,7 +58,22 @@ export async function approveIssue(
 
   const mergePR = options.mergePRImpl ?? defaultMergePR;
 
-  const merged = await mergePR({ repo: repoRef, prNumber, token });
+  let merged: { sha: string; merged: boolean };
+  try {
+    merged = await mergePR({ repo: repoRef, prNumber, token });
+  } catch (err) {
+    if (err instanceof MergeConflictError) {
+      eventStore.appendEvent({
+        projectId: slug,
+        workItemId,
+        kind: 'merge.conflict',
+        payload: { prNumber },
+      });
+      await source.transitionState(id, 'factory:approved', 'factory:merge-conflict');
+      return { ok: false, error: 'merge-conflict', status: 409 };
+    }
+    throw err;
+  }
 
   eventStore.appendEvent({
     projectId: slug,

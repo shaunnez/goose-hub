@@ -19,6 +19,7 @@ export const STATES = Object.freeze([
   'factory:needs-review',
   'factory:needs-fix',
   'factory:approved',
+  'factory:merge-conflict',
   'factory:retrospecting',
   'factory:needs-human',
   'factory:done',

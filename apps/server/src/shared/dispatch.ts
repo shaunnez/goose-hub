@@ -130,6 +130,41 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
   }
 }
 
+/** Run the merge conflict resolution workflow for a single issue. Drops duplicate triggers. */
+export async function dispatchResolveConflict(slug: string, issueNumber: number): Promise<void> {
+  const key = issueKey(slug, issueNumber);
+  if (_issueInFlight.has(key)) {
+    logger.warn('dispatchResolveConflict: already in-flight, dropping duplicate', {
+      slug,
+      issueNumber,
+    });
+    return;
+  }
+  _issueInFlight.add(key);
+  try {
+    // Cross-package boundary: slices/ is not a workspace package (rule 28a).
+    const { runResolveConflictWorkflow } = (await import(
+      new URL('../../../../slices/resolve-conflict/workflow.js', import.meta.url).href
+    )) as {
+      runResolveConflictWorkflow: (
+        item: unknown,
+        source: unknown,
+        slug: string,
+        repoRoot: string,
+      ) => Promise<unknown>;
+    };
+    const source = await getSourceForSlug(slug);
+    if (source == null) {
+      logger.error('dispatchResolveConflict: no source for slug', { slug });
+      return;
+    }
+    const item = await source.getItem(issueNumber.toString());
+    await runResolveConflictWorkflow(item, source, slug, REPO_ROOT);
+  } finally {
+    _issueInFlight.delete(key);
+  }
+}
+
 /** Run the QA holdout workflow for a single issue. Drops duplicate triggers for the same issue. */
 export async function dispatchQa(slug: string, issueNumber: number): Promise<void> {
   const key = issueKey(slug, issueNumber);
@@ -294,6 +329,10 @@ export async function dispatchForLabel(
   }
   if (labelName === 'factory:needs-review') {
     await dispatchReview(slug, issueNumber);
+    return;
+  }
+  if (labelName === 'factory:merge-conflict') {
+    await dispatchResolveConflict(slug, issueNumber);
     return;
   }
   logger.info('dispatchForLabel: no workflow for label', { slug, labelName });

@@ -18,6 +18,7 @@ const {
   mockApproveIssue,
   mockRejectIssue,
   mockFakeRun,
+  mockDispatchResolveConflict,
 } = vi.hoisted(() => ({
   mockListIssues: vi.fn(),
   mockGetIssue: vi.fn(),
@@ -33,6 +34,7 @@ const {
   mockApproveIssue: vi.fn(),
   mockRejectIssue: vi.fn(),
   mockFakeRun: vi.fn(),
+  mockDispatchResolveConflict: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('./service.js', () => ({
@@ -54,6 +56,10 @@ vi.mock('./service.js', () => ({
 
 vi.mock('@goose-hub/core/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+vi.mock('#shared/dispatch.js', () => ({
+  dispatchResolveConflict: mockDispatchResolveConflict,
 }));
 
 import { issuesRouter } from './router.js';
@@ -641,6 +647,21 @@ describe('POST /projects/:slug/issues/:id/approve', () => {
     const app = makeApp();
     const res = await app.request('/projects/my-project/issues/42/approve', { method: 'POST' });
     expect(res.status).toBe(500);
+  });
+
+  it('returns 409 and calls dispatchResolveConflict when merge conflict detected', async () => {
+    mockApproveIssue.mockResolvedValue({
+      ok: false,
+      error: 'merge-conflict',
+      status: 409,
+    });
+
+    const app = makeApp();
+    const res = await app.request('/projects/my-project/issues/42/approve', { method: 'POST' });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('merge-conflict');
+    expect(mockDispatchResolveConflict).toHaveBeenCalledWith('my-project', 42);
   });
 });
 

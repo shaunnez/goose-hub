@@ -20,6 +20,8 @@
 | `core/state-machine/transitions.ts` | Add transitions for new state |
 | `core/state-machine/states.test.ts` | Update count (24→25) + add state in order |
 | `core/state-machine/transitions.test.ts` | Add transition tests |
+| `core/event-stream/store.ts` | Add 3 new EventKinds: `merge.conflict`, `merge.conflict-resolved`, `merge.conflict-unresolvable` |
+| `apps/web/src/lib/transitions.ts` | Mirror `factory:merge-conflict` entries in browser `LEGAL_TARGETS` |
 | `core/connectors/github/merge-pr.ts` | Add `MergeConflictError`, detect 405 |
 | `core/connectors/github/slice.test.ts` | Add conflict detection tests |
 | `apps/server/src/domains/issues/transitions.ts` | Catch `MergeConflictError` in `approveIssue` |
@@ -30,6 +32,7 @@
 | `skills/resolve-conflict/skill.md` | Create — conflict resolution prompt |
 | `skills/resolve-conflict/schema.ts` | Create — output Zod schema |
 | `skills/resolve-conflict/config.ts` | Create — SkillConfig |
+| `skills/resolve-conflict/README.md` | Create — required by FACTORY_RULES skill convention |
 | `skills/resolve-conflict/slice.test.ts` | Create — schema validation tests |
 | `slices/resolve-conflict/workflow.ts` | Create — full workflow |
 | `slices/resolve-conflict/slice.test.ts` | Create — workflow tests |
@@ -177,6 +180,65 @@ Expected: PASS — all state and transition tests green.
 ```bash
 git add core/state-machine/states.ts core/state-machine/transitions.ts core/state-machine/states.test.ts core/state-machine/transitions.test.ts
 git commit -m "feat(state-machine): add factory:merge-conflict state and transitions"
+```
+
+---
+
+## Task 1.5: Reserve event kinds and mirror browser state machine
+
+**Files:**
+- Modify: `core/event-stream/store.ts`
+- Modify: `apps/web/src/lib/transitions.ts`
+
+These two small changes unblock subsequent tasks: the workflow (Task 6) emits the new event kinds, and the browser Transition popover (relied on by the UI in Task 7+) reads the mirrored legal targets. Without them, downstream typecheck and UI tests would fail.
+
+- [ ] **Step 1: Add the EventKind union members**
+
+In `core/event-stream/store.ts`, find the `// M7 approval gate (#186)` comment block (around the `'gate.approved' | 'gate.rejected' | 'pr.merged'` lines). Below `'pr.merged'`, add a new comment block with the three new kinds:
+
+```ts
+  // M7 approval gate (#186)
+  | 'gate.approved'
+  | 'gate.rejected'
+  | 'pr.merged'
+  // Merge conflict auto-resolution (resolve-conflict slice)
+  | 'merge.conflict'
+  | 'merge.conflict-resolved'
+  | 'merge.conflict-unresolvable'
+```
+
+Payload contracts (enforced at call sites — `payload: unknown` at the union level):
+
+| Kind | Payload |
+|---|---|
+| `merge.conflict` | `{ prNumber: number }` |
+| `merge.conflict-resolved` | `{ prNumber: number, sha: string }` |
+| `merge.conflict-unresolvable` | `{ prNumber: number, prUrl: string, error: string }` |
+
+- [ ] **Step 2: Mirror the new transitions in the browser**
+
+In `apps/web/src/lib/transitions.ts`, update the entry for `'factory:approved'` and insert `'factory:merge-conflict'` between approved and retrospecting:
+
+```ts
+  'factory:approved': ['factory:retrospecting', 'factory:merge-conflict'],
+  'factory:merge-conflict': ['factory:done', 'factory:needs-human'],
+  'factory:retrospecting': ['factory:done'],
+```
+
+- [ ] **Step 3: Type-check both surfaces**
+
+```bash
+pnpm tsc --noEmit -p core/tsconfig.json
+pnpm tsc --noEmit -p apps/web/tsconfig.json
+```
+
+Expected: no errors. (No new tests needed — the EventKind union is the source of truth and adding kinds is non-breaking; the browser mirror is read-only data.)
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add core/event-stream/store.ts apps/web/src/lib/transitions.ts
+git commit -m "feat(events,web): reserve merge.conflict event kinds and mirror browser transitions"
 ```
 
 ---
@@ -578,12 +640,13 @@ git commit -m "feat(dispatch): add dispatchResolveConflict, router fires it on 4
 
 ---
 
-## Task 5: `skills/resolve-conflict/` — prompt, schema, config
+## Task 5: `skills/resolve-conflict/` — prompt, schema, config, README
 
 **Files:**
 - Create: `skills/resolve-conflict/skill.md`
 - Create: `skills/resolve-conflict/schema.ts`
 - Create: `skills/resolve-conflict/config.ts`
+- Create: `skills/resolve-conflict/README.md`
 - Create: `skills/resolve-conflict/slice.test.ts`
 
 - [ ] **Step 1: Write the failing schema test**
@@ -727,7 +790,67 @@ Return a JSON object matching this schema:
 If `unresolvable` is non-empty, explain why in the relevant `decisionSummaries` entry.
 ```
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [ ] **Step 6: Create `README.md`**
+
+Create `skills/resolve-conflict/README.md`:
+
+```md
+# skills/resolve-conflict
+
+Resolves git merge conflicts in a worktree. The skill receives the worktree path and the list of conflicted files; the orchestrating slice (`slices/resolve-conflict/`) owns git, fetch, merge, commit, and push. The skill reads each conflicted file, writes a resolved version with no conflict markers, and reports per-file outcomes.
+
+## When this skill runs
+
+- `slices/resolve-conflict/` workflow, after `git merge origin/<baseBranch>` produces conflicts and the slice has enumerated `git diff --name-only --diff-filter=U`.
+
+## Inputs
+
+`ResolveConflictContextSchema`:
+
+| Field | Type | Description |
+|---|---|---|
+| `worktreePath` | `string` | Absolute path to the worktree where conflict markers are present |
+| `conflictedFiles` | `string[]` | Workspace-relative paths of conflicted files |
+| `baseBranch` | `string` | Branch being merged INTO the PR branch (typically `main`) |
+| `prNumber` | `number` | PR number under resolution (context only) |
+
+## Outputs
+
+`ResolveConflictSchema`:
+
+| Field | Type | Description |
+|---|---|---|
+| `resolved` | `string[]` | Workspace-relative paths the agent successfully resolved |
+| `unresolvable` | `string[]` | Workspace-relative paths the agent could not resolve confidently |
+| `confidence` | `'low' \| 'medium' \| 'high'` | Self-reported confidence in the overall resolution |
+| `decisionSummaries` | `DecisionSummary[]` | Required, ≥ 1 entry. One per file or per resolution strategy |
+
+## Tool allowlist
+
+`dev-tools` bundle — `read`, `search`, `work-item-read`, `write`, `bash`, `test`. All workspace-bound, bash-denylist enforced. The skill writes resolved files directly via the `write` tool; the slice runs `git add -A && git commit` afterwards.
+
+## Model pin
+
+`sonnet`. Routine resolution tier (Opus reserved for advisor / investigator per FACTORY_RULES rule 22).
+
+## Critical rules
+
+- Never simply pick one side of a conflict — combine both intents semantically.
+- Verify the written file contains zero `<<<<<<<` / `=======` / `>>>>>>>` markers before reporting it as `resolved`.
+- If you cannot produce a confident resolution, list the file in `unresolvable` and explain in `decisionSummaries`. The slice will escalate to `factory:needs-human`.
+- `decisionSummaries` is required. One sentence per entry. No chain-of-thought, no PII.
+
+## Context allowlist
+
+| Key | Included |
+|---|---|
+| `worktreePath` | yes |
+| `conflictedFiles` | yes |
+| `baseBranch` | yes |
+| `prNumber` | yes |
+```
+
+- [ ] **Step 7: Run tests to verify they pass**
 
 ```bash
 pnpm --filter @goose-hub/skills test skills/resolve-conflict/slice.test.ts
@@ -735,11 +858,11 @@ pnpm --filter @goose-hub/skills test skills/resolve-conflict/slice.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add skills/resolve-conflict/
-git commit -m "feat(skills): add resolve-conflict skill (schema, config, prompt)"
+git commit -m "feat(skills): add resolve-conflict skill (schema, config, prompt, README)"
 ```
 
 ---
@@ -992,6 +1115,45 @@ describe('runResolveConflictWorkflow', () => {
     );
   });
 
+  it('agent reports low confidence → transitions to needs-human (no merge attempt)', async () => {
+    vi.mocked(eventStore.replay).mockReturnValueOnce([PR_OPENED_EVENT] as never);
+
+    const gitExecImpl = vi
+      .fn()
+      .mockReturnValueOnce('') // worktree add
+      .mockReturnValueOnce('') // fetch
+      .mockImplementationOnce(() => { throw new Error('conflict'); }) // merge fails
+      .mockReturnValueOnce('src/foo.ts\n') // conflicted files
+      .mockReturnValueOnce(''); // worktree remove
+
+    const lowConfidence: AgentResult = {
+      output: {
+        resolved: ['src/foo.ts'],
+        unresolvable: [],
+        confidence: 'low',
+        decisionSummaries: [{ step: 'resolve', summary: 'Uncertain merge — picked PR side blindly' }],
+      },
+      decisionSummaries: [],
+      events: [],
+    };
+    mockClaudeCliRun.mockResolvedValueOnce(lowConfidence);
+    const mergePRImpl = vi.fn();
+
+    const source = makeStateSource();
+    await runResolveConflictWorkflow(makeWorkItem(), source, 'proj', '/repo', {
+      runtime: { run: mockClaudeCliRun } as unknown as AgentRuntime,
+      mergePRImpl,
+      gitExecImpl,
+    });
+
+    expect(mergePRImpl).not.toHaveBeenCalled();
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:merge-conflict',
+      'factory:needs-human',
+    );
+  });
+
   it('mergePR throws → transitions to needs-human', async () => {
     vi.mocked(eventStore.replay).mockReturnValueOnce([PR_OPENED_EVENT] as never);
 
@@ -1165,6 +1327,19 @@ export async function runResolveConflictWorkflow(
             ? 'Agent output failed schema validation'
             : `Agent could not resolve: ${parsed.data.unresolvable.join(', ')}`;
           throw new Error(reason);
+        }
+        if (parsed.data.confidence === 'low') {
+          throw new Error('Agent reported low confidence in conflict resolution');
+        }
+
+        // Defensive: re-scan every file the agent claimed to resolve. If any
+        // still contain conflict markers, the agent's self-report is wrong —
+        // escalate rather than commit broken code.
+        for (const f of parsed.data.resolved) {
+          const content = readFileSync(join(wtPath, f), 'utf8');
+          if (/^(<{7}|={7}|>{7})/m.test(content)) {
+            throw new Error(`Resolved file ${f} still contains conflict markers`);
+          }
         }
 
         // Commit the resolved files
@@ -1474,14 +1649,50 @@ git commit -m "feat(ui): add factory:merge-conflict to review lane and constants
 ## Self-Review Checklist
 
 - [x] **State machine** — `factory:merge-conflict` added in states.ts and transitions.ts, tests updated
+- [x] **EventKinds** — `merge.conflict`, `merge.conflict-resolved`, `merge.conflict-unresolvable` added to the EventKind union (Task 1.5)
+- [x] **Browser mirror** — `apps/web/src/lib/transitions.ts` updated so the Transition popover shows the new legal targets (Task 1.5)
 - [x] **MergeConflictError** — typed 405 detection in merge-pr.ts, test coverage for all paths
 - [x] **approveIssue** — catches conflict, transitions state, emits event, returns 409
 - [x] **Router** — 409 handled, `dispatchResolveConflict` fired fire-and-forget
 - [x] **dispatch.ts** — `dispatchResolveConflict` + `dispatchForLabel` entry for recovery
-- [x] **Skill** — schema, config, prompt all created and tested
-- [x] **Workflow** — happy path, no-pr-event, agent-failure, mergePR-failure all tested
-- [x] **Client** — 409 detected in api.ts, conflict banner shown, error path preserved
+- [x] **Skill** — schema, config, prompt, README all created and tested
+- [x] **Workflow** — happy path, no-pr-event, agent-failure, low-confidence, mergePR-failure all tested
+- [x] **Defensive marker scan** — workflow re-reads every "resolved" file and rejects if conflict markers remain
+- [x] **Client** — 409 detected in api.ts (discriminated union, no string parsing), conflict banner shown, error path preserved
 - [x] **UI constants** — new state labelled and in CODE_ACTIVE_STATES
 - [x] **Lanes** — merge-conflict in review lane, lane count unchanged at 11
 - [x] **Events** — merge.conflict, merge.conflict-resolved, merge.conflict-unresolvable all emitted correctly
 - [x] **Failure comment** — includes PR URL so human can merge manually
+
+---
+
+## Final verification — three-tier per `docs/standards/verification.md`
+
+After all 8 tasks land, run:
+
+- [ ] **Tier 1 — Structural**
+
+```bash
+pnpm tsc --noEmit
+pnpm biome check .
+```
+
+Expected: clean.
+
+- [ ] **Tier 2 — Functional**
+
+```bash
+pnpm vitest run
+```
+
+Expected: all unit + integration + workflow tests pass — specifically the new tests in `core/state-machine/`, `core/connectors/github/`, `apps/server/src/domains/issues/`, `apps/server/src/shared/`, `slices/resolve-conflict/`, `skills/resolve-conflict/`, `apps/web/src/lib/`, and `ApprovalGateSection.test.tsx`.
+
+- [ ] **Tier 3 — Regression**
+
+The change is server-side + skill-side; the UI change is one branch in an existing component, covered by unit tests. No new Playwright spec required (per the verification doc's "would a user notice within 24 hours" rule for tier-3 priority — the conflict path is rare and the existing approval flow is unchanged on the happy path). If running the full e2e suite:
+
+```bash
+pnpm playwright test
+```
+
+Expected: no regressions.

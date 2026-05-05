@@ -437,6 +437,37 @@ describe('approveIssue / rejectIssue (#186)', () => {
       .mock.calls.find(([e]) => e.kind === 'pr.merged');
     expect(merged).toBeDefined();
   });
+
+  it('approveIssue returns 409 and transitions to merge-conflict when GitHub 405', async () => {
+    vi.mocked(eventStore.replay).mockReturnValueOnce([
+      {
+        id: 1,
+        projectId: 'proj',
+        workItemId: 'github:owner/repo#1',
+        kind: 'pr.opened',
+        runId: 'run-1',
+        payload: { prNumber: 42, prUrl: 'https://github.com/owner/repo/pull/42', branch: 'b' },
+        createdAt: '2026-05-05T10:00:00Z',
+      },
+    ] as never);
+
+    const { MergeConflictError } = await import('@goose-hub/core/connectors/github/merge-pr.js');
+    const mergePRImpl = vi.fn().mockRejectedValueOnce(new MergeConflictError(42));
+
+    const { approveIssue } = await import('./service.js');
+    const result = await approveIssue('proj', '1', { mergePRImpl });
+
+    expect(result).toMatchObject({ ok: false, status: 409, error: 'merge-conflict' });
+    expect(mockSource.transitionState).toHaveBeenCalledWith(
+      '1',
+      'factory:approved',
+      'factory:merge-conflict',
+    );
+    const conflictEvent = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'merge.conflict');
+    expect(conflictEvent).toBeDefined();
+  });
 });
 
 describe('getIssueEvents', () => {
