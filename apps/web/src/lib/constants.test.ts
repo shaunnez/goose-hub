@@ -28,6 +28,7 @@ const ALL_FACTORY_STATES = [
   'factory:needs-review',
   'factory:needs-fix',
   'factory:approved',
+  'factory:merge-conflict',
   'factory:retrospecting',
   'factory:needs-human',
   'factory:done',
@@ -37,7 +38,7 @@ const ALL_FACTORY_STATES = [
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];
 
 describe('STATE_LABEL', () => {
-  it('covers all 23 factory states', () => {
+  it('covers all factory states present in the label map', () => {
     for (const state of ALL_FACTORY_STATES) {
       expect(STATE_LABEL[state], `missing state: ${state}`).toBeDefined();
     }

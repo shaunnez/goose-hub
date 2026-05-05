@@ -61,7 +61,7 @@ export const LANES: readonly LaneConfig[] = [
   {
     key: 'review',
     label: 'Review',
-    states: ['factory:needs-review', 'factory:approved'],
+    states: ['factory:needs-review', 'factory:approved', 'factory:merge-conflict'],
     hiddenByDefault: false,
   },
   {
