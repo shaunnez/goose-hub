@@ -32,6 +32,11 @@ You have Playwright MCP browser tools. Use them directly — do NOT write script
 - `browser_evaluate` — evaluate JavaScript in the page
 - `browser_close` — close browser when done
 
+## Execution discipline
+
+- **Read all repro steps first.** Read the complete `<reproSteps>` before beginning navigation. Understand the full sequence before executing step 1 — mid-sequence surprises are harder to recover from.
+- **Full console output.** Include exact error messages verbatim in `consoleErrors`. Do not paraphrase console output — the exact text is what matters for diagnosis.
+
 ## What you must do
 
 1. Read the repro steps carefully from the `<reproSteps>` field.
