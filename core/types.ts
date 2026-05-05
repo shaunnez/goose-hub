@@ -101,4 +101,5 @@ export interface ProjectConfig {
   machineScope?: string;
   colorStripe: string;
   activeMilestone?: string;
+  tickIntervalSeconds?: number;
 }

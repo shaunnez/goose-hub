@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectConfig } from '../types.js';
 import { DuplicateSlugError, detectDuplicateSlugs } from './loader.js';
+import { startPerProjectScheduler } from './scheduler.js';
 
 afterEach(() => {
   vi.resetModules();
@@ -120,5 +121,95 @@ describe('getProjectBySlug', () => {
     }));
     const { getProjectBySlug } = await import('./loader.js');
     expect(await getProjectBySlug('missing-slug', '/some/root')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// startPerProjectScheduler
+// ---------------------------------------------------------------------------
+
+describe('startPerProjectScheduler', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function makeProject(slug: string, tickIntervalSeconds?: number): ProjectConfig {
+    return { slug, tickIntervalSeconds } as unknown as ProjectConfig;
+  }
+
+  it('fires tickFn once per project after one interval', async () => {
+    const tickA = vi.fn().mockResolvedValue(undefined);
+    const tickB = vi.fn().mockResolvedValue(undefined);
+    const calls: string[] = [];
+    const scheduler = startPerProjectScheduler(
+      [makeProject('proj-a', 10), makeProject('proj-b', 20)],
+      async (slug) => {
+        calls.push(slug);
+        if (slug === 'proj-a') await tickA();
+        else await tickB();
+      },
+    );
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(calls).toContain('proj-a');
+    expect(calls).not.toContain('proj-b');
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(calls.filter((s) => s === 'proj-a').length).toBe(2);
+    expect(calls.filter((s) => s === 'proj-b').length).toBe(1);
+
+    scheduler.stop();
+  });
+
+  it('uses default 60s interval when tickIntervalSeconds is not set', async () => {
+    const ticks: string[] = [];
+    const scheduler = startPerProjectScheduler([makeProject('default-proj')], async (slug) => {
+      ticks.push(slug);
+    });
+
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(ticks).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(ticks).toHaveLength(1);
+
+    scheduler.stop();
+  });
+
+  it('errors in one project tick do not stop the other project timer', async () => {
+    const bTicks: string[] = [];
+    const scheduler = startPerProjectScheduler(
+      [makeProject('bad-proj', 5), makeProject('good-proj', 5)],
+      async (slug) => {
+        if (slug === 'bad-proj') throw new Error('boom');
+        bTicks.push(slug);
+      },
+    );
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    // bad-proj threw but good-proj still fired
+    expect(bTicks).toContain('good-proj');
+
+    scheduler.stop();
+  });
+
+  it('stop() cancels all timers', async () => {
+    const ticks: string[] = [];
+    const scheduler = startPerProjectScheduler([makeProject('proj', 5)], async (slug) => {
+      ticks.push(slug);
+    });
+
+    scheduler.stop();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(ticks).toHaveLength(0);
+  });
+
+  it('returns immediately when given an empty project list', () => {
+    const scheduler = startPerProjectScheduler([], async () => {});
+    expect(() => scheduler.stop()).not.toThrow();
   });
 });

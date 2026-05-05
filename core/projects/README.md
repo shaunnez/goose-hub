@@ -26,6 +26,25 @@ Pure function — throws `DuplicateSlugError` on first duplicate slug. Exported 
 
 Thrown when two projects share a slug. Carries `.slug: string`.
 
+## Scheduler
+
+### `startPerProjectScheduler(projects, tickFn)`
+
+Starts one independent `setInterval` per project. Each fires at `project.tickIntervalSeconds ?? 60` seconds. Errors in one project's tick are caught and logged; they never prevent other projects' timers from firing. Returns a `ProjectScheduler` handle with a `stop()` method.
+
+```ts
+import { loadProjects } from '@goose-hub/core/projects/loader.js';
+import { startPerProjectScheduler } from '@goose-hub/core/projects/scheduler.js';
+
+const projects = await loadProjects();
+const scheduler = startPerProjectScheduler(projects, async (slug) => {
+  await runTriageBatch(slug);
+});
+// later: scheduler.stop()
+```
+
+Per-project locking (one workflow at a time) is enforced in `apps/server/src/shared/dispatch.ts` via per-slug in-flight sets — not in the scheduler itself.
+
 ## Adding a project
 
 Create `target-projects/<slug>/project.config.ts` exporting a `ProjectConfig` default. Required fields added in M10:

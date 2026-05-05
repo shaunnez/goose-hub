@@ -4,7 +4,10 @@ config({ path: resolve(import.meta.dirname, '../../../.env') });
 
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
+import { loadProjects } from '@goose-hub/core/projects/loader.js';
+import { startPerProjectScheduler } from '@goose-hub/core/projects/scheduler.js';
 import { serve } from '@hono/node-server';
+import { runTriageBatch } from './domains/workflows/triage-batch.js';
 import { app } from './server.js';
 
 if (process.env.VITEST == null) {
@@ -18,4 +21,13 @@ if (process.env.VITEST == null) {
   const port = Number(process.env.PORT ?? 3001);
   serve({ fetch: app.fetch, port });
   logger.info('server started', { port });
+
+  loadProjects()
+    .then((projects) => {
+      startPerProjectScheduler(projects, (slug) => runTriageBatch(slug));
+      logger.info('per-project tick scheduler started', { projects: projects.map((p) => p.slug) });
+    })
+    .catch((err: unknown) => {
+      logger.error('failed to start per-project tick scheduler', { error: String(err) });
+    });
 }
