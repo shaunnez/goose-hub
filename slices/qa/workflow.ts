@@ -68,16 +68,16 @@ async function defaultRunTests(cwd: string, command: string): Promise<TestRun | 
 export async function runQaWorkflow(
   workItem: WorkItem,
   stateSource: StateSource,
-  projectId: string,
+  projectSlug: string,
   _targetRepo: string,
   deps: QaWorkflowDeps = {},
 ): Promise<void> {
   const runId = crypto.randomUUID();
   const runtime = deps.runtime ?? new ClaudeCliRuntime();
   const runTests = deps.runTests ?? defaultRunTests;
-  const qaPrompt = readPromptWithContext('qa', projectId);
+  const qaPrompt = readPromptWithContext('qa', projectSlug);
   const qaJsonSchema = toJsonSchema(QaOutputSchema);
-  const { personaId } = selectPersona(projectId, 'qa');
+  const { personaId } = selectPersona(projectSlug, 'qa');
   const prDiff = getPrDiff(workItem);
   const workspaceDir = findDevWorktreePath(workItem.id);
 
@@ -97,7 +97,7 @@ export async function runQaWorkflow(
       role: 'qa',
       skill: 'qa',
       context: {
-        projectId,
+        projectId: projectSlug,
         workItemId: workItem.id,
         workItem: {
           title: workItem.title,
@@ -140,7 +140,7 @@ export async function runQaWorkflow(
     ][]) {
       if (!qaOutput.tierResults[tier].passed) {
         eventStore.appendEvent({
-          projectId,
+          projectId: projectSlug,
           workItemId: workItem.id,
           kind,
           payload: { tier, findings: qaOutput.tierResults[tier].findings },
@@ -154,7 +154,7 @@ export async function runQaWorkflow(
     // agent might echo back — even if the schema accepts it from the agent,
     // we trust our own measurement.
     eventStore.appendEvent({
-      projectId,
+      projectId: projectSlug,
       workItemId: workItem.id,
       kind: 'qa.completed',
       payload: {
@@ -170,7 +170,7 @@ export async function runQaWorkflow(
 
     for (const summary of qaOutput.decisionSummaries) {
       eventStore.appendEvent({
-        projectId,
+        projectId: projectSlug,
         workItemId: workItem.id,
         kind: 'agent.decision-summary',
         payload: { skill: 'qa', ...summary },
@@ -192,7 +192,7 @@ export async function runQaWorkflow(
       nextState = needsEscalation ? 'factory:needs-human' : 'factory:qa-failed';
       if (needsEscalation) {
         eventStore.appendEvent({
-          projectId,
+          projectId: projectSlug,
           workItemId: workItem.id,
           kind: 'agent.retry-escalated',
           payload: { stage: 'qa', maxRetries: DEFAULT_MAX_RETRIES, runId },
@@ -217,7 +217,7 @@ export async function runQaWorkflow(
     accumulatePersonaStats({ personaName: personaId, role: 'qa', outcome: 'failure' });
     const error = err instanceof Error ? err : new Error(String(err));
     eventStore.appendEvent({
-      projectId,
+      projectId: projectSlug,
       workItemId: workItem.id,
       kind: 'agent.run-failed',
       payload: { runId, error: error.message },
