@@ -437,6 +437,7 @@ async function afterImplement(input: AfterImplementInput): Promise<void> {
     repoRef,
     evidenceSpecPath: implementOutput.evidenceSpecPath,
     beforeCommentUrl,
+    worktreePath,
   });
 
   // Step 7: M8 path — route through QA before approval (factory:in-progress → factory:needs-qa)
@@ -459,6 +460,13 @@ interface RunEvidencePostInput {
    * investigation. Present only for type:bug; undefined for feature/chore.
    */
   beforeCommentUrl?: string;
+  /**
+   * Dev worktree path. Passed as `workspaceDir` so the agent runs inside the
+   * git repo it must read from (spec source, app code) and push from. Without
+   * this, the runtime falls back to a fresh empty directory and every git
+   * command in the skill fails.
+   */
+  worktreePath: string;
 }
 
 /**
@@ -485,6 +493,7 @@ async function runEvidencePost(input: RunEvidencePostInput): Promise<void> {
       runId: evidenceRunId,
       role: 'developer',
       skill: 'evidence-post',
+      workspaceDir: input.worktreePath,
       context: {
         projectId: input.projectId,
         workItemId: input.workItem.id,

@@ -109,38 +109,41 @@ If the WebM does not exist or `ffmpeg` fails, set `gifPath: null` in the output 
 
 ### 6. Push artefacts to the evidence branch
 
-The `evidence/issue-<N>` branch is a dedicated, never-deleted **secondary** branch that holds image artefacts only. The dev branch (where code lives) and the QA worktree are completely separate. To avoid disturbing the current worktree's HEAD or working tree, do all evidence work in a **dedicated git worktree** at a sibling path. Never push to `main`.
+The `evidence/issue-<N>` branch is a dedicated, never-deleted **secondary** branch that holds image artefacts only. The dev branch (where code lives) and the QA worktree are completely separate. Do all evidence work in a sibling git worktree at `/tmp/evidence-issue-<N>` and use `git -C <path>` for every git command on it — that way the agent never `cd`s and the dev worktree stays untouched. Never push to `main`.
+
+**Substitute `<N>` with the literal issue number** (e.g. `42`) in every command below. Do not use shell variables; the tool allowlist matches on the literal command text.
 
 From the dev worktree:
 
 ```bash
-EVIDENCE_DIR=/tmp/evidence-issue-<N>
-
 # Clean up any orphan worktree from a prior failed run.
-git worktree remove --force "$EVIDENCE_DIR" 2>/dev/null || true
+git worktree remove --force /tmp/evidence-issue-<N> 2>/dev/null || true
 
 # Fetch the evidence branch in case a prior run already pushed to it.
 # (This is the BEFORE state, but a previous attempt may have created the
 # remote branch even if its commit didn't post the comment.)
 git fetch origin evidence/issue-<N> 2>/dev/null || true
 
-if git show-ref --verify --quiet refs/remotes/origin/evidence/issue-<N>; then
-  git worktree add "$EVIDENCE_DIR" -B evidence/issue-<N> origin/evidence/issue-<N>
-else
-  git worktree add "$EVIDENCE_DIR" -b evidence/issue-<N>
-fi
+# Track the remote when present so the subsequent push is a fast-forward;
+# otherwise create the branch fresh from current HEAD.
+git show-ref --verify --quiet refs/remotes/origin/evidence/issue-<N> \
+  && git worktree add /tmp/evidence-issue-<N> -B evidence/issue-<N> origin/evidence/issue-<N> \
+  || git worktree add /tmp/evidence-issue-<N> -b evidence/issue-<N>
 
-cd "$EVIDENCE_DIR"
-mkdir -p evidence/issue-<N>
-# Copy /tmp/repro-<slug>/step-*.png and walkthrough.gif into evidence/issue-<N>/
-git add evidence/issue-<N>/
-git commit -m "evidence: before-state for issue #<N>"
-git push origin evidence/issue-<N>
-git rev-parse HEAD    # capture the SHA
+# Stage the artefacts INTO the evidence worktree without changing CWD.
+mkdir -p /tmp/evidence-issue-<N>/evidence/issue-<N>
+cp /tmp/repro-<slug>/step-*.png /tmp/evidence-issue-<N>/evidence/issue-<N>/
+cp /tmp/repro-<slug>/walkthrough.gif /tmp/evidence-issue-<N>/evidence/issue-<N>/
 
-# Tear down the helper worktree — the dev worktree is untouched.
-cd -
-git worktree remove "$EVIDENCE_DIR"
+# All git commands on the evidence worktree go through -C so the dev
+# worktree's CWD is preserved.
+git -C /tmp/evidence-issue-<N> add evidence/issue-<N>/
+git -C /tmp/evidence-issue-<N> commit -m "evidence: before-state for issue #<N>"
+git -C /tmp/evidence-issue-<N> push origin evidence/issue-<N>
+git -C /tmp/evidence-issue-<N> rev-parse HEAD    # capture the SHA
+
+# Tear down the helper worktree.
+git worktree remove /tmp/evidence-issue-<N>
 ```
 
 ### 7. Build SHA-pinned GitHub URLs
