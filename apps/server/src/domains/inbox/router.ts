@@ -21,11 +21,16 @@ router.get('/', async (c) => {
 router.post('/:id/promote', async (c) => {
   const id = Number(c.req.param('id'));
   if (Number.isNaN(id)) return c.json({ error: 'invalid id' }, 400);
-  const body = await parseBody<{ projectSlug?: string; milestoneNumber?: number | null }>(c);
+  const body = await parseBody<{
+    projectSlug?: string;
+    milestoneNumber?: number | null;
+    enhance?: boolean;
+  }>(c);
   if (!body.ok) return body.error;
   const slug = body.data.projectSlug ?? 'goose-hub-self';
   const milestoneNumber = body.data.milestoneNumber;
-  const result = await promoteInboxItem(id, slug, milestoneNumber);
+  const enhance = body.data.enhance === true;
+  const result = await promoteInboxItem(id, slug, milestoneNumber, enhance);
   return result.ok
     ? c.json(result.data)
     : c.json({ error: result.error }, result.status as 400 | 404);

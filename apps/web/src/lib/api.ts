@@ -233,8 +233,9 @@ export async function promoteInboxItem(
   id: number,
   projectSlug = 'goose-hub-self',
   milestoneNumber?: number | null,
+  enhance?: boolean,
 ): Promise<void> {
-  await postJson(`/inbox/${id}/promote`, { projectSlug, milestoneNumber });
+  await postJson(`/inbox/${id}/promote`, { projectSlug, milestoneNumber, enhance });
 }
 
 export async function deleteInboxItem(id: number): Promise<void> {
