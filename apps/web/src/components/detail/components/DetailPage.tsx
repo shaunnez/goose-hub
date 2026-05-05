@@ -15,7 +15,6 @@ import { GatePendingBanner } from './GatePendingBanner';
 import { InvestigationSection } from './InvestigationSection';
 import { LeftRail } from './LeftRail';
 import { OverviewSection } from './OverviewSection';
-import { PlaywrightCaptureSection } from './PlaywrightCaptureSection';
 import { QASection } from './QASection';
 import { RetrospectiveSection } from './RetrospectiveSection';
 import { ReviewSection } from './ReviewSection';
@@ -235,14 +234,9 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
             ) : currentSection.key === 'timeline' ? (
               <TimelineSection projectSlug={slug} id={id} workItemId={workItemId} />
             ) : currentSection.key === 'investigation' ? (
-              <InvestigationSection projectSlug={slug} id={id} itemState={item?.state} />
+              <InvestigationSection projectSlug={slug} id={id} itemState={item?.state} itemType={item?.type} />
             ) : currentSection.key === 'code' ? (
-              <div>
-                <CodeDiffSection projectSlug={slug} id={id} />
-                {item?.type === 'bug' && (
-                  <PlaywrightCaptureSection projectSlug={slug} id={id} itemType={item.type} />
-                )}
-              </div>
+              <CodeDiffSection projectSlug={slug} id={id} />
             ) : currentSection.key === 'qa' ? (
               <QASection projectSlug={slug} id={id} />
             ) : currentSection.key === 'review' ? (
