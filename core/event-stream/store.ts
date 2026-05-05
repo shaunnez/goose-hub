@@ -50,7 +50,9 @@ export type EventKind =
   // M8 retry-and-escalate
   | 'agent.retry-escalated'
   // M9 retrospective lifecycle
-  | 'retrospective.completed';
+  | 'retrospective.completed'
+  // M9 PostToolUse hook — live decision marker (#465)
+  | 'agent.decision-summary-live';
 
 export interface AgentEvent {
   id: number;

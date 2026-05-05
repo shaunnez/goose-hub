@@ -15,6 +15,42 @@ import { buildSseStream } from '@goose-hub/core/event-stream/sse.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { eventsRouter } from './router.js';
 
+describe('POST /events/decision-summary', () => {
+  beforeEach(() => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+  });
+
+  it('appends an agent.decision-summary-live event and returns 202', async () => {
+    const app = new Hono().route('/events', eventsRouter);
+    const res = await app.request('/events/decision-summary', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        run_id: 'run-ds-1',
+        summary: 'Chose approach X',
+        timestamp: '2026-01-01T00:00:00Z',
+      }),
+    });
+    expect(res.status).toBe(202);
+    const body = (await res.json()) as { ok: boolean };
+    expect(body.ok).toBe(true);
+    expect(eventStore.appendEvent).toHaveBeenCalledTimes(1);
+    const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
+    expect(arg.kind).toBe('agent.decision-summary-live');
+    expect(arg.runId).toBe('run-ds-1');
+  });
+
+  it('returns 400 for invalid JSON', async () => {
+    const app = new Hono().route('/events', eventsRouter);
+    const res = await app.request('/events/decision-summary', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('POST /events/tool-call (#209)', () => {
   beforeEach(() => {
     vi.mocked(eventStore.appendEvent).mockClear();
