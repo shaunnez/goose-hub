@@ -24,7 +24,7 @@ export function Pill({ tone = 'default', className, children, ...rest }: PillPro
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 h-6 px-2 rounded-full text-[11.5px]',
+        'inline-flex items-center gap-1.5 h-6 px-2 rounded-full text-[11.5px] truncate',
         TONE_CLASSES[tone],
         className,
       )}
