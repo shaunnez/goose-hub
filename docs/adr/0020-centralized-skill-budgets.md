@@ -57,7 +57,20 @@ Default tiers by skill:
 
 `developer.primary` in `rolesModels` updated to `haiku` (fallback remains `sonnet`). This is documentation of intent — the actual model comes from `resolveBudgets`.
 
-### 5. Telemetry: `turnsUsed` added to `agent.run-completed`
+### 5. Schema-validation escalation (haiku → sonnet retry)
+
+`SkillBudget.escalation?: { modelTier; maxBudgetUsd; maxTurns?; timeoutMs? }` defines an opt-in retry policy for schema-validation failures. `runWithEscalation` (in `core/agent-runtime/with-escalation.ts`) wraps a `runtime.run(spec)` + Zod `safeParse` pair: on parse failure for an escalatable skill, it retries once at the escalated tier with a fresh `runId` and emits `agent.retry-escalated` with `{ runId, retryRunId, skill, fromModel, toModel, reason: 'schema-validation-failed' }`.
+
+Constraints:
+
+- Holdout roles (`qa`, `reviewer`) never escalate — they throw `HoldoutFallbackForbiddenError` instead.
+- Subprocess failures (timeout, process death) are not handled here; those go to `withFallback`. This wrapper only handles validation failure on a successful run.
+- One retry maximum — haiku → sonnet, not a loop.
+- The retry uses a recalculated budget (sonnet ~10× per-token cost vs haiku) and a new `runId` for separate cost attribution.
+
+Currently only `implement` opts in (`escalation: { modelTier: 'sonnet', maxBudgetUsd: 15.0 }`). Triage / repo-match / evidence-post deliberately do not — the per-run savings on those skills don't justify the extra complexity, and a hard fail is acceptable.
+
+### 6. Telemetry: `turnsUsed` added to `agent.run-completed`
 
 The CLI `--output-format json` envelope includes `num_turns`. This is now extracted and added to the `agent.run-completed` payload alongside `turns.budgeted` and `budget.usd`. Retrospectives can compare observed usage against limits to recommend budget tuning.
 
@@ -83,6 +96,6 @@ Skills without telemetry (investigate, playwright-repro, advisor, spec-author, r
 ## Consequences
 
 - All call sites are ~1 line instead of 3. Adding a new skill requires one entry in `SKILL_BUDGETS`.
-- Haiku-first reduces cost on most runs. Schema-validation escalation (upgrade haiku → sonnet on failure) is a separate future ADR.
+- Haiku-first reduces cost on most runs. Schema-validation escalation (upgrade haiku → sonnet on failure) is implemented in `runWithEscalation` and currently enabled for `implement` only.
 - `timeoutMs` is no longer optional at the config layer; all SKILL_BUDGETS entries include it explicitly. The runtime still handles a missing `timeoutMs` via the existing `TIMEOUT_MS` fallback (30s) for specs that bypass the resolver.
 - `rolesModels.developer.primary` is now `haiku` but this field is currently informational only — the authoritative tier comes from `resolveBudgets`.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SKILL_BUDGETS, resolveBudgets } from './budgets.js';
+import { SKILL_BUDGETS, resolveBudgets, resolveEscalatedBudgets } from './budgets.js';
 
 describe('SKILL_BUDGETS', () => {
   it('covers all expected production skills', () => {
@@ -108,5 +108,32 @@ describe('resolveBudgets', () => {
       const { modelOverride } = resolveBudgets(skill);
       expect(modelOverride, `${skill} should use sonnet`).toContain('sonnet');
     }
+  });
+});
+
+describe('resolveEscalatedBudgets', () => {
+  it('returns sonnet budget for implement skill', () => {
+    const result = resolveEscalatedBudgets('implement');
+    expect(result).not.toBeNull();
+    expect(result?.modelOverride).toContain('sonnet');
+    expect(result?.budgets.maxBudgetUsd).toBe(15.0);
+    // maxTurns/timeoutMs default to base entry
+    expect(result?.budgets.maxTurns).toBe(150);
+    expect(result?.budgets.timeoutMs).toBe(900_000);
+  });
+
+  it('returns null for skills without an escalation policy', () => {
+    for (const skill of ['triage', 'repo-match', 'evidence-post', 'qa', 'review']) {
+      expect(resolveEscalatedBudgets(skill), `${skill}`).toBeNull();
+    }
+  });
+
+  it('returns null for unknown skill (no base, no override with escalation)', () => {
+    expect(resolveEscalatedBudgets('unknown-skill-xyz')).toBeNull();
+  });
+
+  it('caps escalated maxBudgetUsd at perWorkflowMaxUsd', () => {
+    const result = resolveEscalatedBudgets('implement', { perWorkflowMaxUsd: 8 });
+    expect(result?.budgets.maxBudgetUsd).toBe(8);
   });
 });

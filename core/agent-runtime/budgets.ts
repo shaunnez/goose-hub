@@ -7,6 +7,23 @@ export interface SkillBudget {
   maxBudgetUsd: number;
   timeoutMs: number;
   modelTier: ModelTier;
+  /**
+   * Escalation policy for schema-validation failures. When present,
+   * `runWithEscalation` may retry once at the escalated tier with the
+   * supplied budget. Sonnet costs ~10× haiku per token, so escalated
+   * `maxBudgetUsd` should be sized accordingly — reuse of the base haiku
+   * budget would risk hitting the cap mid-run.
+   *
+   * Only set this on skills where retry is worth the cost (`implement`).
+   * Triage / repo-match / evidence-post fail loudly instead — the savings
+   * there don't justify the complexity.
+   */
+  escalation?: {
+    modelTier: ModelTier;
+    maxBudgetUsd: number;
+    maxTurns?: number;
+    timeoutMs?: number;
+  };
 }
 
 export type SkillBudgetOverride = Partial<SkillBudget>;
@@ -31,7 +48,15 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
   'repo-match': { maxTurns: 25, maxBudgetUsd: 0.05, timeoutMs: 60_000, modelTier: 'haiku' },
   'bug-enhance': { maxTurns: 20, maxBudgetUsd: 0.3, timeoutMs: 120_000, modelTier: 'haiku' },
   'evidence-post': { maxTurns: 60, maxBudgetUsd: 2.0, timeoutMs: 300_000, modelTier: 'haiku' },
-  implement: { maxTurns: 150, maxBudgetUsd: 6.0, timeoutMs: 900_000, modelTier: 'haiku' },
+  implement: {
+    maxTurns: 150,
+    maxBudgetUsd: 6.0,
+    timeoutMs: 900_000,
+    modelTier: 'haiku',
+    // Sonnet retry: ~2.5× haiku cap to absorb the per-token price delta on
+    // a comparable turn count. Keep maxTurns/timeoutMs from the base.
+    escalation: { modelTier: 'sonnet', maxBudgetUsd: 15.0 },
+  },
   qa: { maxTurns: 100, maxBudgetUsd: 3.0, timeoutMs: 600_000, modelTier: 'sonnet' },
   review: { maxTurns: 25, maxBudgetUsd: 0.5, timeoutMs: 180_000, modelTier: 'sonnet' },
   'resolve-conflict': { maxTurns: 75, maxBudgetUsd: 4.0, timeoutMs: 600_000, modelTier: 'sonnet' },
@@ -107,5 +132,49 @@ export function resolveBudgets(
   return {
     budgets: { maxTurns: merged.maxTurns, maxBudgetUsd, timeoutMs: merged.timeoutMs },
     modelOverride: defaultModelForTier(merged.modelTier),
+  };
+}
+
+/**
+ * Resolves the escalated budget for a skill — used by `runWithEscalation` to
+ * retry once at a higher tier when the haiku output fails schema validation.
+ *
+ * Returns `null` when the skill has no escalation policy (most skills don't);
+ * the caller must then surface the validation error.
+ *
+ * `maxTurns` and `timeoutMs` default to the base entry's values; `maxBudgetUsd`
+ * comes from the escalation block (sonnet pricing > haiku, so the cap must
+ * grow). `perWorkflowMaxUsd` from project budgets still caps the result.
+ */
+export function resolveEscalatedBudgets(
+  skill: string,
+  projectBudgets?: {
+    perWorkflowMaxUsd?: number;
+    skillBudgetOverrides?: Record<string, SkillBudgetOverride>;
+  },
+): ResolvedBudget | null {
+  const base = SKILL_BUDGETS[skill];
+  const override = projectBudgets?.skillBudgetOverrides?.[skill];
+
+  const escalation = override?.escalation ?? base?.escalation;
+  if (escalation == null) return null;
+
+  const baseTurns = override?.maxTurns ?? base?.maxTurns ?? 10;
+  const baseTimeout = override?.timeoutMs ?? base?.timeoutMs ?? 120_000;
+
+  const maxTurns = escalation.maxTurns ?? baseTurns;
+  const timeoutMs = escalation.timeoutMs ?? baseTimeout;
+  let maxBudgetUsd = escalation.maxBudgetUsd;
+
+  if (
+    projectBudgets?.perWorkflowMaxUsd != null &&
+    maxBudgetUsd > projectBudgets.perWorkflowMaxUsd
+  ) {
+    maxBudgetUsd = projectBudgets.perWorkflowMaxUsd;
+  }
+
+  return {
+    budgets: { maxTurns, maxBudgetUsd, timeoutMs },
+    modelOverride: defaultModelForTier(escalation.modelTier),
   };
 }
