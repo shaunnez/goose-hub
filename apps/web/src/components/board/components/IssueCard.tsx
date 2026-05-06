@@ -6,7 +6,17 @@ import type { WorkItemCostsDto, WorkItemDto } from '@/lib/types';
 import { getPersonaInitials, usePersonaMap } from '@/lib/usePersonaMap';
 import { ageLabel, formatCost } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
+import { Ban } from 'lucide-react';
 import { Link } from 'react-router-dom';
+
+/** Shorten a repo-qualified dep ref to issue-number-only when it's in the same repo. */
+function shortRef(ref: string, repoRef: string): string {
+  const prefix = `${repoRef}#`;
+  if (ref.startsWith(prefix)) return `#${ref.split('#').pop()}`;
+  // Already short (e.g. "#292" from same-repo shorthand in body)
+  if (ref.startsWith('#')) return ref;
+  return ref;
+}
 
 export function IssueCard({
   item,
@@ -20,6 +30,7 @@ export function IssueCard({
   const ageStr = ageLabel(item.createdAt);
   const personaMap = usePersonaMap();
   const initials = getPersonaInitials(personaMap, item.lastPersonaId);
+  const isBlocked = item.schedule === 'blocked-by';
 
   // Per-card fetch; TanStack Query dedupes by key so the issue detail page
   // shares the same cache. Boards with many cards trigger N requests on mount —
@@ -35,16 +46,22 @@ export function IssueCard({
       : costs.rows.length === 0
         ? '$—'
         : formatCost(costs.totalUsd, costs.hasEstimated ? 'estimated' : 'exact');
+
+  const blockedTooltip = isBlocked
+    ? `Blocked by: ${item.dependsOn.map((r) => shortRef(r, item.repoRef)).join(', ')}`
+    : undefined;
   return (
     <Link
       to={`/projects/${projectSlug}/items/${item.externalId}`}
       data-testid="issue-card"
       data-issue-number={item.externalId}
       data-state={item.state}
+      data-schedule={item.schedule}
       data-project={projectColor != null ? projectSlug : undefined}
       className={cn(
         'block rounded-md border border-line bg-bg-elev px-3 py-2.5',
         'hover:border-line-2 hover:bg-bg-hover transition-colors',
+        isBlocked && 'border-[color:var(--danger)]/40',
       )}
       style={projectColor != null ? { borderLeft: `3px solid ${projectColor}` } : undefined}
     >
@@ -64,6 +81,17 @@ export function IssueCard({
         {item.title.length <= 55 ? item.title : `${item.title.slice(0, 54).trimEnd()}…`}
       </div>
       <div className="flex items-center gap-1.5 flex-wrap">
+        {isBlocked && (
+          <Pill
+            tone="danger"
+            className="h-5 text-[10.5px] px-2 gap-1"
+            title={blockedTooltip}
+            data-testid="blocked-indicator"
+          >
+            <Ban size={9} aria-hidden />
+            Blocked
+          </Pill>
+        )}
         <Pill tone="default" className="h-5 text-[10.5px] px-2">
           {STATE_LABEL[item.state] ?? item.state}
         </Pill>
