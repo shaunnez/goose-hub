@@ -9,6 +9,8 @@ import { selectPersona } from '../agent-runtime/select-persona.js';
 import { db } from '../db/db.js';
 import { improvementCandidates } from '../db/schema.js';
 import { eventStore } from '../event-stream/store.js';
+import { archiveLifecycle } from '../learning/archive.js';
+import { computeTrend } from '../learning/convergence.js';
 import { accumulatePersonaStats } from '../persona/accumulate.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import type { ImprovementCandidate } from '../retrospective/schemas.js';
@@ -113,6 +115,21 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
     ),
   );
 
+  // Collect unique roles from active persona IDs (format: projectId/role/slotIndex)
+  const activeRoles = Array.from(
+    new Set(
+      activePersonas.map((pid) => {
+        const parts = pid.split('/');
+        return parts.length >= 2 ? (parts[parts.length - 2] ?? 'unknown') : 'unknown';
+      }),
+    ),
+  );
+
+  const roleTrends = activeRoles.map((role) => ({
+    role,
+    ...computeTrend({ projectId, role }),
+  }));
+
   try {
     const result = await runtime.run({
       runId,
@@ -132,6 +149,7 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
           decisionSummaries: priorDecisionSummaries,
         },
         activePersonas,
+        roleTrends,
       },
       contextAllowlist: [
         'workItem.title',
@@ -139,6 +157,7 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
         'workItem.number',
         'runSummary',
         'activePersonas',
+        'roleTrends',
       ],
       freshContext: false,
       toolBundles: ['core'],
@@ -197,6 +216,20 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
 
     accumulatePersonaStats({ personaName: personaId, role: 'retrospector', outcome: 'success' });
     await stateSource.transitionState(workItem.externalId, 'factory:retrospecting', 'factory:done');
+    // Archive only after the state transition succeeds — otherwise a transition
+    // failure would leave a phantom archive row for a lifecycle that never
+    // reached factory:done, skewing future mining and trend output.
+    try {
+      archiveLifecycle({ projectId, workItemId: workItem.id });
+    } catch (archiveErr) {
+      eventStore.appendEvent({
+        kind: 'system.note',
+        projectId,
+        workItemId: workItem.id,
+        runId,
+        payload: { archiveError: String(archiveErr) },
+      });
+    }
   } catch (err) {
     accumulatePersonaStats({ personaName: personaId, role: 'retrospector', outcome: 'failure' });
     eventStore.appendEvent({
