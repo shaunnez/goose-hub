@@ -225,6 +225,54 @@ describe('tier selection', () => {
     const spec = mockRun.mock.calls[0][0] as { skill: string };
     expect(spec.skill).toBe('retrospective-deep');
   });
+
+  it('auto + retriesGe2 → retrospective-deep', async () => {
+    const { runRetrospectiveWorkflow } = await import('./retrospective.js');
+    mockRun.mockResolvedValueOnce(makeDeepResult());
+
+    await runRetrospectiveWorkflow({
+      workItem: makeWorkItem(),
+      stateSource: makeSource(),
+      projectId: 'test-project',
+      policy: 'auto',
+      triggers: { retriesGe2: true },
+    });
+
+    const spec = mockRun.mock.calls[0][0] as { skill: string };
+    expect(spec.skill).toBe('retrospective-deep');
+  });
+
+  it('auto + budgetExceeded → retrospective-deep', async () => {
+    const { runRetrospectiveWorkflow } = await import('./retrospective.js');
+    mockRun.mockResolvedValueOnce(makeDeepResult());
+
+    await runRetrospectiveWorkflow({
+      workItem: makeWorkItem(),
+      stateSource: makeSource(),
+      projectId: 'test-project',
+      policy: 'auto',
+      triggers: { budgetExceeded: true },
+    });
+
+    const spec = mockRun.mock.calls[0][0] as { skill: string };
+    expect(spec.skill).toBe('retrospective-deep');
+  });
+
+  it('auto + priorityHigh → retrospective-deep', async () => {
+    const { runRetrospectiveWorkflow } = await import('./retrospective.js');
+    mockRun.mockResolvedValueOnce(makeDeepResult());
+
+    await runRetrospectiveWorkflow({
+      workItem: makeWorkItem(),
+      stateSource: makeSource(),
+      projectId: 'test-project',
+      policy: 'auto',
+      triggers: { priorityHigh: true },
+    });
+
+    const spec = mockRun.mock.calls[0][0] as { skill: string };
+    expect(spec.skill).toBe('retrospective-deep');
+  });
 });
 
 // ─── context assembly ─────────────────────────────────────────────────────────

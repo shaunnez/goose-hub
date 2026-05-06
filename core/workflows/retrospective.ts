@@ -19,6 +19,9 @@ export interface TriggerContext {
   qaFailed?: boolean;
   qualityScoreDeclining?: boolean;
   humanRequested?: boolean;
+  retriesGe2?: boolean;
+  budgetExceeded?: boolean;
+  priorityHigh?: boolean;
 }
 
 export interface RunRetrospectiveInput {
@@ -56,7 +59,10 @@ function selectTier(policy: RetrospectivePolicy, triggers: TriggerContext): 'lig
     triggers.firstRunInMilestone ||
     triggers.qaFailed ||
     triggers.qualityScoreDeclining ||
-    triggers.humanRequested
+    triggers.humanRequested ||
+    triggers.retriesGe2 ||
+    triggers.budgetExceeded ||
+    triggers.priorityHigh
   ) {
     return 'deep';
   }
