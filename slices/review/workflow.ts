@@ -75,11 +75,12 @@ export async function runReviewWorkflow(
     }
     const reviewOutput = parsed.data;
 
+    const { decisionSummaries: _ds, ...reviewPayload } = reviewOutput;
     eventStore.appendEvent({
       projectId: projectSlug,
       workItemId: workItem.id,
       kind: 'review.completed',
-      payload: { verdict: reviewOutput.verdict, confidence: reviewOutput.confidence },
+      payload: reviewPayload,
       runId,
     });
 

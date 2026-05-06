@@ -109,10 +109,9 @@ export function ReviewSection({ projectSlug, id }: ReviewSectionProps) {
   });
   const { byStage } = useIssueCostsBreakdown(projectSlug, id);
   const reviewCost = byStage.get('review');
-
   if (isLoading) return null;
 
-  const reviewEvent = [...events].reverse().find((e) => e.kind === 'review.completed');
+  const reviewEvent = [...events].find((e) => e.kind === 'review.completed');
   const review = reviewEvent?.payload as ReviewPayload | undefined;
 
   const prOpenedEvent = [...events]
@@ -123,6 +122,8 @@ export function ReviewSection({ projectSlug, id }: ReviewSectionProps) {
     );
   const prUrl = prOpenedEvent?.payload.prUrl ?? null;
   const prNumber = prOpenedEvent?.payload.prNumber ?? null;
+
+console.log(reviewCost, reviewEvent, review, prOpenedEvent)
 
   if (!review) {
     return (

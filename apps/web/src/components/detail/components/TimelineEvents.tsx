@@ -774,7 +774,13 @@ function RetroCompletedEvent({ event }: { event: AgentEventDto }) {
           .split('\n')
           .map((l) => l.replace(/^[-*]\s*/, '').trim())
           .filter(Boolean)
-      : [];
+      : rawSummary != null && typeof rawSummary === 'object'
+        ? [
+            (rawSummary as Record<string, unknown>).wentWell,
+            (rawSummary as Record<string, unknown>).couldBeSmootherOrCleanRun,
+            (rawSummary as Record<string, unknown>).mainTakeaway,
+          ].filter((s): s is string => typeof s === 'string' && s.length > 0)
+        : [];
   const candidateCount = p?.output?.improvementCandidates?.length ?? 0;
 
   return (
