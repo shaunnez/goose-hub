@@ -1,30 +1,61 @@
 {
+  "defaultMode": "auto",
   "permissions": {
-    "deny": [
-      "Read(./.env*)",
-      "Bash(sudo *)",
-      "Bash(rm -rf *)"
+    "allow": [
+      "Bash(pnpm biome check *)",
+      "Bash(pnpm test *)",
+      "Bash(pnpm tsc --noEmit *)"
     ]
   },
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": ".*",
+        "matcher": "Edit|Write",
         "hooks": [
           {
             "type": "command",
-            "command": "\"/opt/homebrew/Cellar/node@22/22.22.2/bin/node\" \"/Users/shaunnesbitt/.factory/hooks/pre-tool-use.js\""
+            "command": "bash .claude/hooks/pre-tool-use-governance.sh"
           }
         ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": ".*",
+        "matcher": "Edit|Write",
         "hooks": [
           {
             "type": "command",
-            "command": "\"/opt/homebrew/Cellar/node@22/22.22.2/bin/node\" \"/Users/shaunnesbitt/.factory/hooks/post-tool-use.js\""
+            "command": "bash .claude/hooks/post-write-quality.sh"
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/post-compact.sh"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/subagent-start.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/stop-verify.sh"
           }
         ]
       }
