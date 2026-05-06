@@ -274,6 +274,40 @@ describe('context assembly', () => {
       summary: 'Added widget',
     });
   });
+
+  it('emits agent.decision-summary events from the retro output', async () => {
+    const { runRetrospectiveWorkflow } = await import('./retrospective.js');
+    const { eventStore } = await import('../event-stream/store.js');
+
+    const resultWithSummaries = {
+      output: {
+        summary: '- All good.\n- No issues.\n- Keep it up.',
+        improvementCandidates: [],
+        decisionSummaries: [
+          { kind: 'VERDICT', summary: 'Clean run — no friction detected' },
+        ],
+      },
+      decisionSummaries: [], // runtime always returns [] — bug being fixed
+      events: [],
+    };
+    mockRun.mockResolvedValueOnce(resultWithSummaries);
+
+    await runRetrospectiveWorkflow({
+      workItem: makeWorkItem(),
+      stateSource: makeSource(),
+      projectId: 'test-project',
+      policy: 'always-light',
+    });
+
+    const summaryEvents = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(([e]) => e.kind === 'agent.decision-summary');
+
+    expect(summaryEvents).toHaveLength(1);
+    const payload = summaryEvents[0][0].payload as { kind: string; summary: string };
+    expect(payload.kind).toBe('VERDICT');
+    expect(payload.summary).toBe('Clean run — no friction detected');
+  });
 });
 
 // ─── state transitions ────────────────────────────────────────────────────────

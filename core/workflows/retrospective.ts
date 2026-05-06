@@ -131,18 +131,19 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
       tier === 'deep'
         ? DeepRetroSchema.safeParse(result.output)
         : LightRetroSchema.safeParse(result.output);
-    if (parsed.success && parsed.data.improvementCandidates.length > 0) {
-      persistCandidates(projectId, personaId, workItem.id, parsed.data.improvementCandidates);
-    }
-
-    for (const ds of result.decisionSummaries) {
-      eventStore.appendEvent({
-        kind: 'agent.decision-summary',
-        projectId,
-        workItemId: workItem.id,
-        runId,
-        payload: { skill: skillName, ...ds },
-      });
+    if (parsed.success) {
+      if (parsed.data.improvementCandidates.length > 0) {
+        persistCandidates(projectId, personaId, workItem.id, parsed.data.improvementCandidates);
+      }
+      for (const ds of parsed.data.decisionSummaries) {
+        eventStore.appendEvent({
+          kind: 'agent.decision-summary',
+          projectId,
+          workItemId: workItem.id,
+          runId,
+          payload: { skill: skillName, ...ds },
+        });
+      }
     }
 
     accumulatePersonaStats({ personaName: personaId, role: 'retrospector', outcome: 'success' });
