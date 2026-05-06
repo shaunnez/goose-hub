@@ -139,4 +139,18 @@ describe('IssueCard', () => {
     renderCard({ ...BASE_ITEM, milestoneTitle: undefined });
     expect(screen.queryByTestId('milestone-badge')).toBeNull();
   });
+
+  it('truncates long milestone names to prevent text overflow', () => {
+    vi.mocked(fetchIssueCosts).mockResolvedValueOnce(costsResponse([]));
+    const longMilestone =
+      'M99: Very Long Milestone Name That Should Be Truncated With Ellipsis To Prevent Overflow';
+    renderCard({ ...BASE_ITEM, milestoneTitle: longMilestone });
+    const badge = screen.getByTestId('milestone-badge');
+    // Verify the badge has truncate class applied (via classList check for text-ellipsis)
+    const hasEllipsisStyling =
+      badge.className.includes('truncate') || window.getComputedStyle(badge).overflow === 'hidden';
+    expect(hasEllipsisStyling).toBe(true);
+    // Verify text content is still present (not deleted)
+    expect(badge.textContent).toBe(longMilestone);
+  });
 });
