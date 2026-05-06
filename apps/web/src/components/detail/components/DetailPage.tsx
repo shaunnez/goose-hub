@@ -7,6 +7,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { SECTIONS } from '../lib/sections';
+import { useHasOpenDep } from '../lib/useHasOpenDep';
 import { ApprovalGateSection } from './ApprovalGateSection';
 import { CodeDiffSection } from './CodeDiffSection';
 import { CostsSection } from './CostsSection';
@@ -106,6 +107,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
   }, [onBack, onNext, onPrev]);
 
   const [fakeRunInProgress, setFakeRunInProgress] = useState(false);
+  const hasOpenDep = useHasOpenDep(item, slug);
 
   const onFakeRun = useCallback(() => {
     if (fakeRunInProgress) return;
@@ -210,7 +212,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
           </button>
         </div>
 
-        <TaskHeader item={item} projectSlug={slug} />
+        <TaskHeader item={item} projectSlug={slug} hasOpenDep={hasOpenDep} />
 
         <GatePendingBanner
           state={item?.state}

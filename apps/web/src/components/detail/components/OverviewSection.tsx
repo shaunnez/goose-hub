@@ -11,6 +11,7 @@ import { useParams } from 'react-router-dom';
 import { parseDiff } from '../lib/code-diff';
 import { useIssueCostsBreakdown } from '../lib/costs';
 import { CommentsSection } from './CommentsSection';
+import { DependenciesSection } from './DependenciesSection';
 
 interface OverviewSectionProps {
   item?: WorkItemDto;
@@ -166,6 +167,11 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
             )}
           </div>
         </div>
+
+        {/* Dependencies */}
+        {item != null && projectSlug != null && (
+          <DependenciesSection item={item} projectSlug={projectSlug} />
+        )}
 
         {/* Comments card */}
         {item != null && projectSlug != null && (
