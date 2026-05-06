@@ -1,5 +1,6 @@
 import { execSync } from 'node:child_process';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
+import { resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
@@ -7,6 +8,7 @@ import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
+import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { DEFAULT_MAX_RETRIES, shouldEscalateReview } from '@goose-hub/core/retry/retry-counter.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
@@ -33,6 +35,7 @@ export async function runReviewWorkflow(
   deps: ReviewWorkflowDeps = {},
 ): Promise<void> {
   const runId = crypto.randomUUID();
+  const projectConfig = await getProjectBySlug(projectSlug);
   const runtime = deps.runtime ?? new ClaudeCliRuntime();
   const reviewPrompt = readPromptWithContext('review', projectSlug);
   const reviewJsonSchema = toJsonSchema(ReviewOutputSchema);
@@ -64,7 +67,7 @@ export async function runReviewWorkflow(
       freshContext: true,
       toolBundles: ['read', 'validate'],
       toolExtras: [],
-      budgets: { maxTurns: 50, maxBudgetUsd: 2, timeoutMs: 300_000 },
+      ...resolveBudgets('review', projectConfig?.budgets),
       personaId,
       outputJsonSchema: reviewJsonSchema,
       appendSystemPrompt: reviewPrompt,

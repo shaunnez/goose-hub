@@ -1,11 +1,13 @@
 import { execFileSync } from 'node:child_process';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { adviseOnPlan } from '@goose-hub/core/agent-runtime/advisor.js';
+import { resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
+import { runWithEscalation } from '@goose-hub/core/agent-runtime/with-escalation.js';
 import { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
@@ -290,56 +292,53 @@ interface ImplementOutputShape {
 }
 
 async function runImplement(input: RunImplementInput): Promise<ImplementOutputShape> {
-  const result = await input.runtime.run({
-    runId: input.runId,
-    role: 'developer',
-    skill: 'implement',
-    context: {
-      projectId: input.projectId,
-      workItemId: input.workItem.id,
-      workItem: {
-        title: input.workItem.title,
-        body: input.workItem.body,
-        number: Number(input.workItem.externalId),
-        priority: input.workItem.priority,
+  const projectConfig = await getProjectBySlug(input.projectId);
+  const { output } = await runWithEscalation({
+    runtime: input.runtime,
+    schema: ImplementSchema,
+    projectId: input.projectId,
+    workItemId: input.workItem.id,
+    projectBudgets: projectConfig?.budgets,
+    spec: {
+      runId: input.runId,
+      role: 'developer',
+      skill: 'implement',
+      context: {
+        projectId: input.projectId,
+        workItemId: input.workItem.id,
+        workItem: {
+          title: input.workItem.title,
+          body: input.workItem.body,
+          number: Number(input.workItem.externalId),
+          priority: input.workItem.priority,
+        },
+        worktreePath: input.worktreePath,
+        stack: input.stack,
+        advisorFeedback: input.advisorFeedback,
+        revisionPass: input.revisionPass ?? 0,
       },
-      worktreePath: input.worktreePath,
-      stack: input.stack,
-      advisorFeedback: input.advisorFeedback,
-      revisionPass: input.revisionPass ?? 0,
+      contextAllowlist: [
+        'workItem.title',
+        'workItem.body',
+        'workItem.number',
+        'workItem.priority',
+        'worktreePath',
+        'stack.testCommand',
+        'stack.lintCommand',
+        'stack.typecheckCommand',
+        'advisorFeedback',
+        'revisionPass',
+      ],
+      freshContext: false,
+      toolBundles: ['dev-tools'],
+      toolExtras: [],
+      ...resolveBudgets('implement', projectConfig?.budgets),
+      personaId: input.personaId,
+      outputJsonSchema: input.outputJsonSchema,
+      appendSystemPrompt: input.appendSystemPrompt,
     },
-    contextAllowlist: [
-      'workItem.title',
-      'workItem.body',
-      'workItem.number',
-      'workItem.priority',
-      'worktreePath',
-      'stack.testCommand',
-      'stack.lintCommand',
-      'stack.typecheckCommand',
-      'advisorFeedback',
-      'revisionPass',
-    ],
-    freshContext: false,
-    toolBundles: ['dev-tools'],
-    toolExtras: [],
-    budgets: { maxTurns: 200, maxBudgetUsd: 2.0, timeoutMs: 600_000 },
-    personaId: input.personaId,
-    outputJsonSchema: input.outputJsonSchema,
-    appendSystemPrompt: input.appendSystemPrompt,
   });
-
-  const parsed = ImplementSchema.safeParse(result.output);
-  if (!parsed.success) {
-    const rawPreview =
-      typeof result.output === 'string'
-        ? (result.output as string).slice(0, 800)
-        : JSON.stringify(result.output).slice(0, 800);
-    throw new Error(
-      `implement output validation failed: ${JSON.stringify(parsed.error.issues)}\nRaw output (first 800 chars): ${rawPreview}`,
-    );
-  }
-  return parsed.data;
+  return output;
 }
 
 interface AfterImplementInput {
@@ -510,6 +509,7 @@ async function runEvidencePost(input: RunEvidencePostInput): Promise<void> {
   }
 
   const evidenceRunId = crypto.randomUUID();
+  const projectConfig = await getProjectBySlug(input.projectId);
   try {
     const result = await input.runtime.run({
       runId: evidenceRunId,
@@ -542,7 +542,7 @@ async function runEvidencePost(input: RunEvidencePostInput): Promise<void> {
       toolBundles: ['validate'],
       toolExtras: [],
       env: { WEB_PORT: String(5200 + (Number(input.workItem.externalId) % 800)) },
-      budgets: { maxTurns: 150, maxBudgetUsd: 5, timeoutMs: 1_800_000 },
+      ...resolveBudgets('evidence-post', projectConfig?.budgets),
       personaId: selectPersona(input.projectId, 'developer').personaId,
       outputJsonSchema: input.outputJsonSchema,
       appendSystemPrompt: input.appendSystemPrompt,

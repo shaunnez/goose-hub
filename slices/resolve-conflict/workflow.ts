@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
+import { resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
@@ -12,6 +13,7 @@ import {
   mergePR as defaultMergePR,
 } from '@goose-hub/core/connectors/github/merge-pr.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import config from '@goose-hub/skills/resolve-conflict/config.js';
 import { ResolveConflictSchema } from '@goose-hub/skills/resolve-conflict/schema.js';
@@ -90,6 +92,7 @@ export async function runResolveConflictWorkflow(
   const runId = crypto.randomUUID();
   const wtPath = join(WORKSPACES_DIR, runId);
   mkdirSync(WORKSPACES_DIR, { recursive: true });
+  const projectConfig = await getProjectBySlug(slug);
 
   try {
     // Worktree on the PR branch (committable, not detached).
@@ -129,7 +132,7 @@ export async function runResolveConflictWorkflow(
           freshContext: false,
           toolBundles: config.toolBundles,
           toolExtras: [],
-          budgets: { maxTurns: 50, maxBudgetUsd: 2, timeoutMs: 600_000 },
+          ...resolveBudgets('resolve-conflict', projectConfig?.budgets),
           personaId,
           outputJsonSchema: toJsonSchema(ResolveConflictSchema),
           appendSystemPrompt: readPrompt('resolve-conflict'),

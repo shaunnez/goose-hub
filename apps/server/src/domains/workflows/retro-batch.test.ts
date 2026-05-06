@@ -198,6 +198,38 @@ describe('computeTriggers', () => {
     expect(runtimeArgs.skill).toBe('retrospective-light');
   });
 
+  it('does not set retriesGe2 for stage=model retries (haiku→sonnet escalation)', async () => {
+    const retroItem = makeWorkItem({ state: 'factory:retrospecting' });
+    const source = makeMockSource([retroItem]);
+    mockGetProject.mockResolvedValue(projectConfigWith('light'));
+    // Two model-tier escalations on the same work item — must NOT trigger deep retro
+    mockReplay.mockImplementation((filter: { workItemId?: string }) =>
+      filter.workItemId
+        ? [
+            {
+              id: 1,
+              kind: 'agent.retry-escalated',
+              payload: { stage: 'model', skill: 'implement', reason: 'schema-validation-failed' },
+              createdAt: '',
+            },
+            {
+              id: 2,
+              kind: 'agent.retry-escalated',
+              payload: { stage: 'model', skill: 'implement', reason: 'schema-validation-failed' },
+              createdAt: '',
+            },
+          ]
+        : [{ id: 99, kind: 'retrospective.completed', payload: { tier: 'light' }, createdAt: '' }],
+    );
+    mockRun.mockResolvedValueOnce(makeAgentResult(makeLightRetroOutput()));
+
+    const { runRetroBatch } = await import('./retro-batch.js');
+    await runRetroBatch(SLUG, source);
+
+    const runtimeArgs = mockRun.mock.calls[0]?.[0] as { skill?: string };
+    expect(runtimeArgs.skill).toBe('retrospective-light');
+  });
+
   it('sets budgetExceeded=true when project.budget-exceeded event exists', async () => {
     const retroItem = makeWorkItem({ state: 'factory:retrospecting' });
     const source = makeMockSource([retroItem]);

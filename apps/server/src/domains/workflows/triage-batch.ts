@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
@@ -123,7 +124,7 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       freshContext: false,
       toolBundles: [],
       toolExtras: [],
-      budgets: { maxTurns: 5, maxBudgetUsd: 1 },
+      ...resolveBudgets('triage', projectConfig?.budgets),
       personaId: triagerPersonaId,
       outputJsonSchema: triageJsonSchema,
       appendSystemPrompt: triagePrompt,
@@ -197,7 +198,7 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       freshContext: false,
       toolBundles: [],
       toolExtras: [],
-      budgets: { maxTurns: 5, maxBudgetUsd: 1 },
+      ...resolveBudgets('repo-match', projectConfig?.budgets),
       personaId: researcherPersonaId,
       outputJsonSchema: repoMatchJsonSchema,
       appendSystemPrompt: repoMatchPrompt,

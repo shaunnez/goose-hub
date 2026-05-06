@@ -4,6 +4,8 @@ import {
   AdviseOnPlanSchema,
 } from '@goose-hub/skills/advise-on-plan/schema.js';
 import { eventStore } from '../event-stream/store.js';
+import { getProjectBySlug } from '../projects/loader.js';
+import { resolveBudgets } from './budgets.js';
 import { ClaudeCliRuntime } from './claude-cli.js';
 import type { AgentRuntime } from './interface.js';
 import { readPromptWithContext } from './read-prompt.js';
@@ -52,6 +54,7 @@ export async function adviseOnPlan(input: AdviseOnPlanInput): Promise<AdviseOnPl
   const { personaId } = selectPersona(input.projectId, 'researcher');
   const advisorPrompt = readPromptWithContext('advise-on-plan', input.projectId);
   const outputJsonSchema = toJsonSchema(AdviseOnPlanSchema) as Record<string, unknown>;
+  const projectConfig = await getProjectBySlug(input.projectId);
 
   const result = await runtime.run({
     runId: input.runId,
@@ -69,7 +72,7 @@ export async function adviseOnPlan(input: AdviseOnPlanInput): Promise<AdviseOnPl
     freshContext: advisorConfig.freshContext as true,
     toolBundles: advisorConfig.toolBundles,
     toolExtras: [],
-    budgets: { maxTurns: 8, maxBudgetUsd: 0.2 },
+    ...resolveBudgets('advise-on-plan', projectConfig?.budgets),
     personaId,
     outputJsonSchema,
     appendSystemPrompt: advisorPrompt,

@@ -72,6 +72,11 @@ export interface BudgetConfig {
   perWorkflowMaxUsd: number;
   perAgentMaxUsd: number;
   perAdvisorMaxUsd: number;
+  /** Per-project overrides for specific skill budgets. Merged over SKILL_BUDGETS defaults. */
+  skillBudgetOverrides?: Record<
+    string,
+    { maxTurns?: number; maxBudgetUsd?: number; timeoutMs?: number; modelTier?: ModelTier }
+  >;
 }
 
 export interface GovernanceConfig {

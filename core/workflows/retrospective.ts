@@ -1,5 +1,6 @@
 import { DeepRetroSchema } from '../../skills/retrospective-deep/schema.js';
 import { LightRetroSchema } from '../../skills/retrospective-light/schema.js';
+import { resolveBudgets } from '../agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '../agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
 import { readPromptWithContext } from '../agent-runtime/read-prompt.js';
@@ -9,6 +10,7 @@ import { db } from '../db/db.js';
 import { improvementCandidates } from '../db/schema.js';
 import { eventStore } from '../event-stream/store.js';
 import { accumulatePersonaStats } from '../persona/accumulate.js';
+import { getProjectBySlug } from '../projects/loader.js';
 import type { ImprovementCandidate } from '../retrospective/schemas.js';
 import type { StateSource, WorkItem } from '../state-source/interface.js';
 
@@ -82,6 +84,7 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
   const skillName = tier === 'deep' ? 'retrospective-deep' : 'retrospective-light';
   const schema = tier === 'deep' ? DeepRetroSchema : LightRetroSchema;
   const prompt = readPromptWithContext(skillName, projectId);
+  const projectConfig = await getProjectBySlug(projectId);
   const jsonSchema = toJsonSchema(schema);
   const { personaId } = selectPersona(projectId, 'retrospector');
 
@@ -140,7 +143,7 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
       freshContext: false,
       toolBundles: ['core'],
       toolExtras: [],
-      budgets: { maxTurns: 30, maxBudgetUsd: 2, timeoutMs: 120_000 },
+      ...resolveBudgets(skillName, projectConfig?.budgets),
       personaId,
       appendSystemPrompt: prompt,
       outputJsonSchema: jsonSchema,

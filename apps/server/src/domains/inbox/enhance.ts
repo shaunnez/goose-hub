@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
@@ -49,7 +50,7 @@ export async function runBugEnhance(
       freshContext: false,
       toolBundles: [],
       toolExtras: [],
-      budgets: { maxTurns: 3, maxBudgetUsd: 0.5 },
+      ...resolveBudgets('bug-enhance'),
       personaId,
       outputJsonSchema: jsonSchema,
       appendSystemPrompt: prompt,
