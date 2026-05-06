@@ -116,6 +116,14 @@ function PlaybookCard({ playbook, isSelected, onClick }: PlaybookCardProps) {
         <span>{playbook.topPatternCount} patterns</span>
         <span>·</span>
         <span>{playbook.topCandidateCount} candidates</span>
+        {playbook.coachProposalCount > 0 && (
+          <>
+            <span>·</span>
+            <span className="text-accent font-medium">
+              Coach proposals: {playbook.coachProposalCount}
+            </span>
+          </>
+        )}
       </div>
     </button>
   );

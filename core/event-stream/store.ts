@@ -60,7 +60,11 @@ export type EventKind =
   // M9 fix-feedback loop — re-dispatch after QA failure
   | 'agent.fix-feedback-complete'
   // M11.13 skill-coach — coach run produced a candidate
-  | 'coach.completed';
+  | 'coach.completed'
+  // M11.14 auto-trigger — coach dispatch events from cross-run retro
+  | 'coach.dispatch-triggered'
+  | 'coach.skipped-forbidden-target'
+  | 'coach.dispatch-failed';
 
 export interface AgentEvent {
   id: number;

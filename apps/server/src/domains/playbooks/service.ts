@@ -5,6 +5,7 @@ import {
 import type { Result } from '#shared/middleware.js';
 import {
   type PlaybookRow,
+  countCoachProposalsForPlaybook,
   getPlaybookByIdForProject,
   listPlaybooksForProject,
 } from './repository.js';
@@ -17,6 +18,7 @@ export interface PlaybookSummaryDto {
   lifecycleCount: number;
   topPatternCount: number;
   topCandidateCount: number;
+  coachProposalCount: number;
   createdAt: string;
 }
 
@@ -37,7 +39,7 @@ function parseManifest(raw: string): ManifestShape {
   }
 }
 
-function toSummary(row: PlaybookRow): PlaybookSummaryDto {
+function toBaseSummary(row: PlaybookRow): Omit<PlaybookSummaryDto, 'coachProposalCount'> {
   const manifest = parseManifest(row.manifest);
   return {
     id: row.id,
@@ -57,7 +59,13 @@ export async function listPlaybooks(
   projectId: string,
 ): Promise<Result<{ playbooks: PlaybookSummaryDto[] }>> {
   const rows = await listPlaybooksForProject(projectId);
-  return { ok: true, data: { playbooks: rows.map(toSummary) } };
+  const summaries = await Promise.all(
+    rows.map(async (row) => {
+      const coachProposalCount = await countCoachProposalsForPlaybook(row.id);
+      return { ...toBaseSummary(row), coachProposalCount };
+    }),
+  );
+  return { ok: true, data: { playbooks: summaries } };
 }
 
 export async function getPlaybook(
@@ -67,11 +75,13 @@ export async function getPlaybook(
   const row = await getPlaybookByIdForProject(projectId, id);
   if (!row) return { ok: false, error: 'playbook not found', status: 404 };
   const manifest = parseManifest(row.manifest);
+  const coachProposalCount = await countCoachProposalsForPlaybook(row.id);
   return {
     ok: true,
     data: {
       playbook: {
-        ...toSummary(row),
+        ...toBaseSummary(row),
+        coachProposalCount,
         manifest,
       },
     },

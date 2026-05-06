@@ -77,6 +77,11 @@ const config: ProjectConfig = {
         'first-run-of-skill',
       ],
     },
+    coachPolicy: {
+      enabled: false,
+      consistencyThreshold: 0.8,
+      minLifecycles: 3,
+    },
   },
   budgets: {
     dailyTokens: 5_000_000,

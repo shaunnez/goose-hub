@@ -46,6 +46,15 @@ export interface ToolAllowlist {
   extras?: string[];
 }
 
+export interface CoachPolicy {
+  /** Whether the auto-trigger is active. Default false in supervised mode. */
+  enabled: boolean;
+  /** Minimum pattern consistencyScore to treat as convergent. Default 0.8. */
+  consistencyThreshold: number;
+  /** Minimum lifecycle count in the retro window before coaching fires. Default 3. */
+  minLifecycles: number;
+}
+
 export interface AgentConfig {
   runtime: 'claude-cli';
   rolesModels: Record<Role, RoleModel>;
@@ -61,6 +70,7 @@ export interface AgentConfig {
     defaultTier: 'light' | 'deep';
     deepTriggers: string[];
   };
+  coachPolicy?: CoachPolicy;
 }
 
 export interface BudgetConfig {
