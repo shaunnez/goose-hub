@@ -512,9 +512,14 @@ export function RetrospectiveSection({ projectSlug, id }: RetrospectiveSectionPr
         )}
       </div>
 
-      <SummarySection summary={out.summary} />
-
-      {isDeep && <PersonaScoresSection scores={personaScores} />}
+      {isDeep && personaScores.length > 0 ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <SummarySection summary={out.summary} />
+          <PersonaScoresSection scores={personaScores} />
+        </div>
+      ) : (
+        <SummarySection summary={out.summary} />
+      )}
 
       {/* 2x2 grid for cards: candidates, learnings, patterns, summaries */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">

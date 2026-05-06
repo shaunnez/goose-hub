@@ -166,9 +166,7 @@ export function ReviewSection({ projectSlug, id }: ReviewSectionProps) {
       <div className="flex items-end gap-3">
         <div className="flex-1 min-w-0">
           <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">07. Review</div>
-          <h2 className="text-[17px] font-semibold text-fg leading-snug">
-            Pre-merge checklist
-          </h2>
+          <h2 className="text-[17px] font-semibold text-fg leading-snug">Pre-merge checklist</h2>
           <div className="flex items-center gap-2 text-[12.5px] text-fg-3 mt-1 flex-wrap">
             <span>{hint}</span>
             {reviewCost && (

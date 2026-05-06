@@ -10,28 +10,6 @@ Tests - whats level are we at seems low?
 Loading ... should always be something inside timeline "agent run" window indicating it's loading. This is seen on code.
 Timeline needs header like other pages. Put expand / collapse next to it.
 
-# Overview page
-Could remove priority card, add in files changed (from code panel) and tests (pass).
-Brief - remove the priority seems unnecessary. Be nice to add the agent cards in the brief.
-
-# Code page
-Have the header and make it look more like the design
-
-# Tests
-Potentially group them somehow (into folders?), not sure. 
-
-# Review
-SHould be showing lint, type check pass, tests passing, bundle size, accessibility, secret scan.... whatever our pre-merge review checks should be
-CUrrently it shows specific things to the the bug (e.g. expanded all accordions, collapsed them, followed web standards) - see design
-
-# Cost
-Be good to show the "budget" if possible, currently we show tokens and cost. Look at design. 
-Should show persona name, tokens -> max tokens bar, generic operations (hard coded)
-
-# General
-Be nice to show the current "stage/agent" under the title of the task.
-Does "current,m backlog,icebox,later" drop down matter?
-
 # Retrospective  
 
   Review — holdout, per-PR, forward-looking. Input: issue body + PR diff. Question: did the code meet the spec? No access to agent reasoning by design.                              

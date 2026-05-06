@@ -98,13 +98,9 @@ export function CodeDiffSection({ projectSlug, id }: CodeDiffSectionProps) {
 
   return (
     <div data-testid="code-diff-section" className="flex flex-col gap-5">
-
       <div className="px-8 pt-4 ">
         <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">05. Code</div>
-        <h2 className="text-[17px] font-semibold text-fg leading-snug">
-          Code Diff and PR
-        </h2>
-
+        <h2 className="text-[17px] font-semibold text-fg leading-snug">Code Diff and PR</h2>
       </div>
       {/* Header bar */}
       <div className="px-6 flex items-center justify-between border-b border-line">
