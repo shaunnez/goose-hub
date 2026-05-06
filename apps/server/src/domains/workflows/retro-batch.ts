@@ -25,7 +25,16 @@ function computeTriggers(slug: string, workItem: WorkItem): TriggerContext {
 
   const humanRequested = itemEvents.some((e) => e.kind === 'gate.awaiting-human');
 
-  const retriesGe2 = itemEvents.filter((e) => e.kind === 'agent.retry-escalated').length >= 2;
+  // `agent.retry-escalated` is shared between workflow-level retries (qa, review)
+  // and model-tier escalation (haiku→sonnet on schema failure). retriesGe2 should
+  // only count workflow-level retries — a model-tier retry isn't evidence that
+  // the work item is struggling.
+  const retriesGe2 =
+    itemEvents.filter(
+      (e) =>
+        e.kind === 'agent.retry-escalated' &&
+        (e.payload as { stage?: string } | null)?.stage !== 'model',
+    ).length >= 2;
 
   const priorityHigh = workItem.priority === 'high' || workItem.priority === 'critical';
 

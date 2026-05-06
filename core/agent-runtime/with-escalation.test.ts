@@ -92,6 +92,7 @@ describe('runWithEscalation — escalation', () => {
     const eventCall = appendEvent.mock.calls[0][0] as Record<string, unknown>;
     expect(eventCall.kind).toBe('agent.retry-escalated');
     const payload = eventCall.payload as Record<string, unknown>;
+    expect(payload.stage).toBe('model');
     expect(payload.skill).toBe('implement');
     expect(payload.fromModel).toContain('haiku');
     expect(payload.toModel).toContain('sonnet');
@@ -129,6 +130,25 @@ describe('runWithEscalation — no-escalation guards', () => {
       runWithEscalation({
         runtime,
         spec: makeSpec({ modelOverride: 'claude-sonnet-4-6' }),
+        schema: Schema,
+        projectId: 'p',
+        workItemId: 'w',
+      }),
+    ).rejects.toThrow(/validation failed/i);
+    expect(runFn).toHaveBeenCalledTimes(1);
+    expect(appendEvent).not.toHaveBeenCalled();
+  });
+
+  it('does not escalate when current tier is above escalation target (opus > sonnet)', async () => {
+    appendEvent.mockClear();
+    const runFn = vi.fn().mockResolvedValue(makeResult({ wrong: 'shape' }));
+    const runtime = makeRuntime(runFn);
+
+    // Spec runs at opus; implement's escalation target is sonnet — never downgrade
+    await expect(
+      runWithEscalation({
+        runtime,
+        spec: makeSpec({ modelOverride: 'claude-opus-4-7' }),
         schema: Schema,
         projectId: 'p',
         workItemId: 'w',

@@ -59,7 +59,9 @@ Default tiers by skill:
 
 ### 5. Schema-validation escalation (haiku → sonnet retry)
 
-`SkillBudget.escalation?: { modelTier; maxBudgetUsd; maxTurns?; timeoutMs? }` defines an opt-in retry policy for schema-validation failures. `runWithEscalation` (in `core/agent-runtime/with-escalation.ts`) wraps a `runtime.run(spec)` + Zod `safeParse` pair: on parse failure for an escalatable skill, it retries once at the escalated tier with a fresh `runId` and emits `agent.retry-escalated` with `{ runId, retryRunId, skill, fromModel, toModel, reason: 'schema-validation-failed' }`.
+`SkillBudget.escalation?: { modelTier; maxBudgetUsd; maxTurns?; timeoutMs? }` defines an opt-in retry policy for schema-validation failures. `runWithEscalation` (in `core/agent-runtime/with-escalation.ts`) wraps a `runtime.run(spec)` + Zod `safeParse` pair: on parse failure for an escalatable skill, it retries once at the escalated tier with a fresh `runId` and emits `agent.retry-escalated` with `{ stage: 'model', runId, retryRunId, skill, fromModel, toModel, reason: 'schema-validation-failed' }`.
+
+The `stage` field discriminates this from QA / review escalations on the same event kind (which carry `stage: 'qa' | 'review'`). The retro `retriesGe2` trigger filters events to only count workflow-level retries — a model-tier retry isn't evidence the work item is struggling.
 
 Constraints:
 

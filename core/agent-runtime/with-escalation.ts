@@ -1,5 +1,6 @@
 import type { ZodType } from 'zod';
 import { eventStore } from '../event-stream/store.js';
+import type { ModelTier } from '../types.js';
 import { resolveEscalatedBudgets } from './budgets.js';
 import type { SkillBudgetOverride } from './budgets.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
@@ -7,6 +8,10 @@ import { HoldoutFallbackForbiddenError } from './interface.js';
 import { tierOf } from './models.js';
 
 const HOLDOUT_ROLES = new Set(['qa', 'reviewer']);
+
+// Local rank table — duplicates the order in models.ts but kept private here
+// so we don't widen models.ts' public surface for one defensive check.
+const TIER_RANK: Record<ModelTier, number> = { haiku: 0, sonnet: 1, opus: 2 };
 
 export interface RunWithEscalationInput<T> {
   runtime: AgentRuntime;
@@ -66,8 +71,9 @@ export async function runWithEscalation<T>(
 
   const currentTier = spec.modelOverride != null ? tierOf(spec.modelOverride) : null;
   const targetTier = tierOf(escalated.modelOverride);
-  if (currentTier != null && currentTier === targetTier) {
-    // Already at the escalation target — no upward room
+  // Only escalate strictly upward. Equal-tier or downward "escalation" is a
+  // misconfiguration; surface the original validation error instead.
+  if (currentTier != null && TIER_RANK[targetTier] <= TIER_RANK[currentTier]) {
     throw makeValidationError(spec.skill, parsed.error.issues, result.output, false);
   }
 
@@ -84,6 +90,10 @@ export async function runWithEscalation<T>(
     workItemId: workItemId ?? null,
     kind: 'agent.retry-escalated',
     payload: {
+      // `stage` discriminates this from QA/review escalations on the same
+      // event kind. The retro `retriesGe2` trigger filters on stage so a
+      // model-tier retry doesn't masquerade as a workflow retry.
+      stage: 'model',
       runId: spec.runId,
       retryRunId,
       skill: spec.skill,
