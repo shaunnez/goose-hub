@@ -24,6 +24,21 @@ Defines the abstraction every backend implements.
 - Malformed or unrecognised lines are silently skipped — never throws
 - Consumed by M11.02 resolver and M11.03 scheduler filter
 
+### `dependency-resolver.ts`
+
+`resolveDependency(ref, ctx)` and `DependencyResolver` — turn a `DependencyRef` into a `ResolvedDep` carrying the lifecycle state of the referenced issue.
+
+- **`ResolvedDep`**: `{ ref, repoRef, issueNumber, state: 'open' | 'closed' | 'unregistered', title? }`
+- Same-repo deps (`ref.repoRef == null`) resolve against `ctx.currentRepo`.
+- Cross-repo deps resolve against the matching registered project. Unregistered repos surface `state: 'unregistered'` (M11.07 escalates these to `factory:needs-human`).
+- `closed` = dep satisfied; `open` = dep unsatisfied; `unregistered` = unresolvable.
+- `DependencyResolver` caches by `(repoRef, issueNumber)` for the lifetime of the instance — the orchestrator constructs one resolver per tick to avoid N+1 GitHub calls. M11.03 will re-evaluate every tick because deps close mid-sprint.
+- `createProjectAwareTargetSource()` wires `loadProjects()` + per-project GitHub fetchers into a `FetchTargetFn` for production use. Tests inject a Map-backed adapter directly.
+
+**`null` from `FetchTargetFn` is reserved for "repo not registered."** Per-project fetchers (`ProjectIssueFetcher`) must throw `DependencyTargetFetchError` on 404 / non-OK / network errors so a fetch failure on a registered repo is not silently misclassified as `unregistered` (which would falsely trigger M11.07's needs-human escalation). The resolver propagates these errors so the orchestrator can decide whether to retry or escalate.
+
+Lifecycle (open/closed) is read straight from the GitHub issues endpoint inside the slice. `WorkItem` carries state-machine state, not GitHub-lifecycle, and the dep contract is "issue closed = dep satisfied" — keeping the API call narrow inside `core/state-source/` avoids widening the `WorkItem` shape across the codebase.
+
 ### `github-labels.ts`
 
 `GitHubLabelsSource` — `StateSource` backed by the GitHub REST API via native `fetch`.
