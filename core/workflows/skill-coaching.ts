@@ -1,6 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { eq, inArray } from 'drizzle-orm';
 import { SkillCoachOutputSchema } from '../../skills/skill-coach/schema.js';
 import { resolveBudgets } from '../agent-runtime/budgets.js';
@@ -14,7 +13,7 @@ import { archivedLifecycles, decisionPatterns, improvementCandidates } from '../
 import { eventStore } from '../event-stream/store.js';
 import { getProjectBySlug } from '../projects/loader.js';
 
-const DEFAULT_REPO_ROOT = join(fileURLToPath(import.meta.url), '../../../..');
+const DEFAULT_REPO_ROOT = join(import.meta.dirname, '../..');
 
 export const FORBIDDEN_COACH_TARGETS = new Set([
   'qa',
