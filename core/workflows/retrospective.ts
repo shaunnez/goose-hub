@@ -10,6 +10,7 @@ import { db } from '../db/db.js';
 import { improvementCandidates } from '../db/schema.js';
 import { eventStore } from '../event-stream/store.js';
 import { archiveLifecycle } from '../learning/archive.js';
+import { computeTrend } from '../learning/convergence.js';
 import { accumulatePersonaStats } from '../persona/accumulate.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import type { ImprovementCandidate } from '../retrospective/schemas.js';
@@ -114,6 +115,10 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
     ),
   );
 
+  // Compute trend for deep tier
+  const trend =
+    tier === 'deep' ? computeTrend({ projectId, role: 'developer', windowSize: 5 }) : undefined;
+
   try {
     const result = await runtime.run({
       runId,
@@ -131,6 +136,7 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
           role: 'retrospector',
           outcome: 'success',
           decisionSummaries: priorDecisionSummaries,
+          ...(tier === 'deep' && { trend }),
         },
         activePersonas,
       },

@@ -32,7 +32,7 @@ Produce a `summary` object with three concrete strings:
 For each persona in `<active_personas>` (and only those), produce a `QualityScore`:
 - `personaId` — copied verbatim from `<active_personas>`
 - `score` — 0.0–1.0 (1.0 = perfect, 0.0 = total failure). Weight: 0.6 outcome + 0.4 decision quality.
-- `trend` — `improving | stable | declining`. Default to `stable` if insufficient data.
+- `trend` — `improving | stable | declining`. Use the value from `<run_summary>.trend` (computed from cross-run quality scores); if absent, default to `stable`.
 - `sampleCount` — 1 unless run summary provides history.
 - `rationale` — required. One concrete sentence justifying the score, tied to specific decisions or behaviour observed. Required so the human reviewer can see *why* this persona scored what it did. Don't say "performed well" — say "wrote 5 tests red-green before any implementation, zero retries" or "approved despite missing acceptance criterion check, capping confidence at 0.85".
 
@@ -129,9 +129,9 @@ Return JSON conforming to `DeepRetroSchema`. No free-text outside the schema fie
     {
       "personaId": "goose-hub-self/developer/0",
       "score": 0.88,
-      "trend": "stable",
+      "trend": "improving",
       "sampleCount": 1,
-      "rationale": "TDD discipline held: 5 tests written red before implementation, all 5 green after; out-of-scope settings.json edit kept score below 0.9."
+      "rationale": "TDD discipline held: 5 tests written red before implementation, all 5 green after; out-of-scope settings.json edit kept score below 0.9. Trend improving from prior runs."
     },
     {
       "personaId": "goose-hub-self/retrospector/2",

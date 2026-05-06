@@ -11,13 +11,11 @@ import { eq, sql } from 'drizzle-orm';
  */
 export function computeTrend({
   projectId,
-  role,
-  skill,
   windowSize = 5,
 }: {
   projectId: string;
-  role: string; // Unused for now, kept for future filtering
-  skill?: string;
+  role?: string; // Kept for future filtering by persona role
+  skill?: string; // Kept for future filtering by skill context
   windowSize?: number;
 }): 'improving' | 'stable' | 'declining' {
   // Fetch recent archived lifecycles, ordered by closedAt descending
