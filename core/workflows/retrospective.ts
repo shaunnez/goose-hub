@@ -9,6 +9,7 @@ import { selectPersona } from '../agent-runtime/select-persona.js';
 import { db } from '../db/db.js';
 import { improvementCandidates } from '../db/schema.js';
 import { eventStore } from '../event-stream/store.js';
+import { archiveLifecycle } from '../learning/archive.js';
 import { accumulatePersonaStats } from '../persona/accumulate.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import type { ImprovementCandidate } from '../retrospective/schemas.js';
@@ -197,6 +198,9 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
 
     accumulatePersonaStats({ personaName: personaId, role: 'retrospector', outcome: 'success' });
     await stateSource.transitionState(workItem.externalId, 'factory:retrospecting', 'factory:done');
+
+    // Archive lifecycle data for cross-session learning
+    archiveLifecycle({ projectId, workItemId: workItem.id });
   } catch (err) {
     accumulatePersonaStats({ personaName: personaId, role: 'retrospector', outcome: 'failure' });
     eventStore.appendEvent({

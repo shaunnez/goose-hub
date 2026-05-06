@@ -145,3 +145,50 @@ export const agentRunCosts = sqliteTable(
     workItemIdx: index('agent_run_costs_work_item_idx').on(t.workItemId),
   }),
 );
+
+// Archived lifecycle data from completed work items
+// JSON fields store serialized decision summaries, learning entries, and quality scores
+export const archivedLifecycles = sqliteTable(
+  'archived_lifecycles',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    projectId: text('project_id').notNull(),
+    workItemId: text('work_item_id').notNull(),
+    closedAt: text('closed_at').notNull(),
+    decisionSummaries: text('decision_summaries').notNull(), // JSON serialized
+    learningEntries: text('learning_entries').notNull(), // JSON serialized
+    qualityScores: text('quality_scores').notNull(), // JSON serialized
+    costsUsd: real('costs_usd').notNull().default(0),
+    runIds: text('run_ids').notNull(), // JSON array of run IDs
+  },
+  (t) => ({
+    projectIdx: index('archived_lifecycles_project_idx').on(t.projectId, t.closedAt),
+    workItemIdx: index('archived_lifecycles_work_item_idx').on(t.workItemId),
+  }),
+);
+
+// Aggregated decision patterns mined from archived lifecycles
+// Tracks recurring decision patterns, consistency, and trend
+export const decisionPatterns = sqliteTable(
+  'decision_patterns',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    projectId: text('project_id').notNull(),
+    kind: text('kind').notNull(), // DecisionKind enum value (PLAN, RED, GREEN, etc)
+    role: text('role').notNull(), // Agent role (developer, qa, reviewer)
+    actionSummary: text('action_summary').notNull(),
+    reasonSummary: text('reason_summary').notNull(),
+    occurrenceCount: integer('occurrence_count').notNull().default(1),
+    consistencyScore: real('consistency_score').notNull().default(0), // 0..1
+    lastSeenAt: text('last_seen_at').notNull(),
+    exampleWorkItemIds: text('example_work_item_ids').notNull(), // JSON array, max 5
+  },
+  (t) => ({
+    projectKindRoleUniq: uniqueIndex('decision_patterns_project_kind_role_uniq').on(
+      t.projectId,
+      t.kind,
+      t.role,
+    ),
+    projectIdx: index('decision_patterns_project_idx').on(t.projectId),
+  }),
+);
