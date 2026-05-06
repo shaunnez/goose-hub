@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
-import config, { QaContextSchema } from './skill.config.js';
 import {
   CriteriaResultSchema,
   FindingSchema,
@@ -9,6 +8,7 @@ import {
   TierResultSchema,
   computeOverallScore,
 } from './schema.js';
+import config, { QaContextSchema } from './skill.config.js';
 
 // ─── Helper: minimal valid QaOutput ─────────────────────────────────────────
 

@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('Kanban board milestone text truncates properly without overflow', async ({ page }) => {
   // Mock the API endpoints to return test data with long milestone names
-  await page.route('**/api/projects/*/issues', route =>
+  await page.route('**/api/projects/*/issues', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -31,7 +31,7 @@ test('Kanban board milestone text truncates properly without overflow', async ({
     }),
   );
 
-  await page.route('**/api/projects/*/issues/*/timeline*', route =>
+  await page.route('**/api/projects/*/issues/*/timeline*', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -50,7 +50,7 @@ test('Kanban board milestone text truncates properly without overflow', async ({
   expect(isVisible).toBe(true);
 
   // Get computed styles to verify truncation is applied
-  const computedStyle = await milestoneBadge.evaluate(el => {
+  const computedStyle = await milestoneBadge.evaluate((el) => {
     const style = window.getComputedStyle(el);
     return {
       overflow: style.overflow,
@@ -74,9 +74,7 @@ test('Kanban board milestone text truncates properly without overflow', async ({
   if (cardBounds && badgeBounds) {
     // Badge should be within card bounds (with small margin for padding)
     expect(badgeBounds.x).toBeGreaterThanOrEqual(cardBounds.x);
-    expect(badgeBounds.x + badgeBounds.width).toBeLessThanOrEqual(
-      cardBounds.x + cardBounds.width,
-    );
+    expect(badgeBounds.x + badgeBounds.width).toBeLessThanOrEqual(cardBounds.x + cardBounds.width);
   }
 
   // Take a screenshot as visual evidence

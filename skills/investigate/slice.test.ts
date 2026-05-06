@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
-import config, { InvestigateContextSchema } from './skill.config.js';
 import { InvestigateSchema } from './schema.js';
+import config, { InvestigateContextSchema } from './skill.config.js';
 
 describe('investigate schema', () => {
   it('accepts valid output with all required fields', () => {

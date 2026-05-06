@@ -16,8 +16,8 @@ import {
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
-import config from '@goose-hub/skills/resolve-conflict/skill.config.js';
 import { ResolveConflictSchema } from '@goose-hub/skills/resolve-conflict/schema.js';
+import config from '@goose-hub/skills/resolve-conflict/skill.config.js';
 
 const WORKSPACES_DIR = join(homedir(), '.factory', 'workspaces');
 

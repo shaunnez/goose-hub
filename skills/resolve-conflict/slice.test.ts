@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import config from './skill.config.js';
 import { ResolveConflictContextSchema, ResolveConflictSchema } from './schema.js';
+import config from './skill.config.js';
 
 describe('ResolveConflictSchema', () => {
   it('accepts valid output with all resolved', () => {

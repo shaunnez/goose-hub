@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import config, { ReviewContextSchema } from './skill.config.js';
 import { CriterionCheckSchema, ReviewFindingSchema, ReviewOutputSchema } from './schema.js';
+import config, { ReviewContextSchema } from './skill.config.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -405,7 +405,9 @@ describe('prompt.md — criteriaChecks population requirement', () => {
 
   it('warns that empty criteriaChecks array is never valid when criteria exist', () => {
     // Must contain a warning that criteriaChecks: [] is never valid
-    expect(promptMd).toMatch(/criteriaChecks.*\[\].*never valid|criteriaChecks: \[\].*never valid/s);
+    expect(promptMd).toMatch(
+      /criteriaChecks.*\[\].*never valid|criteriaChecks: \[\].*never valid/s,
+    );
   });
 });
 

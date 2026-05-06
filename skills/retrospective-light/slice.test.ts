@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
-import config from './skill.config.js';
 import { LightRetroSchema } from './schema.js';
+import config from './skill.config.js';
 
 const baseValid = {
   outcome: 'success' as const,
