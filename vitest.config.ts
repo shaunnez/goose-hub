@@ -42,6 +42,7 @@ export default defineConfig({
         '**/vitest.config.ts',
         '**/vite.config.ts',
         '**/playwright.config.ts',
+        '**/playwright-*.config.ts',
         '**/tailwind.config.ts',
         '**/*.d.ts',
         // One-time migration/setup scripts — not unit-testable
