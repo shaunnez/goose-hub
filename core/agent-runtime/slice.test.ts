@@ -875,3 +875,264 @@ describe('adviseOnPlan (#182)', () => {
     expect(spec.context.previousAdvisorFeedback).toBe('last time I said X');
   });
 });
+
+// ─── model-router — predictive model selection (#529) ───────────────────────
+
+const { mockRouterDb } = vi.hoisted(() => {
+  const chain: Record<string, ReturnType<typeof vi.fn>> = {} as never;
+  for (const m of ['select', 'from', 'where'] as const) {
+    (chain as Record<string, unknown>)[m] = vi.fn().mockReturnValue(chain);
+  }
+  chain.all = vi.fn().mockReturnValue([]);
+  return { mockRouterDb: chain };
+});
+
+vi.mock('../db/db.js', () => ({ db: mockRouterDb }));
+vi.mock('../db/schema.js', () => ({
+  decisionPatterns: { projectId: 'p', kind: 'k', role: 'r', consistencyScore: 'cs' },
+}));
+
+function makeWorkItem(
+  overrides: Partial<{
+    type: 'feature' | 'bug' | 'chore' | 'research';
+    priority: 'critical' | 'high' | 'medium' | 'low';
+    body: string;
+  }> = {},
+) {
+  return {
+    id: 'github:owner/repo#42',
+    externalId: '42',
+    repoRef: 'owner/repo',
+    title: 'Test issue',
+    body: overrides.body ?? 'Short body',
+    type: overrides.type ?? 'feature',
+    priority: overrides.priority ?? 'medium',
+    mode: 'supervised' as const,
+    state: 'factory:dev-ready' as const,
+    authorIsOwner: true,
+    schedule: 'current' as const,
+    exec: 'serial' as const,
+    dependsOn: [],
+    blocks: [],
+    createdAt: new Date(),
+  };
+}
+
+describe('selectModel (#529)', () => {
+  beforeEach(() => {
+    mockRouterDb.all.mockReturnValue([]);
+    vi.clearAllMocks();
+    mockRouterDb.all.mockReturnValue([]);
+    for (const m of ['select', 'from', 'where']) {
+      mockRouterDb[m].mockReturnValue(mockRouterDb);
+    }
+  });
+
+  describe('holdout role bypass', () => {
+    it('returns null for qa role', async () => {
+      const { selectModel } = await import('./model-router.js');
+      expect(selectModel({ workItem: makeWorkItem(), role: 'qa', projectId: 'proj' })).toBeNull();
+    });
+
+    it('returns null for reviewer role', async () => {
+      const { selectModel } = await import('./model-router.js');
+      expect(
+        selectModel({ workItem: makeWorkItem(), role: 'reviewer', projectId: 'proj' }),
+      ).toBeNull();
+    });
+  });
+
+  describe('static policy — type:bug', () => {
+    it('returns haiku for type:bug at medium priority', async () => {
+      const { selectModel } = await import('./model-router.js');
+      const result = selectModel({
+        workItem: makeWorkItem({ type: 'bug', priority: 'medium' }),
+        role: 'developer',
+        projectId: 'proj',
+      });
+      expect(result?.tier).toBe('haiku');
+      expect(result?.reason).toBe('type-bug');
+    });
+  });
+
+  describe('static policy — type:chore', () => {
+    it('returns haiku for type:chore', async () => {
+      const { selectModel } = await import('./model-router.js');
+      const result = selectModel({
+        workItem: makeWorkItem({ type: 'chore' }),
+        role: 'developer',
+        projectId: 'proj',
+      });
+      expect(result?.tier).toBe('haiku');
+      expect(result?.reason).toBe('type-chore');
+    });
+  });
+
+  describe('static policy — priority overrides type', () => {
+    it('returns sonnet for priority:high regardless of type', async () => {
+      const { selectModel } = await import('./model-router.js');
+      const result = selectModel({
+        workItem: makeWorkItem({ type: 'bug', priority: 'high' }),
+        role: 'developer',
+        projectId: 'proj',
+      });
+      expect(result?.tier).toBe('sonnet');
+      expect(result?.reason).toBe('priority-high-or-critical');
+    });
+
+    it('returns sonnet for priority:critical', async () => {
+      const { selectModel } = await import('./model-router.js');
+      const result = selectModel({
+        workItem: makeWorkItem({ type: 'chore', priority: 'critical' }),
+        role: 'developer',
+        projectId: 'proj',
+      });
+      expect(result?.tier).toBe('sonnet');
+      expect(result?.reason).toBe('priority-high-or-critical');
+    });
+  });
+
+  describe('static policy — type:feature', () => {
+    it('returns sonnet with reason "feature" for small feature (< 5 AC, body < 1500)', async () => {
+      const { selectModel } = await import('./model-router.js');
+      const body = '- [ ] AC one\n- [ ] AC two\nSome description';
+      const result = selectModel({
+        workItem: makeWorkItem({ type: 'feature', body }),
+        role: 'developer',
+        projectId: 'proj',
+      });
+      expect(result?.tier).toBe('sonnet');
+      expect(result?.reason).toBe('feature');
+    });
+
+    it('returns sonnet with reason "large-feature" when AC count ≥ 5', async () => {
+      const { selectModel } = await import('./model-router.js');
+      const body = ['- [ ] AC 1', '- [ ] AC 2', '- [ ] AC 3', '- [ ] AC 4', '- [ ] AC 5'].join(
+        '\n',
+      );
+      const result = selectModel({
+        workItem: makeWorkItem({ type: 'feature', body }),
+        role: 'developer',
+        projectId: 'proj',
+      });
+      expect(result?.tier).toBe('sonnet');
+      expect(result?.reason).toBe('large-feature');
+    });
+
+    it('returns sonnet with reason "large-feature" when body length ≥ 1500', async () => {
+      const { selectModel } = await import('./model-router.js');
+      const body = `- [ ] One AC\n${'x'.repeat(1500)}`;
+      const result = selectModel({
+        workItem: makeWorkItem({ type: 'feature', body }),
+        role: 'developer',
+        projectId: 'proj',
+      });
+      expect(result?.tier).toBe('sonnet');
+      expect(result?.reason).toBe('large-feature');
+    });
+  });
+
+  describe('project-level override', () => {
+    it('applies role-level override', async () => {
+      const { selectModel } = await import('./model-router.js');
+      const result = selectModel({
+        workItem: makeWorkItem({ type: 'feature' }),
+        role: 'developer',
+        projectId: 'proj',
+        modelRouterConfig: { overrides: { developer: 'opus' } },
+      });
+      expect(result?.tier).toBe('opus');
+      expect(result?.reason).toBe('project-override');
+    });
+
+    it('role+type override wins over role-only override', async () => {
+      const { selectModel } = await import('./model-router.js');
+      const result = selectModel({
+        workItem: makeWorkItem({ type: 'bug' }),
+        role: 'developer',
+        projectId: 'proj',
+        modelRouterConfig: {
+          overrides: { developer: 'haiku', 'developer+type:bug': 'sonnet' },
+        },
+      });
+      expect(result?.tier).toBe('sonnet');
+      expect(result?.reason).toBe('project-override');
+    });
+
+    it('role+priority override wins over role-only override', async () => {
+      const { selectModel } = await import('./model-router.js');
+      const result = selectModel({
+        workItem: makeWorkItem({ priority: 'low' }),
+        role: 'developer',
+        projectId: 'proj',
+        modelRouterConfig: {
+          overrides: { developer: 'sonnet', 'developer+priority:low': 'haiku' },
+        },
+      });
+      expect(result?.tier).toBe('haiku');
+      expect(result?.reason).toBe('project-override');
+    });
+
+    it('does not apply override to holdout roles', async () => {
+      const { selectModel } = await import('./model-router.js');
+      const result = selectModel({
+        workItem: makeWorkItem(),
+        role: 'qa',
+        projectId: 'proj',
+        modelRouterConfig: { overrides: { qa: 'opus' } },
+      });
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('pattern-informed selection', () => {
+    it('uses pattern tier when consistencyScore > 0.7 and pattern is present', async () => {
+      const { selectModel } = await import('./model-router.js');
+      mockRouterDb.all.mockReturnValue([{ actionSummary: 'opus', consistencyScore: 0.9 }]);
+      const result = selectModel({
+        workItem: makeWorkItem({ type: 'feature' }),
+        role: 'developer',
+        projectId: 'proj',
+      });
+      expect(result?.tier).toBe('opus');
+      expect(result?.reason).toBe('pattern-informed');
+    });
+
+    it('falls back to static policy when no patterns exist', async () => {
+      const { selectModel } = await import('./model-router.js');
+      mockRouterDb.all.mockReturnValue([]);
+      const result = selectModel({
+        workItem: makeWorkItem({ type: 'bug' }),
+        role: 'developer',
+        projectId: 'proj',
+      });
+      expect(result?.tier).toBe('haiku');
+      expect(result?.reason).toBe('type-bug');
+    });
+
+    it('falls back to static policy when pattern tier is unrecognised', async () => {
+      const { selectModel } = await import('./model-router.js');
+      mockRouterDb.all.mockReturnValue([{ actionSummary: 'unknown-tier', consistencyScore: 0.95 }]);
+      const result = selectModel({
+        workItem: makeWorkItem({ type: 'bug' }),
+        role: 'developer',
+        projectId: 'proj',
+      });
+      expect(result?.tier).toBe('haiku');
+      expect(result?.reason).toBe('type-bug');
+    });
+
+    it('project-level override takes precedence over patterns', async () => {
+      const { selectModel } = await import('./model-router.js');
+      mockRouterDb.all.mockReturnValue([{ actionSummary: 'opus', consistencyScore: 0.95 }]);
+      const result = selectModel({
+        workItem: makeWorkItem(),
+        role: 'developer',
+        projectId: 'proj',
+        modelRouterConfig: { overrides: { developer: 'haiku' } },
+      });
+      expect(result?.tier).toBe('haiku');
+      expect(result?.reason).toBe('project-override');
+    });
+  });
+});

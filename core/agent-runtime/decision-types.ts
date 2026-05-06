@@ -14,6 +14,7 @@ import { z } from 'zod';
 export const DecisionKindSchema = z.enum([
   // Cross-cutting decisions
   'MODEL_SELECTION',
+  'MODEL_SELECTION_OUTCOME',
   'SCOPE_CHANGE',
   'FIX_STRATEGY',
   'SKIP_GATE',

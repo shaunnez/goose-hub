@@ -4,6 +4,8 @@ import { adviseOnPlan } from '@goose-hub/core/agent-runtime/advisor.js';
 import { resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
+import { selectModel } from '@goose-hub/core/agent-runtime/model-router.js';
+import { defaultModelForTier, tierOf } from '@goose-hub/core/agent-runtime/models.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
@@ -293,6 +295,33 @@ interface ImplementOutputShape {
 
 async function runImplement(input: RunImplementInput): Promise<ImplementOutputShape> {
   const projectConfig = await getProjectBySlug(input.projectId);
+  const { budgets, modelOverride: budgetModelOverride } = resolveBudgets(
+    'implement',
+    projectConfig?.budgets,
+  );
+
+  const routerResult = selectModel({
+    workItem: input.workItem,
+    role: 'developer',
+    projectId: input.projectId,
+    modelRouterConfig: projectConfig?.agentConfig?.modelRouter,
+  });
+  const modelOverride =
+    routerResult != null ? defaultModelForTier(routerResult.tier) : budgetModelOverride;
+
+  eventStore.appendEvent({
+    projectId: input.projectId,
+    workItemId: input.workItem.id,
+    kind: 'agent.model-selected',
+    payload: {
+      runId: input.runId,
+      role: 'developer',
+      selectedTier: routerResult?.tier ?? tierOf(budgetModelOverride),
+      reason: routerResult?.reason ?? 'budget-default',
+    },
+    runId: input.runId,
+  });
+
   const { output } = await runWithEscalation({
     runtime: input.runtime,
     schema: ImplementSchema,
@@ -332,7 +361,8 @@ async function runImplement(input: RunImplementInput): Promise<ImplementOutputSh
       freshContext: false,
       toolBundles: ['dev-tools'],
       toolExtras: [],
-      ...resolveBudgets('implement', projectConfig?.budgets),
+      budgets,
+      modelOverride,
       personaId: input.personaId,
       outputJsonSchema: input.outputJsonSchema,
       appendSystemPrompt: input.appendSystemPrompt,

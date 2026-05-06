@@ -8,6 +8,7 @@ Typed contracts and model registry for all agent runtime code.
 |------|---------|
 | `interface.ts` | `AgentSpec`, `AgentResult`, `AgentRuntime`, `DecisionSummary`, `AgentBudgets` |
 | `models.ts` | `MODELS`, `ModelEntry`, `ModelTier`, `defaultModelForTier`, `tierOf`, `modelsAtOrAboveTier` |
+| `model-router.ts` | `selectModel`, `SelectModelInput`, `SelectModelResult` |
 | `with-timeout.ts` | `withTimeout`, `LifecycleTimeoutError`, per-step subclasses, `DEFAULT_TIMEOUTS` |
 
 ## AgentSpec
@@ -29,6 +30,37 @@ Hardcoded in `models.ts`, git-tracked. Current IDs:
 | `haiku` | `claude-haiku-4-5-20251001` |
 
 Update by PR to `models.ts`. The git log of this file is the audit trail for model changes.
+
+## Model Router
+
+`model-router.ts` provides predictive model selection based on issue-complexity signals. It is called by the dispatch path before building the `AgentSpec`, and its result overrides the budget's default `modelTier`.
+
+```ts
+import { selectModel } from '@goose-hub/core/agent-runtime/model-router.js';
+
+const routerResult = selectModel({ workItem, role: 'developer', projectId, modelRouterConfig });
+const modelOverride = routerResult != null ? defaultModelForTier(routerResult.tier) : budgetModelOverride;
+```
+
+**Resolution order** (highest wins):
+1. `agentConfig.modelRouter.overrides` — project-level table keyed by `"role"`, `"role+type:TYPE"`, or `"role+priority:PRIORITY"`
+2. Mined `decision_patterns` with `kind = MODEL_SELECTION_OUTCOME` and `consistencyScore > 0.7`
+3. Static policy table (see below)
+
+**Static policy** (applied when no override or pattern matches):
+
+| Condition | Tier |
+|-----------|------|
+| `priority: high` or `priority: critical` | `sonnet` |
+| `type: bug` | `haiku` |
+| `type: chore` | `haiku` |
+| `type: feature` with AC count ≥ 5 OR body ≥ 1500 chars | `sonnet` (reason: `large-feature`) |
+| `type: feature` otherwise | `sonnet` (reason: `feature`) |
+| default | `sonnet` |
+
+**Holdout bypass**: `selectModel` returns `null` for `qa` and `reviewer` roles. Callers must not apply the result to holdout specs — use the skill's configured tier unchanged.
+
+Emits `agent.model-selected` event after selection so retro / mining can learn from outcomes.
 
 ## Per-step typed timeouts (#219)
 
