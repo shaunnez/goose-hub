@@ -44,6 +44,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'qa.structural-failed': 'QA structural failed',
   'qa.functional-failed': 'QA functional failed',
   'qa.regression-failed': 'QA regression failed',
+  'retrospective.completed': 'Retrospective completed',
 };
 
 export function formatSkillName(skill: string | null): string {

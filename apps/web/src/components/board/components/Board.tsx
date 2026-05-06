@@ -33,6 +33,7 @@ export function Board({ projectSlug }: BoardProps) {
       resolvedMilestone != null
         ? fetchMilestoneIssues(projectSlug, resolvedMilestone)
         : fetchIssues(projectSlug),
+    gcTime: 0,
   });
 
   // SSE: patch board state in-place on transition events.

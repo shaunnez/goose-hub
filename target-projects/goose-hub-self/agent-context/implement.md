@@ -8,6 +8,14 @@ Run from worktree **root** using pnpm filter syntax — NOT from `apps/web/`:
 | Web only | `pnpm --filter=@goose-hub/web test -- --reporter=json` |
 | Server only | `pnpm --filter=@goose-hub/server test -- --reporter=json` |
 | Specific file | `pnpm --filter=@goose-hub/web test -- --reporter=json <relative-path>` |
+
+`<relative-path>` is **relative to the package root** (`apps/web/`), not the worktree root. Example:
+
+```
+pnpm --filter=@goose-hub/web test -- --reporter=json src/components/detail/components/TimelineExpandCollapse.test.tsx
+```
+
+Not `apps/web/src/...`. Not a glob. Just `src/...`.
 | Lint | `pnpm lint` |
 | Typecheck | `pnpm typecheck` |
 

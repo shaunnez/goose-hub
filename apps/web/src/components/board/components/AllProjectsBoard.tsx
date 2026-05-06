@@ -26,8 +26,8 @@ export function AllProjectsBoard() {
 
   const issueQueries = useQueries({
     queries: configs.map((cfg) => ({
-      queryKey: ['issues', cfg.slug],
-      queryFn: () => fetchIssues(cfg.slug),
+      queryKey: ['issues-all', cfg.slug],
+      queryFn: () => fetchIssues(cfg.slug, { all: true }),
       enabled: configs.length > 0,
     })),
   });

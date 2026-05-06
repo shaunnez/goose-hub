@@ -750,6 +750,82 @@ function ReviewCompletedEvent({ event }: { event: AgentEventDto }) {
   );
 }
 
+function RetroCompletedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as {
+    tier?: 'light' | 'deep';
+    output?: {
+      outcome?: string;
+      summary?: string | string[];
+      improvementCandidates?: unknown[];
+      decisionSummary?: { kind?: string; text?: string };
+    };
+  } | null;
+
+  const tier = p?.tier ?? 'light';
+  const outcome = p?.output?.outcome ?? 'unknown';
+  const isSuccess = outcome === 'success';
+  const rawSummary = p?.output?.summary;
+  const summaryItems: string[] = Array.isArray(rawSummary)
+    ? rawSummary
+    : typeof rawSummary === 'string'
+      ? rawSummary
+          .split('\n')
+          .map((l) => l.replace(/^[-*]\s*/, '').trim())
+          .filter(Boolean)
+      : [];
+  const candidateCount = p?.output?.improvementCandidates?.length ?? 0;
+
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex items-center gap-2 mb-2 text-[11px] text-fg-3">
+        <RefreshCw size={13} className="shrink-0 text-purple-400" />
+        <span className="font-mono uppercase tracking-wider">Retrospective</span>
+        <span
+          className={cn(
+            'text-[10px] font-medium uppercase px-1.5 py-0.5 rounded-full',
+            tier === 'deep'
+              ? 'bg-purple-500/15 text-purple-400'
+              : 'bg-blue-500/15 text-blue-400',
+          )}
+        >
+          {tier}
+        </span>
+        <span
+          className={cn(
+            'text-[10px] font-medium uppercase px-1.5 py-0.5 rounded-full',
+            isSuccess
+              ? 'bg-green-500/15 text-green-400'
+              : 'bg-red-500/15 text-red-400',
+          )}
+        >
+          {outcome}
+        </span>
+        {candidateCount > 0 && (
+          <>
+            <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+            <span className="text-fg-4">{candidateCount} candidate{candidateCount !== 1 ? 's' : ''}</span>
+          </>
+        )}
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      {summaryItems.length > 0 && (
+        <ul className="space-y-1 mt-1">
+          {summaryItems.map((item, i) => (
+            <li key={i} className="flex gap-2 text-[11.5px] text-fg-2 leading-snug">
+              <span className="shrink-0 text-fg-5 mt-0.5">–</span>
+              <span>{item.replace(/\*\*(.+?)\*\*/g, '$1')}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
 function PrMergedEvent({ event }: { event: AgentEventDto }) {
   const p = event.payload as { prNumber?: number; sha?: string } | null;
   const shortSha = p?.sha != null ? p.sha.slice(0, 7) : null;
@@ -1117,13 +1193,29 @@ function RunGroupWrapper({
     return () => clearInterval(id);
   }, [isLive]);
 
-  const rank = (item: RenderItem) => {
-    if (item.kind !== 'event') return 2;
-    if (item.event.kind === 'agent.run-completed') return 0;
-    if (item.event.kind === 'agent.run-failed') return 1;
-    return 2;
+  const displayItems = items.map((item) => {
+    if (
+      item.kind === 'event' &&
+      (item.event.kind === 'agent.run-completed' || item.event.kind === 'agent.run-failed') &&
+      lastEventAt != null
+    ) {
+      return { ...item, event: { ...item.event, createdAt: lastEventAt } };
+    }
+    return item;
+  });
+  const getItemTs = (item: RenderItem): number => {
+    if (item.kind === 'event') {
+      const base = new Date(item.event.createdAt).getTime();
+      // +1 ensures run-completed/failed sorts above any same-timestamp sibling
+      if (item.event.kind === 'agent.run-completed' || item.event.kind === 'agent.run-failed') {
+        return base + 1;
+      }
+      return base;
+    }
+    if (item.kind === 'log-group') return new Date(item.events[0]?.createdAt ?? 0).getTime();
+    return 0;
   };
-  const sorted = [...items].sort((a, b) => rank(a) - rank(b));
+  const sorted = [...displayItems].sort((a, b) => getItemTs(b) - getItemTs(a));
 
   const startMs = startedAt != null ? new Date(startedAt).getTime() : null;
   const endMs = endedAt != null ? new Date(endedAt).getTime() : null;
@@ -1131,7 +1223,9 @@ function RunGroupWrapper({
   const isStalled = isLive && lastMs != null && now - lastMs > STALL_MS;
   const liveDuration = startMs != null ? formatDuration(now - startMs) : null;
   const completeDuration =
-    startMs != null && endMs != null ? formatDuration(endMs - startMs) : null;
+    startMs != null && endMs != null
+      ? formatDuration((lastMs ?? endMs) - startMs)
+      : null;
   const isFailed = items.some(
     (item) => item.kind === 'event' && item.event.kind === 'agent.run-failed',
   );
@@ -1194,7 +1288,7 @@ function RunGroupWrapper({
       <span className="text-fg-5 text-[10.5px]">
         {completeDuration != null && <>Ran for {completeDuration}</>}
         {startedAt != null && <> &middot; Started {new Date(startedAt).toLocaleTimeString()}</>}
-        {endedAt != null && <> &middot; Ended {new Date(endedAt).toLocaleTimeString()}</>}
+        {endedAt != null && <> &middot; Ended {new Date(lastEventAt ?? endedAt).toLocaleTimeString()}</>}
       </span>
     );
 
@@ -1336,6 +1430,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <PrOpenedEvent key={event.id} event={event} />;
     case 'review.completed':
       return <ReviewCompletedEvent key={event.id} event={event} />;
+    case 'retrospective.completed':
+      return <RetroCompletedEvent key={event.id} event={event} />;
     case 'pr.merged':
       return <PrMergedEvent key={event.id} event={event} />;
     case 'gate.approved':

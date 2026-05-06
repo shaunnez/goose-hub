@@ -597,9 +597,10 @@ These rules must have unit tests (M1 exit criterion).
 - `factory:rate-limited`
 - `factory:budget-exceeded`
 - `factory:tool-violation`
-- `factory:gate-pending`
 - `factory:improvement-candidate`
 - `factory:advisor-flagged`
+- `factory:blocked-by-dependency`
+- `factory:docs`
 - `factory:bootstrap-pr` (used by bootstrap to bypass governance immutability for *creation* only)
 
 ### 9.5 The full state list (canonical)
@@ -617,6 +618,7 @@ factory:research-pending
 factory:research-complete
 factory:investigating
 factory:investigation-complete
+factory:gate-pending
 factory:dev-ready
 factory:in-progress
 factory:needs-qa
@@ -624,6 +626,7 @@ factory:qa-failed
 factory:needs-review
 factory:needs-fix
 factory:approved
+factory:merge-conflict
 factory:retrospecting
 factory:needs-human
 factory:done

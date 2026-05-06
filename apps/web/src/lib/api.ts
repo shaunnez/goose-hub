@@ -68,8 +68,9 @@ export async function fetchProjectConfigs(signal?: AbortSignal): Promise<Project
   return configs;
 }
 
-export async function fetchIssues(slug: string): Promise<WorkItemDto[]> {
-  const { items } = await getJson<{ items: WorkItemDto[] }>(`/projects/${slug}/issues`);
+export async function fetchIssues(slug: string, opts?: { all?: boolean }): Promise<WorkItemDto[]> {
+  const qs = opts?.all ? '?all=true' : '';
+  const { items } = await getJson<{ items: WorkItemDto[] }>(`/projects/${slug}/issues${qs}`);
   return items;
 }
 

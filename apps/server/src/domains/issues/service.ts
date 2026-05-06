@@ -13,11 +13,16 @@ export { getIssueWorktreeDiff } from './diff.js';
 export { getIssueTriage, overrideIssueRepo } from './triage.js';
 export { fakeRun } from './fake-run.js';
 
-export async function listIssues(slug: string): Promise<Result<{ items: unknown[] }>> {
+export async function listIssues(
+  slug: string,
+  opts?: { all?: boolean },
+): Promise<Result<{ items: unknown[] }>> {
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
-  const { milestoneNumber } = await resolveActiveMilestone(slug);
-  const items = await source.listOpenWork(milestoneNumber ?? undefined);
+  const milestoneNumber = opts?.all
+    ? undefined
+    : (await resolveActiveMilestone(slug)).milestoneNumber ?? undefined;
+  const items = await source.listOpenWork(milestoneNumber);
   const lastPersonaMap = getLastPersonaIdsByWorkItem(slug);
   const enriched = items.map((item) => ({
     ...(item as object),
