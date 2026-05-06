@@ -49,3 +49,28 @@ Every new slice at `slices/<name>/` MUST include:
 - Before mocking any hook: read the component file and grep its imports first (discipline rule 5)
 - `MemoryRouter` is required for any component that uses `Link` or `useNavigate`
 - **Before any test rewrite:** re-read the component and grep for the exact key/state it reads (e.g. `localStorage.getItem`, `useState`, `useRef`). A test that doesn't mirror the component's actual state access will fail regardless of rewrites.
+
+## Evidence specs (e2e)
+
+Evidence specs are **visual proof the feature exists in the running app**, not a second unit test. Unit tests cover logic; evidence specs confirm the feature renders and responds in the browser.
+
+**Do not rely on live data.** The Factory workspace has an empty SQLite DB (no synced events) and GitHub API calls are flaky under rate limits. A spec that navigates to the board and checks for issue links will find nothing and exit early — the feature is never exercised.
+
+**Use `page.route()` to mock API responses** whenever the feature requires data to render:
+
+```typescript
+// Intercept the endpoint and return minimal fixture data
+await page.route('**/api/issues/*/timeline*', route =>
+  route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{ id: '1', type: 'agent.run', /* ...required fields */ }]),
+  })
+);
+await page.goto('/issues/511');
+// now assert the feature — buttons, panels, etc.
+```
+
+To find the right endpoint and response shape: read the component file, grep its `fetch`/`useQuery` calls, then read the server router for the matching route and its response type.
+
+**Graceful-exit guards are wrong for evidence specs.** `if (!hasData) return;` means the spec never tests the feature. Skip the guard — mock the data instead so the feature always renders.

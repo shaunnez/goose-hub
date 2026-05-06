@@ -4,21 +4,8 @@ import { renderMarkdownToHtml } from '@/lib/markdown';
 import type { WorkItemDto } from '@/lib/types';
 import { getPersonaLabel, usePersonaMap } from '@/lib/usePersonaMap';
 import { formatCost, formatTokens } from '@/lib/utils';
-import {
-  Brain,
-  Bug,
-  Clock,
-  Code2,
-  Coins,
-  Eye,
-  FileText,
-  Folder,
-  MessageSquare,
-  RotateCcw,
-} from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useIssueCostsBreakdown } from '../lib/costs';
-import { SECTIONS } from '../lib/sections';
 import { CommentsSection } from './CommentsSection';
 
 interface OverviewSectionProps {
@@ -26,31 +13,6 @@ interface OverviewSectionProps {
   projectSlug?: string;
 }
 
-const SECTION_ICONS: Record<string, React.ElementType> = {
-  repo: Folder,
-  investigation: Brain,
-  prd: FileText,
-  code: Code2,
-  qa: Bug,
-  review: Eye,
-  retrospective: RotateCcw,
-  timeline: Clock,
-  chat: MessageSquare,
-  costs: Coins,
-};
-
-const SECTION_HINTS: Record<string, string> = {
-  repo: 'Repo candidates & triage',
-  investigation: 'Findings & evidence trail',
-  prd: 'Scope, criteria, decomposition',
-  code: 'Diff view, file changes',
-  qa: 'Test run outcome',
-  review: 'Holdout review verdict',
-  retrospective: 'Post-merge learning loop',
-  timeline: 'Full event history',
-  chat: 'Conversation with orchestrator',
-  costs: 'Token spend & budget burn',
-};
 
 function StatCard({
   label,
@@ -67,7 +29,7 @@ function StatCard({
     <div className="rounded-lg border border-line bg-bg-elev px-4 py-3">
       <div className="text-[10.5px] uppercase tracking-wider text-fg-4 mb-1.5">{label}</div>
       <div
-        className="text-[20px] font-semibold leading-none tracking-tight"
+        className="text-[20px] font-semibold leading-none tracking-tight capitalize"
         style={{ color: color ?? 'var(--fg)' }}
       >
         {value}
@@ -98,8 +60,6 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
   const priorityColor = PRIORITY_COLOR[priority];
   const priorityBg = PRIORITY_BG[priority];
   const priorityBorder = PRIORITY_BORDER[priority];
-
-  const jumpSections = SECTIONS.filter((s) => s.key !== 'overview');
 
   return (
     <div data-testid="overview-section" className="px-8 py-6 flex flex-col gap-5">
@@ -135,7 +95,7 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
       </div>
 
       {/* Main content grid */}
-      <div className="grid gap-4" style={{ gridTemplateColumns: '1.4fr 1fr' }}>
+      <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1fr' }}>
         {/* Brief card */}
         <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
           <div className="px-4 py-3 border-b border-line bg-bg-elev-2">
@@ -163,50 +123,22 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
           </div>
         </div>
 
-        {/* Quick jump card */}
-        <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
-          <div className="px-4 py-3 border-b border-line bg-bg-elev-2">
-            <div className="text-[10.5px] uppercase tracking-wider text-fg-4">Quick jump</div>
+        {/* Comments card */}
+        {item != null && projectSlug != null && (
+          <div className="rounded-lg border border-line bg-bg-elev overflow-hidden flex flex-col">
+            <div className="px-4 py-3 border-b border-line bg-bg-elev-2 flex items-center justify-between shrink-0">
+              <div className="text-[10.5px] uppercase tracking-wider text-fg-4">Comments</div>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <CommentsSection
+                projectSlug={projectSlug}
+                id={item.externalId}
+                externalId={item.externalId}
+              />
+            </div>
           </div>
-          <div className="py-1">
-            {jumpSections.map((s) => {
-              const Icon = SECTION_ICONS[s.key];
-              const target =
-                s.key === 'overview'
-                  ? `/projects/${slug}/items/${id}`
-                  : `/projects/${slug}/items/${id}/${s.key}`;
-              return (
-                <Link
-                  key={s.key}
-                  to={target}
-                  className="flex items-center gap-3 px-4 py-2 hover:bg-bg-hover transition-colors group"
-                >
-                  <span className="w-7 h-7 rounded-md flex items-center justify-center bg-accent-soft text-accent shrink-0">
-                    {Icon && <Icon size={13} />}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[12.5px] font-medium text-fg group-hover:text-fg">
-                      {s.label}
-                    </div>
-                    <div className="text-[11px] text-fg-4 truncate">
-                      {SECTION_HINTS[s.key] ?? s.description ?? ''}
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
+        )}
       </div>
-
-      {/* Comments */}
-      {item != null && projectSlug != null && (
-        <CommentsSection
-          projectSlug={projectSlug}
-          id={item.externalId}
-          externalId={item.externalId}
-        />
-      )}
     </div>
   );
 }

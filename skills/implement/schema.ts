@@ -1,5 +1,12 @@
 import { DecisionSummarySchema } from '@goose-hub/core/retrospective/schemas.js';
+import { QualityScoresSchema, computeOverallScore } from '../qa/schema.js';
 import { z } from 'zod';
+
+export { computeOverallScore };
+
+export function anyZeroCategory(scores: z.infer<typeof QualityScoresSchema>): boolean {
+  return Object.values(scores).some((v) => v === 0);
+}
 
 export { DecisionSummarySchema };
 
@@ -63,6 +70,19 @@ export const ImplementSchema = z
       ),
     confidence: ConfidenceSchema,
     decisionSummaries: z.array(DecisionSummarySchema).min(1),
+    selfQualityScore: QualityScoresSchema.optional().describe(
+      '8-category quality score the developer self-assigned; absent for chore PRs',
+    ),
+    selfScoreBelowThreshold: z
+      .boolean()
+      .optional()
+      .describe('true when final self-score fails threshold (< 70) or single-zero rule'),
+    selfScoreWarnings: z
+      .array(z.string())
+      .default([])
+      .describe(
+        'Non-fatal consistency warnings from superRefine (confidence vs threshold contradictions)',
+      ),
   })
   .superRefine((val, ctx) => {
     const touchesWeb = val.filesWritten.some((f) => f.path.startsWith('apps/web/'));
@@ -84,6 +104,31 @@ export const ImplementSchema = z
           'testsRun.paths must be non-empty when testsWritten is non-empty (record what dev actually ran, #467)',
         path: ['testsRun', 'paths'],
       });
+    }
+    // Soft warning: below threshold but claiming high confidence
+    if (val.selfScoreBelowThreshold === true && val.confidence === 'high') {
+      val.selfScoreWarnings.push(
+        'selfScoreBelowThreshold is true but confidence is high — contradictory',
+      );
+    }
+    // Soft warning: threshold passed but claiming low confidence
+    if (val.selfScoreBelowThreshold === false && val.confidence === 'low') {
+      val.selfScoreWarnings.push(
+        'selfScoreBelowThreshold is false but confidence is low — contradictory',
+      );
+    }
+    // Hard-fail: score tuple inconsistent with flag
+    if (val.selfQualityScore != null && val.selfScoreBelowThreshold != null) {
+      const score = computeOverallScore(val.selfQualityScore);
+      const hasZero = anyZeroCategory(val.selfQualityScore);
+      const shouldBeBelow = score < 70 || hasZero;
+      if (shouldBeBelow !== val.selfScoreBelowThreshold) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `selfScoreBelowThreshold (${val.selfScoreBelowThreshold}) is inconsistent with selfQualityScore (aggregate ${score}, anyZero ${hasZero})`,
+          path: ['selfScoreBelowThreshold'],
+        });
+      }
     }
   });
 

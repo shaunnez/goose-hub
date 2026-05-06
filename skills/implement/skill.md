@@ -74,6 +74,51 @@ The context contains a `<task>` block with:
 - Only refactor surrounding code if doing so is required to make the test pass cleanly. Do NOT do drive-by refactors of unrelated code.
 - Re-run the **targeted** test command (same paths) after any refactor.
 
+### 5a — Self-score
+
+Skip this step entirely if `testsWritten` is `[]` (chore PR — nothing behavioural to score; leave `selfQualityScore` and `selfScoreBelowThreshold` absent).
+
+Score the files you wrote or modified during this session. Do NOT run git diff — you have already read every file you touched. Score from memory of what you wrote.
+
+For each of the 8 categories, assign an integer score using the table below.
+Compute aggregate = sum of all 8 scores (0–100).
+Any single category at zero is an automatic fail regardless of aggregate.
+
+Emit: `[decision] SELF_SCORE: <aggregate>/100 — lowest: <category> (<score>/<max>) because <one sentence>`
+
+If aggregate ≥ 70 AND no category is 0: proceed to step 6.
+
+If aggregate < 70 OR any category is 0:
+  Make one focused quality-refactor targeting the lowest-scoring or zero category.
+  The quality-refactor does NOT count toward the two-rewrite cap (discipline rule 4); they are separate limits.
+  Re-run the targeted Vitest test command (same paths as step 4 Green) to confirm still green.
+  Do NOT re-run Playwright at this stage.
+  Re-score using the same table. Second score is final.
+
+  If second aggregate ≥ 70 AND no category is 0:
+    Emit: `[decision] SELF_SCORE: <aggregate>/100 after quality-refactor — lowest: <category> (<score>/<max>)`
+    Proceed to step 6.
+
+  If second aggregate < 70 OR any single category is still zero:
+    Set `selfScoreBelowThreshold = true`.
+    Emit: `[decision] SELF_SCORE_WARN: <aggregate>/100 after quality-refactor — proceeding, QA will adjudicate`
+    Proceed to step 6.
+
+#### Scoring table
+
+Score honestly. Identify your single lowest-scoring category and explain it in the decision summary. If every category scores its maximum, briefly justify why in the summary — unexplained perfect scores are a grade-inflation signal.
+
+| Category | Max | 0 pts — absent/broken | Half pts — standard | Max pts — exceptional |
+|---|---:|---|---|---|
+| Open/Closed | 20 | New behaviour required modifying existing code paths | New feature is contained; existing code unchanged | Pure extension; existing functions/classes not touched |
+| Concept count | 15 | Module introduces ≥ 5 new abstractions | 2–4 new abstractions | ≤ 1 new abstraction |
+| Time-to-capability | 15 | A new dev would need > 30 min to understand usage | 10–30 min | < 10 min from reading names alone |
+| Complecting | 15 | Unrelated concerns share functions/modules | Minor incidental coupling | Each function has exactly one job |
+| LOC | 10 | > 200 net new lines for this change | 50–200 lines | < 50 lines |
+| Coupling | 10 | Module adds ≥ 5 new cross-module deps | 2–4 new deps | ≤ 1 new dep |
+| Gall's Law | 10 | Complexity introduced all at once | Some incremental growth | Grew from simplest working version |
+| Cyclomatic complexity | 5 | Avg branches/function ≥ 8 | 4–7 | ≤ 3 |
+
 ### 6 — Lint and typecheck
 
 - If `<lint_command>` is provided, run it via the `bash` tool. Fix any failures (auto-fix where possible).
@@ -130,11 +175,24 @@ Return a JSON object conforming to `ImplementSchema`. The orchestrator opens the
   },
   "prUrl": "https://github.com/owner/repo/issues/123",
   "evidenceSpecPath": "apps/web/e2e/issue-123.spec.ts",
+  "selfQualityScore": {
+    "openClosed": 18,
+    "conceptCount": 12,
+    "timeToCapability": 13,
+    "complecting": 14,
+    "loc": 8,
+    "coupling": 9,
+    "gallsLaw": 9,
+    "cyclomaticComplexity": 4
+  },
+  "selfScoreBelowThreshold": false,
+  "selfScoreWarnings": [],
   "confidence": "high",
   "decisionSummaries": [
     { "kind": "PLAN", "summary": "Add helper at core/foo/bar.ts; mirror existing baz pattern" },
     { "kind": "RED", "summary": "Wrote 3 failing tests covering the success and two error paths" },
     { "kind": "GREEN", "summary": "Implementation passes all 3 targeted tests" },
+    { "kind": "SELF_SCORE", "summary": "87/100 — lowest: loc (8/10) because helper adds ~60 net lines" },
     { "kind": "LINT", "summary": "Lint and typecheck clean" }
   ]
 }

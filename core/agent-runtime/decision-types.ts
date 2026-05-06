@@ -32,6 +32,8 @@ export const DecisionKindSchema = z.enum([
   'REGRESSION_CHECK',
   'CRITERIA_CHECK',
   'QUALITY_SCORE',
+  'SELF_SCORE',
+  'SELF_SCORE_WARN',
   'DIFF_READ',
   'VERDICT',
 

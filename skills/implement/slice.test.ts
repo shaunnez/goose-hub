@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
 import config, { ImplementContextSchema } from './config.js';
 import { ImplementSchema } from './schema.js';
+import { anyZeroCategory } from './schema.js';
+import { computeOverallScore } from '../qa/schema.js';
 
 describe('implement output schema', () => {
   const baseValid = {
@@ -156,6 +158,128 @@ describe('implement output schema', () => {
     const jsonSchema = toJSONSchema(ImplementSchema);
     expect(typeof jsonSchema).toBe('object');
     expect(jsonSchema).not.toBeNull();
+  });
+
+  const validScores = {
+    openClosed: 18,
+    conceptCount: 12,
+    timeToCapability: 13,
+    complecting: 14,
+    loc: 8,
+    coupling: 9,
+    gallsLaw: 9,
+    cyclomaticComplexity: 4,
+  }; // sum = 87
+
+  const baseChore = {
+    plan: 'chore',
+    filesWritten: [{ path: 'docs/x.md', reason: 'docs' }],
+    testsWritten: [],
+    testsRun: { command: 'pnpm test --run', paths: [] },
+    prUrl: 'https://github.com/owner/repo/issues/1',
+    evidenceSpecPath: null,
+    confidence: 'medium' as const,
+    decisionSummaries: [{ kind: 'PLAN', summary: 'docs only' }],
+  };
+
+  const baseImpl = {
+    ...baseChore,
+    filesWritten: [
+      { path: 'core/foo/bar.ts', reason: 'impl' },
+      { path: 'core/foo/bar.test.ts', reason: 'tests' },
+    ],
+    testsWritten: [{ path: 'core/foo/bar.test.ts', cases: 3 }],
+    testsRun: { command: 'pnpm test --run', paths: ['core/foo/bar.test.ts'] },
+    confidence: 'high' as const,
+  };
+
+  it('AC schema T1: accepts valid scores with selfScoreBelowThreshold false', () => {
+    const result = ImplementSchema.safeParse({
+      ...baseImpl,
+      selfQualityScore: validScores,
+      selfScoreBelowThreshold: false,
+      selfScoreWarnings: [],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('AC schema T2: accepts without scores (backward compat / chore)', () => {
+    expect(ImplementSchema.safeParse(baseChore).success).toBe(true);
+  });
+
+  it('AC schema T3: high confidence + below threshold => warns, no hard-fail', () => {
+    const result = ImplementSchema.safeParse({
+      ...baseImpl,
+      selfScoreBelowThreshold: true,
+      confidence: 'high',
+      selfScoreWarnings: [],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.selfScoreWarnings.length).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('AC schema T4: low confidence + threshold passed => warns, no hard-fail', () => {
+    const result = ImplementSchema.safeParse({
+      ...baseImpl,
+      selfScoreBelowThreshold: false,
+      confidence: 'low',
+      selfScoreWarnings: [],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.selfScoreWarnings.length).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('AC schema T5: score tuple inconsistent with flag => hard-fail', () => {
+    // validScores sums to 87 (>= 70, no zeros) but flag says below threshold
+    const result = ImplementSchema.safeParse({
+      ...baseImpl,
+      selfQualityScore: validScores,
+      selfScoreBelowThreshold: true,
+      selfScoreWarnings: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('AC schema T6a: anyZeroCategory returns true when a category is zero', () => {
+    expect(anyZeroCategory({ ...validScores, openClosed: 0 })).toBe(true);
+  });
+
+  it('AC schema T6b: anyZeroCategory returns false when no category is zero', () => {
+    expect(anyZeroCategory(validScores)).toBe(false);
+  });
+
+  it('AC schema T7a: computeOverallScore sums to 100 for max scores', () => {
+    expect(
+      computeOverallScore({
+        openClosed: 20,
+        conceptCount: 15,
+        timeToCapability: 15,
+        complecting: 15,
+        loc: 10,
+        coupling: 10,
+        gallsLaw: 10,
+        cyclomaticComplexity: 5,
+      }),
+    ).toBe(100);
+  });
+
+  it('AC schema T7b: computeOverallScore returns 0 for all-zero scores', () => {
+    expect(
+      computeOverallScore({
+        openClosed: 0,
+        conceptCount: 0,
+        timeToCapability: 0,
+        complecting: 0,
+        loc: 0,
+        coupling: 0,
+        gallsLaw: 0,
+        cyclomaticComplexity: 0,
+      }),
+    ).toBe(0);
   });
 });
 

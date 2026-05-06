@@ -35,7 +35,10 @@ export async function getIssue(slug: string, id: string): Promise<Result<{ item:
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
   const item = await source.getItem(id);
-  return { ok: true, data: { item } };
+  const lastPersonaMap = getLastPersonaIdsByWorkItem(slug);
+  const workItemId = (item as { id: string }).id;
+  const enriched = { ...(item as object), lastPersonaId: lastPersonaMap.get(workItemId) ?? null };
+  return { ok: true, data: { item: enriched } };
 }
 
 export async function getIssueEvents(
