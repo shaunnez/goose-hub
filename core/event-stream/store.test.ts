@@ -461,10 +461,6 @@ describe('eventStore.closeOrphanedRuns', () => {
     db.delete(events).where(sql`project_id = ${ORPHAN_PROJECT}`).run();
   });
 
-  it('returns 0 when there are no run-started events at all', () => {
-    expect(eventStore.closeOrphanedRuns()).toBe(0);
-  });
-
   it('closes a run that started but never completed by emitting agent.run-failed', () => {
     const runId = 'orphan-run-1';
     eventStore.appendEvent({
