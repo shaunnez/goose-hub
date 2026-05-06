@@ -26,6 +26,33 @@ export type FetchTargetFn = (
   issueNumber: number,
 ) => Promise<DependencyTarget | null>;
 
+/**
+ * Per-project fetcher used by `createProjectAwareTargetSource`.
+ *
+ * The fetcher is only invoked for repos that are registered as projects, so
+ * it must never return `null` — `null` is reserved for "repo not registered"
+ * and that decision is owned by the registry, not the fetcher. On 404 /
+ * non-OK / network error the fetcher MUST throw so the caller can distinguish
+ * "registered repo, transient or genuine fetch failure" from "no project for
+ * this repo" (which falsely triggers M11.07 needs-human escalation).
+ */
+export type ProjectIssueFetcher = (
+  repoRef: string,
+  issueNumber: number,
+) => Promise<DependencyTarget>;
+
+export class DependencyTargetFetchError extends Error {
+  constructor(
+    public readonly repoRef: string,
+    public readonly issueNumber: number,
+    public readonly status: number | null,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'DependencyTargetFetchError';
+  }
+}
+
 export interface DependencyResolverContext {
   /** Repo of the issue carrying the dep. Used when `ref.repoRef` is null. */
   currentRepo: string;
@@ -98,7 +125,7 @@ export interface ProjectAwareTargetSourceOptions {
   /** Pre-loaded projects (overrides `loadProjects()`). For tests. */
   projects?: ProjectConfig[];
   /** Override per-project fetcher construction. For tests. */
-  fetchTargetForProject?: (project: ProjectConfig) => FetchTargetFn;
+  fetchTargetForProject?: (project: ProjectConfig) => ProjectIssueFetcher;
   /** GitHub token for the default fetcher. Defaults to `process.env.GITHUB_TOKEN`. */
   githubToken?: string;
 }
@@ -112,7 +139,7 @@ export async function createProjectAwareTargetSource(
   options: ProjectAwareTargetSourceOptions = {},
 ): Promise<FetchTargetFn> {
   const projects = options.projects ?? (await loadProjects());
-  const fetchers = new Map<string, FetchTargetFn>();
+  const fetchers = new Map<string, ProjectIssueFetcher>();
 
   for (const project of projects) {
     const repoRef = project.source.repo;
@@ -125,7 +152,9 @@ export async function createProjectAwareTargetSource(
 
   return async (repoRef, issueNumber) => {
     const fetcher = fetchers.get(repoRef);
-    if (fetcher == null) return null;
+    if (fetcher == null) return null; // unregistered — only path to state: 'unregistered'
+    // Registered: fetcher must return a target or throw. Errors propagate so a
+    // 404 on a registered repo is not silently misclassified as unregistered.
     return fetcher(repoRef, issueNumber);
   };
 }
@@ -137,36 +166,50 @@ export async function createProjectAwareTargetSource(
  * state-machine state. The dep contract is "issue closed = dep satisfied",
  * which is GitHub-lifecycle, so we hit the API narrowly here rather than
  * widening the `WorkItem` shape across the codebase.
+ *
+ * Throws `DependencyTargetFetchError` on 404 / non-OK / network failure so the
+ * caller can distinguish "registered repo, transient fetch failure" from
+ * "repo not registered" (which is the only path to `state: 'unregistered'`).
  */
-function defaultFetchTargetForProject(token: string): FetchTargetFn {
+function defaultFetchTargetForProject(token: string): ProjectIssueFetcher {
   return async (repoRef, issueNumber) => {
+    const url = `https://api.github.com/repos/${repoRef}/issues/${issueNumber}`;
+    let response: Response;
     try {
-      const url = `https://api.github.com/repos/${repoRef}/issues/${issueNumber}`;
-      const response = await fetch(url, {
+      response = await fetch(url, {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/vnd.github+json',
           'X-GitHub-Api-Version': '2022-11-28',
         },
       });
-      if (response.status === 404) return null;
-      if (!response.ok) {
-        logger.warn('dependency-resolver: github fetch failed', {
-          repoRef,
-          issueNumber,
-          status: response.status,
-        });
-        return null;
-      }
-      const json = (await response.json()) as { state: 'open' | 'closed'; title: string };
-      return { state: json.state, title: json.title };
     } catch (err) {
       logger.warn('dependency-resolver: github fetch error', {
         repoRef,
         issueNumber,
         error: String(err),
       });
-      return null;
+      throw new DependencyTargetFetchError(
+        repoRef,
+        issueNumber,
+        null,
+        `Network error fetching ${repoRef}#${issueNumber}: ${String(err)}`,
+      );
     }
+    if (!response.ok) {
+      logger.warn('dependency-resolver: github fetch failed', {
+        repoRef,
+        issueNumber,
+        status: response.status,
+      });
+      throw new DependencyTargetFetchError(
+        repoRef,
+        issueNumber,
+        response.status,
+        `GitHub returned ${response.status} for ${repoRef}#${issueNumber}`,
+      );
+    }
+    const json = (await response.json()) as { state: 'open' | 'closed'; title: string };
+    return { state: json.state, title: json.title };
   };
 }

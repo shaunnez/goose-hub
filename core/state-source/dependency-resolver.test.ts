@@ -4,7 +4,9 @@ import type { DependencyRef } from './dependency-parser.js';
 import {
   DependencyResolver,
   type DependencyTarget,
+  DependencyTargetFetchError,
   type FetchTargetFn,
+  type ProjectIssueFetcher,
   createProjectAwareTargetSource,
   resolveDependency,
 } from './dependency-resolver.js';
@@ -240,11 +242,11 @@ function makeProject(repoRef: string): ProjectConfig {
 
 describe('createProjectAwareTargetSource', () => {
   it('routes registered cross-repo lookups to the matching project fetcher', async () => {
-    const goosehubFetcher = vi.fn<FetchTargetFn>(async () => ({
+    const goosehubFetcher = vi.fn<ProjectIssueFetcher>(async () => ({
       state: 'open',
       title: 'in goose-hub',
     }));
-    const otherFetcher = vi.fn<FetchTargetFn>(async () => ({
+    const otherFetcher = vi.fn<ProjectIssueFetcher>(async () => ({
       state: 'closed',
       title: 'in other',
     }));
@@ -302,5 +304,45 @@ describe('createProjectAwareTargetSource', () => {
       issueNumber: 7,
     });
     expect(stranger).toMatchObject({ state: 'unregistered', repoRef: 'unknown/repo' });
+  });
+
+  it('propagates errors from per-project fetchers (404 on registered repo ≠ unregistered)', async () => {
+    const failingFetcher: ProjectIssueFetcher = async () => {
+      throw new DependencyTargetFetchError(
+        'shaunnez/goose-hub',
+        404,
+        404,
+        'GitHub returned 404 for shaunnez/goose-hub#404',
+      );
+    };
+
+    const fetchTarget = await createProjectAwareTargetSource({
+      projects: [makeProject('shaunnez/goose-hub')],
+      fetchTargetForProject: () => failingFetcher,
+    });
+
+    await expect(fetchTarget('shaunnez/goose-hub', 404)).rejects.toBeInstanceOf(
+      DependencyTargetFetchError,
+    );
+  });
+
+  it('resolver surfaces fetch errors as rejections, not as state: unregistered', async () => {
+    const failingFetcher: ProjectIssueFetcher = async () => {
+      throw new DependencyTargetFetchError('shaunnez/goose-hub', 404, 404, 'not found');
+    };
+
+    const fetchTarget = await createProjectAwareTargetSource({
+      projects: [makeProject('shaunnez/goose-hub')],
+      fetchTargetForProject: () => failingFetcher,
+    });
+
+    const resolver = new DependencyResolver({
+      currentRepo: 'shaunnez/goose-hub',
+      fetchTarget,
+    });
+
+    await expect(
+      resolver.resolve({ type: 'depends-on', repoRef: null, issueNumber: 404 }),
+    ).rejects.toBeInstanceOf(DependencyTargetFetchError);
   });
 });
