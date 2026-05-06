@@ -12,7 +12,7 @@ import { parseVitestJson } from './parse-vitest-json.js';
 
 export interface RunVitestOptions {
   /**
-   * Test command as a single shell string (e.g. `pnpm test --run`).
+   * Test command as a single shell string (e.g. `pnpm test `).
    * The runner appends `--reporter=json --outputFile=<tmp>` so callers
    * don't need to know the reporter flag.
    */
@@ -27,14 +27,15 @@ const DEFAULT_TIMEOUT_MS = 600_000;
 /**
  * Runs the given test command with vitest's JSON reporter and parses the
  * output. The command is executed via `sh -c` so callers can pass pipelines
- * or compound commands ("pnpm test --run"). Vitest is told to write the
+ * or compound commands ("pnpm test "). Vitest is told to write the
  * report to a tempfile (stdout is reserved for log output) which we then
  * read back.
  */
 export async function runVitest(opts: RunVitestOptions): Promise<TestRun> {
   const dir = mkdtempSync(join(tmpdir(), 'goose-hub-vitest-'));
   const outFile = join(dir, 'report.json');
-  const fullCommand = `${opts.command} --reporter=json --outputFile=${JSON.stringify(outFile)}`;
+  const baseCommand = opts.command.replace(/\s+--reporter(?:=\S+)?/g, '').trimEnd();
+  const fullCommand = `${baseCommand} --reporter=json --outputFile=${JSON.stringify(outFile)}`;
 
   try {
     await new Promise<void>((resolve, reject) => {

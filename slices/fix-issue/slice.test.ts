@@ -103,7 +103,7 @@ function makeImplementOutput(overrides: Record<string, unknown> = {}) {
     ],
     testsWritten: [{ path: 'core/utils/strings.test.ts', cases: 3 }],
     testsRun: {
-      command: 'pnpm test --run',
+      command: 'pnpm test ',
       paths: ['core/utils/strings.test.ts'],
     },
     prUrl: 'https://github.com/owner/repo/issues/42',
@@ -466,7 +466,7 @@ describe('runFixIssueWorkflow (#183)', () => {
     // #467 — testsRun is preserved verbatim on agent.implement-complete so
     // QA can pull it as devTestsRun when grading.
     expect((completeEvent?.[0].payload as { testsRun: unknown }).testsRun).toEqual({
-      command: 'pnpm test --run',
+      command: 'pnpm test ',
       paths: ['core/utils/strings.test.ts'],
     });
   });

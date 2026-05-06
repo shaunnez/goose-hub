@@ -24,6 +24,10 @@ export function CommentsSection({ projectSlug, id, externalId }: CommentsSection
 
   return (
     <div className="px-3 py-2" data-testid="comments-section">
+      <div className="flex items-center gap-1 mb-2">
+        <span className="text-[12px] font-medium text-fg-2">Comments</span>
+        {comments.length > 0 && <span className="text-[12px] text-fg-2">({comments.length})</span>}
+      </div>
       {comments.length > 1 && (
         <div className="flex justify-end mb-2">
           <button

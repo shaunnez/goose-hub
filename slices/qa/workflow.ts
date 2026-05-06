@@ -75,7 +75,7 @@ export interface QaWorkflowDeps {
   verifyCommands?: VerifyCommand[];
 }
 
-const DEFAULT_TEST_COMMAND = 'pnpm test --run';
+const DEFAULT_TEST_COMMAND = 'pnpm test --reporter=json';
 
 async function defaultRunTests(cwd: string, command: string): Promise<TestRun | null> {
   try {

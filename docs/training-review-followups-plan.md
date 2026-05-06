@@ -157,7 +157,7 @@ Dev today runs `<test_command>` (full suite) up to 5+ times per run (`skills/imp
 
 ### Acceptance criteria
 
-- [ ] `skills/implement/skill.md` Red/Green/Refactor sections updated: dev runs targeted commands only — `<test_command> --run path/to/new.test.ts path/to/affected.test.ts` (or the project's equivalent for partial runs)
+- [ ] `skills/implement/skill.md` Red/Green/Refactor sections updated: dev runs targeted commands only — `<test_command>  path/to/new.test.ts path/to/affected.test.ts` (or the project's equivalent for partial runs)
 - [ ] `skills/implement/skill.md` adds an explicit note in "Critical rules": "QA runs the full suite — your job is to ship green for the surface you touched, not to verify the world. If you broke something far away, QA catches it."
 - [ ] New optional context field `<targeted_test_command>` on the implement skill — defaults to `<test_command>` with file-path arguments appended at run time
 - [ ] `skills/implement/schema.ts` adds `testsRun: { command: string, paths: string[] }` so the orchestrator and QA can see exactly what dev ran

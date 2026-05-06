@@ -542,7 +542,7 @@ async function runEvidencePost(input: RunEvidencePostInput): Promise<void> {
       toolBundles: ['validate'],
       toolExtras: [],
       env: { WEB_PORT: String(5200 + (Number(input.workItem.externalId) % 800)) },
-      budgets: { maxTurns: 50, maxBudgetUsd: 2, timeoutMs: 300_000 },
+      budgets: { maxTurns: 150, maxBudgetUsd: 5, timeoutMs: 1_800_000 },
       personaId: selectPersona(input.projectId, 'developer').personaId,
       outputJsonSchema: input.outputJsonSchema,
       appendSystemPrompt: input.appendSystemPrompt,

@@ -112,7 +112,7 @@ import config, { ReviewContextSchema } from './config.js';
 Run the slice tests:
 
 ```bash
-pnpm test --run skills/review/slice.test.ts
+pnpm test --reporter=json skills/review/slice.test.ts
 ```
 
 Tests cover:

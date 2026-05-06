@@ -5,7 +5,7 @@ const THREE_ACS = `
 ## Acceptance criteria
 
 - [ ] First AC with full verify block
-      Verify: pnpm test --run
+      Verify: pnpm test 
       Expected: 5 tests passed
       Tolerance: exact
 
@@ -101,7 +101,7 @@ describe('parseAcceptanceCriteria', () => {
 
   it('extracts the correct command from multi-AC body', () => {
     const result = parseAcceptanceCriteria(THREE_ACS);
-    expect(result[0].command).toBe('pnpm test --run');
+    expect(result[0].command).toBe('pnpm test');
     expect(result[1].command).toBe('pnpm biome check .');
   });
 

@@ -19,7 +19,7 @@ Referenced directly in the M8 exit criteria (PLAN.md §28 M8).
 ## Running
 
 ```bash
-pnpm test --run slices/holdout-boundary-test/slice.test.ts
+pnpm test --reporter=json slices/holdout-boundary-test/slice.test.ts
 ```
 
 No live Claude API required — tests the context assembly layer only.

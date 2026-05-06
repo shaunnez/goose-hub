@@ -23,7 +23,9 @@ const router = new Hono();
 
 router.get('/:slug/issues', async (c) => {
   const all = c.req.query('all') === 'true';
-  const result = await listIssues(c.req.param('slug'), { all });
+  const result = all
+    ? await listIssues(c.req.param('slug'), { all })
+    : await listIssues(c.req.param('slug'));
   return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);
 });
 

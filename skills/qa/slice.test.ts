@@ -541,7 +541,7 @@ describe('qa skill config', () => {
     const valid = QaContextSchema.safeParse({
       workItem: { title: 'Fix auth bug', body: 'Auth breaks on login.', number: 42 },
       prDiff: 'diff --git a/src/foo.ts b/src/foo.ts\n...',
-      projectCommands: { testCommand: 'pnpm test --run', lintCommand: 'pnpm biome check .' },
+      projectCommands: { testCommand: 'pnpm test ', lintCommand: 'pnpm biome check .' },
     });
     expect(valid.success).toBe(true);
   });
@@ -550,7 +550,7 @@ describe('qa skill config', () => {
     const valid = QaContextSchema.safeParse({
       workItem: { title: 'title', body: 'body', number: 1 },
       prDiff: 'diff output here',
-      projectCommands: { testCommand: 'pnpm test --run' },
+      projectCommands: { testCommand: 'pnpm test ' },
       sliceTests: ['skills/qa/slice.test.ts'],
     });
     expect(valid.success).toBe(true);
@@ -559,7 +559,7 @@ describe('qa skill config', () => {
   it('contextSchema rejects missing workItem', () => {
     const invalid = QaContextSchema.safeParse({
       prDiff: 'diff output',
-      projectCommands: { testCommand: 'pnpm test --run' },
+      projectCommands: { testCommand: 'pnpm test ' },
     });
     expect(invalid.success).toBe(false);
   });
@@ -567,7 +567,7 @@ describe('qa skill config', () => {
   it('contextSchema rejects missing prDiff', () => {
     const invalid = QaContextSchema.safeParse({
       workItem: { title: 'title', body: 'body', number: 1 },
-      projectCommands: { testCommand: 'pnpm test --run' },
+      projectCommands: { testCommand: 'pnpm test ' },
     });
     expect(invalid.success).toBe(false);
   });
@@ -584,7 +584,7 @@ describe('qa skill config', () => {
     const invalid = QaContextSchema.safeParse({
       workItem: { title: 'title', body: 'body' },
       prDiff: 'diff output',
-      projectCommands: { testCommand: 'pnpm test --run' },
+      projectCommands: { testCommand: 'pnpm test ' },
     });
     expect(invalid.success).toBe(false);
   });
@@ -593,11 +593,11 @@ describe('qa skill config', () => {
     const valid = QaContextSchema.safeParse({
       workItem: { title: 'title', body: 'body', number: 1 },
       prDiff: 'diff',
-      projectCommands: { testCommand: 'pnpm test --run' },
+      projectCommands: { testCommand: 'pnpm test ' },
       verifyCommands: [
         {
           ac: 'Loader returns two projects',
-          command: 'pnpm test --run',
+          command: 'pnpm test ',
           expected: '2 tests passed',
           tolerance: 'contains',
         },
@@ -610,7 +610,7 @@ describe('qa skill config', () => {
     const valid = QaContextSchema.safeParse({
       workItem: { title: 'title', body: 'body', number: 1 },
       prDiff: 'diff',
-      projectCommands: { testCommand: 'pnpm test --run' },
+      projectCommands: { testCommand: 'pnpm test ' },
       verifyCommands: [],
     });
     expect(valid.success).toBe(true);
@@ -628,9 +628,9 @@ describe('qa skill config', () => {
     const valid = QaContextSchema.safeParse({
       workItem: { title: 't', body: 'b', number: 1 },
       prDiff: 'diff',
-      projectCommands: { testCommand: 'pnpm test --run' },
+      projectCommands: { testCommand: 'pnpm test ' },
       devTestsRun: {
-        command: 'pnpm test --run',
+        command: 'pnpm test ',
         paths: ['core/foo/bar.test.ts', 'core/foo/baz.test.ts'],
       },
     });
@@ -681,7 +681,7 @@ describe('CriteriaResultSchema', () => {
   it('accepts a passing criteria result', () => {
     const result = CriteriaResultSchema.safeParse({
       ac: 'Loader returns two projects',
-      command: 'pnpm test --run',
+      command: 'pnpm test ',
       expected: '2 tests passed',
       actual: '2 tests passed, 0 failed',
       tolerance: 'contains',
@@ -693,7 +693,7 @@ describe('CriteriaResultSchema', () => {
   it('accepts a failing criteria result', () => {
     const result = CriteriaResultSchema.safeParse({
       ac: 'Loader deduplicates slugs',
-      command: 'pnpm test --run core/projects',
+      command: 'pnpm test  core/projects',
       expected: 'DuplicateSlugError thrown',
       actual: 'Test failed: expected DuplicateSlugError',
       tolerance: 'exact',

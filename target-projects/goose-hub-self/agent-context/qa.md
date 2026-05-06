@@ -1,11 +1,20 @@
 ## Test commands
 
+
 | What | Command |
 |---|---|
-| Full suite | `pnpm test -- --reporter=json` |
-| Web only | `pnpm --filter=@goose-hub/web test -- --reporter=json` |
-| Server only | `pnpm --filter=@goose-hub/server test -- --reporter=json` |
-| E2E | `pnpm test:e2e` (only run if `e2eCommand` is provided) |
+| All packages | `pnpm test --reporter=json` |
+| Specific file | `pnpm test --reporter=json <relative-path>` |
+
+`<relative-path>` is **relative to the package root** (`apps/web/`), not the worktree root. Example:
+
+```
+pnpm test --reporter=json src/components/detail/components/TimelineExpandCollapse.test.tsx
+```
+
+**First command in any worktree:** `cat package.json` to verify available scripts.
+
+**Shell syntax is forbidden:** `2>&1`, `&&`, `;`, `|` are literal arguments with `shell: false` — they break the command. CWD is always worktree root, immutable between calls. Same command = same result, always. If a command fails, diagnose — do not retry.
 
 **Reading JSON test output:** check `numFailedTests` first — if `0`, suite is green. If `> 0`, read `testResults[].assertionResults[]` where `status === "failed"` for error detail. If `testRun` is injected in context, use it directly — do not re-run.
 

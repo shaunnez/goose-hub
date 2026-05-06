@@ -10,6 +10,7 @@ afterEach(cleanup);
 vi.mock('@/lib/api', () => ({
   fetchIssueDiff: vi.fn(),
   fetchEvents: vi.fn().mockResolvedValue([]),
+  fetchPersonaNames: vi.fn().mockResolvedValue([]),
 }));
 
 function render_(jsx: React.ReactNode) {

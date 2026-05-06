@@ -18,7 +18,7 @@ const config: ProjectConfig = {
     runtime: 'node',
     packageManager: 'pnpm',
     buildCommand: 'pnpm build',
-    testCommand: 'pnpm --filter=@goose-hub/web test -- --reporter=json',
+    testCommand: 'pnpm test --reporter=json',
     lintCommand: 'pnpm lint',
     typecheckCommand: 'pnpm typecheck',
     e2eCommand: 'pnpm test:e2e',

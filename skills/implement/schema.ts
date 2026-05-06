@@ -24,7 +24,7 @@ export const TestWrittenSchema = z.object({
 
 /**
  * Records the targeted test command the developer actually ran (#467).
- * Dev runs `<test_command> --run <paths…>` rather than the full suite — QA
+ * Dev runs `<test_command>  <paths…>` rather than the full suite — QA
  * runs the full suite and cross-references this against its own results
  * to flag failures outside the dev-touched surface as high-signal regressions.
  */

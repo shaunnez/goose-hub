@@ -772,7 +772,7 @@ describe('runQaWorkflow', () => {
             testsWritten: 1,
             confidence: 'high',
             testsRun: {
-              command: 'pnpm test --run',
+              command: 'pnpm test ',
               paths: ['core/foo/bar.test.ts'],
             },
           },
@@ -789,7 +789,7 @@ describe('runQaWorkflow', () => {
         contextAllowlist: string[];
       };
       expect(spec.context.devTestsRun).toEqual({
-        command: 'pnpm test --run',
+        command: 'pnpm test ',
         paths: ['core/foo/bar.test.ts'],
       });
       expect(spec.contextAllowlist).toContain('devTestsRun');

@@ -17,7 +17,7 @@ If you find yourself reasoning about "why the developer did X", stop. Your job i
 ## Execution discipline
 
 - **Full output, no grep.** Run `testCommand` once. Read the complete output before drawing any conclusions. Do not re-run the suite more than once in a verification pass. Re-running speculatively wastes budget and does not produce new information.
-- **Verify the command first.** If `testRun` is absent from context, confirm the test command from `projectCommands` before running it. Do not assume `pnpm test` works — the project may require `pnpm --filter=web test` or a workspace-specific invocation.
+- **Verify the command first.** If `testRun` is absent from context, confirm the test command from `projectCommands` before running it. Do not assume `pnpm test` works — the project may require a workspace-specific invocation.
 - **Isolate sparingly.** Only re-run a single test file if you have a specific hypothesis about that file. State the hypothesis in a decision summary before running.
 - **No shell syntax.** Never add `2>&1`, `&&`, `;`, or `|` — `shell: false` passes these as literal arguments, breaking the command. Example of what NOT to do: `pnpm biome check . | tail -20` — the pipe is banned AND `tail` silently discards earlier errors, making lint results unreliable.
 
@@ -316,7 +316,7 @@ Return a JSON object conforming exactly to this structure:
     "functional": {
       "passed": true,
       "findings": [],
-      "command": "pnpm test --run",
+      "command": "pnpm test --reporter=json",
       "output": "34 tests passed"
     },
     "regression": {

@@ -67,7 +67,7 @@ The context contains a `<task>` block with:
 ### 3 — Red — failing tests first
 
 - Write the test cases that will fail with the current implementation. Cover the acceptance criteria and at least one negative path.
-- Run the **targeted** test command via the `test` tool — pass the new test file path and any test files for surfaces you've modified, e.g. `<test_command> --run path/to/new.test.ts path/to/affected.test.ts`. Do not run the full suite. Confirm the new tests fail (and only the new ones — pre-existing tests must still pass or fail for known reasons).
+- Run the **targeted** test command via the `test` tool — pass the new test file path and any test files for surfaces you've modified, e.g. `<test_command>  path/to/new.test.ts path/to/affected.test.ts`. Do not run the full suite. Confirm the new tests fail (and only the new ones — pre-existing tests must still pass or fail for known reasons).
 - Emit: `[decision] RED: Wrote N failing tests for <surface>; targeted test command shows N new failures`
 
 ### 4 — Green — implementation
@@ -178,7 +178,7 @@ Return a JSON object conforming to `ImplementSchema`. The orchestrator opens the
   ],
   "testsWritten": [{ "path": "core/foo/bar.test.ts", "cases": 3 }],
   "testsRun": {
-    "command": "pnpm test --run",
+    "command": "pnpm test --reporter=json",
     "paths": ["core/foo/bar.test.ts"]
   },
   "prUrl": "https://github.com/owner/repo/issues/123",

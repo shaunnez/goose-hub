@@ -1,7 +1,7 @@
 ## Playwright command
 
 ```bash
-pnpm --filter=@goose-hub/web exec playwright test <spec_path>
+pnpm exec playwright test <spec_path>
 ```
 
 NOT `npx playwright test`. NOT `playwright test` directly.

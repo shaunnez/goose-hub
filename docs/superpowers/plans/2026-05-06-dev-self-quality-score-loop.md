@@ -86,7 +86,7 @@ describe('self-quality-score fields', () => {
     plan: 'chore',
     filesWritten: [{ path: 'docs/x.md', reason: 'docs' }],
     testsWritten: [],
-    testsRun: { command: 'pnpm test --run', paths: [] },
+    testsRun: { command: 'pnpm test ', paths: [] },
     prUrl: 'https://github.com/owner/repo/issues/1',
     evidenceSpecPath: null,
     confidence: 'medium' as const,
@@ -100,7 +100,7 @@ describe('self-quality-score fields', () => {
       { path: 'core/foo/bar.test.ts', reason: 'tests' },
     ],
     testsWritten: [{ path: 'core/foo/bar.test.ts', cases: 3 }],
-    testsRun: { command: 'pnpm test --run', paths: ['core/foo/bar.test.ts'] },
+    testsRun: { command: 'pnpm test ', paths: ['core/foo/bar.test.ts'] },
     confidence: 'high' as const,
   };
 
@@ -203,7 +203,7 @@ import { anyZeroCategory, computeOverallScore } from '../qa/schema.js';
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-pnpm test --run skills/implement/slice.test.ts
+pnpm test  skills/implement/slice.test.ts
 ```
 Expected: tests in `self-quality-score fields` describe block fail (anyZeroCategory not exported yet, new schema fields absent).
 
@@ -271,7 +271,7 @@ Note: the superRefine callback must be changed to `async`-style with mutable `va
 - [ ] **Step 4: Run tests**
 
 ```bash
-pnpm test --run skills/implement/slice.test.ts
+pnpm test  skills/implement/slice.test.ts
 ```
 Expected: all tests pass.
 
@@ -367,7 +367,7 @@ Score honestly. Identify your single lowest-scoring category and explain it in t
   ],
   "testsWritten": [{ "path": "core/foo/bar.test.ts", "cases": 3 }],
   "testsRun": {
-    "command": "pnpm test --run",
+    "command": "pnpm test ",
     "paths": ["core/foo/bar.test.ts"]
   },
   "prUrl": "https://github.com/owner/repo/issues/123",

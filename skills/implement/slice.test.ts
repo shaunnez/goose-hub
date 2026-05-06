@@ -14,7 +14,7 @@ describe('implement output schema', () => {
     ],
     testsWritten: [{ path: 'core/foo/bar.test.ts', cases: 3 }],
     testsRun: {
-      command: 'pnpm test --run',
+      command: 'pnpm test ',
       paths: ['core/foo/bar.test.ts'],
     },
     prUrl: 'https://github.com/owner/repo/issues/123',
@@ -81,14 +81,14 @@ describe('implement output schema', () => {
         { path: 'core/foo/bar.test.ts', reason: 'tests' },
       ],
       testsRun: {
-        command: 'pnpm vitest --run',
+        command: 'pnpm vitest ',
         paths: ['core/foo/bar.test.ts'],
       },
       evidenceSpecPath: null,
     });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.testsRun.command).toBe('pnpm vitest --run');
+      expect(result.data.testsRun.command).toBe('pnpm vitest ');
       expect(result.data.testsRun.paths).toEqual(['core/foo/bar.test.ts']);
     }
   });
@@ -104,7 +104,7 @@ describe('implement output schema', () => {
         ...baseValid,
         filesWritten: [{ path: 'docs/x.md', reason: 'docs only' }],
         testsWritten: [],
-        testsRun: { command: 'pnpm test --run', paths: [] },
+        testsRun: { command: 'pnpm test ', paths: [] },
         evidenceSpecPath: null,
       }).success,
     ).toBe(true);
@@ -115,7 +115,7 @@ describe('implement output schema', () => {
       ImplementSchema.safeParse({
         ...baseValid,
         testsWritten: [{ path: 'core/foo/bar.test.ts', cases: 3 }],
-        testsRun: { command: 'pnpm test --run', paths: [] },
+        testsRun: { command: 'pnpm test ', paths: [] },
         evidenceSpecPath: null,
       }).success,
     ).toBe(false);
@@ -175,7 +175,7 @@ describe('implement output schema', () => {
     plan: 'chore',
     filesWritten: [{ path: 'docs/x.md', reason: 'docs' }],
     testsWritten: [],
-    testsRun: { command: 'pnpm test --run', paths: [] },
+    testsRun: { command: 'pnpm test ', paths: [] },
     prUrl: 'https://github.com/owner/repo/issues/1',
     evidenceSpecPath: null,
     confidence: 'medium' as const,
@@ -189,7 +189,7 @@ describe('implement output schema', () => {
       { path: 'core/foo/bar.test.ts', reason: 'tests' },
     ],
     testsWritten: [{ path: 'core/foo/bar.test.ts', cases: 3 }],
-    testsRun: { command: 'pnpm test --run', paths: ['core/foo/bar.test.ts'] },
+    testsRun: { command: 'pnpm test ', paths: ['core/foo/bar.test.ts'] },
     confidence: 'high' as const,
   };
 
