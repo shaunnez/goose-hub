@@ -117,6 +117,16 @@ describe('evaluateDependencies', () => {
     expect(result.unregisteredDeps).toHaveLength(1);
     expect(result.blockingDeps).toHaveLength(1);
   });
+
+  it('satisfied — "Blocks #N" with open #N does NOT block the current item', async () => {
+    // "Blocks #71" means the current issue is a blocker FOR #71, not that the
+    // current issue depends on #71. Treating it as a blocker inverts semantics.
+    const item = makeItem('7', 'Blocks #71');
+    const resolver = makeResolver(new Map([['shaunnez/goose-hub#71', 'open']]));
+    const result = await evaluateDependencies(item, resolver);
+    expect(result.state).toBe('satisfied');
+    expect(result.resolved).toHaveLength(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

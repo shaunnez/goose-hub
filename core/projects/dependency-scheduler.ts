@@ -31,7 +31,10 @@ export async function evaluateDependencies(
   item: WorkItem,
   resolver: DependencyResolver,
 ): Promise<DependencyEvaluation> {
-  const refs = parseDependencies(item.body);
+  // Only 'depends-on' refs gate the current item. 'blocks' refs mean the
+  // current issue is the blocker for another issue — resolving them here would
+  // invert dependency semantics and prevent the blocking issue from dispatching.
+  const refs = parseDependencies(item.body).filter((r) => r.type === 'depends-on');
   if (refs.length === 0) {
     return { state: 'satisfied', resolved: [], blockingDeps: [], unregisteredDeps: [] };
   }
