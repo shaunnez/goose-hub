@@ -60,13 +60,21 @@ describe('GET /projects/:slug/playbooks/:id', () => {
     expect(res.status).toBe(400);
   });
 
-  it('returns the playbook detail', async () => {
+  it('passes the slug to the service so lookups are scoped per project', async () => {
     mockGetPlaybook.mockResolvedValue({
       ok: true,
       data: { playbook: { id: 1, manifest: { lifecycleCount: 3 } } },
     });
-    const res = await makeApp().request('/projects/p/playbooks/1');
+    const res = await makeApp().request('/projects/project-a/playbooks/1');
     expect(res.status).toBe(200);
+    expect(mockGetPlaybook).toHaveBeenCalledWith('project-a', 1);
+  });
+
+  it('404s when the slug does not match the playbook owner (cross-project leak prevention)', async () => {
+    mockGetPlaybook.mockResolvedValue({ ok: false, error: 'playbook not found', status: 404 });
+    const res = await makeApp().request('/projects/project-b/playbooks/1');
+    expect(res.status).toBe(404);
+    expect(mockGetPlaybook).toHaveBeenCalledWith('project-b', 1);
   });
 });
 

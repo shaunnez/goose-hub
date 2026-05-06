@@ -3,7 +3,11 @@ import {
   runCrossRunRetroWorkflow,
 } from '@goose-hub/core/workflows/cross-run-retro.js';
 import type { Result } from '#shared/middleware.js';
-import { type PlaybookRow, getPlaybookById, listPlaybooksForProject } from './repository.js';
+import {
+  type PlaybookRow,
+  getPlaybookByIdForProject,
+  listPlaybooksForProject,
+} from './repository.js';
 
 export interface PlaybookSummaryDto {
   id: number;
@@ -56,8 +60,11 @@ export async function listPlaybooks(
   return { ok: true, data: { playbooks: rows.map(toSummary) } };
 }
 
-export async function getPlaybook(id: number): Promise<Result<{ playbook: PlaybookDetailDto }>> {
-  const row = await getPlaybookById(id);
+export async function getPlaybook(
+  projectId: string,
+  id: number,
+): Promise<Result<{ playbook: PlaybookDetailDto }>> {
+  const row = await getPlaybookByIdForProject(projectId, id);
   if (!row) return { ok: false, error: 'playbook not found', status: 404 };
   const manifest = parseManifest(row.manifest);
   return {

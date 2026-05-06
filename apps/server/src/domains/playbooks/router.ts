@@ -12,9 +12,10 @@ router.get('/:slug/playbooks', async (c) => {
 });
 
 router.get('/:slug/playbooks/:id', async (c) => {
+  const slug = c.req.param('slug');
   const id = Number(c.req.param('id'));
   if (!Number.isFinite(id)) return c.json({ error: 'invalid id' }, 400);
-  const result = await getPlaybook(id);
+  const result = await getPlaybook(slug, id);
   return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);
 });
 
