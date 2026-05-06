@@ -22,7 +22,7 @@ You execute one narrow GitHub issue at a time. The issue is your build spec.
 
 - Vertical slices, never horizontal layers. Slices include only the surfaces they touch (no empty `ui.tsx` for workflow-only slices). `slice.test.ts` and `README.md` are always required.
 - Slices import from `core/` through public interfaces only. Slices never import from other slices.
-- Skills are versioned. Every skill in `skills/<name>/` has three required files: `prompt.md` (Markdown instructions), `schema.ts` (Zod output schema), and `skill.config.ts` (role, context schema, budgets). Inline prompts in code fail review.
+- Skills are versioned. Every skill in `skills/<name>/` has three required files: a Markdown prompt, a Zod output schema (`schema.ts`), and a TypeScript config (role, context schema, budgets). Two file-name conventions currently coexist — the legacy pair `skill.md` + `config.ts` (used by most skills today; loaded by `core/agent-runtime/read-prompt.ts` and `import config from '@goose-hub/skills/<name>/config.js'`) and the newer pair `prompt.md` + `skill.config.ts` (used by `triage`, `repo-match`, `bug-enhance`, `echo-test`, `echo-test-holdout`; loaded dynamically by the CLI). Match the convention of the skill you're touching; do not mix the two within a single skill. Inline prompts in code fail review either way.
 - Every agent run produces JSON conforming to its skill schema. Free-text-only outputs fail.
 - State labels live on **issues**, not PRs.
 - Governance files cannot be modified by any Factory PR — creation is only allowed in PRs tagged `factory:bootstrap-pr`. Per FACTORY_RULES rule 12 the perimeter is: `MISSION.md`, `FACTORY_RULES.md`, `CLAUDE.md`, project configs (`target-projects/<slug>/project.config.ts`), and persona configs (`target-projects/<slug>/personas/`).
@@ -53,14 +53,13 @@ Before touching any file in an app, read its `README.md` first. The README will 
 
 When prompted with "start the next issue" (or similar), resolve the issue to work on as follows:
 
-1. Run: `gh issue list --milestone "M11: Dependency-aware Scheduling" --label "schedule:current" --state open --json number,title,body,labels --jq 'sort_by(.number)'`
-2. Skip any issue already labeled `factory:in-progress`.
-3. For each remaining issue in ascending number order, check its body for `Depends on #N` (or `Depends on owner/repo#N`) lines. Fetch each referenced issue number with `gh issue view <N> --json state` and skip this issue if any dependency is still open. The canonical parser is `parseDependencies()` in `core/state-source/dependency-parser.ts`; mirror its tolerance (case-insensitive, optional colon, supports `Blocks` / `Blocked by` / `Depends-On`).
-4. Pick the lowest-numbered issue that passes the dependency check.
-5. Label it `factory:in-progress` on GitHub immediately: `gh issue edit <N> --add-label "factory:in-progress"`
-6. Then follow "How to approach a task" below.
-
-Update the milestone name as the active milestone advances. Note that each project has its own active milestone (M10+, see `target-projects/<slug>/project.config.ts`); the command above defaults to `shaunnez/goose-hub`. For other projects, use that project's active milestone string.
+1. Determine the active milestone for the project. Each project declares its own `activeMilestone` in `target-projects/<slug>/project.config.ts` (e.g. `goose-hub-self` is currently on `M10: Multi-project Orchestration`). Read that string and substitute it into the next step. Do not hardcode a milestone — the active value moves over time and differs between projects.
+2. Run, with the milestone string from step 1: `gh issue list --milestone "<active-milestone>" --label "schedule:current" --state open --json number,title,body,labels --jq 'sort_by(.number)'`
+3. Skip any issue already labeled `factory:in-progress`.
+4. For each remaining issue in ascending number order, check its body for `Depends on #N` (or `Depends on owner/repo#N`) lines. Fetch each referenced issue number with `gh issue view <N> --json state` and skip this issue if any dependency is still open. The canonical parser is `parseDependencies()` in `core/state-source/dependency-parser.ts`; mirror its tolerance (case-insensitive, optional colon, supports `Blocks` / `Blocked by` / `Depends-On`).
+5. Pick the lowest-numbered issue that passes the dependency check.
+6. Label it `factory:in-progress` on GitHub immediately: `gh issue edit <N> --add-label "factory:in-progress"`
+7. Then follow "How to approach a task" below.
 
 ## When there is no next issue
 
