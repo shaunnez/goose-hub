@@ -1,0 +1,1 @@
+ALTER TABLE `improvement_candidates` ADD `proposed_diff` text;

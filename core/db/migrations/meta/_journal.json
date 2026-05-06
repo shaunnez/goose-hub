@@ -8,6 +8,13 @@
       "when": 1777946562070,
       "tag": "0000_red_impossible_man",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1778062229376,
+      "tag": "0001_white_gargoyle",
+      "breakpoints": true
     }
   ]
 }

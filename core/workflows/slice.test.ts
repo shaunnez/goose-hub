@@ -15,9 +15,13 @@ vi.mock('../agent-runtime/schema-bridge.js', () => ({
   toJsonSchema: vi.fn().mockReturnValue({}),
 }));
 vi.mock('../agent-runtime/select-persona.js', () => ({
-  selectPersona: vi
-    .fn()
-    .mockReturnValue({ personaId: 'test-project/retrospector/0', codename: 'Grey Honker' }),
+  selectPersona: vi.fn().mockImplementation((projectId: string, role: string) => {
+    const codenames: Record<string, string> = {
+      retrospector: 'Grey Honker',
+      developer: 'Skywalker',
+    };
+    return { personaId: `${projectId}/${role}/0`, codename: codenames[role] || 'Unknown' };
+  }),
 }));
 vi.mock('../event-stream/store.js', () => ({
   eventStore: {
@@ -27,10 +31,20 @@ vi.mock('../event-stream/store.js', () => ({
     replay: vi.fn().mockReturnValue([]),
   },
 }));
+const mockReadFileSync = vi.fn().mockReturnValue('# mock skill prompt');
+
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
-  return { ...actual, readFileSync: vi.fn().mockReturnValue('# mock skill prompt') };
+  return { ...actual, readFileSync: mockReadFileSync };
 });
+
+vi.mock('../agent-runtime/read-prompt.js', () => ({
+  readPromptWithContext: vi.fn().mockReturnValue('# mock skill prompt with context'),
+}));
+
+vi.mock('../projects/loader.js', () => ({
+  getProjectBySlug: vi.fn().mockResolvedValue({ budgets: {} }),
+}));
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -486,6 +500,143 @@ describe('state transitions', () => {
     expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
       personaName: 'test-project/retrospector/0',
       role: 'retrospector',
+      outcome: 'failure',
+    });
+  });
+});
+
+// ─── skill-coaching workflow ──────────────────────────────────────────────────
+
+describe('skill-coaching workflow', () => {
+  it('rejects forbidden target before dispatch', async () => {
+    const { runSkillCoachingWorkflow } = await import('./skill-coaching.js');
+    const { eventStore } = await import('../event-stream/store.js');
+
+    await runSkillCoachingWorkflow({
+      projectId: 'test-project',
+      targetSkillName: 'qa',
+      patternIds: ['p1'],
+    });
+
+    const failedEvent = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'agent.run-failed');
+    expect(failedEvent).toBeDefined();
+
+    // Verify that agent.run was NOT called for forbidden target
+    expect(mockRun).not.toHaveBeenCalled();
+
+    // Verify persona stat recorded as failure
+    expect(mockAccumulatePersonaStats).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: 'developer',
+        outcome: 'failure',
+      }),
+    );
+  });
+
+  it('rejects review skill as forbidden', async () => {
+    const { runSkillCoachingWorkflow } = await import('./skill-coaching.js');
+    const { eventStore } = await import('../event-stream/store.js');
+
+    await runSkillCoachingWorkflow({
+      projectId: 'test-project',
+      targetSkillName: 'review',
+      patternIds: ['p1'],
+    });
+
+    const failedEvent = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'agent.run-failed');
+    expect(failedEvent).toBeDefined();
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+
+  it('rejects retrospective-light as forbidden', async () => {
+    const { runSkillCoachingWorkflow } = await import('./skill-coaching.js');
+    const { eventStore } = await import('../event-stream/store.js');
+
+    await runSkillCoachingWorkflow({
+      projectId: 'test-project',
+      targetSkillName: 'retrospective-light',
+      patternIds: ['p1'],
+    });
+
+    const failedEvent = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'agent.run-failed');
+    expect(failedEvent).toBeDefined();
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+
+  it('rejects skill-coach as forbidden (cannot coach itself)', async () => {
+    const { runSkillCoachingWorkflow } = await import('./skill-coaching.js');
+    const { eventStore } = await import('../event-stream/store.js');
+
+    await runSkillCoachingWorkflow({
+      projectId: 'test-project',
+      targetSkillName: 'skill-coach',
+      patternIds: ['p1'],
+    });
+
+    const failedEvent = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'agent.run-failed');
+    expect(failedEvent).toBeDefined();
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+
+  it('emits agent.run-failed and failure stat on schema validation error', async () => {
+    const { runSkillCoachingWorkflow } = await import('./skill-coaching.js');
+    const { eventStore } = await import('../event-stream/store.js');
+    mockRun.mockResolvedValueOnce({
+      output: {
+        skillName: 'investigate',
+        // missing diagnosis, proposedPatch, etc.
+        confidence: 'high',
+        decisionSummaries: [],
+      },
+      decisionSummaries: [],
+      events: [],
+    });
+
+    await runSkillCoachingWorkflow({
+      projectId: 'test-project',
+      targetSkillName: 'investigate',
+      patternIds: ['p1'],
+    });
+
+    const failedEvent = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'agent.run-failed');
+    expect(failedEvent).toBeDefined();
+
+    expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
+      personaName: 'test-project/developer/0',
+      role: 'developer',
+      outcome: 'failure',
+    });
+  });
+
+  it('emits agent.run-failed on runtime exception', async () => {
+    const { runSkillCoachingWorkflow } = await import('./skill-coaching.js');
+    const { eventStore } = await import('../event-stream/store.js');
+    mockRun.mockRejectedValueOnce(new Error('network error'));
+
+    await runSkillCoachingWorkflow({
+      projectId: 'test-project',
+      targetSkillName: 'investigate',
+      patternIds: ['p1'],
+    });
+
+    const failedEvent = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'agent.run-failed');
+    expect(failedEvent).toBeDefined();
+
+    expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
+      personaName: 'test-project/developer/0',
+      role: 'developer',
       outcome: 'failure',
     });
   });

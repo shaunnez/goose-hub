@@ -51,6 +51,8 @@ export type EventKind =
   | 'agent.retry-escalated'
   // M9 retrospective lifecycle
   | 'retrospective.completed'
+  // M11 skill-coaching workflow
+  | 'skill-coaching.completed'
   // M9 PostToolUse hook — live decision marker (#465)
   | 'agent.decision-summary-live'
   // M10 per-AC verify-command live events (#469)
