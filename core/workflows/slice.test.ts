@@ -331,9 +331,7 @@ describe('context assembly', () => {
       output: {
         summary: '- All good.\n- No issues.\n- Keep it up.',
         improvementCandidates: [],
-        decisionSummaries: [
-          { kind: 'VERDICT', summary: 'Clean run — no friction detected' },
-        ],
+        decisionSummaries: [{ kind: 'VERDICT', summary: 'Clean run — no friction detected' }],
       },
       decisionSummaries: [], // runtime always returns [] — bug being fixed
       events: [],

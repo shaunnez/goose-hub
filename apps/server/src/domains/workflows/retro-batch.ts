@@ -35,7 +35,14 @@ function computeTriggers(slug: string, workItem: WorkItem): TriggerContext {
 
   const firstRunInMilestone = !projectEvents.some((e) => e.kind === 'retrospective.completed');
 
-  return { qaFailed, humanRequested, retriesGe2, priorityHigh, budgetExceeded, firstRunInMilestone };
+  return {
+    qaFailed,
+    humanRequested,
+    retriesGe2,
+    priorityHigh,
+    budgetExceeded,
+    firstRunInMilestone,
+  };
 }
 
 export async function runRetroForItem(

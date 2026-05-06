@@ -232,7 +232,14 @@ describe('computeTriggers', () => {
     mockGetProject.mockResolvedValue(projectConfigWith('light'));
     mockReplay.mockImplementation((filter: { workItemId?: string }) =>
       filter.workItemId
-        ? [{ id: 1, kind: 'gate.awaiting-human', payload: { reason: 'manual review' }, createdAt: '' }]
+        ? [
+            {
+              id: 1,
+              kind: 'gate.awaiting-human',
+              payload: { reason: 'manual review' },
+              createdAt: '',
+            },
+          ]
         : [],
     );
     mockRun.mockResolvedValueOnce(makeAgentResult(makeDeepRetroOutput()));
