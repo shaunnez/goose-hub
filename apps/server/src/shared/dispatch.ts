@@ -1,18 +1,20 @@
 import { join } from 'node:path';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
+import { parallelLock } from '@goose-hub/core/projects/parallel-lock.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { parseAcceptanceCriteria } from '../domains/issues/parse-acceptance.js';
 import { runRetroForItem } from '../domains/workflows/retro-batch.js';
 import { runTriageBatch } from '../domains/workflows/triage-batch.js';
+import { getProject } from './projects.js';
 import { getSourceForSlug } from './source.js';
 
 const _triageBatchInFlight = new Set<string>();
 const _triageBatchPending = new Set<string>();
-const _issueInFlight = new Set<string>();
 
-function issueKey(slug: string, issueNumber: number): string {
-  return `${slug}:${issueNumber}`;
+async function getMaxParallelAgents(slug: string): Promise<number> {
+  const cfg = await getProject(slug);
+  return cfg?.budgets.maxParallelAgents ?? 1;
 }
 
 /**
@@ -50,15 +52,16 @@ export function dispatchTriageBatch(slug: string): Promise<void> {
 
 /** Run the investigate workflow for a single issue. Drops duplicate triggers for the same issue. */
 export async function dispatchInvestigate(slug: string, issueNumber: number): Promise<void> {
-  const key = issueKey(slug, issueNumber);
-  if (_issueInFlight.has(key)) {
-    logger.warn('dispatchInvestigate: already in-flight, dropping duplicate', {
+  const maxParallel = await getMaxParallelAgents(slug);
+  if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
+    logger.warn('dispatchInvestigate: parallel-lock rejected (in-flight or at cap)', {
       slug,
       issueNumber,
+      inFlight: parallelLock.inFlightCount(slug),
+      maxParallel,
     });
     return;
   }
-  _issueInFlight.add(key);
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
     const { runInvestigateWorkflow } = (await import(
@@ -79,18 +82,22 @@ export async function dispatchInvestigate(slug: string, issueNumber: number): Pr
     const item = await source.getItem(issueNumber.toString());
     await runInvestigateWorkflow(item, source, slug, REPO_ROOT);
   } finally {
-    _issueInFlight.delete(key);
+    parallelLock.release(slug, issueNumber);
   }
 }
 
 /** Run the M7 fix-issue workflow for a single issue (#183). Drops duplicate triggers for the same issue. */
 export async function dispatchFixIssue(slug: string, issueNumber: number): Promise<void> {
-  const key = issueKey(slug, issueNumber);
-  if (_issueInFlight.has(key)) {
-    logger.warn('dispatchFixIssue: already in-flight, dropping duplicate', { slug, issueNumber });
+  const maxParallel = await getMaxParallelAgents(slug);
+  if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
+    logger.warn('dispatchFixIssue: parallel-lock rejected (in-flight or at cap)', {
+      slug,
+      issueNumber,
+      inFlight: parallelLock.inFlightCount(slug),
+      maxParallel,
+    });
     return;
   }
-  _issueInFlight.add(key);
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
     const { runFixIssueWorkflow } = (await import(
@@ -129,21 +136,22 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
 
     await runFixIssueWorkflow(item, source, slug, REPO_ROOT, mockDeps);
   } finally {
-    _issueInFlight.delete(key);
+    parallelLock.release(slug, issueNumber);
   }
 }
 
 /** Run the merge conflict resolution workflow for a single issue. Drops duplicate triggers. */
 export async function dispatchResolveConflict(slug: string, issueNumber: number): Promise<void> {
-  const key = issueKey(slug, issueNumber);
-  if (_issueInFlight.has(key)) {
-    logger.warn('dispatchResolveConflict: already in-flight, dropping duplicate', {
+  const maxParallel = await getMaxParallelAgents(slug);
+  if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
+    logger.warn('dispatchResolveConflict: parallel-lock rejected (in-flight or at cap)', {
       slug,
       issueNumber,
+      inFlight: parallelLock.inFlightCount(slug),
+      maxParallel,
     });
     return;
   }
-  _issueInFlight.add(key);
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
     const { runResolveConflictWorkflow } = (await import(
@@ -174,18 +182,22 @@ export async function dispatchResolveConflict(slug: string, issueNumber: number)
       });
     });
   } finally {
-    _issueInFlight.delete(key);
+    parallelLock.release(slug, issueNumber);
   }
 }
 
 /** Run the QA holdout workflow for a single issue. Drops duplicate triggers for the same issue. */
 export async function dispatchQa(slug: string, issueNumber: number): Promise<void> {
-  const key = issueKey(slug, issueNumber);
-  if (_issueInFlight.has(key)) {
-    logger.warn('dispatchQa: already in-flight, dropping duplicate', { slug, issueNumber });
+  const maxParallel = await getMaxParallelAgents(slug);
+  if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
+    logger.warn('dispatchQa: parallel-lock rejected (in-flight or at cap)', {
+      slug,
+      issueNumber,
+      inFlight: parallelLock.inFlightCount(slug),
+      maxParallel,
+    });
     return;
   }
-  _issueInFlight.add(key);
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
     const { runQaWorkflow } = (await import(
@@ -215,18 +227,22 @@ export async function dispatchQa(slug: string, issueNumber: number): Promise<voi
     const verifyCommands = parseAcceptanceCriteria(item.body ?? '');
     await runQaWorkflow(item, source, slug, item.repoRef ?? slug, { verifyCommands });
   } finally {
-    _issueInFlight.delete(key);
+    parallelLock.release(slug, issueNumber);
   }
 }
 
 /** Run the fix-feedback workflow for a single issue. Drops duplicate triggers. */
 export async function dispatchNeedsFix(slug: string, issueNumber: number): Promise<void> {
-  const key = issueKey(slug, issueNumber);
-  if (_issueInFlight.has(key)) {
-    logger.warn('dispatchNeedsFix: already in-flight, dropping duplicate', { slug, issueNumber });
+  const maxParallel = await getMaxParallelAgents(slug);
+  if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
+    logger.warn('dispatchNeedsFix: parallel-lock rejected (in-flight or at cap)', {
+      slug,
+      issueNumber,
+      inFlight: parallelLock.inFlightCount(slug),
+      maxParallel,
+    });
     return;
   }
-  _issueInFlight.add(key);
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
     const { runFixFeedbackWorkflow } = (await import(
@@ -248,7 +264,7 @@ export async function dispatchNeedsFix(slug: string, issueNumber: number): Promi
     const item = await source.getItem(issueNumber.toString());
     await runFixFeedbackWorkflow(item, source, slug, item.repoRef ?? slug);
   } finally {
-    _issueInFlight.delete(key);
+    parallelLock.release(slug, issueNumber);
   }
 }
 
@@ -258,12 +274,16 @@ export async function dispatchNeedsFix(slug: string, issueNumber: number): Promi
  * remain. Transition qa-failed → needs-fix and dispatch fix-feedback.
  */
 async function dispatchQaFailed(slug: string, issueNumber: number): Promise<void> {
-  const key = issueKey(slug, issueNumber);
-  if (_issueInFlight.has(key)) {
-    logger.warn('dispatchQaFailed: already in-flight, dropping duplicate', { slug, issueNumber });
+  const maxParallel = await getMaxParallelAgents(slug);
+  if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
+    logger.warn('dispatchQaFailed: parallel-lock rejected (in-flight or at cap)', {
+      slug,
+      issueNumber,
+      inFlight: parallelLock.inFlightCount(slug),
+      maxParallel,
+    });
     return;
   }
-  _issueInFlight.add(key);
   try {
     const source = await getSourceForSlug(slug);
     if (source == null) {
@@ -296,7 +316,7 @@ async function dispatchQaFailed(slug: string, issueNumber: number): Promise<void
       issueNumber,
     });
   } finally {
-    _issueInFlight.delete(key);
+    parallelLock.release(slug, issueNumber);
   }
 
   // Fire fix-feedback outside the in-flight guard so needs-fix can also
@@ -306,12 +326,16 @@ async function dispatchQaFailed(slug: string, issueNumber: number): Promise<void
 
 /** Run the Review holdout workflow for a single issue. Drops duplicate triggers for the same issue. */
 export async function dispatchReview(slug: string, issueNumber: number): Promise<void> {
-  const key = issueKey(slug, issueNumber);
-  if (_issueInFlight.has(key)) {
-    logger.warn('dispatchReview: already in-flight, dropping duplicate', { slug, issueNumber });
+  const maxParallel = await getMaxParallelAgents(slug);
+  if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
+    logger.warn('dispatchReview: parallel-lock rejected (in-flight or at cap)', {
+      slug,
+      issueNumber,
+      inFlight: parallelLock.inFlightCount(slug),
+      maxParallel,
+    });
     return;
   }
-  _issueInFlight.add(key);
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
     const { runReviewWorkflow } = (await import(
@@ -332,7 +356,7 @@ export async function dispatchReview(slug: string, issueNumber: number): Promise
     const item = await source.getItem(issueNumber.toString());
     await runReviewWorkflow(item, source, slug, item.repoRef ?? slug);
   } finally {
-    _issueInFlight.delete(key);
+    parallelLock.release(slug, issueNumber);
   }
 }
 
@@ -344,12 +368,16 @@ export async function dispatchReview(slug: string, issueNumber: number): Promise
  * sequential duplicate triggers must no-op once the workflow has run.
  */
 export async function dispatchRetro(slug: string, issueNumber: number): Promise<void> {
-  const key = issueKey(slug, issueNumber);
-  if (_issueInFlight.has(key)) {
-    logger.warn('dispatchRetro: already in-flight, dropping duplicate', { slug, issueNumber });
+  const maxParallel = await getMaxParallelAgents(slug);
+  if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
+    logger.warn('dispatchRetro: parallel-lock rejected (in-flight or at cap)', {
+      slug,
+      issueNumber,
+      inFlight: parallelLock.inFlightCount(slug),
+      maxParallel,
+    });
     return;
   }
-  _issueInFlight.add(key);
   try {
     const source = await getSourceForSlug(slug);
     if (source == null) {
@@ -367,7 +395,7 @@ export async function dispatchRetro(slug: string, issueNumber: number): Promise<
     }
     await runRetroForItem(item, source, slug);
   } finally {
-    _issueInFlight.delete(key);
+    parallelLock.release(slug, issueNumber);
   }
 }
 
@@ -377,15 +405,16 @@ export async function dispatchRetro(slug: string, issueNumber: number): Promise<
  * Medium/high → dev-ready (proceed automatically).
  */
 async function dispatchInvestigationComplete(slug: string, issueNumber: number): Promise<void> {
-  const key = issueKey(slug, issueNumber);
-  if (_issueInFlight.has(key)) {
-    logger.warn('dispatchInvestigationComplete: already in-flight, dropping duplicate', {
+  const maxParallel = await getMaxParallelAgents(slug);
+  if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
+    logger.warn('dispatchInvestigationComplete: parallel-lock rejected (in-flight or at cap)', {
       slug,
       issueNumber,
+      inFlight: parallelLock.inFlightCount(slug),
+      maxParallel,
     });
     return;
   }
-  _issueInFlight.add(key);
   try {
     const source = await getSourceForSlug(slug);
     if (source == null) {
@@ -435,7 +464,7 @@ async function dispatchInvestigationComplete(slug: string, issueNumber: number):
 
     logger.info('dispatchInvestigationComplete: transitioned', { slug, issueNumber, targetState });
   } finally {
-    _issueInFlight.delete(key);
+    parallelLock.release(slug, issueNumber);
   }
 }
 
@@ -535,8 +564,7 @@ const RESUME_WORKFLOWS: Partial<Record<StateName, ResumeEntry>> = {
  * not always legal in the normal workflow graph.
  */
 export async function dispatchResumeIssue(slug: string, issueNumber: number): Promise<void> {
-  const key = issueKey(slug, issueNumber);
-  if (_issueInFlight.has(key)) {
+  if (parallelLock.isInFlight(slug, issueNumber)) {
     logger.warn('dispatchResumeIssue: already in-flight, dropping duplicate', {
       slug,
       issueNumber,

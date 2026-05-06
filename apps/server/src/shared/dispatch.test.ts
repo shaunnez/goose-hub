@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockRunTriageBatch = vi.fn();
 const mockGetSourceForSlug = vi.fn();
+const mockGetProject = vi.fn();
 const mockLoggerError = vi.fn();
 const mockLoggerInfo = vi.fn();
 const mockLoggerWarn = vi.fn();
@@ -30,6 +31,10 @@ vi.mock('./source.js', () => ({
   isValidSlug: vi.fn().mockReturnValue(true),
 }));
 
+vi.mock('./projects.js', () => ({
+  getProject: mockGetProject,
+}));
+
 vi.mock('@goose-hub/core/logger.js', () => ({
   logger: {
     error: mockLoggerError,
@@ -47,6 +52,8 @@ beforeEach(() => {
   mockRunTriageBatch.mockResolvedValue(undefined);
   mockRunRetroForItem.mockResolvedValue(undefined);
   mockGetSourceForSlug.mockResolvedValue(null);
+  // Default: single-workflow-per-project (backward-compat) for tests that don't override.
+  mockGetProject.mockResolvedValue(null);
 });
 
 // ─── dispatchTriageBatch ──────────────────────────────────────────────────
@@ -156,7 +163,7 @@ describe('dispatchInvestigate', () => {
 
     await p2;
     expect(mockLoggerWarn).toHaveBeenCalledWith(
-      'dispatchInvestigate: already in-flight, dropping duplicate',
+      'dispatchInvestigate: parallel-lock rejected (in-flight or at cap)',
       expect.objectContaining({ slug: 'slug', issueNumber: 5 }),
     );
 
@@ -165,7 +172,10 @@ describe('dispatchInvestigate', () => {
     expect(mockGetSourceForSlug).toHaveBeenCalledTimes(1);
   });
 
-  it('different issue numbers run independently', async () => {
+  it('different issue numbers run independently when maxParallelAgents allows it', async () => {
+    // Set maxParallelAgents=2 so both can run concurrently (M11 parallel dispatch).
+    mockGetProject.mockResolvedValue({ budgets: { maxParallelAgents: 2 } });
+
     const { dispatchInvestigate } = await import('./dispatch.js');
     await Promise.all([dispatchInvestigate('slug', 1), dispatchInvestigate('slug', 2)]);
     expect(mockGetSourceForSlug).toHaveBeenCalledTimes(2);
@@ -201,7 +211,7 @@ describe('dispatchFixIssue', () => {
 
     await p2;
     expect(mockLoggerWarn).toHaveBeenCalledWith(
-      'dispatchFixIssue: already in-flight, dropping duplicate',
+      'dispatchFixIssue: parallel-lock rejected (in-flight or at cap)',
       expect.objectContaining({ slug: 'slug', issueNumber: 7 }),
     );
 
