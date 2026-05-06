@@ -117,11 +117,25 @@ export async function filterEligibleByDependencies(
         }
         blocked.push(item);
       } else {
-        // unregistered — M11.07 applies factory:needs-human; we only skip dispatch
-        logger.info('dep-scheduler: unregistered dep, skipping dispatch', {
-          externalId: item.externalId,
-          unregisteredDeps: evaluation.unregisteredDeps.map((d) => `${d.repoRef}#${d.issueNumber}`),
-        });
+        // unregistered — escalate to factory:needs-human on first encounter
+        if (item.state !== 'factory:needs-human') {
+          const depList = evaluation.unregisteredDeps
+            .map((d) => `\`${d.repoRef}#${d.issueNumber}\``)
+            .join(', ');
+          const commentBody = `Dependency on ${depList} cannot be resolved — repo is not registered. Register the repo or remove the dependency to unblock.`;
+          await ctx.source.forceState(item.externalId, 'factory:needs-human');
+          await ctx.source.comment(item.externalId, commentBody);
+          logger.info('dep-scheduler: unregistered dep escalated to factory:needs-human', {
+            externalId: item.externalId,
+            unregisteredDeps: evaluation.unregisteredDeps.map(
+              (d) => `${d.repoRef}#${d.issueNumber}`,
+            ),
+          });
+        } else {
+          logger.info('dep-scheduler: unregistered dep already escalated, skipping', {
+            externalId: item.externalId,
+          });
+        }
         unregistered.push(item);
       }
     }),
