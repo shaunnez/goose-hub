@@ -16,14 +16,26 @@ function resolvePolicy(defaultTier: 'light' | 'deep' | undefined): Retrospective
 }
 
 function computeTriggers(slug: string, workItem: WorkItem): TriggerContext {
-  const events = eventStore.replay({ projectId: slug, workItemId: workItem.id });
-  const qaFailed = events.some(
+  const itemEvents = eventStore.replay({ projectId: slug, workItemId: workItem.id });
+
+  const qaFailed = itemEvents.some(
     (e) =>
       e.kind === 'qa.completed' && (e.payload as { verdict?: string } | null)?.verdict === 'fail',
   );
-  // firstRunInMilestone, qualityScoreDeclining, humanRequested are deferred
-  // (v1). The workflow treats undefined as falsy in selectTier.
-  return { qaFailed };
+
+  const humanRequested = itemEvents.some((e) => e.kind === 'gate.awaiting-human');
+
+  const retriesGe2 = itemEvents.filter((e) => e.kind === 'agent.retry-escalated').length >= 2;
+
+  const priorityHigh = workItem.priority === 'high' || workItem.priority === 'critical';
+
+  const projectEvents = eventStore.replay({ projectId: slug });
+
+  const budgetExceeded = projectEvents.some((e) => e.kind === 'project.budget-exceeded');
+
+  const firstRunInMilestone = !projectEvents.some((e) => e.kind === 'retrospective.completed');
+
+  return { qaFailed, humanRequested, retriesGe2, priorityHigh, budgetExceeded, firstRunInMilestone };
 }
 
 export async function runRetroForItem(

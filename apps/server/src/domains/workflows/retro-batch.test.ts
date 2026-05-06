@@ -139,6 +139,145 @@ beforeEach(() => {
 
 // ─── tests ────────────────────────────────────────────────────────────────────
 
+// ─── computeTriggers detection ────────────────────────────────────────────────
+
+describe('computeTriggers', () => {
+  it('sets retriesGe2=true when 2+ agent.retry-escalated events exist for the work item', async () => {
+    const retroItem = makeWorkItem({ state: 'factory:retrospecting' });
+    const source = makeMockSource([retroItem]);
+    mockGetProject.mockResolvedValue(projectConfigWith('light'));
+    mockReplay.mockImplementation((filter: { workItemId?: string }) =>
+      filter.workItemId
+        ? [
+            { id: 1, kind: 'agent.retry-escalated', payload: { attempt: 1 }, createdAt: '' },
+            { id: 2, kind: 'agent.retry-escalated', payload: { attempt: 2 }, createdAt: '' },
+          ]
+        : [],
+    );
+    mockRun.mockResolvedValueOnce(makeAgentResult(makeDeepRetroOutput()));
+
+    const { runRetroBatch } = await import('./retro-batch.js');
+    await runRetroBatch(SLUG, source);
+
+    const runtimeArgs = mockRun.mock.calls[0]?.[0] as { skill?: string };
+    expect(runtimeArgs.skill).toBe('retrospective-deep');
+  });
+
+  it('does not set retriesGe2 when only 1 retry event exists', async () => {
+    const retroItem = makeWorkItem({ state: 'factory:retrospecting' });
+    const source = makeMockSource([retroItem]);
+    mockGetProject.mockResolvedValue(projectConfigWith('light'));
+    // project-scoped replay returns a prior retro so firstRunInMilestone=false
+    mockReplay.mockImplementation((filter: { workItemId?: string }) =>
+      filter.workItemId
+        ? [{ id: 1, kind: 'agent.retry-escalated', payload: { attempt: 1 }, createdAt: '' }]
+        : [{ id: 99, kind: 'retrospective.completed', payload: { tier: 'light' }, createdAt: '' }],
+    );
+    mockRun.mockResolvedValueOnce(makeAgentResult(makeLightRetroOutput()));
+
+    const { runRetroBatch } = await import('./retro-batch.js');
+    await runRetroBatch(SLUG, source);
+
+    const runtimeArgs = mockRun.mock.calls[0]?.[0] as { skill?: string };
+    expect(runtimeArgs.skill).toBe('retrospective-light');
+  });
+
+  it('sets budgetExceeded=true when project.budget-exceeded event exists', async () => {
+    const retroItem = makeWorkItem({ state: 'factory:retrospecting' });
+    const source = makeMockSource([retroItem]);
+    mockGetProject.mockResolvedValue(projectConfigWith('light'));
+    mockReplay.mockImplementation((filter: { workItemId?: string }) =>
+      filter.workItemId
+        ? []
+        : [{ id: 1, kind: 'project.budget-exceeded', payload: {}, createdAt: '' }],
+    );
+    mockRun.mockResolvedValueOnce(makeAgentResult(makeDeepRetroOutput()));
+
+    const { runRetroBatch } = await import('./retro-batch.js');
+    await runRetroBatch(SLUG, source);
+
+    const runtimeArgs = mockRun.mock.calls[0]?.[0] as { skill?: string };
+    expect(runtimeArgs.skill).toBe('retrospective-deep');
+  });
+
+  it('sets priorityHigh=true for high-priority work items', async () => {
+    const retroItem = makeWorkItem({ state: 'factory:retrospecting', priority: 'high' });
+    const source = makeMockSource([retroItem]);
+    mockGetProject.mockResolvedValue(projectConfigWith('light'));
+    mockRun.mockResolvedValueOnce(makeAgentResult(makeDeepRetroOutput()));
+
+    const { runRetroBatch } = await import('./retro-batch.js');
+    await runRetroBatch(SLUG, source);
+
+    const runtimeArgs = mockRun.mock.calls[0]?.[0] as { skill?: string };
+    expect(runtimeArgs.skill).toBe('retrospective-deep');
+  });
+
+  it('sets priorityHigh=true for critical-priority work items', async () => {
+    const retroItem = makeWorkItem({ state: 'factory:retrospecting', priority: 'critical' });
+    const source = makeMockSource([retroItem]);
+    mockGetProject.mockResolvedValue(projectConfigWith('light'));
+    mockRun.mockResolvedValueOnce(makeAgentResult(makeDeepRetroOutput()));
+
+    const { runRetroBatch } = await import('./retro-batch.js');
+    await runRetroBatch(SLUG, source);
+
+    const runtimeArgs = mockRun.mock.calls[0]?.[0] as { skill?: string };
+    expect(runtimeArgs.skill).toBe('retrospective-deep');
+  });
+
+  it('sets humanRequested=true when gate.awaiting-human event exists for work item', async () => {
+    const retroItem = makeWorkItem({ state: 'factory:retrospecting' });
+    const source = makeMockSource([retroItem]);
+    mockGetProject.mockResolvedValue(projectConfigWith('light'));
+    mockReplay.mockImplementation((filter: { workItemId?: string }) =>
+      filter.workItemId
+        ? [{ id: 1, kind: 'gate.awaiting-human', payload: { reason: 'manual review' }, createdAt: '' }]
+        : [],
+    );
+    mockRun.mockResolvedValueOnce(makeAgentResult(makeDeepRetroOutput()));
+
+    const { runRetroBatch } = await import('./retro-batch.js');
+    await runRetroBatch(SLUG, source);
+
+    const runtimeArgs = mockRun.mock.calls[0]?.[0] as { skill?: string };
+    expect(runtimeArgs.skill).toBe('retrospective-deep');
+  });
+
+  it('sets firstRunInMilestone=true when no prior retrospective.completed events exist for project', async () => {
+    const retroItem = makeWorkItem({ state: 'factory:retrospecting' });
+    const source = makeMockSource([retroItem]);
+    mockGetProject.mockResolvedValue(projectConfigWith('light'));
+    // replay returns [] for both work-item and project-scoped calls → no prior retros
+    mockReplay.mockReturnValue([]);
+    mockRun.mockResolvedValueOnce(makeAgentResult(makeDeepRetroOutput()));
+
+    const { runRetroBatch } = await import('./retro-batch.js');
+    await runRetroBatch(SLUG, source);
+
+    const runtimeArgs = mockRun.mock.calls[0]?.[0] as { skill?: string };
+    expect(runtimeArgs.skill).toBe('retrospective-deep');
+  });
+
+  it('does not set firstRunInMilestone when prior retrospective.completed events exist', async () => {
+    const retroItem = makeWorkItem({ state: 'factory:retrospecting' });
+    const source = makeMockSource([retroItem]);
+    mockGetProject.mockResolvedValue(projectConfigWith('light'));
+    mockReplay.mockImplementation((filter: { workItemId?: string }) =>
+      filter.workItemId
+        ? []
+        : [{ id: 1, kind: 'retrospective.completed', payload: { tier: 'light' }, createdAt: '' }],
+    );
+    mockRun.mockResolvedValueOnce(makeAgentResult(makeLightRetroOutput()));
+
+    const { runRetroBatch } = await import('./retro-batch.js');
+    await runRetroBatch(SLUG, source);
+
+    const runtimeArgs = mockRun.mock.calls[0]?.[0] as { skill?: string };
+    expect(runtimeArgs.skill).toBe('retrospective-light');
+  });
+});
+
 describe('runRetroBatch', () => {
   it('processes only items in factory:retrospecting and runs the workflow', async () => {
     const retroItem = makeWorkItem({ state: 'factory:retrospecting' });
@@ -183,6 +322,12 @@ describe('runRetroBatch', () => {
     const retroItem = makeWorkItem({ state: 'factory:retrospecting' });
     const source = makeMockSource([retroItem]);
     mockGetProject.mockResolvedValue(projectConfigWith('light'));
+    // simulate a project that has already run retros so firstRunInMilestone=false
+    mockReplay.mockImplementation((filter: { workItemId?: string }) =>
+      filter.workItemId
+        ? []
+        : [{ id: 99, kind: 'retrospective.completed', payload: { tier: 'light' }, createdAt: '' }],
+    );
     mockRun.mockResolvedValueOnce(makeAgentResult(makeLightRetroOutput()));
 
     const { runRetroBatch } = await import('./retro-batch.js');
