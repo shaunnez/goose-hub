@@ -1,0 +1,1 @@
+Please run the QA agent run the QA agent through several passes confirming everything works as planned. treat it like a sr engineer that wants everything to be perfect no matter how long it takes. every click, every interaction a work of art. with care, love and craftsmanship. a magnum opus. Use playwright to chech UI button my button within the scope of the last task completed. 
