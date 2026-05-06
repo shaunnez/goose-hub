@@ -119,7 +119,7 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
       freshContext: false,
       toolBundles: ['core'],
       toolExtras: [],
-      budgets: { maxTurns: 30, maxBudgetUsd: 2 },
+      budgets: { maxTurns: 30, maxBudgetUsd: 2, timeoutMs: 120_000 },
       personaId,
       appendSystemPrompt: prompt,
       outputJsonSchema: jsonSchema,
