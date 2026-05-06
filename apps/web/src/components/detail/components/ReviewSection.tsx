@@ -165,7 +165,7 @@ console.log(reviewCost, reviewEvent, review, prOpenedEvent)
   return (
     <div
       data-testid="review-section"
-      className="px-7 py-6 flex flex-col gap-5 max-w-[1100px] mx-auto"
+      className="px-7 py-6 flex flex-col gap-5  mx-auto"
     >
       {/* Header */}
       <div className="flex items-end gap-3">
