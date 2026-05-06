@@ -2,23 +2,19 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
+import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import type { StateSource } from '@goose-hub/core/state-source/interface.js';
-import { skillsRoot } from '@goose-hub/skills';
 import { RepoMatchOutputSchema } from '@goose-hub/skills/repo-match/schema.js';
 import { TriageOutputSchema } from '@goose-hub/skills/triage/schema.js';
 import { targetProjectsRoot } from '@goose-hub/target-projects';
 import { checkDailyBudget } from '#shared/budget.js';
 import { getProject } from '#shared/projects.js';
 import { getSourceForSlug, isValidSlug } from '#shared/source.js';
-
-function readPrompt(skillName: string): string {
-  return readFileSync(join(skillsRoot, skillName, 'prompt.md'), 'utf8');
-}
 
 // Maps triage priority (p0–p3) to GitHub label values (critical/high/medium/low)
 function mapPriority(p: string): string {
@@ -88,8 +84,8 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
 
   const reposContext = readReposContext(slug);
   const runtime = new ClaudeCliRuntime();
-  const triagePrompt = readPrompt('triage');
-  const repoMatchPrompt = readPrompt('repo-match');
+  const triagePrompt = readPromptWithContext('triage', slug);
+  const repoMatchPrompt = readPromptWithContext('repo-match', slug);
   const triageJsonSchema = toJsonSchema(TriageOutputSchema);
   const repoMatchJsonSchema = toJsonSchema(RepoMatchOutputSchema);
 

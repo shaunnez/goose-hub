@@ -1,16 +1,14 @@
 #!/usr/bin/env tsx
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { createInterface } from 'node:readline';
-import { pathToFileURL } from 'node:url';
 import { SKILL_BUDGETS, resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { assembleSpawnContext } from '@goose-hub/core/agent-runtime/context-assembly.js';
 import { withFallback } from '@goose-hub/core/agent-runtime/fallback.js';
 import type { AgentSpec } from '@goose-hub/core/agent-runtime/interface.js';
 import { validateOutput } from '@goose-hub/core/agent-runtime/output-validator.js';
+import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { db } from '@goose-hub/core/db/db.js';
 import { agentRunCosts } from '@goose-hub/core/db/schema.js';
@@ -19,7 +17,6 @@ import { STATES } from '@goose-hub/core/state-machine/states.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { GitHubLabelsSource } from '@goose-hub/core/state-source/github-labels.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
-import { skillsRoot } from '@goose-hub/skills';
 import { targetProjectsRoot } from '@goose-hub/target-projects';
 import { and, eq, gte, lt } from 'drizzle-orm';
 
@@ -217,19 +214,23 @@ async function sweepCommand(slug: string, milestoneArg: string): Promise<void> {
 }
 
 async function runAgentCommand(rawArgs: string[]): Promise<void> {
-  // Parse --skill=<name> --input='<json>' [--dry-run]
+  // Parse --skill=<name> --input='<json>' [--project=<slug>] [--dry-run]
   let skillName: string | null = null;
   let inputJson: string | null = null;
+  let projectSlug = '';
   let dryRun = false;
 
   for (const arg of rawArgs) {
     if (arg.startsWith('--skill=')) skillName = arg.slice('--skill='.length);
     else if (arg.startsWith('--input=')) inputJson = arg.slice('--input='.length);
+    else if (arg.startsWith('--project=')) projectSlug = arg.slice('--project='.length);
     else if (arg === '--dry-run') dryRun = true;
   }
 
   if (!skillName || !inputJson) {
-    console.error("Usage: goose run-agent --skill=<name> --input='<json>' [--dry-run]");
+    console.error(
+      "Usage: goose run-agent --skill=<name> --input='<json>' [--project=<slug>] [--dry-run]",
+    );
     process.exit(1);
   }
 
@@ -262,13 +263,13 @@ async function runAgentCommand(rawArgs: string[]): Promise<void> {
     process.exit(1);
   }
 
-  // Load skill's prompt.md as system prompt (CONTEXT.md: --append-system-prompt channel)
+  // Load skill's prompt.md (with optional project overlay) as system prompt
+  // (CONTEXT.md: --append-system-prompt channel). When --project is omitted,
+  // an empty slug is passed and the overlay path won't exist, so just the
+  // base prompt is returned.
   let appendSystemPrompt: string | undefined;
   try {
-    appendSystemPrompt = readFileSync(
-      pathToFileURL(path.join(skillsRoot, skillName, 'prompt.md')),
-      'utf8',
-    );
+    appendSystemPrompt = readPromptWithContext(skillName, projectSlug);
   } catch {
     // no prompt.md — skill runs without system prompt
   }
@@ -364,6 +365,8 @@ switch (command) {
     console.error('Commands:');
     console.error('  status <project-slug>            Show open issues and their factory states');
     console.error('  sweep <project-slug> <milestone> Archive non-terminal issues in a milestone');
-    console.error("  run-agent --skill=<name> --input='<json>' [--dry-run]  Run a skill agent");
+    console.error(
+      "  run-agent --skill=<name> --input='<json>' [--project=<slug>] [--dry-run]  Run a skill agent",
+    );
     process.exit(1);
 }
