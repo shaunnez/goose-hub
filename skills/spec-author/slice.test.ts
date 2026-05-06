@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
-import config, { SpecAuthorContextSchema } from './config.js';
+import config, { SpecAuthorContextSchema } from './skill.config.js';
 import { SpecAuthorSchema } from './schema.js';
 
 describe('spec-author schema', () => {

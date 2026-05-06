@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
 import { computeOverallScore } from '../qa/schema.js';
-import config, { ImplementContextSchema } from './config.js';
+import config, { ImplementContextSchema } from './skill.config.js';
 import { ImplementSchema } from './schema.js';
 import { anyZeroCategory } from './schema.js';
 

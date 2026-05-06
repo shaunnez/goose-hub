@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
-import config, { EvidencePostContextSchema } from './config.js';
+import config, { EvidencePostContextSchema } from './skill.config.js';
 import { EvidencePostSchema } from './schema.js';
 
 describe('evidence-post schema', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
-import config, { AdviseOnPlanContextSchema } from './config.js';
+import config, { AdviseOnPlanContextSchema } from './skill.config.js';
 import { AdviseOnPlanSchema, AdvisorVerdictSchema } from './schema.js';
 
 describe('advise-on-plan output schema', () => {

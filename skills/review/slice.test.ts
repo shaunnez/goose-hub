@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import config, { ReviewContextSchema } from './config.js';
+import config, { ReviewContextSchema } from './skill.config.js';
 import { CriterionCheckSchema, ReviewFindingSchema, ReviewOutputSchema } from './schema.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

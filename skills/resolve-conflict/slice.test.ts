@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import config from './config.js';
+import config from './skill.config.js';
 import { ResolveConflictContextSchema, ResolveConflictSchema } from './schema.js';
 
 describe('ResolveConflictSchema', () => {
