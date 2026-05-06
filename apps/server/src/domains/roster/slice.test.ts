@@ -16,6 +16,7 @@ const mockCandidate = {
   status: 'pending',
   githubIssueUrl: null,
   errorNote: null,
+  proposedDiff: null,
   createdAt: '2026-05-01T00:00:00Z',
 };
 

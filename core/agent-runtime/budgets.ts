@@ -84,6 +84,15 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     timeoutMs: 420_000,
     modelTier: 'sonnet',
   },
+  // Skill coach reads skill source + evidence patterns and proposes diffs (M11.13).
+  // Reasoning-heavy; sonnet is the starting tier, opus available as escalation path
+  // via project config override if needed.
+  'skill-coach': {
+    maxTurns: 50,
+    maxBudgetUsd: 2.0,
+    timeoutMs: 600_000,
+    modelTier: 'sonnet',
+  },
 };
 
 export interface ResolvedBudget {

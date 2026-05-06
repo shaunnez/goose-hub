@@ -6,7 +6,8 @@ import {
 } from '@/lib/api';
 import type { ImprovementCandidateDto, PersonaRunDto, PersonaStatDto } from '@/lib/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { X } from 'lucide-react';
+import { Copy, X } from 'lucide-react';
+import { useState } from 'react';
 
 interface PersonaDrillInProps {
   persona: PersonaStatDto;
@@ -83,6 +84,43 @@ function RunHistory({ personaName }: { personaName: string }) {
   );
 }
 
+function ProposedDiffBlock({ diff }: { diff: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    navigator.clipboard.writeText(diff).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+
+  return (
+    <div
+      data-testid="proposed-diff-block"
+      className="relative mb-2 rounded border border-line bg-bg overflow-hidden"
+    >
+      <div className="flex items-center justify-between px-2 py-1 border-b border-line bg-bg-elev">
+        <span className="text-[10.5px] font-mono text-fg-3 uppercase tracking-wider">
+          proposed diff
+        </span>
+        <button
+          type="button"
+          data-testid="copy-diff-btn"
+          onClick={handleCopy}
+          className="flex items-center gap-1 text-[10.5px] text-fg-3 hover:text-fg"
+          title="Copy diff"
+        >
+          <Copy size={11} />
+          {copied ? 'Copied!' : 'Copy'}
+        </button>
+      </div>
+      <pre className="text-[10.5px] font-mono p-2 overflow-x-auto whitespace-pre text-fg leading-relaxed max-h-48 overflow-y-auto">
+        {diff}
+      </pre>
+    </div>
+  );
+}
+
 function CandidateRow({
   candidate,
   personaName,
@@ -143,6 +181,7 @@ function CandidateRow({
           {candidate.errorNote}
         </p>
       )}
+      {candidate.proposedDiff && <ProposedDiffBlock diff={candidate.proposedDiff} />}
       {candidate.status === 'pending' && (
         <div className="flex gap-2">
           <button

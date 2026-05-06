@@ -24,6 +24,7 @@ export interface ImprovementCandidateRow {
   status: string;
   githubIssueUrl: string | null;
   errorNote: string | null;
+  proposedDiff: string | null;
   createdAt: string;
 }
 
@@ -117,6 +118,7 @@ export async function insertCandidate(data: {
   sourceTaskId: string | null;
   suggestionText: string;
   suggestionType: string;
+  proposedDiff?: string | null;
 }): Promise<ImprovementCandidateRow> {
   const [row] = await db.insert(improvementCandidates).values(data).returning();
   return row;
