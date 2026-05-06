@@ -179,6 +179,7 @@ export interface CoachDispatchInput {
  *   - lifecycleCount >= coachPolicy.minLifecycles (not enough data otherwise)
  *   - at least one topPattern with consistencyScore >= coachPolicy.consistencyThreshold
  *   - candidate.kind ∈ {skill-prompt, skill-schema, skill-config}
+ *   - candidate.evidence must reference at least one eligible pattern ID (P2: per-candidate gate)
  *   - targetPath must yield a valid skill name ("skills/<name>/...")
  *   - skill name must not be in FORBIDDEN_COACH_TARGETS
  */
@@ -204,6 +205,13 @@ export async function dispatchCoachCandidates(input: CoachDispatchInput): Promis
   for (const candidate of manifest.improvementCandidates) {
     if (!SKILL_CANDIDATE_KINDS.has(candidate.kind)) continue;
 
+    // P2: verify the candidate's evidence cites at least one convergent pattern
+    const evidenceLower = (candidate.evidence ?? '').toLowerCase();
+    const backedByEligible = eligiblePatternIds.some((id) =>
+      evidenceLower.includes(id.toLowerCase()),
+    );
+    if (!backedByEligible) continue;
+
     const skillName = extractSkillName(candidate.targetPath);
     if (!skillName) continue;
 
@@ -223,12 +231,20 @@ export async function dispatchCoachCandidates(input: CoachDispatchInput): Promis
     });
 
     try {
-      await coachWorkflowRunner({
+      const outcome = await coachWorkflowRunner({
         projectId,
         targetSkillName: skillName,
         evidence: { patternIds: eligiblePatternIds, lifecycleIds },
         sourcePlaybookId: playbookId,
       });
+      // P1: runSkillCoachingWorkflow returns { ok: false } on runtime/schema failures
+      if (!outcome.ok) {
+        eventStore.appendEvent({
+          kind: 'coach.dispatch-failed',
+          projectId,
+          payload: { targetSkillName: skillName, playbookId, error: outcome.error },
+        });
+      }
     } catch (err) {
       eventStore.appendEvent({
         kind: 'coach.dispatch-failed',

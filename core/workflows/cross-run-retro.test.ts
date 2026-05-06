@@ -417,8 +417,10 @@ describe('runCrossRunRetroWorkflow', () => {
 
 function makeManifestWithCandidates(
   patterns: { patternId: string; consistencyScore: number }[],
-  candidates: { kind: string; targetPath: string }[],
+  candidates: { kind: string; targetPath: string; evidence?: string }[],
 ) {
+  // Default evidence cites the first pattern's ID so the P2 per-candidate gate passes
+  const defaultEvidence = patterns[0] ? `see ${patterns[0].patternId} for details` : 'no evidence';
   return {
     outcome: 'success' as const,
     workItemNumber: 0,
@@ -440,7 +442,7 @@ function makeManifestWithCandidates(
       kind: c.kind as 'skill-prompt' | 'skill-schema' | 'skill-config',
       targetPath: c.targetPath,
       suggestionText: 'improve this',
-      evidence: `pattern:${c.kind} ref`,
+      evidence: c.evidence ?? defaultEvidence,
       confidence: 'high' as const,
     })),
     decisionSummaries: [] as never[],
@@ -564,5 +566,54 @@ describe('dispatchCoachCandidates', () => {
     );
     expect(targets).toContain('implement');
     expect(targets).toContain('triage');
+  });
+
+  it('emits coach.dispatch-failed when runner returns ok: false (P1)', async () => {
+    const mockCoachRunner = vi.fn().mockResolvedValue({ ok: false, error: 'schema mismatch' });
+    const manifest = makeManifestWithCandidates(
+      [{ patternId: 'PLAN::developer', consistencyScore: 0.9 }],
+      [{ kind: 'skill-prompt', targetPath: 'skills/implement/prompt.md' }],
+    );
+
+    await dispatchCoachCandidates({
+      projectId: 'p',
+      playbookId: 6,
+      manifest,
+      lifecycleCount: 4,
+      lifecycleIds: [1, 2, 3, 4],
+      coachPolicy: { enabled: true, consistencyThreshold: 0.8, minLifecycles: 3 },
+      coachWorkflowRunner: mockCoachRunner,
+    });
+
+    const events = mockAppendEvent.mock.calls.map((c) => c[0]);
+    expect(events.some((e) => e.kind === 'coach.dispatch-failed')).toBe(true);
+    const failedEvent = events.find((e) => e.kind === 'coach.dispatch-failed');
+    expect((failedEvent?.payload as { error: string }).error).toBe('schema mismatch');
+  });
+
+  it('does not fire when candidate evidence does not reference an eligible pattern (P2)', async () => {
+    const mockCoachRunner = vi.fn();
+    const manifest = makeManifestWithCandidates(
+      [{ patternId: 'PLAN::developer', consistencyScore: 0.9 }],
+      [
+        {
+          kind: 'skill-prompt',
+          targetPath: 'skills/implement/prompt.md',
+          evidence: 'some unrelated evidence with no pattern citation',
+        },
+      ],
+    );
+
+    await dispatchCoachCandidates({
+      projectId: 'p',
+      playbookId: 7,
+      manifest,
+      lifecycleCount: 4,
+      lifecycleIds: [1, 2, 3, 4],
+      coachPolicy: { enabled: true, consistencyThreshold: 0.8, minLifecycles: 3 },
+      coachWorkflowRunner: mockCoachRunner,
+    });
+
+    expect(mockCoachRunner).not.toHaveBeenCalled();
   });
 });
