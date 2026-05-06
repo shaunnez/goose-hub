@@ -374,16 +374,16 @@ describe('listClosedWorkByMilestone', () => {
 // ---------------------------------------------------------------------------
 
 describe('forceState', () => {
-  it('removes factory:* labels and adds the target, leaving non-factory labels alone', async () => {
+  it('atomically replaces all factory:* labels with the target via a single PUT, preserving non-factory labels', async () => {
     const existingLabels = [
       { name: 'factory:in-progress' },
+      { name: 'factory:needs-qa' }, // a stray second factory label — must also be dropped
       { name: 'type:feature' },
       { name: 'priority:high' },
     ];
 
     const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
       const method = (init?.method ?? 'GET').toUpperCase();
-
       if (method === 'GET') {
         return Promise.resolve(
           new Response(JSON.stringify(existingLabels), {
@@ -392,10 +392,7 @@ describe('forceState', () => {
           }),
         );
       }
-      if (method === 'DELETE') {
-        return Promise.resolve(new Response('', { status: 200 }));
-      }
-      if (method === 'POST') {
+      if (method === 'PUT') {
         return Promise.resolve(
           new Response(JSON.stringify([]), {
             status: 200,
@@ -411,33 +408,29 @@ describe('forceState', () => {
     const source = makeSource();
     await source.forceState('github:shaunnez/goose-hub#10', 'factory:archived');
 
-    // Collect all DELETE calls.
-    const deletedUrls = fetchMock.mock.calls
-      .filter(([, init]) => (init?.method ?? 'GET').toUpperCase() === 'DELETE')
-      .map(([url]) => url as string);
-
-    // Must have deleted factory:in-progress.
-    expect(
-      deletedUrls.some(
-        (u) => u.includes('factory%3Ain-progress') || u.includes('factory:in-progress'),
-      ),
-    ).toBe(true);
-
-    // Must NOT have deleted non-factory labels.
-    expect(
-      deletedUrls.some((u) => u.includes('type%3Afeature') || u.includes('type:feature')),
-    ).toBe(false);
-    expect(
-      deletedUrls.some((u) => u.includes('priority%3Ahigh') || u.includes('priority:high')),
-    ).toBe(false);
-
-    // Must have posted the target label.
-    const postCalls = fetchMock.mock.calls.filter(
-      ([, init]) => (init?.method ?? 'GET').toUpperCase() === 'POST',
+    // No DELETE or POST calls — the operation must use a single PUT.
+    const methodCounts = fetchMock.mock.calls.reduce(
+      (acc, [, init]) => {
+        const m = (init?.method ?? 'GET').toUpperCase();
+        acc[m] = (acc[m] ?? 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
     );
-    expect(postCalls).toHaveLength(1);
-    const postBody = JSON.parse(postCalls[0][1].body as string) as { labels: string[] };
-    expect(postBody.labels).toContain('factory:archived');
+    expect(methodCounts.DELETE ?? 0).toBe(0);
+    expect(methodCounts.POST ?? 0).toBe(0);
+    expect(methodCounts.PUT).toBe(1);
+
+    const putCall = fetchMock.mock.calls.find(
+      ([, init]) => (init?.method ?? 'GET').toUpperCase() === 'PUT',
+    );
+    if (putCall == null) throw new Error('expected a PUT call');
+    const putBody = JSON.parse(putCall[1].body as string) as { labels: string[] };
+    expect(putBody.labels).toContain('factory:archived');
+    expect(putBody.labels).toContain('type:feature');
+    expect(putBody.labels).toContain('priority:high');
+    expect(putBody.labels).not.toContain('factory:in-progress');
+    expect(putBody.labels).not.toContain('factory:needs-qa');
   });
 
   it('works with a plain issue number as itemId', async () => {
@@ -689,13 +682,25 @@ describe('listMilestones', () => {
 // ---------------------------------------------------------------------------
 
 describe('transitionState', () => {
-  it('removes the old label and adds the new one for a legal transition', async () => {
+  it('atomically replaces the old state label with the new one via a single PUT, preserving non-factory labels', async () => {
+    const existingLabels = [
+      { name: 'factory:triaging' },
+      { name: 'type:feature' },
+      { name: 'priority:high' },
+      { name: 'schedule:current' },
+    ];
+
     const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
       const method = (init?.method ?? 'GET').toUpperCase();
-      if (method === 'DELETE') {
-        return Promise.resolve(new Response('', { status: 200 }));
+      if (method === 'GET') {
+        return Promise.resolve(
+          new Response(JSON.stringify(existingLabels), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
       }
-      if (method === 'POST') {
+      if (method === 'PUT') {
         return Promise.resolve(
           new Response(JSON.stringify([]), {
             status: 200,
@@ -709,23 +714,35 @@ describe('transitionState', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const source = makeSource();
-    // factory:triaging -> factory:accepted is a legal transition
     await expect(
       source.transitionState('github:shaunnez/goose-hub#5', 'factory:triaging', 'factory:accepted'),
     ).resolves.toBeUndefined();
 
-    const deleteCalls = fetchMock.mock.calls.filter(
-      ([, init]) => (init?.method ?? 'GET').toUpperCase() === 'DELETE',
+    // No DELETE or POST — the transition must be a single atomic PUT (no
+    // intermediate window where the conflict-resolver could see zero state
+    // labels and default to factory:triaging).
+    const methodCounts = fetchMock.mock.calls.reduce(
+      (acc, [, init]) => {
+        const m = (init?.method ?? 'GET').toUpperCase();
+        acc[m] = (acc[m] ?? 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
     );
-    expect(deleteCalls).toHaveLength(1);
-    expect(deleteCalls[0][0]).toContain('factory%3Atriaging');
+    expect(methodCounts.DELETE ?? 0).toBe(0);
+    expect(methodCounts.POST ?? 0).toBe(0);
+    expect(methodCounts.PUT).toBe(1);
 
-    const postCalls = fetchMock.mock.calls.filter(
-      ([, init]) => (init?.method ?? 'GET').toUpperCase() === 'POST',
+    const putCall = fetchMock.mock.calls.find(
+      ([, init]) => (init?.method ?? 'GET').toUpperCase() === 'PUT',
     );
-    expect(postCalls).toHaveLength(1);
-    const body = JSON.parse(postCalls[0][1].body as string) as { labels: string[] };
+    if (putCall == null) throw new Error('expected a PUT call');
+    const body = JSON.parse(putCall[1].body as string) as { labels: string[] };
     expect(body.labels).toContain('factory:accepted');
+    expect(body.labels).not.toContain('factory:triaging');
+    expect(body.labels).toContain('type:feature');
+    expect(body.labels).toContain('priority:high');
+    expect(body.labels).toContain('schedule:current');
   });
 
   it('throws on an illegal transition', async () => {
@@ -736,13 +753,22 @@ describe('transitionState', () => {
     );
   });
 
-  it('tolerates 404 when removing the old label (idempotent)', async () => {
+  it('is idempotent when the from-label is already absent', async () => {
+    // Simulate a re-run where the previous transition partially landed: the
+    // from-label is gone, but the to-label has not yet been added.
+    const existingLabels = [{ name: 'type:feature' }];
+
     const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
       const method = (init?.method ?? 'GET').toUpperCase();
-      if (method === 'DELETE') {
-        return Promise.resolve(new Response('', { status: 404 }));
+      if (method === 'GET') {
+        return Promise.resolve(
+          new Response(JSON.stringify(existingLabels), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
       }
-      if (method === 'POST') {
+      if (method === 'PUT') {
         return Promise.resolve(
           new Response(JSON.stringify([]), {
             status: 200,
@@ -759,34 +785,41 @@ describe('transitionState', () => {
     await expect(
       source.transitionState('5', 'factory:triaging', 'factory:accepted'),
     ).resolves.toBeUndefined();
+
+    const putCall = fetchMock.mock.calls.find(
+      ([, init]) => (init?.method ?? 'GET').toUpperCase() === 'PUT',
+    );
+    if (putCall == null) throw new Error('expected a PUT call');
+    const body = JSON.parse(putCall[1].body as string) as { labels: string[] };
+    expect(body.labels).toContain('factory:accepted');
+    expect(body.labels).toContain('type:feature');
   });
 
-  it('throws when removing the old label fails with a non-404 error', async () => {
-    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
-      const method = (init?.method ?? 'GET').toUpperCase();
-      if (method === 'DELETE') {
-        return Promise.resolve(
-          new Response('', { status: 500, statusText: 'Internal Server Error' }),
-        );
-      }
-      return Promise.resolve(new Response('[]', { status: 200 }));
-    });
+  it('throws when reading current labels fails', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response('', { status: 500, statusText: 'Internal Server Error' }));
 
     vi.stubGlobal('fetch', fetchMock);
 
     const source = makeSource();
     await expect(
       source.transitionState('5', 'factory:triaging', 'factory:accepted'),
-    ).rejects.toThrow('Failed to remove label');
+    ).rejects.toThrow('GitHub API error: 500');
   });
 
-  it('throws when adding the new label fails', async () => {
+  it('throws when writing the new label set fails', async () => {
     const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
       const method = (init?.method ?? 'GET').toUpperCase();
-      if (method === 'DELETE') {
-        return Promise.resolve(new Response('', { status: 200 }));
+      if (method === 'GET') {
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
       }
-      if (method === 'POST') {
+      if (method === 'PUT') {
         return Promise.resolve(
           new Response('', { status: 422, statusText: 'Unprocessable Entity' }),
         );
@@ -799,16 +832,21 @@ describe('transitionState', () => {
     const source = makeSource();
     await expect(
       source.transitionState('5', 'factory:triaging', 'factory:accepted'),
-    ).rejects.toThrow('Failed to add label');
+    ).rejects.toThrow('Failed to set label');
   });
 
-  it('posts a comment when a note is supplied', async () => {
+  it('posts a comment when a note is supplied, after the atomic label PUT', async () => {
     const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
       const method = (init?.method ?? 'GET').toUpperCase();
-      if (method === 'DELETE') {
-        return Promise.resolve(new Response('', { status: 200 }));
+      if (method === 'GET') {
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
       }
-      if (method === 'POST') {
+      if (method === 'PUT' || method === 'POST') {
         return Promise.resolve(
           new Response(JSON.stringify([]), {
             status: 200,
@@ -829,12 +867,12 @@ describe('transitionState', () => {
       'Transitioned by agent',
     );
 
+    // Exactly one POST — the comment.
     const postCalls = fetchMock.mock.calls.filter(
       ([, init]) => (init?.method ?? 'GET').toUpperCase() === 'POST',
     );
-    // First POST = add label, second POST = comment
-    expect(postCalls).toHaveLength(2);
-    const commentBody = JSON.parse(postCalls[1][1].body as string) as { body: string };
+    expect(postCalls).toHaveLength(1);
+    const commentBody = JSON.parse(postCalls[0][1].body as string) as { body: string };
     expect(commentBody.body).toBe('Transitioned by agent');
   });
 });
@@ -1204,7 +1242,7 @@ describe('ghFetch — rate limit reset timestamp', () => {
 // ---------------------------------------------------------------------------
 
 describe('forceState — error handling', () => {
-  it('throws when adding the forced label fails', async () => {
+  it('throws when the atomic label PUT fails', async () => {
     const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
       const method = (init?.method ?? 'GET').toUpperCase();
       if (method === 'GET') {
@@ -1215,7 +1253,7 @@ describe('forceState — error handling', () => {
           }),
         );
       }
-      if (method === 'POST') {
+      if (method === 'PUT') {
         return Promise.resolve(
           new Response('', { status: 422, statusText: 'Unprocessable Entity' }),
         );
@@ -1227,34 +1265,20 @@ describe('forceState — error handling', () => {
 
     const source = makeSource();
     await expect(source.forceState('10', 'factory:archived')).rejects.toThrow(
-      'Failed to add label',
+      'Failed to set label',
     );
   });
 
-  it('throws when removing a factory label fails with non-404', async () => {
-    const existingLabels = [{ name: 'factory:in-progress' }];
-
-    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
-      const method = (init?.method ?? 'GET').toUpperCase();
-      if (method === 'GET') {
-        return Promise.resolve(
-          new Response(JSON.stringify(existingLabels), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        );
-      }
-      if (method === 'DELETE') {
-        return Promise.resolve(new Response('', { status: 500, statusText: 'Server Error' }));
-      }
-      return Promise.resolve(new Response('[]', { status: 200 }));
-    });
+  it('throws when reading current labels fails', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response('', { status: 500, statusText: 'Server Error' }));
 
     vi.stubGlobal('fetch', fetchMock);
 
     const source = makeSource();
     await expect(source.forceState('10', 'factory:archived')).rejects.toThrow(
-      'Failed to remove label',
+      'GitHub API error: 500',
     );
   });
 });
