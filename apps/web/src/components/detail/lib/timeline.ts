@@ -1,4 +1,13 @@
-import type { AgentEventDto } from '@/lib/types';
+import type { AgentEventDto, CostRowDto } from '@/lib/types';
+
+export type TimelineContext = {
+  slug: string;
+  issueId: string;
+  latestRunId: string | null;
+  runCosts?: Map<string, CostRowDto>;
+  /** Monotonic tick that increments each time the user clicks expand/collapse all. */
+  expandSignal?: { tick: number; open: boolean };
+};
 
 // ─── display helpers ──────────────────────────────────────────────────────────
 
