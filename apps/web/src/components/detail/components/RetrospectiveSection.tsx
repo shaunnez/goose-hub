@@ -27,10 +27,14 @@ interface QualityScore {
   trend: 'improving' | 'stable' | 'declining';
 }
 
+type SummaryShape =
+  | string
+  | { wentWell?: string; couldBeSmootherOrCleanRun?: string; mainTakeaway?: string };
+
 interface LightRetroPayload {
   tier: 'light';
   output: {
-    summary: string;
+    summary: SummaryShape;
     improvementCandidates: ImprovementCandidate[];
   };
 }
@@ -38,7 +42,7 @@ interface LightRetroPayload {
 interface DeepRetroPayload {
   tier: 'deep';
   output: {
-    summary: string;
+    summary: SummaryShape;
     personaAnalysis: QualityScore[];
     improvementCandidates: ImprovementCandidate[];
     learningEntries: Array<{ observation: string; rationale: string; confidence: string }>;
@@ -120,10 +124,16 @@ export function RetrospectiveSection({ projectSlug, id }: RetrospectiveSectionPr
     );
   }
 
-  const bullets = retro.output.summary
-    .split('\n')
-    .map((l) => l.replace(/^-\s*/, '').trim())
-    .filter(Boolean);
+  const summary = retro.output.summary;
+  const bullets =
+    typeof summary === 'string'
+      ? summary
+          .split('\n')
+          .map((l) => l.replace(/^-\s*/, '').trim())
+          .filter(Boolean)
+      : [summary.wentWell, summary.couldBeSmootherOrCleanRun, summary.mainTakeaway].filter(
+          (s): s is string => typeof s === 'string' && s.length > 0,
+        );
 
   return (
     <div data-testid="retro-section" className="px-8 py-6 space-y-6">

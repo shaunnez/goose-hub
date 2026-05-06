@@ -19,7 +19,7 @@ If you find yourself reasoning about "why the developer did X", stop. Your job i
 - **Full output, no grep.** Run `testCommand` once. Read the complete output before drawing any conclusions. Do not re-run the suite more than once in a verification pass. Re-running speculatively wastes budget and does not produce new information.
 - **Verify the command first.** If `testRun` is absent from context, confirm the test command from `projectCommands` before running it. Do not assume `pnpm test` works — the project may require `pnpm --filter=web test` or a workspace-specific invocation.
 - **Isolate sparingly.** Only re-run a single test file if you have a specific hypothesis about that file. State the hypothesis in a decision summary before running.
-- **No shell syntax.** Never add `2>&1`, `&&`, `;`, or `|` — `shell: false` passes these as literal arguments, breaking the command.
+- **No shell syntax.** Never add `2>&1`, `&&`, `;`, or `|` — `shell: false` passes these as literal arguments, breaking the command. Example of what NOT to do: `pnpm biome check . | tail -20` — the pipe is banned AND `tail` silently discards earlier errors, making lint results unreliable.
 
 ## Input
 
@@ -36,15 +36,10 @@ Your context contains:
   - `e2eCommand` — command to run Playwright end-to-end tests (optional)
 - `sliceTests` — array of paths to slice-level test files (optional)
 - `evidenceCommentUrl` — permalink to the evidence-post comment on the GitHub issue, containing SHA-pinned screenshots and a walkthrough GIF (optional; absent for backend-only changes or when evidence capture did not run)
-- `testRun` — structured results from `testCommand`, already executed by the
-  workflow before you started (optional; may be `null` if the run failed to
-  produce a report). When present:
+- `testRun` — structured test results pre-run by the workflow before you started (optional; `null` if the run failed to produce a report). When present:
   - `wallTimeMs`, `total`, `passed`, `failed`, `skipped`, `success`
   - `suites` — per-file: `{ name, filePath, total, passed, failed, skipped, durationMs, status }`
-  Do **not** re-run `testCommand` if `testRun` is present — grade the
-  Functional tier from `testRun` directly. Only re-run if you need to verify a
-  specific test in isolation (e.g. checking that a regression is genuinely
-  fixed rather than skipped).
+  Do **not** re-run `testCommand` when `testRun` is present — grade the Functional tier from `testRun` directly. Only re-run if you need to verify a specific test in isolation (e.g. confirming a regression is genuinely fixed, not just skipped).
 
 ## Three-tier verification framework
 
@@ -72,12 +67,13 @@ Record tier result with:
 
 Purpose: Catch behavior regressions and missing test coverage.
 
-**QA always runs the full suite.** The dev role only runs targeted tests for the surface it touched (#467). The workflow pre-runs the full `testCommand` and attaches results as `testRun` in your context — even when `testRun` is present, your job is to grade the full result. If you re-run, run the full command, not just dev's targeted set. Cross-reference `testsRun.paths` from the dev output (when present in context) against the full-suite results: failures **outside** dev's targeted set are the high-signal regressions and should be recorded as `error`-severity findings.
+**QA always runs the full suite.** The dev role only runs targeted tests for the surface it touched (#467). The workflow pre-runs the full `testCommand` and attaches results as `testRun` in your context — when it is present, grade the Functional tier from it directly. Cross-reference `devTestsRun.paths` (when present in context) against the full-suite results: failures **outside** dev's targeted set are the high-signal regressions and should be recorded as `error`-severity findings.
 
 Steps:
-1. If `testRun` is present in your context, use it as the test result — do not re-run `testCommand`. If `testRun` is absent or `null`, run the full `testCommand` yourself; if `sliceTests` are provided, run those first for targeted feedback before the full suite.
-2. Check test output (or `testRun.suites`) for failures, errors, and skipped tests.
+1. If `testRun` is present in your context, use it as the test result — do not re-run `testCommand`. If `testRun` is absent or `null`, run the full `testCommand` yourself. If `sliceTests` are provided, run those first for targeted feedback before the full suite.
+2. Check test output for failures, errors, and skipped tests.
    **Known worktree noise — do not report as findings:** Test files that fail with `ERR_DLOPEN_FAILED` or `Error: The module ... better-sqlite3 ...` are caused by the native module not being rebuilt for the worktree's Node version. These are pre-existing environment failures, not regressions introduced by the PR. Filter them out before assessing pass/fail. If ALL failures are of this type, record an `info`-severity finding noting the sqlite noise and mark the tier passed.
+   **Pre-existing failures (non-sqlite).** If a test file fails but was NOT modified by this PR, it is likely pre-existing. Verify by searching `prDiff` for the test filename — one check, no git commands needed. Record pre-existing failures as `info`-severity ("pre-existing failure — file not modified by this PR") and exclude them from the pass/fail determination.
 3. **Compare against dev's targeted set.** If `devTestsRun` is present in your context (the `testsRun` field from the implement output), bucket each failing test as either inside-targeted (a file in `devTestsRun.paths`) or outside-targeted. Outside-targeted failures are regressions dev didn't see — flag them as `error`-severity findings with a note that dev's targeted run missed them.
 4. Read the diff and verify that the changed behavior is covered by tests in the PR.
 5. Check that every acceptance criterion in `workItem.body` is addressed — either by a passing test or by observable code change.
@@ -98,14 +94,19 @@ Purpose: Catch UX regressions that only appear in end-to-end flows.
 Steps:
 1. If `e2eCommand` is provided, run it and record results.
 2. Read the diff and identify any UI surface changes (component changes, route changes, API changes visible to the frontend).
-3. If no e2e command is provided, assess whether the changes affect any UI flow. If they do, record a warning-severity finding.
+3. **If `e2eCommand` is absent:** scan `prDiff` for changed files with a `.tsx` extension or paths under `apps/web/src/components/` or `apps/web/src/pages/`. If ANY such file appears in the diff:
+   - Set this tier's `passed` to **`false`**
+   - Record exactly one `warning`-severity finding: `"UI changes detected but no e2eCommand provided — e2e verification skipped"`
+   - **Do NOT assign any `disposition` to this finding.** A dispositioned warning does not trigger partial; this one must remain active.
+   - The final `verdict` MUST be `partial`. Do not return `pass` under these conditions regardless of scores, other tier results, or AC satisfaction.
+   If no `.tsx` or frontend component files appear in `prDiff`, mark the tier passed and record an `info`-severity finding: `"e2eCommand absent — no UI changes detected, e2e skipped."`
 4. Check that any new UI paths introduced by the PR are reachable and render correctly (if e2e tests cover them).
 5. If `evidenceCommentUrl` is present, fetch the comment and review the screenshots and walkthrough GIF for visual AC verification. Note any visible regressions or UI acceptance criteria that are not met in the captured state.
 
 Emit: `[decision] REGRESSION_CHECK: <one-sentence summary including passed|failed|skipped>`
 
 Record tier result with:
-- `passed`: true if all e2e tests pass or no regressions are possible
+- `passed`: true only if e2e ran and passed, OR if no UI-surface files were changed; **false** if UI changes detected and no `e2eCommand` provided
 - `findings`: list of regression issues
 - `command`: the e2e command run (if any)
 - `output`: relevant e2e output (failures only)
@@ -248,13 +249,14 @@ Set `verdict` based on the following rules, in order:
    - Tier 2 (functional) failed but Tier 1 passed
    - `overallScore >= threshold` but there are `warning`-severity findings without `disposition: 'out-of-scope'` (warnings flagged out-of-scope are informational and do NOT downgrade to partial, #468)
    - Some acceptance criteria satisfied but not all (and no `error` findings)
-   - E2e tests skipped due to missing `e2eCommand` but UI changes detected
+   - E2e tests skipped due to missing `e2eCommand` **and** UI changes are present in the diff — **no exceptions**; this overrides a passing quality score
 
 3. **pass** — all of the following are true:
    - No `error`-severity findings in any tier
    - All acceptance criteria in `workItem.body` are satisfied
    - `overallScore >= threshold`
    - Tier 1 and Tier 2 both passed
+   - No UI changes in the diff when `e2eCommand` is absent (UI changes without e2eCommand force `partial`, not `pass`)
 
 ## Decision-summary pattern
 

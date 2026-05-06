@@ -56,7 +56,9 @@ export type EventKind =
   // M10 per-AC verify-command live events (#469)
   | 'agent.verify-command'
   // M10 project budget exceeded
-  | 'project.budget-exceeded';
+  | 'project.budget-exceeded'
+  // M9 fix-feedback loop — re-dispatch after QA failure
+  | 'agent.fix-feedback-complete';
 
 export interface AgentEvent {
   id: number;

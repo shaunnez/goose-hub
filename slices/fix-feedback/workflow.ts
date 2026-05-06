@@ -1,0 +1,252 @@
+import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
+import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
+import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
+import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
+import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
+import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
+import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
+import { ImplementSchema } from '@goose-hub/skills/implement/schema.js';
+
+export interface FixFeedbackDeps {
+  runtime?: AgentRuntime;
+}
+
+/**
+ * Finds the worktree path from the most recent `pr.opened` event for this work item.
+ * Returns undefined if no such event exists.
+ */
+function findWorktreePath(workItemId: string): string | undefined {
+  const events = eventStore.replay({ workItemId });
+  const prOpened = events
+    .slice()
+    .reverse()
+    .find((e) => e.kind === 'pr.opened');
+  if (prOpened == null) return undefined;
+  const payload = prOpened.payload as Record<string, unknown>;
+  return typeof payload.worktreePath === 'string' ? payload.worktreePath : undefined;
+}
+
+/**
+ * Extracts QA findings from the most recent `qa.completed` event and formats
+ * them as a human-readable string for injection into the implement skill's
+ * `advisorFeedback` field.
+ *
+ * Returns an empty string if no qa.completed event exists (implement still
+ * runs; it just has no targeted feedback).
+ */
+function buildQaFeedback(workItemId: string): string {
+  const events = eventStore.replay({ workItemId });
+  const qaCompleted = events
+    .slice()
+    .reverse()
+    .find((e) => e.kind === 'qa.completed');
+  if (qaCompleted == null) return '';
+
+  type TierResult = {
+    passed: boolean;
+    findings: Array<{ tier: string; severity: string; description: string; suggestion?: string }>;
+  };
+  type QaPayload = {
+    verdict?: string;
+    overallScore?: number;
+    threshold?: number;
+    tierResults?: {
+      structural?: TierResult;
+      functional?: TierResult;
+      regression?: TierResult;
+    };
+  };
+
+  const payload = qaCompleted.payload as QaPayload;
+  const { verdict = 'fail', overallScore = 0, threshold = 70, tierResults = {} } = payload;
+
+  const lines: string[] = [
+    `QA verdict: ${verdict} (score ${overallScore}/${threshold})`,
+    '',
+    'Findings to address:',
+  ];
+
+  for (const [tier, result] of Object.entries(tierResults) as [string, TierResult | undefined][]) {
+    if (result == null || result.passed) continue;
+    for (const f of result.findings) {
+      lines.push(
+        `- [${tier}/${f.severity}] ${f.description}${f.suggestion ? ` — ${f.suggestion}` : ''}`,
+      );
+    }
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Runs the fix-feedback workflow for a work item in `factory:needs-fix` state.
+ *
+ * This workflow is invoked after QA fails and auto-transition has moved the
+ * item from `factory:qa-failed` → `factory:needs-fix`. It differs from
+ * fix-issue in that:
+ * - It reuses the existing worktree (no new worktree created)
+ * - It injects QA findings as `advisorFeedback` for the implement skill
+ * - It pushes to the existing branch (no new PR opened)
+ *
+ * Sequence:
+ *   1. Find existing worktree from `pr.opened` event → missing = needs-human
+ *   2. Transition factory:needs-fix → factory:in-progress
+ *   3. Run implement skill with QA findings as advisorFeedback, revisionPass=1
+ *   4. Emit agent.fix-feedback-complete
+ *   5. Transition factory:in-progress → factory:needs-qa
+ *
+ * On failure at any step: comment, transition to factory:needs-human.
+ */
+export async function runFixFeedbackWorkflow(
+  workItem: WorkItem,
+  stateSource: StateSource,
+  projectId: string,
+  _targetRepo: string,
+  deps: FixFeedbackDeps = {},
+): Promise<void> {
+  const runId = crypto.randomUUID();
+  const runtime = deps.runtime ?? new ClaudeCliRuntime();
+
+  const worktreePath = findWorktreePath(workItem.id);
+  if (worktreePath == null) {
+    await stateSource.comment(
+      workItem.externalId,
+      'Fix-feedback: no worktree found — cannot locate existing dev workspace. Escalating.',
+    );
+    await stateSource.transitionState(
+      workItem.externalId,
+      'factory:needs-fix',
+      'factory:needs-human',
+    );
+    eventStore.appendEvent({
+      projectId,
+      workItemId: workItem.id,
+      kind: 'agent.run-failed',
+      payload: { runId, error: 'fix-feedback: no worktree found in pr.opened events' },
+      runId,
+    });
+    return;
+  }
+
+  const implementPrompt = readPromptWithContext('implement', projectId);
+  const implementJsonSchema = toJsonSchema(ImplementSchema);
+  const { personaId } = selectPersona(projectId, 'developer');
+  const advisorFeedback = buildQaFeedback(workItem.id);
+
+  await stateSource.transitionState(
+    workItem.externalId,
+    'factory:needs-fix',
+    'factory:in-progress',
+  );
+
+  try {
+    const result = await runtime.run({
+      runId,
+      role: 'developer',
+      skill: 'implement',
+      workspaceDir: worktreePath,
+      context: {
+        projectId,
+        workItemId: workItem.id,
+        workItem: {
+          title: workItem.title,
+          body: workItem.body,
+          number: Number(workItem.externalId),
+          priority: workItem.priority,
+        },
+        worktreePath,
+        stack: {
+          testCommand: 'pnpm test',
+          lintCommand: 'pnpm lint',
+          typecheckCommand: 'pnpm typecheck',
+        },
+        advisorFeedback: advisorFeedback || undefined,
+        revisionPass: 1,
+      },
+      contextAllowlist: [
+        'workItem.title',
+        'workItem.body',
+        'workItem.number',
+        'workItem.priority',
+        'worktreePath',
+        'stack.testCommand',
+        'stack.lintCommand',
+        'stack.typecheckCommand',
+        'advisorFeedback',
+        'revisionPass',
+      ],
+      freshContext: false,
+      toolBundles: ['dev-tools'],
+      toolExtras: [],
+      budgets: { maxTurns: 200, maxBudgetUsd: 2.0, timeoutMs: 600_000 },
+      personaId,
+      outputJsonSchema: implementJsonSchema,
+      appendSystemPrompt: implementPrompt,
+    });
+
+    const parsed = ImplementSchema.safeParse(result.output);
+    if (!parsed.success) {
+      const rawPreview =
+        typeof result.output === 'string'
+          ? (result.output as string).slice(0, 400)
+          : JSON.stringify(result.output).slice(0, 400);
+      throw new Error(
+        `fix-feedback implement output validation failed: ${JSON.stringify(parsed.error.issues)}\nRaw: ${rawPreview}`,
+      );
+    }
+
+    const implementOutput = parsed.data;
+
+    for (const summary of implementOutput.decisionSummaries) {
+      eventStore.appendEvent({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'agent.decision-summary',
+        payload: { skill: 'fix-feedback', ...summary },
+        runId,
+      });
+    }
+
+    eventStore.appendEvent({
+      projectId,
+      workItemId: workItem.id,
+      kind: 'agent.fix-feedback-complete',
+      payload: {
+        filesWritten: implementOutput.filesWritten.length,
+        testsWritten: implementOutput.testsWritten.length,
+        confidence: implementOutput.confidence,
+        testsRun: implementOutput.testsRun,
+      },
+      runId,
+    });
+
+    accumulatePersonaStats({ personaName: personaId, role: 'developer', outcome: 'success' });
+
+    await stateSource.comment(
+      workItem.externalId,
+      'Fix-feedback complete. Transitioning back to `factory:needs-qa`.',
+    );
+    await stateSource.transitionState(
+      workItem.externalId,
+      'factory:in-progress',
+      'factory:needs-qa',
+    );
+  } catch (err) {
+    accumulatePersonaStats({ personaName: personaId, role: 'developer', outcome: 'failure' });
+    const error = err instanceof Error ? err : new Error(String(err));
+    eventStore.appendEvent({
+      projectId,
+      workItemId: workItem.id,
+      kind: 'agent.run-failed',
+      payload: { runId, error: error.message },
+      runId,
+    });
+    await stateSource.comment(workItem.externalId, `Fix-feedback failed: ${error.message}`);
+    await stateSource.transitionState(
+      workItem.externalId,
+      'factory:in-progress',
+      'factory:needs-human',
+    );
+  }
+}

@@ -88,6 +88,7 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
       role: 'retrospector',
       skill: skillName,
       context: {
+        workItemId: workItem.id,
         workItem: {
           title: workItem.title,
           body: workItem.body,

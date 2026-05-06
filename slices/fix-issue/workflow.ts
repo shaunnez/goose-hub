@@ -8,6 +8,7 @@ import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
+import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import {
   cleanupWorktree,
@@ -125,7 +126,7 @@ export async function runFixIssueWorkflow(
         projectId,
         workItem,
         worktreePath,
-        stack: deriveStack(),
+        stack: await deriveStack(projectId),
         appendSystemPrompt: implementPrompt,
         outputJsonSchema: implementJsonSchema,
         personaId: implementPersonaId,
@@ -197,7 +198,7 @@ export async function runFixIssueWorkflow(
       projectId,
       workItem,
       worktreePath,
-      stack: deriveStack(),
+      stack: await deriveStack(projectId),
       appendSystemPrompt: implementPrompt,
       outputJsonSchema: implementJsonSchema,
       personaId: implementPersonaId,
@@ -610,12 +611,19 @@ export function resolveWorktreeHeadSha(worktreePath: string): string {
   }
 }
 
-function deriveStack(): {
+async function deriveStack(projectId: string): Promise<{
   testCommand: string;
   lintCommand?: string;
   typecheckCommand?: string;
-} {
-  // Goose-Hub-self defaults. Cross-project stack discovery is M11+ work.
+}> {
+  const config = await getProjectBySlug(projectId);
+  if (config?.stack) {
+    return {
+      testCommand: config.stack.testCommand,
+      lintCommand: config.stack.lintCommand,
+      typecheckCommand: config.stack.typecheckCommand,
+    };
+  }
   return {
     testCommand: 'pnpm test',
     lintCommand: 'pnpm lint',
