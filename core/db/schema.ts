@@ -118,6 +118,52 @@ export const personaNames = sqliteTable(
   }),
 );
 
+export const archivedLifecycles = sqliteTable(
+  'archived_lifecycles',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    projectId: text('project_id').notNull(),
+    workItemId: text('work_item_id').notNull(),
+    closedAt: text('closed_at').notNull(),
+    decisionSummaries: text('decision_summaries').notNull().default('[]'),
+    learningEntries: text('learning_entries').notNull().default('[]'),
+    qualityScores: text('quality_scores').notNull().default('[]'),
+    costsUsd: real('costs_usd').notNull().default(0),
+    runIds: text('run_ids').notNull().default('[]'),
+  },
+  (t) => ({
+    projectWorkItemIdx: index('archived_lifecycles_project_work_item_idx').on(
+      t.projectId,
+      t.workItemId,
+    ),
+    projectClosedIdx: index('archived_lifecycles_project_closed_idx').on(t.projectId, t.closedAt),
+  }),
+);
+
+export const decisionPatterns = sqliteTable(
+  'decision_patterns',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    projectId: text('project_id').notNull(),
+    kind: text('kind').notNull(),
+    role: text('role').notNull(),
+    actionSummary: text('action_summary').notNull(),
+    reasonSummary: text('reason_summary').notNull().default(''),
+    occurrenceCount: integer('occurrence_count').notNull().default(1),
+    consistencyScore: real('consistency_score').notNull().default(0),
+    lastSeenAt: text('last_seen_at').notNull(),
+    exampleWorkItemIds: text('example_work_item_ids').notNull().default('[]'),
+  },
+  (t) => ({
+    projectKindRoleUniq: uniqueIndex('decision_patterns_project_kind_role_uniq').on(
+      t.projectId,
+      t.kind,
+      t.role,
+    ),
+    projectIdx: index('decision_patterns_project_idx').on(t.projectId),
+  }),
+);
+
 // One row per agent run. `runId` is unique — the same run is never recorded twice.
 // `costLabel`: 'exact' when the source provided authoritative usage metadata
 // (direct API), 'estimated' when only the Claude CLI's reported totals are

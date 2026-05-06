@@ -1,3 +1,4 @@
+import { minePatterns } from '@goose-hub/core/learning/mine.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { Hono } from 'hono';
 import { dispatchForIssue, dispatchQa, dispatchRetro, dispatchReview } from '#shared/dispatch.js';
@@ -86,6 +87,18 @@ router.post('/:slug/dispatch/:n', async (c) => {
     logger.error('dispatchForIssue failed', { slug, n, error: String(err) });
   });
   return c.json({ ok: true, slug, issueNumber: n }, 202);
+});
+
+router.post('/:slug/learning/mine', (c) => {
+  const slug = c.req.param('slug');
+  const since = c.req.query('since');
+  try {
+    minePatterns({ projectId: slug, since });
+    return c.json({ ok: true, slug }, 200);
+  } catch (err) {
+    logger.error('minePatterns failed', { slug, error: String(err) });
+    return c.json({ ok: false, error: String(err) }, 500);
+  }
 });
 
 export { router as workflowsRouter };
