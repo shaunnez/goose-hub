@@ -115,28 +115,72 @@ describe('runWithEscalation — escalation', () => {
         projectId: 'p',
         workItemId: 'w',
       }),
-    ).rejects.toThrow(/validation failed.*sonnet/i);
+    ).rejects.toThrow(/validation failed after sonnet retry/i);
     expect(runFn).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries at the same tier when escalation target equals current tier (opus→opus)', async () => {
+    appendEvent.mockClear();
+    const runFn = vi
+      .fn()
+      .mockResolvedValueOnce(makeResult({ wrong: 'shape' }))
+      .mockResolvedValueOnce(makeResult({ ok: true }));
+    const runtime = makeRuntime(runFn);
+
+    const out = await runWithEscalation({
+      runtime,
+      spec: makeSpec({ modelOverride: 'claude-opus-4-7' }),
+      schema: Schema,
+      projectId: 'p',
+      workItemId: 'w',
+      // Override implement's escalation to opus → simulates a hypothetical
+      // opus-pinned skill. The key behaviour: same-tier retry is allowed.
+      projectBudgets: {
+        skillBudgetOverrides: {
+          implement: { escalation: { modelTier: 'opus', maxBudgetUsd: 30 } },
+        },
+      },
+    });
+
+    expect(out.escalated).toBe(true);
+    expect(runFn).toHaveBeenCalledTimes(2);
+    const firstSpec = runFn.mock.calls[0][0] as AgentSpec;
+    const retrySpec = runFn.mock.calls[1][0] as AgentSpec;
+    expect(firstSpec.modelOverride).toContain('opus');
+    expect(retrySpec.modelOverride).toContain('opus');
+    expect(retrySpec.runId).not.toBe(firstSpec.runId);
+    expect(appendEvent).toHaveBeenCalledTimes(1);
+    const payload = appendEvent.mock.calls[0][0].payload as Record<string, unknown>;
+    expect(payload.fromModel).toContain('opus');
+    expect(payload.toModel).toContain('opus');
   });
 });
 
 describe('runWithEscalation — no-escalation guards', () => {
-  it('does not escalate when already at sonnet (current tier ≥ escalation tier)', async () => {
+  it('retries at the same tier when escalation target equals current tier (sonnet→sonnet)', async () => {
     appendEvent.mockClear();
-    const runFn = vi.fn().mockResolvedValue(makeResult({ wrong: 'shape' }));
+    const runFn = vi
+      .fn()
+      .mockResolvedValueOnce(makeResult({ wrong: 'shape' }))
+      .mockResolvedValueOnce(makeResult({ ok: true }));
     const runtime = makeRuntime(runFn);
 
-    await expect(
-      runWithEscalation({
-        runtime,
-        spec: makeSpec({ modelOverride: 'claude-sonnet-4-6' }),
-        schema: Schema,
-        projectId: 'p',
-        workItemId: 'w',
-      }),
-    ).rejects.toThrow(/validation failed/i);
-    expect(runFn).toHaveBeenCalledTimes(1);
-    expect(appendEvent).not.toHaveBeenCalled();
+    // Spec already at sonnet (e.g. via withFallback degradation); implement's
+    // escalation target is sonnet — same-tier retry is allowed and gets the
+    // recalculated escalation budget.
+    const out = await runWithEscalation({
+      runtime,
+      spec: makeSpec({ modelOverride: 'claude-sonnet-4-6' }),
+      schema: Schema,
+      projectId: 'p',
+      workItemId: 'w',
+    });
+
+    expect(out.escalated).toBe(true);
+    expect(runFn).toHaveBeenCalledTimes(2);
+    expect(appendEvent).toHaveBeenCalledTimes(1);
+    const retrySpec = runFn.mock.calls[1][0] as AgentSpec;
+    expect(retrySpec.modelOverride).toContain('sonnet');
   });
 
   it('does not escalate when current tier is above escalation target (opus > sonnet)', async () => {

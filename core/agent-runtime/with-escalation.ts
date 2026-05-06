@@ -30,24 +30,27 @@ export interface RunWithEscalationInput<T> {
 export interface RunWithEscalationResult<T> {
   output: T;
   result: AgentResult;
-  /** True when the haiku attempt failed validation and we retried at sonnet. */
+  /** True when the first attempt failed validation and we retried at the escalated tier. */
   escalated: boolean;
 }
 
 /**
  * Runs an agent and parses its output against `schema`. If parsing fails AND
- * the skill has an escalation policy AND the spec is currently at a tier below
- * the escalated tier, retries once at the escalated tier with a recalculated
- * budget. Holdout roles (qa, reviewer) never escalate; they throw
- * HoldoutFallbackForbiddenError on validation failure.
+ * the skill has an escalation policy AND the spec's current tier is at or
+ * below the escalation target, retries once at the escalated tier with a
+ * recalculated budget. Holdout roles (qa, reviewer) never escalate; they
+ * throw HoldoutFallbackForbiddenError on validation failure.
+ *
+ * Same-tier retry is permitted (e.g. opus→opus): the model gets one extra
+ * shot with a recalculated budget. Strict downgrade is rejected.
  *
  * Subprocess errors (timeout, process death) are not caught here — those are
  * the responsibility of `withFallback`. This wrapper only handles
  * schema-validation failure on a successful run.
  *
  * Emits `agent.retry-escalated` with payload
- * `{ runId, retryRunId, skill, fromModel, toModel, reason }` before the retry.
- * The retry uses a fresh runId for separate cost attribution.
+ * `{ stage: 'model', runId, retryRunId, skill, fromModel, toModel, reason }`
+ * before the retry. The retry uses a fresh runId for separate cost attribution.
  */
 export async function runWithEscalation<T>(
   input: RunWithEscalationInput<T>,
@@ -66,15 +69,16 @@ export async function runWithEscalation<T>(
 
   const escalated = resolveEscalatedBudgets(spec.skill, projectBudgets);
   if (escalated == null) {
-    throw makeValidationError(spec.skill, parsed.error.issues, result.output, false);
+    throw makeValidationError(spec.skill, parsed.error.issues, result.output, null);
   }
 
   const currentTier = spec.modelOverride != null ? tierOf(spec.modelOverride) : null;
   const targetTier = tierOf(escalated.modelOverride);
-  // Only escalate strictly upward. Equal-tier or downward "escalation" is a
-  // misconfiguration; surface the original validation error instead.
-  if (currentTier != null && TIER_RANK[targetTier] <= TIER_RANK[currentTier]) {
-    throw makeValidationError(spec.skill, parsed.error.issues, result.output, false);
+  // Allow same-tier retry (e.g. opus→opus when there is no higher tier — give
+  // the same model one more shot at producing valid output). Reject only
+  // strict downgrade, which is a misconfiguration.
+  if (currentTier != null && TIER_RANK[targetTier] < TIER_RANK[currentTier]) {
+    throw makeValidationError(spec.skill, parsed.error.issues, result.output, null);
   }
 
   const retryRunId = crypto.randomUUID();
@@ -107,7 +111,7 @@ export async function runWithEscalation<T>(
   const retryResult = await runtime.run(retrySpec);
   const retryParsed = schema.safeParse(retryResult.output);
   if (!retryParsed.success) {
-    throw makeValidationError(spec.skill, retryParsed.error.issues, retryResult.output, true);
+    throw makeValidationError(spec.skill, retryParsed.error.issues, retryResult.output, targetTier);
   }
 
   return { output: retryParsed.data, result: retryResult, escalated: true };
@@ -117,13 +121,13 @@ function makeValidationError(
   skill: string,
   issues: unknown,
   rawOutput: unknown,
-  afterEscalation: boolean,
+  retriedAtTier: ModelTier | null,
 ): Error {
   const rawPreview =
     typeof rawOutput === 'string'
       ? rawOutput.slice(0, 800)
       : JSON.stringify(rawOutput).slice(0, 800);
-  const suffix = afterEscalation ? ' after sonnet escalation' : '';
+  const suffix = retriedAtTier != null ? ` after ${retriedAtTier} retry` : '';
   return new Error(
     `${skill} output validation failed${suffix}: ${JSON.stringify(issues)}\nRaw output (first 800 chars): ${rawPreview}`,
   );

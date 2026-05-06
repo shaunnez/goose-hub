@@ -67,7 +67,8 @@ Constraints:
 
 - Holdout roles (`qa`, `reviewer`) never escalate — they throw `HoldoutFallbackForbiddenError` instead.
 - Subprocess failures (timeout, process death) are not handled here; those go to `withFallback`. This wrapper only handles validation failure on a successful run.
-- One retry maximum — haiku → sonnet, not a loop.
+- One retry maximum — haiku → sonnet (or same-tier, e.g. opus → opus, when there is no higher tier), not a loop.
+- Strict downgrade (e.g. opus → sonnet) is rejected; same-tier retry is allowed so a top-tier skill can still get one extra shot at producing valid output.
 - The retry uses a recalculated budget (sonnet ~10× per-token cost vs haiku) and a new `runId` for separate cost attribution.
 
 Currently only `implement` opts in (`escalation: { modelTier: 'sonnet', maxBudgetUsd: 15.0 }`). Triage / repo-match / evidence-post deliberately do not — the per-run savings on those skills don't justify the extra complexity, and a hard fail is acceptable.
