@@ -56,7 +56,7 @@ Read `prDiff` in full. Understand:
 1. What files were added, modified, or deleted
 2. What new exports, functions, schemas, or types were introduced
 3. What existing code was changed and how
-4. Whether any `README.md`, `slice.test.ts`, or `skill.md` files are present (required for new slices)
+4. Whether any `README.md`, `slice.test.ts`, or `prompt.md` files are present (required for new slices)
 
 Emit:
 
@@ -101,9 +101,9 @@ For each problem you identify — whether or not it maps to a specific criterion
 
 Use `blocker` when:
 - An acceptance criterion is `unmet`
-- A required file is missing (e.g., `slice.test.ts`, `README.md` for a new slice, `skill.md` for a new skill)
+- A required file is missing (e.g., `slice.test.ts`, `README.md` for a new slice, `prompt.md` for a new skill)
 - A cross-slice import violation is present (slices must not import from other slices)
-- An inline prompt is found in TypeScript code (prompts must live in `skill.md` files)
+- An inline prompt is found in TypeScript code (prompts must live in `prompt.md` files)
 - An ESM import is missing the `.js` extension in TypeScript source
 - A Zod schema output does not match the specified structure in the issue
 
@@ -213,7 +213,7 @@ Standard kinds for Review:
 
 Examples of good Review decision summaries:
 - `[decision] READ: Issue #240 — found 6 acceptance criteria to verify`
-- `[decision] DIFF_READ: 5 files changed — new skills/review/ directory with schema, config, tests, skill.md, README`
+- `[decision] DIFF_READ: 5 files changed — new skills/review/ directory with schema, config, tests, prompt.md, README`
 - `[decision] CRITERIA_CHECK: 5 met, 1 unmet, 0 unclear`
 - `[decision] INSIGHT: 1 blocker finding — README.md missing required escalation policy section`
 - `[decision] VERDICT: needs-fix, confidence 0.85 — README gap is clear and fixable`
@@ -247,7 +247,7 @@ For `approved` or `needs-fix`:
   "decisionSummaries": [
     { "kind": "READ", "summary": "Read issue #240: found 5 acceptance criteria" },
     { "kind": "DIFF_READ", "summary": "Read PR diff: 5 files changed in skills/review/" },
-    { "kind": "CRITERIA_CHECK", "summary": "All 5 criteria met: schema, config, tests, skill.md, README present" },
+    { "kind": "CRITERIA_CHECK", "summary": "All 5 criteria met: schema, config, tests, prompt.md, README present" },
     { "kind": "VERDICT", "summary": "Verdict: approved, confidence 0.92 — all criteria met, no blockers" }
   ]
 }

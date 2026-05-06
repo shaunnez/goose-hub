@@ -56,7 +56,7 @@ dev-ready → in-progress → needs-qa → needs-review → approved → (human 
 
 ### Skills (`@goose-hub/skills`)
 
-Versioned markdown prompts + Zod schemas under `skills/<name>/`. Current set: `triage`, `repo-match`, `investigate`, `playwright-repro`, `spec-author`, `evidence-post`, `implement`, `advise-on-plan`, `qa`, `review`, `retrospective-light`, `retrospective-deep`. Each ships with `slice.test.ts`, `eval/eval.json`, and `README.md`. Skills follow the channel-split convention from CONTEXT.md: `skill.md` is the system prompt, per-run context is rendered as XML in the user message.
+Versioned markdown prompts + Zod schemas under `skills/<name>/`. Current set: `triage`, `repo-match`, `investigate`, `playwright-repro`, `spec-author`, `evidence-post`, `implement`, `advise-on-plan`, `qa`, `review`, `retrospective-light`, `retrospective-deep`, `resolve-conflict`, `bug-enhance`, `echo-test`, `echo-test-holdout`. Each ships with `slice.test.ts`, `eval/eval.json` (where applicable), and `README.md`. Skills follow the channel-split convention from CONTEXT.md: `prompt.md` is the system prompt, per-run context is rendered as XML in the user message. All prompts are loaded via `readPromptWithContext()` (ADR 0022) which also appends an optional per-project overlay from `target-projects/<slug>/agent-context/<skillName>.md`.
 
 ### Holdouts (M8)
 
@@ -65,7 +65,7 @@ QA and Review are **holdouts**: each runs in a fresh agent context with no acces
 ### Standards & ADRs
 
 - `docs/standards/verification.md` — the three-tier (Structural / Functional / Regression) verification framework + 8-category code-quality rubric (≥ 70/100 threshold). Ships ahead of the M8 QA holdout.
-- `docs/adr/` — architectural decisions in chronological order. M7 added ADR 0011 (Playwright agents), 0012 (advisor wrapping + per-step typed timeouts), 0013 (GitHub connectors + fix-issue workflow shape). M8 added ADR 0014 (holdout enforcement architecture). M9 added ADR 0015 (target-projects workspace package), ADR 0016 (cost module architecture), ADR 0017 (core/workflows placement for cross-caller workflows), ADR 0018 (decision-kind taxonomy), ADR 0019 (retrospective output schema), ADR 0020 (centralized skill budgets). M10 added ADR 0021 (multi-project loader and per-project scheduler in core/projects/) — originally filed as 0018, renumbered to resolve the collision.
+- `docs/adr/` — architectural decisions in chronological order. M7 added ADR 0011 (Playwright agents), 0012 (advisor wrapping + per-step typed timeouts), 0013 (GitHub connectors + fix-issue workflow shape). M8 added ADR 0014 (holdout enforcement architecture). M9 added ADR 0015 (target-projects workspace package), ADR 0016 (cost module architecture), ADR 0017 (core/workflows placement for cross-caller workflows), ADR 0018 (decision-kind taxonomy), ADR 0019 (retrospective output schema), ADR 0020 (centralized skill budgets). M10 added ADR 0021 (multi-project loader and per-project scheduler in core/projects/) — originally filed as 0018, renumbered to resolve the collision. M11 added ADR 0022 (skill file convention consolidation onto `prompt.md` + `skill.config.ts` + `readPromptWithContext`).
 
 ### Retrospective & Learning Loop (M9)
 

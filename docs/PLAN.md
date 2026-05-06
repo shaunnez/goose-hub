@@ -210,8 +210,8 @@ goose-hub/
 ├── skills/                              # composable skill packages (M5+, @goose-hub/skills workspace pkg)
 │   ├── package.json                     # exports: { "./*": "./*" }
 │   ├── triage/
-│   │   ├── config.ts                    # SkillConfig (toolBundles, modelPin, freshContext, role, contextSchema)
-│   │   ├── skill.md                     # versioned system prompt; ends with [decision] footer
+│   │   ├── skill.config.ts              # SkillConfig (toolBundles, modelPin, freshContext, role, contextSchema)
+│   │   ├── prompt.md                    # versioned system prompt; ends with [decision] footer
 │   │   ├── schema.ts                    # Zod output schema
 │   │   ├── slice.test.ts                # always required
 │   │   ├── eval/eval.json               # at least one eval case

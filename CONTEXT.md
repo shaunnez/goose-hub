@@ -427,6 +427,10 @@ Both `target-projects/` and `skills/` are pnpm workspace packages (`@goose-hub/t
 
 **Per-project active milestone:** each `ProjectConfig` declares its own `activeMilestone`; the Kanban filters per-project; the All Projects view aggregates across them.
 
+## Skill File Convention (ADR 0022)
+
+Every skill in `skills/<name>/` uses `prompt.md` (Markdown instructions) and `skill.config.ts` (SkillConfig with role, contextSchema, toolBundles, modelTier, budgets). All prompt loading routes through `readPromptWithContext(skillName, projectSlug)` in `core/agent-runtime/read-prompt.ts`, which appends `target-projects/<slug>/agent-context/<skillName>.md` if the overlay file exists. Per-project overlays are now available to every skill, not just orchestrator-side ones. The CLI's `run-agent` command takes an optional `--project=<slug>` flag for the same overlay path. Resolved at M11.
+
 ## Flagged ambiguities
 
 - **Decision-summary two-stream split**: resolved. Canonical record lives in schema field; live markers from `[decision]` footer in `prompt.md`. Tool-call audit is a third, separate stream. All three distinct concerns at distinct cadences.
