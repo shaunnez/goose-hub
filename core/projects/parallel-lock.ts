@@ -7,7 +7,7 @@
  *
  * This relaxes FACTORY_RULES rule 4 ("one workflow per project at a time") to
  * "up to maxParallelAgents workflows per project, on distinct issues."
- * See ADR 0001 (M11.09) for the decision record.
+ * See ADR 0023 (M11.09) for the decision record.
  */
 export class ProjectParallelLock {
   private readonly _bySlug = new Map<string, Set<number>>();
