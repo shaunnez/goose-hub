@@ -308,6 +308,84 @@ describe('runCrossRunRetroWorkflow', () => {
     if (!result.ok) expect(result.error).toContain('timeout');
   });
 
+  it('does not dispatch coach when coachPolicy.enabled is false', async () => {
+    const mockCoachRunner = vi.fn();
+    mockFetchLifecyclesInWindow.mockReturnValue([
+      {
+        id: 1,
+        projectId: 'p',
+        workItemId: 'w1',
+        closedAt: '2026-04-10T00:00:00Z',
+        decisionSummaries: '[]',
+        learningEntries: '[]',
+        qualityScores: '[]',
+        costsUsd: 0,
+        runIds: '[]',
+      },
+      {
+        id: 2,
+        projectId: 'p',
+        workItemId: 'w2',
+        closedAt: '2026-04-11T00:00:00Z',
+        decisionSummaries: '[]',
+        learningEntries: '[]',
+        qualityScores: '[]',
+        costsUsd: 0,
+        runIds: '[]',
+      },
+      {
+        id: 3,
+        projectId: 'p',
+        workItemId: 'w3',
+        closedAt: '2026-04-12T00:00:00Z',
+        decisionSummaries: '[]',
+        learningEntries: '[]',
+        qualityScores: '[]',
+        costsUsd: 0,
+        runIds: '[]',
+      },
+    ]);
+    mockComputeGateThresholds.mockReturnValue([]);
+    mockComputeCostBaselines.mockReturnValue([]);
+    mockDb.all = vi.fn().mockReturnValue([{ id: 77 }]);
+    mockGetProjectBySlug.mockResolvedValueOnce({
+      budgets: {},
+      agentConfig: {
+        coachPolicy: { enabled: false, consistencyThreshold: 0.8, minLifecycles: 1 },
+      },
+    });
+    mockRun.mockResolvedValueOnce(
+      makeManifestOutput({
+        topPatterns: [
+          {
+            patternId: 'PLAN::developer',
+            pattern: 'x',
+            occurrenceCount: 3,
+            consistencyScore: 0.95,
+            exampleWorkItemIds: [],
+          },
+        ],
+        improvementCandidates: [
+          {
+            kind: 'skill-prompt',
+            targetPath: 'skills/implement/prompt.md',
+            suggestionText: 's',
+            evidence: 'pattern:x',
+            confidence: 'high',
+          },
+        ],
+      }),
+    );
+
+    await runCrossRunRetroWorkflow({
+      projectId: 'p',
+      dateRange: { startAt: '2026-04-01T00:00:00Z', endAt: '2026-05-01T00:00:00Z' },
+      deps: { coachWorkflowRunner: mockCoachRunner },
+    });
+
+    expect(mockCoachRunner).not.toHaveBeenCalled();
+  });
+
   it('passes precomputed gate thresholds + cost baselines into the skill context', async () => {
     mockFetchLifecyclesInWindow.mockReturnValue([]);
     mockComputeGateThresholds.mockReturnValue([

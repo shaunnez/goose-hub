@@ -41,3 +41,26 @@ await runRetrospectiveWorkflow({
   triggers: { qaFailed: true },
 });
 ```
+
+## cross-run-retro.ts
+
+Runs on demand (via `POST /api/projects/:slug/playbooks`). Fetches a window of archived lifecycles and mined patterns, dispatches the `retrospective-cross-run` skill, and persists the validated output as a `playbooks` row.
+
+### M11.14 auto-trigger
+
+After the playbook is persisted, `dispatchCoachCandidates` scans the manifest's `improvementCandidates` and fires `skill-coaching.ts` for each eligible entry. Eligibility requires all of:
+
+- `agentConfig.coachPolicy.enabled === true`
+- `lifecycleCount >= coachPolicy.minLifecycles` (default 3)
+- At least one `topPattern` with `consistencyScore >= coachPolicy.consistencyThreshold` (default 0.8)
+- `candidate.kind ∈ {skill-prompt, skill-schema, skill-config}`
+- `targetPath` parseable to a valid skill name (`skills/<name>/...`)
+- Skill name not in the forbidden-target list
+
+Forbidden targets emit `coach.skipped-forbidden-target`; dispatches emit `coach.dispatch-triggered`; errors emit `coach.dispatch-failed`. Output is always a candidate — never auto-applied.
+
+## skill-coaching.ts
+
+Reads a target skill's source files (`prompt.md`, `schema.ts`) and cross-run evidence, dispatches the `skill-coach` agent, and persists the output as an `improvement_candidates` row with `proposedDiff` and optional `sourcePlaybookId`.
+
+Forbidden targets (`qa`, `review`, `retrospective-*`, `skill-coach`) are rejected before dispatch.
