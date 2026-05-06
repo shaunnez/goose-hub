@@ -1,6 +1,6 @@
 import { DecisionSummarySchema } from '@goose-hub/core/retrospective/schemas.js';
-import { QualityScoresSchema, computeOverallScore } from '../qa/schema.js';
 import { z } from 'zod';
+import { QualityScoresSchema, computeOverallScore } from '../qa/schema.js';
 
 export { computeOverallScore };
 

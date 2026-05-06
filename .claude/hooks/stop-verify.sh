@@ -17,11 +17,16 @@ fi
 
 ERRORS=""
 
-# Full biome check
-LINT=$(pnpm run lint 2>&1)
-if [ $? -ne 0 ]; then
-  LINT_TRIMMED=$(echo "$LINT" | grep -E "error|Error" | head -10)
-  ERRORS="${ERRORS}LINT FAILED:\n$LINT_TRIMMED\n\n"
+# Biome check scoped to files changed this session only.
+# Full-workspace lint causes multi-agent conflicts: agent B's stop-verify fires,
+# picks up agent A's in-progress errors, then tries to fix files it didn't touch.
+CHANGED_TS_FILES=$(echo "$CHANGES" | grep -E '\.(ts|tsx|js|jsx|json)$' | sort -u)
+if [ -n "$CHANGED_TS_FILES" ]; then
+  LINT=$(echo "$CHANGED_TS_FILES" | xargs pnpm biome check 2>&1)
+  if [ $? -ne 0 ]; then
+    LINT_TRIMMED=$(echo "$LINT" | grep -E "error|Error" | head -10)
+    ERRORS="${ERRORS}LINT FAILED:\n$LINT_TRIMMED\n\n"
+  fi
 fi
 
 # Full typecheck

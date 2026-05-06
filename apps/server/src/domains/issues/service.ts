@@ -21,7 +21,7 @@ export async function listIssues(
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
   const milestoneNumber = opts?.all
     ? undefined
-    : (await resolveActiveMilestone(slug)).milestoneNumber ?? undefined;
+    : ((await resolveActiveMilestone(slug)).milestoneNumber ?? undefined);
   const items = await source.listOpenWork(milestoneNumber);
   const lastPersonaMap = getLastPersonaIdsByWorkItem(slug);
   const enriched = items.map((item) => ({

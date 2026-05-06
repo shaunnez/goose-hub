@@ -13,7 +13,6 @@ interface OverviewSectionProps {
   projectSlug?: string;
 }
 
-
 function StatCard({
   label,
   value,

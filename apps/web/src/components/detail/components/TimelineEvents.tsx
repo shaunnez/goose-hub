@@ -786,9 +786,7 @@ function RetroCompletedEvent({ event }: { event: AgentEventDto }) {
         <span
           className={cn(
             'text-[10px] font-medium uppercase px-1.5 py-0.5 rounded-full',
-            tier === 'deep'
-              ? 'bg-purple-500/15 text-purple-400'
-              : 'bg-blue-500/15 text-blue-400',
+            tier === 'deep' ? 'bg-purple-500/15 text-purple-400' : 'bg-blue-500/15 text-blue-400',
           )}
         >
           {tier}
@@ -796,9 +794,7 @@ function RetroCompletedEvent({ event }: { event: AgentEventDto }) {
         <span
           className={cn(
             'text-[10px] font-medium uppercase px-1.5 py-0.5 rounded-full',
-            isSuccess
-              ? 'bg-green-500/15 text-green-400'
-              : 'bg-red-500/15 text-red-400',
+            isSuccess ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400',
           )}
         >
           {outcome}
@@ -806,7 +802,9 @@ function RetroCompletedEvent({ event }: { event: AgentEventDto }) {
         {candidateCount > 0 && (
           <>
             <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
-            <span className="text-fg-4">{candidateCount} candidate{candidateCount !== 1 ? 's' : ''}</span>
+            <span className="text-fg-4">
+              {candidateCount} candidate{candidateCount !== 1 ? 's' : ''}
+            </span>
           </>
         )}
         <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
@@ -814,8 +812,8 @@ function RetroCompletedEvent({ event }: { event: AgentEventDto }) {
       </div>
       {summaryItems.length > 0 && (
         <ul className="space-y-1 mt-1">
-          {summaryItems.map((item, i) => (
-            <li key={i} className="flex gap-2 text-[11.5px] text-fg-2 leading-snug">
+          {summaryItems.map((item) => (
+            <li key={item} className="flex gap-2 text-[11.5px] text-fg-2 leading-snug">
               <span className="shrink-0 text-fg-5 mt-0.5">–</span>
               <span>{item.replace(/\*\*(.+?)\*\*/g, '$1')}</span>
             </li>
@@ -1223,9 +1221,7 @@ function RunGroupWrapper({
   const isStalled = isLive && lastMs != null && now - lastMs > STALL_MS;
   const liveDuration = startMs != null ? formatDuration(now - startMs) : null;
   const completeDuration =
-    startMs != null && endMs != null
-      ? formatDuration((lastMs ?? endMs) - startMs)
-      : null;
+    startMs != null && endMs != null ? formatDuration((lastMs ?? endMs) - startMs) : null;
   const isFailed = items.some(
     (item) => item.kind === 'event' && item.event.kind === 'agent.run-failed',
   );
@@ -1288,7 +1284,9 @@ function RunGroupWrapper({
       <span className="text-fg-5 text-[10.5px]">
         {completeDuration != null && <>Ran for {completeDuration}</>}
         {startedAt != null && <> &middot; Started {new Date(startedAt).toLocaleTimeString()}</>}
-        {endedAt != null && <> &middot; Ended {new Date(lastEventAt ?? endedAt).toLocaleTimeString()}</>}
+        {endedAt != null && (
+          <> &middot; Ended {new Date(lastEventAt ?? endedAt).toLocaleTimeString()}</>
+        )}
       </span>
     );
 
