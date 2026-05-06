@@ -287,6 +287,40 @@ export class GitHubLabelsSource implements StateSource {
     return mapGithubMilestone(milestones[0]);
   }
 
+  // Atomically replace the issue's factory:* state label. GET current labels,
+  // drop any factory:* labels matching `removeFactoryLabels` ('all' or a single
+  // state name), then PUT the resulting set in one request. PUT replaces the
+  // full label set on GitHub atomically — no DELETE→POST window where the
+  // conflict-resolver could observe zero state labels and default to triaging.
+  private async replaceFactoryStateAtomic(
+    number: string,
+    to: StateName,
+    removeFactoryLabels: 'all' | StateName,
+  ): Promise<void> {
+    const labelsUrl = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels`;
+    const labelsRes = await this.ghFetch(labelsUrl);
+    const currentLabels = (await labelsRes.json()) as { name: string }[];
+
+    const kept = currentLabels
+      .map((l) => l.name)
+      .filter((name) => {
+        if (removeFactoryLabels === 'all') {
+          return !name.startsWith('factory:');
+        }
+        return name !== removeFactoryLabels;
+      });
+    const next = Array.from(new Set([...kept, to]));
+
+    const putRes = await fetch(labelsUrl, {
+      method: 'PUT',
+      headers: { ...this.baseHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ labels: next }),
+    });
+    if (!putRes.ok) {
+      throw new Error(`Failed to set label ${to}: ${putRes.status} ${putRes.statusText}`);
+    }
+  }
+
   async transitionState(
     itemId: string,
     from: StateName,
@@ -298,26 +332,7 @@ export class GitHubLabelsSource implements StateSource {
     }
     const number = parseIssueNumber(itemId);
 
-    // Remove the old state label, then add the new one. Do removal first so
-    // the conflict-resolver never sees both labels at once.
-    const removeUrl = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels/${encodeURIComponent(from)}`;
-    const removeRes = await fetch(removeUrl, { method: 'DELETE', headers: this.baseHeaders });
-    // 404 is acceptable — label may already be off (idempotent).
-    if (!removeRes.ok && removeRes.status !== 404) {
-      throw new Error(
-        `Failed to remove label ${from}: ${removeRes.status} ${removeRes.statusText}`,
-      );
-    }
-
-    const addUrl = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels`;
-    const addRes = await fetch(addUrl, {
-      method: 'POST',
-      headers: { ...this.baseHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ labels: [to] }),
-    });
-    if (!addRes.ok) {
-      throw new Error(`Failed to add label ${to}: ${addRes.status} ${addRes.statusText}`);
-    }
+    await this.replaceFactoryStateAtomic(number, to, from);
 
     if (note != null && note.length > 0) {
       await this.comment(itemId, note);
@@ -326,29 +341,7 @@ export class GitHubLabelsSource implements StateSource {
 
   async forceState(itemId: string, to: StateName): Promise<void> {
     const number = parseIssueNumber(itemId);
-
-    const labelsUrl = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels`;
-    const labelsRes = await this.ghFetch(labelsUrl);
-    const currentLabels = (await labelsRes.json()) as { name: string }[];
-
-    for (const label of currentLabels) {
-      if (!label.name.startsWith('factory:')) continue;
-      const removeUrl = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels/${encodeURIComponent(label.name)}`;
-      const res = await fetch(removeUrl, { method: 'DELETE', headers: this.baseHeaders });
-      if (!res.ok && res.status !== 404) {
-        throw new Error(`Failed to remove label ${label.name}: ${res.status} ${res.statusText}`);
-      }
-    }
-
-    const addUrl = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels`;
-    const addRes = await fetch(addUrl, {
-      method: 'POST',
-      headers: { ...this.baseHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ labels: [to] }),
-    });
-    if (!addRes.ok) {
-      throw new Error(`Failed to add label ${to}: ${addRes.status} ${addRes.statusText}`);
-    }
+    await this.replaceFactoryStateAtomic(number, to, 'all');
   }
 
   async listComments(itemId: string): Promise<IssueComment[]> {
