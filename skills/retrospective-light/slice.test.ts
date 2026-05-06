@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
-import config from './config.js';
 import { LightRetroSchema } from './schema.js';
+import config from './skill.config.js';
 
 const baseValid = {
   outcome: 'success' as const,
@@ -14,7 +14,7 @@ const baseValid = {
   improvementCandidates: [
     {
       kind: 'skill-prompt' as const,
-      targetPath: 'skills/implement/skill.md',
+      targetPath: 'skills/implement/prompt.md',
       suggestionText: 'Add explicit reminder to check slice.test.ts exists before writing code',
       confidence: 'high' as const,
     },

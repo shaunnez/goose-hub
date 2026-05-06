@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
-import config, { EvidencePostContextSchema } from './config.js';
 import { EvidencePostSchema } from './schema.js';
+import config, { EvidencePostContextSchema } from './skill.config.js';
 
 describe('evidence-post schema', () => {
   it('accepts a fully-populated valid output', () => {

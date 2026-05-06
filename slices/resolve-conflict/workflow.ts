@@ -6,6 +6,7 @@ import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
+import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import {
@@ -15,15 +16,10 @@ import {
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
-import config from '@goose-hub/skills/resolve-conflict/config.js';
 import { ResolveConflictSchema } from '@goose-hub/skills/resolve-conflict/schema.js';
+import config from '@goose-hub/skills/resolve-conflict/skill.config.js';
 
 const WORKSPACES_DIR = join(homedir(), '.factory', 'workspaces');
-const REPO_ROOT = join(import.meta.dirname, '../..');
-
-function readPrompt(skillName: string): string {
-  return readFileSync(join(REPO_ROOT, 'skills', skillName, 'skill.md'), 'utf8');
-}
 
 const CONFLICT_MARKER_RE = /^(<{7}|={7}|>{7})/m;
 
@@ -135,7 +131,7 @@ export async function runResolveConflictWorkflow(
           ...resolveBudgets('resolve-conflict', projectConfig?.budgets),
           personaId,
           outputJsonSchema: toJsonSchema(ResolveConflictSchema),
-          appendSystemPrompt: readPrompt('resolve-conflict'),
+          appendSystemPrompt: readPromptWithContext('resolve-conflict', slug),
           workspaceDir: wtPath,
         });
 

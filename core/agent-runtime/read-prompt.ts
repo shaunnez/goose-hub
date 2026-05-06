@@ -6,7 +6,7 @@ const DEFAULT_REPO_ROOT = join(import.meta.dirname, '../..');
 /**
  * Reads a skill's base prompt and optionally appends project-specific context.
  *
- * Looks for base prompt at: skills/<skillName>/skill.md
+ * Looks for base prompt at: skills/<skillName>/prompt.md
  * Looks for project context at: target-projects/<projectSlug>/agent-context/<skillName>.md
  *
  * The optional repoRoot parameter exists for testing — production callers omit it.
@@ -16,7 +16,7 @@ export function readPromptWithContext(
   projectSlug: string,
   repoRoot: string = DEFAULT_REPO_ROOT,
 ): string {
-  const basePrompt = readFileSync(join(repoRoot, 'skills', skillName, 'skill.md'), 'utf8');
+  const basePrompt = readFileSync(join(repoRoot, 'skills', skillName, 'prompt.md'), 'utf8');
   const contextPath = join(
     repoRoot,
     'target-projects',

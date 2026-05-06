@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
-import config, { PlaywrightReproContextSchema } from './config.js';
 import { PlaywrightReproSchema } from './schema.js';
+import config, { PlaywrightReproContextSchema } from './skill.config.js';
 
 describe('playwright-repro schema', () => {
   it('accepts valid output with bug reproduced', () => {

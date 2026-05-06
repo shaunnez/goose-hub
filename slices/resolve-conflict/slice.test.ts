@@ -275,11 +275,11 @@ describe('runResolveConflictWorkflow', () => {
       .mockReturnValueOnce('');
 
     // Skill claims resolved, but the file in the worktree still has markers.
-    // The prompt read (skills/resolve-conflict/skill.md) returns clean content;
+    // The prompt read (skills/resolve-conflict/prompt.md) returns clean content;
     // the worktree file read returns the unresolved markers.
     mockReadFileSync.mockImplementation((path: unknown) => {
       const p = String(path);
-      if (p.endsWith('skill.md')) return '# mock prompt';
+      if (p.endsWith('prompt.md')) return '# mock prompt';
       return '<<<<<<< HEAD\nleft\n=======\nright\n>>>>>>> main\n';
     });
     mockClaudeCliRun.mockResolvedValueOnce(SUCCESS_AGENT_OUTPUT);

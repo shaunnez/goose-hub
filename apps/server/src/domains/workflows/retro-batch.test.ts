@@ -124,7 +124,7 @@ function makeDeepRetroOutput() {
     improvementCandidates: [
       {
         kind: 'persona',
-        targetPath: 'skills/qa/skill.md',
+        targetPath: 'skills/qa/prompt.md',
         suggestionText: 'Add empty-input check to QA prompt',
         confidence: 'medium',
       },

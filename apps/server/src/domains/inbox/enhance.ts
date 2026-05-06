@@ -1,18 +1,12 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
+import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { logger } from '@goose-hub/core/logger.js';
-import { skillsRoot } from '@goose-hub/skills';
 import { BugEnhanceOutputSchema } from '@goose-hub/skills/bug-enhance/schema.js';
 
 const jsonSchema = toJsonSchema(BugEnhanceOutputSchema);
-
-function readPrompt(): string {
-  return readFileSync(join(skillsRoot, 'bug-enhance', 'prompt.md'), 'utf8');
-}
 
 /**
  * Runs the bug-enhance agent on a UI/web bug report.
@@ -34,7 +28,7 @@ export async function runBugEnhance(
 
   let prompt: string;
   try {
-    prompt = readPrompt();
+    prompt = readPromptWithContext('bug-enhance', projectId);
   } catch (err) {
     logger.error('bug-enhance: failed to read prompt', { err: String(err) });
     return null;
