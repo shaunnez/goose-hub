@@ -53,7 +53,7 @@ export function useHasOpenDep(item: WorkItemDto | undefined, projectSlug: string
           if (target === 'unregistered') return null;
           return fetchIssue(target.slug, target.id);
         },
-        enabled: target !== 'unregistered' && projects.length > 0,
+        enabled: target !== 'unregistered',
       };
     }),
   });

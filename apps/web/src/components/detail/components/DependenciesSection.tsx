@@ -52,7 +52,7 @@ export function DependenciesSection({ item, projectSlug }: DependenciesSectionPr
           if (target === 'unregistered') return null;
           return fetchIssue(target.slug, target.id);
         },
-        enabled: target !== 'unregistered' && projects.length > 0,
+        enabled: target !== 'unregistered',
       };
     }),
   });
