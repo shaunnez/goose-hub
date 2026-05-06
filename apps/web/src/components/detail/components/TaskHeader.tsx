@@ -1,6 +1,8 @@
 import { fetchMilestones, setLabel, setMilestone } from '@/lib/api';
 import { PRIORITY_BG, PRIORITY_BORDER, PRIORITY_COLOR, STATE_LABEL } from '@/lib/constants';
+import { laneForState } from '@/lib/lanes.config';
 import type { MilestoneDto, WorkItemDto } from '@/lib/types';
+import { getPersonaLabel, usePersonaMap } from '@/lib/usePersonaMap';
 import { formatCost, formatTokens } from '@/lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -25,7 +27,11 @@ export function TaskHeader({ item, projectSlug }: TaskHeaderProps) {
     enabled: item != null,
   });
 
+  const personaMap = usePersonaMap();
   const costs = useIssueCostsBreakdown(projectSlug, item?.externalId ?? '');
+
+  const lane = item?.state ? (laneForState(item.state) ?? item.state.replace('factory:', '')) : '—';
+  const lastPersonaLabel = getPersonaLabel(personaMap, item?.lastPersonaId) ?? '—';
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['issue', projectSlug, item?.externalId] });
@@ -82,15 +88,13 @@ export function TaskHeader({ item, projectSlug }: TaskHeaderProps) {
   return (
     <div data-testid="task-header" className="px-6 py-4 border-b border-line bg-bg-elev shrink-0">
       <div className="flex items-start gap-4">
-        <div className="flex items-center grow min-w-0 gap-4">
-          {/* <div className="flex items-center gap-2 mb-1.5 text-[11px] text-fg-3">
-            <span className="font-mono uppercase tracking-wider">#{item?.externalId}</span>
-            <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
-            <span className="font-mono">{item?.repoRef}</span>
-          </div> */}
+        <div className="flex flex-col grow min-w-0">
           <h1 className="text-[22px] font-semibold tracking-tight leading-tight text-fg">
             {item?.title}
           </h1>
+          <div className="text-[12.5px] text-fg-3 mt-1">
+            {lane} · {lastPersonaLabel}
+          </div>
         </div>
       </div>
       <div className="flex items-center gap-3 mt-3 text-[11.5px] text-fg-3 flex-wrap">

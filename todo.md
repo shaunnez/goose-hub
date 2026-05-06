@@ -1,14 +1,11 @@
-# Unknown
-0. When a task gets blocked... i need some way of fixing it. Need to consider how i can send it back to the dev/qa/triage... Assuming i should be able to do this in the "transition" drop down. Ideally the banner shown "Human intervention reuqired" has a link or guidance... Lets plan it
-0a. QA and Investigation section "rerun and other buttons"
-1. Remove fake triage
-
 # Todo
 Invoke web standards [retrospectivesection, reviewsection, timelineevents] -- way to big. Interface should be in logical place (lib) and shared. 
 Too many components and lines of code inside each of them, things could be split out into seperate files. 
 Tests - whats level are we at seems low?
 Loading ... should always be something inside timeline "agent run" window indicating it's loading. This is seen on code.
-Timeline needs header like other pages. Put expand / collapse next to it.
+General loading - details page all have "no content" part, but should have a consistent "loading" page as well.
+Remove fake triage
+
 
 # Retrospective  
 

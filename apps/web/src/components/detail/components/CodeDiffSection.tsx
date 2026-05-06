@@ -1,5 +1,6 @@
 import { fetchEvents, fetchIssueDiff } from '@/lib/api';
 import type { AgentEventDto, IssueDiffDto } from '@/lib/types';
+import { getPersonaLabel, usePersonaMap } from '@/lib/usePersonaMap';
 import { useQuery } from '@tanstack/react-query';
 import { ExternalLink, FileCode } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -33,8 +34,18 @@ export function CodeDiffSection({ projectSlug, id }: CodeDiffSectionProps) {
     staleTime: 10_000,
   });
 
-  const { byStage } = useIssueCostsBreakdown(projectSlug, id);
+  const personaMap = usePersonaMap();
+  const costs = useIssueCostsBreakdown(projectSlug, id);
+  const { byStage, byRun } = costs;
   const devCost = byStage.get('dev');
+
+  const devPersonaId = useMemo(() => {
+    for (const row of byRun.values()) {
+      if (row.stage === 'dev' && row.personaId) return row.personaId;
+    }
+    return null;
+  }, [byRun]);
+  const devPersonaLabel = getPersonaLabel(personaMap, devPersonaId) ?? '—';
 
   const prOpenedEvent = events
     ?.slice()
@@ -98,13 +109,22 @@ export function CodeDiffSection({ projectSlug, id }: CodeDiffSectionProps) {
 
   return (
     <div data-testid="code-diff-section" className="flex flex-col ">
-
       <div className="px-8 pt-6">
-        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">05. Code</div>
-        <h2 className="text-[17px] font-semibold text-fg leading-snug">
-          Code Diff and PR
-        </h2>
-
+        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">05 · Code</div>
+        <h2 className="text-[17px] font-semibold text-fg leading-snug">Patch in flight</h2>
+        <div className="flex items-center gap-2 text-[12.5px] text-fg-3 mt-1 flex-wrap">
+          <span>{devPersonaLabel}</span>
+          <span className="text-fg-5">·</span>
+          <span>{files.length} files</span>
+          <span className="text-fg-5">·</span>
+          <span className="font-mono" style={{ color: 'var(--success)' }}>
+            +{totalAdds}
+          </span>
+          <span className="text-fg-5">/</span>
+          <span className="font-mono" style={{ color: 'var(--danger)' }}>
+            −{totalDels}
+          </span>
+        </div>
       </div>
       {/* Header bar */}
       <div className="flex items-center justify-between border-b border-line px-8 pt-2">
@@ -145,7 +165,7 @@ export function CodeDiffSection({ projectSlug, id }: CodeDiffSectionProps) {
       <div
         data-testid="code-diff-panels"
         style={{ display: 'grid', gridTemplateColumns: '240px 1fr', minHeight: 400 }}
-        className='px-8'
+        className="px-8"
       >
         <CodeDiffFileList
           files={files}

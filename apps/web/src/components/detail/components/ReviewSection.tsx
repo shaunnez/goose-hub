@@ -136,6 +136,38 @@ export function ReviewSection({ projectSlug, id }: ReviewSectionProps) {
     );
   }
 
+  const qaEvent = events.find((e) => e.kind === 'qa.completed');
+  const qaPayload = qaEvent?.payload as
+    | {
+        tierResults?: {
+          structural?: { passed: boolean };
+          functional?: { passed: boolean };
+        };
+        testRun?: { failed: number };
+        criteriaResults?: { passed: boolean }[];
+      }
+    | undefined;
+
+  const pipeline: { label: string; passed: boolean | undefined }[] = [
+    { label: 'Lint clean', passed: qaPayload?.tierResults?.structural?.passed },
+    {
+      label: 'Tests passing',
+      passed:
+        qaPayload?.testRun != null
+          ? qaPayload.testRun.failed === 0
+          : qaPayload?.tierResults?.functional?.passed,
+    },
+    {
+      label: 'Acceptance criteria',
+      passed:
+        qaPayload?.criteriaResults != null && qaPayload.criteriaResults.length > 0
+          ? qaPayload.criteriaResults.every((r) => r.passed)
+          : undefined,
+    },
+    { label: 'PR opened', passed: prOpenedEvent != null },
+    { label: 'Review approved', passed: review.verdict === 'approved' },
+  ];
+
   const checks = review.criteriaChecks ?? [];
   const metCount = checks.filter((c) => c.status === 'met').length;
   const total = checks.length;
@@ -224,7 +256,50 @@ export function ReviewSection({ projectSlug, id }: ReviewSectionProps) {
         </div>
       )}
 
-      {/* Pre-merge checklist */}
+      {/* Pre-merge pipeline */}
+      <div>
+        <h3 className="text-[11px] font-medium text-fg-3 uppercase tracking-[0.14em] mb-2">
+          Pre-merge pipeline
+        </h3>
+        <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
+          {pipeline.map((p, i) => {
+            const passed = p.passed;
+            const unknown = passed === undefined;
+            return (
+              <div
+                key={p.label}
+                className={`flex items-center gap-3 px-4 py-3 ${i === 0 ? '' : 'border-t border-line'}`}
+              >
+                <span
+                  aria-hidden
+                  className={`grid place-items-center shrink-0 rounded-full ${
+                    passed === true
+                      ? 'bg-[color:var(--success)]'
+                      : unknown
+                        ? 'border-[1.5px] border-dashed border-line-2'
+                        : 'border-[1.5px] border-dashed border-yellow-500/60'
+                  }`}
+                  style={{ width: 22, height: 22 }}
+                >
+                  {passed === true && (
+                    <Check size={12} strokeWidth={2.4} className="text-[color:var(--bg)]" />
+                  )}
+                  {passed === false && (
+                    <XCircle size={12} className="text-red-400/70" strokeWidth={2} />
+                  )}
+                </span>
+                <span
+                  className={`text-[13px] ${passed === true ? 'text-fg' : unknown ? 'text-fg-3' : 'text-fg-2'}`}
+                >
+                  {p.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Criteria checklist */}
       {total > 0 ? (
         <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
           {checks.map((c, i) => (

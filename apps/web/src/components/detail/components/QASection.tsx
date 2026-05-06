@@ -2,6 +2,7 @@ import { fetchEvents } from '@/lib/api';
 import type { AgentEventDto } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, CheckCircle, Clock, XCircle } from 'lucide-react';
+import type React from 'react';
 import { useIssueCostsBreakdown } from '../lib/costs';
 import { TIERS, formatWallTime } from '../lib/qa';
 import type { CriteriaResult, QaPayload } from '../lib/qa';
@@ -164,19 +165,34 @@ export function QASection({ projectSlug, id }: QASectionProps) {
         />
       </div>
 
-      {/* Test suites — when real test-run data is present */}
-      {qa.testRun && qa.testRun.suites.length > 0 && (
-        <div data-testid="qa-test-suites">
+      {/* Verification tiers */}
+      <div>
+        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-2">
+          Verification Tiers
+        </div>
+        <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
+          {TIERS.map((tier, i) => (
+            <QaTierRow key={tier} tier={tier} result={qa.tierResults?.[tier]} isFirst={i === 0} />
+          ))}
+        </div>
+      </div>
+
+      {/* Findings */}
+      {allFindings.length > 0 && (
+        <div>
           <div className="flex items-baseline justify-between mb-2">
-            <div className="text-[10.5px] uppercase tracking-wider text-fg-2">Test suites</div>
+            <div className="text-[10.5px] uppercase tracking-wider text-fg-2">Findings</div>
             <div className="text-[11px] text-fg-2 mono tnum">
-              {qa.testRun.passed} passed · {qa.testRun.failed} failed · {qa.testRun.skipped} skipped
+              {errorCount} error{errorCount === 1 ? '' : 's'} · {warnCount} warning
+              {warnCount === 1 ? '' : 's'} · {infoCount} info
             </div>
           </div>
           <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
-            {qa.testRun.suites.map((s, i) => (
-              <QaTestSuiteRow key={s.filePath || s.name} suite={s} isFirst={i === 0} />
-            ))}
+            {TIERS.flatMap((tier) =>
+              (qa.tierResults?.[tier]?.findings ?? []).map((f, idx) => (
+                <QaFindingRow key={`${tier}:${idx}:${f.description}`} finding={f} tier={tier} />
+              )),
+            )}
           </div>
         </div>
       )}
@@ -242,37 +258,62 @@ export function QASection({ projectSlug, id }: QASectionProps) {
         </div>
       )}
 
-      {/* Verification tiers */}
-      <div>
-        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-2">
-          Verification Tiers
-        </div>
-        <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
-          {TIERS.map((tier, i) => (
-            <QaTierRow key={tier} tier={tier} result={qa.tierResults?.[tier]} isFirst={i === 0} />
-          ))}
-        </div>
-      </div>
-
-      {/* Findings */}
-      {allFindings.length > 0 && (
-        <div>
-          <div className="flex items-baseline justify-between mb-2">
-            <div className="text-[10.5px] uppercase tracking-wider text-fg-2">Findings</div>
-            <div className="text-[11px] text-fg-2 mono tnum">
-              {errorCount} error{errorCount === 1 ? '' : 's'} · {warnCount} warning
-              {warnCount === 1 ? '' : 's'} · {infoCount} info
+      {/* Test suites — when real test-run data is present */}
+      {qa.testRun &&
+        qa.testRun.suites.length > 0 &&
+        (() => {
+          const groups = new Map<string, typeof qa.testRun.suites>();
+          for (const s of qa.testRun.suites) {
+            const parts = s.filePath.split('/');
+            const key = parts.length > 1 ? parts.slice(0, -1).join('/') : 'root';
+            const existing = groups.get(key);
+            if (existing) existing.push(s);
+            else groups.set(key, [s]);
+          }
+          let globalIdx = 0;
+          return (
+            <div data-testid="qa-test-suites">
+              <div className="flex items-baseline justify-between mb-2">
+                <div className="text-[10.5px] uppercase tracking-wider text-fg-2">Test suites</div>
+                <div className="text-[11px] text-fg-2 mono tnum">
+                  {qa.testRun.passed} passed · {qa.testRun.failed} failed · {qa.testRun.skipped}{' '}
+                  skipped
+                </div>
+              </div>
+              <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
+                {Array.from(groups.entries()).flatMap(([group, suites]) => {
+                  const passCount = suites.filter((s) => s.status === 'passed').length;
+                  const rows: React.ReactNode[] = [];
+                  if (suites.length > 1) {
+                    rows.push(
+                      <div
+                        key={`group-${group}`}
+                        className={`px-4 py-2 bg-bg-elev-2 text-fg-3 text-[11px] uppercase tracking-wider flex items-center justify-between ${globalIdx === 0 ? '' : 'border-t border-line'}`}
+                      >
+                        <span>{group === 'root' ? '(root)/' : `${group}/`}</span>
+                        <span className="text-fg-2">
+                          {passCount}/{suites.length} passing
+                        </span>
+                      </div>,
+                    );
+                    globalIdx++;
+                  }
+                  for (const s of suites) {
+                    rows.push(
+                      <QaTestSuiteRow
+                        key={s.filePath || s.name}
+                        suite={s}
+                        isFirst={globalIdx === 0}
+                      />,
+                    );
+                    globalIdx++;
+                  }
+                  return rows;
+                })}
+              </div>
             </div>
-          </div>
-          <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
-            {TIERS.flatMap((tier) =>
-              (qa.tierResults?.[tier]?.findings ?? []).map((f, idx) => (
-                <QaFindingRow key={`${tier}:${idx}:${f.description}`} finding={f} tier={tier} />
-              )),
-            )}
-          </div>
-        </div>
-      )}
+          );
+        })()}
     </div>
   );
 }

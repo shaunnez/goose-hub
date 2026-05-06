@@ -114,7 +114,6 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
 
   return (
     <div data-testid="timeline-section" className="px-8 py-6">
-
       {/* Section header */}
       <div className=" gap-3 mb-3">
         <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">09. Timeline</div>
@@ -146,7 +145,6 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
         </div>
       </div>
 
-      
       <ol className="flex flex-col gap-3">
         {items.map((item: RenderItem, idx: number) => renderTimelineItem(item, idx, context))}
       </ol>
