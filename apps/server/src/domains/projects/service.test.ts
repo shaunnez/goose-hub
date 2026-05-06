@@ -1,12 +1,17 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../shared/projects.js', () => ({
   listProjects: vi.fn(),
   listProjectConfigs: vi.fn(),
 }));
 
+vi.mock('@goose-hub/core/workflows/skill-coaching.js');
+
+import { runSkillCoachingWorkflow } from '@goose-hub/core/workflows/skill-coaching.js';
 import { listProjectConfigs, listProjects } from '#shared/projects.js';
-import { listProjectConfigsService, listProjectsService } from './service.js';
+import { coachSkillService, listProjectConfigsService, listProjectsService } from './service.js';
+
+const mockRunSkillCoachingWorkflow = vi.mocked(runSkillCoachingWorkflow);
 
 describe('listProjectsService (#208)', () => {
   it('returns { projects } shape from the underlying loader', async () => {
@@ -72,5 +77,60 @@ describe('listProjectConfigsService (#280)', () => {
     vi.mocked(listProjectConfigs).mockResolvedValueOnce([] as never);
     const result = await listProjectConfigsService();
     expect(result).toEqual({ configs: [] });
+  });
+});
+
+describe('coachSkillService', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls runSkillCoachingWorkflow with projectId and params', async () => {
+    mockRunSkillCoachingWorkflow.mockResolvedValueOnce(undefined);
+
+    const result = await coachSkillService('test-proj', {
+      targetSkillName: 'investigate',
+      patternIds: ['p1', 'p2'],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(mockRunSkillCoachingWorkflow).toHaveBeenCalledWith({
+      projectId: 'test-proj',
+      targetSkillName: 'investigate',
+      patternIds: ['p1', 'p2'],
+      lifecycleIds: undefined,
+    });
+  });
+
+  it('passes lifecycleIds when provided', async () => {
+    mockRunSkillCoachingWorkflow.mockResolvedValueOnce(undefined);
+
+    const result = await coachSkillService('test-proj', {
+      targetSkillName: 'investigate',
+      patternIds: ['p1'],
+      lifecycleIds: ['l1', 'l2'],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(mockRunSkillCoachingWorkflow).toHaveBeenCalledWith({
+      projectId: 'test-proj',
+      targetSkillName: 'investigate',
+      patternIds: ['p1'],
+      lifecycleIds: ['l1', 'l2'],
+    });
+  });
+
+  it('returns error when workflow throws', async () => {
+    mockRunSkillCoachingWorkflow.mockRejectedValueOnce(new Error('Workflow failed'));
+
+    const result = await coachSkillService('test-proj', {
+      targetSkillName: 'investigate',
+      patternIds: ['p1'],
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('Workflow failed');
+    }
   });
 });

@@ -3,17 +3,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ─── module mocks ──────────────────────────────────────────────────────────────
 
-const { mockListProjectsService } = vi.hoisted(() => ({
+const { mockListProjectsService, mockCoachSkillService } = vi.hoisted(() => ({
   mockListProjectsService: vi.fn(),
+  mockCoachSkillService: vi.fn(),
 }));
 
 vi.mock('./service.js', () => ({
   listProjectsService: mockListProjectsService,
+  coachSkillService: mockCoachSkillService,
 }));
 
 import { projectsRouter } from './router.js';
 
-// ─── helpers ──────────────────────────────────────────────────────────────────
+// ─── helpers ─────────────────────────────────────────────────────────────────
 
 function makeApp() {
   return new Hono().route('/', projectsRouter);
@@ -59,5 +61,85 @@ describe('GET /projects', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { projects: unknown[] };
     expect(body.projects).toEqual([]);
+  });
+});
+
+describe('POST /projects/:slug/coach', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('accepts valid targetSkillName and patternIds', async () => {
+    mockCoachSkillService.mockResolvedValue({ ok: true });
+
+    const app = makeApp();
+    const res = await app.request('/projects/test-project/coach', {
+      method: 'POST',
+      body: JSON.stringify({
+        targetSkillName: 'investigate',
+        patternIds: ['p1', 'p2'],
+      }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(res.status).toBe(200);
+    expect(mockCoachSkillService).toHaveBeenCalledWith('test-project', {
+      targetSkillName: 'investigate',
+      patternIds: ['p1', 'p2'],
+      lifecycleIds: undefined,
+    });
+  });
+
+  it('accepts optional lifecycleIds', async () => {
+    mockCoachSkillService.mockResolvedValue({ ok: true });
+
+    const app = makeApp();
+    const res = await app.request('/projects/test-project/coach', {
+      method: 'POST',
+      body: JSON.stringify({
+        targetSkillName: 'investigate',
+        patternIds: ['p1'],
+        lifecycleIds: ['l1', 'l2'],
+      }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(res.status).toBe(200);
+    expect(mockCoachSkillService).toHaveBeenCalledWith('test-project', {
+      targetSkillName: 'investigate',
+      patternIds: ['p1'],
+      lifecycleIds: ['l1', 'l2'],
+    });
+  });
+
+  it('returns 400 when targetSkillName is missing', async () => {
+    const app = makeApp();
+    const res = await app.request('/projects/test-project/coach', {
+      method: 'POST',
+      body: JSON.stringify({ patternIds: ['p1'] }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when patternIds is missing', async () => {
+    const app = makeApp();
+    const res = await app.request('/projects/test-project/coach', {
+      method: 'POST',
+      body: JSON.stringify({ targetSkillName: 'investigate' }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when patternIds is not an array', async () => {
+    const app = makeApp();
+    const res = await app.request('/projects/test-project/coach', {
+      method: 'POST',
+      body: JSON.stringify({
+        targetSkillName: 'investigate',
+        patternIds: 'p1',
+      }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(res.status).toBe(400);
   });
 });

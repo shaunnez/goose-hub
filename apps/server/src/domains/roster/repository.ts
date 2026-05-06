@@ -24,6 +24,7 @@ export interface ImprovementCandidateRow {
   status: string;
   githubIssueUrl: string | null;
   errorNote: string | null;
+  proposedDiff: string | null;
   createdAt: string;
 }
 

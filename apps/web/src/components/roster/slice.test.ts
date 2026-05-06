@@ -79,6 +79,7 @@ describe('roster — fetchPersonaCandidates', () => {
         status: 'pending',
         githubIssueUrl: null,
         errorNote: null,
+        proposedDiff: null,
         createdAt: '2026-05-01T00:00:00Z',
       },
     ];
@@ -87,6 +88,31 @@ describe('roster — fetchPersonaCandidates', () => {
     expect(candidates).toHaveLength(1);
     expect(candidates[0].status).toBe('pending');
     expect(candidates[0].suggestionType).toBe('skill-prompt');
+  });
+
+  it('includes proposedDiff field when present', async () => {
+    const { fetchPersonaCandidates } = await import('@/lib/api');
+    const mockCandidates = [
+      {
+        id: 2,
+        projectId: 'goose-hub',
+        personaName: 'goose-hub-self/retrospector/0',
+        sourceTaskId: null,
+        suggestionText: 'Clarify skill guidance',
+        suggestionType: 'skill-coach',
+        status: 'pending',
+        githubIssueUrl: null,
+        errorNote: null,
+        proposedDiff:
+          '--- a/skills/investigate/skill.md\n+++ b/skills/investigate/skill.md\n@@ -10,3 +10,4 @@\n clarify boundaries',
+        createdAt: '2026-05-01T00:00:00Z',
+      },
+    ];
+    vi.mocked(fetchPersonaCandidates).mockResolvedValue(mockCandidates);
+    const candidates = await fetchPersonaCandidates('goose-hub-self/retrospector/0');
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].proposedDiff).toBeTruthy();
+    expect(candidates[0].proposedDiff).toContain('--- a/skills/investigate/skill.md');
   });
 });
 

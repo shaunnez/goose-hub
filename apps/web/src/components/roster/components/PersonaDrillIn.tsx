@@ -103,6 +103,12 @@ function CandidateRow({
     onSuccess: invalidate,
   });
 
+  const copyDiff = () => {
+    if (candidate.proposedDiff) {
+      navigator.clipboard.writeText(candidate.proposedDiff);
+    }
+  };
+
   return (
     <li
       data-testid="candidate-row"
@@ -124,6 +130,27 @@ function CandidateRow({
         </span>
       </div>
       <p className="text-fg leading-snug mb-2">{candidate.suggestionText}</p>
+      {candidate.proposedDiff && (
+        <div className="mb-2">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[11px] text-fg-3">Proposed diff:</span>
+            <button
+              type="button"
+              onClick={copyDiff}
+              data-testid="copy-diff-btn"
+              className="text-[11px] px-2 py-1 rounded border border-line bg-bg-hover text-fg-2 hover:text-fg"
+            >
+              Copy
+            </button>
+          </div>
+          <pre
+            data-testid="proposed-diff"
+            className="text-[11px] font-mono bg-bg-elev border border-line rounded p-2 overflow-x-auto max-h-48 overflow-y-auto"
+          >
+            {candidate.proposedDiff}
+          </pre>
+        </div>
+      )}
       {candidate.githubIssueUrl && (
         <a
           href={candidate.githubIssueUrl}

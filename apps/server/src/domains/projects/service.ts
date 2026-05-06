@@ -1,3 +1,4 @@
+import { runSkillCoachingWorkflow } from '@goose-hub/core/workflows/skill-coaching.js';
 import { listProjectConfigs, listProjects as readProjects } from '#shared/projects.js';
 
 export async function listProjectsService(): Promise<{ projects: unknown[] }> {
@@ -31,4 +32,28 @@ export async function listProjectConfigsService(): Promise<{ configs: ProjectCon
     mode: p.mode,
   }));
   return { configs };
+}
+
+export interface CoachSkillInput {
+  targetSkillName: string;
+  patternIds: string[];
+  lifecycleIds?: string[];
+}
+
+export async function coachSkillService(
+  projectId: string,
+  input: CoachSkillInput,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await runSkillCoachingWorkflow({
+      projectId,
+      targetSkillName: input.targetSkillName,
+      patternIds: input.patternIds,
+      lifecycleIds: input.lifecycleIds,
+    });
+    return { ok: true };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : 'Unknown error dispatching coach workflow';
+    return { ok: false, error };
+  }
 }

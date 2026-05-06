@@ -16,6 +16,7 @@ const mockCandidate = {
   status: 'pending',
   githubIssueUrl: null,
   errorNote: null,
+  proposedDiff: null,
   createdAt: '2026-05-01T00:00:00Z',
 };
 
@@ -70,6 +71,7 @@ describe('status update — approved (happy path: GitHub issue created)', () => 
           ...mockCandidate,
           status: 'approved',
           githubIssueUrl: 'https://github.com/owner/repo/issues/10',
+          proposedDiff: null,
         },
       },
     });
@@ -107,6 +109,7 @@ describe('status update — approved (failure path: GitHub issue creation fails)
           status: 'approved',
           githubIssueUrl: null,
           errorNote: 'GitHub API error: 422 Unprocessable Entity',
+          proposedDiff: null,
         },
       },
     });
@@ -125,7 +128,7 @@ describe('status update — rejected', () => {
     const { rejectCandidate } = await import('./service.js');
     vi.mocked(rejectCandidate).mockResolvedValue({
       ok: true,
-      data: { candidate: { ...mockCandidate, status: 'rejected' } },
+      data: { candidate: { ...mockCandidate, status: 'rejected', proposedDiff: null } },
     });
     const result = await rejectCandidate(1);
     expect(result.ok).toBe(true);
