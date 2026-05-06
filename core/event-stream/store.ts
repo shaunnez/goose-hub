@@ -58,7 +58,9 @@ export type EventKind =
   // M10 project budget exceeded
   | 'project.budget-exceeded'
   // M9 fix-feedback loop — re-dispatch after QA failure
-  | 'agent.fix-feedback-complete';
+  | 'agent.fix-feedback-complete'
+  // M11 cross-run retrospective and playbook workflow
+  | 'playbook.created';
 
 export interface AgentEvent {
   id: number;

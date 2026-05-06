@@ -145,3 +145,19 @@ export const agentRunCosts = sqliteTable(
     workItemIdx: index('agent_run_costs_work_item_idx').on(t.workItemId),
   }),
 );
+
+export const playbooks = sqliteTable(
+  'playbooks',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    projectId: text('project_id').notNull(),
+    windowStartAt: text('window_start_at').notNull(),
+    windowEndAt: text('window_end_at').notNull(),
+    manifest: text('manifest').notNull(), // JSON string of CrossRunRetroOutput
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  },
+  (t) => ({
+    projectCreatedIdx: index('playbooks_project_created_idx').on(t.projectId, t.createdAt),
+    windowIdx: index('playbooks_window_idx').on(t.projectId, t.windowStartAt, t.windowEndAt),
+  }),
+);

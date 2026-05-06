@@ -6,6 +6,7 @@ import { eventsRouter } from './domains/events/router.js';
 import { inboxRouter } from './domains/inbox/router.js';
 import { issuesRouter } from './domains/issues/router.js';
 import { milestonesRouter } from './domains/milestones/router.js';
+import { playbooksRouter } from './domains/playbooks/router.js';
 import { projectsRouter } from './domains/projects/router.js';
 import { rosterRouter } from './domains/roster/router.js';
 import { webhooksRouter } from './domains/webhooks/router.js';
@@ -29,6 +30,7 @@ app.route('/projects', milestonesRouter); // GET/POST /projects/:slug/milestones
 app.route('/projects', issuesRouter); // GET/POST /projects/:slug/issues/**
 app.route('/projects', workflowsRouter); // POST /projects/:slug/tick
 app.route('/projects', costsRouter); // GET /projects/:slug/costs/summary, /projects/:slug/issues/:id/costs
+app.route('/projects', playbooksRouter); // POST /projects/:slug/playbooks
 app.route('/inbox', inboxRouter); // GET/POST /inbox/**
 app.route('/roster', rosterRouter); // GET /roster/**
 app.route('/events', eventsRouter); // GET /events
