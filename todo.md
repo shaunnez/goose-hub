@@ -6,7 +6,9 @@
 # Todo
 Invoke web standards [retrospectivesection, reviewsection, timelineevents] -- way to big. Interface should be in logical place (lib) and shared. 
 Too many components and lines of code inside each of them, things could be split out into seperate files. 
-Tests - whats level?
+Tests - whats level are we at seems low?
+Loading ... should always be something inside timeline "agent run" window indicating it's loading. This is seen on code.
+Timeline needs header like other pages. Put expand / collapse next to it.
 
 # Overview page
 Could remove priority card, add in files changed (from code panel) and tests (pass).

@@ -34,6 +34,7 @@ For each persona in `<active_personas>` (and only those), produce a `QualityScor
 - `score` — 0.0–1.0 (1.0 = perfect, 0.0 = total failure). Weight: 0.6 outcome + 0.4 decision quality.
 - `trend` — `improving | stable | declining`. Default to `stable` if insufficient data.
 - `sampleCount` — 1 unless run summary provides history.
+- `rationale` — required. One concrete sentence justifying the score, tied to specific decisions or behaviour observed. Required so the human reviewer can see *why* this persona scored what it did. Don't say "performed well" — say "wrote 5 tests red-green before any implementation, zero retries" or "approved despite missing acceptance criterion check, capping confidence at 0.85".
 
 Do not invent persona IDs. Do not emit `personaName`, `role`, `skillName`, or `computedAt`.
 
@@ -125,8 +126,20 @@ Return JSON conforming to `DeepRetroSchema`. No free-text outside the schema fie
     "architecturalTakeaway": "Tick-based expand/collapse signal is correct for React but requires reading the guard to understand mount-time skip; explicit callback API would reduce cognitive load."
   },
   "personaQualityScores": [
-    { "personaId": "goose-hub-self/developer/0", "score": 0.88, "trend": "stable", "sampleCount": 1 },
-    { "personaId": "goose-hub-self/retrospector/2", "score": 0.84, "trend": "stable", "sampleCount": 1 }
+    {
+      "personaId": "goose-hub-self/developer/0",
+      "score": 0.88,
+      "trend": "stable",
+      "sampleCount": 1,
+      "rationale": "TDD discipline held: 5 tests written red before implementation, all 5 green after; out-of-scope settings.json edit kept score below 0.9."
+    },
+    {
+      "personaId": "goose-hub-self/retrospector/2",
+      "score": 0.84,
+      "trend": "stable",
+      "sampleCount": 1,
+      "rationale": "Surfaced two concrete improvement candidates with high confidence; missed one cross-cutting pattern about reviewer AC inference."
+    }
   ],
   "learningEntries": [
     {

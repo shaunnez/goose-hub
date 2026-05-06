@@ -60,6 +60,7 @@ interface QualityScore {
   score: number;
   trend: 'improving' | 'stable' | 'declining';
   sampleCount: number;
+  rationale?: string;
 }
 
 interface LearningEntry {
@@ -230,6 +231,9 @@ function PersonaScoresSection({ scores }: { scores: QualityScore[] }) {
                   style={{ width: `${pct}%`, backgroundColor: grade.color }}
                 />
               </div>
+              {p.rationale && (
+                <div className="mt-2 text-[11.5px] text-fg-3 leading-relaxed">{p.rationale}</div>
+              )}
             </div>
           );
         })}

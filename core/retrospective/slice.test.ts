@@ -90,6 +90,7 @@ describe('QualityScoreSchema', () => {
     score: 0.85,
     trend: 'improving' as const,
     sampleCount: 5,
+    rationale: 'Wrote tests red-green-refactor across all 5 acceptance criteria with zero retries.',
   };
 
   it('accepts a fully-populated valid score', () => {
@@ -125,6 +126,15 @@ describe('QualityScoreSchema', () => {
 
   it('rejects an unknown trend value', () => {
     expect(QualityScoreSchema.safeParse({ ...base, trend: 'flat' }).success).toBe(false);
+  });
+
+  it('rejects empty rationale', () => {
+    expect(QualityScoreSchema.safeParse({ ...base, rationale: '' }).success).toBe(false);
+  });
+
+  it('rejects missing rationale', () => {
+    const { rationale: _omit, ...rest } = base;
+    expect(QualityScoreSchema.safeParse(rest).success).toBe(false);
   });
 });
 

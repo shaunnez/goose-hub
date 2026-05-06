@@ -18,6 +18,7 @@ const baseValid = {
       score: 0.9,
       trend: 'improving' as const,
       sampleCount: 4,
+      rationale: 'TDD held across all 5 ACs; one minor lint warning auto-fixed.',
     },
   ],
   learningEntries: [

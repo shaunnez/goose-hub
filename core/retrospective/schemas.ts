@@ -39,6 +39,7 @@ export const QualityScoreSchema = z.object({
   score: z.number().min(0).max(1),
   trend: z.enum(['improving', 'stable', 'declining']),
   sampleCount: z.number().int().min(1),
+  rationale: z.string().min(1),
 });
 
 export const LearningEntrySchema = z.object({
