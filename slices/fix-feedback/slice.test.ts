@@ -88,7 +88,7 @@ function makeImplementOutput(overrides: Record<string, unknown> = {}) {
     prUrl: 'https://github.com/owner/repo/pull/1',
     evidenceSpecPath: null,
     confidence: 'high',
-    decisionSummaries: [{ kind: 'fix', summary: 'Fixed null check per QA finding' }],
+    decisionSummaries: [{ kind: 'FIX_STRATEGY', summary: 'Fixed null check per QA finding' }],
     ...overrides,
   };
 }
