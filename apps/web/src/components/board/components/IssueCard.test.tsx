@@ -140,6 +140,56 @@ describe('IssueCard', () => {
     expect(screen.queryByTestId('milestone-badge')).toBeNull();
   });
 
+  // ─── blocked indicator ───────────────────────────────────────────────────
+
+  it('shows blocked indicator when schedule is blocked-by', () => {
+    vi.mocked(fetchIssueCosts).mockResolvedValueOnce(costsResponse([]));
+    renderCard({ ...BASE_ITEM, schedule: 'blocked-by', dependsOn: ['shaunnez/goose-hub#10'] });
+    expect(screen.getByTestId('blocked-indicator')).toBeTruthy();
+    expect(screen.getByText('Blocked')).toBeTruthy();
+  });
+
+  it('does not show blocked indicator when schedule is current', () => {
+    vi.mocked(fetchIssueCosts).mockResolvedValueOnce(costsResponse([]));
+    renderCard({ ...BASE_ITEM, schedule: 'current' });
+    expect(screen.queryByTestId('blocked-indicator')).toBeNull();
+  });
+
+  it('blocked indicator tooltip lists same-repo dep as short ref', () => {
+    vi.mocked(fetchIssueCosts).mockResolvedValueOnce(costsResponse([]));
+    renderCard({
+      ...BASE_ITEM,
+      schedule: 'blocked-by',
+      repoRef: 'shaunnez/goose-hub',
+      dependsOn: ['shaunnez/goose-hub#10'],
+    });
+    const indicator = screen.getByTestId('blocked-indicator');
+    expect(indicator.getAttribute('title')).toBe('Blocked by: #10');
+  });
+
+  it('blocked indicator tooltip lists cross-repo dep in full', () => {
+    vi.mocked(fetchIssueCosts).mockResolvedValueOnce(costsResponse([]));
+    renderCard({
+      ...BASE_ITEM,
+      schedule: 'blocked-by',
+      repoRef: 'shaunnez/goose-hub',
+      dependsOn: ['other/repo#5'],
+    });
+    const indicator = screen.getByTestId('blocked-indicator');
+    expect(indicator.getAttribute('title')).toBe('Blocked by: other/repo#5');
+  });
+
+  it('blocked indicator co-exists with persona chip and cost badge', () => {
+    vi.mocked(fetchIssueCosts).mockResolvedValueOnce(costsResponse([]));
+    renderCard({
+      ...BASE_ITEM,
+      schedule: 'blocked-by',
+      dependsOn: ['shaunnez/goose-hub#10'],
+    });
+    expect(screen.getByTestId('blocked-indicator')).toBeTruthy();
+    expect(screen.getByTestId('issue-card-cost')).toBeTruthy();
+  });
+
   it('truncates long milestone names to prevent text overflow', () => {
     vi.mocked(fetchIssueCosts).mockResolvedValueOnce(costsResponse([]));
     const longMilestone =

@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { groupAllProjectsItems } from './lib/all-projects';
 import type { WorkItemWithProject } from './lib/all-projects';
 
-// IssueCard rendering is exercised by the Playwright happy-path (#36)
-// and by board/components/IssueCard.test.tsx.
-// Here we lock the sort/ordering rule it relies on.
+// IssueCard rendering (including the M11.05 blocked indicator) is exercised by
+// board/components/IssueCard.test.tsx and apps/web/e2e/m11-blocked-card.spec.ts.
+// Here we lock the sort/ordering rule and grouping logic.
 
 describe('issue card lane ordering', () => {
   it('orders by priority desc, then issue number asc', () => {
