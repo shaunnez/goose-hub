@@ -71,6 +71,15 @@ export interface AgentConfig {
     deepTriggers: string[];
   };
   coachPolicy?: CoachPolicy;
+  modelRouter?: {
+    /**
+     * Project-level override table for model tier selection.
+     * Keys are "role" (applies to all items for that role) or
+     * "role+type:TYPE" / "role+priority:PRIORITY" for finer-grained control.
+     * Example: { "developer+type:bug": "sonnet", "developer": "haiku" }
+     */
+    overrides?: Record<string, ModelTier>;
+  };
 }
 
 export interface BudgetConfig {

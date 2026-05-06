@@ -64,7 +64,9 @@ export type EventKind =
   // M11.14 auto-trigger — coach dispatch events from cross-run retro
   | 'coach.dispatch-triggered'
   | 'coach.skipped-forbidden-target'
-  | 'coach.dispatch-failed';
+  | 'coach.dispatch-failed'
+  // M11.15 model router — predictive model selection
+  | 'agent.model-selected';
 
 export interface AgentEvent {
   id: number;
