@@ -61,6 +61,9 @@ export interface AgentConfig {
     defaultTier: 'light' | 'deep';
     deepTriggers: string[];
   };
+  modelRouter?: {
+    overrides: Record<string, ModelTier>;
+  };
 }
 
 export interface BudgetConfig {

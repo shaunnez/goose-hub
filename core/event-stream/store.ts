@@ -49,6 +49,8 @@ export type EventKind =
   | 'review.completed'
   // M8 retry-and-escalate
   | 'agent.retry-escalated'
+  // M11 model selection
+  | 'agent.model-selected'
   // M9 retrospective lifecycle
   | 'retrospective.completed'
   // M9 PostToolUse hook — live decision marker (#465)
