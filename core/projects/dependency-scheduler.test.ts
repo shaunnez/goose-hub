@@ -44,8 +44,14 @@ function makeResolver(targets: Map<string, 'open' | 'closed' | null>): Dependenc
 
 function makeSource(
   setLabelMock: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue(undefined),
+  forceStateMock: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue(undefined),
+  commentMock: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue(undefined),
 ): StateSource {
-  return { setLabelInGroup: setLabelMock } as unknown as StateSource;
+  return {
+    setLabelInGroup: setLabelMock,
+    forceState: forceStateMock,
+    comment: commentMock,
+  } as unknown as StateSource;
 }
 
 // ---------------------------------------------------------------------------
@@ -205,19 +211,42 @@ describe('filterEligibleByDependencies', () => {
     expect(setLabel).not.toHaveBeenCalled();
   });
 
-  it('unregistered — skips dispatch; no label changes', async () => {
+  it('unregistered — applies factory:needs-human and posts comment on first encounter', async () => {
     const setLabel = vi.fn();
+    const forceState = vi.fn().mockResolvedValue(undefined);
+    const comment = vi.fn().mockResolvedValue(undefined);
     const fetchTarget: FetchTargetFn = async () => null;
     const item = makeItem('30', 'Depends on external/repo#5');
     const result = await filterEligibleByDependencies([item], {
       currentRepo,
       fetchTarget,
-      source: makeSource(setLabel),
+      source: makeSource(setLabel, forceState, comment),
     });
     expect(result.unregistered).toHaveLength(1);
     expect(result.eligible).toHaveLength(0);
     expect(result.blocked).toHaveLength(0);
     expect(setLabel).not.toHaveBeenCalled();
+    expect(forceState).toHaveBeenCalledWith('30', 'factory:needs-human');
+    expect(comment).toHaveBeenCalledWith('30', expect.stringContaining('external/repo#5'));
+    expect(comment).toHaveBeenCalledWith('30', expect.stringContaining('not registered'));
+  });
+
+  it('unregistered — already factory:needs-human → no re-escalation', async () => {
+    const setLabel = vi.fn();
+    const forceState = vi.fn().mockResolvedValue(undefined);
+    const comment = vi.fn().mockResolvedValue(undefined);
+    const fetchTarget: FetchTargetFn = async () => null;
+    const item = makeItem('31', 'Depends on external/repo#5');
+    // Simulate a previously-escalated item
+    item.state = 'factory:needs-human';
+    const result = await filterEligibleByDependencies([item], {
+      currentRepo,
+      fetchTarget,
+      source: makeSource(setLabel, forceState, comment),
+    });
+    expect(result.unregistered).toHaveLength(1);
+    expect(forceState).not.toHaveBeenCalled();
+    expect(comment).not.toHaveBeenCalled();
   });
 
   it('mixed batch — correctly partitions eligible / blocked / unregistered', async () => {

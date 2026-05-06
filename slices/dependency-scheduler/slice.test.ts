@@ -33,8 +33,14 @@ function makeItem(
 
 function makeSource(
   setLabelMock: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue(undefined),
+  forceStateMock: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue(undefined),
+  commentMock: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue(undefined),
 ): StateSource {
-  return { setLabelInGroup: setLabelMock } as unknown as StateSource;
+  return {
+    setLabelInGroup: setLabelMock,
+    forceState: forceStateMock,
+    comment: commentMock,
+  } as unknown as StateSource;
 }
 
 // ---------------------------------------------------------------------------
@@ -93,20 +99,43 @@ describe('dependency-scheduler slice — end-to-end', () => {
     expect(setLabel).toHaveBeenCalledWith('3', 'schedule', 'current');
   });
 
-  it('unregistered cross-repo dep → unregistered partition; no label applied', async () => {
+  it('unregistered cross-repo dep → escalate to factory:needs-human + comment posted', async () => {
     const setLabel = vi.fn();
+    const forceState = vi.fn().mockResolvedValue(undefined);
+    const comment = vi.fn().mockResolvedValue(undefined);
     const fetchTarget: FetchTargetFn = async () => null;
     const item = makeItem('4', 'Depends on external/repo#5');
 
     const result = await filterEligibleByDependencies([item], {
       currentRepo,
       fetchTarget,
-      source: makeSource(setLabel),
+      source: makeSource(setLabel, forceState, comment),
     });
 
     expect(result.unregistered[0].externalId).toBe('4');
     expect(result.eligible).toHaveLength(0);
     expect(setLabel).not.toHaveBeenCalled();
+    expect(forceState).toHaveBeenCalledWith('4', 'factory:needs-human');
+    expect(comment).toHaveBeenCalledWith('4', expect.stringContaining('external/repo#5'));
+  });
+
+  it('already-escalated unregistered dep → no re-escalation on repeat tick', async () => {
+    const setLabel = vi.fn();
+    const forceState = vi.fn().mockResolvedValue(undefined);
+    const comment = vi.fn().mockResolvedValue(undefined);
+    const fetchTarget: FetchTargetFn = async () => null;
+    const item = makeItem('5', 'Depends on external/repo#5');
+    item.state = 'factory:needs-human';
+
+    const result = await filterEligibleByDependencies([item], {
+      currentRepo,
+      fetchTarget,
+      source: makeSource(setLabel, forceState, comment),
+    });
+
+    expect(result.unregistered[0].externalId).toBe('5');
+    expect(forceState).not.toHaveBeenCalled();
+    expect(comment).not.toHaveBeenCalled();
   });
 
   it('mixed sprint batch — eligible / blocked / unregistered partitioned correctly', async () => {
