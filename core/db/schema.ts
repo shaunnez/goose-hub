@@ -90,6 +90,7 @@ export const improvementCandidates = sqliteTable(
     status: text('status').notNull().default('pending'), // pending | approved | rejected
     githubIssueUrl: text('github_issue_url'),
     errorNote: text('error_note'),
+    proposedDiff: text('proposed_diff'),
     createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
   },
   (t) => ({

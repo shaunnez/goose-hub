@@ -183,6 +183,7 @@ export interface ImprovementCandidateDto {
   status: string;
   githubIssueUrl: string | null;
   errorNote: string | null;
+  proposedDiff: string | null;
   createdAt: string;
 }
 

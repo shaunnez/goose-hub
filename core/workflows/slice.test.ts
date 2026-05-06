@@ -29,7 +29,11 @@ vi.mock('../event-stream/store.js', () => ({
 }));
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
-  return { ...actual, readFileSync: vi.fn().mockReturnValue('# mock skill prompt') };
+  return {
+    ...actual,
+    readFileSync: vi.fn().mockReturnValue('# mock skill prompt'),
+    existsSync: vi.fn().mockReturnValue(true),
+  };
 });
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -488,5 +492,151 @@ describe('state transitions', () => {
       role: 'retrospector',
       outcome: 'failure',
     });
+  });
+});
+
+// ─── skill-coaching workflow ──────────────────────────────────────────────────
+
+function makeCoachResult() {
+  return {
+    output: {
+      skillName: 'implement',
+      diagnosis: 'Skill lacks explicit slice.test.ts reminder',
+      proposedPatch:
+        '--- a/skills/implement/prompt.md\n+++ b/skills/implement/prompt.md\n@@ -10,0 +11 @@\n+Write slice.test.ts first.',
+      rationale:
+        'Pattern PLAN::developer recurred consistently; the skill prompt does not mandate slice.test.ts.',
+      evidencePatternIds: ['PLAN::developer'],
+      confidence: 'high',
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Coached implement: add TDD reminder' }],
+    },
+    decisionSummaries: [],
+    events: [],
+  };
+}
+
+describe('skill-coaching workflow — forbidden targets', () => {
+  it.each([
+    'qa',
+    'review',
+    'retrospective-light',
+    'retrospective-deep',
+    'retrospective-cross-run',
+    'skill-coach',
+  ])('throws SkillCoachForbiddenTargetError for "%s"', async (target) => {
+    const { runSkillCoachingWorkflow, SkillCoachForbiddenTargetError } = await import(
+      './skill-coaching.js'
+    );
+    await expect(
+      runSkillCoachingWorkflow({
+        projectId: 'test-project',
+        targetSkillName: target,
+        evidence: { patternIds: [] },
+        deps: { runtime: { run: mockRun } },
+      }),
+    ).rejects.toBeInstanceOf(SkillCoachForbiddenTargetError);
+  });
+});
+
+describe('skill-coaching workflow — missing skill source', () => {
+  it('throws SkillCoachMissingSourceError when prompt.md is absent', async () => {
+    const { existsSync } = await import('node:fs');
+    vi.mocked(existsSync).mockReturnValueOnce(false);
+
+    const { runSkillCoachingWorkflow, SkillCoachMissingSourceError } = await import(
+      './skill-coaching.js'
+    );
+    await expect(
+      runSkillCoachingWorkflow({
+        projectId: 'test-project',
+        targetSkillName: 'implement',
+        evidence: { patternIds: [] },
+        deps: { runtime: { run: mockRun } },
+      }),
+    ).rejects.toBeInstanceOf(SkillCoachMissingSourceError);
+
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+});
+
+describe('skill-coaching workflow — schema validation failure', () => {
+  it('returns ok: false when coach output fails schema parse', async () => {
+    mockRun.mockResolvedValueOnce({
+      output: { invalid: 'output' },
+      decisionSummaries: [],
+      events: [],
+    });
+
+    const { runSkillCoachingWorkflow } = await import('./skill-coaching.js');
+    const result = await runSkillCoachingWorkflow({
+      projectId: 'test-project',
+      targetSkillName: 'implement',
+      evidence: { patternIds: [] },
+      deps: { runtime: { run: mockRun } },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('skill-coaching workflow — happy path', () => {
+  it('dispatches skill-coach and returns a valid candidate result', async () => {
+    mockRun.mockResolvedValueOnce(makeCoachResult());
+
+    const { runSkillCoachingWorkflow } = await import('./skill-coaching.js');
+    const result = await runSkillCoachingWorkflow({
+      projectId: 'test-project',
+      targetSkillName: 'implement',
+      evidence: { patternIds: ['PLAN::developer'] },
+      deps: { runtime: { run: mockRun } },
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.skillName).toBe('implement');
+      expect(result.confidence).toBe('high');
+      expect(result.proposedPatch.length).toBeGreaterThan(0);
+      expect(typeof result.candidateId).toBe('number');
+    }
+  });
+
+  it('dispatches with skill: skill-coach in the run spec', async () => {
+    mockRun.mockResolvedValueOnce(makeCoachResult());
+
+    const { runSkillCoachingWorkflow } = await import('./skill-coaching.js');
+    await runSkillCoachingWorkflow({
+      projectId: 'test-project',
+      targetSkillName: 'implement',
+      evidence: { patternIds: [] },
+      deps: { runtime: { run: mockRun } },
+    });
+
+    const spec = mockRun.mock.calls[0][0] as { skill: string; role: string };
+    expect(spec.skill).toBe('skill-coach');
+    expect(spec.role).toBe('retrospector');
+  });
+
+  it('emits coach.completed event on success', async () => {
+    mockRun.mockResolvedValueOnce(makeCoachResult());
+
+    const { runSkillCoachingWorkflow } = await import('./skill-coaching.js');
+    const { eventStore } = await import('../event-stream/store.js');
+
+    await runSkillCoachingWorkflow({
+      projectId: 'test-project',
+      targetSkillName: 'implement',
+      evidence: { patternIds: [] },
+      deps: { runtime: { run: mockRun } },
+    });
+
+    const coachEvent = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'coach.completed');
+    expect(coachEvent).toBeDefined();
+    const payload = coachEvent?.[0].payload as { targetSkillName: string };
+    expect(payload.targetSkillName).toBe('implement');
   });
 });
