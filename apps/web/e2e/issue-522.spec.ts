@@ -6,26 +6,28 @@ test('Kanban board milestone text truncates properly without overflow', async ({
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify([
-        {
-          id: 'item-1',
-          externalId: '101',
-          repoRef: 'test/repo',
-          title: 'Test Issue 1',
-          body: 'Test body',
-          type: 'feature',
-          priority: 'high',
-          mode: 'supervised',
-          state: 'factory:in-progress',
-          authorIsOwner: true,
-          schedule: 'current',
-          exec: 'serial',
-          dependsOn: [],
-          blocks: [],
-          createdAt: new Date().toISOString(),
-          milestoneTitle: 'M99: Very Long Milestone Name That Should Be Truncated',
-        },
-      ]),
+      body: JSON.stringify({
+        items: [
+          {
+            id: 'item-1',
+            externalId: '101',
+            repoRef: 'test/repo',
+            title: 'Test Issue 1',
+            body: 'Test body',
+            type: 'feature',
+            priority: 'high',
+            mode: 'supervised',
+            state: 'factory:in-progress',
+            authorIsOwner: true,
+            schedule: 'current',
+            exec: 'serial',
+            dependsOn: [],
+            blocks: [],
+            createdAt: new Date().toISOString(),
+            milestoneTitle: 'M99: Very Long Milestone Name That Should Be Truncated',
+          },
+        ],
+      }),
     }),
   );
 
