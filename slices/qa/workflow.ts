@@ -1,4 +1,5 @@
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
+import { resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
@@ -6,6 +7,7 @@ import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
+import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { DEFAULT_MAX_RETRIES, shouldEscalateQa } from '@goose-hub/core/retry/retry-counter.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
@@ -114,6 +116,7 @@ export async function runQaWorkflow(
   const runTests = deps.runTests ?? defaultRunTests;
   const verifyCommands = deps.verifyCommands;
   const qaPrompt = readPromptWithContext('qa', projectSlug);
+  const projectConfig = await getProjectBySlug(projectSlug);
   const qaJsonSchema = toJsonSchema(QaOutputSchema);
   const { personaId } = selectPersona(projectSlug, 'qa');
   const prDiff = getPrDiff(workItem);
@@ -171,7 +174,7 @@ export async function runQaWorkflow(
       toolBundles: ['read', 'qa-tools'],
       workspaceDir,
       toolExtras: [],
-      budgets: { maxTurns: 50, maxBudgetUsd: 5, timeoutMs: 600_000 },
+      ...resolveBudgets('qa', projectConfig?.budgets),
       personaId,
       outputJsonSchema: qaJsonSchema,
       appendSystemPrompt: qaPrompt,

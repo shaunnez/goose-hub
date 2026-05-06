@@ -1,4 +1,5 @@
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
+import { resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
@@ -6,6 +7,7 @@ import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
+import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { ImplementSchema } from '@goose-hub/skills/implement/schema.js';
 
@@ -108,6 +110,7 @@ export async function runFixFeedbackWorkflow(
 ): Promise<void> {
   const runId = crypto.randomUUID();
   const runtime = deps.runtime ?? new ClaudeCliRuntime();
+  const projectConfig = await getProjectBySlug(projectId);
 
   const worktreePath = findWorktreePath(workItem.id);
   if (worktreePath == null) {
@@ -184,7 +187,7 @@ export async function runFixFeedbackWorkflow(
       freshContext: false,
       toolBundles: ['dev-tools'],
       toolExtras: [],
-      budgets: { maxTurns: 200, maxBudgetUsd: 2.0, timeoutMs: 600_000 },
+      ...resolveBudgets('implement', projectConfig?.budgets),
       personaId,
       outputJsonSchema: implementJsonSchema,
       appendSystemPrompt: implementPrompt,

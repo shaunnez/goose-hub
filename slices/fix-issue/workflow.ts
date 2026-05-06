@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { adviseOnPlan } from '@goose-hub/core/agent-runtime/advisor.js';
+import { resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
@@ -290,6 +291,7 @@ interface ImplementOutputShape {
 }
 
 async function runImplement(input: RunImplementInput): Promise<ImplementOutputShape> {
+  const projectConfig = await getProjectBySlug(input.projectId);
   const result = await input.runtime.run({
     runId: input.runId,
     role: 'developer',
@@ -323,7 +325,7 @@ async function runImplement(input: RunImplementInput): Promise<ImplementOutputSh
     freshContext: false,
     toolBundles: ['dev-tools'],
     toolExtras: [],
-    budgets: { maxTurns: 200, maxBudgetUsd: 2.0, timeoutMs: 600_000 },
+    ...resolveBudgets('implement', projectConfig?.budgets),
     personaId: input.personaId,
     outputJsonSchema: input.outputJsonSchema,
     appendSystemPrompt: input.appendSystemPrompt,
@@ -510,6 +512,7 @@ async function runEvidencePost(input: RunEvidencePostInput): Promise<void> {
   }
 
   const evidenceRunId = crypto.randomUUID();
+  const projectConfig = await getProjectBySlug(input.projectId);
   try {
     const result = await input.runtime.run({
       runId: evidenceRunId,
@@ -542,7 +545,7 @@ async function runEvidencePost(input: RunEvidencePostInput): Promise<void> {
       toolBundles: ['validate'],
       toolExtras: [],
       env: { WEB_PORT: String(5200 + (Number(input.workItem.externalId) % 800)) },
-      budgets: { maxTurns: 50, maxBudgetUsd: 2, timeoutMs: 300_000 },
+      ...resolveBudgets('evidence-post', projectConfig?.budgets),
       personaId: selectPersona(input.projectId, 'developer').personaId,
       outputJsonSchema: input.outputJsonSchema,
       appendSystemPrompt: input.appendSystemPrompt,

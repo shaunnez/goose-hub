@@ -1,10 +1,12 @@
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
+import { resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
+import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import {
   cleanupWorktree,
@@ -41,6 +43,7 @@ export async function runInvestigateWorkflow(
   const playwrightReproJsonSchema = toJsonSchema(PlaywrightReproSchema);
 
   const { personaId } = selectPersona(projectId, 'investigator');
+  const projectConfig = await getProjectBySlug(projectId);
   const worktreePath = createWorktree(targetRepo, runId);
   if (workItem.type === 'bug') {
     prewarmWorktree(worktreePath, '@goose-hub/web');
@@ -66,9 +69,8 @@ export async function runInvestigateWorkflow(
       freshContext: false,
       toolBundles: ['read-only'],
       toolExtras: [],
-      budgets: { maxTurns: 100, maxBudgetUsd: 2, timeoutMs: 300_000 },
+      ...resolveBudgets('investigate', projectConfig?.budgets),
       personaId,
-      modelOverride: 'claude-opus-4-7',
       outputJsonSchema: investigateJsonSchema,
       appendSystemPrompt: investigatePrompt,
     });
@@ -111,7 +113,7 @@ export async function runInvestigateWorkflow(
           toolBundles: ['validate'],
           toolExtras: [],
           env: { SKIP_WEBSERVER: '1' },
-          budgets: { maxTurns: 40, maxBudgetUsd: 5, timeoutMs: 300_000 },
+          ...resolveBudgets('playwright-repro', projectConfig?.budgets),
           personaId: playwrightPersonaId,
           outputJsonSchema: playwrightReproJsonSchema,
           appendSystemPrompt: playwrightReproPrompt,

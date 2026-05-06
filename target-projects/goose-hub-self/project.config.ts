@@ -35,7 +35,7 @@ const config: ProjectConfig = {
       'prd-writer': { primary: 'opus', fallback: 'sonnet', advisor: 'opus' },
       decomposer: { primary: 'sonnet', fallback: 'haiku', advisor: null },
       investigator: { primary: 'opus', fallback: 'sonnet', advisor: null },
-      developer: { primary: 'sonnet', fallback: 'sonnet', advisor: 'opus' },
+      developer: { primary: 'haiku', fallback: 'sonnet', advisor: 'opus' },
       qa: { primary: 'sonnet', fallback: null, advisor: null },
       reviewer: { primary: 'sonnet', fallback: null, advisor: null },
       retrospector: { primary: 'sonnet', fallback: 'haiku', advisor: null },
@@ -84,9 +84,9 @@ const config: ProjectConfig = {
     maxRetries: 2,
     maxIssuesPerDayFromNonOwners: 3,
     maxBashSeconds: 120,
-    perWorkflowMaxUsd: 5,
-    perAgentMaxUsd: 5,
-    perAdvisorMaxUsd: 5,
+    perWorkflowMaxUsd: 10,
+    perAgentMaxUsd: 10,
+    perAdvisorMaxUsd: 2,
   },
   governance: {
     immutablePaths: [
