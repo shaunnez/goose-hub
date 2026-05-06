@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
-import config, { SpecAuthorContextSchema } from './config.js';
 import { SpecAuthorSchema } from './schema.js';
+import config, { SpecAuthorContextSchema } from './skill.config.js';
 
 describe('spec-author schema', () => {
   it('accepts a fully-populated valid output', () => {

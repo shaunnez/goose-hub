@@ -182,7 +182,7 @@ This distinction matters: agents and future you should not underbuild durability
 
 ## 6. Repository layout
 
-This reflects the actual layout as of M10. Future directories are annotated with the milestone that introduces them.
+This reflects the actual layout as of M11 (mid-milestone). Future directories are annotated with the milestone that introduces them. CONTEXT.md is the canonical record of resolved implementation decisions; ADRs justify them long-form.
 
 ```
 goose-hub/
@@ -210,26 +210,28 @@ goose-hub/
 ├── skills/                              # composable skill packages (M5+, @goose-hub/skills workspace pkg)
 │   ├── package.json                     # exports: { "./*": "./*" }
 │   ├── triage/
-│   │   ├── config.ts                    # SkillConfig (toolBundles, modelPin, freshContext, role, contextSchema)
-│   │   ├── skill.md                     # versioned system prompt; ends with [decision] footer
+│   │   ├── skill.config.ts              # SkillConfig (toolBundles, modelPin, freshContext, role, contextSchema)
+│   │   ├── prompt.md                    # versioned system prompt; ends with [decision] footer
 │   │   ├── schema.ts                    # Zod output schema
 │   │   ├── slice.test.ts                # always required
 │   │   ├── eval/eval.json               # at least one eval case
 │   │   └── README.md                    # always required
 │   └── ...
 ├── slices/                              # named orchestrator workflow slices (M5+)
-│   │                                    # Each slice is one workflow; named by what it does (NOT numbered).
+│   │                                    # Each slice is one workflow OR a self-contained helper module.
+│   │                                    # Named by what it does (NOT numbered).
 │   │                                    # NOT UI component slices — those live in apps/web/src/components/
-│   ├── investigate/                     # M6 (#197)
-│   │   ├── workflow.ts                  # exports runInvestigateWorkflow(item, source, projectId, repo)
-│   │   ├── slice.test.ts                # always required
-│   │   └── README.md                    # always required
-│   ├── fix-issue/                       # M7 supervised dev (#183)
-│   │   ├── workflow.ts                  # exports runFixIssueWorkflow(item, source, projectId, repo, deps?)
-│   │   ├── slice.test.ts
-│   │   ├── chore-shipping.test.ts       # full state-machine integration test (#187)
-│   │   └── README.md
-│   └── ...
+│   ├── investigate/                     # M6 workflow (#197)
+│   ├── fix-issue/                       # M7 supervised dev workflow (#183)
+│   ├── qa/                              # M8 holdout workflow
+│   ├── review/                          # M8 holdout workflow
+│   ├── resolve-conflict/                # M8+ helper slice — conflict-resolver agent dispatch
+│   ├── retry-escalate/                  # M8 retry counter + escalation logic (imported by qa/, review/)
+│   ├── holdout-boundary-test/           # M8 regression slice — proves holdout context filtering
+│   ├── fix-feedback/                    # M9 fix-loop after qa/review failure (factory:qa-failed → factory:needs-fix)
+│   ├── cost-tracking/                   # M9 helper slice for agent_run_costs writes
+│   └── ...                              # every slice contains at minimum workflow.ts (or feature module),
+│                                        # slice.test.ts, README.md
 ├── core/                                # @goose-hub/core workspace package
 │   ├── package.json
 │   ├── types.ts
@@ -249,7 +251,7 @@ goose-hub/
 │   │   ├── schema.ts
 │   │   ├── db.ts
 │   │   └── migrate.ts
-│   ├── projects/                        # M10+ (see ADR 0018); multi-project loader + per-project scheduler
+│   ├── projects/                        # M10+ (see ADR 0021); multi-project loader + per-project scheduler
 │   │   ├── loader.ts                    # loadProjects() / getProjectBySlug() — reads target-projects/*/project.config.ts
 │   │   └── scheduler.ts                 # startPerProjectScheduler() — one independent setInterval per project
 │   │                                    # NOTE: per-project locking and workflow dispatch live in
@@ -768,7 +770,9 @@ When all issues in a milestone are `done`/`archived`/`rejected`, auto-create a `
 
 ## 13. The skill chain
 
-Each skill is markdown prompt + TS schema + config. Per-skill schemas in `skills/<name>/schema.ts`. Output validation enforced; invalid output fails the run.
+Each skill is `prompt.md` (versioned system prompt) + `schema.ts` (Zod output) + `skill.config.ts` (role, contextSchema, toolBundles, modelTier, budgets). Output validation enforced; invalid output fails the run. Per-skill default budgets resolve through `core/agent-runtime/budgets.ts` (see CONTEXT.md "Centralized Skill Budgets").
+
+The sub-sections below describe the **production skill chain** — skills wired into a workflow. The repo also contains **test/helper skills** that are not part of the chain: `echo-test`, `echo-test-holdout` (M4 spike, holdout-boundary regression), `repo-match` (called from inside Triage), `evidence-post`, `bug-enhance`, `playwright-repro`, `resolve-conflict`, `spec-author`, `advise-on-plan`. They follow the same skill-package convention but do not own a state transition.
 
 ### 13.1 Triage
 
@@ -1005,23 +1009,28 @@ Decompose outputs slices in the target repo's `slices/` folder (when the convent
 
 ## 21. UI surfaces
 
-In priority order:
+In priority order (status as of M11 mid-milestone):
 
-1. Global chrome (sidebar, top bar, command palette)
-2. Kanban (per-project + All Projects aggregated, M10+)
-3. Inbox (project-agnostic capture, target-repo picker on promote)
-4. Task detail (slide-in tabs: Overview, Investigation, PRD, Code, QA, Review, Retrospective, Timeline, Chat, Costs)
-5. Roster (personas with metrics, M9+)
-6. Milestones (set-active, sprint review)
-7. Settings (projects, source bindings, models, hooks, budgets, governance, lane overrides)
+1. Global chrome (sidebar, top bar, command palette) — shipped (M2+)
+2. Kanban — per-project shipped (M2); All Projects aggregated shipped (M10)
+3. Inbox (project-agnostic capture, target-repo picker on promote) — shipped (M3+)
+4. Task detail — slide-in tabs: Overview, Investigation, PRD (M13), Code, QA, Review, Retrospective, Timeline, Chat (M13), Costs. All non-M13 tabs shipped through M9.
+5. Roster (personas with metrics) — shipped (M9); cross-project filter at `/projects/all/roster` (M10)
+6. Milestones (set-active per project, sprint review) — per-project active milestone shipped (M10); sprint review surface still pending
+7. Settings → Projects (read-only per-project config viewer) — shipped (M10). Models, hooks, budgets, governance, lane overrides editing surfaces still pending
 8. Project bootstrap wizard (M12+)
 9. Office tab (M17 skin, optional)
 
-Costs in UI are labelled **estimated** when inferred from Claude CLI; **exact** when authoritative.
+Costs in UI are labelled **estimated** when inferred from Claude CLI; **exact** when authoritative (see CONTEXT.md "Cost Module").
 
 ---
 
 ## 22. Agent decision summaries and observability
+
+> **Three observability streams (see CONTEXT.md "Decision Summary" entries for the canonical design and ADR 0018 for the `kind` taxonomy):**
+> 1. **Canonical decision summaries** — `decisionSummaries: Array<{kind, summary, evidence?}>` in each skill's Zod schema; orchestrator extracts from validated terminal output and emits as `agent.decision-summary` events post-validation.
+> 2. **Live `[decision]` markers** — best-effort mid-run progress in `[decision] KIND: <one sentence>` form, scanned out of the transcript by the PostToolUse hook. `KIND` is constrained to `DecisionKindSchema` in `core/agent-runtime/decision-types.ts`; unknown kinds coerce to `UNKNOWN`.
+> 3. **Tool-call audit (`agent.tool-call`)** — automatic per-call event from the PreToolUse hook with redacted inputs. No reasoning, no skill-author burden. Distinct stream at distinct cadence.
 
 ### 22.1 What they are
 
@@ -1045,7 +1054,7 @@ Agents must NOT include in decision summaries:
 
 ### 22.3 Holdout enforcement
 
-QA and Review agents have `contextAllowlist` excluding `decision-summaries-from-implementation-roles`. The runtime refuses to inject any developer/investigator decision summaries into their prompts. Tested at M4.
+QA and Review agents declare `contextAllowlist` to opt in to a small set of keys (e.g. `workItem`, `prDiff`, `sliceTests`, `projectCommands`). The orchestrator filters `spec.context` against this allowlist in `assembleSpawnContext()` before XML rendering, so keys like `investigationFindings` or `devDecisionSummaries` are never injected. A disallowed key on a holdout role emits a `tool.violation` event (one per key) — see ADR 0014 and CONTEXT.md "Holdout Enforcement Internals".
 
 ### 22.4 Event taxonomy
 
@@ -1739,16 +1748,18 @@ For every milestone:
 
 **Outcome:** the scheduler respects `Depends on` and `Blocks` body-level dependencies, including cross-repo. Issues with unmet dependencies are blocked from dispatch. UI surfaces blocked status. Move-with-dependencies is implemented.
 
+**Mid-milestone status (2026-05-06):** halfway through. M11.01 (dependency parser) shipped via PR #497. The parser lives at `core/state-source/dependency-parser.ts` (not `github-labels.ts` as originally planned), exports `parseDependencies()` returning typed `DependencyRef[]`, and is colon-tolerant for `Depends on`, `Depends-On`, `Blocks`, `Blocked by`. Items 2–10 below remain open.
+
 **Included scope:**
-- Dependency parser in `core/state-source/github-labels.ts`: handles `Depends on #N`, `Depends on owner/repo#N`, `Blocks #N`, plus tolerant variants
-- Cross-repo dependency resolution: requires the dep repo to be a registered project
-- Scheduler enhancement: filter eligible items by dependency satisfaction
-- `factory:blocked-by-dependency` label (or just use `schedule:blocked-by` from existing labels)
-- UI: dependencies visible on issue detail (links to dep issues with current state); blocked status surfaced on card
-- `goose task move <ref> --to=current --with-dependencies` and `--ignore-dependencies` CLI flags
-- UI confirmation dialog when moving an issue with dependencies
-- Cross-repo dep where the dep repo is unregistered → escalates to `factory:needs-human`
-- Multi-issue parallel: relax the project-level lock to allow multiple workflows on different work items in parallel, up to `maxParallelAgents`. (This is the breaking change to rule 4 noted in v2.1's adversarial review; ADR documents it.)
+- Dependency parser in `core/state-source/dependency-parser.ts`: handles `Depends on #N`, `Depends on owner/repo#N`, `Blocks #N`, plus tolerant variants — **shipped (M11.01)**
+- Cross-repo dependency resolution: requires the dep repo to be a registered project — pending
+- Scheduler enhancement: filter eligible items by dependency satisfaction — pending
+- `factory:blocked-by-dependency` label (or just use `schedule:blocked-by` from existing labels) — pending
+- UI: dependencies visible on issue detail (links to dep issues with current state); blocked status surfaced on card — pending
+- `goose task move <ref> --to=current --with-dependencies` and `--ignore-dependencies` CLI flags — pending
+- UI confirmation dialog when moving an issue with dependencies — pending
+- Cross-repo dep where the dep repo is unregistered → escalates to `factory:needs-human` — pending
+- Multi-issue parallel: relax the project-level lock to allow multiple workflows on different work items in parallel, up to `maxParallelAgents`. (This is the breaking change to FACTORY_RULES rule 14 noted in v2.1's adversarial review; ADR documents it.) — pending
 
 **Explicit exclusions:**
 - No graphical dependency tree visualisation

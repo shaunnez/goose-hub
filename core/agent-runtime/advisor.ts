@@ -1,8 +1,8 @@
-import advisorConfig from '@goose-hub/skills/advise-on-plan/config.js';
 import {
   type AdviseOnPlanOutput,
   AdviseOnPlanSchema,
 } from '@goose-hub/skills/advise-on-plan/schema.js';
+import advisorConfig from '@goose-hub/skills/advise-on-plan/skill.config.js';
 import { eventStore } from '../event-stream/store.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import { resolveBudgets } from './budgets.js';

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
-import config, { AdviseOnPlanContextSchema } from './config.js';
 import { AdviseOnPlanSchema, AdvisorVerdictSchema } from './schema.js';
+import config, { AdviseOnPlanContextSchema } from './skill.config.js';
 
 describe('advise-on-plan output schema', () => {
   it('accepts a proceed verdict', () => {

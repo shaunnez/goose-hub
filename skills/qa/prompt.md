@@ -53,7 +53,7 @@ Steps:
 1. If `lintCommand` is provided, run it. Record any errors or warnings.
 2. Check that every changed TypeScript file (from the diff) type-checks correctly.
 3. If the PR introduces or modifies Zod schemas, verify that the schema exports are valid and correctly typed.
-4. Look for obvious anti-patterns in the diff: inline prompts instead of skill.md files, imports between slices, missing `README.md` or `slice.test.ts` for new slices.
+4. Look for obvious anti-patterns in the diff: inline prompts instead of `prompt.md` files, imports between slices, missing `README.md` or `slice.test.ts` for new slices.
 
 Emit: `[decision] STRUCTURAL_CHECK: <one-sentence summary including passed|failed>`
 

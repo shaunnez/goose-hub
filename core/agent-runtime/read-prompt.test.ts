@@ -8,7 +8,7 @@ const root = join(tmpdir(), `read-prompt-test-${Date.now()}`);
 
 beforeAll(() => {
   mkdirSync(join(root, 'skills', 'my-skill'), { recursive: true });
-  writeFileSync(join(root, 'skills', 'my-skill', 'skill.md'), '# base prompt');
+  writeFileSync(join(root, 'skills', 'my-skill', 'prompt.md'), '# base prompt');
 
   mkdirSync(join(root, 'target-projects', 'my-project', 'agent-context'), { recursive: true });
   writeFileSync(

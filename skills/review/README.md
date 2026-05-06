@@ -101,7 +101,7 @@ import { ReviewOutputSchema, type ReviewOutput } from './schema.js';
 ## Config
 
 ```typescript
-import config, { ReviewContextSchema } from './config.js';
+import config, { ReviewContextSchema } from './skill.config.js';
 // config.freshContext === true
 // config.role === 'reviewer'
 // config.contextAllowlist === ['workItem', 'prDiff', 'qaVerdict']

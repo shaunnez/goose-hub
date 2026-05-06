@@ -1,8 +1,10 @@
-# ADR 0018: Multi-project Loader and Per-project Scheduler in `core/projects/`
+# ADR 0021: Multi-project Loader and Per-project Scheduler in `core/projects/`
 
-**Status:** Accepted  
-**Date:** 2026-05-05  
+**Status:** Accepted
+**Date:** 2026-05-05 (renumbered 2026-05-06)
 **Milestone:** M10 — Multi-project Orchestration
+
+> Originally filed as ADR 0018, which collided with `0018-decision-kind-taxonomy.md`. Renumbered to 0021 in the M11 governance refresh; content unchanged.
 
 ## Context
 

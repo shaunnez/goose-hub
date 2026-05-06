@@ -441,3 +441,108 @@ describe('EventStore — replay branch coverage', () => {
     errorSpy.mockRestore();
   });
 });
+
+// ---------------------------------------------------------------------------
+// closeOrphanedRuns — startup recovery for crash-mid-run scenarios
+// ---------------------------------------------------------------------------
+
+describe('eventStore.closeOrphanedRuns', () => {
+  const ORPHAN_PROJECT = 'test-event-store-orphan';
+
+  beforeAll(() => {
+    db.delete(events).where(sql`project_id = ${ORPHAN_PROJECT}`).run();
+  });
+
+  afterEach(() => {
+    db.delete(events).where(sql`project_id = ${ORPHAN_PROJECT}`).run();
+  });
+
+  afterAll(() => {
+    db.delete(events).where(sql`project_id = ${ORPHAN_PROJECT}`).run();
+  });
+
+  it('closes a run that started but never completed by emitting agent.run-failed', () => {
+    const runId = 'orphan-run-1';
+    eventStore.appendEvent({
+      projectId: ORPHAN_PROJECT,
+      workItemId: 'github:org/repo#1',
+      kind: 'agent.run-started',
+      payload: { skill: 'echo-test' },
+      runId,
+    });
+
+    const closed = eventStore.closeOrphanedRuns();
+    expect(closed).toBeGreaterThanOrEqual(1);
+
+    const replay = eventStore.replay({ projectId: ORPHAN_PROJECT, runId });
+    const failed = replay.find((e) => e.kind === 'agent.run-failed');
+    expect(failed).toBeDefined();
+    const payload = failed?.payload as { orphaned?: boolean; error?: string };
+    expect(payload.orphaned).toBe(true);
+    expect(payload.error).toMatch(/orphaned/i);
+  });
+
+  it('does not re-close a run that already has a run-completed event', () => {
+    const runId = 'completed-run-1';
+    eventStore.appendEvent({
+      projectId: ORPHAN_PROJECT,
+      kind: 'agent.run-started',
+      payload: {},
+      runId,
+    });
+    eventStore.appendEvent({
+      projectId: ORPHAN_PROJECT,
+      kind: 'agent.run-completed',
+      payload: {},
+      runId,
+    });
+
+    eventStore.closeOrphanedRuns();
+    const replay = eventStore.replay({ projectId: ORPHAN_PROJECT, runId });
+    const failedCount = replay.filter((e) => e.kind === 'agent.run-failed').length;
+    expect(failedCount).toBe(0);
+  });
+
+  it('does not re-close a run that already has a run-failed event', () => {
+    const runId = 'failed-run-1';
+    eventStore.appendEvent({
+      projectId: ORPHAN_PROJECT,
+      kind: 'agent.run-started',
+      payload: {},
+      runId,
+    });
+    eventStore.appendEvent({
+      projectId: ORPHAN_PROJECT,
+      kind: 'agent.run-failed',
+      payload: { error: 'first failure' },
+      runId,
+    });
+
+    eventStore.closeOrphanedRuns();
+    const replay = eventStore.replay({ projectId: ORPHAN_PROJECT, runId });
+    const failed = replay.filter((e) => e.kind === 'agent.run-failed');
+    // Still exactly one — closeOrphanedRuns must not have appended a synthetic one.
+    expect(failed).toHaveLength(1);
+    expect((failed[0].payload as { error: string }).error).toBe('first failure');
+  });
+
+  it('only emits a single synthetic failure even when a run has multiple started events', () => {
+    const runId = 'multi-start-run';
+    eventStore.appendEvent({
+      projectId: ORPHAN_PROJECT,
+      kind: 'agent.run-started',
+      payload: { attempt: 1 },
+      runId,
+    });
+    eventStore.appendEvent({
+      projectId: ORPHAN_PROJECT,
+      kind: 'agent.run-started',
+      payload: { attempt: 2 },
+      runId,
+    });
+
+    eventStore.closeOrphanedRuns();
+    const replay = eventStore.replay({ projectId: ORPHAN_PROJECT, runId });
+    expect(replay.filter((e) => e.kind === 'agent.run-failed')).toHaveLength(1);
+  });
+});

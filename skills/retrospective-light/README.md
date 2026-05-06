@@ -27,7 +27,7 @@ Only `confidence: "high"` candidates are included. Low/medium confidence observa
 
 ## Prompt
 
-`skill.md` — instructs the agent to summarise the run in 3 bullets and surface high-confidence candidates only.
+`prompt.md` — instructs the agent to summarise the run in 3 bullets and surface high-confidence candidates only.
 
 ## Config
 
