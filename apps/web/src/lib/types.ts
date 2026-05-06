@@ -185,3 +185,68 @@ export interface ImprovementCandidateDto {
   errorNote: string | null;
   createdAt: string;
 }
+
+export interface PlaybookSummaryDto {
+  id: number;
+  projectId: string;
+  windowStartAt: string;
+  windowEndAt: string;
+  lifecycleCount: number;
+  topPatternCount: number;
+  topCandidateCount: number;
+  createdAt: string;
+}
+
+export interface PlaybookManifestDto {
+  outcome: string;
+  workItemNumber: number;
+  windowStartAt: string;
+  windowEndAt: string;
+  lifecycleCount: number;
+  summary: { wentWell: string; didNotGoWell: string; architecturalTakeaway: string };
+  aggregatedLearnings: Array<{
+    observation: string;
+    rationale: string;
+    improvementKind: string;
+    targetPath?: string;
+    confidence: string;
+  }>;
+  topPatterns: Array<{
+    patternId: string;
+    pattern: string;
+    occurrenceCount: number;
+    consistencyScore: number;
+    role?: string;
+    kind?: string;
+    exampleWorkItemIds: string[];
+  }>;
+  gateThresholds: Array<{
+    gate: 'qa' | 'review';
+    mean: number;
+    min: number;
+    max: number;
+    stdDev: number;
+    sampleCount: number;
+  }>;
+  costBaselines: Array<{
+    role: string;
+    skill: string;
+    mean: number;
+    p50: number;
+    p95: number;
+    sampleCount: number;
+  }>;
+  improvementCandidates: Array<{
+    kind: string;
+    targetPath: string;
+    suggestionText: string;
+    confidence: string;
+    evidence?: string;
+    proposedDiff?: string;
+  }>;
+  decisionSummaries: Array<{ kind: string; summary: string; evidence?: string }>;
+}
+
+export interface PlaybookDetailDto extends PlaybookSummaryDto {
+  manifest: PlaybookManifestDto;
+}

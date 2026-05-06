@@ -15,6 +15,13 @@
       "when": 1778065774445,
       "tag": "0001_parallel_morg",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1778098267923,
+      "tag": "0002_nervous_lucky_pierre",
+      "breakpoints": true
     }
   ]
 }

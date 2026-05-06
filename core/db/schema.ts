@@ -164,6 +164,27 @@ export const decisionPatterns = sqliteTable(
   }),
 );
 
+export const playbooks = sqliteTable(
+  'playbooks',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    projectId: text('project_id').notNull(),
+    windowStartAt: text('window_start_at').notNull(),
+    windowEndAt: text('window_end_at').notNull(),
+    lifecycleCount: integer('lifecycle_count').notNull().default(0),
+    manifest: text('manifest').notNull(),
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  },
+  (t) => ({
+    projectCreatedIdx: index('playbooks_project_created_idx').on(t.projectId, t.createdAt),
+    projectWindowIdx: index('playbooks_project_window_idx').on(
+      t.projectId,
+      t.windowStartAt,
+      t.windowEndAt,
+    ),
+  }),
+);
+
 // One row per agent run. `runId` is unique — the same run is never recorded twice.
 // `costLabel`: 'exact' when the source provided authoritative usage metadata
 // (direct API), 'estimated' when only the Claude CLI's reported totals are

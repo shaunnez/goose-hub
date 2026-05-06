@@ -76,6 +76,14 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     timeoutMs: 300_000,
     modelTier: 'sonnet',
   },
+  // Cross-run retro reasons over a window of lifecycles (M11.12). Larger
+  // context window than per-merge retros, so a higher turn/budget cap.
+  'retrospective-cross-run': {
+    maxTurns: 40,
+    maxBudgetUsd: 1.0,
+    timeoutMs: 420_000,
+    modelTier: 'sonnet',
+  },
 };
 
 export interface ResolvedBudget {
