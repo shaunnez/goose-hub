@@ -195,6 +195,7 @@ export interface PlaybookSummaryDto {
   lifecycleCount: number;
   topPatternCount: number;
   topCandidateCount: number;
+  coachProposalCount: number;
   createdAt: string;
 }
 

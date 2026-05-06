@@ -18,6 +18,13 @@ import {
   fetchLifecyclesInWindow,
 } from '../learning/playbook-stats.js';
 import { getProjectBySlug } from '../projects/loader.js';
+import type { CoachPolicy } from '../types.js';
+import {
+  FORBIDDEN_COACH_TARGETS,
+  type SkillCoachingInput,
+  type SkillCoachingOutcome,
+  runSkillCoachingWorkflow,
+} from './skill-coaching.js';
 
 export interface DateRange {
   startAt: string;
@@ -30,7 +37,11 @@ export interface CrossRunRetroInput {
   windowSize?: number;
   /** Inclusive ISO8601 bounds. Mutually exclusive with `windowSize`. */
   dateRange?: DateRange;
-  deps?: { runtime?: AgentRuntime; now?: () => Date };
+  deps?: {
+    runtime?: AgentRuntime;
+    now?: () => Date;
+    coachWorkflowRunner?: (input: SkillCoachingInput) => Promise<SkillCoachingOutcome>;
+  };
 }
 
 export interface CrossRunRetroResult {
@@ -138,6 +149,93 @@ function safeParseJsonUnknownArray(raw: string): unknown[] {
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
+  }
+}
+
+const SKILL_CANDIDATE_KINDS = new Set(['skill-prompt', 'skill-schema', 'skill-config']);
+
+function extractSkillName(targetPath: string): string | null {
+  const match = targetPath.match(/^skills\/([^/]+)\//);
+  return match?.[1] ?? null;
+}
+
+export interface CoachDispatchInput {
+  projectId: string;
+  playbookId: number;
+  manifest: CrossRunRetroOutput;
+  lifecycleCount: number;
+  lifecycleIds: number[];
+  coachPolicy: CoachPolicy;
+  coachWorkflowRunner: (input: SkillCoachingInput) => Promise<SkillCoachingOutcome>;
+}
+
+/**
+ * M11.14: After a playbook is persisted, scan its improvementCandidates for
+ * skill-related entries backed by convergent patterns and auto-dispatch the
+ * skill-coach for each eligible one.
+ *
+ * Guards:
+ *   - coachPolicy.enabled must be true (caller's responsibility)
+ *   - lifecycleCount >= coachPolicy.minLifecycles (not enough data otherwise)
+ *   - at least one topPattern with consistencyScore >= coachPolicy.consistencyThreshold
+ *   - candidate.kind ∈ {skill-prompt, skill-schema, skill-config}
+ *   - targetPath must yield a valid skill name ("skills/<name>/...")
+ *   - skill name must not be in FORBIDDEN_COACH_TARGETS
+ */
+export async function dispatchCoachCandidates(input: CoachDispatchInput): Promise<void> {
+  const {
+    projectId,
+    playbookId,
+    manifest,
+    lifecycleCount,
+    lifecycleIds,
+    coachPolicy,
+    coachWorkflowRunner,
+  } = input;
+
+  if (lifecycleCount < coachPolicy.minLifecycles) return;
+
+  const eligiblePatternIds = manifest.topPatterns
+    .filter((p) => p.consistencyScore >= coachPolicy.consistencyThreshold)
+    .map((p) => p.patternId);
+
+  if (eligiblePatternIds.length === 0) return;
+
+  for (const candidate of manifest.improvementCandidates) {
+    if (!SKILL_CANDIDATE_KINDS.has(candidate.kind)) continue;
+
+    const skillName = extractSkillName(candidate.targetPath);
+    if (!skillName) continue;
+
+    if (FORBIDDEN_COACH_TARGETS.has(skillName)) {
+      eventStore.appendEvent({
+        kind: 'coach.skipped-forbidden-target',
+        projectId,
+        payload: { targetSkillName: skillName, playbookId, reason: 'forbidden-target' },
+      });
+      continue;
+    }
+
+    eventStore.appendEvent({
+      kind: 'coach.dispatch-triggered',
+      projectId,
+      payload: { targetSkillName: skillName, playbookId, patternCount: eligiblePatternIds.length },
+    });
+
+    try {
+      await coachWorkflowRunner({
+        projectId,
+        targetSkillName: skillName,
+        evidence: { patternIds: eligiblePatternIds, lifecycleIds },
+        sourcePlaybookId: playbookId,
+      });
+    } catch (err) {
+      eventStore.appendEvent({
+        kind: 'coach.dispatch-failed',
+        projectId,
+        payload: { targetSkillName: skillName, playbookId, error: String(err) },
+      });
+    }
   }
 }
 
@@ -280,6 +378,21 @@ export async function runCrossRunRetroWorkflow(
       runId,
       payload: { tier: 'cross-run', playbookId, manifest },
     });
+
+    const coachPolicy = projectConfig?.agentConfig?.coachPolicy;
+    if (coachPolicy?.enabled) {
+      const lifecycleIds = lifecycles.map((l) => l.id);
+      const coachRunner = input.deps?.coachWorkflowRunner ?? runSkillCoachingWorkflow;
+      await dispatchCoachCandidates({
+        projectId,
+        playbookId,
+        manifest,
+        lifecycleCount: lifecycles.length,
+        lifecycleIds,
+        coachPolicy,
+        coachWorkflowRunner: coachRunner,
+      });
+    }
 
     return {
       ok: true,

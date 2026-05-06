@@ -56,6 +56,7 @@ vi.mock('../projects/loader.js', () => ({
 
 import {
   CrossRunRetroInputError,
+  dispatchCoachCandidates,
   resolveWindow,
   runCrossRunRetroWorkflow,
 } from './cross-run-retro.js';
@@ -331,5 +332,159 @@ describe('runCrossRunRetroWorkflow', () => {
     };
     expect(spec.context.precomputedGateThresholds).toHaveLength(1);
     expect(spec.context.precomputedCostBaselines).toHaveLength(1);
+  });
+});
+
+// ─── dispatchCoachCandidates — M11.14 auto-trigger ───────────────────────────
+
+function makeManifestWithCandidates(
+  patterns: { patternId: string; consistencyScore: number }[],
+  candidates: { kind: string; targetPath: string }[],
+) {
+  return {
+    outcome: 'success' as const,
+    workItemNumber: 0,
+    windowStartAt: '2026-04-01T00:00:00Z',
+    windowEndAt: '2026-05-01T00:00:00Z',
+    lifecycleCount: 5,
+    summary: { wentWell: '', didNotGoWell: '', architecturalTakeaway: '' },
+    aggregatedLearnings: [],
+    topPatterns: patterns.map((p) => ({
+      patternId: p.patternId,
+      pattern: 'some pattern',
+      occurrenceCount: 3,
+      consistencyScore: p.consistencyScore,
+      exampleWorkItemIds: [],
+    })),
+    gateThresholds: [],
+    costBaselines: [],
+    improvementCandidates: candidates.map((c) => ({
+      kind: c.kind as 'skill-prompt' | 'skill-schema' | 'skill-config',
+      targetPath: c.targetPath,
+      suggestionText: 'improve this',
+      evidence: `pattern:${c.kind} ref`,
+      confidence: 'high' as const,
+    })),
+    decisionSummaries: [] as never[],
+  };
+}
+
+describe('dispatchCoachCandidates', () => {
+  it('fires coach runner above threshold with enough lifecycles', async () => {
+    const mockCoachRunner = vi.fn().mockResolvedValue({ ok: true });
+    const manifest = makeManifestWithCandidates(
+      [{ patternId: 'PLAN::developer', consistencyScore: 0.9 }],
+      [{ kind: 'skill-prompt', targetPath: 'skills/implement/prompt.md' }],
+    );
+
+    await dispatchCoachCandidates({
+      projectId: 'p',
+      playbookId: 1,
+      manifest,
+      lifecycleCount: 4,
+      lifecycleIds: [1, 2, 3, 4],
+      coachPolicy: { enabled: true, consistencyThreshold: 0.8, minLifecycles: 3 },
+      coachWorkflowRunner: mockCoachRunner,
+    });
+
+    expect(mockCoachRunner).toHaveBeenCalledOnce();
+    const call = mockCoachRunner.mock.calls[0][0] as {
+      targetSkillName: string;
+      sourcePlaybookId: number;
+    };
+    expect(call.targetSkillName).toBe('implement');
+    expect(call.sourcePlaybookId).toBe(1);
+    const events = mockAppendEvent.mock.calls.map((c) => c[0]);
+    expect(events.some((e) => e.kind === 'coach.dispatch-triggered')).toBe(true);
+  });
+
+  it('does not fire when consistencyScore is below threshold', async () => {
+    const mockCoachRunner = vi.fn();
+    const manifest = makeManifestWithCandidates(
+      [{ patternId: 'PLAN::developer', consistencyScore: 0.5 }],
+      [{ kind: 'skill-prompt', targetPath: 'skills/implement/prompt.md' }],
+    );
+
+    await dispatchCoachCandidates({
+      projectId: 'p',
+      playbookId: 2,
+      manifest,
+      lifecycleCount: 5,
+      lifecycleIds: [1, 2, 3, 4, 5],
+      coachPolicy: { enabled: true, consistencyThreshold: 0.8, minLifecycles: 3 },
+      coachWorkflowRunner: mockCoachRunner,
+    });
+
+    expect(mockCoachRunner).not.toHaveBeenCalled();
+  });
+
+  it('does not fire when lifecycleCount is below minLifecycles', async () => {
+    const mockCoachRunner = vi.fn();
+    const manifest = makeManifestWithCandidates(
+      [{ patternId: 'PLAN::developer', consistencyScore: 0.95 }],
+      [{ kind: 'skill-prompt', targetPath: 'skills/implement/prompt.md' }],
+    );
+
+    await dispatchCoachCandidates({
+      projectId: 'p',
+      playbookId: 3,
+      manifest,
+      lifecycleCount: 2,
+      lifecycleIds: [1, 2],
+      coachPolicy: { enabled: true, consistencyThreshold: 0.8, minLifecycles: 3 },
+      coachWorkflowRunner: mockCoachRunner,
+    });
+
+    expect(mockCoachRunner).not.toHaveBeenCalled();
+  });
+
+  it('skips forbidden targets and emits coach.skipped-forbidden-target', async () => {
+    const mockCoachRunner = vi.fn();
+    const manifest = makeManifestWithCandidates(
+      [{ patternId: 'VERDICT::qa', consistencyScore: 0.9 }],
+      [{ kind: 'skill-prompt', targetPath: 'skills/qa/prompt.md' }],
+    );
+
+    await dispatchCoachCandidates({
+      projectId: 'p',
+      playbookId: 4,
+      manifest,
+      lifecycleCount: 5,
+      lifecycleIds: [1, 2, 3, 4, 5],
+      coachPolicy: { enabled: true, consistencyThreshold: 0.8, minLifecycles: 3 },
+      coachWorkflowRunner: mockCoachRunner,
+    });
+
+    expect(mockCoachRunner).not.toHaveBeenCalled();
+    const events = mockAppendEvent.mock.calls.map((c) => c[0]);
+    expect(events.some((e) => e.kind === 'coach.skipped-forbidden-target')).toBe(true);
+  });
+
+  it('dispatches once per each matching candidate when multiple pass filters', async () => {
+    const mockCoachRunner = vi.fn().mockResolvedValue({ ok: true });
+    const manifest = makeManifestWithCandidates(
+      [{ patternId: 'PLAN::developer', consistencyScore: 0.9 }],
+      [
+        { kind: 'skill-prompt', targetPath: 'skills/implement/prompt.md' },
+        { kind: 'skill-schema', targetPath: 'skills/triage/schema.ts' },
+      ],
+    );
+
+    await dispatchCoachCandidates({
+      projectId: 'p',
+      playbookId: 5,
+      manifest,
+      lifecycleCount: 4,
+      lifecycleIds: [1, 2, 3, 4],
+      coachPolicy: { enabled: true, consistencyThreshold: 0.8, minLifecycles: 3 },
+      coachWorkflowRunner: mockCoachRunner,
+    });
+
+    expect(mockCoachRunner).toHaveBeenCalledTimes(2);
+    const targets = mockCoachRunner.mock.calls.map(
+      (c) => (c[0] as { targetSkillName: string }).targetSkillName,
+    );
+    expect(targets).toContain('implement');
+    expect(targets).toContain('triage');
   });
 });

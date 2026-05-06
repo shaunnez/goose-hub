@@ -47,6 +47,8 @@ export interface SkillCoachingInput {
     patternIds: string[];
     lifecycleIds?: number[];
   };
+  /** Set when this coaching run was auto-triggered from a cross-run retro playbook. */
+  sourcePlaybookId?: number;
   deps?: { runtime?: AgentRuntime; repoRoot?: string };
 }
 
@@ -240,6 +242,7 @@ export async function runSkillCoachingWorkflow(
         suggestionText: output.rationale,
         suggestionType: 'skill-prompt',
         proposedDiff: output.proposedPatch || null,
+        sourcePlaybookId: input.sourcePlaybookId ?? null,
       })
       .returning({ id: improvementCandidates.id })
       .all();
