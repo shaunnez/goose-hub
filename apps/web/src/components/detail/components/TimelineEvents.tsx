@@ -38,6 +38,8 @@ type TimelineContext = {
   issueId: string;
   latestRunId: string | null;
   runCosts?: Map<string, CostRowDto>;
+  /** Monotonic tick that increments each time the user clicks expand/collapse all. */
+  expandSignal?: { tick: number; open: boolean };
 };
 
 // ─── individual event renderers ───────────────────────────────────────────────
@@ -1190,6 +1192,14 @@ function RunGroupWrapper({
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, [isLive]);
+
+  // React to expand/collapse all signal from parent.
+  const expandTick = context?.expandSignal?.tick ?? 0;
+  const expandOpen = context?.expandSignal?.open ?? true;
+  useEffect(() => {
+    if (expandTick === 0) return;
+    setOpen(expandOpen);
+  }, [expandTick, expandOpen]);
 
   const displayItems = items.map((item) => {
     if (

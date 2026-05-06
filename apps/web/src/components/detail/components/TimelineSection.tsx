@@ -4,6 +4,7 @@ import { Clock } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useIssueCostsBreakdown } from '../lib/costs';
 import { EVENT_KIND_LABEL, groupEvents } from '../lib/timeline';
+import type { RenderItem } from '../lib/timeline';
 import { SectionEmptyState } from './SectionEmptyState';
 import { renderTimelineItem } from './TimelineEvents';
 
@@ -21,6 +22,10 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
   const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const { byRun: runCosts } = useIssueCostsBreakdown(projectSlug, id);
+  const [expandSignal, setExpandSignal] = useState<{ tick: number; open: boolean }>({
+    tick: 0,
+    open: true,
+  });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -101,13 +106,37 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
   }
 
   const items = groupEvents(events);
-  const latestRunId = items.find((item) => item.kind === 'run-group')?.runId ?? null;
-  const context = { slug: projectSlug, issueId: id, latestRunId, runCosts };
+  const hasRunGroups = items.some((item: RenderItem) => item.kind === 'run-group');
+  const latestRunId = items.find((item: RenderItem) => item.kind === 'run-group')?.runId ?? null;
+  const context = { slug: projectSlug, issueId: id, latestRunId, runCosts, expandSignal };
+
+  const sendSignal = (open: boolean) => setExpandSignal((prev) => ({ tick: prev.tick + 1, open }));
 
   return (
     <div data-testid="timeline-section" className="px-8 py-6">
+      {hasRunGroups && (
+        <div className="flex items-center gap-3 mb-3">
+          <button
+            type="button"
+            data-testid="timeline-expand-all"
+            onClick={() => sendSignal(true)}
+            className="font-mono text-[11px] uppercase tracking-wider text-fg-4 hover:text-fg-2 transition-colors"
+          >
+            Expand all
+          </button>
+          <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-5" />
+          <button
+            type="button"
+            data-testid="timeline-collapse-all"
+            onClick={() => sendSignal(false)}
+            className="font-mono text-[11px] uppercase tracking-wider text-fg-4 hover:text-fg-2 transition-colors"
+          >
+            Collapse all
+          </button>
+        </div>
+      )}
       <ol className="flex flex-col gap-3">
-        {items.map((item, idx) => renderTimelineItem(item, idx, context))}
+        {items.map((item: RenderItem, idx: number) => renderTimelineItem(item, idx, context))}
       </ol>
     </div>
   );
