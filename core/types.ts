@@ -33,7 +33,8 @@ export type Role =
   | 'qa'
   | 'reviewer'
   | 'retrospector'
-  | 'researcher';
+  | 'researcher'
+  | 'coach';
 
 export interface RoleModel {
   primary: ModelTier;
@@ -44,6 +45,13 @@ export interface RoleModel {
 export interface ToolAllowlist {
   bundles: string[];
   extras?: string[];
+}
+
+export interface CoachPolicy {
+  enabled: boolean;
+  consistencyThreshold: number;
+  minLifecycles: number;
+  forbiddenTargets?: string[];
 }
 
 export interface AgentConfig {
@@ -61,6 +69,7 @@ export interface AgentConfig {
     defaultTier: 'light' | 'deep';
     deepTriggers: string[];
   };
+  coachPolicy?: CoachPolicy;
 }
 
 export interface BudgetConfig {

@@ -40,6 +40,7 @@ const config: ProjectConfig = {
       reviewer: { primary: 'sonnet', fallback: null, advisor: null },
       retrospector: { primary: 'sonnet', fallback: 'haiku', advisor: null },
       researcher: { primary: 'opus', fallback: 'sonnet', advisor: null },
+      coach: { primary: 'sonnet', fallback: 'haiku', advisor: null },
     },
     fallbackPolicy: {
       critical: 'same-tier-only',
@@ -58,6 +59,7 @@ const config: ProjectConfig = {
       reviewer: { bundles: ['read', 'validate'] },
       retrospector: { bundles: ['core'], extras: ['event-read', 'persona-stats'] },
       researcher: { bundles: ['web', 'workItemAdmin'] },
+      coach: { bundles: ['core'], extras: ['event-read'] },
     },
     advisorMode: {
       enabled: true,
@@ -76,6 +78,12 @@ const config: ProjectConfig = {
         'priority-critical',
         'first-run-of-skill',
       ],
+    },
+    coachPolicy: {
+      enabled: false,
+      consistencyThreshold: 0.8,
+      minLifecycles: 3,
+      forbiddenTargets: [],
     },
   },
   budgets: {

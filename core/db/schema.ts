@@ -89,6 +89,7 @@ export const improvementCandidates = sqliteTable(
     projectId: text('project_id').notNull().default(''),
     status: text('status').notNull().default('pending'), // pending | approved | rejected
     githubIssueUrl: text('github_issue_url'),
+    sourcePlaybookId: text('source_playbook_id'),
     errorNote: text('error_note'),
     createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
   },
@@ -97,6 +98,7 @@ export const improvementCandidates = sqliteTable(
       t.personaName,
       t.status,
     ),
+    playbookIdx: index('improvement_candidates_playbook_idx').on(t.sourcePlaybookId),
   }),
 );
 
