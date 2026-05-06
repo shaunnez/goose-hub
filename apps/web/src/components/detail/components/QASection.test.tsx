@@ -210,4 +210,92 @@ describe('QASection', () => {
       expect(badge.textContent).toContain('800');
     });
   });
+
+  // Folder grouping tests (#518)
+  it('shows a directory group header when multiple suites share a directory', async () => {
+    vi.mocked(fetchEvents).mockResolvedValueOnce([
+      qaEvent({
+        verdict: 'pass',
+        overallScore: 90,
+        threshold: 70,
+        tierResults: passingTiers,
+        testRun: {
+          wallTimeMs: 500,
+          total: 2,
+          passed: 2,
+          failed: 0,
+          skipped: 0,
+          success: true,
+          suites: [
+            {
+              name: 'a.test.ts',
+              filePath: 'src/a.test.ts',
+              total: 1,
+              passed: 1,
+              failed: 0,
+              skipped: 0,
+              durationMs: 100,
+              status: 'passed',
+            },
+            {
+              name: 'b.test.ts',
+              filePath: 'src/b.test.ts',
+              total: 1,
+              passed: 1,
+              failed: 0,
+              skipped: 0,
+              durationMs: 100,
+              status: 'passed',
+            },
+          ],
+        },
+      }),
+    ]);
+    render_(<QASection projectSlug="proj" id="42" />);
+    await waitFor(() => {
+      expect(screen.getByTestId('qa-test-suites')).toBeTruthy();
+    });
+    // Group header "src/" should appear with "2/2 passing"
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('src/');
+    expect(text).toContain('2/2 passing');
+  });
+
+  it('skips the group header when a directory contains only one suite', async () => {
+    vi.mocked(fetchEvents).mockResolvedValueOnce([
+      qaEvent({
+        verdict: 'pass',
+        overallScore: 90,
+        threshold: 70,
+        tierResults: passingTiers,
+        testRun: {
+          wallTimeMs: 200,
+          total: 1,
+          passed: 1,
+          failed: 0,
+          skipped: 0,
+          success: true,
+          suites: [
+            {
+              name: 'solo.test.ts',
+              filePath: 'src/solo.test.ts',
+              total: 1,
+              passed: 1,
+              failed: 0,
+              skipped: 0,
+              durationMs: 200,
+              status: 'passed',
+            },
+          ],
+        },
+      }),
+    ]);
+    render_(<QASection projectSlug="proj" id="42" />);
+    await waitFor(() => {
+      expect(screen.getByTestId('qa-test-suites')).toBeTruthy();
+    });
+    // "1/1 passing" is a group header pattern — should NOT appear for single-suite group
+    const text = document.body.textContent ?? '';
+    expect(text).not.toContain('/1 passing');
+  });
 });

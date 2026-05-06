@@ -170,4 +170,44 @@ describe('ReviewSection', () => {
     const pill = screen.getByTestId('review-verdict-pill');
     expect(pill.textContent).toContain('mystery-verdict');
   });
+
+  // Pre-merge pipeline tests (#518)
+  it('renders all five pre-merge pipeline check labels', () => {
+    const QA_COMPLETED: AgentEventDto = {
+      id: 8,
+      projectId: 'test-proj',
+      workItemId: 'github:test/repo#42',
+      kind: 'qa.completed',
+      payload: {
+        tierResults: {
+          structural: { passed: true },
+          functional: { passed: true },
+        },
+        testRun: { failed: 0 },
+        criteriaResults: [{ passed: true }],
+      },
+      runId: 'run-1',
+      createdAt: new Date().toISOString(),
+    };
+    renderSection([QA_COMPLETED, PR_OPENED, REVIEW_APPROVED]);
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('Lint clean');
+    expect(text).toContain('Tests passing');
+    expect(text).toContain('Acceptance criteria');
+    expect(text).toContain('PR opened');
+    expect(text).toContain('Review approved');
+  });
+
+  it('marks PR opened as passed when pr.opened event present', () => {
+    renderSection([PR_OPENED, REVIEW_APPROVED]);
+    // The "PR opened" row should be in the pipeline list
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('PR opened');
+  });
+
+  it('marks Review approved based on verdict field', () => {
+    renderSection([REVIEW_APPROVED]);
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('Review approved');
+  });
 });

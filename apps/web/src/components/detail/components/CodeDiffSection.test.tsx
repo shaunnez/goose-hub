@@ -10,6 +10,10 @@ afterEach(cleanup);
 vi.mock('@/lib/api', () => ({
   fetchIssueDiff: vi.fn(),
   fetchEvents: vi.fn().mockResolvedValue([]),
+  fetchPersonaNames: vi.fn().mockResolvedValue([]),
+  fetchIssueCosts: vi
+    .fn()
+    .mockResolvedValue({ workItemId: 'wi', totalUsd: 0, hasEstimated: false, rows: [] }),
 }));
 
 function render_(jsx: React.ReactNode) {
@@ -59,5 +63,20 @@ describe('CodeDiffSection (#185)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('code-diff-empty')).toBeTruthy();
     });
+  });
+
+  // Section header tests (#518)
+  it('renders the eyebrow and title when diff is present', async () => {
+    vi.mocked(fetchIssueDiff).mockResolvedValueOnce({
+      diff: 'diff --git a/x.ts b/x.ts\n--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-old\n+new',
+      runId: 'run-abc12345',
+    });
+    render_(<CodeDiffSection projectSlug="proj" id="42" />);
+    await waitFor(() => {
+      expect(screen.getByTestId('code-diff-section')).toBeTruthy();
+    });
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('05 · Code');
+    expect(text).toContain('Patch in flight');
   });
 });
