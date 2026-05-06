@@ -76,6 +76,12 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     timeoutMs: 300_000,
     modelTier: 'sonnet',
   },
+  'skill-coach': {
+    maxTurns: 25,
+    maxBudgetUsd: 0.5,
+    timeoutMs: 180_000,
+    modelTier: 'sonnet',
+  },
 };
 
 export interface ResolvedBudget {

@@ -94,6 +94,7 @@ export async function runSkillCoachingWorkflow(input: RunSkillCoachingInput): Pr
   // Try to read skill files (validates that the skill directory exists)
   try {
     readSkillFile(targetSkillName, 'skill.md', worktreePath);
+    readSkillFile(targetSkillName, 'schema.ts', worktreePath);
   } catch {
     const error = `Skill file not found: skills/${targetSkillName}/skill.md`;
     eventStore.appendEvent({

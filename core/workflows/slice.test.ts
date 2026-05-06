@@ -640,4 +640,72 @@ describe('skill-coaching workflow', () => {
       outcome: 'failure',
     });
   });
+
+  it('emits skill-coaching.completed and success stat on happy path', async () => {
+    const { runSkillCoachingWorkflow } = await import('./skill-coaching.js');
+    const { eventStore } = await import('../event-stream/store.js');
+
+    const validOutput = {
+      skillName: 'investigate',
+      diagnosis: 'Pattern: agents skip reading imports before mocking.',
+      proposedPatch:
+        '--- a/skills/investigate/skill.md\n+++ b/skills/investigate/skill.md\n@@ -5,3 +5,4 @@\n+Before mocking, read the file imports.\n',
+      rationale: 'Clarifies read-before-mock discipline that 6 lifecycles violated.',
+      evidencePatternIds: ['p1', 'p2'],
+      confidence: 'high',
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Synthesized 2 patterns into minimal patch' }],
+    };
+    mockRun.mockResolvedValueOnce({ output: validOutput, decisionSummaries: [], events: [] });
+
+    await runSkillCoachingWorkflow({
+      projectId: 'test-project',
+      targetSkillName: 'investigate',
+      patternIds: ['p1', 'p2'],
+    });
+
+    const completedEvent = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'skill-coaching.completed');
+    expect(completedEvent).toBeDefined();
+
+    const payload = completedEvent?.[0].payload as { targetSkillName: string };
+    expect(payload.targetSkillName).toBe('investigate');
+
+    expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
+      personaName: 'test-project/developer/0',
+      role: 'developer',
+      outcome: 'success',
+    });
+  });
+
+  it('emits agent.run-failed with clear error when skill source files are missing', async () => {
+    const { runSkillCoachingWorkflow } = await import('./skill-coaching.js');
+    const { eventStore } = await import('../event-stream/store.js');
+
+    mockReadFileSync.mockImplementationOnce(() => {
+      throw new Error('ENOENT: no such file or directory');
+    });
+
+    await runSkillCoachingWorkflow({
+      projectId: 'test-project',
+      targetSkillName: 'nonexistent-skill',
+      patternIds: ['p1'],
+    });
+
+    const failedEvent = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'agent.run-failed');
+    expect(failedEvent).toBeDefined();
+
+    const payload = failedEvent?.[0].payload as { skill: string; error: string };
+    expect(payload.error).toContain('nonexistent-skill');
+    expect(mockRun).not.toHaveBeenCalled();
+
+    expect(mockAccumulatePersonaStats).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: 'developer',
+        outcome: 'failure',
+      }),
+    );
+  });
 });
