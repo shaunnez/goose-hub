@@ -247,7 +247,7 @@ describe('ReviewFindingSchema', () => {
       criterion: 'No inline prompts in code',
       severity: 'major',
       description: 'Prompt found inline in src/agent.ts',
-      suggestion: 'Move to skills/myskill/skill.md',
+      suggestion: 'Move to skills/myskill/prompt.md',
       file: 'src/agent.ts',
       line: 37,
     });
@@ -310,7 +310,7 @@ describe('ReviewFindingSchema', () => {
     expect(
       ReviewFindingSchema.safeParse({
         severity: 'blocker',
-        description: 'Inline prompt — moved to skill.md',
+        description: 'Inline prompt — moved to prompt.md',
         disposition: 'fixed',
         dispositionRef: 'd34db33f',
       }).success,
@@ -393,19 +393,19 @@ describe('confidence range validation', () => {
   });
 });
 
-// ─── skill.md — criteriaChecks output requirement ────────────────────────────
+// ─── prompt.md — criteriaChecks output requirement ───────────────────────────
 
-describe('skill.md — criteriaChecks population requirement', () => {
-  const skillMd = readFileSync(join(import.meta.dirname, 'skill.md'), 'utf-8');
+describe('prompt.md — criteriaChecks population requirement', () => {
+  const promptMd = readFileSync(join(import.meta.dirname, 'prompt.md'), 'utf-8');
 
   it('output format section explicitly requires one entry per criterion', () => {
     // Must contain language stating criteriaChecks needs one entry per criterion
-    expect(skillMd).toMatch(/criteriaChecks.*one entry per/s);
+    expect(promptMd).toMatch(/criteriaChecks.*one entry per/s);
   });
 
   it('warns that empty criteriaChecks array is never valid when criteria exist', () => {
     // Must contain a warning that criteriaChecks: [] is never valid
-    expect(skillMd).toMatch(/criteriaChecks.*\[\].*never valid|criteriaChecks: \[\].*never valid/s);
+    expect(promptMd).toMatch(/criteriaChecks.*\[\].*never valid|criteriaChecks: \[\].*never valid/s);
   });
 });
 

@@ -14,7 +14,7 @@ const baseValid = {
   improvementCandidates: [
     {
       kind: 'skill-prompt' as const,
-      targetPath: 'skills/implement/skill.md',
+      targetPath: 'skills/implement/prompt.md',
       suggestionText: 'Add explicit reminder to check slice.test.ts exists before writing code',
       confidence: 'high' as const,
     },
