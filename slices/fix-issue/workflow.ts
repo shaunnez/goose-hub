@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { adviseOnPlan } from '@goose-hub/core/agent-runtime/advisor.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
@@ -147,7 +148,12 @@ export async function runFixIssueWorkflow(
       });
 
       if (verdict.verdict === 'abort') {
-        await stateSource.comment(workItem.externalId, `Advisor aborted: ${verdict.reason}`);
+        await stateSource.comment(
+          workItem.externalId,
+          buildAgentComment('Dev', 'Aborted', 'Advisor aborted — escalating to needs-human', [
+            `Reason: ${verdict.reason}`,
+          ]),
+        );
         await stateSource.transitionState(
           workItem.externalId,
           'factory:in-progress',
@@ -240,7 +246,12 @@ export async function runFixIssueWorkflow(
       payload: { runId, error: error.message },
       runId,
     });
-    await stateSource.comment(workItem.externalId, `Fix-issue failed: ${error.message}`);
+    await stateSource.comment(
+      workItem.externalId,
+      buildAgentComment('Dev', 'Failed', 'Fix-issue failed — escalating to needs-human', [
+        `Error: ${error.message}`,
+      ]),
+    );
     await stateSource.transitionState(
       workItem.externalId,
       'factory:in-progress',
@@ -413,7 +424,12 @@ async function afterImplement(input: AfterImplementInput): Promise<void> {
 
   await stateSource.comment(
     workItem.externalId,
-    `PR #${prResult.prNumber} opened: ${prResult.prUrl}\n\nTransitioning to \`factory:needs-qa\`.`,
+    buildAgentComment(
+      'Dev',
+      'Complete',
+      `PR #${prResult.prNumber} opened — transitioning to needs-qa`,
+      [`PR: ${prResult.prUrl}`],
+    ),
   );
 
   // Step 6: evidence-post wiring (#234) — best-effort.

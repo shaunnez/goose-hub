@@ -26,7 +26,7 @@ export function QASection({ projectSlug, id }: QASectionProps) {
 
   if (isLoading) return null;
 
-  const qaEvent = [...events].reverse().find((e) => e.kind === 'qa.completed');
+  const qaEvent = [...events].find((e) => e.kind === 'qa.completed');
   const qa = qaEvent?.payload as QaPayload | undefined;
 
   if (!qa) {

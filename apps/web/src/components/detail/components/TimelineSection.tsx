@@ -120,7 +120,7 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
             type="button"
             data-testid="timeline-expand-all"
             onClick={() => sendSignal(true)}
-            className="font-mono text-[11px] uppercase tracking-wider text-fg-4 hover:text-fg-2 transition-colors"
+            className="font-mono text-[11px] uppercase tracking-wider hover:text-fg-2 transition-colors"
           >
             Expand all
           </button>
@@ -129,7 +129,7 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
             type="button"
             data-testid="timeline-collapse-all"
             onClick={() => sendSignal(false)}
-            className="font-mono text-[11px] uppercase tracking-wider text-fg-4 hover:text-fg-2 transition-colors"
+            className="font-mono text-[11px] uppercase tracking-wider hover:text-fg-2 transition-colors"
           >
             Collapse all
           </button>

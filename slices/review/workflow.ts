@@ -1,4 +1,5 @@
 import { execSync } from 'node:child_process';
+import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
@@ -94,9 +95,6 @@ export async function runReviewWorkflow(
       });
     }
 
-    const comment = buildReviewComment(reviewOutput);
-    await stateSource.comment(workItem.externalId, comment);
-
     let nextState: StateName;
     if (reviewOutput.verdict === 'needs-fix') {
       // Use priorEvents (snapshotted before this run) for retry count.
@@ -118,6 +116,10 @@ export async function runReviewWorkflow(
       };
       nextState = VERDICT_TO_STATE[reviewOutput.verdict] ?? 'factory:needs-human';
     }
+
+    const comment = buildReviewComment(reviewOutput, nextState);
+    await stateSource.comment(workItem.externalId, comment);
+
     accumulatePersonaStats({
       personaName: personaId,
       role: 'reviewer',
@@ -137,7 +139,12 @@ export async function runReviewWorkflow(
       runId,
     });
 
-    await stateSource.comment(workItem.externalId, `Review failed: ${error.message}`);
+    await stateSource.comment(
+      workItem.externalId,
+      buildAgentComment('Review', 'Failed', 'Review run failed — escalating to needs-human', [
+        `Error: ${error.message}`,
+      ]),
+    );
     await stateSource.transitionState(
       workItem.externalId,
       'factory:needs-review',
@@ -173,24 +180,30 @@ function getQaVerdict(_workItem: WorkItem): { verdict: string; overallScore: num
   return undefined;
 }
 
-function buildReviewComment(output: {
-  verdict: string;
-  confidence: number;
-  criteriaChecks: Array<{ criterion: string; status: string }>;
-  findings: Array<{ severity: string; description: string }>;
-}): string {
-  const emojiMap: Record<string, string> = {
-    approved: '✅',
-    'needs-fix': '🔧',
-    'needs-human': '🆘',
+function buildReviewComment(
+  output: {
+    verdict: string;
+    confidence: number;
+    criteriaChecks: Array<{ criterion: string; status: string }>;
+    findings: Array<{ severity: string; description: string }>;
+  },
+  nextState: string,
+): string {
+  const statusMap: Record<string, string> = {
+    approved: 'Approved',
+    'needs-fix': 'Needs Fix',
+    'needs-human': 'Needs Human',
   };
-  const emoji = emojiMap[output.verdict] ?? '❓';
-  const critLines = output.criteriaChecks
-    .map((c) => `- [${c.status === 'met' ? 'x' : ' '}] ${c.criterion}`)
-    .join('\n');
-  const findingLines = output.findings
-    .slice(0, 5)
-    .map((f) => `- [${f.severity}] ${f.description}`)
-    .join('\n');
-  return `**Review ${emoji} ${output.verdict.toUpperCase()}** (confidence: ${Math.round(output.confidence * 100)}%)\n\n${critLines || ''}\n\n${findingLines || ''}`.trim();
+  const status = statusMap[output.verdict] ?? output.verdict;
+  const pct = Math.round(output.confidence * 100);
+  const details = [
+    ...output.criteriaChecks.map((c) => `[${c.status === 'met' ? 'x' : ' '}] ${c.criterion}`),
+    ...output.findings.slice(0, 5).map((f) => `[${f.severity}] ${f.description}`),
+  ];
+  return buildAgentComment(
+    'Review',
+    status,
+    `Confidence ${pct}% — transitioning to ${nextState}`,
+    details.length > 0 ? details : undefined,
+  );
 }

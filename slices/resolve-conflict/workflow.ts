@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
@@ -65,7 +66,11 @@ export async function runResolveConflictWorkflow(
     await stateSource.transitionState(issueNumber, 'factory:merge-conflict', 'factory:needs-human');
     await stateSource.comment(
       issueNumber,
-      'Agent could not resolve merge conflict: no pr.opened event found.',
+      buildAgentComment(
+        'Resolve-Conflict',
+        'Failed',
+        'No pr.opened event found — escalating to needs-human',
+      ),
     );
     return;
   }
@@ -188,7 +193,12 @@ export async function runResolveConflictWorkflow(
     );
     await stateSource.comment(
       issueNumber,
-      `Merge conflict resolved automatically by agent; PR #${prNumber} merged (${merged.sha}).`,
+      buildAgentComment(
+        'Resolve-Conflict',
+        'Complete',
+        `Merge conflict resolved — PR #${prNumber} merged`,
+        [`SHA: ${merged.sha}`],
+      ),
     );
   } catch (err: unknown) {
     eventStore.appendEvent({
@@ -200,7 +210,12 @@ export async function runResolveConflictWorkflow(
     await stateSource.transitionState(issueNumber, 'factory:merge-conflict', 'factory:needs-human');
     await stateSource.comment(
       issueNumber,
-      `Agent could not resolve merge conflict automatically. Manual merge required: ${prUrl}`,
+      buildAgentComment(
+        'Resolve-Conflict',
+        'Failed',
+        'Could not resolve automatically — manual merge required',
+        [`PR: ${prUrl}`],
+      ),
     );
   } finally {
     try {

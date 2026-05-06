@@ -176,6 +176,9 @@ function extractRunMeta(items: RenderItem[]): {
       if (endedAt == null) endedAt = ev.createdAt;
     } else if (ev.kind === 'agent.run-failed') {
       if (endedAt == null) endedAt = ev.createdAt;
+    } else if (ev.kind === 'retrospective.completed') {
+      // retrospective runs don't always emit agent.run-completed; treat this as terminal
+      if (endedAt == null) endedAt = ev.createdAt;
     }
   }
 

@@ -1,3 +1,4 @@
+import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import {
   MergeConflictError,
   mergePR as defaultMergePR,
@@ -102,7 +103,12 @@ export async function approveIssue(
   }
 
   await source.transitionState(id, 'factory:approved', 'factory:retrospecting');
-  await source.comment(id, `Approved via Goose Hub UI; PR #${prNumber} merged (${merged.sha}).`);
+  await source.comment(
+    id,
+    buildAgentComment('Gate', 'Approved', `PR #${prNumber} merged via Goose Hub UI`, [
+      `SHA: ${merged.sha}`,
+    ]),
+  );
 
   // Fire-and-forget the retrospective. The label-change webhook will also
   // dispatch retro on factory:retrospecting; running it here avoids waiting
@@ -140,7 +146,10 @@ export async function rejectIssue(
     kind: 'gate.rejected',
     payload: { source: 'ui', reason },
   });
-  await source.comment(id, `Rejected at approval gate: ${reason}`);
+  await source.comment(
+    id,
+    buildAgentComment('Gate', 'Rejected', 'Rejected at approval gate', [`Reason: ${reason}`]),
+  );
   await source.transitionState(id, 'factory:approved', 'factory:needs-fix');
 
   return { ok: true, data: { ok: true } };

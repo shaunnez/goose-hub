@@ -127,7 +127,7 @@ describe('runResolveConflictWorkflow', () => {
     );
     expect(source.comment).toHaveBeenCalledWith(
       '42',
-      expect.stringContaining('no pr.opened event'),
+      expect.stringContaining('No pr.opened event found'),
     );
   });
 
@@ -171,7 +171,7 @@ describe('runResolveConflictWorkflow', () => {
     expect(resolvedEvent).toBeDefined();
     expect(source.comment).toHaveBeenCalledWith(
       '42',
-      expect.stringContaining('resolved automatically'),
+      expect.stringContaining('Merge conflict resolved'),
     );
   });
 

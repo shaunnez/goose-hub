@@ -12,41 +12,72 @@ interface RetrospectiveSectionProps {
 }
 
 interface ImprovementCandidate {
-  kind: string;
-  targetPath: string;
-  suggestionText: string;
-  confidence: 'low' | 'medium' | 'high';
-  proposedDiff?: string;
+  file?: string;
+  action?: string;
+  evidence?: string;
+  confidence?: 'low' | 'medium' | 'high';
+  // legacy fields
+  kind?: string;
+  targetPath?: string;
+  suggestionText?: string;
 }
 
 interface QualityScore {
-  personaName: string;
-  role: string;
-  skillName: string;
+  personaId: string;
   score: number;
   trend: 'improving' | 'stable' | 'declining';
+  sampleCount?: number;
 }
 
 type SummaryShape =
   | string
-  | { wentWell?: string; couldBeSmootherOrCleanRun?: string; mainTakeaway?: string };
+  | {
+      wentWell?: string;
+      didNotGoWell?: string;
+      architecturalTakeaway?: string;
+      couldBeSmootherOrCleanRun?: string;
+      mainTakeaway?: string;
+    };
+
+interface DecisionSummaryEntry {
+  kind: string;
+  summary: string;
+}
 
 interface LightRetroPayload {
   tier: 'light';
   output: {
-    summary: SummaryShape;
+    summaryBullets: string[];
     improvementCandidates: ImprovementCandidate[];
+    decisionSummaries?: DecisionSummaryEntry[];
+    outcome?: string;
+    workItemNumber?: number;
   };
 }
 
 interface DeepRetroPayload {
   tier: 'deep';
   output: {
-    summary: SummaryShape;
-    personaAnalysis: QualityScore[];
+    summary?: SummaryShape;
+    summaryBullets?: string[];
+    personaQualityScores: QualityScore[];
     improvementCandidates: ImprovementCandidate[];
-    learningEntries: Array<{ observation: string; rationale: string; confidence: string }>;
-    decisionPatterns: Array<{ pattern: string; frequency: number; confidence: string }>;
+    learningEntries: Array<{
+      observation: string;
+      rationale: string;
+      improvementKind?: string;
+      confidence: string;
+    }>;
+    decisionPatterns: Array<{
+      pattern: string;
+      frequency?: number;
+      occurrences?: number;
+      confidence: string;
+      note?: string;
+    }>;
+    decisionSummaries?: DecisionSummaryEntry[];
+    outcome?: string;
+    workItemNumber?: number;
   };
 }
 
@@ -66,28 +97,40 @@ function CandidateList({ candidates }: { candidates: ImprovementCandidate[] }) {
         Improvement Candidates
       </h3>
       <div className="space-y-2">
-        {candidates.map((c) => (
-          <div key={c.targetPath} className="border border-line rounded-lg p-3 text-[12.5px]">
-            <div className="flex items-center gap-2 mb-1">
-              <span
-                className={`text-[10px] font-medium uppercase px-1.5 py-0.5 rounded ${
-                  c.confidence === 'high'
-                    ? 'bg-green-500/15 text-green-400'
-                    : c.confidence === 'medium'
-                      ? 'bg-yellow-500/15 text-yellow-400'
-                      : 'bg-blue-500/15 text-blue-400'
-                }`}
-              >
-                {c.confidence}
-              </span>
-              <span className="text-[11px] text-fg-4">{c.kind}</span>
-              <span className="font-mono text-[10px] text-fg-3 bg-bg-glass px-1 py-0.5 rounded">
-                {c.targetPath}
-              </span>
+        {candidates.map((c, i) => {
+          const label = c.file ?? c.targetPath;
+          const body = c.action ?? c.suggestionText;
+          const conf = c.confidence;
+          return (
+            <div key={label ?? i} className="border border-line rounded-lg p-3 text-[12.5px]">
+              <div className="flex items-center gap-2 mb-1">
+                {conf && (
+                  <span
+                    className={`text-[10px] font-medium uppercase px-1.5 py-0.5 rounded ${
+                      conf === 'high'
+                        ? 'bg-green-500/15 text-green-400'
+                        : conf === 'medium'
+                          ? 'bg-yellow-500/15 text-yellow-400'
+                          : 'bg-blue-500/15 text-blue-400'
+                    }`}
+                  >
+                    {conf}
+                  </span>
+                )}
+                {c.kind && <span className="text-[11px] text-fg-4">{c.kind}</span>}
+                {label && (
+                  <span className="font-mono text-[10px] text-fg-3 bg-bg-glass px-1 py-0.5 rounded">
+                    {label}
+                  </span>
+                )}
+              </div>
+              {body && <div className="text-fg-2">{body}</div>}
+              {c.evidence && (
+                <div className="mt-1.5 text-[11px] text-fg-4 italic">{c.evidence}</div>
+              )}
             </div>
-            <div className="text-fg-2">{c.suggestionText}</div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -103,9 +146,8 @@ export function RetrospectiveSection({ projectSlug, id }: RetrospectiveSectionPr
 
   if (isLoading) return null;
 
-  const retroEvent = [...events].reverse().find((e) => e.kind === 'retrospective.completed');
+  const retroEvent = [...events].find((e) => e.kind === 'retrospective.completed');
   const retro = retroEvent?.payload as RetroPayload | undefined;
-
   if (!retro) {
     return (
       <div className="px-8 py-6">
@@ -124,17 +166,29 @@ export function RetrospectiveSection({ projectSlug, id }: RetrospectiveSectionPr
     );
   }
 
-  const summary = retro.output.summary;
-  const bullets =
-    typeof summary === 'string'
-      ? summary
-          .split('\n')
-          .map((l) => l.replace(/^-\s*/, '').trim())
-          .filter(Boolean)
-      : [summary.wentWell, summary.couldBeSmootherOrCleanRun, summary.mainTakeaway].filter(
-          (s): s is string => typeof s === 'string' && s.length > 0,
-        );
+  let bullets: string[] = [];
 
+  if (retro.tier === 'light') {
+    bullets = retro.output.summaryBullets.map((l) => l.replace(/^-\s*/, '').trim()).filter(Boolean);
+  } else {
+    const s = retro.output.summary;
+    if (retro.output.summaryBullets) {
+      bullets = retro.output.summaryBullets
+        .map((l) => l.replace(/^-\s*/, '').trim())
+        .filter(Boolean);
+    } else if (typeof s === 'string') {
+      bullets = s
+        .split('\n')
+        .map((l) => l.replace(/^-\s*/, '').trim())
+        .filter(Boolean);
+    } else if (s != null) {
+      bullets = [
+        s.wentWell,
+        s.didNotGoWell ?? s.couldBeSmootherOrCleanRun,
+        s.architecturalTakeaway ?? s.mainTakeaway,
+      ].filter((x): x is string => typeof x === 'string' && x.length > 0);
+    }
+  }
   return (
     <div data-testid="retro-section" className="px-8 py-6 space-y-6">
       {/* Tier badge */}
@@ -159,34 +213,37 @@ export function RetrospectiveSection({ projectSlug, id }: RetrospectiveSectionPr
       </div>
 
       {/* Summary bullets */}
-      <div>
-        <h3 className="text-[11px] font-medium text-fg-3 uppercase tracking-wider mb-3">Summary</h3>
-        <ul className="space-y-1.5">
-          {bullets.map((b) => (
-            <li key={b} className="flex items-start gap-2 text-[13px] text-fg-2">
-              <span className="text-fg-4 mt-0.5">•</span>
-              <span>{b}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
+      {bullets.length > 0 && (
+        <div>
+          <h3 className="text-[11px] font-medium text-fg-3 uppercase tracking-wider mb-3">
+            Summary
+          </h3>
+          <ul className="space-y-1.5">
+            {bullets.map((b) => (
+              <li key={b} className="flex items-start gap-2 text-[13px] text-fg-2">
+                <span className="text-fg-4 mt-0.5">•</span>
+                <span>{b}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Deep-only: persona analysis */}
-      {retro.tier === 'deep' && retro.output.personaAnalysis.length > 0 && (
+      {retro.tier === 'deep' && retro.output.personaQualityScores.length > 0 && (
         <div>
           <h3 className="text-[11px] font-medium text-fg-3 uppercase tracking-wider mb-3">
             Persona Quality
           </h3>
           <div className="space-y-2">
-            {retro.output.personaAnalysis.map((p) => (
+            {retro.output.personaQualityScores.map((p) => (
               <div
-                key={`${p.personaName}:${p.role}`}
+                key={p.personaId}
                 className="flex items-center gap-3 border border-line rounded-lg p-3"
               >
                 <TrendIcon trend={p.trend} />
                 <div className="grow">
-                  <span className="text-[12.5px] font-medium">{p.personaName}</span>
-                  <span className="text-[11px] text-fg-3 ml-1.5">{p.role}</span>
+                  <span className="text-[12.5px] font-medium font-mono">{p.personaId}</span>
                 </div>
                 <span className="font-mono text-[12px] text-fg-2">
                   {(p.score * 100).toFixed(0)}%

@@ -1,3 +1,4 @@
+import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
@@ -112,7 +113,11 @@ export async function runFixFeedbackWorkflow(
   if (worktreePath == null) {
     await stateSource.comment(
       workItem.externalId,
-      'Fix-feedback: no worktree found — cannot locate existing dev workspace. Escalating.',
+      buildAgentComment(
+        'Dev',
+        'Failed',
+        'No worktree found — cannot locate existing dev workspace, escalating to needs-human',
+      ),
     );
     await stateSource.transitionState(
       workItem.externalId,
@@ -225,7 +230,7 @@ export async function runFixFeedbackWorkflow(
 
     await stateSource.comment(
       workItem.externalId,
-      'Fix-feedback complete. Transitioning back to `factory:needs-qa`.',
+      buildAgentComment('Dev', 'Complete', 'Fix-feedback applied — transitioning to needs-qa'),
     );
     await stateSource.transitionState(
       workItem.externalId,
@@ -242,7 +247,12 @@ export async function runFixFeedbackWorkflow(
       payload: { runId, error: error.message },
       runId,
     });
-    await stateSource.comment(workItem.externalId, `Fix-feedback failed: ${error.message}`);
+    await stateSource.comment(
+      workItem.externalId,
+      buildAgentComment('Dev', 'Failed', 'Fix-feedback failed — escalating to needs-human', [
+        `Error: ${error.message}`,
+      ]),
+    );
     await stateSource.transitionState(
       workItem.externalId,
       'factory:in-progress',

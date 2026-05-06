@@ -37,7 +37,7 @@ const GATE_ACTIONS: Record<
 export { GATE_ACTIONS };
 
 function extractReason(events: AgentEventDto[]): string | null {
-  const last = [...events].reverse().find((e) => e.kind === 'agent.decision-summary');
+  const last = [...events].find((e) => e.kind === 'agent.decision-summary');
   if (!last) return null;
   const p = last.payload as Record<string, unknown>;
   if (typeof p.summary === 'string') return p.summary.slice(0, 120);

@@ -244,8 +244,8 @@ describe('runReviewWorkflow', () => {
 
       const commentCall = vi.mocked(source.comment).mock.calls[0];
       const comment = commentCall[1];
-      expect(comment).toContain('APPROVED');
-      expect(comment).toContain('confidence');
+      expect(comment).toContain('Approved');
+      expect(comment).toContain('Confidence');
     });
 
     it('truncates findings to first 5 in comment', async () => {

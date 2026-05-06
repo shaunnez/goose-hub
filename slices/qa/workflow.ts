@@ -1,3 +1,4 @@
+import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
@@ -268,7 +269,12 @@ export async function runQaWorkflow(
     const scoreLabel = `${qaOutput.overallScore}/${qaOutput.threshold}`;
     await stateSource.comment(
       workItem.externalId,
-      `**QA ${qaOutput.verdict}** — score ${scoreLabel}\n\nVerdict: ${qaOutput.verdict} → ${nextState}`,
+      buildAgentComment(
+        'QA',
+        passes ? 'Pass' : 'Fail',
+        `Score ${scoreLabel} — transitioning to ${nextState}`,
+        [`Score: ${scoreLabel}`, `Next state: ${nextState}`],
+      ),
     );
     accumulatePersonaStats({
       personaName: personaId,
@@ -287,7 +293,12 @@ export async function runQaWorkflow(
       payload: { runId, error: error.message },
       runId,
     });
-    await stateSource.comment(workItem.externalId, `QA failed: ${error.message}`);
+    await stateSource.comment(
+      workItem.externalId,
+      buildAgentComment('QA', 'Failed', 'QA run failed — escalating to needs-human', [
+        `Error: ${error.message}`,
+      ]),
+    );
     await stateSource.transitionState(
       workItem.externalId,
       'factory:needs-qa',

@@ -1,3 +1,4 @@
+import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
@@ -186,8 +187,15 @@ export async function runInvestigateWorkflow(
       runId,
     });
 
-    // Post GitHub comment
-    await stateSource.comment(workItem.externalId, `Investigation failed: ${error.message}`);
+    await stateSource.comment(
+      workItem.externalId,
+      buildAgentComment(
+        'Investigate',
+        'Failed',
+        'Investigation failed — escalating to needs-human',
+        [`Error: ${error.message}`],
+      ),
+    );
 
     // Transition to error state
     await stateSource.transitionState(

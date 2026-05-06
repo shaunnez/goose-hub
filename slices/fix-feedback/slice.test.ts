@@ -167,7 +167,10 @@ describe('runFixFeedbackWorkflow', () => {
       'factory:needs-fix',
       'factory:needs-human',
     );
-    expect(stateSource.comment).toHaveBeenCalledWith('42', expect.stringContaining('no worktree'));
+    expect(stateSource.comment).toHaveBeenCalledWith(
+      '42',
+      expect.stringContaining('No worktree found'),
+    );
   });
 
   it('transitions needs-fix → in-progress → needs-qa on success', async () => {
