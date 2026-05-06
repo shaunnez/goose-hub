@@ -36,7 +36,10 @@ export class ProjectParallelLock {
 
   /** Release the slot held by this issue. No-op if not held. */
   release(slug: string, issueNumber: number): void {
-    this._bySlug.get(slug)?.delete(issueNumber);
+    const set = this._bySlug.get(slug);
+    if (set == null) return;
+    set.delete(issueNumber);
+    if (set.size === 0) this._bySlug.delete(slug);
   }
 
   /** How many workflow slots are currently occupied for this project. */

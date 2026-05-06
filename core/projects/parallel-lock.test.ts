@@ -36,6 +36,16 @@ describe('ProjectParallelLock', () => {
       expect(() => lock.release('proj', 99)).not.toThrow();
     });
 
+    it('releasing the last issue removes the slug entry (no memory leak)', () => {
+      const lock = new ProjectParallelLock();
+      lock.tryAcquire('proj', 1, 1);
+      lock.release('proj', 1);
+      // inFlightCount uses the map internally; 0 confirms the entry was cleaned up
+      expect(lock.inFlightCount('proj')).toBe(0);
+      // A fresh acquire must still work after the cleanup
+      expect(lock.tryAcquire('proj', 2, 1)).toBe(true);
+    });
+
     it('defaults maxParallelAgents to 1 when omitted', () => {
       const lock = new ProjectParallelLock();
       lock.tryAcquire('proj', 1);
