@@ -71,13 +71,15 @@ export function CostsSection({ projectSlug, id }: CostsSectionProps) {
 
   return (
     <div data-testid="costs-section" className="px-8 py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-[11px] font-medium text-fg-3 uppercase tracking-wider">
+      <div>
+        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">11. Costs</div>
+        <div className="flex items-center justify-between">
+        <h2 className="text-[17px] font-semibold text-fg leading-snug ">
           Token economics for this task
         </h2>
         {data.hasEstimated && <CostLegend />}
+        </div>
       </div>
-
       <div className="flex gap-3">
         <StatTile
           label="Spent"

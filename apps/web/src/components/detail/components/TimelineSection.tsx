@@ -114,27 +114,39 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
 
   return (
     <div data-testid="timeline-section" className="px-8 py-6">
-      {hasRunGroups && (
-        <div className="flex items-center gap-3 mb-3">
-          <button
-            type="button"
-            data-testid="timeline-expand-all"
-            onClick={() => sendSignal(true)}
-            className="font-mono text-[11px] uppercase tracking-wider hover:text-fg-2 transition-colors"
-          >
-            Expand all
-          </button>
-          <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-5" />
-          <button
-            type="button"
-            data-testid="timeline-collapse-all"
-            onClick={() => sendSignal(false)}
-            className="font-mono text-[11px] uppercase tracking-wider hover:text-fg-2 transition-colors"
-          >
-            Collapse all
-          </button>
+
+      {/* Section header */}
+      <div className=" gap-3 mb-3">
+        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">09. Timeline</div>
+        <div className="flex justify-between items-baseline">
+          <h2 className="text-[17px] font-semibold text-fg leading-snug">
+            Repo candidates &amp; classification
+          </h2>
+          {hasRunGroups && (
+            <div className="flex gap-3 mb-3">
+              <button
+                type="button"
+                data-testid="timeline-expand-all"
+                onClick={() => sendSignal(true)}
+                className="font-mono text-[11px] uppercase tracking-wider hover:text-fg-2 transition-colors"
+              >
+                Expand all
+              </button>
+              <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-5" />
+              <button
+                type="button"
+                data-testid="timeline-collapse-all"
+                onClick={() => sendSignal(false)}
+                className="font-mono text-[11px] uppercase tracking-wider hover:text-fg-2 transition-colors"
+              >
+                Collapse all
+              </button>
+            </div>
+          )}
         </div>
-      )}
+      </div>
+
+      
       <ol className="flex flex-col gap-3">
         {items.map((item: RenderItem, idx: number) => renderTimelineItem(item, idx, context))}
       </ol>

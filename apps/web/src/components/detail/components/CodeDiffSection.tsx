@@ -97,13 +97,17 @@ export function CodeDiffSection({ projectSlug, id }: CodeDiffSectionProps) {
   }
 
   return (
-    <div data-testid="code-diff-section" className="flex flex-col gap-5">
-      <div className="px-8 pt-4 ">
+    <div data-testid="code-diff-section" className="flex flex-col ">
+
+      <div className="px-8 pt-6">
         <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">05. Code</div>
-        <h2 className="text-[17px] font-semibold text-fg leading-snug">Code Diff and PR</h2>
+        <h2 className="text-[17px] font-semibold text-fg leading-snug">
+          Code Diff and PR
+        </h2>
+
       </div>
       {/* Header bar */}
-      <div className="px-6 flex items-center justify-between border-b border-line">
+      <div className="flex items-center justify-between border-b border-line px-8 pt-2">
         <div className="flex items-center gap-3">
           <span className="text-[10.5px] font-semibold uppercase tracking-wide text-fg-3">
             {prNumber != null ? `PR #${prNumber}` : 'Live diff'}
@@ -141,6 +145,7 @@ export function CodeDiffSection({ projectSlug, id }: CodeDiffSectionProps) {
       <div
         data-testid="code-diff-panels"
         style={{ display: 'grid', gridTemplateColumns: '240px 1fr', minHeight: 400 }}
+        className='px-8'
       >
         <CodeDiffFileList
           files={files}
