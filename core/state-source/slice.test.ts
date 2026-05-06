@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { parseDependencies } from './dependency-parser.js';
+import {
+  DependencyResolver,
+  type FetchTargetFn,
+  resolveDependency,
+} from './dependency-resolver.js';
 
 // ---------------------------------------------------------------------------
 // Empty / no-match cases
@@ -236,5 +241,50 @@ describe('parseDependencies — malformed input', () => {
 
   it('rejects cross-repo ref with alphanumeric suffix — owner/repo#12foo', () => {
     expect(parseDependencies('Depends on shaunnez/other-repo#12foo')).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// End-to-end: parser → resolver
+// ---------------------------------------------------------------------------
+
+describe('slice — parser feeds resolver end-to-end', () => {
+  it('resolves all parsed deps from a real-world body, batching same-repo and cross-repo', async () => {
+    const body = [
+      'Depends on #286',
+      'Depends on shaunnez/other-repo#12',
+      'Depends on stranger/elsewhere#9',
+    ].join('\n');
+
+    const refs = parseDependencies(body);
+
+    const fetchTarget: FetchTargetFn = async (repoRef, n) => {
+      if (repoRef === 'shaunnez/goose-hub' && n === 286)
+        return { state: 'closed', title: 'parser' };
+      if (repoRef === 'shaunnez/other-repo' && n === 12) return { state: 'open', title: 'across' };
+      return null; // stranger/elsewhere — unregistered
+    };
+
+    const resolver = new DependencyResolver({
+      currentRepo: 'shaunnez/goose-hub',
+      fetchTarget,
+    });
+
+    const resolved = await Promise.all(refs.map((r) => resolver.resolve(r)));
+
+    expect(resolved).toMatchObject([
+      { state: 'closed', repoRef: 'shaunnez/goose-hub', issueNumber: 286, title: 'parser' },
+      { state: 'open', repoRef: 'shaunnez/other-repo', issueNumber: 12, title: 'across' },
+      { state: 'unregistered', repoRef: 'stranger/elsewhere', issueNumber: 9 },
+    ]);
+  });
+
+  it('resolveDependency convenience function handles a single ref', async () => {
+    const fetchTarget = vi.fn<FetchTargetFn>(async () => ({ state: 'closed', title: 't' }));
+    const result = await resolveDependency(
+      { type: 'depends-on', repoRef: null, issueNumber: 1 },
+      { currentRepo: 'shaunnez/goose-hub', fetchTarget },
+    );
+    expect(result.state).toBe('closed');
   });
 });
