@@ -215,8 +215,21 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
     }
 
     accumulatePersonaStats({ personaName: personaId, role: 'retrospector', outcome: 'success' });
-    archiveLifecycle({ projectId, workItemId: workItem.id });
     await stateSource.transitionState(workItem.externalId, 'factory:retrospecting', 'factory:done');
+    // Archive only after the state transition succeeds — otherwise a transition
+    // failure would leave a phantom archive row for a lifecycle that never
+    // reached factory:done, skewing future mining and trend output.
+    try {
+      archiveLifecycle({ projectId, workItemId: workItem.id });
+    } catch (archiveErr) {
+      eventStore.appendEvent({
+        kind: 'system.note',
+        projectId,
+        workItemId: workItem.id,
+        runId,
+        payload: { archiveError: String(archiveErr) },
+      });
+    }
   } catch (err) {
     accumulatePersonaStats({ personaName: personaId, role: 'retrospector', outcome: 'failure' });
     eventStore.appendEvent({

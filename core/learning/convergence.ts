@@ -1,6 +1,6 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { type SQL, and, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '../db/db.js';
-import { archivedLifecycles } from '../db/schema.js';
+import { agentRunCosts, archivedLifecycles } from '../db/schema.js';
 
 export type Trend = 'improving' | 'stable' | 'declining';
 
@@ -21,12 +21,32 @@ export interface TrendResult {
 }
 
 export function computeTrend(input: ComputeTrendInput): TrendResult {
-  const { projectId, role, windowSize = 5 } = input;
+  const { projectId, role, skill, windowSize = 5 } = input;
+
+  const conditions: SQL[] = [eq(archivedLifecycles.projectId, projectId)];
+
+  // Skill filter: narrow the window to lifecycles whose runs included the
+  // requested skill. Without this, callers passing `skill` would receive a
+  // role-wide trend that mixes scores from unrelated skills.
+  if (skill != null) {
+    const skillWorkItems = db
+      .selectDistinct({ workItemId: agentRunCosts.workItemId })
+      .from(agentRunCosts)
+      .where(and(eq(agentRunCosts.projectId, projectId), eq(agentRunCosts.skill, skill)))
+      .all();
+    const ids = skillWorkItems
+      .map((r) => r.workItemId)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0);
+    if (ids.length === 0) {
+      return { trend: 'stable', sampleCount: 0, delta: 0 };
+    }
+    conditions.push(inArray(archivedLifecycles.workItemId, ids));
+  }
 
   const rows = db
     .select()
     .from(archivedLifecycles)
-    .where(and(eq(archivedLifecycles.projectId, projectId)))
+    .where(conditions.length === 1 ? conditions[0] : and(...conditions))
     .orderBy(desc(archivedLifecycles.closedAt))
     .limit(windowSize)
     .all();

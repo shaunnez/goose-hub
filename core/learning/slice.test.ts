@@ -2,25 +2,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ─── DB mock ──────────────────────────────────────────────────────────────────
 
-const { mockDb } = vi.hoisted(() => {
-  const mockDb = {
-    select: vi.fn(),
-    insert: vi.fn(),
-    update: vi.fn(),
-    from: vi.fn(),
-    where: vi.fn(),
-    orderBy: vi.fn(),
-    limit: vi.fn(),
-    values: vi.fn(),
-    set: vi.fn(),
-    onConflictDoUpdate: vi.fn(),
-    run: vi.fn(),
-    all: vi.fn(),
-  };
+const FLUENT_METHODS = [
+  'select',
+  'selectDistinct',
+  'insert',
+  'update',
+  'from',
+  'where',
+  'orderBy',
+  'limit',
+  'values',
+  'set',
+  'onConflictDoUpdate',
+] as const;
 
-  // Default fluent chain: each method returns mockDb so chains compose
-  for (const method of [
+const { mockDb } = vi.hoisted(() => {
+  const FLUENT = [
     'select',
+    'selectDistinct',
     'insert',
     'update',
     'from',
@@ -30,13 +29,15 @@ const { mockDb } = vi.hoisted(() => {
     'values',
     'set',
     'onConflictDoUpdate',
-  ]) {
-    (mockDb as Record<string, unknown>)[method] = vi.fn().mockReturnValue(mockDb);
+  ] as const;
+  const mockDb: Record<string, unknown> = {};
+  for (const method of FLUENT) {
+    mockDb[method] = vi.fn().mockReturnValue(mockDb);
   }
   mockDb.run = vi.fn();
   mockDb.all = vi.fn().mockReturnValue([]);
 
-  return { mockDb };
+  return { mockDb: mockDb as Record<string, ReturnType<typeof vi.fn>> };
 });
 
 vi.mock('../db/db.js', () => ({ db: mockDb }));
@@ -77,18 +78,7 @@ vi.mock('../event-stream/store.js', () => ({
 
 function resetMockDb() {
   vi.clearAllMocks();
-  for (const method of [
-    'select',
-    'insert',
-    'update',
-    'from',
-    'where',
-    'orderBy',
-    'limit',
-    'values',
-    'set',
-    'onConflictDoUpdate',
-  ]) {
+  for (const method of FLUENT_METHODS) {
     (mockDb as Record<string, unknown>)[method] = vi.fn().mockReturnValue(mockDb);
   }
   mockDb.run = vi.fn();
@@ -578,5 +568,41 @@ describe('computeTrend', () => {
     // delta = 0.9 - 0.85 = 0.05 (on the boundary → stable)
     expect(result.sampleCount).toBe(2);
     expect(['stable', 'improving']).toContain(result.trend);
+  });
+
+  it('returns stable when skill filter matches no work items', async () => {
+    // First .all() call (skill lookup) returns no work items → short-circuit
+    mockDb.all.mockReturnValueOnce([]);
+
+    const { computeTrend } = await import('./convergence.js');
+    const result = computeTrend({ projectId: 'p', role: 'developer', skill: 'fix-issue' });
+
+    expect(result).toEqual({ trend: 'stable', sampleCount: 0, delta: 0 });
+  });
+
+  it('applies skill filter by narrowing to matching work items', async () => {
+    // First .all() call: skill lookup returns 2 matching work items
+    // Second .all() call: archived lifecycle rows for those work items
+    mockDb.all
+      .mockReturnValueOnce([{ workItemId: 'item-1' }, { workItemId: 'item-2' }])
+      .mockReturnValueOnce([
+        makeLifecycleRow({
+          workItemId: 'item-2',
+          closedAt: '2026-05-02T00:00:00.000Z',
+          qualityScores: JSON.stringify([{ personaId: 'p/developer/0', score: 0.95 }]),
+        }),
+        makeLifecycleRow({
+          workItemId: 'item-1',
+          closedAt: '2026-05-01T00:00:00.000Z',
+          qualityScores: JSON.stringify([{ personaId: 'p/developer/0', score: 0.5 }]),
+        }),
+      ]);
+
+    const { computeTrend } = await import('./convergence.js');
+    const result = computeTrend({ projectId: 'p', role: 'developer', skill: 'fix-issue' });
+
+    // Two scores in chron order [0.5, 0.95] → delta = 0.45 → improving
+    expect(result.sampleCount).toBe(2);
+    expect(result.trend).toBe('improving');
   });
 });
