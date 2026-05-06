@@ -1,4 +1,4 @@
-import advisorConfig from '@goose-hub/skills/advise-on-plan/config.js';
+import advisorConfig from '@goose-hub/skills/advise-on-plan/skill.config.js';
 import {
   type AdviseOnPlanOutput,
   AdviseOnPlanSchema,
