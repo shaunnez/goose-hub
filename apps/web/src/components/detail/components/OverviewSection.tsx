@@ -95,7 +95,7 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
       </div>
 
       {/* Main content grid */}
-      <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1fr' }}>
+      <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1.4fr' }}>
         {/* Brief card */}
         <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
           <div className="px-4 py-3 border-b border-line bg-bg-elev-2">
