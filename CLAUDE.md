@@ -53,7 +53,7 @@ Before touching any file in an app, read its `README.md` first. The README will 
 
 When prompted with "start the next issue" (or similar), resolve the issue to work on as follows:
 
-1. Determine the active milestone for the project. Each project declares its own `activeMilestone` in `target-projects/<slug>/project.config.ts` (e.g. `goose-hub-self` is currently on `M10: Multi-project Orchestration`). Read that string and substitute it into the next step. Do not hardcode a milestone — the active value moves over time and differs between projects.
+1. Determine the active milestone for the project. Each project declares its own `activeMilestone` in `target-projects/<slug>/project.config.ts` (e.g. `goose-hub-self` is currently on `M11: Dependency-aware Scheduling`). Read that string and substitute it into the next step. Do not hardcode a milestone — the active value moves over time and differs between projects.
 2. Run, with the milestone string from step 1: `gh issue list --milestone "<active-milestone>" --label "schedule:current" --state open --json number,title,body,labels --jq 'sort_by(.number)'`
 3. Skip any issue already labeled `factory:in-progress`.
 4. For each remaining issue in ascending number order, check its body for `Depends on #N` (or `Depends on owner/repo#N`) lines. Fetch each referenced issue number with `gh issue view <N> --json state` and skip this issue if any dependency is still open. The canonical parser is `parseDependencies()` in `core/state-source/dependency-parser.ts`; mirror its tolerance (case-insensitive, optional colon, supports `Blocks` / `Blocked by` / `Depends-On`).
