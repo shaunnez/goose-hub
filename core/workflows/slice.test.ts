@@ -227,6 +227,55 @@ describe('tier selection', () => {
   });
 });
 
+// ─── context assembly ─────────────────────────────────────────────────────────
+
+describe('context assembly', () => {
+  it('passes prior decision summaries from event store to run context', async () => {
+    const { runRetrospectiveWorkflow } = await import('./retrospective.js');
+    const { eventStore } = await import('../event-stream/store.js');
+
+    vi.mocked(eventStore.replay).mockReturnValueOnce([
+      {
+        id: 1,
+        projectId: 'test-project',
+        workItemId: 'github:owner/repo#42',
+        kind: 'agent.decision-summary',
+        payload: { skill: 'implement', kind: 'PLAN', summary: 'Added widget', evidence: 'tests' },
+        runId: 'run-1',
+        personaId: null,
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+      {
+        id: 2,
+        projectId: 'test-project',
+        workItemId: 'github:owner/repo#42',
+        kind: 'agent.run-started',
+        payload: { skill: 'implement' },
+        runId: 'run-1',
+        personaId: null,
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+    ]);
+    mockRun.mockResolvedValueOnce(makeLightResult());
+
+    await runRetrospectiveWorkflow({
+      workItem: makeWorkItem(),
+      stateSource: makeSource(),
+      projectId: 'test-project',
+      policy: 'always-light',
+    });
+
+    const runSpec = mockRun.mock.calls[0][0] as {
+      context: { runSummary: { decisionSummaries: unknown[] } };
+    };
+    expect(runSpec.context.runSummary.decisionSummaries).toHaveLength(1);
+    expect(runSpec.context.runSummary.decisionSummaries[0]).toMatchObject({
+      kind: 'PLAN',
+      summary: 'Added widget',
+    });
+  });
+});
+
 // ─── state transitions ────────────────────────────────────────────────────────
 
 describe('state transitions', () => {

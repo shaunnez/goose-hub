@@ -82,6 +82,14 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
     payload: { skill: skillName, tier, personaId },
   });
 
+  const priorDecisionSummaries = eventStore
+    .replay({ projectId, workItemId: workItem.id })
+    .filter((e) => e.kind === 'agent.decision-summary')
+    .map((e) => {
+      const p = e.payload as { kind?: string; summary?: string; evidence?: string };
+      return { kind: p.kind ?? 'VERDICT', summary: p.summary ?? '', evidence: p.evidence };
+    });
+
   try {
     const result = await runtime.run({
       runId,
@@ -94,7 +102,12 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
           body: workItem.body,
           number: Number(workItem.externalId),
         },
-        runSummary: { personaId, role: 'retrospector', outcome: 'success', decisionSummaries: [] },
+        runSummary: {
+          personaId,
+          role: 'retrospector',
+          outcome: 'success',
+          decisionSummaries: priorDecisionSummaries,
+        },
       },
       contextAllowlist: ['workItem.title', 'workItem.body', 'workItem.number', 'runSummary'],
       freshContext: false,
