@@ -219,6 +219,91 @@ export async function dispatchQa(slug: string, issueNumber: number): Promise<voi
   }
 }
 
+/** Run the fix-feedback workflow for a single issue. Drops duplicate triggers. */
+export async function dispatchNeedsFix(slug: string, issueNumber: number): Promise<void> {
+  const key = issueKey(slug, issueNumber);
+  if (_issueInFlight.has(key)) {
+    logger.warn('dispatchNeedsFix: already in-flight, dropping duplicate', { slug, issueNumber });
+    return;
+  }
+  _issueInFlight.add(key);
+  try {
+    // Cross-package boundary: slices/ is not a workspace package (rule 28a).
+    const { runFixFeedbackWorkflow } = (await import(
+      new URL('../../../../slices/fix-feedback/workflow.js', import.meta.url).href
+    )) as {
+      runFixFeedbackWorkflow: (
+        item: unknown,
+        source: unknown,
+        slug: string,
+        targetRepo: string,
+        deps?: Record<string, unknown>,
+      ) => Promise<unknown>;
+    };
+    const source = await getSourceForSlug(slug);
+    if (source == null) {
+      logger.error('dispatchNeedsFix: no source for slug', { slug });
+      return;
+    }
+    const item = await source.getItem(issueNumber.toString());
+    await runFixFeedbackWorkflow(item, source, slug, item.repoRef ?? slug);
+  } finally {
+    _issueInFlight.delete(key);
+  }
+}
+
+/**
+ * Auto-transition from qa-failed based on retry logic.
+ * QA already applied shouldEscalateQa — if we reach this label, retries
+ * remain. Transition qa-failed → needs-fix and dispatch fix-feedback.
+ */
+async function dispatchQaFailed(slug: string, issueNumber: number): Promise<void> {
+  const key = issueKey(slug, issueNumber);
+  if (_issueInFlight.has(key)) {
+    logger.warn('dispatchQaFailed: already in-flight, dropping duplicate', { slug, issueNumber });
+    return;
+  }
+  _issueInFlight.add(key);
+  try {
+    const source = await getSourceForSlug(slug);
+    if (source == null) {
+      logger.error('dispatchQaFailed: no source for slug', { slug });
+      return;
+    }
+
+    const item = await source.getItem(issueNumber.toString());
+    if (item.state !== 'factory:qa-failed') {
+      logger.info('dispatchQaFailed: state already moved', {
+        slug,
+        issueNumber,
+        state: item.state,
+      });
+      return;
+    }
+
+    const workItemId = `github:${source.repoRef}#${issueNumber}`;
+    await source.transitionState(workItemId, 'factory:qa-failed', 'factory:needs-fix');
+
+    eventStore.appendEvent({
+      projectId: slug,
+      workItemId,
+      kind: 'state.transitioned',
+      payload: { from: 'factory:qa-failed', to: 'factory:needs-fix', by: 'orchestrator' },
+    });
+
+    logger.info('dispatchQaFailed: transitioned to needs-fix, dispatching fix-feedback', {
+      slug,
+      issueNumber,
+    });
+  } finally {
+    _issueInFlight.delete(key);
+  }
+
+  // Fire fix-feedback outside the in-flight guard so needs-fix can also
+  // be triggered independently (e.g. review-failed path in the future).
+  await dispatchNeedsFix(slug, issueNumber);
+}
+
 /** Run the Review holdout workflow for a single issue. Drops duplicate triggers for the same issue. */
 export async function dispatchReview(slug: string, issueNumber: number): Promise<void> {
   const key = issueKey(slug, issueNumber);
@@ -396,6 +481,14 @@ export async function dispatchForLabel(
     await dispatchRetro(slug, issueNumber);
     return;
   }
+  if (labelName === 'factory:qa-failed') {
+    await dispatchQaFailed(slug, issueNumber);
+    return;
+  }
+  if (labelName === 'factory:needs-fix') {
+    await dispatchNeedsFix(slug, issueNumber);
+    return;
+  }
   logger.info('dispatchForLabel: no workflow for label', { slug, labelName });
 }
 
@@ -430,6 +523,8 @@ const RESUME_WORKFLOWS: Partial<Record<StateName, ResumeEntry>> = {
   },
   'factory:investigating': { targetState: 'factory:investigating', dispatch: dispatchInvestigate },
   'factory:retrospecting': { targetState: 'factory:retrospecting', dispatch: dispatchRetro },
+  'factory:qa-failed': { targetState: 'factory:needs-fix', dispatch: dispatchNeedsFix },
+  'factory:needs-fix': { targetState: 'factory:needs-fix', dispatch: dispatchNeedsFix },
 };
 
 /**
