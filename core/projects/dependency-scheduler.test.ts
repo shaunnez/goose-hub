@@ -211,10 +211,15 @@ describe('filterEligibleByDependencies', () => {
     expect(setLabel).not.toHaveBeenCalled();
   });
 
-  it('unregistered — applies factory:needs-human and posts comment on first encounter', async () => {
+  it('unregistered — posts comment then applies factory:needs-human on first encounter', async () => {
+    const callOrder: string[] = [];
     const setLabel = vi.fn();
-    const forceState = vi.fn().mockResolvedValue(undefined);
-    const comment = vi.fn().mockResolvedValue(undefined);
+    const forceState = vi.fn().mockImplementation(async () => {
+      callOrder.push('forceState');
+    });
+    const comment = vi.fn().mockImplementation(async () => {
+      callOrder.push('comment');
+    });
     const fetchTarget: FetchTargetFn = async () => null;
     const item = makeItem('30', 'Depends on external/repo#5');
     const result = await filterEligibleByDependencies([item], {
@@ -226,9 +231,11 @@ describe('filterEligibleByDependencies', () => {
     expect(result.eligible).toHaveLength(0);
     expect(result.blocked).toHaveLength(0);
     expect(setLabel).not.toHaveBeenCalled();
-    expect(forceState).toHaveBeenCalledWith('30', 'factory:needs-human');
     expect(comment).toHaveBeenCalledWith('30', expect.stringContaining('external/repo#5'));
     expect(comment).toHaveBeenCalledWith('30', expect.stringContaining('not registered'));
+    expect(forceState).toHaveBeenCalledWith('30', 'factory:needs-human');
+    // comment must precede forceState so partial failures leave the guard inactive
+    expect(callOrder).toEqual(['comment', 'forceState']);
   });
 
   it('unregistered — already factory:needs-human → no re-escalation', async () => {
