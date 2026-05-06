@@ -1,4 +1,5 @@
 import { GATE_STATES } from '@/lib/constants';
+import { parseDependencies } from '@/lib/dependency-parser';
 import { renderMarkdownToHtml } from '@/lib/markdown';
 import { LEGAL_TARGETS } from '@/lib/transitions';
 import { describe, expect, it } from 'vitest';
@@ -220,5 +221,46 @@ describe('extractPlaywrightRepro', () => {
     const result = extractPlaywrightRepro([makeInvestigationEvent(1, repro)]);
     expect(result?.reproduced).toBe(false);
     expect(result?.notes).toBe('Could not trigger the error');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// dependency-parser (web lib)
+// ---------------------------------------------------------------------------
+
+describe('dependency-parser — web lib', () => {
+  it('returns empty array for a body with no dep declarations', () => {
+    expect(parseDependencies('See #42 for context')).toEqual([]);
+  });
+
+  it('parses "Depends on #N" as depends-on', () => {
+    expect(parseDependencies('Depends on #286')).toEqual([
+      { type: 'depends-on', repoRef: null, issueNumber: 286 },
+    ]);
+  });
+
+  it('parses "Blocks #N" as blocks', () => {
+    expect(parseDependencies('Blocks #291')).toEqual([
+      { type: 'blocks', repoRef: null, issueNumber: 291 },
+    ]);
+  });
+
+  it('parses cross-repo ref', () => {
+    expect(parseDependencies('Depends on shaunnez/other-repo#12')).toEqual([
+      { type: 'depends-on', repoRef: 'shaunnez/other-repo', issueNumber: 12 },
+    ]);
+  });
+
+  it('rejects alphanumeric suffix — #123abc must not match', () => {
+    expect(parseDependencies('Depends on #123abc')).toEqual([]);
+  });
+
+  it('handles multiple dep lines', () => {
+    const body = 'Depends on #286\nDepends on #291\nBlocks #300';
+    expect(parseDependencies(body)).toEqual([
+      { type: 'depends-on', repoRef: null, issueNumber: 286 },
+      { type: 'depends-on', repoRef: null, issueNumber: 291 },
+      { type: 'blocks', repoRef: null, issueNumber: 300 },
+    ]);
   });
 });

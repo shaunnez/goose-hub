@@ -13,9 +13,10 @@ import { TransitionButton } from './TransitionButton';
 interface TaskHeaderProps {
   item?: WorkItemDto;
   projectSlug: string;
+  hasOpenDep?: boolean;
 }
 
-export function TaskHeader({ item, projectSlug }: TaskHeaderProps) {
+export function TaskHeader({ item, projectSlug, hasOpenDep = false }: TaskHeaderProps) {
   const queryClient = useQueryClient();
   const [savingPriority, setSavingPriority] = useState(false);
   const [savingSchedule, setSavingSchedule] = useState(false);
@@ -125,6 +126,19 @@ export function TaskHeader({ item, projectSlug }: TaskHeaderProps) {
         </span>
 
         <div className="flex grow" />
+        {hasOpenDep && (
+          <span
+            data-testid="blocked-badge"
+            className="inline-flex items-center h-6 px-2.5 rounded-full text-[11.5px] border font-medium"
+            style={{
+              color: 'var(--warning)',
+              background: 'oklch(from var(--warning) l c h / 0.12)',
+              borderColor: 'oklch(from var(--warning) l c h / 0.4)',
+            }}
+          >
+            Blocked
+          </span>
+        )}
         {/* State — static accent pill */}
         <span
           data-testid="state-pill"
