@@ -45,7 +45,7 @@
 //   return (
 //     <div className="border-b border-line/50 last:border-0 py-1.5">
 //       <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
-//         <summary className="flex items-center gap-1 cursor-pointer list-none font-mono text-[11px] text-fg-4 select-none">
+//         <summary className="flex items-center gap-1 cursor-pointer list-none font-mono text-[11px] text-fg-2 select-none">
 //           {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
 //           <Wrench size={10} className="shrink-0" />
 //           <span className="flex-1 truncate">{toolName}</span>
@@ -54,7 +54,7 @@
 //           </span>
 //         </summary>
 //         {inputStr.length > 0 && (
-//           <pre className="mt-1 text-[10px] font-mono text-fg-4 whitespace-pre-wrap overflow-x-auto max-h-32">
+//           <pre className="mt-1 text-[10px] font-mono text-fg-2 whitespace-pre-wrap overflow-x-auto max-h-32">
 //             {inputStr}
 //           </pre>
 //         )}
@@ -140,14 +140,14 @@ export function RightRail() {
       className="w-[320px] shrink-0 flex flex-col border-l border-line bg-bg-elev/40"
     >
       <div className="px-4 py-3 border-b border-line">
-        <div className="text-[10.5px] uppercase tracking-wider text-fg-4">Live activity</div>
+        <div className="text-[10.5px] uppercase tracking-wider text-fg-2">Live activity</div>
       </div>
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4">
         {/* {toolCalls.length > 0 && (
           <div className="rounded-md border border-line bg-bg p-3">
             <div className="text-fg-2 mb-2 text-[11.5px] font-medium">
               Tool calls
-              <span className="ml-1.5 text-fg-4 font-normal">({toolCalls.length})</span>
+              <span className="ml-1.5 text-fg-2 font-normal">({toolCalls.length})</span>
             </div>
             <div className="text-[11px]">
               {toolCalls.map((e) => (
@@ -179,7 +179,7 @@ export function RightRail() {
           )
         )} */}
       </div>
-      <div className="px-4 py-3 border-t border-line text-[10.5px] uppercase tracking-wider text-fg-4">
+      <div className="px-4 py-3 border-t border-line text-[10.5px] uppercase tracking-wider text-fg-2">
         Personas
       </div>
       <div className="px-4 pb-4 text-[11.5px] text-fg-3">

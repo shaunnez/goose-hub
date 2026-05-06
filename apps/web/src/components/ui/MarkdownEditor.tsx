@@ -83,7 +83,7 @@ export function MarkdownEditor({
               className={`px-3 py-1 text-[12px] rounded capitalize transition-none ${
                 tab === t
                   ? 'bg-bg text-fg-2 border border-line shadow-sm'
-                  : 'text-fg-4 hover:text-fg-2'
+                  : 'text-fg-2 hover:text-fg-2'
               }`}
             >
               {t}
@@ -117,7 +117,7 @@ export function MarkdownEditor({
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           rows={rows}
-          className="w-full min-h-[120px] bg-bg text-[13px] px-4 py-3 resize-y focus:outline-none placeholder:text-fg-4 block"
+          className="w-full min-h-[120px] bg-bg text-[13px] px-4 py-3 resize-y focus:outline-none placeholder:text-fg-2 block"
         />
       ) : (
         <div

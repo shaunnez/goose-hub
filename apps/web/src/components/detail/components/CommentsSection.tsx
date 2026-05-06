@@ -29,7 +29,7 @@ export function CommentsSection({ projectSlug, id, externalId }: CommentsSection
           <button
             type="button"
             onClick={() => setNewestFirst((v) => !v)}
-            className="text-[11px] text-fg-4 hover:text-fg-2 transition-colors"
+            className="text-[11px] text-fg-2 hover:text-fg-2 transition-colors"
             data-testid="sort-order-toggle"
           >
             {newestFirst ? 'Oldest first' : 'Newest first'}
@@ -38,7 +38,7 @@ export function CommentsSection({ projectSlug, id, externalId }: CommentsSection
       )}
 
       {isLoading ? (
-        <p className="text-[12.5px] text-fg-4">Loading…</p>
+        <p className="text-[12.5px] text-fg-2">Loading…</p>
       ) : (
         <div className="relative">
           {comments.length > 0 && (
@@ -53,7 +53,7 @@ export function CommentsSection({ projectSlug, id, externalId }: CommentsSection
                   <div className="flex items-center justify-between px-3 py-1.5 bg-bg-elev border-b border-line">
                     <div className="flex items-center gap-2">
                       <span className="text-[12px] font-medium text-fg-2">{c.authorLogin}</span>
-                      <span className="text-[11px] text-fg-4">{timeAgo(c.createdAt)}</span>
+                      <span className="text-[11px] text-fg-2">{timeAgo(c.createdAt)}</span>
                     </div>
                   </div>
                   <div

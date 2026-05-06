@@ -251,7 +251,7 @@ function KanbanPage() {
       breadcrumb={
         <>
           <span className="font-mono text-fg-3">{slug}</span>
-          <span className="mx-2 text-fg-4">/</span>
+          <span className="mx-2 text-fg-2">/</span>
           <span>Kanban</span>
         </>
       }
@@ -585,7 +585,7 @@ export function TransitionButton({ projectSlug, id, currentState }: TransitionBu
         disabled
         title={`Terminal state: ${currentState} has no legal next states`}
         data-testid="transition-button-disabled"
-        className="h-7 px-2.5 rounded-md text-[12px] border border-line text-fg-4 cursor-not-allowed"
+        className="h-7 px-2.5 rounded-md text-[12px] border border-line text-fg-2 cursor-not-allowed"
       >
         No transitions
       </button>
@@ -635,7 +635,7 @@ export function TransitionButton({ projectSlug, id, currentState }: TransitionBu
           data-testid="transition-popover"
           className="absolute right-0 mt-1 z-20 min-w-[220px] rounded-md border border-line bg-bg-elev shadow-md py-1"
         >
-          <div className="px-3 py-1 text-[10.5px] uppercase tracking-wider text-fg-4">
+          <div className="px-3 py-1 text-[10.5px] uppercase tracking-wider text-fg-2">
             Legal next states
           </div>
           {targets.map((t) => (
@@ -826,9 +826,9 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
         <span aria-hidden className="w-[1px] h-4 bg-line" />
         <span className="font-mono text-[12px] text-fg-3 truncate">
           <span className="text-fg-3">{slug}</span>
-          <span className="mx-1.5 text-fg-4">/</span>
+          <span className="mx-1.5 text-fg-2">/</span>
           <span className="text-fg-3">{item.repoRef}</span>
-          <span className="mx-1.5 text-fg-4">/</span>
+          <span className="mx-1.5 text-fg-2">/</span>
           <span className="text-fg font-semibold">#{item.externalId}</span>
         </span>
         <span className="grow" />
@@ -1118,9 +1118,9 @@ Wrap the final return (the `data-testid="detail-page"` div) in a `Skeleton`, and
             <span aria-hidden className="w-[1px] h-4 bg-line" />
             <span className="font-mono text-[12px] text-fg-3 truncate">
               <span className="text-fg-3">{slug}</span>
-              <span className="mx-1.5 text-fg-4">/</span>
+              <span className="mx-1.5 text-fg-2">/</span>
               <span className="text-fg-3">{item.repoRef}</span>
-              <span className="mx-1.5 text-fg-4">/</span>
+              <span className="mx-1.5 text-fg-2">/</span>
               <span className="text-fg font-semibold">#{item.externalId}</span>
             </span>
             <span className="grow" />

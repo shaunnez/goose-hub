@@ -29,12 +29,12 @@ export function SettingsPage() {
       {/* Left: project list */}
       <div className="w-56 shrink-0 border-r border-line overflow-y-auto py-4 px-2">
         <div className="flex items-center justify-between px-2 mb-3">
-          <h2 className="text-[11px] uppercase tracking-wider text-fg-4">Projects</h2>
+          <h2 className="text-[11px] uppercase tracking-wider text-fg-2">Projects</h2>
           <button
             type="button"
             title="Reload configs"
             onClick={reload}
-            className="text-fg-4 hover:text-fg transition-colors p-1 rounded"
+            className="text-fg-2 hover:text-fg transition-colors p-1 rounded"
           >
             <RefreshCw size={12} />
           </button>
@@ -68,7 +68,7 @@ export function SettingsPage() {
       {/* Right: config detail */}
       <div className="flex-1 overflow-y-auto px-8 py-6">
         <h1 className="text-[15px] font-semibold mb-1">Settings</h1>
-        <p className="text-[12px] text-fg-4 mb-6">
+        <p className="text-[12px] text-fg-2 mb-6">
           Read-only. All values sourced from project config files.
         </p>
 

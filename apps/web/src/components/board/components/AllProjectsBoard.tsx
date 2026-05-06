@@ -109,7 +109,7 @@ export function AllProjectsBoard() {
         <span data-testid="board-issue-count">
           {isLoading ? '…' : `${totalItems} issue${totalItems === 1 ? '' : 's'}`}
         </span>
-        <span className="text-fg-4">
+        <span className="text-fg-2">
           across {configs.length} project{configs.length === 1 ? '' : 's'}
         </span>
         <span className="grow" />
@@ -155,7 +155,7 @@ export function AllProjectsBoard() {
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto px-2 py-2 flex flex-col gap-2">
                 {laneItems.length === 0 ? (
-                  <div className="text-[11.5px] text-fg-4 px-2 py-4 text-center italic">empty</div>
+                  <div className="text-[11.5px] text-fg-2 px-2 py-4 text-center italic">empty</div>
                 ) : (
                   laneItems.map((item) => (
                     <IssueCard

@@ -18,7 +18,13 @@ test.describe('M9 retrospective tab', () => {
     payload: {
       tier: 'light',
       output: {
-        summary: '- All tests pass.\n- No issues.\n- Keep it up.',
+        outcome: 'success',
+        workItemNumber: 9001,
+        summary: {
+          wentWell: 'All tests pass',
+          didNotGoWell: 'No issues',
+          architecturalTakeaway: 'Keep it up',
+        },
         improvementCandidates: [],
         decisionSummaries: [{ kind: 'VERDICT', summary: 'Clean run' }],
       },
@@ -102,7 +108,7 @@ test.describe('M9 retrospective tab', () => {
     await page.goto(`/projects/${slug}/items/${issueId}/retrospective`);
 
     await expect(page.getByTestId('retro-section')).toBeVisible();
-    await expect(page.getByText('All tests pass.')).toBeVisible();
+    await expect(page.getByText('All tests pass')).toBeVisible();
   });
 
   test('retrospective section shows empty state when no retro event exists', async ({ page }) => {

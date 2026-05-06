@@ -323,17 +323,22 @@ type ImprovementKind =
   | 'governance-suggestion'   // human-only; filtered from dispatcher (FACTORY_RULES rule 12)
 ```
 
-**Body schema:** prose summary/context/suggestion for humans + structured YAML fenced block for orchestrator:
+**Body schema:** prose summary/context/suggestion for humans + structured YAML fenced block for orchestrator. The retrospector agent emits the human-facing fields only (`kind`, `target_path`, `suggestion_text`, `confidence`, optional `evidence`/`proposed_diff`). The workflow injects provenance (`source_run_id`, `source_project`, `source_work_item`, `retrospective_kind`) when persisting to DB or filing the GitHub issue — see `docs/adr/0019-retrospective-output-schema.md`.
+
 ```yaml
 improvement_candidate:
+  # ── agent-emitted ─────────────────────────────
   kind: skill-prompt
   target_path: skills/triage/prompt.md
+  suggestion_text: Add explicit reminder to ...
+  confidence: medium   # low | medium | high
+  evidence: |          # optional — what surfaced this
+  proposed_diff: |     # optional
+  # ── workflow-injected ─────────────────────────
   source_run_id: run_01J...
   source_project: phaser-game
   source_work_item: shaunnez/phaser-game#142
   retrospective_kind: deep
-  confidence: medium   # low | medium | high
-  proposed_diff: |     # optional
 ```
 
 **Dispatch routing:** `governance-suggestion` → human-only queue. All other kinds → standard supervised pipeline. The kind discriminator is the gate.
@@ -349,6 +354,7 @@ improvement_candidate:
 - **Decision-summary two-stream split**: resolved. Canonical record lives in schema field; live markers from `[decision]` footer in `prompt.md`. Tool-call audit is a third, separate stream. All three distinct concerns at distinct cadences.
 - **Decision-summary `kind` taxonomy**: resolved at M9 (#466). Free-text `step` promoted to a controlled `DecisionKindSchema` enum in `core/agent-runtime/decision-types.ts`, consumed everywhere through `core/retrospective/schemas.ts`. Live-marker grammar is `[decision] KIND: <summary>`. See `docs/adr/0018-decision-kind-taxonomy.md`.
 - **Holdout fix-or-register**: resolved at M9 (#468). Every error-severity QA finding and blocker-severity Review finding must declare `disposition` (`fixed` | `registered` | `out-of-scope`) and a matching `dispositionRef`. Shared `DispositionSchema` lives in `core/findings/disposition.ts`.
+- **Retrospective output schema drift**: resolved post-M9 maintenance fix. Light and deep tiers now share `RetroOutputBaseSchema` with one canonical `summary` object shape (`{wentWell, didNotGoWell, architecturalTakeaway}`) and one `ImprovementCandidate` shape. DB-layer fields (`id`, `sourceRunIds`, `exampleRunIds`, `surfacedAt`, `computedAt`) and provenance (`sourceRunId/Project/WorkItem`) are stripped from agent output — workflow injects provenance at persist time. `safeParse` failure now emits `agent.run-failed` and transitions to `factory:needs-human` instead of swallowing silently. See `docs/adr/0019-retrospective-output-schema.md`.
 
 ## Deferred / Open Questions (to resolve at their milestone)
 

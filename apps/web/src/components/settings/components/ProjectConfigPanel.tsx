@@ -3,7 +3,7 @@ import type { ProjectConfigDto } from '@/lib/types';
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-start gap-4 py-2 border-b border-line last:border-0">
-      <span className="w-40 shrink-0 text-[11.5px] text-fg-4 uppercase tracking-wider pt-0.5">
+      <span className="w-40 shrink-0 text-[11.5px] text-fg-2 uppercase tracking-wider pt-0.5">
         {label}
       </span>
       <span className="text-[12.5px] text-fg font-mono break-all">{value}</span>
@@ -26,7 +26,7 @@ export function ProjectConfigPanel({ config }: Props) {
           config.activeMilestone != null ? (
             config.activeMilestone
           ) : (
-            <span className="text-fg-4 italic">github default</span>
+            <span className="text-fg-2 italic">github default</span>
           )
         }
       />
@@ -47,7 +47,7 @@ export function ProjectConfigPanel({ config }: Props) {
       <Row label="Daily tokens" value={config.budgets.dailyTokens.toLocaleString()} />
       <Row label="Per-advisor $" value={`$${config.budgets.perAdvisorMaxUsd}`} />
 
-      <p className="mt-4 text-[11.5px] text-fg-4">
+      <p className="mt-4 text-[11.5px] text-fg-2">
         To edit, modify{' '}
         <code className="font-mono text-fg-3">target-projects/{config.slug}/project.config.ts</code>{' '}
         and restart the server.

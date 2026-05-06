@@ -152,7 +152,7 @@ export function Sidebar({ activeSlug }: SidebarProps) {
                     : `Available in ${item.milestone}`
                 }
                 className={cn(
-                  'flex items-center rounded-md text-fg-4 cursor-not-allowed',
+                  'flex items-center rounded-md text-fg-2 cursor-not-allowed',
                   collapsed ? 'justify-center w-9 h-9 mx-auto' : 'gap-2 px-2 py-1.5 text-[12.5px]',
                 )}
               >
@@ -160,7 +160,7 @@ export function Sidebar({ activeSlug }: SidebarProps) {
                 {!collapsed && (
                   <>
                     <span>{item.label}</span>
-                    <span className="ml-auto text-[10.5px] uppercase tracking-wider text-fg-4/80">
+                    <span className="ml-auto text-[10.5px] uppercase tracking-wider text-fg-2/80">
                       {item.milestone}
                     </span>
                   </>
@@ -197,7 +197,7 @@ export function Sidebar({ activeSlug }: SidebarProps) {
         )}
       >
         {!collapsed && (
-          <span className="text-[11px] text-fg-4 flex-1 whitespace-nowrap">
+          <span className="text-[11px] text-fg-2 flex-1 whitespace-nowrap">
             Local-first · M2 preview
           </span>
         )}
@@ -205,7 +205,7 @@ export function Sidebar({ activeSlug }: SidebarProps) {
           type="button"
           onClick={toggle}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="text-fg-4 hover:text-fg transition-colors p-1 rounded"
+          className="text-fg-2 hover:text-fg transition-colors p-1 rounded"
         >
           {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
         </button>

@@ -23,7 +23,7 @@ export function MilestoneSelectorSlot({
     return (
       <div
         data-testid="milestone-selector"
-        className={cn('text-[11.5px] text-fg-4', collapsed ? 'flex justify-center' : 'px-2')}
+        className={cn('text-[11.5px] text-fg-2', collapsed ? 'flex justify-center' : 'px-2')}
       >
         {collapsed ? <Flag size={16} className="animate-pulse" /> : 'Loading milestones…'}
       </div>
@@ -48,7 +48,7 @@ export function MilestoneSelectorSlot({
     return (
       <div
         data-testid="milestone-selector"
-        className={cn('text-[11.5px] text-fg-4', collapsed ? 'flex justify-center' : 'px-2')}
+        className={cn('text-[11.5px] text-fg-2', collapsed ? 'flex justify-center' : 'px-2')}
       >
         {collapsed ? <Flag size={16} /> : 'No milestones'}
       </div>
@@ -74,7 +74,7 @@ export function MilestoneSelectorSlot({
             sideOffset={8}
             className="z-50 min-w-[200px] bg-bg-elev border border-line rounded-lg shadow-lg p-1.5 outline-none"
           >
-            <p className="text-[10px] uppercase tracking-wider text-fg-4 px-2 py-1">Milestone</p>
+            <p className="text-[10px] uppercase tracking-wider text-fg-2 px-2 py-1">Milestone</p>
             {milestones.map((m) => (
               <button
                 type="button"
@@ -106,7 +106,7 @@ export function MilestoneSelectorSlot({
     <div className="px-2">
       <label
         htmlFor="active-milestone"
-        className="block text-[10.5px] uppercase tracking-wider text-fg-4 mb-1"
+        className="block text-[10.5px] uppercase tracking-wider text-fg-2 mb-1"
       >
         Milestone
       </label>

@@ -20,7 +20,7 @@ function StatTile({
 }) {
   return (
     <div data-testid={testId} className="flex-1 border border-line rounded-lg p-4 bg-bg-elev/60">
-      <div className="text-[11px] uppercase tracking-wider text-fg-4 mb-1.5">{label}</div>
+      <div className="text-[11px] uppercase tracking-wider text-fg-2 mb-1.5">{label}</div>
       <div className="text-[20px] font-semibold tracking-tight">{value}</div>
       {sub != null && <div className="text-[11.5px] text-fg-3 mt-1">{sub}</div>}
     </div>
@@ -81,7 +81,7 @@ export function CostsPage() {
           </div>
 
           <section data-testid="stage-breakdown" className="border border-line rounded-lg p-5">
-            <h2 className="text-[11px] uppercase tracking-wider text-fg-4 mb-4">
+            <h2 className="text-[11px] uppercase tracking-wider text-fg-2 mb-4">
               Per-stage breakdown · last 30 days
             </h2>
             {data.byStage.length === 0 ? (

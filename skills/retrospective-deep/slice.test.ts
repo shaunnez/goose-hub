@@ -3,56 +3,49 @@ import { toJSONSchema } from 'zod';
 import config from './config.js';
 import { DeepRetroSchema } from './schema.js';
 
-const ISO = '2026-05-03T12:00:00.000Z';
-
 const baseValid = {
-  summary:
-    '- Implemented vertical slice cleanly.\n- No holdout violations.\n- Zero retry attempts.',
-  personaAnalysis: [
+  outcome: 'success' as const,
+  workItemNumber: 77,
+  triggerReasons: ['standard-deep'],
+  summary: {
+    wentWell: 'Implemented vertical slice cleanly',
+    didNotGoWell: 'No holdout violations',
+    architecturalTakeaway: 'Zero retry attempts; TDD discipline held',
+  },
+  personaQualityScores: [
     {
-      personaName: 'alice',
-      role: 'developer',
-      skillName: 'implement',
+      personaId: 'goose-hub-self/developer/0',
       score: 0.9,
-      trend: 'improving',
+      trend: 'improving' as const,
       sampleCount: 4,
-      computedAt: ISO,
     },
   ],
   learningEntries: [
     {
-      id: 'le-001',
-      sourceRunIds: ['run-abc'],
-      personaName: 'alice',
-      role: 'developer',
       observation: 'Slice pattern consistently reduces integration surface',
       rationale: 'No cross-slice imports in last 4 runs',
-      improvementKind: 'skill-prompt',
-      confidence: 'medium',
+      improvementKind: 'skill-prompt' as const,
+      confidence: 'medium' as const,
     },
   ],
   decisionPatterns: [
     {
-      id: 'dp-001',
       pattern: 'Developer writes tests before any implementation',
-      frequency: 4,
-      confidence: 'high',
-      exampleRunIds: ['run-abc', 'run-def'],
-      surfacedAt: ISO,
+      occurrences: 4,
+      confidence: 'high' as const,
     },
   ],
   improvementCandidates: [
     {
-      kind: 'skill-prompt',
+      kind: 'skill-prompt' as const,
       targetPath: 'skills/implement/prompt.md',
-      sourceRunId: 'run-abc',
-      sourceProject: 'goose-hub',
-      sourceWorkItem: 'shaunnez/goose-hub#77',
       suggestionText: 'Add explicit reminder to write slice.test.ts first',
-      confidence: 'high',
+      confidence: 'high' as const,
     },
   ],
-  decisionSummaries: [{ kind: 'PLAN', summary: 'Selected light retro — no deep triggers fired' }],
+  decisionSummaries: [
+    { kind: 'PLAN' as const, summary: 'Selected deep retro — first-run trigger' },
+  ],
 };
 
 describe('DeepRetroSchema', () => {
@@ -60,11 +53,11 @@ describe('DeepRetroSchema', () => {
     expect(DeepRetroSchema.safeParse(baseValid).success).toBe(true);
   });
 
-  it('accepts empty arrays for personaAnalysis, learningEntries, decisionPatterns, improvementCandidates', () => {
+  it('accepts empty arrays for personaQualityScores, learningEntries, decisionPatterns, improvementCandidates', () => {
     expect(
       DeepRetroSchema.safeParse({
         ...baseValid,
-        personaAnalysis: [],
+        personaQualityScores: [],
         learningEntries: [],
         decisionPatterns: [],
         improvementCandidates: [],
@@ -72,18 +65,35 @@ describe('DeepRetroSchema', () => {
     ).toBe(true);
   });
 
-  it('accepts optional proposedDiff on improvementCandidates', () => {
-    const withDiff = {
+  it('accepts optional proposedDiff and evidence on improvementCandidates', () => {
+    const withExtras = {
       ...baseValid,
       improvementCandidates: [
-        { ...baseValid.improvementCandidates[0], proposedDiff: '- old line\n+ new line' },
+        {
+          ...baseValid.improvementCandidates[0],
+          proposedDiff: '- old line\n+ new line',
+          evidence: 'Cited by 3 reviewers',
+        },
       ],
     };
-    expect(DeepRetroSchema.safeParse(withDiff).success).toBe(true);
+    expect(DeepRetroSchema.safeParse(withExtras).success).toBe(true);
   });
 
-  it('rejects empty summary', () => {
-    expect(DeepRetroSchema.safeParse({ ...baseValid, summary: '' }).success).toBe(false);
+  it('accepts optional note on decisionPatterns', () => {
+    const withNote = {
+      ...baseValid,
+      decisionPatterns: [{ ...baseValid.decisionPatterns[0], note: 'cross-run evidence' }],
+    };
+    expect(DeepRetroSchema.safeParse(withNote).success).toBe(true);
+  });
+
+  it('rejects empty summary field', () => {
+    expect(
+      DeepRetroSchema.safeParse({
+        ...baseValid,
+        summary: { ...baseValid.summary, wentWell: '' },
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects empty decisionSummaries (FACTORY_RULES rule 6)', () => {
@@ -94,16 +104,7 @@ describe('DeepRetroSchema', () => {
     expect(
       DeepRetroSchema.safeParse({
         ...baseValid,
-        personaAnalysis: [{ ...baseValid.personaAnalysis[0], score: 2.0 }],
-      }).success,
-    ).toBe(false);
-  });
-
-  it('rejects invalid LearningEntry with empty sourceRunIds', () => {
-    expect(
-      DeepRetroSchema.safeParse({
-        ...baseValid,
-        learningEntries: [{ ...baseValid.learningEntries[0], sourceRunIds: [] }],
+        personaQualityScores: [{ ...baseValid.personaQualityScores[0], score: 2.0 }],
       }).success,
     ).toBe(false);
   });
@@ -124,6 +125,19 @@ describe('DeepRetroSchema', () => {
         improvementCandidates: [{ ...baseValid.improvementCandidates[0], confidence: 'very-high' }],
       }).success,
     ).toBe(false);
+  });
+
+  it('rejects unknown improvementKind on learningEntry', () => {
+    expect(
+      DeepRetroSchema.safeParse({
+        ...baseValid,
+        learningEntries: [{ ...baseValid.learningEntries[0], improvementKind: 'scope-discipline' }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects invalid outcome', () => {
+    expect(DeepRetroSchema.safeParse({ ...baseValid, outcome: 'unknown' }).success).toBe(false);
   });
 
   it('zod toJSONSchema roundtrip produces a valid JSON Schema object', () => {

@@ -3,18 +3,23 @@
 0a. QA and Investigation section "rerun and other buttons"
 1. Remove fake triage
 
+# Todo
+Invoke web standards [retrospectivesection, reviewsection, timelineevents] -- way to big. Interface should be in logical place (lib) and shared. 
+Too many components and lines of code inside each of them, things could be split out into seperate files. 
+Tests - whats level?
+
 # Overview page
-Could remove priority, add in files changed (from code panel) and tests (pass).
+Could remove priority card, add in files changed (from code panel) and tests (pass).
 Brief - remove the priority seems unnecessary. Be nice to add the agent cards in the brief.
 
 # Code page
 Have the header and make it look more like the design
 
 # Tests
-Potentially group them somehow (into folders?)
+Potentially group them somehow (into folders?), not sure. 
 
 # Review
-SHould eb showing lint, type check pass, tests passing, bundle size, accessibility, secret scan.... whatever our pre-merge review checks should be
+SHould be showing lint, type check pass, tests passing, bundle size, accessibility, secret scan.... whatever our pre-merge review checks should be
 CUrrently it shows specific things to the the bug (e.g. expanded all accordions, collapsed them, followed web standards) - see design
 
 # Cost

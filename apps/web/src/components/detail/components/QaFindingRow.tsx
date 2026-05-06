@@ -37,7 +37,7 @@ export function QaFindingRow({ finding, tier }: QaFindingRowProps) {
         >
           {finding.severity}
         </span>
-        <span className="text-[11px] text-fg-4 capitalize">{tier}</span>
+        <span className="text-[11px] text-fg-2 capitalize">{tier}</span>
         {finding.disposition != null && (
           <span
             className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium tracking-wide"

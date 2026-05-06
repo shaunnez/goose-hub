@@ -104,7 +104,7 @@ export function CodeDiffSection({ projectSlug, id }: CodeDiffSectionProps) {
           <span className="text-[10.5px] font-semibold uppercase tracking-wide text-fg-3">
             {prNumber != null ? `PR #${prNumber}` : 'Live diff'}
           </span>
-          <span className="text-fg-4 text-[11px]">{files.length} files</span>
+          <span className="text-fg-2 text-[11px]">{files.length} files</span>
           <span className="font-mono text-[11px] tabular-nums" style={{ color: 'var(--success)' }}>
             +{totalAdds}
           </span>
@@ -128,7 +128,7 @@ export function CodeDiffSection({ projectSlug, id }: CodeDiffSectionProps) {
             </a>
           )}
           {prNumber == null && data?.runId != null && (
-            <span className="font-mono text-[10.5px] text-fg-4">run:{data.runId.slice(0, 8)}</span>
+            <span className="font-mono text-[10.5px] text-fg-2">run:{data.runId.slice(0, 8)}</span>
           )}
         </div>
       </div>

@@ -96,9 +96,13 @@ function makeMockSource(items: WorkItem[] = []): StateSource {
 
 function makeLightRetroOutput() {
   return {
-    summary: 'All went well.',
-    whatWorked: ['tests caught the bug'],
-    whatDidnt: [],
+    outcome: 'success',
+    workItemNumber: 42,
+    summary: {
+      wentWell: 'All went well.',
+      didNotGoWell: 'Nothing material.',
+      architecturalTakeaway: 'Keep current shape.',
+    },
     improvementCandidates: [],
     decisionSummaries: [{ kind: 'VERDICT', summary: 'Light retro complete' }],
   };
@@ -106,12 +110,24 @@ function makeLightRetroOutput() {
 
 function makeDeepRetroOutput() {
   return {
-    summary: 'QA failed; deep dive.',
-    whatWorked: [],
-    whatDidnt: ['missed an edge case'],
-    rootCauses: ['no test for empty input'],
+    outcome: 'partial',
+    workItemNumber: 42,
+    summary: {
+      wentWell: 'Recovered after retry.',
+      didNotGoWell: 'QA failed on edge case.',
+      architecturalTakeaway: 'Strengthen QA edge-case coverage.',
+    },
+    triggerReasons: ['qa-failed'],
+    personaQualityScores: [],
+    learningEntries: [],
+    decisionPatterns: [],
     improvementCandidates: [
-      { kind: 'persona-tweak', suggestionText: 'Add empty-input check to QA prompt' },
+      {
+        kind: 'persona',
+        targetPath: 'skills/qa/skill.md',
+        suggestionText: 'Add empty-input check to QA prompt',
+        confidence: 'medium',
+      },
     ],
     decisionSummaries: [{ kind: 'VERDICT', summary: 'Deep retro complete' }],
   };
@@ -295,6 +311,12 @@ describe('runRetroBatch', () => {
     });
     const source = makeMockSource([retroItem, otherItem]);
     mockGetProject.mockResolvedValue(projectConfigWith('light'));
+    // simulate a prior retro so firstRunInMilestone=false → light tier
+    mockReplay.mockImplementation((filter: { workItemId?: string }) =>
+      filter.workItemId
+        ? []
+        : [{ id: 99, kind: 'retrospective.completed', payload: { tier: 'light' }, createdAt: '' }],
+    );
     mockRun.mockResolvedValueOnce(makeAgentResult(makeLightRetroOutput()));
 
     const { runRetroBatch } = await import('./retro-batch.js');

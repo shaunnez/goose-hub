@@ -33,7 +33,7 @@ export function TransitionButton({ projectSlug, id, currentState }: TransitionBu
         disabled
         title={`Terminal state: ${currentState} has no legal next states`}
         data-testid="transition-button-disabled"
-        className="h-6 px-2.5 rounded-full text-[11.5px] border border-line text-fg-4 cursor-not-allowed"
+        className="h-6 px-2.5 rounded-full text-[11.5px] border border-line text-fg-2 cursor-not-allowed"
       >
         No transitions
       </button>
@@ -82,7 +82,7 @@ export function TransitionButton({ projectSlug, id, currentState }: TransitionBu
           data-testid="transition-popover"
           className="absolute right-0 mt-1 z-20 min-w-[220px] rounded-md border border-line bg-bg-elev shadow-md py-1"
         >
-          <div className="px-3 py-1 text-[10.5px] uppercase tracking-wider text-fg-4">
+          <div className="px-3 py-1 text-[10.5px] uppercase tracking-wider text-fg-2">
             Legal next states
           </div>
           {targets.map((t) => (

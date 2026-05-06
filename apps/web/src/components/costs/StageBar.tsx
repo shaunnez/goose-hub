@@ -41,8 +41,8 @@ export function StageBar({ stage, totalUsd, hasEstimated, totalRuns, maxUsd }: P
         <span className="text-fg-2">
           {formatCost(totalUsd, hasEstimated ? 'estimated' : 'exact')}
         </span>
-        <span className="text-fg-4">·</span>
-        <span className="text-fg-4">
+        <span className="text-fg-2">·</span>
+        <span className="text-fg-2">
           {totalRuns} run{totalRuns === 1 ? '' : 's'}
         </span>
       </div>

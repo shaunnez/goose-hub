@@ -83,7 +83,13 @@ function makeSource(overrides: Partial<StateSource> = {}): StateSource {
 function makeLightResult() {
   return {
     output: {
-      summary: '- All good.\n- No issues.\n- Keep it up.',
+      outcome: 'success',
+      workItemNumber: 42,
+      summary: {
+        wentWell: 'All good.',
+        didNotGoWell: 'No issues.',
+        architecturalTakeaway: 'Keep it up.',
+      },
       improvementCandidates: [],
       decisionSummaries: [{ kind: 'VERDICT', summary: 'Clean run' }],
     },
@@ -95,8 +101,15 @@ function makeLightResult() {
 function makeDeepResult() {
   return {
     output: {
-      summary: '- Good.\n- QA failed once.\n- Adjust prompt.',
-      personaAnalysis: [],
+      outcome: 'success',
+      workItemNumber: 42,
+      summary: {
+        wentWell: 'Good.',
+        didNotGoWell: 'QA failed once.',
+        architecturalTakeaway: 'Adjust prompt.',
+      },
+      triggerReasons: ['standard-deep'],
+      personaQualityScores: [],
       learningEntries: [],
       decisionPatterns: [],
       improvementCandidates: [],
@@ -329,7 +342,13 @@ describe('context assembly', () => {
 
     const resultWithSummaries = {
       output: {
-        summary: '- All good.\n- No issues.\n- Keep it up.',
+        outcome: 'success',
+        workItemNumber: 42,
+        summary: {
+          wentWell: 'All good.',
+          didNotGoWell: 'No issues.',
+          architecturalTakeaway: 'Keep it up.',
+        },
         improvementCandidates: [],
         decisionSummaries: [{ kind: 'VERDICT', summary: 'Clean run — no friction detected' }],
       },
@@ -414,6 +433,50 @@ describe('state transitions', () => {
       projectId: 'test-project',
       policy: 'always-light',
     });
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:retrospecting',
+      'factory:needs-human',
+    );
+    expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
+      personaName: 'test-project/retrospector/0',
+      role: 'retrospector',
+      outcome: 'failure',
+    });
+  });
+
+  it('emits agent.run-failed and transitions to factory:needs-human when output fails schema parse', async () => {
+    const { runRetrospectiveWorkflow } = await import('./retrospective.js');
+    const { eventStore } = await import('../event-stream/store.js');
+    const source = makeSource();
+
+    // missing required fields (outcome, workItemNumber, summary as object)
+    mockRun.mockResolvedValueOnce({
+      output: { summary: 'free text', decisionSummaries: [] },
+      decisionSummaries: [],
+      events: [],
+    });
+
+    await runRetrospectiveWorkflow({
+      workItem: makeWorkItem(),
+      stateSource: source,
+      projectId: 'test-project',
+      policy: 'always-light',
+    });
+
+    const failedEvent = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'agent.run-failed');
+    expect(failedEvent).toBeDefined();
+    const payload = failedEvent?.[0].payload as { skill: string; error: string };
+    expect(payload.skill).toBe('retrospective-light');
+    expect(payload.error.length).toBeGreaterThan(0);
+
+    const completedEvent = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'retrospective.completed');
+    expect(completedEvent).toBeUndefined();
 
     expect(source.transitionState).toHaveBeenCalledWith(
       '42',

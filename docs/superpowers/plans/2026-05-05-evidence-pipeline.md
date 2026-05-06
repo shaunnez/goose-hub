@@ -274,7 +274,7 @@ Update `slices/fix-issue/slice.test.ts` to cover the `beforeCommentUrl` lookup p
   onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
 />
 {shot.githubUrl == null && (
-  <p className="text-[11px] text-fg-4">
+  <p className="text-[11px] text-fg-2">
     Saved to: <code className="font-mono">{shot.path}</code>
   </p>
 )}

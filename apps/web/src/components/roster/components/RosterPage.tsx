@@ -57,7 +57,7 @@ function PersonaCard({
         <div className="text-[10.5px] text-fg-5 font-mono truncate mb-1">{persona.personaName}</div>
       )}
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 text-[11px] text-fg-4">
+        <div className="flex items-center gap-3 text-[11px] text-fg-2">
           <span>{persona.runsTotal} runs</span>
           <span>·</span>
           <span>{timeAgo(persona.lastRunAt)}</span>
@@ -65,7 +65,7 @@ function PersonaCard({
         {projectColor != null && projectName != null && (
           <span
             data-testid="roster-project-badge"
-            className="flex items-center gap-1 text-[10.5px] text-fg-4 shrink-0"
+            className="flex items-center gap-1 text-[10.5px] text-fg-2 shrink-0"
           >
             <span
               className="inline-block w-1.5 h-1.5 rounded-full"
@@ -98,7 +98,7 @@ function RoleGroup({
 }) {
   return (
     <section>
-      <h2 className="text-[11px] uppercase tracking-wider text-fg-4 px-1 mb-2 capitalize">
+      <h2 className="text-[11px] uppercase tracking-wider text-fg-2 px-1 mb-2 capitalize">
         {role}
       </h2>
       <div className="flex flex-col gap-1.5">

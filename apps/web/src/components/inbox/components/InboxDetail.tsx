@@ -14,10 +14,10 @@ export function InboxDetail({ item, onPromote, onDelete }: InboxDetailProps) {
         <div className="flex-1 min-w-0">
           <h2 className="text-[17px] font-semibold text-fg leading-snug mb-2">{item.title}</h2>
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-mono uppercase tracking-wider text-fg-4 border border-line rounded px-1.5 py-0.5">
+            <span className="text-[11px] font-mono uppercase tracking-wider text-fg-2 border border-line rounded px-1.5 py-0.5">
               {item.type}
             </span>
-            <span className="text-[12px] text-fg-4">
+            <span className="text-[12px] text-fg-2">
               {new Date(item.createdAt).toLocaleDateString(undefined, {
                 year: 'numeric',
                 month: 'long',
@@ -51,7 +51,7 @@ export function InboxDetail({ item, onPromote, onDelete }: InboxDetailProps) {
         {item.body ? (
           <p className="text-[13px] text-fg-2 leading-relaxed whitespace-pre-wrap">{item.body}</p>
         ) : (
-          <p className="text-[13px] text-fg-4 italic">No description.</p>
+          <p className="text-[13px] text-fg-2 italic">No description.</p>
         )}
       </div>
     </div>

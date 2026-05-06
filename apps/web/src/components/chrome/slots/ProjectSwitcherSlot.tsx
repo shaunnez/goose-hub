@@ -19,7 +19,7 @@ export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSl
     return (
       <div
         data-testid="project-switcher"
-        className={cn('text-[11.5px] text-fg-4', collapsed ? 'flex justify-center' : 'px-2')}
+        className={cn('text-[11.5px] text-fg-2', collapsed ? 'flex justify-center' : 'px-2')}
       >
         {collapsed ? <FolderGit2 size={16} className="animate-pulse" /> : 'Loading projects…'}
       </div>
@@ -44,7 +44,7 @@ export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSl
     return (
       <div
         data-testid="project-switcher"
-        className={cn('text-[11.5px] text-fg-4', collapsed ? 'flex justify-center' : 'px-2')}
+        className={cn('text-[11.5px] text-fg-2', collapsed ? 'flex justify-center' : 'px-2')}
       >
         {collapsed ? <FolderGit2 size={16} /> : 'No projects configured'}
       </div>
@@ -73,7 +73,7 @@ export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSl
             sideOffset={8}
             className="z-50 min-w-[180px] bg-bg-elev border border-line rounded-lg shadow-lg p-1.5 outline-none"
           >
-            <p className="text-[10px] uppercase tracking-wider text-fg-4 px-2 py-1">Project</p>
+            <p className="text-[10px] uppercase tracking-wider text-fg-2 px-2 py-1">Project</p>
             <button
               type="button"
               onClick={() => {
@@ -119,7 +119,7 @@ export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSl
     <div className="px-2">
       <label
         htmlFor="active-project"
-        className="block text-[10.5px] uppercase tracking-wider text-fg-4 mb-1"
+        className="block text-[10.5px] uppercase tracking-wider text-fg-2 mb-1"
       >
         Project
       </label>

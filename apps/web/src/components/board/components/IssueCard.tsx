@@ -58,7 +58,7 @@ export function IssueCard({
           #{item.externalId}
         </span>
         <span className="grow" />
-        <span className="font-mono tnum text-[10.5px] text-fg-4">{ageStr}</span>
+        <span className="font-mono tnum text-[10.5px] text-fg-2">{ageStr}</span>
       </div>
       <div className="text-[12.5px] text-fg leading-snug font-medium mb-2">
         {item.title.length <= 55 ? item.title : `${item.title.slice(0, 54).trimEnd()}…`}
@@ -92,7 +92,7 @@ export function IssueCard({
           </span>
         )}
         <span
-          className="ml-auto font-mono text-[10.5px] text-fg-4"
+          className="ml-auto font-mono text-[10.5px] text-fg-2"
           title={
             costs == null
               ? 'Loading…'

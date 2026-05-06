@@ -38,14 +38,14 @@ function RunHistory({ personaName }: { personaName: string }) {
   });
 
   if (isLoading) {
-    return <div className="text-[12px] text-fg-4 py-4">Loading run history…</div>;
+    return <div className="text-[12px] text-fg-2 py-4">Loading run history…</div>;
   }
 
   if (runs.length === 0) {
     return (
       <div
         data-testid="runs-empty-state"
-        className="text-[12px] text-fg-4 py-4 text-center border border-dashed border-line rounded-md"
+        className="text-[12px] text-fg-2 py-4 text-center border border-dashed border-line rounded-md"
       >
         No run history recorded yet
       </div>
@@ -73,10 +73,10 @@ function RunHistory({ personaName }: { personaName: string }) {
             {run.outcome}
           </span>
           <span className="flex-1 text-fg-3 truncate">{run.workItemId ?? '—'}</span>
-          <span className="text-fg-4 font-mono shrink-0">
+          <span className="text-fg-2 font-mono shrink-0">
             {Math.round(run.qualityScore * 100)}%
           </span>
-          <span className="text-fg-4 shrink-0">{new Date(run.createdAt).toLocaleDateString()}</span>
+          <span className="text-fg-2 shrink-0">{new Date(run.createdAt).toLocaleDateString()}</span>
         </li>
       ))}
     </ol>
@@ -176,14 +176,14 @@ function CandidatesList({ personaName }: { personaName: string }) {
   });
 
   if (isLoading) {
-    return <div className="text-[12px] text-fg-4 py-4">Loading candidates…</div>;
+    return <div className="text-[12px] text-fg-2 py-4">Loading candidates…</div>;
   }
 
   if (candidates.length === 0) {
     return (
       <div
         data-testid="candidates-empty-state"
-        className="text-[12px] text-fg-4 py-4 text-center border border-dashed border-line rounded-md"
+        className="text-[12px] text-fg-2 py-4 text-center border border-dashed border-line rounded-md"
       >
         No improvement candidates yet
       </div>
@@ -217,7 +217,7 @@ export function PersonaDrillIn({ persona, onClose }: PersonaDrillInProps) {
           type="button"
           onClick={onClose}
           aria-label="Close panel"
-          className="p-1 rounded hover:bg-bg-hover text-fg-4 hover:text-fg"
+          className="p-1 rounded hover:bg-bg-hover text-fg-2 hover:text-fg"
         >
           <X size={14} />
         </button>
@@ -226,7 +226,7 @@ export function PersonaDrillIn({ persona, onClose }: PersonaDrillInProps) {
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
         {/* Stats summary */}
         <section>
-          <h3 className="text-[11px] uppercase tracking-wider text-fg-4 mb-2">Quality</h3>
+          <h3 className="text-[11px] uppercase tracking-wider text-fg-2 mb-2">Quality</h3>
           {qualityBar(persona.avgQualityScore)}
           <div className="flex gap-4 mt-2 text-[11.5px] text-fg-3">
             <span>{persona.runsTotal} total</span>
@@ -237,13 +237,13 @@ export function PersonaDrillIn({ persona, onClose }: PersonaDrillInProps) {
 
         {/* Run history */}
         <section>
-          <h3 className="text-[11px] uppercase tracking-wider text-fg-4 mb-2">Run History</h3>
+          <h3 className="text-[11px] uppercase tracking-wider text-fg-2 mb-2">Run History</h3>
           <RunHistory personaName={persona.personaName} />
         </section>
 
         {/* Improvement candidates */}
         <section>
-          <h3 className="text-[11px] uppercase tracking-wider text-fg-4 mb-2">
+          <h3 className="text-[11px] uppercase tracking-wider text-fg-2 mb-2">
             Improvement Candidates
           </h3>
           <CandidatesList personaName={persona.personaName} />

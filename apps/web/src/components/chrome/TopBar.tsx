@@ -31,7 +31,7 @@ export function TopBar({ breadcrumb }: TopBarProps) {
           type="button"
           disabled
           title="Search — available later"
-          className="flex items-center gap-2 h-7 px-2.5 rounded-md text-[12px] text-fg-4 border border-line bg-bg cursor-not-allowed"
+          className="flex items-center gap-2 h-7 px-2.5 rounded-md text-[12px] text-fg-2 border border-line bg-bg cursor-not-allowed"
         >
           <Search size={13} />
           <span>Search</span>
@@ -41,7 +41,7 @@ export function TopBar({ breadcrumb }: TopBarProps) {
           type="button"
           disabled
           title="Command palette — available in M3"
-          className="flex items-center gap-2 h-7 px-2.5 rounded-md text-[12px] text-fg-4 border border-line bg-bg cursor-not-allowed"
+          className="flex items-center gap-2 h-7 px-2.5 rounded-md text-[12px] text-fg-2 border border-line bg-bg cursor-not-allowed"
         >
           <Terminal size={13} />
           <span>Command</span>

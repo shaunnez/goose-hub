@@ -81,10 +81,10 @@ export function InboxList() {
                     {item.title}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[10.5px] font-mono uppercase tracking-wider text-fg-4 border border-line rounded px-1 py-0.5">
+                    <span className="text-[10.5px] font-mono uppercase tracking-wider text-fg-2 border border-line rounded px-1 py-0.5">
                       {item.type}
                     </span>
-                    <span className="text-[11px] text-fg-4">
+                    <span className="text-[11px] text-fg-2">
                       {new Date(item.createdAt).toLocaleDateString()}
                     </span>
                   </div>

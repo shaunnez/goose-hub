@@ -26,14 +26,14 @@ function StatCard({
 }) {
   return (
     <div className="rounded-lg border border-line bg-bg-elev px-4 py-3">
-      <div className="text-[10.5px] uppercase tracking-wider text-fg-4 mb-1.5">{label}</div>
+      <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1.5">{label}</div>
       <div
         className="text-[20px] font-semibold leading-none tracking-tight capitalize"
         style={{ color: color ?? 'var(--fg)' }}
       >
         {value}
       </div>
-      {sub && <div className="text-[11px] text-fg-4 mt-1">{sub}</div>}
+      {sub && <div className="text-[11px] text-fg-2 mt-1">{sub}</div>}
     </div>
   );
 }
@@ -64,7 +64,7 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
     <div data-testid="overview-section" className="px-8 py-6 flex flex-col gap-5">
       {/* Section header */}
       <div>
-        <div className="text-[10.5px] uppercase tracking-wider text-fg-4 mb-1">01. Overview</div>
+        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">01. Overview</div>
         <h2 className="text-[17px] font-semibold text-fg leading-snug truncate">
           What's happening on this task
         </h2>
@@ -98,7 +98,7 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
         {/* Brief card */}
         <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
           <div className="px-4 py-3 border-b border-line bg-bg-elev-2">
-            <div className="text-[10.5px] uppercase tracking-wider text-fg-4">Brief</div>
+            <div className="text-[10.5px] uppercase tracking-wider text-fg-2">Brief</div>
           </div>
           <div className="px-4 py-4">
             {priority !== '—' && (
@@ -126,7 +126,7 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
         {item != null && projectSlug != null && (
           <div className="rounded-lg border border-line bg-bg-elev overflow-hidden flex flex-col">
             <div className="px-4 py-3 border-b border-line bg-bg-elev-2 flex items-center justify-between shrink-0">
-              <div className="text-[10.5px] uppercase tracking-wider text-fg-4">Comments</div>
+              <div className="text-[10.5px] uppercase tracking-wider text-fg-2">Comments</div>
             </div>
             <div className="flex-1 overflow-y-auto">
               <CommentsSection

@@ -144,7 +144,7 @@ export function InvestigationSection({
       {/* Section header */}
       <div className="flex items-start gap-4">
         <div className="grow min-w-0">
-          <div className="text-[10.5px] uppercase tracking-wider text-fg-4 mb-1">
+          <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">
             03 · Investigation
           </div>
           <h2 className="text-[17px] font-semibold text-fg leading-snug">What was found</h2>
@@ -237,7 +237,7 @@ export function InvestigationSection({
                 key={f.path}
                 severity={investigate.confidence}
                 title={basename}
-                body={f.reason ? <span>{f.reason}</span> : <span className="text-fg-4">—</span>}
+                body={f.reason ? <span>{f.reason}</span> : <span className="text-fg-2">—</span>}
                 filePath={f.path}
                 viewUrl={githubBase != null ? `${githubBase}/${f.path}` : undefined}
                 conf={conf}
@@ -252,7 +252,7 @@ export function InvestigationSection({
       {/* Open questions */}
       {investigate.openQuestions.length > 0 && (
         <div className="rounded-lg border border-line bg-bg-elev px-4 py-4">
-          <div className="text-[10.5px] uppercase tracking-wider text-fg-4 mb-2">
+          <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-2">
             Open questions
           </div>
           <ul data-testid="open-questions-list" className="space-y-1 list-disc list-inside">
@@ -269,7 +269,7 @@ export function InvestigationSection({
       {investigate.decisionSummaries.length > 0 && (
         <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
           <div className="px-4 py-3 border-b border-line bg-bg-elev-2 flex items-baseline gap-2">
-            <div className="text-[10.5px] uppercase tracking-wider text-fg-4">
+            <div className="text-[10.5px] uppercase tracking-wider text-fg-2">
               Investigation trail
             </div>
             <div className="text-[12px] text-fg-3">What was looked at, in order</div>
@@ -281,7 +281,7 @@ export function InvestigationSection({
                 key={i}
                 className="flex items-start gap-3 text-[12.5px] py-1"
               >
-                <span className="font-mono tnum text-fg-4 w-6 shrink-0">
+                <span className="font-mono tnum text-fg-2 w-6 shrink-0">
                   {String(i + 1).padStart(2, '0')}
                 </span>
                 {initials != null && (
@@ -298,7 +298,7 @@ export function InvestigationSection({
                 <span className="flex-1 text-fg-2 leading-relaxed">
                   {s.summary}
                   {s.evidence != null && s.evidence.length > 0 && (
-                    <span className="block mt-0.5 text-[11.5px] text-fg-4 font-mono">
+                    <span className="block mt-0.5 text-[11.5px] text-fg-2 font-mono">
                       {s.evidence}
                     </span>
                   )}
@@ -321,7 +321,7 @@ export function InvestigationSection({
                 key={note.id}
                 className="rounded border border-line bg-bg-elev/40 px-3 py-2 text-[12px] text-fg-2"
               >
-                <div className="text-[11px] text-fg-4 mb-1">{timeAgo(note.createdAt)}</div>
+                <div className="text-[11px] text-fg-2 mb-1">{timeAgo(note.createdAt)}</div>
                 <div
                   className="prose prose-sm prose-invert max-w-none text-[12px] [&_p]:mb-1"
                   // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized by renderMarkdownToHtml
@@ -373,7 +373,7 @@ export function InvestigationSection({
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Optional notes or answers to open questions…"
             rows={3}
-            className="w-full rounded border border-line bg-bg px-3 py-2 text-[12px] text-fg placeholder:text-fg-4 focus:outline-none focus:border-[color:var(--accent)] resize-none"
+            className="w-full rounded border border-line bg-bg px-3 py-2 text-[12px] text-fg placeholder:text-fg-2 focus:outline-none focus:border-[color:var(--accent)] resize-none"
           />
           {proceedError != null && (
             <p className="text-[11px] text-[color:var(--danger)]">{proceedError}</p>

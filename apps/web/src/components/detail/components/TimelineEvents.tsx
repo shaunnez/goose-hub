@@ -124,7 +124,7 @@ function AgentDecisionSummaryLiveEvent({ event }: { event: AgentEventDto }) {
           )}
           <span className="truncate max-w-[460px]">{summary}</span>
         </summary>
-        <div className="mt-1.5 text-[11px] text-fg-4 font-mono tnum pl-4">
+        <div className="mt-1.5 text-[11px] text-fg-2 font-mono tnum pl-4">
           {new Date(event.createdAt).toLocaleString()}
         </div>
       </details>
@@ -140,7 +140,7 @@ function AgentLogEvent({ event }: { event: AgentEventDto }) {
       data-event-kind={event.kind}
       className="rounded-md border border-line/50 bg-bg/40 px-4 py-2"
     >
-      <span className="font-mono text-[11.5px] text-fg-4">{line}</span>
+      <span className="font-mono text-[11.5px] text-fg-2">{line}</span>
     </li>
   );
 }
@@ -156,7 +156,7 @@ function AgentLogGroupEvent({ events }: { events: AgentEventDto[] }) {
           setOpen((e.target as HTMLDetailsElement).open);
         }}
       >
-        <summary className="flex items-center gap-1 cursor-pointer list-none font-mono text-[11.5px] text-fg-4 select-none">
+        <summary className="flex items-center gap-1 cursor-pointer list-none font-mono text-[11.5px] text-fg-2 select-none">
           {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           {events.length} log lines
         </summary>
@@ -165,7 +165,7 @@ function AgentLogGroupEvent({ events }: { events: AgentEventDto[] }) {
             const p = ev.payload as { line?: string; text?: string } | null;
             const line = p?.line ?? p?.text ?? getPayloadStr(ev.payload);
             return (
-              <div key={ev.id} className="font-mono text-[11.5px] text-fg-4">
+              <div key={ev.id} className="font-mono text-[11.5px] text-fg-2">
                 {line}
               </div>
             );
@@ -376,7 +376,7 @@ function normalizeToolInput(
             $ {inp.command}
           </code>
           {timeoutMs != null && (
-            <span className="text-[10px] text-fg-4">timeout: {Math.round(timeoutMs / 1000)}s</span>
+            <span className="text-[10px] text-fg-2">timeout: {Math.round(timeoutMs / 1000)}s</span>
           )}
         </div>
       ),
@@ -395,7 +395,7 @@ function normalizeToolInput(
       body: (
         <div className="mt-1.5 flex flex-col gap-1.5">
           {filePath != null && (
-            <span className="text-[10.5px] text-fg-4 font-mono truncate">{filePath}</span>
+            <span className="text-[10.5px] text-fg-2 font-mono truncate">{filePath}</span>
           )}
           {replaceAll && (
             <span className="text-[10px] text-yellow-400/80 font-mono">replace all</span>
@@ -424,8 +424,8 @@ function normalizeToolInput(
       summary: `Write: ${fileName}`,
       body: (
         <div className="mt-1.5 flex flex-col gap-1">
-          <span className="text-[10.5px] text-fg-4 font-mono truncate">{filePath}</span>
-          <span className="text-[10px] text-fg-4">{content.length.toLocaleString()} chars</span>
+          <span className="text-[10.5px] text-fg-2 font-mono truncate">{filePath}</span>
+          <span className="text-[10px] text-fg-2">{content.length.toLocaleString()} chars</span>
           {content.length > 0 && (
             <pre className="mt-0.5 text-[10px] font-mono text-fg-3 whitespace-pre-wrap break-all line-clamp-6">
               {content.length > 400 ? `${content.slice(0, 400)}…` : content}
@@ -452,8 +452,8 @@ function normalizeToolInput(
       summary: `Read: ${fileName}${lineHint != null ? ` [${lineHint}]` : ''}`,
       body: (
         <div className="mt-1.5 flex flex-col gap-1">
-          <span className="text-[10.5px] text-fg-4 font-mono truncate">{filePath}</span>
-          {lineHint != null && <span className="text-[10px] text-fg-4">{lineHint}</span>}
+          <span className="text-[10.5px] text-fg-2 font-mono truncate">{filePath}</span>
+          {lineHint != null && <span className="text-[10px] text-fg-2">{lineHint}</span>}
         </div>
       ),
     };
@@ -469,8 +469,8 @@ function normalizeToolInput(
       body: (
         <div className="mt-1.5 flex flex-col gap-1">
           <span className="text-[10.5px] text-fg-2 font-mono">/{pattern}/</span>
-          {path != null && <span className="text-[10px] text-fg-4 font-mono truncate">{path}</span>}
-          {outputMode != null && <span className="text-[10px] text-fg-4">{outputMode}</span>}
+          {path != null && <span className="text-[10px] text-fg-2 font-mono truncate">{path}</span>}
+          {outputMode != null && <span className="text-[10px] text-fg-2">{outputMode}</span>}
         </div>
       ),
     };
@@ -483,7 +483,7 @@ function normalizeToolInput(
       summary: `Glob: ${path}`,
       body: (
         <div className="mt-1.5">
-          <span className="text-[10.5px] text-fg-4 font-mono">{path}</span>
+          <span className="text-[10.5px] text-fg-2 font-mono">{path}</span>
         </div>
       ),
     };
@@ -637,7 +637,7 @@ function AgentTriageCompleteEvent({ event }: { event: AgentEventDto }) {
         <div className="text-[11px] text-fg-3 font-mono">
           repo: <span className="text-fg-2">{topRepo.repo}</span>
           {topRepo.confidence != null && (
-            <span className="text-fg-4 ml-2">{topRepo.confidence}% confidence</span>
+            <span className="text-fg-2 ml-2">{topRepo.confidence}% confidence</span>
           )}
         </div>
       )}
@@ -705,13 +705,13 @@ function AgentInvestigationCompleteEvent({ event }: { event: AgentEventDto }) {
           </span>
         )}
         {repro != null && (
-          <span className={repro.reproduced ? 'text-[color:var(--danger)]' : 'text-fg-4'}>
+          <span className={repro.reproduced ? 'text-[color:var(--danger)]' : 'text-fg-2'}>
             repro: {repro.reproduced ? 'confirmed' : 'not reproduced'}
           </span>
         )}
       </div>
       {repro?.notes != null && !repro.reproduced && (
-        <p className="mt-1.5 text-[11px] text-fg-4 italic">{repro.notes}</p>
+        <p className="mt-1.5 text-[11px] text-fg-2 italic">{repro.notes}</p>
       )}
     </li>
   );
@@ -757,30 +757,24 @@ function RetroCompletedEvent({ event }: { event: AgentEventDto }) {
     tier?: 'light' | 'deep';
     output?: {
       outcome?: string;
-      summary?: string | string[];
+      summary?: {
+        wentWell?: string;
+        didNotGoWell?: string;
+        architecturalTakeaway?: string;
+      };
       improvementCandidates?: unknown[];
-      decisionSummary?: { kind?: string; text?: string };
     };
   } | null;
 
   const tier = p?.tier ?? 'light';
   const outcome = p?.output?.outcome ?? 'unknown';
   const isSuccess = outcome === 'success';
-  const rawSummary = p?.output?.summary;
-  const summaryItems: string[] = Array.isArray(rawSummary)
-    ? rawSummary
-    : typeof rawSummary === 'string'
-      ? rawSummary
-          .split('\n')
-          .map((l) => l.replace(/^[-*]\s*/, '').trim())
-          .filter(Boolean)
-      : rawSummary != null && typeof rawSummary === 'object'
-        ? [
-            (rawSummary as Record<string, unknown>).wentWell,
-            (rawSummary as Record<string, unknown>).couldBeSmootherOrCleanRun,
-            (rawSummary as Record<string, unknown>).mainTakeaway,
-          ].filter((s): s is string => typeof s === 'string' && s.length > 0)
-        : [];
+  const summary = p?.output?.summary;
+  const summaryRows: { label: string; text: string }[] = [];
+  if (summary?.wentWell) summaryRows.push({ label: 'Went well', text: summary.wentWell });
+  if (summary?.didNotGoWell) summaryRows.push({ label: "Didn't", text: summary.didNotGoWell });
+  if (summary?.architecturalTakeaway)
+    summaryRows.push({ label: 'Takeaway', text: summary.architecturalTakeaway });
   const candidateCount = p?.output?.improvementCandidates?.length ?? 0;
 
   return (
@@ -810,7 +804,7 @@ function RetroCompletedEvent({ event }: { event: AgentEventDto }) {
         {candidateCount > 0 && (
           <>
             <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
-            <span className="text-fg-4">
+            <span className="text-fg-2">
               {candidateCount} candidate{candidateCount !== 1 ? 's' : ''}
             </span>
           </>
@@ -818,12 +812,14 @@ function RetroCompletedEvent({ event }: { event: AgentEventDto }) {
         <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
         <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
       </div>
-      {summaryItems.length > 0 && (
+      {summaryRows.length > 0 && (
         <ul className="space-y-1 mt-1">
-          {summaryItems.map((item) => (
-            <li key={item} className="flex gap-2 text-[11.5px] text-fg-2 leading-snug">
+          {summaryRows.map((row) => (
+            <li key={row.label} className="flex gap-2 text-[11.5px] text-fg-2 leading-snug">
               <span className="shrink-0 text-fg-5 mt-0.5">–</span>
-              <span>{item.replace(/\*\*(.+?)\*\*/g, '$1')}</span>
+              <span>
+                <span className="text-fg-3">{row.label}</span> — {row.text}
+              </span>
             </li>
           ))}
         </ul>
@@ -868,7 +864,7 @@ function GateApprovedEvent({ event }: { event: AgentEventDto }) {
         <CheckCircle size={13} className="shrink-0 text-green-400" />
         <span className="font-mono uppercase tracking-wider">Approved</span>
         {p?.prNumber != null && <span className="font-mono text-fg-2">#{p.prNumber}</span>}
-        {p?.source != null && <span className="font-mono text-fg-4">via {p.source}</span>}
+        {p?.source != null && <span className="font-mono text-fg-2">via {p.source}</span>}
         <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
         <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
       </div>
@@ -886,7 +882,7 @@ function GateRejectedEvent({ event }: { event: AgentEventDto }) {
       <div className="flex items-center gap-2 text-[11px] text-fg-3">
         <XCircle size={13} className="shrink-0 text-red-400" />
         <span className="font-mono uppercase tracking-wider">Rejected</span>
-        {p?.source != null && <span className="font-mono text-fg-4">via {p.source}</span>}
+        {p?.source != null && <span className="font-mono text-fg-2">via {p.source}</span>}
         <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
         <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
       </div>
@@ -1070,7 +1066,7 @@ function QaCompletedEvent({ event }: { event: AgentEventDto }) {
             <span className={score >= threshold ? 'text-green-400' : 'text-[color:var(--danger)]'}>
               {score}
             </span>
-            <span className="text-fg-4">/{threshold}</span>
+            <span className="text-fg-2">/{threshold}</span>
           </span>
         )}
       </div>
@@ -1083,7 +1079,7 @@ function QaCompletedEvent({ event }: { event: AgentEventDto }) {
             return (
               <div key={key} className="flex items-center gap-2 text-[11px]">
                 {skipped ? (
-                  <Circle size={11} className="shrink-0 text-fg-4" />
+                  <Circle size={11} className="shrink-0 text-fg-2" />
                 ) : passed ? (
                   <CheckCircle size={11} className="shrink-0 text-green-400" />
                 ) : (

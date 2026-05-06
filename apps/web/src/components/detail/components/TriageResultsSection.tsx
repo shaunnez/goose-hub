@@ -59,7 +59,7 @@ export function TriageResultsSection({ projectSlug, id }: TriageResultsSectionPr
       <div data-testid="triage-empty-state" className="px-8 py-6 flex flex-col gap-5">
         {/* Section header */}
         <div>
-          <div className="text-[10.5px] uppercase tracking-wider text-fg-4 mb-1">02. Triage</div>
+          <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">02. Triage</div>
           <h2 className="text-[17px] font-semibold text-fg leading-snug">
             Repo candidates &amp; classification
           </h2>
@@ -68,13 +68,13 @@ export function TriageResultsSection({ projectSlug, id }: TriageResultsSectionPr
         {/* Empty body */}
         <div className="flex flex-col items-center justify-center gap-4 py-14 rounded-lg border border-dashed border-line bg-bg-elev/20 text-center">
           <div className="w-10 h-10 rounded-full bg-bg-elev flex items-center justify-center">
-            <ScanSearch size={20} className="text-fg-4" />
+            <ScanSearch size={20} className="text-fg-2" />
           </div>
           <div className="flex flex-col gap-1">
             <p className="text-[13px] font-medium text-fg-3">No triage result yet</p>
             <p
               data-testid="triage-empty-description"
-              className="text-[12px] text-fg-4 max-w-xs leading-snug"
+              className="text-[12px] text-fg-2 max-w-xs leading-snug"
             >
               The triager agent classifies this issue and identifies candidate repositories.
             </p>
@@ -95,7 +95,7 @@ export function TriageResultsSection({ projectSlug, id }: TriageResultsSectionPr
     <div data-testid="triage-results-section" className="px-8 py-6 flex flex-col gap-5">
       {/* Section header */}
       <div>
-        <div className="text-[10.5px] uppercase tracking-wider text-fg-4 mb-1">02. Triage</div>
+        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">02. Triage</div>
         <h2 className="text-[17px] font-semibold text-fg leading-snug">
           Repo candidates &amp; classification
         </h2>
@@ -121,7 +121,7 @@ export function TriageResultsSection({ projectSlug, id }: TriageResultsSectionPr
         <div className="rounded-lg border border-line overflow-hidden">
           {/* Table header */}
           <div
-            className="grid text-[10.5px] uppercase tracking-wider text-fg-4 font-semibold bg-bg-elev-2 px-4 py-2.5 border-b border-line"
+            className="grid text-[10.5px] uppercase tracking-wider text-fg-2 font-semibold bg-bg-elev-2 px-4 py-2.5 border-b border-line"
             style={{ gridTemplateColumns: '1fr 100px 60px 1.4fr 80px' }}
           >
             <span>Repository</span>

@@ -27,12 +27,12 @@ export function SectionEmptyState({
     >
       {Icon != null && (
         <div className="w-10 h-10 rounded-full bg-bg-elev flex items-center justify-center">
-          <Icon size={20} className="text-fg-4" />
+          <Icon size={20} className="text-fg-2" />
         </div>
       )}
       <div className="flex flex-col gap-1">
         <p className="text-[13px] font-medium text-fg-3">{title}</p>
-        <div className="text-[12px] text-fg-4 max-w-xs leading-snug">{subtitle}</div>
+        <div className="text-[12px] text-fg-2 max-w-xs leading-snug">{subtitle}</div>
       </div>
       {children != null && children}
     </div>

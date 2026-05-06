@@ -107,7 +107,7 @@ export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSl
 
   if (loading) {
     return (
-      <div data-testid="project-switcher" className={cn('text-[11.5px] text-fg-4', collapsed ? 'flex justify-center' : 'px-2')}>
+      <div data-testid="project-switcher" className={cn('text-[11.5px] text-fg-2', collapsed ? 'flex justify-center' : 'px-2')}>
         {collapsed ? <FolderGit2 size={16} className="animate-pulse" /> : 'Loading projects…'}
       </div>
     );
@@ -123,7 +123,7 @@ export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSl
 
   if (current == null) {
     return (
-      <div data-testid="project-switcher" className={cn('text-[11.5px] text-fg-4', collapsed ? 'flex justify-center' : 'px-2')}>
+      <div data-testid="project-switcher" className={cn('text-[11.5px] text-fg-2', collapsed ? 'flex justify-center' : 'px-2')}>
         {collapsed ? <FolderGit2 size={16} /> : 'No projects configured'}
       </div>
     );
@@ -148,7 +148,7 @@ export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSl
             sideOffset={8}
             className="z-50 min-w-[180px] bg-bg-elev border border-line rounded-lg shadow-lg p-1.5 outline-none"
           >
-            <p className="text-[10px] uppercase tracking-wider text-fg-4 px-2 py-1">Project</p>
+            <p className="text-[10px] uppercase tracking-wider text-fg-2 px-2 py-1">Project</p>
             {projects.map((p) => (
               <button
                 key={p.slug}
@@ -180,7 +180,7 @@ export function ProjectSwitcherSlot({ activeSlug, collapsed }: ProjectSwitcherSl
     <div className="px-2">
       <label
         htmlFor="active-project"
-        className="block text-[10.5px] uppercase tracking-wider text-fg-4 mb-1"
+        className="block text-[10.5px] uppercase tracking-wider text-fg-2 mb-1"
       >
         Project
       </label>
@@ -267,7 +267,7 @@ export function MilestoneSelectorSlot({ activeSlug: _activeSlug, collapsed }: Mi
 
   if (loading) {
     return (
-      <div data-testid="milestone-selector" className={cn('text-[11.5px] text-fg-4', collapsed ? 'flex justify-center' : 'px-2')}>
+      <div data-testid="milestone-selector" className={cn('text-[11.5px] text-fg-2', collapsed ? 'flex justify-center' : 'px-2')}>
         {collapsed ? <Flag size={16} className="animate-pulse" /> : 'Loading milestones…'}
       </div>
     );
@@ -283,7 +283,7 @@ export function MilestoneSelectorSlot({ activeSlug: _activeSlug, collapsed }: Mi
 
   if (milestones.length === 0) {
     return (
-      <div data-testid="milestone-selector" className={cn('text-[11.5px] text-fg-4', collapsed ? 'flex justify-center' : 'px-2')}>
+      <div data-testid="milestone-selector" className={cn('text-[11.5px] text-fg-2', collapsed ? 'flex justify-center' : 'px-2')}>
         {collapsed ? <Flag size={16} /> : 'No milestones'}
       </div>
     );
@@ -307,7 +307,7 @@ export function MilestoneSelectorSlot({ activeSlug: _activeSlug, collapsed }: Mi
             sideOffset={8}
             className="z-50 min-w-[200px] bg-bg-elev border border-line rounded-lg shadow-lg p-1.5 outline-none"
           >
-            <p className="text-[10px] uppercase tracking-wider text-fg-4 px-2 py-1">Milestone</p>
+            <p className="text-[10px] uppercase tracking-wider text-fg-2 px-2 py-1">Milestone</p>
             {milestones.map((m) => (
               <button
                 key={m.id}
@@ -335,7 +335,7 @@ export function MilestoneSelectorSlot({ activeSlug: _activeSlug, collapsed }: Mi
     <div className="px-2">
       <label
         htmlFor="active-milestone"
-        className="block text-[10.5px] uppercase tracking-wider text-fg-4 mb-1"
+        className="block text-[10.5px] uppercase tracking-wider text-fg-2 mb-1"
       >
         Milestone
       </label>
@@ -563,7 +563,7 @@ export function Sidebar({ activeSlug }: SidebarProps) {
                     : `Available in ${item.milestone}`
                 }
                 className={cn(
-                  'flex items-center rounded-md text-fg-4 cursor-not-allowed',
+                  'flex items-center rounded-md text-fg-2 cursor-not-allowed',
                   collapsed
                     ? 'justify-center w-9 h-9 mx-auto'
                     : 'gap-2 px-2 py-1.5 text-[12.5px]',
@@ -573,7 +573,7 @@ export function Sidebar({ activeSlug }: SidebarProps) {
                 {!collapsed && (
                   <>
                     <span>{item.label}</span>
-                    <span className="ml-auto text-[10.5px] uppercase tracking-wider text-fg-4/80">
+                    <span className="ml-auto text-[10.5px] uppercase tracking-wider text-fg-2/80">
                       {item.milestone}
                     </span>
                   </>
@@ -612,14 +612,14 @@ export function Sidebar({ activeSlug }: SidebarProps) {
         )}
       >
         {!collapsed && (
-          <span className="text-[11px] text-fg-4 flex-1 whitespace-nowrap">
+          <span className="text-[11px] text-fg-2 flex-1 whitespace-nowrap">
             Local-first · M2 preview
           </span>
         )}
         <button
           onClick={toggle}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="text-fg-4 hover:text-fg transition-colors p-1 rounded"
+          className="text-fg-2 hover:text-fg transition-colors p-1 rounded"
         >
           {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
         </button>

@@ -192,7 +192,7 @@ Then in the JSX, after the open questions block and before/after the proceed gat
           key={note.id}
           className="rounded border border-line bg-bg-elev/40 px-3 py-2 text-[12px] text-fg-2"
         >
-          <div className="text-[11px] text-fg-4 mb-1">{timeAgo(note.createdAt)}</div>
+          <div className="text-[11px] text-fg-2 mb-1">{timeAgo(note.createdAt)}</div>
           <div
             className="prose prose-sm prose-invert max-w-none text-[12px] [&_p]:mb-1"
             // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized by renderMarkdownToHtml

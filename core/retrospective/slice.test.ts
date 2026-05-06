@@ -5,16 +5,37 @@ import {
   ImprovementKindSchema,
   LearningEntrySchema,
   QualityScoreSchema,
+  SummarySchema,
 } from './schemas.js';
 
-const ISO = '2026-05-03T12:00:00.000Z';
+describe('SummarySchema', () => {
+  const base = {
+    wentWell: 'Tests passed first try',
+    didNotGoWell: 'One lint warning auto-fixed',
+    architecturalTakeaway: 'Vertical slice pattern reduces conflicts',
+  };
+
+  it('accepts a fully-populated summary', () => {
+    expect(SummarySchema.safeParse(base).success).toBe(true);
+  });
+
+  it('rejects empty wentWell', () => {
+    expect(SummarySchema.safeParse({ ...base, wentWell: '' }).success).toBe(false);
+  });
+
+  it('rejects missing didNotGoWell', () => {
+    const { didNotGoWell: _omit, ...rest } = base;
+    expect(SummarySchema.safeParse(rest).success).toBe(false);
+  });
+
+  it('rejects missing architecturalTakeaway', () => {
+    const { architecturalTakeaway: _omit, ...rest } = base;
+    expect(SummarySchema.safeParse(rest).success).toBe(false);
+  });
+});
 
 describe('LearningEntrySchema', () => {
   const base = {
-    id: 'le-001',
-    sourceRunIds: ['run-abc', 'run-def'],
-    personaName: 'alice',
-    role: 'developer',
     observation: 'Vertical slices reduce merge conflicts',
     rationale: 'Observed in 3 consecutive runs with zero conflicts',
     improvementKind: 'skill-prompt' as const,
@@ -53,25 +74,22 @@ describe('LearningEntrySchema', () => {
     ).toBe(false);
   });
 
-  it('rejects empty sourceRunIds array', () => {
-    expect(LearningEntrySchema.safeParse({ ...base, sourceRunIds: [] }).success).toBe(false);
+  it('rejects empty observation', () => {
+    expect(LearningEntrySchema.safeParse({ ...base, observation: '' }).success).toBe(false);
   });
 
-  it('rejects missing observation', () => {
-    const { observation: _omit, ...rest } = base;
+  it('rejects missing rationale', () => {
+    const { rationale: _omit, ...rest } = base;
     expect(LearningEntrySchema.safeParse(rest).success).toBe(false);
   });
 });
 
 describe('QualityScoreSchema', () => {
   const base = {
-    personaName: 'alice',
-    role: 'developer',
-    skillName: 'implement',
+    personaId: 'goose-hub-self/developer/0',
     score: 0.85,
     trend: 'improving' as const,
     sampleCount: 5,
-    computedAt: ISO,
   };
 
   it('accepts a fully-populated valid score', () => {
@@ -112,34 +130,31 @@ describe('QualityScoreSchema', () => {
 
 describe('DecisionPatternSchema', () => {
   const base = {
-    id: 'dp-001',
     pattern: 'Developer consistently chooses vertical slice before horizontal',
-    frequency: 7,
+    occurrences: 7,
     confidence: 'high' as const,
-    exampleRunIds: ['run-abc', 'run-def', 'run-ghi'],
-    surfacedAt: ISO,
   };
 
   it('accepts a fully-populated valid pattern', () => {
     expect(DecisionPatternSchema.safeParse(base).success).toBe(true);
   });
 
-  it('rejects frequency less than 1', () => {
-    expect(DecisionPatternSchema.safeParse({ ...base, frequency: 0 }).success).toBe(false);
-  });
-
-  it('rejects non-integer frequency', () => {
-    expect(DecisionPatternSchema.safeParse({ ...base, frequency: 1.5 }).success).toBe(false);
-  });
-
-  it('rejects empty exampleRunIds', () => {
-    expect(DecisionPatternSchema.safeParse({ ...base, exampleRunIds: [] }).success).toBe(false);
-  });
-
-  it('rejects non-datetime surfacedAt', () => {
-    expect(DecisionPatternSchema.safeParse({ ...base, surfacedAt: 'not-a-date' }).success).toBe(
-      false,
+  it('accepts optional note when present', () => {
+    expect(DecisionPatternSchema.safeParse({ ...base, note: 'cross-run evidence' }).success).toBe(
+      true,
     );
+  });
+
+  it('rejects occurrences less than 1', () => {
+    expect(DecisionPatternSchema.safeParse({ ...base, occurrences: 0 }).success).toBe(false);
+  });
+
+  it('rejects non-integer occurrences', () => {
+    expect(DecisionPatternSchema.safeParse({ ...base, occurrences: 1.5 }).success).toBe(false);
+  });
+
+  it('rejects empty pattern', () => {
+    expect(DecisionPatternSchema.safeParse({ ...base, pattern: '' }).success).toBe(false);
   });
 });
 

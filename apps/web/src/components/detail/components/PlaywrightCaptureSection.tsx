@@ -110,7 +110,7 @@ export function PlaywrightCaptureSection({
                   }}
                 />
                 {shot.githubUrl == null && (
-                  <p className="text-[11px] text-fg-4">
+                  <p className="text-[11px] text-fg-2">
                     Saved to:{' '}
                     <code className="font-mono bg-bg-glass px-1 py-0.5 rounded text-fg-3 break-all">
                       {shot.path}
@@ -137,7 +137,7 @@ export function PlaywrightCaptureSection({
                 (e.currentTarget as HTMLImageElement).style.display = 'none';
               }}
             />
-            <p className="text-[11px] text-fg-4">
+            <p className="text-[11px] text-fg-2">
               Saved to:{' '}
               <code className="font-mono bg-bg-glass px-1 py-0.5 rounded text-fg-3 break-all">
                 {repro.gifPath}
@@ -181,7 +181,7 @@ export function PlaywrightCaptureSection({
                 <div className="min-w-0">
                   <p className="text-[12px] text-fg-2 break-words">{err.message}</p>
                   {err.url != null && err.url.length > 0 && (
-                    <p className="text-[11px] text-fg-4 font-mono mt-0.5 break-all">{err.url}</p>
+                    <p className="text-[11px] text-fg-2 font-mono mt-0.5 break-all">{err.url}</p>
                   )}
                 </div>
               </div>

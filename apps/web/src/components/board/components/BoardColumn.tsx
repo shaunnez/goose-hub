@@ -32,7 +32,7 @@ export function BoardColumn({ lane, items, projectSlug, onHide }: BoardColumnPro
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto px-2 py-2 flex flex-col gap-2">
         {items.length === 0 ? (
-          <div className="text-[11.5px] text-fg-4 px-2 py-4 text-center italic">empty</div>
+          <div className="text-[11.5px] text-fg-2 px-2 py-4 text-center italic">empty</div>
         ) : (
           items.map((item) => <IssueCard key={item.id} item={item} projectSlug={projectSlug} />)
         )}

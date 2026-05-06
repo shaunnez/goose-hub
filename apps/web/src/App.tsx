@@ -29,7 +29,7 @@ function KanbanPage() {
       breadcrumb={
         <>
           <span className="font-mono text-fg-3">{slug}</span>
-          <span className="mx-2 text-fg-4">/</span>
+          <span className="mx-2 text-fg-2">/</span>
           <span>Kanban</span>
         </>
       }

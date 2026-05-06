@@ -57,7 +57,7 @@ export function FindingCard({
             )}
             <span className="grow" />
             <span className="flex items-center gap-2 text-[11px]">
-              <span className="text-fg-4">conf</span>
+              <span className="text-fg-2">conf</span>
               <span className="block w-[60px] h-1 rounded-sm bg-line overflow-hidden">
                 <span
                   className="block h-full rounded-sm"

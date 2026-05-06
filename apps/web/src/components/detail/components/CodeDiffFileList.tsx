@@ -10,7 +10,7 @@ export function CodeDiffFileList({ files, activePath, onSelect }: CodeDiffFileLi
   return (
     <div className="overflow-y-auto" style={{ borderRight: '1px solid var(--line)' }}>
       <div className="px-3 py-2" style={{ borderBottom: '1px solid var(--line)' }}>
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-fg-4">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-fg-2">
           Files · {files.length}
         </span>
       </div>

@@ -32,7 +32,7 @@ function StatTile({
 }) {
   return (
     <div className="flex-1 border border-line rounded-lg p-3 bg-bg-elev/60">
-      <div className="text-[10.5px] uppercase tracking-wider text-fg-4 mb-1">{label}</div>
+      <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">{label}</div>
       <div className="text-[18px] font-semibold tracking-tight">{value}</div>
       {sub != null && <div className="text-[11px] text-fg-3 mt-0.5">{sub}</div>}
     </div>
@@ -88,7 +88,7 @@ export function CostsSection({ projectSlug, id }: CostsSectionProps) {
       </div>
 
       <div className="border border-line rounded-lg overflow-hidden">
-        <div className="grid grid-cols-[120px_120px_140px_1fr_100px] px-4 py-2.5 border-b border-line bg-bg-elev/50 text-[10.5px] uppercase tracking-wider text-fg-4">
+        <div className="grid grid-cols-[120px_120px_140px_1fr_100px] px-4 py-2.5 border-b border-line bg-bg-elev/50 text-[10.5px] uppercase tracking-wider text-fg-2">
           <span>Stage</span>
           <span>Skill</span>
           <span>Model</span>
@@ -114,7 +114,7 @@ export function CostsSection({ projectSlug, id }: CostsSectionProps) {
         ))}
       </div>
 
-      <p className="text-[11px] text-fg-4">
+      <p className="text-[11px] text-fg-2">
         Most recent run: {timeAgo(data.rows[data.rows.length - 1].createdAt)}
       </p>
     </div>

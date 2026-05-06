@@ -19,7 +19,7 @@ export function DeferredSurface({ surface, milestone, description }: DeferredSur
           <>
             <span className="uppercase tracking-wider text-[10.5px] text-fg-5">{surface}</span>
             {description != null && (
-              <span className="block mt-1 text-[12px] text-fg-4">{description}</span>
+              <span className="block mt-1 text-[12px] text-fg-2">{description}</span>
             )}
           </>
         }

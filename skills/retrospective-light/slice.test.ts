@@ -4,20 +4,24 @@ import config from './config.js';
 import { LightRetroSchema } from './schema.js';
 
 const baseValid = {
-  summary:
-    '- Tests all pass.\n- One minor lint warning auto-fixed.\n- Dev followed vertical slice pattern throughout.',
+  outcome: 'success' as const,
+  workItemNumber: 42,
+  summary: {
+    wentWell: 'Tests all pass',
+    didNotGoWell: 'One minor lint warning auto-fixed',
+    architecturalTakeaway: 'Dev followed vertical slice pattern throughout',
+  },
   improvementCandidates: [
     {
-      kind: 'skill-prompt',
+      kind: 'skill-prompt' as const,
       targetPath: 'skills/implement/skill.md',
-      sourceRunId: 'run-abc',
-      sourceProject: 'goose-hub',
-      sourceWorkItem: 'shaunnez/goose-hub#42',
       suggestionText: 'Add explicit reminder to check slice.test.ts exists before writing code',
-      confidence: 'high',
+      confidence: 'high' as const,
     },
   ],
-  decisionSummaries: [{ kind: 'PLAN', summary: 'Selected light retro — no deep triggers' }],
+  decisionSummaries: [
+    { kind: 'PLAN' as const, summary: 'Selected light retro — no deep triggers' },
+  ],
 };
 
 describe('LightRetroSchema', () => {
@@ -41,8 +45,23 @@ describe('LightRetroSchema', () => {
     expect(LightRetroSchema.safeParse(withDiff).success).toBe(true);
   });
 
-  it('rejects empty summary', () => {
-    expect(LightRetroSchema.safeParse({ ...baseValid, summary: '' }).success).toBe(false);
+  it('accepts optional evidence on a candidate', () => {
+    const withEvidence = {
+      ...baseValid,
+      improvementCandidates: [
+        { ...baseValid.improvementCandidates[0], evidence: 'Reviewer cited gap in 3 runs' },
+      ],
+    };
+    expect(LightRetroSchema.safeParse(withEvidence).success).toBe(true);
+  });
+
+  it('rejects empty summary fields', () => {
+    expect(
+      LightRetroSchema.safeParse({
+        ...baseValid,
+        summary: { ...baseValid.summary, wentWell: '' },
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects empty decisionSummaries (FACTORY_RULES rule 6)', () => {
@@ -65,6 +84,10 @@ describe('LightRetroSchema', () => {
         improvementCandidates: [{ ...baseValid.improvementCandidates[0], confidence: 'very-high' }],
       }).success,
     ).toBe(false);
+  });
+
+  it('rejects invalid outcome', () => {
+    expect(LightRetroSchema.safeParse({ ...baseValid, outcome: 'unknown' }).success).toBe(false);
   });
 
   it('zod toJSONSchema roundtrip produces a valid JSON Schema object', () => {

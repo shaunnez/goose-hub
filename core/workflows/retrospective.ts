@@ -33,18 +33,23 @@ export interface RunRetrospectiveInput {
   deps?: { runtime?: AgentRuntime };
 }
 
+interface CandidateProvenance {
+  runId: string;
+  projectId: string;
+  sourceWorkItem: string | null;
+  personaId: string;
+}
+
 function persistCandidates(
-  projectId: string,
-  personaId: string,
-  workItemId: string | null,
+  provenance: CandidateProvenance,
   candidates: ImprovementCandidate[],
 ): void {
   for (const c of candidates) {
     db.insert(improvementCandidates)
       .values({
-        projectId,
-        personaName: personaId,
-        sourceTaskId: workItemId,
+        projectId: provenance.projectId,
+        personaName: provenance.personaId,
+        sourceTaskId: provenance.sourceWorkItem,
         suggestionText: c.suggestionText,
         suggestionType: c.kind,
       })
@@ -88,13 +93,22 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
     payload: { skill: skillName, tier, personaId },
   });
 
-  const priorDecisionSummaries = eventStore
-    .replay({ projectId, workItemId: workItem.id })
+  const itemEvents = eventStore.replay({ projectId, workItemId: workItem.id });
+
+  const priorDecisionSummaries = itemEvents
     .filter((e) => e.kind === 'agent.decision-summary')
     .map((e) => {
       const p = e.payload as { kind?: string; summary?: string; evidence?: string };
       return { kind: p.kind ?? 'VERDICT', summary: p.summary ?? '', evidence: p.evidence };
     });
+
+  const activePersonas = Array.from(
+    new Set(
+      itemEvents
+        .map((e) => e.personaId)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    ),
+  );
 
   try {
     const result = await runtime.run({
@@ -114,8 +128,15 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
           outcome: 'success',
           decisionSummaries: priorDecisionSummaries,
         },
+        activePersonas,
       },
-      contextAllowlist: ['workItem.title', 'workItem.body', 'workItem.number', 'runSummary'],
+      contextAllowlist: [
+        'workItem.title',
+        'workItem.body',
+        'workItem.number',
+        'runSummary',
+        'activePersonas',
+      ],
       freshContext: false,
       toolBundles: ['core'],
       toolExtras: [],
@@ -125,6 +146,28 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
       outputJsonSchema: jsonSchema,
     });
 
+    const parsed =
+      tier === 'deep'
+        ? DeepRetroSchema.safeParse(result.output)
+        : LightRetroSchema.safeParse(result.output);
+
+    if (!parsed.success) {
+      eventStore.appendEvent({
+        kind: 'agent.run-failed',
+        projectId,
+        workItemId: workItem.id,
+        runId,
+        payload: { skill: skillName, error: parsed.error.message },
+      });
+      accumulatePersonaStats({ personaName: personaId, role: 'retrospector', outcome: 'failure' });
+      await stateSource.transitionState(
+        workItem.externalId,
+        'factory:retrospecting',
+        'factory:needs-human',
+      );
+      return;
+    }
+
     eventStore.appendEvent({
       kind: 'retrospective.completed',
       projectId,
@@ -133,23 +176,20 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
       payload: { tier, output: result.output },
     });
 
-    const parsed =
-      tier === 'deep'
-        ? DeepRetroSchema.safeParse(result.output)
-        : LightRetroSchema.safeParse(result.output);
-    if (parsed.success) {
-      if (parsed.data.improvementCandidates.length > 0) {
-        persistCandidates(projectId, personaId, workItem.id, parsed.data.improvementCandidates);
-      }
-      for (const ds of parsed.data.decisionSummaries) {
-        eventStore.appendEvent({
-          kind: 'agent.decision-summary',
-          projectId,
-          workItemId: workItem.id,
-          runId,
-          payload: { skill: skillName, ...ds },
-        });
-      }
+    if (parsed.data.improvementCandidates.length > 0) {
+      persistCandidates(
+        { runId, projectId, sourceWorkItem: workItem.id, personaId },
+        parsed.data.improvementCandidates,
+      );
+    }
+    for (const ds of parsed.data.decisionSummaries) {
+      eventStore.appendEvent({
+        kind: 'agent.decision-summary',
+        projectId,
+        workItemId: workItem.id,
+        runId,
+        payload: { skill: skillName, ...ds },
+      });
     }
 
     accumulatePersonaStats({ personaName: personaId, role: 'retrospector', outcome: 'success' });

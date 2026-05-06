@@ -84,13 +84,13 @@ export function LeftRail({ itemState }: LeftRailProps) {
                   'flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] transition-colors',
                   isActive
                     ? 'bg-bg-hover text-fg-2'
-                    : 'text-fg-4 hover:text-fg-3 hover:bg-bg-hover',
+                    : 'text-fg-2 hover:text-fg-3 hover:bg-bg-hover',
                 )}
               >
-                <span className="font-mono tnum text-[10.5px] text-fg-4 w-5">{number}</span>
+                <span className="font-mono tnum text-[10.5px] text-fg-2 w-5">{number}</span>
                 {Icon && <Icon size={13} className="shrink-0" />}
                 <span className="grow">{section.label}</span>
-                <span className="text-[10px] uppercase tracking-wider text-fg-4">
+                <span className="text-[10px] uppercase tracking-wider text-fg-2">
                   {section.milestone}
                 </span>
               </Link>
