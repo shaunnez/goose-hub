@@ -123,8 +123,12 @@ export async function filterEligibleByDependencies(
             .map((d) => `\`${d.repoRef}#${d.issueNumber}\``)
             .join(', ');
           const commentBody = `Dependency on ${depList} cannot be resolved — repo is not registered. Register the repo or remove the dependency to unblock.`;
-          await ctx.source.forceState(item.externalId, 'factory:needs-human');
+          // Comment before forceState so the idempotency guard (item.state ===
+          // 'factory:needs-human') only activates after both writes succeed. If
+          // forceState succeeds but comment throws, the next tick retries the
+          // whole escalation instead of silently skipping the comment.
           await ctx.source.comment(item.externalId, commentBody);
+          await ctx.source.forceState(item.externalId, 'factory:needs-human');
           logger.info('dep-scheduler: unregistered dep escalated to factory:needs-human', {
             externalId: item.externalId,
             unregisteredDeps: evaluation.unregisteredDeps.map(
