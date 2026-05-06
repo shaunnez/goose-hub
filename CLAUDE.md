@@ -10,22 +10,25 @@ Goose Hub is a personal command centre for AI-assisted software delivery, powere
 
 You execute one narrow GitHub issue at a time. The issue is your build spec.
 
-`docs/PLAN.md` is **the constitution**, not a build spec. Read it for context, vocabulary, and architectural decisions. Do not try to build "from the document." Build from the issue.
+`docs/PLAN.md` is **the constitution**, not a build spec. Use it for direction, domain vocabulary, and the milestone roadmap. Do not try to build "from the document." Build from the issue.
 
-`CONTEXT.md` (repo root) records **resolved implementation decisions and canonical domain vocabulary** from design sessions. Read it before writing any code in `core/` or `apps/`. It answers questions like "how does the SSE event stream work," "what format does context take in agent prompts," and "where do improvement candidates get filed." If the code you're about to write touches a decision recorded there, follow it — don't re-litigate it.
+`CONTEXT.md` (repo root) is the **resolved-implementation-decision registry**. Read it before writing any code in `core/` or `apps/`. It answers concrete "how is this wired?" questions: how the SSE event stream works, what format context takes in agent prompts, where improvement candidates get filed, how holdout context filtering works. If the code you're about to write touches a decision recorded there, follow it — don't re-litigate it.
+
+`docs/adr/` is the long-form record. CONTEXT.md summarizes; ADRs justify. When you need the *why* behind a decision (or are filing a new one), go to ADRs.
 
 ## Hard rules to remember
 
-`FACTORY_RULES.md` lists 28 non-negotiable rules. The ones most likely to bite you:
+`FACTORY_RULES.md` is the source of truth (numbered list, currently rules 1–33). The ones most likely to bite you:
 
 - Vertical slices, never horizontal layers. Slices include only the surfaces they touch (no empty `ui.tsx` for workflow-only slices). `slice.test.ts` and `README.md` are always required.
 - Slices import from `core/` through public interfaces only. Slices never import from other slices.
-- Skills are versioned markdown with Zod schemas in `skills/<name>/`. Inline prompts in code fail review.
+- Skills are versioned. Every skill in `skills/<name>/` has three required files: `prompt.md` (Markdown instructions), `schema.ts` (Zod output schema), and `skill.config.ts` (role, context schema, budgets). Inline prompts in code fail review.
 - Every agent run produces JSON conforming to its skill schema. Free-text-only outputs fail.
 - State labels live on **issues**, not PRs.
-- Governance files (`MISSION.md`, `FACTORY_RULES.md`, `CLAUDE.md`, `target-projects/**`) cannot be modified by any Factory PR. Creation is only allowed in PRs tagged `factory:bootstrap-pr`.
+- Governance files cannot be modified by any Factory PR — creation is only allowed in PRs tagged `factory:bootstrap-pr`. Per FACTORY_RULES rule 12 the perimeter is: `MISSION.md`, `FACTORY_RULES.md`, `CLAUDE.md`, project configs (`target-projects/<slug>/project.config.ts`), and persona configs (`target-projects/<slug>/personas/`).
 - The orchestrator is stateless across ticks. Work-item authority lives in the source of truth (GitHub Issues, Jira). Operational state (events, persona stats, budgets) lives in local SQLite.
 - QA and Review are holdouts. They never see implementation reasoning.
+- New top-level directories imported by two or more apps must be pnpm workspace packages before the first cross-app import lands (rule 28a).
 
 ## Stack
 
@@ -50,14 +53,14 @@ Before touching any file in an app, read its `README.md` first. The README will 
 
 When prompted with "start the next issue" (or similar), resolve the issue to work on as follows:
 
-1. Run: `gh issue list --milestone "M9: Retrospective and Learning Loop" --label "schedule:current" --state open --json number,title,body,labels --jq 'sort_by(.number)'`
+1. Run: `gh issue list --milestone "M11: Dependency-aware Scheduling" --label "schedule:current" --state open --json number,title,body,labels --jq 'sort_by(.number)'`
 2. Skip any issue already labeled `factory:in-progress`.
-3. For each remaining issue in ascending number order, check its body for `Depends on #N` lines. Fetch each referenced issue number with `gh issue view <N> --json state` and skip this issue if any dependency is still open.
+3. For each remaining issue in ascending number order, check its body for `Depends on #N` (or `Depends on owner/repo#N`) lines. Fetch each referenced issue number with `gh issue view <N> --json state` and skip this issue if any dependency is still open. The canonical parser is `parseDependencies()` in `core/state-source/dependency-parser.ts`; mirror its tolerance (case-insensitive, optional colon, supports `Blocks` / `Blocked by` / `Depends-On`).
 4. Pick the lowest-numbered issue that passes the dependency check.
 5. Label it `factory:in-progress` on GitHub immediately: `gh issue edit <N> --add-label "factory:in-progress"`
 6. Then follow "How to approach a task" below.
 
-Update the milestone name as the active milestone advances.
+Update the milestone name as the active milestone advances. Note that each project has its own active milestone (M10+, see `target-projects/<slug>/project.config.ts`); the command above defaults to `shaunnez/goose-hub`. For other projects, use that project's active milestone string.
 
 ## When there is no next issue
 
@@ -105,8 +108,14 @@ If you see an issue labelled `factory:in-progress` with no recent activity (no P
 
 ## Decision summaries
 
-You must emit `agent.decision-summary` events at decision points. Examples of good summaries:
+Every agent run emits decision summaries. Two streams (see CONTEXT.md for the full design + ADR 0018 for the taxonomy):
 
+1. **Canonical (schema field).** Each skill schema declares `decisionSummaries: Array<{kind, summary, evidence?}>`. The agent populates this in its terminal JSON; the orchestrator extracts and emits `agent.decision-summary` events post-validation. This is the record QA and Review will never see, but Retro will.
+2. **Live markers (`[decision] KIND: ...`).** Mid-run, emit `[decision] KIND: <one sentence>` lines in your text turn. The PostToolUse hook scans the transcript and forwards them as best-effort progress events.
+
+`KIND` is constrained to the `DecisionKindSchema` enum in `core/agent-runtime/decision-types.ts`. Use a recognized value (e.g. `REPO_SELECTION`, `IMPLEMENTATION_PLAN`, `QUERY_PIVOT`); unknown kinds are coerced to `UNKNOWN` rather than dropped. Both streams reconcile at run end.
+
+Good summaries:
 - "Selected payments-api as primary repo based on keyword match + code search hits"
 - "Implementation plan: add validation in src/api/handlers.ts and update tests in slices/0042"
 - "Tried query X, got no results, switching to query Y"
@@ -116,6 +125,8 @@ Bad summaries:
 - Anything containing credentials, API keys, file dumps, or PII
 - More than one sentence
 - Anything you wouldn't want a future reviewer to see
+
+Tool-call audit (`agent.tool-call`) is a separate, automatic stream emitted by the PreToolUse hook — you don't write to it, but be aware it captures every tool invocation with redacted inputs.
 
 ## What's currently in scope
 

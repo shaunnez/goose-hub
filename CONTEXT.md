@@ -349,6 +349,84 @@ improvement_candidate:
 
 **Labels:** `improvement:skill-prompt`, `improvement:workflow`, etc. Pre-filed at bootstrap.
 
+## Centralized Skill Budgets (ADR 0020)
+
+`SKILL_BUDGETS: Record<string, SkillBudget>` in `core/agent-runtime/budgets.ts` is the single source of truth for per-skill `maxTurns`, `maxBudgetUsd`, `timeoutMs`, and `modelTier`. Values are calibrated from telemetry with a 3–5× safety margin.
+
+**Resolver:** `resolveBudgets(skill, projectBudgets?)` returns `{ budgets, modelOverride }`. Precedence: project override (`BudgetConfig.skillBudgetOverrides[skill]`) → canonical `SKILL_BUDGETS[skill]` → throws. Unregistered skills are a programming error, not a runtime condition. `maxBudgetUsd` is capped at `perWorkflowMaxUsd`.
+
+**Default tiers:** triage / repo-match / bug-enhance / evidence-post / implement / retro-light → haiku. qa / review / resolve-conflict / playwright-repro / spec-author / retro-deep → sonnet. investigate / advise-on-plan → opus.
+
+**Schema-validation escalation:** `SkillBudget.escalation?: { modelTier; maxBudgetUsd; ... }` defines an opt-in retry policy. `runWithEscalation` wraps `runtime.run + safeParse`; on parse failure for an escalatable skill, it retries once at the higher tier with a fresh `runId` and emits `agent.retry-escalated { stage: 'model', ... }`. Holdouts never escalate (throw `HoldoutFallbackForbiddenError`). One retry max. Currently only `implement` opts in.
+
+**Telemetry:** `agent.run-completed` carries `turns.used` (extracted from CLI `num_turns`) alongside `turns.budgeted` and `budget.usd`, so retrospectives can compare observed vs limit.
+
+## Cost Module (ADR 0016)
+
+All cost logic lives in `core/cost/`: `extract.ts` (parsers), `repository.ts` (writes), `skill-stage.ts` (skill→UI-stage mapping), `types.ts`. The `costs/` server domain only reads. Only the agent runtime appends rows, called once per successful skill run via `recordCost()`.
+
+**`CostUsage.costLabel`** is required at construction: `'estimated'` (Claude CLI `total_cost_usd`) or `'exact'` (direct Anthropic API `usage`). The label cannot be lost in transit because it's set at parse time. `costFromCliEnvelope` always returns `estimated`; `costFromApiUsage` always returns `exact`.
+
+**`agent_run_costs`** has a unique index on `runId` — duplicate inserts (retries, webhook redeliveries) are silently ignored. Every run produces exactly one row, even at `costUsd = 0`, so dashboards reflect every run.
+
+**Stages:** `triage`, `investigate`, `dev`, `qa`, `review`, `retrospective`, `other`. Stage is UI-only metadata; never influences workflow logic. Unknown skills fall into `other` (soft fallback).
+
+**UI convention:** `~$0.04` for estimated, `$0.04` for exact. Enforced in frontend, not DB.
+
+## Holdout Enforcement Internals (ADR 0014)
+
+**Centralized gateway:** all context injection routes through `assembleSpawnContext()` in `core/agent-runtime/context-assembly.ts`. Single point where `spec.context` is filtered against `spec.contextAllowlist` before XML rendering.
+
+**Constants in `context-assembly.ts`:**
+- `HOLDOUT_ROLES = new Set(['qa', 'reviewer'])` — source of truth for strict-isolation roles.
+- `SYSTEM_KEYS = new Set(['projectId', 'workItemId'])` — runtime-managed keys exempt from violation detection.
+
+**Disallowed key on holdout role:** emit one `tool.violation` event per key with `{ role, disallowedKey, runId }`. Non-holdout roles silently omit disallowed keys (matches pre-M8 behaviour). The violation event is the observable signal for the M8 exit criterion.
+
+**`HoldoutFallbackForbiddenError`** in `core/agent-runtime/fallback.ts`: typed error thrown when `withFallback()` would otherwise down-tier a QA or Reviewer primary failure. Workflow catch blocks detect the class and transition to `factory:needs-human`.
+
+**Retry counter** in `core/retry/retry-counter.ts`: derived from event stream (`qa.completed` non-pass, `review.completed` `needs-fix`). No new DB table — consistent with stateless-orchestrator. `DEFAULT_MAX_RETRIES = 2`. Lives in `core/retry/` so both `slices/qa/` and `slices/review/` can import without violating slice-import rules. With `maxRetries=2`, second consecutive failure escalates (the just-appended event is included in the count by design — see `slices/retry-escalate/README.md`).
+
+## Workflows Placement (ADR 0017)
+
+**Default:** workflows live in `slices/<name>/workflow.ts` — single-pipeline-stage logic, removable as a unit.
+
+**Exception:** `core/workflows/` for workflows called from **two or more** server code paths that cannot be cleanly removed as a single slice. First inhabitant: `core/workflows/retrospective.ts` (called from both `apps/server/src/domains/workflows/retro-batch.ts` and `apps/server/src/domains/issues/transitions.ts`).
+
+**Promotion rule:** start in a slice; promote to `core/workflows/` only when a second non-batch caller appears. Not a catch-all for "complex" workflows. Not the same as the (never-built) `core/orchestrator/workflows/` directory.
+
+## Target-projects and Skills as Workspace Packages (ADR 0015)
+
+Both `target-projects/` and `skills/` are pnpm workspace packages (`@goose-hub/target-projects`, `@goose-hub/skills`) with wildcard `"./*": "./*"` exports. Apps must import by package name; relative `../../../target-projects/` paths fail review (FACTORY_RULES rule 28a).
+
+**Two import shapes:**
+- Per-file static: `import gooseHubSelf from '@goose-hub/target-projects/goose-hub-self/project.config.js'`.
+- Filesystem-root anchoring: `import { targetProjectsRoot, skillsRoot } from '@goose-hub/target-projects'` (or `@goose-hub/skills`) for `readdir` walks, dynamic config loads, sibling `repos.md` reads, `prompt.md` lookups.
+
+`tsconfig.json` paths mirror the package mappings so editor + tsc resolve identically to pnpm at runtime.
+
+## Tool Layer (ADR 0010)
+
+**Bundles, not per-tool allowlists.** Skills declare `toolBundles: ['read-only' | 'read-write' | 'bash-restricted']`; `computeAllowlist` expands at spawn time. Adding a new tool to a bundle automatically reaches every skill that uses it.
+
+**Pattern-level deny rules** (`Read(./.env*)`, `Bash(sudo *)`, `Bash(rm -rf *)`) live in `<workspace>/.claude/settings.json`, written by `writeWorkspaceSandbox()` at workspace bootstrap. Not passed as `--disallowedTools` argv — settings.json applies for any invocation in the workspace and survives process restarts.
+
+**PreToolUse hook deployed once** to `~/.factory/hooks/` on first run (idempotent). Per-run identity carried in `FACTORY_RUN_ID` / `FACTORY_RUN_ALLOWLIST` env vars, not the hook path.
+
+**No `bash-denylist.ts`, no `interface.ts`** despite PLAN.md §6 listing them. The denylist is a constant in `sandbox.ts`; an interface module belongs only when a second tool-layer implementation exists (e.g. remote tool proxy).
+
+## Multi-project Loader and Per-project Scheduler (ADR 0021)
+
+`core/projects/` holds two files:
+
+- **`loader.ts`** — `loadProjects()`, `getProjectBySlug()`. Reads every `target-projects/*/project.config.ts` at startup via dynamic `import()`. Process-lifetime in-memory cache (no hot reload — restart suffices). Missing/malformed configs log a warning and are skipped; startup never aborts. Duplicate slug throws `DuplicateSlugError` eagerly. `DEFAULT_PROJECTS_ROOT` resolves relative to the compiled module's `__dirname` so the loader works regardless of cwd.
+
+- **`scheduler.ts`** — `startPerProjectScheduler()`. One `setInterval` per project; `tickIntervalSeconds` is per-project config (default 60s). Crash or long-running workflow in project A never delays project B's tick. Error isolation per project.
+
+**Per-project lock** stays in `apps/server/src/shared/dispatch.ts` (the `_issueInFlight` Set keyed by `(slug, issueNumber)`), not in the scheduler. The scheduler is a pure tick driver; dispatch decides what to do.
+
+**Per-project active milestone:** each `ProjectConfig` declares its own `activeMilestone`; the Kanban filters per-project; the All Projects view aggregates across them.
+
 ## Flagged ambiguities
 
 - **Decision-summary two-stream split**: resolved. Canonical record lives in schema field; live markers from `[decision]` footer in `prompt.md`. Tool-call audit is a third, separate stream. All three distinct concerns at distinct cadences.
@@ -359,7 +437,7 @@ improvement_candidate:
 ## Deferred / Open Questions (to resolve at their milestone)
 
 - **M8**: starting M8 work — read `docs/m8-handoff.md` first. Lists outstanding M7 follow-ups, the M8 issue picking order (#239–#249), recommended PR groupings, holdout-discipline reminders, and the still-required real-Claude chore-shipping demo for M7 close.
-- **M11**: `parseDependsOn` regex in `github-labels.ts` requires a colon (`depends on:`). Plan examples use `Depends on #42` (no colon). Tolerant parser spec says also accept `Depends-On`, `blocked by`. Fix before M11 dependency checks go live.
+- **M11 (in flight)**: dependency parser shipped as `core/state-source/dependency-parser.ts` (PR #497, M11.01). The parser is colon-tolerant, supports `Depends on`, `Depends-On`, `Blocks`, `Blocked by`, and same-repo + `owner/repo#N` cross-repo refs, returning typed `DependencyRef`. Still pending in M11: scheduler dependency-satisfaction filter, `factory:blocked-by-dependency` surface, UI dep-state visibility, move-with-dependencies CLI/UI, unregistered cross-repo escalation, multi-parallel project-lock relaxation (ADR for FACTORY_RULES rule 14 wording change), and integration tests.
 - **M12**: Governance PR check CI wiring — how does `core/governance/pr-check.ts` get access to the PR diff and labels in GitHub Actions?
 - **Post-v0**: Claude CLI vs Claude Agent SDK — reference audit (#10) said "compare honestly." SDK lacks subprocess overhead and suits non-coding skills (triage, retro) better. Revisit when v0 ships.
 

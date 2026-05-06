@@ -65,7 +65,7 @@ QA and Review are **holdouts**: each runs in a fresh agent context with no acces
 ### Standards & ADRs
 
 - `docs/standards/verification.md` — the three-tier (Structural / Functional / Regression) verification framework + 8-category code-quality rubric (≥ 70/100 threshold). Ships ahead of the M8 QA holdout.
-- `docs/adr/` — architectural decisions in chronological order. M7 added ADR 0011 (Playwright agents), 0012 (advisor wrapping + per-step typed timeouts), 0013 (GitHub connectors + fix-issue workflow shape). M8 added ADR 0014 (holdout enforcement architecture). M9 added ADR 0015 (target-projects workspace package), ADR 0016 (cost module architecture), ADR 0017 (core/workflows placement for cross-caller workflows). M10 added ADR 0018 (multi-project loader and per-project scheduler in core/projects/).
+- `docs/adr/` — architectural decisions in chronological order. M7 added ADR 0011 (Playwright agents), 0012 (advisor wrapping + per-step typed timeouts), 0013 (GitHub connectors + fix-issue workflow shape). M8 added ADR 0014 (holdout enforcement architecture). M9 added ADR 0015 (target-projects workspace package), ADR 0016 (cost module architecture), ADR 0017 (core/workflows placement for cross-caller workflows), ADR 0018 (decision-kind taxonomy), ADR 0019 (retrospective output schema), ADR 0020 (centralized skill budgets). M10 added ADR 0021 (multi-project loader and per-project scheduler in core/projects/) — originally filed as 0018, renumbered to resolve the collision.
 
 ### Retrospective & Learning Loop (M9)
 
@@ -85,4 +85,4 @@ Goose Hub can now drive more than one target project simultaneously. Two project
 - **Cross-project Roster** — at `/projects/all/roster` (or via the project filter dropdown on the Roster page). Shows personas from all registered projects with color-stripe attribution. Filter to a single project to scope the leaderboard.
 - **Settings → Projects** — read-only display of every registered project's config (slug, source, active milestone, budget limits, color). A "Reload" button refreshes without a full page reload. Editing is file-based; the UI includes a prompt directing to `target-projects/<slug>/project.config.ts`.
 
-ADR 0018 covers the `core/projects/` loader and scheduler architecture. See `docs/adr/0018-multi-project-loader-and-scheduler.md`.
+ADR 0021 covers the `core/projects/` loader and scheduler architecture. See `docs/adr/0021-multi-project-loader-and-scheduler.md`.
