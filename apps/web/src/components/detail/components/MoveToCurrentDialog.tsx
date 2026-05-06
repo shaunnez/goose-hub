@@ -27,6 +27,7 @@ function resolveDepTarget(
 // ─── types ───────────────────────────────────────────────────────────────────
 
 interface MovableDep {
+  depKey: string;
   issueNumber: number;
   refLabel: string;
   title: string;
@@ -58,7 +59,7 @@ export function MoveToCurrentDialog({
 }: MoveToCurrentDialogProps) {
   const [phase, setPhase] = useState<'loading' | 'dialog' | 'working'>('loading');
   const [movableDeps, setMovableDeps] = useState<MovableDep[]>([]);
-  const [checked, setChecked] = useState<Set<number>>(new Set());
+  const [checked, setChecked] = useState<Set<string>>(new Set());
   const [error, setError] = useState('');
   // Guards against StrictMode double-firing and subsequent data refreshes re-triggering.
   const triggered = useRef(false);
@@ -113,7 +114,9 @@ export function MoveToCurrentDialog({
       if (!isOpenState(depItem.state)) continue;
       if (depItem.schedule === 'current') continue;
 
+      const repoRef = ref.repoRef ?? item.repoRef;
       movable.push({
+        depKey: `${repoRef}#${ref.issueNumber}`,
         issueNumber: ref.issueNumber,
         refLabel: ref.repoRef != null ? `${ref.repoRef}#${ref.issueNumber}` : `#${ref.issueNumber}`,
         title: depItem.title,
@@ -124,7 +127,7 @@ export function MoveToCurrentDialog({
     return movable;
     // depQueries is intentionally included to recompute when query results arrive.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allLoaded, deps, targets, depQueries, projects.length]);
+  }, [allLoaded, deps, targets, depQueries, projects.length, item.repoRef]);
 
   const doMove = useCallback(
     async (depsToMove: MovableDep[]) => {
@@ -154,21 +157,21 @@ export function MoveToCurrentDialog({
       void doMove([]);
     } else {
       setMovableDeps(movableComputed);
-      setChecked(new Set(movableComputed.map((d) => d.issueNumber)));
+      setChecked(new Set(movableComputed.map((d) => d.depKey)));
       setPhase('dialog');
     }
   }, [movableComputed, doMove]);
 
   const handleConfirm = () => {
-    const selected = movableDeps.filter((d) => checked.has(d.issueNumber));
+    const selected = movableDeps.filter((d) => checked.has(d.depKey));
     void doMove(selected);
   };
 
-  const toggleDep = (issueNumber: number) => {
+  const toggleDep = (depKey: string) => {
     setChecked((prev) => {
       const next = new Set(prev);
-      if (next.has(issueNumber)) next.delete(issueNumber);
-      else next.add(issueNumber);
+      if (next.has(depKey)) next.delete(depKey);
+      else next.add(depKey);
       return next;
     });
   };
@@ -202,7 +205,7 @@ export function MoveToCurrentDialog({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
               {movableDeps.map((dep) => (
                 <label
-                  key={dep.issueNumber}
+                  key={dep.depKey}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -213,10 +216,10 @@ export function MoveToCurrentDialog({
                 >
                   <input
                     type="checkbox"
-                    checked={checked.has(dep.issueNumber)}
-                    onChange={() => toggleDep(dep.issueNumber)}
+                    checked={checked.has(dep.depKey)}
+                    onChange={() => toggleDep(dep.depKey)}
                     disabled={phase === 'working'}
-                    data-testid={`dep-checkbox-${dep.issueNumber}`}
+                    data-testid={`dep-checkbox-${dep.depKey}`}
                   />
                   <span style={{ fontFamily: 'monospace', color: 'var(--accent)', flexShrink: 0 }}>
                     {dep.refLabel}
