@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { pathToFileURL } from 'node:url';
+import { SKILL_BUDGETS, resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { assembleSpawnContext } from '@goose-hub/core/agent-runtime/context-assembly.js';
 import { withFallback } from '@goose-hub/core/agent-runtime/fallback.js';
@@ -282,10 +283,15 @@ async function runAgentCommand(rawArgs: string[]): Promise<void> {
     freshContext: skillConfig.freshContext,
     toolBundles: skillConfig.toolBundles,
     toolExtras: [],
-    budgets: { maxTurns: 10, maxBudgetUsd: 1.0 },
+    // Use skill budget if registered; fall back to a safe generic default for ad-hoc CLI runs.
+    ...(skillName in SKILL_BUDGETS
+      ? resolveBudgets(skillName)
+      : {
+          budgets: { maxTurns: 10, maxBudgetUsd: 1.0, timeoutMs: 120_000 },
+          modelOverride: undefined,
+        }),
     // CLI runs don't use persona routing — use a placeholder persona ID
     personaId: `cli/${skillConfig.role ?? 'developer'}/0`,
-    modelOverride: undefined,
     appendSystemPrompt,
   };
 

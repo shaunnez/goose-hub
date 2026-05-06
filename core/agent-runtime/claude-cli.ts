@@ -293,6 +293,10 @@ export class ClaudeCliRuntime implements AgentRuntime {
         }
 
         const usage = envelope ? costFromCliEnvelope(envelope) : null;
+        const turnsUsed =
+          envelope != null && typeof (envelope as Record<string, unknown>).num_turns === 'number'
+            ? ((envelope as Record<string, unknown>).num_turns as number)
+            : null;
         recordCost({
           runId,
           projectId,
@@ -342,6 +346,13 @@ export class ClaudeCliRuntime implements AgentRuntime {
               inputTokens: usage?.inputTokens ?? 0,
               outputTokens: usage?.outputTokens ?? 0,
               label: usage?.costLabel ?? 'estimated',
+            },
+            turns: {
+              used: turnsUsed,
+              budgeted: spec.budgets.maxTurns,
+            },
+            budget: {
+              usd: spec.budgets.maxBudgetUsd,
             },
           },
           runId,
