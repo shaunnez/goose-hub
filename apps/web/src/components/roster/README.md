@@ -36,3 +36,11 @@ invalidation.
 - No personas: "No personas yet — stats accumulate as agent runs complete"
 - No run history: "No run history recorded yet"
 - No candidates: "No improvement candidates yet"
+
+## Playbooks tab (M11.12)
+
+A second tab on the roster page lists cross-run retrospective `PlaybookManifest` artifacts produced by `core/workflows/cross-run-retro.ts`. Each card shows the window dates, lifecycle count, and pattern/candidate counts; selecting a card opens a drill-in panel with the full manifest (summary, top patterns, improvement candidates, gate thresholds, cost baselines).
+
+- `GET /projects/:slug/playbooks` — playbook summaries for the current project
+- `GET /projects/:slug/playbooks/:id` — full manifest detail
+- `POST /projects/:slug/playbooks` — manual trigger; body is one of `{ windowSize: N }` or `{ dateRange: { startAt, endAt } }`

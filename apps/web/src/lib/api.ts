@@ -9,6 +9,8 @@ import type {
   PersonaNameDto,
   PersonaRunDto,
   PersonaStatDto,
+  PlaybookDetailDto,
+  PlaybookSummaryDto,
   ProjectConfigDto,
   ProjectSummary,
   TransitionResult,
@@ -34,6 +36,8 @@ export type {
   ImprovementCandidateDto,
   CostSummaryDto,
   WorkItemCostsDto,
+  PlaybookSummaryDto,
+  PlaybookDetailDto,
 } from './types';
 
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -320,4 +324,28 @@ export async function fetchCostSummary(slug: string): Promise<CostSummaryDto> {
 
 export async function fetchIssueCosts(slug: string, id: string): Promise<WorkItemCostsDto> {
   return getJson<WorkItemCostsDto>(`/projects/${slug}/issues/${id}/costs`);
+}
+
+export async function fetchPlaybooks(slug: string): Promise<PlaybookSummaryDto[]> {
+  const { playbooks } = await getJson<{ playbooks: PlaybookSummaryDto[] }>(
+    `/projects/${slug}/playbooks`,
+  );
+  return playbooks;
+}
+
+export async function fetchPlaybook(slug: string, id: number): Promise<PlaybookDetailDto> {
+  const { playbook } = await getJson<{ playbook: PlaybookDetailDto }>(
+    `/projects/${slug}/playbooks/${id}`,
+  );
+  return playbook;
+}
+
+export async function createPlaybook(
+  slug: string,
+  body: { windowSize?: number; dateRange?: { startAt: string; endAt: string } },
+): Promise<{ playbookId: number; lifecycleCount: number }> {
+  return postJson<{ playbookId: number; lifecycleCount: number }>(
+    `/projects/${slug}/playbooks`,
+    body,
+  );
 }
