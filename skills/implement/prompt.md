@@ -135,16 +135,17 @@ Score honestly. Identify your single lowest-scoring category and explain it in t
 - If `<typecheck_command>` is provided, run it. Fix any errors.
 - Re-run the **targeted** test command one final time (same paths) to confirm nothing in your surface regressed.
 
-### 7 — Commit
+### 7 — Do NOT commit (orchestrator commits on your behalf)
 
-All tests pass and lint is clean. Commit your changes now — the orchestrator pushes this commit to open the PR.
+**Do not run `git add` or `git commit`.** The orchestrator commits your changes after this
+skill returns (ADR 0031 — builder no-commit rule). Running git mutation commands from inside
+the skill is a violation of the orchestrator-owned git contract. If you accidentally run
+`git commit`, the orchestrator will detect the empty stage and abort.
 
-- Stage everything: `git add -A` (separate `bash` call)
-- Commit with a message derived from the issue title and number:
-  `git commit -m "fix(#<number>): <concise description of what changed>"`
-- Emit: `[decision] COMMIT: Committed changes for #<number>`
+Return the output now. The orchestrator stages all changes, commits with a canonical message,
+and then calls `openPR`.
 
-> **This step is required.** If you skip it, the orchestrator pushes an empty branch and the PR creation fails with a 422.
+- Emit: `[decision] PLAN: Skipping commit — orchestrator commits on return`
 
 ### 8 — Declare the evidence spec path
 
@@ -216,7 +217,7 @@ Return a JSON object conforming to `ImplementSchema`. The orchestrator opens the
 
 `kind` is constrained to a shared enum (see `core/agent-runtime/decision-types.ts`). The implement skill most commonly emits:
 
-- **Phase markers:** `READ`, `PLAN`, `RED`, `GREEN`, `REFACTOR`, `LINT`, `COMMIT`
+- **Phase markers:** `READ`, `PLAN`, `RED`, `GREEN`, `REFACTOR`, `LINT`
 - **Self-observations:** `BLOCKER`, `RETRY`, `UNCERTAINTY`, `TOOL_FAILURE`, `INSIGHT`
 
 Use uppercase enum values both in the JSON `kind` field and in the live `[decision] KIND: …` marker line. Free-text `step` strings are no longer accepted — schema validation rejects them.
