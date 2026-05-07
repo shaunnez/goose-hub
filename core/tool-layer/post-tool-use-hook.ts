@@ -72,6 +72,27 @@ async function main() {
     }
   }
 
+  // Bash error capture: emit agent.tool-result when tool returned an error.
+  const toolName = call?.tool_name ?? '';
+  const toolError = call?.tool_response?.error ?? '';
+  if (toolName === 'Bash' && typeof toolError === 'string' && toolError.length > 0) {
+    const truncated = toolError.length > 2048;
+    const errorText = truncated ? toolError.slice(0, 2048) : toolError;
+    try {
+      await fetch(\`http://localhost:\${serverPort}/events/tool-result\`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          run_id: runId,
+          tool_name: toolName,
+          error: errorText,
+          truncated,
+        }),
+        signal: AbortSignal.timeout(500),
+      }).catch(() => {});
+    } catch { /* best-effort */ }
+  }
+
   if (markers.length === 0) process.exit(0);
 
   for (const { kind, summary } of markers) {

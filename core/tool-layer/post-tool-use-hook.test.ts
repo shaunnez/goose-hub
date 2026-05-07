@@ -165,4 +165,31 @@ describe('deployPostHook', () => {
     const script = vi.mocked(writeFileSync).mock.calls[0][1] as string;
     expect(script).toContain('3001');
   });
+
+  it('hook script emits agent.tool-result when Bash tool_response.error is non-empty', () => {
+    deployPostHook();
+    const script = vi.mocked(writeFileSync).mock.calls[0][1] as string;
+    expect(script).toContain('/events/tool-result');
+    expect(script).toContain("toolName === 'Bash'");
+    expect(script).toContain('tool_response');
+  });
+
+  it('hook script caps error at 2048 chars and sets truncated flag', () => {
+    deployPostHook();
+    const script = vi.mocked(writeFileSync).mock.calls[0][1] as string;
+    expect(script).toContain('2048');
+    expect(script).toContain('truncated');
+  });
+
+  it('hook script skips tool-result POST when tool_name is not Bash', () => {
+    deployPostHook();
+    const script = vi.mocked(writeFileSync).mock.calls[0][1] as string;
+    expect(script).toContain("toolName === 'Bash'");
+  });
+
+  it('hook script skips tool-result POST when error field is empty', () => {
+    deployPostHook();
+    const script = vi.mocked(writeFileSync).mock.calls[0][1] as string;
+    expect(script).toContain('.length > 0');
+  });
 });
