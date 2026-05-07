@@ -1,0 +1,19 @@
+{
+  "shouldTrigger": [
+    "Review the PRD draft for completeness and correctness",
+    "Critique this PRD before we decompose it into issues",
+    "Advise on the product requirements document for this feature",
+    "Check the PRD for missing journeys or acceptance criteria gaps",
+    "Is this PRD ready to decompose? Review it",
+    "Validate the PRD against the work item scope"
+  ],
+  "shouldNotTrigger": [
+    "Write the PRD for this feature",
+    "Triage this incoming issue and assign a priority",
+    "Review the pull request for code quality",
+    "Decompose the PRD into GitHub issues",
+    "Run QA on the implementation in this PR",
+    "Grill me on this idea before writing the spec",
+    "Investigate the root cause of this regression"
+  ]
+}
