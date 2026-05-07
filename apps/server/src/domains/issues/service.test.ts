@@ -832,3 +832,57 @@ describe('overrideIssueRepo (#201 slug guard)', () => {
     expect(result).toMatchObject({ ok: false, error: 'repo is required', status: 400 });
   });
 });
+
+describe('overrideIssueRepo (#569 repos.md error handling)', () => {
+  it('returns 404 when repos.md does not exist (ENOENT)', async () => {
+    const error = new Error('ENOENT: no such file or directory');
+    (error as NodeJS.ErrnoException).code = 'ENOENT';
+    vi.mocked(readFileSync).mockImplementationOnce(() => {
+      throw error;
+    });
+    const result = await overrideIssueRepo('proj', '1', 'owner/repo');
+    expect(result).toMatchObject({
+      ok: false,
+      status: 404,
+      error: expect.stringMatching(/repos\.md|not found/i),
+    });
+  });
+
+  it('returns 500 when repos.md read fails for a non-ENOENT reason', async () => {
+    const error = new Error('Permission denied');
+    (error as NodeJS.ErrnoException).code = 'EACCES';
+    vi.mocked(readFileSync).mockImplementationOnce(() => {
+      throw error;
+    });
+    const result = await overrideIssueRepo('proj', '1', 'owner/repo');
+    expect(result).toMatchObject({
+      ok: false,
+      status: 500,
+      error: expect.any(String),
+    });
+  });
+
+  it('happy path: returns 200 when repos.md is valid and repo is in allowlist', async () => {
+    vi.mocked(readFileSync).mockReturnValueOnce('### [owner/repo]\n' as never);
+    vi.mocked(eventStore.replay).mockReturnValueOnce([
+      {
+        id: 1,
+        kind: 'agent.triage-complete',
+        payload: {
+          triage: { type: 'bug', priority: 'high' },
+          repoMatch: { candidates: [] },
+        },
+        projectId: 'proj',
+        workItemId: 'x',
+        createdAt: '2026-01-01',
+      },
+    ] as never);
+    const result = await overrideIssueRepo('proj', '1', 'owner/repo');
+    expect(result).toMatchObject({ ok: true });
+    if (result.ok) {
+      const triage = result.data.triage as Record<string, unknown>;
+      expect(triage.type).toBe('bug');
+      expect(triage.overrideRepo).toBe('owner/repo');
+    }
+  });
+});

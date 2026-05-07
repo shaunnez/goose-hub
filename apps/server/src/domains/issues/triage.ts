@@ -71,7 +71,25 @@ export async function overrideIssueRepo(
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
 
   const reposMdPath = join(targetProjectsRoot, slug, 'repos.md');
-  const reposMd = readFileSync(reposMdPath, 'utf8');
+  let reposMd: string;
+  try {
+    reposMd = readFileSync(reposMdPath, 'utf8');
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    if (err.code === 'ENOENT') {
+      return {
+        ok: false,
+        error: `repos.md not found at ${reposMdPath}`,
+        status: 404,
+      };
+    }
+    return {
+      ok: false,
+      error: `failed to read repos.md: ${err.message}`,
+      status: 500,
+    };
+  }
+
   const allowedRepos =
     reposMd
       .match(/^###\s+\[([^\]]+)\]/gm)
