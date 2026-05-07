@@ -29,6 +29,7 @@ const baseFunctionalSpec = {
     {
       when: 'Admin clicks Export CSV',
       given: 'Audit log page is loaded',
+      // biome-ignore lint/suspicious/noThenProperty: matches FunctionalSpecBehaviorSchema (when/given/then)
       then: 'Date-range picker modal is shown',
     },
   ],

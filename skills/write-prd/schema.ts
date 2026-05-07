@@ -39,6 +39,7 @@ export const AcceptanceCriterionSchema = z.object({
 export const FunctionalSpecBehaviorSchema = z.object({
   when: z.string(),
   given: z.string(),
+  // biome-ignore lint/suspicious/noThenProperty: schema mirrors when/given/then doctrine from #313
   then: z.string(),
 });
 

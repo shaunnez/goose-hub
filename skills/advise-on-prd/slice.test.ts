@@ -19,7 +19,9 @@ describe('advise-on-prd output schema', () => {
       verdict: 'approve',
       concerns: ['successCriteria[0] could be more measurable'],
       revisedSections: {},
-      decisionSummaries: [{ kind: 'VERDICT', summary: 'PRD approved with minor notes on success criteria' }],
+      decisionSummaries: [
+        { kind: 'VERDICT', summary: 'PRD approved with minor notes on success criteria' },
+      ],
     });
     expect(result.success).toBe(true);
   });
@@ -37,15 +39,14 @@ describe('advise-on-prd output schema', () => {
   it('accepts revise with concerns and partial revisedSections', () => {
     const result = AdvisePRDOutputSchema.safeParse({
       verdict: 'revise',
-      concerns: [
-        'Problem statement conflates two pain points',
-        'Journey J-1 missing error states',
-      ],
+      concerns: ['Problem statement conflates two pain points', 'Journey J-1 missing error states'],
       revisedSections: {
         problem: 'Revised problem statement',
         successCriteria: 'Revised success criteria',
       },
-      decisionSummaries: [{ kind: 'VERDICT', summary: 'PRD needs problem and success criteria revisions' }],
+      decisionSummaries: [
+        { kind: 'VERDICT', summary: 'PRD needs problem and success criteria revisions' },
+      ],
     });
     expect(result.success).toBe(true);
   });
@@ -55,7 +56,9 @@ describe('advise-on-prd output schema', () => {
       verdict: 'revise',
       concerns: ['functionalSpec.behaviors lack when/given/then structure'],
       revisedSections: {},
-      decisionSummaries: [{ kind: 'VERDICT', summary: 'PRD revised: functional spec needs structured format' }],
+      decisionSummaries: [
+        { kind: 'VERDICT', summary: 'PRD revised: functional spec needs structured format' },
+      ],
     });
     expect(result.success).toBe(true);
   });

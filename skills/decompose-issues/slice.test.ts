@@ -8,7 +8,13 @@ const validDecisionSummary = { kind: 'PLAN' as const, summary: 'Decomposed PRD i
 const validIssue = {
   title: 'M13.01: implement core schema',
   body: '## Context\n\nPart of #100.\n\n## Acceptance criteria\n\n- [ ] Schema defined\n\n## Depends on\n\nNo prior sibling dependencies.',
-  labels: ['factory:accepted', 'type:feature', 'priority:medium', 'schedule:current', 'exec:serial'],
+  labels: [
+    'factory:accepted',
+    'type:feature',
+    'priority:medium',
+    'schedule:current',
+    'exec:serial',
+  ],
   dependsOn: [],
 };
 

@@ -69,9 +69,9 @@ describe('SprintReviewOutputSchema', () => {
   });
 
   it('rejects empty milestoneTitle string', () => {
-    expect(
-      SprintReviewOutputSchema.safeParse({ ...baseValid, milestoneTitle: '' }).success,
-    ).toBe(false);
+    expect(SprintReviewOutputSchema.safeParse({ ...baseValid, milestoneTitle: '' }).success).toBe(
+      false,
+    );
   });
 
   it('zod toJSONSchema roundtrip produces valid JSON Schema object', () => {
@@ -163,7 +163,14 @@ describe('sprint-review skill config', () => {
             didNotGoWell: 'None',
             architecturalTakeaway: 'N/A',
           },
-          learningEntries: [{ observation: 'something', rationale: 'because', improvementKind: 'workflow', confidence: 'low' }],
+          learningEntries: [
+            {
+              observation: 'something',
+              rationale: 'because',
+              improvementKind: 'workflow',
+              confidence: 'low',
+            },
+          ],
         },
       ],
       improvementCandidates: [],

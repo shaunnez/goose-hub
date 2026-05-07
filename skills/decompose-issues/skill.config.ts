@@ -16,12 +16,7 @@ const config: SkillConfig = {
   modelPin: 'sonnet',
   freshContext: false,
   role: 'decomposer',
-  contextAllowlist: [
-    'parentIssue.number',
-    'parentIssue.title',
-    'parentIssue.body',
-    'prdOutput',
-  ],
+  contextAllowlist: ['parentIssue.number', 'parentIssue.title', 'parentIssue.body', 'prdOutput'],
 };
 
 export default config;
