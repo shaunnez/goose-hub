@@ -31,7 +31,7 @@ export async function listIssues(
     dependsOnTitles: Object.fromEntries(
       (item.dependsOn ?? [])
         .filter((ref) => titleByExternalId.has(ref))
-        .map((ref) => [ref, titleByExternalId.get(ref)!]),
+        .map((ref) => [ref, titleByExternalId.get(ref) ?? '']),
     ),
   }));
   return { ok: true, data: { items: enriched } };

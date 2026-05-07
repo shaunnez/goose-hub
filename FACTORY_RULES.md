@@ -23,7 +23,7 @@ These rules are immutable. Factory cannot modify this file. Humans can modify it
 
 ## Governance
 
-12. Governance files (`MISSION.md`, `FACTORY_RULES.md`, `CLAUDE.md`, project configs, persona configs) cannot be **modified** by any Factory PR. They can be **created** only in PRs tagged `factory:bootstrap-pr`. Hard-fail PR check otherwise.
+12. Governance files (MISSION.md, FACTORY_RULES.md, CLAUDE.md, project configs, persona configs) cannot be modified by any Factory-dispatched PR. They can be created only in PRs tagged factory:bootstrap-pr. Amendments by the human system owner are out-of-scope of this rule. Hard-fail PR check applies to Factory PRs only.
 13. Skills are versioned markdown with JSON schemas. Inline prompts in code fail review.
 
 ## Concurrency, budgets, safety
