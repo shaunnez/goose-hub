@@ -62,7 +62,15 @@ Based on your investigation, form a hypothesis:
 
 Emit: `[decision] INSIGHT: Root cause hypothesis — <one sentence>`
 
-### Step 5 — Record open questions
+### Step 5 — Determine if browser reproduction applies
+
+Decide whether this bug can be meaningfully reproduced via a Playwright browser session against the running dev server:
+- Set `requiresBrowserRepro: true` if the bug manifests visibly in the browser UI (wrong rendering, broken interaction, visible error state, etc.)
+- Set `requiresBrowserRepro: false` if the bug is purely server-side: an API returning a wrong status code, a thrown exception in a handler, a missing file guard, DB errors, etc. For these, a browser session captures nothing useful.
+
+Emit: `[decision] INSIGHT: requiresBrowserRepro=<true|false> — <one-sentence reason>`
+
+### Step 6 — Record open questions
 
 Note any unresolved questions that would require additional investigation:
 - Missing reproduction environment details
@@ -86,6 +94,7 @@ Return a JSON object with this exact structure:
     "<question 1>",
     "<question 2>"
   ],
+  "requiresBrowserRepro": false,
   "decisionSummaries": [
     { "kind": "READ", "summary": "<one sentence>", "evidence": "<quote or signal>" },
     { "kind": "READ", "summary": "<one sentence>", "evidence": "<file names or search terms>" },
