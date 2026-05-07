@@ -18,6 +18,7 @@ const mockLoggerWarn = vi.fn();
 const mockRunRetroForItem = vi.fn();
 const mockFilterEligibleByDependencies = vi.fn();
 const mockCreateProjectAwareTargetSource = vi.fn();
+const mockRunGrillAndPrdWorkflow = vi.fn();
 
 vi.mock('@goose-hub/core/projects/dependency-scheduler.js', () => ({
   filterEligibleByDependencies: mockFilterEligibleByDependencies,
@@ -54,6 +55,10 @@ vi.mock('@goose-hub/core/logger.js', () => ({
   },
 }));
 
+vi.mock('@goose-hub/core/workflows/grill-and-prd.js', () => ({
+  runGrillAndPrdWorkflow: mockRunGrillAndPrdWorkflow,
+}));
+
 // ─── helpers ──────────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -61,6 +66,7 @@ beforeEach(() => {
   vi.resetAllMocks(); // clears call counts AND implementation queues (once-mocks)
   mockRunTriageBatch.mockResolvedValue(undefined);
   mockRunRetroForItem.mockResolvedValue(undefined);
+  mockRunGrillAndPrdWorkflow.mockResolvedValue(undefined);
   mockGetSourceForSlug.mockResolvedValue(null);
   // Default: single-workflow-per-project (backward-compat) for tests that don't override.
   mockGetProject.mockResolvedValue(null);
@@ -421,5 +427,65 @@ describe('dispatchRetro', () => {
     await dispatchRetro('slug', 42);
 
     expect(mockRunRetroForItem).toHaveBeenCalledWith(item, source, 'slug');
+  });
+});
+
+// ─── dispatchGrillAndPrd — buildPriorReplies filtering ───────────────────
+
+describe('dispatchGrillAndPrd: buildPriorReplies filters system/prd/child-issues comments', () => {
+  it('excludes system-marker and child-issues comments from priorReplies', async () => {
+    const source = {
+      getItem: vi.fn().mockResolvedValue({ state: 'factory:grilling' }),
+      listComments: vi
+        .fn()
+        .mockResolvedValue([
+          { body: '<!-- factory:grill-question -->\n**Round 1** — What is the scope?' },
+          { body: 'It is admin only.' },
+          { body: '<!-- factory:system -->\nUser rejected the PRD; returning to grill.' },
+          { body: '## Child issues\n- #10 slice 1' },
+          { body: '<!-- factory:prd -->\n# PRD\n```json\n{}\n```' },
+        ]),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+
+    const { dispatchGrillAndPrd } = await import('./dispatch.js');
+    await dispatchGrillAndPrd('slug', 99);
+
+    expect(mockRunGrillAndPrdWorkflow).toHaveBeenCalledOnce();
+    const call = mockRunGrillAndPrdWorkflow.mock.calls[0][0] as {
+      priorReplies: Array<{ role: string; content: string }>;
+    };
+    // Only the grill question and user reply should pass through
+    expect(call.priorReplies).toHaveLength(2);
+    expect(call.priorReplies[0].role).toBe('agent');
+    expect(call.priorReplies[1].role).toBe('user');
+    expect(call.priorReplies[1].content).toBe('It is admin only.');
+  });
+});
+
+// ─── dispatchDecomposePrd — no-PRD escape ────────────────────────────────
+
+describe('dispatchDecomposePrd: no-PRD escape', () => {
+  it('posts a comment and forces needs-human when no PRD comment is found', async () => {
+    const source = {
+      getItem: vi.fn().mockResolvedValue({ state: 'factory:decomposing' }),
+      listComments: vi.fn().mockResolvedValue([]),
+      comment: vi.fn().mockResolvedValue(undefined),
+      forceState: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+
+    const { dispatchDecomposePrd } = await import('./dispatch.js');
+    await dispatchDecomposePrd('slug', 55);
+
+    expect(mockLoggerError).toHaveBeenCalledWith(
+      'dispatchDecomposePrd: no PRD marker comment found',
+      expect.objectContaining({ slug: 'slug', issueNumber: 55 }),
+    );
+    expect(source.comment).toHaveBeenCalledWith(
+      '55',
+      expect.stringContaining('no PRD comment found'),
+    );
+    expect(source.forceState).toHaveBeenCalledWith('55', 'factory:needs-human');
   });
 });

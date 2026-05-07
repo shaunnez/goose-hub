@@ -88,6 +88,12 @@ export interface StateSource {
     group: 'priority' | 'schedule' | 'type',
     value: string,
   ): Promise<void>;
+  /** Additively apply labels. Idempotent — duplicate labels are silently ignored. */
+  addLabels(itemId: string, labels: string[]): Promise<void>;
+  /** Remove a single label. Idempotent — 404 (label not present) is treated as success. */
+  removeLabel(itemId: string, name: string): Promise<void>;
+  /** Return all labels currently on the item (state labels + extra labels). */
+  listLabels?(itemId: string): Promise<string[]>;
   attach(itemId: string, artifact: Artifact): Promise<void>;
   createIssue(input: CreateIssueInput): Promise<WorkItem>;
 

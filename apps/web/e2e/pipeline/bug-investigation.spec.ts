@@ -67,6 +67,6 @@ test.describe('Bug investigation (MOCK_AGENTS + MOCK_SOURCE)', () => {
 
     // Investigate (low-confidence) → investigation-complete → gate-pending
     await postServer(`/projects/${SLUG}/dispatch/${issueNumber}`);
-    await expect(statePill).toHaveText('factory:gate-pending', { timeout: 60_000 });
+    await expect(statePill).toHaveText('gate-pending', { timeout: 60_000 });
   });
 });

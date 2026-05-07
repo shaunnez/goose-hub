@@ -7,6 +7,7 @@ import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { createProjectAwareTargetSource } from '@goose-hub/core/state-source/dependency-resolver.js';
 import { parseAcceptanceCriteria } from '../domains/issues/parse-acceptance.js';
 import { runRetroForItem } from '../domains/workflows/retro-batch.js';
+import { maybeFireSprintReview } from '../domains/workflows/sprint-review-trigger.js';
 import { runTriageBatch } from '../domains/workflows/triage-batch.js';
 import { getProject } from './projects.js';
 import { getSourceForSlug } from './source.js';
@@ -527,6 +528,32 @@ async function dispatchInvestigationComplete(slug: string, issueNumber: number):
 }
 
 /**
+ * Handles terminal labels (factory:archived, factory:rejected) that bypass the
+ * retro path. Fetches the issue's milestone and fires maybeFireSprintReview so
+ * that the sprint-review trigger runs even when an issue is archived or rejected
+ * without going through retrospective (PLAN §12.6).
+ */
+async function dispatchTerminalLabel(slug: string, issueNumber: number): Promise<void> {
+  const source = await getSourceForSlug(slug);
+  if (source == null) {
+    logger.error('dispatchTerminalLabel: no source for slug', { slug, issueNumber });
+    return;
+  }
+  const item = await source.getItem(issueNumber.toString());
+  const milestoneNumber = item.milestoneId != null ? Number(item.milestoneId) : null;
+  const milestoneTitle = item.milestoneTitle ?? null;
+  if (milestoneNumber == null || Number.isNaN(milestoneNumber) || milestoneTitle == null) {
+    logger.info('dispatchTerminalLabel: no milestoneId, skipping sprint-review check', {
+      slug,
+      issueNumber,
+    });
+    return;
+  }
+  // Fire-and-forget; errors logged inside maybeFireSprintReview.
+  void maybeFireSprintReview(slug, milestoneNumber, milestoneTitle, source);
+}
+
+/**
  * Webhook label-driven dispatcher. Routes the factory:* label to the right
  * workflow without requiring the webhook handler to know about the
  * `workflows` or `slices` directory layout.
@@ -584,6 +611,11 @@ export async function dispatchForLabel(
     await dispatchDecomposePrd(slug, issueNumber);
     return;
   }
+  // Terminal labels that bypass retro — check for sprint-review eligibility.
+  if (labelName === 'factory:archived' || labelName === 'factory:rejected') {
+    await dispatchTerminalLabel(slug, issueNumber);
+    return;
+  }
   logger.info('dispatchForLabel: no workflow for label', { slug, labelName });
 }
 
@@ -591,6 +623,8 @@ export async function dispatchForLabel(
 
 const PRD_MARKER = '<!-- factory:prd -->';
 const GRILL_QUESTION_MARKER = '<!-- factory:grill-question -->';
+const SYSTEM_MARKER = '<!-- factory:system -->';
+const CHILD_ISSUES_MARKER = '## Child issues';
 const PRD_JSON_FENCE_RE = /```json\s*\n([\s\S]*?)\n```/;
 
 /**
@@ -617,14 +651,20 @@ function extractPrdFromComments(
 /**
  * Build the `priorReplies` array for grill-and-prd from issue comments.
  * Agent questions carry the `<!-- factory:grill-question -->` prefix; every
- * other comment is treated as a user reply. PRD-marker comments are
- * filtered out so they don't bleed into the grill conversation.
+ * other comment is treated as a user reply. PRD-marker, system-marker, and
+ * child-issues comments are filtered out so they don't bleed into the grill
+ * conversation.
  */
 function buildPriorReplies(
   comments: ReadonlyArray<{ body: string }>,
 ): Array<{ role: 'user' | 'agent'; content: string }> {
   return comments
-    .filter((c) => !c.body.startsWith(PRD_MARKER))
+    .filter(
+      (c) =>
+        !c.body.startsWith(PRD_MARKER) &&
+        !c.body.startsWith(SYSTEM_MARKER) &&
+        !c.body.startsWith(CHILD_ISSUES_MARKER),
+    )
     .map((c) => ({
       role: c.body.startsWith(GRILL_QUESTION_MARKER) ? ('agent' as const) : ('user' as const),
       content: c.body,
@@ -714,6 +754,11 @@ export async function dispatchDecomposePrd(slug: string, issueNumber: number): P
     const prdOutput = extractPrdFromComments(comments);
     if (prdOutput == null) {
       logger.error('dispatchDecomposePrd: no PRD marker comment found', { slug, issueNumber });
+      await source.comment(
+        issueNumber.toString(),
+        'decompose-prd: no PRD comment found on this issue. Returning to needs-human.',
+      );
+      await source.forceState(issueNumber.toString(), 'factory:needs-human');
       return;
     }
     await runDecomposePrdWorkflow({
@@ -760,6 +805,13 @@ const RESUME_WORKFLOWS: Partial<Record<StateName, ResumeEntry>> = {
   'factory:retrospecting': { targetState: 'factory:retrospecting', dispatch: dispatchRetro },
   'factory:qa-failed': { targetState: 'factory:needs-fix', dispatch: dispatchNeedsFix },
   'factory:needs-fix': { targetState: 'factory:needs-fix', dispatch: dispatchNeedsFix },
+  // Discover lane
+  'factory:grilling': { targetState: 'factory:grilling', dispatch: dispatchGrillAndPrd },
+  // factory:gate-pending is lane-agnostic (it can originate from grilling or
+  // other human-gate situations) and has no single canonical resume target, so
+  // it is intentionally omitted here. Human triage is required.
+  'factory:prd-drafting': { targetState: 'factory:grilling', dispatch: dispatchGrillAndPrd },
+  'factory:decomposing': { targetState: 'factory:decomposing', dispatch: dispatchDecomposePrd },
 };
 
 /**

@@ -4,7 +4,7 @@ import type { IssueCommentDto } from '@/lib/types';
 import { timeAgo } from '@/lib/utils';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MessageCircleQuestion } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { SectionEmptyState } from './SectionEmptyState';
 
 interface GrillSectionProps {
@@ -16,6 +16,8 @@ interface GrillSectionProps {
 
 const GRILL_QUESTION_MARKER = '<!-- factory:grill-question -->';
 const PRD_MARKER = '<!-- factory:prd -->';
+const SYSTEM_MARKER = '<!-- factory:system -->';
+const CHILD_ISSUES_MARKER = '## Child issues';
 
 function isAgentQuestion(body: string): boolean {
   return body.startsWith(GRILL_QUESTION_MARKER);
@@ -43,6 +45,14 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
     queryFn: () => fetchComments(projectSlug, id),
   });
 
+  // Refetch comments when the issue state changes — the grill workflow posts
+  // a question comment as part of the transition into factory:gate-pending,
+  // and without this hook the cache (loaded at factory:grilling) misses it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: state is a prop; biome doesn't recognise it
+  useEffect(() => {
+    void queryClient.invalidateQueries({ queryKey: ['comments', projectSlug, id] });
+  }, [state, projectSlug, id, queryClient]);
+
   const send = useMutation({
     mutationFn: async (body: string) => {
       await addComment(projectSlug, externalId, body);
@@ -67,8 +77,14 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
     },
   });
 
-  // Filter out the PRD marker comment — it's rendered on the PRD tab, not here.
-  const grillComments = comments.filter((c) => !c.body.startsWith(PRD_MARKER));
+  // Filter out system/metadata comments — PRD drafts, system notices, child
+  // issues posts — they are not part of the grill conversation.
+  const grillComments = comments.filter(
+    (c) =>
+      !c.body.startsWith(PRD_MARKER) &&
+      !c.body.startsWith(SYSTEM_MARKER) &&
+      !c.body.startsWith(CHILD_ISSUES_MARKER),
+  );
   const merged: Array<IssueCommentDto | OptimisticReply> = [...grillComments, ...optimisticReplies];
 
   const grillingComplete =

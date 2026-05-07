@@ -282,6 +282,10 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       runId,
     });
 
+    // Determine whether this item carries factory:from-prd (decomposed child)
+    const itemLabels = (await stateSource.listLabels?.(item.externalId)) ?? [];
+    const isFromPrd = itemLabels.includes('factory:from-prd');
+
     let finalState: string;
     if (triageOutput.type === 'bug') {
       await stateSource.transitionState(
@@ -297,7 +301,12 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
         'factory:research-pending',
       );
       finalState = 'factory:research-pending';
+    } else if (triageOutput.type === 'feature' && !isFromPrd) {
+      // Fresh feature (not from decompose-prd): route to Discover Lane grilling
+      await stateSource.transitionState(item.externalId, 'factory:accepted', 'factory:grilling');
+      finalState = 'factory:grilling';
     } else {
+      // Chore, or feature with factory:from-prd (decomposed child): skip grilling
       await stateSource.transitionState(item.externalId, 'factory:accepted', 'factory:dev-ready');
       finalState = 'factory:dev-ready';
     }

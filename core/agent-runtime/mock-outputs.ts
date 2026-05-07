@@ -254,6 +254,133 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
       };
     }
 
+    case 'grill-me': {
+      // Round 1 → ask one question. From round 2 onward → readyForPRD.
+      const roundNumber = (spec.context.roundNumber as number | undefined) ?? 1;
+      if (roundNumber <= 1) {
+        return {
+          output: {
+            questions: ['What problem are you actually trying to solve?'],
+            refinedIntent: '',
+            readyForPRD: false,
+            decisionSummaries: [
+              { kind: 'PLAN', summary: 'Mock grill-me round 1 — one clarifying question' },
+            ],
+          },
+          decisionSummaries: [
+            { kind: 'PLAN', summary: 'Mock grill-me round 1 — one clarifying question' },
+          ],
+          events: [],
+        };
+      }
+      return {
+        output: {
+          questions: [],
+          refinedIntent:
+            'Mock refined intent: improve search relevance to surface keyword matches.',
+          readyForPRD: true,
+          decisionSummaries: [
+            { kind: 'VERDICT', summary: 'Mock grill-me complete — proceeding to write-prd' },
+          ],
+        },
+        decisionSummaries: [
+          { kind: 'VERDICT', summary: 'Mock grill-me complete — proceeding to write-prd' },
+        ],
+        events: [],
+      };
+    }
+
+    case 'write-prd':
+      return {
+        output: {
+          title: 'Mock PRD',
+          problem: 'Mock problem statement.',
+          proposedSolution: 'Mock proposed solution.',
+          outOfScope: [],
+          successCriteria: ['Mock success criterion 1'],
+          acceptanceCriteria: [
+            { id: 'AC-1', statement: 'Mock acceptance criterion', journeyId: 'J-1' },
+          ],
+          journeys: [
+            {
+              id: 'J-1',
+              persona: 'Mock user',
+              trigger: 'Mock trigger',
+              steps: [
+                {
+                  userAction: 'mock action',
+                  systemResponse: 'mock response',
+                  dataShown: 'mock data',
+                  stateChange: 'mock change',
+                },
+              ],
+              successState: 'success',
+              errorStates: [],
+              edgeCases: [],
+            },
+          ],
+          functionalSpec: {
+            // biome-ignore lint/suspicious/noThenProperty: schema mandates the field name
+            behaviors: [{ when: 'mock', given: 'mock', then: 'mock' }],
+            stateModel: [],
+            invalidTransitions: [],
+            dataConstraints: [],
+          },
+          verticalSlices: [
+            { title: 'Mock slice 1', goal: 'Mock goal', estimatedSize: 'S', journeyRefs: ['J-1'] },
+          ],
+          estimatedComplexity: 'low',
+          decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock write-prd complete' }],
+        },
+        decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock write-prd complete' }],
+        events: [],
+      };
+
+    case 'advise-on-prd':
+      return {
+        output: {
+          verdict: 'approve',
+          concerns: [],
+          revisedSections: {},
+          decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock advise-on-prd approved' }],
+        },
+        decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock advise-on-prd approved' }],
+        events: [],
+      };
+
+    case 'decompose-issues':
+      return {
+        output: {
+          issues: [
+            {
+              title: 'Mock decomposed slice 1',
+              body: '## Context\n\nMock context.\n\n## Acceptance criteria\n\n- [ ] AC-1\n\n## Depends on\n\n_(none)_',
+              labels: ['type:feature', 'priority:medium', 'schedule:current'],
+              dependsOn: [],
+            },
+          ],
+          decisionSummaries: [
+            { kind: 'VERDICT', summary: 'Mock decompose-issues produced 1 slice' },
+          ],
+        },
+        decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock decompose-issues produced 1 slice' }],
+        events: [],
+      };
+
+    case 'sprint-review':
+      return {
+        output: {
+          milestoneTitle: 'Mock Milestone',
+          shipped: ['#1: Mock shipped item'],
+          deferred: [],
+          retroThemes: ['Mock retro theme'],
+          nextSprintSuggestions: ['Mock next sprint suggestion'],
+          decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock sprint-review complete' }],
+        },
+        decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock sprint-review complete' }],
+        events: [],
+      };
+
     default:
       throw new Error(`resolveMockOutput: no preset for skill "${spec.skill}"`);
   }

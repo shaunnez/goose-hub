@@ -5,6 +5,7 @@ import { agentRunCosts } from '../db/schema.js';
 import {
   listCostsForWorkItem,
   recordCost,
+  totalSpendForSkill,
   totalsByStageForProjectSince,
   totalsForProjectSince,
 } from './repository.js';
@@ -142,6 +143,62 @@ describe('totalsForProjectSince', () => {
     });
     const totals = totalsForProjectSince(PROJECT, '1970-01-01T00:00:00Z');
     expect(totals.hasEstimated).toBe(false);
+  });
+});
+
+describe('totalSpendForSkill', () => {
+  it('returns 0 when no rows exist for the given skill', () => {
+    const total = totalSpendForSkill(PROJECT, 'advise-on-prd');
+    expect(total).toBe(0);
+  });
+
+  it('sums costs only for the specified skill', () => {
+    recordCost({
+      runId: `run-skill-a-${PROJECT}`,
+      projectId: PROJECT,
+      workItemId: null,
+      stage: 'discover',
+      skill: 'advise-on-prd',
+      modelId: 'claude-opus-4-5',
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0.5,
+      costLabel: 'exact',
+      personaId: null,
+    });
+    recordCost({
+      runId: `run-skill-b-${PROJECT}`,
+      projectId: PROJECT,
+      workItemId: null,
+      stage: 'discover',
+      skill: 'write-prd',
+      modelId: 'claude-opus-4-5',
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 1.0,
+      costLabel: 'exact',
+      personaId: null,
+    });
+    const total = totalSpendForSkill(PROJECT, 'advise-on-prd');
+    expect(total).toBeCloseTo(0.5);
+  });
+
+  it('returns 0 when the project has no rows (even if another project does)', () => {
+    recordCost({
+      runId: `run-other-proj-${PROJECT}`,
+      projectId: 'other-project',
+      workItemId: null,
+      stage: 'discover',
+      skill: 'advise-on-prd',
+      modelId: 'claude-opus-4-5',
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 2.0,
+      costLabel: 'exact',
+      personaId: null,
+    });
+    const total = totalSpendForSkill(PROJECT, 'advise-on-prd');
+    expect(total).toBe(0);
   });
 });
 

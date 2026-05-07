@@ -33,6 +33,7 @@ const ALL_FACTORY_STATES = [
   'factory:needs-human',
   'factory:done',
   'factory:archived',
+  'factory:gate-pending',
 ];
 
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];

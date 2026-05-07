@@ -8,6 +8,7 @@ import type {
 import { runRetrospectiveWorkflow } from '@goose-hub/core/workflows/retrospective.js';
 import { getProject } from '#shared/projects.js';
 import { getSourceForSlug } from '#shared/source.js';
+import { maybeFireSprintReview } from './sprint-review-trigger.js';
 
 function resolvePolicy(defaultTier: 'light' | 'deep' | undefined): RetrospectivePolicy {
   // `defaultTier: 'deep'` means run deep unconditionally. `light` (or unset)
@@ -69,6 +70,17 @@ export async function runRetroForItem(
     policy,
     triggers,
   });
+
+  // Auto-trigger sprint review when the last schedule:current item in the
+  // milestone reaches a terminal state (done/archived/rejected — PLAN §12.6).
+  // Fire-and-forget — errors are logged inside maybeFireSprintReview.
+  const milestoneNumber = workItem.milestoneId != null ? Number(workItem.milestoneId) : null;
+  const milestoneTitle = workItem.milestoneTitle ?? null;
+
+  if (milestoneNumber != null && !Number.isNaN(milestoneNumber) && milestoneTitle != null) {
+    // Run asynchronously so we don't block the retro batch tick
+    void maybeFireSprintReview(slug, milestoneNumber, milestoneTitle, stateSource);
+  }
 }
 
 export async function runRetroBatch(slug: string, source?: StateSource): Promise<void> {

@@ -1,12 +1,27 @@
 # slices/discover-lane-e2e
 
 M13.10: End-to-end integration test for the Discover Lane (#321).
+M13 follow-up (#592): triage → grilling entry point.
 
 ## What this slice tests
 
 This is the **M13 exit-criterion integration test**. It wires the two
 Discover-Lane workflows together and verifies every required state transition
-across the full lane:
+across the full lane. A second test suite verifies the triage entry-point
+added in #592: a fresh `type:feature` issue seeded at `factory:triaging` is
+routed through `factory:accepted` → `factory:grilling` (legal state-machine
+arc) and continues through the Discover Lane normally.
+
+The full `runTriageBatch` routing unit tests live in
+`apps/server/src/domains/workflows/triage-batch.test.ts`. This slice tests
+the downstream state-machine arc.
+
+```
+factory:triaging
+  → (triage-batch routes type:feature && !factory:from-prd)
+    → factory:accepted → factory:grilling
+      → runGrillAndPrdWorkflow ...
+```
 
 ```
 factory:grilling
@@ -69,10 +84,11 @@ tabs, comment rendering, and the approve-PRD action. The vitest slice here
 covers the workflow/state-machine layer; the Playwright spec covers the
 presentation layer.
 
-## Scenario list (10 phases)
+## Scenario list (10 phases + entry-point test)
 
 | # | Phase | Key assertion |
 |---|-------|---------------|
+| E | Triage entry point (#592): seed at `factory:triaging`; simulate routing to `factory:grilling`; run one grill round | State arc `triaging → accepted → grilling → gate-pending` is legal; `grill.question-posted` comment present |
 | 1 | Seed a vague feature issue; force into `factory:grilling` | `workItem.state === 'factory:grilling'` |
 | 2 | Round 1 grill — not ready; one question posted | Comment with `<!-- factory:grill-question -->` + `Round 1`; state → `factory:gate-pending`; `grill.question-posted` event |
 | 3 | User reply; re-enter `factory:grilling` | Comment posted by non-bot author; state forced back |

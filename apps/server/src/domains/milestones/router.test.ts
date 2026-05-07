@@ -9,12 +9,14 @@ const {
   mockListClosedMilestoneIssues,
   mockGetActiveMilestone,
   mockSetActiveMilestone,
+  mockTriggerSprintReview,
 } = vi.hoisted(() => ({
   mockListMilestones: vi.fn(),
   mockListMilestoneIssues: vi.fn(),
   mockListClosedMilestoneIssues: vi.fn(),
   mockGetActiveMilestone: vi.fn(),
   mockSetActiveMilestone: vi.fn(),
+  mockTriggerSprintReview: vi.fn(),
 }));
 
 vi.mock('./service.js', () => ({
@@ -23,6 +25,7 @@ vi.mock('./service.js', () => ({
   listClosedMilestoneIssues: mockListClosedMilestoneIssues,
   getActiveMilestone: mockGetActiveMilestone,
   setActiveMilestone: mockSetActiveMilestone,
+  triggerSprintReview: mockTriggerSprintReview,
 }));
 
 vi.mock('@goose-hub/core/logger.js', () => ({
@@ -280,6 +283,59 @@ describe('POST /projects/:slug/active-milestone', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ milestoneNumber: 5 }),
+    });
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('project not found');
+  });
+});
+
+describe('POST /projects/:slug/milestones/:title/sprint-review', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns 200 with issueNumber on success', async () => {
+    mockTriggerSprintReview.mockResolvedValue({ ok: true, data: { issueNumber: 42 } });
+
+    const app = makeApp();
+    const res = await app.request(
+      '/projects/my-project/milestones/M13%3A%20Subagents/sprint-review',
+      { method: 'POST' },
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { issueNumber: number };
+    expect(body.issueNumber).toBe(42);
+    expect(mockTriggerSprintReview).toHaveBeenCalledWith('my-project', 'M13: Subagents');
+  });
+
+  it('returns 409 when sprint-review issue already exists', async () => {
+    mockTriggerSprintReview.mockResolvedValue({
+      ok: false,
+      error: 'sprint-review issue already exists for this milestone',
+      status: 409,
+    });
+
+    const app = makeApp();
+    const res = await app.request(
+      '/projects/my-project/milestones/M13%3A%20Subagents/sprint-review',
+      { method: 'POST' },
+    );
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('already exists');
+  });
+
+  it('returns 404 when project not found', async () => {
+    mockTriggerSprintReview.mockResolvedValue({
+      ok: false,
+      error: 'project not found',
+      status: 404,
+    });
+
+    const app = makeApp();
+    const res = await app.request('/projects/unknown/milestones/M13%3A%20Subagents/sprint-review', {
+      method: 'POST',
     });
     expect(res.status).toBe(404);
     const body = (await res.json()) as { error: string };

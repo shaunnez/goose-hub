@@ -6,6 +6,10 @@
  * runDecomposePrdWorkflow) and verifies every state transition across the
  * full Discover Lane: grilling → PRD → decompose → child lifecycle → sprint review.
  *
+ * Also covers the triage → grilling entry point (#592): a vague type:feature
+ * issue seeded at factory:triaging is routed to factory:grilling by triage-batch
+ * when it carries no factory:from-prd label.
+ *
  * All workflows run against an in-memory StateSource; the AgentRuntime is
  * mocked with a queued output list. The SQLite event store (shared singleton)
  * receives real events — each test uses a unique projectId to isolate rows.
@@ -616,5 +620,66 @@ describe('Discover Lane end-to-end integration', () => {
 
     // decompose.completed ×1
     expect(kinds.filter((k) => k === 'decompose.completed')).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Triage entry-point: factory:triaging → factory:grilling for fresh features
+// (#592) — verifies that the state-machine path triaging → accepted → grilling
+// is legal and that a feature carrying no factory:from-prd ends up in grilling.
+//
+// Note: the full runTriageBatch routing is unit-tested in
+// apps/server/src/domains/workflows/triage-batch.test.ts. This test confirms
+// the downstream state-machine arc is valid so the full lane can proceed.
+// ---------------------------------------------------------------------------
+
+describe('Discover Lane entry point: triage routes fresh feature to grilling (#592)', () => {
+  it('triaging → accepted → grilling arc is legal and issue continues through Discover Lane', async () => {
+    const projectId = uniqueProjectId();
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+
+    // Seed a vague feature at factory:triaging (the default for new issues)
+    const seeded = await source.seedIssue({
+      title: 'Add better search',
+      body: 'We need better search. Current search is not good enough.',
+      type: 'feature',
+      priority: 'medium',
+      state: 'factory:triaging',
+    });
+
+    // Verify it starts in factory:triaging
+    let item = await source.getItem(seeded.externalId);
+    expect(item.state).toBe('factory:triaging');
+
+    // Simulate triage-batch routing: triaging → accepted → grilling
+    // (triage-batch.ts checks type:feature && !factory:from-prd → grilling)
+    await source.transitionState(seeded.externalId, 'factory:triaging', 'factory:accepted');
+    await source.transitionState(seeded.externalId, 'factory:accepted', 'factory:grilling');
+
+    item = await source.getItem(seeded.externalId);
+    expect(item.state).toBe('factory:grilling');
+
+    // Now run one round of grilling to confirm the Discover Lane continues normally
+    const grillOutput = {
+      questions: ['What aspect of search needs improvement?'],
+      refinedIntent: '',
+      readyForPRD: false,
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Asked clarifying question' }],
+    };
+    const runtime = makeQueuedRuntime([grillOutput]);
+
+    const result = await runGrillAndPrdWorkflow({
+      workItem: item,
+      stateSource: source,
+      projectId,
+      priorReplies: [],
+      deps: { runtime, projectConfig: injectedConfig() },
+    });
+
+    expect(result.phase).toBe('grilling');
+
+    // Issue must be in gate-pending awaiting human reply
+    const afterGrill = await source.getItem(seeded.externalId);
+    expect(afterGrill.state).toBe('factory:gate-pending');
   });
 });

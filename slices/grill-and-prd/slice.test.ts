@@ -437,6 +437,48 @@ describe('grill-and-prd: advisor budget exhausted', () => {
 });
 
 // ---------------------------------------------------------------------------
+// 4b. Advisor spend check — high priority, perAdvisorMaxUsd=1.0, spend=0.95
+// ---------------------------------------------------------------------------
+
+describe('grill-and-prd: advisor skipped when spend stub returns near-cap value', () => {
+  it('skips advisor with reason=budget when stubbed spend (0.95) + single-run budget > perAdvisorMaxUsd (1.0)', async () => {
+    const projectId = uniqueProjectId('advisor-spend-stub');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await seedFeatureItem(source, {
+      state: 'factory:grilling',
+      priority: 'high',
+    });
+    const workItem = await source.getItem(item.externalId);
+
+    const runtime = makeQueuedRuntime([validGrillReady(), validPRD()]);
+
+    // perAdvisorMaxUsd=1.0; FALLBACK_ADVISOR_BUDGET.maxBudgetUsd=1.0;
+    // spend stub returns 0.95 → 0.95 + 1.0 = 1.95 > 1.0 → budget unavailable
+    const result = await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies: [],
+      deps: {
+        runtime,
+        projectConfig: injectedConfig(1.0),
+        totalSpendForSkill: vi.fn().mockReturnValue(0.95),
+      },
+    });
+
+    expect(result.phase).toBe('prd-review');
+
+    const evs = eventStore.replay({ projectId, workItemId: workItem.id });
+    const skipped = evs.find((e) => e.kind === 'prd.advisor-skipped');
+    expect(skipped).toBeDefined();
+    expect((skipped?.payload as { reason: string }).reason).toBe('budget');
+
+    // Only grill + write-prd ran (no advisor)
+    expect(runtime.run).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 5. Max grill-rounds reached — 7 prior agent rounds, skill returns ready
 // ---------------------------------------------------------------------------
 
@@ -476,6 +518,67 @@ describe('grill-and-prd: max rounds reached, proceed straight to PRD', () => {
 
     // No new question-posted event
     expect(evs.find((e) => e.kind === 'grill.question-posted')).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5b. Round 8 hard-cap — griller still not ready, workflow forced to PRD
+// ---------------------------------------------------------------------------
+
+describe('grill-and-prd: round-8 hard-cap forces PRD drafting', () => {
+  it('forces PRD drafting on round 8 when griller returns readyForPRD=false', async () => {
+    const projectId = uniqueProjectId('round8-cap');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await seedFeatureItem(source, {
+      state: 'factory:gate-pending',
+      priority: 'medium',
+    });
+    const workItem = await source.getItem(item.externalId);
+
+    // Griller still returns not-ready on round 8
+    const grillStillNotReady = {
+      questions: ['Yet another clarification question?'],
+      refinedIntent: 'Improve onboarding (partially refined).',
+      readyForPRD: false,
+      decisionSummaries: [{ kind: 'UNCERTAINTY', summary: 'Still uncertain after 8 rounds.' }],
+    };
+
+    const runtime = makeQueuedRuntime([grillStillNotReady, validPRD()]);
+
+    // 7 prior agent turns (so roundNumber computes as 8)
+    const priorReplies = Array.from({ length: 14 }, (_, i) =>
+      i % 2 === 0
+        ? { role: 'agent' as const, content: `Round ${Math.floor(i / 2) + 1} question` }
+        : { role: 'user' as const, content: `Round ${Math.floor(i / 2) + 1} answer` },
+    );
+
+    const result = await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies,
+      deps: { runtime, projectConfig: injectedConfig() },
+    });
+
+    // Should have forced PRD drafting, not stayed in grilling
+    expect(result.phase).toBe('prd-review');
+
+    const evs = eventStore.replay({ projectId, workItemId: workItem.id });
+
+    // grill.completed emitted with forced:true
+    const completed = evs.find((e) => e.kind === 'grill.completed');
+    expect(completed).toBeDefined();
+    expect((completed?.payload as { forced?: boolean }).forced).toBe(true);
+    expect((completed?.payload as { rounds: number }).rounds).toBe(8);
+
+    // No new question was posted
+    expect(evs.find((e) => e.kind === 'grill.question-posted')).toBeUndefined();
+
+    // PRD was drafted
+    expect(evs.find((e) => e.kind === 'prd.drafted')).toBeDefined();
+
+    // grill + write-prd ran; advisor skipped (medium priority)
+    expect(runtime.run).toHaveBeenCalledTimes(2);
   });
 });
 
