@@ -24,9 +24,15 @@ export async function listIssues(
     : ((await resolveActiveMilestone(slug)).milestoneNumber ?? undefined);
   const items = await source.listOpenWork(milestoneNumber);
   const lastPersonaMap = getLastPersonaIdsByWorkItem(slug);
+  const titleByExternalId = new Map(items.map((i) => [i.externalId, i.title]));
   const enriched = items.map((item) => ({
     ...(item as object),
     lastPersonaId: lastPersonaMap.get((item as { id: string }).id) ?? null,
+    dependsOnTitles: Object.fromEntries(
+      (item.dependsOn ?? [])
+        .filter((ref) => titleByExternalId.has(ref))
+        .map((ref) => [ref, titleByExternalId.get(ref)!]),
+    ),
   }));
   return { ok: true, data: { items: enriched } };
 }

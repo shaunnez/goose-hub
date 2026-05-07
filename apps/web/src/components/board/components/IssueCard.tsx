@@ -48,7 +48,13 @@ export function IssueCard({
         : formatCost(costs.totalUsd, costs.hasEstimated ? 'estimated' : 'exact');
 
   const blockedTooltip = isBlocked
-    ? `Blocked by: ${item.dependsOn.map((r) => shortRef(r, item.repoRef)).join(', ')}`
+    ? `Blocked by: ${item.dependsOn
+        .map((r) => {
+          const short = shortRef(r, item.repoRef);
+          const title = item.dependsOnTitles?.[r];
+          return title ? `${short} — ${title}` : short;
+        })
+        .join(', ')}`
     : undefined;
   return (
     <Link

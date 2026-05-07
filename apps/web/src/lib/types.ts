@@ -23,6 +23,7 @@ export interface WorkItemDto {
   schedule: string;
   exec: string;
   dependsOn: string[];
+  dependsOnTitles?: Record<string, string>;
   blocks: string[];
   createdAt: string;
   lastPersonaId?: string | null;
