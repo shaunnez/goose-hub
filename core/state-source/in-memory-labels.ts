@@ -316,6 +316,14 @@ export class InMemoryLabelsSource implements StateSource {
     return issue?.prDiff ?? '--- a/mock.ts\n+++ b/mock.ts\n@@ -1 +1 @@\n-old\n+new\n';
   }
 
+  async listLabels(itemId: string): Promise<string[]> {
+    const number = parseIssueNumber(itemId);
+    const issue = this.getByExternalId(number);
+    if (issue == null) return [];
+    // Combine the canonical state label with extra labels
+    return [issue.state, ...issue.extraLabels];
+  }
+
   /**
    * Test helper: returns the set of extra labels applied via addLabels / removeLabel.
    * Not part of the StateSource interface.

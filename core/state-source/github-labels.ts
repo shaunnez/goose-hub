@@ -451,6 +451,17 @@ export class GitHubLabelsSource implements StateSource {
     }
   }
 
+  async listLabels(itemId: string): Promise<string[]> {
+    const number = parseIssueNumber(itemId);
+    const url = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels`;
+    const res = await this.ghFetch(url);
+    if (!res.ok) {
+      throw new Error(`Failed to list labels: ${res.status} ${res.statusText}`);
+    }
+    const labels = (await res.json()) as { name: string }[];
+    return labels.map((l) => l.name);
+  }
+
   async attach(_itemId: string, _artifact: Artifact): Promise<void> {
     throw new Error('not implemented in M1');
   }

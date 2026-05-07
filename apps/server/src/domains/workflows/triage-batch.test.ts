@@ -110,6 +110,7 @@ function makeMockSource(items: WorkItem[] = []): StateSource {
     getPrDiff: vi.fn().mockResolvedValue(''),
     addLabels: vi.fn(),
     removeLabel: vi.fn(),
+    listLabels: vi.fn().mockResolvedValue([]),
     watchForUpdates: vi.fn(),
   };
 }
@@ -602,8 +603,11 @@ describe('runTriageBatch onward routing after accept', () => {
     );
   });
 
-  it('routes type:feature to factory:dev-ready after accepting', async () => {
+  it('routes type:feature with factory:from-prd to factory:dev-ready after accepting', async () => {
     const source = makeMockSource([makeWorkItem()]);
+    // Seed the from-prd label so triage recognises it as a decomposed child
+    // biome-ignore lint/style/noNonNullAssertion: mock source always defines listLabels
+    vi.mocked(source.listLabels!).mockResolvedValue(['factory:accepted', 'factory:from-prd']);
     mockRuntime.run
       .mockResolvedValueOnce({
         output: { ...makeTriageOutput(), type: 'feature' },
@@ -623,6 +627,31 @@ describe('runTriageBatch onward routing after accept', () => {
       '42',
       'factory:accepted',
       'factory:dev-ready',
+    );
+  });
+
+  it('routes fresh type:feature (no factory:from-prd) to factory:grilling after accepting', async () => {
+    const source = makeMockSource([makeWorkItem()]);
+    // No factory:from-prd label — default mock returns []
+    mockRuntime.run
+      .mockResolvedValueOnce({
+        output: { ...makeTriageOutput(), type: 'feature' },
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeRepoMatchOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+    const { runTriageBatch } = await import('./triage-batch.js');
+    await runTriageBatch('goose-hub-self', source);
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:accepted',
+      'factory:grilling',
     );
   });
 

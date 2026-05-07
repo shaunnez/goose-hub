@@ -107,6 +107,7 @@ function makeMockSource(): StateSource {
     getPrDiff: vi.fn().mockResolvedValue(''),
     addLabels: vi.fn(),
     removeLabel: vi.fn(),
+    listLabels: vi.fn().mockResolvedValue([]),
     watchForUpdates: vi.fn(),
   };
 }

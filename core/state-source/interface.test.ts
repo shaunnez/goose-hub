@@ -76,6 +76,10 @@ class StubStateSource implements StateSource {
     return Promise.resolve();
   }
 
+  listLabels(_itemId: string): Promise<string[]> {
+    return Promise.resolve([]);
+  }
+
   attach(_itemId: string, _artifact: Artifact): Promise<void> {
     return Promise.resolve();
   }

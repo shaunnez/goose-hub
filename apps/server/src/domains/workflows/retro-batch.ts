@@ -6,9 +6,9 @@ import type {
   TriggerContext,
 } from '@goose-hub/core/workflows/retrospective.js';
 import { runRetrospectiveWorkflow } from '@goose-hub/core/workflows/retrospective.js';
-import { runSprintReviewWorkflow } from '@goose-hub/core/workflows/sprint-review.js';
 import { getProject } from '#shared/projects.js';
 import { getSourceForSlug } from '#shared/source.js';
+import { maybeFireSprintReview } from './sprint-review-trigger.js';
 
 function resolvePolicy(defaultTier: 'light' | 'deep' | undefined): RetrospectivePolicy {
   // `defaultTier: 'deep'` means run deep unconditionally. `light` (or unset)
@@ -72,67 +72,14 @@ export async function runRetroForItem(
   });
 
   // Auto-trigger sprint review when the last schedule:current item in the
-  // milestone reaches factory:done (i.e., the retro just completed above).
-  // Fire-and-forget — errors are logged but must not propagate to the caller.
+  // milestone reaches a terminal state (done/archived/rejected — PLAN §12.6).
+  // Fire-and-forget — errors are logged inside maybeFireSprintReview.
   const milestoneNumber = workItem.milestoneId != null ? Number(workItem.milestoneId) : null;
   const milestoneTitle = workItem.milestoneTitle ?? null;
 
   if (milestoneNumber != null && !Number.isNaN(milestoneNumber) && milestoneTitle != null) {
     // Run asynchronously so we don't block the retro batch tick
-    void maybeFireSprintReview(slug, stateSource, milestoneNumber, milestoneTitle);
-  }
-}
-
-/**
- * Fires sprint-review if all schedule:current items in the milestone are done
- * and no sprint-review issue already exists for the milestone.
- */
-async function maybeFireSprintReview(
-  slug: string,
-  stateSource: StateSource,
-  milestoneNumber: number,
-  milestoneTitle: string,
-): Promise<void> {
-  try {
-    const allItems = await stateSource.listWorkByMilestone(milestoneNumber);
-
-    // Check for remaining open schedule:current items
-    const openCurrentItems = allItems.filter(
-      (item) => item.schedule === 'current' && item.state !== 'factory:done',
-    );
-
-    if (openCurrentItems.length > 0) {
-      // Some items still pending — not the last one
-      return;
-    }
-
-    // Dedup: check if a sprint-review issue already exists
-    const sprintReviewTitle = `Sprint Review: ${milestoneTitle}`;
-    const alreadyExists = allItems.some((item) => item.title === sprintReviewTitle);
-    if (alreadyExists) {
-      logger.info('sprint-review: already exists, skipping', { slug, milestoneTitle });
-      return;
-    }
-
-    logger.info('sprint-review: all schedule:current items done, triggering sprint review', {
-      slug,
-      milestoneTitle,
-    });
-
-    await runSprintReviewWorkflow({
-      projectId: slug,
-      milestoneTitle,
-      milestoneNumber,
-      stateSource,
-    });
-
-    logger.info('sprint-review: completed', { slug, milestoneTitle });
-  } catch (err) {
-    logger.error('sprint-review: auto-trigger failed', {
-      slug,
-      milestoneTitle,
-      error: String(err),
-    });
+    void maybeFireSprintReview(slug, milestoneNumber, milestoneTitle, stateSource);
   }
 }
 

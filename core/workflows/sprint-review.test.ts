@@ -93,6 +93,7 @@ function makeMockSource(items: WorkItem[] = []): StateSource {
     setLabelInGroup: vi.fn().mockResolvedValue(undefined),
     addLabels: vi.fn().mockResolvedValue(undefined),
     removeLabel: vi.fn().mockResolvedValue(undefined),
+    listLabels: vi.fn().mockResolvedValue([]),
     attach: vi.fn().mockResolvedValue(undefined),
     createIssue: vi
       .fn()

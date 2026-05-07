@@ -268,8 +268,10 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
 
         // Promote child from factory:triaging (the createIssue default) to
         // factory:accepted, leaving exec:serial and mode:supervised unchanged.
+        // Apply factory:from-prd so triage skips grilling for these children
+        // if they ever re-enter triaging (e.g. after a needs-human recovery).
         await stateSource.removeLabel(created.externalId, 'factory:triaging');
-        await stateSource.addLabels(created.externalId, ['factory:accepted']);
+        await stateSource.addLabels(created.externalId, ['factory:accepted', 'factory:from-prd']);
       }
     } catch (loopErr) {
       // Partial-create: some children were created before the failure.

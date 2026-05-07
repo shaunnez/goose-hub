@@ -7,6 +7,7 @@ import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { createProjectAwareTargetSource } from '@goose-hub/core/state-source/dependency-resolver.js';
 import { parseAcceptanceCriteria } from '../domains/issues/parse-acceptance.js';
 import { runRetroForItem } from '../domains/workflows/retro-batch.js';
+import { maybeFireSprintReview } from '../domains/workflows/sprint-review-trigger.js';
 import { runTriageBatch } from '../domains/workflows/triage-batch.js';
 import { getProject } from './projects.js';
 import { getSourceForSlug } from './source.js';
@@ -527,6 +528,32 @@ async function dispatchInvestigationComplete(slug: string, issueNumber: number):
 }
 
 /**
+ * Handles terminal labels (factory:archived, factory:rejected) that bypass the
+ * retro path. Fetches the issue's milestone and fires maybeFireSprintReview so
+ * that the sprint-review trigger runs even when an issue is archived or rejected
+ * without going through retrospective (PLAN §12.6).
+ */
+async function dispatchTerminalLabel(slug: string, issueNumber: number): Promise<void> {
+  const source = await getSourceForSlug(slug);
+  if (source == null) {
+    logger.error('dispatchTerminalLabel: no source for slug', { slug, issueNumber });
+    return;
+  }
+  const item = await source.getItem(issueNumber.toString());
+  const milestoneNumber = item.milestoneId != null ? Number(item.milestoneId) : null;
+  const milestoneTitle = item.milestoneTitle ?? null;
+  if (milestoneNumber == null || Number.isNaN(milestoneNumber) || milestoneTitle == null) {
+    logger.info('dispatchTerminalLabel: no milestoneId, skipping sprint-review check', {
+      slug,
+      issueNumber,
+    });
+    return;
+  }
+  // Fire-and-forget; errors logged inside maybeFireSprintReview.
+  void maybeFireSprintReview(slug, milestoneNumber, milestoneTitle, source);
+}
+
+/**
  * Webhook label-driven dispatcher. Routes the factory:* label to the right
  * workflow without requiring the webhook handler to know about the
  * `workflows` or `slices` directory layout.
@@ -582,6 +609,11 @@ export async function dispatchForLabel(
   }
   if (labelName === 'factory:decomposing') {
     await dispatchDecomposePrd(slug, issueNumber);
+    return;
+  }
+  // Terminal labels that bypass retro — check for sprint-review eligibility.
+  if (labelName === 'factory:archived' || labelName === 'factory:rejected') {
+    await dispatchTerminalLabel(slug, issueNumber);
     return;
   }
   logger.info('dispatchForLabel: no workflow for label', { slug, labelName });

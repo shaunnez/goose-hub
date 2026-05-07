@@ -446,9 +446,11 @@ describe('children land at factory:accepted', () => {
       const child = await source.getItem(String(childNum));
       expect(child.state).toBe('factory:accepted');
 
-      // extraLabels must contain factory:accepted and must NOT contain factory:triaging
+      // extraLabels must contain factory:accepted and factory:from-prd,
+      // and must NOT contain factory:triaging
       const labels = source.getExtraLabels(String(childNum));
       expect(labels.has('factory:accepted')).toBe(true);
+      expect(labels.has('factory:from-prd')).toBe(true);
       expect(labels.has('factory:triaging')).toBe(false);
     }
   });

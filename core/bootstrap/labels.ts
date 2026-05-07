@@ -70,6 +70,11 @@ export const FACTORY_LABELS: Label[] = [
     description: 'Bootstrap PR; governance creation allowed',
   },
   { name: 'factory:docs', color: '0075ca', description: 'Plan/doc issue' },
+  {
+    name: 'factory:from-prd',
+    color: 'c4b5fd',
+    description: 'Child of a decomposed PRD; triage skips grilling',
+  },
 
   // type:*
   { name: 'type:feature', color: '0e8a16', description: 'New capability' },
