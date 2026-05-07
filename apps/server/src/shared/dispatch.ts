@@ -215,6 +215,7 @@ export async function dispatchQa(slug: string, issueNumber: number): Promise<voi
             expected: string;
             tolerance: string;
           }>;
+          runTests?: (() => Promise<null>) | undefined;
         },
       ) => Promise<unknown>;
     };

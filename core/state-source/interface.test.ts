@@ -76,6 +76,10 @@ class StubStateSource implements StateSource {
     return Promise.reject(new Error('not implemented'));
   }
 
+  getPrDiff(_itemId: string): Promise<string> {
+    return Promise.resolve('');
+  }
+
   watchForUpdates(_callback: (event: SourceEvent) => void): Promise<Subscription> {
     return Promise.resolve({ unsubscribe: () => {} });
   }

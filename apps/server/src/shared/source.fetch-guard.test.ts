@@ -17,7 +17,7 @@ describe('MOCK_SOURCE fetch guard', () => {
     process.env.MOCK_AGENTS = 'true';
     process.env.MOCK_OPEN_PR = 'true';
 
-    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0], _init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       if (/api\.github\.com|github\.com/.test(url)) {
         throw new Error(`[fetch-guard] Real GitHub fetch blocked in MOCK_SOURCE mode: ${url}`);
