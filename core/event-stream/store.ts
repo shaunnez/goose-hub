@@ -80,7 +80,16 @@ export type EventKind =
   | 'prd.advisor-skipped'
   // M13.08 PRD review actions (UI-driven approve / reject)
   | 'prd.approved'
-  | 'prd.rejected';
+  | 'prd.rejected'
+  // M19.01 Wave-1/Wave-2 swarm — sub-agent dispatch from skills (ADR 0030)
+  | 'swarm.heartbeat'
+  | 'swarm.scout-completed'
+  | 'swarm.scout-timeout'
+  | 'swarm.scout-failed'
+  | 'swarm.wave-completed'
+  | 'swarm.wave-incomplete'
+  | 'swarm.wave-halted'
+  | 'agent.cancelled';
 
 export interface AgentEvent {
   id: number;

@@ -85,6 +85,14 @@ export interface AgentConfig {
 export interface BudgetConfig {
   dailyTokens: number;
   maxParallelAgents: number;
+  /**
+   * Per-issue scout fan-out cap for Wave-1 swarm dispatch (M19.01, ADR 0030).
+   * Distinct from `maxParallelAgents` (which caps issue-level dispatch).
+   * Default 6 — matches Steve's canonical 6-scout roster (schema, code-path,
+   * pattern, test-inventory, dependency, user-journey). Does not consume
+   * the per-issue dispatch slot.
+   */
+  maxScoutAgents?: number;
   maxRetries: number;
   maxIssuesPerDayFromNonOwners: number;
   maxBashSeconds: number;

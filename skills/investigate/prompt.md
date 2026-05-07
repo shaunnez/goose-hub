@@ -18,14 +18,37 @@ The context contains a `<task>` block with:
 
 ## Investigation process
 
-Follow these steps systematically:
+> **Status (M19.01).** The Wave-1 / Wave-2 swarm protocol described below is the post-M19.01 *target* shape of an investigation. The primitives (`dispatchWave`, `crossValidate`, the 6 scouts, the 2 Wave-2 agents) are landed and unit-tested, but the production `runInvestigateWorkflow` is **not yet wired** to dispatch them automatically. Until a later M19 issue connects them, this skill operates in **single-agent mode**: you read the worktree directly and skip the wave steps. When the workflow caller passes Wave-1 / Wave-2 reports through `<scout_reports>`, switch to wave-aware mode and use them as primary evidence. Otherwise treat the wave protocol below as documentation, not a runtime guarantee.
 
-### Discipline — applied throughout
+In wave-aware mode, you decide WHICH scouts ran and WHAT each one focused on; the orchestrator (when wired) handles fan-out, holdout boundaries, timeouts, and cross-validation.
+
+### Wave protocol overview (target shape)
+
+1. **Wave 1 — fact-gathering.** Up to 6 scouts run in parallel, each on one narrow concern. Output is a flat list of `{file, line?, fact, confidence}` findings. Read-only. No synthesis, no hypotheses.
+2. **Cross-validation.** The orchestrator detects contradictions (same `file:line`, different facts) **across distinct scouts** before Wave 2 runs. If a contradiction is detected, you decide whether to dispatch a tie-breaker scout or surface it as an open question.
+3. **Wave 2 — synthesis.** Up to 2 deep agents (`wave2-interface-designer`, `wave2-risk-analyst`) consume the cross-validated reports and emit paste-ready artefacts (Zod schemas, function signatures, DDL) and a structured risk register.
+4. **Synthesis** (your turn). You read all reports and write the final `findings`, `keyFiles`, `confidence`, and `requiresBrowserRepro`.
+
+### Scout roster (Wave 1)
+
+| Scout | When to dispatch |
+|---|---|
+| `scout-schema` | The work item touches DB columns, Zod schemas, or boundary types |
+| `scout-code-path` | A specific symbol or function is named in the issue |
+| `scout-pattern` | The fix should follow an existing idiom; check it is followed elsewhere |
+| `scout-test-inventory` | You need to know which tests already cover the area |
+| `scout-dependency` | The change crosses package boundaries or touches imports |
+| `scout-user-journey` | The bug manifests in a UI flow or API surface the user can see |
+
+When wired, dispatch the 4–6 scouts that are actually relevant. Do **not** dispatch all six reflexively — empty findings from an irrelevant scout add noise to cross-validation.
+
+### Discipline — applied throughout (single-agent and wave-aware modes)
 
 - **Orient first.** Before searching for anything, list the top-level directory structure to understand the codebase layout. Know where `core/`, `apps/`, and `slices/` live before diving in.
 - **Read before hypothesising.** Read actual source files before forming hypotheses. File names and directory names are not evidence. Code is evidence.
 - **Search before assuming location.** Grep for symbol definitions before assuming a file path. A module named `Sidebar` may not be in `sidebar.ts` — search for the export.
 - **Widen before speculating.** If two search attempts return no relevant results, widen the search term or try a synonym. Do not speculate about root cause from empty search results.
+- **Holdout discipline per child spawn.** When wave-aware: you never inject your own decision summaries or chain-of-thought into a scout's context. Scouts get only the work item, their narrow `scoutFocus`, and the worktree path. Synthesis stays with you and Wave 2.
 
 ### Step 1 — Read the issue
 
@@ -37,27 +60,33 @@ Carefully read the issue title and body. Identify:
 
 Emit: `[decision] READ: Issue #<number> — <one-sentence summary of the bug>`
 
-### Step 2 — Identify entry points
+### Step 2 — Identify entry points (single-agent mode) or read Wave-1 reports (wave-aware mode)
 
-Based on the issue text, identify likely entry points in the codebase:
+**Single-agent mode (current default):** identify likely entry points from the issue text, then trace the code path directly:
 - Search for function names, error messages, or identifiers mentioned in the issue
 - Use search tools to locate files relevant to the symptom area
 - Read directory structure to understand the code organisation
 
-Emit: `[decision] READ: Identified entry points — <comma-separated file or directory names>`
+**Wave-aware mode:** if `<scout_reports>` is present in your context, read the cross-validated Wave-1 reports first; treat them as primary evidence and only re-investigate gaps. If `crossValidate` has flagged contradictions across scouts, surface them in `openQuestions`. Wave-1 partial-failure rules (informational — the orchestrator enforces them before you see the reports):
+- ≥3 scouts succeeded AND ≤1 failed → wave advanced; reports are usable.
+- 2+ scouts failed → orchestrator halted the wave and escalated; you should not be running.
 
-### Step 3 — Trace the code path
+Emit: `[decision] READ: Identified entry points — <comma-separated file or directory names>` (single-agent) or `[decision] READ: Wave-1 reports — <one-sentence summary>` (wave-aware).
 
-Starting from the entry points, trace the execution path:
+### Step 3 — Trace the code path (single-agent mode) or read Wave-2 artefacts (wave-aware mode)
+
+**Single-agent mode:** starting from the entry points, trace the execution path:
 - Read the relevant source files
 - Follow imports and function calls related to the reported symptom
 - Look for validation logic, error handling, or data transformation that could cause the bug
+
+**Wave-aware mode:** if Wave-2 deep-agent outputs are also present (`wave2-interface-designer` artefacts, `wave2-risk-analyst` risks), read them as the synthesis layer; do not re-derive what they already produced. Use the worktree only to verify their citations.
 
 Emit: `[decision] READ: Traced code path through <key files> — <one-sentence hypothesis>`
 
 ### Step 4 — Form root cause hypothesis
 
-Based on your investigation, form a hypothesis:
+Based on your investigation (single-agent traces, or Wave-1 + Wave-2 outputs in wave-aware mode), form a hypothesis:
 - Identify the specific code location most likely responsible
 - Note any related files that could contribute
 - Assess your confidence: `low` (many unknowns), `medium` (probable cause identified), `high` (root cause clear)
