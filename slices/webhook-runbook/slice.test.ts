@@ -4,10 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 describe('M12.08: webhook-setup runbook', () => {
   it('webhook-setup.md exists and contains required sections', () => {
-    const runbookPath = resolve(
-      import.meta.dirname,
-      '../../docs/runbooks/webhook-setup.md',
-    );
+    const runbookPath = resolve(import.meta.dirname, '../../docs/runbooks/webhook-setup.md');
     const content = readFileSync(runbookPath, 'utf-8');
 
     // Verify required headings are present
@@ -24,10 +21,7 @@ describe('M12.08: webhook-setup runbook', () => {
   });
 
   it('webhook-setup.md documents the correct endpoint path', () => {
-    const runbookPath = resolve(
-      import.meta.dirname,
-      '../../docs/runbooks/webhook-setup.md',
-    );
+    const runbookPath = resolve(import.meta.dirname, '../../docs/runbooks/webhook-setup.md');
     const content = readFileSync(runbookPath, 'utf-8');
 
     // Verify the correct endpoint is documented
@@ -35,10 +29,7 @@ describe('M12.08: webhook-setup runbook', () => {
   });
 
   it('webhook-setup.md documents GITHUB_WEBHOOK_SECRET env var', () => {
-    const runbookPath = resolve(
-      import.meta.dirname,
-      '../../docs/runbooks/webhook-setup.md',
-    );
+    const runbookPath = resolve(import.meta.dirname, '../../docs/runbooks/webhook-setup.md');
     const content = readFileSync(runbookPath, 'utf-8');
 
     // Verify the secret setup is documented
@@ -46,10 +37,7 @@ describe('M12.08: webhook-setup runbook', () => {
   });
 
   it('webhook-setup.md documents required events', () => {
-    const runbookPath = resolve(
-      import.meta.dirname,
-      '../../docs/runbooks/webhook-setup.md',
-    );
+    const runbookPath = resolve(import.meta.dirname, '../../docs/runbooks/webhook-setup.md');
     const content = readFileSync(runbookPath, 'utf-8');
 
     // Verify required events are documented
