@@ -513,16 +513,24 @@ async function createBranch(input: CreateBranchInput): Promise<void> {
   }
 }
 
-async function getRepoDefaultBranch(
+async function getRepoInfo(
   fetchImpl: typeof fetch,
   token: string,
   repoRef: string,
-): Promise<string> {
+): Promise<{ defaultBranch: string; description: string }> {
   const meta = await ghJson(fetchImpl, `https://api.github.com/repos/${repoRef}`, {
     method: 'GET',
     token,
   });
-  return String(meta.default_branch ?? 'main');
+  return {
+    defaultBranch: String(meta.default_branch ?? 'main'),
+    description: String(meta.description ?? ''),
+  };
+}
+
+export function renderReposMd(slug: string, repoRef: string, description: string): string {
+  const desc = description.trim() || `${repoRef} managed by Factory.`;
+  return `# Repo Registry — ${slug}\n\n### [${repoRef}](https://github.com/${repoRef})\n**Description:** ${desc}\n`;
 }
 
 async function putFileOnBranch(input: {
@@ -642,9 +650,12 @@ export async function bootstrapProject(
   const labels = await installLabels(input.repoRef, input.token, fetchImpl);
 
   // ── Step 4: scaffold target-projects/<slug>/project.config.ts ────────
-  // Fetch the *target* repo's default branch (not goose-hub's) so projects
-  // that use master/develop/etc. don't get incorrectly scaffolded with main.
-  const targetDefaultBranch = await getRepoDefaultBranch(fetchImpl, input.token, input.repoRef);
+  // Fetch the *target* repo's default branch and description in one round-trip.
+  const { defaultBranch: targetDefaultBranch, description: targetDescription } = await getRepoInfo(
+    fetchImpl,
+    input.token,
+    input.repoRef,
+  );
   const detectedAt = new Date().toISOString();
   const configContent = renderProjectConfig({
     slug,
@@ -683,6 +694,16 @@ export async function bootstrapProject(
     path: `target-projects/${slug}/project.config.ts`,
     content: configContent,
     message: `bootstrap: scaffold target-projects/${slug}/project.config.ts`,
+  });
+
+  const reposMdContent = renderReposMd(slug, input.repoRef, targetDescription);
+  await putFileOnBranch({
+    fetchImpl,
+    token: input.token,
+    branch: branchName,
+    path: `target-projects/${slug}/repos.md`,
+    content: reposMdContent,
+    message: `bootstrap: scaffold target-projects/${slug}/repos.md`,
   });
 
   // CLAUDE.md is a *target-repo* concern, not a goose-hub concern. The

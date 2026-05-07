@@ -21,6 +21,14 @@ vi.mock('../../shared/source.js', () => ({
   getSourceForSlug: mockGetSourceForSlug,
 }));
 
+vi.mock('@goose-hub/core/projects/loader.js', () => ({
+  loadProjects: vi
+    .fn()
+    .mockResolvedValue([
+      { id: 'goose-hub-self', slug: 'goose-hub-self', repos: ['shaunnez/goose-hub'] },
+    ]),
+}));
+
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 function sign(body: string, secret: string): string {

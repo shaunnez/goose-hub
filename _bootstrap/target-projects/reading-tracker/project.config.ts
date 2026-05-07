@@ -67,14 +67,14 @@ const config: ProjectConfig = {
     },
   },
   budgets: {
-    dailyTokens: 2_000_000,
-    maxParallelAgents: 2,
-    maxRetries: 2,
-    maxIssuesPerDayFromNonOwners: 3,
-    maxBashSeconds: 120,
-    perWorkflowMaxUsd: 8,
-    perAgentMaxUsd: 8,
-    perAdvisorMaxUsd: 2,
+    dailyTokens: 0,
+    maxParallelAgents: 0,
+    maxRetries: 0,
+    maxIssuesPerDayFromNonOwners: 0,
+    maxBashSeconds: 0,
+    perWorkflowMaxUsd: 0,
+    perAgentMaxUsd: 0,
+    perAdvisorMaxUsd: 0,
   },
   governance: {
     immutablePaths: [

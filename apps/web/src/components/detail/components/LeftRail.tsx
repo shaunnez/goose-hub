@@ -1,10 +1,10 @@
 import { cn } from '@/lib/cn';
-import {
-  CODE_ACTIVE_STATES,
-  GRILL_ACTIVE_STATES,
-  PRD_ACTIVE_STATES,
-  RETRO_ACTIVE_STATES,
-} from '@/lib/constants';
+// import {
+//   CODE_ACTIVE_STATES,
+//   GRILL_ACTIVE_STATES,
+//   PRD_ACTIVE_STATES,
+//   RETRO_ACTIVE_STATES,
+// } from '@/lib/constants';
 import {
   Brain,
   Bug,
@@ -41,23 +41,23 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
 // Sections whose visibility is gated by issue state. When `itemState` is
 // not in the set we render no rail entry at all (per the M13 spec
 // requirement that Grill be ABSENT — not collapsed — outside Discover).
-const STATE_GATED: Record<string, ReadonlySet<string>> = {
-  code: CODE_ACTIVE_STATES,
-  retrospective: RETRO_ACTIVE_STATES,
-  prd: PRD_ACTIVE_STATES,
-  grill: GRILL_ACTIVE_STATES,
-};
+// const STATE_GATED: Record<string, ReadonlySet<string>> = {
+//   code: CODE_ACTIVE_STATES,
+//   retrospective: RETRO_ACTIVE_STATES,
+//   prd: PRD_ACTIVE_STATES,
+//   grill: GRILL_ACTIVE_STATES,
+// };
 
 // Sections that should be COMPLETELY HIDDEN when their state gate fails,
 // rather than rendered as a deferred-state link. Both Grill and PRD are
-// purely Discover-lane surfaces so they're hidden outside that lane.
-const STATE_HIDE_WHEN_GATED = new Set(['grill', 'prd']);
+// // purely Discover-lane surfaces so they're hidden outside that lane.
+// const STATE_HIDE_WHEN_GATED = new Set(['grill', 'prd']);
 
-interface LeftRailProps {
-  itemState?: string;
-}
-
-export function LeftRail({ itemState }: LeftRailProps) {
+// interface LeftRailProps {
+//   itemState?: string;
+// }
+// { itemState }: LeftRailProps
+export function LeftRail() {
   const { slug = 'goose-hub-self', id = '' } = useParams<{ slug: string; id: string }>();
   const location = useLocation();
 
@@ -83,15 +83,15 @@ export function LeftRail({ itemState }: LeftRailProps) {
           const number = String(idx + 1).padStart(2, '0');
           const Icon = SECTION_ICONS[section.key];
 
-          const stateGate = STATE_GATED[section.key];
-          const passesStateGate =
-            stateGate == null ? true : itemState != null && stateGate.has(itemState);
+          // const stateGate = STATE_GATED[section.key];
+          // const passesStateGate =
+          //   stateGate == null ? true : itemState != null && stateGate.has(itemState);
           // Sections in STATE_HIDE_WHEN_GATED disappear entirely when their
           // gate doesn't pass — used for Discover-only tabs like Grill and PRD.
-          if (stateGate != null && !passesStateGate && STATE_HIDE_WHEN_GATED.has(section.key)) {
-            return null;
-          }
-          const available = stateGate != null ? passesStateGate : section.available;
+          // if (stateGate != null && !passesStateGate && STATE_HIDE_WHEN_GATED.has(section.key)) {
+          //   return null;
+          // }
+          const available = true; // stateGate != null ? passesStateGate : section.available;
 
           const unavailableTitle =
             section.key === 'code'

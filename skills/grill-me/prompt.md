@@ -28,9 +28,18 @@ Set `readyForPRD: true` when:
 
 When `readyForPRD: true`, `questions` may be empty (no further question needed).
 
+## Quality bar
+
+- One question per round. No lists of questions.
+- Questions are specific, not generic ("What problem are you solving?" is too vague — "Is this feature only for admin users or all users?" is right).
+- `refinedIntent` gets sharper each round. It should not be identical to the previous round unless the answer added nothing.
+- Mid-run, emit a live `[decision] PLAN: <one sentence>` marker identifying the unknown you chose to interrogate.
+
+[decision] PLAN: Selected highest-value unknown to interrogate based on work item body and prior replies
+
 ## Output format
 
-Return a JSON object with this exact structure:
+Return a single JSON object conforming to this exact structure. Free-text-only output fails the run. Your entire response must be valid JSON — no prose, no preamble, no explanation outside the object.
 
 ```json
 {
@@ -45,12 +54,3 @@ Return a JSON object with this exact structure:
 ```
 
 `decisionSummaries` must have at least one entry. Include one per major decision or uncertainty surfaced this round.
-
-[decision] PLAN: Selected highest-value unknown to interrogate based on work item body and prior replies
-
-## Quality bar
-
-- One question per round. No lists of questions.
-- Questions are specific, not generic ("What problem are you solving?" is too vague — "Is this feature only for admin users or all users?" is right).
-- `refinedIntent` gets sharper each round. It should not be identical to the previous round unless the answer added nothing.
-- Free-text-only output fails review. Return JSON always.

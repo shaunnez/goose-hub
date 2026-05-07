@@ -3,6 +3,7 @@ import {
   bootstrapProject,
   parseRepoRef,
   renderProjectConfig,
+  renderReposMd,
   sanitiseSlug,
   summariseStack,
 } from '@goose-hub/core/workflows/bootstrap-project.js';
@@ -42,6 +43,8 @@ function makeMockFetch(handlers: {
   defaultBranch?: string;
   /** Default branch name for the *target* repo (defaults to 'main'). */
   targetDefaultBranch?: string;
+  /** Description for the *target* repo (defaults to empty string). */
+  targetDescription?: string;
   /** PR number / html_url to return for a successfully opened PR. */
   openedPr?: { number: number; html_url: string };
   /** When true, POST /git/refs returns 422 "Reference already exists". */
@@ -110,13 +113,16 @@ function makeMockFetch(handlers: {
       return jsonResponse({ ref: (parsedBody as { ref: string }).ref }, 201);
     }
 
-    // 4b) Target repo metadata (used to discover its default branch).
+    // 4b) Target repo metadata (used to discover its default branch + description).
     if (
       method === 'GET' &&
       /^https:\/\/api\.github\.com\/repos\/[^/]+\/[^/]+$/.test(urlStr) &&
       urlStr !== 'https://api.github.com/repos/shaunnez/goose-hub'
     ) {
-      return jsonResponse({ default_branch: handlers.targetDefaultBranch ?? 'main' });
+      return jsonResponse({
+        default_branch: handlers.targetDefaultBranch ?? 'main',
+        description: handlers.targetDescription ?? '',
+      });
     }
 
     // 5) Put file via Contents API.
@@ -269,6 +275,24 @@ describe('renderProjectConfig', () => {
 });
 
 // ---------------------------------------------------------------------------
+// renderReposMd
+// ---------------------------------------------------------------------------
+
+describe('renderReposMd', () => {
+  it('includes slug, repoRef, and provided description', () => {
+    const out = renderReposMd('my-app', 'octo/my-app', 'A widget factory.');
+    expect(out).toContain('Repo Registry — my-app');
+    expect(out).toContain('[octo/my-app](https://github.com/octo/my-app)');
+    expect(out).toContain('A widget factory.');
+  });
+
+  it('falls back to default description when empty', () => {
+    const out = renderReposMd('my-app', 'octo/my-app', '');
+    expect(out).toContain('octo/my-app managed by Factory.');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // bootstrapProject — happy path
 // ---------------------------------------------------------------------------
 
@@ -363,6 +387,17 @@ describe('bootstrapProject — happy path', () => {
     const decoded = Buffer.from(putBody.content, 'base64').toString('utf-8');
     expect(decoded).toContain("slug: 'widgets'");
     expect(decoded).toContain("repo: 'octo/widgets'");
+
+    // repos.md was also pushed to the bootstrap branch.
+    const reposPut = recorded.find(
+      (r) => r.method === 'PUT' && r.url.includes('/contents/target-projects/widgets/repos.md'),
+    );
+    expect(reposPut).toBeDefined();
+    const reposPutBody = reposPut?.body as { branch: string; content: string; message: string };
+    expect(reposPutBody.branch).toBe('bootstrap/widgets');
+    const reposDecoded = Buffer.from(reposPutBody.content, 'base64').toString('utf-8');
+    expect(reposDecoded).toContain('octo/widgets');
+    expect(reposDecoded).toContain('Repo Registry');
   });
 
   it('CLAUDE.md update path: diff is included in PR body', async () => {

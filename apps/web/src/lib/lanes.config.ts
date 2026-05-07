@@ -73,7 +73,7 @@ export const LANES: readonly LaneConfig[] = [
   {
     key: 'blocked',
     label: 'Blocked',
-    states: ['factory:needs-human'],
+    states: ['factory:needs-human', 'factory:gate-pending'],
     hiddenByDefault: false,
   },
   {

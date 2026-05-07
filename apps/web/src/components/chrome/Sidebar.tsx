@@ -62,13 +62,6 @@ function buildItems(slug: string | undefined): SidebarItem[] {
       icon: <Settings size={14} />,
       available: true,
     },
-    {
-      to: `/projects/${project}/bootstrap`,
-      label: 'Bootstrap',
-      icon: <Rocket size={14} />,
-      available: false,
-      milestone: 'M12',
-    },
   ];
 }
 

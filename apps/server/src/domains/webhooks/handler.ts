@@ -1,12 +1,23 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { logger } from '@goose-hub/core/logger.js';
+import { loadProjects } from '@goose-hub/core/projects/loader.js';
+import { targetProjectsRoot } from '@goose-hub/target-projects';
 import type { Context } from 'hono';
 import { dispatchForLabel, dispatchTriageBatch } from '#shared/dispatch.js';
 
-/** Map from GitHub repo full name → project slug */
-const REPO_TO_SLUG: Record<string, string> = {
-  'shaunnez/goose-hub': 'goose-hub-self',
-};
+async function buildRepoSlugMap(): Promise<Record<string, string>> {
+  const projects = await loadProjects(targetProjectsRoot);
+  const map: Record<string, string> = {};
+  for (const cfg of projects) {
+    for (const repo of cfg.repos ?? []) {
+      if (map[repo] != null) {
+        logger.warn('duplicate repo in project configs, last-wins', { repo, slug: cfg.slug });
+      }
+      map[repo] = cfg.slug;
+    }
+  }
+  return map;
+}
 
 export function verifyGitHubSignature(body: string, signature: string, secret: string): boolean {
   const expected = `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
@@ -55,7 +66,8 @@ export async function handleGitHubWebhook(c: Context): Promise<Response> {
   }
 
   const repoName = payload.repository?.full_name ?? '';
-  const slug = REPO_TO_SLUG[repoName];
+  const repoToSlug = await buildRepoSlugMap();
+  const slug = repoToSlug[repoName];
 
   if (slug == null) {
     return c.json({
