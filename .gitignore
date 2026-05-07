@@ -8,3 +8,5 @@ dist
 goose-hub.db
 claude-design/
 coverage/
+.codex
+AGENTS.md
