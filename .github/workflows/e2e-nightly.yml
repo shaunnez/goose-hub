@@ -30,9 +30,6 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm --filter @goose-hub/web exec playwright install chromium --with-deps
 
-      - name: Build server
-        run: pnpm --filter @goose-hub/server build
-
       - name: Run real-GitHub E2E specs
         run: pnpm --filter @goose-hub/web test:e2e
         env:

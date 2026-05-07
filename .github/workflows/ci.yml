@@ -65,9 +65,6 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm --filter @goose-hub/web exec playwright install chromium --with-deps
 
-      - name: Build server
-        run: pnpm --filter @goose-hub/server build
-
       - name: Run pipeline E2E (MOCK_AGENTS + MOCK_SOURCE)
         run: pnpm --filter @goose-hub/web test:e2e:pipeline
         env:
