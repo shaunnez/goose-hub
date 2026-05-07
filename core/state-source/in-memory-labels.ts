@@ -1,4 +1,5 @@
 import { resolveState } from '../state-machine/conflict-resolver.js';
+import { STATES } from '../state-machine/states.js';
 import type { StateName } from '../state-machine/states.js';
 import { isLegalTransition } from '../state-machine/transitions.js';
 import type {
@@ -48,6 +49,8 @@ interface MockIssueStore {
   comments: IssueComment[];
   createdAt: Date;
   prDiff?: string;
+  /** Arbitrary extra labels not tracked by the enum fields above. */
+  extraLabels: Set<string>;
 }
 
 const DEFAULT_MILESTONE: Milestone = {
@@ -228,6 +231,30 @@ export class InMemoryLabelsSource implements StateSource {
     }
   }
 
+  async addLabels(itemId: string, labels: string[]): Promise<void> {
+    const number = parseIssueNumber(itemId);
+    const issue = this.getByExternalId(number);
+    if (issue == null) throw new Error(`InMemoryLabelsSource: issue #${number} not found`);
+    const stateSet = new Set<string>(STATES);
+    for (const label of labels) {
+      issue.extraLabels.add(label);
+      // If this label is a factory state, update the state field so getItem
+      // reflects the promotion (mirrors what GitHub does when a factory:* label
+      // is added to an issue).
+      if (stateSet.has(label)) {
+        issue.state = label as StateName;
+      }
+    }
+  }
+
+  async removeLabel(itemId: string, name: string): Promise<void> {
+    const number = parseIssueNumber(itemId);
+    const issue = this.getByExternalId(number);
+    if (issue == null) throw new Error(`InMemoryLabelsSource: issue #${number} not found`);
+    // Idempotent: deleting a non-existent label is a no-op.
+    issue.extraLabels.delete(name);
+  }
+
   async attach(_itemId: string, _artifact: Artifact): Promise<void> {
     throw new Error('not implemented in M1');
   }
@@ -257,6 +284,7 @@ export class InMemoryLabelsSource implements StateSource {
       blocks: [],
       comments: [],
       createdAt: new Date(),
+      extraLabels: new Set<string>(),
     };
     this.store.set(externalId, issue);
     return this.toWorkItem(issue);
@@ -286,6 +314,16 @@ export class InMemoryLabelsSource implements StateSource {
     const number = parseIssueNumber(itemId);
     const issue = this.getByExternalId(number);
     return issue?.prDiff ?? '--- a/mock.ts\n+++ b/mock.ts\n@@ -1 +1 @@\n-old\n+new\n';
+  }
+
+  /**
+   * Test helper: returns the set of extra labels applied via addLabels / removeLabel.
+   * Not part of the StateSource interface.
+   */
+  getExtraLabels(itemId: string): Set<string> {
+    const number = parseIssueNumber(itemId);
+    const issue = this.getByExternalId(number);
+    return issue?.extraLabels ?? new Set();
   }
 
   async watchForUpdates(_callback: (event: SourceEvent) => void): Promise<Subscription> {

@@ -1455,3 +1455,100 @@ describe('listOpenWork — milestone parameter', () => {
     expect(item.milestoneTitle).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// addLabels
+// ---------------------------------------------------------------------------
+
+describe('addLabels', () => {
+  it('POSTs labels to the GitHub additive endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const source = makeSource();
+    await source.addLabels('github:shaunnez/goose-hub#10', ['factory:accepted', 'exec:serial']);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain('/issues/10/labels');
+    expect((init as RequestInit).method).toBe('POST');
+    const body = JSON.parse((init as RequestInit).body as string) as { labels: string[] };
+    expect(body.labels).toContain('factory:accepted');
+    expect(body.labels).toContain('exec:serial');
+  });
+
+  it('is a no-op when the labels array is empty', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const source = makeSource();
+    await source.addLabels('10', []);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('throws when the POST fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(new Response('', { status: 422, statusText: 'Unprocessable Entity' })),
+    );
+
+    const source = makeSource();
+    await expect(source.addLabels('10', ['factory:accepted'])).rejects.toThrow(
+      'Failed to add labels',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// removeLabel
+// ---------------------------------------------------------------------------
+
+describe('removeLabel', () => {
+  it('DELETEs the label from the GitHub endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('', { status: 200 }));
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const source = makeSource();
+    await source.removeLabel('github:shaunnez/goose-hub#10', 'factory:triaging');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain('/issues/10/labels/');
+    expect(url).toContain(encodeURIComponent('factory:triaging'));
+    expect((init as RequestInit).method).toBe('DELETE');
+  });
+
+  it('does not throw on 404 (idempotent)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('', { status: 404, statusText: 'Not Found' })),
+    );
+
+    const source = makeSource();
+    await expect(source.removeLabel('10', 'factory:triaging')).resolves.toBeUndefined();
+  });
+
+  it('throws on non-404 error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(new Response('', { status: 500, statusText: 'Internal Server Error' })),
+    );
+
+    const source = makeSource();
+    await expect(source.removeLabel('10', 'factory:triaging')).rejects.toThrow(
+      'Failed to remove label',
+    );
+  });
+});

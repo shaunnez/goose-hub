@@ -162,101 +162,131 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
     const parentMilestoneNumber =
       workItem.milestoneId != null ? Number(workItem.milestoneId) : null;
 
-    for (let i = 0; i < issues.length; i++) {
-      const issue = issues[i];
+    try {
+      for (let i = 0; i < issues.length; i++) {
+        const issue = issues[i];
 
-      // Resolve cross-sibling refs in the body using already-created siblings
-      const resolvedBody = resolveSiblingRefs(issue.body, siblingNumbers);
+        // Resolve cross-sibling refs in the body using already-created siblings
+        let resolvedBody = resolveSiblingRefs(issue.body, siblingNumbers);
 
-      // Determine labels for this child
-      const labelSet = new Set(issue.labels.map((l) => l.toLowerCase()));
+        // If the skill emitted a structured dependsOn list, and the body does not
+        // already have a "## Depends on" section, append one using the real issue
+        // numbers from the already-created siblings map.
+        if (issue.dependsOn.length > 0 && !/^##\s+depends\s+on\b/im.test(resolvedBody)) {
+          const depLines = issue.dependsOn
+            .filter((idx) => siblingNumbers.has(idx))
+            .map((idx) => `- #${siblingNumbers.get(idx)}`);
+          if (depLines.length > 0) {
+            resolvedBody = `${resolvedBody}\n\n## Depends on\n${depLines.join('\n')}`;
+          }
+        }
 
-      // Derive type, priority, schedule from labels (fall back to defaults)
-      let issueType: 'feature' | 'bug' | 'chore' | 'research' = 'feature';
-      let issuePriority: 'critical' | 'high' | 'medium' | 'low' = 'medium';
+        // Determine labels for this child
+        const labelSet = new Set(issue.labels.map((l) => l.toLowerCase()));
 
-      // The decompose-issues skill emits `type:*` labels (issue #314 default
-      // labels include `type:feature`); accept both forms so codex-flagged
-      // outputs like `type:bug` correctly map to bug.
-      for (const lbl of labelSet) {
-        if (lbl === 'bug' || lbl === 'type:bug') {
-          issueType = 'bug';
-          break;
+        // Derive type, priority, schedule from labels (fall back to defaults)
+        let issueType: 'feature' | 'bug' | 'chore' | 'research' = 'feature';
+        let issuePriority: 'critical' | 'high' | 'medium' | 'low' = 'medium';
+
+        // The decompose-issues skill emits `type:*` labels (issue #314 default
+        // labels include `type:feature`); accept both forms so codex-flagged
+        // outputs like `type:bug` correctly map to bug.
+        for (const lbl of labelSet) {
+          if (lbl === 'bug' || lbl === 'type:bug') {
+            issueType = 'bug';
+            break;
+          }
+          if (lbl === 'chore' || lbl === 'type:chore') {
+            issueType = 'chore';
+            break;
+          }
+          if (lbl === 'research' || lbl === 'type:research') {
+            issueType = 'research';
+            break;
+          }
+          if (lbl === 'feature' || lbl === 'type:feature') {
+            issueType = 'feature';
+            break;
+          }
         }
-        if (lbl === 'chore' || lbl === 'type:chore') {
-          issueType = 'chore';
-          break;
+        for (const lbl of labelSet) {
+          if (lbl === 'critical' || lbl === 'priority:critical') {
+            issuePriority = 'critical';
+            break;
+          }
+          if (lbl === 'high' || lbl === 'priority:high') {
+            issuePriority = 'high';
+            break;
+          }
+          if (lbl === 'low' || lbl === 'priority:low') {
+            issuePriority = 'low';
+            break;
+          }
+          if (lbl === 'medium' || lbl === 'priority:medium') {
+            issuePriority = 'medium';
+            break;
+          }
         }
-        if (lbl === 'research' || lbl === 'type:research') {
-          issueType = 'research';
-          break;
+
+        const created = await stateSource.createIssue({
+          title: issue.title,
+          body: resolvedBody,
+          type: issueType,
+          priority: issuePriority,
+        });
+
+        const childNumber = Number(created.externalId);
+        siblingNumbers.set(i, childNumber);
+        childIssueNumbers.push(childNumber);
+
+        // Set milestone if parent has one
+        if (parentMilestoneNumber != null && !Number.isNaN(parentMilestoneNumber)) {
+          await stateSource.setMilestone(created.externalId, parentMilestoneNumber);
         }
-        if (lbl === 'feature' || lbl === 'type:feature') {
-          issueType = 'feature';
-          break;
+
+        // Apply label groups via setLabelInGroup (supports priority, schedule, type)
+        await stateSource.setLabelInGroup(created.externalId, 'type', issueType);
+        await stateSource.setLabelInGroup(created.externalId, 'priority', issuePriority);
+
+        // Determine schedule label (default: 'current')
+        let scheduleValue = 'current';
+        for (const lbl of labelSet) {
+          if (lbl === 'next' || lbl === 'schedule:next') {
+            scheduleValue = 'next';
+            break;
+          }
+          if (lbl === 'later' || lbl === 'schedule:later') {
+            scheduleValue = 'later';
+            break;
+          }
+          if (lbl === 'current' || lbl === 'schedule:current') {
+            scheduleValue = 'current';
+            break;
+          }
         }
+        await stateSource.setLabelInGroup(created.externalId, 'schedule', scheduleValue);
+
+        // Promote child from factory:triaging (the createIssue default) to
+        // factory:accepted, leaving exec:serial and mode:supervised unchanged.
+        await stateSource.removeLabel(created.externalId, 'factory:triaging');
+        await stateSource.addLabels(created.externalId, ['factory:accepted']);
       }
-      for (const lbl of labelSet) {
-        if (lbl === 'critical' || lbl === 'priority:critical') {
-          issuePriority = 'critical';
-          break;
-        }
-        if (lbl === 'high' || lbl === 'priority:high') {
-          issuePriority = 'high';
-          break;
-        }
-        if (lbl === 'low' || lbl === 'priority:low') {
-          issuePriority = 'low';
-          break;
-        }
-        if (lbl === 'medium' || lbl === 'priority:medium') {
-          issuePriority = 'medium';
-          break;
-        }
+    } catch (loopErr) {
+      // Partial-create: some children were created before the failure.
+      // Post a comment so the human can see what was partially created, then
+      // re-raise so the outer catch transitions the parent to factory:needs-human.
+      if (childIssueNumbers.length > 0) {
+        const partialList = childIssueNumbers.map((n) => `#${n}`).join(', ');
+        const childList = childIssueNumbers
+          .map((n, i) => `- #${n} — ${issues[i].title}`)
+          .join('\n');
+        await stateSource.comment(workItem.externalId, `## Child issues\n${childList}`);
+        await stateSource.comment(
+          workItem.externalId,
+          `decompose-prd: partial failure. Created children: ${partialList}. Error: ${String(loopErr)}. Parent moved to needs-human.`,
+        );
       }
-
-      const created = await stateSource.createIssue({
-        title: issue.title,
-        body: resolvedBody,
-        type: issueType,
-        priority: issuePriority,
-      });
-
-      const childNumber = Number(created.externalId);
-      siblingNumbers.set(i, childNumber);
-      childIssueNumbers.push(childNumber);
-
-      // Set milestone if parent has one
-      if (parentMilestoneNumber != null && !Number.isNaN(parentMilestoneNumber)) {
-        await stateSource.setMilestone(created.externalId, parentMilestoneNumber);
-      }
-
-      // Apply label groups via setLabelInGroup (supports priority, schedule, type)
-      await stateSource.setLabelInGroup(created.externalId, 'type', issueType);
-      await stateSource.setLabelInGroup(created.externalId, 'priority', issuePriority);
-
-      // Determine schedule label (default: 'current')
-      let scheduleValue = 'current';
-      for (const lbl of labelSet) {
-        if (lbl === 'next' || lbl === 'schedule:next') {
-          scheduleValue = 'next';
-          break;
-        }
-        if (lbl === 'later' || lbl === 'schedule:later') {
-          scheduleValue = 'later';
-          break;
-        }
-        if (lbl === 'current' || lbl === 'schedule:current') {
-          scheduleValue = 'current';
-          break;
-        }
-      }
-      await stateSource.setLabelInGroup(created.externalId, 'schedule', scheduleValue);
-
-      // Note: setLabelInGroup only supports 'priority' | 'schedule' | 'type'.
-      // Labels like 'factory:accepted' and 'exec:serial' cannot be applied via
-      // setLabelInGroup. These would need a separate addLabels API on StateSource
-      // which does not currently exist. See slice README for the limitation.
+      throw loopErr;
     }
 
     // Step 6: Update parent issue with child issue list (posted as a comment)

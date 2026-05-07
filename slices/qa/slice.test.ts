@@ -210,6 +210,8 @@ function makeMockSource(overrides: Partial<StateSource> = {}): StateSource {
     attach: vi.fn().mockResolvedValue(undefined),
     createIssue: vi.fn(),
     getPrDiff: vi.fn().mockResolvedValue(''),
+    addLabels: vi.fn(),
+    removeLabel: vi.fn(),
     watchForUpdates: vi.fn(),
     ...overrides,
   };

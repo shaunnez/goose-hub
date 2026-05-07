@@ -413,3 +413,171 @@ describe('child issue type derived from labels', () => {
     expect(child?.type).toBe('bug');
   });
 });
+
+// ---------------------------------------------------------------------------
+// 7. Children land at factory:accepted (AC #316)
+// ---------------------------------------------------------------------------
+
+describe('children land at factory:accepted', () => {
+  it('removes factory:triaging and adds factory:accepted to each child', async () => {
+    const source = new InMemoryLabelsSource(PROJECT_ID, REPO_REF);
+    const parent = await source.seedIssue({
+      title: 'Parent PRD epic',
+      body: 'A feature.',
+      state: 'factory:prd-review',
+    });
+
+    const workItem = makeParentItem(parent.externalId);
+    const output = makeValidOutput([
+      { title: 'Child A', body: 'Body A.' },
+      { title: 'Child B', body: 'Body B.' },
+    ]);
+
+    const result = await runDecomposePrdWorkflow({
+      workItem,
+      prdOutput: { slices: [] },
+      stateSource: source,
+      projectId: PROJECT_ID,
+      deps: { runtime: makeRuntime(output) },
+    });
+
+    for (const childNum of result.childIssueNumbers) {
+      // State must be factory:accepted (not factory:triaging)
+      const child = await source.getItem(String(childNum));
+      expect(child.state).toBe('factory:accepted');
+
+      // extraLabels must contain factory:accepted and must NOT contain factory:triaging
+      const labels = source.getExtraLabels(String(childNum));
+      expect(labels.has('factory:accepted')).toBe(true);
+      expect(labels.has('factory:triaging')).toBe(false);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 8. Structured dependsOn → appended "## Depends on" section
+// ---------------------------------------------------------------------------
+
+describe('structured dependsOn appended to child body', () => {
+  it('appends ## Depends on section when body has no existing heading', async () => {
+    const source = new InMemoryLabelsSource(PROJECT_ID, REPO_REF);
+    const parent = await source.seedIssue({
+      title: 'Parent PRD epic',
+      body: 'A feature requiring 2 slices.',
+      state: 'factory:prd-review',
+    });
+
+    const workItem = makeParentItem(parent.externalId);
+    const output = makeValidOutput([
+      { title: 'Slice 0', body: 'First slice body.', dependsOn: [] },
+      { title: 'Slice 1', body: 'Second slice body with no heading.', dependsOn: [0] },
+    ]);
+
+    const result = await runDecomposePrdWorkflow({
+      workItem,
+      prdOutput: { slices: [] },
+      stateSource: source,
+      projectId: PROJECT_ID,
+      deps: { runtime: makeRuntime(output) },
+    });
+
+    const [n0, n1] = result.childIssueNumbers;
+
+    const child1 = await source.getItem(String(n1));
+    expect(child1.body).toContain('## Depends on');
+    expect(child1.body).toContain(`#${n0}`);
+  });
+
+  it('leaves the body unchanged when it already contains ## Depends on', async () => {
+    const source = new InMemoryLabelsSource(PROJECT_ID, REPO_REF);
+    const parent = await source.seedIssue({
+      title: 'Parent PRD epic',
+      body: 'A feature.',
+      state: 'factory:prd-review',
+    });
+
+    const workItem = makeParentItem(parent.externalId);
+    const output = makeValidOutput([
+      { title: 'Slice 0', body: 'First slice.', dependsOn: [] },
+      {
+        title: 'Slice 1',
+        body: 'Second slice.\n\n## Depends on\n\n- (sibling index 0) must complete first.',
+        dependsOn: [0],
+      },
+    ]);
+
+    const result = await runDecomposePrdWorkflow({
+      workItem,
+      prdOutput: { slices: [] },
+      stateSource: source,
+      projectId: PROJECT_ID,
+      deps: { runtime: makeRuntime(output) },
+    });
+
+    const [, n1] = result.childIssueNumbers;
+    const child1 = await source.getItem(String(n1));
+
+    // Should only have one "## Depends on" heading (not duplicated)
+    const headingCount = (child1.body.match(/^##\s+depends\s+on/gim) ?? []).length;
+    expect(headingCount).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 9. Partial-create cleanup
+// ---------------------------------------------------------------------------
+
+describe('partial-create cleanup', () => {
+  it('posts child list and failure comment when loop errors after partial creation', async () => {
+    const source = new InMemoryLabelsSource(PROJECT_ID, REPO_REF);
+    const parent = await source.seedIssue({
+      title: 'Parent PRD epic',
+      body: 'A feature.',
+      state: 'factory:prd-review',
+    });
+
+    const workItem = makeParentItem(parent.externalId);
+
+    // Runtime returns 3 issues but setLabelInGroup will throw on the 2nd child's schedule call.
+    // We simulate this by wrapping source with a failing createIssue on 2nd call.
+    let callCount = 0;
+    const originalCreateIssue = source.createIssue.bind(source);
+    source.createIssue = async (input) => {
+      callCount += 1;
+      if (callCount === 2) {
+        throw new Error('Simulated GitHub API failure on 2nd child');
+      }
+      return originalCreateIssue(input);
+    };
+
+    const output = makeValidOutput([
+      { title: 'Child 0', body: 'Body 0.' },
+      { title: 'Child 1 (will fail)', body: 'Body 1.' },
+      { title: 'Child 2', body: 'Body 2.' },
+    ]);
+
+    await expect(
+      runDecomposePrdWorkflow({
+        workItem,
+        prdOutput: { slices: [] },
+        stateSource: source,
+        projectId: PROJECT_ID,
+        deps: { runtime: makeRuntime(output) },
+      }),
+    ).rejects.toThrow('Simulated GitHub API failure on 2nd child');
+
+    // Parent should be in factory:needs-human (outer catch)
+    const updatedParent = await source.getItem(parent.externalId);
+    expect(updatedParent.state).toBe('factory:needs-human');
+
+    // Comments should include the partial-create report
+    const comments = await source.listComments(parent.externalId);
+    const partialComment = comments.find((c) => c.body.includes('partial failure'));
+    expect(partialComment).toBeDefined();
+    expect(partialComment?.body).toContain('Created children:');
+
+    // The child issues list comment should also be present
+    const childListComment = comments.find((c) => c.body.includes('## Child issues'));
+    expect(childListComment).toBeDefined();
+  });
+});

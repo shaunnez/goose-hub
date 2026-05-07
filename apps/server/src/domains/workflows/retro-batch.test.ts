@@ -2,6 +2,13 @@ import type { AgentResult } from '@goose-hub/core/agent-runtime/interface.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// ─── sprint-review auto-trigger mock ──────────────────────────────────────────
+
+const mockRunSprintReviewWorkflow = vi.fn();
+vi.mock('@goose-hub/core/workflows/sprint-review.js', () => ({
+  runSprintReviewWorkflow: mockRunSprintReviewWorkflow,
+}));
+
 // ─── module mocks ──────────────────────────────────────────────────────────────
 
 const mockRun = vi.fn();
@@ -91,6 +98,8 @@ function makeMockSource(items: WorkItem[] = []): StateSource {
     attach: vi.fn().mockResolvedValue(undefined),
     createIssue: vi.fn(),
     getPrDiff: vi.fn().mockResolvedValue(''),
+    addLabels: vi.fn(),
+    removeLabel: vi.fn(),
     watchForUpdates: vi.fn(),
   };
 }
@@ -426,5 +435,156 @@ describe('runRetroBatch', () => {
       'factory:retrospecting',
       'factory:needs-human',
     );
+  });
+});
+
+// ─── sprint-review auto-trigger ───────────────────────────────────────────────
+
+describe('sprint-review auto-trigger', () => {
+  function makeRetroItem(overrides: Partial<WorkItem> = {}): WorkItem {
+    return makeWorkItem({
+      state: 'factory:retrospecting',
+      schedule: 'current',
+      milestoneId: '13',
+      milestoneTitle: 'M13: Subagents',
+      ...overrides,
+    });
+  }
+
+  function makeSourceWithMilestoneItems(
+    retroItems: WorkItem[],
+    allMilestoneItems: WorkItem[],
+  ): StateSource {
+    const source = makeMockSource(retroItems);
+    (source.listWorkByMilestone as ReturnType<typeof vi.fn>).mockResolvedValue(allMilestoneItems);
+    return source;
+  }
+
+  beforeEach(() => {
+    mockRunSprintReviewWorkflow.mockReset();
+    mockRunSprintReviewWorkflow.mockResolvedValue({ issueNumber: 200 });
+  });
+
+  it('triggers sprint-review when the last schedule:current item completes retro', async () => {
+    const retroItem = makeRetroItem();
+    // After retro, this item transitions to factory:done. listWorkByMilestone returns it as done.
+    const doneItem = { ...retroItem, state: 'factory:done' as const };
+    const source = makeSourceWithMilestoneItems([retroItem], [doneItem]);
+    mockGetProject.mockResolvedValue(projectConfigWith('light'));
+    mockReplay.mockImplementation((filter: { workItemId?: string }) =>
+      filter.workItemId
+        ? []
+        : [{ id: 99, kind: 'retrospective.completed', payload: { tier: 'light' }, createdAt: '' }],
+    );
+    mockRun.mockResolvedValueOnce(makeAgentResult(makeLightRetroOutput()));
+
+    const { runRetroBatch } = await import('./retro-batch.js');
+    await runRetroBatch(SLUG, source);
+
+    // Give the fire-and-forget promise a chance to resolve
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(mockRunSprintReviewWorkflow).toHaveBeenCalledTimes(1);
+    expect(mockRunSprintReviewWorkflow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: SLUG,
+        milestoneTitle: 'M13: Subagents',
+        milestoneNumber: 13,
+      }),
+    );
+  });
+
+  it('does NOT trigger sprint-review when other schedule:current items remain open', async () => {
+    const retroItem = makeRetroItem({ externalId: '42' });
+    const doneItem = { ...retroItem, state: 'factory:done' as const };
+    // Another open schedule:current item still exists
+    const pendingItem = makeWorkItem({
+      externalId: '43',
+      state: 'factory:needs-qa',
+      schedule: 'current',
+      milestoneId: '13',
+      milestoneTitle: 'M13: Subagents',
+    });
+    const source = makeSourceWithMilestoneItems([retroItem], [doneItem, pendingItem]);
+    mockGetProject.mockResolvedValue(projectConfigWith('light'));
+    mockReplay.mockImplementation((filter: { workItemId?: string }) =>
+      filter.workItemId
+        ? []
+        : [{ id: 99, kind: 'retrospective.completed', payload: { tier: 'light' }, createdAt: '' }],
+    );
+    mockRun.mockResolvedValueOnce(makeAgentResult(makeLightRetroOutput()));
+
+    const { runRetroBatch } = await import('./retro-batch.js');
+    await runRetroBatch(SLUG, source);
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(mockRunSprintReviewWorkflow).not.toHaveBeenCalled();
+  });
+
+  it('does NOT trigger sprint-review when a sprint-review issue already exists (dedup)', async () => {
+    const retroItem = makeRetroItem();
+    const doneItem = { ...retroItem, state: 'factory:done' as const };
+    // A sprint-review issue already exists
+    const existingReview = makeWorkItem({
+      externalId: '200',
+      title: 'Sprint Review: M13: Subagents',
+      state: 'factory:done',
+    });
+    const source = makeSourceWithMilestoneItems([retroItem], [doneItem, existingReview]);
+    mockGetProject.mockResolvedValue(projectConfigWith('light'));
+    mockReplay.mockImplementation((filter: { workItemId?: string }) =>
+      filter.workItemId
+        ? []
+        : [{ id: 99, kind: 'retrospective.completed', payload: { tier: 'light' }, createdAt: '' }],
+    );
+    mockRun.mockResolvedValueOnce(makeAgentResult(makeLightRetroOutput()));
+
+    const { runRetroBatch } = await import('./retro-batch.js');
+    await runRetroBatch(SLUG, source);
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(mockRunSprintReviewWorkflow).not.toHaveBeenCalled();
+  });
+
+  it('does NOT trigger sprint-review when item has no milestoneId', async () => {
+    const retroItem = makeRetroItem({ milestoneId: undefined, milestoneTitle: undefined });
+    const doneItem = { ...retroItem, state: 'factory:done' as const };
+    const source = makeSourceWithMilestoneItems([retroItem], [doneItem]);
+    mockGetProject.mockResolvedValue(projectConfigWith('light'));
+    mockReplay.mockImplementation((filter: { workItemId?: string }) =>
+      filter.workItemId
+        ? []
+        : [{ id: 99, kind: 'retrospective.completed', payload: { tier: 'light' }, createdAt: '' }],
+    );
+    mockRun.mockResolvedValueOnce(makeAgentResult(makeLightRetroOutput()));
+
+    const { runRetroBatch } = await import('./retro-batch.js');
+    await runRetroBatch(SLUG, source);
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(mockRunSprintReviewWorkflow).not.toHaveBeenCalled();
+  });
+
+  it('logs error but does not throw when sprint-review workflow fails', async () => {
+    const retroItem = makeRetroItem();
+    const doneItem = { ...retroItem, state: 'factory:done' as const };
+    const source = makeSourceWithMilestoneItems([retroItem], [doneItem]);
+    mockGetProject.mockResolvedValue(projectConfigWith('light'));
+    mockReplay.mockImplementation((filter: { workItemId?: string }) =>
+      filter.workItemId
+        ? []
+        : [{ id: 99, kind: 'retrospective.completed', payload: { tier: 'light' }, createdAt: '' }],
+    );
+    mockRun.mockResolvedValueOnce(makeAgentResult(makeLightRetroOutput()));
+    mockRunSprintReviewWorkflow.mockRejectedValueOnce(new Error('sprint-review exploded'));
+
+    const { runRetroBatch } = await import('./retro-batch.js');
+    // Should not throw
+    await expect(runRetroBatch(SLUG, source)).resolves.not.toThrow();
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
   });
 });

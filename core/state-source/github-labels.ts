@@ -424,6 +424,33 @@ export class GitHubLabelsSource implements StateSource {
     }
   }
 
+  async addLabels(itemId: string, labels: string[]): Promise<void> {
+    if (labels.length === 0) return;
+    const number = parseIssueNumber(itemId);
+    const url = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels`;
+    // POST /repos/:owner/:repo/issues/:n/labels is additive and treats duplicates as no-ops.
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { ...this.baseHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ labels }),
+    });
+    if (!res.ok) {
+      throw new Error(
+        `Failed to add labels [${labels.join(', ')}]: ${res.status} ${res.statusText}`,
+      );
+    }
+  }
+
+  async removeLabel(itemId: string, name: string): Promise<void> {
+    const number = parseIssueNumber(itemId);
+    const url = `https://api.github.com/repos/${this.repoRef}/issues/${number}/labels/${encodeURIComponent(name)}`;
+    const res = await fetch(url, { method: 'DELETE', headers: this.baseHeaders });
+    // 404 means the label was not present — treat as success (idempotent).
+    if (!res.ok && res.status !== 404) {
+      throw new Error(`Failed to remove label ${name}: ${res.status} ${res.statusText}`);
+    }
+  }
+
   async attach(_itemId: string, _artifact: Artifact): Promise<void> {
     throw new Error('not implemented in M1');
   }

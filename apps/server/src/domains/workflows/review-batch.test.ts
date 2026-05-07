@@ -50,6 +50,8 @@ function makeMockSource(items: WorkItem[]): StateSource {
     attach: vi.fn(),
     createIssue: vi.fn(),
     getPrDiff: vi.fn().mockResolvedValue(''),
+    addLabels: vi.fn(),
+    removeLabel: vi.fn(),
     watchForUpdates: vi.fn(),
   };
 }
