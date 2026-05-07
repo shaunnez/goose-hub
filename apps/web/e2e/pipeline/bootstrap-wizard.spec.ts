@@ -1,20 +1,11 @@
 import { expect, test } from '@playwright/test';
 
-// ---------------------------------------------------------------------------
-// E2E test for the bootstrap wizard (M12.07, issue #308).
-//
-// The Playwright run boots the server with MOCK_BOOTSTRAP=true (set in
-// playwright.config.ts), so the /api/projects/bootstrap/{preview,run}
-// endpoints return deterministic fixtures instead of hitting GitHub.
-// This test walks every wizard step and asserts the final PR URL renders.
-// ---------------------------------------------------------------------------
+// E2E test for the bootstrap wizard. Lives in the pipeline lane so it runs as
+// a required CI check; the server is booted with MOCK_BOOTSTRAP=true (see
+// playwright-e2e-pipeline.config.ts) so /api/projects/bootstrap/{preview,run}
+// return deterministic fixtures instead of hitting GitHub.
 
-test.describe('bootstrap wizard', () => {
-  test.skip(
-    process.env.MOCK_BOOTSTRAP !== 'true',
-    'requires MOCK_BOOTSTRAP=true so the server short-circuits the workflow',
-  );
-
+test.describe('bootstrap wizard (MOCK_BOOTSTRAP)', () => {
   test('walks all wizard steps and shows the PR URL on completion', async ({ page }) => {
     await page.goto('/settings');
     await expect(page.getByTestId('settings-page')).toBeVisible();
@@ -47,7 +38,7 @@ test.describe('bootstrap wizard', () => {
 
     // Step 5 — webhook setup with payload URL.
     await expect(page.getByTestId('step-webhook')).toBeVisible();
-    await expect(page.getByTestId('webhook-payload-url')).toContainText('webhook/github');
+    await expect(page.getByTestId('webhook-payload-url')).toContainText('webhooks/github');
     await page.getByTestId('wizard-next').click();
 
     // Final step — Open PR button + result.

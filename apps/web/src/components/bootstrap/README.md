@@ -60,9 +60,10 @@ The split keeps the destructive `/run` step deliberate: the wizard's
 
 ## Mocking the workflow
 
-The Playwright e2e (`apps/web/e2e/bootstrap-wizard.spec.ts`) drives the
-wizard through every step against a server booted with
-`MOCK_BOOTSTRAP=true`. Both endpoints short-circuit to deterministic
+The Playwright e2e (`apps/web/e2e/pipeline/bootstrap-wizard.spec.ts`)
+drives the wizard through every step in the pipeline lane. The pipeline
+config (`playwright-e2e-pipeline.config.ts`) boots the server with
+`MOCK_BOOTSTRAP=true`, so both endpoints short-circuit to deterministic
 fixtures — no GitHub calls, no real labels installed, no PR opened.
 
 ## State machine
