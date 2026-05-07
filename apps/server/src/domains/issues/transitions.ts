@@ -70,6 +70,12 @@ export async function approveIssue(
       payload: { prNumber },
     });
     await source.transitionState(id, 'factory:approved', 'factory:merge-conflict');
+    eventStore.appendEvent({
+      projectId: slug,
+      workItemId,
+      kind: 'state.transitioned',
+      payload: { from: 'factory:approved', to: 'factory:merge-conflict', by: 'orchestrator' },
+    });
     return { ok: false, error: 'merge-conflict', status: 409 };
   }
 
@@ -85,6 +91,12 @@ export async function approveIssue(
         payload: { prNumber },
       });
       await source.transitionState(id, 'factory:approved', 'factory:merge-conflict');
+      eventStore.appendEvent({
+        projectId: slug,
+        workItemId,
+        kind: 'state.transitioned',
+        payload: { from: 'factory:approved', to: 'factory:merge-conflict', by: 'orchestrator' },
+      });
       return { ok: false, error: 'merge-conflict', status: 409 };
     }
     throw err;

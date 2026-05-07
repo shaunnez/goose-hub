@@ -202,6 +202,20 @@ class EventStore {
   }
 
   /**
+   * Delete all events recorded for a single work item. Test-only escape
+   * hatch: the E2E pipeline harness reuses sequential issue numbers across
+   * runs, so without clearing prior events the retry counters in
+   * `core/retry/retry-counter.ts` count completed events from earlier runs
+   * and escalate the very first qa.completed of a fresh issue. Production
+   * code paths must NOT call this — there's no UI surface for it and the
+   * audit trail is meant to be append-only (FACTORY_RULES rule 3).
+   */
+  deleteByWorkItem(workItemId: string): number {
+    const result = db.delete(events).where(eq(events.workItemId, workItemId)).run();
+    return result.changes;
+  }
+
+  /**
    * On server startup, find any runs that started but never completed (server
    * crashed mid-run). Emit a synthetic agent.run-failed for each so the UI
    * doesn't show them as "Live" forever. Returns the number of runs closed.
