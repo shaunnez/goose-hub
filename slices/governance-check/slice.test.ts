@@ -1,5 +1,9 @@
-import { checkGovernance, isGovernancePath } from '@goose-hub/core/bootstrap/governance-check.js';
-import type { ChangedFile } from '@goose-hub/core/bootstrap/governance-check.js';
+import {
+  checkGovernance,
+  expandPrFileChanges,
+  isGovernancePath,
+} from '@goose-hub/core/bootstrap/governance-check.js';
+import type { ChangedFile, PrFileChange } from '@goose-hub/core/bootstrap/governance-check.js';
 import { describe, expect, it } from 'vitest';
 
 // ---------------------------------------------------------------------------
@@ -210,6 +214,88 @@ describe('checkGovernance — bootstrap PR (factory:bootstrap-pr label)', () => 
 // ---------------------------------------------------------------------------
 // Acceptance criteria scenario: the issue specifies this exact test case
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// expandPrFileChanges — rename bypass guard
+// ---------------------------------------------------------------------------
+
+describe('expandPrFileChanges', () => {
+  it('passes added/modified/removed entries through unchanged', () => {
+    const prFiles: PrFileChange[] = [
+      { filename: 'src/a.ts', status: 'added' },
+      { filename: 'src/b.ts', status: 'modified' },
+      { filename: 'src/c.ts', status: 'removed' },
+    ];
+    expect(expandPrFileChanges(prFiles)).toEqual([
+      { path: 'src/a.ts', status: 'added' },
+      { path: 'src/b.ts', status: 'modified' },
+      { path: 'src/c.ts', status: 'removed' },
+    ]);
+  });
+
+  it('splits a renamed entry into a removed of the previous path plus the renamed new path', () => {
+    const prFiles: PrFileChange[] = [
+      { filename: 'docs/MISSION.md', status: 'renamed', previous_filename: 'MISSION.md' },
+    ];
+    expect(expandPrFileChanges(prFiles)).toEqual([
+      { path: 'MISSION.md', status: 'removed' },
+      { path: 'docs/MISSION.md', status: 'renamed' },
+    ]);
+  });
+
+  it('handles a rename without a previous_filename gracefully', () => {
+    const prFiles: PrFileChange[] = [{ filename: 'src/x.ts', status: 'renamed' }];
+    expect(expandPrFileChanges(prFiles)).toEqual([{ path: 'src/x.ts', status: 'renamed' }]);
+  });
+
+  it('does not emit a duplicate removed when previous_filename equals filename', () => {
+    const prFiles: PrFileChange[] = [
+      { filename: 'src/x.ts', status: 'renamed', previous_filename: 'src/x.ts' },
+    ];
+    expect(expandPrFileChanges(prFiles)).toEqual([{ path: 'src/x.ts', status: 'renamed' }]);
+  });
+
+  it('coerces unknown statuses to modified', () => {
+    const prFiles: PrFileChange[] = [{ filename: 'src/y.ts', status: 'copied' }];
+    expect(expandPrFileChanges(prFiles)).toEqual([{ path: 'src/y.ts', status: 'modified' }]);
+  });
+});
+
+describe('checkGovernance — rename bypass guard (P1)', () => {
+  it('FAILS when a governance file is renamed OUT of the perimeter', () => {
+    // Simulates: MISSION.md -> docs/MISSION.md
+    const changes = expandPrFileChanges([
+      { filename: 'docs/MISSION.md', status: 'renamed', previous_filename: 'MISSION.md' },
+    ]);
+    const result = checkGovernance(changes, false);
+    expect(result.ok).toBe(false);
+    // The previous (governance) path is flagged as a removal violation.
+    expect(result.violations.some((v) => v.path === 'MISSION.md')).toBe(true);
+  });
+
+  it('FAILS when an existing project.config.ts is renamed under bootstrap label', () => {
+    const changes = expandPrFileChanges([
+      {
+        filename: 'target-projects/old/renamed-config.ts',
+        status: 'renamed',
+        previous_filename: 'target-projects/old/project.config.ts',
+      },
+    ]);
+    const result = checkGovernance(changes, true);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.path === 'target-projects/old/project.config.ts')).toBe(
+      true,
+    );
+  });
+
+  it('still passes when a non-governance file is renamed', () => {
+    const changes = expandPrFileChanges([
+      { filename: 'src/new.ts', status: 'renamed', previous_filename: 'src/old.ts' },
+    ]);
+    const result = checkGovernance(changes, false);
+    expect(result.ok).toBe(true);
+  });
+});
 
 describe('acceptance criteria scenario', () => {
   const newProjectConfigPath = 'target-projects/test-slug/project.config.ts';

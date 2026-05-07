@@ -22,6 +22,45 @@ export interface ChangedFile {
   status: FileStatus;
 }
 
+export interface PrFileChange {
+  filename: string;
+  status: string;
+  previous_filename?: string;
+}
+
+function normaliseStatus(s: string): FileStatus {
+  switch (s) {
+    case 'added':
+      return 'added';
+    case 'removed':
+      return 'removed';
+    case 'renamed':
+      return 'renamed';
+    default:
+      return 'modified';
+  }
+}
+
+/**
+ * Expand the GitHub PR-files API response into ChangedFile entries.
+ *
+ * Renames are split into a `removed` of the previous path plus a `renamed` of
+ * the new path. Without this, a rename of a governance file out of the perimeter
+ * (e.g. MISSION.md -> docs/MISSION.md) would bypass the check because only the
+ * new path is inspected.
+ */
+export function expandPrFileChanges(prFiles: PrFileChange[]): ChangedFile[] {
+  const out: ChangedFile[] = [];
+  for (const f of prFiles) {
+    const status = normaliseStatus(f.status);
+    if (status === 'renamed' && f.previous_filename && f.previous_filename !== f.filename) {
+      out.push({ path: f.previous_filename, status: 'removed' });
+    }
+    out.push({ path: f.filename, status });
+  }
+  return out;
+}
+
 export interface Violation {
   path: string;
   reason: string;

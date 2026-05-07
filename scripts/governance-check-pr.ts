@@ -18,14 +18,15 @@
  */
 
 import fs from 'node:fs';
-import type { ChangedFile, FileStatus } from '../core/bootstrap/governance-check.js';
-import { checkGovernance } from '../core/bootstrap/governance-check.js';
+import type { PrFileChange } from '../core/bootstrap/governance-check.js';
+import { checkGovernance, expandPrFileChanges } from '../core/bootstrap/governance-check.js';
 
 const BOOTSTRAP_LABEL = 'factory:bootstrap-pr';
 
 interface GitHubPRFile {
   filename: string;
   status: string;
+  previous_filename?: string;
 }
 
 interface GitHubLabel {
@@ -39,19 +40,6 @@ interface GitHubEventPR {
 
 interface GitHubEvent {
   pull_request?: GitHubEventPR;
-}
-
-function normaliseStatus(githubStatus: string): FileStatus {
-  switch (githubStatus) {
-    case 'added':
-      return 'added';
-    case 'removed':
-      return 'removed';
-    case 'renamed':
-      return 'renamed';
-    default:
-      return 'modified';
-  }
 }
 
 async function fetchPRFiles(
@@ -129,10 +117,7 @@ async function main(): Promise<void> {
   const prFiles = await fetchPRFiles(token, repo, prNumber);
   console.log(`Changed files: ${prFiles.length}`);
 
-  const changes: ChangedFile[] = prFiles.map((f) => ({
-    path: f.filename,
-    status: normaliseStatus(f.status),
-  }));
+  const changes = expandPrFileChanges(prFiles as PrFileChange[]);
 
   const result = checkGovernance(changes, hasBootstrapLabel);
 
