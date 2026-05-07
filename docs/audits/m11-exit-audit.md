@@ -7,6 +7,25 @@
 
 The human reviews this report and decides whether to close M11. This agent does not close the milestone, advance the active milestone, or file follow-up issues.
 
+> **Update — same-PR follow-ups landed.** The three soft-check follow-ups (checks 7, 10, 11) were
+> addressed in this PR after audit submission, on user request:
+> - Check 7 (ADRs): added ADRs 0024 (cross-run learning loop), 0025 (skill-coach feedback loop),
+>   0026 (predictive model router), 0027 (workflow init smoke gate), 0028 (playbook portability +
+>   description-loop eval).
+> - Check 10 (layout): top-level `plans/` moved to `docs/plans/`; PLAN section 6 amended to
+>   acknowledge top-level `hooks/` (kept where it is — `.claude/hooks/` is governance-protected
+>   from agent writes, so SDLC-hook source files for `writeWorkspaceSandbox()` must live outside)
+>   and the new `docs/plans/`, `docs/audits/`, `docs/standards/` subdirs. Section 6 also now
+>   reflects the M11 core/* additions (state-source dep parser/resolver, projects dep-scheduler
+>   /parallel-lock/move-with-deps, learning/*, workflows cross-run-retro/skill-coaching,
+>   orchestrator/smoke, agent-runtime budgets/model-router).
+> - Check 11 (README): added a "Dependency-aware Scheduling & Learning Loop (M11)" section,
+>   refreshed the CLI command list (`task move`, `playbook export/import`), updated the skills
+>   roster, and rolled the new ADRs into the ADR summary.
+>
+> The body of this report below captures the audit's original findings; consider checks 7, 10,
+> and 11 as PASS once this PR merges.
+
 ---
 
 ## Generic checks
