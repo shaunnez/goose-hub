@@ -14,6 +14,7 @@ describe('investigate schema', () => {
       ],
       confidence: 'high',
       openQuestions: ['Does this also affect the websocket upgrade path?'],
+      requiresBrowserRepro: false,
       decisionSummaries: [
         {
           kind: 'READ',
@@ -36,6 +37,7 @@ describe('investigate schema', () => {
       keyFiles: [],
       confidence: 'low',
       openQuestions: ['Need runtime logs to identify the failing code path.'],
+      requiresBrowserRepro: false,
       decisionSummaries: [{ kind: 'READ', summary: 'Read issue but no clear entry point found' }],
     });
     expect(result.success).toBe(true);
@@ -47,6 +49,7 @@ describe('investigate schema', () => {
       keyFiles: [{ path: 'core/math/ratio.ts', reason: 'Divide-by-zero bug' }],
       confidence: 'high',
       openQuestions: [],
+      requiresBrowserRepro: false,
       decisionSummaries: [{ kind: 'INSIGHT', summary: 'Divide-by-zero in calculateRatio()' }],
     });
     expect(result.success).toBe(true);
@@ -58,6 +61,7 @@ describe('investigate schema', () => {
       keyFiles: [],
       confidence: 'medium',
       openQuestions: [],
+      requiresBrowserRepro: false,
       decisionSummaries: [{ kind: 'READ', summary: 'Read and understood the issue' }],
     });
     expect(result.success).toBe(true);
