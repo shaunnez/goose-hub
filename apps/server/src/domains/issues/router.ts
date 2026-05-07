@@ -4,6 +4,7 @@ import { dispatchResolveConflict, dispatchResumeIssue } from '#shared/dispatch.j
 import { parseBody } from '#shared/middleware.js';
 import {
   approveIssue,
+  approvePRD,
   commentOnIssue,
   fakeRun,
   getIssue,
@@ -14,6 +15,7 @@ import {
   listIssues,
   overrideIssueRepo,
   rejectIssue,
+  rejectPRD,
   setIssueLabel,
   setIssueMilestone,
   transitionIssue,
@@ -157,6 +159,24 @@ router.post('/:slug/issues/:id/reject', async (c) => {
   return result.ok
     ? c.json(result.data)
     : c.json({ error: result.error }, result.status as 400 | 404);
+});
+
+// PRD review actions (M13.08). Approve advances prd-review → decomposing so
+// the orchestrator can pick the issue up and run decompose-prd on its next
+// tick. Reject returns the issue to grilling and posts a marker comment so
+// the user can continue the grill conversation.
+router.post('/:slug/issues/:id/approve-prd', async (c) => {
+  const result = await approvePRD(c.req.param('slug'), c.req.param('id'));
+  return result.ok
+    ? c.json(result.data)
+    : c.json({ error: result.error }, result.status as 400 | 404 | 409);
+});
+
+router.post('/:slug/issues/:id/reject-prd', async (c) => {
+  const result = await rejectPRD(c.req.param('slug'), c.req.param('id'));
+  return result.ok
+    ? c.json(result.data)
+    : c.json({ error: result.error }, result.status as 400 | 404 | 409);
 });
 
 router.post('/:slug/issues/:id/resume', async (c) => {

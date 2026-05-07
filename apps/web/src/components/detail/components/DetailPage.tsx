@@ -13,9 +13,11 @@ import { CodeDiffSection } from './CodeDiffSection';
 import { CostsSection } from './CostsSection';
 import { DeferredSurface } from './DeferredSurface';
 import { GatePendingBanner } from './GatePendingBanner';
+import { GrillSection } from './GrillSection';
 import { InvestigationSection } from './InvestigationSection';
 import { LeftRail } from './LeftRail';
 import { OverviewSection } from './OverviewSection';
+import { PRDSection } from './PRDSection';
 import { QASection } from './QASection';
 import { RetrospectiveSection } from './RetrospectiveSection';
 import { ReviewSection } from './ReviewSection';
@@ -241,6 +243,15 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
                 id={id}
                 itemState={item?.state}
                 itemType={item?.type}
+              />
+            ) : currentSection.key === 'prd' ? (
+              <PRDSection projectSlug={slug} id={id} state={item?.state} />
+            ) : currentSection.key === 'grill' ? (
+              <GrillSection
+                projectSlug={slug}
+                externalId={item?.externalId ?? id}
+                id={id}
+                state={item?.state}
               />
             ) : currentSection.key === 'code' ? (
               <CodeDiffSection projectSlug={slug} id={id} />

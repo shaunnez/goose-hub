@@ -25,9 +25,14 @@ export const SECTIONS: readonly DetailSection[] = [
   {
     key: 'prd',
     label: 'PRD',
-    available: false,
-    milestone: 'M5/M7',
+    available: true,
     description: 'Grilled scope, acceptance criteria, decomposition into vertical slices.',
+  },
+  {
+    key: 'grill',
+    label: 'Grill',
+    available: true,
+    description: 'Discover-lane chat between you and the griller agent.',
   },
   {
     key: 'code',

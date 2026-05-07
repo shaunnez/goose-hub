@@ -77,7 +77,10 @@ export type EventKind =
   | 'grill.question-posted'
   | 'grill.completed'
   | 'prd.drafted'
-  | 'prd.advisor-skipped';
+  | 'prd.advisor-skipped'
+  // M13.08 PRD review actions (UI-driven approve / reject)
+  | 'prd.approved'
+  | 'prd.rejected';
 
 export interface AgentEvent {
   id: number;

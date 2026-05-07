@@ -17,6 +17,8 @@ const {
   mockOverrideIssueRepo,
   mockApproveIssue,
   mockRejectIssue,
+  mockApprovePRD,
+  mockRejectPRD,
   mockFakeRun,
   mockDispatchResolveConflict,
 } = vi.hoisted(() => ({
@@ -33,6 +35,8 @@ const {
   mockOverrideIssueRepo: vi.fn(),
   mockApproveIssue: vi.fn(),
   mockRejectIssue: vi.fn(),
+  mockApprovePRD: vi.fn(),
+  mockRejectPRD: vi.fn(),
   mockFakeRun: vi.fn(),
   mockDispatchResolveConflict: vi.fn().mockResolvedValue(undefined),
 }));
@@ -51,6 +55,8 @@ vi.mock('./service.js', () => ({
   overrideIssueRepo: mockOverrideIssueRepo,
   approveIssue: mockApproveIssue,
   rejectIssue: mockRejectIssue,
+  approvePRD: mockApprovePRD,
+  rejectPRD: mockRejectPRD,
   fakeRun: mockFakeRun,
 }));
 
@@ -715,6 +721,82 @@ describe('POST /projects/:slug/issues/:id/reject', () => {
 
     const app = makeApp();
     const res = await postJson(app, '/projects/unknown/issues/1/reject', { reason: 'bad' });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('POST /projects/:slug/issues/:id/approve-prd', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('approves PRD and returns 200', async () => {
+    mockApprovePRD.mockResolvedValue({ ok: true, data: { ok: true } });
+
+    const app = makeApp();
+    const res = await app.request('/projects/my-project/issues/42/approve-prd', { method: 'POST' });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean };
+    expect(body.ok).toBe(true);
+    expect(mockApprovePRD).toHaveBeenCalledWith('my-project', '42');
+  });
+
+  it('returns 409 when state is not factory:prd-review', async () => {
+    mockApprovePRD.mockResolvedValue({
+      ok: false,
+      error: 'expected state factory:prd-review, got factory:dev-ready',
+      status: 409,
+    });
+
+    const app = makeApp();
+    const res = await app.request('/projects/my-project/issues/42/approve-prd', { method: 'POST' });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('expected state factory:prd-review');
+  });
+
+  it('returns 404 when project not found', async () => {
+    mockApprovePRD.mockResolvedValue({ ok: false, error: 'project not found', status: 404 });
+
+    const app = makeApp();
+    const res = await app.request('/projects/unknown/issues/1/approve-prd', { method: 'POST' });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('POST /projects/:slug/issues/:id/reject-prd', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('rejects PRD and returns 200', async () => {
+    mockRejectPRD.mockResolvedValue({ ok: true, data: { ok: true } });
+
+    const app = makeApp();
+    const res = await app.request('/projects/my-project/issues/42/reject-prd', { method: 'POST' });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean };
+    expect(body.ok).toBe(true);
+    expect(mockRejectPRD).toHaveBeenCalledWith('my-project', '42');
+  });
+
+  it('returns 409 when state is not factory:prd-review', async () => {
+    mockRejectPRD.mockResolvedValue({
+      ok: false,
+      error: 'expected state factory:prd-review, got factory:done',
+      status: 409,
+    });
+
+    const app = makeApp();
+    const res = await app.request('/projects/my-project/issues/42/reject-prd', { method: 'POST' });
+    expect(res.status).toBe(409);
+  });
+
+  it('returns 404 when project not found', async () => {
+    mockRejectPRD.mockResolvedValue({ ok: false, error: 'project not found', status: 404 });
+
+    const app = makeApp();
+    const res = await app.request('/projects/unknown/issues/1/reject-prd', { method: 'POST' });
     expect(res.status).toBe(404);
   });
 });

@@ -51,6 +51,26 @@ export const PRIORITY_BORDER: Record<string, string> = {
 
 export const RETRO_ACTIVE_STATES = new Set(['factory:retrospecting', 'factory:done']);
 
+// PRD tab is visible across the discover lane after grilling — drafting,
+// review, and the post-approval decompose / issues-created stages so the
+// user can scroll back to the most recent PRD draft.
+export const PRD_ACTIVE_STATES = new Set([
+  'factory:prd-drafting',
+  'factory:prd-review',
+  'factory:decomposing',
+  'factory:issues-created',
+]);
+
+// Grill tab is visible on issues that are currently in (or recently came from)
+// the discover lane. Hidden entirely on issues that never went through grill,
+// so triage / dev-ready / coding etc. don't see a Grill tab.
+export const GRILL_ACTIVE_STATES = new Set([
+  'factory:grilling',
+  'factory:gate-pending',
+  'factory:prd-drafting',
+  'factory:prd-review',
+]);
+
 export const CODE_ACTIVE_STATES = new Set([
   'factory:in-progress',
   'factory:needs-qa',

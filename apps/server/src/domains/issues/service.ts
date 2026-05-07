@@ -12,6 +12,7 @@ export type { TransitionResult } from './transitions.js';
 export { getIssueWorktreeDiff } from './diff.js';
 export { getIssueTriage, overrideIssueRepo } from './triage.js';
 export { fakeRun } from './fake-run.js';
+export { approvePRD, rejectPRD } from './prd-actions.js';
 
 export async function listIssues(
   slug: string,

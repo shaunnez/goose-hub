@@ -221,7 +221,13 @@ export async function runGrillAndPrdWorkflow(
       return { phase: 'needs-human' };
     }
 
-    await stateSource.comment(workItem.externalId, `**Round ${roundNumber}** — ${question}`);
+    // Prefix with the `<!-- factory:grill-question -->` HTML marker so the
+    // Grill chat tab in the UI can distinguish agent questions from user
+    // replies. The marker is invisible in rendered Markdown.
+    await stateSource.comment(
+      workItem.externalId,
+      `<!-- factory:grill-question -->\n**Round ${roundNumber}** — ${question}`,
+    );
     await ensureGatePending(stateSource, workItem.externalId, workItem.state);
 
     eventStore.appendEvent({
