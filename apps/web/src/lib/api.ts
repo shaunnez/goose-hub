@@ -1,5 +1,7 @@
 import type {
   AgentEventDto,
+  BootstrapPreviewDto,
+  BootstrapRunDto,
   CostSummaryDto,
   ImprovementCandidateDto,
   InboxItemDto,
@@ -17,7 +19,7 @@ import type {
   TriageResultDto,
   WorkItemCostsDto,
   WorkItemDto,
-} from './types';
+} from './types.js';
 
 export type {
   ProjectConfigDto,
@@ -38,7 +40,9 @@ export type {
   WorkItemCostsDto,
   PlaybookSummaryDto,
   PlaybookDetailDto,
-} from './types';
+  BootstrapPreviewDto,
+  BootstrapRunDto,
+} from './types.js';
 
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(`/api${path}`, { headers: { Accept: 'application/json' }, signal });
@@ -356,4 +360,30 @@ export async function createPlaybook(
     `/projects/${slug}/playbooks`,
     body,
   );
+}
+
+export async function previewBootstrap(repoRef: string): Promise<BootstrapPreviewDto> {
+  const res = await fetch('/api/projects/bootstrap/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ repoRef }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`POST /projects/bootstrap/preview failed: ${res.status} ${text}`);
+  }
+  return (await res.json()) as BootstrapPreviewDto;
+}
+
+export async function runBootstrap(repoRef: string, slug?: string): Promise<BootstrapRunDto> {
+  const res = await fetch('/api/projects/bootstrap/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ repoRef, slug }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`POST /projects/bootstrap/run failed: ${res.status} ${text}`);
+  }
+  return (await res.json()) as BootstrapRunDto;
 }

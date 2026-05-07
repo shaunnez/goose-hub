@@ -31,6 +31,9 @@ export default defineConfig({
             timeout: 30_000,
             env: {
               GITHUB_TOKEN: process.env.GITHUB_TOKEN ?? '',
+              // M12.07: forward MOCK_BOOTSTRAP so the bootstrap-wizard e2e can
+              // exercise the wizard against deterministic fixture endpoints.
+              MOCK_BOOTSTRAP: process.env.MOCK_BOOTSTRAP ?? '',
             },
           },
           {

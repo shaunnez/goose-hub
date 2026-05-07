@@ -1,13 +1,15 @@
+import { BootstrapWizard } from '@/components/bootstrap/components/BootstrapWizard';
 import { fetchProjectConfigs } from '@/lib/api';
 import type { ProjectConfigDto } from '@/lib/types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { RefreshCw } from 'lucide-react';
+import { Plus, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { ProjectConfigPanel } from './ProjectConfigPanel';
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<string | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const {
     data: configs = [],
@@ -30,14 +32,25 @@ export function SettingsPage() {
       <div className="w-56 shrink-0 border-r border-line overflow-y-auto py-4 px-2">
         <div className="flex items-center justify-between px-2 mb-3">
           <h2 className="text-[11px] uppercase tracking-wider text-fg-2">Projects</h2>
-          <button
-            type="button"
-            title="Reload configs"
-            onClick={reload}
-            className="text-fg-2 hover:text-fg transition-colors p-1 rounded"
-          >
-            <RefreshCw size={12} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              data-testid="add-project-button"
+              title="Add project"
+              onClick={() => setWizardOpen(true)}
+              className="text-fg-2 hover:text-fg transition-colors p-1 rounded"
+            >
+              <Plus size={12} />
+            </button>
+            <button
+              type="button"
+              title="Reload configs"
+              onClick={reload}
+              className="text-fg-2 hover:text-fg transition-colors p-1 rounded"
+            >
+              <RefreshCw size={12} />
+            </button>
+          </div>
         </div>
 
         {isLoading && <div className="text-[12px] text-fg-3 px-2">Loading…</div>}
@@ -81,6 +94,8 @@ export function SettingsPage() {
           </div>
         )}
       </div>
+
+      <BootstrapWizard open={wizardOpen} onClose={() => setWizardOpen(false)} />
     </div>
   );
 }

@@ -26,8 +26,10 @@ import { STATES } from '@goose-hub/core/state-machine/states.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { GitHubLabelsSource } from '@goose-hub/core/state-source/github-labels.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
+import { bootstrapProject } from '@goose-hub/core/workflows/bootstrap-project.js';
 import { targetProjectsRoot } from '@goose-hub/target-projects';
 import { and, eq, gte, lt } from 'drizzle-orm';
+import { bootstrapCommand } from './bootstrap-command.js';
 
 async function statusCommand(slug: string): Promise<void> {
   const projects = await loadProjects(targetProjectsRoot);
@@ -601,6 +603,21 @@ switch (command) {
   case 'skill':
     await skillCommand(args);
     break;
+  case 'project':
+    if (args[0] === 'bootstrap') {
+      const exitCode = await bootstrapCommand({
+        argv: process.argv,
+        env: process.env as Record<string, string | undefined>,
+        runWorkflow: (input) => bootstrapProject(input),
+        write: (line) => process.stdout.write(`${line}\n`),
+        writeErr: (line) => process.stderr.write(`${line}\n`),
+      });
+      process.exit(exitCode);
+    } else {
+      console.error('Usage: goose project bootstrap <owner>/<repo>');
+      process.exit(1);
+    }
+    break;
   default:
     console.error('Usage: goose <command> [args]');
     console.error('Commands:');
@@ -614,5 +631,6 @@ switch (command) {
     );
     console.error('  playbook export|import <project-slug> [--json]');
     console.error('  skill triggers <skill-name> [--json]');
+    console.error('  project bootstrap <owner>/<repo>  Bootstrap a new project into Factory');
     process.exit(1);
 }
