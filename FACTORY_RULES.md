@@ -28,7 +28,7 @@ These rules are immutable. Factory cannot modify this file. Humans can modify it
 
 ## Concurrency, budgets, safety
 
-14. One workflow at a time per project. (M11+ may relax to one workflow per work item; documented in an ADR when that lands.)
+14. One workflow at a time per work item. Per-project parallel cap is `project.maxParallelAgents` (default 1). Per-issue uniqueness guarded by orchestrator dispatch lock. (Was: one workflow per project; relaxed in ADR 0023.)
 15. Per-project budget caps enforced before workflow start and at every agent spawn.
 16. Flood protection: non-owner issues capped at `maxIssuesPerDayFromNonOwners` per project.
 17. Every workflow node has a max budget. Triage batches max 10 issues, body truncation at 2KB.

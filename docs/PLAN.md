@@ -1748,7 +1748,13 @@ For every milestone:
 
 **Outcome:** the scheduler respects `Depends on` and `Blocks` body-level dependencies, including cross-repo. Issues with unmet dependencies are blocked from dispatch. UI surfaces blocked status. Move-with-dependencies is implemented.
 
-**Mid-milestone status (2026-05-06):** halfway through. M11.01 (dependency parser) shipped via PR #497. The parser lives at `core/state-source/dependency-parser.ts` (not `github-labels.ts` as originally planned), exports `parseDependencies()` returning typed `DependencyRef[]`, and is colon-tolerant for `Depends on`, `Depends-On`, `Blocks`, `Blocked by`. Items 2–10 below remain open.
+**Status (2026-05-07):** effectively complete. M11.01–M11.15 shipped (dependency parser, scheduler dep filter, blocked label, UI dep visibility, blocked-on-card surface, cross-repo escalation, multi-parallel relaxation per ADR 0023, lifecycle archive + cross-run pattern miner + convergence detector, cross-run retrospective + playbook writer + gate thresholds, skill-coach skill + auto-trigger, predictive model router). Remaining: move-with-deps CLI/UI (M11.04), FACTORY_RULES rule-14 wording amendment, integration tests covering all five M11 paths.
+
+**Patches added 2026-05-07** (gap analysis vs Steve's autonomous-dev training corpus — `docs/steves-training-materials/`):
+- **M11.16** SDLC enforcement hooks: plan-first PreToolUse + (existing) PostToolUse lint-feedback + (existing) Stop-verify. Note: `post-write-quality.sh` and `stop-verify.sh` already shipped per Factory's own hook deployment; M11.16 only adds the plan-first PreToolUse hook + AC-completeness check at Stop.
+- **M11.17** non-skippable smoke gate at workflow init (`gh auth`, `git fsck`, `claude --version`, SQLite ping, budget floor, ANTHROPIC_API_KEY). Halts dispatch on failure, project-scoped only.
+- **M11.18** playbook export/import portability — `goose playbook export <slug>` / `import <slug>` ships PlaybookManifest as portable JSON with schemaVersion. Mined patterns transfer between projects.
+- **M11.19** skill auto-trigger description loop (eval Layer 1 only; Layer 2 binary-assertion authoring deferred per-skill into M19+).
 
 **Included scope:**
 - Dependency parser in `core/state-source/dependency-parser.ts`: handles `Depends on #N`, `Depends on owner/repo#N`, `Blocks #N`, plus tolerant variants — **shipped (M11.01)**
@@ -1774,16 +1780,25 @@ For every milestone:
 **Why vertically useful:** dependencies are how real software work organises. Without this, sprints are unrealistic — every multi-step feature has implicit ordering that the system can't enforce.
 
 **Rough GitHub issues:**
-1. Dependency parser with tolerant variants
-2. Cross-repo dependency resolver
-3. Scheduler dependency-satisfaction filter
-4. UI: dependency visibility on issue detail
-5. UI: blocked status on card
-6. Move-with-dependencies CLI and UI
-7. Unregistered cross-repo dep → escalate to needs-human
-8. Multi-parallel relaxation of project lock
-9. ADR documenting the rule-4 modification
-10. Tests: same-repo dep, cross-repo dep, unregistered dep, move-with-deps, parallel non-conflicting
+1. Dependency parser with tolerant variants — shipped (M11.01)
+2. Cross-repo dependency resolver — shipped
+3. Scheduler dependency-satisfaction filter — shipped
+4. UI: dependency visibility on issue detail — shipped
+5. UI: blocked status on card — shipped (M11.05)
+6. Move-with-dependencies CLI and UI — pending (M11.04)
+7. Unregistered cross-repo dep → escalate to needs-human — shipped
+8. Multi-parallel relaxation of project lock — shipped (M11.09 / ADR 0023)
+9. ADR documenting the rule-14 modification — shipped (ADR 0023; FACTORY_RULES wording amendment pending)
+10. Tests: same-repo dep, cross-repo dep, unregistered dep, move-with-deps, parallel non-conflicting — pending (M11.07)
+11. Lifecycle archive + cross-run pattern miner + convergence detector — shipped (M11.11)
+12. Cross-run retrospective + playbook writer + gate thresholds — shipped (M11.12)
+13. Skill-coach skill (propose diffs to skill prompts from convergent patterns) — shipped (M11.13)
+14. Auto-trigger skill-coach from playbook convergence — shipped (M11.14)
+15. Predictive model router for dev-side skills — shipped (M11.15)
+16. SDLC enforcement hooks (plan-first / lint-feedback / verify-before-stop) — pending (M11.16, #554)
+17. Smoke gate non-skippable workflow init — pending (M11.17, #555)
+18. Playbook export/import portability — pending (M11.18, #556)
+19. Skill auto-trigger description loop — pending (M11.19, #557)
 
 **Defer list:**
 - Graphical dep tree → never (over-engineered)
@@ -1908,6 +1923,8 @@ For every milestone:
 
 **Dependencies:** M13 (full skill chain operational)
 
+**Status note (2026-05-07):** the investigate skill in this milestone runs single-investigator. Wave-1/Wave-2 swarm pattern (M19.01) upgrades the skill post-M19; M14 ships single-agent and is upgraded transparently when M19 lands. M14 may be deferred indefinitely if no work-machine demand surfaces.
+
 **Exit criteria:** with `WORK_MACHINE=true` set, register a Work project. File a Jira ticket. Goose Hub triages it (ported triage skill works against Jira), suggests a Bitbucket repo, runs investigation in a Bitbucket worktree, produces findings. Without `WORK_MACHINE`, the project is hidden from the UI and the orchestrator refuses to tick.
 
 **Why vertically useful:** Goose Hub becomes useful for the day job. Even without write/PR support, investigation alone is a real time-saver. Architecturally, this milestone is the proof that the abstractions hold up beyond GitHub.
@@ -2000,7 +2017,7 @@ For every milestone:
 
 **Dependencies:** M15 (notifications needed for needs-human escalations from autonomous runs)
 
-**Exit criteria:** flag the Phaser game (or similar low-stakes project) as autonomous. File a `type:bug` issue. Wait 4 hours. Confirm: triage, investigation, dev, QA, review, merge, retrospective all run unsupervised inside Docker containers. Notification arrives if anything escalates to `factory:needs-human`. Run for 2 weeks and review.
+**Status note (2026-05-07):** auto-merge gate composes with M19.04 convergent review and M19.08 QualityScore once M19 lands — autonomous PRs require `score >= 80 AND isConverged(history)` rather than just QA+Review pass. Parallel-builder (M19.03) executes per-WP inside Docker containers (one container per WP-builder, orchestrator merges WP commits) under M19.
 
 **Why vertically useful:** the actual "factory" that ships software while you sleep. Up to here, Goose Hub is supervision-amplification. From here, it's productive without supervision (within strict bounds).
 
@@ -2097,6 +2114,54 @@ For every milestone:
 **Defer list:**
 - Hosted demo → never
 - Multi-user → never
+
+---
+
+### M19. Multi-Agent Orchestration
+
+**Outcome:** Factory orchestrator coordinates multiple sub-agents per work item rather than running a single agent per role. Wave-1/Wave-2 investigation swarm gathers facts in parallel during PLANNING; Engineering Spec format with file-ownership lets multiple builders work concurrently on disjoint Work Packages; convergent adversarial review hardens quality on first pass; 3-tier verification distinguishes "did the change execute" from "does it work" from "did anything else break"; per-run QualityScore quantifies ship-readiness.
+
+**Source:** Steve's autonomous-dev training corpus (`docs/steves-training-materials/Markdown Files/Autonomous Decelopment/` and `Skill Examples/`). Gap analysis 2026-05-07 confirmed none of these patterns existed in M12–M18 backlog.
+
+**Vocabulary** (additions to §6):
+- **Scout** — read-only sub-skill spawned during PLANNING that gathers facts (file:line citations) for one narrow concern. 6 canonical Wave-1 scouts: Schema, Code Path, Pattern Matcher, Test Inventory, Dependency Mapper, User Journey.
+- **Wave** — a parallel batch of scout spawns. Wave 1 = 4–6 scouts, fact-gathering. Wave 2 = 1–2 deep agents (Interface Designer + Risk Analyst), consume Wave-1 reports, emit paste-ready Zod/SQL/function-signatures.
+- **Cross-validation** — orchestrator step between Wave 1 and Wave 2 that detects contradictions between scout reports.
+- **Work Package (WP)** — unit of code change in an Engineering Spec. Declares files owned (no overlap with sibling WPs), acceptance criteria, builder model tier.
+- **Engineering Spec** — structured plan artefact: Objective + ACs + WPs + execution-order DAG + verificationTooling + AC→Journey→Verification map + risk register. Authored by `spec-author` skill; consumed by parallel-builder and convergent-review.
+- **Convergent review** — review with ≥2 reviewers in Round 1; rounds continue until 2 consecutive rounds with 0 new CRITICAL findings. ≥3 rounds for `auth | session | crypto | secret` topics.
+- **3-tier verification** — Tier 1 Structural (grep/AST: change executed?), Tier 2 Functional (runtime/API/Playwright: works?), Tier 3 Regression (prior tests still pass?). All three required.
+- **QualityScore** — per-run 0–100 score with components (P0/P1/P2/P3 counts, regressions_open, review_converged, uat_passed, static_passed, harness_pass_rate, architecturalScore). Convergence rule: score delta < 5.0 over last 3 iterations + zero P0/P1 + ≤3 regressions = ship-ready.
+
+**Included scope:**
+- M19.01 Wave-1/Wave-2 swarm in `investigate` skill (#558) + ADR 0024 sub-agent dispatch from skills
+- M19.02 `spec-author` outputs Engineering Spec with WPs + file ownership + AC→Journey→Verification map (#559)
+- M19.03 parallel implement workflow + ADR 0025 orchestrator-owned git + FACTORY_RULES rule-37 candidate (#560)
+- M19.04 convergent adversarial review with 2 parallel reviewers (#561)
+- M19.05 3-tier verification harness — Structural / Functional / Regression with carry-forward failure semantics (#562)
+- M19.06 record-decision runtime tool (filed for evaluation; may be deferred or discarded after A/B against existing two-stream decision summaries) (#563)
+- M19.07 8-category 100-point code-quality audit skill (#564)
+- M19.08 per-run QualityScore + convergence detection (#565)
+
+**Explicit exclusions:**
+- No new heavyweight dependencies (rule 27): no agent-graph framework, no embedding service, no vector DB
+- No `record-decision` adoption decision until A/B evidence accumulates from M19 runs
+- No FACTORY_RULES governance amendments outside rules 14 (M11) and 37 (this milestone) without ADR + bootstrap-pr
+- Skill-level eval Layer-2 (binary-assertion `eval.json`) per-skill authoring rolls in incrementally as each skill ships under M19; no milestone-wide eval batch
+
+**Dependencies:** M11 patches (M11.16–M11.19) land first; M13 Discover Lane independent and can ship concurrently.
+
+**Exit criteria:** a representative `type:feature` issue runs end-to-end through Wave-1 scouts, cross-validation, Wave-2 deep agents, Engineering Spec with multiple WPs, parallel build (≥2 concurrent builders on disjoint files), convergent review (≥2 reviewers, convergence detected), 3-tier verification (all tiers pass), QualityScore ≥ 80 with `isConverged(history) = true`. Cross-run retrospective archives the full lifecycle and surfaces ≥1 improvement candidate.
+
+**Why vertically useful:** unlocks the parallelism that makes "shipping while you sleep" actually fast. Single-agent-per-role caps throughput at the slowest sub-step; multi-agent fan-out + structured fact-gathering matches Steve's "dark factory" lifecycle and is the prerequisite for autonomous mode (M16) to scale beyond toy projects.
+
+**Rough GitHub issues** (filed 2026-05-07):
+- M19.01–M19.08 issues #558–#565 (see Included scope above for one-line each)
+
+**Defer list:**
+- Layer-2 `eval.json` per-skill authoring → roll in per-skill across M19+
+- Sub-investigation contracts (parent-budget child-isolated) → revisit if multi-issue parallel hits coordination problems
+- Network-allowlist enforcement during Wave dispatch → covered by existing rule 33 minimal env
 
 ---
 

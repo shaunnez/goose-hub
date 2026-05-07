@@ -1,7 +1,3 @@
-# todo
-Check if are capturing full logs in timeline (pre and post hooks?)
-
-
 # Todo
 1. Loading ... should always be something inside timeline "agent run" window indicating it's loading. This is seen on code but not other types. Obviously disappears when run is done and/or "resume" shows
 

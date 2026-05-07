@@ -782,3 +782,114 @@ Steve patterns already implemented in code or planned in open issues — no new 
   3. Approve M19 milestone creation with the 7 issues (Gaps 1, 2, 3, 4, 6, 11, 14) bundled?                                              
   4. Gap 12 (PRD triplet) — patch into existing #313 or separate M13.11?                                                                 
   5. Pre/post-hook tool-result capture issue — file separately as observability gap? 
+
+
+#  From me
+
+Gap 1 - ok
+Gap 5 - ok
+Gap 9 - add to m19 later for us to evaluate
+Gap 10 - agreed
+Gap 11 - agreed
+Gap 13 - ok great love it
+Rule 37 - ugh help me decide, i'll assume steves patterns better. The only reason i like docker is that my works API repos are all dockerized so i thought that might make it simpler. But actually, probably not. How big of an impact is this across our project though?
+Rule 14 adr - nah don't worry about the tag just updated factory_rules i give you permission
+Note 3 - gap 7 - lets do it
+
+
+Asks
+1. whatever you think
+2. yes
+3. yes
+4. you make a call i'm easy
+5. already on its way now
+
+# From you
+
+Rule 37 (worktrees) impact       
+                                           
+  Recommendation: adopt Steve's pattern. Medium surgery, bundled into M19 (no separate milestone needed).                                
+                                                                                                                                         
+  Surfaces touched (~6-8):                                                                                                               
+  - core/workspaces/ — repurpose to per-WP scratch (already creates worktrees)                                                           
+  - core/orchestrator/ — new orchestrator-owned commit logic per WP                                                                      
+  - skills/implement + skills/fix-feedback + new skills/implement-wp — strip Bash(git ...) from tool bundle                              
+  - slices/fix-issue — refactor: builder no longer commits, orchestrator does                                                            
+  - slices/parallel-implement (Gap 3) — built on Steve pattern from start                                                                
+  - ADR 0025 (orchestrator-owned git) — accompanies Gap 3                                                                                
+  - Rule 37 wording — lands when ADR 0025 ships                                                                                          
+                                                                                                                                         
+  Docker is orthogonal — your work API stack being dockerized doesn't drive this. The win is deterministic commits + auditable diffs per 
+  WP. Worktrees stay (orchestrator uses them for scratch); only authority changes.                                                       
+                                                                                                                                         
+  Folds cleanly into M19.03 (Gap 3) without standalone work. Net cost: ~30% extra effort on M19.03 vs naive parallel-build.              
+                                              
+  ---                                                                                                                                    
+  Execution plan                              
+                                      
+  1. Update FACTORY_RULES rule 14 (you granted permission, no bootstrap-pr tag)
+  2. Create M19 milestone via gh                                                                                                         
+  3. File M11.16–M11.19 patches (Gap 7, 8, 10-Layer1, 13)
+  4. File M19.01–M19.08 issues (Gap 1, 2, 3, 4, 6, 9, 11, 14)                                                                            
+  5. Patch existing #313 to include Gap 12 (User-Journey + Functional + Engineering triplet)                                             
+  6. Skip Gap 5 + Gap 12-as-separate-issue per call      
+
+
+  All issues filed. Summary:                                                                                                             
+                                   
+  Done                                                                                                                                   
+                                              
+  Milestone M19 created (#22)                                                                                                            
+                                
+  M11 patches filed (4):                                                                                                                 
+  - #554 M11.16: SDLC hooks (plan-first / lint / verify-before-stop) — Gap 7                                                             
+  - #555 M11.17: smoke gate non-skippable init — Gap 8                      
+  - #556 M11.18: playbook export/import portability — Gap 13                                                                             
+  - #557 M11.19: skill description-trigger loop (eval Layer 1) — Gap 10 partial
+                                                                                                                                         
+  M19 issues filed (8):         
+  - #558 M19.01: Wave 1/Wave 2 investigation swarm + ADR 0024 — Gap 1                                                                    
+  - #559 M19.02: Engineering Spec format with WPs + AC→Journey map — Gap 2
+  - #560 M19.03: parallel builder per-WP + orchestrator-owned git + ADR 0025 + rule 37 candidate — Gap 3                                 
+  - #561 M19.04: convergent adversarial review (2 reviewers) — Gap 4                                    
+  - #562 M19.05: 3-tier verification (Structural/Functional/Regression) — Gap 6                                                          
+  - #563 M19.06: record-decision runtime tool (eval-deferred) — Gap 9                                                                    
+  - #564 M19.07: 8-category code-quality audit skill — Gap 11                                                                            
+  - #565 M19.08: QualityScore 0-100 + convergence — Gap 14                                                                               
+                                                                                                                                         
+  #313 patched with PRD triplet (User Journeys + Functional Spec + Engineering Spec) — Gap 12 folded in.
+                                                                                                                                         
+  Blocked                                                                                                                                
+                                                                                                                                         
+  Rule 14 wording amendment — pre-tool-use-governance hook denied edit despite your permission. Need either:                             
+  - (a) you update line 31 of FACTORY_RULES.md manually                                                                                  
+  - (b) mv .claude/hooks/pre-tool-use-governance.sh{,.off}, I retry, you re-enable                                                       
+                                                                                                                                         
+  Suggested wording:                                                                                                                     
+                                              
+  ▎ 14. One workflow at a time per work item. Per-project parallel cap is project.maxParallelAgents (default 1). Per-issue uniqueness    
+  ▎ guarded by orchestrator dispatch lock. (Was: one workflow per project; relaxed in ADR 0023.)                                         
+                                      
+  Not done (your prior asks)                                                                                                             
+                                              
+  - PLAN.md updates — table in earlier report. Want me to draft a patch issue M11.20 or apply directly to docs/PLAN.md?                  
+  - Pre/post-hook tool-result capture — you said "already on its way", standing down.
+                                                                                                                                         
+  Pending decisions                           
+                                                                                                                                         
+  - Rule 37 wording (orchestrator-owned git): defer until ADR 0025 lands with M19.03. No action now.                                     
+  - Layer-2 binary-assertion eval: per-skill eval.json authoring rolls in M19+ as each skill ships. No issue.
+  - M14 Work Mode: defer indefinitely per your call.                                                                                     
+                                              
+✻ Crunched for 6m 44s                                                                                                                    
+                                              
+❯ Rule 14 - go for it. Yes update plan.md.     
+
+
+- M11 issues 1–10 marked shipped/pending; added 11–19 entries.
+    - M14 status note: single-investigator now, Wave swarm post-M19.
+    - M16 status note: composes with M19.04 (convergent review) + M19.08 (QualityScore) + M19.03 (parallel-builder per Docker container).
+    - New M19 entry added between M18 and §29: outcome, vocabulary block (8 terms), included scope (8 issues), exclusions, deps, exit
+  criteria, defer list.
+  - #554 patched — flagged that post-write-quality.sh + stop-verify.sh already shipped. M11.16 scope reduced: only require-spec.sh
+  PreToolUse + AC-completeness extension to existing stop-verify.sh. Resized S (was M).
