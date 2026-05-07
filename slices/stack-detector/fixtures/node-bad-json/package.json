@@ -1,0 +1,6 @@
+{
+  "name": "broken",
+  "scripts": {
+    "build": "tsc",
+  // missing-comma + line-comment make this invalid JSON
+}

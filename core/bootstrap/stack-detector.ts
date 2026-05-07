@@ -84,7 +84,11 @@ async function tryDetectNode(repoPath: string): Promise<NodeStackInfo | null> {
   try {
     pkg = JSON.parse(raw) as Record<string, unknown>;
   } catch {
-    return null;
+    // package.json exists but is unparseable (mid-edit, conflicted merge, etc).
+    // Returning null would let lower-priority detectors win and misclassify a
+    // Node repo as Python/Go/Rust. Preserve Node priority with empty defaults
+    // so the user can fix the manifest after bootstrap.
+    return { type: 'node', packageManager: 'npm', scripts: {} };
   }
 
   const scriptsRaw = pkg.scripts as Record<string, string> | undefined;
@@ -148,12 +152,15 @@ async function tryDetectGo(repoPath: string): Promise<GoStackInfo | null> {
 
   const content = await readText(goModPath);
 
-  // Extract module name: first non-comment line starting with "module "
+  // Extract module name: first non-comment line starting with "module ".
+  // Strip any trailing inline comment (e.g. `module example.com/app // root`).
   let moduleName = '';
   for (const line of content.split('\n')) {
     const trimmed = line.trim();
     if (trimmed.startsWith('module ')) {
-      moduleName = trimmed.slice('module '.length).trim();
+      const rest = trimmed.slice('module '.length);
+      const commentIdx = rest.indexOf('//');
+      moduleName = (commentIdx >= 0 ? rest.slice(0, commentIdx) : rest).trim();
       break;
     }
   }

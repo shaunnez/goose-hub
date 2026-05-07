@@ -142,4 +142,30 @@ describe('stack-detector slice', () => {
       expect(info.type).toBe('node');
     });
   });
+
+  describe('Node priority preserved when package.json is unparseable (P2 review)', () => {
+    const fixturePath = path.join(FIXTURES, 'node-bad-json');
+
+    it('still classifies as node despite invalid JSON', async () => {
+      const info = await detectStack(fixturePath);
+      expect(info.type).toBe('node');
+    });
+
+    it('falls back to safe defaults (npm + empty scripts)', async () => {
+      const info = await detectStack(fixturePath);
+      if (info.type !== 'node') throw new Error('Expected node stack');
+      expect(info.packageManager).toBe('npm');
+      expect(info.scripts).toEqual({});
+    });
+  });
+
+  describe('Go module name strips inline comments (P2 review)', () => {
+    const fixturePath = path.join(FIXTURES, 'go-with-comment');
+
+    it('returns the module path without the trailing comment', async () => {
+      const info = await detectStack(fixturePath);
+      if (info.type !== 'go') throw new Error('Expected go stack');
+      expect(info.moduleName).toBe('example.com/app');
+    });
+  });
 });
