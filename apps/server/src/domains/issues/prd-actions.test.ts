@@ -18,6 +18,17 @@ vi.mock('../../shared/projects.js', () => ({
     .fn()
     .mockResolvedValue({ source: { kind: 'github', repo: 'test-owner/test-repo' } }),
 }));
+// Stub the discover-lane dispatchers so the fire-and-forget calls in
+// approvePRD/rejectPRD don't pull the real grill/decompose workflows into
+// these unit tests. We assert call-counts to verify the wiring.
+const { dispatchDecomposePrdMock, dispatchGrillAndPrdMock } = vi.hoisted(() => ({
+  dispatchDecomposePrdMock: vi.fn().mockResolvedValue(undefined),
+  dispatchGrillAndPrdMock: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('../../shared/dispatch.js', () => ({
+  dispatchDecomposePrd: dispatchDecomposePrdMock,
+  dispatchGrillAndPrd: dispatchGrillAndPrdMock,
+}));
 
 import { getSourceForSlug } from '#shared/source.js';
 import { approvePRD, rejectPRD } from './prd-actions.js';
@@ -59,6 +70,11 @@ describe('approvePRD', () => {
         (e.payload as { to: string }).to === 'factory:decomposing',
     );
     expect(transitioned).toBeDefined();
+
+    // Wait a microtask cycle for the fire-and-forget dispatcher promise
+    // chain to resolve before asserting on the mock.
+    await Promise.resolve();
+    expect(dispatchDecomposePrdMock).toHaveBeenCalledWith(projectId, Number(item.externalId));
   });
 
   it('returns 409 when the issue is not in factory:prd-review', async () => {
@@ -114,6 +130,9 @@ describe('rejectPRD', () => {
 
     const evs = eventStore.replay({ projectId, workItemId: item.id });
     expect(evs.find((e) => e.kind === 'prd.rejected')).toBeDefined();
+
+    await Promise.resolve();
+    expect(dispatchGrillAndPrdMock).toHaveBeenCalledWith(projectId, Number(item.externalId));
   });
 
   it('returns 409 when the issue is not in factory:prd-review', async () => {

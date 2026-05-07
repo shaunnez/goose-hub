@@ -576,7 +576,155 @@ export async function dispatchForLabel(
     await dispatchNeedsFix(slug, issueNumber);
     return;
   }
+  if (labelName === 'factory:grilling') {
+    await dispatchGrillAndPrd(slug, issueNumber);
+    return;
+  }
+  if (labelName === 'factory:decomposing') {
+    await dispatchDecomposePrd(slug, issueNumber);
+    return;
+  }
   logger.info('dispatchForLabel: no workflow for label', { slug, labelName });
+}
+
+// ─── M13 Discover Lane dispatchers ────────────────────────────────────────────
+
+const PRD_MARKER = '<!-- factory:prd -->';
+const GRILL_QUESTION_MARKER = '<!-- factory:grill-question -->';
+const PRD_JSON_FENCE_RE = /```json\s*\n([\s\S]*?)\n```/;
+
+/**
+ * Extract the PRDOutput JSON from the latest `<!-- factory:prd -->` marker
+ * comment. Returns `null` if no marker comment exists or the JSON fence
+ * fails to parse. The decompose-prd workflow validates the parsed shape
+ * against `DecomposeOutputSchema`'s upstream `PRDOutputSchema` itself.
+ */
+function extractPrdFromComments(
+  comments: ReadonlyArray<{ body: string; createdAt: string }>,
+): unknown {
+  const matches = comments.filter((c) => c.body.startsWith(PRD_MARKER));
+  if (matches.length === 0) return null;
+  const sorted = [...matches].sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+  const fence = sorted[sorted.length - 1].body.match(PRD_JSON_FENCE_RE);
+  if (fence == null) return null;
+  try {
+    return JSON.parse(fence[1]);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Build the `priorReplies` array for grill-and-prd from issue comments.
+ * Agent questions carry the `<!-- factory:grill-question -->` prefix; every
+ * other comment is treated as a user reply. PRD-marker comments are
+ * filtered out so they don't bleed into the grill conversation.
+ */
+function buildPriorReplies(
+  comments: ReadonlyArray<{ body: string }>,
+): Array<{ role: 'user' | 'agent'; content: string }> {
+  return comments
+    .filter((c) => !c.body.startsWith(PRD_MARKER))
+    .map((c) => ({
+      role: c.body.startsWith(GRILL_QUESTION_MARKER) ? ('agent' as const) : ('user' as const),
+      content: c.body,
+    }));
+}
+
+/**
+ * Run the grill-and-prd workflow for a single issue. Drops duplicate
+ * triggers via parallel-lock. Webhook fires this when the issue lands in
+ * `factory:grilling`; the rejectPRD handler fires it after returning a
+ * rejected PRD to grilling.
+ */
+export async function dispatchGrillAndPrd(slug: string, issueNumber: number): Promise<void> {
+  const maxParallel = await getMaxParallelAgents(slug);
+  if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
+    logger.warn('dispatchGrillAndPrd: parallel-lock rejected (in-flight or at cap)', {
+      slug,
+      issueNumber,
+      inFlight: parallelLock.inFlightCount(slug),
+      maxParallel,
+    });
+    return;
+  }
+  try {
+    const { runGrillAndPrdWorkflow } = await import('@goose-hub/core/workflows/grill-and-prd.js');
+    const source = await getSourceForSlug(slug);
+    if (source == null) {
+      logger.error('dispatchGrillAndPrd: no source for slug', { slug });
+      return;
+    }
+    const item = await source.getItem(issueNumber.toString());
+    if (item.state !== 'factory:grilling') {
+      logger.info('dispatchGrillAndPrd: state already advanced, skipping', {
+        slug,
+        issueNumber,
+        state: item.state,
+      });
+      return;
+    }
+    const comments = await source.listComments(issueNumber.toString());
+    const priorReplies = buildPriorReplies(comments);
+    await runGrillAndPrdWorkflow({
+      workItem: item,
+      stateSource: source,
+      projectId: slug,
+      priorReplies,
+    });
+  } finally {
+    parallelLock.release(slug, issueNumber);
+  }
+}
+
+/**
+ * Run the decompose-prd workflow for a single issue. Drops duplicate
+ * triggers via parallel-lock. Webhook fires this when the issue lands
+ * in `factory:decomposing`; the approvePRD handler fires it after the
+ * human approves the PRD comment.
+ */
+export async function dispatchDecomposePrd(slug: string, issueNumber: number): Promise<void> {
+  const maxParallel = await getMaxParallelAgents(slug);
+  if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
+    logger.warn('dispatchDecomposePrd: parallel-lock rejected (in-flight or at cap)', {
+      slug,
+      issueNumber,
+      inFlight: parallelLock.inFlightCount(slug),
+      maxParallel,
+    });
+    return;
+  }
+  try {
+    const { runDecomposePrdWorkflow } = await import('@goose-hub/core/workflows/decompose-prd.js');
+    const source = await getSourceForSlug(slug);
+    if (source == null) {
+      logger.error('dispatchDecomposePrd: no source for slug', { slug });
+      return;
+    }
+    const item = await source.getItem(issueNumber.toString());
+    if (item.state !== 'factory:decomposing') {
+      logger.info('dispatchDecomposePrd: state already advanced, skipping', {
+        slug,
+        issueNumber,
+        state: item.state,
+      });
+      return;
+    }
+    const comments = await source.listComments(issueNumber.toString());
+    const prdOutput = extractPrdFromComments(comments);
+    if (prdOutput == null) {
+      logger.error('dispatchDecomposePrd: no PRD marker comment found', { slug, issueNumber });
+      return;
+    }
+    await runDecomposePrdWorkflow({
+      workItem: item,
+      prdOutput,
+      stateSource: source,
+      projectId: slug,
+    });
+  } finally {
+    parallelLock.release(slug, issueNumber);
+  }
 }
 
 /**

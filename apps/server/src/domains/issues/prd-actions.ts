@@ -9,7 +9,9 @@
  * back to `forceState` if `transitionState` throws.
  */
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { logger } from '@goose-hub/core/logger.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
+import { dispatchDecomposePrd, dispatchGrillAndPrd } from '#shared/dispatch.js';
 import type { Result } from '#shared/middleware.js';
 import { getSourceForSlug } from '#shared/source.js';
 import { getRepoRef } from './internal.js';
@@ -57,6 +59,17 @@ export async function approvePRD(slug: string, id: string): Promise<Result<{ ok:
     payload: { from: 'factory:prd-review', to: 'factory:decomposing', by: 'ui' },
   });
 
+  // Fire decompose-prd outside the response path. Mirrors the
+  // dispatchRetro-after-approve pattern in resolve-conflict so the
+  // workflow runs without waiting on webhook delivery.
+  dispatchDecomposePrd(slug, Number(id)).catch((err: unknown) => {
+    logger.error('dispatchDecomposePrd after approvePRD failed', {
+      slug,
+      id,
+      error: String(err),
+    });
+  });
+
   return { ok: true, data: { ok: true } };
 }
 
@@ -89,6 +102,15 @@ export async function rejectPRD(slug: string, id: string): Promise<Result<{ ok: 
     workItemId,
     kind: 'state.transitioned',
     payload: { from: 'factory:prd-review', to: 'factory:grilling', by: 'ui' },
+  });
+
+  // Re-enter the grill loop without waiting on webhook delivery.
+  dispatchGrillAndPrd(slug, Number(id)).catch((err: unknown) => {
+    logger.error('dispatchGrillAndPrd after rejectPRD failed', {
+      slug,
+      id,
+      error: String(err),
+    });
   });
 
   return { ok: true, data: { ok: true } };

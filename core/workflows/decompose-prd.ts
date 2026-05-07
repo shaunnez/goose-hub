@@ -175,20 +175,23 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
       let issueType: 'feature' | 'bug' | 'chore' | 'research' = 'feature';
       let issuePriority: 'critical' | 'high' | 'medium' | 'low' = 'medium';
 
+      // The decompose-issues skill emits `type:*` labels (issue #314 default
+      // labels include `type:feature`); accept both forms so codex-flagged
+      // outputs like `type:bug` correctly map to bug.
       for (const lbl of labelSet) {
-        if (lbl === 'bug') {
+        if (lbl === 'bug' || lbl === 'type:bug') {
           issueType = 'bug';
           break;
         }
-        if (lbl === 'chore') {
+        if (lbl === 'chore' || lbl === 'type:chore') {
           issueType = 'chore';
           break;
         }
-        if (lbl === 'research') {
+        if (lbl === 'research' || lbl === 'type:research') {
           issueType = 'research';
           break;
         }
-        if (lbl === 'feature') {
+        if (lbl === 'feature' || lbl === 'type:feature') {
           issueType = 'feature';
           break;
         }

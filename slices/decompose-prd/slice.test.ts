@@ -309,3 +309,107 @@ describe('resolveSiblingRefs', () => {
     expect(result).toBe('Depends on #99');
   });
 });
+
+// ---------------------------------------------------------------------------
+// 6. Label-prefix parsing — codex review feedback (PR #587)
+// ---------------------------------------------------------------------------
+
+describe('child issue type derived from labels', () => {
+  it('parses prefixed `type:bug` label, not just bare `bug`', async () => {
+    const source = new InMemoryLabelsSource(PROJECT_ID, REPO_REF);
+    const parent = await source.seedIssue({
+      title: 'Parent',
+      body: 'A bug epic.',
+      state: 'factory:prd-review',
+    });
+
+    const workItem = makeParentItem(parent.externalId);
+    const output = makeValidOutput([
+      {
+        title: 'Child with type:bug label',
+        body: 'Body.',
+        labels: ['factory:accepted', 'type:bug', 'priority:medium', 'schedule:current'],
+      },
+    ]);
+
+    await runDecomposePrdWorkflow({
+      workItem,
+      prdOutput: { slices: [] },
+      stateSource: source,
+      projectId: PROJECT_ID,
+      deps: { runtime: makeRuntime(output) },
+    });
+
+    const allItems = await source.listOpenWork();
+    const child = allItems.find((i) => i.externalId !== parent.externalId);
+    expect(child).toBeDefined();
+    expect(child?.type).toBe('bug');
+  });
+
+  it('parses prefixed `type:chore` and `type:research` correctly', async () => {
+    const source = new InMemoryLabelsSource(PROJECT_ID, REPO_REF);
+    const parent = await source.seedIssue({
+      title: 'Parent',
+      body: 'Mixed kinds.',
+      state: 'factory:prd-review',
+    });
+
+    const workItem = makeParentItem(parent.externalId);
+    const output = makeValidOutput([
+      {
+        title: 'Chore child',
+        body: 'Body.',
+        labels: ['type:chore', 'priority:low'],
+      },
+      {
+        title: 'Research child',
+        body: 'Body.',
+        labels: ['type:research', 'priority:medium'],
+      },
+    ]);
+
+    await runDecomposePrdWorkflow({
+      workItem,
+      prdOutput: { slices: [] },
+      stateSource: source,
+      projectId: PROJECT_ID,
+      deps: { runtime: makeRuntime(output) },
+    });
+
+    const allItems = await source.listOpenWork();
+    const choreChild = allItems.find((i) => i.title === 'Chore child');
+    const researchChild = allItems.find((i) => i.title === 'Research child');
+    expect(choreChild?.type).toBe('chore');
+    expect(researchChild?.type).toBe('research');
+  });
+
+  it('still accepts the bare-label form for backwards compatibility', async () => {
+    const source = new InMemoryLabelsSource(PROJECT_ID, REPO_REF);
+    const parent = await source.seedIssue({
+      title: 'Parent',
+      body: 'Legacy labels.',
+      state: 'factory:prd-review',
+    });
+
+    const workItem = makeParentItem(parent.externalId);
+    const output = makeValidOutput([
+      {
+        title: 'Legacy bug child',
+        body: 'Body.',
+        labels: ['bug', 'priority:medium'],
+      },
+    ]);
+
+    await runDecomposePrdWorkflow({
+      workItem,
+      prdOutput: { slices: [] },
+      stateSource: source,
+      projectId: PROJECT_ID,
+      deps: { runtime: makeRuntime(output) },
+    });
+
+    const allItems = await source.listOpenWork();
+    const child = allItems.find((i) => i.title === 'Legacy bug child');
+    expect(child?.type).toBe('bug');
+  });
+});
