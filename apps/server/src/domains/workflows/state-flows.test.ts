@@ -149,6 +149,7 @@ function makeInvestigateOutput() {
     keyFiles: [],
     confidence: 'high',
     openQuestions: [],
+    requiresBrowserRepro: false,
     decisionSummaries: [{ kind: 'INSIGHT', summary: 'Mock investigation' }],
   };
 }
