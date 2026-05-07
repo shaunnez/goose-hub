@@ -239,8 +239,10 @@ Click on a request to see full headers, payload, and response.
 ### 4. Check Event Stream (UI)
 
 If the target project is registered in Goose Hub, navigate to **Events** and look for:
-- `webhook.dispatched` events (when the webhook fires)
-- Workflow dispatch events (when a label triggers an action)
+- `agent.spawned` events (from the dispatch triggered by the webhook)
+- `state.transitioned` events (when a label change triggers a workflow)
+
+(The webhook handler itself does not append a dedicated `webhook.*` event on success — see `apps/server/src/domains/webhooks/handler.ts`. The downstream dispatch is what surfaces in the event stream.)
 
 ## Troubleshooting
 
@@ -273,7 +275,7 @@ If the target project is registered in Goose Hub, navigate to **Events** and loo
    - Check the webhook settings; ensure **Active** is checked
 
 2. **Payload URL is unreachable:**
-   - Test the URL in a browser: `curl https://<your-host>/webhooks/github` (should return `405 Method Not Allowed` since it only accepts POST)
+   - Test the URL: `curl -i https://<your-host>/webhooks/github` returns `404 Not Found` because the route is only registered for POST in Hono and a healthy deployment will produce a 404 on GET. To confirm the server is reachable, hit the `/health` endpoint instead: `curl https://<your-host>/health` should return `200`.
    - If using ngrok, ensure the tunnel is still running and the URL is current
    - Check firewall/network settings; the server may be blocking inbound HTTPS
 
