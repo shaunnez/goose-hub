@@ -129,6 +129,7 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
                 base: 'main',
               }),
             createWorktreeImpl: () => '/mock/worktree',
+            prewarmWorktreeImpl: () => undefined,
             cleanupWorktreeImpl: () => undefined,
             resolveWorktreeHeadShaImpl: () => 'mock-sha-abc123',
           }
