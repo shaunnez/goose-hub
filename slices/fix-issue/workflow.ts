@@ -418,7 +418,7 @@ async function afterImplement(input: AfterImplementInput): Promise<void> {
 
   // Step 5: open PR.
   const token = process.env.GITHUB_TOKEN ?? '';
-  if (token.length === 0) {
+  if (token.length === 0 && process.env.MOCK_OPEN_PR !== 'true') {
     throw new Error('GITHUB_TOKEN env var is required to open PR');
   }
   const repoRef = stateSource.repoRef;

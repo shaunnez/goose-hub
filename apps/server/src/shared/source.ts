@@ -1,4 +1,5 @@
 import { GitHubLabelsSource } from '@goose-hub/core/state-source/github-labels.js';
+import { InMemoryLabelsSource } from '@goose-hub/core/state-source/in-memory-labels.js';
 import type { StateSource } from '@goose-hub/core/state-source/interface.js';
 import { getProject } from './projects.js';
 
@@ -22,6 +23,14 @@ export async function getSourceForSlug(slug: string): Promise<StateSource | null
 
   const cfg = await getProject(slug);
   if (cfg == null) return null;
+
+  if (process.env.MOCK_SOURCE === 'true') {
+    const repoRef = cfg.source.kind === 'github' ? cfg.source.repo : slug;
+    const source = new InMemoryLabelsSource(cfg.id, repoRef);
+    sourceCache.set(slug, source);
+    return source;
+  }
+
   if (cfg.source.kind !== 'github') {
     throw new Error(`Unsupported source kind for ${slug}: ${cfg.source.kind}`);
   }
@@ -35,4 +44,8 @@ export async function getSourceForSlug(slug: string): Promise<StateSource | null
   const source = new GitHubLabelsSource(cfg.id, cfg.source.repo, token, ownerLogin);
   sourceCache.set(slug, source);
   return source;
+}
+
+export function resetSourceCache(): void {
+  sourceCache.clear();
 }

@@ -172,6 +172,9 @@ export async function createProjectAwareTargetSource(
  * "repo not registered" (which is the only path to `state: 'unregistered'`).
  */
 function defaultFetchTargetForProject(token: string): ProjectIssueFetcher {
+  if (process.env.MOCK_SOURCE === 'true') {
+    return async (_repoRef, _issueNumber) => ({ state: 'open', title: 'mock-dep' });
+  }
   return async (repoRef, issueNumber) => {
     const url = `https://api.github.com/repos/${repoRef}/issues/${issueNumber}`;
     let response: Response;

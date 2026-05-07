@@ -29,12 +29,21 @@ import { PlaywrightReproSchema } from '@goose-hub/skills/playwright-repro/schema
  * On failure: cleanup worktree, persist agent.run-failed event,
  * post GitHub comment, transition to factory:needs-human.
  */
+export interface InvestigateWorkflowDeps {
+  createWorktreeImpl?: typeof createWorktree;
+  prewarmWorktreeImpl?: typeof prewarmWorktree;
+}
+
 export async function runInvestigateWorkflow(
   workItem: WorkItem,
   stateSource: StateSource,
   projectId: string,
   targetRepo: string,
+  deps: InvestigateWorkflowDeps = {},
 ): Promise<void> {
+  const createWtFn = deps.createWorktreeImpl ?? createWorktree;
+  const prewarmWtFn = deps.prewarmWorktreeImpl ?? prewarmWorktree;
+
   const runId = crypto.randomUUID();
   const runtime = new ClaudeCliRuntime();
   const investigatePrompt = readPromptWithContext('investigate', projectId);
@@ -44,9 +53,9 @@ export async function runInvestigateWorkflow(
 
   const { personaId } = selectPersona(projectId, 'investigator');
   const projectConfig = await getProjectBySlug(projectId);
-  const worktreePath = createWorktree(targetRepo, runId);
+  const worktreePath = createWtFn(targetRepo, runId);
   if (workItem.type === 'bug') {
-    prewarmWorktree(worktreePath, '@goose-hub/web');
+    prewarmWtFn(worktreePath, '@goose-hub/web');
   }
 
   try {

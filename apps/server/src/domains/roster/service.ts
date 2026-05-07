@@ -50,6 +50,9 @@ async function createGithubImprovementIssue(
   token: string,
   candidate: ImprovementCandidateRow,
 ): Promise<string> {
+  if (process.env.MOCK_SOURCE === 'true') {
+    return `https://github.com/${repo}/issues/mock-improvement`;
+  }
   const title = `[improvement] ${candidate.suggestionText.slice(0, 120)}`;
   const sourceLink = candidate.sourceTaskId
     ? `Source task: ${candidate.sourceTaskId}`

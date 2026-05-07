@@ -104,6 +104,7 @@ function makeMockSource(): StateSource {
     setLabelInGroup: vi.fn().mockResolvedValue(undefined),
     attach: vi.fn().mockResolvedValue(undefined),
     createIssue: vi.fn(),
+    getPrDiff: vi.fn().mockResolvedValue(''),
     watchForUpdates: vi.fn(),
   };
 }

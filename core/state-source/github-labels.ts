@@ -1,3 +1,4 @@
+import { eventStore } from '../event-stream/store.js';
 import { resolveState } from '../state-machine/conflict-resolver.js';
 import type { StateName } from '../state-machine/states.js';
 import { isLegalTransition } from '../state-machine/transitions.js';
@@ -452,6 +453,32 @@ export class GitHubLabelsSource implements StateSource {
     }
     const issue = (await res.json()) as GithubIssue;
     return mapIssueToWorkItem(issue, this.repoRef, this.ownerLogin);
+  }
+
+  async getPrDiff(itemId: string): Promise<string> {
+    const number = parseIssueNumber(itemId);
+    const workItemId = `github:${this.repoRef}#${number}`;
+    const events = eventStore.replay({ workItemId });
+    const prOpened = events
+      .slice()
+      .reverse()
+      .find((e) => e.kind === 'pr.opened');
+    if (prOpened == null) return '';
+    const payload = prOpened.payload as Record<string, unknown>;
+    const prNumber = typeof payload.prNumber === 'number' ? payload.prNumber : undefined;
+    if (prNumber == null) return '';
+    try {
+      const res = await fetch(`https://api.github.com/repos/${this.repoRef}/pulls/${prNumber}`, {
+        headers: {
+          ...this.baseHeaders,
+          Accept: 'application/vnd.github.v3.diff',
+        },
+      });
+      if (!res.ok) return '';
+      return await res.text();
+    } catch {
+      return '';
+    }
   }
 
   async watchForUpdates(_callback: (event: SourceEvent) => void): Promise<Subscription> {

@@ -111,6 +111,9 @@ async function tryGitHubPrDiff(
   repo: string,
   fetchImpl: typeof fetch,
 ): Promise<{ diff: string; prRunId: string | null } | null> {
+  if (process.env.MOCK_SOURCE === 'true') {
+    return { diff: '--- a/mock.ts\n+++ b/mock.ts\n@@ -1 +1 @@\n-old\n+new\n', prRunId: null };
+  }
   const token = process.env.GITHUB_TOKEN ?? '';
   if (token.length === 0) return null;
   const prEvent = [...ascending]

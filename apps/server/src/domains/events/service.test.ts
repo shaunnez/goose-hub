@@ -8,7 +8,12 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
 }));
 
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
-import { parseSseFilter, recordDecisionSummary, recordToolCall, recordToolResult } from './service.js';
+import {
+  parseSseFilter,
+  recordDecisionSummary,
+  recordToolCall,
+  recordToolResult,
+} from './service.js';
 
 describe('parseSseFilter (#208)', () => {
   it('passes through projectId and workItemId from input', () => {

@@ -134,6 +134,7 @@ function makeMockSource(overrides: Partial<StateSource> = {}): StateSource {
     setLabelInGroup: vi.fn().mockResolvedValue(undefined),
     attach: vi.fn().mockResolvedValue(undefined),
     createIssue: vi.fn(),
+    getPrDiff: vi.fn().mockResolvedValue(''),
     watchForUpdates: vi.fn(),
     ...overrides,
   };
@@ -167,28 +168,24 @@ describe('runReviewWorkflow', () => {
       expect(getPrDiff).toHaveBeenCalledWith('42');
     });
 
-    it('uses gh pr diff via pr.opened event when stateSource has no getPrDiff', async () => {
+    it('passes the prDiff from stateSource to the agent', async () => {
       const item = makeWorkItem();
-      const source = makeMockSource();
+      const getPrDiff = vi.fn().mockResolvedValue('diff --git a/foo.ts b/foo.ts\n+added line');
+      const source = makeMockSource({ getPrDiff } as never);
       mockRun.mockResolvedValueOnce(makeApprovedResult());
-      mockExecSync.mockReturnValueOnce('diff --git a/foo.ts b/foo.ts\n+added line');
-      mockReplay.mockReturnValue([
-        { kind: 'pr.opened', payload: { prNumber: 9100 }, workItemId: item.id },
-      ]);
 
       const { runReviewWorkflow } = await import('./workflow.js');
       await runReviewWorkflow(item, source, 'test-project', 'owner/repo');
 
-      expect(mockExecSync).toHaveBeenCalledWith('gh pr diff 9100', expect.any(Object));
+      expect(getPrDiff).toHaveBeenCalledWith('42');
       const spec = mockRun.mock.calls[0][0] as { context: Record<string, unknown> };
       expect(spec.context.prDiff).toBe('diff --git a/foo.ts b/foo.ts\n+added line');
     });
 
-    it('passes empty prDiff when no pr.opened event exists', async () => {
+    it('passes empty prDiff when stateSource returns empty string', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();
       mockRun.mockResolvedValueOnce(makeApprovedResult());
-      mockReplay.mockReturnValue([]);
 
       const { runReviewWorkflow } = await import('./workflow.js');
       await runReviewWorkflow(item, source, 'test-project', 'owner/repo');

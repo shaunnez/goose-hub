@@ -72,6 +72,7 @@ export async function dispatchInvestigate(slug: string, issueNumber: number): Pr
         source: unknown,
         slug: string,
         repoRoot: string,
+        deps?: Record<string, unknown>,
       ) => Promise<unknown>;
     };
     const source = await getSourceForSlug(slug);
@@ -80,10 +81,23 @@ export async function dispatchInvestigate(slug: string, issueNumber: number): Pr
       return;
     }
     const item = await source.getItem(issueNumber.toString());
-    await runInvestigateWorkflow(item, source, slug, REPO_ROOT);
+    const mockInvestigateDeps: Record<string, unknown> | undefined =
+      process.env.MOCK_AGENTS === 'true'
+        ? {
+            createWorktreeImpl: () => '/mock/worktree',
+            prewarmWorktreeImpl: () => undefined,
+          }
+        : undefined;
+    await runInvestigateWorkflow(item, source, slug, REPO_ROOT, mockInvestigateDeps);
   } finally {
     parallelLock.release(slug, issueNumber);
   }
+
+  // Chain to investigation-complete routing outside the lock. In production the
+  // GitHub label-change webhook fires dispatchForLabel('factory:investigation-complete')
+  // instead; in MOCK_SOURCE mode there are no webhooks so we chain explicitly.
+  // Idempotency is enforced by the state check inside dispatchInvestigationComplete.
+  await dispatchInvestigationComplete(slug, issueNumber);
 }
 
 /** Run the M7 fix-issue workflow for a single issue (#183). Drops duplicate triggers for the same issue. */
@@ -129,6 +143,7 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
                 base: 'main',
               }),
             createWorktreeImpl: () => '/mock/worktree',
+            prewarmWorktreeImpl: () => undefined,
             cleanupWorktreeImpl: () => undefined,
             resolveWorktreeHeadShaImpl: () => 'mock-sha-abc123',
           }
@@ -162,6 +177,7 @@ export async function dispatchResolveConflict(slug: string, issueNumber: number)
         source: unknown,
         slug: string,
         repoRoot: string,
+        deps?: Record<string, unknown>,
       ) => Promise<unknown>;
     };
     const source = await getSourceForSlug(slug);
@@ -170,7 +186,14 @@ export async function dispatchResolveConflict(slug: string, issueNumber: number)
       return;
     }
     const item = await source.getItem(issueNumber.toString());
-    await runResolveConflictWorkflow(item, source, slug, REPO_ROOT);
+    const mockConflictDeps: Record<string, unknown> | undefined =
+      process.env.MOCK_SOURCE === 'true'
+        ? {
+            mergePRImpl: () => Promise.resolve({ sha: 'mock-sha-merged', merged: true }),
+            gitExecImpl: () => '',
+          }
+        : undefined;
+    await runResolveConflictWorkflow(item, source, slug, REPO_ROOT, mockConflictDeps);
     // Fire-and-forget retro after conflict resolution + merge, same pattern as
     // approveIssue. The label-change webhook also triggers dispatchRetro on
     // factory:retrospecting; running it here avoids waiting for webhook delivery.
@@ -215,6 +238,7 @@ export async function dispatchQa(slug: string, issueNumber: number): Promise<voi
             expected: string;
             tolerance: string;
           }>;
+          runTests?: (() => Promise<null>) | undefined;
         },
       ) => Promise<unknown>;
     };
@@ -225,7 +249,11 @@ export async function dispatchQa(slug: string, issueNumber: number): Promise<voi
     }
     const item = await source.getItem(issueNumber.toString());
     const verifyCommands = parseAcceptanceCriteria(item.body ?? '');
-    await runQaWorkflow(item, source, slug, item.repoRef ?? slug, { verifyCommands });
+    const qaRunTests = process.env.MOCK_SOURCE === 'true' ? () => Promise.resolve(null) : undefined;
+    await runQaWorkflow(item, source, slug, item.repoRef ?? slug, {
+      verifyCommands,
+      runTests: qaRunTests,
+    });
   } finally {
     parallelLock.release(slug, issueNumber);
   }

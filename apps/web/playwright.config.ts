@@ -8,6 +8,7 @@ const PORT = Number(process.env.WEB_PORT ?? 5173);
 
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: ['**/pipeline/**'],
   timeout: 30_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
