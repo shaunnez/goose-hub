@@ -6,8 +6,9 @@ import type { MilestoneDto, WorkItemDto } from '@/lib/types';
 import { getPersonaLabel, usePersonaMap } from '@/lib/usePersonaMap';
 import { formatCost, formatTokens } from '@/lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useIssueCostsBreakdown } from '../lib/costs';
+import { EVENT_KIND_LABEL } from '../lib/timeline';
 import { MoveToCurrentDialog } from './MoveToCurrentDialog';
 import { PillSelect } from './PillSelect';
 import { TransitionButton } from './TransitionButton';
@@ -37,10 +38,23 @@ export function TaskHeader({ item, projectSlug, hasOpenDep = false }: TaskHeader
   const lane = item?.state ? (laneForState(item.state) ?? item.state.replace('factory:', '')) : '—';
   const lastPersonaLabel = getPersonaLabel(personaMap, item?.lastPersonaId) ?? '—';
 
-  const invalidate = () => {
+  const invalidate = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['issue', projectSlug, item?.externalId] });
     void queryClient.invalidateQueries({ queryKey: ['issues', projectSlug] });
-  };
+  }, [queryClient, projectSlug, item?.externalId]);
+
+  // Re-fetch state when any SSE event arrives for this work item so the state
+  // pill reflects server-side transitions without requiring a page reload.
+  useEffect(() => {
+    if (!item?.id) return;
+    const url = `/events?projectId=${encodeURIComponent(projectSlug)}&workItemId=${encodeURIComponent(item.id)}`;
+    const es = new EventSource(url);
+    const handler = () => invalidate();
+    for (const kind of Object.keys(EVENT_KIND_LABEL)) {
+      es.addEventListener(kind, handler);
+    }
+    return () => es.close();
+  }, [projectSlug, item?.id, invalidate]);
 
   const onPriority = async (value: string) => {
     if (!item) return;
