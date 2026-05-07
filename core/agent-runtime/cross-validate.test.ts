@@ -86,6 +86,19 @@ describe('crossValidate', () => {
     expect(result.contradictions[0]?.facts).toHaveLength(3);
   });
 
+  it('does NOT flag a single scout listing multiple distinct facts at the same file:line', () => {
+    // A catalog from one scout is not a contradiction — contradictions are
+    // by definition cross-scout disagreement.
+    const result = crossValidate([
+      rep('scout-pattern', [
+        { file: 'src/x.ts', line: 7, fact: 'callsite A', confidence: 'high' },
+        { file: 'src/x.ts', line: 7, fact: 'callsite B (overload)', confidence: 'high' },
+      ]),
+    ]);
+    expect(result.contradictions).toHaveLength(0);
+    expect(result.hasContradictions).toBe(false);
+  });
+
   it('skips reports whose status is not ok (only ok scouts contribute to cross-validation)', () => {
     const ok: ScoutReport = {
       scoutName: 'ok-1',

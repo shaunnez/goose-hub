@@ -2,6 +2,7 @@ import type { AgentEvent, AppendEventInput, EventKind } from '../event-stream/st
 import { eventStore } from '../event-stream/store.js';
 import { assembleSpawnContext } from './context-assembly.js';
 import type { AgentResult, AgentRuntime, AgentSpec, DecisionSummary } from './interface.js';
+import { ScoutOutputSchema } from './scout-output.js';
 
 /**
  * Wave-1 / Wave-2 swarm dispatch (M19.01, ADR 0030).
@@ -89,6 +90,24 @@ export interface DispatchWaveOptions {
   personaId: string;
   /** Optional override (tests). Defaults to the real event store. */
   appendEvent?: (input: AppendEventInput) => AgentEvent;
+  /**
+   * Production callers supply this to populate `appendSystemPrompt` and
+   * `outputJsonSchema` on each scout spawn. Without it the underlying
+   * `ClaudeCliRuntime` skips `--system-prompt` and `--json-schema` and
+   * scouts run with generic CLI behaviour. Tests don't need it because
+   * they inject a fake runtime that ignores those fields.
+   *
+   * Recommended production wiring:
+   *
+   *   loadSkillAssets: (scoutName) => ({
+   *     appendSystemPrompt: readPromptWithContext(scoutName, slug),
+   *     outputJsonSchema: toJsonSchema(ScoutOutputSchema),
+   *   })
+   */
+  loadSkillAssets?: (scoutName: string) => {
+    appendSystemPrompt?: string;
+    outputJsonSchema?: Record<string, unknown>;
+  };
 }
 
 /** Keys a scout context is allowed to carry. Anything else → tool.violation. */
@@ -190,6 +209,10 @@ interface RunOneScoutContext {
   workItemId?: string;
   runtime: AgentRuntime;
   personaId: string;
+  loadSkillAssets?: (scoutName: string) => {
+    appendSystemPrompt?: string;
+    outputJsonSchema?: Record<string, unknown>;
+  };
 }
 
 async function runOneScout(
@@ -232,7 +255,11 @@ async function runOneScout(
     }
   }
 
-  // Build the AgentSpec with freshContext: true.
+  // Build the AgentSpec with freshContext: true. Production callers supply
+  // `loadSkillAssets` so `appendSystemPrompt` and `outputJsonSchema` are
+  // populated; without them the runtime would skip --system-prompt and
+  // --json-schema and the scout would run with generic CLI behaviour.
+  const skillAssets = ctx.loadSkillAssets?.(spec.scoutName);
   const spawnSpec: AgentSpec = {
     runId,
     role: 'investigator',
@@ -244,6 +271,8 @@ async function runOneScout(
     toolExtras: [],
     budgets: { maxTurns: 10, maxBudgetUsd: 0.5, timeoutMs: scoutTimeoutMs },
     personaId: ctx.personaId,
+    appendSystemPrompt: skillAssets?.appendSystemPrompt,
+    outputJsonSchema: skillAssets?.outputJsonSchema,
   };
 
   // Route through the centralized gateway so the holdout enforcement path
@@ -307,9 +336,35 @@ async function runOneScout(
     };
   }
 
-  const output = result.output as { findings?: ScoutFinding[] } | null;
-  const findings = output?.findings ?? [];
-  const decisionSummaries = result.decisionSummaries ?? [];
+  // Validate scout output against the canonical schema. Without this, a
+  // scout that ran without `--json-schema` could return arbitrary text and
+  // the swarm would silently treat it as an empty-findings success — which
+  // would let invalid Wave-1 results drive Wave-2 dispatch.
+  const parsed = ScoutOutputSchema.safeParse(result.output);
+  if (!parsed.success) {
+    const reason = `scout output failed schema validation: ${parsed.error.issues
+      .map((i) => `${i.path.join('.')}: ${i.message}`)
+      .join('; ')}`;
+    append({
+      projectId: ctx.projectId,
+      workItemId: ctx.workItemId ?? null,
+      kind: 'swarm.scout-failed',
+      payload: { runId, scoutName: spec.scoutName, errorReason: reason },
+      runId,
+    });
+    return {
+      scoutName: spec.scoutName,
+      status: 'error',
+      findings: [],
+      decisionSummaries: result.decisionSummaries ?? [],
+      errorReason: reason,
+      runId,
+    };
+  }
+
+  const findings = parsed.data.findings;
+  const decisionSummaries =
+    result.decisionSummaries.length > 0 ? result.decisionSummaries : parsed.data.decisionSummaries;
 
   append({
     projectId: ctx.projectId,

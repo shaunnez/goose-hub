@@ -306,6 +306,85 @@ describe('swarm.dispatchWave', () => {
     expect(v.role).toBe('scout');
   });
 
+  it('marks status: "error" when a scout returns output that fails ScoutOutputSchema validation', async () => {
+    const { fn: appendEvent, events } = makeFakeAppendEvent();
+    const garbageRuntime = makeRuntime({
+      'scout-schema': () => Promise.resolve(okResult('scout-schema')),
+      'scout-code-path': () => Promise.resolve(okResult('scout-code-path')),
+      'scout-pattern': () => Promise.resolve(okResult('scout-pattern')),
+      // Scout that returns arbitrary text (no findings, no schema fields).
+      'scout-broken': () =>
+        Promise.resolve({
+          output: 'I am a free-text response, ignoring the schema',
+          decisionSummaries: [],
+          events: [],
+        }),
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-bad',
+      scoutSpecs: [
+        makeScoutSpec('scout-schema'),
+        makeScoutSpec('scout-code-path'),
+        makeScoutSpec('scout-pattern'),
+        makeScoutSpec('scout-broken'),
+      ],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime: garbageRuntime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+    });
+
+    const broken = result.reports.find((r) => r.scoutName === 'scout-broken');
+    expect(broken?.status).toBe('error');
+    expect(broken?.errorReason).toContain('schema validation');
+    expect(events.some((e) => e.kind === 'swarm.scout-failed')).toBe(true);
+    // 3 succeeded + 1 invalid: still advances (≤1 failure tolerated).
+    expect(result.shouldAdvance).toBe(true);
+  });
+
+  it('forwards loadSkillAssets results to the AgentSpec on each scout spawn', async () => {
+    const { fn: appendEvent } = makeFakeAppendEvent();
+    const seenSpecs: AgentSpec[] = [];
+    const runtime: AgentRuntime = {
+      async run(spec: AgentSpec): Promise<AgentResult> {
+        seenSpecs.push(spec);
+        return okResult(spec.skill);
+      },
+    };
+
+    await dispatchWave({
+      parentRunId: 'parent-assets',
+      scoutSpecs: [
+        makeScoutSpec('scout-schema'),
+        makeScoutSpec('scout-code-path'),
+        makeScoutSpec('scout-pattern'),
+      ],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      loadSkillAssets: (scoutName) => ({
+        appendSystemPrompt: `prompt for ${scoutName}`,
+        outputJsonSchema: { type: 'object', $id: scoutName },
+      }),
+    });
+
+    expect(seenSpecs).toHaveLength(3);
+    for (const spec of seenSpecs) {
+      expect(spec.appendSystemPrompt).toBe(`prompt for ${spec.skill}`);
+      expect(spec.outputJsonSchema).toEqual({ type: 'object', $id: spec.skill });
+    }
+  });
+
   it('routes each child spawn through assembleSpawnContext (freshContext: true per scout)', async () => {
     const { fn: appendEvent } = makeFakeAppendEvent();
     const seenSpecs: AgentSpec[] = [];

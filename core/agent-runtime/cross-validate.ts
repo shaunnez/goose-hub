@@ -66,6 +66,13 @@ export function crossValidate(reports: ScoutReport[]): CrossValidationResult {
     // Agreement: every fact at the same key reports the same `fact` text.
     const distinctFacts = new Set(facts.map((f) => f.fact));
     if (distinctFacts.size <= 1) continue;
+    // Cross-scout discipline: a single scout reporting multiple distinct
+    // facts at the same file:line is a *catalog*, not a contradiction. Wave
+    // 1 contradictions are about scouts disagreeing — not about one scout
+    // listing several adjacent observations. Require at least two distinct
+    // scout names to flag.
+    const distinctScouts = new Set(facts.map((f) => f.scoutName));
+    if (distinctScouts.size < 2) continue;
     const sep = key.lastIndexOf('::');
     const file = key.slice(0, sep);
     const lineRaw = key.slice(sep + 2);
@@ -75,7 +82,7 @@ export function crossValidate(reports: ScoutReport[]): CrossValidationResult {
       file,
       line,
       facts,
-      scouts: Array.from(new Set(facts.map((f) => f.scoutName))),
+      scouts: Array.from(distinctScouts),
     });
   }
 
