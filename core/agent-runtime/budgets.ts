@@ -131,6 +131,64 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     timeoutMs: 240_000,
     modelTier: 'sonnet',
   },
+  // M19.01 — Wave-1 scouts. Read-only fact-gathering; cheap and short.
+  // 90 s timeout matches ADR 0030 default; haiku-tier is enough for
+  // grep-and-quote work. Per-scout maxTurns capped low to enforce
+  // narrow-concern discipline (Steve "≤3 turns per intent default" —
+  // LLM Tool Base Integrations slide 5 line 119; we allow up to 10
+  // for safety while keeping the spirit).
+  'scout-schema': {
+    maxTurns: 10,
+    maxBudgetUsd: 0.15,
+    timeoutMs: 90_000,
+    modelTier: 'haiku',
+  },
+  'scout-code-path': {
+    maxTurns: 10,
+    maxBudgetUsd: 0.15,
+    timeoutMs: 90_000,
+    modelTier: 'haiku',
+  },
+  'scout-pattern': {
+    maxTurns: 10,
+    maxBudgetUsd: 0.15,
+    timeoutMs: 90_000,
+    modelTier: 'haiku',
+  },
+  'scout-test-inventory': {
+    maxTurns: 10,
+    maxBudgetUsd: 0.15,
+    timeoutMs: 90_000,
+    modelTier: 'haiku',
+  },
+  'scout-dependency': {
+    maxTurns: 10,
+    maxBudgetUsd: 0.15,
+    timeoutMs: 90_000,
+    modelTier: 'haiku',
+  },
+  'scout-user-journey': {
+    maxTurns: 10,
+    maxBudgetUsd: 0.15,
+    timeoutMs: 90_000,
+    modelTier: 'haiku',
+  },
+  // M19.01 — Wave-2 deep agents. Synthesise paste-ready artefacts from
+  // scout reports; sonnet-tier for the reasoning step. Higher turn cap
+  // because the designer may need to verify scout citations in the
+  // worktree.
+  'wave2-interface-designer': {
+    maxTurns: 30,
+    maxBudgetUsd: 1.0,
+    timeoutMs: 240_000,
+    modelTier: 'sonnet',
+  },
+  'wave2-risk-analyst': {
+    maxTurns: 25,
+    maxBudgetUsd: 0.75,
+    timeoutMs: 180_000,
+    modelTier: 'sonnet',
+  },
 };
 
 export interface ResolvedBudget {

@@ -2,16 +2,22 @@ import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
 
 /**
- * Context expected by the spec-author agent. Rendered as XML in the user prompt:
+ * Engineering Spec authoring skill (M19.02, issue #559).
+ *
+ * Replaces the prior Playwright e2e spec-author content. The skill name
+ * is the one Steve uses; PLAN.md §28 (M19) names this skill explicitly
+ * as the author of the Engineering Spec consumed by parallel-builder
+ * (M19.03) and convergent-review (M19.04).
+ *
+ * Context (rendered as XML in the user prompt):
  *
  *   <task>
- *     <work_item>
- *       <title>...</title>
- *       <body>...</body>
- *       <number>...</number>
- *     </work_item>
- *     <target_url>http://localhost:5173/...</target_url>
- *     <slice_description>...</slice_description>
+ *     <work_item><title>...</title><body>...</body><number>...</number></work_item>
+ *     <issue_type>feature|bug</issue_type>
+ *     <worktree_path>/abs/path/to/worktree</worktree_path>
+ *     <prd>...</prd>?                      <!-- when type:feature, copied from #313 -->
+ *     <scout_reports>[json]</scout_reports>?   <!-- M19.01 Wave-1 reports when present -->
+ *     <wave2_reports>[json]</wave2_reports>?   <!-- M19.01 Wave-2 reports when present -->
  *   </task>
  */
 export const SpecAuthorContextSchema = z.object({
@@ -20,12 +26,15 @@ export const SpecAuthorContextSchema = z.object({
     body: z.string(),
     number: z.number(),
   }),
-  targetUrl: z
-    .string()
-    .describe('URL of the running dev server (e.g. http://localhost:5173) the agent will explore'),
-  sliceDescription: z
-    .string()
-    .describe('User-facing description of the scenario the spec must exercise'),
+  /** Drives the strict-vs-advisory AC→Journey rule. Defaults to feature in the validator. */
+  issueType: z.enum(['feature', 'bug']).optional(),
+  worktreePath: z.string(),
+  /** PRD body (copied from #313 for type:feature). Optional when type:bug. */
+  prd: z.string().optional(),
+  /** JSON-stringified Wave-1 scout reports (M19.01). Optional fall-back to manual investigation. */
+  scoutReports: z.string().optional(),
+  /** JSON-stringified Wave-2 deep-agent reports (M19.01). Optional. */
+  wave2Reports: z.string().optional(),
 });
 
 const config: SkillConfig = {
@@ -34,20 +43,18 @@ const config: SkillConfig = {
     'workItem.title',
     'workItem.body',
     'workItem.number',
-    'targetUrl',
-    'sliceDescription',
+    'issueType',
+    'worktreePath',
+    'prd',
+    'scoutReports',
+    'wave2Reports',
   ],
   /**
-   * `playwright-mcp` exposes Microsoft's playwright-test MCP server tools
-   * (browser_*, planner_*, generator_*). The runtime auto-merges
-   * apps/web/.mcp.json into the spawn-time MCP config when this bundle
-   * is present (see core/agent-runtime/claude-cli.ts:resolveMcpConfigPath).
-   *
-   * `read-write` is included so the agent can read existing fixtures and
-   * write the spec file under apps/web/e2e/ if the MCP write_test tool
-   * declines (defensive — generator_write_test is the primary path).
+   * Read bundle: spec-author authors a JSON artefact in its terminal
+   * output, not files on disk. Persistence to `slices/<n>/spec.json` is
+   * orchestrator-side after schema + validator pass.
    */
-  toolBundles: ['playwright-mcp', 'read-write'],
+  toolBundles: ['read'],
   modelPin: 'sonnet',
   freshContext: false,
   role: 'developer',
