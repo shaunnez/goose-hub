@@ -3,7 +3,6 @@ Product AI - Intro to AI
 Stephen Driggs - Product AI
 September 17, 2025
 
-![](GoogleShape784p127.jpg)
 
 ### Notes:
 
@@ -20,7 +19,6 @@ From Hype to Reality
 
 This session will explore how to realize that vision by treating AI not as a magic plug-in feature but as a skillset to be mastered across our engineering organization.
 
-![](GoogleShape793p128.jpg)
 
 ### Notes:
 
@@ -36,7 +34,6 @@ AI isn’t replacing people directly—but it changes everything – by removing
 The inflection point is here
 AI is not about tools; it’s about rethinking work, skills, and operating models to compete in an AI-powered world.
 
-![](GoogleShape801p129.jpg)
 
 ### Notes:
 
@@ -52,18 +49,14 @@ Don’t expect customers to learn AI immediately, advance the learning curve by 
 1. Shift4 Literacy at All Levels
 Identify key skills and capabilities at every stage of the product pipeline to increase time to delivery, quality and effectiveness in exceeding customer expectations
 
-![](GoogleShape823p130.jpg)
 Know when and how to use AI effectively
 Use AI to automate and enable
 Be able to articulate how to get the most out of AI without falling into “AI traps” or hype
 
-![](GoogleShape826p130.jpg)
 
-![](GoogleShape828p130.jpg)
 
 3. A Culture of Innovation
 
-![](GoogleShape812p130.jpg)
 Contribute to team innovation and advancement through sharing of learnings and best practices
 Establish standards and share insight between teams
 Share successes and learn as an organization from failure (expect to fail a lot)
@@ -71,7 +64,6 @@ Grow together
 
 4. Compete in the Market
 
-![](GoogleShape834p130.jpg)
 The competitive AI landscape is changing constantly and Shift4 is pushing the envelope on what's possible
 
 Advance personal literacy
@@ -100,7 +92,6 @@ The Game has Changed
 
 The recommended approach is to learn AI at a fundamental level first and tool features/preferences become a secondary factor.
 
-![](GoogleShape850p132.jpg)
 
 ### Notes:
 
@@ -182,30 +173,23 @@ Infrastructure Layer
 # AI is an Agent, Model, Memory and Tools
 AI is a set of billions or trillions of dials that transform inputs into outputs. These dials are set by the model’s training (usually the entire internet and extra information) and, by probability, set the outputs word by word according to chance / probability. It’s like throwing magnet letters at a fridge to see what sticks. The magnet letters are your inputs and the magnet strengths are the parameters (dials).
 
-![](GoogleShape927p140.jpg)
 This is AI. That’s it.
 
 ### Notes:
 
 <!-- Slide number: 15 -->
 
-![](GoogleShape934p141.jpg)
 # AI is Built Different
 
-![](GoogleShape938p141.jpg)
 
-![](GoogleShape935p141.jpg)
 
-![](GoogleShape936p141.jpg)
 
-![](GoogleShape937p141.jpg)
 
 ### Notes:
 
 <!-- Slide number: 16 -->
 # How do I interact with AI - Context
 
-![](GoogleShape944p142.jpg)
 Context is the information the agent has available to it to perform a task or produce an output.
 
 ### Notes:
@@ -213,7 +197,6 @@ Context is the information the agent has available to it to perform a task or pr
 <!-- Slide number: 17 -->
 # The Role of Users is to Give the AI the Context it Needs to Perform
 
-![](GoogleShape951p143.jpg)
 Personal use of AI
 One shot prompts
 One Question
@@ -236,7 +219,6 @@ WHY
 <!-- Slide number: 18 -->
 # The Role of the User is Conext Engineer
 
-![](GoogleShape959p144.jpg)
 
 ### Notes:
 
