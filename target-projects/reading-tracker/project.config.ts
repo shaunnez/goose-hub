@@ -1,0 +1,96 @@
+import type { ProjectConfig } from '../../core/types.js';
+
+const config: ProjectConfig = {
+  id: 'reading-tracker',
+  name: 'reading-tracker',
+  slug: 'reading-tracker',
+  source: {
+    kind: 'github',
+    repo: 'shaunnez/reading-tracker',
+    stateMachine: 'labels',
+  },
+  targetRepo: {
+    cloneUrl: 'git@github.com:shaunnez/reading-tracker.git',
+    defaultBranch: 'main',
+    localPath: '/Users/shaunnesbitt/projects/goose-hub/reading-tracker',
+  },
+  stack: {
+    runtime: 'unknown',
+    packageManager: 'unknown',
+    testCommand: 'echo "TODO: configure testCommand"',
+    detectedAt: "2026-05-07T21:52:20.013Z",
+  },
+  mode: 'supervised',
+  storage: { kind: 'local', path: '~/.factory/data/reading-tracker' },
+  repos: ['shaunnez/reading-tracker'],
+  agentConfig: {
+    runtime: 'claude-cli',
+    rolesModels: {
+      triager: { primary: 'haiku', fallback: 'haiku', advisor: null },
+      griller: { primary: 'sonnet', fallback: 'haiku', advisor: null },
+      'prd-writer': { primary: 'sonnet', fallback: 'haiku', advisor: null },
+      decomposer: { primary: 'sonnet', fallback: 'haiku', advisor: null },
+      investigator: { primary: 'sonnet', fallback: 'haiku', advisor: null },
+      developer: { primary: 'haiku', fallback: 'sonnet', advisor: null },
+      qa: { primary: 'sonnet', fallback: null, advisor: null },
+      reviewer: { primary: 'sonnet', fallback: null, advisor: null },
+      retrospector: { primary: 'sonnet', fallback: 'haiku', advisor: null },
+      researcher: { primary: 'sonnet', fallback: 'haiku', advisor: null },
+    },
+    fallbackPolicy: {
+      critical: 'same-tier-only',
+      high: 'same-tier-only',
+      medium: 'allow-down-tier',
+      low: 'allow-down-tier',
+    },
+    toolAllowlists: {
+      triager: { bundles: ['core'] },
+      griller: { bundles: ['core'] },
+      'prd-writer': { bundles: ['read', 'core'] },
+      decomposer: { bundles: ['read', 'core'] },
+      investigator: { bundles: ['read', 'core'] },
+      developer: { bundles: ['read', 'write', 'shell'] },
+      qa: { bundles: ['read', 'shell', 'validate'] },
+      reviewer: { bundles: ['read', 'validate'] },
+      retrospector: { bundles: ['core'] },
+      researcher: { bundles: ['web'] },
+    },
+    advisorMode: {
+      enabled: false,
+      triggerOn: { priorities: [] },
+      maxAdvisorBudgetUsd: 0,
+      disableInAutonomous: true,
+    },
+    retrospectivePolicy: {
+      defaultTier: 'light',
+      deepTriggers: [],
+    },
+  },
+  budgets: {
+    dailyTokens: 0,
+    maxParallelAgents: 0,
+    maxRetries: 0,
+    maxIssuesPerDayFromNonOwners: 0,
+    maxBashSeconds: 0,
+    perWorkflowMaxUsd: 0,
+    perAgentMaxUsd: 0,
+    perAdvisorMaxUsd: 0,
+  },
+  governance: {
+    immutablePaths: [
+      'MISSION.md',
+      'FACTORY_RULES.md',
+      'CLAUDE.md',
+      'target-projects/**/MISSION.md',
+      'target-projects/**/FACTORY_RULES.md',
+      'target-projects/**/project.config.ts',
+      'target-projects/**/personas/**',
+    ],
+  },
+  isolation: { mode: 'native' },
+  archiveAfterDays: 7,
+  visibility: 'always_visible',
+  colorStripe: '#6366f1',
+};
+
+export default config;
