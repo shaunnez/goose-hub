@@ -182,7 +182,7 @@ This distinction matters: agents and future you should not underbuild durability
 
 ## 6. Repository layout
 
-This reflects the actual layout as of M11 (mid-milestone). Future directories are annotated with the milestone that introduces them. CONTEXT.md is the canonical record of resolved implementation decisions; ADRs justify them long-form.
+This reflects the actual layout as of end-of-M11. Future directories are annotated with the milestone that introduces them. CONTEXT.md is the canonical record of resolved implementation decisions; ADRs justify them long-form.
 
 ```
 goose-hub/
@@ -196,6 +196,14 @@ goose-hub/
 ├── biome.json
 ├── .github/
 │   └── workflows/                       # CI YAML — allowed, expected
+├── .claude/                             # Claude Code config + governance-protected hooks (M11)
+│   ├── settings.json                    # hook wiring; agent-write blocked by pre-tool-use-governance.sh
+│   └── hooks/                           # protected hooks (post-compact, post-write-quality, pre-tool-use-governance, stop-verify, subagent-start)
+├── hooks/                               # M11.16: SDLC enforcement hooks injected into agent worktrees
+│   ├── require-spec.sh                  # PreToolUse plan-first gate
+│   └── stop-verify-ac.sh                # Stop AC-completeness gate
+│                                        # Lives outside .claude/hooks/ because that path is governance-protected
+│                                        # from agent writes; writeWorkspaceSandbox() copies these into worktrees.
 ├── target-projects/                     # config + governance per project (@goose-hub/target-projects, see ADR 0015)
 │   ├── index.ts                         # exports targetProjectsRoot path anchor
 │   ├── goose-hub-self/
@@ -242,6 +250,8 @@ goose-hub/
 │   ├── state-source/
 │   │   ├── interface.ts
 │   │   ├── github-labels.ts
+│   │   ├── dependency-parser.ts         # M11 (canonical parser for Depends on / Blocks / Blocked by)
+│   │   ├── dependency-resolver.ts       # M11 cross-repo resolver — registered repos only
 │   │   ├── jira.ts                      # M14
 │   │   └── linear.ts                    # stub
 │   ├── event-stream/
@@ -253,7 +263,10 @@ goose-hub/
 │   │   └── migrate.ts
 │   ├── projects/                        # M10+ (see ADR 0021); multi-project loader + per-project scheduler
 │   │   ├── loader.ts                    # loadProjects() / getProjectBySlug() — reads target-projects/*/project.config.ts
-│   │   └── scheduler.ts                 # startPerProjectScheduler() — one independent setInterval per project
+│   │   ├── scheduler.ts                 # startPerProjectScheduler() — one independent setInterval per project
+│   │   ├── dependency-scheduler.ts      # M11 (ADR 0024) filter eligible items by dep satisfaction; applies schedule:blocked-by
+│   │   ├── parallel-lock.ts             # M11 (ADR 0023) per-issue lock + maxParallelAgents cap
+│   │   └── move-with-deps.ts            # M11 task-move CLI helper (--with-dependencies / --ignore-dependencies)
 │   │                                    # NOTE: per-project locking and workflow dispatch live in
 │   │                                    # apps/server/src/shared/dispatch.ts, not here.
 │   ├── agent-runtime/                   # M4+
@@ -265,6 +278,8 @@ goose-hub/
 │   │   ├── models.ts
 │   │   ├── output-validator.ts
 │   │   ├── schema-bridge.ts
+│   │   ├── budgets.ts                   # M11 centralized SKILL_BUDGETS (ADR 0020)
+│   │   ├── model-router.ts              # M11 (ADR 0026) predictive per-call tier selection
 │   │   └── hooks/                       # future
 │   ├── tool-layer/                      # M4+
 │   │   ├── bundles.ts
@@ -283,7 +298,19 @@ goose-hub/
 │   │   ├── skill-stage.ts               # skill → stage mapping
 │   │   └── types.ts
 │   ├── workflows/                       # M9+ (see ADR 0017); cross-caller workflows only
-│   │   └── retrospective.ts             # runRetrospectiveWorkflow — tier selection + skill dispatch
+│   │   ├── retrospective.ts             # runRetrospectiveWorkflow — tier selection + skill dispatch
+│   │   ├── cross-run-retro.ts           # M11 (ADR 0024) cross-run retro + auto-trigger gates
+│   │   └── skill-coaching.ts            # M11 (ADR 0025) skill-coach workflow + forbidden targets
+│   ├── learning/                        # M11+ (ADRs 0024, 0028); cross-run learning loop
+│   │   ├── archive.ts                   # archiveLifecycle — replay events into archived_lifecycles
+│   │   ├── mine.ts                      # minePatterns — group decision summaries into decision_patterns
+│   │   ├── convergence.ts               # computeTrend — improving|stable|declining over windowSize
+│   │   ├── playbook-stats.ts            # gate thresholds + cost baselines
+│   │   ├── playbook-export.ts           # PlaybookManifest exporter (schemaVersion '1')
+│   │   ├── playbook-import.ts           # validated importer; upserts patterns
+│   │   └── description-loop.ts          # M11.19 skill-trigger eval (Layer 1)
+│   ├── orchestrator/                    # M11+ (ADR 0027) workflow init checks
+│   │   └── smoke.ts                     # six non-skippable pre-dispatch checks; per-project cache
 │   └── connectors/
 │       └── github/                      # M7+ (#184/#186)
 │           ├── open-pr.ts
@@ -318,7 +345,10 @@ goose-hub/
     ├── exit-audit.md
     ├── reference-audit.md               # produced in M1
     ├── adr/
-    └── retros/
+    ├── audits/                          # M11+ exit-audit reports (one per closed milestone)
+    ├── plans/                           # design-phase scratchpads for human-driven refactors
+    ├── retros/
+    └── standards/                       # verification framework + code-quality rubric
 ```
 
 ### 6.1 Slices include only relevant surfaces
