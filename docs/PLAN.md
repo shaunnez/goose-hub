@@ -2171,9 +2171,9 @@ Other decks in `ppt-conversion/` are training/non-technical material that duplic
 - **QualityScore** — per-run 0–100 score with components (P0/P1/P2/P3 counts, regressions_open, review_converged, uat_passed, static_passed, harness_pass_rate, architecturalScore). Convergence rule: score delta < 5.0 over last 3 iterations + zero P0/P1 + ≤3 regressions = ship-ready.
 
 **Included scope:**
-- M19.01 Wave-1/Wave-2 swarm in `investigate` skill (#558) + ADR 0024 sub-agent dispatch from skills
+- M19.01 Wave-1/Wave-2 swarm in `investigate` skill (#558) + ADR 0030 sub-agent dispatch from skills
 - M19.02 `spec-author` outputs Engineering Spec with WPs + file ownership + AC→Journey→Verification map (#559)
-- M19.03 parallel implement workflow + ADR 0025 orchestrator-owned git + FACTORY_RULES rule-37 candidate (#560)
+- M19.03 parallel implement workflow + ADR 0031 orchestrator-owned git + FACTORY_RULES rule-37 candidate (#560)
 - M19.04 convergent adversarial review with 2 parallel reviewers (#561)
 - M19.05 3-tier verification harness — Structural / Functional / Regression with carry-forward failure semantics (#562)
 - M19.06 record-decision runtime tool (filed for evaluation; may be deferred or discarded after A/B against existing two-stream decision summaries) (#563)
