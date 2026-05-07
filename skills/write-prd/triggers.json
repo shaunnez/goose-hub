@@ -1,0 +1,20 @@
+{
+  "shouldTrigger": [
+    "Write the PRD for this feature now that the intent is clear",
+    "Author the product requirements document for this work item",
+    "Draft a PRD with user journeys and a functional spec for this feature",
+    "Turn this refined intent into a full PRD with vertical slices",
+    "Produce the PRD covering journeys, behaviours, and acceptance criteria",
+    "Generate the spec document for this feature so we can decompose it",
+    "Write the requirements doc with cross-cutting acceptance criteria"
+  ],
+  "shouldNotTrigger": [
+    "Triage this issue and assign a priority",
+    "Grill me on this vague idea before writing a spec",
+    "Decompose the existing PRD into GitHub issues",
+    "Implement the authentication module from the existing PRD",
+    "Run QA on PR #112",
+    "Review the code changes in this pull request",
+    "Investigate the root cause of this performance regression"
+  ]
+}

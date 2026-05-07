@@ -187,6 +187,14 @@ export async function rejectIssue(slug: string, id: string, reason: string): Pro
   return postJson<{ ok: true }>(`/projects/${slug}/issues/${id}/reject`, { reason });
 }
 
+export async function approvePRD(slug: string, id: string): Promise<{ ok: true }> {
+  return postJson<{ ok: true }>(`/projects/${slug}/issues/${id}/approve-prd`, {});
+}
+
+export async function rejectPRD(slug: string, id: string): Promise<{ ok: true }> {
+  return postJson<{ ok: true }>(`/projects/${slug}/issues/${id}/reject-prd`, {});
+}
+
 export async function fetchComments(slug: string, id: string): Promise<IssueCommentDto[]> {
   const { comments } = await getJson<{ comments: IssueCommentDto[] }>(
     `/projects/${slug}/issues/${id}/comments`,

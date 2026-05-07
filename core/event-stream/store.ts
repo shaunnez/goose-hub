@@ -70,7 +70,17 @@ export type EventKind =
   // M11.15 model router — predictive model selection
   | 'agent.model-selected'
   // M11.17 smoke gate — pre-dispatch infrastructure check
-  | 'workflow.smoke-failed';
+  | 'workflow.smoke-failed'
+  // M13.06 decompose-prd workflow
+  | 'decompose.completed'
+  // M13.05 grill-and-prd workflow lifecycle
+  | 'grill.question-posted'
+  | 'grill.completed'
+  | 'prd.drafted'
+  | 'prd.advisor-skipped'
+  // M13.08 PRD review actions (UI-driven approve / reject)
+  | 'prd.approved'
+  | 'prd.rejected';
 
 export interface AgentEvent {
   id: number;

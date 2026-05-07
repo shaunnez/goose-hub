@@ -93,6 +93,44 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     timeoutMs: 600_000,
     modelTier: 'sonnet',
   },
+  // M13 Discover Lane — one focused question per round, capped at 7 rounds.
+  // Cheap per-round; the workflow is the loop, not the skill.
+  'grill-me': {
+    maxTurns: 15,
+    maxBudgetUsd: 0.2,
+    timeoutMs: 120_000,
+    modelTier: 'sonnet',
+  },
+  // M13 — fresh-context PRD writer. Three-layer artefact (Journey →
+  // FunctionalSpec → SliceOutline) is reasoning-heavy; opus fits the role
+  // model declared in goose-hub-self/project.config.ts.
+  'write-prd': {
+    maxTurns: 40,
+    maxBudgetUsd: 2.0,
+    timeoutMs: 420_000,
+    modelTier: 'opus',
+  },
+  // M13 — priority-gated PRD advisor. One revision pass; cheap.
+  'advise-on-prd': {
+    maxTurns: 15,
+    maxBudgetUsd: 1.0,
+    timeoutMs: 180_000,
+    modelTier: 'opus',
+  },
+  // M13 — turns SliceOutlines into vertical-slice issue bodies.
+  'decompose-issues': {
+    maxTurns: 30,
+    maxBudgetUsd: 0.5,
+    timeoutMs: 240_000,
+    modelTier: 'sonnet',
+  },
+  // M13 — milestone-rollup writer (sprint review issue at milestone end).
+  'sprint-review': {
+    maxTurns: 25,
+    maxBudgetUsd: 0.5,
+    timeoutMs: 240_000,
+    modelTier: 'sonnet',
+  },
 };
 
 export interface ResolvedBudget {

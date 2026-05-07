@@ -8,12 +8,13 @@ import { extractPlaywrightRepro } from './lib/playwright-capture';
 import { SECTIONS } from './lib/sections';
 
 describe('detail page — sections config', () => {
-  it('lists the 11 design sections in order (retrospective added in M9)', () => {
+  it('lists the 12 design sections in order (grill added in M13)', () => {
     expect(SECTIONS.map((s) => s.key)).toEqual([
       'overview',
       'repo',
       'investigation',
       'prd',
+      'grill',
       'code',
       'qa',
       'review',
