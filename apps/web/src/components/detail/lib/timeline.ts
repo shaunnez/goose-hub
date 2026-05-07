@@ -35,6 +35,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'agent.run-completed': 'Agent run completed',
   'agent.run-failed': 'Agent run failed',
   'agent.tool-call': 'Tool call',
+  'agent.tool-result': 'Tool result (error)',
   'tool.stdout-truncated': 'Stdout truncated',
   'tool.timeout': 'Timeout',
   'agent.fallback-triggered': 'Fallback triggered',

@@ -7,6 +7,7 @@ import {
   AgentTerminatedEvent,
 } from './timeline/AgentLifecycleEvents';
 import { AgentToolCallEvent } from './timeline/AgentToolCallEvent';
+import { AgentToolResultEvent } from './timeline/AgentToolResultEvent';
 import { AgentTriageCompleteEvent } from './timeline/AgentTriageCompleteEvent';
 import {
   AgentDecisionSummaryEvent,
@@ -87,6 +88,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <AgentRunStatusEvent key={event.id} event={event} />;
     case 'agent.tool-call':
       return <AgentToolCallEvent key={event.id} event={event} />;
+    case 'agent.tool-result':
+      return <AgentToolResultEvent key={event.id} event={event} />;
     case 'agent.verify-command':
       return <AgentVerifyCommandEvent key={event.id} event={event} />;
     case 'tool.stdout-truncated':
