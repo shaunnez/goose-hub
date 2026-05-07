@@ -1,0 +1,20 @@
+{
+  "shouldTrigger": [
+    "Write a technical spec for this feature before implementation",
+    "Author the engineering spec for the new payment module",
+    "Create a spec document with acceptance criteria for this issue",
+    "Draft the technical specification so we can start building",
+    "Write the spec for the dependency scheduler",
+    "Produce an engineering spec with acceptance criteria and approach",
+    "Before coding, write a spec that outlines the solution"
+  ],
+  "shouldNotTrigger": [
+    "Triage this incoming issue and determine its priority",
+    "Implement the feature described in this issue",
+    "Run QA on the PR and verify acceptance criteria",
+    "Review the code changes for correctness",
+    "Investigate the root cause of this regression",
+    "Deploy the changes to the staging environment",
+    "Archive the completed milestone and run the exit audit"
+  ]
+}

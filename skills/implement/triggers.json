@@ -1,0 +1,20 @@
+{
+  "shouldTrigger": [
+    "Implement the feature described in the spec",
+    "Write the code for the payment API endpoint",
+    "Build the implementation for issue #42",
+    "Code the solution following the engineering spec",
+    "Develop the feature — write tests first then implementation",
+    "Implement the changes required by the acceptance criteria",
+    "Write the TypeScript implementation for the scheduler"
+  ],
+  "shouldNotTrigger": [
+    "Triage this bug report and assign a priority",
+    "Run QA checks and verify the acceptance criteria",
+    "Review the pull request for code quality",
+    "Investigate the root cause of the performance issue",
+    "Write an engineering spec before we start coding",
+    "Archive the closed milestone issues",
+    "Summarise the retrospective learnings from the last run"
+  ]
+}
