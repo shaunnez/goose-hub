@@ -1,0 +1,20 @@
+{
+  "shouldTrigger": [
+    "Help me clarify this vague feature idea before writing a spec",
+    "Run a discovery session on this issue — it's not well defined yet",
+    "Grill me on this work item until the intent is clear",
+    "Interview me about this feature request so we can write a PRD",
+    "This issue is too vague — ask me questions to sharpen it",
+    "Run a structured interrogation on this task before we start building",
+    "I need to clarify the scope of this before handing it to a developer"
+  ],
+  "shouldNotTrigger": [
+    "Triage this issue and assign a priority",
+    "Write the PRD for this feature — the requirements are already defined",
+    "Implement the authentication module",
+    "Review the code changes in this pull request",
+    "Run the QA checks on PR #55",
+    "Investigate the root cause of this performance regression",
+    "Deploy the latest build to staging and run smoke tests"
+  ]
+}

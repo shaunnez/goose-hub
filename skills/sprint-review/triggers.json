@@ -1,0 +1,19 @@
+{
+  "shouldTrigger": [
+    "Summarise what shipped this milestone",
+    "Write the sprint review for M13",
+    "Generate a milestone retrospective rollup for all closed issues",
+    "What did we ship and what got deferred this sprint?",
+    "Produce a sprint review from the retro outputs for this milestone",
+    "Create a milestone summary with themes and next sprint suggestions",
+    "Roll up the retros for this milestone into a sprint review"
+  ],
+  "shouldNotTrigger": [
+    "Run a light retro on this single merged PR",
+    "Triage this new issue and assign a priority",
+    "Write the implementation for this feature",
+    "Run QA checks on this pull request",
+    "Investigate the root cause of this performance regression",
+    "Review the code changes in PR #42"
+  ]
+}

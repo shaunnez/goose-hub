@@ -1,0 +1,20 @@
+{
+  "shouldTrigger": [
+    "Decompose this PRD into individual GitHub issues",
+    "Break down the feature spec into child issues",
+    "Generate child issues from the PRD output for this epic",
+    "Turn the slice outlines into concrete work items",
+    "Create the implementation tasks from this PRD",
+    "Split this PRD into vertical slices and generate issues",
+    "Convert the PRD slices into GitHub issues with acceptance criteria"
+  ],
+  "shouldNotTrigger": [
+    "Triage this issue and assign a priority",
+    "Write the PRD for the authentication feature",
+    "Review the code changes in this pull request",
+    "Run QA on the implementation for issue #42",
+    "Investigate the root cause of this regression",
+    "Deploy the latest build to staging",
+    "Write the retrospective for the completed milestone"
+  ]
+}
