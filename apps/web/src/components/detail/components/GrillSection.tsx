@@ -4,7 +4,7 @@ import type { IssueCommentDto } from '@/lib/types';
 import { timeAgo } from '@/lib/utils';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MessageCircleQuestion } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { SectionEmptyState } from './SectionEmptyState';
 
 interface GrillSectionProps {
@@ -44,6 +44,14 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
     queryKey: ['comments', projectSlug, id],
     queryFn: () => fetchComments(projectSlug, id),
   });
+
+  // Refetch comments when the issue state changes — the grill workflow posts
+  // a question comment as part of the transition into factory:gate-pending,
+  // and without this hook the cache (loaded at factory:grilling) misses it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: state is a prop; biome doesn't recognise it
+  useEffect(() => {
+    void queryClient.invalidateQueries({ queryKey: ['comments', projectSlug, id] });
+  }, [state, projectSlug, id, queryClient]);
 
   const send = useMutation({
     mutationFn: async (body: string) => {

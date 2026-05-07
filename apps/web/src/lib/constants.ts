@@ -26,6 +26,7 @@ export const STATE_LABEL: Record<string, string> = {
   'factory:needs-human': 'needs-human',
   'factory:done': 'done',
   'factory:archived': 'archived',
+  'factory:gate-pending': 'gate-pending',
 };
 
 export const PRIORITY_COLOR: Record<string, string> = {
