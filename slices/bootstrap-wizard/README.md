@@ -24,8 +24,9 @@ instead of the CLI.
   `BootstrapPreviewDto` + `BootstrapRunDto`.
 - **Top-level slice manifest**: `slice.test.ts` (this folder) asserts the
   public surface contract.
-- **Playwright e2e**: `apps/web/e2e/bootstrap-wizard.spec.ts` walks the
-  wizard end-to-end against a server booted with `MOCK_BOOTSTRAP=true`.
+- **Playwright e2e**: `apps/web/e2e/pipeline/bootstrap-wizard.spec.ts` runs in
+  the pipeline lane (`pnpm test:e2e:pipeline`) — the server is booted with
+  `MOCK_BOOTSTRAP=true` automatically by `playwright-e2e-pipeline.config.ts`.
 
 The slice does **not** import from any other slice, and re-uses the core
 workflow through its public interfaces (`bootstrapProject`, `parseRepoRef`,
@@ -88,6 +89,6 @@ pnpm vitest run apps/server/src/domains/bootstrap/
 # Web component + state machine
 pnpm vitest run apps/web/src/components/bootstrap/
 
-# End-to-end (requires the dev server)
-MOCK_BOOTSTRAP=true pnpm --filter @goose-hub/web test:e2e bootstrap-wizard.spec.ts
+# End-to-end (pipeline lane — boots its own server with MOCK_BOOTSTRAP=true)
+pnpm --filter @goose-hub/web test:e2e:pipeline bootstrap-wizard
 ```

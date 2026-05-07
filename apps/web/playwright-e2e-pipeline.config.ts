@@ -39,6 +39,7 @@ export default defineConfig({
               MOCK_AGENTS: 'true',
               MOCK_OPEN_PR: 'true',
               MOCK_SOURCE: 'true',
+              MOCK_BOOTSTRAP: 'true',
             },
           },
           {
