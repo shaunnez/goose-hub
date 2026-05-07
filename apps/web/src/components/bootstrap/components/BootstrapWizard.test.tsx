@@ -99,7 +99,9 @@ describe('BootstrapWizard', () => {
 
     // Step 5 — webhook setup.
     await waitFor(() => expect(screen.getByTestId('step-webhook')).toBeTruthy());
-    expect(screen.getByTestId('webhook-payload-url').textContent).toContain('webhook/github');
+    // Must match the actual server route in apps/server/src/server.ts (`/webhooks/github`),
+    // not the singular `/webhook/github` that previously shipped here.
+    expect(screen.getByTestId('webhook-payload-url').textContent).toContain('/webhooks/github');
     await user.click(screen.getByTestId('wizard-next'));
 
     // Final step — Open PR + result render.

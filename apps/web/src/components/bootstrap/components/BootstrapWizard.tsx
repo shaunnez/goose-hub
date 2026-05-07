@@ -12,7 +12,7 @@
 
 import { previewBootstrap, runBootstrap } from '@/lib/api';
 import type { BootstrapPreviewDto, BootstrapRunDto } from '@/lib/types';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   WIZARD_STEPS,
   type WizardStep,
@@ -48,10 +48,16 @@ const INITIAL_STATE: WizardState = {
 
 export function BootstrapWizard({ open, onClose }: BootstrapWizardProps) {
   const [state, setState] = useState<WizardState>(INITIAL_STATE);
+  // Tracks whether the modal is still mounted/open by the time an in-flight
+  // preview/run request resolves. Without this guard, a late response can
+  // re-populate state after the user has closed the wizard, leaving stale
+  // step/preview data visible on the next open.
+  const openRef = useRef(open);
 
   const reset = useCallback(() => setState(INITIAL_STATE), []);
 
   useEffect(() => {
+    openRef.current = open;
     // Reset whenever the modal closes so the next open starts fresh.
     if (!open) reset();
   }, [open, reset]);
@@ -70,8 +76,10 @@ export function BootstrapWizard({ open, onClose }: BootstrapWizardProps) {
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
       const preview = await previewBootstrap(state.repoRef.trim());
+      if (!openRef.current) return;
       setState((s) => ({ ...s, preview, loading: false, step: nextStep(s.step) }));
     } catch (err) {
+      if (!openRef.current) return;
       setError(err instanceof Error ? err.message : 'Failed to validate repo');
     }
   }
@@ -80,8 +88,10 @@ export function BootstrapWizard({ open, onClose }: BootstrapWizardProps) {
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
       const result = await runBootstrap(state.repoRef.trim(), state.preview?.slug);
+      if (!openRef.current) return;
       setState((s) => ({ ...s, result, loading: false }));
     } catch (err) {
+      if (!openRef.current) return;
       setError(err instanceof Error ? err.message : 'Failed to open registration PR');
     }
   }
@@ -436,7 +446,7 @@ function StepLabels({ preview }: { preview: BootstrapPreviewDto }) {
 }
 
 function StepWebhook({ preview, repoRef }: { preview: BootstrapPreviewDto; repoRef: string }) {
-  const payloadUrl = '<your-goose-hub-host>/webhook/github';
+  const payloadUrl = '<your-goose-hub-host>/webhooks/github';
   return (
     <div data-testid="step-webhook">
       <h3 style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600 }}>Webhook setup</h3>

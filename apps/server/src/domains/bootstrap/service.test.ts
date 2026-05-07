@@ -207,6 +207,18 @@ describe('runBootstrapService', () => {
     );
   });
 
+  it('returns 400 (not 500) for an invalid slug override', async () => {
+    // sanitiseSlug throws on empty/punctuation-only inputs.
+    const result = await runBootstrapService('octo/widgets', '!!!---!!!');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(400);
+      expect(result.error).toMatch(/slug|empty/i);
+    }
+    // The workflow must NOT have been invoked for invalid input.
+    expect(mockBootstrapProject).not.toHaveBeenCalled();
+  });
+
   it('returns 500 with error message when the workflow throws', async () => {
     mockBootstrapProject.mockRejectedValue(new Error('GitHub API exploded'));
     const result = await runBootstrapService('octo/widgets');

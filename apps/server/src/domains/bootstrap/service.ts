@@ -278,6 +278,21 @@ export async function runBootstrapService(
     };
   }
 
+  // Validate the optional client-supplied slug up front so a bad value
+  // (e.g. one that sanitises to empty) reports as 400 input error rather
+  // than being swallowed by the catch-all 500 below.
+  if (slugOverride != null) {
+    try {
+      sanitiseSlug(slugOverride);
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : `invalid slug: ${slugOverride}`,
+        status: 400,
+      };
+    }
+  }
+
   const token = getGithubToken();
   if (token == null) {
     return {
