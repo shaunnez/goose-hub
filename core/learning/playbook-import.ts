@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '../db/db.js';
 import { decisionPatterns } from '../db/schema.js';
 import { type PlaybookManifest, PlaybookManifestSchema } from './playbook-export.js';
@@ -49,9 +49,11 @@ export function importPlaybook(
       .select()
       .from(decisionPatterns)
       .where(
-        eq(decisionPatterns.projectId, targetProjectId) &&
-          eq(decisionPatterns.kind, pattern.decisionType) &&
+        and(
+          eq(decisionPatterns.projectId, targetProjectId),
+          eq(decisionPatterns.kind, pattern.decisionType),
           eq(decisionPatterns.role, pattern.phase),
+        ),
       )
       .all()
       .at(0);

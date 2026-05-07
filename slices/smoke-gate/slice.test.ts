@@ -24,14 +24,22 @@ const { mockDb } = vi.hoisted(() => {
 
 vi.mock('@goose-hub/core/db/db.js', () => ({ db: mockDb }));
 vi.mock('@goose-hub/core/db/schema.js', () => ({
-  events: { id: 'id', projectId: 'project_id', kind: 'kind', payload: 'payload', createdAt: 'created_at' },
+  events: {
+    id: 'id',
+    projectId: 'project_id',
+    kind: 'kind',
+    payload: 'payload',
+    createdAt: 'created_at',
+  },
 }));
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 import type { ProjectConfig } from '@goose-hub/core/types.js';
 
-function makeConfig(overrides: Partial<{ slug: string; budgets: Partial<ProjectConfig['budgets']> }> = {}): ProjectConfig {
+function makeConfig(
+  overrides: Partial<{ slug: string; budgets: Partial<ProjectConfig['budgets']> }> = {},
+): ProjectConfig {
   return {
     id: 'test-project',
     slug: overrides.slug ?? 'test-slug',
@@ -164,7 +172,9 @@ describe('runSmoke', () => {
 
   it('emits workflow.smoke-failed when budget floor not met', async () => {
     clearSmokeCache('budget-low');
-    const result = await runSmoke(makeConfig({ slug: 'budget-low', budgets: { perWorkflowMaxUsd: 0.1 } }));
+    const result = await runSmoke(
+      makeConfig({ slug: 'budget-low', budgets: { perWorkflowMaxUsd: 0.1 } }),
+    );
     expect(result.ok).toBe(false);
     expect(result.failedCheck).toBe('budget-floor');
   });
