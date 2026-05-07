@@ -1,203 +1,512 @@
-import { describe, expect, it } from 'vitest';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
-import { SpecAuthorSchema } from './schema.js';
+import { type EngineeringSpec, EngineeringSpecSchema, SpecAuthorSchema } from './schema.js';
 import config, { SpecAuthorContextSchema } from './skill.config.js';
+import { validateEngineeringSpec } from './validate.js';
 
-describe('spec-author schema', () => {
-  it('accepts a fully-populated valid output', () => {
-    const result = SpecAuthorSchema.safeParse({
-      specPath: 'apps/web/e2e/issue-235.spec.ts',
-      planSummary:
-        'Exercises the new evidence panel: navigate to /projects/foo, open the issue detail view, expand the evidence section, assert the inline screenshot is visible.',
-      screenshotsTaken: 4,
-      decisionSummaries: [
-        {
-          kind: 'READ',
-          summary: 'Walked the slice scenario via playwright-mcp and captured 4 screenshots',
-        },
-        {
-          kind: 'GREEN',
-          summary: 'Wrote spec at apps/web/e2e/issue-235.spec.ts with 3 expect assertions',
-        },
-      ],
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts zero screenshotsTaken (skill may use evaluate-only flow)', () => {
-    const result = SpecAuthorSchema.safeParse({
-      specPath: 'apps/web/e2e/issue-99.spec.ts',
-      planSummary: 'Asserts API contract via page.evaluate; no visual capture.',
-      screenshotsTaken: 0,
-      decisionSummaries: [
-        { kind: 'GREEN', summary: 'Wrote API-contract spec without screenshots' },
-      ],
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts decisionSummary with optional evidence field', () => {
-    const result = SpecAuthorSchema.safeParse({
-      specPath: 'apps/web/e2e/issue-1.spec.ts',
-      planSummary: 'Spec.',
-      screenshotsTaken: 1,
-      decisionSummaries: [
-        { kind: 'READ', summary: 'walked it', evidence: 'screenshot at /tmp/exp.png' },
-      ],
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('rejects missing specPath', () => {
-    const result = SpecAuthorSchema.safeParse({
-      planSummary: 'Some summary.',
-      screenshotsTaken: 2,
-      decisionSummaries: [{ kind: 'PLAN', summary: 'b' }],
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects missing planSummary', () => {
-    const result = SpecAuthorSchema.safeParse({
-      specPath: 'apps/web/e2e/x.spec.ts',
-      screenshotsTaken: 2,
-      decisionSummaries: [{ kind: 'PLAN', summary: 'b' }],
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects negative screenshotsTaken', () => {
-    const result = SpecAuthorSchema.safeParse({
-      specPath: 'apps/web/e2e/x.spec.ts',
-      planSummary: 'p',
-      screenshotsTaken: -1,
-      decisionSummaries: [{ kind: 'PLAN', summary: 'b' }],
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects non-integer screenshotsTaken', () => {
-    const result = SpecAuthorSchema.safeParse({
-      specPath: 'apps/web/e2e/x.spec.ts',
-      planSummary: 'p',
-      screenshotsTaken: 2.5,
-      decisionSummaries: [{ kind: 'PLAN', summary: 'b' }],
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects empty decisionSummaries (FACTORY_RULES rule 6)', () => {
-    const result = SpecAuthorSchema.safeParse({
-      specPath: 'apps/web/e2e/x.spec.ts',
-      planSummary: 'p',
-      screenshotsTaken: 0,
-      decisionSummaries: [],
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects decisionSummary missing step or summary', () => {
-    const missingSummary = SpecAuthorSchema.safeParse({
-      specPath: 'apps/web/e2e/x.spec.ts',
-      planSummary: 'p',
-      screenshotsTaken: 0,
-      decisionSummaries: [{ kind: 'PLAN' }],
-    });
-    expect(missingSummary.success).toBe(false);
-
-    const missingStep = SpecAuthorSchema.safeParse({
-      specPath: 'apps/web/e2e/x.spec.ts',
-      planSummary: 'p',
-      screenshotsTaken: 0,
-      decisionSummaries: [{ summary: 'b' }],
-    });
-    expect(missingStep.success).toBe(false);
-  });
-
-  it('zod toJSONSchema roundtrip produces valid JSON Schema object', () => {
-    const jsonSchema = toJSONSchema(SpecAuthorSchema);
-    expect(typeof jsonSchema).toBe('object');
-    expect(jsonSchema).not.toBeNull();
-    expect(jsonSchema).toHaveProperty('properties');
-  });
-});
-
-describe('spec-author skill config', () => {
-  it('has role developer (NOT a holdout)', () => {
-    expect(config.role).toBe('developer');
-  });
-
-  it('declares playwright-mcp tool bundle (per #235 acceptance criteria)', () => {
-    expect(config.toolBundles).toContain('playwright-mcp');
-  });
-
-  it('also declares read-write so it can write the spec file', () => {
-    expect(config.toolBundles).toContain('read-write');
-  });
-
-  it('is pinned to sonnet model', () => {
-    expect(config.modelPin).toBe('sonnet');
-  });
-
-  it('does not require fresh context (developer skills may use ambient context)', () => {
-    expect(config.freshContext).toBe(false);
-  });
-
-  it('has contextAllowlist defined and includes targetUrl + sliceDescription', () => {
-    expect(config.contextAllowlist).toBeDefined();
-    expect(config.contextAllowlist).toContain('targetUrl');
-    expect(config.contextAllowlist).toContain('sliceDescription');
-    expect(config.contextAllowlist).toContain('workItem.title');
-    expect(config.contextAllowlist).toContain('workItem.body');
-    expect(config.contextAllowlist).toContain('workItem.number');
-  });
-});
-
-describe('spec-author context schema', () => {
-  it('accepts valid context with all fields', () => {
-    const valid = SpecAuthorContextSchema.safeParse({
-      workItem: {
-        title: 'Add overview screenshots',
-        body: 'When I open the overview...',
-        number: 235,
+function baseSpec(overrides: Partial<EngineeringSpec> = {}): EngineeringSpec {
+  const base: EngineeringSpec = {
+    objective: 'Add a /healthz endpoint and document its contract.',
+    userJourneys: [
+      {
+        id: 'J1',
+        actor: 'developer',
+        steps: [{ idx: 0, description: 'GET /healthz observes 200 with body "ok"' }],
       },
-      targetUrl: 'http://localhost:5173/projects/goose-hub',
-      sliceDescription: 'Open the overview, see the inline screenshot from the linked PR.',
-    });
-    expect(valid.success).toBe(true);
+    ],
+    functionalRequirements: [{ id: 'FR1', statement: '/healthz returns 200 with body "ok"' }],
+    architecture: {
+      current: 'No health endpoint.',
+      new: 'Add a Hono route at /healthz returning 200/"ok".',
+      decisionRationale: 'Aligns with existing Hono routing in apps/server.',
+    },
+    schemaChanges: { ddl: [], migrations: [] },
+    interfaceContracts: [
+      {
+        name: 'healthzHandler',
+        signature: 'export const healthzHandler: Handler = (c) => c.text("ok");',
+        file: 'apps/server/src/routes/healthz.ts',
+      },
+    ],
+    workPackages: [
+      {
+        id: 'WP1',
+        filesOwned: ['apps/server/src/routes/healthz.ts'],
+        changes: 'Add a new file exporting healthzHandler bound to GET /healthz at line 1-12.',
+        dependsOn: [],
+        builderTier: 'haiku',
+      },
+      {
+        id: 'WP2',
+        filesOwned: ['apps/server/src/router.ts'],
+        changes: 'Wire healthzHandler into router at app.get("/healthz", healthzHandler).',
+        dependsOn: ['WP1'],
+        builderTier: 'haiku',
+      },
+    ],
+    executionOrder: [
+      { batch: 0, wpIds: ['WP1'] },
+      { batch: 1, wpIds: ['WP2'] },
+    ],
+    verificationTooling: [],
+    acceptanceCriteria: [
+      {
+        id: 'AC1',
+        statement: 'GET /healthz returns 200 with body "ok"',
+        journeyRef: 'J1',
+        stepIdx: 0,
+        verifyCommand: 'curl -fsS http://localhost:3000/healthz',
+      },
+    ],
+    constraints: [],
+    riskRegister: [],
+    decisionSummaries: [{ kind: 'PLAN', summary: 'Designed healthz endpoint as 1+1 WP split' }],
+  };
+  return { ...base, ...overrides };
+}
+
+describe('EngineeringSpecSchema (shape)', () => {
+  it('accepts a fully-populated valid spec', () => {
+    const result = EngineeringSpecSchema.safeParse(baseSpec());
+    expect(result.success).toBe(true);
   });
 
-  it('rejects missing targetUrl', () => {
-    const invalid = SpecAuthorContextSchema.safeParse({
-      workItem: { title: 't', body: 'b', number: 1 },
-      sliceDescription: 's',
-    });
-    expect(invalid.success).toBe(false);
+  it('rejects empty workPackages', () => {
+    const result = EngineeringSpecSchema.safeParse(baseSpec({ workPackages: [] }));
+    expect(result.success).toBe(false);
   });
 
-  it('rejects missing sliceDescription', () => {
-    const invalid = SpecAuthorContextSchema.safeParse({
-      workItem: { title: 't', body: 'b', number: 1 },
-      targetUrl: 'http://localhost:5173',
-    });
-    expect(invalid.success).toBe(false);
+  it('rejects empty acceptanceCriteria', () => {
+    const result = EngineeringSpecSchema.safeParse(baseSpec({ acceptanceCriteria: [] }));
+    expect(result.success).toBe(false);
   });
 
-  it('rejects missing workItem.number', () => {
-    const invalid = SpecAuthorContextSchema.safeParse({
-      workItem: { title: 't', body: 'b' },
-      targetUrl: 'http://localhost:5173',
-      sliceDescription: 's',
-    });
-    expect(invalid.success).toBe(false);
+  it('rejects WP with empty filesOwned', () => {
+    const result = EngineeringSpecSchema.safeParse(
+      baseSpec({
+        workPackages: [
+          {
+            id: 'WP1',
+            filesOwned: [],
+            changes: 'irrelevant',
+            dependsOn: [],
+            builderTier: 'haiku',
+          },
+        ],
+      }),
+    );
+    expect(result.success).toBe(false);
   });
 
-  it('rejects workItem.number as a string (must be number)', () => {
-    const invalid = SpecAuthorContextSchema.safeParse({
-      workItem: { title: 't', body: 'b', number: '235' },
-      targetUrl: 'http://localhost:5173',
-      sliceDescription: 's',
+  it('rejects unknown builderTier', () => {
+    const parsed = EngineeringSpecSchema.safeParse(
+      baseSpec({
+        workPackages: [
+          {
+            id: 'WP1',
+            filesOwned: ['a.ts'],
+            changes: 'x',
+            dependsOn: [],
+            // @ts-expect-error — testing rejection
+            builderTier: 'gpt-4',
+          },
+        ],
+      }),
+    );
+    expect(parsed.success).toBe(false);
+  });
+
+  it('rejects empty AC verifyCommand (falsifiability rule)', () => {
+    const result = EngineeringSpecSchema.safeParse(
+      baseSpec({
+        acceptanceCriteria: [
+          {
+            id: 'AC1',
+            statement: 'works',
+            journeyRef: 'J1',
+            stepIdx: 0,
+            verifyCommand: '',
+          },
+        ],
+      }),
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects empty decisionSummaries', () => {
+    const result = EngineeringSpecSchema.safeParse(baseSpec({ decisionSummaries: [] }));
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts SpecAuthorSchema as alias for EngineeringSpecSchema (backwards-compat)', () => {
+    const result = SpecAuthorSchema.safeParse(baseSpec());
+    expect(result.success).toBe(true);
+  });
+
+  it('round-trips to JSON schema via zod-to-json-schema', () => {
+    const json = toJSONSchema(EngineeringSpecSchema);
+    expect(json).toBeDefined();
+    expect(typeof json).toBe('object');
+  });
+
+  it('config exports the canonical Engineering Spec context shape', () => {
+    expect(config.toolBundles).toEqual(['read']);
+    expect(config.modelPin).toBe('sonnet');
+    const ctx = SpecAuthorContextSchema.safeParse({
+      workItem: { title: 't', body: 'b', number: 559 },
+      issueType: 'feature',
+      worktreePath: '/tmp/wt',
     });
-    expect(invalid.success).toBe(false);
+    expect(ctx.success).toBe(true);
+  });
+});
+
+describe('validateEngineeringSpec — hard rules', () => {
+  it('passes a clean spec', () => {
+    const result = validateEngineeringSpec(baseSpec());
+    expect(result.ok).toBe(true);
+  });
+
+  it('rejects file-ownership-collision (same path in two WPs, even across batches)', () => {
+    const spec = baseSpec({
+      workPackages: [
+        {
+          id: 'WP1',
+          filesOwned: ['apps/server/src/router.ts'],
+          changes: 'edit router.ts to register /healthz',
+          dependsOn: [],
+          builderTier: 'haiku',
+        },
+        {
+          id: 'WP2',
+          // SAME PATH — across batches.
+          filesOwned: ['apps/server/src/router.ts'],
+          changes: 'edit router.ts to register /readyz',
+          dependsOn: ['WP1'],
+          builderTier: 'haiku',
+        },
+      ],
+      executionOrder: [
+        { batch: 0, wpIds: ['WP1'] },
+        { batch: 1, wpIds: ['WP2'] },
+      ],
+      // Make the spec otherwise self-consistent
+      interfaceContracts: [
+        {
+          name: 'noop',
+          signature: 'export const noop = () => {};',
+          file: 'apps/server/src/router.ts',
+        },
+      ],
+    });
+    const result = validateEngineeringSpec(spec);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.some((e) => e.rule === 'file-ownership-collision')).toBe(true);
+  });
+
+  it('rejects AC without journeyRef when issueType=feature (ac-orphan-without-journey)', () => {
+    const spec = baseSpec({
+      acceptanceCriteria: [
+        {
+          id: 'AC1',
+          statement: 'orphan ac',
+          verifyCommand: 'echo ok',
+          // no journeyRef, no crossCutting
+        },
+      ],
+    });
+    const result = validateEngineeringSpec(spec);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.some((e) => e.rule === 'ac-orphan-without-journey')).toBe(true);
+  });
+
+  it('accepts orphan AC when crossCutting: true', () => {
+    const spec = baseSpec({
+      acceptanceCriteria: [
+        ...baseSpec().acceptanceCriteria,
+        {
+          id: 'AC-CROSS',
+          statement: 'budget cap is enforced',
+          verifyCommand: 'pnpm test core/cost',
+          crossCutting: true,
+        },
+      ],
+    });
+    const result = validateEngineeringSpec(spec);
+    expect(result.ok).toBe(true);
+  });
+
+  it('treats orphan AC as advisory when issueType=bug', () => {
+    const spec = baseSpec({
+      acceptanceCriteria: [
+        {
+          id: 'AC1',
+          statement: 'orphan ac',
+          verifyCommand: 'echo ok',
+        },
+      ],
+    });
+    const result = validateEngineeringSpec(spec, { issueType: 'bug' });
+    expect(result.ok).toBe(true);
+  });
+
+  it('rejects ac-journey-ref-not-found when journeyRef points at unknown journey', () => {
+    const spec = baseSpec({
+      acceptanceCriteria: [
+        {
+          id: 'AC1',
+          statement: 's',
+          verifyCommand: 'echo ok',
+          journeyRef: 'J-UNKNOWN',
+        },
+      ],
+    });
+    const result = validateEngineeringSpec(spec);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.some((e) => e.rule === 'ac-journey-ref-not-found')).toBe(true);
+  });
+
+  it('rejects ac-step-idx-out-of-range when stepIdx is not a real step', () => {
+    const spec = baseSpec({
+      acceptanceCriteria: [
+        {
+          id: 'AC1',
+          statement: 's',
+          verifyCommand: 'echo ok',
+          journeyRef: 'J1',
+          stepIdx: 99,
+        },
+      ],
+    });
+    const result = validateEngineeringSpec(spec);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.some((e) => e.rule === 'ac-step-idx-out-of-range')).toBe(true);
+  });
+
+  it('rejects when sensitive path (auth) is touched but riskRegister is empty', () => {
+    const spec = baseSpec({
+      workPackages: [
+        {
+          id: 'WP1',
+          filesOwned: ['core/auth/normalise-email.ts'],
+          changes: 'fix plus-sign decode at line 87',
+          dependsOn: [],
+          builderTier: 'haiku',
+        },
+        {
+          id: 'WP2',
+          filesOwned: ['core/auth/types.ts'],
+          changes: 'export NormalisedEmail type',
+          dependsOn: ['WP1'],
+          builderTier: 'haiku',
+        },
+      ],
+      executionOrder: [
+        { batch: 0, wpIds: ['WP1'] },
+        { batch: 1, wpIds: ['WP2'] },
+      ],
+      interfaceContracts: [
+        {
+          name: 'NormalisedEmail',
+          signature: 'export type NormalisedEmail = string & { __brand: "ne" };',
+          file: 'core/auth/types.ts',
+        },
+      ],
+      riskRegister: [], // empty even though auth is touched
+    });
+    const result = validateEngineeringSpec(spec);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.some((e) => e.rule === 'risk-required-on-sensitive-path')).toBe(true);
+  });
+
+  it('rejects malformed constraint source (constraint-source-format)', () => {
+    const spec = baseSpec({
+      constraints: [{ kind: 'phase', name: 'in-flight', source: 'not-a-real-format' }],
+    });
+    const result = validateEngineeringSpec(spec);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.some((e) => e.rule === 'constraint-source-format')).toBe(true);
+  });
+
+  it('rejects wp-dependson-not-found when dependsOn references unknown WP', () => {
+    const spec = baseSpec({
+      workPackages: [
+        {
+          id: 'WP1',
+          filesOwned: ['a.ts'],
+          changes: 'change a',
+          dependsOn: ['WP-DOES-NOT-EXIST'],
+          builderTier: 'haiku',
+        },
+      ],
+      executionOrder: [{ batch: 0, wpIds: ['WP1'] }],
+      // Single-WP spec — no interface contracts needed.
+      interfaceContracts: [],
+    });
+    const result = validateEngineeringSpec(spec);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.some((e) => e.rule === 'wp-dependson-not-found')).toBe(true);
+  });
+
+  it('rejects execution-order-wp-mismatch when WP missing from executionOrder', () => {
+    const spec = baseSpec({
+      executionOrder: [{ batch: 0, wpIds: ['WP1'] }], // WP2 is missing
+    });
+    const result = validateEngineeringSpec(spec);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.some((e) => e.rule === 'execution-order-wp-mismatch')).toBe(true);
+  });
+
+  it('rejects self-check-journey-coverage when a journey step has no AC', () => {
+    const spec = baseSpec({
+      userJourneys: [
+        {
+          id: 'J1',
+          actor: 'developer',
+          steps: [
+            { idx: 0, description: 'a' },
+            { idx: 1, description: 'b' },
+            { idx: 2, description: 'uncovered step' },
+          ],
+        },
+      ],
+    });
+    const result = validateEngineeringSpec(spec);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.some((e) => e.rule === 'self-check-journey-coverage')).toBe(true);
+  });
+
+  it('rejects self-check-complete-interfaces when ≥2 WPs but no interfaceContracts', () => {
+    const spec = baseSpec({
+      interfaceContracts: [], // 2 WPs above; no contracts
+    });
+    const result = validateEngineeringSpec(spec);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.some((e) => e.rule === 'self-check-complete-interfaces')).toBe(true);
+  });
+
+  it('rejects self-check-verification-tooling when >2 WPs but no verificationTooling', () => {
+    const spec = baseSpec({
+      workPackages: [
+        ...baseSpec().workPackages,
+        {
+          id: 'WP3',
+          filesOwned: ['apps/server/src/routes/readyz.ts'],
+          changes: 'add /readyz route, mirror healthz',
+          dependsOn: [],
+          builderTier: 'haiku',
+        },
+      ],
+      executionOrder: [
+        { batch: 0, wpIds: ['WP1', 'WP3'] },
+        { batch: 1, wpIds: ['WP2'] },
+      ],
+    });
+    const result = validateEngineeringSpec(spec);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.some((e) => e.rule === 'self-check-verification-tooling')).toBe(true);
+  });
+
+  it('rejects self-check-builder-independence when WP changes is too short', () => {
+    const wp2 = baseSpec().workPackages[1];
+    if (wp2 === undefined) throw new Error('baseSpec must have ≥2 WPs');
+    const spec = baseSpec({
+      workPackages: [
+        {
+          id: 'WP1',
+          filesOwned: ['a.ts'],
+          changes: 'fix', // way too short
+          dependsOn: [],
+          builderTier: 'haiku',
+        },
+        wp2,
+      ],
+    });
+    const result = validateEngineeringSpec(spec);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.some((e) => e.rule === 'self-check-builder-independence')).toBe(true);
+  });
+});
+
+describe('validateEngineeringSpec — repoRoot-backed checks', () => {
+  let tmpRepo: string;
+
+  beforeEach(() => {
+    tmpRepo = mkdtempSync(join(tmpdir(), 'spec-author-test-'));
+    // Pre-create a couple of files for grounding checks.
+    mkdirSync(join(tmpRepo, 'apps/server/src/routes'), { recursive: true });
+    writeFileSync(
+      join(tmpRepo, 'apps/server/src/routes/healthz.ts'),
+      'export const healthzHandler = () => "ok";\n',
+    );
+    writeFileSync(
+      join(tmpRepo, 'apps/server/src/router.ts'),
+      "import { healthzHandler } from './routes/healthz.js';\n",
+    );
+  });
+
+  afterEach(() => {
+    rmSync(tmpRepo, { recursive: true, force: true });
+  });
+
+  it('passes a clean spec when constraint sources point at real files+symbols', () => {
+    const spec = baseSpec({
+      constraints: [
+        {
+          kind: 'phase',
+          name: 'healthz endpoint',
+          source: 'apps/server/src/routes/healthz.ts:healthzHandler',
+        },
+      ],
+    });
+    const result = validateEngineeringSpec(spec, { repoRoot: tmpRepo });
+    expect(result.ok).toBe(true);
+  });
+
+  it('rejects constraint-source-file-missing when the cited file does not exist', () => {
+    const spec = baseSpec({
+      constraints: [
+        {
+          kind: 'phase',
+          name: 'fictional',
+          source: 'apps/server/src/routes/notreal.ts:42',
+        },
+      ],
+    });
+    const result = validateEngineeringSpec(spec, { repoRoot: tmpRepo });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.some((e) => e.rule === 'constraint-source-file-missing')).toBe(true);
+  });
+
+  it('rejects constraint-source-symbol-missing when the cited symbol is absent', () => {
+    const spec = baseSpec({
+      constraints: [
+        {
+          kind: 'model',
+          name: 'unknown handler',
+          source: 'apps/server/src/routes/healthz.ts:nonexistentSymbol',
+        },
+      ],
+    });
+    const result = validateEngineeringSpec(spec, { repoRoot: tmpRepo });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.some((e) => e.rule === 'constraint-source-symbol-missing')).toBe(true);
   });
 });
