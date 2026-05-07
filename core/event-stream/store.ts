@@ -72,7 +72,12 @@ export type EventKind =
   // M11.17 smoke gate — pre-dispatch infrastructure check
   | 'workflow.smoke-failed'
   // M13.06 decompose-prd workflow
-  | 'decompose.completed';
+  | 'decompose.completed'
+  // M13.05 grill-and-prd workflow lifecycle
+  | 'grill.question-posted'
+  | 'grill.completed'
+  | 'prd.drafted'
+  | 'prd.advisor-skipped';
 
 export interface AgentEvent {
   id: number;
