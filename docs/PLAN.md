@@ -1748,7 +1748,7 @@ For every milestone:
 
 **Outcome:** the scheduler respects `Depends on` and `Blocks` body-level dependencies, including cross-repo. Issues with unmet dependencies are blocked from dispatch. UI surfaces blocked status. Move-with-dependencies is implemented.
 
-**Status (2026-05-07):** effectively complete. M11.01–M11.15 shipped (dependency parser, scheduler dep filter, blocked label, UI dep visibility, blocked-on-card surface, cross-repo escalation, multi-parallel relaxation per ADR 0023, lifecycle archive + cross-run pattern miner + convergence detector, cross-run retrospective + playbook writer + gate thresholds, skill-coach skill + auto-trigger, predictive model router). Remaining: move-with-deps CLI/UI (M11.04), FACTORY_RULES rule-14 wording amendment, integration tests covering all five M11 paths.
+**Status (2026-05-07):** core path shipped. M11.01–M11.09 + M11.11–M11.15 shipped (dependency parser, scheduler dep filter, blocked label, UI dep visibility, blocked-on-card surface, move-with-deps CLI groundwork, cross-repo escalation, multi-parallel relaxation per ADR 0023, lifecycle archive + cross-run pattern miner + convergence detector, cross-run retrospective + playbook writer + gate thresholds, skill-coach skill + auto-trigger, predictive model router). FACTORY_RULES rule-14 wording amended 2026-05-07 (user-direct edit). **Open:** M11.10 integration tests (#301), and M11.16–M11.19 (#554–#557, gap-analysis patches below).
 
 **Patches added 2026-05-07** (gap analysis vs Steve's autonomous-dev training corpus — `docs/steves-training-materials/`):
 - **M11.16** SDLC enforcement hooks: plan-first PreToolUse + (existing) PostToolUse lint-feedback + (existing) Stop-verify. Note: `post-write-quality.sh` and `stop-verify.sh` already shipped per Factory's own hook deployment; M11.16 only adds the plan-first PreToolUse hook + AC-completeness check at Stop.
@@ -2123,7 +2123,7 @@ For every milestone:
 
 **Source:** Steve's autonomous-dev training corpus (`docs/steves-training-materials/Markdown Files/Autonomous Decelopment/` and `Skill Examples/`). Gap analysis 2026-05-07 confirmed none of these patterns existed in M12–M18 backlog.
 
-**Vocabulary** (additions to §6):
+**Vocabulary** (M19-specific terms; complements but does not modify §6 / §11. When M19 ships, candidate to fold into a new §6 sub-block or a dedicated `docs/glossary.md` per a follow-up bookkeeping issue):
 - **Scout** — read-only sub-skill spawned during PLANNING that gathers facts (file:line citations) for one narrow concern. 6 canonical Wave-1 scouts: Schema, Code Path, Pattern Matcher, Test Inventory, Dependency Mapper, User Journey.
 - **Wave** — a parallel batch of scout spawns. Wave 1 = 4–6 scouts, fact-gathering. Wave 2 = 1–2 deep agents (Interface Designer + Risk Analyst), consume Wave-1 reports, emit paste-ready Zod/SQL/function-signatures.
 - **Cross-validation** — orchestrator step between Wave 1 and Wave 2 that detects contradictions between scout reports.
