@@ -1,0 +1,20 @@
+{
+  "shouldTrigger": [
+    "Triage this new issue and decide if it should be accepted",
+    "Classify this bug report and assign a priority",
+    "Label this feature request appropriately",
+    "Determine if this issue is in scope for the current milestone",
+    "Review this incoming issue and categorize it",
+    "Should we accept this task? Triage it",
+    "Tag this issue with the right type and priority labels"
+  ],
+  "shouldNotTrigger": [
+    "Write the implementation for this feature",
+    "Run the QA checks on this pull request",
+    "Review the code changes in PR #42",
+    "Investigate the root cause of this performance regression",
+    "Write the spec for the authentication module",
+    "Deploy the latest build to staging",
+    "Run the full test suite and report results"
+  ]
+}

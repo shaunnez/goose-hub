@@ -1,0 +1,20 @@
+{
+  "shouldTrigger": [
+    "Investigate the root cause of this regression",
+    "Research which files are affected by this bug",
+    "Explore the codebase to understand how the payment module works",
+    "Find out why the CI pipeline is failing intermittently",
+    "Dig into the issue and produce an investigation report",
+    "Trace through the code to understand the bug",
+    "What is the root cause? Investigate and report findings"
+  ],
+  "shouldNotTrigger": [
+    "Triage this feature request and label it",
+    "Write the implementation for the auth flow",
+    "Run QA on the PR and check the acceptance criteria",
+    "Review the code diff for quality concerns",
+    "Write the engineering spec for the new API",
+    "Create a retrospective summary for the last sprint",
+    "Deploy the fix and verify in production"
+  ]
+}

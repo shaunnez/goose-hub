@@ -68,7 +68,9 @@ export type EventKind =
   | 'coach.skipped-forbidden-target'
   | 'coach.dispatch-failed'
   // M11.15 model router — predictive model selection
-  | 'agent.model-selected';
+  | 'agent.model-selected'
+  // M11.17 smoke gate — pre-dispatch infrastructure check
+  | 'workflow.smoke-failed';
 
 export interface AgentEvent {
   id: number;

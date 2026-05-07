@@ -1,0 +1,20 @@
+{
+  "shouldTrigger": [
+    "Run QA on the pull request and check acceptance criteria",
+    "Verify that all the acceptance criteria are met for issue #42",
+    "Quality check the implementation — are all ACs satisfied?",
+    "Check if the PR meets the functional requirements",
+    "Perform a QA pass on the submitted work",
+    "Validate the implementation against the spec",
+    "Does the implementation satisfy the stated acceptance criteria?"
+  ],
+  "shouldNotTrigger": [
+    "Triage this new incoming feature request",
+    "Write the code to implement the payment flow",
+    "Review the pull request for architectural concerns",
+    "Investigate why the build is failing in CI",
+    "Write a spec for the new API endpoint",
+    "Merge the pull request after approval",
+    "Suggest improvements to the retrospective process"
+  ]
+}

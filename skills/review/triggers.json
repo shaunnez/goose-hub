@@ -1,0 +1,20 @@
+{
+  "shouldTrigger": [
+    "Review the pull request for correctness and code quality",
+    "Do a code review on the changes in this PR",
+    "Check the implementation for architectural concerns",
+    "Review the code changes and provide feedback",
+    "Is the code well-structured? Review it",
+    "Assess the quality of the implementation in this PR",
+    "Look at the diff and flag any issues with the approach"
+  ],
+  "shouldNotTrigger": [
+    "Triage this incoming issue and assign a priority",
+    "Run QA to verify the acceptance criteria are met",
+    "Write the code to implement this feature",
+    "Investigate the root cause of this regression",
+    "Write a technical spec before implementation begins",
+    "Deploy the build and run smoke tests",
+    "Summarise the retrospective findings from last week"
+  ]
+}
