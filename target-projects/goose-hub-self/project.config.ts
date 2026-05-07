@@ -110,7 +110,7 @@ const config: ProjectConfig = {
   visibility: 'always_visible',
   machineScope: undefined,
   colorStripe: '#7c3aed',
-  activeMilestone: 'M11: Dependency-aware Scheduling',
+  activeMilestone: 'M12: Project Bootstrap Workflow',
 };
 
 export default config;
