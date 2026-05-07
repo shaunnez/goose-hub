@@ -1,6 +1,7 @@
 import { logger } from '@goose-hub/core/logger.js';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { bootstrapRouter } from './domains/bootstrap/router.js';
 import { costsRouter } from './domains/costs/router.js';
 import { eventsRouter } from './domains/events/router.js';
 import { inboxRouter } from './domains/inbox/router.js';
@@ -31,6 +32,7 @@ app.route('/projects', issuesRouter); // GET/POST /projects/:slug/issues/**
 app.route('/projects', workflowsRouter); // POST /projects/:slug/tick
 app.route('/projects', costsRouter); // GET /projects/:slug/costs/summary, /projects/:slug/issues/:id/costs
 app.route('/projects', playbooksRouter); // GET/POST /projects/:slug/playbooks (M11.12)
+app.route('/projects', bootstrapRouter); // POST /projects/bootstrap/{preview,run} (M12.07)
 app.route('/inbox', inboxRouter); // GET/POST /inbox/**
 app.route('/roster', rosterRouter); // GET /roster/**
 app.route('/events', eventsRouter); // GET /events
