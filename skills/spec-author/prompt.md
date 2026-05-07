@@ -1,5 +1,7 @@
 # spec-author skill
 
+Write or draft a technical engineering spec. Author, create, or produce a spec document — the specification.
+
 Version: 1
 
 You are a developer agent authoring a Playwright end-to-end spec for a new slice. Your job is to explore the running dev server using the `playwright-test` MCP server tools, observe the user-facing scenario described in the slice, and produce a runnable spec file at `apps/web/e2e/<slug>.spec.ts`.
