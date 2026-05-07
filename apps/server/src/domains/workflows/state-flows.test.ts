@@ -116,7 +116,7 @@ function makeAgentResult(output: unknown): AgentResult {
   return { output, decisionSummaries: [], events: [] };
 }
 
-function makeTriageOutput(type: 'feature' | 'bug' | 'research' = 'feature') {
+function makeTriageOutput(type: 'feature' | 'bug' | 'research' | 'chore' = 'feature') {
   return {
     type,
     priority: 'p2',
@@ -242,7 +242,9 @@ beforeEach(() => {
 // ─── Layer A: Triage ─────────────────────────────────────────────────────────
 
 describe('Layer A: Triage state paths', () => {
-  it('routes feature to factory:dev-ready via factory:accepted', async () => {
+  it('routes fresh feature (no factory:from-prd) to factory:grilling via factory:accepted', async () => {
+    // Fresh features (no factory:from-prd) enter the Discover Lane via grilling.
+    // listLabels returns [] by default (no factory:from-prd).
     const item = makeWorkItem({ state: 'factory:triaging', type: 'feature' });
     const source = makeMockSource();
     (source.listOpenWork as ReturnType<typeof vi.fn>).mockResolvedValue([item]);
@@ -263,7 +265,7 @@ describe('Layer A: Triage state paths', () => {
       2,
       '42',
       'factory:accepted',
-      'factory:dev-ready',
+      'factory:grilling',
     );
     expect(source.transitionState).toHaveBeenCalledTimes(2);
   });
@@ -593,7 +595,8 @@ describe('Layer A: Investigate state paths', () => {
 // without floating-Promise interference with the mockRun queue.
 
 describe('Layer B: Full dispatch chain (dispatchForLabel → workflow → state)', () => {
-  it('dispatchForLabel triaging → triage batch → factory:dev-ready', async () => {
+  it('dispatchForLabel triaging → triage batch → factory:grilling (fresh feature)', async () => {
+    // Fresh features route to grilling, not dev-ready.
     const { dispatchForLabel } = await import('../../shared/dispatch.js');
     const item = makeWorkItem({ state: 'factory:triaging', type: 'feature' });
     const source = makeMockSource();
@@ -615,7 +618,7 @@ describe('Layer B: Full dispatch chain (dispatchForLabel → workflow → state)
       2,
       '42',
       'factory:accepted',
-      'factory:dev-ready',
+      'factory:grilling',
     );
     expect(source.transitionState).toHaveBeenCalledTimes(2);
   });
@@ -669,7 +672,8 @@ describe('Layer B: Full dispatch chain (dispatchForLabel → workflow → state)
   it('full chore pipeline: triaging → dev-ready → factory:approved', async () => {
     const { dispatchForLabel } = await import('../../shared/dispatch.js');
     const source = makeMockSource();
-    const trigItem = makeWorkItem({ state: 'factory:triaging', type: 'feature' });
+    // Use type:chore — chores route directly to dev-ready (no grilling)
+    const trigItem = makeWorkItem({ state: 'factory:triaging', type: 'chore' });
     const devReadyItem = makeWorkItem({ state: 'factory:dev-ready', priority: 'medium' });
 
     mockGetSourceForSlug.mockResolvedValue(source);
@@ -678,7 +682,7 @@ describe('Layer B: Full dispatch chain (dispatchForLabel → workflow → state)
 
     // Phase 1: triage
     mockRun
-      .mockResolvedValueOnce(makeAgentResult(makeTriageOutput('feature')))
+      .mockResolvedValueOnce(makeAgentResult(makeTriageOutput('chore')))
       .mockResolvedValueOnce(makeAgentResult(makeRepoMatchOutput()));
 
     await dispatchForLabel(SLUG, 42, 'factory:triaging');
