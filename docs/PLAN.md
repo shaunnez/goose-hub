@@ -2153,6 +2153,13 @@ For every milestone:
 
 **Source:** Steve's autonomous-dev training corpus (`docs/steves-training-materials/Markdown Files/Autonomous Decelopment/` and `Skill Examples/`). Gap analysis 2026-05-07 confirmed none of these patterns existed in M12–M18 backlog.
 
+Three additional decks in `docs/steves-training-materials/ppt-conversion/` (added 2026-05-07, not part of the original gap analysis) carry net-new signal for M19:
+- `Harness 101.md` — full state-machine + Wave-1 scout roster + 6-layer UAT harness; primary reference for M19.01 (#558) and M19.02 (#559); secondary for M19.05 (#562).
+- `LLM Tool Base Integrations Best Pactices.md` — progressive query levels L0–L4 + manifest-driven tool topology; informs scout tool-allowlist + ReAct-loop bounding under M19.01 (#558).
+- `Skills & Autoimprovement.md` — `eval.json` binary-assertion framework + overnight improvement loop; scaffold for M19.07 (#564) code-quality audit skill and M19.08 (#565) QualityScore convergence detection.
+
+Other decks in `ppt-conversion/` are training/non-technical material that duplicates already-audited content; safe to ignore for M19 scope.
+
 **Vocabulary** (M19-specific terms; complements but does not modify §6 / §11. When M19 ships, candidate to fold into a new §6 sub-block or a dedicated `docs/glossary.md` per a follow-up bookkeeping issue):
 - **Scout** — read-only sub-skill spawned during PLANNING that gathers facts (file:line citations) for one narrow concern. 6 canonical Wave-1 scouts: Schema, Code Path, Pattern Matcher, Test Inventory, Dependency Mapper, User Journey.
 - **Wave** — a parallel batch of scout spawns. Wave 1 = 4–6 scouts, fact-gathering. Wave 2 = 1–2 deep agents (Interface Designer + Risk Analyst), consume Wave-1 reports, emit paste-ready Zod/SQL/function-signatures.
