@@ -63,7 +63,10 @@ function recordWpIteration(
 ): void {
   db.insert(wpIterations)
     .values({ runId, wpId, iteration, status, errorReason: errorReason ?? null })
-    .onConflictDoNothing()
+    .onConflictDoUpdate({
+      target: [wpIterations.runId, wpIterations.wpId, wpIterations.iteration],
+      set: { status, errorReason: errorReason ?? null },
+    })
     .run();
 }
 
@@ -135,6 +138,18 @@ Closes #${opts.workItem.externalId}
 
 // ─── Single-WP builder runner ─────────────────────────────────────────────────
 
+// Internal result from the concurrent build phase, before the serial commit phase.
+type WpBuildPhaseResult =
+  | {
+      status: 'built';
+      wp: WorkPackage;
+      parsedFilesWritten: Array<{ path: string; reason?: string }>;
+      wpRunId: string;
+      commitMsg: string;
+      scratchWorktreePath: string;
+    }
+  | { status: 'failed' | 'timeout'; wpId: string; errorReason?: string; runId: string };
+
 interface RunOneWpBuilderOptions {
   wp: WorkPackage;
   iteration: number;
@@ -143,20 +158,18 @@ interface RunOneWpBuilderOptions {
   workItemId?: string;
   workItem: WorkItem;
   scratchWorktreePath: string;
-  issueWorktreePath: string;
   stack: { testCommand: string; lintCommand?: string; typecheckCommand?: string };
   runtime: AgentRuntime;
   personaId: string;
   wpTimeoutMs: number;
   appendEvent: (input: AppendEventInput) => AgentEvent;
-  orchestratorCommitWpFn: typeof orchestratorCommitWp;
   revertWpChangesFn: typeof revertWpChanges;
   recordIterationFn: typeof recordWpIteration;
   implementWpPrompt: string;
   implementWpJsonSchema: Record<string, unknown>;
 }
 
-async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpDispatchResult> {
+async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpBuildPhaseResult> {
   const { wp, iteration, runId, projectId, workItemId } = opts;
   const wpRunId = `${runId}:wp:${wp.id}:iter:${iteration}`;
 
@@ -250,7 +263,7 @@ async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpDispatch
     });
     opts.revertWpChangesFn(opts.scratchWorktreePath, wp.filesOwned);
     opts.recordIterationFn(runId, wp.id, iteration, 'failed', 'timeout');
-    return { wpId: wp.id, status: 'timeout', errorReason: 'timeout', runId: wpRunId };
+    return { status: 'timeout', wpId: wp.id, errorReason: 'timeout', runId: wpRunId };
   }
 
   if (errorReason != null || result == null) {
@@ -263,7 +276,7 @@ async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpDispatch
     });
     opts.revertWpChangesFn(opts.scratchWorktreePath, wp.filesOwned);
     opts.recordIterationFn(runId, wp.id, iteration, 'failed', errorReason ?? 'unknown');
-    return { wpId: wp.id, status: 'failed', errorReason: errorReason ?? 'unknown', runId: wpRunId };
+    return { status: 'failed', wpId: wp.id, errorReason: errorReason ?? 'unknown', runId: wpRunId };
   }
 
   const parsed = ImplementWpSchema.safeParse(result.output);
@@ -280,46 +293,19 @@ async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpDispatch
     });
     opts.revertWpChangesFn(opts.scratchWorktreePath, wp.filesOwned);
     opts.recordIterationFn(runId, wp.id, iteration, 'failed', reason);
-    return { wpId: wp.id, status: 'failed', errorReason: reason, runId: wpRunId };
+    return { status: 'failed', wpId: wp.id, errorReason: reason, runId: wpRunId };
   }
 
-  // WP succeeded — copy files to integration worktree and commit there.
-  // This serialization is intentional: concurrent WPs each build in isolation
-  // then commit serially to the shared integration worktree (ADR 0031).
-  for (const fileWritten of parsed.data.filesWritten) {
-    const destPath = join(opts.issueWorktreePath, fileWritten.path);
-    mkdirSync(dirname(destPath), { recursive: true });
-    const srcPath = join(opts.scratchWorktreePath, fileWritten.path);
-    copyFileSync(srcPath, destPath);
-  }
-
+  // Build succeeded — return files for the serial commit phase.
   const commitMsg = `M:${wp.id} ${wp.changes.slice(0, 60)}\n\nBuilt by ${opts.personaId}`;
-  let commitSha: string | undefined;
-  try {
-    commitSha = opts.orchestratorCommitWpFn(opts.issueWorktreePath, wp.filesOwned, commitMsg);
-  } catch (commitErr) {
-    const reason = commitErr instanceof Error ? commitErr.message : String(commitErr);
-    opts.appendEvent({
-      projectId,
-      workItemId: workItemId ?? null,
-      kind: 'parallel-implement.wp-commit-failed',
-      payload: { wpId: wp.id, wpRunId, errorReason: reason },
-      runId: wpRunId,
-    });
-    opts.revertWpChangesFn(opts.scratchWorktreePath, wp.filesOwned);
-    opts.recordIterationFn(runId, wp.id, iteration, 'failed', `commit-failed: ${reason}`);
-    return { wpId: wp.id, status: 'failed', errorReason: reason, runId: wpRunId };
-  }
-
-  opts.appendEvent({
-    projectId,
-    workItemId: workItemId ?? null,
-    kind: 'parallel-implement.wp-committed',
-    payload: { wpId: wp.id, wpRunId, commitSha },
-    runId: wpRunId,
-  });
-  opts.recordIterationFn(runId, wp.id, iteration, 'ok');
-  return { wpId: wp.id, status: 'ok', commitSha, runId: wpRunId };
+  return {
+    status: 'built',
+    wp,
+    parsedFilesWritten: parsed.data.filesWritten,
+    wpRunId,
+    commitMsg,
+    scratchWorktreePath: opts.scratchWorktreePath,
+  };
 }
 
 // ─── Main workflow ─────────────────────────────────────────────────────────────
@@ -408,12 +394,15 @@ export async function runParallelImplementWorkflow(
       });
 
       // Execute batches in order (respecting executionOrder).
-      // WPs within the same batch run concurrently.
+      // Phase 1: WPs within the same batch build concurrently.
+      // Phase 2: successful builds commit serially to the integration worktree
+      //          to avoid git index lock contention (ADR 0031).
       for (const batch of spec.executionOrder) {
         const batchWps = wpsToRun.filter((wp) => batch.wpIds.includes(wp.id));
         if (batchWps.length === 0) continue;
 
-        const batchResults = await runWithConcurrencyCap(batchWps, maxParallel, (wp) =>
+        // Phase 1 — concurrent build (no git writes to integration worktree).
+        const buildPhaseResults = await runWithConcurrencyCap(batchWps, maxParallel, (wp) =>
           runOneWpBuilder({
             wp,
             iteration,
@@ -422,13 +411,11 @@ export async function runParallelImplementWorkflow(
             workItemId: workItem.id,
             workItem,
             scratchWorktreePath: scratchWorktrees.get(wp.id) ?? '/tmp/missing-scratch',
-            issueWorktreePath: issueWorktreePath ?? '/tmp/missing-issue',
             stack,
             runtime,
             personaId,
             wpTimeoutMs,
             appendEvent: append,
-            orchestratorCommitWpFn: commitWpFn,
             revertWpChangesFn: revertFn,
             recordIterationFn: recordFn,
             implementWpPrompt,
@@ -436,7 +423,61 @@ export async function runParallelImplementWorkflow(
           }),
         );
 
-        allWpResults.push(...batchResults);
+        // Phase 2 — serial commit (one WP at a time into the integration worktree).
+        for (const buildResult of buildPhaseResults) {
+          if (buildResult.status !== 'built') {
+            const r = buildResult;
+            allWpResults.push({
+              wpId: r.wpId,
+              status: r.status,
+              errorReason: r.errorReason,
+              runId: r.runId,
+            });
+            continue;
+          }
+
+          const { wp, parsedFilesWritten, wpRunId, commitMsg, scratchWorktreePath } = buildResult;
+          const issueWt = issueWorktreePath ?? '/tmp/missing-issue';
+
+          for (const fileWritten of parsedFilesWritten) {
+            const destPath = join(issueWt, fileWritten.path);
+            mkdirSync(dirname(destPath), { recursive: true });
+            copyFileSync(join(scratchWorktreePath, fileWritten.path), destPath);
+          }
+
+          let commitSha: string | undefined;
+          try {
+            commitSha = commitWpFn(issueWt, wp.filesOwned, commitMsg);
+          } catch (commitErr) {
+            const reason = commitErr instanceof Error ? commitErr.message : String(commitErr);
+            append({
+              projectId,
+              workItemId: workItem.id,
+              kind: 'parallel-implement.wp-commit-failed',
+              payload: { wpId: wp.id, wpRunId, errorReason: reason },
+              runId: wpRunId,
+            });
+            revertFn(scratchWorktreePath, wp.filesOwned);
+            recordFn(runId, wp.id, iteration, 'failed', `commit-failed: ${reason}`);
+            allWpResults.push({
+              wpId: wp.id,
+              status: 'failed',
+              errorReason: reason,
+              runId: wpRunId,
+            });
+            continue;
+          }
+
+          append({
+            projectId,
+            workItemId: workItem.id,
+            kind: 'parallel-implement.wp-committed',
+            payload: { wpId: wp.id, wpRunId, commitSha },
+            runId: wpRunId,
+          });
+          recordFn(runId, wp.id, iteration, 'ok');
+          allWpResults.push({ wpId: wp.id, status: 'ok', commitSha, runId: wpRunId });
+        }
       }
 
       const stillFailed = allWpIds.filter((id) => getStatusFn(runId, id) !== 'ok');
