@@ -31,56 +31,93 @@ function findWorktreePath(workItemId: string): string | undefined {
   return typeof payload.worktreePath === 'string' ? payload.worktreePath : undefined;
 }
 
+type TierResult = {
+  passed: boolean;
+  findings: Array<{ tier: string; severity: string; description: string; suggestion?: string }>;
+};
+
+type QaPayload = {
+  verdict?: string;
+  overallScore?: number;
+  threshold?: number;
+  tierResults?: {
+    structural?: TierResult;
+    functional?: TierResult;
+    regression?: TierResult;
+  };
+};
+
+type ReviewPayload = {
+  verdict?: string;
+  findings?: Array<{ severity: string; description: string }>;
+};
+
 /**
- * Extracts QA findings from the most recent `qa.completed` event and formats
- * them as a human-readable string for injection into the implement skill's
- * `advisorFeedback` field.
+ * Finds the most recent failure from either `qa.completed` (non-pass) or
+ * `review.completed` (needs-fix), whichever is later in the event stream,
+ * and formats it as advisor feedback for the implement skill.
  *
- * Returns an empty string if no qa.completed event exists (implement still
- * runs; it just has no targeted feedback).
+ * Skips QA passes so a qa-fail → fix → qa-pass → review-fail cycle correctly
+ * surfaces the review findings rather than the superseded QA pass.
  */
-function buildQaFeedback(workItemId: string): string {
+function buildAdvisorFeedback(workItemId: string): string {
   const events = eventStore.replay({ workItemId });
-  const qaCompleted = events
-    .slice()
-    .reverse()
-    .find((e) => e.kind === 'qa.completed');
-  if (qaCompleted == null) return '';
 
-  type TierResult = {
-    passed: boolean;
-    findings: Array<{ tier: string; severity: string; description: string; suggestion?: string }>;
-  };
-  type QaPayload = {
-    verdict?: string;
-    overallScore?: number;
-    threshold?: number;
-    tierResults?: {
-      structural?: TierResult;
-      functional?: TierResult;
-      regression?: TierResult;
-    };
-  };
-
-  const payload = qaCompleted.payload as QaPayload;
-  const { verdict = 'fail', overallScore = 0, threshold = 70, tierResults = {} } = payload;
-
-  const lines: string[] = [
-    `QA verdict: ${verdict} (score ${overallScore}/${threshold})`,
-    '',
-    'Findings to address:',
-  ];
-
-  for (const [tier, result] of Object.entries(tierResults) as [string, TierResult | undefined][]) {
-    if (result == null || result.passed) continue;
-    for (const f of result.findings) {
-      lines.push(
-        `- [${tier}/${f.severity}] ${f.description}${f.suggestion ? ` — ${f.suggestion}` : ''}`,
-      );
+  let qaIdx = -1;
+  let qaEvent: (typeof events)[number] | null = null;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.kind === 'qa.completed' && (e.payload as QaPayload).verdict !== 'pass') {
+      qaIdx = i;
+      qaEvent = e;
+      break;
     }
   }
 
-  return lines.join('\n');
+  let reviewIdx = -1;
+  let reviewEvent: (typeof events)[number] | null = null;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.kind === 'review.completed' && (e.payload as ReviewPayload).verdict === 'needs-fix') {
+      reviewIdx = i;
+      reviewEvent = e;
+      break;
+    }
+  }
+
+  if (reviewEvent != null && reviewIdx > qaIdx) {
+    const payload = reviewEvent.payload as ReviewPayload;
+    const findings = payload.findings ?? [];
+    const lines: string[] = ['Review verdict: needs-fix', '', 'Findings to address:'];
+    for (const f of findings) {
+      lines.push(`- [${f.severity}] ${f.description}`);
+    }
+    return lines.join('\n');
+  }
+
+  if (qaEvent != null) {
+    const payload = qaEvent.payload as QaPayload;
+    const { verdict = 'fail', overallScore = 0, threshold = 70, tierResults = {} } = payload;
+    const lines: string[] = [
+      `QA verdict: ${verdict} (score ${overallScore}/${threshold})`,
+      '',
+      'Findings to address:',
+    ];
+    for (const [tier, result] of Object.entries(tierResults) as [
+      string,
+      TierResult | undefined,
+    ][]) {
+      if (result == null || result.passed) continue;
+      for (const f of result.findings) {
+        lines.push(
+          `- [${tier}/${f.severity}] ${f.description}${f.suggestion ? ` — ${f.suggestion}` : ''}`,
+        );
+      }
+    }
+    return lines.join('\n');
+  }
+
+  return '';
 }
 
 /**
@@ -141,7 +178,7 @@ export async function runFixFeedbackWorkflow(
   const implementPrompt = readPromptWithContext('implement', projectId);
   const implementJsonSchema = toJsonSchema(ImplementSchema);
   const { personaId } = selectPersona(projectId, 'developer');
-  const advisorFeedback = buildQaFeedback(workItem.id);
+  const advisorFeedback = buildAdvisorFeedback(workItem.id);
 
   await stateSource.transitionState(
     workItem.externalId,

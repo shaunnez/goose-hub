@@ -262,6 +262,14 @@ export async function dispatchNeedsFix(slug: string, issueNumber: number): Promi
       return;
     }
     const item = await source.getItem(issueNumber.toString());
+    if (item.state !== 'factory:needs-fix') {
+      logger.info('dispatchNeedsFix: state already moved, skipping', {
+        slug,
+        issueNumber,
+        state: item.state,
+      });
+      return;
+    }
     await runFixFeedbackWorkflow(item, source, slug, item.repoRef ?? slug);
   } finally {
     parallelLock.release(slug, issueNumber);

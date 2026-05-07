@@ -49,6 +49,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'evidence.no-spec-declared': 'Evidence — no spec declared',
   'evidence.posted': 'Evidence posted',
   'evidence.post-failed': 'Evidence post failed',
+  'agent.verify-command': 'Verify command',
   'qa.completed': 'QA completed',
   'qa.structural-failed': 'QA structural failed',
   'qa.functional-failed': 'QA functional failed',

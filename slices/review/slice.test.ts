@@ -546,6 +546,83 @@ describe('runReviewWorkflow', () => {
     });
   });
 
+  describe('getQaVerdict — reads qa.completed from event store', () => {
+    it('passes qaVerdict with verdict and overallScore when qa.completed event exists', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce(makeApprovedResult());
+      mockReplay.mockReturnValue([
+        {
+          kind: 'qa.completed',
+          payload: { verdict: 'pass', overallScore: 88 },
+          workItemId: item.id,
+        },
+      ]);
+
+      const { runReviewWorkflow } = await import('./workflow.js');
+      await runReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const spec = mockRun.mock.calls[0][0] as { context: Record<string, unknown> };
+      expect(spec.context.qaVerdict).toEqual({ verdict: 'pass', overallScore: 88 });
+    });
+
+    it('uses the last qa.completed when multiple exist', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce(makeApprovedResult());
+      mockReplay.mockReturnValue([
+        {
+          kind: 'qa.completed',
+          payload: { verdict: 'fail', overallScore: 45 },
+          workItemId: item.id,
+        },
+        {
+          kind: 'qa.completed',
+          payload: { verdict: 'pass', overallScore: 92 },
+          workItemId: item.id,
+        },
+      ]);
+
+      const { runReviewWorkflow } = await import('./workflow.js');
+      await runReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const spec = mockRun.mock.calls[0][0] as { context: Record<string, unknown> };
+      expect(spec.context.qaVerdict).toEqual({ verdict: 'pass', overallScore: 92 });
+    });
+
+    it('passes undefined qaVerdict when no qa.completed event exists', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce(makeApprovedResult());
+      mockReplay.mockReturnValue([]);
+
+      const { runReviewWorkflow } = await import('./workflow.js');
+      await runReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const spec = mockRun.mock.calls[0][0] as { context: Record<string, unknown> };
+      expect(spec.context.qaVerdict).toBeUndefined();
+    });
+
+    it('handles string-serialized payload (legacy mock compatibility)', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce(makeApprovedResult());
+      mockReplay.mockReturnValue([
+        {
+          kind: 'qa.completed',
+          payload: JSON.stringify({ verdict: 'partial', overallScore: 72 }),
+          workItemId: item.id,
+        },
+      ]);
+
+      const { runReviewWorkflow } = await import('./workflow.js');
+      await runReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const spec = mockRun.mock.calls[0][0] as { context: Record<string, unknown> };
+      expect(spec.context.qaVerdict).toEqual({ verdict: 'partial', overallScore: 72 });
+    });
+  });
+
   describe('non-Error thrown (line 127 branch)', () => {
     it('wraps non-Error thrown value as Error and transitions to needs-human', async () => {
       const item = makeWorkItem();

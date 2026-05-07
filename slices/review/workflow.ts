@@ -46,7 +46,7 @@ export async function runReviewWorkflow(
 
   try {
     const prDiff = await getPrDiff(workItem, stateSource);
-    const qaVerdict = getQaVerdict(workItem);
+    const qaVerdict = getQaVerdict(priorEvents);
 
     const result = await runtime.run({
       runId,
@@ -177,10 +177,18 @@ async function getPrDiff(workItem: WorkItem, stateSource: StateSource): Promise<
   }
 }
 
-function getQaVerdict(_workItem: WorkItem): { verdict: string; overallScore: number } | undefined {
-  // In production, read from the qa.completed event in the event store.
-  // For M8 scope: return undefined (qaVerdict is optional in ReviewContextSchema).
-  return undefined;
+function getQaVerdict(
+  events: { kind: string; payload: string | unknown }[],
+): { verdict: string; overallScore: number } | undefined {
+  const qaEvents = events.filter((e) => e.kind === 'qa.completed');
+  if (qaEvents.length === 0) return undefined;
+  const last = qaEvents[qaEvents.length - 1];
+  const p = (typeof last.payload === 'string' ? JSON.parse(last.payload) : last.payload) as {
+    verdict?: string;
+    overallScore?: number;
+  };
+  if (p.verdict == null || p.overallScore == null) return undefined;
+  return { verdict: p.verdict, overallScore: p.overallScore };
 }
 
 function buildReviewComment(
