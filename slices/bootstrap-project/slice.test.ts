@@ -38,10 +38,14 @@ function makeMockFetch(handlers: {
   existingPrs?: { number: number; state: string; html_url: string; ref: string }[];
   /** Default branch sha returned by /repos/{owner}/{repo}/git/ref/heads/<default>. */
   defaultBranchSha?: string;
-  /** Default branch name returned by /repos/{owner}/{repo}. */
+  /** Default branch name returned by goose-hub /repos/shaunnez/goose-hub. */
   defaultBranch?: string;
+  /** Default branch name for the *target* repo (defaults to 'main'). */
+  targetDefaultBranch?: string;
   /** PR number / html_url to return for a successfully opened PR. */
   openedPr?: { number: number; html_url: string };
+  /** When true, POST /git/refs returns 422 "Reference already exists". */
+  branchAlreadyExists?: boolean;
 }) {
   const recorded: RecordedRequest[] = [];
 
@@ -97,7 +101,22 @@ function makeMockFetch(handlers: {
       method === 'POST' &&
       urlStr === 'https://api.github.com/repos/shaunnez/goose-hub/git/refs'
     ) {
+      if (handlers.branchAlreadyExists) {
+        return new Response(JSON.stringify({ message: 'Reference already exists' }), {
+          status: 422,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
       return jsonResponse({ ref: (parsedBody as { ref: string }).ref }, 201);
+    }
+
+    // 4b) Target repo metadata (used to discover its default branch).
+    if (
+      method === 'GET' &&
+      /^https:\/\/api\.github\.com\/repos\/[^/]+\/[^/]+$/.test(urlStr) &&
+      urlStr !== 'https://api.github.com/repos/shaunnez/goose-hub'
+    ) {
+      return jsonResponse({ default_branch: handlers.targetDefaultBranch ?? 'main' });
     }
 
     // 5) Put file via Contents API.
@@ -482,6 +501,71 @@ describe('bootstrapProject — idempotency', () => {
 
     const result = await bootstrapProject(HAPPY_INPUT, deps);
     expect(result.status).toBe('created');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// bootstrapProject — recover from a stale branch (P1 review)
+// ---------------------------------------------------------------------------
+
+describe('bootstrapProject — recovers when bootstrap branch already exists', () => {
+  it('treats 422 "Reference already exists" as a no-op and proceeds to open the PR', async () => {
+    // Simulates a previous run that created refs/heads/bootstrap/widgets but
+    // crashed before opening the PR.
+    const { fetchImpl, recorded } = makeMockFetch({
+      branchAlreadyExists: true,
+      openedPr: { number: 8888, html_url: 'https://github.com/shaunnez/goose-hub/pull/8888' },
+    });
+    const deps = makeDeps({
+      fetchImpl,
+      detectStack: happyDetectStack(),
+      auditClaudeMd: happyAudit(),
+      installLabels: happyInstallLabels(),
+    });
+
+    const result = await bootstrapProject(HAPPY_INPUT, deps);
+
+    expect(result.status).toBe('created');
+    expect(result.registrationPrUrl).toBe('https://github.com/shaunnez/goose-hub/pull/8888');
+
+    // The PR creation went through after the stale-ref no-op.
+    const prCreate = recorded.find(
+      (r) =>
+        r.method === 'POST' && r.url === 'https://api.github.com/repos/shaunnez/goose-hub/pulls',
+    );
+    expect(prCreate).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// bootstrapProject — target repo's default branch is honoured (P2 review)
+// ---------------------------------------------------------------------------
+
+describe("bootstrapProject — scaffolded config uses the target repo's default branch", () => {
+  it('writes defaultBranch=master when the target repo defaults to master', async () => {
+    const { fetchImpl, recorded } = makeMockFetch({
+      targetDefaultBranch: 'master',
+    });
+    const deps = makeDeps({
+      fetchImpl,
+      detectStack: happyDetectStack(),
+      auditClaudeMd: happyAudit(),
+      installLabels: happyInstallLabels(),
+    });
+
+    await bootstrapProject(HAPPY_INPUT, deps);
+
+    const configPut = recorded.find(
+      (r) =>
+        r.method === 'PUT' && r.url.includes('/contents/target-projects/widgets/project.config.ts'),
+    );
+    expect(configPut).toBeDefined();
+    const decoded = Buffer.from(
+      (configPut?.body as { content: string }).content,
+      'base64',
+    ).toString('utf-8');
+    expect(decoded).toContain("defaultBranch: 'master'");
+    expect(decoded).not.toContain("defaultBranch: 'main'");
   });
 });
 

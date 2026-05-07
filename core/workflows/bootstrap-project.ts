@@ -495,11 +495,34 @@ async function getDefaultBranchSha(
 }
 
 async function createBranch(input: CreateBranchInput): Promise<void> {
-  await ghJson(input.fetchImpl, `https://api.github.com/repos/${REGISTRATION_REPO}/git/refs`, {
-    method: 'POST',
-    token: input.token,
-    body: JSON.stringify({ ref: `refs/heads/${input.branchName}`, sha: input.baseSha }),
+  try {
+    await ghJson(input.fetchImpl, `https://api.github.com/repos/${REGISTRATION_REPO}/git/refs`, {
+      method: 'POST',
+      token: input.token,
+      body: JSON.stringify({ ref: `refs/heads/${input.branchName}`, sha: input.baseSha }),
+    });
+  } catch (err) {
+    // GitHub returns 422 "Reference already exists" if a previous run created
+    // the branch but errored before opening the PR. Treat that as a no-op so
+    // the workflow can self-recover. Any other error must propagate.
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/422/.test(msg) && /already exists/i.test(msg)) {
+      return;
+    }
+    throw err;
+  }
+}
+
+async function getRepoDefaultBranch(
+  fetchImpl: typeof fetch,
+  token: string,
+  repoRef: string,
+): Promise<string> {
+  const meta = await ghJson(fetchImpl, `https://api.github.com/repos/${repoRef}`, {
+    method: 'GET',
+    token,
   });
+  return String(meta.default_branch ?? 'main');
 }
 
 async function putFileOnBranch(input: {
@@ -619,11 +642,14 @@ export async function bootstrapProject(
   const labels = await installLabels(input.repoRef, input.token, fetchImpl);
 
   // ── Step 4: scaffold target-projects/<slug>/project.config.ts ────────
+  // Fetch the *target* repo's default branch (not goose-hub's) so projects
+  // that use master/develop/etc. don't get incorrectly scaffolded with main.
+  const targetDefaultBranch = await getRepoDefaultBranch(fetchImpl, input.token, input.repoRef);
   const detectedAt = new Date().toISOString();
   const configContent = renderProjectConfig({
     slug,
     repoRef: input.repoRef,
-    defaultBranch: 'main',
+    defaultBranch: targetDefaultBranch,
     cloneRoot: input.cloneRoot,
     stack,
     detectedAt,
