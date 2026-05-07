@@ -2153,6 +2153,13 @@ For every milestone:
 
 **Source:** Steve's autonomous-dev training corpus (`docs/steves-training-materials/Markdown Files/Autonomous Decelopment/` and `Skill Examples/`). Gap analysis 2026-05-07 confirmed none of these patterns existed in M12–M18 backlog.
 
+Three additional decks in `docs/steves-training-materials/ppt-conversion/` (added 2026-05-07, not part of the original gap analysis) carry net-new signal for M19:
+- `Harness 101.md` — full state-machine + Wave-1 scout roster + 6-layer UAT harness; primary reference for M19.01 (#558) and M19.02 (#559); secondary for M19.05 (#562).
+- `LLM Tool Base Integrations Best Pactices.md` — progressive query levels L0–L4 + manifest-driven tool topology; informs scout tool-allowlist + ReAct-loop bounding under M19.01 (#558).
+- `Skills & Autoimprovement.md` — `eval.json` binary-assertion framework + overnight improvement loop; scaffold for M19.07 (#564) code-quality audit skill and M19.08 (#565) QualityScore convergence detection.
+
+Other decks in `ppt-conversion/` are training/non-technical material that duplicates already-audited content; safe to ignore for M19 scope.
+
 **Vocabulary** (M19-specific terms; complements but does not modify §6 / §11. When M19 ships, candidate to fold into a new §6 sub-block or a dedicated `docs/glossary.md` per a follow-up bookkeeping issue):
 - **Scout** — read-only sub-skill spawned during PLANNING that gathers facts (file:line citations) for one narrow concern. 6 canonical Wave-1 scouts: Schema, Code Path, Pattern Matcher, Test Inventory, Dependency Mapper, User Journey.
 - **Wave** — a parallel batch of scout spawns. Wave 1 = 4–6 scouts, fact-gathering. Wave 2 = 1–2 deep agents (Interface Designer + Risk Analyst), consume Wave-1 reports, emit paste-ready Zod/SQL/function-signatures.
@@ -2164,9 +2171,9 @@ For every milestone:
 - **QualityScore** — per-run 0–100 score with components (P0/P1/P2/P3 counts, regressions_open, review_converged, uat_passed, static_passed, harness_pass_rate, architecturalScore). Convergence rule: score delta < 5.0 over last 3 iterations + zero P0/P1 + ≤3 regressions = ship-ready.
 
 **Included scope:**
-- M19.01 Wave-1/Wave-2 swarm in `investigate` skill (#558) + ADR 0024 sub-agent dispatch from skills
+- M19.01 Wave-1/Wave-2 swarm in `investigate` skill (#558) + ADR 0030 sub-agent dispatch from skills
 - M19.02 `spec-author` outputs Engineering Spec with WPs + file ownership + AC→Journey→Verification map (#559)
-- M19.03 parallel implement workflow + ADR 0025 orchestrator-owned git + FACTORY_RULES rule-37 candidate (#560)
+- M19.03 parallel implement workflow + ADR 0031 orchestrator-owned git + FACTORY_RULES rule-37 candidate (#560)
 - M19.04 convergent adversarial review with 2 parallel reviewers (#561)
 - M19.05 3-tier verification harness — Structural / Functional / Regression with carry-forward failure semantics (#562)
 - M19.06 record-decision runtime tool (filed for evaluation; may be deferred or discarded after A/B against existing two-stream decision summaries) (#563)
