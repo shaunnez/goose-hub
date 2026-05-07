@@ -253,3 +253,38 @@ export interface PlaybookManifestDto {
 export interface PlaybookDetailDto extends PlaybookSummaryDto {
   manifest: PlaybookManifestDto;
 }
+
+// ---------------------------------------------------------------------------
+// Bootstrap wizard (M12.07, issue #308)
+// ---------------------------------------------------------------------------
+
+export interface BootstrapPreviewLabelDto {
+  name: string;
+  color: string;
+  description: string;
+}
+
+export interface BootstrapPreviewDto {
+  slug: string;
+  defaultBranch: string;
+  stack: {
+    type: string;
+    summary: string;
+    raw: unknown;
+  };
+  audit: {
+    action: 'create' | 'update' | 'ok';
+    content: string;
+    rationale: string;
+  };
+  labelsToInstall: BootstrapPreviewLabelDto[];
+}
+
+export interface BootstrapRunDto {
+  status: 'created' | 'idempotent-skip';
+  registrationPrUrl: string | null;
+  slug: string;
+  stackSummary: string;
+  auditAction: 'create' | 'update' | 'ok';
+  labelCounts?: { created: number; updated: number; skipped: number };
+}
