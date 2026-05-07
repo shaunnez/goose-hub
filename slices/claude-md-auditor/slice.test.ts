@@ -42,6 +42,8 @@ describe('auditClaudeMd — no CLAUDE.md', () => {
     expect(result.content).toContain('## Commands');
     expect(result.content).toContain('## Hard rules');
     expect(result.content).toContain('## PR conventions');
+    // Holdout-safety boundary mandated by CONTEXT.md:275
+    expect(result.content).toContain("## What goes here / What doesn't");
 
     // Stack commands should be populated
     expect(result.content).toContain('pnpm build');
@@ -126,6 +128,39 @@ describe('auditClaudeMd — stack with e2e command', () => {
 
     expect(result.action).toBe('create');
     expect(result.content).toContain('pnpm playwright test');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Scenario: holdout-safety section is mandatory (P1 from review)
+// ---------------------------------------------------------------------------
+
+describe('auditClaudeMd — holdout-safety section is required (CONTEXT.md:275)', () => {
+  it('flags a CLAUDE.md missing the holdout-safety section as needing update', async () => {
+    // The partial fixture has Stack + What-this-repo-is but is missing
+    // PR conventions and What-goes-here / What-doesn't, so it must update.
+    const repoPath = path.join(fixturesDir, 'partial-claude-md');
+    const result: AuditResult = await auditClaudeMd(repoPath, minimalStack);
+
+    expect(result.action).toBe('update');
+    expect(result.content).toContain("## What goes here / What doesn't");
+    expect(result.rationale).toContain("What goes here / What doesn't");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Scenario: read errors other than ENOENT surface (P2 from review)
+// ---------------------------------------------------------------------------
+
+describe('auditClaudeMd — non-ENOENT read errors surface', () => {
+  it('rethrows when the repo path itself is not a directory', async () => {
+    // Pointing repoPath at a file rather than a directory triggers ENOTDIR
+    // when joining `<file>/CLAUDE.md`, which must surface rather than be
+    // silently misreported as "no CLAUDE.md".
+    const notADir = path.join(fixturesDir, 'partial-claude-md', 'CLAUDE.md');
+    await expect(auditClaudeMd(notADir, minimalStack)).rejects.toMatchObject({
+      code: 'ENOTDIR',
+    });
   });
 });
 

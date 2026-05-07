@@ -64,6 +64,10 @@ const REQUIRED_SECTIONS: ReadonlyArray<string> = [
   'Commands',
   'Hard rules',
   'PR conventions',
+  // Holdout-safety boundary mandated by CONTEXT.md:275 — the workspace
+  // CLAUDE.md is auto-loaded by Claude Code on every spawn, so it must be
+  // holdout-clean by design. This section makes that boundary explicit.
+  "What goes here / What doesn't",
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -117,6 +121,16 @@ ${commandsBlock}
 - Title format: \`M<milestone>.<task>: <short description>\`
 - Body must contain \`Closes #N\` on its own line.
 - No implementation reasoning in the PR body.
+
+## What goes here / What doesn't
+
+This file is auto-loaded by Claude Code on every agent spawn, so it is
+visible to QA and Reviewer holdouts. Keep it holdout-clean.
+
+- Goes here: naming conventions, test/lint/build commands, repo layout, hard rules, PR conventions.
+- Does not go here: implementation reasoning, plans, decision summaries, chat history, agent-specific guidance.
+
+Per-skill guidance lives in \`skills/<name>/prompt.md\` or in \`AgentSpec.context\` filtered by allowlist — never in this file.
 `;
 }
 
@@ -210,6 +224,19 @@ function buildAdditionDiff(
         );
         break;
 
+      case "What goes here / What doesn't":
+        lines.push(
+          'This file is auto-loaded by Claude Code on every agent spawn, so it is',
+          'visible to QA and Reviewer holdouts. Keep it holdout-clean.',
+          '',
+          '- Goes here: naming conventions, test/lint/build commands, repo layout, hard rules, PR conventions.',
+          '- Does not go here: implementation reasoning, plans, decision summaries, chat history, agent-specific guidance.',
+          '',
+          'Per-skill guidance lives in `skills/<name>/prompt.md` or in `AgentSpec.context` filtered by allowlist — never in this file.',
+          '',
+        );
+        break;
+
       default:
         lines.push('<!-- TODO: Fill in this section. -->', '');
         break;
@@ -257,8 +284,12 @@ export async function auditClaudeMd(repoPath: string, stackInfo: StackInfo): Pro
   let existingContent: string | null = null;
   try {
     existingContent = await fs.readFile(claudeMdPath, 'utf-8');
-  } catch {
-    // File does not exist — that is fine, handled below
+  } catch (err) {
+    // Only ENOENT is "missing"; permission, IO, or path errors must surface
+    // so bootstrap doesn't silently misreport an unreadable file as missing.
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw err;
+    }
   }
 
   if (existingContent === null) {
