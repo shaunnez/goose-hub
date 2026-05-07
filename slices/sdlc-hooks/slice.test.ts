@@ -216,7 +216,7 @@ describe('writeWorkspaceSandbox registers SDLC hooks', () => {
     try {
       writeWorkspaceSandbox(tmpDir);
       const { readFileSync } = await import('node:fs');
-      const settings = JSON.parse(readFileSync(join(tmpDir, '.claude', 'settings.json'), 'utf8'));
+      const settings = JSON.parse(readFileSync(join(tmpDir, '.claude', 'settings.local.json'), 'utf8'));
       const preHooks = settings.hooks?.PreToolUse ?? [];
       const requireSpecEntry = preHooks.find((h: { hooks?: Array<{ command?: string }> }) =>
         h.hooks?.some((cmd) => cmd.command?.includes('require-spec.sh')),
@@ -234,7 +234,7 @@ describe('writeWorkspaceSandbox registers SDLC hooks', () => {
     try {
       writeWorkspaceSandbox(tmpDir);
       const { readFileSync } = await import('node:fs');
-      const settings = JSON.parse(readFileSync(join(tmpDir, '.claude', 'settings.json'), 'utf8'));
+      const settings = JSON.parse(readFileSync(join(tmpDir, '.claude', 'settings.local.json'), 'utf8'));
       const stopHooks = settings.hooks?.Stop ?? [];
       const acEntry = stopHooks.find((h: { hooks?: Array<{ command?: string }> }) =>
         h.hooks?.some((cmd) => cmd.command?.includes('stop-verify-ac.sh')),
