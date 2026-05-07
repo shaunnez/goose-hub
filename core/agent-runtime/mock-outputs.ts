@@ -46,9 +46,9 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
           candidates: [
             { repo: 'shaunnez/goose-hub', confidence: 95, evidence: 'name match', tier: 1 },
           ],
-          decisionSummaries: [],
+          decisionSummaries: [{ kind: 'INSIGHT', summary: 'Mock repo match for e2e test' }],
         },
-        decisionSummaries: [],
+        decisionSummaries: [{ kind: 'INSIGHT', summary: 'Mock repo match for e2e test' }],
         events: [],
       };
 
