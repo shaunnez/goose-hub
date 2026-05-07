@@ -126,6 +126,44 @@ export function recordToolCall(payload: ToolCallHookPayload): RecordToolCallResu
  * to `UNKNOWN` so a malformed marker doesn't drop the event entirely — better
  * to surface it under UNKNOWN than to lose visibility into the live stream.
  */
+interface ToolResultHookPayload {
+  run_id?: string;
+  tool_name?: string;
+  error?: string;
+  truncated?: boolean;
+  [key: string]: unknown;
+}
+
+export interface RecordToolResultResult {
+  ok: boolean;
+}
+
+/**
+ * Records a tool-result event from the PostToolUse hook when a Bash call
+ * returns an error. Resolves projectId/workItemId from the matching
+ * agent.run-started event so SSE filters on the detail page can match.
+ */
+export function recordToolResult(payload: ToolResultHookPayload): RecordToolResultResult {
+  const runId = typeof payload.run_id === 'string' ? payload.run_id : null;
+  let projectId = 'unknown';
+  let workItemId: string | null = null;
+  if (runId != null) {
+    const startEvent = eventStore.replay({ runId }).find((e) => e.kind === 'agent.run-started');
+    if (startEvent != null) {
+      projectId = startEvent.projectId;
+      workItemId = startEvent.workItemId;
+    }
+  }
+  eventStore.appendEvent({
+    projectId,
+    workItemId,
+    kind: 'agent.tool-result',
+    payload,
+    runId,
+  });
+  return { ok: true };
+}
+
 export function recordDecisionSummary(
   payload: DecisionSummaryPayload,
 ): RecordDecisionSummaryResult {

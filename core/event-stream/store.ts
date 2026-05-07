@@ -53,6 +53,8 @@ export type EventKind =
   | 'retrospective.completed'
   // M9 PostToolUse hook — live decision marker (#465)
   | 'agent.decision-summary-live'
+  // PostToolUse hook — Bash error capture
+  | 'agent.tool-result'
   // M10 per-AC verify-command live events (#469)
   | 'agent.verify-command'
   // M10 project budget exceeded

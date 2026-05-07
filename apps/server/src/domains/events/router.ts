@@ -5,6 +5,7 @@ import {
   parseSseFilter,
   recordDecisionSummary,
   recordToolCall,
+  recordToolResult,
   recordVerifyCommand,
 } from './service.js';
 
@@ -27,6 +28,16 @@ router.post('/decision-summary', async (c) => {
   const body = await parseBody<Record<string, unknown>>(c);
   if (!body.ok) return body.error;
   return c.json(recordDecisionSummary(body.data), 202);
+});
+
+/**
+ * Tool-result error capture endpoint. Thin delegator to recordToolResult.
+ * Called by the PostToolUse hook when a Bash tool call returns an error.
+ */
+router.post('/tool-result', async (c) => {
+  const body = await parseBody<Record<string, unknown>>(c);
+  if (!body.ok) return body.error;
+  return c.json(recordToolResult(body.data), 202);
 });
 
 /**

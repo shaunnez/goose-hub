@@ -8,7 +8,7 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
 }));
 
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
-import { parseSseFilter, recordDecisionSummary, recordToolCall } from './service.js';
+import { parseSseFilter, recordDecisionSummary, recordToolCall, recordToolResult } from './service.js';
 
 describe('parseSseFilter (#208)', () => {
   it('passes through projectId and workItemId from input', () => {
@@ -121,5 +121,54 @@ describe('recordDecisionSummary', () => {
     recordDecisionSummary({ run_id: 'run-3', summary: 'no kind at all' });
     const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
     expect((arg.payload as { kind: string }).kind).toBe('UNKNOWN');
+  });
+});
+
+describe('recordToolResult', () => {
+  it('appends an agent.tool-result event with the supplied runId', () => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    const result = recordToolResult({
+      run_id: 'run-42',
+      tool_name: 'Bash',
+      error: 'exit code 1\nsome error',
+    });
+    expect(result).toEqual({ ok: true });
+    const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
+    expect(arg.kind).toBe('agent.tool-result');
+    expect(arg.runId).toBe('run-42');
+  });
+
+  it('uses null runId when run_id is missing', () => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    recordToolResult({ tool_name: 'Bash', error: 'oops' });
+    const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
+    expect(arg.runId).toBeNull();
+  });
+
+  it('resolves projectId/workItemId from agent.run-started when runId matches', () => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    vi.mocked(eventStore.replay).mockReturnValueOnce([
+      {
+        id: 1,
+        kind: 'agent.run-started',
+        projectId: 'proj-abc',
+        workItemId: 'wi-42',
+        runId: 'run-x',
+        payload: {},
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+    recordToolResult({ run_id: 'run-x', tool_name: 'Bash', error: 'fail' });
+    const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
+    expect(arg.projectId).toBe('proj-abc');
+    expect(arg.workItemId).toBe('wi-42');
+  });
+
+  it('falls back to projectId=unknown when no matching run-started event', () => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    vi.mocked(eventStore.replay).mockReturnValueOnce([]);
+    recordToolResult({ run_id: 'run-missing', tool_name: 'Bash', error: 'fail' });
+    const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
+    expect(arg.projectId).toBe('unknown');
   });
 });
