@@ -84,6 +84,12 @@ export async function dispatchInvestigate(slug: string, issueNumber: number): Pr
   } finally {
     parallelLock.release(slug, issueNumber);
   }
+
+  // Chain to investigation-complete routing outside the lock. In production the
+  // GitHub label-change webhook fires dispatchForLabel('factory:investigation-complete')
+  // instead; in MOCK_SOURCE mode there are no webhooks so we chain explicitly.
+  // Idempotency is enforced by the state check inside dispatchInvestigationComplete.
+  await dispatchInvestigationComplete(slug, issueNumber);
 }
 
 /** Run the M7 fix-issue workflow for a single issue (#183). Drops duplicate triggers for the same issue. */
@@ -163,6 +169,7 @@ export async function dispatchResolveConflict(slug: string, issueNumber: number)
         source: unknown,
         slug: string,
         repoRoot: string,
+        deps?: Record<string, unknown>,
       ) => Promise<unknown>;
     };
     const source = await getSourceForSlug(slug);
@@ -171,7 +178,14 @@ export async function dispatchResolveConflict(slug: string, issueNumber: number)
       return;
     }
     const item = await source.getItem(issueNumber.toString());
-    await runResolveConflictWorkflow(item, source, slug, REPO_ROOT);
+    const mockConflictDeps: Record<string, unknown> | undefined =
+      process.env.MOCK_SOURCE === 'true'
+        ? {
+            mergePRImpl: () => Promise.resolve({ sha: 'mock-sha-merged', merged: true }),
+            gitExecImpl: () => '',
+          }
+        : undefined;
+    await runResolveConflictWorkflow(item, source, slug, REPO_ROOT, mockConflictDeps);
     // Fire-and-forget retro after conflict resolution + merge, same pattern as
     // approveIssue. The label-change webhook also triggers dispatchRetro on
     // factory:retrospecting; running it here avoids waiting for webhook delivery.

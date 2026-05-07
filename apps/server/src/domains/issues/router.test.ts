@@ -612,7 +612,7 @@ describe('POST /projects/:slug/issues/:id/approve', () => {
     const body = (await res.json()) as { ok: boolean; sha: string; prNumber: number };
     expect(body.sha).toBe('abc123');
     expect(body.prNumber).toBe(77);
-    expect(mockApproveIssue).toHaveBeenCalledWith('my-project', '42');
+    expect(mockApproveIssue).toHaveBeenCalledWith('my-project', '42', expect.any(Object));
   });
 
   it('returns 400 when no PR event found', async () => {

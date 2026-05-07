@@ -131,10 +131,16 @@ router.post('/:slug/issues/:id/repo-override', async (c) => {
 router.post('/:slug/issues/:id/approve', async (c) => {
   const slug = c.req.param('slug');
   const id = c.req.param('id');
-  const result = await approveIssue(slug, id);
-  if (!result.ok && result.error === 'merge-conflict') {
+  const mockMergePR =
+    process.env.MOCK_SOURCE === 'true'
+      ? () => Promise.resolve({ sha: 'mock-sha-merged', merged: true })
+      : undefined;
+  const result = await approveIssue(slug, id, { mergePRImpl: mockMergePR });
+  if (!result.ok && result.error === 'merge-conflict' && process.env.MOCK_SOURCE !== 'true') {
     // Fire-and-forget: workflow runs out-of-band. UI polls and reflects the
     // state transition once the worker resolves or escalates.
+    // In MOCK_SOURCE mode the E2E test drives dispatch explicitly so we skip
+    // the auto-trigger here to avoid a race with the test's own /dispatch call.
     dispatchResolveConflict(slug, Number(id)).catch((err: unknown) => {
       logger.error('dispatchResolveConflict failed', { slug, id, error: String(err) });
     });
