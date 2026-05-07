@@ -13,7 +13,15 @@
  */
 export type CostLabel = 'estimated' | 'exact';
 
-export type Stage = 'triage' | 'investigate' | 'dev' | 'qa' | 'review' | 'retrospective' | 'other';
+export type Stage =
+  | 'triage'
+  | 'discover'
+  | 'investigate'
+  | 'dev'
+  | 'qa'
+  | 'review'
+  | 'retrospective'
+  | 'other';
 
 export interface CostRecord {
   runId: string;
