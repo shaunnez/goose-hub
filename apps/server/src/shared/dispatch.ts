@@ -72,6 +72,7 @@ export async function dispatchInvestigate(slug: string, issueNumber: number): Pr
         source: unknown,
         slug: string,
         repoRoot: string,
+        deps?: Record<string, unknown>,
       ) => Promise<unknown>;
     };
     const source = await getSourceForSlug(slug);
@@ -80,7 +81,14 @@ export async function dispatchInvestigate(slug: string, issueNumber: number): Pr
       return;
     }
     const item = await source.getItem(issueNumber.toString());
-    await runInvestigateWorkflow(item, source, slug, REPO_ROOT);
+    const mockInvestigateDeps: Record<string, unknown> | undefined =
+      process.env.MOCK_AGENTS === 'true'
+        ? {
+            createWorktreeImpl: () => '/mock/worktree',
+            prewarmWorktreeImpl: () => undefined,
+          }
+        : undefined;
+    await runInvestigateWorkflow(item, source, slug, REPO_ROOT, mockInvestigateDeps);
   } finally {
     parallelLock.release(slug, issueNumber);
   }
