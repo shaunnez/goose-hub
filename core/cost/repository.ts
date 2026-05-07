@@ -90,6 +90,21 @@ export function totalsByStageForProjectSince(projectId: string, sinceIso: string
   }));
 }
 
+/**
+ * Returns the total USD spend for a specific skill within a project across all
+ * time. Used by workflows to enforce per-advisor budget caps.
+ */
+export function totalSpendForSkill(projectId: string, skill: string): number {
+  const [row] = db
+    .select({
+      totalUsd: sql<number>`coalesce(sum(${agentRunCosts.costUsd}), 0)`,
+    })
+    .from(agentRunCosts)
+    .where(and(eq(agentRunCosts.projectId, projectId), eq(agentRunCosts.skill, skill)))
+    .all();
+  return row?.totalUsd ?? 0;
+}
+
 function toRow(r: typeof agentRunCosts.$inferSelect): CostRow {
   return {
     id: r.id,

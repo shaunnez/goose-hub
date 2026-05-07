@@ -112,6 +112,31 @@ describe('advise-on-prd output schema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects unknown section key in revisedSections', () => {
+    const result = AdvisePRDOutputSchema.safeParse({
+      verdict: 'revise',
+      concerns: [],
+      revisedSections: { unknownSection: 'some value' },
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'tried to revise unknown section' }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts revising acceptanceCriteria with an array value', () => {
+    const result = AdvisePRDOutputSchema.safeParse({
+      verdict: 'revise',
+      concerns: ['Acceptance criteria need strengthening'],
+      revisedSections: {
+        acceptanceCriteria: [
+          { id: 'AC-1', statement: 'Field validates on blur', journeyId: 'J-1', stepIdx: 1 },
+          { id: 'AC-2', statement: 'All errors logged', crossCutting: true },
+        ],
+      },
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Revised acceptanceCriteria with array' }],
+    });
+    expect(result.success).toBe(true);
+  });
+
   it('toJSONSchema roundtrip produces a valid JSON Schema object', () => {
     const jsonSchema = toJSONSchema(AdvisePRDOutputSchema);
     expect(typeof jsonSchema).toBe('object');

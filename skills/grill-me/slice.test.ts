@@ -99,6 +99,26 @@ describe('grill-me schema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('rejects questions array with more than one entry', () => {
+    const result = GrillMeOutputSchema.safeParse({
+      questions: ['Question one?', 'Question two?'],
+      refinedIntent: 'Something.',
+      readyForPRD: false,
+      decisionSummaries: [{ kind: 'PLAN', summary: 'asked two questions' }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts empty questions when readyForPRD is true', () => {
+    const result = GrillMeOutputSchema.safeParse({
+      questions: [],
+      refinedIntent: 'Implement a dark mode toggle accessible from the user settings page.',
+      readyForPRD: true,
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'All scope resolved; ready to write PRD.' }],
+    });
+    expect(result.success).toBe(true);
+  });
+
   it('zod toJSONSchema roundtrip produces valid JSON Schema object', () => {
     const jsonSchema = toJSONSchema(GrillMeOutputSchema);
     expect(typeof jsonSchema).toBe('object');

@@ -16,7 +16,20 @@ export const AdvisePRDOutputSchema = z
   .object({
     verdict: z.enum(['approve', 'revise']),
     concerns: z.array(z.string()).max(5),
-    revisedSections: z.record(z.string(), z.string()),
+    revisedSections: z
+      .object({
+        title: z.unknown().optional(),
+        problem: z.unknown().optional(),
+        proposedSolution: z.unknown().optional(),
+        outOfScope: z.unknown().optional(),
+        successCriteria: z.unknown().optional(),
+        acceptanceCriteria: z.unknown().optional(),
+        journeys: z.unknown().optional(),
+        functionalSpec: z.unknown().optional(),
+        verticalSlices: z.unknown().optional(),
+        estimatedComplexity: z.unknown().optional(),
+      })
+      .strict(),
     decisionSummaries: z.array(DecisionSummarySchema).min(1),
   })
   .superRefine((data, ctx) => {

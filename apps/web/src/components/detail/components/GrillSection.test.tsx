@@ -144,6 +144,32 @@ describe('GrillSection', () => {
     pendingResolver.current?.();
   });
 
+  it('filters out <!-- factory:system --> comments from the grill thread', async () => {
+    vi.mocked(fetchComments).mockResolvedValueOnce([
+      comment(1, '<!-- factory:grill-question -->\nQ?'),
+      comment(2, '<!-- factory:system -->\nUser rejected the PRD; returning to grill.'),
+    ]);
+    render_(<GrillSection projectSlug="proj" externalId="42" id="42" state="factory:grilling" />);
+    await waitFor(() => {
+      expect(screen.getAllByTestId('grill-msg-agent')).toHaveLength(1);
+    });
+    expect(screen.queryByTestId('grill-msg-user')).toBeNull();
+  });
+
+  it('filters out ## Child issues comments from the grill thread', async () => {
+    vi.mocked(fetchComments).mockResolvedValueOnce([
+      comment(1, '<!-- factory:grill-question -->\nQ?'),
+      comment(2, '## Child issues\n- #101 Slice 1\n- #102 Slice 2'),
+    ]);
+    render_(
+      <GrillSection projectSlug="proj" externalId="42" id="42" state="factory:decomposing" />,
+    );
+    await waitFor(() => {
+      expect(screen.getAllByTestId('grill-msg-agent')).toHaveLength(1);
+    });
+    expect(screen.queryByTestId('grill-msg-user')).toBeNull();
+  });
+
   it('renders the "Grilling complete" footer when state has progressed past grilling', async () => {
     vi.mocked(fetchComments).mockResolvedValueOnce([
       comment(1, '<!-- factory:grill-question -->\nQ?'),

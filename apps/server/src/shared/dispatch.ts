@@ -591,6 +591,8 @@ export async function dispatchForLabel(
 
 const PRD_MARKER = '<!-- factory:prd -->';
 const GRILL_QUESTION_MARKER = '<!-- factory:grill-question -->';
+const SYSTEM_MARKER = '<!-- factory:system -->';
+const CHILD_ISSUES_MARKER = '## Child issues';
 const PRD_JSON_FENCE_RE = /```json\s*\n([\s\S]*?)\n```/;
 
 /**
@@ -617,14 +619,20 @@ function extractPrdFromComments(
 /**
  * Build the `priorReplies` array for grill-and-prd from issue comments.
  * Agent questions carry the `<!-- factory:grill-question -->` prefix; every
- * other comment is treated as a user reply. PRD-marker comments are
- * filtered out so they don't bleed into the grill conversation.
+ * other comment is treated as a user reply. PRD-marker, system-marker, and
+ * child-issues comments are filtered out so they don't bleed into the grill
+ * conversation.
  */
 function buildPriorReplies(
   comments: ReadonlyArray<{ body: string }>,
 ): Array<{ role: 'user' | 'agent'; content: string }> {
   return comments
-    .filter((c) => !c.body.startsWith(PRD_MARKER))
+    .filter(
+      (c) =>
+        !c.body.startsWith(PRD_MARKER) &&
+        !c.body.startsWith(SYSTEM_MARKER) &&
+        !c.body.startsWith(CHILD_ISSUES_MARKER),
+    )
     .map((c) => ({
       role: c.body.startsWith(GRILL_QUESTION_MARKER) ? ('agent' as const) : ('user' as const),
       content: c.body,
@@ -714,6 +722,11 @@ export async function dispatchDecomposePrd(slug: string, issueNumber: number): P
     const prdOutput = extractPrdFromComments(comments);
     if (prdOutput == null) {
       logger.error('dispatchDecomposePrd: no PRD marker comment found', { slug, issueNumber });
+      await source.comment(
+        issueNumber.toString(),
+        'decompose-prd: no PRD comment found on this issue. Returning to needs-human.',
+      );
+      await source.forceState(issueNumber.toString(), 'factory:needs-human');
       return;
     }
     await runDecomposePrdWorkflow({
@@ -760,6 +773,13 @@ const RESUME_WORKFLOWS: Partial<Record<StateName, ResumeEntry>> = {
   'factory:retrospecting': { targetState: 'factory:retrospecting', dispatch: dispatchRetro },
   'factory:qa-failed': { targetState: 'factory:needs-fix', dispatch: dispatchNeedsFix },
   'factory:needs-fix': { targetState: 'factory:needs-fix', dispatch: dispatchNeedsFix },
+  // Discover lane
+  'factory:grilling': { targetState: 'factory:grilling', dispatch: dispatchGrillAndPrd },
+  // factory:gate-pending is lane-agnostic (it can originate from grilling or
+  // other human-gate situations) and has no single canonical resume target, so
+  // it is intentionally omitted here. Human triage is required.
+  'factory:prd-drafting': { targetState: 'factory:grilling', dispatch: dispatchGrillAndPrd },
+  'factory:decomposing': { targetState: 'factory:decomposing', dispatch: dispatchDecomposePrd },
 };
 
 /**

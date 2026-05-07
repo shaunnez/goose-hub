@@ -106,7 +106,7 @@ describe('approvePRD', () => {
 });
 
 describe('rejectPRD', () => {
-  it('returns to grilling, posts the rejection comment, and emits prd.rejected', async () => {
+  it('returns to grilling, posts the rejection comment with system marker, and emits prd.rejected', async () => {
     const projectId = uniqueProjectId('reject-happy');
     const source = new InMemoryLabelsSource(projectId, REPO_REF);
     const item = await source.seedIssue({
@@ -127,6 +127,7 @@ describe('rejectPRD', () => {
     const comments = await source.listComments(item.externalId);
     const last = comments[comments.length - 1];
     expect(last.body).toContain('User rejected the PRD');
+    expect(last.body).toContain('<!-- factory:system -->');
 
     const evs = eventStore.replay({ projectId, workItemId: item.id });
     expect(evs.find((e) => e.kind === 'prd.rejected')).toBeDefined();

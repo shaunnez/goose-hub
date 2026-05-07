@@ -17,6 +17,7 @@ import type { AgentRuntime } from '../agent-runtime/interface.js';
 import { readPromptWithContext } from '../agent-runtime/read-prompt.js';
 import { toJsonSchema } from '../agent-runtime/schema-bridge.js';
 import { selectPersona } from '../agent-runtime/select-persona.js';
+import { totalSpendForSkill as _totalSpendForSkill } from '../cost/repository.js';
 import { eventStore } from '../event-stream/store.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import type { StateName } from '../state-machine/states.js';
@@ -37,6 +38,11 @@ export interface RunGrillAndPrdInput {
      * stub the loader (loader reads disk and caches per-process).
      */
     projectConfig?: Pick<ProjectConfig, 'budgets'> | null;
+    /**
+     * Stubbed in tests to avoid hitting the real DB. Defaults to the real
+     * `totalSpendForSkill` from `core/cost/repository`.
+     */
+    totalSpendForSkill?: (projectId: string, skill: string) => number;
   };
 }
 
@@ -102,6 +108,7 @@ export async function runGrillAndPrdWorkflow(
   const { workItem, stateSource, projectId, priorReplies, deps = {} } = input;
   const runId = crypto.randomUUID();
   const runtime = deps.runtime ?? new ClaudeCliRuntime();
+  const totalSpendForSkill = deps.totalSpendForSkill ?? _totalSpendForSkill;
 
   // Pre-condition: only run when the orchestrator has placed us in the
   // discover lane. Anything else means the workflow was invoked out of band.
@@ -201,6 +208,23 @@ export async function runGrillAndPrdWorkflow(
     });
   }
 
+  // Hard cap at round 7: if the griller still hasn't declared readyForPRD,
+  // force the workflow forward so we don't loop indefinitely.
+  let grillCompletedEmitted = false;
+  if (!grillOutput.readyForPRD && roundNumber > 7) {
+    const forcedRefinedIntent =
+      grillOutput.refinedIntent.trim() !== '' ? grillOutput.refinedIntent : workItem.body;
+    eventStore.appendEvent({
+      kind: 'grill.completed',
+      projectId,
+      workItemId: workItem.id,
+      runId,
+      payload: { refinedIntent: forcedRefinedIntent, rounds: roundNumber, forced: true },
+    });
+    grillCompletedEmitted = true;
+    grillOutput = { ...grillOutput, refinedIntent: forcedRefinedIntent, readyForPRD: true };
+  }
+
   if (!grillOutput.readyForPRD) {
     // Defensively pick the first question even though the skill is supposed
     // to ask exactly one. Empty `questions` with readyForPRD:false is a skill
@@ -241,15 +265,17 @@ export async function runGrillAndPrdWorkflow(
     return { phase: 'grilling', questionPosted: question };
   }
 
-  // readyForPRD === true — the griller is done. Emit completion and proceed
-  // to write-prd.
-  eventStore.appendEvent({
-    kind: 'grill.completed',
-    projectId,
-    workItemId: workItem.id,
-    runId,
-    payload: { refinedIntent: grillOutput.refinedIntent, rounds: roundNumber },
-  });
+  // readyForPRD === true — the griller is done. Emit completion (unless
+  // already emitted by the round-7 forced cap above) and proceed to write-prd.
+  if (!grillCompletedEmitted) {
+    eventStore.appendEvent({
+      kind: 'grill.completed',
+      projectId,
+      workItemId: workItem.id,
+      runId,
+      payload: { refinedIntent: grillOutput.refinedIntent, rounds: roundNumber },
+    });
+  }
 
   // ─── Step 2: write-prd ──────────────────────────────────────────────────
   // Transition into prd-drafting. Only `factory:grilling` legally targets
@@ -358,7 +384,9 @@ export async function runGrillAndPrdWorkflow(
     FALLBACK_ADVISOR_BUDGET,
   );
   const perAdvisorMaxUsd = projectConfig?.budgets?.perAdvisorMaxUsd ?? Number.POSITIVE_INFINITY;
-  const advisorBudgetAvailable = perAdvisorMaxUsd > advisorBudget.budgets.maxBudgetUsd;
+  const advisorSpentUsd = totalSpendForSkill(projectId, 'advise-on-prd');
+  const advisorBudgetAvailable =
+    advisorSpentUsd + advisorBudget.budgets.maxBudgetUsd <= perAdvisorMaxUsd;
 
   if (!advisorEligibleByPriority) {
     eventStore.appendEvent({

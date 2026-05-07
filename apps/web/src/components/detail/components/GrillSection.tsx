@@ -16,6 +16,8 @@ interface GrillSectionProps {
 
 const GRILL_QUESTION_MARKER = '<!-- factory:grill-question -->';
 const PRD_MARKER = '<!-- factory:prd -->';
+const SYSTEM_MARKER = '<!-- factory:system -->';
+const CHILD_ISSUES_MARKER = '## Child issues';
 
 function isAgentQuestion(body: string): boolean {
   return body.startsWith(GRILL_QUESTION_MARKER);
@@ -67,8 +69,14 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
     },
   });
 
-  // Filter out the PRD marker comment — it's rendered on the PRD tab, not here.
-  const grillComments = comments.filter((c) => !c.body.startsWith(PRD_MARKER));
+  // Filter out system/metadata comments — PRD drafts, system notices, child
+  // issues posts — they are not part of the grill conversation.
+  const grillComments = comments.filter(
+    (c) =>
+      !c.body.startsWith(PRD_MARKER) &&
+      !c.body.startsWith(SYSTEM_MARKER) &&
+      !c.body.startsWith(CHILD_ISSUES_MARKER),
+  );
   const merged: Array<IssueCommentDto | OptimisticReply> = [...grillComments, ...optimisticReplies];
 
   const grillingComplete =
