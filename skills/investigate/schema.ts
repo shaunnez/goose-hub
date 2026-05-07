@@ -13,6 +13,11 @@ export const InvestigateSchema = z.object({
   keyFiles: z.array(KeyFileSchema).describe('Files most relevant to the bug'),
   confidence: z.enum(['low', 'medium', 'high']),
   openQuestions: z.array(z.string()).describe('Unresolved questions requiring more investigation'),
+  requiresBrowserRepro: z
+    .boolean()
+    .describe(
+      'True if the bug manifests in the browser UI and can be reproduced via Playwright. False for pure server-side/API bugs where a browser repro is meaningless.',
+    ),
   decisionSummaries: z.array(DecisionSummarySchema).min(1),
 });
 

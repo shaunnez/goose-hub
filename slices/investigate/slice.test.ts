@@ -75,18 +75,20 @@ function makeWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
   };
 }
 
-function makeInvestigateOutput() {
+function makeInvestigateOutput(overrides: Record<string, unknown> = {}) {
   return {
     findings: 'Root cause is a null-check missing in auth middleware.',
     keyFiles: [{ path: 'apps/server/src/middleware/auth.ts', reason: 'Contains null-dereference' }],
     confidence: 'high',
     openQuestions: ['Does this also affect WebSocket upgrade path?'],
+    requiresBrowserRepro: true,
     decisionSummaries: [
       {
         kind: 'READ',
         summary: 'Read issue #42: auth middleware crashes on missing session token',
       },
     ],
+    ...overrides,
   };
 }
 
@@ -370,6 +372,22 @@ describe('runInvestigateWorkflow', () => {
 
         expect(mockRun).toHaveBeenCalledTimes(1);
       }
+    });
+
+    it('does NOT run playwright-repro for type:bug when requiresBrowserRepro is false', async () => {
+      const item = makeWorkItem({ type: 'bug' });
+      const source = makeMockSource();
+
+      mockRun.mockResolvedValueOnce({
+        output: makeInvestigateOutput({ requiresBrowserRepro: false }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
+
+      expect(mockRun).toHaveBeenCalledTimes(1);
     });
   });
 

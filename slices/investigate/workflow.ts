@@ -84,9 +84,9 @@ export async function runInvestigateWorkflow(
     }
     const findings = investigateParsed.data;
 
-    // Step c: If type:bug, run playwright-repro skill
+    // Step c: If type:bug and the bug manifests in the browser, run playwright-repro skill
     let reproOutput: unknown | undefined;
-    if (workItem.type === 'bug') {
+    if (workItem.type === 'bug' && findings.requiresBrowserRepro) {
       const { personaId: playwrightPersonaId } = selectPersona(projectId, 'investigator');
       const playwrightRunId = crypto.randomUUID();
 
