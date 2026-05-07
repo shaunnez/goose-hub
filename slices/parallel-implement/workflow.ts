@@ -23,7 +23,7 @@ import {
   orchestratorCommitWp,
   revertWpChanges,
 } from '@goose-hub/core/workspaces/orchestrator-git.js';
-import { createWorktree } from '@goose-hub/core/workspaces/worktree.js';
+import { type cleanupWorktree, createWorktree } from '@goose-hub/core/workspaces/worktree.js';
 import { ImplementWpSchema } from '@goose-hub/skills/implement-wp/schema.js';
 import type { EngineeringSpec, WorkPackage } from '@goose-hub/skills/spec-author/schema.js';
 import { and, desc, eq } from 'drizzle-orm';
@@ -44,7 +44,7 @@ export interface ParallelImplementDeps {
   createWpWorktreeImpl?: typeof createWpScratchWorktree;
   createIssueWorktreeImpl?: typeof createWorktree;
   cleanupWpWorktreesImpl?: typeof cleanupAllWpWorktrees;
-  cleanupIssueWorktreeImpl?: typeof cleanupIssueWorktree;
+  cleanupIssueWorktreeImpl?: typeof cleanupWorktree;
   orchestratorCommitWpImpl?: typeof orchestratorCommitWp;
   revertWpChangesImpl?: typeof revertWpChanges;
   recordIterationImpl?: typeof recordWpIteration;

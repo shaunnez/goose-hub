@@ -18,7 +18,7 @@ const config: ProjectConfig = {
     runtime: 'unknown',
     packageManager: 'unknown',
     testCommand: 'echo "TODO: configure testCommand"',
-    detectedAt: "2026-05-07T21:52:20.013Z",
+    detectedAt: '2026-05-07T21:52:20.013Z',
   },
   mode: 'supervised',
   storage: { kind: 'local', path: '~/.factory/data/reading-tracker' },
