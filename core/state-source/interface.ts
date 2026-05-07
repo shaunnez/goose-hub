@@ -91,5 +91,7 @@ export interface StateSource {
   attach(itemId: string, artifact: Artifact): Promise<void>;
   createIssue(input: CreateIssueInput): Promise<WorkItem>;
 
+  getPrDiff(itemId: string): Promise<string>;
+
   watchForUpdates(callback: (event: SourceEvent) => void): Promise<Subscription>;
 }

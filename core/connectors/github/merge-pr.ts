@@ -38,6 +38,10 @@ export interface MergePrResult {
 }
 
 export async function mergePR(input: MergePrInput): Promise<MergePrResult> {
+  if (process.env.MOCK_SOURCE === 'true') {
+    return { sha: 'mock-sha', merged: true };
+  }
+
   const { repo, prNumber, token, mergeMethod = 'merge', fetchImpl = fetch } = input;
   const url = `https://api.github.com/repos/${repo}/pulls/${prNumber}/merge`;
   const response = await fetchImpl(url, {

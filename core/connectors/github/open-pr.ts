@@ -55,6 +55,15 @@ export function validatePrBody(body: string, issueNumber: number): void {
 }
 
 export async function openPR(input: OpenPrInput): Promise<OpenPrResult> {
+  if (process.env.MOCK_SOURCE === 'true') {
+    return {
+      prNumber: 999,
+      prUrl: `https://github.com/${input.repo}/pull/999`,
+      branch: input.branchName,
+      base: input.baseBranch ?? 'main',
+    };
+  }
+
   const {
     worktreePath,
     repo,

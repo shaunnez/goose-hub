@@ -225,7 +225,11 @@ export async function dispatchQa(slug: string, issueNumber: number): Promise<voi
     }
     const item = await source.getItem(issueNumber.toString());
     const verifyCommands = parseAcceptanceCriteria(item.body ?? '');
-    await runQaWorkflow(item, source, slug, item.repoRef ?? slug, { verifyCommands });
+    const qaRunTests = process.env.MOCK_SOURCE === 'true' ? () => Promise.resolve(null) : undefined;
+    await runQaWorkflow(item, source, slug, item.repoRef ?? slug, {
+      verifyCommands,
+      runTests: qaRunTests,
+    });
   } finally {
     parallelLock.release(slug, issueNumber);
   }

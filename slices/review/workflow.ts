@@ -1,4 +1,3 @@
-import { execSync } from 'node:child_process';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
@@ -157,24 +156,7 @@ export async function runReviewWorkflow(
 }
 
 async function getPrDiff(workItem: WorkItem, stateSource: StateSource): Promise<string> {
-  if ('getPrDiff' in stateSource && typeof stateSource.getPrDiff === 'function') {
-    return (stateSource.getPrDiff as (id: string) => Promise<string>)(workItem.externalId);
-  }
-  // Fall back to reading prNumber from the pr.opened event and shelling out to gh.
-  const events = eventStore.replay({ workItemId: workItem.id });
-  const prOpened = events
-    .slice()
-    .reverse()
-    .find((e) => e.kind === 'pr.opened');
-  if (prOpened == null) return '';
-  const payload = prOpened.payload as Record<string, unknown>;
-  const prNumber = typeof payload.prNumber === 'number' ? payload.prNumber : undefined;
-  if (prNumber == null) return '';
-  try {
-    return execSync(`gh pr diff ${prNumber}`, { encoding: 'utf8', timeout: 30_000 });
-  } catch {
-    return '';
-  }
+  return stateSource.getPrDiff(workItem.externalId);
 }
 
 function getQaVerdict(

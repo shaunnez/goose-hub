@@ -80,20 +80,21 @@ describe('resolveMockOutput — investigate', () => {
 });
 
 describe('resolveMockOutput — qa', () => {
-  it('returns a passing functional verdict', () => {
+  it('returns a passing verdict with tierResults', () => {
     const r = resolveMockOutput(makeSpec({ skill: 'qa' }));
-    const out = r.output as { verdict: string; tier: string };
+    const out = r.output as { verdict: string; overallScore: number; tierResults: object };
     expect(out.verdict).toBe('pass');
-    expect(out.tier).toBe('functional');
+    expect(out.overallScore).toBeGreaterThan(70);
+    expect(out.tierResults).toBeDefined();
   });
 });
 
 describe('resolveMockOutput — review', () => {
-  it('returns an "approved" verdict with no feedback', () => {
+  it('returns an "approved" verdict with confidence', () => {
     const r = resolveMockOutput(makeSpec({ skill: 'review' }));
-    const out = r.output as { verdict: string; feedback: string | null };
+    const out = r.output as { verdict: string; confidence: number };
     expect(out.verdict).toBe('approved');
-    expect(out.feedback).toBeNull();
+    expect(out.confidence).toBeGreaterThan(0);
   });
 });
 

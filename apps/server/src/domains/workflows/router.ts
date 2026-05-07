@@ -1,5 +1,9 @@
+import { registerTestOutcomes } from '@goose-hub/core/agent-runtime/mock-test-registry.js';
 import { minePatterns } from '@goose-hub/core/learning/mine.js';
 import { logger } from '@goose-hub/core/logger.js';
+import type { StateName } from '@goose-hub/core/state-machine/states.js';
+import { InMemoryLabelsSource } from '@goose-hub/core/state-source/in-memory-labels.js';
+import type { Priority, WorkItemType } from '@goose-hub/core/state-source/interface.js';
 import {
   SkillCoachForbiddenTargetError,
   SkillCoachMissingSourceError,
@@ -8,6 +12,7 @@ import {
 import { Hono } from 'hono';
 import { dispatchForIssue, dispatchQa, dispatchRetro, dispatchReview } from '#shared/dispatch.js';
 import { parseBody } from '#shared/middleware.js';
+import { getSourceForSlug } from '#shared/source.js';
 import { runQaBatch } from './qa-batch.js';
 import { runRetroBatch } from './retro-batch.js';
 import { runReviewBatch } from './review-batch.js';
@@ -153,5 +158,54 @@ router.post('/:slug/coach', async (c) => {
     return c.json({ error: String(err) }, 500);
   }
 });
+
+// Seed endpoint: only active when MOCK_SOURCE=true. Creates fixture issues in
+// the InMemoryLabelsSource for deterministic E2E pipeline specs.
+if (process.env.MOCK_SOURCE === 'true') {
+  router.post('/test/:slug/seed-issue', async (c) => {
+    const slug = c.req.param('slug');
+    const body = await parseBody<{
+      title?: string;
+      body?: string;
+      type?: WorkItemType;
+      priority?: Priority;
+      state?: string;
+      milestoneTitle?: string;
+      dependsOn?: string[];
+      prDiff?: string;
+      outcomes?: Partial<Record<string, string | string[]>>;
+      throwMergeConflict?: boolean;
+    }>(c);
+    if (!body.ok) return body.error;
+
+    if (!body.data.title) return c.json({ error: 'title is required' }, 400);
+
+    const source = await getSourceForSlug(slug);
+    if (source == null) return c.json({ error: 'project not found' }, 404);
+    if (!(source instanceof InMemoryLabelsSource)) {
+      return c.json({ error: 'MOCK_SOURCE=true required for seed endpoint' }, 400);
+    }
+
+    const item = await source.seedIssue({
+      title: body.data.title,
+      body: body.data.body,
+      type: body.data.type,
+      priority: body.data.priority,
+      state: body.data.state as StateName | undefined,
+      milestoneTitle: body.data.milestoneTitle,
+      dependsOn: body.data.dependsOn,
+      prDiff: body.data.prDiff,
+    });
+
+    if (body.data.outcomes != null || body.data.throwMergeConflict != null) {
+      registerTestOutcomes(item.id, {
+        outcomes: body.data.outcomes,
+        throwMergeConflict: body.data.throwMergeConflict,
+      });
+    }
+
+    return c.json({ issueNumber: Number(item.externalId), workItemId: item.id }, 201);
+  });
+}
 
 export { router as workflowsRouter };

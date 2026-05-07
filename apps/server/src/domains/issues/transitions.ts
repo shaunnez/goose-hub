@@ -1,4 +1,5 @@
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
+import { checkAndClearMergeConflict } from '@goose-hub/core/agent-runtime/mock-test-registry.js';
 import {
   MergeConflictError,
   mergePR as defaultMergePR,
@@ -55,11 +56,22 @@ export async function approveIssue(
   }
 
   const token = process.env.GITHUB_TOKEN ?? '';
-  if (token.length === 0) {
+  if (token.length === 0 && process.env.MOCK_SOURCE !== 'true') {
     return { ok: false, error: 'GITHUB_TOKEN env var not set', status: 500 };
   }
 
   const mergePR = options.mergePRImpl ?? defaultMergePR;
+
+  if (process.env.MOCK_SOURCE === 'true' && checkAndClearMergeConflict(workItemId)) {
+    eventStore.appendEvent({
+      projectId: slug,
+      workItemId,
+      kind: 'merge.conflict',
+      payload: { prNumber },
+    });
+    await source.transitionState(id, 'factory:approved', 'factory:merge-conflict');
+    return { ok: false, error: 'merge-conflict', status: 409 };
+  }
 
   let merged: { sha: string; merged: boolean };
   try {

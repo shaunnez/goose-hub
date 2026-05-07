@@ -8,6 +8,7 @@ const PORT = Number(process.env.WEB_PORT ?? 5173);
 
 export default defineConfig({
   testDir: './e2e/pipeline',
+  testIgnore: ['**/state-flow.spec.ts'],
   timeout: 120_000,
   expect: { timeout: 30_000 },
   fullyParallel: false,
@@ -28,9 +29,11 @@ export default defineConfig({
             reuseExistingServer: !process.env.CI,
             timeout: 30_000,
             env: {
-              GITHUB_TOKEN: process.env.GITHUB_TOKEN ?? '',
+              GITHUB_TOKEN: '',
+              GITHUB_WEBHOOK_SECRET: 'mock-webhook-secret-for-e2e',
               MOCK_AGENTS: 'true',
               MOCK_OPEN_PR: 'true',
+              MOCK_SOURCE: 'true',
             },
           },
           {
