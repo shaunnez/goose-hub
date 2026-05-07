@@ -4,7 +4,7 @@
     "Verify that all the acceptance criteria are met for issue #42",
     "Quality check the implementation — are all ACs satisfied?",
     "Check if the PR meets the functional requirements",
-    "Perform a QA pass on the submitted work",
+    "Verify the implementation quality and check requirements are satisfied",
     "Validate the implementation against the spec",
     "Does the implementation satisfy the stated acceptance criteria?"
   ],

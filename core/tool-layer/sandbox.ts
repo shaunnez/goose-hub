@@ -11,7 +11,7 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const REQUIRE_SPEC_HOOK_PATH = join(REPO_ROOT, 'hooks', 'require-spec.sh');
 export const STOP_VERIFY_AC_HOOK_PATH = join(REPO_ROOT, 'hooks', 'stop-verify-ac.sh');
 
-/** Writes workspace .claude/settings.json with deny rules and hook registrations. Idempotent. */
+/** Writes workspace .claude/settings.local.json with deny rules and hook registrations. Idempotent. */
 export function writeWorkspaceSandbox(workspacePath: string): void {
   const settings = JSON.stringify(
     {
@@ -51,5 +51,5 @@ export function writeWorkspaceSandbox(workspacePath: string): void {
   );
   const claudeDir = join(workspacePath, '.claude');
   mkdirSync(claudeDir, { recursive: true });
-  writeFileSync(join(claudeDir, 'settings.json'), settings, 'utf8');
+  writeFileSync(join(claudeDir, 'settings.local.json'), settings, 'utf8');
 }

@@ -1,8 +1,10 @@
 import { join } from 'node:path';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
+import { filterEligibleByDependencies } from '@goose-hub/core/projects/dependency-scheduler.js';
 import { parallelLock } from '@goose-hub/core/projects/parallel-lock.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
+import { createProjectAwareTargetSource } from '@goose-hub/core/state-source/dependency-resolver.js';
 import { parseAcceptanceCriteria } from '../domains/issues/parse-acceptance.js';
 import { runRetroForItem } from '../domains/workflows/retro-batch.js';
 import { runTriageBatch } from '../domains/workflows/triage-batch.js';
@@ -131,6 +133,26 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
       return;
     }
     const item = await source.getItem(issueNumber.toString());
+
+    // Dependency gate: skip dispatch if any dep is open or unregistered.
+    // filterEligibleByDependencies applies schedule:blocked-by and needs-human
+    // labels as side-effects, so we only need to check eligible.length here.
+    const depProjectConfig = await getProject(slug);
+    if (depProjectConfig != null) {
+      const fetchTarget = await createProjectAwareTargetSource();
+      const { eligible } = await filterEligibleByDependencies([item], {
+        currentRepo: depProjectConfig.source.repo,
+        fetchTarget,
+        source,
+      });
+      if (eligible.length === 0) {
+        logger.info('dispatchFixIssue: item blocked by deps, skipping', {
+          slug,
+          issueNumber,
+        });
+        return;
+      }
+    }
 
     const mockDeps: Record<string, unknown> | undefined =
       process.env.MOCK_OPEN_PR === 'true'

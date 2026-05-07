@@ -236,95 +236,87 @@ describe('dispatchFixIssue', () => {
     expect(mockGetSourceForSlug).toHaveBeenCalledTimes(1);
   });
 
-  it(
-    'skips workflow and logs when item is dep-blocked',
-    { timeout: 30_000 },
-    async () => {
-      const mockItem = {
-        id: 'item-1',
-        externalId: '42',
-        title: 'blocked issue',
-        body: 'Depends on #99',
-        state: 'factory:dev-ready',
-        schedule: 'current',
-        type: 'feature',
-      };
-      const mockSource = {
-        getItem: vi.fn().mockResolvedValue(mockItem),
-        setLabelInGroup: vi.fn().mockResolvedValue(undefined),
-        comment: vi.fn().mockResolvedValue(undefined),
-      };
-      mockGetSourceForSlug.mockResolvedValue(mockSource);
-      mockGetProject.mockResolvedValue({
-        budgets: { maxParallelAgents: 1 },
-        source: { repo: 'shaunnez/goose-hub', type: 'github' },
-      });
-      mockFilterEligibleByDependencies.mockResolvedValue({
-        eligible: [],
-        blocked: [mockItem],
-        unregistered: [],
-      });
+  it('skips workflow and logs when item is dep-blocked', { timeout: 30_000 }, async () => {
+    const mockItem = {
+      id: 'item-1',
+      externalId: '42',
+      title: 'blocked issue',
+      body: 'Depends on #99',
+      state: 'factory:dev-ready',
+      schedule: 'current',
+      type: 'feature',
+    };
+    const mockSource = {
+      getItem: vi.fn().mockResolvedValue(mockItem),
+      setLabelInGroup: vi.fn().mockResolvedValue(undefined),
+      comment: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetSourceForSlug.mockResolvedValue(mockSource);
+    mockGetProject.mockResolvedValue({
+      budgets: { maxParallelAgents: 1 },
+      source: { repo: 'shaunnez/goose-hub', type: 'github' },
+    });
+    mockFilterEligibleByDependencies.mockResolvedValue({
+      eligible: [],
+      blocked: [mockItem],
+      unregistered: [],
+    });
 
-      const { dispatchFixIssue } = await import('./dispatch.js');
-      await expect(dispatchFixIssue('slug', 42)).resolves.toBeUndefined();
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    await expect(dispatchFixIssue('slug', 42)).resolves.toBeUndefined();
 
-      expect(mockFilterEligibleByDependencies).toHaveBeenCalledWith(
-        [mockItem],
-        expect.objectContaining({ currentRepo: 'shaunnez/goose-hub' }),
-      );
-      expect(mockLoggerInfo).toHaveBeenCalledWith(
-        'dispatchFixIssue: item blocked by deps, skipping',
-        expect.objectContaining({ slug: 'slug', issueNumber: 42 }),
-      );
-    },
-  );
+    expect(mockFilterEligibleByDependencies).toHaveBeenCalledWith(
+      [mockItem],
+      expect.objectContaining({ currentRepo: 'shaunnez/goose-hub' }),
+    );
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      'dispatchFixIssue: item blocked by deps, skipping',
+      expect.objectContaining({ slug: 'slug', issueNumber: 42 }),
+    );
+  });
 
-  it(
-    'runs workflow when item has no unmet deps (eligible)',
-    { timeout: 30_000 },
-    async () => {
-      const mockItem = {
-        id: 'item-2',
-        externalId: '43',
-        title: 'clear issue',
-        body: 'No deps',
-        state: 'factory:dev-ready',
-        schedule: 'current',
-        type: 'feature',
-      };
-      const mockSource = {
-        getItem: vi.fn().mockResolvedValue(mockItem),
-        setLabelInGroup: vi.fn().mockResolvedValue(undefined),
-        comment: vi.fn().mockResolvedValue(undefined),
-      };
-      mockGetSourceForSlug.mockResolvedValue(mockSource);
-      mockGetProject.mockResolvedValue({
-        budgets: { maxParallelAgents: 1 },
-        source: { repo: 'shaunnez/goose-hub', type: 'github' },
-      });
-      mockFilterEligibleByDependencies.mockResolvedValue({
-        eligible: [mockItem],
-        blocked: [],
-        unregistered: [],
-      });
+  it('runs workflow when item has no unmet deps (eligible)', { timeout: 30_000 }, async () => {
+    const mockItem = {
+      id: 'item-2',
+      externalId: '43',
+      title: 'clear issue',
+      body: 'No deps',
+      state: 'factory:dev-ready',
+      schedule: 'current',
+      type: 'feature',
+    };
+    const mockSource = {
+      getItem: vi.fn().mockResolvedValue(mockItem),
+      setLabelInGroup: vi.fn().mockResolvedValue(undefined),
+      comment: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetSourceForSlug.mockResolvedValue(mockSource);
+    mockGetProject.mockResolvedValue({
+      budgets: { maxParallelAgents: 1 },
+      source: { repo: 'shaunnez/goose-hub', type: 'github' },
+    });
+    mockFilterEligibleByDependencies.mockResolvedValue({
+      eligible: [mockItem],
+      blocked: [],
+      unregistered: [],
+    });
 
-      const { dispatchFixIssue } = await import('./dispatch.js');
-      // Dynamic import of slices/fix-issue may fail in test env — that's fine.
-      // What matters: filterEligibleByDependencies was called AND blocked message was NOT logged.
-      await dispatchFixIssue('slug', 43).catch(() => {
-        // acceptable: dynamic import may fail in test env
-      });
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    // Dynamic import of slices/fix-issue may fail in test env — that's fine.
+    // What matters: filterEligibleByDependencies was called AND blocked message was NOT logged.
+    await dispatchFixIssue('slug', 43).catch(() => {
+      // acceptable: dynamic import may fail in test env
+    });
 
-      expect(mockFilterEligibleByDependencies).toHaveBeenCalledWith(
-        [mockItem],
-        expect.objectContaining({ currentRepo: 'shaunnez/goose-hub' }),
-      );
-      expect(mockLoggerInfo).not.toHaveBeenCalledWith(
-        'dispatchFixIssue: item blocked by deps, skipping',
-        expect.anything(),
-      );
-    },
-  );
+    expect(mockFilterEligibleByDependencies).toHaveBeenCalledWith(
+      [mockItem],
+      expect.objectContaining({ currentRepo: 'shaunnez/goose-hub' }),
+    );
+    expect(mockLoggerInfo).not.toHaveBeenCalledWith(
+      'dispatchFixIssue: item blocked by deps, skipping',
+      expect.anything(),
+    );
+  });
 });
 
 // ─── dispatchForLabel — label routing switch ─────────────────────────────

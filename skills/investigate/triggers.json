@@ -3,7 +3,7 @@
     "Investigate the root cause of this regression",
     "Research which files are affected by this bug",
     "Explore the codebase to understand how the payment module works",
-    "Find out why the CI pipeline is failing intermittently",
+    "Explore the codebase and trace the root cause of this bug",
     "Dig into the issue and produce an investigation report",
     "Trace through the code to understand the bug",
     "What is the root cause? Investigate and report findings"

@@ -141,11 +141,11 @@ describe('computeAllowlist', () => {
 // ─── workspace sandbox ────────────────────────────────────────────────────────
 
 describe('writeWorkspaceSandbox', () => {
-  it('writes .claude/settings.json with denylist rules', () => {
+  it('writes .claude/settings.local.json with denylist rules', () => {
     const dir = mkdtempSync(join(tmpdir(), 'sandbox-test-'));
     try {
       writeWorkspaceSandbox(dir);
-      const raw = readFileSync(join(dir, '.claude', 'settings.json'), 'utf8');
+      const raw = readFileSync(join(dir, '.claude', 'settings.local.json'), 'utf8');
       const cfg = JSON.parse(raw) as { permissions: { deny: string[] } };
       expect(cfg.permissions.deny).toContain('Read(./.env*)');
       expect(cfg.permissions.deny).toContain('Bash(sudo *)');
@@ -165,11 +165,11 @@ describe('writeWorkspaceSandbox', () => {
     }
   });
 
-  it('registers PostToolUse hook in workspace settings.json', () => {
+  it('registers PostToolUse hook in workspace settings.local.json', () => {
     const dir = mkdtempSync(join(tmpdir(), 'sandbox-post-hook-'));
     try {
       writeWorkspaceSandbox(dir);
-      const raw = readFileSync(join(dir, '.claude', 'settings.json'), 'utf8');
+      const raw = readFileSync(join(dir, '.claude', 'settings.local.json'), 'utf8');
       const cfg = JSON.parse(raw) as { hooks?: { PostToolUse?: unknown[] } };
       expect(cfg.hooks?.PostToolUse).toBeDefined();
       expect(Array.isArray(cfg.hooks?.PostToolUse)).toBe(true);

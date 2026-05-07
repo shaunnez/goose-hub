@@ -4,7 +4,11 @@ import { config } from 'dotenv';
 
 config({ path: resolve(import.meta.dirname, '../../.env') });
 
-const PORT = Number(process.env.WEB_PORT ?? 5173);
+const PORT = Number(process.env.WEB_PORT ?? 5299);
+const MOCK_SERVER_PORT = 3099;
+
+// Tell test workers where to reach the mock server directly
+process.env.SERVER_URL = `http://localhost:${MOCK_SERVER_PORT}`;
 
 export default defineConfig({
   testDir: './e2e/pipeline',
@@ -25,10 +29,11 @@ export default defineConfig({
       : [
           {
             command: 'pnpm --filter @goose-hub/server start',
-            port: 3001,
-            reuseExistingServer: !process.env.CI,
+            port: MOCK_SERVER_PORT,
+            reuseExistingServer: false,
             timeout: 30_000,
             env: {
+              PORT: String(MOCK_SERVER_PORT),
               GITHUB_TOKEN: '',
               GITHUB_WEBHOOK_SECRET: 'mock-webhook-secret-for-e2e',
               MOCK_AGENTS: 'true',
@@ -39,8 +44,9 @@ export default defineConfig({
           {
             command: `pnpm dev --port ${PORT}`,
             port: PORT,
-            reuseExistingServer: !process.env.CI,
+            reuseExistingServer: false,
             timeout: 30_000,
+            env: { SERVER_PORT: String(MOCK_SERVER_PORT) },
           },
         ],
 });

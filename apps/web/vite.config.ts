@@ -3,6 +3,9 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
+const serverPort = process.env.SERVER_PORT ?? '3001';
+const serverTarget = `http://localhost:${serverPort}`;
+
 export default defineConfig({
   envDir: path.resolve(__dirname, '../..'),
   plugins: [react(), tailwindcss()],
@@ -13,11 +16,11 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: serverTarget,
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api/, ''),
       },
-      '/events': { target: 'http://localhost:3001', changeOrigin: true, ws: true },
+      '/events': { target: serverTarget, changeOrigin: true, ws: true },
     },
   },
 });
