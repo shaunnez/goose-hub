@@ -40,26 +40,26 @@ test.describe('QA fail loop (MOCK_AGENTS + MOCK_SOURCE)', () => {
 
     await page.goto(`/projects/${SLUG}/items/${issueNumber}`);
     const statePill = page.getByTestId('state-pill');
-    await expect(statePill).toHaveText('factory:triaging', { timeout: 15_000 });
+    await expect(statePill).toHaveText('triaging', { timeout: 15_000 });
 
     // Triage → dev-ready
     await postServer(`/projects/${SLUG}/tick`);
-    await expect(statePill).toHaveText('factory:dev-ready', { timeout: 60_000 });
+    await expect(statePill).toHaveText('dev-ready', { timeout: 60_000 });
 
     // Fix-issue → needs-qa
     await postServer(`/projects/${SLUG}/dispatch/${issueNumber}`);
-    await expect(statePill).toHaveText('factory:needs-qa', { timeout: 60_000 });
+    await expect(statePill).toHaveText('needs-qa', { timeout: 60_000 });
 
     // QA (fail) → qa-failed
     await postServer(`/projects/${SLUG}/run-qa/${issueNumber}`);
-    await expect(statePill).toHaveText('factory:qa-failed', { timeout: 60_000 });
+    await expect(statePill).toHaveText('qa-failed', { timeout: 60_000 });
 
     // dispatchQaFailed → needs-fix → fix-feedback → in-progress → needs-qa
     await postServer(`/projects/${SLUG}/dispatch/${issueNumber}`);
-    await expect(statePill).toHaveText('factory:needs-qa', { timeout: 60_000 });
+    await expect(statePill).toHaveText('needs-qa', { timeout: 60_000 });
 
     // QA (pass this time) → needs-review
     await postServer(`/projects/${SLUG}/run-qa/${issueNumber}`);
-    await expect(statePill).toHaveText('factory:needs-review', { timeout: 60_000 });
+    await expect(statePill).toHaveText('needs-review', { timeout: 60_000 });
   });
 });

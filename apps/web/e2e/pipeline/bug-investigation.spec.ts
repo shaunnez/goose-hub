@@ -37,15 +37,15 @@ test.describe('Bug investigation (MOCK_AGENTS + MOCK_SOURCE)', () => {
 
     await page.goto(`/projects/${SLUG}/items/${issueNumber}`);
     const statePill = page.getByTestId('state-pill');
-    await expect(statePill).toHaveText('factory:triaging', { timeout: 15_000 });
+    await expect(statePill).toHaveText('triaging', { timeout: 15_000 });
 
     // Triage (bug type) → accepted → investigating
     await postServer(`/projects/${SLUG}/tick`);
-    await expect(statePill).toHaveText('factory:investigating', { timeout: 60_000 });
+    await expect(statePill).toHaveText('investigating', { timeout: 60_000 });
 
     // Investigate (high-confidence) → investigation-complete → dev-ready
     await postServer(`/projects/${SLUG}/dispatch/${issueNumber}`);
-    await expect(statePill).toHaveText('factory:dev-ready', { timeout: 60_000 });
+    await expect(statePill).toHaveText('dev-ready', { timeout: 60_000 });
   });
 
   test('low-confidence investigate → investigation-complete → gate-pending', async ({ page }) => {
@@ -59,11 +59,11 @@ test.describe('Bug investigation (MOCK_AGENTS + MOCK_SOURCE)', () => {
 
     await page.goto(`/projects/${SLUG}/items/${issueNumber}`);
     const statePill = page.getByTestId('state-pill');
-    await expect(statePill).toHaveText('factory:triaging', { timeout: 15_000 });
+    await expect(statePill).toHaveText('triaging', { timeout: 15_000 });
 
     // Triage (bug type) → accepted → investigating
     await postServer(`/projects/${SLUG}/tick`);
-    await expect(statePill).toHaveText('factory:investigating', { timeout: 60_000 });
+    await expect(statePill).toHaveText('investigating', { timeout: 60_000 });
 
     // Investigate (low-confidence) → investigation-complete → gate-pending
     await postServer(`/projects/${SLUG}/dispatch/${issueNumber}`);
