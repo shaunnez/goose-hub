@@ -60,7 +60,7 @@ function goldenTitle(): string {
   return `${emoji} [GOLDEN-BUG-LOW-CONF] ${iso}`;
 }
 
-test.describe('Golden Bug — low-confidence investigation gate (MOCK_AGENTS + MOCK_SOURCE + MOCK_OPEN_PR)', () => {
+test.describe('Golden Bug — low-confidence gate (MOCK_AGENTS + MOCK_SOURCE + MOCK_OPEN_PR)', () => {
   test('low-confidence → gate-pending → human proceed → dev → done', async ({ page }) => {
     test.setTimeout(240_000);
 
