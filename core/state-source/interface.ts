@@ -35,6 +35,9 @@ export interface Milestone {
   description?: string;
   dueOn?: Date;
   isActive: boolean;
+  state: 'open' | 'closed';
+  openIssues: number;
+  closedIssues: number;
 }
 
 export interface Artifact {
@@ -96,6 +99,12 @@ export interface StateSource {
   listLabels?(itemId: string): Promise<string[]>;
   attach(itemId: string, artifact: Artifact): Promise<void>;
   createIssue(input: CreateIssueInput): Promise<WorkItem>;
+  createMilestone(title: string): Promise<Milestone>;
+  updateMilestone(
+    number: number,
+    patch: { title?: string; state?: 'open' | 'closed' },
+  ): Promise<Milestone>;
+  deleteMilestone(number: number): Promise<void>;
 
   getPrDiff(itemId: string): Promise<string>;
 

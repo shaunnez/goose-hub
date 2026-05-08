@@ -40,8 +40,15 @@
     {
       "idx": 5,
       "version": "6",
+      "when": 1746748800000,
+      "tag": "0005_events_work_item_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
       "when": 1778197779792,
-      "tag": "0005_redundant_emma_frost",
+      "tag": "0006_redundant_emma_frost",
       "breakpoints": true
     }
   ]

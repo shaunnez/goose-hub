@@ -18,6 +18,7 @@ import { InvestigationSection } from './InvestigationSection';
 import { LeftRail } from './LeftRail';
 import { OverviewSection } from './OverviewSection';
 import { PRDSection } from './PRDSection';
+import { PendingNextRunBanner } from './PendingNextRunBanner';
 import { QASection } from './QASection';
 import { RetrospectiveSection } from './RetrospectiveSection';
 import { ReviewSection } from './ReviewSection';
@@ -225,11 +226,12 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
             void queryClient.invalidateQueries({ queryKey: ['issues', slug] });
           }}
         />
+        <PendingNextRunBanner state={item?.state} projectSlug={slug} id={id} />
 
         <ApprovalGateSection projectSlug={slug} id={id} state={item?.state} />
 
         <div className="flex-1 min-h-0 flex">
-          <LeftRail itemState={item?.state} />
+          <LeftRail itemState={item?.state} prdParent={item?.prdParent} itemType={item?.type} />
           <main className="flex-1 min-w-0 overflow-y-auto">
             {currentSection.key === 'overview' ? (
               <OverviewSection item={item} projectSlug={slug} />

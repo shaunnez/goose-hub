@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "0005_events_work_item_idx",
-  "prevId": "0004_coach_source_playbook",
+  "id": "b96f54ab-d048-48d8-bdc1-d23b7ee58008",
+  "prevId": "0005_events_work_item_idx",
   "tables": {
     "agent_run_costs": {
       "name": "agent_run_costs",
@@ -398,14 +398,6 @@
             "created_at"
           ],
           "isUnique": false
-        },
-        "events_work_item_idx": {
-          "name": "events_work_item_idx",
-          "columns": [
-            "work_item_id",
-            "id"
-          ],
-          "isUnique": false
         }
       },
       "foreignKeys": {},
@@ -534,14 +526,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
-        },
         "proposed_diff": {
           "name": "proposed_diff",
           "type": "text",
@@ -555,6 +539,14 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
         }
       },
       "indexes": {
@@ -914,6 +906,84 @@
         }
       },
       "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "wp_iterations": {
+      "name": "wp_iterations",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "run_id": {
+          "name": "run_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "wp_id": {
+          "name": "wp_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "iteration": {
+          "name": "iteration",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "error_reason": {
+          "name": "error_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
+        }
+      },
+      "indexes": {
+        "wp_iterations_run_wp_iteration_uniq": {
+          "name": "wp_iterations_run_wp_iteration_uniq",
+          "columns": [
+            "run_id",
+            "wp_id",
+            "iteration"
+          ],
+          "isUnique": true
+        },
+        "wp_iterations_run_wp_idx": {
+          "name": "wp_iterations_run_wp_idx",
+          "columns": [
+            "run_id",
+            "wp_id"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},

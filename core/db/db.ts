@@ -7,7 +7,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import * as schema from './schema.js';
 
-const dbPath = path.join(os.homedir(), '.factory', 'data', 'factory.db');
+const dbPath = process.env.DB_PATH ?? path.join(os.homedir(), '.factory', 'data', 'factory.db');
 mkdirSync(path.dirname(dbPath), { recursive: true });
 
 const sqlite = new Database(dbPath);

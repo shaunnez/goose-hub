@@ -37,7 +37,13 @@ router.get('/:slug/issues/:id', async (c) => {
 });
 
 router.get('/:slug/issues/:id/events', async (c) => {
-  const result = await getIssueEvents(c.req.param('slug'), c.req.param('id'));
+  const limitStr = c.req.query('limit');
+  const beforeStr = c.req.query('before');
+  const opts =
+    limitStr != null
+      ? { limit: Number(limitStr), before: beforeStr != null ? Number(beforeStr) : undefined }
+      : undefined;
+  const result = await getIssueEvents(c.req.param('slug'), c.req.param('id'), opts);
   return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);
 });
 

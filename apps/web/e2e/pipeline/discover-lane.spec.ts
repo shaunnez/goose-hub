@@ -246,9 +246,8 @@ test.describe('Discover Lane (MOCK_AGENTS + MOCK_SOURCE)', () => {
     const approveBtn = page.getByTestId('prd-approve-btn');
     await expect(approveBtn).toBeVisible();
     await approveBtn.click();
-    // After approve-prd the issue transitions through factory:decomposing to
-    // factory:issues-created. The mock workflow completes synchronously so we
-    // observe the terminal state directly.
-    await expect(statePill).toHaveText(/^(decomposing|issues-created)$/, { timeout: 30_000 });
+    // After approve-prd: the mock decompose-prd workflow runs synchronously and
+    // advances decomposing → issues-created → done before the UI polls.
+    await expect(statePill).toHaveText('done', { timeout: 30_000 });
   });
 });

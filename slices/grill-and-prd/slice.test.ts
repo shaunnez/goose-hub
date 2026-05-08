@@ -586,8 +586,8 @@ describe('grill-and-prd: round-8 hard-cap forces PRD drafting', () => {
 // 6. Schema-fail at grill step
 // ---------------------------------------------------------------------------
 
-describe('grill-and-prd: malformed grill output → needs-human', () => {
-  it('forces state to factory:needs-human and returns phase=needs-human', async () => {
+describe('grill-and-prd: malformed grill output → gate-pending', () => {
+  it('forces state to factory:gate-pending, emits state.transitioned, returns phase=grilling', async () => {
     const projectId = uniqueProjectId('grill-malformed');
     const source = new InMemoryLabelsSource(projectId, REPO_REF);
     const item = await seedFeatureItem(source, { state: 'factory:grilling' });
@@ -610,15 +610,28 @@ describe('grill-and-prd: malformed grill output → needs-human', () => {
       deps: { runtime, projectConfig: injectedConfig() },
     });
 
-    expect(result.phase).toBe('needs-human');
+    expect(result.phase).toBe('grilling');
 
     const updated = await source.getItem(item.externalId);
-    expect(updated.state).toBe('factory:needs-human');
+    expect(updated.state).toBe('factory:gate-pending');
 
     const evs = eventStore.replay({ projectId, workItemId: workItem.id });
     const failed = evs.find((e) => e.kind === 'agent.run-failed');
     expect(failed).toBeDefined();
     expect((failed?.payload as { skill: string }).skill).toBe('grill-me');
+
+    const transitioned = evs.find(
+      (e) =>
+        e.kind === 'state.transitioned' &&
+        (e.payload as { to: string }).to === 'factory:gate-pending',
+    );
+    expect(transitioned).toBeDefined();
+    expect((transitioned?.payload as { from: string }).from).toBe('factory:grilling');
+
+    // System comment posted (filtered from priorReplies, visible in timeline)
+    const comments = await source.listComments(item.externalId);
+    const sysComment = comments.find((c) => c.body.startsWith('<!-- factory:system -->'));
+    expect(sysComment).toBeDefined();
   });
 });
 

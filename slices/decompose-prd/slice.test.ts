@@ -4,7 +4,7 @@ import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
  *
  * Tests the runDecomposePrdWorkflow using an InMemoryLabelsSource and injected
  * AgentRuntime mock. Covers:
- *   1. Single-slice PRD: one child issue created, parent transitions to factory:issues-created.
+ *   1. Single-slice PRD: one child issue created, parent transitions to factory:done.
  *   2. Multi-slice PRD with sequential deps: sibling index refs are resolved to real numbers.
  *   3. Duplicate-title guard: two children with same title → factory:needs-human + comment.
  *   4. Schema-validation failure: malformed runtime output → factory:needs-human.
@@ -84,7 +84,7 @@ function makeValidOutput(
 // ---------------------------------------------------------------------------
 
 describe('single-slice PRD', () => {
-  it('creates one child issue and transitions parent to factory:issues-created', async () => {
+  it('creates one child issue and transitions parent to factory:done', async () => {
     const source = new InMemoryLabelsSource(PROJECT_ID, REPO_REF);
     const parent = await source.seedIssue({
       title: 'Parent PRD epic',
@@ -108,9 +108,9 @@ describe('single-slice PRD', () => {
       deps: { runtime: makeRuntime(output) },
     });
 
-    // Parent should be in factory:issues-created
+    // Parent should be in factory:done
     const updatedParent = await source.getItem(parent.externalId);
-    expect(updatedParent.state).toBe('factory:issues-created');
+    expect(updatedParent.state).toBe('factory:done');
 
     // One child issue should have been created
     const allItems = await source.listOpenWork();
@@ -182,9 +182,9 @@ describe('multi-slice PRD with sequential sibling deps', () => {
     expect(child2.body).toContain(`#${n1}`);
     expect(child2.body).not.toContain('sibling index');
 
-    // Parent transitions to factory:issues-created
+    // Parent transitions to factory:done
     const updatedParent = await source.getItem(parent.externalId);
-    expect(updatedParent.state).toBe('factory:issues-created');
+    expect(updatedParent.state).toBe('factory:done');
   });
 });
 
@@ -442,14 +442,12 @@ describe('children land at factory:accepted', () => {
     });
 
     for (const childNum of result.childIssueNumbers) {
-      // State must be factory:accepted (not factory:triaging)
+      // State must be factory:dev-ready (workflow promotes triaging → accepted → dev-ready)
       const child = await source.getItem(String(childNum));
-      expect(child.state).toBe('factory:accepted');
+      expect(child.state).toBe('factory:dev-ready');
 
-      // extraLabels must contain factory:accepted and factory:from-prd,
-      // and must NOT contain factory:triaging
+      // extraLabels must contain factory:from-prd, and must NOT contain factory:triaging
       const labels = source.getExtraLabels(String(childNum));
-      expect(labels.has('factory:accepted')).toBe(true);
       expect(labels.has('factory:from-prd')).toBe(true);
       expect(labels.has('factory:triaging')).toBe(false);
     }

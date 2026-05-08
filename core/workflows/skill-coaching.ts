@@ -179,19 +179,6 @@ export async function runSkillCoachingWorkflow(
   const evidencePatterns = fetchEvidencePatterns(projectId, evidence.patternIds);
   const evidenceLifecycles = fetchEvidenceLifecycles(evidence.lifecycleIds ?? []);
 
-  eventStore.appendEvent({
-    kind: 'agent.run-started',
-    projectId,
-    runId,
-    payload: {
-      skill: skillName,
-      targetSkillName,
-      personaId,
-      patternCount: evidencePatterns.length,
-      lifecycleCount: evidenceLifecycles.length,
-    },
-  });
-
   try {
     const result = await runtime.run({
       runId,
@@ -218,6 +205,11 @@ export async function runSkillCoachingWorkflow(
       personaId,
       appendSystemPrompt: prompt,
       outputJsonSchema: jsonSchema,
+      extraEventPayload: {
+        targetSkillName,
+        patternCount: evidencePatterns.length,
+        lifecycleCount: evidenceLifecycles.length,
+      },
     });
 
     const parsed = SkillCoachOutputSchema.safeParse(result.output);

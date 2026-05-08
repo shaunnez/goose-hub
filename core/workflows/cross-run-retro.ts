@@ -293,20 +293,6 @@ export async function runCrossRunRetroWorkflow(
   const jsonSchema = toJsonSchema(CrossRunRetroOutputSchema);
   const { personaId } = selectPersona(projectId, 'retrospector');
 
-  eventStore.appendEvent({
-    kind: 'agent.run-started',
-    projectId,
-    runId,
-    payload: {
-      skill: skillName,
-      tier: 'cross-run',
-      personaId,
-      windowStartAt: window.startAt,
-      windowEndAt: window.endAt,
-      lifecycleCount: lifecycles.length,
-    },
-  });
-
   const archivedForSkill = lifecycles.map((row) => ({
     workItemId: row.workItemId,
     closedAt: row.closedAt,
@@ -350,6 +336,12 @@ export async function runCrossRunRetroWorkflow(
       personaId,
       appendSystemPrompt: prompt,
       outputJsonSchema: jsonSchema,
+      extraEventPayload: {
+        tier: 'cross-run',
+        windowStartAt: window.startAt,
+        windowEndAt: window.endAt,
+        lifecycleCount: lifecycles.length,
+      },
     });
 
     const parsed = CrossRunRetroOutputSchema.safeParse(result.output);

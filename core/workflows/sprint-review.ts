@@ -92,13 +92,6 @@ export async function runSprintReviewWorkflow(input: RunSprintReviewInput): Prom
     confidence: 'medium' as const,
   }));
 
-  eventStore.appendEvent({
-    kind: 'agent.run-started',
-    projectId,
-    runId,
-    payload: { skill: skillName, personaId },
-  });
-
   let resolvedBudget: {
     budgets: { maxTurns: number; maxBudgetUsd: number; timeoutMs?: number };
     modelOverride: string;

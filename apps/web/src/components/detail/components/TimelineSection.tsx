@@ -1,7 +1,7 @@
-import { fetchEvents } from '@/lib/api';
+import { fetchEventsPage } from '@/lib/api';
 import type { AgentEventDto } from '@/lib/types';
 import { Clock } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIssueCostsBreakdown } from '../lib/costs';
 import { EVENT_KIND_LABEL, groupEvents } from '../lib/timeline';
 import type { RenderItem } from '../lib/timeline';
@@ -9,6 +9,8 @@ import { SectionEmptyState } from './SectionEmptyState';
 import { renderTimelineItem } from './TimelineEvents';
 
 export type { RenderItem } from '../lib/timeline';
+
+const PAGE_SIZE = 100;
 
 interface TimelineSectionProps {
   projectSlug: string;
@@ -19,7 +21,12 @@ interface TimelineSectionProps {
 export function TimelineSection({ projectSlug, id, workItemId }: TimelineSectionProps) {
   const [events, setEvents] = useState<AgentEventDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [cursor, setCursor] = useState<number | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  // Set to max event id after initial REST fetch; triggers SSE open with lastEventId.
+  const [sseReadyAfter, setSseReadyAfter] = useState<number | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const { byRun: runCosts } = useIssueCostsBreakdown(projectSlug, id);
   const [expandSignal, setExpandSignal] = useState<{ tick: number; open: boolean }>({
@@ -32,14 +39,15 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchEvents(projectSlug, id, controller.signal)
-      .then((list) => {
+    setSseReadyAfter(null);
+    fetchEventsPage(projectSlug, id, { limit: PAGE_SIZE }, controller.signal)
+      .then(({ events: list, hasMore: more }) => {
         if (cancelled) return;
-        // Server returns ascending; render newest first.
-        const sorted = [...list].sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        );
-        setEvents(sorted);
+        setEvents(list);
+        setHasMore(more);
+        setCursor(list.at(-1)?.id);
+        // Open SSE from here — skip replay of events we already have.
+        setSseReadyAfter(list[0]?.id ?? 0);
         setLoading(false);
       })
       .catch((err: Error) => {
@@ -53,10 +61,32 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
     };
   }, [projectSlug, id]);
 
-  // Live updates via SSE filtered to this work item.
+  const loadMore = useCallback(async () => {
+    if (!hasMore || loadingMore || cursor == null) return;
+    setLoadingMore(true);
+    try {
+      const { events: older, hasMore: more } = await fetchEventsPage(projectSlug, id, {
+        limit: PAGE_SIZE,
+        before: cursor,
+      });
+      setEvents((prev) => [...prev, ...older]);
+      setHasMore(more);
+      setCursor(older.at(-1)?.id);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [hasMore, loadingMore, cursor, projectSlug, id]);
+
+  // Live updates via SSE. Opens only after initial REST fetch so lastEventId
+  // skips the replay of events already loaded — no double-fetch.
   useEffect(() => {
-    const url = `/events?projectId=${encodeURIComponent(projectSlug)}&workItemId=${encodeURIComponent(workItemId)}`;
-    const es = new EventSource(url);
+    if (sseReadyAfter === null || !workItemId) return;
+    const params = new URLSearchParams({
+      projectId: projectSlug,
+      workItemId,
+      lastEventId: String(sseReadyAfter),
+    });
+    const es = new EventSource(`/events?${params}`);
     eventSourceRef.current = es;
     const handler = (msg: MessageEvent<string>) => {
       try {
@@ -82,7 +112,7 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
       es.close();
       eventSourceRef.current = null;
     };
-  }, [projectSlug, workItemId]);
+  }, [projectSlug, workItemId, sseReadyAfter]);
 
   if (loading) {
     return <div className="px-8 py-6 text-fg-3">Loading timeline…</div>;
@@ -152,6 +182,19 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
       <ol className="flex flex-col gap-3">
         {items.map((item: RenderItem, idx: number) => renderTimelineItem(item, idx, context))}
       </ol>
+
+      {hasMore && (
+        <div className="mt-4 flex justify-center">
+          <button
+            type="button"
+            onClick={() => void loadMore()}
+            disabled={loadingMore}
+            className="h-7 px-4 rounded-md border border-line text-[12px] text-fg-2 hover:text-fg hover:bg-bg-hover disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loadingMore ? 'Loading…' : 'Load older events'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

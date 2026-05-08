@@ -59,6 +59,9 @@ const DEFAULT_MILESTONE: Milestone = {
   number: 1,
   description: 'In-memory milestone for E2E tests',
   isActive: true,
+  state: 'open',
+  openIssues: 0,
+  closedIssues: 0,
 };
 
 export interface SeedIssueOptions {
@@ -288,6 +291,18 @@ export class InMemoryLabelsSource implements StateSource {
     };
     this.store.set(externalId, issue);
     return this.toWorkItem(issue);
+  }
+
+  async createMilestone(_title: string): Promise<Milestone> {
+    throw new Error('not implemented');
+  }
+
+  async updateMilestone(_number: number, _patch: unknown): Promise<Milestone> {
+    throw new Error('not implemented');
+  }
+
+  async deleteMilestone(_number: number): Promise<void> {
+    throw new Error('not implemented');
   }
 
   async seedIssue(opts: SeedIssueOptions): Promise<WorkItem> {

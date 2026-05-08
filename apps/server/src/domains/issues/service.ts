@@ -4,6 +4,26 @@ import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
 import { getSourceForSlug } from '#shared/source.js';
 import { getLastPersonaIdsByWorkItem, getRepoRef } from './internal.js';
 
+function buildPrdRelationships(projectId: string): {
+  byParent: Map<string, string[]>;
+  byChild: Map<string, string>;
+} {
+  const byParent = new Map<string, string[]>();
+  const byChild = new Map<string, string>();
+  const decomposeEvents = eventStore.replay({ projectId, kind: 'decompose.completed' });
+  for (const ev of decomposeEvents) {
+    if (ev.workItemId == null) continue;
+    const parentExternalId = ev.workItemId.split('#').pop();
+    if (parentExternalId == null) continue;
+    const payload = ev.payload as { childIssueNumbers?: number[] };
+    const children = (payload.childIssueNumbers ?? []).map(String);
+    if (children.length === 0) continue;
+    byParent.set(parentExternalId, children);
+    for (const c of children) byChild.set(c, parentExternalId);
+  }
+  return { byParent, byChild };
+}
+
 // Public surface for the issues domain. The implementation is split across
 // sibling files to keep each concern focused; this barrel re-exports the
 // pieces the router and tests depend on.
@@ -26,6 +46,7 @@ export async function listIssues(
   const items = await source.listOpenWork(milestoneNumber);
   const lastPersonaMap = getLastPersonaIdsByWorkItem(slug);
   const titleByExternalId = new Map(items.map((i) => [i.externalId, i.title]));
+  const { byParent, byChild } = buildPrdRelationships(slug);
   const enriched = items.map((item) => ({
     ...(item as object),
     lastPersonaId: lastPersonaMap.get((item as { id: string }).id) ?? null,
@@ -34,6 +55,8 @@ export async function listIssues(
         .filter((ref) => titleByExternalId.has(ref))
         .map((ref) => [ref, titleByExternalId.get(ref) ?? '']),
     ),
+    prdChildren: byParent.get(item.externalId),
+    prdParent: byChild.get(item.externalId),
   }));
   return { ok: true, data: { items: enriched } };
 }
@@ -44,21 +67,44 @@ export async function getIssue(slug: string, id: string): Promise<Result<{ item:
   const item = await source.getItem(id);
   const lastPersonaMap = getLastPersonaIdsByWorkItem(slug);
   const workItemId = (item as { id: string }).id;
-  const enriched = { ...(item as object), lastPersonaId: lastPersonaMap.get(workItemId) ?? null };
+  const { byParent, byChild } = buildPrdRelationships(slug);
+  const externalId = (item as { externalId: string }).externalId;
+  const enriched = {
+    ...(item as object),
+    lastPersonaId: lastPersonaMap.get(workItemId) ?? null,
+    prdChildren: byParent.get(externalId),
+    prdParent: byChild.get(externalId),
+  };
   return { ok: true, data: { item: enriched } };
 }
 
 export async function getIssueEvents(
   slug: string,
   id: string,
-): Promise<Result<{ events: unknown[] }>> {
+  opts?: { limit?: number; before?: number },
+): Promise<Result<{ events: unknown[]; hasMore: boolean }>> {
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
   const repoRef = await getRepoRef(slug);
   const workItemId = `github:${repoRef}#${id}`;
+
+  if (opts?.limit != null) {
+    const fetched = eventStore.replay({
+      projectId: slug,
+      workItemId,
+      limit: opts.limit + 1,
+      before: opts.before,
+      order: 'desc',
+    });
+    const hasMore = fetched.length > opts.limit;
+    return {
+      ok: true,
+      data: { events: hasMore ? fetched.slice(0, opts.limit) : fetched, hasMore },
+    };
+  }
+
   const ascending = eventStore.replay({ projectId: slug, workItemId });
-  const events = [...ascending].reverse();
-  return { ok: true, data: { events } };
+  return { ok: true, data: { events: [...ascending].reverse(), hasMore: false } };
 }
 
 export async function getIssueComments(

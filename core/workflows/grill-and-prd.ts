@@ -84,15 +84,19 @@ function safeResolveBudgets(
 }
 
 /**
- * Move the work item into `factory:gate-pending`. The legal-transition table
- * does not allow `factory:grilling -> factory:gate-pending` directly, so this
- * helper attempts `transitionState` first (no-op-friendly when already in
- * gate-pending) and then falls back to `forceState`.
+ * Move the work item into `factory:gate-pending` and emit a `state.transitioned`
+ * event. The legal-transition table does not allow `factory:grilling ->
+ * factory:gate-pending` directly, so this helper attempts `transitionState`
+ * first and falls back to `forceState`. The emitted event lets
+ * `dispatchResumeIssue` inspect the `from` field and route back to the correct
+ * workflow without knowing skill names.
  */
 async function ensureGatePending(
   stateSource: StateSource,
   externalId: string,
   fromState: StateName,
+  projectId: string,
+  workItemId: string,
 ): Promise<void> {
   if (fromState === 'factory:gate-pending') return;
   try {
@@ -100,6 +104,12 @@ async function ensureGatePending(
   } catch {
     await stateSource.forceState(externalId, 'factory:gate-pending');
   }
+  eventStore.appendEvent({
+    projectId,
+    workItemId,
+    kind: 'state.transitioned',
+    payload: { from: fromState, to: 'factory:gate-pending', by: 'grill-and-prd' },
+  });
 }
 
 export async function runGrillAndPrdWorkflow(
@@ -139,14 +149,6 @@ export async function runGrillAndPrdWorkflow(
   const grillPrompt = readPromptWithContext('grill-me', projectId);
   const grillJsonSchema = toJsonSchema(GrillMeOutputSchema);
 
-  eventStore.appendEvent({
-    kind: 'agent.run-started',
-    projectId,
-    workItemId: workItem.id,
-    runId,
-    payload: { skill: 'grill-me', personaId: grillerPersona.personaId, roundNumber },
-  });
-
   let grillOutput: import('../../skills/grill-me/schema.js').GrillMeOutput;
   try {
     const grillResult = await runtime.run({
@@ -154,6 +156,8 @@ export async function runGrillAndPrdWorkflow(
       role: 'griller',
       skill: 'grill-me',
       context: {
+        projectId,
+        workItemId: workItem.id,
         workItem: {
           title: workItem.title,
           body: workItem.body,
@@ -170,6 +174,7 @@ export async function runGrillAndPrdWorkflow(
       personaId: grillerPersona.personaId,
       appendSystemPrompt: grillPrompt,
       outputJsonSchema: grillJsonSchema,
+      extraEventPayload: { roundNumber },
     });
 
     const parsed = GrillMeOutputSchema.safeParse(grillResult.output);
@@ -181,8 +186,18 @@ export async function runGrillAndPrdWorkflow(
         runId,
         payload: { skill: 'grill-me', error: parsed.error.message },
       });
-      await stateSource.forceState(workItem.externalId, 'factory:needs-human');
-      return { phase: 'needs-human' };
+      await stateSource.comment(
+        workItem.externalId,
+        '<!-- factory:system -->\ngrill-me returned invalid output; waiting for human to resume grilling.',
+      );
+      await ensureGatePending(
+        stateSource,
+        workItem.externalId,
+        workItem.state,
+        projectId,
+        workItem.id,
+      );
+      return { phase: 'grilling' };
     }
     grillOutput = parsed.data;
   } catch (err) {
@@ -193,8 +208,18 @@ export async function runGrillAndPrdWorkflow(
       runId,
       payload: { skill: 'grill-me', error: String(err) },
     });
-    await stateSource.forceState(workItem.externalId, 'factory:needs-human');
-    return { phase: 'needs-human' };
+    await stateSource.comment(
+      workItem.externalId,
+      '<!-- factory:system -->\ngrill-me failed; waiting for human to resume grilling.',
+    );
+    await ensureGatePending(
+      stateSource,
+      workItem.externalId,
+      workItem.state,
+      projectId,
+      workItem.id,
+    );
+    return { phase: 'grilling' };
   }
 
   // Emit any decision summaries the griller produced this round.
@@ -241,8 +266,18 @@ export async function runGrillAndPrdWorkflow(
           error: 'grill-me returned readyForPRD:false with no questions',
         },
       });
-      await stateSource.forceState(workItem.externalId, 'factory:needs-human');
-      return { phase: 'needs-human' };
+      await stateSource.comment(
+        workItem.externalId,
+        '<!-- factory:system -->\ngrill-me returned no questions; waiting for human to resume grilling.',
+      );
+      await ensureGatePending(
+        stateSource,
+        workItem.externalId,
+        workItem.state,
+        projectId,
+        workItem.id,
+      );
+      return { phase: 'grilling' };
     }
 
     // Prefix with the `<!-- factory:grill-question -->` HTML marker so the
@@ -252,7 +287,13 @@ export async function runGrillAndPrdWorkflow(
       workItem.externalId,
       `<!-- factory:grill-question -->\n**Round ${roundNumber}** — ${question}`,
     );
-    await ensureGatePending(stateSource, workItem.externalId, workItem.state);
+    await ensureGatePending(
+      stateSource,
+      workItem.externalId,
+      workItem.state,
+      projectId,
+      workItem.id,
+    );
 
     eventStore.appendEvent({
       kind: 'grill.question-posted',
@@ -300,14 +341,6 @@ export async function runGrillAndPrdWorkflow(
   const prdPrompt = readPromptWithContext('write-prd', projectId);
   const prdJsonSchema = toJsonSchema(PRDOutputSchema);
 
-  eventStore.appendEvent({
-    kind: 'agent.run-started',
-    projectId,
-    workItemId: workItem.id,
-    runId,
-    payload: { skill: 'write-prd', personaId: prdPersona.personaId },
-  });
-
   let prdOutput: import('../../skills/write-prd/schema.js').PRDOutput;
   try {
     const prdResult = await runtime.run({
@@ -315,6 +348,8 @@ export async function runGrillAndPrdWorkflow(
       role: 'prd-writer',
       skill: 'write-prd',
       context: {
+        projectId,
+        workItemId: workItem.id,
         workItem: {
           title: workItem.title,
           body: workItem.body,
@@ -412,20 +447,12 @@ export async function runGrillAndPrdWorkflow(
     const advisorPrompt = readPromptWithContext('advise-on-prd', projectId);
     const advisorJsonSchema = toJsonSchema(AdvisePRDOutputSchema);
 
-    eventStore.appendEvent({
-      kind: 'agent.run-started',
-      projectId,
-      workItemId: workItem.id,
-      runId,
-      payload: { skill: 'advise-on-prd', personaId: advisorPersona.personaId },
-    });
-
     try {
       const advisorResult = await runtime.run({
         runId,
         role: 'prd-writer',
         skill: 'advise-on-prd',
-        context: { prdOutput, priority: workItem.priority },
+        context: { projectId, workItemId: workItem.id, prdOutput, priority: workItem.priority },
         contextAllowlist: ['prdOutput', 'priority'],
         freshContext: true,
         toolBundles: ['read', 'core'],

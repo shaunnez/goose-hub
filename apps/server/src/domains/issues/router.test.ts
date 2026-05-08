@@ -154,7 +154,7 @@ describe('GET /projects/:slug/issues/:id/events', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { events: unknown[] };
     expect(body.events).toEqual(events);
-    expect(mockGetIssueEvents).toHaveBeenCalledWith('my-project', '42');
+    expect(mockGetIssueEvents).toHaveBeenCalledWith('my-project', '42', undefined);
   });
 
   it('returns 404 when project not found', async () => {

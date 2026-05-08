@@ -14,7 +14,7 @@ const TRANSITIONS: Readonly<Record<StateName, readonly StateName[]>> = {
   'factory:prd-drafting': ['factory:prd-review', 'factory:archived'],
   'factory:prd-review': ['factory:decomposing', 'factory:archived'],
   'factory:decomposing': ['factory:issues-created', 'factory:archived'],
-  'factory:issues-created': ['factory:dev-ready', 'factory:archived'],
+  'factory:issues-created': ['factory:dev-ready', 'factory:done', 'factory:archived'],
   'factory:research-pending': ['factory:research-complete', 'factory:archived'],
   'factory:research-complete': ['factory:dev-ready', 'factory:archived'],
   'factory:investigating': [

@@ -40,6 +40,7 @@ export default defineConfig({
               MOCK_OPEN_PR: 'true',
               MOCK_SOURCE: 'true',
               MOCK_BOOTSTRAP: 'true',
+              DB_PATH: resolve(import.meta.dirname, '../../.e2e-pipeline.db'),
             },
           },
           {
