@@ -13,6 +13,7 @@ import {
   AgentDecisionSummaryEvent,
   AgentDecisionSummaryLiveEvent,
 } from './timeline/DecisionSummaryEvents';
+import { DecomposeCompletedEvent } from './timeline/DecomposeEvents';
 import {
   EvidenceNoSpecEvent,
   EvidencePostFailedEvent,
@@ -144,6 +145,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <PrdApprovedEvent key={event.id} event={event} />;
     case 'prd.rejected':
       return <PrdRejectedEvent key={event.id} event={event} />;
+    case 'decompose.completed':
+      return <DecomposeCompletedEvent key={event.id} event={event} context={context} />;
     default:
       return <FallbackEvent key={event.id} event={event} />;
   }

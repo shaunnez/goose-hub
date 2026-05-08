@@ -62,6 +62,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'prd.advisor-skipped': 'Advisor skipped',
   'prd.approved': 'PRD approved',
   'prd.rejected': 'PRD rejected',
+  'decompose.completed': 'Decompose complete',
 };
 
 export function formatSkillName(skill: string | null): string {
@@ -200,6 +201,8 @@ function extractRunMeta(items: RenderItem[]): {
       if (endedAt == null) endedAt = ev.createdAt;
     } else if (ev.kind === 'grill.question-posted' || ev.kind === 'grill.completed') {
       // grill-me runs don't emit agent.run-completed — these are the terminal events
+      if (endedAt == null) endedAt = ev.createdAt;
+    } else if (ev.kind === 'decompose.completed') {
       if (endedAt == null) endedAt = ev.createdAt;
     }
   }
