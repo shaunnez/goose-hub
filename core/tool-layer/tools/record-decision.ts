@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { type DecisionKind, isDecisionKind } from '../../agent-runtime/decision-types.js';
 import { db } from '../../db/db.js';
 import { agentDecisions } from '../../db/schema.js';
@@ -73,7 +73,7 @@ export function readRunDecisions(
     })
     .from(agentDecisions)
     .where(eq(agentDecisions.runId, runId))
-    .orderBy(agentDecisions.ts)
+    .orderBy(agentDecisions.ts, sql`rowid`)
     .all();
 
   return rows.map((r) => ({

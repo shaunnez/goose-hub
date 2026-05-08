@@ -52,28 +52,23 @@ function fetchToolDecisions(runId?: string): Map<string, number> {
 }
 
 function fetchSchemaDecisions(runId?: string): Map<string, number> {
-  const filter = runId
-    ? eq(events.runId, runId)
+  // Each agent.decision-summary event carries one decision with a flat payload
+  // { skill, kind, summary, evidence? } — emitted one-per-decision by workflows.
+  const whereClause = runId
+    ? and(eq(events.kind, 'agent.decision-summary'), eq(events.runId, runId))
     : eq(events.kind, 'agent.decision-summary');
 
   const rows = db
     .select({ runId: events.runId, payload: events.payload })
     .from(events)
-    .where(runId ? eq(events.runId, runId) : eq(events.kind, 'agent.decision-summary'))
+    .where(whereClause)
     .all();
-
-  void filter;
 
   const map = new Map<string, number>();
   for (const row of rows) {
     if (row.runId == null) continue;
-    try {
-      const payload = JSON.parse(row.payload) as { decisionSummaries?: unknown[] };
-      const count = Array.isArray(payload.decisionSummaries) ? payload.decisionSummaries.length : 0;
-      map.set(row.runId, (map.get(row.runId) ?? 0) + count);
-    } catch {
-      // malformed payload — skip
-    }
+    // One event = one decision; increment the count for this runId.
+    map.set(row.runId, (map.get(row.runId) ?? 0) + 1);
   }
   return map;
 }
@@ -87,23 +82,20 @@ function fetchKindsByRun(runId: string): { toolKinds: Set<string>; schemaKinds: 
 
   const toolKinds = new Set(toolRows.map((r) => r.kind));
 
+  // Each agent.decision-summary event has a flat payload { skill, kind, summary, evidence? }.
   const eventRows = db
     .select({ payload: events.payload })
     .from(events)
-    .where(eq(events.runId, runId))
+    .where(and(eq(events.kind, 'agent.decision-summary'), eq(events.runId, runId)))
     .all();
 
   const schemaKinds = new Set<string>();
   for (const row of eventRows) {
     try {
-      const payload = JSON.parse(row.payload) as { decisionSummaries?: Array<{ kind: string }> };
-      if (Array.isArray(payload.decisionSummaries)) {
-        for (const ds of payload.decisionSummaries) {
-          if (typeof ds.kind === 'string') schemaKinds.add(ds.kind);
-        }
-      }
+      const payload = JSON.parse(row.payload) as { kind?: string };
+      if (typeof payload.kind === 'string') schemaKinds.add(payload.kind);
     } catch {
-      // skip
+      // skip malformed payloads
     }
   }
 
