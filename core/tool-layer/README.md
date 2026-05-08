@@ -33,9 +33,11 @@ Named bundles passed via `AgentSpec.toolBundles`. At spawn, `computeAllowlist(sp
 | `read-write` | `Read`, `Write`, `Edit`, `Glob`, `Grep` | Developer agents |
 | `bash-restricted` | `Bash` | Shell agents |
 | `read` | `read`, `search`, `work-item-read` | Investigator agents (sandboxed) |
-| `dev-tools` | `read`, `search`, `work-item-read`, `write`, `bash`, `test` | Developer agents (sandboxed superset of `read`) |
+| `dev-tools` | `Read`, `Write`, `Edit`, `Glob`, `Grep`, `Bash` | Developer skills (`implement`, `implement-wp`, `resolve-conflict`) and dev workflows (`fix-issue`, `parallel-implement`, `fix-feedback`) |
 | `validate` | `Read`, `Write`, `Edit`, `Glob`, `Grep`, scoped `Bash(pnpm test:e2e*)`, evidence I/O, git push | Playwright skills (`evidence-post`, `playwright-repro`) |
 | `playwright-mcp` | `mcp__playwright-test__*` (browser/planner/generator) | `spec-author` skill (auto-merges `apps/web/.mcp.json`) |
+
+**Note on `dev-tools`:** the bundle currently uses Claude Code's built-in tools. The lowercase sandboxed variants in `tools/` (`runBash`, `writeFile`, `runTests`, `readFile`, `searchFiles`) are pre-built but not yet exposed via an MCP server, so agents reach the host shell through Claude Code's `Bash` rather than `runBash`. Workspace-level deny rules in `sandbox.ts` plus the PreToolUse hook are the active safety boundary. Wiring the MCP server (and thereby enforcing fields like `perBashCommandMaxSeconds`) is tracked in #635 — see ADR 0035 for the timeout-scope decision that depends on it.
 
 ## Workspace Sandbox
 
