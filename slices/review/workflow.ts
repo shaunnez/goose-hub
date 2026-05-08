@@ -198,6 +198,10 @@ export interface ReviewWaveResult {
   reviewerOutputs: Array<{ parsed: ReviewOutput; runId: string }>;
   parseFailure: boolean;
   parseFailureError?: string;
+  /** True if any reviewer returned verdict: 'needs-human' — must escalate immediately. */
+  anyNeedsHuman: boolean;
+  /** True if any reviewer returned verdict: 'needs-fix' — prevents convergence counting. */
+  anyNeedsFix: boolean;
 }
 
 export interface DispatchReviewWaveOpts {
@@ -339,6 +343,8 @@ export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<
       reviewerOutputs: [],
       parseFailure: true,
       parseFailureError: [errA, errB].filter(Boolean).join('; '),
+      anyNeedsHuman: false,
+      anyNeedsFix: false,
     };
   }
 
@@ -358,6 +364,8 @@ export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<
       { parsed: parsedB.data, runId: runIdB },
     ],
     parseFailure: false,
+    anyNeedsHuman: parsedA.data.verdict === 'needs-human' || parsedB.data.verdict === 'needs-human',
+    anyNeedsFix: parsedA.data.verdict === 'needs-fix' || parsedB.data.verdict === 'needs-fix',
   };
 }
 
@@ -432,11 +440,61 @@ export async function runConvergentReviewWorkflow(
           round,
           roundFindingsCount: waveResult.roundFindings.length,
           newCriticalCount: waveResult.newCriticalFindings.length,
+          anyNeedsHuman: waveResult.anyNeedsHuman,
+          anyNeedsFix: waveResult.anyNeedsFix,
         },
         runId: crypto.randomUUID(),
       });
 
-      if (waveResult.newCriticalFindings.length === 0) {
+      // P1 fix: a reviewer returning needs-human must escalate immediately (rule 23, holdout).
+      if (waveResult.anyNeedsHuman) {
+        const humanReviewer = waveResult.reviewerOutputs.find(
+          (r) => r.parsed.verdict === 'needs-human',
+        );
+        const escalationReason =
+          humanReviewer?.parsed.verdict === 'needs-human'
+            ? humanReviewer.parsed.escalationReason
+            : 'Reviewer requested human review';
+        const runId = crypto.randomUUID();
+        eventStore.appendEvent({
+          projectId: projectSlug,
+          workItemId: workItem.id,
+          kind: 'review.escalated',
+          payload: { reason: 'reviewer-needs-human', round, escalationReason },
+          runId,
+        });
+        eventStore.appendEvent({
+          projectId: projectSlug,
+          workItemId: workItem.id,
+          kind: 'review.completed',
+          payload: {
+            verdict: 'needs-human',
+            confidence: humanReviewer?.parsed.confidence ?? 0,
+            criteriaChecks: humanReviewer?.parsed.criteriaChecks ?? [],
+            findings: humanReviewer?.parsed.findings ?? [],
+            escalationReason,
+          },
+          runId,
+        });
+        await stateSource.comment(
+          workItem.externalId,
+          buildAgentComment(
+            'Review',
+            'Needs Human',
+            `Round ${round} reviewer requested human review: ${escalationReason}`,
+            [],
+          ),
+        );
+        await stateSource.transitionState(
+          workItem.externalId,
+          'factory:needs-review',
+          'factory:needs-human',
+        );
+        return;
+      }
+
+      // P1 fix: needs-fix verdict (even without blockers) prevents convergence counting.
+      if (waveResult.newCriticalFindings.length === 0 && !waveResult.anyNeedsFix) {
         consecutiveZeroCriticalRounds++;
       } else {
         consecutiveZeroCriticalRounds = 0;
@@ -448,12 +506,31 @@ export async function runConvergentReviewWorkflow(
       const isConverged = consecutiveZeroCriticalRounds >= 2 && round >= minRounds;
 
       if (isConverged) {
+        const lastOutputs = waveResult.reviewerOutputs;
+        const avgConfidence =
+          lastOutputs.length > 0
+            ? lastOutputs.reduce((s, r) => s + r.parsed.confidence, 0) / lastOutputs.length
+            : 1;
+        const runId = crypto.randomUUID();
         eventStore.appendEvent({
           projectId: projectSlug,
           workItemId: workItem.id,
           kind: 'review.converged',
           payload: { totalRounds: round },
-          runId: crypto.randomUUID(),
+          runId,
+        });
+        // P2 fix: emit canonical review.completed so UI and fix-feedback loop can consume it.
+        eventStore.appendEvent({
+          projectId: projectSlug,
+          workItemId: workItem.id,
+          kind: 'review.completed',
+          payload: {
+            verdict: 'approved',
+            confidence: avgConfidence,
+            criteriaChecks: [],
+            findings: lastOutputs.flatMap((r) => r.parsed.findings),
+          },
+          runId,
         });
         await stateSource.comment(
           workItem.externalId,
@@ -472,8 +549,9 @@ export async function runConvergentReviewWorkflow(
         return;
       }
 
-      // At round cap with unresolved CRITICAL — escalate. Do NOT continue past cap.
+      // At round cap with unresolved CRITICAL or unconverged — escalate. Do NOT continue past cap.
       if (round === maxReviewRounds && waveResult.newCriticalFindings.length > 0) {
+        const runId = crypto.randomUUID();
         eventStore.appendEvent({
           projectId: projectSlug,
           workItemId: workItem.id,
@@ -483,7 +561,22 @@ export async function runConvergentReviewWorkflow(
             round,
             unconvergedFindingsCount: waveResult.newCriticalFindings.length,
           },
-          runId: crypto.randomUUID(),
+          runId,
+        });
+        const allFindings = waveResult.reviewerOutputs.flatMap((r) => r.parsed.findings);
+        // P2 fix: emit review.completed so downstream consumers see the outcome.
+        eventStore.appendEvent({
+          projectId: projectSlug,
+          workItemId: workItem.id,
+          kind: 'review.completed',
+          payload: {
+            verdict: 'needs-human',
+            confidence: 0,
+            criteriaChecks: [],
+            findings: allFindings,
+            escalationReason: `Failed to converge after ${round} rounds: ${waveResult.newCriticalFindings.length} unresolved CRITICAL finding(s)`,
+          },
+          runId,
         });
         const details = waveResult.newCriticalFindings
           .slice(0, 5)

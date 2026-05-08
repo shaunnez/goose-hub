@@ -798,6 +798,70 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
     expect(mockRun).toHaveBeenCalledTimes(6);
   });
 
+  // Test for P1 fix: needs-human verdict from individual reviewer escalates immediately
+  it('escalates immediately when any reviewer returns needs-human verdict', async () => {
+    const item = makeWorkItem();
+    const source = makeMockSource({
+      getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+added'),
+    });
+
+    // Round 1: reviewer A returns needs-human (no blocker findings needed for this verdict)
+    const needsHumanResult: AgentResult = {
+      output: {
+        verdict: 'needs-human',
+        confidence: 0.2,
+        criteriaChecks: [],
+        findings: [],
+        decisionSummaries: [],
+        escalationReason: 'Spec is fundamentally ambiguous',
+      },
+      decisionSummaries: [],
+      events: [],
+    };
+    mockRun.mockResolvedValueOnce(needsHumanResult); // R1-A needs-human
+    mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings()); // R1-B approved
+
+    const { runConvergentReviewWorkflow } = await import('./workflow.js');
+    const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+    await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+    // Must escalate to needs-human immediately, not continue to round 2
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:needs-review',
+      'factory:needs-human',
+    );
+    expect(mockRun).toHaveBeenCalledTimes(2); // only round 1 ran
+
+    // Must emit review.completed so UI/downstream consumers see the outcome
+    const completedEvents = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(([e]) => e.kind === 'review.completed');
+    expect(completedEvents).toHaveLength(1);
+    expect(completedEvents[0]?.[0].payload).toMatchObject({ verdict: 'needs-human' });
+  });
+
+  // Test for P2 fix: review.completed emitted on convergence path
+  it('emits review.completed with verdict approved when converging', async () => {
+    const item = makeWorkItem();
+    const source = makeMockSource({
+      getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+added'),
+    });
+
+    // 3 rounds × 2 reviewers all returning approved with no findings → converge at round 3
+    for (let i = 0; i < 6; i++) mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings());
+
+    const { runConvergentReviewWorkflow } = await import('./workflow.js');
+    const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+    await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+    const completedEvents = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(([e]) => e.kind === 'review.completed');
+    expect(completedEvents).toHaveLength(1);
+    expect(completedEvents[0]?.[0].payload).toMatchObject({ verdict: 'approved' });
+  });
+
   // Test 4: holdout discipline — sibling decision summary leak is detected via tool.violation
   it('test 4: emits tool.violation when sibling decision summaries are injected into a reviewer context', async () => {
     const { assembleSpawnContext } = await import(
