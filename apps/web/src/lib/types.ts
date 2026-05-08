@@ -45,6 +45,15 @@ export interface MilestoneDto {
   description?: string;
   dueOn?: string;
   isActive: boolean;
+  state: 'open' | 'closed';
+  openIssues: number;
+  closedIssues: number;
+}
+
+export interface SprintReviewEligibility {
+  eligible: boolean;
+  reason: string;
+  alreadyExists: boolean;
 }
 
 export interface AgentEventDto {

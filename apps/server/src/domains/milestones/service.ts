@@ -3,7 +3,8 @@ import { runSprintReviewWorkflow } from '@goose-hub/core/workflows/sprint-review
 import type { Result } from '#shared/middleware.js';
 import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
 import { getSourceForSlug } from '#shared/source.js';
-import { writeActiveMilestone } from './repository.js';
+import { checkSprintReviewEligibility } from '../workflows/sprint-review-eligibility.js';
+import { readActiveMilestone, writeActiveMilestone } from './repository.js';
 
 export async function getActiveMilestone(
   slug: string,
@@ -67,6 +68,78 @@ export async function listClosedMilestoneIssues(
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
   const items = await source.listClosedWorkByMilestone(milestone);
   return { ok: true, data: { items } };
+}
+
+const MILESTONE_TITLE_VALID_RE = /^M\d+:\s+\S/;
+
+export async function createMilestone(
+  slug: string,
+  title: string,
+): Promise<Result<{ milestone: unknown }>> {
+  const source = await getSourceForSlug(slug);
+  if (source == null) return { ok: false, error: 'project not found', status: 404 };
+  if (!MILESTONE_TITLE_VALID_RE.test(title)) {
+    return { ok: false, error: 'title must match M<N>: <name> format', status: 422 };
+  }
+  const milestone = await source.createMilestone(title);
+  return { ok: true, data: { milestone } };
+}
+
+export async function updateMilestone(
+  slug: string,
+  number: number,
+  patch: { title?: string; state?: 'open' | 'closed' },
+): Promise<Result<{ milestone: unknown }>> {
+  const source = await getSourceForSlug(slug);
+  if (source == null) return { ok: false, error: 'project not found', status: 404 };
+  if (patch.title != null && !MILESTONE_TITLE_VALID_RE.test(patch.title)) {
+    return { ok: false, error: 'title must match M<N>: <name> format', status: 422 };
+  }
+  // Note: renaming invalidates configMilestoneCache in resolve-milestone.ts (process-lifetime cache).
+  // If project.config.ts still references the old title, resolution falls back to GitHub default
+  // until server restart. This is pre-existing file-managed config behavior.
+  const milestone = await source.updateMilestone(number, patch);
+  return { ok: true, data: { milestone } };
+}
+
+export async function deleteMilestone(slug: string, number: number): Promise<Result<{ ok: true }>> {
+  const source = await getSourceForSlug(slug);
+  if (source == null) return { ok: false, error: 'project not found', status: 404 };
+
+  const milestones = await source.listMilestones();
+  const target = milestones.find((m) => m.number === number);
+  if (target == null) return { ok: false, error: 'milestone not found', status: 404 };
+
+  if (target.openIssues + target.closedIssues > 0) {
+    return { ok: false, error: 'milestone has issues', status: 409 };
+  }
+
+  const activeMilestone = await readActiveMilestone(slug);
+  if (activeMilestone === number) {
+    return {
+      ok: false,
+      error: 'milestone is currently active; switch away before deleting',
+      status: 409,
+    };
+  }
+
+  await source.deleteMilestone(number);
+  return { ok: true, data: { ok: true } };
+}
+
+export async function getSprintReviewEligibility(
+  slug: string,
+  milestoneNumber: number,
+): Promise<Result<{ eligible: boolean; reason: string; alreadyExists: boolean }>> {
+  const source = await getSourceForSlug(slug);
+  if (source == null) return { ok: false, error: 'project not found', status: 404 };
+
+  const milestones = await source.listMilestones();
+  const milestone = milestones.find((m) => m.number === milestoneNumber);
+  if (milestone == null) return { ok: false, error: 'milestone not found', status: 404 };
+
+  const eligibility = await checkSprintReviewEligibility(source, milestoneNumber, milestone.title);
+  return { ok: true, data: eligibility };
 }
 
 export async function triggerSprintReview(

@@ -29,7 +29,8 @@
       ".worktrees/",
       "claude-design/",
       "coverage/",
-      "docs/design/"
+      "docs/design/",
+      "target-projects/"
     ]
   }
 }

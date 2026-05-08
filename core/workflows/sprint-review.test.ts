@@ -98,9 +98,9 @@ function makeMockSource(items: WorkItem[] = []): StateSource {
     createIssue: vi
       .fn()
       .mockResolvedValue(makeWorkItem({ externalId: '99', state: 'factory:done' })),
-    createMilestone: vi.fn(),
-    updateMilestone: vi.fn(),
-    deleteMilestone: vi.fn(),
+    createMilestone: vi.fn().mockResolvedValue(undefined),
+    updateMilestone: vi.fn().mockResolvedValue(undefined),
+    deleteMilestone: vi.fn().mockResolvedValue(undefined),
     getPrDiff: vi.fn().mockResolvedValue(''),
     watchForUpdates: vi.fn(),
   };

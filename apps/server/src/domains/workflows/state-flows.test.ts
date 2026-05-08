@@ -54,6 +54,9 @@ vi.mock('@goose-hub/core/workspaces/worktree.js', () => ({
   prewarmWorktree: vi.fn(),
   resolveWorktreeHeadSha: vi.fn().mockReturnValue('mock-sha-abc123'),
 }));
+vi.mock('@goose-hub/core/workspaces/orchestrator-git.js', () => ({
+  orchestratorCommitAll: vi.fn().mockReturnValue('fake-sha'),
+}));
 
 const { mockGetSourceForSlug } = vi.hoisted(() => ({
   mockGetSourceForSlug: vi.fn(),

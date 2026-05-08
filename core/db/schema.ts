@@ -188,6 +188,30 @@ export const playbooks = sqliteTable(
   }),
 );
 
+// Per-WP iteration outcome (M19.03, ADR 0031). One row per (run, WP, iteration) triple.
+// Carry-forward rule: a WP whose last status for this run_id is 'failed' stays in the
+// retry set for iteration N+1. Only moves to 'ok' after a successful builder run + commit.
+export const wpIterations = sqliteTable(
+  'wp_iterations',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    runId: text('run_id').notNull(),
+    wpId: text('wp_id').notNull(),
+    iteration: integer('iteration').notNull(),
+    status: text('status').notNull(), // 'in-progress' | 'ok' | 'failed'
+    errorReason: text('error_reason'),
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  },
+  (t) => ({
+    runWpIterationUniq: uniqueIndex('wp_iterations_run_wp_iteration_uniq').on(
+      t.runId,
+      t.wpId,
+      t.iteration,
+    ),
+    runWpIdx: index('wp_iterations_run_wp_idx').on(t.runId, t.wpId),
+  }),
+);
+
 // One row per agent run. `runId` is unique — the same run is never recorded twice.
 // `costLabel`: 'exact' when the source provided authoritative usage metadata
 // (direct API), 'estimated' when only the Claude CLI's reported totals are

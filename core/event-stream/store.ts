@@ -89,7 +89,15 @@ export type EventKind =
   | 'swarm.wave-completed'
   | 'swarm.wave-incomplete'
   | 'swarm.wave-halted'
-  | 'agent.cancelled';
+  | 'agent.cancelled'
+  // M19.03 parallel-implement — per-WP builder lifecycle (ADR 0031)
+  | 'parallel-implement.iteration-started'
+  | 'parallel-implement.wp-started'
+  | 'parallel-implement.wp-committed'
+  | 'parallel-implement.wp-failed'
+  | 'parallel-implement.wp-timeout'
+  | 'parallel-implement.wp-commit-failed'
+  | 'parallel-implement.exhausted';
 
 export interface AgentEvent {
   id: number;

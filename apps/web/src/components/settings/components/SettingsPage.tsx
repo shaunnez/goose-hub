@@ -82,7 +82,8 @@ export function SettingsPage() {
       <div className="flex-1 overflow-y-auto px-8 py-6">
         <h1 className="text-[15px] font-semibold mb-1">Settings</h1>
         <p className="text-[12px] text-fg-2 mb-6">
-          Read-only. All values sourced from project config files.
+          Config fields are read-only (sourced from project config files). Milestones are editable
+          below.
         </p>
 
         {selectedConfig != null && <ProjectConfigPanel config={selectedConfig} />}
