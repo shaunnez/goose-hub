@@ -6,6 +6,13 @@
 # FACTORY_WP_FILESOWNED is a colon-separated list of workspace-relative paths.
 # FACTORY_WP_ID identifies the WP for the violation message.
 #
+# WHY Bash is not blocked here:
+#   Each WP builder runs in its own isolated scratch worktree. Even if a builder
+#   uses Bash to write files outside filesOwned, the orchestrator's commit step
+#   (orchestratorCommitWp) only stages the WP's declared filesOwned paths —
+#   so out-of-scope Bash writes are never committed and never contaminate other WPs.
+#   Blocking Bash entirely would also prevent legitimate read-only shell operations.
+#
 # Exit codes (Claude CC hook protocol):
 #   0 — allow
 #   2 — deny (stderr message shown to agent)

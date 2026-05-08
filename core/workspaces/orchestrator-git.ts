@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 const WORKSPACES_DIR = join(homedir(), '.factory', 'workspaces');
 
@@ -128,7 +128,13 @@ export function revertWpChanges(worktreePath: string, filesOwned: string[]): voi
     try {
       execFileSync('git', ['checkout', '--', file], { cwd: worktreePath, stdio: 'pipe' });
     } catch {
-      // File may not exist yet (builder never wrote it) — not an error.
+      // `git checkout --` fails for untracked files (never staged). Remove them
+      // so they don't leak into subsequent retry iterations in the same worktree.
+      try {
+        rmSync(resolve(worktreePath, file), { force: true });
+      } catch {
+        // File doesn't exist at all — not an error.
+      }
     }
   }
 }
