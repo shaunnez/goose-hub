@@ -44,6 +44,7 @@ const GLOBAL_FIELDS: Array<{
     key: 'perBashCommandMaxSeconds',
     label: 'Per-bash-command max seconds',
     configKey: 'perBashCommandMaxSeconds',
+    notYetEnforced: true,
   },
 ];
 
