@@ -165,15 +165,19 @@ type AdvisorVerdict =
 
 **Location:** `core/agent-runtime/models.ts` — typed `ModelEntry[]`, hardcoded TS, git-tracked. Not external config.
 
-**Current IDs (as of 2026-04-30):**
-- `opus` → `claude-opus-4-7`
-- `sonnet` → `claude-sonnet-4-6`
-- `haiku` → `claude-haiku-4-5-20251001`
+**Current IDs (as of 2026-05-08):**
+- `opus` → `claude-opus-4-7` (provider: claude)
+- `sonnet` → `claude-sonnet-4-6` (provider: claude)
+- `haiku` → `claude-haiku-4-5-20251001` (provider: claude)
+- `sonnet` → `gpt-5-codex` (provider: codex; added M19.10)
+- `haiku` → `gpt-5-codex-mini` (provider: codex; added M19.10)
 
 **Exported helpers:**
-- `defaultModelForTier(tier)` — head non-deprecated entry for the tier
+- `defaultModelForTier(tier)` — head non-deprecated **claude** entry for the tier (back-compat default)
+- `defaultModelForTierAndProvider(tier, provider)` — head entry filtered by provider (added M19.10)
 - `tierOf(modelId)` — inverse lookup (required for fallback policy enforcement)
-- `modelsAtOrAboveTier(tier)` — for fallback safety (FACTORY_RULES rule 27)
+- `providerOf(modelId)` — inverse provider lookup (added M19.10; used by the runtime dispatcher)
+- `modelsAtOrAboveTier(tier, provider = 'claude')` — for fallback safety (FACTORY_RULES rule 27); fallback stays within-provider
 
 **Override hierarchy (lowest → highest precedence):**
 tier default → project pin (`ProjectConfig.modelPins?`) → skill pin (`SkillConfig.modelPin?` with required `reason`) → per-spawn override (`AgentSpec.modelOverride?`)
@@ -183,6 +187,23 @@ tier default → project pin (`ProjectConfig.modelPins?`) → skill pin (`SkillC
 **Upgrade path:** manual PR (pre-M9) → retro hook flags degradation (M9+) → autonomous model-bump issues (M16+, YAGNI until felt 3x manually).
 
 **Future flag:** `ModelTier` assumes Anthropic family naming. OpenRouter (post-v0) breaks this; tier becomes per-provider. Document in OpenRouter ADR when that work lands.
+
+## Agent Runtimes — Claude CLI and Codex CLI siblings (M19.10)
+
+Two concrete runtimes share `interface AgentRuntime { run(spec): Promise<AgentResult> }`:
+
+- `core/agent-runtime/claude-cli.ts` → spawns `claude --print --output-format json …`
+- `core/agent-runtime/codex-cli.ts` → spawns `codex exec --json --cd <workspace> --model …`
+
+Both honour the same security envelope (FACTORY_RULES rule 29 `shell: false`, rule 32 30 s default timeout, FACTORY_RULES rule 31 4 MB stdout cap), the same hook contract (`FACTORY_RUN_ALLOWLIST`, `FACTORY_RUN_ID`, `FACTORY_SERVER_PORT` env vars consumed by `pre-tool-use-hook.ts`), and emit the same lifecycle events (`agent.run-started`, `agent.run-completed`, `agent.run-failed`, `tool.timeout`, `tool.stdout-truncated`, `agent.log`). The Codex runtime tags both started/completed events with `payload.runtime: 'codex-cli'` so timeline consumers can distinguish providers.
+
+**Codex pre-flight:** `assertCodexAuthenticated()` checks `~/.codex/auth.json` exists before mkdir or event emission. Throws `CodexNotAuthenticatedError` on absence. Binary resolution (`resolveCodexBinary()`) honours `CODEX_BIN` override, otherwise uses `which codex` (or `where` on Windows). Throws `CodexBinaryNotFoundError`.
+
+**Output normalisation:** `parseCodexEnvelope()` accepts either a single JSON envelope or NDJSON, picking the last terminal event with summary fields. Field aliases probed in order: `result | output | text` for the result body; `usage.input_tokens | tokens.input` for input tokens; `usage.output_tokens | tokens.output` for output tokens; `total_cost_usd | cost_usd | cost` for dollars; `num_turns | turns` for turn count. Unknown shapes degrade to zeroed cost with `costLabel: 'estimated'` — same fallback as Claude. `parseCodexEnvelope()` is exported for unit tests.
+
+**Dispatcher:** `core/agent-runtime/select-runtime.ts` exports `selectRuntime({ configRuntime, model?, skillProvider? })`. `'auto'` picks on `model.provider` (via `providerOf()`), falling back to `skillProvider`, then to claude. Existing call sites that hard-code `new ClaudeCliRuntime()` are unchanged — the dispatcher is opt-in for new code paths (M19.11/12 dev-review, future migrations). See ADR 0036.
+
+**Auth status UI:** `GET /projects/:slug/settings/codex-auth` returns `{ status: 'connected' | 'missing', authPath, loginCommand }`. Surfaced in the Settings → Models tab via `ProjectModelPanel`'s `CodexAuthSection`. Read-only; no interactive OAuth from the web (same constraint as Claude).
 
 ## Scheduler — Work Item Eligibility Pipeline
 

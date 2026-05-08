@@ -116,12 +116,22 @@ describe('interface types', () => {
 // ─── models registry ──────────────────────────────────────────────────────────
 
 describe('models registry', () => {
-  it('contains exactly the three current Claude model IDs', () => {
+  it('contains the three current Claude model IDs', () => {
     const ids = MODELS.map((m) => m.id);
     expect(ids).toContain('claude-opus-4-7');
     expect(ids).toContain('claude-sonnet-4-6');
     expect(ids).toContain('claude-haiku-4-5-20251001');
-    expect(ids).toHaveLength(3);
+    const claudeCount = MODELS.filter((m) => (m.provider ?? 'claude') === 'claude').length;
+    expect(claudeCount).toBe(3);
+  });
+
+  it('contains the Codex model IDs registered for M19.10', () => {
+    const codex = MODELS.filter((m) => m.provider === 'codex');
+    const ids = codex.map((m) => m.id);
+    expect(ids).toContain('gpt-5-codex');
+    expect(ids).toContain('gpt-5-codex-mini');
+    expect(codex.find((m) => m.id === 'gpt-5-codex')?.tier).toBe('sonnet');
+    expect(codex.find((m) => m.id === 'gpt-5-codex-mini')?.tier).toBe('haiku');
   });
 
   it('each model has a valid tier', () => {
@@ -170,22 +180,31 @@ describe('models registry', () => {
   });
 
   describe('modelsAtOrAboveTier', () => {
-    it('returns all three models when tier is haiku', () => {
+    it('defaults to claude provider and returns all three Claude models when tier is haiku', () => {
       const result = modelsAtOrAboveTier('haiku');
       expect(result).toHaveLength(3);
+      expect(result.every((m) => (m.provider ?? 'claude') === 'claude')).toBe(true);
       const tiers = result.map((m) => m.tier);
       expect(tiers).toContain('haiku');
       expect(tiers).toContain('sonnet');
       expect(tiers).toContain('opus');
     });
 
-    it('returns sonnet and opus when tier is sonnet', () => {
+    it('returns Claude sonnet and opus when tier is sonnet', () => {
       const result = modelsAtOrAboveTier('sonnet');
       expect(result).toHaveLength(2);
       const tiers = result.map((m) => m.tier);
       expect(tiers).toContain('sonnet');
       expect(tiers).toContain('opus');
       expect(tiers).not.toContain('haiku');
+    });
+
+    it('returns Codex models when provider=codex is requested', () => {
+      const result = modelsAtOrAboveTier('haiku', 'codex');
+      expect(result.every((m) => m.provider === 'codex')).toBe(true);
+      const ids = result.map((m) => m.id);
+      expect(ids).toContain('gpt-5-codex');
+      expect(ids).toContain('gpt-5-codex-mini');
     });
 
     it('returns only opus when tier is opus', () => {

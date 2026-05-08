@@ -604,3 +604,16 @@ export async function patchComplexityOverrides(
 export async function deleteRoleModelSetting(slug: string, role: string): Promise<void> {
   await deleteRequest(`/projects/${slug}/settings/models/${encodeURIComponent(role)}`);
 }
+
+export interface CodexAuthStatusDto {
+  status: 'connected' | 'missing';
+  authPath: string;
+  loginCommand: string;
+}
+
+export async function fetchCodexAuthStatus(
+  slug: string,
+  signal?: AbortSignal,
+): Promise<CodexAuthStatusDto> {
+  return getJson<CodexAuthStatusDto>(`/projects/${slug}/settings/codex-auth`, signal);
+}
