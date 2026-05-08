@@ -53,7 +53,7 @@ export interface GrillAndPrdResult {
 }
 
 const FALLBACK_GRILL_BUDGET = {
-  budgets: { maxTurns: 15, maxBudgetUsd: 0.2, timeoutMs: 120_000 },
+  budgets: { maxTurns: 15, maxBudgetUsd: 0.2, timeoutMs: 300_000 },
   modelOverride: 'sonnet',
 };
 const FALLBACK_PRD_BUDGET = {

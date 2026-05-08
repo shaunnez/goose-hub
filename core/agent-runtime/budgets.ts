@@ -98,7 +98,7 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
   'grill-me': {
     maxTurns: 15,
     maxBudgetUsd: 0.2,
-    timeoutMs: 120_000,
+    timeoutMs: 300_000,
     modelTier: 'sonnet',
   },
   // M13 — fresh-context PRD writer. Three-layer artefact (Journey →

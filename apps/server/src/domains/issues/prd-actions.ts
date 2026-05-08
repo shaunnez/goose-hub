@@ -88,7 +88,10 @@ export async function rejectPRD(slug: string, id: string): Promise<Result<{ ok: 
     };
   }
 
-  await source.comment(id, '<!-- factory:system -->\nUser rejected the PRD; returning to grill.');
+  await source.comment(
+    id,
+    'PRD rejected. Please ask me further questions to refine the requirements and produce a better PRD.',
+  );
   await moveOrForce(source, id, 'factory:prd-review', 'factory:grilling');
 
   eventStore.appendEvent({
