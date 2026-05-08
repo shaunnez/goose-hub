@@ -189,6 +189,17 @@ function buildValidPRD() {
       },
     ],
     estimatedComplexity: 'medium' as const,
+    implementationDecisions: [
+      {
+        decision: 'Rebuild query tokeniser using existing Drizzle schema',
+        rationale: 'Follows pattern established in CONTEXT.md',
+        moduleRef: 'core/state-source/',
+      },
+    ],
+    testingDecisions: {
+      approach: 'Test that keyword queries return ranked results; permission filter excludes forbidden items',
+      modulesToTest: ['slices/discover-lane-e2e/slice.test.ts'],
+    },
     decisionSummaries: [
       { kind: 'PLAN', summary: 'PRD covers two vertical slices: tokeniser + permission filter.' },
     ],

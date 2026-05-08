@@ -110,6 +110,11 @@ function buildMockPrdCommentBody(): string {
       },
     ],
     estimatedComplexity: 'medium',
+    implementationDecisions: [{ decision: 'Use Drizzle for new query table' }],
+    testingDecisions: {
+      approach: 'Verify search returns ranked results for keyword queries',
+      modulesToTest: ['slices/search/slice.test.ts'],
+    },
     decisionSummaries: [{ kind: 'PLAN', summary: 'Mock PRD for E2E.' }],
   };
   return `<!-- factory:prd -->\n# PRD\n\n\`\`\`json\n${JSON.stringify(prd, null, 2)}\n\`\`\``;

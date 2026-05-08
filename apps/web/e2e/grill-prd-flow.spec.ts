@@ -56,6 +56,18 @@ const PRD_FIXTURE = {
     },
   ],
   estimatedComplexity: 'medium',
+  implementationDecisions: [
+    {
+      decision: 'Validate on blur using existing form utilities',
+      rationale: 'Follows CONTEXT.md pattern',
+      moduleRef: 'apps/web/src/components/forms/',
+    },
+  ],
+  testingDecisions: {
+    approach: 'Verify inline error renders on blur with invalid value',
+    modulesToTest: ['slices/grill-prd-ui/slice.test.ts'],
+    priorArt: 'apps/web/e2e/grill-prd-flow.spec.ts',
+  },
 };
 
 function prdCommentBody(): string {

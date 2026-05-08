@@ -80,6 +80,17 @@ const validPRD = {
   functionalSpec: baseFunctionalSpec,
   verticalSlices: [baseSlice],
   estimatedComplexity: 'medium' as const,
+  implementationDecisions: [
+    {
+      decision: 'Stream CSV via existing admin route',
+      rationale: 'Follows admin gateway pattern in CONTEXT.md',
+      moduleRef: 'apps/server/src/domains/admin/',
+    },
+  ],
+  testingDecisions: {
+    approach: 'Verify admin endpoint returns correct CSV rows for date range',
+    modulesToTest: ['slices/admin-csv-export/slice.test.ts'],
+  },
   decisionSummaries: [baseDecisionSummary],
 };
 

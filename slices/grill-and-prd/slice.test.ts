@@ -182,6 +182,17 @@ function basePRD() {
       },
     ],
     estimatedComplexity: 'medium' as const,
+    implementationDecisions: [
+      {
+        decision: 'Validate on blur using existing form utilities',
+        rationale: 'Aligns with existing pattern in CONTEXT.md',
+        moduleRef: 'apps/web/src/components/forms/',
+      },
+    ],
+    testingDecisions: {
+      approach: 'Test that invalid fields render inline errors on blur; valid fields show green check',
+      modulesToTest: ['slices/grill-and-prd/slice.test.ts'],
+    },
     decisionSummaries: [
       {
         kind: 'PLAN',
