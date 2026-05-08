@@ -651,23 +651,21 @@ function extractPrdFromComments(
 
 /**
  * Build the `priorReplies` array for grill-and-prd from issue comments.
- * Agent questions carry the `<!-- factory:grill-question -->` prefix; every
- * other comment is treated as a user reply. PRD-marker, system-marker, and
- * child-issues comments are filtered out so they don't bleed into the grill
- * conversation.
+ * Agent messages: grill questions (<!-- factory:grill-question -->) and PRD
+ * drafts (<!-- factory:prd -->). PRD drafts are included so the griller sees
+ * what was produced when a user declines and re-enters grilling.
+ * System-marker and child-issues comments are excluded as noise.
  */
 function buildPriorReplies(
   comments: ReadonlyArray<{ body: string }>,
 ): Array<{ role: 'user' | 'agent'; content: string }> {
   return comments
-    .filter(
-      (c) =>
-        !c.body.startsWith(PRD_MARKER) &&
-        !c.body.startsWith(SYSTEM_MARKER) &&
-        !c.body.startsWith(CHILD_ISSUES_MARKER),
-    )
+    .filter((c) => !c.body.startsWith(SYSTEM_MARKER) && !c.body.startsWith(CHILD_ISSUES_MARKER))
     .map((c) => ({
-      role: c.body.startsWith(GRILL_QUESTION_MARKER) ? ('agent' as const) : ('user' as const),
+      role:
+        c.body.startsWith(GRILL_QUESTION_MARKER) || c.body.startsWith(PRD_MARKER)
+          ? ('agent' as const)
+          : ('user' as const),
       content: c.body,
     }));
 }
