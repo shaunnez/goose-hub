@@ -33,7 +33,8 @@ export type Role =
   | 'qa'
   | 'reviewer'
   | 'retrospector'
-  | 'researcher';
+  | 'researcher'
+  | 'auditor';
 
 export interface RoleModel {
   primary: ModelTier;
