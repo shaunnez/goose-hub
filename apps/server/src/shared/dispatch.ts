@@ -31,7 +31,8 @@ function enqueueWorkflow(
     queue = [];
     _workflowPending.set(slug, queue);
   }
-  if (queue.some((e) => e.issueNumber === issueNumber)) return;
+  // Dedup by (issueNumber, dispatchFn) so different workflows for the same issue can both queue.
+  if (queue.some((e) => e.issueNumber === issueNumber && e.dispatchFn === dispatchFn)) return;
   queue.push({ issueNumber, dispatchFn });
 }
 
@@ -41,7 +42,13 @@ function drainPending(slug: string): void {
   const entry = queue.shift();
   if (queue.length === 0) _workflowPending.delete(slug);
   if (entry != null) {
-    void entry.dispatchFn(slug, entry.issueNumber);
+    entry.dispatchFn(slug, entry.issueNumber).catch((err: unknown) => {
+      logger.error('drainPending: dispatch failed', {
+        slug,
+        issueNumber: entry.issueNumber,
+        error: String(err),
+      });
+    });
   }
 }
 

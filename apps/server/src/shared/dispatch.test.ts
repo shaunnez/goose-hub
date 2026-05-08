@@ -430,7 +430,7 @@ describe('pending queue: cap-full queuing and drain', () => {
     expect(mockGetSourceForSlug).toHaveBeenCalledTimes(1);
   });
 
-  it('same issue already pending is not queued a second time', async () => {
+  it('same issue + same workflow already pending is not queued a second time', async () => {
     let resolveSource!: () => void;
     mockGetProject.mockResolvedValue({ budgets: { maxParallelAgents: 1 } });
     mockGetSourceForSlug
@@ -460,6 +460,46 @@ describe('pending queue: cap-full queuing and drain', () => {
       expect(mockGetSourceForSlug).toHaveBeenCalledTimes(2);
     });
     expect(mockGetSourceForSlug).toHaveBeenCalledTimes(2);
+  });
+
+  it('different workflows for the same issue can each be queued independently', async () => {
+    let resolveSource!: () => void;
+    mockGetProject.mockResolvedValue({ budgets: { maxParallelAgents: 1 } });
+    mockGetSourceForSlug
+      .mockReturnValueOnce(
+        new Promise<null>((r) => {
+          resolveSource = () => r(null);
+        }),
+      )
+      .mockResolvedValue(null);
+
+    const { dispatchFixIssue, dispatchQa } = await import('./dispatch.js');
+    const p1 = dispatchFixIssue('slug', 5);
+
+    await vi.waitFor(() => {
+      expect(mockGetSourceForSlug).toHaveBeenCalledTimes(1);
+    });
+
+    // Two different workflows for the same issue — both should be enqueued.
+    await dispatchFixIssue('slug', 6);
+    await dispatchQa('slug', 6);
+
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      'dispatchFixIssue: cap full, queuing work item',
+      expect.objectContaining({ issueNumber: 6 }),
+    );
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      'dispatchQa: cap full, queuing work item',
+      expect.objectContaining({ issueNumber: 6 }),
+    );
+
+    resolveSource();
+    await p1;
+
+    // Both pending dispatches drain sequentially; getSourceForSlug called 3 times total.
+    await vi.waitFor(() => {
+      expect(mockGetSourceForSlug).toHaveBeenCalledTimes(3);
+    });
   });
 });
 
