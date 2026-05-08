@@ -1,5 +1,12 @@
 import type { AgentEventDto } from '@/lib/types';
-import { CheckCircle2, FileText, SkipForward, XCircle } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  FileText,
+  MessageSquareDiff,
+  SkipForward,
+  XCircle,
+} from 'lucide-react';
 
 type Ac = { id?: string; statement?: string };
 type Slice = { title?: string; estimatedSize?: string };
@@ -141,6 +148,63 @@ export function PrdRejectedEvent({ event }: { event: AgentEventDto }) {
         <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
       </div>
       {p?.reason != null && <p className="text-[11.5px] text-fg-2 leading-relaxed">{p.reason}</p>}
+    </li>
+  );
+}
+
+export function PrdRevisedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as { source?: string; concerns?: string[] } | null;
+  const concerns = p?.concerns ?? [];
+  return (
+    <li
+      data-event-kind={event.kind}
+      data-testid="prd-revised-event"
+      className="rounded-md border border-amber-500/20 bg-amber-500/5 px-4 py-3"
+    >
+      <div className="flex items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <MessageSquareDiff size={13} className="shrink-0 text-amber-400" />
+        <span className="font-mono uppercase tracking-wider">PRD revision requested</span>
+        {p?.source != null && (
+          <>
+            <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+            <span className="text-fg-3">via {p.source}</span>
+          </>
+        )}
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      {concerns.length > 0 && (
+        <ul className="mt-1 list-disc pl-4 text-[11.5px] text-fg-2 space-y-0.5">
+          {concerns.map((c, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: concern list has no stable id
+            <li key={i}>{c}</li>
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+export function PrdDeclinedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as { source?: string } | null;
+  return (
+    <li
+      data-event-kind={event.kind}
+      data-testid="prd-declined-event"
+      className="rounded-md border border-red-500/20 bg-red-500/5 px-4 py-3"
+    >
+      <div className="flex items-center gap-2 text-[11px] text-fg-3">
+        <AlertCircle size={13} className="shrink-0 text-[color:var(--danger)]" />
+        <span className="font-mono uppercase tracking-wider">Feature declined</span>
+        {p?.source != null && (
+          <>
+            <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+            <span className="text-fg-3">via {p.source}</span>
+          </>
+        )}
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
     </li>
   );
 }

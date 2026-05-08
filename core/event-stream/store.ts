@@ -84,6 +84,9 @@ export type EventKind =
   // M13.08 PRD review actions (UI-driven approve / reject)
   | 'prd.approved'
   | 'prd.rejected'
+  // M13.12 PRD revision flow (revise / decline)
+  | 'prd.revised'
+  | 'prd.declined'
   // M19.01 Wave-1/Wave-2 swarm — sub-agent dispatch from skills (ADR 0030)
   | 'swarm.heartbeat'
   | 'swarm.scout-completed'

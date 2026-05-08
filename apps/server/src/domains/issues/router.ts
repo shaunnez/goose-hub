@@ -6,6 +6,7 @@ import {
   approveIssue,
   approvePRD,
   commentOnIssue,
+  declinePRD,
   fakeRun,
   getIssue,
   getIssueComments,
@@ -14,8 +15,10 @@ import {
   getIssueWorktreeDiff,
   listIssues,
   overrideIssueRepo,
+  proceedToPrd,
   rejectIssue,
   rejectPRD,
+  revisePRD,
   setIssueLabel,
   setIssueMilestone,
   transitionIssue,
@@ -167,10 +170,10 @@ router.post('/:slug/issues/:id/reject', async (c) => {
     : c.json({ error: result.error }, result.status as 400 | 404);
 });
 
-// PRD review actions (M13.08). Approve advances prd-review → decomposing so
-// the orchestrator can pick the issue up and run decompose-prd on its next
-// tick. Reject returns the issue to grilling and posts a marker comment so
-// the user can continue the grill conversation.
+// PRD review actions (M13.08 + M13.12). Approve advances prd-review →
+// decomposing. Revise re-runs write-prd with human concerns. Decline closes
+// the work item. reject-prd is kept as a 410 tombstone pointing to the two
+// replacement endpoints.
 router.post('/:slug/issues/:id/approve-prd', async (c) => {
   const result = await approvePRD(c.req.param('slug'), c.req.param('id'));
   return result.ok
@@ -179,7 +182,28 @@ router.post('/:slug/issues/:id/approve-prd', async (c) => {
 });
 
 router.post('/:slug/issues/:id/reject-prd', async (c) => {
-  const result = await rejectPRD(c.req.param('slug'), c.req.param('id'));
+  return c.json({ error: 'reject-prd is gone. Use /revise-prd or /decline-prd instead.' }, 410);
+});
+
+router.post('/:slug/issues/:id/revise-prd', async (c) => {
+  const body = await parseBody<{ concerns?: string[] }>(c);
+  if (!body.ok) return body.error;
+  const concerns = Array.isArray(body.data.concerns) ? body.data.concerns : [];
+  const result = await revisePRD(c.req.param('slug'), c.req.param('id'), concerns);
+  return result.ok
+    ? c.json(result.data)
+    : c.json({ error: result.error }, result.status as 400 | 404 | 409);
+});
+
+router.post('/:slug/issues/:id/decline-prd', async (c) => {
+  const result = await declinePRD(c.req.param('slug'), c.req.param('id'));
+  return result.ok
+    ? c.json(result.data)
+    : c.json({ error: result.error }, result.status as 400 | 404 | 409);
+});
+
+router.post('/:slug/issues/:id/proceed-to-prd', async (c) => {
+  const result = await proceedToPrd(c.req.param('slug'), c.req.param('id'));
   return result.ok
     ? c.json(result.data)
     : c.json({ error: result.error }, result.status as 400 | 404 | 409);

@@ -110,6 +110,11 @@ function buildMockPrdCommentBody(): string {
       },
     ],
     estimatedComplexity: 'medium',
+    implementationDecisions: [{ decision: 'Use Drizzle for new query table' }],
+    testingDecisions: {
+      approach: 'Verify search returns ranked results for keyword queries',
+      modulesToTest: ['slices/search/slice.test.ts'],
+    },
     decisionSummaries: [{ kind: 'PLAN', summary: 'Mock PRD for E2E.' }],
   };
   return `<!-- factory:prd -->\n# PRD\n\n\`\`\`json\n${JSON.stringify(prd, null, 2)}\n\`\`\``;
@@ -206,6 +211,76 @@ test.describe('Discover Lane (MOCK_AGENTS + MOCK_SOURCE)', () => {
   // This avoids a multi-round grill sequence (already covered by
   // slice.test.ts) while still exercising the UI surfaces the spec requires.
   // ─────────────────────────────────────────────────────────────────────────
+  test('prd-review: Decline Feature transitions to done', async ({ page }) => {
+    test.setTimeout(60_000);
+
+    const { issueNumber } = await seedIssue({
+      title: `[E2E] Discover Decline ${Date.now()}`,
+      type: 'feature',
+      state: 'factory:prd-review',
+    });
+
+    await postServer(`/projects/${SLUG}/issues/${issueNumber}/comment`, {
+      body: buildMockPrdCommentBody(),
+    });
+
+    await page.goto(`/projects/${SLUG}/items/${issueNumber}/prd`);
+    const statePill = page.getByTestId('state-pill');
+    await expect(statePill).toHaveText('prd-review', { timeout: 15_000 });
+
+    // PRD section must load and show the decline button
+    await expect(page.getByTestId('prd-section')).toBeVisible({ timeout: 15_000 });
+    await page.getByTestId('prd-decline-btn').click();
+
+    // Confirmation dialog appears
+    await expect(page.getByTestId('prd-decline-confirm')).toBeVisible({ timeout: 5_000 });
+    await page.getByTestId('prd-confirm-decline-btn').click();
+
+    // State transitions to done
+    await expect(statePill).toHaveText('done', { timeout: 15_000 });
+  });
+
+  test('prd-review: Request Changes submits concerns and v2 PRD renders', async ({ page }) => {
+    test.setTimeout(60_000);
+
+    const { issueNumber } = await seedIssue({
+      title: `[E2E] Discover Revise ${Date.now()}`,
+      type: 'feature',
+      state: 'factory:prd-review',
+    });
+
+    await postServer(`/projects/${SLUG}/issues/${issueNumber}/comment`, {
+      body: buildMockPrdCommentBody(),
+    });
+
+    await page.goto(`/projects/${SLUG}/items/${issueNumber}/prd`);
+    const statePill = page.getByTestId('state-pill');
+    await expect(statePill).toHaveText('prd-review', { timeout: 15_000 });
+
+    await expect(page.getByTestId('prd-section')).toBeVisible({ timeout: 15_000 });
+    await page.getByTestId('prd-request-changes-btn').click();
+
+    const form = page.getByTestId('prd-request-changes-form');
+    await expect(form).toBeVisible({ timeout: 5_000 });
+
+    await page.getByTestId('prd-concerns-input').fill('Journey J-1 step 2 needs more detail');
+    await page.getByTestId('prd-submit-changes-btn').click();
+
+    // Form closes after successful submission
+    await expect(form).not.toBeVisible({ timeout: 10_000 });
+
+    // Plant a v2 PRD comment to simulate the background workflow completing
+    const v2Prd = buildMockPrdCommentBody().replace('Better Search', 'Better Search v2');
+    await postServer(`/projects/${SLUG}/issues/${issueNumber}/comment`, { body: v2Prd });
+
+    // The PRD section should update to show v2 content once comments are refreshed.
+    // Reload to trigger a fresh fetch (React Query cache would need a poll cycle otherwise).
+    await page.reload();
+    await expect(page.getByTestId('prd-title')).toHaveText('Better Search v2', {
+      timeout: 10_000,
+    });
+  });
+
   test('prd-review: PRD tab visible, PRD content renders, Approve calls /approve-prd', async ({
     page,
   }) => {

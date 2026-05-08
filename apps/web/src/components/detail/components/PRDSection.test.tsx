@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { approvePRD, fetchComments, rejectPRD } from '@/lib/api';
+import { approvePRD, declinePRD, fetchComments, revisePRD } from '@/lib/api';
 import type { IssueCommentDto } from '@/lib/types';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -11,7 +11,8 @@ afterEach(cleanup);
 vi.mock('@/lib/api', () => ({
   fetchComments: vi.fn(),
   approvePRD: vi.fn(),
-  rejectPRD: vi.fn(),
+  revisePRD: vi.fn(),
+  declinePRD: vi.fn(),
 }));
 
 const PRD_FIXTURE = {
@@ -61,6 +62,18 @@ const PRD_FIXTURE = {
     },
   ],
   estimatedComplexity: 'medium',
+  implementationDecisions: [
+    {
+      decision: 'Use Zod for client-side validation',
+      rationale: 'Matches server-side validation pattern',
+      moduleRef: 'apps/web/src/lib/validation.ts',
+    },
+  ],
+  testingDecisions: {
+    approach: 'Test that invalid fields show errors on blur',
+    modulesToTest: ['slices/onboarding/slice.test.ts'],
+    priorArt: 'slices/login/slice.test.ts uses similar blur-validation pattern',
+  },
 };
 
 function makePRDComment(advisor?: string): IssueCommentDto {
@@ -116,14 +129,15 @@ describe('PRDSection', () => {
     });
   });
 
-  it('shows Approve and Reject buttons only when state is factory:prd-review', async () => {
+  it('shows Approve, Request Changes, and Decline buttons only when state is factory:prd-review', async () => {
     vi.mocked(fetchComments).mockResolvedValue([makePRDComment()]);
     const { unmount } = render_(
       <PRDSection projectSlug="proj" id="42" state="factory:prd-review" />,
     );
     await waitFor(() => {
       expect(screen.getByTestId('prd-approve-btn')).toBeTruthy();
-      expect(screen.getByTestId('prd-reject-btn')).toBeTruthy();
+      expect(screen.getByTestId('prd-request-changes-btn')).toBeTruthy();
+      expect(screen.getByTestId('prd-decline-btn')).toBeTruthy();
     });
     unmount();
 
@@ -132,6 +146,7 @@ describe('PRDSection', () => {
       expect(screen.getByTestId('prd-section')).toBeTruthy();
     });
     expect(screen.queryByTestId('prd-approve-btn')).toBeNull();
+    expect(screen.queryByTestId('prd-request-changes-btn')).toBeNull();
   });
 
   it('Approve PRD button calls approvePRD API', async () => {
@@ -147,16 +162,36 @@ describe('PRDSection', () => {
     });
   });
 
-  it('Reject PRD button calls rejectPRD API', async () => {
+  it('Request Changes opens the concern form and submits revisePRD', async () => {
     vi.mocked(fetchComments).mockResolvedValue([makePRDComment()]);
-    vi.mocked(rejectPRD).mockResolvedValueOnce({ ok: true });
+    vi.mocked(revisePRD).mockResolvedValueOnce({ ok: true });
     render_(<PRDSection projectSlug="proj" id="42" state="factory:prd-review" />);
-    await waitFor(() => {
-      expect(screen.getByTestId('prd-reject-btn')).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('prd-request-changes-btn')).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId('prd-request-changes-btn'));
+    await waitFor(() => expect(screen.getByTestId('prd-request-changes-form')).toBeTruthy());
+
+    fireEvent.change(screen.getByTestId('prd-concerns-input'), {
+      target: { value: 'Journey J-1 is unclear' },
     });
-    fireEvent.click(screen.getByTestId('prd-reject-btn'));
+    fireEvent.click(screen.getByTestId('prd-submit-changes-btn'));
     await waitFor(() => {
-      expect(rejectPRD).toHaveBeenCalledWith('proj', '42');
+      expect(revisePRD).toHaveBeenCalledWith('proj', '42', ['Journey J-1 is unclear']);
+    });
+  });
+
+  it('Decline Feature shows confirmation and calls declinePRD on confirm', async () => {
+    vi.mocked(fetchComments).mockResolvedValue([makePRDComment()]);
+    vi.mocked(declinePRD).mockResolvedValueOnce({ ok: true });
+    render_(<PRDSection projectSlug="proj" id="42" state="factory:prd-review" />);
+    await waitFor(() => expect(screen.getByTestId('prd-decline-btn')).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId('prd-decline-btn'));
+    await waitFor(() => expect(screen.getByTestId('prd-decline-confirm')).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId('prd-confirm-decline-btn'));
+    await waitFor(() => {
+      expect(declinePRD).toHaveBeenCalledWith('proj', '42');
     });
   });
 
@@ -173,5 +208,28 @@ describe('PRDSection', () => {
     await waitFor(() => {
       expect(screen.getByTestId('prd-parse-error')).toBeTruthy();
     });
+  });
+
+  it('renders Implementation Decisions section when present', async () => {
+    vi.mocked(fetchComments).mockResolvedValueOnce([makePRDComment()]);
+    render_(<PRDSection projectSlug="proj" id="42" state="factory:prd-review" />);
+    await waitFor(() => {
+      expect(screen.getByTestId('prd-implementation-decisions')).toBeTruthy();
+    });
+    const decisions = screen.getAllByTestId('prd-impl-decision');
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0].textContent).toContain('Use Zod for client-side validation');
+    expect(decisions[0].textContent).toContain('apps/web/src/lib/validation.ts');
+  });
+
+  it('renders Testing Approach section when present', async () => {
+    vi.mocked(fetchComments).mockResolvedValueOnce([makePRDComment()]);
+    render_(<PRDSection projectSlug="proj" id="42" state="factory:prd-review" />);
+    await waitFor(() => {
+      expect(screen.getByTestId('prd-testing-decisions')).toBeTruthy();
+    });
+    const section = screen.getByTestId('prd-testing-decisions');
+    expect(section.textContent).toContain('Test that invalid fields show errors on blur');
+    expect(section.textContent).toContain('slices/onboarding/slice.test.ts');
   });
 });

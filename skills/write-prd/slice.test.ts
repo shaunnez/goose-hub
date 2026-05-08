@@ -80,6 +80,17 @@ const validPRD = {
   functionalSpec: baseFunctionalSpec,
   verticalSlices: [baseSlice],
   estimatedComplexity: 'medium' as const,
+  implementationDecisions: [
+    {
+      decision: 'Stream CSV via existing admin route',
+      rationale: 'Follows admin gateway pattern in CONTEXT.md',
+      moduleRef: 'apps/server/src/domains/admin/',
+    },
+  ],
+  testingDecisions: {
+    approach: 'Verify admin endpoint returns correct CSV rows for date range',
+    modulesToTest: ['slices/admin-csv-export/slice.test.ts'],
+  },
   decisionSummaries: [baseDecisionSummary],
 };
 
@@ -231,11 +242,19 @@ describe('write-prd skill config', () => {
     expect(config.contextAllowlist).toContain('priority');
   });
 
+  const validProjectContext = {
+    stackSummary: 'runtime: node',
+    contextMd: '',
+    adrSummaries: [],
+    claudeMd: '',
+  };
+
   it('contextSchema validates a fully-populated valid input', () => {
     const result = WritePRDContextSchema.safeParse({
       workItem: { title: 'Admin CSV export', body: 'Allow CSV download.', number: 314 },
       refinedIntent: 'Admin can download a date-ranged CSV of the audit log.',
       priority: 'medium',
+      projectContext: validProjectContext,
     });
     expect(result.success).toBe(true);
   });
@@ -280,6 +299,7 @@ describe('write-prd skill config', () => {
         workItem: { title: 't', body: 'b', number: 1 },
         refinedIntent: 'x',
         priority,
+        projectContext: validProjectContext,
       });
       expect(result.success).toBe(true);
     }

@@ -19,6 +19,9 @@ const {
   mockRejectIssue,
   mockApprovePRD,
   mockRejectPRD,
+  mockDeclinePRD,
+  mockRevisePRD,
+  mockProceedToPrd,
   mockFakeRun,
   mockDispatchResolveConflict,
 } = vi.hoisted(() => ({
@@ -37,6 +40,9 @@ const {
   mockRejectIssue: vi.fn(),
   mockApprovePRD: vi.fn(),
   mockRejectPRD: vi.fn(),
+  mockDeclinePRD: vi.fn(),
+  mockRevisePRD: vi.fn(),
+  mockProceedToPrd: vi.fn(),
   mockFakeRun: vi.fn(),
   mockDispatchResolveConflict: vi.fn().mockResolvedValue(undefined),
 }));
@@ -57,6 +63,9 @@ vi.mock('./service.js', () => ({
   rejectIssue: mockRejectIssue,
   approvePRD: mockApprovePRD,
   rejectPRD: mockRejectPRD,
+  declinePRD: mockDeclinePRD,
+  revisePRD: mockRevisePRD,
+  proceedToPrd: mockProceedToPrd,
   fakeRun: mockFakeRun,
 }));
 
@@ -765,39 +774,111 @@ describe('POST /projects/:slug/issues/:id/approve-prd', () => {
 });
 
 describe('POST /projects/:slug/issues/:id/reject-prd', () => {
+  it('returns 410 Gone (tombstone — use /revise-prd or /decline-prd)', async () => {
+    const app = makeApp();
+    const res = await app.request('/projects/my-project/issues/42/reject-prd', { method: 'POST' });
+    expect(res.status).toBe(410);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('revise-prd');
+    expect(body.error).toContain('decline-prd');
+  });
+});
+
+describe('POST /projects/:slug/issues/:id/revise-prd', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('rejects PRD and returns 200', async () => {
-    mockRejectPRD.mockResolvedValue({ ok: true, data: { ok: true } });
+  it('calls revisePRD with concerns and returns 200', async () => {
+    mockRevisePRD.mockResolvedValue({ ok: true, data: { ok: true } });
 
     const app = makeApp();
-    const res = await app.request('/projects/my-project/issues/42/reject-prd', { method: 'POST' });
+    const res = await postJson(app, '/projects/my-project/issues/42/revise-prd', {
+      concerns: ['Journey J-1 is unclear'],
+    });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { ok: boolean };
-    expect(body.ok).toBe(true);
-    expect(mockRejectPRD).toHaveBeenCalledWith('my-project', '42');
+    expect(mockRevisePRD).toHaveBeenCalledWith('my-project', '42', ['Journey J-1 is unclear']);
+  });
+
+  it('passes empty array when concerns is absent', async () => {
+    mockRevisePRD.mockResolvedValue({ ok: true, data: { ok: true } });
+
+    const app = makeApp();
+    const res = await postJson(app, '/projects/my-project/issues/42/revise-prd', {});
+    expect(res.status).toBe(200);
+    expect(mockRevisePRD).toHaveBeenCalledWith('my-project', '42', []);
   });
 
   it('returns 409 when state is not factory:prd-review', async () => {
-    mockRejectPRD.mockResolvedValue({
+    mockRevisePRD.mockResolvedValue({
       ok: false,
       error: 'expected state factory:prd-review, got factory:done',
       status: 409,
     });
 
     const app = makeApp();
-    const res = await app.request('/projects/my-project/issues/42/reject-prd', { method: 'POST' });
+    const res = await postJson(app, '/projects/my-project/issues/42/revise-prd', {
+      concerns: ['fix this'],
+    });
     expect(res.status).toBe(409);
   });
+});
 
-  it('returns 404 when project not found', async () => {
-    mockRejectPRD.mockResolvedValue({ ok: false, error: 'project not found', status: 404 });
+describe('POST /projects/:slug/issues/:id/decline-prd', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls declinePRD and returns 200', async () => {
+    mockDeclinePRD.mockResolvedValue({ ok: true, data: { ok: true } });
 
     const app = makeApp();
-    const res = await app.request('/projects/unknown/issues/1/reject-prd', { method: 'POST' });
-    expect(res.status).toBe(404);
+    const res = await app.request('/projects/my-project/issues/42/decline-prd', { method: 'POST' });
+    expect(res.status).toBe(200);
+    expect(mockDeclinePRD).toHaveBeenCalledWith('my-project', '42');
+  });
+
+  it('returns 409 when state is not factory:prd-review', async () => {
+    mockDeclinePRD.mockResolvedValue({
+      ok: false,
+      error: 'expected state factory:prd-review, got factory:grilling',
+      status: 409,
+    });
+
+    const app = makeApp();
+    const res = await app.request('/projects/my-project/issues/42/decline-prd', { method: 'POST' });
+    expect(res.status).toBe(409);
+  });
+});
+
+describe('POST /projects/:slug/issues/:id/proceed-to-prd', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls proceedToPrd and returns 200', async () => {
+    mockProceedToPrd.mockResolvedValue({ ok: true, data: { ok: true } });
+
+    const app = makeApp();
+    const res = await app.request('/projects/my-project/issues/42/proceed-to-prd', {
+      method: 'POST',
+    });
+    expect(res.status).toBe(200);
+    expect(mockProceedToPrd).toHaveBeenCalledWith('my-project', '42');
+  });
+
+  it('returns 409 when state is not factory:gate-pending', async () => {
+    mockProceedToPrd.mockResolvedValue({
+      ok: false,
+      error: 'expected state factory:gate-pending, got factory:grilling',
+      status: 409,
+    });
+
+    const app = makeApp();
+    const res = await app.request('/projects/my-project/issues/42/proceed-to-prd', {
+      method: 'POST',
+    });
+    expect(res.status).toBe(409);
   });
 });
 

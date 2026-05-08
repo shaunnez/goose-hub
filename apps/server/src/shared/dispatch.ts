@@ -819,6 +819,49 @@ export async function dispatchGrillAndPrd(slug: string, issueNumber: number): Pr
 }
 
 /**
+ * Re-run write-prd with prior PRD + human concerns (revise path).
+ * Drops duplicate triggers via parallel-lock. State stays prd-review.
+ */
+export async function dispatchRevisePrd(
+  slug: string,
+  issueNumber: number,
+  priorPrd: import('@goose-hub/skills/write-prd/schema.js').PRDOutput | undefined,
+  humanConcerns: string[],
+): Promise<void> {
+  const maxParallel = await getMaxParallelAgents(slug);
+  if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
+    logger.warn('dispatchRevisePrd: parallel-lock rejected (in-flight or at cap)', {
+      slug,
+      issueNumber,
+      inFlight: parallelLock.inFlightCount(slug),
+      maxParallel,
+    });
+    return;
+  }
+  try {
+    const { runGrillAndPrdWorkflow } = await import('@goose-hub/core/workflows/grill-and-prd.js');
+    const source = await getSourceForSlug(slug);
+    if (source == null) {
+      logger.error('dispatchRevisePrd: no source for slug', { slug });
+      return;
+    }
+    const item = await source.getItem(issueNumber.toString());
+    const comments = await source.listComments(issueNumber.toString());
+    const priorReplies = buildPriorReplies(comments);
+    await runGrillAndPrdWorkflow({
+      workItem: item,
+      stateSource: source,
+      projectId: slug,
+      priorReplies,
+      priorPrd,
+      humanConcerns,
+    });
+  } finally {
+    parallelLock.release(slug, issueNumber);
+  }
+}
+
+/**
  * Run the decompose-prd workflow for a single issue. Drops duplicate
  * triggers via parallel-lock. Webhook fires this when the issue lands
  * in `factory:decomposing`; the approvePRD handler fires it after the

@@ -54,6 +54,16 @@ export interface ParsedPRDView {
     journeyRefs: string[];
   }>;
   estimatedComplexity?: 'low' | 'medium' | 'high';
+  implementationDecisions?: Array<{
+    decision: string;
+    rationale?: string;
+    moduleRef?: string;
+  }>;
+  testingDecisions?: {
+    approach: string;
+    modulesToTest: string[];
+    priorArt?: string;
+  };
 }
 
 export interface ParsedPRDComment {

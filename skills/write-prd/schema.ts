@@ -75,6 +75,18 @@ export const SliceOutlineSchema = z.object({
   journeyRefs: z.array(z.string()),
 });
 
+export const ImplementationDecisionSchema = z.object({
+  decision: z.string(),
+  rationale: z.string().optional(),
+  moduleRef: z.string().optional(),
+});
+
+export const TestingDecisionsSchema = z.object({
+  approach: z.string(),
+  modulesToTest: z.array(z.string()),
+  priorArt: z.string().optional(),
+});
+
 // ─── Top-level PRD schema ──────────────────────────────────────────────────────
 //
 // Orphaned-AC rule (per issue #313):
@@ -96,6 +108,8 @@ export const PRDOutputSchema = z
     engineeringSpecRef: z.string().optional(),
     verticalSlices: z.array(SliceOutlineSchema).min(1),
     estimatedComplexity: z.enum(['low', 'medium', 'high']),
+    implementationDecisions: z.array(ImplementationDecisionSchema).min(1),
+    testingDecisions: TestingDecisionsSchema,
     decisionSummaries: z.array(DecisionSummarySchema).min(1),
   })
   .superRefine((data, ctx) => {
@@ -118,3 +132,5 @@ export type Journey = z.infer<typeof JourneySchema>;
 export type AcceptanceCriterion = z.infer<typeof AcceptanceCriterionSchema>;
 export type FunctionalSpec = z.infer<typeof FunctionalSpecSchema>;
 export type SliceOutline = z.infer<typeof SliceOutlineSchema>;
+export type ImplementationDecision = z.infer<typeof ImplementationDecisionSchema>;
+export type TestingDecisions = z.infer<typeof TestingDecisionsSchema>;

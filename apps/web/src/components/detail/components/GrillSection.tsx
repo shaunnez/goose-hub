@@ -1,4 +1,4 @@
-import { addComment, fetchComments, transitionState } from '@/lib/api';
+import { addComment, fetchComments, proceedToPrd, transitionState } from '@/lib/api';
 import { renderMarkdownToHtml } from '@/lib/markdown';
 import type { IssueCommentDto } from '@/lib/types';
 import { timeAgo } from '@/lib/utils';
@@ -15,6 +15,7 @@ interface GrillSectionProps {
 }
 
 const GRILL_QUESTION_MARKER = '<!-- factory:grill-question -->';
+const RECOMMENDED_ANSWER_MARKER = '<!-- factory:recommended-answer -->';
 const PRD_MARKER = '<!-- factory:prd -->';
 const SYSTEM_MARKER = '<!-- factory:system -->';
 const CHILD_ISSUES_MARKER = '## Child issues';
@@ -28,6 +29,18 @@ function stripMarker(body: string): string {
     return body.slice(GRILL_QUESTION_MARKER.length).trimStart();
   }
   return body;
+}
+
+function parseRecommendedAnswer(body: string): string | null {
+  const idx = body.indexOf(RECOMMENDED_ANSWER_MARKER);
+  if (idx === -1) return null;
+  return body.slice(idx + RECOMMENDED_ANSWER_MARKER.length).trimStart() || null;
+}
+
+function stripRecommendedAnswer(body: string): string {
+  const idx = body.indexOf(RECOMMENDED_ANSWER_MARKER);
+  if (idx === -1) return body;
+  return body.slice(0, idx).trimEnd();
 }
 
 interface OptimisticReply extends IssueCommentDto {
@@ -77,6 +90,17 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
     },
   });
 
+  const proceed = useMutation({
+    mutationFn: () => proceedToPrd(projectSlug, externalId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['issue', projectSlug, id] });
+      void queryClient.invalidateQueries({ queryKey: ['issues', projectSlug] });
+    },
+    onError: (err: unknown) => {
+      setErrorMsg(err instanceof Error ? err.message : String(err));
+    },
+  });
+
   // Filter out system/metadata comments — PRD drafts, system notices, child
   // issues posts — they are not part of the grill conversation.
   const grillComments = comments.filter(
@@ -86,6 +110,9 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
       !c.body.startsWith(CHILD_ISSUES_MARKER),
   );
   const merged: Array<IssueCommentDto | OptimisticReply> = [...grillComments, ...optimisticReplies];
+
+  // The last agent question in the thread (used for recommended-answer pill).
+  const lastAgentQuestionId = [...merged].reverse().find((c) => isAgentQuestion(c.body))?.id;
 
   const grillingComplete =
     state === 'factory:prd-drafting' ||
@@ -143,8 +170,13 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
         <ol className="flex flex-col gap-3" data-testid="grill-thread">
           {merged.map((c) => {
             const agent = isAgentQuestion(c.body);
-            const display = stripMarker(c.body);
+            const rawStripped = stripMarker(c.body);
+            const display = agent ? stripRecommendedAnswer(rawStripped) : rawStripped;
             const isOptimistic = '__optimistic' in c && c.__optimistic === true;
+            const recommendedAnswer =
+              agent && c.id === lastAgentQuestionId && awaitingReply
+                ? parseRecommendedAnswer(c.body)
+                : null;
             return (
               <li
                 key={c.id}
@@ -165,6 +197,25 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
                   // biome-ignore lint/security/noDangerouslySetInnerHtml: renderMarkdownToHtml escapes raw input
                   dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(display) }}
                 />
+                {recommendedAnswer != null && (
+                  <div
+                    data-testid="grill-recommended-answer"
+                    className="mt-2 rounded border border-accent/30 bg-accent-soft/20 px-2 py-1.5 text-[11.5px]"
+                  >
+                    <div className="text-[10.5px] font-medium text-fg-2 uppercase tracking-wider mb-1">
+                      Suggested answer
+                    </div>
+                    <p className="text-fg-2 leading-snug">{recommendedAnswer}</p>
+                    <button
+                      type="button"
+                      data-testid="grill-use-answer-btn"
+                      onClick={() => setText(recommendedAnswer)}
+                      className="mt-1.5 text-[11px] text-accent hover:underline"
+                    >
+                      Use this
+                    </button>
+                  </div>
+                )}
               </li>
             );
           })}
@@ -204,7 +255,16 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
               {errorMsg}
             </div>
           )}
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              data-testid="grill-proceed-btn"
+              disabled={proceed.isPending || send.isPending}
+              onClick={() => proceed.mutate()}
+              className="h-8 px-3 rounded-md border border-line text-[12px] text-fg-2 hover:bg-bg-elev disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {proceed.isPending ? 'Proceeding…' : 'Proceed to PRD'}
+            </button>
             <button
               type="submit"
               data-testid="grill-send-btn"
