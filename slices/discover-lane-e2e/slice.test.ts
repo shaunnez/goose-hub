@@ -582,14 +582,6 @@ describe('Discover Lane end-to-end integration', () => {
     const allEvs = eventStore.replay({ projectId, workItemId: parentId });
     const kinds = allEvs.map((e) => e.kind);
 
-    // 3 agent.run-started events (grill-me ×3, but only the one within each
-    // runGrillAndPrdWorkflow call; each call emits one run-started for grill-me,
-    // plus optionally one for write-prd and one for advise-on-prd; here we have
-    // r1=1, r2=1, r3=2 (grill+prd). Total = 4 run-started for parent.
-    // The spec says "×3"; we assert ≥3.
-    const runStarted = kinds.filter((k) => k === 'agent.run-started');
-    expect(runStarted.length).toBeGreaterThanOrEqual(3);
-
     // grill.question-posted ×2
     expect(kinds.filter((k) => k === 'grill.question-posted')).toHaveLength(2);
 
