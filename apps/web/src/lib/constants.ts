@@ -89,3 +89,15 @@ export const GATE_STATES: Record<string, string> = {
   'factory:needs-review': 'Code Review pending — human approval required',
   'factory:needs-human': 'Human intervention required',
 };
+
+export const PENDING_NEXT_RUN_STATES: Record<string, string> = {
+  'factory:triaging': 'triage',
+  'factory:grilling': 'grill-me',
+  'factory:prd-drafting': 'write-prd',
+  'factory:decomposing': 'decompose-issues',
+  'factory:dev-ready': 'implement',
+  'factory:in-progress': 'implement',
+  'factory:needs-qa': 'qa',
+  'factory:needs-fix': 'fix-issue',
+  'factory:retrospecting': 'retrospective',
+};
