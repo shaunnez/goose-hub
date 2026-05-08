@@ -33,21 +33,26 @@ export function writeProjectDevReviewSettings(
   patch: DevReviewSettingsPatch,
   by: string,
 ): void {
-  const now = new Date().toISOString();
-  const existing = db
-    .select()
-    .from(projectDevReviewSettings)
-    .where(eq(projectDevReviewSettings.projectId, projectId))
-    .all();
-
-  if (existing.length === 0) {
-    db.insert(projectDevReviewSettings)
-      .values({ projectId, ...patch, updatedAt: now, updatedBy: by })
-      .run();
-  } else {
-    db.update(projectDevReviewSettings)
-      .set({ ...patch, updatedAt: now, updatedBy: by })
+  try {
+    const now = new Date().toISOString();
+    const existing = db
+      .select()
+      .from(projectDevReviewSettings)
       .where(eq(projectDevReviewSettings.projectId, projectId))
-      .run();
+      .all();
+
+    if (existing.length === 0) {
+      db.insert(projectDevReviewSettings)
+        .values({ projectId, ...patch, updatedAt: now, updatedBy: by })
+        .run();
+    } else {
+      db.update(projectDevReviewSettings)
+        .set({ ...patch, updatedAt: now, updatedBy: by })
+        .where(eq(projectDevReviewSettings.projectId, projectId))
+        .run();
+    }
+  } catch {
+    // Table may not exist yet (migration pending) — silently skip the write.
+    return;
   }
 }

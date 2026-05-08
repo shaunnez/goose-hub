@@ -29,6 +29,7 @@ import { writeWpBuilderSandbox } from '@goose-hub/core/tool-layer/sandbox.js';
 import {
   cleanupAllWpWorktrees,
   createWpScratchWorktree,
+  orchestratorCommitAll,
   orchestratorCommitWp,
   revertWpChanges,
 } from '@goose-hub/core/workspaces/orchestrator-git.js';
@@ -71,6 +72,8 @@ export interface ParallelImplementDeps {
   runDevReviewImpl?: typeof runDevReview;
   /** Override runDevReviewResponse for testing (avoids hitting DB/FS/Claude). */
   runDevReviewResponseImpl?: typeof runDevReviewResponse;
+  /** Override the orchestrator commit-all for dev-review-response edits (for testing). */
+  commitDevReviewResponseImpl?: (worktreePath: string, msg: string) => string;
 }
 
 // ─── DB helpers ───────────────────────────────────────────────────────────────
@@ -368,6 +371,9 @@ export async function runParallelImplementWorkflow(
   const getDiffFn = deps.getDiffImpl ?? getDiffForDevReview;
   const devReviewFn = deps.runDevReviewImpl ?? runDevReview;
   const devReviewResponseFn = deps.runDevReviewResponseImpl ?? runDevReviewResponse;
+  const commitDevReviewFn =
+    deps.commitDevReviewResponseImpl ??
+    ((wt: string, msg: string) => orchestratorCommitAll(wt, msg));
 
   const { personaId } = selectPersona(projectId, 'developer');
   const implementWpPrompt = readPromptWithContext('implement-wp', projectId);
@@ -597,6 +603,12 @@ export async function runParallelImplementWorkflow(
               runtime: deps.devReviewResponseRuntime,
               appendEvent: append,
             });
+            // Commit any edits the response agent made before opening the PR.
+            // orchestratorCommitAll uses --allow-empty, so no-ops safely when nothing changed.
+            commitDevReviewFn(
+              issueWorktreePath,
+              'chore: dev-review-response addressing/dismissing findings',
+            );
             // No second Codex dev-review pass — proceed straight to PR.
           }
         } catch (devReviewErr) {
