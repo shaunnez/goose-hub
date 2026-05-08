@@ -47,15 +47,55 @@ Schema rejects ACs that have neither — every AC must back-reference a journey/
 
 `decisionSummaries[]` must have at least one entry. Emit one per major decision. Common kinds for this skill:
 
-- `IMPLEMENTATION_PLAN` — when you choose how to slice the feature into vertical slices
+- `PLAN` — when you choose how to slice the feature into vertical slices
 - `SCOPE_CHANGE` — when the refined intent forces you to drop or add a journey vs the original work item body
 - `UNCERTAINTY` — when a journey or constraint is best-effort because the refined intent leaves a gap
 - `VERDICT` — final summary of the PRD shape and complexity rating
 
 Mid-run, also emit live `[decision] KIND: <one sentence>` markers.
 
-[decision] IMPLEMENTATION_PLAN: Decomposed feature into 3 vertical slices anchored on the admin-export, viewer-filter, and audit-log journeys
+[decision] PLAN: Decomposed feature into 3 vertical slices anchored on the admin-export, viewer-filter, and audit-log journeys
 
 ## Output format
 
-Return a single JSON object conforming to `PRDOutputSchema`. Free-text-only output fails the run. Every required field must be present, `journeys[]` and `verticalSlices[]` must each have at least one entry, and every AC must satisfy the cross-reference rule above.
+Return a single JSON object conforming to `PRDOutputSchema`. Free-text-only output fails the run. Your entire response must be valid JSON — no prose, no preamble, no explanation outside the object. Every required field must be present, `journeys[]` and `verticalSlices[]` must each have at least one entry, and every AC must satisfy the cross-reference rule above.
+
+Exact field names (use these verbatim):
+
+```json
+{
+  "title": "<string>",
+  "problem": "<string — what problem this solves>",
+  "proposedSolution": "<string — how it will be solved>",
+  "outOfScope": ["<string>"],
+  "successCriteria": ["<string>"],
+  "acceptanceCriteria": [
+    { "id": "<string>", "statement": "<string>", "journeyId": "<string>", "stepIdx": 0, "verifyCommand": "<optional string>" },
+    { "id": "<string>", "statement": "<string>", "crossCutting": true }
+  ],
+  "journeys": [
+    {
+      "id": "<string>", "persona": "<string>", "trigger": "<string>",
+      "steps": [{ "userAction": "<string>", "systemResponse": "<string>", "dataShown": "<string>", "stateChange": "<string>" }],
+      "successState": "<string>",
+      "errorStates": [{ "error": "<string>", "recovery": "<string>" }],
+      "edgeCases": ["<string>"]
+    }
+  ],
+  "functionalSpec": {
+    "behaviors": [{ "when": "<string>", "given": "<string>", "then": "<string>" }],
+    "stateModel": [{ "state": "<string>", "entryCondition": "<string>", "behaviorsAvailable": ["<string>"], "exitTransitions": ["<string>"] }],
+    "invalidTransitions": [{ "from": "<string>", "to": "<string>", "reason": "<string>" }],
+    "dataConstraints": [{ "type": "<string>", "validation": "<string>" }]
+  },
+  "verticalSlices": [
+    { "title": "<string>", "goal": "<string>", "estimatedSize": "S|M|L", "journeyRefs": ["<journeyId>"] }
+  ],
+  "estimatedComplexity": "low|medium|high",
+  "decisionSummaries": [
+    { "kind": "PLAN", "summary": "<string>", "evidence": "<string>" }
+  ]
+}
+```
+
+`functionalSpec.stateModel`, `functionalSpec.invalidTransitions`, and `functionalSpec.dataConstraints` must be **arrays**, not objects.

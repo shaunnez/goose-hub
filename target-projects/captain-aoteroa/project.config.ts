@@ -12,13 +12,14 @@ const config: ProjectConfig = {
   targetRepo: {
     cloneUrl: 'git@github.com:shaunnez/captain-aoteroa.git',
     defaultBranch: 'main',
-    localPath: '/var/folders/v3/cjyfc_ls0bs35tq3bbmk83bh0000gp/T/goose-hub-bootstrap/captain-aoteroa',
+    localPath:
+      '/var/folders/v3/cjyfc_ls0bs35tq3bbmk83bh0000gp/T/goose-hub-bootstrap/captain-aoteroa',
   },
   stack: {
     runtime: 'unknown',
     packageManager: 'unknown',
     testCommand: 'echo "TODO: configure testCommand"',
-    detectedAt: "2026-05-07T23:06:40.118Z",
+    detectedAt: '2026-05-07T23:06:40.118Z',
   },
   mode: 'supervised',
   storage: { kind: 'local', path: '~/.factory/data/captain-aoteroa' },

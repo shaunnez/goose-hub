@@ -93,6 +93,10 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
     state === 'factory:decomposing' ||
     state === 'factory:issues-created';
 
+  // Griller is processing a reply — hide the form but don't show "complete" yet.
+  const grillingInProgress = state === 'factory:grilling';
+  const awaitingReply = state === 'factory:gate-pending';
+
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = text.trim();
@@ -174,7 +178,14 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
         >
           Grilling complete — the PRD has been drafted. Open the PRD tab to review it.
         </div>
-      ) : (
+      ) : grillingInProgress ? (
+        <div
+          data-testid="grill-processing-footer"
+          className="text-[12px] text-fg-2 border-t border-line pt-3"
+        >
+          Griller is processing your reply…
+        </div>
+      ) : awaitingReply ? (
         <form
           onSubmit={onSubmit}
           className="flex flex-col gap-2 border-t border-line pt-3"
@@ -204,7 +215,7 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
             </button>
           </div>
         </form>
-      )}
+      ) : null}
     </div>
   );
 }

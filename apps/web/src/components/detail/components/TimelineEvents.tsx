@@ -23,6 +23,7 @@ import {
   GateAwaitingHumanEvent,
   GateRejectedEvent,
 } from './timeline/GateEvents';
+import { GrillCompletedEvent, GrillQuestionPostedEvent } from './timeline/GrillEvents';
 import { AgentLogEvent, AgentLogGroupEvent } from './timeline/LogEvents';
 import {
   FallbackEvent,
@@ -32,6 +33,12 @@ import {
   SystemNoteEvent,
 } from './timeline/MiscEvents';
 import { PrMergedEvent, PrOpenedEvent } from './timeline/PrEvents';
+import {
+  PrdAdvisorSkippedEvent,
+  PrdApprovedEvent,
+  PrdDraftedEvent,
+  PrdRejectedEvent,
+} from './timeline/PrdEvents';
 import { QaCompletedEvent, QaFailedEvent } from './timeline/QaEvents';
 import { RetroCompletedEvent } from './timeline/RetroCompletedEvent';
 import { ReviewCompletedEvent } from './timeline/ReviewCompletedEvent';
@@ -119,12 +126,24 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <GateRejectedEvent key={event.id} event={event} />;
     case 'agent.implement-complete':
       return <AgentImplementCompleteEvent key={event.id} event={event} />;
+    case 'grill.question-posted':
+      return <GrillQuestionPostedEvent key={event.id} event={event} />;
+    case 'grill.completed':
+      return <GrillCompletedEvent key={event.id} event={event} />;
     case 'evidence.no-spec-declared':
       return <EvidenceNoSpecEvent key={event.id} event={event} />;
     case 'evidence.posted':
       return <EvidencePostedEvent key={event.id} event={event} />;
     case 'evidence.post-failed':
       return <EvidencePostFailedEvent key={event.id} event={event} />;
+    case 'prd.drafted':
+      return <PrdDraftedEvent key={event.id} event={event} />;
+    case 'prd.advisor-skipped':
+      return <PrdAdvisorSkippedEvent key={event.id} event={event} />;
+    case 'prd.approved':
+      return <PrdApprovedEvent key={event.id} event={event} />;
+    case 'prd.rejected':
+      return <PrdRejectedEvent key={event.id} event={event} />;
     default:
       return <FallbackEvent key={event.id} event={event} />;
   }

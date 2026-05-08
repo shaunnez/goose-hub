@@ -469,10 +469,6 @@ describe('Discover Lane end-to-end integration', () => {
     const afterApprove = await source.getItem(seeded.externalId);
     expect(afterApprove.state).toBe('factory:decomposing');
 
-    // runDecomposePrdWorkflow expects factory:prd-review, so forceState back
-    // to let the workflow do its own transitionState(prd-review → decomposing).
-    await source.forceState(seeded.externalId, 'factory:prd-review');
-
     // ─────────────────────────────────────────────────────────────────────────
     // Phase 7 — Decompose: 2 child issues, sibling dep resolved
     // ─────────────────────────────────────────────────────────────────────────

@@ -55,19 +55,14 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
   const jsonSchema = toJsonSchema(DecomposeOutputSchema);
   const { personaId } = selectPersona(projectId, 'decomposer');
 
-  // Pre-condition check
-  if (workItem.state !== 'factory:prd-review') {
+  // Pre-condition check. dispatchDecomposePrd already transitions the issue
+  // to factory:decomposing before calling this workflow, so we accept that
+  // state here rather than trying to do the transition ourselves.
+  if (workItem.state !== 'factory:decomposing') {
     throw new Error(
-      `runDecomposePrdWorkflow: expected workItem.state 'factory:prd-review', got '${workItem.state}'`,
+      `runDecomposePrdWorkflow: expected workItem.state 'factory:decomposing', got '${workItem.state}'`,
     );
   }
-
-  // Step 1: Transition to factory:decomposing
-  await stateSource.transitionState(
-    workItem.externalId,
-    'factory:prd-review',
-    'factory:decomposing',
-  );
 
   eventStore.appendEvent({
     kind: 'agent.run-started',

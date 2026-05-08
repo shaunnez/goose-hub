@@ -34,7 +34,7 @@ function makeParentItem(externalId = '100'): WorkItem {
     type: 'feature',
     priority: 'medium',
     mode: 'supervised',
-    state: 'factory:prd-review',
+    state: 'factory:decomposing',
     authorIsOwner: true,
     milestoneId: '1',
     milestoneTitle: 'M13',
@@ -89,7 +89,7 @@ describe('single-slice PRD', () => {
     const parent = await source.seedIssue({
       title: 'Parent PRD epic',
       body: 'A big feature.',
-      state: 'factory:prd-review',
+      state: 'factory:decomposing',
     });
 
     const workItem = makeParentItem(parent.externalId);
@@ -136,7 +136,7 @@ describe('multi-slice PRD with sequential sibling deps', () => {
     const parent = await source.seedIssue({
       title: 'Parent PRD epic',
       body: 'A feature requiring 3 slices.',
-      state: 'factory:prd-review',
+      state: 'factory:decomposing',
     });
 
     const workItem = makeParentItem(parent.externalId);
@@ -198,7 +198,7 @@ describe('duplicate-title guard', () => {
     const parent = await source.seedIssue({
       title: 'Parent PRD epic',
       body: 'Feature with duplicate slice titles.',
-      state: 'factory:prd-review',
+      state: 'factory:decomposing',
     });
 
     const workItem = makeParentItem(parent.externalId);
@@ -245,7 +245,7 @@ describe('schema-validation failure', () => {
     const parent = await source.seedIssue({
       title: 'Parent PRD epic',
       body: 'Feature.',
-      state: 'factory:prd-review',
+      state: 'factory:decomposing',
     });
 
     const workItem = makeParentItem(parent.externalId);
@@ -320,7 +320,7 @@ describe('child issue type derived from labels', () => {
     const parent = await source.seedIssue({
       title: 'Parent',
       body: 'A bug epic.',
-      state: 'factory:prd-review',
+      state: 'factory:decomposing',
     });
 
     const workItem = makeParentItem(parent.externalId);
@@ -351,7 +351,7 @@ describe('child issue type derived from labels', () => {
     const parent = await source.seedIssue({
       title: 'Parent',
       body: 'Mixed kinds.',
-      state: 'factory:prd-review',
+      state: 'factory:decomposing',
     });
 
     const workItem = makeParentItem(parent.externalId);
@@ -388,7 +388,7 @@ describe('child issue type derived from labels', () => {
     const parent = await source.seedIssue({
       title: 'Parent',
       body: 'Legacy labels.',
-      state: 'factory:prd-review',
+      state: 'factory:decomposing',
     });
 
     const workItem = makeParentItem(parent.externalId);
@@ -424,7 +424,7 @@ describe('children land at factory:accepted', () => {
     const parent = await source.seedIssue({
       title: 'Parent PRD epic',
       body: 'A feature.',
-      state: 'factory:prd-review',
+      state: 'factory:decomposing',
     });
 
     const workItem = makeParentItem(parent.externalId);
@@ -466,7 +466,7 @@ describe('structured dependsOn appended to child body', () => {
     const parent = await source.seedIssue({
       title: 'Parent PRD epic',
       body: 'A feature requiring 2 slices.',
-      state: 'factory:prd-review',
+      state: 'factory:decomposing',
     });
 
     const workItem = makeParentItem(parent.externalId);
@@ -495,7 +495,7 @@ describe('structured dependsOn appended to child body', () => {
     const parent = await source.seedIssue({
       title: 'Parent PRD epic',
       body: 'A feature.',
-      state: 'factory:prd-review',
+      state: 'factory:decomposing',
     });
 
     const workItem = makeParentItem(parent.externalId);
@@ -535,7 +535,7 @@ describe('partial-create cleanup', () => {
     const parent = await source.seedIssue({
       title: 'Parent PRD epic',
       body: 'A feature.',
-      state: 'factory:prd-review',
+      state: 'factory:decomposing',
     });
 
     const workItem = makeParentItem(parent.externalId);

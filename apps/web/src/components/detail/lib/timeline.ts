@@ -56,6 +56,12 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'qa.functional-failed': 'QA functional failed',
   'qa.regression-failed': 'QA regression failed',
   'retrospective.completed': 'Retrospective completed',
+  'grill.question-posted': 'Grill question posted',
+  'grill.completed': 'Grill completed',
+  'prd.drafted': 'PRD drafted',
+  'prd.advisor-skipped': 'Advisor skipped',
+  'prd.approved': 'PRD approved',
+  'prd.rejected': 'PRD rejected',
 };
 
 export function formatSkillName(skill: string | null): string {
@@ -189,6 +195,11 @@ function extractRunMeta(items: RenderItem[]): {
       if (endedAt == null) endedAt = ev.createdAt;
     } else if (ev.kind === 'retrospective.completed') {
       // retrospective runs don't always emit agent.run-completed; treat this as terminal
+      if (endedAt == null) endedAt = ev.createdAt;
+    } else if (ev.kind === 'prd.approved' || ev.kind === 'prd.rejected') {
+      if (endedAt == null) endedAt = ev.createdAt;
+    } else if (ev.kind === 'grill.question-posted' || ev.kind === 'grill.completed') {
+      // grill-me runs don't emit agent.run-completed — these are the terminal events
       if (endedAt == null) endedAt = ev.createdAt;
     }
   }

@@ -348,7 +348,8 @@ export async function runGrillAndPrdWorkflow(
         runId,
         payload: { skill: 'write-prd', error: parsed.error.message },
       });
-      await stateSource.forceState(workItem.externalId, 'factory:needs-human');
+      // Leave state as factory:prd-drafting so dispatchResumeIssue can re-enter
+      // via the existing prd-drafting resume handler (forces → grilling).
       return { phase: 'needs-human' };
     }
     prdOutput = parsed.data;
@@ -360,7 +361,8 @@ export async function runGrillAndPrdWorkflow(
       runId,
       payload: { skill: 'write-prd', error: String(err) },
     });
-    await stateSource.forceState(workItem.externalId, 'factory:needs-human');
+    // Leave state as factory:prd-drafting so dispatchResumeIssue can re-enter
+    // via the existing prd-drafting resume handler (forces → grilling).
     return { phase: 'needs-human' };
   }
 

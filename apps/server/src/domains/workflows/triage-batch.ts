@@ -30,7 +30,7 @@ function buildTriageComment(
   const candidateLines = candidates
     .map((c) => `- ${c.repo} (${c.confidence}%, ${c.evidence}) [tier ${c.tier}]`)
     .join('\n');
-  return `**Triage complete**\nType: ${type} | Priority: ${priority}\n\n**Repo candidates:**\n${candidateLines || '- none'}`;
+  return `<!-- factory:system -->\n**Triage complete**\nType: ${type} | Priority: ${priority}\n\n**Repo candidates:**\n${candidateLines || '- none'}`;
 }
 
 function readReposContext(slug: string): string {

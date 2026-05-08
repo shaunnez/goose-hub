@@ -106,21 +106,17 @@ describe('GrillSection', () => {
     });
   });
 
-  it('does NOT call transitionState when the issue is already in factory:grilling', async () => {
+  it('does NOT show reply form when state is factory:grilling (agent is processing)', async () => {
     vi.mocked(fetchComments).mockResolvedValue([]);
-    vi.mocked(addComment).mockResolvedValueOnce(undefined);
 
     render_(<GrillSection projectSlug="proj" externalId="42" id="42" state="factory:grilling" />);
-    await waitFor(() => expect(screen.getByTestId('grill-reply-input')).toBeTruthy());
-    fireEvent.change(screen.getByTestId('grill-reply-input'), { target: { value: 'hi' } });
-    fireEvent.click(screen.getByTestId('grill-send-btn'));
-
-    await waitFor(() => expect(addComment).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByTestId('grill-processing-footer')).toBeTruthy());
+    expect(screen.queryByTestId('grill-reply-form')).toBeNull();
     expect(transitionState).not.toHaveBeenCalled();
   });
 
   it('shows the optimistic reply in the thread before round-trip resolves', async () => {
-    vi.mocked(fetchComments).mockResolvedValue([]);
+    vi.mocked(fetchComments).mockResolvedValue([comment(1, '<!-- factory:grill-question -->\nQ?')]);
     const pending = new Promise<void>((resolve) => {
       // Stash the resolver on the ref so the test can drain the mutation
       // after assertions complete.
@@ -128,7 +124,9 @@ describe('GrillSection', () => {
     });
     vi.mocked(addComment).mockImplementationOnce(() => pending);
 
-    render_(<GrillSection projectSlug="proj" externalId="42" id="42" state="factory:grilling" />);
+    render_(
+      <GrillSection projectSlug="proj" externalId="42" id="42" state="factory:gate-pending" />,
+    );
     await waitFor(() => expect(screen.getByTestId('grill-reply-input')).toBeTruthy());
 
     fireEvent.change(screen.getByTestId('grill-reply-input'), { target: { value: 'optimistic!' } });
