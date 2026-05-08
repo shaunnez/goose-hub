@@ -50,13 +50,6 @@ function buildItems(slug: string | undefined): SidebarItem[] {
       available: true,
     },
     {
-      to: `/projects/${project}/milestones`,
-      label: 'Milestones',
-      icon: <ListChecks size={14} />,
-      available: false,
-      milestone: 'later',
-    },
-    {
       to: '/settings',
       label: 'Settings',
       icon: <Settings size={14} />,

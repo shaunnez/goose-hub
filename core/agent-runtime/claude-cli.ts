@@ -141,7 +141,11 @@ export class ClaudeCliRuntime implements AgentRuntime {
       argv.push('--system-prompt', spec.appendSystemPrompt);
     }
 
-    if (allowedTools.length > 0) {
+    // Pass --allowedTools whenever bundles were explicitly declared, even if they
+    // resolve to an empty list. An empty list means "no tools" (e.g. grill-me uses
+    // the 'core' bundle which grants no filesystem access). Omitting the flag
+    // entirely would leave the agent unrestricted.
+    if (spec.toolBundles.length > 0 || allowedTools.length > 0) {
       argv.push('--allowedTools', allowedTools.join(','));
     }
 

@@ -1,4 +1,4 @@
-CREATE TABLE `agent_decisions` (
+CREATE TABLE IF NOT EXISTS `agent_decisions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`run_id` text NOT NULL,
 	`iteration` integer DEFAULT 0 NOT NULL,
@@ -9,9 +9,9 @@ CREATE TABLE `agent_decisions` (
 	`ts` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')) NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `agent_decisions_run_kind_what_uniq` ON `agent_decisions` (`run_id`,`kind`,`what`);--> statement-breakpoint
-CREATE INDEX `agent_decisions_run_idx` ON `agent_decisions` (`run_id`);--> statement-breakpoint
-CREATE TABLE `project_dev_review_settings` (
+CREATE UNIQUE INDEX IF NOT EXISTS `agent_decisions_run_kind_what_uniq` ON `agent_decisions` (`run_id`,`kind`,`what`);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS `agent_decisions_run_idx` ON `agent_decisions` (`run_id`);--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `project_dev_review_settings` (
 	`project_id` text PRIMARY KEY NOT NULL,
 	`enabled` integer,
 	`trigger_on` text,
@@ -22,7 +22,7 @@ CREATE TABLE `project_dev_review_settings` (
 	`updated_by` text
 );
 --> statement-breakpoint
-CREATE TABLE `run_quality_scores` (
+CREATE TABLE IF NOT EXISTS `run_quality_scores` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`run_id` text NOT NULL,
 	`project_id` text NOT NULL,
@@ -33,5 +33,5 @@ CREATE TABLE `run_quality_scores` (
 	`ts` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')) NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `run_quality_scores_run_iteration_uniq` ON `run_quality_scores` (`run_id`,`iteration`);--> statement-breakpoint
-CREATE INDEX `run_quality_scores_project_ts_idx` ON `run_quality_scores` (`project_id`,`ts`);
+CREATE UNIQUE INDEX IF NOT EXISTS `run_quality_scores_run_iteration_uniq` ON `run_quality_scores` (`run_id`,`iteration`);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS `run_quality_scores_project_ts_idx` ON `run_quality_scores` (`project_id`,`ts`);

@@ -1,4 +1,11 @@
 export const TOOL_BUNDLES = {
+  /**
+   * No-tool bundle for skills that receive all context via prompt injection
+   * (e.g. grill-me). Declaring this bundle signals intent to restrict tools;
+   * the runtime passes --allowedTools '' to the CLI, locking the agent to
+   * zero filesystem/shell access.
+   */
+  core: [] as string[],
   'read-only': ['Read', 'Glob', 'Grep', 'Bash(cat *)', 'Bash(ls *)'],
   'read-write': ['Read', 'Write', 'Edit', 'Glob', 'Grep'],
   'bash-restricted': ['Bash'],
@@ -14,6 +21,24 @@ export const TOOL_BUNDLES = {
    * workspace-level deny rules in sandbox.ts provide the safety boundary instead.
    */
   'dev-tools': ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'],
+  /**
+   * Shell bundle: read-only bash access for skills that need to run commands
+   * but must not write files. Covers two use cases:
+   *   1. QA/audit: pnpm test/lint commands (same as qa-tools bash patterns)
+   *   2. code-quality-audit: git log/blame for Gall's Law evolution analysis (Cat 7)
+   * No Read/Glob/Grep — pair with 'read' bundle when file access is also needed.
+   */
+  shell: [
+    'Bash(pnpm test*)',
+    'Bash(pnpm --filter*)',
+    'Bash(pnpm biome*)',
+    'Bash(pnpm typecheck*)',
+    'Bash(pnpm lint*)',
+    'Bash(git log*)',
+    'Bash(git blame*)',
+    'Bash(git diff*)',
+    'Bash(git show*)',
+  ],
   /**
    * QA holdout bundle. Read-only access plus scoped bash for running test/lint
    * commands inside the dev worktree. No Write/Edit — QA must not modify files.
