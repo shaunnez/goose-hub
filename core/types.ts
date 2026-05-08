@@ -58,9 +58,9 @@ export interface CoachPolicy {
 
 export interface AgentConfig {
   runtime: 'claude-cli';
-  rolesModels: Record<Role, RoleModel>;
+  rolesModels: Partial<Record<Role, RoleModel>>;
   fallbackPolicy: Record<string, FallbackPolicy>;
-  toolAllowlists: Record<Role, ToolAllowlist>;
+  toolAllowlists: Partial<Record<Role, ToolAllowlist>>;
   advisorMode: {
     enabled: boolean;
     triggerOn: { priorities: string[] };

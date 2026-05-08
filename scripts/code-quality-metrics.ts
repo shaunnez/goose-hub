@@ -34,7 +34,7 @@ const outputJson = args.includes('--json');
 // ─── File discovery ───────────────────────────────────────────────────────────
 
 function findSourceFiles(root: string, exts: string[]): string[] {
-  const extPattern = exts.map((e) => `*.${e}`).join(' -o -name ');
+  const extPattern = exts.map((e) => `"*.${e}"`).join(' -o -name ');
   const excludes = [
     '-not -path "*/node_modules/*"',
     '-not -path "*/.git/*"',

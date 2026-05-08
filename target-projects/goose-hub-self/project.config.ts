@@ -40,7 +40,6 @@ const config: ProjectConfig = {
       reviewer: { primary: 'sonnet', fallback: null, advisor: null },
       retrospector: { primary: 'sonnet', fallback: 'haiku', advisor: null },
       researcher: { primary: 'opus', fallback: 'sonnet', advisor: null },
-      auditor: { primary: 'opus', fallback: 'sonnet', advisor: null },
     },
     fallbackPolicy: {
       critical: 'same-tier-only',
@@ -59,7 +58,6 @@ const config: ProjectConfig = {
       reviewer: { bundles: ['read', 'validate'] },
       retrospector: { bundles: ['core'], extras: ['event-read', 'persona-stats'] },
       researcher: { bundles: ['web', 'workItemAdmin'] },
-      auditor: { bundles: ['read', 'shell'] },
     },
     advisorMode: {
       enabled: true,
