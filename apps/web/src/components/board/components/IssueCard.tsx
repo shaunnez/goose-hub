@@ -6,7 +6,7 @@ import type { WorkItemCostsDto, WorkItemDto } from '@/lib/types';
 import { getPersonaInitials, usePersonaMap } from '@/lib/usePersonaMap';
 import { ageLabel, formatCost } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
-import { Ban } from 'lucide-react';
+import { Ban, GitFork } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 /** Shorten a repo-qualified dep ref to issue-number-only when it's in the same repo. */
@@ -115,6 +115,32 @@ export function IssueCard({
           >
             {item.milestoneTitle}
           </Pill>
+        )}
+        {item.prdChildren != null && item.prdChildren.length > 0 && (
+          <span className="inline-flex items-center gap-1">
+            {item.prdChildren.map((n) => (
+              <Link
+                key={n}
+                to={`/projects/${projectSlug}/items/${n}`}
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-0.5 font-mono text-[10px] text-accent border border-accent/30 rounded px-1 py-0.5 hover:border-accent/60 hover:bg-accent/5 transition-colors"
+                title={`Child issue #${n}`}
+              >
+                <GitFork size={9} aria-hidden />#{n}
+              </Link>
+            ))}
+          </span>
+        )}
+        {item.prdParent != null && (
+          <Link
+            to={`/projects/${projectSlug}/items/${item.prdParent}`}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-0.5 font-mono text-[10px] text-fg-3 border border-line rounded px-1 py-0.5 hover:border-line-2 hover:text-fg-2 transition-colors"
+            title={`From PRD #${item.prdParent}`}
+          >
+            <GitFork size={9} aria-hidden />
+            PRD #{item.prdParent}
+          </Link>
         )}
         {initials != null && (
           <span

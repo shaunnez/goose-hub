@@ -92,6 +92,8 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
       role: 'decomposer',
       skill: skillName,
       context: {
+        projectId,
+        workItemId: workItem.id,
         parentIssue: {
           number: Number(workItem.externalId),
           title: workItem.title,
@@ -267,6 +269,11 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
         // if they ever re-enter triaging (e.g. after a needs-human recovery).
         await stateSource.removeLabel(created.externalId, 'factory:triaging');
         await stateSource.addLabels(created.externalId, ['factory:accepted', 'factory:from-prd']);
+        await stateSource.transitionState(
+          created.externalId,
+          'factory:accepted',
+          'factory:dev-ready',
+        );
       }
     } catch (loopErr) {
       // Partial-create: some children were created before the failure.
@@ -298,6 +305,11 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
       workItem.externalId,
       'factory:decomposing',
       'factory:issues-created',
+    );
+    await stateSource.transitionState(
+      workItem.externalId,
+      'factory:issues-created',
+      'factory:done',
     );
 
     // Step 8: Emit decision summaries

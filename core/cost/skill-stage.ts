@@ -8,6 +8,10 @@ import type { Stage } from './types.js';
 const SKILL_TO_STAGE: Record<string, Stage> = {
   triage: 'triage',
   'triage-light': 'triage',
+  'grill-me': 'discover',
+  'write-prd': 'discover',
+  'advise-on-prd': 'discover',
+  'decompose-issues': 'discover',
   investigate: 'investigate',
   investigation: 'investigate',
   implement: 'dev',

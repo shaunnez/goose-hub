@@ -807,16 +807,11 @@ const RESUME_WORKFLOWS: Partial<Record<StateName, ResumeEntry>> = {
   'factory:needs-fix': { targetState: 'factory:needs-fix', dispatch: dispatchNeedsFix },
   // Discover lane
   'factory:grilling': { targetState: 'factory:grilling', dispatch: dispatchGrillAndPrd },
-  // factory:gate-pending is lane-agnostic (it can originate from grilling or
-  // other human-gate situations) and has no single canonical resume target, so
-  // it is intentionally omitted here. Human triage is required.
+  // factory:gate-pending is handled above with lane-origin inspection; it is
+  // intentionally absent from this table so the special-case runs first.
   'factory:prd-drafting': { targetState: 'factory:grilling', dispatch: dispatchGrillAndPrd },
   'factory:decomposing': { targetState: 'factory:decomposing', dispatch: dispatchDecomposePrd },
 };
-
-// Skills that belong to the discover lane — used to detect whether a
-// factory:needs-human escape originated from grilling so resume can route back.
-const DISCOVER_LANE_SKILLS = new Set(['grill-me', 'write-prd', 'advise-on-prd', 'grill-and-prd']);
 
 /**
  * Resume an orphaned or stalled run. Looks up the issue's current state,
@@ -825,9 +820,11 @@ const DISCOVER_LANE_SKILLS = new Set(['grill-me', 'write-prd', 'advise-on-prd', 
  * forceState rather than transitionState because recovery transitions are
  * not always legal in the normal workflow graph.
  *
- * factory:needs-human is handled specially: event history is inspected to
- * determine which lane the failure originated from so resume can route back
- * to the correct workflow.
+ * factory:gate-pending is handled specially: the last `state.transitioned`
+ * event that landed the issue in gate-pending is inspected for its `from`
+ * field to determine which lane to resume. Only `from: factory:grilling`
+ * supports auto-resume (routes back to the grill workflow). All other origins
+ * require manual triage.
  */
 export async function dispatchResumeIssue(slug: string, issueNumber: number): Promise<void> {
   if (parallelLock.isInFlight(slug, issueNumber)) {
@@ -846,18 +843,23 @@ export async function dispatchResumeIssue(slug: string, issueNumber: number): Pr
   const item = await source.getItem(issueNumber.toString());
   const fromState = item.state;
 
-  // Special-case: needs-human is lane-agnostic. Inspect event history to find
-  // which skill last failed and route to the appropriate resume workflow.
-  if (fromState === 'factory:needs-human') {
+  // gate-pending is lane-agnostic. Inspect the last state.transitioned event
+  // that moved the issue into gate-pending to determine which lane to resume.
+  if (fromState === 'factory:gate-pending') {
     const allEvents = eventStore.replay({ projectId: slug, workItemId });
-    const lastRunFailed = [...allEvents].reverse().find((e) => e.kind === 'agent.run-failed');
-    const failedSkill = (lastRunFailed?.payload as { skill?: string } | undefined)?.skill;
+    const lastToGatePending = [...allEvents]
+      .reverse()
+      .find(
+        (e) =>
+          e.kind === 'state.transitioned' &&
+          (e.payload as { to?: string }).to === 'factory:gate-pending',
+      );
+    const transitionedFrom = (lastToGatePending?.payload as { from?: string } | undefined)?.from;
 
-    if (failedSkill != null && DISCOVER_LANE_SKILLS.has(failedSkill)) {
-      logger.info('dispatchResumeIssue: needs-human from discover lane, resuming grilling', {
+    if (transitionedFrom === 'factory:grilling') {
+      logger.info('dispatchResumeIssue: gate-pending from grilling, resuming discover lane', {
         slug,
         issueNumber,
-        failedSkill,
       });
       await source.forceState(workItemId, 'factory:grilling');
       eventStore.appendEvent({
@@ -870,14 +872,11 @@ export async function dispatchResumeIssue(slug: string, issueNumber: number): Pr
       return;
     }
 
-    logger.warn(
-      'dispatchResumeIssue: needs-human with no discover-lane failure, cannot auto-resume',
-      {
-        slug,
-        issueNumber,
-        failedSkill,
-      },
-    );
+    logger.warn('dispatchResumeIssue: gate-pending from unknown lane, cannot auto-resume', {
+      slug,
+      issueNumber,
+      transitionedFrom,
+    });
     return;
   }
 

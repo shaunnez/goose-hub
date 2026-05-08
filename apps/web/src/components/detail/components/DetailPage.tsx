@@ -229,7 +229,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
         <ApprovalGateSection projectSlug={slug} id={id} state={item?.state} />
 
         <div className="flex-1 min-h-0 flex">
-          <LeftRail itemState={item?.state} />
+          <LeftRail itemState={item?.state} prdParent={item?.prdParent} itemType={item?.type} />
           <main className="flex-1 min-w-0 overflow-y-auto">
             {currentSection.key === 'overview' ? (
               <OverviewSection item={item} projectSlug={slug} />

@@ -160,13 +160,20 @@ class EventStore {
    * Last-Event-ID resumption.
    */
   replay(
-    filter: { projectId?: string; workItemId?: string; sinceId?: number; runId?: string } = {},
+    filter: {
+      projectId?: string;
+      workItemId?: string;
+      sinceId?: number;
+      runId?: string;
+      kind?: string;
+    } = {},
   ): AgentEvent[] {
     const conditions: SQL[] = [];
     if (filter.projectId != null) conditions.push(eq(events.projectId, filter.projectId));
     if (filter.workItemId != null) conditions.push(eq(events.workItemId, filter.workItemId));
     if (filter.sinceId != null) conditions.push(gt(events.id, filter.sinceId));
     if (filter.runId != null) conditions.push(eq(events.runId, filter.runId));
+    if (filter.kind != null) conditions.push(eq(events.kind, filter.kind));
 
     const where =
       conditions.length === 0

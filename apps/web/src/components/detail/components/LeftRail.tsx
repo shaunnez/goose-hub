@@ -1,10 +1,4 @@
 import { cn } from '@/lib/cn';
-// import {
-//   CODE_ACTIVE_STATES,
-//   GRILL_ACTIVE_STATES,
-//   PRD_ACTIVE_STATES,
-//   RETRO_ACTIVE_STATES,
-// } from '@/lib/constants';
 import {
   Brain,
   Bug,
@@ -38,26 +32,45 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   costs: Coins,
 };
 
-// Sections whose visibility is gated by issue state. When `itemState` is
-// not in the set we render no rail entry at all (per the M13 spec
-// requirement that Grill be ABSENT — not collapsed — outside Discover).
-// const STATE_GATED: Record<string, ReadonlySet<string>> = {
-//   code: CODE_ACTIVE_STATES,
-//   retrospective: RETRO_ACTIVE_STATES,
-//   prd: PRD_ACTIVE_STATES,
-//   grill: GRILL_ACTIVE_STATES,
-// };
+interface LeftRailProps {
+  itemState?: string;
+  itemType?: string;
+  prdParent?: string;
+}
 
-// Sections that should be COMPLETELY HIDDEN when their state gate fails,
-// rather than rendered as a deferred-state link. Both Grill and PRD are
-// // purely Discover-lane surfaces so they're hidden outside that lane.
-// const STATE_HIDE_WHEN_GATED = new Set(['grill', 'prd']);
+function getNotApplicableReason(
+  key: string,
+  itemType: string | undefined,
+  prdParent: string | undefined,
+): string | undefined {
+  const isRawFeature = itemType === 'feature' && prdParent == null;
+  const isFromPrd = prdParent != null;
 
-// interface LeftRailProps {
-//   itemState?: string;
-// }
-// { itemState }: LeftRailProps
-export function LeftRail() {
+  if (key === 'investigation') {
+    if (itemType !== 'bug') {
+      return itemType != null
+        ? `Investigation runs on bugs only — this is a ${itemType}`
+        : 'Investigation runs on bugs only';
+    }
+  }
+
+  if (key === 'grill' || key === 'prd') {
+    if (isFromPrd) return `Generated from PRD — see parent #${prdParent}`;
+    if (itemType != null && itemType !== 'feature') {
+      return `${itemType === 'bug' ? 'Bugs go straight to investigation' : `${itemType.charAt(0).toUpperCase()}${itemType.slice(1)}s skip`} the Discover lane`;
+    }
+  }
+
+  if (key === 'code' || key === 'qa' || key === 'review' || key === 'retrospective') {
+    if (isRawFeature) {
+      return 'This feature is decomposed into child issues — dev work happens there, not here';
+    }
+  }
+
+  return undefined;
+}
+
+export function LeftRail({ itemState: _itemState, itemType, prdParent }: LeftRailProps) {
   const { slug = 'goose-hub-self', id = '' } = useParams<{ slug: string; id: string }>();
   const location = useLocation();
 
@@ -83,24 +96,31 @@ export function LeftRail() {
           const number = String(idx + 1).padStart(2, '0');
           const Icon = SECTION_ICONS[section.key];
 
-          // const stateGate = STATE_GATED[section.key];
-          // const passesStateGate =
-          //   stateGate == null ? true : itemState != null && stateGate.has(itemState);
-          // Sections in STATE_HIDE_WHEN_GATED disappear entirely when their
-          // gate doesn't pass — used for Discover-only tabs like Grill and PRD.
-          // if (stateGate != null && !passesStateGate && STATE_HIDE_WHEN_GATED.has(section.key)) {
-          //   return null;
-          // }
-          const available = true; // stateGate != null ? passesStateGate : section.available;
+          const notApplicableReason = getNotApplicableReason(section.key, itemType, prdParent);
 
-          const unavailableTitle =
-            section.key === 'code'
-              ? 'Available once coding has started'
-              : section.key === 'retrospective'
-                ? 'Available after the PR merges'
-                : `Available in ${section.milestone}`;
+          if (notApplicableReason != null) {
+            return (
+              // Use a div so pointer events stay enabled (enabling title tooltip),
+              // but navigation is blocked. cursor-not-allowed signals non-interactivity.
+              <div
+                key={section.key}
+                title={notApplicableReason}
+                className="flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-fg-3 opacity-35 cursor-not-allowed select-none"
+              >
+                <span className="font-mono tnum text-[10.5px] w-5">{number}</span>
+                {Icon && <Icon size={13} className="shrink-0" />}
+                <span className="line-through">{section.label}</span>
+              </div>
+            );
+          }
 
-          if (!available) {
+          if (!section.available) {
+            const unavailableTitle =
+              section.key === 'code'
+                ? 'Available once coding has started'
+                : section.key === 'retrospective'
+                  ? 'Available after the PR merges'
+                  : `Available in ${section.milestone}`;
             return (
               <Link
                 key={section.key}

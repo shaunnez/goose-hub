@@ -1,5 +1,13 @@
+# Grill me
+  1. Grill page shows triage comments, probably not great.
+  2. Overview shows comments... weird it shows the griller comments
+  3. When i responded to the griller, this god added to github issue comments.. why?
+
+# Need to fix the dispatch file (so much code)
+
 # Milesotne 11 testing
  Validation checklist (exit criteria, PLAN.md §28)
+
                                                                                                                           
   Per PLAN.md line 1778, you need to manually verify these five scenarios:
                                                                                                                           
@@ -146,7 +154,7 @@
   ├──────────────────────────┼─────────────┼─────────────────┼───────────────────┤                                        
   │ Smoke gate               │ Yes         │ No              │ No                │
   └──────────────────────────┴─────────────┴─────────────────┴───────────────────┘     
-  
+
 # Todo
 1. Loading ... should always be something inside timeline "agent run" window indicating it's loading. This is seen on code but not other types. Obviously disappears when run is done and/or "resume" shows
 

@@ -25,6 +25,8 @@ export interface WorkItemDto {
   dependsOn: string[];
   dependsOnTitles?: Record<string, string>;
   blocks: string[];
+  prdChildren?: string[];
+  prdParent?: string;
   createdAt: string;
   lastPersonaId?: string | null;
 }
