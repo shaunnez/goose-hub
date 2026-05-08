@@ -192,12 +192,13 @@ function extractRunMeta(items: RenderItem[]): {
       if (skill == null && p?.skill != null) skill = p.skill;
     } else if (ev.kind === 'agent.spawned') {
       if (skill == null && p?.skill != null) skill = p.skill;
-    } else if (ev.kind === 'agent.model-selected' || ev.kind === 'agent.run-failed') {
+    } else if (ev.kind === 'agent.model-selected') {
       if (skill == null && p?.skill != null) skill = p.skill;
     } else if (ev.kind === 'agent.run-completed') {
       if (skill == null && p?.skill != null) skill = p.skill;
       if (endedAt == null) endedAt = ev.createdAt;
     } else if (ev.kind === 'agent.run-failed') {
+      if (skill == null && p?.skill != null) skill = p.skill;
       if (endedAt == null) endedAt = ev.createdAt;
     } else if (ev.kind === 'retrospective.completed') {
       // retrospective runs don't always emit agent.run-completed; treat this as terminal
