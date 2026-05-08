@@ -1,6 +1,6 @@
+import type { AgentEventDto } from '@/lib/types';
 import { describe, expect, it } from 'vitest';
 import { computeIsLive } from './PendingNextRunBanner';
-import type { AgentEventDto } from '@/lib/types';
 
 function makeEvent(kind: string, id: number): AgentEventDto {
   return {
