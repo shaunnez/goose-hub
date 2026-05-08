@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "0010_project_model_settings",
-  "prevId": "0010_project_model_settings",
+  "id": "7728dabe-d9cd-4e3a-8277-79644e5a0a75",
+  "prevId": "5aa214e5-0892-4361-8bdd-78dc86590ccf",
   "tables": {
     "agent_run_costs": {
       "name": "agent_run_costs",
