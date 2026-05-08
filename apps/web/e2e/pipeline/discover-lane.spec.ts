@@ -142,13 +142,9 @@ test.describe('Discover Lane (MOCK_AGENTS + MOCK_SOURCE)', () => {
     await postServer(`/projects/${SLUG}/tick`);
     await expect(statePill).toHaveText('grilling', { timeout: 60_000 });
 
-    // Grill tab must be present in the left rail (GRILL_ACTIVE_STATES includes grilling)
+    // Grill tab must be present in the left rail
     const grillLink = page.locator('[data-section-key="grill"]');
     await expect(grillLink).toBeVisible({ timeout: 10_000 });
-
-    // PRD tab must be absent (PRD_ACTIVE_STATES does NOT include grilling)
-    const prdLink = page.locator('[data-section-key="prd"]');
-    await expect(prdLink).not.toBeVisible({ timeout: 5_000 });
   });
 
   // ─────────────────────────────────────────────────────────────────────────

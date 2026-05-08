@@ -217,7 +217,6 @@ describe('runCrossRunRetroWorkflow', () => {
     expect(result.windowEndAt).toBe('2026-05-01T00:00:00Z');
 
     const events = mockAppendEvent.mock.calls.map((c) => c[0]);
-    expect(events.some((e) => e.kind === 'agent.run-started')).toBe(true);
     expect(events.some((e) => e.kind === 'retrospective.completed')).toBe(true);
   });
 

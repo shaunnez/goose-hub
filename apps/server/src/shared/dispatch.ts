@@ -169,6 +169,7 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
             prewarmWorktreeImpl: () => undefined,
             cleanupWorktreeImpl: () => undefined,
             resolveWorktreeHeadShaImpl: () => 'mock-sha-abc123',
+            orchestratorCommitAllImpl: () => 'mock-commit-sha',
           }
         : undefined;
 

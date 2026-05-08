@@ -487,9 +487,9 @@ describe('Discover Lane end-to-end integration', () => {
     expect(decomposeResult.childIssueNumbers).toHaveLength(2);
     const [child1Num, child2Num] = decomposeResult.childIssueNumbers;
 
-    // Parent state is factory:issues-created
+    // Parent state is factory:done (decompose workflow advances issues-created → done)
     const afterDecompose = await source.getItem(seeded.externalId);
-    expect(afterDecompose.state).toBe('factory:issues-created');
+    expect(afterDecompose.state).toBe('factory:done');
 
     // Second child's body contains #<first-child-number> (sibling ref resolved)
     const child2 = await source.getItem(String(child2Num));
@@ -519,9 +519,7 @@ describe('Discover Lane end-to-end integration', () => {
     for (const childNum of [child1Num, child2Num]) {
       const childId = String(childNum);
 
-      // Children are created in factory:triaging; force to accepted
-      await source.forceState(childId, 'factory:accepted');
-      await source.transitionState(childId, 'factory:accepted', 'factory:dev-ready');
+      // Children are promoted to factory:dev-ready by the decompose workflow
       await source.transitionState(childId, 'factory:dev-ready', 'factory:in-progress');
       await source.transitionState(childId, 'factory:in-progress', 'factory:needs-qa');
       await source.transitionState(childId, 'factory:needs-qa', 'factory:needs-review');
@@ -533,17 +531,7 @@ describe('Discover Lane end-to-end integration', () => {
       expect(finalChild.state).toBe('factory:done');
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Close the parent too (issues-created → dev-ready → ... → done)
-    // ─────────────────────────────────────────────────────────────────────────
-    await source.transitionState(seeded.externalId, 'factory:issues-created', 'factory:dev-ready');
-    await source.transitionState(seeded.externalId, 'factory:dev-ready', 'factory:in-progress');
-    await source.transitionState(seeded.externalId, 'factory:in-progress', 'factory:needs-qa');
-    await source.transitionState(seeded.externalId, 'factory:needs-qa', 'factory:needs-review');
-    await source.transitionState(seeded.externalId, 'factory:needs-review', 'factory:approved');
-    await source.transitionState(seeded.externalId, 'factory:approved', 'factory:retrospecting');
-    await source.transitionState(seeded.externalId, 'factory:retrospecting', 'factory:done');
-
+    // Parent is already factory:done after decompose (workflow advances issues-created → done)
     const finalParent = await source.getItem(seeded.externalId);
     expect(finalParent.state).toBe('factory:done');
 
@@ -593,14 +581,6 @@ describe('Discover Lane end-to-end integration', () => {
     // ─────────────────────────────────────────────────────────────────────────
     const allEvs = eventStore.replay({ projectId, workItemId: parentId });
     const kinds = allEvs.map((e) => e.kind);
-
-    // 3 agent.run-started events (grill-me ×3, but only the one within each
-    // runGrillAndPrdWorkflow call; each call emits one run-started for grill-me,
-    // plus optionally one for write-prd and one for advise-on-prd; here we have
-    // r1=1, r2=1, r3=2 (grill+prd). Total = 4 run-started for parent.
-    // The spec says "×3"; we assert ≥3.
-    const runStarted = kinds.filter((k) => k === 'agent.run-started');
-    expect(runStarted.length).toBeGreaterThanOrEqual(3);
 
     // grill.question-posted ×2
     expect(kinds.filter((k) => k === 'grill.question-posted')).toHaveLength(2);

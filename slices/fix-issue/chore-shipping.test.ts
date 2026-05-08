@@ -44,6 +44,9 @@ vi.mock('node:fs', async (importOriginal) => {
 vi.mock('@goose-hub/core/persona/accumulate.js', () => ({
   accumulatePersonaStats: vi.fn(),
 }));
+vi.mock('@goose-hub/core/workspaces/orchestrator-git.js', () => ({
+  orchestratorCommitAll: vi.fn().mockReturnValue('fake-sha'),
+}));
 
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { runFixIssueWorkflow } from './workflow.js';

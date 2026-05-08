@@ -15,6 +15,7 @@ import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
+import { orchestratorCommitAll } from '@goose-hub/core/workspaces/orchestrator-git.js';
 import {
   cleanupWorktree,
   createWorktree,
@@ -55,6 +56,11 @@ export interface FixIssueDeps {
   resolveWorktreeHeadShaImpl?: typeof resolveWorktreeHeadSha;
   /** Override resolveBaseBranch (used by tests to avoid real git subprocess). */
   resolveBaseBranchImpl?: (repoPath: string) => string;
+  /**
+   * Override orchestratorCommitAll (used by tests). Orchestrator commits the
+   * implement skill's output before opening the PR (ADR 0031 — builder no-commit rule).
+   */
+  orchestratorCommitAllImpl?: typeof orchestratorCommitAll;
 }
 
 /**
@@ -93,6 +99,7 @@ export async function runFixIssueWorkflow(
   const prewarmWtFn = deps.prewarmWorktreeImpl ?? prewarmWorktree;
   const resolveHeadShaFn = deps.resolveWorktreeHeadShaImpl ?? resolveWorktreeHeadSha;
   const resolveBaseBranchFn = deps.resolveBaseBranchImpl ?? resolveBaseBranch;
+  const orchestratorCommitFn = deps.orchestratorCommitAllImpl ?? orchestratorCommitAll;
 
   const implementPrompt = readPromptWithContext('implement', projectId);
   const implementJsonSchema = toJsonSchema(ImplementSchema);
@@ -191,6 +198,7 @@ export async function runFixIssueWorkflow(
           evidencePostPrompt,
           evidencePostJsonSchema,
           resolveHeadShaFn,
+          orchestratorCommitFn,
         });
         accumulatePersonaStats({
           personaName: implementPersonaId,
@@ -230,6 +238,7 @@ export async function runFixIssueWorkflow(
       evidencePostPrompt,
       evidencePostJsonSchema,
       resolveHeadShaFn,
+      orchestratorCommitFn,
     });
     accumulatePersonaStats({
       personaName: implementPersonaId,
@@ -385,10 +394,20 @@ interface AfterImplementInput {
   evidencePostPrompt: string;
   evidencePostJsonSchema: Record<string, unknown>;
   resolveHeadShaFn: typeof resolveWorktreeHeadSha;
+  /** Orchestrator commits before openPR (ADR 0031 — builder no-commit rule). */
+  orchestratorCommitFn: typeof orchestratorCommitAll;
 }
 
 async function afterImplement(input: AfterImplementInput): Promise<void> {
   const { implementOutput, workItem, stateSource, projectId, runId, worktreePath } = input;
+
+  // Orchestrator commits the builder's work before opening the PR (ADR 0031).
+  // The implement skill writes files but no longer commits; this call stages
+  // all changes and creates a single commit attributed to the workflow run.
+  input.orchestratorCommitFn(
+    worktreePath,
+    `fix(#${workItem.externalId}): ${workItem.title.slice(0, 60)}`,
+  );
 
   // Emit implement decision summaries (#206 pattern).
   for (const summary of implementOutput.decisionSummaries) {
