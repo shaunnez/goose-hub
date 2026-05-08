@@ -15,6 +15,7 @@ import type {
   PlaybookSummaryDto,
   ProjectConfigDto,
   ProjectSummary,
+  SprintReviewEligibility,
   TransitionResult,
   TriageResultDto,
   WorkItemCostsDto,
@@ -28,6 +29,7 @@ export type {
   IssueCommentDto,
   IssueDiffDto,
   MilestoneDto,
+  SprintReviewEligibility,
   AgentEventDto,
   TransitionResult,
   InboxItemDto,
@@ -64,6 +66,30 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
     throw new Error(`POST ${path} failed: ${res.status} ${res.statusText} ${text}`);
   }
   return (await res.json()) as T;
+}
+
+async function patchJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`/api${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`PATCH ${path} failed: ${res.status} ${res.statusText} ${text}`);
+  }
+  return (await res.json()) as T;
+}
+
+async function deleteRequest(path: string): Promise<void> {
+  const res = await fetch(`/api${path}`, {
+    method: 'DELETE',
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`DELETE ${path} failed: ${res.status} ${res.statusText} ${text}`);
+  }
 }
 
 export async function fetchProjects(signal?: AbortSignal): Promise<ProjectSummary[]> {
@@ -130,6 +156,49 @@ export async function setActiveMilestone(
   milestoneNumber: number | null,
 ): Promise<void> {
   await postJson(`/projects/${slug}/active-milestone`, { milestoneNumber });
+}
+
+export async function createMilestone(slug: string, title: string): Promise<MilestoneDto> {
+  const { milestone } = await postJson<{ milestone: MilestoneDto }>(
+    `/projects/${slug}/milestones`,
+    { title },
+  );
+  return milestone;
+}
+
+export async function updateMilestone(
+  slug: string,
+  number: number,
+  patch: { title?: string; state?: 'open' | 'closed' },
+): Promise<MilestoneDto> {
+  const { milestone } = await patchJson<{ milestone: MilestoneDto }>(
+    `/projects/${slug}/milestones/${number}`,
+    patch,
+  );
+  return milestone;
+}
+
+export async function deleteMilestone(slug: string, number: number): Promise<void> {
+  await deleteRequest(`/projects/${slug}/milestones/${number}`);
+}
+
+export async function fetchSprintReviewEligibility(
+  slug: string,
+  number: number,
+): Promise<SprintReviewEligibility> {
+  return getJson<SprintReviewEligibility>(
+    `/projects/${slug}/milestones/${number}/sprint-review-eligibility`,
+  );
+}
+
+export async function triggerSprintReview(
+  slug: string,
+  milestoneTitle: string,
+): Promise<{ issueNumber: number }> {
+  return postJson<{ issueNumber: number }>(
+    `/projects/${slug}/milestones/${encodeURIComponent(milestoneTitle)}/sprint-review`,
+    {},
+  );
 }
 
 export async function fetchTriageResult(slug: string, id: string): Promise<TriageResultDto | null> {

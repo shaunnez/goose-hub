@@ -1,4 +1,5 @@
 import type { ProjectConfigDto } from '@/lib/types';
+import { MilestonesPanel } from './MilestonesPanel';
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -47,11 +48,9 @@ export function ProjectConfigPanel({ config }: Props) {
       <Row label="Daily tokens" value={config.budgets.dailyTokens.toLocaleString()} />
       <Row label="Per-advisor $" value={`$${config.budgets.perAdvisorMaxUsd}`} />
 
-      <p className="mt-4 text-[11.5px] text-fg-2">
-        To edit, modify{' '}
-        <code className="font-mono text-fg-3">target-projects/{config.slug}/project.config.ts</code>{' '}
-        and restart the server.
-      </p>
+      <div className="mt-6 border-t border-line pt-6">
+        <MilestonesPanel slug={config.slug} />
+      </div>
     </div>
   );
 }

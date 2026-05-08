@@ -10,6 +10,10 @@ const {
   mockGetActiveMilestone,
   mockSetActiveMilestone,
   mockTriggerSprintReview,
+  mockCreateMilestone,
+  mockUpdateMilestone,
+  mockDeleteMilestone,
+  mockGetSprintReviewEligibility,
 } = vi.hoisted(() => ({
   mockListMilestones: vi.fn(),
   mockListMilestoneIssues: vi.fn(),
@@ -17,6 +21,10 @@ const {
   mockGetActiveMilestone: vi.fn(),
   mockSetActiveMilestone: vi.fn(),
   mockTriggerSprintReview: vi.fn(),
+  mockCreateMilestone: vi.fn(),
+  mockUpdateMilestone: vi.fn(),
+  mockDeleteMilestone: vi.fn(),
+  mockGetSprintReviewEligibility: vi.fn(),
 }));
 
 vi.mock('./service.js', () => ({
@@ -26,6 +34,10 @@ vi.mock('./service.js', () => ({
   getActiveMilestone: mockGetActiveMilestone,
   setActiveMilestone: mockSetActiveMilestone,
   triggerSprintReview: mockTriggerSprintReview,
+  createMilestone: mockCreateMilestone,
+  updateMilestone: mockUpdateMilestone,
+  deleteMilestone: mockDeleteMilestone,
+  getSprintReviewEligibility: mockGetSprintReviewEligibility,
 }));
 
 vi.mock('@goose-hub/core/logger.js', () => ({
@@ -340,5 +352,101 @@ describe('POST /projects/:slug/milestones/:title/sprint-review', () => {
     expect(res.status).toBe(404);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe('project not found');
+  });
+});
+
+describe('POST /projects/:slug/milestones', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('returns 201 with created milestone', async () => {
+    const milestone = { id: '14', number: 14, title: 'M14: Sprint', state: 'open' };
+    mockCreateMilestone.mockResolvedValue({ ok: true, data: { milestone } });
+    const app = makeApp();
+    const res = await app.request('/projects/my-proj/milestones', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'M14: Sprint' }),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { milestone: unknown };
+    expect(body.milestone).toEqual(milestone);
+  });
+
+  it('returns 422 on validation failure', async () => {
+    mockCreateMilestone.mockResolvedValue({ ok: false, error: 'title must match', status: 422 });
+    const app = makeApp();
+    const res = await app.request('/projects/my-proj/milestones', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Bad' }),
+    });
+    expect(res.status).toBe(422);
+  });
+});
+
+describe('PATCH /projects/:slug/milestones/:number', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('returns 200 with updated milestone', async () => {
+    const milestone = { id: '14', number: 14, title: 'M14: Renamed', state: 'open' };
+    mockUpdateMilestone.mockResolvedValue({ ok: true, data: { milestone } });
+    const app = makeApp();
+    const res = await app.request('/projects/my-proj/milestones/14', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'M14: Renamed' }),
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('returns 400 for non-numeric milestone number', async () => {
+    const app = makeApp();
+    const res = await app.request('/projects/my-proj/milestones/abc', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'M14: x' }),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('DELETE /projects/:slug/milestones/:number', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('returns 200 on success', async () => {
+    mockDeleteMilestone.mockResolvedValue({ ok: true, data: { ok: true } });
+    const app = makeApp();
+    const res = await app.request('/projects/my-proj/milestones/14', { method: 'DELETE' });
+    expect(res.status).toBe(200);
+  });
+
+  it('returns 409 when milestone has issues', async () => {
+    mockDeleteMilestone.mockResolvedValue({
+      ok: false,
+      error: 'milestone has issues',
+      status: 409,
+    });
+    const app = makeApp();
+    const res = await app.request('/projects/my-proj/milestones/14', { method: 'DELETE' });
+    expect(res.status).toBe(409);
+  });
+});
+
+describe('GET /projects/:slug/milestones/:number/sprint-review-eligibility', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('returns eligibility data', async () => {
+    const eligibility = { eligible: true, reason: '', alreadyExists: false };
+    mockGetSprintReviewEligibility.mockResolvedValue({ ok: true, data: eligibility });
+    const app = makeApp();
+    const res = await app.request('/projects/my-proj/milestones/5/sprint-review-eligibility');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(eligibility);
+  });
+
+  it('returns 400 for non-numeric number', async () => {
+    const app = makeApp();
+    const res = await app.request('/projects/my-proj/milestones/abc/sprint-review-eligibility');
+    expect(res.status).toBe(400);
   });
 });
