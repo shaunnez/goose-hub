@@ -37,8 +37,10 @@ import { PrMergedEvent, PrOpenedEvent } from './timeline/PrEvents';
 import {
   PrdAdvisorSkippedEvent,
   PrdApprovedEvent,
+  PrdDeclinedEvent,
   PrdDraftedEvent,
   PrdRejectedEvent,
+  PrdRevisedEvent,
 } from './timeline/PrdEvents';
 import { QaCompletedEvent, QaFailedEvent } from './timeline/QaEvents';
 import { RetroCompletedEvent } from './timeline/RetroCompletedEvent';
@@ -145,6 +147,10 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <PrdApprovedEvent key={event.id} event={event} />;
     case 'prd.rejected':
       return <PrdRejectedEvent key={event.id} event={event} />;
+    case 'prd.revised':
+      return <PrdRevisedEvent key={event.id} event={event} />;
+    case 'prd.declined':
+      return <PrdDeclinedEvent key={event.id} event={event} />;
     case 'decompose.completed':
       return <DecomposeCompletedEvent key={event.id} event={event} context={context} />;
     default:

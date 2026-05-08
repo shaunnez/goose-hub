@@ -62,6 +62,8 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'prd.advisor-skipped': 'Advisor skipped',
   'prd.approved': 'PRD approved',
   'prd.rejected': 'PRD rejected',
+  'prd.revised': 'PRD revision requested',
+  'prd.declined': 'Feature declined',
   'decompose.completed': 'Decompose complete',
 };
 
