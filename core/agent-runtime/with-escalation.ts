@@ -1,11 +1,11 @@
 import type { ZodType } from 'zod';
 import { eventStore } from '../event-stream/store.js';
 import type { ModelTier } from '../types.js';
-import { resolveEscalatedBudgets } from './budgets.js';
 import type { SkillBudgetOverride } from './budgets.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { HoldoutFallbackForbiddenError } from './interface.js';
 import { tierOf } from './models.js';
+import { resolveEscalatedBudgetsForProject } from './resolve-for-project.js';
 
 const HOLDOUT_ROLES = new Set(['qa', 'reviewer']);
 
@@ -67,7 +67,7 @@ export async function runWithEscalation<T>(
     throw new HoldoutFallbackForbiddenError(spec.role);
   }
 
-  const escalated = resolveEscalatedBudgets(spec.skill, projectBudgets);
+  const escalated = resolveEscalatedBudgetsForProject(spec.skill, projectBudgets, projectId);
   if (escalated == null) {
     throw makeValidationError(spec.skill, parsed.error.issues, result.output, null);
   }

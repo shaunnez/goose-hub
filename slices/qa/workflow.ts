@@ -1,8 +1,8 @@
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
-import { resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
+import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
@@ -174,7 +174,7 @@ export async function runQaWorkflow(
       toolBundles: ['read', 'qa-tools'],
       workspaceDir,
       toolExtras: [],
-      ...resolveBudgets('qa', projectConfig?.budgets),
+      ...resolveBudgetsForProject('qa', projectConfig?.budgets, projectSlug),
       personaId,
       outputJsonSchema: qaJsonSchema,
       appendSystemPrompt: qaPrompt,

@@ -11,10 +11,13 @@
 import { AdvisePRDOutputSchema } from '../../skills/advise-on-prd/schema.js';
 import { GrillMeOutputSchema } from '../../skills/grill-me/schema.js';
 import { PRDOutputSchema } from '../../skills/write-prd/schema.js';
-import { resolveBudgets } from '../agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '../agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
 import { readPromptWithContext } from '../agent-runtime/read-prompt.js';
+import {
+  resolveBudgetsForProject,
+  resolveGlobalSettingsForProject,
+} from '../agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '../agent-runtime/schema-bridge.js';
 import { selectPersona } from '../agent-runtime/select-persona.js';
 import { totalSpendForSkill as _totalSpendForSkill } from '../cost/repository.js';
@@ -72,12 +75,13 @@ function safeResolveBudgets(
     budgets: { maxTurns: number; maxBudgetUsd: number; timeoutMs?: number };
     modelOverride: string;
   },
+  projectId?: string,
 ): {
   budgets: { maxTurns: number; maxBudgetUsd: number; timeoutMs?: number };
   modelOverride: string;
 } {
   try {
-    return resolveBudgets(skill, projectBudgets);
+    return resolveBudgetsForProject(skill, projectBudgets, projectId ?? '');
   } catch {
     return fallback;
   }
@@ -145,7 +149,12 @@ export async function runGrillAndPrdWorkflow(
 
   // ─── Step 1: grill-me ────────────────────────────────────────────────────
   const grillerPersona = selectPersona(projectId, 'griller');
-  const grillBudget = safeResolveBudgets('grill-me', projectConfig?.budgets, FALLBACK_GRILL_BUDGET);
+  const grillBudget = safeResolveBudgets(
+    'grill-me',
+    projectConfig?.budgets,
+    FALLBACK_GRILL_BUDGET,
+    projectId,
+  );
   const grillPrompt = readPromptWithContext('grill-me', projectId);
   const grillJsonSchema = toJsonSchema(GrillMeOutputSchema);
 
@@ -346,7 +355,12 @@ export async function runGrillAndPrdWorkflow(
   }
 
   const prdPersona = selectPersona(projectId, 'prd-writer');
-  const prdBudget = safeResolveBudgets('write-prd', projectConfig?.budgets, FALLBACK_PRD_BUDGET);
+  const prdBudget = safeResolveBudgets(
+    'write-prd',
+    projectConfig?.budgets,
+    FALLBACK_PRD_BUDGET,
+    projectId,
+  );
   const prdPrompt = readPromptWithContext('write-prd', projectId);
   const prdJsonSchema = toJsonSchema(PRDOutputSchema);
 
@@ -438,8 +452,10 @@ export async function runGrillAndPrdWorkflow(
     'advise-on-prd',
     projectConfig?.budgets,
     FALLBACK_ADVISOR_BUDGET,
+    projectId,
   );
-  const perAdvisorMaxUsd = projectConfig?.budgets?.perAdvisorMaxUsd ?? Number.POSITIVE_INFINITY;
+  const globalSettings = resolveGlobalSettingsForProject(projectId, projectConfig?.budgets);
+  const perAdvisorMaxUsd = globalSettings.perAdvisorMaxUsd ?? Number.POSITIVE_INFINITY;
   const advisorSpentUsd = totalSpendForSkill(projectId, 'advise-on-prd');
   const advisorBudgetAvailable =
     advisorSpentUsd + advisorBudget.budgets.maxBudgetUsd <= perAdvisorMaxUsd;

@@ -7,6 +7,10 @@ import { runTriageBatch } from './triage-batch.js';
 
 // ─── Module-level mocks ──────────────────────────────────────────────────────
 
+vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
+  readProjectSettings: vi.fn().mockReturnValue(null),
+  readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
+}));
 const mockRun = vi.fn();
 
 vi.mock('@goose-hub/core/agent-runtime/claude-cli.js', () => ({

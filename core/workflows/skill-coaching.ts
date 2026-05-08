@@ -2,10 +2,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq, inArray } from 'drizzle-orm';
 import { SkillCoachOutputSchema } from '../../skills/skill-coach/schema.js';
-import { resolveBudgets } from '../agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '../agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
 import { readPromptWithContext } from '../agent-runtime/read-prompt.js';
+import { resolveBudgetsForProject } from '../agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '../agent-runtime/schema-bridge.js';
 import { selectPersona } from '../agent-runtime/select-persona.js';
 import { db } from '../db/db.js';
@@ -201,7 +201,7 @@ export async function runSkillCoachingWorkflow(
       freshContext: false,
       toolBundles: ['core'],
       toolExtras: [],
-      ...resolveBudgets(skillName, projectConfig?.budgets),
+      ...resolveBudgetsForProject(skillName, projectConfig?.budgets, projectId),
       personaId,
       appendSystemPrompt: prompt,
       outputJsonSchema: jsonSchema,

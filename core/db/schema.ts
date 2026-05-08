@@ -255,6 +255,40 @@ export const runQualityScores = sqliteTable(
   }),
 );
 
+// Per-project configurable budget overrides (global caps). One row per project.
+// Values here win over project.config.ts and take effect on the next agent dispatch.
+export const projectSettings = sqliteTable('project_settings', {
+  projectId: text('project_id').primaryKey(),
+  perWorkflowMaxUsd: real('per_workflow_max_usd'),
+  perAgentMaxUsd: real('per_agent_max_usd'),
+  perAdvisorMaxUsd: real('per_advisor_max_usd'),
+  dailyTokens: integer('daily_tokens'),
+  maxParallelAgents: integer('max_parallel_agents'),
+  maxRetries: integer('max_retries'),
+  maxBashSeconds: integer('max_bash_seconds'),
+  maxIssuesPerDayFromNonOwners: integer('max_issues_per_day_from_non_owners'),
+  updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  updatedBy: text('updated_by'),
+});
+
+// Per-project per-skill budget overrides. (project_id, skill_name) is the PK.
+// Values here win over project.config.ts skillBudgetOverrides and SKILL_BUDGETS defaults.
+export const projectSkillSettings = sqliteTable(
+  'project_skill_settings',
+  {
+    projectId: text('project_id').notNull(),
+    skillName: text('skill_name').notNull(),
+    maxTurns: integer('max_turns'),
+    maxBudgetUsd: real('max_budget_usd'),
+    timeoutMs: integer('timeout_ms'),
+    updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+    updatedBy: text('updated_by'),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.projectId, table.skillName] }),
+  }),
+);
+
 // One row per agent run. `runId` is unique — the same run is never recorded twice.
 // `costLabel`: 'exact' when the source provided authoritative usage metadata
 // (direct API), 'estimated' when only the Claude CLI's reported totals are

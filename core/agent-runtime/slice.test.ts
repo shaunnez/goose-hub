@@ -888,6 +888,10 @@ const { mockRouterDb } = vi.hoisted(() => {
 });
 
 vi.mock('../db/db.js', () => ({ db: mockRouterDb }));
+vi.mock('../db/repositories/project-settings.js', () => ({
+  readProjectSettings: vi.fn().mockReturnValue(null),
+  readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
+}));
 vi.mock('../db/schema.js', () => ({
   decisionPatterns: { projectId: 'p', kind: 'k', role: 'r', consistencyScore: 'cs' },
 }));

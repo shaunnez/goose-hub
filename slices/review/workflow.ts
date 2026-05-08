@@ -8,6 +8,7 @@ import type {
   AgentSpec,
 } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
+import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
@@ -73,7 +74,7 @@ export async function runReviewWorkflow(
       freshContext: true,
       toolBundles: ['read', 'validate'],
       toolExtras: [],
-      ...resolveBudgets('review', projectConfig?.budgets),
+      ...resolveBudgetsForProject('review', projectConfig?.budgets, projectSlug),
       personaId,
       outputJsonSchema: reviewJsonSchema,
       appendSystemPrompt: reviewPrompt,

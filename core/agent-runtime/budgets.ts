@@ -197,16 +197,24 @@ export interface ResolvedBudget {
   modelOverride: string;
 }
 
+/** DB-sourced per-skill override. Passed in by callers that have a projectId. */
+export interface DbSkillOverride {
+  maxTurns?: number | null;
+  maxBudgetUsd?: number | null;
+  timeoutMs?: number | null;
+}
+
 /**
  * Resolves the effective budget and starting model for a skill.
  *
- * Resolution order:
- *   1. Project-level override (budgets.skillBudgetOverrides[skill])
- *   2. Built-in SKILL_BUDGETS default
+ * Resolution order (later wins):
+ *   1. Built-in SKILL_BUDGETS default
+ *   2. project.config.ts skillBudgetOverrides[skill]
+ *   3. dbOverride (UI-editable, sourced from project_skill_settings by the caller)
  *
- * maxBudgetUsd is capped at perWorkflowMaxUsd when projectBudgets is provided.
+ * perWorkflowMaxUsd cap: dbPerWorkflowMaxUsd wins over the config value.
  *
- * Throws if the skill is not registered and no project override exists.
+ * Throws if the skill is not registered and no override exists at any layer.
  */
 export function resolveBudgets(
   skill: string,
@@ -214,32 +222,38 @@ export function resolveBudgets(
     perWorkflowMaxUsd?: number;
     skillBudgetOverrides?: Record<string, SkillBudgetOverride>;
   },
+  dbOverride?: DbSkillOverride,
+  dbPerWorkflowMaxUsd?: number | null,
 ): ResolvedBudget {
   const base = SKILL_BUDGETS[skill];
-  const override = projectBudgets?.skillBudgetOverrides?.[skill];
+  const configOverride = projectBudgets?.skillBudgetOverrides?.[skill];
 
-  if (base == null && override == null) {
+  if (base == null && configOverride == null && dbOverride == null) {
     throw new Error(
       `resolveBudgets: no budget registered for skill '${skill}'. Add it to SKILL_BUDGETS in core/agent-runtime/budgets.ts or add a skillBudgetOverrides entry in the project config.`,
     );
   }
 
-  const merged: SkillBudget = {
-    ...(base ?? {
-      maxTurns: 10,
-      maxBudgetUsd: 1,
-      timeoutMs: 120_000,
-      modelTier: 'sonnet' as ModelTier,
-    }),
-    ...override,
+  const fallback: SkillBudget = {
+    maxTurns: 10,
+    maxBudgetUsd: 1,
+    timeoutMs: 120_000,
+    modelTier: 'sonnet' as ModelTier,
   };
 
+  const merged: SkillBudget = {
+    ...(base ?? fallback),
+    ...configOverride,
+    // DB row fields only applied when non-null (null means "not set, inherit")
+    ...(dbOverride?.maxTurns != null ? { maxTurns: dbOverride.maxTurns } : {}),
+    ...(dbOverride?.maxBudgetUsd != null ? { maxBudgetUsd: dbOverride.maxBudgetUsd } : {}),
+    ...(dbOverride?.timeoutMs != null ? { timeoutMs: dbOverride.timeoutMs } : {}),
+  };
+
+  const effectivePerWorkflowCap = dbPerWorkflowMaxUsd ?? projectBudgets?.perWorkflowMaxUsd;
   let maxBudgetUsd = merged.maxBudgetUsd;
-  if (
-    projectBudgets?.perWorkflowMaxUsd != null &&
-    maxBudgetUsd > projectBudgets.perWorkflowMaxUsd
-  ) {
-    maxBudgetUsd = projectBudgets.perWorkflowMaxUsd;
+  if (effectivePerWorkflowCap != null && maxBudgetUsd > effectivePerWorkflowCap) {
+    maxBudgetUsd = effectivePerWorkflowCap;
   }
 
   return {
@@ -257,7 +271,7 @@ export function resolveBudgets(
  *
  * `maxTurns` and `timeoutMs` default to the base entry's values; `maxBudgetUsd`
  * comes from the escalation block (sonnet pricing > haiku, so the cap must
- * grow). `perWorkflowMaxUsd` from project budgets still caps the result.
+ * grow). `perWorkflowMaxUsd` cap: dbPerWorkflowMaxUsd wins over config value.
  */
 export function resolveEscalatedBudgets(
   skill: string,
@@ -265,6 +279,7 @@ export function resolveEscalatedBudgets(
     perWorkflowMaxUsd?: number;
     skillBudgetOverrides?: Record<string, SkillBudgetOverride>;
   },
+  dbPerWorkflowMaxUsd?: number | null,
 ): ResolvedBudget | null {
   const base = SKILL_BUDGETS[skill];
   const override = projectBudgets?.skillBudgetOverrides?.[skill];
@@ -279,11 +294,9 @@ export function resolveEscalatedBudgets(
   const timeoutMs = escalation.timeoutMs ?? baseTimeout;
   let maxBudgetUsd = escalation.maxBudgetUsd;
 
-  if (
-    projectBudgets?.perWorkflowMaxUsd != null &&
-    maxBudgetUsd > projectBudgets.perWorkflowMaxUsd
-  ) {
-    maxBudgetUsd = projectBudgets.perWorkflowMaxUsd;
+  const effectivePerWorkflowCap = dbPerWorkflowMaxUsd ?? projectBudgets?.perWorkflowMaxUsd;
+  if (effectivePerWorkflowCap != null && maxBudgetUsd > effectivePerWorkflowCap) {
+    maxBudgetUsd = effectivePerWorkflowCap;
   }
 
   return {

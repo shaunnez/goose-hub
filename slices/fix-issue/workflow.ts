@@ -1,12 +1,12 @@
 import { execFileSync } from 'node:child_process';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { adviseOnPlan } from '@goose-hub/core/agent-runtime/advisor.js';
-import { resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { selectModel } from '@goose-hub/core/agent-runtime/model-router.js';
 import { defaultModelForTier, tierOf } from '@goose-hub/core/agent-runtime/models.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
+import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { runWithEscalation } from '@goose-hub/core/agent-runtime/with-escalation.js';
@@ -304,9 +304,10 @@ interface ImplementOutputShape {
 
 async function runImplement(input: RunImplementInput): Promise<ImplementOutputShape> {
   const projectConfig = await getProjectBySlug(input.projectId);
-  const { budgets, modelOverride: budgetModelOverride } = resolveBudgets(
+  const { budgets, modelOverride: budgetModelOverride } = resolveBudgetsForProject(
     'implement',
     projectConfig?.budgets,
+    input.projectId,
   );
 
   const routerResult = selectModel({
@@ -591,7 +592,7 @@ async function runEvidencePost(input: RunEvidencePostInput): Promise<void> {
       toolBundles: ['validate'],
       toolExtras: [],
       env: { WEB_PORT: String(5200 + (Number(input.workItem.externalId) % 800)) },
-      ...resolveBudgets('evidence-post', projectConfig?.budgets),
+      ...resolveBudgetsForProject('evidence-post', projectConfig?.budgets, input.projectId),
       personaId: selectPersona(input.projectId, 'developer').personaId,
       outputJsonSchema: input.outputJsonSchema,
       appendSystemPrompt: input.appendSystemPrompt,

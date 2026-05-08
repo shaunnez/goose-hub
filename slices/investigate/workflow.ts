@@ -1,7 +1,7 @@
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
-import { resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
+import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
@@ -78,7 +78,7 @@ export async function runInvestigateWorkflow(
       freshContext: false,
       toolBundles: ['read-only'],
       toolExtras: [],
-      ...resolveBudgets('investigate', projectConfig?.budgets),
+      ...resolveBudgetsForProject('investigate', projectConfig?.budgets, projectId),
       personaId,
       outputJsonSchema: investigateJsonSchema,
       appendSystemPrompt: investigatePrompt,
@@ -122,7 +122,7 @@ export async function runInvestigateWorkflow(
           toolBundles: ['validate'],
           toolExtras: [],
           env: { SKIP_WEBSERVER: '1' },
-          ...resolveBudgets('playwright-repro', projectConfig?.budgets),
+          ...resolveBudgetsForProject('playwright-repro', projectConfig?.budgets, projectId),
           personaId: playwrightPersonaId,
           outputJsonSchema: playwrightReproJsonSchema,
           appendSystemPrompt: playwrightReproPrompt,

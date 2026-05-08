@@ -1,8 +1,8 @@
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
-import { resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
+import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { runWithEscalation } from '@goose-hub/core/agent-runtime/with-escalation.js';
@@ -231,7 +231,7 @@ export async function runFixFeedbackWorkflow(
         freshContext: false,
         toolBundles: ['dev-tools'],
         toolExtras: [],
-        ...resolveBudgets('implement', projectConfig?.budgets),
+        ...resolveBudgetsForProject('implement', projectConfig?.budgets, projectId),
         personaId,
         outputJsonSchema: implementJsonSchema,
         appendSystemPrompt: implementPrompt,

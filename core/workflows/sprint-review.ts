@@ -1,9 +1,9 @@
 import { eq } from 'drizzle-orm';
 import { SprintReviewOutputSchema } from '../../skills/sprint-review/schema.js';
-import { resolveBudgets } from '../agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '../agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
 import { readPromptWithContext } from '../agent-runtime/read-prompt.js';
+import { resolveBudgetsForProject } from '../agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '../agent-runtime/schema-bridge.js';
 import { selectPersona } from '../agent-runtime/select-persona.js';
 import { db } from '../db/db.js';
@@ -97,7 +97,7 @@ export async function runSprintReviewWorkflow(input: RunSprintReviewInput): Prom
     modelOverride: string;
   };
   try {
-    resolvedBudget = resolveBudgets(skillName, projectConfig?.budgets);
+    resolvedBudget = resolveBudgetsForProject(skillName, projectConfig?.budgets, projectId);
   } catch {
     resolvedBudget = {
       budgets: { maxTurns: 25, maxBudgetUsd: 0.5, timeoutMs: 240_000 },

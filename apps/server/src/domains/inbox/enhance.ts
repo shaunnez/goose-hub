@@ -1,6 +1,6 @@
-import { resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
+import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { logger } from '@goose-hub/core/logger.js';
@@ -44,7 +44,7 @@ export async function runBugEnhance(
       freshContext: false,
       toolBundles: [],
       toolExtras: [],
-      ...resolveBudgets('bug-enhance'),
+      ...resolveBudgetsForProject('bug-enhance', undefined, projectId),
       personaId,
       outputJsonSchema: jsonSchema,
       appendSystemPrompt: prompt,
