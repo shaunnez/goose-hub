@@ -250,13 +250,8 @@ test.describe('Discover Lane (MOCK_AGENTS + MOCK_SOURCE)', () => {
     const approveBtn = page.getByTestId('prd-approve-btn');
     await expect(approveBtn).toBeVisible();
     await approveBtn.click();
-    // After approve-prd the issue transitions to factory:decomposing.
-    // The mock decompose-prd workflow then advances to factory:issues-created.
-    await expect(statePill).toHaveText('decomposing', { timeout: 30_000 });
-
-    // TODO: verify at least one child issue card appears in the project list
-    // with factory:from-prd label once mock supports decomposed-child seeding.
-    // Tracked as a follow-up; the terminal assertion here is factory:decomposing
-    // (or factory:issues-created if the mock workflow completes synchronously).
+    // After approve-prd: the mock decompose-prd workflow runs synchronously and
+    // advances decomposing → issues-created → done before the UI polls.
+    await expect(statePill).toHaveText('done', { timeout: 30_000 });
   });
 });

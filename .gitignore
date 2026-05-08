@@ -6,6 +6,7 @@ dist
 .claude/settings.local.json
 .worktrees/
 goose-hub.db
+.e2e-pipeline.db
 claude-design/
 coverage/
 .codex
