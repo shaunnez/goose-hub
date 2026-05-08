@@ -79,6 +79,13 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
   }
 
   try {
+    eventStore.appendEvent({
+      kind: 'agent.run-started',
+      projectId,
+      workItemId: workItem.id,
+      runId,
+      payload: { skill: skillName, runId, personaId },
+    });
     const result = await runtime.run({
       runId,
       role: 'decomposer',
@@ -261,11 +268,6 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
         // if they ever re-enter triaging (e.g. after a needs-human recovery).
         await stateSource.removeLabel(created.externalId, 'factory:triaging');
         await stateSource.addLabels(created.externalId, ['factory:accepted', 'factory:from-prd']);
-        await stateSource.transitionState(
-          created.externalId,
-          'factory:accepted',
-          'factory:dev-ready',
-        );
       }
     } catch (loopErr) {
       // Partial-create: some children were created before the failure.
@@ -290,18 +292,10 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
     await stateSource.comment(workItem.externalId, `## Child issues\n${childList}`);
 
     // Step 7: Transition parent to factory:issues-created
-    // setLabelInGroup only supports 'priority' | 'schedule' | 'type', so
-    // 'factory:issues-created' cannot be applied via that method.
-    // Posting a comment to note the intended label, then transitioning state.
     await stateSource.transitionState(
       workItem.externalId,
       'factory:decomposing',
       'factory:issues-created',
-    );
-    await stateSource.transitionState(
-      workItem.externalId,
-      'factory:issues-created',
-      'factory:done',
     );
 
     // Step 8: Emit decision summaries

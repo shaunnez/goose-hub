@@ -303,6 +303,13 @@ export async function runCrossRunRetroWorkflow(
   }));
 
   try {
+    eventStore.appendEvent({
+      kind: 'agent.run-started',
+      projectId,
+      runId,
+      payload: { skill: skillName, runId, personaId },
+    });
+
     const result = await runtime.run({
       runId,
       role: 'retrospector',

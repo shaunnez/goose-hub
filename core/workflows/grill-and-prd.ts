@@ -151,6 +151,13 @@ export async function runGrillAndPrdWorkflow(
 
   let grillOutput: import('../../skills/grill-me/schema.js').GrillMeOutput;
   try {
+    eventStore.appendEvent({
+      kind: 'agent.run-started',
+      projectId,
+      workItemId: workItem.id,
+      runId,
+      payload: { skill: 'grill-me', runId, personaId: grillerPersona.personaId },
+    });
     const grillResult = await runtime.run({
       runId,
       role: 'griller',
@@ -343,6 +350,13 @@ export async function runGrillAndPrdWorkflow(
 
   let prdOutput: import('../../skills/write-prd/schema.js').PRDOutput;
   try {
+    eventStore.appendEvent({
+      kind: 'agent.run-started',
+      projectId,
+      workItemId: workItem.id,
+      runId,
+      payload: { skill: 'write-prd', runId, personaId: prdPersona.personaId },
+    });
     const prdResult = await runtime.run({
       runId,
       role: 'prd-writer',
