@@ -4,16 +4,21 @@ import { selectModel } from '../../core/agent-runtime/model-router.js';
 import type { WorkItem } from '../../core/state-source/interface.js';
 
 const baseWorkItem: WorkItem = {
-  id: '1',
+  id: 'github:owner/repo#1',
+  externalId: '1',
+  repoRef: 'owner/repo',
   title: 'Test issue',
   body: '- [ ] AC1',
   type: 'feature',
   priority: 'medium',
-  state: 'open',
-  labels: [],
-  number: 1,
-  createdAt: '2026-01-01T00:00:00Z',
-  updatedAt: '2026-01-01T00:00:00Z',
+  mode: 'supervised',
+  state: 'factory:accepted',
+  authorIsOwner: true,
+  schedule: 'current',
+  exec: 'serial',
+  dependsOn: [],
+  blocks: [],
+  createdAt: new Date('2026-01-01T00:00:00Z'),
 };
 
 // ─── selectModelForRole ────────────────────────────────────────────────────────
