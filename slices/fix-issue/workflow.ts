@@ -334,6 +334,7 @@ async function runImplement(input: RunImplementInput): Promise<ImplementOutputSh
     kind: 'agent.model-selected',
     payload: {
       runId: input.runId,
+      skill: 'implement',
       role: 'developer',
       selectedTier: routerResult?.tier ?? tierOf(budgetModelOverride),
       reason: routerResult?.reason ?? 'budget-default',

@@ -8,7 +8,6 @@ target-projects/**/MISSION.md
 target-projects/**/FACTORY_RULES.md
 target-projects/**/project.config.ts
 target-projects/**/personas/**
-docs/PLAN.md
 ```
 
 Any plan that modifies the above → `abort`.

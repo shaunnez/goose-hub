@@ -10,11 +10,39 @@ Goose Hub is a personal command centre for AI-assisted software delivery, powere
 
 You execute one narrow GitHub issue at a time. The issue is your build spec.
 
-`docs/PLAN.md` is **the constitution**, not a build spec. Use it for direction, domain vocabulary, and the milestone roadmap. Do not try to build "from the document." Build from the issue.
-
 `CONTEXT.md` (repo root) is the **resolved-implementation-decision registry**. Read it before writing any code in `core/` or `apps/`. It answers concrete "how is this wired?" questions: how the SSE event stream works, what format context takes in agent prompts, where improvement candidates get filed, how holdout context filtering works. If the code you're about to write touches a decision recorded there, follow it — don't re-litigate it.
 
 `docs/adr/` is the long-form record. CONTEXT.md summarizes; ADRs justify. When you need the *why* behind a decision (or are filing a new one), go to ADRs.
+
+## Domain vocabulary
+
+- **Goose Hub** — the product. The app, UI, and runtime.
+- **Factory** — the engine inside Goose Hub: orchestrator, workflows, agent runtime, tool layer, workspaces, budgets, telemetry.
+- **Target Project** (or just **Project**) — a unit of work Factory operates on. Has its own source of truth, mode, budgets, governance. Configured under `target-projects/<slug>/`.
+- **Target Repository** — the actual codebase agents clone, investigate, and modify. Lives outside Goose Hub.
+- **Source of Truth** — the system holding work-item state for a project. v0: GitHub Issues per repo.
+- **Work Item** — a unit of work in the source of truth. Carries type, priority, mode, current state.
+- **State** — the lifecycle position of a work item. Stored on the **issue**, not the PR. PRs are artefacts; PR labels are decorative only.
+- **Workflow** — a TypeScript module composing nodes that takes a work item from state to state.
+- **Node** — a single async function inside a workflow.
+- **Lane** — a UI column on the Kanban. Visual grouping of states. Pure display; never drives behaviour.
+- **Agent Run** — one invocation of an AI agent with role, prompt, tool allowlist, budget, output schema.
+- **Role** — Triager, Griller, PRD-Writer, Decomposer, Researcher, Investigator, Developer, QA, Reviewer, Retrospector, Advisor.
+- **Persona** — a named instance of a role with personality, history, performance metrics. Project-scoped.
+- **Skill** — a packaged capability: prompt + role + tool bundle list + model config + JSON output schema. Versioned markdown plus a TypeScript schema file.
+- **Tool Bundle** — a named set of related tools. Roles compose allowlists from bundles plus per-role extras.
+- **Workspace** — an ephemeral working directory containing a git worktree of the target repo. A *workflow boundary*, not an *isolation boundary*.
+- **Vertical Slice** — a self-contained, end-to-end feature folder. Slices include only surfaces they touch; `slice.test.ts` and `README.md` are required.
+- **Funnel** — an input channel that produces work items: direct, Inbox UI, research lane, conversation capture, external webhook.
+- **Inbox** — project-agnostic capture for raw notes. Lives in local SQLite. Promotes to a target repo's issue tracker.
+- **Mode** — autonomy level: `interactive`, `supervised`, `autonomous`.
+- **Gate** — a workflow node that pauses awaiting human approval.
+- **Milestone** — a GitHub-native bucket of work items. One is "active" at a time per project.
+- **Improvement Candidate** — retrospective-flagged change to a prompt, config, or skill. Becomes a Factory issue once approved.
+- **Governance** — immutable rules in `MISSION.md`, `FACTORY_RULES.md`, `CLAUDE.md`.
+- **Advisor** — a higher-tier model that reviews a primary agent's output in fresh context. Verdict: proceed/revise/abort. Never used on holdouts.
+- **Decision Summary** — a single-sentence event emitted by an agent at a decision point. Not raw chain-of-thought. Stored in the event stream after secret redaction.
+- **Bootstrap** — the workflow that onboards a new target project: detects stack, ensures CLAUDE.md, installs labels, scaffolds project config.
 
 ## Hard rules to remember
 
@@ -68,7 +96,7 @@ If the `gh issue list` command above returns no eligible issues — meaning all 
 - Have unmet `Depends on #N` references pointing at still-open issues
 — then the milestone is structurally complete.
 
-Run the exit audit per `docs/exit-audit.md`. That file describes the generic checks. It also instructs you to read the milestone-specific exit criteria from `docs/PLAN.md` section 28 for the active milestone, and combine both.
+Run the exit audit per `docs/exit-audit.md`. That file describes the generic checks. It also instructs you to read the milestone-specific exit criteria from `docs/archive/PLAN.md` section 28 for the active milestone, and combine both.
 
 Report findings using the structured format `docs/exit-audit.md` specifies. Do NOT close the milestone yourself. Do NOT start work on the next milestone. The human reviews the audit and decides.
 
@@ -80,11 +108,11 @@ If you see an issue labelled `factory:in-progress` with no recent activity (no P
 ## How to approach a task
 
 1. Read the issue carefully. Identify the acceptance criteria.
-2. Read this file (`CLAUDE.md`) and the relevant section of `docs/PLAN.md`.
+2. Read this file (`CLAUDE.md`) and `CONTEXT.md` for implementation decisions relevant to the task.
 3. Check `FACTORY_RULES.md` for any rule that bears on this task.
 3a. If the task touches `core/` and requires a new architectural decision not already covered by `CONTEXT.md`, write an ADR in `docs/adr/` before opening the PR.
 4. If the task contradicts a rule or principle, reject it with a comment citing the violation. Do not proceed.
-5. If the task is ambiguous, look up the domain model (PLAN section 4) and interfaces (PLAN section 7). Most ambiguity is resolved there.
+5. If the task is ambiguous, look up the domain vocabulary above and `CONTEXT.md`. Most ambiguity is resolved there.
 6. If still unsure, label the issue `factory:gate-pending` and request human input. Do not guess on architectural decisions.
 7. Follow TDD: write the failing test first, then the implementation, then refactor.
 8. Run lint and tests before opening a PR.
@@ -129,7 +157,7 @@ Tool-call audit (`agent.tool-call`) is a separate, automatic stream emitted by t
 
 ## What's currently in scope
 
-Goose Hub is built milestone-by-milestone (M0–M18 in `docs/PLAN.md` section 28). Work on the issue you're given. Do not scope-creep into earlier or later milestones.
+Goose Hub is built milestone-by-milestone (M0–M18). Work on the issue you're given. Do not scope-creep into earlier or later milestones.
 
 If you find work that should belong in a later milestone, file a new issue (don't do the work now).
 
@@ -143,4 +171,4 @@ If you find work that should belong in a later milestone, file a new issue (don'
 
 ## When in doubt
 
-`docs/PLAN.md` first. `MISSION.md` second. `FACTORY_RULES.md` third. Ask the human fourth. Guess never.
+`CONTEXT.md` first. `MISSION.md` second. `FACTORY_RULES.md` third. Ask the human fourth. Guess never.

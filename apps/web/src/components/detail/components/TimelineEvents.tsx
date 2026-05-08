@@ -27,6 +27,7 @@ import {
 import { GrillCompletedEvent, GrillQuestionPostedEvent } from './timeline/GrillEvents';
 import { AgentLogEvent, AgentLogGroupEvent } from './timeline/LogEvents';
 import {
+  AgentModelSelectedEvent,
   FallbackEvent,
   ManualActionEvent,
   MilestoneActivatedEvent,
@@ -72,6 +73,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
   const { event } = item;
 
   switch (event.kind) {
+    case 'agent.model-selected':
+      return <AgentModelSelectedEvent key={event.id} event={event} />;
     case 'agent.spawned':
       return <AgentSpawnedEvent key={event.id} event={event} />;
     case 'agent.decision-summary':

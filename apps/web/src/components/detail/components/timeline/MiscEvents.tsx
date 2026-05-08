@@ -1,5 +1,5 @@
 import type { AgentEventDto } from '@/lib/types';
-import { ArrowRight, Info, Target, User } from 'lucide-react';
+import { ArrowRight, Cpu, Info, Target, User } from 'lucide-react';
 import { EVENT_KIND_LABEL, getPayloadStr } from '../../lib/timeline';
 
 export function ManualActionEvent({ event }: { event: AgentEventDto }) {
@@ -73,6 +73,35 @@ export function SystemNoteEvent({ event }: { event: AgentEventDto }) {
         <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
       </div>
       <div className="text-[12.5px] text-fg-2">{getPayloadStr(event.payload)}</div>
+    </li>
+  );
+}
+
+export function AgentModelSelectedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as {
+    skill?: string;
+    role?: string;
+    selectedTier?: string;
+    reason?: string;
+  } | null;
+  const tier = p?.selectedTier ?? '—';
+  const reason = p?.reason ?? '—';
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <Cpu size={13} className="shrink-0" />
+        <span className="font-mono uppercase tracking-wider">Model selected</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="text-[12.5px] text-fg-2">
+        {tier}
+        <span className="text-fg-4 mx-1">·</span>
+        {reason}
+      </div>
     </li>
   );
 }

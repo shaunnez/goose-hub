@@ -1,6 +1,6 @@
 # Milestone Exit Audit
 
-This file is run by an AI agent (or a human) at the end of each milestone, **before** the milestone is closed. It validates that the milestone is genuinely done — not just that the headline criterion works, but that the implementation matches the architecture in `docs/PLAN.md` and the rules in `FACTORY_RULES.md`.
+This file is run by an AI agent (or a human) at the end of each milestone, **before** the milestone is closed. It validates that the milestone is genuinely done — not just that the headline criterion works, but that the implementation matches the architecture in `CONTEXT.md` and the rules in `FACTORY_RULES.md`.
 
 ## When this is run
 
@@ -13,7 +13,7 @@ The agent never closes the milestone. The agent never starts work on the next mi
 The audit has two parts:
 
 1. **Generic checks** (this file) — apply to every milestone
-2. **Milestone-specific exit criteria** — read from `docs/PLAN.md` section 28 for the active milestone
+2. **Milestone-specific exit criteria** — read from `docs/archive/PLAN.md` section 28 for the active milestone
 
 The active milestone name is in `CLAUDE.md` under "Starting the next issue." Read it from there.
 
@@ -24,7 +24,7 @@ The agent runs both parts and reports findings in a single structured output.
 Read these files in order before running checks:
 
 1. `CLAUDE.md` (root) — confirm the active milestone name
-2. `docs/PLAN.md` — section 3 (principles), section 27 (rules), section 28 entry for the active milestone
+2. `docs/archive/PLAN.md` section 28 — entry for the active milestone (exit criteria)
 3. `MISSION.md` and `FACTORY_RULES.md` — the immutable constraints
 
 ## Generic checks
@@ -44,7 +44,7 @@ If issues remain open with unmet dependencies pointing at *closed* issues (i.e. 
 
 ### Check 2 — Headline exit criterion met
 
-Read the milestone's "Exit criteria" field from `docs/PLAN.md` section 28. Run whatever the criterion specifies. Examples:
+Read the milestone's "Exit criteria" field from `docs/archive/PLAN.md` section 28. Run whatever the criterion specifies. Examples:
 - M1: `pnpm goose status goose-hub-self` produces real output against real GitHub
 - M2: Playwright happy path passes
 - M4: `goose run-agent --skill=echo-test ...` works end-to-end
@@ -130,7 +130,7 @@ Confirm the following directories are absent or empty (unless the active milesto
 - Webhook handlers — introduced in M2/M3
 - `skills/` real implementations — introduced from M5
 
-Check `docs/PLAN.md` section 28 for what *should* exist by the active milestone. Anything present that belongs to a later milestone is scope creep.
+Check `docs/archive/PLAN.md` section 28 for what *should* exist by the active milestone. Anything present that belongs to a later milestone is scope creep.
 
 PASS if scope is correct for the active milestone.
 FOLLOW-UP-NEEDED if early-implemented work exists; flag and recommend either revert or explicit "wired in M<N>" tracking.
@@ -151,8 +151,6 @@ For each merged PR, confirm none of the governance files were modified (only cre
 - `target-projects/**/FACTORY_RULES.md`
 - `target-projects/**/project.config.ts`
 - `target-projects/**/personas/**`
-- `docs/PLAN.md`
-
 PASS if no governance file was modified by a Factory PR (manual human edits via direct push are fine but should be rare and intentional).
 FAIL if any Factory PR modified a governance file outside the bootstrap exception.
 
@@ -163,7 +161,7 @@ Run:
 tree -L 3 -I 'node_modules|dist|.git|build|coverage'
 ```
 
-Compare against PLAN section 6's expected layout. Drift now compounds — catch it.
+Compare against `CONTEXT.md` for current expected layout. Drift now compounds — catch it.
 
 PASS if structure matches.
 FOLLOW-UP-NEEDED if structure has drifted in minor ways (file in wrong subfolder, etc.).
@@ -171,14 +169,14 @@ FAIL if structure has fundamentally diverged.
 
 ### Check 11 — README is current
 
-Read `README.md`. Confirm it points to `MISSION.md`, `FACTORY_RULES.md`, `CLAUDE.md`, and `docs/PLAN.md`. If the milestone added significant new capability (a CLI command, a UI surface, etc.), confirm the README at least mentions it.
+Read `README.md`. Confirm it points to `MISSION.md`, `FACTORY_RULES.md`, and `CLAUDE.md`. If the milestone added significant new capability (a CLI command, a UI surface, etc.), confirm the README at least mentions it.
 
 PASS if current.
 FOLLOW-UP-NEEDED if stale — easy to fix, file as a chore.
 
 ### Check 12 — Milestone-specific exit criteria from PLAN
 
-Read the active milestone's full entry in `docs/PLAN.md` section 28. Specifically:
+Read the active milestone's full entry in `docs/archive/PLAN.md` section 28. Specifically:
 
 - "Outcome" — has it been delivered?
 - "Included scope" — every item shipped?

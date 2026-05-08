@@ -267,7 +267,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
             projectId,
             workItemId,
             kind: 'agent.run-failed',
-            payload: { runId, exitCode: code },
+            payload: { runId, skill: spec.skill, exitCode: code },
             runId,
             personaId,
           });
@@ -282,7 +282,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
             projectId,
             workItemId,
             kind: 'agent.run-failed',
-            payload: { runId, exitCode: code },
+            payload: { runId, skill: spec.skill, exitCode: code },
             runId,
             personaId,
           });

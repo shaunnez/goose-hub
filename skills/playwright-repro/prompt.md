@@ -20,6 +20,11 @@ Context `<work_item>` has:
 
 Context `<appUrl>` — running app base URL (e.g. `http://localhost:5173`).
 
+Context `<investigation>` (optional) — output from the preceding `investigate` skill run:
+- `findings` — root cause hypothesis
+- `keyFiles` — files identified as most relevant, with reasons
+- `confidence` — `low | medium | high`
+
 ## Tools
 
 `Read`, `Write`, `Glob`, `Grep` for source exploration and spec authoring.
@@ -32,11 +37,14 @@ Context `<appUrl>` — running app base URL (e.g. `http://localhost:5173`).
 
 ### 1. Understand the app
 
-Read relevant files in `apps/web/src/` to find:
-- The route path for the bug
-- Selectors for interactive elements (`data-testid` attributes, ARIA roles, visible text)
+**If `<investigation>` context is present**, use it as your primary guide:
+- Read the files listed in `<investigation.keyFiles>` directly — do not do broad directory exploration.
+- Treat `<investigation.findings>` as the confirmed root cause; use it to write targeted assertions in the spec.
+- Only grep or read additional files if a specific selector or route path is still unknown after reading the key files.
 
-Use `Grep` to search for component names, route paths, and `data-testid` values related to the repro steps.
+**If `<investigation>` context is absent**, discover the app the long way:
+- Read relevant files in `apps/web/src/` to find the route path and selectors.
+- Use `Grep` to search for component names, route paths, and `data-testid` values related to the repro steps.
 
 ### 2. Write the repro spec
 

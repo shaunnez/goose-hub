@@ -106,7 +106,6 @@ const config: ProjectConfig = {
       'target-projects/**/FACTORY_RULES.md',
       'target-projects/**/project.config.ts',
       'target-projects/**/personas/**',
-      'docs/PLAN.md',
     ],
   },
   isolation: { mode: 'native' },

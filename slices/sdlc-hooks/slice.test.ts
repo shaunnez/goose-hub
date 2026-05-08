@@ -74,7 +74,12 @@ describe('require-spec.sh', () => {
   });
 
   it('allows docs/ paths', () => {
-    const result = runRequireSpec('Edit', 'docs/PLAN.md', { FACTORY_RUN_ID: 'test-run' }, tmpDir);
+    const result = runRequireSpec(
+      'Edit',
+      'docs/archive/PLAN.md',
+      { FACTORY_RUN_ID: 'test-run' },
+      tmpDir,
+    );
     expect(result.status).toBe(0);
   });
 

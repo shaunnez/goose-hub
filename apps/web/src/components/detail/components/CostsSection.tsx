@@ -55,6 +55,25 @@ export function CostsSection({ projectSlug, id }: CostsSectionProps) {
   });
   const maxBudget = configs.find((c) => c.slug === projectSlug)?.budgets.perWorkflowMaxUsd ?? null;
 
+  const personaSummaries = useMemo(() => {
+    if (!data) return [];
+    const groups = new Map<string, CostRowDto[]>();
+    for (const row of data.rows) {
+      const key = row.personaId ?? '__system__';
+      const existing = groups.get(key);
+      if (existing) existing.push(row);
+      else groups.set(key, [row]);
+    }
+    return Array.from(groups.entries()).map(([key, rows]) => {
+      const personaId = key === '__system__' ? null : key;
+      const toks = rows.reduce((s, r) => s + r.inputTokens + r.outputTokens, 0);
+      const cost = rows.reduce((s, r) => s + r.costUsd, 0);
+      const lastModel = rows[rows.length - 1].modelId;
+      const skills = [...new Set(rows.map((r) => r.skill))].join(', ');
+      return { personaId, toks, cost, lastModel, skills };
+    });
+  }, [data]);
+
   if (isLoading) return null;
 
   if (error) {
@@ -84,25 +103,6 @@ export function CostsSection({ projectSlug, id }: CostsSectionProps) {
 
   const totalLabel = data.hasEstimated ? 'estimated' : 'exact';
   const totalTokens = data.rows.reduce((s, r) => s + r.inputTokens + r.outputTokens, 0);
-
-  const personaSummaries = useMemo(() => {
-    const groups = new Map<string, CostRowDto[]>();
-    for (const row of data.rows) {
-      const key = row.personaId ?? '__system__';
-      const existing = groups.get(key);
-      if (existing) existing.push(row);
-      else groups.set(key, [row]);
-    }
-    return Array.from(groups.entries()).map(([key, rows]) => {
-      const personaId = key === '__system__' ? null : key;
-      const toks = rows.reduce((s, r) => s + r.inputTokens + r.outputTokens, 0);
-      const cost = rows.reduce((s, r) => s + r.costUsd, 0);
-      const lastModel = rows[rows.length - 1].modelId;
-      const skills = [...new Set(rows.map((r) => r.skill))].join(', ');
-      return { personaId, toks, cost, lastModel, skills };
-    });
-  }, [data.rows]);
-
   const maxPersonaToks = Math.max(...personaSummaries.map((p) => p.toks), 1);
   const maxPersonaCost = Math.max(...personaSummaries.map((p) => p.cost), 0.0001);
 

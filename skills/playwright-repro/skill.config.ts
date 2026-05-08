@@ -10,6 +10,16 @@ export const PlaywrightReproContextSchema = z.object({
     number: z.number().describe('Issue number — drives evidence branch name and gh comment'),
     repo: z.string().describe('owner/repo, e.g. shaunnez/goose-hub'),
   }),
+  investigation: z
+    .object({
+      findings: z.string().describe('Root cause hypothesis from the investigate skill'),
+      keyFiles: z
+        .array(z.object({ path: z.string(), reason: z.string() }))
+        .describe('Files identified as most relevant during investigation'),
+      confidence: z.enum(['low', 'medium', 'high']),
+    })
+    .optional()
+    .describe('Output from the preceding investigate skill run, when available'),
 });
 
 const config: SkillConfig = {
@@ -21,6 +31,9 @@ const config: SkillConfig = {
     'workItem.url',
     'workItem.number',
     'workItem.repo',
+    'investigation.findings',
+    'investigation.keyFiles',
+    'investigation.confidence',
   ],
   toolBundles: ['validate'],
   modelPin: 'sonnet',

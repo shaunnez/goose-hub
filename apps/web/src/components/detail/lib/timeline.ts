@@ -65,6 +65,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'prd.revised': 'PRD revision requested',
   'prd.declined': 'Feature declined',
   'decompose.completed': 'Decompose complete',
+  'agent.model-selected': 'Model selected',
 };
 
 export function formatSkillName(skill: string | null): string {
@@ -190,6 +191,8 @@ function extractRunMeta(items: RenderItem[]): {
       if (startedAt == null) startedAt = ev.createdAt;
       if (skill == null && p?.skill != null) skill = p.skill;
     } else if (ev.kind === 'agent.spawned') {
+      if (skill == null && p?.skill != null) skill = p.skill;
+    } else if (ev.kind === 'agent.model-selected' || ev.kind === 'agent.run-failed') {
       if (skill == null && p?.skill != null) skill = p.skill;
     } else if (ev.kind === 'agent.run-completed') {
       if (skill == null && p?.skill != null) skill = p.skill;
