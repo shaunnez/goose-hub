@@ -4,7 +4,7 @@ import type { Result } from '#shared/middleware.js';
 import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
 import { getSourceForSlug } from '#shared/source.js';
 import { checkSprintReviewEligibility } from '../workflows/sprint-review-eligibility.js';
-import { readActiveMilestone, writeActiveMilestone } from './repository.js';
+import { writeActiveMilestone } from './repository.js';
 
 export async function getActiveMilestone(
   slug: string,
@@ -114,8 +114,8 @@ export async function deleteMilestone(slug: string, number: number): Promise<Res
     return { ok: false, error: 'milestone has issues', status: 409 };
   }
 
-  const activeMilestone = await readActiveMilestone(slug);
-  if (activeMilestone === number) {
+  const { milestoneNumber: activeMilestoneNumber } = await resolveActiveMilestone(slug);
+  if (activeMilestoneNumber === number) {
     return {
       ok: false,
       error: 'milestone is currently active; switch away before deleting',

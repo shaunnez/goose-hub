@@ -291,11 +291,19 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
     const childList = childIssueNumbers.map((n, i) => `- #${n} — ${issues[i].title}`).join('\n');
     await stateSource.comment(workItem.externalId, `## Child issues\n${childList}`);
 
-    // Step 7: Transition parent to factory:issues-created
+    // Step 7: Transition parent through factory:issues-created to factory:done.
+    // factory:issues-created is a transient milestone state; the workflow
+    // advances the parent all the way to factory:done so the orchestrator
+    // doesn't need a separate tick to close it.
     await stateSource.transitionState(
       workItem.externalId,
       'factory:decomposing',
       'factory:issues-created',
+    );
+    await stateSource.transitionState(
+      workItem.externalId,
+      'factory:issues-created',
+      'factory:done',
     );
 
     // Step 8: Emit decision summaries

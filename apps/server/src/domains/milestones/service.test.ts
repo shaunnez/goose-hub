@@ -14,13 +14,12 @@ vi.mock('../../shared/resolve-milestone.js', () => ({
 
 vi.mock('./repository.js', () => ({
   writeActiveMilestone: vi.fn().mockResolvedValue(undefined),
-  readActiveMilestone: vi.fn().mockResolvedValue(null),
 }));
 
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
 import { getSourceForSlug } from '#shared/source.js';
-import { readActiveMilestone, writeActiveMilestone } from './repository.js';
+import { writeActiveMilestone } from './repository.js';
 import {
   createMilestone,
   deleteMilestone,
@@ -320,7 +319,10 @@ describe('deleteMilestone', () => {
     mockSource.listMilestones.mockResolvedValueOnce([
       { number: 14, title: 'M14', state: 'open', openIssues: 0, closedIssues: 0 },
     ]);
-    vi.mocked(readActiveMilestone).mockResolvedValueOnce(14);
+    vi.mocked(resolveActiveMilestone).mockResolvedValueOnce({
+      milestoneNumber: 14,
+      source: 'project_state',
+    });
     const result = await deleteMilestone('my-proj', 14);
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -332,7 +334,10 @@ describe('deleteMilestone', () => {
     mockSource.listMilestones.mockResolvedValueOnce([
       { number: 14, title: 'M14', state: 'open', openIssues: 0, closedIssues: 0 },
     ]);
-    vi.mocked(readActiveMilestone).mockResolvedValueOnce(null);
+    vi.mocked(resolveActiveMilestone).mockResolvedValueOnce({
+      milestoneNumber: null,
+      source: 'project_state',
+    });
     const result = await deleteMilestone('my-proj', 14);
     expect(result).toEqual({ ok: true, data: { ok: true } });
     expect(mockSource.deleteMilestone).toHaveBeenCalledWith(14);
