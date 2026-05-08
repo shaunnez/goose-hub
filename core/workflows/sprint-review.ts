@@ -163,8 +163,10 @@ export async function runSprintReviewWorkflow(input: RunSprintReviewInput): Prom
       type: 'chore',
     });
 
-    // Step 7: Label the issue factory:docs
+    // Step 7: Label the issue factory:docs and move out of factory:triaging so the
+    // orchestrator does not pick it up as a work item.
     await stateSource.addLabels(created.externalId, ['factory:docs']);
+    await stateSource.transitionState(created.externalId, 'factory:triaging', 'factory:done');
 
     // Step 8: Emit decision summaries
     for (const ds of decisionSummaries) {

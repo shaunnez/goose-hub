@@ -254,6 +254,22 @@ describe('runSprintReviewWorkflow', () => {
     expect(source.addLabels).toHaveBeenCalledWith('99', ['factory:docs']);
   });
 
+  it('transitions created issue from factory:triaging to factory:done', async () => {
+    const doneItem = makeWorkItem({ externalId: '42', state: 'factory:done' });
+    const source = makeMockSource([doneItem]);
+    mockRun.mockResolvedValueOnce(makeAgentResult(makeSprintReviewOutput()));
+
+    const { runSprintReviewWorkflow } = await import('./sprint-review.js');
+    await runSprintReviewWorkflow({
+      projectId: SLUG,
+      milestoneTitle: MILESTONE_TITLE,
+      milestoneNumber: MILESTONE_NUMBER,
+      stateSource: source,
+    });
+
+    expect(source.transitionState).toHaveBeenCalledWith('99', 'factory:triaging', 'factory:done');
+  });
+
   it('throws and emits agent.run-failed when schema validation fails', async () => {
     const doneItem = makeWorkItem({ externalId: '42', state: 'factory:done' });
     const source = makeMockSource([doneItem]);
