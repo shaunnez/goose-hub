@@ -137,18 +137,6 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
             <div className="text-[10.5px] uppercase tracking-wider text-fg-2">Brief</div>
           </div>
           <div className="px-4 py-4">
-            {priority !== '—' && (
-              <span
-                className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold mb-3 border"
-                style={{
-                  color: priorityColor,
-                  background: priorityBg,
-                  borderColor: priorityBorder,
-                }}
-              >
-                {priority}
-              </span>
-            )}
             <article
               data-testid="overview-body"
               className="prose-fix text-[13.5px]"
