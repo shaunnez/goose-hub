@@ -130,7 +130,9 @@ async function stubBaseEndpoints(
 }
 
 test.describe('M13 grill + prd UI', () => {
-  test('PRD tab: renders parsed PRD and Approve calls /approve-prd', async ({ page }) => {
+  test('PRD tab: renders parsed PRD, new sections, and Approve calls /approve-prd', async ({
+    page,
+  }) => {
     const externalId = '7321';
     await stubBaseEndpoints(page, externalId, 'factory:prd-review', [
       {
@@ -156,10 +158,111 @@ test.describe('M13 grill + prd UI', () => {
     const slices = page.getByTestId('prd-slice');
     await expect(slices).toHaveCount(1);
 
+    // Implementation decisions section
+    const implDecisions = page.getByTestId('prd-implementation-decisions');
+    await expect(implDecisions).toBeVisible();
+    await expect(implDecisions).toContainText('Validate on blur using existing form utilities');
+
+    // Testing approach section
+    const testingDecisions = page.getByTestId('prd-testing-decisions');
+    await expect(testingDecisions).toBeVisible();
+    await expect(testingDecisions).toContainText('Verify inline error renders on blur');
+
     const approveBtn = page.getByTestId('prd-approve-btn');
     await expect(approveBtn).toBeVisible();
     await approveBtn.click();
     await expect.poll(() => approveCalls).toBeGreaterThanOrEqual(1);
+  });
+
+  test('PRD tab: Request Changes sends concerns to /revise-prd', async ({ page }) => {
+    const externalId = '7323';
+    await stubBaseEndpoints(page, externalId, 'factory:prd-review', [
+      {
+        id: 1,
+        body: prdCommentBody(),
+        authorLogin: 'factory-bot',
+        createdAt: '2026-05-07T10:00:00Z',
+      },
+    ]);
+
+    let reviseCalls = 0;
+    let sentConcerns: string[] = [];
+    await page.route(`**/api/projects/${slug}/issues/${externalId}/revise-prd`, (route: Route) => {
+      reviseCalls += 1;
+      const body = route.request().postDataJSON() as { concerns?: string[] };
+      sentConcerns = body.concerns ?? [];
+      return route.fulfill({ json: { ok: true } });
+    });
+
+    await page.goto(`/projects/${slug}/items/${externalId}/prd`);
+    await expect(page.getByTestId('prd-section')).toBeVisible();
+
+    const requestChangesBtn = page.getByTestId('prd-request-changes-btn');
+    await expect(requestChangesBtn).toBeVisible();
+    await requestChangesBtn.click();
+
+    const form = page.getByTestId('prd-request-changes-form');
+    await expect(form).toBeVisible();
+
+    await page.getByTestId('prd-concerns-input').fill('Journey J-1 step 2 is unclear');
+    await page.getByTestId('prd-submit-changes-btn').click();
+
+    await expect.poll(() => reviseCalls).toBeGreaterThanOrEqual(1);
+    expect(sentConcerns).toContain('Journey J-1 step 2 is unclear');
+
+    // Form should close after success
+    await expect(form).not.toBeVisible();
+  });
+
+  test('Grill tab: recommended answer pill fills textarea on click', async ({ page }) => {
+    const externalId = '7324';
+    await stubBaseEndpoints(page, externalId, 'factory:gate-pending', [
+      {
+        id: 1,
+        body: '<!-- factory:grill-question -->\nWhat does "better search" mean?\n<!-- factory:recommended-answer -->\nFewer misses on obvious keyword queries.',
+        authorLogin: 'factory-bot',
+        createdAt: '2026-05-07T09:00:00Z',
+      },
+    ]);
+
+    await page.goto(`/projects/${slug}/items/${externalId}/grill`);
+
+    const pill = page.getByTestId('grill-recommended-answer');
+    await expect(pill).toBeVisible();
+    await expect(pill).toContainText('Fewer misses');
+
+    await page.getByTestId('grill-use-answer-btn').click();
+    const textarea = page.getByTestId('grill-reply-input');
+    await expect(textarea).toHaveValue('Fewer misses on obvious keyword queries.');
+  });
+
+  test('Grill tab: Proceed to PRD calls /proceed-to-prd', async ({ page }) => {
+    const externalId = '7325';
+    await stubBaseEndpoints(page, externalId, 'factory:gate-pending', [
+      {
+        id: 1,
+        body: '<!-- factory:grill-question -->\nQ?',
+        authorLogin: 'factory-bot',
+        createdAt: '2026-05-07T09:00:00Z',
+      },
+    ]);
+
+    let proceedCalls = 0;
+    await page.route(
+      `**/api/projects/${slug}/issues/${externalId}/proceed-to-prd`,
+      (route: Route) => {
+        proceedCalls += 1;
+        return route.fulfill({ json: { ok: true } });
+      },
+    );
+
+    await page.goto(`/projects/${slug}/items/${externalId}/grill`);
+
+    const proceedBtn = page.getByTestId('grill-proceed-btn');
+    await expect(proceedBtn).toBeVisible();
+    await proceedBtn.click();
+
+    await expect.poll(() => proceedCalls).toBeGreaterThanOrEqual(1);
   });
 
   test('Grill tab: posts a reply via /comment and transitions back to grilling', async ({

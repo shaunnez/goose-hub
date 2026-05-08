@@ -222,10 +222,11 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
               className="flex flex-col gap-2"
               data-testid="prd-request-changes-form"
             >
-              <label className="text-[11.5px] text-fg-2">
+              <label htmlFor="prd-concerns-input" className="text-[11.5px] text-fg-2">
                 Describe your concerns — one per line (or separated by semicolons):
               </label>
               <textarea
+                id="prd-concerns-input"
                 data-testid="prd-concerns-input"
                 value={concernsText}
                 onChange={(e) => setConcernsText(e.target.value)}
@@ -499,9 +500,7 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
                 className="rounded-md border border-line bg-bg-elev/50 px-3 py-2 text-[12.5px]"
               >
                 <p className="text-fg font-medium">{d.decision}</p>
-                {d.rationale != null && (
-                  <p className="text-fg-2 mt-0.5">{d.rationale}</p>
-                )}
+                {d.rationale != null && <p className="text-fg-2 mt-0.5">{d.rationale}</p>}
                 {d.moduleRef != null && (
                   <p className="font-mono text-[11px] text-fg-3 mt-0.5">{d.moduleRef}</p>
                 )}
@@ -513,9 +512,7 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
 
       {prd.testingDecisions != null && (
         <Section title="Testing approach" testid="prd-testing-decisions">
-          <div
-            className="rounded-md border border-line bg-bg-elev/50 px-3 py-2 text-[12.5px] flex flex-col gap-2"
-          >
+          <div className="rounded-md border border-line bg-bg-elev/50 px-3 py-2 text-[12.5px] flex flex-col gap-2">
             <p className="text-fg">{prd.testingDecisions.approach}</p>
             {prd.testingDecisions.modulesToTest.length > 0 && (
               <ul className="list-disc pl-5 space-y-0.5">

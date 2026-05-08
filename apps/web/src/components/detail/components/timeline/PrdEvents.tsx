@@ -1,5 +1,12 @@
 import type { AgentEventDto } from '@/lib/types';
-import { AlertCircle, CheckCircle2, FileText, MessageSquareDiff, SkipForward, XCircle } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  FileText,
+  MessageSquareDiff,
+  SkipForward,
+  XCircle,
+} from 'lucide-react';
 
 type Ac = { id?: string; statement?: string };
 type Slice = { title?: string; estimatedSize?: string };
