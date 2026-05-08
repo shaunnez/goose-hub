@@ -32,6 +32,7 @@ export type Role =
   | 'developer'
   | 'qa'
   | 'reviewer'
+  | 'dev-reviewer'
   | 'retrospector'
   | 'researcher'
   | 'auditor';

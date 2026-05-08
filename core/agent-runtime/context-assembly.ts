@@ -11,6 +11,62 @@ const HOLDOUT_ROLES = new Set(['qa', 'reviewer']);
 const SYSTEM_KEYS = new Set(['projectId', 'workItemId']);
 
 /**
+ * Context keys produced by the dev-review pipeline (M19.11) that must NEVER
+ * reach a holdout role's context — even if a future caller adds them to the
+ * allowlist by mistake. Defense in depth: the allowlist mechanism is the
+ * primary gate, this set is the backstop.
+ *
+ * `assertHoldoutContextSafe()` rejects holdout specs that mention these keys
+ * either in `context` or in `contextAllowlist`. ADR 0036 §holdout-discipline.
+ */
+export const HOLDOUT_FORBIDDEN_KEYS: ReadonlySet<string> = new Set([
+  'devReviewFindings',
+  'devReviewVerdict',
+  'devReviewSummaries',
+]);
+
+export interface HoldoutContextLeak {
+  key: string;
+  source: 'context' | 'allowlist';
+}
+
+/**
+ * For holdout roles only: returns the list of forbidden-key leaks present in
+ * either `spec.context` or `spec.contextAllowlist`. Empty array for safe
+ * specs and for non-holdout roles.
+ *
+ * Pure function — does not mutate the spec or emit events. Callers
+ * (e.g. `assembleSpawnContext`) are responsible for the side effects.
+ */
+/**
+ * Returns the top-level key of an allowlist entry. `renderManifest` supports
+ * dotted paths (e.g. `devReviewFindings.summary`) which project a nested
+ * value through to the rendered XML — so leak detection must normalise to
+ * the top-level key before comparing against the forbidden set.
+ */
+function topLevelKey(allowlistEntry: string): string {
+  const dot = allowlistEntry.indexOf('.');
+  return dot === -1 ? allowlistEntry : allowlistEntry.slice(0, dot);
+}
+
+export function findHoldoutContextLeaks(spec: AgentSpec): HoldoutContextLeak[] {
+  if (!HOLDOUT_ROLES.has(spec.role)) return [];
+  const leaks: HoldoutContextLeak[] = [];
+  for (const k of Object.keys(spec.context)) {
+    if (HOLDOUT_FORBIDDEN_KEYS.has(k)) leaks.push({ key: k, source: 'context' });
+  }
+  for (const k of spec.contextAllowlist) {
+    // Compare the top-level key against the forbidden set. `key` on the leak
+    // record preserves the original entry (e.g. `devReviewFindings.summary`)
+    // so the violation event accurately reports what the caller attempted.
+    if (HOLDOUT_FORBIDDEN_KEYS.has(topLevelKey(k))) {
+      leaks.push({ key: k, source: 'allowlist' });
+    }
+  }
+  return leaks;
+}
+
+/**
  * Centralised context injection point. All ambient injection routes through here.
  * When freshContext is true, only allowlist-filtered keys from spec.context are rendered —
  * no event-stream, persona history, or inbox injection. At M4, non-fresh path is identical.
@@ -29,7 +85,44 @@ export function assembleSpawnContext(spec: AgentSpec): SpawnContext {
   // At M6, persona history loading is a stub — the field is wired into AgentSpec
   // so the runtime can record persona attribution in events without injecting history.
   void spec.personaId; // consumed in M9 persona history injection
-  const { contextXml, disallowedKeys } = renderManifest(spec.context, spec.contextAllowlist);
+
+  // Defense-in-depth: dev-review keys must never reach a holdout. Strip from
+  // both the allowlist and the context, emit a leak event per occurrence.
+  // Runs BEFORE render so forbidden keys can't slip into the XML even if the
+  // allowlist accidentally includes them.
+  let effectiveContext = spec.context;
+  let effectiveAllowlist = spec.contextAllowlist;
+  const leaks = findHoldoutContextLeaks(spec);
+  if (leaks.length > 0) {
+    for (const leak of leaks) {
+      eventStore.appendEvent({
+        projectId: typeof spec.context.projectId === 'string' ? spec.context.projectId : 'unknown',
+        workItemId:
+          typeof spec.context.workItemId === 'string' ? spec.context.workItemId : undefined,
+        kind: 'tool.violation',
+        payload: {
+          role: spec.role,
+          runId: spec.runId,
+          leak: 'dev-review',
+          leakedKey: leak.key,
+          source: leak.source,
+        },
+        runId: spec.runId,
+      });
+    }
+    // Normalise to top-level when filtering — dotted entries like
+    // `devReviewFindings.summary` would otherwise project the nested value.
+    effectiveAllowlist = spec.contextAllowlist.filter(
+      (k) => !HOLDOUT_FORBIDDEN_KEYS.has(topLevelKey(k)),
+    );
+    if (Object.keys(spec.context).some((k) => HOLDOUT_FORBIDDEN_KEYS.has(k))) {
+      effectiveContext = Object.fromEntries(
+        Object.entries(spec.context).filter(([k]) => !HOLDOUT_FORBIDDEN_KEYS.has(k)),
+      );
+    }
+  }
+
+  const { contextXml, disallowedKeys } = renderManifest(effectiveContext, effectiveAllowlist);
 
   // Emit tool.violation for disallowed keys on holdout roles
   if (HOLDOUT_ROLES.has(spec.role) && disallowedKeys.length > 0) {

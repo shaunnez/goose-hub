@@ -1,0 +1,104 @@
+{
+  "skill": "dev-review",
+  "description": "Layer-1 binary assertions for the Codex pre-QA dev-review skill. Each prompt describes a synthetic diff with known properties; each assertion is a boolean check on the structured output. Eval Layer 2 (binary assertions on real Codex runs) accumulates as the skill ships and is run.",
+  "prompts": [
+    {
+      "id": "p1-clean-diff",
+      "description": "Diff that satisfies the issue cleanly with no obvious problems",
+      "fixtureCharacteristics": {
+        "diffSize": "small",
+        "criteriaMet": "all",
+        "p0Issues": 0,
+        "p1Issues": 0
+      },
+      "assertions": [
+        {
+          "id": "p1-a1",
+          "check": "verdict === 'no-blockers'",
+          "rationale": "Zero P0/P1 → no-blockers verdict (workflow proceeds straight to QA)"
+        },
+        {
+          "id": "p1-a2",
+          "check": "Array.isArray(findings) && findings.every(f => f.file && typeof f.line === 'number')",
+          "rationale": "Schema requires file:line evidence on every finding (no speculation)"
+        },
+        {
+          "id": "p1-a3",
+          "check": "decisionSummaries.length >= 2",
+          "rationale": "READ + VERDICT decision summaries are emitted at minimum"
+        }
+      ]
+    },
+    {
+      "id": "p2-correctness-bug",
+      "description": "Diff that introduces an off-by-one error in a loop boundary",
+      "fixtureCharacteristics": {
+        "diffSize": "small",
+        "expectedCategory": "correctness",
+        "p0Issues": 0,
+        "p1Issues": 1
+      },
+      "assertions": [
+        {
+          "id": "p2-a1",
+          "check": "verdict === 'blockers-found'",
+          "rationale": "P1 correctness finding triggers blockers-found"
+        },
+        {
+          "id": "p2-a2",
+          "check": "findings.some(f => f.category === 'correctness' && (f.severity === 'P0' || f.severity === 'P1'))",
+          "rationale": "Off-by-one is a correctness bug at P0 or P1 severity"
+        },
+        {
+          "id": "p2-a3",
+          "check": "findings.every(f => f.suggestion && f.suggestion.length > 0)",
+          "rationale": "Every finding includes a one-sentence suggestion the dev can act on"
+        }
+      ]
+    },
+    {
+      "id": "p3-security-issue",
+      "description": "Diff that introduces user input flowing into a shell command without sanitisation",
+      "fixtureCharacteristics": {
+        "diffSize": "small",
+        "expectedCategory": "security",
+        "p0Issues": 1,
+        "p1Issues": 0
+      },
+      "assertions": [
+        {
+          "id": "p3-a1",
+          "check": "verdict === 'blockers-found'",
+          "rationale": "P0 security finding always triggers blockers-found"
+        },
+        {
+          "id": "p3-a2",
+          "check": "findings.some(f => f.category === 'security' && f.severity === 'P0')",
+          "rationale": "Command injection is a P0 security issue"
+        }
+      ]
+    },
+    {
+      "id": "p4-style-only",
+      "description": "Diff with style/cosmetic concerns only — no correctness, security, edge-case, or design issues",
+      "fixtureCharacteristics": {
+        "diffSize": "small",
+        "p0Issues": 0,
+        "p1Issues": 0,
+        "styleOnly": true
+      },
+      "assertions": [
+        {
+          "id": "p4-a1",
+          "check": "verdict === 'no-blockers'",
+          "rationale": "Dev-review intentionally ignores style — Biome handles it"
+        },
+        {
+          "id": "p4-a2",
+          "check": "findings.filter(f => f.severity === 'P0' || f.severity === 'P1').length === 0",
+          "rationale": "Style is never P0/P1 in the dev-review rubric"
+        }
+      ]
+    }
+  ]
+}
