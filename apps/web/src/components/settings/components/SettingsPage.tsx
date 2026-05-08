@@ -4,11 +4,15 @@ import type { ProjectConfigDto } from '@/lib/types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
+import { ProjectBudgetPanel } from './ProjectBudgetPanel';
 import { ProjectConfigPanel } from './ProjectConfigPanel';
+
+type Tab = 'config' | 'budgets';
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>('config');
   const [wizardOpen, setWizardOpen] = useState(false);
 
   const {
@@ -81,12 +85,32 @@ export function SettingsPage() {
       {/* Right: config detail */}
       <div className="flex-1 overflow-y-auto px-8 py-6">
         <h1 className="text-[15px] font-semibold mb-1">Settings</h1>
-        <p className="text-[12px] text-fg-2 mb-6">
-          Config fields are read-only (sourced from project config files). Milestones are editable
-          below.
-        </p>
 
-        {selectedConfig != null && <ProjectConfigPanel config={selectedConfig} />}
+        {/* Tab bar */}
+        <div className="flex gap-1 mb-6 border-b border-line">
+          {(['config', 'budgets'] as Tab[]).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className={[
+                'px-3 py-1.5 text-[12px] capitalize -mb-px border-b-2 transition-colors',
+                tab === t
+                  ? 'border-accent text-fg font-medium'
+                  : 'border-transparent text-fg-2 hover:text-fg',
+              ].join(' ')}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'config' && selectedConfig != null && (
+          <ProjectConfigPanel config={selectedConfig} />
+        )}
+        {tab === 'budgets' && selectedConfig != null && (
+          <ProjectBudgetPanel slug={selectedConfig.slug} />
+        )}
 
         {!isLoading && !error && configs.length === 0 && (
           <div className="text-[13px] text-fg-3 py-16 text-center">

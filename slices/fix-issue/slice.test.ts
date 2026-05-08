@@ -2,6 +2,10 @@ import type { AgentResult, AgentRuntime } from '@goose-hub/core/agent-runtime/in
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
+  readProjectSettings: vi.fn().mockReturnValue(null),
+  readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
+}));
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   eventStore: {
     appendEvent: vi.fn().mockReturnValue({ id: 1 }),

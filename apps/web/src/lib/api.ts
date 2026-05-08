@@ -470,3 +470,56 @@ export async function runBootstrap(repoRef: string, slug?: string): Promise<Boot
   }
   return (await res.json()) as BootstrapRunDto;
 }
+
+export interface ProjectSettingsDto {
+  projectId: string;
+  configBudgets: Record<string, unknown>;
+  dbGlobalOverrides: {
+    perWorkflowMaxUsd: number | null;
+    perAgentMaxUsd: number | null;
+    perAdvisorMaxUsd: number | null;
+    dailyTokens: number | null;
+    maxParallelAgents: number | null;
+    maxRetries: number | null;
+    maxBashSeconds: number | null;
+    maxIssuesPerDayFromNonOwners: number | null;
+    updatedAt: string;
+    updatedBy: string | null;
+  } | null;
+  dbSkillOverrides: Record<
+    string,
+    {
+      maxTurns: number | null;
+      maxBudgetUsd: number | null;
+      timeoutMs: number | null;
+      updatedAt: string;
+    }
+  >;
+  registeredSkills: string[];
+}
+
+export async function fetchProjectSettings(
+  slug: string,
+  signal?: AbortSignal,
+): Promise<ProjectSettingsDto> {
+  return getJson<ProjectSettingsDto>(`/projects/${slug}/settings`, signal);
+}
+
+export async function patchGlobalBudgetSettings(
+  slug: string,
+  patch: Record<string, number | null>,
+): Promise<void> {
+  await patchJson(`/projects/${slug}/settings/global`, patch);
+}
+
+export async function patchSkillBudgetSetting(
+  slug: string,
+  skill: string,
+  patch: Record<string, number | null>,
+): Promise<void> {
+  await patchJson(`/projects/${slug}/settings/skills/${encodeURIComponent(skill)}`, patch);
+}
+
+export async function deleteSkillBudgetSetting(slug: string, skill: string): Promise<void> {
+  await deleteRequest(`/projects/${slug}/settings/skills/${encodeURIComponent(skill)}`);
+}

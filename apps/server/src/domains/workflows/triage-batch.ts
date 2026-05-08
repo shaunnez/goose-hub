@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
+import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
@@ -120,7 +120,7 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       freshContext: false,
       toolBundles: [],
       toolExtras: [],
-      ...resolveBudgets('triage', projectConfig?.budgets),
+      ...resolveBudgetsForProject('triage', projectConfig?.budgets, projectId),
       personaId: triagerPersonaId,
       outputJsonSchema: triageJsonSchema,
       appendSystemPrompt: triagePrompt,
@@ -194,7 +194,7 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       freshContext: false,
       toolBundles: [],
       toolExtras: [],
-      ...resolveBudgets('repo-match', projectConfig?.budgets),
+      ...resolveBudgetsForProject('repo-match', projectConfig?.budgets, projectId),
       personaId: researcherPersonaId,
       outputJsonSchema: repoMatchJsonSchema,
       appendSystemPrompt: repoMatchPrompt,

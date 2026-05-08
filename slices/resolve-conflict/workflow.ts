@@ -3,10 +3,10 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
-import { resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
+import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import {
@@ -128,7 +128,7 @@ export async function runResolveConflictWorkflow(
           freshContext: false,
           toolBundles: config.toolBundles,
           toolExtras: [],
-          ...resolveBudgets('resolve-conflict', projectConfig?.budgets),
+          ...resolveBudgetsForProject('resolve-conflict', projectConfig?.budgets, slug),
           personaId,
           outputJsonSchema: toJsonSchema(ResolveConflictSchema),
           appendSystemPrompt: readPromptWithContext('resolve-conflict', slug),

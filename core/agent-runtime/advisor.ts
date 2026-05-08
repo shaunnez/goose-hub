@@ -5,10 +5,10 @@ import {
 import advisorConfig from '@goose-hub/skills/advise-on-plan/skill.config.js';
 import { eventStore } from '../event-stream/store.js';
 import { getProjectBySlug } from '../projects/loader.js';
-import { resolveBudgets } from './budgets.js';
 import { ClaudeCliRuntime } from './claude-cli.js';
 import type { AgentRuntime } from './interface.js';
 import { readPromptWithContext } from './read-prompt.js';
+import { resolveBudgetsForProject } from './resolve-for-project.js';
 import { toJsonSchema } from './schema-bridge.js';
 import { selectPersona } from './select-persona.js';
 
@@ -72,7 +72,7 @@ export async function adviseOnPlan(input: AdviseOnPlanInput): Promise<AdviseOnPl
     freshContext: advisorConfig.freshContext as true,
     toolBundles: advisorConfig.toolBundles,
     toolExtras: [],
-    ...resolveBudgets('advise-on-plan', projectConfig?.budgets),
+    ...resolveBudgetsForProject('advise-on-plan', projectConfig?.budgets, input.projectId),
     personaId,
     outputJsonSchema,
     appendSystemPrompt: advisorPrompt,

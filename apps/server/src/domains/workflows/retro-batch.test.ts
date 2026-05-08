@@ -46,6 +46,10 @@ vi.mock('@goose-hub/core/persona/accumulate.js', () => ({
 vi.mock('@goose-hub/core/db/db.js', () => ({
   db: { insert: () => ({ values: () => ({ run: vi.fn() }) }) },
 }));
+vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
+  readProjectSettings: vi.fn().mockReturnValue(null),
+  readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
+}));
 
 const mockGetProject = vi.fn();
 vi.mock('../../shared/projects.js', () => ({ getProject: mockGetProject }));

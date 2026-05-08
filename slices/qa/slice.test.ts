@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ─── module mocks ─────────────────────────────────────────────────────────────
 
+vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
+  readProjectSettings: vi.fn().mockReturnValue(null),
+  readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
+}));
 const mockAccumulatePersonaStats = vi.fn();
 vi.mock('@goose-hub/core/persona/accumulate.js', () => ({
   accumulatePersonaStats: (...args: unknown[]) => mockAccumulatePersonaStats(...args),

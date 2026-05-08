@@ -22,6 +22,10 @@ const { mockDb } = vi.hoisted(() => {
 });
 
 vi.mock('../db/db.js', () => ({ db: mockDb }));
+vi.mock('../db/repositories/project-settings.js', () => ({
+  readProjectSettings: vi.fn().mockReturnValue(null),
+  readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
+}));
 vi.mock('../db/schema.js', () => ({
   archivedLifecycles: { projectId: 'project_id', closedAt: 'closed_at' },
   decisionPatterns: { projectId: 'project_id' },
