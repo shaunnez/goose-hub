@@ -88,6 +88,18 @@ class StubStateSource implements StateSource {
     return Promise.reject(new Error('not implemented'));
   }
 
+  createMilestone(_title: string): Promise<Milestone> {
+    return Promise.reject(new Error('not implemented'));
+  }
+
+  updateMilestone(_number: number, _patch: unknown): Promise<Milestone> {
+    return Promise.reject(new Error('not implemented'));
+  }
+
+  deleteMilestone(_number: number): Promise<void> {
+    return Promise.resolve();
+  }
+
   getPrDiff(_itemId: string): Promise<string> {
     return Promise.resolve('');
   }

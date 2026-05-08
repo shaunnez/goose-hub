@@ -293,6 +293,47 @@ export class GitHubLabelsSource implements StateSource {
     return mapGithubMilestone(milestones[0]);
   }
 
+  async createMilestone(title: string): Promise<Milestone> {
+    const url = `https://api.github.com/repos/${this.repoRef}/milestones`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { ...this.baseHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    if (!response.ok) {
+      throw new Error(`GitHub create milestone failed: ${response.status}`);
+    }
+    return mapGithubMilestone((await response.json()) as GithubMilestone);
+  }
+
+  async updateMilestone(
+    number: number,
+    patch: { title?: string; state?: 'open' | 'closed' },
+  ): Promise<Milestone> {
+    const url = `https://api.github.com/repos/${this.repoRef}/milestones/${number}`;
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: { ...this.baseHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    if (!response.ok) {
+      throw new Error(`GitHub update milestone failed: ${response.status}`);
+    }
+    return mapGithubMilestone((await response.json()) as GithubMilestone);
+  }
+
+  async deleteMilestone(number: number): Promise<void> {
+    const url = `https://api.github.com/repos/${this.repoRef}/milestones/${number}`;
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: this.baseHeaders,
+    });
+    // 404 means already gone — treat as success.
+    if (!response.ok && response.status !== 404) {
+      throw new Error(`GitHub delete milestone failed: ${response.status}`);
+    }
+  }
+
   // Atomically replace the issue's factory:* state label. GET current labels,
   // drop any factory:* labels matching `removeFactoryLabels` ('all' or a single
   // state name), then PUT the resulting set in one request. PUT replaces the

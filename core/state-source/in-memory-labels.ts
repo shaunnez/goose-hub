@@ -293,6 +293,18 @@ export class InMemoryLabelsSource implements StateSource {
     return this.toWorkItem(issue);
   }
 
+  async createMilestone(_title: string): Promise<Milestone> {
+    throw new Error('not implemented');
+  }
+
+  async updateMilestone(_number: number, _patch: unknown): Promise<Milestone> {
+    throw new Error('not implemented');
+  }
+
+  async deleteMilestone(_number: number): Promise<void> {
+    throw new Error('not implemented');
+  }
+
   async seedIssue(opts: SeedIssueOptions): Promise<WorkItem> {
     const item = await this.createIssue({
       title: opts.title,
