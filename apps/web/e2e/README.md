@@ -40,5 +40,10 @@ Specs:
 - `qa-fail-loop.spec.ts` — QA fail → needs-fix → re-QA pass
 - `review-sendback-loop.spec.ts` — review sendback → needs-fix → re-review → approved
 - `discover-lane.spec.ts` — M13 Discover Lane: type:feature triaging → grilling (Grill tab visible, PRD tab absent), grill chat (agent question + user reply + state transition), PRD tab + content render + Approve PRD flow through to factory:decomposing
+- `golden-feature.spec.ts` — golden feature happy path: one issue walked seed → grill → PRD → decompose → child dev cycle → done. Covers Overview / Grill / PRD / Timeline / QA / Review surfaces and the parent → child handoff. Trace + video on every run.
+- `golden-feature-prd-revised.spec.ts` — golden feature with PRD revision (ADR 0033 three-path flow, shipped in M13.12 #631): one test for **Request Changes** (PRD v1 → revise → PRD v2 → approve → done, state stays at prd-review throughout) and one for **Decline Feature** (prd-review → done, no decompose).
+- `golden-bug.spec.ts` — golden bug happy path: seed → investigate (high-confidence) → dev → QA → review → approve → done. Covers Investigation / QA / Review / Timeline (pr.opened) surfaces. Trace + video on every run.
+- `golden-bug-iterations.spec.ts` — golden bug with multi-iteration QA loop: two QA fails then pass, exercising `dispatchQaFailed` (qa-failed → needs-fix → in-progress → needs-qa) twice before review/approve.
+- `golden-chore.spec.ts` — golden chore happy path: seed → triage → dev → QA → review → approve → done. Simplest type (no grilling, no investigation); proves the minimal pipeline while still touching every applicable UI surface.
 
 **`discover-lane.spec.ts` vs. `grill-prd-flow.spec.ts`**: The regular `grill-prd-flow.spec.ts` (in `e2e/`) is a pure UI stub — all API calls are route-intercepted, no real server. `discover-lane.spec.ts` uses the full pipeline harness (real mock server, seed-issue, /tick, /dispatch) so it covers the server→UI round-trip including state-gated tab visibility and the approve-prd state machine path.
