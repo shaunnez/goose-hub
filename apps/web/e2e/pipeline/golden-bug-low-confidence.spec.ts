@@ -94,9 +94,9 @@ test.describe('Golden Bug — low-confidence gate (MOCK_AGENTS + MOCK_SOURCE + M
 
     // Human fills notes and proceeds. This calls transitionState:
     // factory:gate-pending → factory:dev-ready.
-    await page.getByTestId('investigation-notes-input').fill(
-      'e2e golden test: low-confidence investigation reviewed, proceeding to dev-ready',
-    );
+    await page
+      .getByTestId('investigation-notes-input')
+      .fill('e2e golden test: low-confidence investigation reviewed, proceeding to dev-ready');
     await page.getByTestId('investigation-proceed-button').click();
 
     // State must leave gate-pending.

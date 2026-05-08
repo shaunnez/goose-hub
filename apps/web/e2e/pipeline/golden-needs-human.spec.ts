@@ -135,8 +135,8 @@ test.describe('Golden Needs-Human flow (MOCK_AGENTS + MOCK_SOURCE + MOCK_OPEN_PR
     // Timeline: verify escalation event was recorded.
     await page.goto(`/projects/${SLUG}/items/${issueNumber}/timeline`);
     await expect(page.getByTestId('timeline-section')).toBeVisible({ timeout: 10_000 });
-    await expect(
-      page.locator('[data-event-kind="agent.retry-escalated"]').first(),
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('[data-event-kind="agent.retry-escalated"]').first()).toBeVisible({
+      timeout: 10_000,
+    });
   });
 });
