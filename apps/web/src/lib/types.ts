@@ -54,6 +54,7 @@ export interface SprintReviewEligibility {
   eligible: boolean;
   reason: string;
   alreadyExists: boolean;
+  existingIssueUrl?: string;
 }
 
 export interface AgentEventDto {

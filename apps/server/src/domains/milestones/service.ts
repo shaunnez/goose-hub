@@ -145,7 +145,7 @@ export async function getSprintReviewEligibility(
 export async function triggerSprintReview(
   slug: string,
   milestoneTitle: string,
-): Promise<Result<{ issueNumber: number }>> {
+): Promise<Result<{ issueNumber: number; issueUrl: string }>> {
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
 
@@ -168,6 +168,7 @@ export async function triggerSprintReview(
     };
   }
 
+  const repoRef = allItems[0]?.repoRef;
   const result = await runSprintReviewWorkflow({
     projectId: slug,
     milestoneTitle,
@@ -175,5 +176,9 @@ export async function triggerSprintReview(
     stateSource: source,
   });
 
-  return { ok: true, data: { issueNumber: result.issueNumber } };
+  const issueUrl =
+    repoRef != null
+      ? `https://github.com/${repoRef}/issues/${result.issueNumber}`
+      : `https://github.com/issues/${result.issueNumber}`;
+  return { ok: true, data: { issueNumber: result.issueNumber, issueUrl } };
 }

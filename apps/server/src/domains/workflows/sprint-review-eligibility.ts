@@ -4,6 +4,7 @@ export interface SprintReviewEligibility {
   eligible: boolean;
   reason: string;
   alreadyExists: boolean;
+  existingIssueUrl?: string;
 }
 
 const TERMINAL_STATES = new Set(['factory:done', 'factory:archived', 'factory:rejected']);
@@ -16,10 +17,20 @@ export async function checkSprintReviewEligibility(
   const allItems = await stateSource.listWorkByMilestone(milestoneNumber);
   const currentItems = allItems.filter((item) => item.schedule === 'current');
   const sprintReviewTitle = `Sprint Review: ${milestoneTitle}`;
-  const alreadyExists = allItems.some((item) => item.title === sprintReviewTitle);
+  const existingReviewItem = allItems.find((item) => item.title === sprintReviewTitle);
+  const alreadyExists = existingReviewItem != null;
+  const existingIssueUrl =
+    existingReviewItem != null
+      ? `https://github.com/${existingReviewItem.repoRef}/issues/${existingReviewItem.externalId}`
+      : undefined;
 
   if (currentItems.length === 0) {
-    return { eligible: false, reason: 'No schedule:current issues in milestone', alreadyExists };
+    return {
+      eligible: false,
+      reason: 'No schedule:current issues in milestone',
+      alreadyExists,
+      existingIssueUrl,
+    };
   }
 
   const openCurrentItems = currentItems.filter((item) => !TERMINAL_STATES.has(item.state));
@@ -28,8 +39,9 @@ export async function checkSprintReviewEligibility(
       eligible: false,
       reason: `${openCurrentItems.length} schedule:current issue(s) not yet terminal`,
       alreadyExists,
+      existingIssueUrl,
     };
   }
 
-  return { eligible: true, reason: '', alreadyExists };
+  return { eligible: true, reason: '', alreadyExists, existingIssueUrl };
 }

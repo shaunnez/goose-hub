@@ -195,8 +195,8 @@ export async function fetchSprintReviewEligibility(
 export async function triggerSprintReview(
   slug: string,
   milestoneTitle: string,
-): Promise<{ issueNumber: number }> {
-  return postJson<{ issueNumber: number }>(
+): Promise<{ issueNumber: number; issueUrl: string }> {
+  return postJson<{ issueNumber: number; issueUrl: string }>(
     `/projects/${slug}/milestones/${encodeURIComponent(milestoneTitle)}/sprint-review`,
     {},
   );

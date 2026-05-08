@@ -42,12 +42,12 @@ function SprintReviewButton({
   });
 
   const [error, setError] = useState<string | null>(null);
-  const [fired, setFired] = useState(false);
+  const [issueUrl, setIssueUrl] = useState<string | null>(null);
 
   const fire = useMutation({
     mutationFn: () => triggerSprintReview(slug, milestone.title),
-    onSuccess: () => {
-      setFired(true);
+    onSuccess: (data) => {
+      setIssueUrl(data.issueUrl);
       void queryClient.invalidateQueries({
         queryKey: ['sprint-review-eligibility', slug, milestone.number],
       });
@@ -59,11 +59,24 @@ function SprintReviewButton({
   if (isLoading) return <span className="text-[11px] text-fg-3">…</span>;
   if (!elig) return null;
 
-  if (elig.alreadyExists || fired) {
+  const resolvedUrl = issueUrl ?? elig.existingIssueUrl ?? null;
+
+  if (elig.alreadyExists || issueUrl != null) {
     return (
       <span className="text-[11px] text-fg-3 flex items-center gap-1">
         <Play size={10} />
-        Review done
+        {resolvedUrl != null ? (
+          <a
+            href={resolvedUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-fg underline underline-offset-2 transition-colors"
+          >
+            Review done
+          </a>
+        ) : (
+          'Review done'
+        )}
       </span>
     );
   }
