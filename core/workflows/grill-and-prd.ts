@@ -14,7 +14,10 @@ import { PRDOutputSchema } from '../../skills/write-prd/schema.js';
 import { ClaudeCliRuntime } from '../agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
 import { readPromptWithContext } from '../agent-runtime/read-prompt.js';
-import { resolveBudgetsForProject } from '../agent-runtime/resolve-for-project.js';
+import {
+  resolveBudgetsForProject,
+  resolveGlobalSettingsForProject,
+} from '../agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '../agent-runtime/schema-bridge.js';
 import { selectPersona } from '../agent-runtime/select-persona.js';
 import { totalSpendForSkill as _totalSpendForSkill } from '../cost/repository.js';
@@ -451,7 +454,8 @@ export async function runGrillAndPrdWorkflow(
     FALLBACK_ADVISOR_BUDGET,
     projectId,
   );
-  const perAdvisorMaxUsd = projectConfig?.budgets?.perAdvisorMaxUsd ?? Number.POSITIVE_INFINITY;
+  const globalSettings = resolveGlobalSettingsForProject(projectId, projectConfig?.budgets);
+  const perAdvisorMaxUsd = globalSettings.perAdvisorMaxUsd ?? Number.POSITIVE_INFINITY;
   const advisorSpentUsd = totalSpendForSkill(projectId, 'advise-on-prd');
   const advisorBudgetAvailable =
     advisorSpentUsd + advisorBudget.budgets.maxBudgetUsd <= perAdvisorMaxUsd;

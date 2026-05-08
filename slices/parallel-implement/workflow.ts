@@ -7,6 +7,7 @@ import type {
   AgentSpec,
 } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
+import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
@@ -337,8 +338,9 @@ export async function runParallelImplementWorkflow(
   const getStatusFn = deps.getLastStatusImpl ?? getLastWpStatus;
 
   const projectConfig = await getProjectBySlug(projectId);
-  const maxParallel = projectConfig?.budgets?.maxParallelAgents ?? 3;
-  const maxRetries = projectConfig?.budgets?.maxRetries ?? 2;
+  const globalSettings = resolveGlobalSettingsForProject(projectId, projectConfig?.budgets);
+  const maxParallel = globalSettings.maxParallelAgents ?? 3;
+  const maxRetries = globalSettings.maxRetries ?? 2;
   const wpTimeoutMs = 900_000;
 
   const { personaId } = selectPersona(projectId, 'developer');

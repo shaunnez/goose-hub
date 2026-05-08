@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { filterEligibleByDependencies } from '@goose-hub/core/projects/dependency-scheduler.js';
@@ -54,7 +55,8 @@ function drainPending(slug: string): void {
 
 async function getMaxParallelAgents(slug: string): Promise<number> {
   const cfg = await getProject(slug);
-  return cfg?.budgets.maxParallelAgents ?? 1;
+  const settings = resolveGlobalSettingsForProject(slug, cfg?.budgets);
+  return settings.maxParallelAgents ?? 1;
 }
 
 /**

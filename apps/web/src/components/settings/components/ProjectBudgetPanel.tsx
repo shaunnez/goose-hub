@@ -18,6 +18,7 @@ const GLOBAL_FIELDS: Array<{
   label: string;
   configKey: string;
   isFloat?: boolean;
+  notYetEnforced?: boolean;
 }> = [
   {
     key: 'perWorkflowMaxUsd',
@@ -25,7 +26,13 @@ const GLOBAL_FIELDS: Array<{
     configKey: 'perWorkflowMaxUsd',
     isFloat: true,
   },
-  { key: 'perAgentMaxUsd', label: 'Per-agent max USD', configKey: 'perAgentMaxUsd', isFloat: true },
+  {
+    key: 'perAgentMaxUsd',
+    label: 'Per-agent max USD',
+    configKey: 'perAgentMaxUsd',
+    isFloat: true,
+    notYetEnforced: true,
+  },
   {
     key: 'perAdvisorMaxUsd',
     label: 'Per-advisor max USD',
@@ -35,11 +42,17 @@ const GLOBAL_FIELDS: Array<{
   { key: 'dailyTokens', label: 'Daily tokens', configKey: 'dailyTokens' },
   { key: 'maxParallelAgents', label: 'Max parallel agents', configKey: 'maxParallelAgents' },
   { key: 'maxRetries', label: 'Max retries', configKey: 'maxRetries' },
-  { key: 'maxBashSeconds', label: 'Max bash seconds', configKey: 'maxBashSeconds' },
+  {
+    key: 'maxBashSeconds',
+    label: 'Max bash seconds',
+    configKey: 'maxBashSeconds',
+    notYetEnforced: true,
+  },
   {
     key: 'maxIssuesPerDayFromNonOwners',
     label: 'Max issues/day (non-owners)',
     configKey: 'maxIssuesPerDayFromNonOwners',
+    notYetEnforced: true,
   },
 ];
 
@@ -132,14 +145,22 @@ export function ProjectBudgetPanel({ slug }: Props) {
           DB overrides win over config file values. Clear a field (leave blank) to revert to config.
         </p>
         <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 items-center">
-          {GLOBAL_FIELDS.map(({ key, label, configKey, isFloat }) => {
+          {GLOBAL_FIELDS.map(({ key, label, configKey, isFloat, notYetEnforced }) => {
             const configVal = configBudgets[configKey];
             const dbVal = dbGlobal?.[key] ?? null;
             const isOverridden = dbVal != null;
             return (
               <>
-                <span key={`${key}-label`} className="text-[12px] text-fg-2">
+                <span
+                  key={`${key}-label`}
+                  className="text-[12px] text-fg-2 flex items-center gap-1.5"
+                >
                   {label}
+                  {notYetEnforced && (
+                    <span className="text-[9px] uppercase tracking-wider font-medium text-fg-3 border border-line rounded px-1 py-0.5">
+                      not yet enforced
+                    </span>
+                  )}
                 </span>
                 <NumericInput
                   key={`${key}-input`}

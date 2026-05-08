@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
-import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
+import {
+  resolveBudgetsForProject,
+  resolveGlobalSettingsForProject,
+} from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
@@ -61,7 +64,8 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
   // Per-project daily budget gate (#283). Skip the tick if today's token usage exceeds the limit.
   const projectConfig = await getProject(slug);
   if (projectConfig != null) {
-    const budgetResult = await checkDailyBudget(slug, projectConfig.budgets.dailyTokens);
+    const globalSettings = resolveGlobalSettingsForProject(slug, projectConfig.budgets);
+    const budgetResult = await checkDailyBudget(slug, globalSettings.dailyTokens);
     if (budgetResult.exceeded) {
       logger.warn('triage-batch: daily token budget exceeded, skipping tick', {
         slug,
