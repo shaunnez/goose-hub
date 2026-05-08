@@ -1,4 +1,4 @@
-import type { AgentResult } from '@goose-hub/core/agent-runtime/interface.js';
+import type { AgentResult, AgentSpec } from '@goose-hub/core/agent-runtime/interface.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -646,6 +646,264 @@ describe('runReviewWorkflow', () => {
         '42',
         expect.stringContaining('string error from review runtime'),
       );
+    });
+  });
+});
+
+// ─── Convergent review (M19.04) ───────────────────────────────────────────────
+
+function makeCriticalResult(description: string): AgentResult {
+  return {
+    output: {
+      verdict: 'needs-fix',
+      confidence: 0.6,
+      criteriaChecks: [],
+      findings: [
+        {
+          severity: 'blocker',
+          description,
+          file: 'src/foo.ts',
+          line: 1,
+          disposition: 'registered',
+          dispositionRef: '#999',
+        },
+      ],
+      decisionSummaries: [],
+    },
+    decisionSummaries: [],
+    events: [],
+  };
+}
+
+function makeApprovedResultNoFindings(): AgentResult {
+  return {
+    output: {
+      verdict: 'approved',
+      confidence: 0.95,
+      criteriaChecks: [],
+      findings: [],
+      decisionSummaries: [],
+    },
+    decisionSummaries: [],
+    events: [],
+  };
+}
+
+describe('runConvergentReviewWorkflow (M19.04)', () => {
+  beforeEach(() => {
+    mockRun.mockReset();
+    mockReplay.mockReset();
+    mockReplay.mockReturnValue([]);
+    mockExecSync.mockReset();
+    mockExecSync.mockReturnValue('');
+    mockAccumulatePersonaStats.mockClear();
+    vi.clearAllMocks();
+    mockReplay.mockReturnValue([]);
+  });
+
+  // Test 1: round 1 A finds 1 CRITICAL, B finds 0; rounds 2+3 have 0 new CRITICAL → converge at round 3
+  it('test 1: transitions to factory:approved when 2 consecutive rounds have 0 new CRITICAL findings', async () => {
+    const item = makeWorkItem();
+    const source = makeMockSource({
+      getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+added'),
+    });
+
+    // Round 1: A finds 1 CRITICAL, B finds 0
+    mockRun.mockResolvedValueOnce(makeCriticalResult('Missing input validation')); // R1-A
+    mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings()); // R1-B
+    // Round 2: both return 0 findings (0 new CRITICAL vs prior round)
+    mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings()); // R2-A
+    mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings()); // R2-B
+    // Round 3: both return 0 findings (0 new CRITICAL → 2 consecutive, converge)
+    mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings()); // R3-A
+    mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings()); // R3-B
+
+    const { runConvergentReviewWorkflow } = await import('./workflow.js');
+    await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:needs-review',
+      'factory:approved',
+    );
+    // Should have run 3 rounds × 2 reviewers = 6 runtime calls
+    expect(mockRun).toHaveBeenCalledTimes(6);
+  });
+
+  // Test 2: round 3 finds new CRITICAL at cap → escalates, does NOT merge
+  it('test 2: escalates to factory:needs-human when cap reached with new CRITICAL findings', async () => {
+    const item = makeWorkItem();
+    const source = makeMockSource({
+      getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+added'),
+    });
+
+    // Each round introduces a new CRITICAL finding so consecutiveZeroCritical stays 0
+    mockRun.mockResolvedValueOnce(makeCriticalResult('Issue A')); // R1-A
+    mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings()); // R1-B
+    mockRun.mockResolvedValueOnce(makeCriticalResult('Issue B')); // R2-A (new)
+    mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings()); // R2-B
+    mockRun.mockResolvedValueOnce(makeCriticalResult('Issue C')); // R3-A (new, at cap)
+    mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings()); // R3-B
+
+    const { runConvergentReviewWorkflow } = await import('./workflow.js');
+    await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:needs-review',
+      'factory:needs-human',
+    );
+    // Verify it does NOT transition to approved
+    expect(source.transitionState).not.toHaveBeenCalledWith(
+      '42',
+      'factory:needs-review',
+      'factory:approved',
+    );
+  });
+
+  // Test 3: auth-tagged PR forces minRounds=3; new CRITICAL at round 3 → escalates
+  it('test 3: auth-topic PR escalates when new CRITICAL appears at round 3 despite early zero-critical rounds', async () => {
+    const item = makeWorkItem();
+    // prDiff contains src/auth.ts → classifyTopic returns minRounds=3
+    const source = makeMockSource({
+      getPrDiff: vi
+        .fn()
+        .mockResolvedValue('diff --git a/src/auth.ts b/src/auth.ts\n+added session logic'),
+    });
+
+    // Round 1: 0 CRITICAL (consecutiveZero=1)
+    mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings()); // R1-A
+    mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings()); // R1-B
+    // Round 2: 0 new CRITICAL (consecutiveZero=2, but round<minRounds=3 → NOT converged)
+    mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings()); // R2-A
+    mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings()); // R2-B
+    // Round 3: new CRITICAL appears at cap → escalate
+    mockRun.mockResolvedValueOnce(makeCriticalResult('Session token not validated')); // R3-A
+    mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings()); // R3-B
+
+    const { runConvergentReviewWorkflow } = await import('./workflow.js');
+    await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:needs-review',
+      'factory:needs-human',
+    );
+    expect(source.transitionState).not.toHaveBeenCalledWith(
+      '42',
+      'factory:needs-review',
+      'factory:approved',
+    );
+    // All 3 rounds must have run (minRounds=3 enforced by auth topic)
+    expect(mockRun).toHaveBeenCalledTimes(6);
+  });
+
+  // Test for P1 fix: needs-human verdict from individual reviewer escalates immediately
+  it('escalates immediately when any reviewer returns needs-human verdict', async () => {
+    const item = makeWorkItem();
+    const source = makeMockSource({
+      getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+added'),
+    });
+
+    // Round 1: reviewer A returns needs-human (no blocker findings needed for this verdict)
+    const needsHumanResult: AgentResult = {
+      output: {
+        verdict: 'needs-human',
+        confidence: 0.2,
+        criteriaChecks: [],
+        findings: [],
+        decisionSummaries: [],
+        escalationReason: 'Spec is fundamentally ambiguous',
+      },
+      decisionSummaries: [],
+      events: [],
+    };
+    mockRun.mockResolvedValueOnce(needsHumanResult); // R1-A needs-human
+    mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings()); // R1-B approved
+
+    const { runConvergentReviewWorkflow } = await import('./workflow.js');
+    const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+    await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+    // Must escalate to needs-human immediately, not continue to round 2
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:needs-review',
+      'factory:needs-human',
+    );
+    expect(mockRun).toHaveBeenCalledTimes(2); // only round 1 ran
+
+    // Must emit review.completed so UI/downstream consumers see the outcome
+    const completedEvents = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(([e]) => e.kind === 'review.completed');
+    expect(completedEvents).toHaveLength(1);
+    expect(completedEvents[0]?.[0].payload).toMatchObject({ verdict: 'needs-human' });
+  });
+
+  // Test for P2 fix: review.completed emitted on convergence path
+  it('emits review.completed with verdict approved when converging', async () => {
+    const item = makeWorkItem();
+    const source = makeMockSource({
+      getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+added'),
+    });
+
+    // 3 rounds × 2 reviewers all returning approved with no findings → converge at round 3
+    for (let i = 0; i < 6; i++) mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings());
+
+    const { runConvergentReviewWorkflow } = await import('./workflow.js');
+    const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+    await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+    const completedEvents = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(([e]) => e.kind === 'review.completed');
+    expect(completedEvents).toHaveLength(1);
+    expect(completedEvents[0]?.[0].payload).toMatchObject({ verdict: 'approved' });
+  });
+
+  // Test 4: holdout discipline — sibling decision summary leak is detected via tool.violation
+  it('test 4: emits tool.violation when sibling decision summaries are injected into a reviewer context', async () => {
+    const { assembleSpawnContext } = await import(
+      '@goose-hub/core/agent-runtime/context-assembly.js'
+    );
+    const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+    vi.mocked(eventStore.appendEvent).mockClear();
+
+    // Simulate a leaky AgentSpec where siblingDecisionSummaries (a disallowed key)
+    // is present in the reviewer's context — the assembleSpawnContext holdout
+    // enforcement must detect and report it.
+    const leakySpec: AgentSpec = {
+      runId: 'holdout-test-run',
+      role: 'reviewer',
+      skill: 'review',
+      context: {
+        projectId: 'test-project',
+        workItemId: 'github:owner/repo#42',
+        workItem: { title: 'T', body: 'B', number: 42 },
+        prDiff: '',
+        qaVerdict: undefined,
+        siblingDecisionSummaries: [
+          { kind: 'IMPLEMENTATION_PLAN', summary: 'reviewer A decided X' },
+        ],
+      },
+      contextAllowlist: ['workItem', 'prDiff', 'qaVerdict'],
+      freshContext: true,
+      toolBundles: ['read', 'validate'],
+      toolExtras: [],
+      budgets: { maxTurns: 25, maxBudgetUsd: 0.5 },
+      personaId: 'test-project/reviewer/0',
+    };
+
+    assembleSpawnContext(leakySpec);
+
+    const violations = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(([e]) => e.kind === 'tool.violation');
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.[0].payload).toMatchObject({
+      disallowedKey: 'siblingDecisionSummaries',
+      role: 'reviewer',
     });
   });
 });
