@@ -27,6 +27,11 @@ export interface ThreeTierVerifyResult {
  * Run Tier 1 → 2 → 3 in sequence. The orchestrator must not advance to the
  * next tier if the previous one failed (Steve, 03-lifecycle-harness.md:112-118).
  *
+ * `implRunId` MUST be the runId from the parallel-implement run that produced
+ * the worktree being verified. Tier-3 carry-forward logic queries wp_iterations
+ * by this key — using a fresh UUID would make all previouslyOkWpIds empty and
+ * disable the regression check entirely.
+ *
  * On Tier-3 failure the action depends on `regressionPolicy`:
  * - 'escalate' (default) → transition to factory:needs-human
  * - 'ignore'             → log warning, continue as passed
@@ -39,16 +44,16 @@ export async function runThreeTierVerifyWorkflow(
   stateSource: StateSource,
   projectId: string,
   worktreePath: string,
+  implRunId: string,
   regressionPolicy: RegressionPolicy = 'escalate',
   deps: ThreeTierVerifyDeps = {},
 ): Promise<ThreeTierVerifyResult> {
-  const runId = crypto.randomUUID();
   const append = deps.appendEvent ?? ((input) => eventStore.appendEvent(input));
   const runTierFn = deps.runTierImpl ?? runTier;
 
   const tierDeps: TierDeps = { appendEvent: append };
   const runArtifacts = {
-    runId,
+    runId: implRunId,
     projectId,
     workItemId: workItem.id,
     worktreePath,

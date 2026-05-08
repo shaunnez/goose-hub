@@ -305,6 +305,7 @@ describe('runThreeTierVerifyWorkflow — Tier 3 failure escalates to needs-human
       stateSource,
       'goose-hub-self',
       worktree,
+      'impl-run-test-01',
       'escalate',
       {
         appendEvent,
@@ -354,6 +355,7 @@ describe('runThreeTierVerifyWorkflow — Tier 3 failure escalates to needs-human
       stateSource,
       'goose-hub-self',
       worktree,
+      'impl-run-test-01',
       'ignore',
       {
         appendEvent,
@@ -376,6 +378,64 @@ describe('runThreeTierVerifyWorkflow — Tier 3 failure escalates to needs-human
     // With 'ignore' policy, Tier 3 findings are warnings → treated as passed
     expect(result.allPassed).toBe(true);
     expect(vi.mocked(stateSource.transitionState)).not.toHaveBeenCalled();
+  });
+});
+
+// ─── implRunId threading — carry-forward regression check ────────────────────
+// Verifies the fix for Codex P1: workflow must use implRunId (not a fresh UUID)
+// so verifyRegression can actually find wp_iterations rows from the impl run.
+
+describe('runThreeTierVerifyWorkflow — implRunId threading', () => {
+  let worktree: string;
+
+  beforeEach(() => {
+    worktree = mkdtempSync(join(tmpdir(), 'goose-hub-rid-'));
+    mkdirSync(join(worktree, 'src'), { recursive: true });
+    writeFileSync(join(worktree, 'src/index.ts'), 'export const x = 1;\n');
+  });
+
+  afterEach(() => rmSync(worktree, { recursive: true, force: true }));
+
+  it('passes implRunId through to verifyRegression so wp_iterations queries see prior statuses', async () => {
+    const capturedRunIds: string[] = [];
+    const stateSource = makeStateSource();
+    const { fn: appendEvent } = makeAppendEvent();
+
+    const spec = makeSpec({
+      workPackages: [makeWp('WP1', ['src/index.ts'])],
+      verificationTooling: [],
+    });
+
+    await runThreeTierVerifyWorkflow(
+      makeWorkItem(),
+      spec,
+      stateSource,
+      'goose-hub-self',
+      worktree,
+      'the-impl-run-id',
+      'escalate',
+      {
+        appendEvent,
+        runTierImpl: async (tier, _spec, artifacts, tierDeps) =>
+          runTier(
+            tier,
+            _spec,
+            { ...artifacts, worktreePath: worktree },
+            {
+              ...tierDeps,
+              getLastWpStatusImpl: (runId, _wpId) => {
+                capturedRunIds.push(runId);
+                return null;
+              },
+              runRegressionTestsImpl: async () => ({ passed: true, failedTests: [] }),
+            },
+          ),
+      },
+    );
+
+    // Tier 3 must have queried with the implRunId, not a fresh UUID
+    expect(capturedRunIds.some((id) => id === 'the-impl-run-id')).toBe(true);
+    expect(capturedRunIds.every((id) => id !== '')).toBe(true);
   });
 });
 
