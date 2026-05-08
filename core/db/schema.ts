@@ -265,8 +265,7 @@ export const projectSettings = sqliteTable('project_settings', {
   dailyTokens: integer('daily_tokens'),
   maxParallelAgents: integer('max_parallel_agents'),
   maxRetries: integer('max_retries'),
-  maxBashSeconds: integer('max_bash_seconds'),
-  maxIssuesPerDayFromNonOwners: integer('max_issues_per_day_from_non_owners'),
+  perBashCommandMaxSeconds: integer('per_bash_command_max_seconds'),
   updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
   updatedBy: text('updated_by'),
 });
