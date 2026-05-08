@@ -44,6 +44,16 @@ export const ROLE_DEFAULTS: Record<Role, RoleDefaults> = {
     modelTier: 'sonnet',
     budgets: { maxTurns: 15, maxBudgetUsd: 0.8 },
   },
+  'dev-reviewer': {
+    /**
+     * Codex pre-QA advisor (M19.11). NOT a holdout — it sits inside the dev
+     * cycle and consumes the same diff the developer just produced. Sonnet-
+     * tier (Codex equivalent resolved by the dispatcher) is enough; this
+     * role is read-only and adversarial, not generative.
+     */
+    modelTier: 'sonnet',
+    budgets: { maxTurns: 6, maxBudgetUsd: 0.5 },
+  },
   retrospector: {
     modelTier: 'sonnet',
     budgets: { maxTurns: 20, maxBudgetUsd: 1.0 },

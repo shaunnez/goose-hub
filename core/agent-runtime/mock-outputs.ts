@@ -159,6 +159,44 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
       };
     }
 
+    case 'dev-review': {
+      // Default: no-blockers (matches the "Static no-blockers default + per-test overrides"
+      // mock policy agreed for M19.10–M19.12). Tests that need findings or a
+      // blockers-found verdict opt in via mock-test-registry's setNextOutcome().
+      if (testOutcome === 'blockers-found') {
+        const finding = {
+          severity: 'P1' as const,
+          category: 'correctness' as const,
+          file: 'mock/file.ts',
+          line: 42,
+          summary: 'Mock blocker for e2e test',
+          suggestion: 'Mock suggestion',
+        };
+        return {
+          output: {
+            verdict: 'blockers-found',
+            findings: [finding],
+            decisionSummaries: [
+              { kind: 'VERDICT', summary: 'Mock dev-review blockers-found for e2e test' },
+            ],
+          },
+          decisionSummaries: [
+            { kind: 'VERDICT', summary: 'Mock dev-review blockers-found for e2e test' },
+          ],
+          events: [],
+        };
+      }
+      return {
+        output: {
+          verdict: 'no-blockers',
+          findings: [],
+          decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock dev-review no-blockers' }],
+        },
+        decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock dev-review no-blockers' }],
+        events: [],
+      };
+    }
+
     case 'review': {
       if (testOutcome === 'needs-fix') {
         return {
