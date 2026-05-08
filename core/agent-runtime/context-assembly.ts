@@ -38,6 +38,17 @@ export interface HoldoutContextLeak {
  * Pure function — does not mutate the spec or emit events. Callers
  * (e.g. `assembleSpawnContext`) are responsible for the side effects.
  */
+/**
+ * Returns the top-level key of an allowlist entry. `renderManifest` supports
+ * dotted paths (e.g. `devReviewFindings.summary`) which project a nested
+ * value through to the rendered XML — so leak detection must normalise to
+ * the top-level key before comparing against the forbidden set.
+ */
+function topLevelKey(allowlistEntry: string): string {
+  const dot = allowlistEntry.indexOf('.');
+  return dot === -1 ? allowlistEntry : allowlistEntry.slice(0, dot);
+}
+
 export function findHoldoutContextLeaks(spec: AgentSpec): HoldoutContextLeak[] {
   if (!HOLDOUT_ROLES.has(spec.role)) return [];
   const leaks: HoldoutContextLeak[] = [];
@@ -45,7 +56,12 @@ export function findHoldoutContextLeaks(spec: AgentSpec): HoldoutContextLeak[] {
     if (HOLDOUT_FORBIDDEN_KEYS.has(k)) leaks.push({ key: k, source: 'context' });
   }
   for (const k of spec.contextAllowlist) {
-    if (HOLDOUT_FORBIDDEN_KEYS.has(k)) leaks.push({ key: k, source: 'allowlist' });
+    // Compare the top-level key against the forbidden set. `key` on the leak
+    // record preserves the original entry (e.g. `devReviewFindings.summary`)
+    // so the violation event accurately reports what the caller attempted.
+    if (HOLDOUT_FORBIDDEN_KEYS.has(topLevelKey(k))) {
+      leaks.push({ key: k, source: 'allowlist' });
+    }
   }
   return leaks;
 }
@@ -94,7 +110,11 @@ export function assembleSpawnContext(spec: AgentSpec): SpawnContext {
         runId: spec.runId,
       });
     }
-    effectiveAllowlist = spec.contextAllowlist.filter((k) => !HOLDOUT_FORBIDDEN_KEYS.has(k));
+    // Normalise to top-level when filtering — dotted entries like
+    // `devReviewFindings.summary` would otherwise project the nested value.
+    effectiveAllowlist = spec.contextAllowlist.filter(
+      (k) => !HOLDOUT_FORBIDDEN_KEYS.has(topLevelKey(k)),
+    );
     if (Object.keys(spec.context).some((k) => HOLDOUT_FORBIDDEN_KEYS.has(k))) {
       effectiveContext = Object.fromEntries(
         Object.entries(spec.context).filter(([k]) => !HOLDOUT_FORBIDDEN_KEYS.has(k)),

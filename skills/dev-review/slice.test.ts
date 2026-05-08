@@ -257,6 +257,32 @@ describe('holdout context-exclusion guard for dev-review keys', () => {
     expect(keys).toContain('devReviewVerdict');
   });
 
+  it('flags DOTTED forbidden-key allowlist entries (renderManifest supports dotted paths)', () => {
+    // renderManifest projects nested values via dotted allowlist entries like
+    // `devReviewFindings.summary` — so the leak guard must normalise to the
+    // top-level key before comparing against HOLDOUT_FORBIDDEN_KEYS.
+    const spec = makeSpec('qa', {
+      contextAllowlist: ['workItem', 'devReviewFindings.summary'],
+    });
+    const leaks = findHoldoutContextLeaks(spec);
+    expect(leaks).toHaveLength(1);
+    expect(leaks[0]).toEqual({ key: 'devReviewFindings.summary', source: 'allowlist' });
+  });
+
+  it('STRIPS dotted forbidden-key allowlist entries from rendered XML', () => {
+    const spec = makeSpec('qa', {
+      context: {
+        projectId: 'p',
+        workItemId: 'i',
+        devReviewFindings: { summary: 'leaked-secret-content', severity: 'P1' },
+      },
+      contextAllowlist: ['devReviewFindings.summary'],
+    });
+    const { contextXml } = assembleSpawnContext(spec);
+    expect(contextXml).not.toContain('devReviewFindings');
+    expect(contextXml).not.toContain('leaked-secret-content');
+  });
+
   it('non-holdout roles can carry dev-review keys without violation', () => {
     const spec = makeSpec('developer', {
       context: {
