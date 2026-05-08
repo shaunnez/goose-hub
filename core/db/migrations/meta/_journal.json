@@ -53,9 +53,23 @@
     },
     {
       "idx": 7,
-      "version": "6",
+      "version": "7",
+      "when": 1746921600000,
+      "tag": "0007_agent_decisions",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1746979200000,
+      "tag": "0008_run_quality_scores",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
       "when": 1778227415565,
-      "tag": "0007_fluffy_the_order",
+      "tag": "0009_project_budget_settings",
       "breakpoints": true
     }
   ]

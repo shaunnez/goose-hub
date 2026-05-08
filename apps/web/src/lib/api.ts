@@ -15,6 +15,7 @@ import type {
   PlaybookSummaryDto,
   ProjectConfigDto,
   ProjectSummary,
+  QualityTrendPointDto,
   SprintReviewEligibility,
   TransitionResult,
   TriageResultDto,
@@ -395,6 +396,16 @@ export async function fetchPersonaCandidates(
     `/roster/candidates?persona=${encodeURIComponent(personaName)}`,
   );
   return candidates;
+}
+
+export async function fetchQualityTrend(
+  projectId: string,
+  limit = 50,
+): Promise<QualityTrendPointDto[]> {
+  const { trend } = await getJson<{ trend: QualityTrendPointDto[] }>(
+    `/roster/quality-trend?project=${encodeURIComponent(projectId)}&limit=${limit}`,
+  );
+  return trend;
 }
 
 export async function approveCandidateById(id: number): Promise<ImprovementCandidateDto> {

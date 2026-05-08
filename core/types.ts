@@ -33,7 +33,8 @@ export type Role =
   | 'qa'
   | 'reviewer'
   | 'retrospector'
-  | 'researcher';
+  | 'researcher'
+  | 'auditor';
 
 export interface RoleModel {
   primary: ModelTier;
@@ -57,9 +58,9 @@ export interface CoachPolicy {
 
 export interface AgentConfig {
   runtime: 'claude-cli';
-  rolesModels: Record<Role, RoleModel>;
+  rolesModels: Partial<Record<Role, RoleModel>>;
   fallbackPolicy: Record<string, FallbackPolicy>;
-  toolAllowlists: Record<Role, ToolAllowlist>;
+  toolAllowlists: Partial<Record<Role, ToolAllowlist>>;
   advisorMode: {
     enabled: boolean;
     triggerOn: { priorities: string[] };
@@ -134,4 +135,19 @@ export interface ProjectConfig {
   colorStripe: string;
   activeMilestone?: string;
   tickIntervalSeconds?: number;
+  /** Maximum rounds for convergent adversarial review (M19.04). Default 3. */
+  maxReviewRounds?: number;
+  /**
+   * How the orchestrator responds when Tier-3 regression detection fires.
+   * 'revert'   — revert the WP commits that introduced the regression and retry
+   * 'escalate' — transition to factory:needs-human (default)
+   * 'ignore'   — log as warning only; do not block the workflow
+   * See docs/adr/0032-regression-policy.md
+   */
+  regressionPolicy?: 'revert' | 'escalate' | 'ignore';
+  /** Feature flags for experimental capabilities. Opt-in per project. */
+  experimental?: {
+    /** M19.06 — ship record-decision MCP tool for A/B evaluation. Default false. */
+    recordDecisionTool?: boolean;
+  };
 }

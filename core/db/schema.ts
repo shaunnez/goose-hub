@@ -212,6 +212,49 @@ export const wpIterations = sqliteTable(
   }),
 );
 
+// One structured decision record per mid-run recordDecision() tool call (M19.06).
+// Deduplication key: (run_id, kind, what) — second call with same key is a no-op.
+// Reconciliation: at run end, orchestrator reads these rows (when flag on) instead
+// of relying solely on the skill schema's decisionSummaries JSON field.
+export const agentDecisions = sqliteTable(
+  'agent_decisions',
+  {
+    id: text('id').primaryKey(), // crypto.randomUUID()
+    runId: text('run_id').notNull(),
+    iteration: integer('iteration').notNull().default(0),
+    phase: text('phase').notNull().default(''),
+    kind: text('kind').notNull(),
+    what: text('what').notNull(),
+    why: text('why').notNull(),
+    ts: text('ts').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  },
+  (t) => ({
+    runKindWhatUniq: uniqueIndex('agent_decisions_run_kind_what_uniq').on(t.runId, t.kind, t.what),
+    runIdx: index('agent_decisions_run_idx').on(t.runId),
+  }),
+);
+
+// Per-run QualityScore (M19.08, issue #565). One row per (run_id, iteration) pair.
+// components_json holds the full QualityComponents object.
+// audit_score from code-quality-audit (#564) is informational — does NOT feed the score formula.
+export const runQualityScores = sqliteTable(
+  'run_quality_scores',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    runId: text('run_id').notNull(),
+    projectId: text('project_id').notNull(),
+    iteration: integer('iteration').notNull().default(0),
+    score: real('score').notNull(),
+    componentsJson: text('components_json').notNull(),
+    auditScore: real('audit_score'),
+    ts: text('ts').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  },
+  (t) => ({
+    runIterationUniq: uniqueIndex('run_quality_scores_run_iteration_uniq').on(t.runId, t.iteration),
+    projectTsIdx: index('run_quality_scores_project_ts_idx').on(t.projectId, t.ts),
+  }),
+);
+
 // Per-project configurable budget overrides (global caps). One row per project.
 // Values here win over project.config.ts and take effect on the next agent dispatch.
 export const projectSettings = sqliteTable('project_settings', {

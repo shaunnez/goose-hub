@@ -63,12 +63,34 @@ export const DecisionSummarySchema = z.object({
   evidence: z.string().optional(),
 });
 
+// Inline quality-score schemas so retrospective output is self-contained.
+// The full quality-score module lives in core/quality-score/; these mirror it
+// to avoid a cross-module circular import path.
+export const RetroQualityComponentsSchema = z.object({
+  p0_count: z.number().int().min(0),
+  p1_count: z.number().int().min(0),
+  p2_count: z.number().int().min(0),
+  p3_count: z.number().int().min(0),
+  regressions_open: z.number().int().min(0),
+  review_converged: z.boolean(),
+  uat_passed: z.boolean(),
+  static_passed: z.boolean(),
+  harness_pass_rate: z.number().min(0).max(1),
+});
+
+export const RetroRunQualityScoreSchema = z.object({
+  score: z.number().min(0).max(100),
+  components: RetroQualityComponentsSchema,
+  isConverged: z.boolean(),
+});
+
 export const RetroOutputBaseSchema = z.object({
   outcome: OutcomeSchema,
   workItemNumber: z.number().int(),
   summary: SummarySchema,
   improvementCandidates: z.array(ImprovementCandidateSchema),
   decisionSummaries: z.array(DecisionSummarySchema).min(1),
+  qualityScore: RetroRunQualityScoreSchema.optional(),
 });
 
 export type Summary = z.infer<typeof SummarySchema>;
@@ -80,6 +102,8 @@ export type ImprovementKind = z.infer<typeof ImprovementKindSchema>;
 export type ImprovementCandidate = z.infer<typeof ImprovementCandidateSchema>;
 export type DecisionSummary = z.infer<typeof DecisionSummarySchema>;
 export type Confidence = z.infer<typeof ConfidenceSchema>;
+export type RetroRunQualityScore = z.infer<typeof RetroRunQualityScoreSchema>;
+export type RetroQualityComponents = z.infer<typeof RetroQualityComponentsSchema>;
 export type RetroOutputBase = z.infer<typeof RetroOutputBaseSchema>;
 
 // Patterns must reach this confidence level before surfacing as improvement candidates.

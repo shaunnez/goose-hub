@@ -95,9 +95,12 @@ export const PENDING_NEXT_RUN_STATES: Record<string, string> = {
   'factory:grilling': 'grill-me',
   'factory:prd-drafting': 'write-prd',
   'factory:decomposing': 'decompose-issues',
+  'factory:investigating': 'investigate',
   'factory:dev-ready': 'implement',
   'factory:in-progress': 'implement',
   'factory:needs-qa': 'qa',
+  'factory:needs-review': 'review',
   'factory:needs-fix': 'fix-issue',
+  'factory:merge-conflict': 'resolve-conflict',
   'factory:retrospecting': 'retrospective',
 };

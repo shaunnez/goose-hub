@@ -7,7 +7,7 @@ import {
 } from '@/lib/api';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 interface Props {
   slug: string;
@@ -57,6 +57,10 @@ function NumericInput({
   onCommit: (val: number | null) => void;
 }) {
   const [draft, setDraft] = useState<string>(value != null ? String(value) : '');
+
+  useEffect(() => {
+    setDraft(value != null ? String(value) : '');
+  }, [value]);
 
   function handleBlur() {
     if (draft === '') {

@@ -600,6 +600,155 @@ describe('Discover Lane end-to-end integration', () => {
 });
 
 // ---------------------------------------------------------------------------
+// PRD decline → re-grill path: verifies that rejecting a PRD re-enters the
+// grill loop with the correct round number and does NOT immediately produce
+// another PRD. Covers the bug where grill-me ran 7 internal rounds and forced
+// readyForPRD=true without asking the human any questions.
+// ---------------------------------------------------------------------------
+
+describe('Discover Lane: PRD decline → re-grill resumes correctly', () => {
+  it('re-grills after PRD decline: asks one question, moves to gate-pending, excludes PRD from priorReplies', async () => {
+    const projectId = uniqueProjectId();
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+
+    const seeded = await source.seedIssue({
+      title: 'Add better search',
+      body: 'Improve search relevance.',
+      type: 'feature',
+      priority: 'medium',
+      state: 'factory:accepted',
+    });
+    await source.forceState(seeded.externalId, 'factory:grilling');
+
+    // ── Round 1 ──
+    const round1Output = {
+      questions: ['What does "better" specifically mean — speed, relevance, or scope?'],
+      refinedIntent: 'Improve search',
+      readyForPRD: false,
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Asked about improvement axis' }],
+    };
+    let workItem = await source.getItem(seeded.externalId);
+    await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies: [],
+      deps: { runtime: makeQueuedRuntime([round1Output]), projectConfig: injectedConfig() },
+    });
+
+    // Simulate user reply
+    await source.comment(seeded.externalId, 'Relevance — current search misses obvious matches.');
+    await source.forceState(seeded.externalId, 'factory:grilling');
+
+    // ── Round 2 → readyForPRD=true → PRD produced ──
+    const round2Output = {
+      questions: [],
+      refinedIntent: 'Improve keyword search relevance with permission-aware filtering',
+      readyForPRD: true,
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Intent is precise; ready for PRD.' }],
+    };
+    const prdOutput = buildValidPRD();
+
+    workItem = await source.getItem(seeded.externalId);
+    const allCommentsForR2 = await source.listComments(seeded.externalId);
+    const priorRepliesR2 = allCommentsForR2
+      .filter(
+        (c) =>
+          c.body.includes('<!-- factory:grill-question -->') || c.authorLogin !== 'factory-bot',
+      )
+      .map((c) => ({
+        role: c.body.includes('<!-- factory:grill-question -->')
+          ? ('agent' as const)
+          : ('user' as const),
+        content: c.body,
+      }));
+
+    const result2 = await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies: priorRepliesR2,
+      deps: {
+        runtime: makeQueuedRuntime([round2Output, prdOutput]),
+        projectConfig: injectedConfig(),
+      },
+    });
+
+    expect(result2.phase).toBe('prd-review');
+    const afterPRD = await source.getItem(seeded.externalId);
+    expect(afterPRD.state).toBe('factory:prd-review');
+
+    // ── User declines PRD ──
+    // Mirror what rejectPRD() does: post rejection comment, force back to grilling
+    await source.comment(
+      seeded.externalId,
+      'PRD rejected. Please ask me further questions to refine the requirements and produce a better PRD.',
+    );
+    await source.forceState(seeded.externalId, 'factory:grilling');
+
+    // ── Re-grill: build priorReplies the same way dispatch.ts does ──
+    // PRD marker comments are excluded; grill-questions → agent; everything else → user
+    const allCommentsAfterReject = await source.listComments(seeded.externalId);
+    const priorRepliesReGrill = allCommentsAfterReject
+      .filter(
+        (c) =>
+          !c.body.startsWith('<!-- factory:system -->') && !c.body.startsWith('## Child issues'),
+      )
+      .map((c) => ({
+        role:
+          c.body.startsWith('<!-- factory:grill-question -->') ||
+          c.body.startsWith('<!-- factory:prd -->')
+            ? ('agent' as const)
+            : ('user' as const),
+        content: c.body,
+      }));
+
+    // Should have: 1 agent (grill Q1) + 1 user (reply) + 1 agent (PRD) + 1 user (rejection) = 4
+    // roundNumber = agent count + 1 = 3
+    const agentCount = priorRepliesReGrill.filter((r) => r.role === 'agent').length;
+    expect(agentCount).toBe(2); // grill question + PRD draft
+    expect(priorRepliesReGrill).toHaveLength(4);
+
+    // Re-grill round 2: griller asks a follow-up question, NOT readyForPRD
+    const reGrillOutput = {
+      questions: ['Should search results respect per-user access permissions?'],
+      refinedIntent: 'Improve keyword search relevance with access-aware filtering',
+      readyForPRD: false,
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Probing permission scope after PRD decline' }],
+    };
+
+    workItem = await source.getItem(seeded.externalId);
+    const reGrillResult = await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies: priorRepliesReGrill,
+      deps: {
+        runtime: makeQueuedRuntime([reGrillOutput]),
+        projectConfig: injectedConfig(),
+      },
+    });
+
+    // Must ask a question, not jump to PRD
+    expect(reGrillResult.phase).toBe('grilling');
+    expect(reGrillResult.questionPosted).toContain('permissions');
+
+    const afterReGrill = await source.getItem(seeded.externalId);
+    expect(afterReGrill.state).toBe('factory:gate-pending');
+
+    // grill.question-posted events: 1 from first session + 1 from re-grill = 2
+    const parentId = seeded.id;
+    const evs = eventStore.replay({ projectId, workItemId: parentId });
+    const qPostedEvs = evs.filter((e) => e.kind === 'grill.question-posted');
+    expect(qPostedEvs).toHaveLength(2);
+
+    // Second posted event roundNumber = 3 (grill Q + PRD draft = 2 prior agent messages)
+    const reGrillQPosted = qPostedEvs[1];
+    expect((reGrillQPosted?.payload as { roundNumber: number }).roundNumber).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Triage entry-point: factory:triaging → factory:grilling for fresh features
 // (#592) — verifies that the state-machine path triaging → accepted → grilling
 // is legal and that a feature carrying no factory:from-prd ends up in grilling.

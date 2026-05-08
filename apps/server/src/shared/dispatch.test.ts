@@ -185,7 +185,7 @@ describe('dispatchInvestigate', () => {
 
     await p2;
     expect(mockLoggerWarn).toHaveBeenCalledWith(
-      'dispatchInvestigate: parallel-lock rejected (in-flight or at cap)',
+      'dispatchInvestigate: duplicate in-flight, dropping',
       expect.objectContaining({ slug: 'slug', issueNumber: 5 }),
     );
 
@@ -233,7 +233,7 @@ describe('dispatchFixIssue', () => {
 
     await p2;
     expect(mockLoggerWarn).toHaveBeenCalledWith(
-      'dispatchFixIssue: parallel-lock rejected (in-flight or at cap)',
+      'dispatchFixIssue: duplicate in-flight, dropping',
       expect.objectContaining({ slug: 'slug', issueNumber: 7 }),
     );
 
@@ -322,6 +322,184 @@ describe('dispatchFixIssue', () => {
       'dispatchFixIssue: item blocked by deps, skipping',
       expect.anything(),
     );
+  });
+});
+
+// ─── pending-queue behaviour ──────────────────────────────────────────────
+
+describe('pending queue: cap-full queuing and drain', () => {
+  it('cap-full rejection queues work item (not logged as warn)', async () => {
+    let resolveSource!: () => void;
+    mockGetProject.mockResolvedValue({ budgets: { maxParallelAgents: 1 } });
+    // First call blocks, keeping slot 1 occupied; second call returns null immediately.
+    mockGetSourceForSlug
+      .mockReturnValueOnce(
+        new Promise<null>((r) => {
+          resolveSource = () => r(null);
+        }),
+      )
+      .mockResolvedValue(null);
+
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    const p1 = dispatchFixIssue('slug', 5);
+
+    // Wait for p1 to acquire the lock (its getMaxParallelAgents must have resolved).
+    await vi.waitFor(() => {
+      expect(mockGetSourceForSlug).toHaveBeenCalledTimes(1);
+    });
+
+    // Fire a second dispatch for a DIFFERENT issue — cap is full.
+    await dispatchFixIssue('slug', 6);
+
+    // Should NOT emit the "duplicate in-flight" warn (issue 6 is not in-flight).
+    expect(mockLoggerWarn).not.toHaveBeenCalledWith(
+      'dispatchFixIssue: duplicate in-flight, dropping',
+      expect.objectContaining({ issueNumber: 6 }),
+    );
+    // Should be logged as a cap-full queue.
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      'dispatchFixIssue: cap full, queuing work item',
+      expect.objectContaining({ slug: 'slug', issueNumber: 6 }),
+    );
+
+    resolveSource();
+    await p1;
+    // Flush the drained dispatch (void, fire-and-forget) so it does not leak into the next test.
+    await vi.waitFor(() => {
+      expect(mockGetSourceForSlug).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('when a slot frees the pending item is dispatched', async () => {
+    let resolveSource!: () => void;
+    mockGetProject.mockResolvedValue({ budgets: { maxParallelAgents: 1 } });
+    mockGetSourceForSlug
+      .mockReturnValueOnce(
+        new Promise<null>((r) => {
+          resolveSource = () => r(null);
+        }),
+      )
+      .mockResolvedValue(null); // second call (drain of issue 6) returns null → early return
+
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    const p1 = dispatchFixIssue('slug', 5);
+
+    await vi.waitFor(() => {
+      expect(mockGetSourceForSlug).toHaveBeenCalledTimes(1);
+    });
+
+    await dispatchFixIssue('slug', 6); // cap-full → queued
+
+    resolveSource();
+    await p1;
+
+    // drainPending fires dispatchFixIssue('slug', 6) which calls getSourceForSlug a second time.
+    await vi.waitFor(() => {
+      expect(mockGetSourceForSlug).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('per-issue duplicate (same issue already in-flight) is not queued', async () => {
+    let resolveSource!: () => void;
+    mockGetProject.mockResolvedValue({ budgets: { maxParallelAgents: 1 } });
+    mockGetSourceForSlug.mockReturnValueOnce(
+      new Promise<null>((r) => {
+        resolveSource = () => r(null);
+      }),
+    );
+
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    const p1 = dispatchFixIssue('slug', 5);
+    // Duplicate for the SAME issue while in-flight.
+    await dispatchFixIssue('slug', 5);
+
+    // Must be logged as a duplicate drop, not as cap-full queue.
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      'dispatchFixIssue: duplicate in-flight, dropping',
+      expect.objectContaining({ slug: 'slug', issueNumber: 5 }),
+    );
+    expect(mockLoggerInfo).not.toHaveBeenCalledWith(
+      'dispatchFixIssue: cap full, queuing work item',
+      expect.anything(),
+    );
+
+    resolveSource();
+    await p1;
+
+    // Only one source lookup — the duplicate was dropped, not queued.
+    expect(mockGetSourceForSlug).toHaveBeenCalledTimes(1);
+  });
+
+  it('same issue + same workflow already pending is not queued a second time', async () => {
+    let resolveSource!: () => void;
+    mockGetProject.mockResolvedValue({ budgets: { maxParallelAgents: 1 } });
+    mockGetSourceForSlug
+      .mockReturnValueOnce(
+        new Promise<null>((r) => {
+          resolveSource = () => r(null);
+        }),
+      )
+      .mockResolvedValue(null);
+
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    const p1 = dispatchFixIssue('slug', 5);
+
+    await vi.waitFor(() => {
+      expect(mockGetSourceForSlug).toHaveBeenCalledTimes(1);
+    });
+
+    // Both of these hit cap-full; only the first should be queued.
+    await dispatchFixIssue('slug', 6);
+    await dispatchFixIssue('slug', 6);
+
+    resolveSource();
+    await p1;
+
+    // Issue 6 should be dispatched exactly once (drained once from the queue).
+    await vi.waitFor(() => {
+      expect(mockGetSourceForSlug).toHaveBeenCalledTimes(2);
+    });
+    expect(mockGetSourceForSlug).toHaveBeenCalledTimes(2);
+  });
+
+  it('different workflows for the same issue can each be queued independently', async () => {
+    let resolveSource!: () => void;
+    mockGetProject.mockResolvedValue({ budgets: { maxParallelAgents: 1 } });
+    mockGetSourceForSlug
+      .mockReturnValueOnce(
+        new Promise<null>((r) => {
+          resolveSource = () => r(null);
+        }),
+      )
+      .mockResolvedValue(null);
+
+    const { dispatchFixIssue, dispatchQa } = await import('./dispatch.js');
+    const p1 = dispatchFixIssue('slug', 5);
+
+    await vi.waitFor(() => {
+      expect(mockGetSourceForSlug).toHaveBeenCalledTimes(1);
+    });
+
+    // Two different workflows for the same issue — both should be enqueued.
+    await dispatchFixIssue('slug', 6);
+    await dispatchQa('slug', 6);
+
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      'dispatchFixIssue: cap full, queuing work item',
+      expect.objectContaining({ issueNumber: 6 }),
+    );
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      'dispatchQa: cap full, queuing work item',
+      expect.objectContaining({ issueNumber: 6 }),
+    );
+
+    resolveSource();
+    await p1;
+
+    // Both pending dispatches drain sequentially; getSourceForSlug called 3 times total.
+    await vi.waitFor(() => {
+      expect(mockGetSourceForSlug).toHaveBeenCalledTimes(3);
+    });
   });
 });
 
@@ -432,8 +610,8 @@ describe('dispatchRetro', () => {
 
 // ─── dispatchGrillAndPrd — buildPriorReplies filtering ───────────────────
 
-describe('dispatchGrillAndPrd: buildPriorReplies filters system/prd/child-issues comments', () => {
-  it('excludes system-marker and child-issues comments from priorReplies', async () => {
+describe('dispatchGrillAndPrd: buildPriorReplies filtering', () => {
+  it('excludes system-marker and child-issues; includes PRD as agent role', async () => {
     const source = {
       getItem: vi.fn().mockResolvedValue({ state: 'factory:grilling' }),
       listComments: vi
@@ -455,11 +633,12 @@ describe('dispatchGrillAndPrd: buildPriorReplies filters system/prd/child-issues
     const call = mockRunGrillAndPrdWorkflow.mock.calls[0][0] as {
       priorReplies: Array<{ role: string; content: string }>;
     };
-    // Only the grill question and user reply should pass through
-    expect(call.priorReplies).toHaveLength(2);
-    expect(call.priorReplies[0].role).toBe('agent');
-    expect(call.priorReplies[1].role).toBe('user');
+    // system-marker and child-issues excluded; PRD included as agent role
+    expect(call.priorReplies).toHaveLength(3);
+    expect(call.priorReplies[0].role).toBe('agent'); // grill question
+    expect(call.priorReplies[1].role).toBe('user'); // user reply
     expect(call.priorReplies[1].content).toBe('It is admin only.');
+    expect(call.priorReplies[2].role).toBe('agent'); // PRD draft
   });
 });
 

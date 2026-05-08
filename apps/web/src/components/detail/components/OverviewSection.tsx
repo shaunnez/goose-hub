@@ -1,5 +1,4 @@
 import { fetchEvents, fetchIssueDiff } from '@/lib/api';
-import { PRIORITY_BG, PRIORITY_BORDER, PRIORITY_COLOR } from '@/lib/constants';
 import { laneForState } from '@/lib/lanes.config';
 import { renderMarkdownToHtml } from '@/lib/markdown';
 import type { AgentEventDto, IssueDiffDto, WorkItemDto } from '@/lib/types';
@@ -12,35 +11,11 @@ import { parseDiff } from '../lib/code-diff';
 import { useIssueCostsBreakdown } from '../lib/costs';
 import { CommentsSection } from './CommentsSection';
 import { DependenciesSection } from './DependenciesSection';
+import { StatCard } from './StatCard';
 
 interface OverviewSectionProps {
   item?: WorkItemDto;
   projectSlug?: string;
-}
-
-function StatCard({
-  label,
-  value,
-  sub,
-  color,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  color?: string;
-}) {
-  return (
-    <div className="rounded-lg border border-line bg-bg-elev px-4 py-3">
-      <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1.5">{label}</div>
-      <div
-        className="text-[20px] font-semibold leading-none tracking-tight capitalize"
-        style={{ color: color ?? 'var(--fg)' }}
-      >
-        {value}
-      </div>
-      {sub && <div className="text-[11px] text-fg-2 mt-1">{sub}</div>}
-    </div>
-  );
 }
 
 export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
@@ -49,7 +24,6 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
   const personaMap = usePersonaMap();
 
   const lane = item?.state ? (laneForState(item.state) ?? item.state.replace('factory:', '')) : '—';
-  const priority = item?.priority ?? '—';
   const depsCount = item?.dependsOn?.length ?? 0;
   const blocksCount = item?.blocks?.length ?? 0;
   const lastAgentLabel = getPersonaLabel(personaMap, item?.lastPersonaId) ?? '—';
@@ -60,10 +34,6 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
     costs.runCount === 0
       ? 'no runs yet'
       : `${formatTokens(costs.totalTokens)} tokens · ${costs.runCount} run${costs.runCount === 1 ? '' : 's'}`;
-
-  const priorityColor = PRIORITY_COLOR[priority];
-  const priorityBg = PRIORITY_BG[priority];
-  const priorityBorder = PRIORITY_BORDER[priority];
 
   const { data: diffData } = useQuery<IssueDiffDto>({
     queryKey: ['issue-diff', slug, id],
@@ -137,18 +107,6 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
             <div className="text-[10.5px] uppercase tracking-wider text-fg-2">Brief</div>
           </div>
           <div className="px-4 py-4">
-            {priority !== '—' && (
-              <span
-                className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold mb-3 border"
-                style={{
-                  color: priorityColor,
-                  background: priorityBg,
-                  borderColor: priorityBorder,
-                }}
-              >
-                {priority}
-              </span>
-            )}
             <article
               data-testid="overview-body"
               className="prose-fix text-[13.5px]"

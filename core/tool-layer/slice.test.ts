@@ -136,6 +136,39 @@ describe('computeAllowlist', () => {
     const list = computeAllowlist({ toolBundles: [], toolExtras: [] });
     expect(list).toHaveLength(0);
   });
+
+  it('strips decision-record-only from qa role', () => {
+    const list = computeAllowlist({
+      toolBundles: ['decision-record-only'],
+      toolExtras: [],
+      role: 'qa',
+    });
+    expect(list).not.toContain('record-decision');
+    expect(list).toHaveLength(0);
+  });
+
+  it('strips decision-record-only from reviewer role', () => {
+    const list = computeAllowlist({
+      toolBundles: ['decision-record-only'],
+      toolExtras: [],
+      role: 'reviewer',
+    });
+    expect(list).not.toContain('record-decision');
+  });
+
+  it('allows decision-record-only for non-holdout roles', () => {
+    const list = computeAllowlist({
+      toolBundles: ['decision-record-only'],
+      toolExtras: [],
+      role: 'developer',
+    });
+    expect(list).toContain('record-decision');
+  });
+
+  it('allows decision-record-only when no role specified', () => {
+    const list = computeAllowlist({ toolBundles: ['decision-record-only'], toolExtras: [] });
+    expect(list).toContain('record-decision');
+  });
 });
 
 // ─── workspace sandbox ────────────────────────────────────────────────────────

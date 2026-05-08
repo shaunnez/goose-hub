@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { PersonaDrillIn } from './PersonaDrillIn';
 import { PlaybooksTab } from './PlaybooksTab';
+import { QualityTrendTab } from './QualityTrendTab';
 
 // Extracts the project slug from a persona name in the format "<slug>/<role>/<index>"
 export function personaProjectSlug(personaName: string): string {
@@ -125,7 +126,9 @@ function RoleGroup({
 export function RosterPage() {
   const params = useParams<{ slug?: string }>();
   const projectSlug = params.slug ?? 'goose-hub-self';
-  const [activeTab, setActiveTab] = useState<'personas' | 'playbooks'>('personas');
+  const [activeTab, setActiveTab] = useState<'personas' | 'playbooks' | 'quality-trend'>(
+    'personas',
+  );
   const [selectedPersona, setSelectedPersona] = useState<PersonaStatDto | null>(null);
   const [projectScope, setProjectScope] = useState<'all' | string>('all');
 
@@ -165,6 +168,17 @@ export function RosterPage() {
         <RosterTabBar activeTab={activeTab} onTabChange={setActiveTab} />
         <div className="flex-1 min-h-0 overflow-hidden">
           <PlaybooksTab projectSlug={projectSlug} />
+        </div>
+      </div>
+    );
+  }
+
+  if (activeTab === 'quality-trend') {
+    return (
+      <div data-testid="roster-page" className="flex flex-col h-full overflow-hidden">
+        <RosterTabBar activeTab={activeTab} onTabChange={setActiveTab} />
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <QualityTrendTab projectSlug={projectSlug} />
         </div>
       </div>
     );
@@ -261,8 +275,8 @@ export function RosterPage() {
 }
 
 interface RosterTabBarProps {
-  activeTab: 'personas' | 'playbooks';
-  onTabChange: (tab: 'personas' | 'playbooks') => void;
+  activeTab: 'personas' | 'playbooks' | 'quality-trend';
+  onTabChange: (tab: 'personas' | 'playbooks' | 'quality-trend') => void;
 }
 
 function RosterTabBar({ activeTab, onTabChange }: RosterTabBarProps) {
@@ -281,6 +295,13 @@ function RosterTabBar({ activeTab, onTabChange }: RosterTabBarProps) {
         onClick={() => onTabChange('playbooks')}
       >
         Playbooks
+      </TabButton>
+      <TabButton
+        testId="tab-quality-trend"
+        active={activeTab === 'quality-trend'}
+        onClick={() => onTabChange('quality-trend')}
+      >
+        Quality Trend
       </TabButton>
     </div>
   );
