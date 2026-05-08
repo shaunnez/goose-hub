@@ -6,7 +6,10 @@ import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { selectModel } from '@goose-hub/core/agent-runtime/model-router.js';
 import { defaultModelForTier, tierOf } from '@goose-hub/core/agent-runtime/models.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
-import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
+import {
+  resolveBudgetsForProject,
+  resolveComplexityOverridesForProject,
+} from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { runWithEscalation } from '@goose-hub/core/agent-runtime/with-escalation.js';
@@ -310,11 +313,17 @@ async function runImplement(input: RunImplementInput): Promise<ImplementOutputSh
     input.projectId,
   );
 
+  const dbComplexityOverrides = resolveComplexityOverridesForProject(
+    'developer',
+    input.projectId,
+    projectConfig?.agentConfig?.modelRouter?.overrides,
+  );
   const routerResult = selectModel({
     workItem: input.workItem,
     role: 'developer',
     projectId: input.projectId,
     modelRouterConfig: projectConfig?.agentConfig?.modelRouter,
+    dbComplexityOverrides,
   });
   const modelOverride =
     routerResult != null ? defaultModelForTier(routerResult.tier) : budgetModelOverride;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { selectModelForRole } from '../../core/agent-runtime/select-model-for-role.js';
 import { selectModel } from '../../core/agent-runtime/model-router.js';
+import { selectModelForRole } from '../../core/agent-runtime/select-model-for-role.js';
 import type { WorkItem } from '../../core/state-source/interface.js';
 
 const baseWorkItem: WorkItem = {
@@ -114,6 +114,22 @@ describe('selectModelForRole', () => {
     // null primaryModel → not valid → falls through to skill default
     expect(result.primary).toBe('haiku');
     expect(result.source).toBe('skill-default');
+  });
+
+  it('DB fallback/advisor survive when primaryModel is null', () => {
+    const result = selectModelForRole(
+      'developer',
+      {
+        rolesModels: { developer: { primary: 'sonnet', fallback: null, advisor: null } },
+        allowHoldoutOverride: false,
+      },
+      { modelPin: 'haiku' },
+      { primaryModel: null, fallbackModel: 'haiku', advisorModel: null },
+    );
+    // Primary comes from project config (DB primary is null), but fallback from DB wins
+    expect(result.primary).toBe('sonnet');
+    expect(result.fallback).toBe('haiku');
+    expect(result.source).toBe('project-config');
   });
 });
 

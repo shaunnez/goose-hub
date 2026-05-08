@@ -47,25 +47,31 @@ export function selectModelForRole(
   const isHoldout = HOLDOUT_ROLES.has(role);
   const allowOverride = agentConfig?.allowHoldoutOverride === true;
 
+  const canUseDb = dbParams != null && (!isHoldout || allowOverride);
+
   // DB override — dropped for holdout roles unless allowHoldoutOverride
-  if (dbParams != null && (!isHoldout || allowOverride)) {
-    if (isValidTier(dbParams.primaryModel)) {
-      return {
-        primary: dbParams.primaryModel,
-        fallback: isValidTier(dbParams.fallbackModel) ? dbParams.fallbackModel : null,
-        advisor: isValidTier(dbParams.advisorModel) ? dbParams.advisorModel : null,
-        source: 'db',
-      };
-    }
+  if (canUseDb && isValidTier(dbParams?.primaryModel)) {
+    return {
+      primary: dbParams?.primaryModel,
+      fallback: isValidTier(dbParams?.fallbackModel) ? dbParams?.fallbackModel : null,
+      advisor: isValidTier(dbParams?.advisorModel) ? dbParams?.advisorModel : null,
+      source: 'db',
+    };
   }
+
+  // DB fallback/advisor survive even when primaryModel is null — merge with lower-layer primary
+  const rawDbFallback = canUseDb ? dbParams?.fallbackModel : undefined;
+  const rawDbAdvisor = canUseDb ? dbParams?.advisorModel : undefined;
+  const dbFallback = isValidTier(rawDbFallback) ? rawDbFallback : null;
+  const dbAdvisor = isValidTier(rawDbAdvisor) ? rawDbAdvisor : null;
 
   // Project config rolesModels — dropped for holdout roles unless allowHoldoutOverride
   const configEntry: RoleModel | undefined = agentConfig?.rolesModels[role];
   if (configEntry != null && (!isHoldout || allowOverride)) {
     return {
       primary: configEntry.primary,
-      fallback: configEntry.fallback,
-      advisor: configEntry.advisor,
+      fallback: dbFallback ?? configEntry.fallback,
+      advisor: dbAdvisor ?? configEntry.advisor,
       source: 'project-config',
     };
   }
@@ -74,8 +80,8 @@ export function selectModelForRole(
   if (skillConfig?.modelPin != null) {
     return {
       primary: skillConfig.modelPin,
-      fallback: null,
-      advisor: null,
+      fallback: dbFallback,
+      advisor: dbAdvisor,
       source: 'skill-default',
     };
   }
@@ -84,8 +90,8 @@ export function selectModelForRole(
   const roleDefault = ROLE_DEFAULTS[role];
   return {
     primary: roleDefault?.modelTier ?? 'sonnet',
-    fallback: null,
-    advisor: null,
+    fallback: dbFallback,
+    advisor: dbAdvisor,
     source: 'role-default',
   };
 }
