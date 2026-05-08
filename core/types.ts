@@ -144,4 +144,9 @@ export interface ProjectConfig {
    * See docs/adr/0032-regression-policy.md
    */
   regressionPolicy?: 'revert' | 'escalate' | 'ignore';
+  /** Feature flags for experimental capabilities. Opt-in per project. */
+  experimental?: {
+    /** M19.06 — ship record-decision MCP tool for A/B evaluation. Default false. */
+    recordDecisionTool?: boolean;
+  };
 }
