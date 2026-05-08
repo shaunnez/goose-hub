@@ -65,7 +65,7 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
   const projectConfig = await getProject(slug);
   if (projectConfig != null) {
     const globalSettings = resolveGlobalSettingsForProject(slug, projectConfig.budgets);
-    const budgetResult = await checkDailyBudget(slug, globalSettings.dailyTokens);
+    const budgetResult = await checkDailyBudget(slug, globalSettings.dailyTokens ?? 0);
     if (budgetResult.exceeded) {
       logger.warn('triage-batch: daily token budget exceeded, skipping tick', {
         slug,
