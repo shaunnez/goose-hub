@@ -208,7 +208,8 @@ function buildValidPRD() {
       },
     ],
     testingDecisions: {
-      approach: 'Test that keyword queries return ranked results; permission filter excludes forbidden items',
+      approach:
+        'Test that keyword queries return ranked results; permission filter excludes forbidden items',
       modulesToTest: ['slices/discover-lane-e2e/slice.test.ts'],
     },
     decisionSummaries: [

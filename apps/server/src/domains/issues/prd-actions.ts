@@ -12,11 +12,7 @@ import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import type { PRDOutput } from '@goose-hub/skills/write-prd/schema.js';
-import {
-  dispatchDecomposePrd,
-  dispatchGrillAndPrd,
-  dispatchRevisePrd,
-} from '#shared/dispatch.js';
+import { dispatchDecomposePrd, dispatchGrillAndPrd, dispatchRevisePrd } from '#shared/dispatch.js';
 import type { Result } from '#shared/middleware.js';
 import { getSourceForSlug } from '#shared/source.js';
 import { getRepoRef } from './internal.js';
@@ -109,9 +105,7 @@ export async function revisePRD(
 
   // Fetch the latest PRD comment and parse its JSON blob.
   const comments = await source.listComments(id);
-  const prdComment = [...comments]
-    .reverse()
-    .find((c) => c.body.startsWith('<!-- factory:prd -->'));
+  const prdComment = [...comments].reverse().find((c) => c.body.startsWith('<!-- factory:prd -->'));
   const priorPrd = prdComment != null ? parsePrdFromCommentBody(prdComment.body) : null;
 
   eventStore.appendEvent({

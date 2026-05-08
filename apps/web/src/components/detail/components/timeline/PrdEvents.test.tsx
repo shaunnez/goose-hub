@@ -1,7 +1,7 @@
+import type { AgentEventDto } from '@/lib/types';
 /** @vitest-environment jsdom */
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { AgentEventDto } from '@/lib/types';
 import { PrdDeclinedEvent, PrdRevisedEvent } from './PrdEvents';
 
 afterEach(cleanup);
@@ -26,9 +26,7 @@ describe('PrdRevisedEvent', () => {
         />
       </ul>,
     );
-    expect(screen.getByTestId('prd-revised-event').textContent).toContain(
-      'PRD revision requested',
-    );
+    expect(screen.getByTestId('prd-revised-event').textContent).toContain('PRD revision requested');
   });
 
   it('renders concern list', () => {

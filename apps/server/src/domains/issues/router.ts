@@ -182,10 +182,7 @@ router.post('/:slug/issues/:id/approve-prd', async (c) => {
 });
 
 router.post('/:slug/issues/:id/reject-prd', async (c) => {
-  return c.json(
-    { error: 'reject-prd is gone. Use /revise-prd or /decline-prd instead.' },
-    410,
-  );
+  return c.json({ error: 'reject-prd is gone. Use /revise-prd or /decline-prd instead.' }, 410);
 });
 
 router.post('/:slug/issues/:id/revise-prd', async (c) => {

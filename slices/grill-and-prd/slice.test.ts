@@ -190,7 +190,8 @@ function basePRD() {
       },
     ],
     testingDecisions: {
-      approach: 'Test that invalid fields render inline errors on blur; valid fields show green check',
+      approach:
+        'Test that invalid fields render inline errors on blur; valid fields show green check',
       modulesToTest: ['slices/grill-and-prd/slice.test.ts'],
     },
     decisionSummaries: [

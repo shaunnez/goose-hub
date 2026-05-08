@@ -39,7 +39,9 @@ const PRD_FIXTURE = {
   },
   verticalSlices: [{ title: 'a', goal: 'g', estimatedSize: 'M', journeyRefs: ['J-1'] }],
   estimatedComplexity: 'low',
-  implementationDecisions: [{ decision: 'Use existing validation utility', moduleRef: 'apps/web/src/' }],
+  implementationDecisions: [
+    { decision: 'Use existing validation utility', moduleRef: 'apps/web/src/' },
+  ],
   testingDecisions: {
     approach: 'Test that form validates on blur',
     modulesToTest: ['slices/grill-prd-ui/slice.test.ts'],

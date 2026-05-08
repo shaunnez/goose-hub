@@ -8,7 +8,7 @@
  * orchestrator drives the loop across ticks and rebuilds priorReplies from
  * issue comments between each tick.
  */
-import { readdir, readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { AdvisePRDOutputSchema } from '../../skills/advise-on-prd/schema.js';
 import { GrillMeOutputSchema } from '../../skills/grill-me/schema.js';
@@ -57,7 +57,11 @@ function extractAdrMeta(
   content: string,
 ): { title: string; status: string; oneLiner: string } {
   const lines = content.split('\n');
-  const title = lines.find((l) => l.startsWith('# '))?.slice(2).trim() ?? filename;
+  const title =
+    lines
+      .find((l) => l.startsWith('# '))
+      ?.slice(2)
+      .trim() ?? filename;
   const statusLine = lines.find((l) => /\*\*status:\*\*/i.test(l));
   const status = statusLine?.replace(/.*\*\*status:\*\*\s*/i, '').trim() ?? 'unknown';
   // Find first sentence of the Context section
@@ -213,8 +217,15 @@ async function ensureGatePending(
 export async function runGrillAndPrdWorkflow(
   input: RunGrillAndPrdInput,
 ): Promise<GrillAndPrdResult> {
-  const { workItem, stateSource, projectId, priorReplies, priorPrd, humanConcerns, deps = {} } =
-    input;
+  const {
+    workItem,
+    stateSource,
+    projectId,
+    priorReplies,
+    priorPrd,
+    humanConcerns,
+    deps = {},
+  } = input;
   const runId = crypto.randomUUID();
   const runtime = deps.runtime ?? new ClaudeCliRuntime();
   const totalSpendForSkill = deps.totalSpendForSkill ?? _totalSpendForSkill;

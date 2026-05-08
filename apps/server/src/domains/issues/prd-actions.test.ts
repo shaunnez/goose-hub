@@ -130,9 +130,7 @@ describe('declinePRD', () => {
     const evs = eventStore.replay({ projectId, workItemId: item.id });
     expect(evs.find((e) => e.kind === 'prd.declined')).toBeDefined();
     const transitioned = evs.find(
-      (e) =>
-        e.kind === 'state.transitioned' &&
-        (e.payload as { to: string }).to === 'factory:done',
+      (e) => e.kind === 'state.transitioned' && (e.payload as { to: string }).to === 'factory:done',
     );
     expect(transitioned).toBeDefined();
   });
@@ -271,8 +269,7 @@ describe('proceedToPrd', () => {
     const evs = eventStore.replay({ projectId, workItemId: item.id });
     const transitioned = evs.find(
       (e) =>
-        e.kind === 'state.transitioned' &&
-        (e.payload as { to: string }).to === 'factory:grilling',
+        e.kind === 'state.transitioned' && (e.payload as { to: string }).to === 'factory:grilling',
     );
     expect(transitioned).toBeDefined();
 
