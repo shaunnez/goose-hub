@@ -6,6 +6,7 @@ import {
   AgentSpawnedEvent,
   AgentTerminatedEvent,
 } from './timeline/AgentLifecycleEvents';
+import { AgentModelSelectedEvent } from './timeline/AgentModelSelectedEvent';
 import { AgentToolCallEvent } from './timeline/AgentToolCallEvent';
 import { AgentToolResultEvent } from './timeline/AgentToolResultEvent';
 import { AgentTriageCompleteEvent } from './timeline/AgentTriageCompleteEvent';
@@ -129,6 +130,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <GateRejectedEvent key={event.id} event={event} />;
     case 'agent.implement-complete':
       return <AgentImplementCompleteEvent key={event.id} event={event} />;
+    case 'agent.model-selected':
+      return <AgentModelSelectedEvent key={event.id} event={event} />;
     case 'grill.question-posted':
       return <GrillQuestionPostedEvent key={event.id} event={event} />;
     case 'grill.completed':

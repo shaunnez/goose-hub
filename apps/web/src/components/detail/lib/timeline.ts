@@ -42,6 +42,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'agent.triage-complete': 'Triage complete',
   'agent.investigation-complete': 'Investigation complete',
   'agent.implement-complete': 'Implement complete',
+  'agent.model-selected': 'Model selected',
   'pr.opened': 'PR opened',
   'pr.merged': 'PR merged',
   'gate.approved': 'Gate approved',
