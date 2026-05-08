@@ -8,8 +8,11 @@
  * orchestrator drives the loop across ticks and rebuilds priorReplies from
  * issue comments between each tick.
  */
+import { readdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { AdvisePRDOutputSchema } from '../../skills/advise-on-prd/schema.js';
 import { GrillMeOutputSchema } from '../../skills/grill-me/schema.js';
+import type { PRDOutput } from '../../skills/write-prd/schema.js';
 import { PRDOutputSchema } from '../../skills/write-prd/schema.js';
 import { resolveBudgets } from '../agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '../agent-runtime/claude-cli.js';
@@ -22,7 +25,93 @@ import { eventStore } from '../event-stream/store.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import type { StateName } from '../state-machine/states.js';
 import type { StateSource, WorkItem } from '../state-source/interface.js';
-import type { ProjectConfig } from '../types.js';
+import type { ProjectConfig, StackConfig } from '../types.js';
+
+export interface ProjectContextBundle {
+  stackSummary: string;
+  contextMd: string;
+  adrSummaries: Array<{
+    filename: string;
+    title: string;
+    status: string;
+    oneLiner: string;
+  }>;
+  claudeMd: string;
+}
+
+function serializeStack(stack: StackConfig | undefined): string {
+  if (stack == null) return '';
+  const parts: string[] = [];
+  parts.push(`runtime: ${stack.runtime}`);
+  parts.push(`packageManager: ${stack.packageManager}`);
+  if (stack.buildCommand) parts.push(`build: ${stack.buildCommand}`);
+  parts.push(`test: ${stack.testCommand}`);
+  if (stack.lintCommand) parts.push(`lint: ${stack.lintCommand}`);
+  if (stack.typecheckCommand) parts.push(`typecheck: ${stack.typecheckCommand}`);
+  if (stack.e2eCommand) parts.push(`e2e: ${stack.e2eCommand}`);
+  return parts.join('\n');
+}
+
+function extractAdrMeta(
+  filename: string,
+  content: string,
+): { title: string; status: string; oneLiner: string } {
+  const lines = content.split('\n');
+  const title = lines.find((l) => l.startsWith('# '))?.slice(2).trim() ?? filename;
+  const statusLine = lines.find((l) => /\*\*status:\*\*/i.test(l));
+  const status = statusLine?.replace(/.*\*\*status:\*\*\s*/i, '').trim() ?? 'unknown';
+  // Find first sentence of the Context section
+  const contextIdx = lines.findIndex((l) => /^#+\s*context/i.test(l));
+  let oneLiner = '';
+  if (contextIdx !== -1) {
+    for (let i = contextIdx + 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line.length === 0) continue;
+      if (line.startsWith('#')) break;
+      const sentenceMatch = line.match(/^([^.!?]+[.!?])/);
+      oneLiner = sentenceMatch ? sentenceMatch[1].trim() : line.slice(0, 120);
+      break;
+    }
+  }
+  return { title, status, oneLiner };
+}
+
+export async function buildProjectContextBundle(localPath: string): Promise<ProjectContextBundle> {
+  const expanded = localPath.startsWith('~/')
+    ? join(process.env.HOME ?? '/root', localPath.slice(2))
+    : localPath;
+
+  const readSafe = async (filePath: string): Promise<string> => {
+    try {
+      return await readFile(filePath, 'utf-8');
+    } catch {
+      return '';
+    }
+  };
+
+  const [contextMd, claudeMd] = await Promise.all([
+    readSafe(join(expanded, 'CONTEXT.md')),
+    readSafe(join(expanded, 'CLAUDE.md')),
+  ]);
+
+  let adrSummaries: ProjectContextBundle['adrSummaries'] = [];
+  try {
+    const adrDir = join(expanded, 'docs', 'adr');
+    const entries = await readdir(adrDir);
+    const mdFiles = entries.filter((f) => f.endsWith('.md')).sort();
+    adrSummaries = await Promise.all(
+      mdFiles.map(async (filename) => {
+        const content = await readSafe(join(adrDir, filename));
+        const { title, status, oneLiner } = extractAdrMeta(filename, content);
+        return { filename, title, status, oneLiner };
+      }),
+    );
+  } catch {
+    adrSummaries = [];
+  }
+
+  return { stackSummary: '', contextMd, adrSummaries, claudeMd };
+}
 
 export interface RunGrillAndPrdInput {
   workItem: WorkItem;
@@ -30,6 +119,10 @@ export interface RunGrillAndPrdInput {
   projectId: string;
   /** Existing reply history sourced from issue comments before this tick */
   priorReplies: Array<{ role: 'user' | 'agent'; content: string }>;
+  /** When present, skip grill rounds and revise the prior PRD instead */
+  priorPrd?: PRDOutput;
+  /** Concerns from the human to address during revision */
+  humanConcerns?: string[];
   deps?: {
     runtime?: AgentRuntime;
     /**
@@ -37,12 +130,17 @@ export interface RunGrillAndPrdInput {
      * `getProjectBySlug(projectId)`. Tests inject this so they don't have to
      * stub the loader (loader reads disk and caches per-process).
      */
-    projectConfig?: Pick<ProjectConfig, 'budgets'> | null;
+    projectConfig?: Pick<ProjectConfig, 'budgets' | 'stack' | 'targetRepo'> | null;
     /**
      * Stubbed in tests to avoid hitting the real DB. Defaults to the real
      * `totalSpendForSkill` from `core/cost/repository`.
      */
     totalSpendForSkill?: (projectId: string, skill: string) => number;
+    /**
+     * Stubbed in tests to avoid real filesystem reads. Defaults to
+     * `buildProjectContextBundle`.
+     */
+    buildContext?: (localPath: string) => Promise<ProjectContextBundle>;
   };
 }
 
@@ -115,14 +213,22 @@ async function ensureGatePending(
 export async function runGrillAndPrdWorkflow(
   input: RunGrillAndPrdInput,
 ): Promise<GrillAndPrdResult> {
-  const { workItem, stateSource, projectId, priorReplies, deps = {} } = input;
+  const { workItem, stateSource, projectId, priorReplies, priorPrd, humanConcerns, deps = {} } =
+    input;
   const runId = crypto.randomUUID();
   const runtime = deps.runtime ?? new ClaudeCliRuntime();
   const totalSpendForSkill = deps.totalSpendForSkill ?? _totalSpendForSkill;
+  const _buildContext = deps.buildContext ?? buildProjectContextBundle;
+
+  const isReviseMode = priorPrd != null;
 
   // Pre-condition: only run when the orchestrator has placed us in the
   // discover lane. Anything else means the workflow was invoked out of band.
-  if (workItem.state !== 'factory:grilling' && workItem.state !== 'factory:gate-pending') {
+  // Revise mode accepts prd-review state (re-running write-prd with concerns).
+  const validStates: string[] = isReviseMode
+    ? ['factory:grilling', 'factory:gate-pending', 'factory:prd-review']
+    : ['factory:grilling', 'factory:gate-pending'];
+  if (!validStates.includes(workItem.state)) {
     eventStore.appendEvent({
       kind: 'agent.run-failed',
       projectId,
@@ -130,7 +236,7 @@ export async function runGrillAndPrdWorkflow(
       runId,
       payload: {
         skill: 'grill-and-prd',
-        error: `expected workItem.state in {factory:grilling, factory:gate-pending}, got '${workItem.state}'`,
+        error: `expected workItem.state in {${validStates.join(', ')}}, got '${workItem.state}'`,
       },
     });
     return { phase: 'needs-human' };
@@ -138,6 +244,38 @@ export async function runGrillAndPrdWorkflow(
 
   const projectConfig =
     deps.projectConfig !== undefined ? deps.projectConfig : await getProjectBySlug(projectId);
+
+  // Build project context bundle for injection into grill-me and write-prd.
+  const localPath = (projectConfig as ProjectConfig | null)?.targetRepo?.localPath ?? '';
+  const projectContext = localPath
+    ? await _buildContext(localPath).catch(() => ({
+        stackSummary: '',
+        contextMd: '',
+        adrSummaries: [],
+        claudeMd: '',
+      }))
+    : { stackSummary: '', contextMd: '', adrSummaries: [], claudeMd: '' };
+
+  // Merge stackSummary from config into the bundle
+  const stackSummary = serializeStack((projectConfig as ProjectConfig | null)?.stack);
+  const fullProjectContext = { ...projectContext, stackSummary };
+
+  // ─── Revise mode: skip grill rounds, go straight to write-prd ───────────
+  if (isReviseMode) {
+    return runWritePrdStep({
+      workItem,
+      stateSource,
+      projectId,
+      runId,
+      runtime,
+      projectConfig,
+      totalSpendForSkill,
+      fullProjectContext,
+      refinedIntent: priorPrd?.title ?? workItem.title,
+      priorPrd,
+      humanConcerns,
+    });
+  }
 
   // Round-number is 1-indexed and counts how many times grill-me has produced
   // a question in the conversation so far, plus one (the round we're about to run).
@@ -175,8 +313,9 @@ export async function runGrillAndPrdWorkflow(
         },
         priorReplies,
         roundNumber,
+        projectContext: fullProjectContext,
       },
-      contextAllowlist: ['workItem', 'priorReplies', 'roundNumber'],
+      contextAllowlist: ['workItem', 'priorReplies', 'roundNumber', 'projectContext'],
       freshContext: false,
       toolBundles: ['core'],
       toolExtras: [],
@@ -327,6 +466,48 @@ export async function runGrillAndPrdWorkflow(
     });
   }
 
+  return runWritePrdStep({
+    workItem,
+    stateSource,
+    projectId,
+    runId,
+    runtime,
+    projectConfig,
+    totalSpendForSkill,
+    fullProjectContext,
+    refinedIntent: grillOutput.refinedIntent,
+  });
+}
+
+interface WritePrdStepInput {
+  workItem: WorkItem;
+  stateSource: StateSource;
+  projectId: string;
+  runId: string;
+  runtime: AgentRuntime;
+  projectConfig: Pick<ProjectConfig, 'budgets' | 'stack' | 'targetRepo'> | null | undefined;
+  totalSpendForSkill: (projectId: string, skill: string) => number;
+  fullProjectContext: ProjectContextBundle;
+  refinedIntent: string;
+  priorPrd?: PRDOutput;
+  humanConcerns?: string[];
+}
+
+async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdResult> {
+  const {
+    workItem,
+    stateSource,
+    projectId,
+    runId,
+    runtime,
+    projectConfig,
+    totalSpendForSkill,
+    fullProjectContext,
+    refinedIntent,
+    priorPrd,
+    humanConcerns,
+  } = input;
+
   // ─── Step 2: write-prd ──────────────────────────────────────────────────
   // Transition into prd-drafting. Only `factory:grilling` legally targets
   // `factory:prd-drafting`; if we entered here from `factory:gate-pending`
@@ -350,7 +531,7 @@ export async function runGrillAndPrdWorkflow(
   const prdPrompt = readPromptWithContext('write-prd', projectId);
   const prdJsonSchema = toJsonSchema(PRDOutputSchema);
 
-  let prdOutput: import('../../skills/write-prd/schema.js').PRDOutput;
+  let prdOutput: PRDOutput;
 
   eventStore.appendEvent({
     kind: 'agent.run-started',
@@ -374,8 +555,11 @@ export async function runGrillAndPrdWorkflow(
           body: workItem.body,
           number: Number(workItem.externalId),
         },
-        refinedIntent: grillOutput.refinedIntent,
+        refinedIntent,
         priority: workItem.priority,
+        projectContext: fullProjectContext,
+        ...(priorPrd != null ? { priorPrd } : {}),
+        ...(humanConcerns != null ? { humanConcerns } : {}),
       },
       contextAllowlist: [
         'workItem.title',
@@ -383,6 +567,9 @@ export async function runGrillAndPrdWorkflow(
         'workItem.number',
         'refinedIntent',
         'priority',
+        'projectContext',
+        'priorPrd',
+        'humanConcerns',
       ],
       freshContext: true,
       toolBundles: ['read', 'core'],

@@ -150,6 +150,13 @@ describe('grill-me skill config', () => {
     expect(config.contextAllowlist).toContain('roundNumber');
   });
 
+  const validProjectContext = {
+    stackSummary: 'runtime: node\npackageManager: pnpm',
+    contextMd: '',
+    adrSummaries: [],
+    claudeMd: '',
+  };
+
   it('contextSchema validates full valid input', () => {
     const result = GrillMeContextSchema.safeParse({
       workItem: {
@@ -162,6 +169,7 @@ describe('grill-me skill config', () => {
         { role: 'user', content: 'All users.' },
       ],
       roundNumber: 2,
+      projectContext: validProjectContext,
     });
     expect(result.success).toBe(true);
   });
@@ -175,6 +183,7 @@ describe('grill-me skill config', () => {
       },
       priorReplies: [],
       roundNumber: 1,
+      projectContext: validProjectContext,
     });
     expect(result.success).toBe(true);
   });
