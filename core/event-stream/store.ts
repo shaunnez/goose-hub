@@ -108,7 +108,16 @@ export type EventKind =
   | 'review.wave-completed'
   | 'review.wave-failed'
   | 'review.converged'
-  | 'review.escalated';
+  | 'review.escalated'
+  // M19.12 dev-review advisor — Codex pre-QA pass lifecycle events (#596)
+  | 'dev-review.started'
+  | 'dev-review.completed'
+  | 'dev-review.failed'
+  | 'dev-review.error'
+  | 'dev-review.budget-skipped'
+  | 'dev-review.response-started'
+  | 'dev-review.response-completed'
+  | 'dev-review.response-failed';
 
 export interface AgentEvent {
   id: number;
