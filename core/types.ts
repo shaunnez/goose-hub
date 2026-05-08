@@ -95,8 +95,7 @@ export interface BudgetConfig {
    */
   maxScoutAgents?: number;
   maxRetries: number;
-  maxIssuesPerDayFromNonOwners: number;
-  maxBashSeconds: number;
+  perBashCommandMaxSeconds: number;
   perWorkflowMaxUsd: number;
   perAgentMaxUsd: number;
   perAdvisorMaxUsd: number;

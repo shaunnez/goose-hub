@@ -136,4 +136,40 @@ describe('resolveEscalatedBudgets', () => {
     const result = resolveEscalatedBudgets('implement', { perWorkflowMaxUsd: 8 });
     expect(result?.budgets.maxBudgetUsd).toBe(8);
   });
+
+  it('caps escalated maxBudgetUsd at perAgentMaxUsd', () => {
+    const result = resolveEscalatedBudgets('implement', { perAgentMaxUsd: 6 }, undefined, 6);
+    expect(result?.budgets.maxBudgetUsd).toBe(6);
+  });
+});
+
+describe('perAgentMaxUsd cap', () => {
+  it('clamps skill budget to perAgentMaxUsd when it exceeds the cap', () => {
+    const result = resolveBudgets('implement', { perAgentMaxUsd: 3 });
+    expect(result.budgets.maxBudgetUsd).toBe(3);
+    expect(result.budgets.maxTurns).toBe(150);
+  });
+
+  it('does not clamp when budget is within perAgentMaxUsd', () => {
+    const result = resolveBudgets('triage', { perAgentMaxUsd: 10 });
+    expect(result.budgets.maxBudgetUsd).toBe(0.05);
+  });
+
+  it('dbPerAgentMaxUsd wins over config perAgentMaxUsd', () => {
+    // Config says 10, DB says 2 — DB should win
+    const result = resolveBudgets('implement', { perAgentMaxUsd: 10 }, undefined, undefined, 2);
+    expect(result.budgets.maxBudgetUsd).toBe(2);
+  });
+
+  it('applies lower of perWorkflowMaxUsd and perAgentMaxUsd', () => {
+    // perWorkflowMaxUsd=2, perAgentMaxUsd=5 => workflow cap (lower) wins
+    const result = resolveBudgets('implement', { perWorkflowMaxUsd: 2, perAgentMaxUsd: 5 });
+    expect(result.budgets.maxBudgetUsd).toBe(2);
+  });
+
+  it('applies lower of perWorkflowMaxUsd and perAgentMaxUsd (agent lower)', () => {
+    // perWorkflowMaxUsd=5, perAgentMaxUsd=2 => agent cap (lower) wins
+    const result = resolveBudgets('implement', { perWorkflowMaxUsd: 5, perAgentMaxUsd: 2 });
+    expect(result.budgets.maxBudgetUsd).toBe(2);
+  });
 });

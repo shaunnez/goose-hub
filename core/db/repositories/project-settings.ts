@@ -12,8 +12,7 @@ export type GlobalBudgetPatch = {
   dailyTokens?: number | null;
   maxParallelAgents?: number | null;
   maxRetries?: number | null;
-  maxBashSeconds?: number | null;
-  maxIssuesPerDayFromNonOwners?: number | null;
+  perBashCommandMaxSeconds?: number | null;
 };
 
 export type SkillBudgetPatch = {

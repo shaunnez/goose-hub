@@ -96,7 +96,7 @@ describe('MOCK_SOURCE fetch guard', () => {
           id: 'test',
           slug: 'test',
           source: { kind: 'github', repo: 'shaunnez/goose-hub' },
-          budgets: { maxParallelAgents: 1, maxIssuesPerDayFromNonOwners: 5, maxRetries: 2 },
+          budgets: { maxParallelAgents: 1, maxRetries: 2 },
         } as never,
       ],
     });

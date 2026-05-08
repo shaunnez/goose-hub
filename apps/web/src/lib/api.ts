@@ -508,8 +508,7 @@ export interface ProjectSettingsDto {
     dailyTokens: number | null;
     maxParallelAgents: number | null;
     maxRetries: number | null;
-    maxBashSeconds: number | null;
-    maxIssuesPerDayFromNonOwners: number | null;
+    perBashCommandMaxSeconds: number | null;
     updatedAt: string;
     updatedBy: string | null;
   } | null;

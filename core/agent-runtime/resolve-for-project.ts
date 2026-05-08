@@ -16,6 +16,8 @@ export interface EffectiveGlobalSettings {
   dailyTokens?: number;
   maxRetries?: number;
   perAdvisorMaxUsd?: number;
+  perAgentMaxUsd?: number;
+  perBashCommandMaxSeconds?: number;
 }
 
 /**
@@ -31,6 +33,8 @@ export function resolveGlobalSettingsForProject(
     dailyTokens?: number;
     maxRetries?: number;
     perAdvisorMaxUsd?: number;
+    perAgentMaxUsd?: number;
+    perBashCommandMaxSeconds?: number;
   },
 ): EffectiveGlobalSettings {
   const dbRow = readProjectSettings(projectId);
@@ -40,6 +44,9 @@ export function resolveGlobalSettingsForProject(
     dailyTokens: dbRow?.dailyTokens ?? projectBudgets?.dailyTokens,
     maxRetries: dbRow?.maxRetries ?? projectBudgets?.maxRetries,
     perAdvisorMaxUsd: dbRow?.perAdvisorMaxUsd ?? projectBudgets?.perAdvisorMaxUsd,
+    perAgentMaxUsd: dbRow?.perAgentMaxUsd ?? projectBudgets?.perAgentMaxUsd,
+    perBashCommandMaxSeconds:
+      dbRow?.perBashCommandMaxSeconds ?? projectBudgets?.perBashCommandMaxSeconds,
   };
 }
 
@@ -54,25 +61,44 @@ export function resolveGlobalSettingsForProject(
 export function resolveBudgetsForProject(
   skill: string,
   projectBudgets:
-    | { perWorkflowMaxUsd?: number; skillBudgetOverrides?: Record<string, SkillBudgetOverride> }
+    | {
+        perWorkflowMaxUsd?: number;
+        perAgentMaxUsd?: number;
+        skillBudgetOverrides?: Record<string, SkillBudgetOverride>;
+      }
     | undefined,
   projectId: string,
 ): ResolvedBudget {
   const skillRows = readProjectSkillSettings(projectId);
   const globalRow = readProjectSettings(projectId);
-  return resolveBudgets(skill, projectBudgets, skillRows.get(skill), globalRow?.perWorkflowMaxUsd);
+  return resolveBudgets(
+    skill,
+    projectBudgets,
+    skillRows.get(skill),
+    globalRow?.perWorkflowMaxUsd,
+    globalRow?.perAgentMaxUsd,
+  );
 }
 
 /**
- * resolveEscalatedBudgets with DB global cap applied.
+ * resolveEscalatedBudgets with DB global caps applied.
  */
 export function resolveEscalatedBudgetsForProject(
   skill: string,
   projectBudgets:
-    | { perWorkflowMaxUsd?: number; skillBudgetOverrides?: Record<string, SkillBudgetOverride> }
+    | {
+        perWorkflowMaxUsd?: number;
+        perAgentMaxUsd?: number;
+        skillBudgetOverrides?: Record<string, SkillBudgetOverride>;
+      }
     | undefined,
   projectId: string,
 ): ResolvedBudget | null {
   const globalRow = readProjectSettings(projectId);
-  return resolveEscalatedBudgets(skill, projectBudgets, globalRow?.perWorkflowMaxUsd);
+  return resolveEscalatedBudgets(
+    skill,
+    projectBudgets,
+    globalRow?.perWorkflowMaxUsd,
+    globalRow?.perAgentMaxUsd,
+  );
 }

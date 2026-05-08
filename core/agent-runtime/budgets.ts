@@ -220,10 +220,12 @@ export function resolveBudgets(
   skill: string,
   projectBudgets?: {
     perWorkflowMaxUsd?: number;
+    perAgentMaxUsd?: number;
     skillBudgetOverrides?: Record<string, SkillBudgetOverride>;
   },
   dbOverride?: DbSkillOverride,
   dbPerWorkflowMaxUsd?: number | null,
+  dbPerAgentMaxUsd?: number | null,
 ): ResolvedBudget {
   const base = SKILL_BUDGETS[skill];
   const configOverride = projectBudgets?.skillBudgetOverrides?.[skill];
@@ -256,6 +258,11 @@ export function resolveBudgets(
     maxBudgetUsd = effectivePerWorkflowCap;
   }
 
+  const effectivePerAgentCap = dbPerAgentMaxUsd ?? projectBudgets?.perAgentMaxUsd;
+  if (effectivePerAgentCap != null && maxBudgetUsd > effectivePerAgentCap) {
+    maxBudgetUsd = effectivePerAgentCap;
+  }
+
   return {
     budgets: { maxTurns: merged.maxTurns, maxBudgetUsd, timeoutMs: merged.timeoutMs },
     modelOverride: defaultModelForTier(merged.modelTier),
@@ -277,9 +284,11 @@ export function resolveEscalatedBudgets(
   skill: string,
   projectBudgets?: {
     perWorkflowMaxUsd?: number;
+    perAgentMaxUsd?: number;
     skillBudgetOverrides?: Record<string, SkillBudgetOverride>;
   },
   dbPerWorkflowMaxUsd?: number | null,
+  dbPerAgentMaxUsd?: number | null,
 ): ResolvedBudget | null {
   const base = SKILL_BUDGETS[skill];
   const override = projectBudgets?.skillBudgetOverrides?.[skill];
@@ -297,6 +306,11 @@ export function resolveEscalatedBudgets(
   const effectivePerWorkflowCap = dbPerWorkflowMaxUsd ?? projectBudgets?.perWorkflowMaxUsd;
   if (effectivePerWorkflowCap != null && maxBudgetUsd > effectivePerWorkflowCap) {
     maxBudgetUsd = effectivePerWorkflowCap;
+  }
+
+  const effectivePerAgentCap = dbPerAgentMaxUsd ?? projectBudgets?.perAgentMaxUsd;
+  if (effectivePerAgentCap != null && maxBudgetUsd > effectivePerAgentCap) {
+    maxBudgetUsd = effectivePerAgentCap;
   }
 
   return {

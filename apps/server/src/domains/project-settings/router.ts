@@ -20,8 +20,7 @@ const GlobalBudgetPatchSchema = z.object({
   dailyTokens: z.number().int().min(0).max(100_000_000).nullable().optional(),
   maxParallelAgents: z.number().int().min(0).max(50).nullable().optional(),
   maxRetries: z.number().int().min(0).max(20).nullable().optional(),
-  maxBashSeconds: z.number().int().min(0).max(3600).nullable().optional(),
-  maxIssuesPerDayFromNonOwners: z.number().int().min(0).max(1000).nullable().optional(),
+  perBashCommandMaxSeconds: z.number().int().min(0).max(3600).nullable().optional(),
 });
 
 const SkillBudgetPatchSchema = z.object({
@@ -68,8 +67,7 @@ router.get('/:slug/settings', async (c) => {
           dailyTokens: globalRow.dailyTokens,
           maxParallelAgents: globalRow.maxParallelAgents,
           maxRetries: globalRow.maxRetries,
-          maxBashSeconds: globalRow.maxBashSeconds,
-          maxIssuesPerDayFromNonOwners: globalRow.maxIssuesPerDayFromNonOwners,
+          perBashCommandMaxSeconds: globalRow.perBashCommandMaxSeconds,
           updatedAt: globalRow.updatedAt,
           updatedBy: globalRow.updatedBy,
         }
