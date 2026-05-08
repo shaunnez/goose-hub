@@ -212,6 +212,28 @@ export const wpIterations = sqliteTable(
   }),
 );
 
+// One structured decision record per mid-run recordDecision() tool call (M19.06).
+// Deduplication key: (run_id, kind, what) — second call with same key is a no-op.
+// Reconciliation: at run end, orchestrator reads these rows (when flag on) instead
+// of relying solely on the skill schema's decisionSummaries JSON field.
+export const agentDecisions = sqliteTable(
+  'agent_decisions',
+  {
+    id: text('id').primaryKey(), // crypto.randomUUID()
+    runId: text('run_id').notNull(),
+    iteration: integer('iteration').notNull().default(0),
+    phase: text('phase').notNull().default(''),
+    kind: text('kind').notNull(),
+    what: text('what').notNull(),
+    why: text('why').notNull(),
+    ts: text('ts').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  },
+  (t) => ({
+    runKindWhatUniq: uniqueIndex('agent_decisions_run_kind_what_uniq').on(t.runId, t.kind, t.what),
+    runIdx: index('agent_decisions_run_idx').on(t.runId),
+  }),
+);
+
 // One row per agent run. `runId` is unique — the same run is never recorded twice.
 // `costLabel`: 'exact' when the source provided authoritative usage metadata
 // (direct API), 'estimated' when only the Claude CLI's reported totals are

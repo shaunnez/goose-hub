@@ -62,6 +62,13 @@ export const TOOL_BUNDLES = {
     'Bash(gh issue comment*)',
   ],
   /**
+   * M19.06 — record-decision tool (opt-in, feature-flagged).
+   * Exposes a single mid-run MCP tool that writes DecisionRecords to SQLite.
+   * MUST NOT be granted to holdout roles (qa, reviewer) — enforced by
+   * computeAllowlist when `role` is provided.
+   */
+  'decision-record-only': ['record-decision'],
+  /**
    * Playwright-test MCP bundle. Tool list extracted from Microsoft's
    * apps/web/.claude/agents/playwright-test-{planner,generator}.md.
    *
