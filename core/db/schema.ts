@@ -289,6 +289,28 @@ export const projectSkillSettings = sqliteTable(
   }),
 );
 
+// Per-project per-role model overrides (M19.09). One row per (project_id, role).
+// primary_model / fallback_model / advisor_model win over project.config.ts rolesModels
+// and skill modelPin defaults. complexity_overrides_json stores a JSON object whose keys
+// are "type:<T>", "priority:<P>", or "default" and whose values are ModelTier strings;
+// these win over agentConfig.modelRouter.overrides for complexity-based tier selection.
+export const projectModelSettings = sqliteTable(
+  'project_model_settings',
+  {
+    projectId: text('project_id').notNull(),
+    role: text('role').notNull(),
+    primaryModel: text('primary_model'),
+    fallbackModel: text('fallback_model'),
+    advisorModel: text('advisor_model'),
+    complexityOverridesJson: text('complexity_overrides_json'),
+    updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+    updatedBy: text('updated_by'),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.projectId, table.role] }),
+  }),
+);
+
 // One row per agent run. `runId` is unique — the same run is never recorded twice.
 // `costLabel`: 'exact' when the source provided authoritative usage metadata
 // (direct API), 'estimated' when only the Claude CLI's reported totals are

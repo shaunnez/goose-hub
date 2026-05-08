@@ -6,8 +6,9 @@ import { Plus, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { ProjectBudgetPanel } from './ProjectBudgetPanel';
 import { ProjectConfigPanel } from './ProjectConfigPanel';
+import { ProjectModelPanel } from './ProjectModelPanel';
 
-type Tab = 'config' | 'budgets';
+type Tab = 'config' | 'budgets' | 'models';
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
@@ -88,7 +89,7 @@ export function SettingsPage() {
 
         {/* Tab bar */}
         <div className="flex gap-1 mb-6 border-b border-line">
-          {(['config', 'budgets'] as Tab[]).map((t) => (
+          {(['config', 'budgets', 'models'] as Tab[]).map((t) => (
             <button
               key={t}
               type="button"
@@ -110,6 +111,9 @@ export function SettingsPage() {
         )}
         {tab === 'budgets' && selectedConfig != null && (
           <ProjectBudgetPanel slug={selectedConfig.slug} />
+        )}
+        {tab === 'models' && selectedConfig != null && (
+          <ProjectModelPanel slug={selectedConfig.slug} />
         )}
 
         {!isLoading && !error && configs.length === 0 && (

@@ -550,3 +550,58 @@ export async function patchSkillBudgetSetting(
 export async function deleteSkillBudgetSetting(slug: string, skill: string): Promise<void> {
   await deleteRequest(`/projects/${slug}/settings/skills/${encodeURIComponent(skill)}`);
 }
+
+// ─── Model settings ──────────────────────────────────────────────────────────
+
+export type ModelTier = 'haiku' | 'sonnet' | 'opus';
+
+export interface RoleModelDto {
+  configRoleModel: { primary: string; fallback: string | null; advisor: string | null } | null;
+  dbRoleModel: {
+    primaryModel: ModelTier | null;
+    fallbackModel: ModelTier | null;
+    advisorModel: ModelTier | null;
+    updatedAt: string | null;
+  } | null;
+  dbComplexityOverrides: Record<string, ModelTier>;
+}
+
+export interface ProjectModelSettingsDto {
+  projectId: string;
+  allowHoldoutOverride: boolean;
+  roles: Record<string, RoleModelDto>;
+}
+
+export async function fetchProjectModelSettings(
+  slug: string,
+  signal?: AbortSignal,
+): Promise<ProjectModelSettingsDto> {
+  return getJson<ProjectModelSettingsDto>(`/projects/${slug}/settings/models`, signal);
+}
+
+export async function patchRoleModelSetting(
+  slug: string,
+  role: string,
+  patch: {
+    primaryModel?: ModelTier | null;
+    fallbackModel?: ModelTier | null;
+    advisorModel?: ModelTier | null;
+  },
+): Promise<void> {
+  await patchJson(`/projects/${slug}/settings/models/${encodeURIComponent(role)}`, patch);
+}
+
+export async function patchComplexityOverrides(
+  slug: string,
+  role: string,
+  overrides: Record<string, ModelTier>,
+): Promise<void> {
+  await patchJson(
+    `/projects/${slug}/settings/models/${encodeURIComponent(role)}/complexity`,
+    overrides,
+  );
+}
+
+export async function deleteRoleModelSetting(slug: string, role: string): Promise<void> {
+  await deleteRequest(`/projects/${slug}/settings/models/${encodeURIComponent(role)}`);
+}

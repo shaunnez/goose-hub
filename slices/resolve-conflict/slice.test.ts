@@ -6,6 +6,10 @@ vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   readProjectSettings: vi.fn().mockReturnValue(null),
   readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
 }));
+vi.mock('@goose-hub/core/db/repositories/project-model-settings.js', () => ({
+  readProjectModelSettingsForRole: vi.fn().mockReturnValue(null),
+  parseComplexityOverrides: vi.fn().mockReturnValue({}),
+}));
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   eventStore: {
     appendEvent: vi.fn().mockReturnValue({ id: 1 }),
