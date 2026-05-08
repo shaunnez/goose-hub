@@ -40,5 +40,7 @@ Specs:
 - `qa-fail-loop.spec.ts` — QA fail → needs-fix → re-QA pass
 - `review-sendback-loop.spec.ts` — review sendback → needs-fix → re-review → approved
 - `discover-lane.spec.ts` — M13 Discover Lane: type:feature triaging → grilling (Grill tab visible, PRD tab absent), grill chat (agent question + user reply + state transition), PRD tab + content render + Approve PRD flow through to factory:decomposing
+- `golden-feature.spec.ts` — golden feature happy path: one issue walked seed → grill → PRD → decompose → child dev cycle → done. Covers Overview / Grill / PRD / Timeline / QA / Review surfaces and the parent → child handoff. Trace + video on every run.
+- `golden-bug.spec.ts` — golden bug happy path: seed → investigate (high-confidence) → dev → QA → review → approve → done. Covers Investigation / QA / Review / Timeline (pr.opened) surfaces. Trace + video on every run.
 
 **`discover-lane.spec.ts` vs. `grill-prd-flow.spec.ts`**: The regular `grill-prd-flow.spec.ts` (in `e2e/`) is a pure UI stub — all API calls are route-intercepted, no real server. `discover-lane.spec.ts` uses the full pipeline harness (real mock server, seed-issue, /tick, /dispatch) so it covers the server→UI round-trip including state-gated tab visibility and the approve-prd state machine path.
