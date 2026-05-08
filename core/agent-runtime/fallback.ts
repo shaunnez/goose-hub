@@ -1,7 +1,7 @@
 export { HoldoutFallbackForbiddenError } from './interface.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { HoldoutFallbackForbiddenError } from './interface.js';
-import { modelsAtOrAboveTier, tierOf } from './models.js';
+import { modelsAtOrAboveTier, providerOf, tierOf } from './models.js';
 
 export interface FallbackPolicy {
   allowDownTier: boolean;
@@ -51,7 +51,10 @@ export function withFallback(runtime: AgentRuntime, policy: FallbackPolicy): Age
         }
 
         const lowerTier = currentTier === 'opus' ? 'sonnet' : 'haiku';
-        const candidates = modelsAtOrAboveTier(lowerTier).filter((m) => m.tier === lowerTier);
+        const provider = currentModel != null ? providerOf(currentModel) : 'claude';
+        const candidates = modelsAtOrAboveTier(lowerTier, provider).filter(
+          (m) => m.tier === lowerTier,
+        );
         if (candidates.length === 0) throw err;
 
         const fallbackModel = candidates[0].id;

@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { ROLE_DEFAULTS } from '@goose-hub/core/agent-runtime/roles.js';
 import {
   deleteRoleModelSetting,
@@ -133,6 +136,25 @@ router.delete('/:slug/settings/models/:role', async (c) => {
 
   deleteRoleModelSetting(project.id, role);
   return c.json({ ok: true });
+});
+
+/**
+ * GET /:slug/settings/codex-auth — read-only Codex CLI auth presence check.
+ * Machine-scoped data, but exposed under the project route so it's discoverable
+ * alongside the per-project Models UI. Returns the same payload regardless of slug.
+ */
+router.get('/:slug/settings/codex-auth', async (c) => {
+  const slug = c.req.param('slug');
+  const project = await getProject(slug);
+  if (project == null) return c.json({ error: 'project not found' }, 404);
+
+  const authPath = join(homedir(), '.codex', 'auth.json');
+  const status = existsSync(authPath) ? 'connected' : 'missing';
+  return c.json({
+    status,
+    authPath,
+    loginCommand: 'codex login',
+  });
 });
 
 export { router as projectModelRouter };

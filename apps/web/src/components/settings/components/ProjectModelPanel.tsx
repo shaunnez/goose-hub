@@ -1,14 +1,16 @@
 import {
+  type CodexAuthStatusDto,
   type ModelTier,
   type ProjectModelSettingsDto,
   type RoleModelDto,
   deleteRoleModelSetting,
+  fetchCodexAuthStatus,
   fetchProjectModelSettings,
   patchComplexityOverrides,
   patchRoleModelSetting,
 } from '@/lib/api';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Copy, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 interface Props {
@@ -280,6 +282,73 @@ function RoleRow({
   );
 }
 
+function CodexAuthSection({ slug }: { slug: string }) {
+  const { data, isLoading } = useQuery<CodexAuthStatusDto>({
+    queryKey: ['codex-auth-status', slug],
+    queryFn: ({ signal }) => fetchCodexAuthStatus(slug, signal),
+    staleTime: 30_000,
+  });
+  const [copied, setCopied] = useState(false);
+
+  const command = data?.loginCommand ?? 'codex login';
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
+
+  return (
+    <div>
+      <h3 className="text-[12px] font-semibold uppercase tracking-wider text-fg-2 mb-1">
+        Codex CLI auth
+      </h3>
+      <p className="text-[11px] text-fg-3 mb-3">
+        OpenAI Codex CLI uses OAuth ("Sign in with ChatGPT"). Required to run any skill with{' '}
+        <code>provider: 'codex'</code>. Status is per-machine, not per-project.
+      </p>
+      {isLoading ? (
+        <div className="text-[12px] text-fg-3">Checking…</div>
+      ) : data?.status === 'connected' ? (
+        <div className="flex items-center gap-2 text-[12px]">
+          <span className="inline-block w-2 h-2 rounded-full bg-success" />
+          <span>Connected</span>
+          <span className="text-fg-3">
+            — token at <code>{data.authPath}</code>
+          </span>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-[12px]">
+            <span className="inline-block w-2 h-2 rounded-full bg-danger" />
+            <span>Not connected</span>
+          </div>
+          <div className="text-[12px] text-fg-3">
+            Run the command below in your terminal to sign in:
+          </div>
+          <div className="flex items-center gap-2">
+            <code className="text-[12px] bg-bg-2 border border-line rounded px-2 py-1">
+              {command}
+            </code>
+            <button
+              type="button"
+              onClick={copy}
+              className="flex items-center gap-1 text-[11px] text-fg-3 hover:text-fg border border-line rounded px-2 py-1"
+              title="Copy to clipboard"
+            >
+              <Copy className="w-3 h-3" />
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ProjectModelPanel({ slug }: Props) {
   const { data, isLoading, error } = useQuery<ProjectModelSettingsDto>({
     queryKey: ['project-model-settings', slug],
@@ -326,6 +395,8 @@ export function ProjectModelPanel({ slug }: Props) {
           </tbody>
         </table>
       </div>
+
+      <CodexAuthSection slug={slug} />
     </div>
   );
 }
