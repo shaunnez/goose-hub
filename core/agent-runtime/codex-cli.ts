@@ -61,13 +61,26 @@ export function resolveCodexBinary(): string {
 }
 
 /**
- * Pre-flight check: assert the user has signed in with Codex (`codex login`).
- * The CLI persists OAuth tokens at `~/.codex/auth.json` per OpenAI's docs.
+ * Pre-flight check: assert the user has authenticated with Codex either via
+ * OAuth (`codex login` writes `~/.codex/auth.json`) or via `OPENAI_API_KEY`
+ * env var (key-based auth path). Either is sufficient.
  */
 export function assertCodexAuthenticated(): void {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (apiKey != null && apiKey.length > 0) return;
   if (!existsSync(CODEX_AUTH_PATH)) {
     throw new CodexNotAuthenticatedError();
   }
+}
+
+/**
+ * Escapes a string for embedding inside a TOML multi-line basic string
+ * (`"""..."""`). Multi-line basic strings carry literal newlines, so we only
+ * need to neutralise backslashes (TOML's escape character) and any embedded
+ * triple-quote sequence (which would terminate the string prematurely).
+ */
+export function escapeForTomlMultilineBasic(input: string): string {
+  return input.replace(/\\/g, '\\\\').replace(/"""/g, '\\"""');
 }
 
 /**
@@ -93,9 +106,10 @@ export function buildCodexArgv(input: {
     input.model,
   ];
   if (input.systemPrompt != null) {
-    // `-c` is Codex's per-invocation override for `instructions`. Quoted
-    // assignment per Codex CLI's TOML-fragment override syntax.
-    argv.push('-c', `instructions="${input.systemPrompt.replace(/"/g, '\\"')}"`);
+    // `-c` is Codex's per-invocation override for `instructions`. We use a
+    // TOML multi-line basic string (triple-quoted) so prompts can carry raw
+    // newlines without escaping; only `\` and any embedded `"""` need escape.
+    argv.push('-c', `instructions="""${escapeForTomlMultilineBasic(input.systemPrompt)}"""`);
   }
   argv.push(input.prompt);
   return argv;

@@ -6,6 +6,7 @@ import {
   CodexCliRuntime,
   CodexNotAuthenticatedError,
   buildCodexArgv,
+  escapeForTomlMultilineBasic,
   parseCodexEnvelope,
   resolveCodexBinary,
 } from '@goose-hub/core/agent-runtime/codex-cli.js';
@@ -90,6 +91,7 @@ beforeEach(() => {
   vi.mocked(existsSync).mockReturnValue(true);
   process.env.CODEX_BIN = '';
   process.env.MOCK_AGENTS = '';
+  process.env.OPENAI_API_KEY = '';
 });
 
 afterEach(() => {
@@ -123,7 +125,7 @@ describe('resolveCodexBinary', () => {
 });
 
 describe('CodexCliRuntime — pre-flight errors', () => {
-  it('throws CodexNotAuthenticatedError when ~/.codex/auth.json is absent', async () => {
+  it('throws CodexNotAuthenticatedError when ~/.codex/auth.json is absent and no OPENAI_API_KEY', async () => {
     vi.mocked(execFileSync).mockReturnValue('/mock/bin/codex' as never);
     vi.mocked(existsSync).mockImplementation((p: unknown) => {
       if (typeof p === 'string' && p.endsWith('auth.json')) return false;
@@ -134,6 +136,26 @@ describe('CodexCliRuntime — pre-flight errors', () => {
     await expect(runtime.run(makeSpec())).rejects.toThrow(CodexNotAuthenticatedError);
     // Spawn was never called — pre-flight failed before we wrote files.
     expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('accepts OPENAI_API_KEY as an alternative to ~/.codex/auth.json', async () => {
+    process.env.OPENAI_API_KEY = 'sk-test-key';
+    vi.mocked(execFileSync).mockReturnValue('/mock/bin/codex' as never);
+    vi.mocked(existsSync).mockImplementation((p: unknown) => {
+      if (typeof p === 'string' && p.endsWith('auth.json')) return false;
+      return true;
+    });
+
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as unknown as ReturnType<typeof spawn>);
+
+    const runtime = new CodexCliRuntime();
+    const runPromise = runtime.run(makeSpec());
+
+    expect(spawn).toHaveBeenCalledOnce();
+    proc.stdout.emit('data', Buffer.from(JSON.stringify({ result: '{"ok":true}', usage: {} })));
+    proc.simulateClose(0);
+    await runPromise;
   });
 
   it('throws CodexBinaryNotFoundError when binary cannot be resolved', async () => {
@@ -162,7 +184,7 @@ describe('buildCodexArgv', () => {
     expect(argv[argv.length - 1]).toBe('<task>hello</task>');
   });
 
-  it('passes systemPrompt via -c instructions= override', () => {
+  it('passes systemPrompt via -c instructions= override using TOML multi-line basic string', () => {
     const argv = buildCodexArgv({
       model: 'gpt-5-codex',
       workspaceDir: '/work',
@@ -171,10 +193,21 @@ describe('buildCodexArgv', () => {
     });
     expect(argv).toContain('-c');
     const idx = argv.indexOf('-c');
-    expect(argv[idx + 1]).toContain('instructions="be terse"');
+    expect(argv[idx + 1]).toBe('instructions="""be terse"""');
   });
 
-  it('escapes embedded quotes in systemPrompt to keep TOML valid', () => {
+  it('preserves multi-line systemPrompt content without escaping newlines', () => {
+    const argv = buildCodexArgv({
+      model: 'gpt-5-codex',
+      workspaceDir: '/work',
+      prompt: '<task></task>',
+      systemPrompt: 'line one\nline two\nline three',
+    });
+    const idx = argv.indexOf('-c');
+    expect(argv[idx + 1]).toBe('instructions="""line one\nline two\nline three"""');
+  });
+
+  it('does not escape inner double-quotes (multi-line basic strings carry them raw)', () => {
     const argv = buildCodexArgv({
       model: 'gpt-5-codex',
       workspaceDir: '/work',
@@ -182,7 +215,29 @@ describe('buildCodexArgv', () => {
       systemPrompt: 'say "hi"',
     });
     const idx = argv.indexOf('-c');
-    expect(argv[idx + 1]).toBe('instructions="say \\"hi\\""');
+    expect(argv[idx + 1]).toBe('instructions="""say "hi""""');
+  });
+});
+
+describe('escapeForTomlMultilineBasic', () => {
+  it('returns plain text unchanged when no metacharacters present', () => {
+    expect(escapeForTomlMultilineBasic('hello world')).toBe('hello world');
+  });
+
+  it('preserves newlines (multi-line basic strings carry literal LF)', () => {
+    expect(escapeForTomlMultilineBasic('a\nb')).toBe('a\nb');
+  });
+
+  it('escapes backslashes (TOML escape character)', () => {
+    expect(escapeForTomlMultilineBasic('C:\\path')).toBe('C:\\\\path');
+  });
+
+  it('escapes embedded triple-quote so the closing delimiter is unambiguous', () => {
+    expect(escapeForTomlMultilineBasic('say """hello"""')).toBe('say \\"""hello\\"""');
+  });
+
+  it('escapes backslashes before triple-quote handling so order is stable', () => {
+    expect(escapeForTomlMultilineBasic('\\"""')).toBe('\\\\\\"""');
   });
 });
 

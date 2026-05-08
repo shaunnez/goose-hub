@@ -33,9 +33,13 @@ The implementation mirrors `claude-cli.ts` for everything except the four points
 Two new error classes in `core/agent-runtime/codex-cli.ts`:
 
 - `CodexBinaryNotFoundError` — thrown by `resolveBinary('codex')` when the binary cannot be located on PATH (or via `CODEX_BIN`). Message instructs the user to install the Codex CLI.
-- `CodexNotAuthenticatedError` — thrown by the pre-flight check when `~/.codex/auth.json` is absent. Message instructs the user to run `codex login`.
+- `CodexNotAuthenticatedError` — thrown by the pre-flight check when **both** auth paths are missing: no `~/.codex/auth.json` AND no non-empty `OPENAI_API_KEY` env var. Either is sufficient. Message instructs the user to run `codex login`.
 
 Both are caught by the existing fallback layer (`fallback.ts`) the same way `ClaudeCliRuntime`'s spawn errors are: holdout roles re-raise as `HoldoutFallbackForbiddenError`; non-holdout, non-critical roles get one down-tier retry; otherwise the error propagates.
+
+**Auth precedence:** `OPENAI_API_KEY` if present and non-empty wins; the OAuth token at `~/.codex/auth.json` is checked only when no API key is configured. The Codex CLI itself reads both, so we don't pass either explicitly — pre-flight just gates the spawn.
+
+**System prompt → TOML override:** the skill's `appendSystemPrompt` (markdown content from `prompt.md`) is forwarded to Codex via `-c instructions="""…"""`, a TOML multi-line basic string. Multi-line strings carry literal newlines, so only `\` (TOML escape character) and embedded `"""` (which would terminate the delimiter) are escaped. `escapeForTomlMultilineBasic()` is exported for unit tests.
 
 ### 3. Output normalisation map
 
