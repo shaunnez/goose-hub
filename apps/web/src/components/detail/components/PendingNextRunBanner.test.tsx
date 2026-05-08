@@ -1,6 +1,6 @@
+import type { AgentEventDto } from '@/lib/types';
 import { describe, expect, it } from 'vitest';
 import { computeIsLive } from './PendingNextRunBanner';
-import type { AgentEventDto } from '@/lib/types';
 
 function makeEvent(kind: string, id: number): AgentEventDto {
   return {
@@ -71,5 +71,15 @@ describe('computeIsLive', () => {
       makeEvent('agent.run-started', 3),
     ];
     expect(computeIsLive(events)).toBe(true);
+  });
+
+  it('handles descending order (as returned by server API)', () => {
+    // Server returns events newest-first; completed run should not appear live
+    const events = [
+      makeEvent('agent.run-completed', 3),
+      makeEvent('agent.run-started', 2),
+      makeEvent('state.transitioned', 1),
+    ];
+    expect(computeIsLive(events)).toBe(false);
   });
 });

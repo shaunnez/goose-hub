@@ -16,13 +16,14 @@ const TERMINAL_EVENTS = new Set([
 ]);
 
 export function computeIsLive(events: AgentEventDto[]): boolean {
+  const sorted = [...events].sort((a, b) => a.id - b.id);
   let lastStartedIdx = -1;
-  for (let i = 0; i < events.length; i++) {
-    if (events[i].kind === 'agent.run-started') lastStartedIdx = i;
+  for (let i = 0; i < sorted.length; i++) {
+    if (sorted[i].kind === 'agent.run-started') lastStartedIdx = i;
   }
   if (lastStartedIdx === -1) return false;
-  for (let i = lastStartedIdx + 1; i < events.length; i++) {
-    if (TERMINAL_EVENTS.has(events[i].kind)) return false;
+  for (let i = lastStartedIdx + 1; i < sorted.length; i++) {
+    if (TERMINAL_EVENTS.has(sorted[i].kind)) return false;
   }
   return true;
 }

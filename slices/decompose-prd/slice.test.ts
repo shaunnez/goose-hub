@@ -108,9 +108,9 @@ describe('single-slice PRD', () => {
       deps: { runtime: makeRuntime(output) },
     });
 
-    // Parent should be in factory:issues-created
+    // Parent advances through issues-created → done once decomposition completes
     const updatedParent = await source.getItem(parent.externalId);
-    expect(updatedParent.state).toBe('factory:issues-created');
+    expect(updatedParent.state).toBe('factory:done');
 
     // One child issue should have been created
     const allItems = await source.listOpenWork();
@@ -182,9 +182,9 @@ describe('multi-slice PRD with sequential sibling deps', () => {
     expect(child2.body).toContain(`#${n1}`);
     expect(child2.body).not.toContain('sibling index');
 
-    // Parent transitions to factory:issues-created
+    // Parent advances through issues-created → done once decomposition completes
     const updatedParent = await source.getItem(parent.externalId);
-    expect(updatedParent.state).toBe('factory:issues-created');
+    expect(updatedParent.state).toBe('factory:done');
   });
 });
 
@@ -442,9 +442,9 @@ describe('children land at factory:accepted', () => {
     });
 
     for (const childNum of result.childIssueNumbers) {
-      // State must be factory:accepted (not factory:triaging)
+      // Children advance accepted → dev-ready (skip triage since they came from a PRD)
       const child = await source.getItem(String(childNum));
-      expect(child.state).toBe('factory:accepted');
+      expect(child.state).toBe('factory:dev-ready');
 
       // extraLabels must contain factory:accepted and factory:from-prd,
       // and must NOT contain factory:triaging

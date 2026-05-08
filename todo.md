@@ -3,7 +3,13 @@
   2. Overview shows comments... weird it shows the griller comments
   3. When i responded to the griller, this god added to github issue comments.. why?
 
-  After respodning to grill me, should show "agent is thinking" until it's reponse
+  After respodning to grill me, should show "agent is thinking" until it's reponse. 
+  Also seeing "griller is processing your reply"... better messasging as i think this is "sending to prd state"
+  Make it look like the timelone agent is loading thing.
+
+
+Rejecting PRD doubles up on grill me run
+Load more events on timeline ont working?
 
 # Need to fix the dispatch file (so much code)
 
