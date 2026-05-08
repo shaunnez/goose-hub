@@ -34,7 +34,7 @@ export function QASection({ projectSlug, id }: QASectionProps) {
     return (
       <div data-testid="qa-section" className="px-8 py-6 flex flex-col gap-5">
         <div>
-          <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">06 · QA</div>
+          <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">07 · QA</div>
           <h2 className="text-[17px] font-semibold text-fg leading-snug">Verification sweep</h2>
           <div className="text-[12.5px] text-fg-3 mt-1">
             QA runs automatically after the PR is opened.
@@ -82,7 +82,7 @@ export function QASection({ projectSlug, id }: QASectionProps) {
       {/* Section header */}
       <div className="flex items-end gap-3">
         <div className="flex-1">
-          <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">06 · QA</div>
+          <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">07 · QA</div>
           <h2 className="text-[17px] font-semibold text-fg leading-snug">Verification sweep</h2>
           <div className="flex items-center gap-2 text-[12.5px] text-fg-3 mt-1 flex-wrap">
             <VerdictIcon size={13} style={{ color: verdictColor }} />

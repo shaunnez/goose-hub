@@ -101,7 +101,13 @@ export function InvestigationSection({
 
   if (latest == null) {
     return (
-      <div className="px-8 py-6">
+      <div className="px-8 py-6 ">
+        <div className="mb-5">
+          <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">
+            03 · Investigation
+          </div>
+          <h2 className="text-[17px] font-semibold text-fg leading-snug">What was found</h2>
+        </div>
         <SectionEmptyState
           data-testid="investigation-empty-state"
           icon={Search}

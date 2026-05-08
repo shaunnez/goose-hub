@@ -96,6 +96,10 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
   if (events.length === 0) {
     return (
       <div data-testid="timeline-section" className="px-8 py-6">
+        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">10. Timeline</div>
+        <h2 className="text-[17px] font-semibold text-fg leading-snug mb-5">
+          Repo candidates &amp; classification
+        </h2>
         <SectionEmptyState
           icon={Clock}
           title="No timeline events yet."
@@ -116,7 +120,7 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
     <div data-testid="timeline-section" className="px-8 py-6">
       {/* Section header */}
       <div className=" gap-3 mb-3">
-        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">09. Timeline</div>
+        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">10. Timeline</div>
         <div className="flex justify-between items-baseline">
           <h2 className="text-[17px] font-semibold text-fg leading-snug">
             Repo candidates &amp; classification

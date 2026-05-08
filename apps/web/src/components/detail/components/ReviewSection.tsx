@@ -40,6 +40,8 @@ export function ReviewSection({ projectSlug, id }: ReviewSectionProps) {
   if (!review) {
     return (
       <div className="px-8 py-6">
+        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">08. Review</div>
+        <h2 className="text-[17px] font-semibold text-fg leading-snug mb-5">Pre-merge checklist</h2>
         <SectionEmptyState
           data-testid="review-empty-state"
           icon={Clock}

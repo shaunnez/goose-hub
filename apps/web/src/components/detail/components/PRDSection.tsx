@@ -68,6 +68,12 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
     if (body == null) {
       return (
         <div className="px-8 py-6">
+          <div className="mb-5">
+            <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">05 · PRD</div>
+            <h2 className="text-[18px] font-semibold text-fg leading-snug" data-testid="prd-title">
+              No PRD yet
+            </h2>
+          </div>
           <SectionEmptyState
             data-testid="prd-drafting"
             icon={FileText}
@@ -83,6 +89,12 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
   if (body == null) {
     return (
       <div className="px-8 py-6">
+        <div className="mb-5">
+          <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">05 · PRD</div>
+          <h2 className="text-[18px] font-semibold text-fg leading-snug" data-testid="prd-title">
+            No PRD yet
+          </h2>
+        </div>
         <SectionEmptyState
           data-testid="prd-empty-state"
           icon={FileText}
@@ -113,7 +125,7 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
   return (
     <div className="px-8 py-6 flex flex-col gap-5" data-testid="prd-section">
       <div>
-        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">04 · PRD</div>
+        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">05 · PRD</div>
         <div className="flex items-center gap-3 flex-wrap">
           <h2 className="text-[18px] font-semibold text-fg leading-snug" data-testid="prd-title">
             {prd.title ?? 'Untitled PRD'}

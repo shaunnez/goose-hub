@@ -125,7 +125,7 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
   return (
     <div className="px-8 py-6 flex flex-col gap-4" data-testid="grill-section">
       <div>
-        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">05 · Grill</div>
+        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">04 · Grill</div>
         <h2 className="text-[18px] font-semibold text-fg leading-snug">Discover-lane chat</h2>
         <p className="text-[12.5px] text-fg-2 mt-1">
           The griller asks one question at a time until the scope is precise enough to draft a PRD.

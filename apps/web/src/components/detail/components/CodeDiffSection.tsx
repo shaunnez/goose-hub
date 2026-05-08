@@ -84,7 +84,13 @@ export function CodeDiffSection({ projectSlug, id }: CodeDiffSectionProps) {
 
   if (files.length === 0) {
     return (
-      <div className="px-8 py-10">
+      <div className="px-8 py-10 pt-6">
+        <div className="mb-5">
+          <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">06 · Code</div>
+          <h2 className="text-[18px] font-semibold text-fg leading-snug" data-testid="prd-title">
+            Code diff tool
+          </h2>
+        </div>
         <SectionEmptyState
           data-testid="code-diff-empty"
           icon={FileCode}
@@ -110,7 +116,7 @@ export function CodeDiffSection({ projectSlug, id }: CodeDiffSectionProps) {
   return (
     <div data-testid="code-diff-section" className="flex flex-col ">
       <div className="px-8 pt-6">
-        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">05 · Code</div>
+        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">06 · Code</div>
         <h2 className="text-[17px] font-semibold text-fg leading-snug">Patch in flight</h2>
         <div className="flex items-center gap-2 text-[12.5px] text-fg-3 mt-1 flex-wrap">
           <span>{devPersonaLabel}</span>

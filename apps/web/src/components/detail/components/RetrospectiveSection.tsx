@@ -39,6 +39,14 @@ export function RetrospectiveSection({ projectSlug, id }: RetrospectiveSectionPr
   if (!retro) {
     return (
       <div className="px-8 py-6">
+        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">
+          09 · Retrospective
+        </div>
+        <div className="flex items-center gap-2 flex-wrap mb-5">
+          <h2 className="text-[17px] font-semibold text-fg leading-snug">
+            Deep or light retrospective
+          </h2>
+        </div>
         <SectionEmptyState
           data-testid="retro-empty-state"
           icon={Clock}
@@ -80,7 +88,7 @@ export function RetrospectiveSection({ projectSlug, id }: RetrospectiveSectionPr
       <div className="flex items-end gap-3 flex-wrap">
         <div className="flex-1 min-w-0">
           <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">
-            08 · Retrospective
+            09 · Retrospective
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-[17px] font-semibold text-fg leading-snug">
