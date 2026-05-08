@@ -31,6 +31,7 @@ export const events = sqliteTable(
   },
   (table) => ({
     projectCreatedIdx: index('events_project_created_idx').on(table.projectId, table.createdAt),
+    workItemIdx: index('events_work_item_idx').on(table.workItemId, table.id),
   }),
 );
 

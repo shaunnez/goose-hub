@@ -149,14 +149,6 @@ export async function runGrillAndPrdWorkflow(
   const grillPrompt = readPromptWithContext('grill-me', projectId);
   const grillJsonSchema = toJsonSchema(GrillMeOutputSchema);
 
-  eventStore.appendEvent({
-    kind: 'agent.run-started',
-    projectId,
-    workItemId: workItem.id,
-    runId,
-    payload: { skill: 'grill-me', personaId: grillerPersona.personaId, roundNumber },
-  });
-
   let grillOutput: import('../../skills/grill-me/schema.js').GrillMeOutput;
   try {
     const grillResult = await runtime.run({
@@ -182,6 +174,7 @@ export async function runGrillAndPrdWorkflow(
       personaId: grillerPersona.personaId,
       appendSystemPrompt: grillPrompt,
       outputJsonSchema: grillJsonSchema,
+      extraEventPayload: { roundNumber },
     });
 
     const parsed = GrillMeOutputSchema.safeParse(grillResult.output);
@@ -348,14 +341,6 @@ export async function runGrillAndPrdWorkflow(
   const prdPrompt = readPromptWithContext('write-prd', projectId);
   const prdJsonSchema = toJsonSchema(PRDOutputSchema);
 
-  eventStore.appendEvent({
-    kind: 'agent.run-started',
-    projectId,
-    workItemId: workItem.id,
-    runId,
-    payload: { skill: 'write-prd', personaId: prdPersona.personaId },
-  });
-
   let prdOutput: import('../../skills/write-prd/schema.js').PRDOutput;
   try {
     const prdResult = await runtime.run({
@@ -461,14 +446,6 @@ export async function runGrillAndPrdWorkflow(
     const advisorPersona = selectPersona(projectId, 'prd-writer');
     const advisorPrompt = readPromptWithContext('advise-on-prd', projectId);
     const advisorJsonSchema = toJsonSchema(AdvisePRDOutputSchema);
-
-    eventStore.appendEvent({
-      kind: 'agent.run-started',
-      projectId,
-      workItemId: workItem.id,
-      runId,
-      payload: { skill: 'advise-on-prd', personaId: advisorPersona.personaId },
-    });
 
     try {
       const advisorResult = await runtime.run({

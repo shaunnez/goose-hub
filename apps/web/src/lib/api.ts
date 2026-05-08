@@ -156,11 +156,25 @@ export async function fetchEvents(
   id: string,
   signal?: AbortSignal,
 ): Promise<AgentEventDto[]> {
-  const { events } = await getJson<{ events: AgentEventDto[] }>(
+  const { events } = await getJson<{ events: AgentEventDto[]; hasMore: boolean }>(
     `/projects/${slug}/issues/${id}/events`,
     signal,
   );
   return events;
+}
+
+export async function fetchEventsPage(
+  slug: string,
+  id: string,
+  opts?: { limit?: number; before?: number },
+  signal?: AbortSignal,
+): Promise<{ events: AgentEventDto[]; hasMore: boolean }> {
+  const params = new URLSearchParams({ limit: String(opts?.limit ?? 100) });
+  if (opts?.before != null) params.set('before', String(opts.before));
+  return getJson<{ events: AgentEventDto[]; hasMore: boolean }>(
+    `/projects/${slug}/issues/${id}/events?${params}`,
+    signal,
+  );
 }
 
 export async function fetchIssueDiff(slug: string, id: string): Promise<IssueDiffDto> {

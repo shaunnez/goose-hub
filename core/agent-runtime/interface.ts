@@ -51,6 +51,8 @@ export type AgentSpec<R extends RoleSpec = RoleSpec> = {
   workspaceDir?: string;
   /** Additional env vars merged into the subprocess's minimal env at spawn time. */
   env?: Record<string, string>;
+  /** Extra fields merged into the agent.run-started event payload. Use for workflow-specific metadata (roundNumber, tier, etc.) that the runtime layer doesn't know about. */
+  extraEventPayload?: Record<string, unknown>;
   /**
    * Explicit MCP config path to pass via --mcp-config. Bypasses the bundle-based
    * resolution in resolveMcpConfigPath. Used when the MCP server must run from a

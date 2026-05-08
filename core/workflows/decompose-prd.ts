@@ -64,14 +64,6 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
     );
   }
 
-  eventStore.appendEvent({
-    kind: 'agent.run-started',
-    projectId,
-    workItemId: workItem.id,
-    runId,
-    payload: { skill: skillName, personaId },
-  });
-
   // TODO: Add 'decompose-issues' entry to SKILL_BUDGETS in core/agent-runtime/budgets.ts
   let resolvedBudget: {
     budgets: { maxTurns: number; maxBudgetUsd: number; timeoutMs?: number };

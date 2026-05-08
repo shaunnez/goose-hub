@@ -81,14 +81,30 @@ export async function getIssue(slug: string, id: string): Promise<Result<{ item:
 export async function getIssueEvents(
   slug: string,
   id: string,
-): Promise<Result<{ events: unknown[] }>> {
+  opts?: { limit?: number; before?: number },
+): Promise<Result<{ events: unknown[]; hasMore: boolean }>> {
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
   const repoRef = await getRepoRef(slug);
   const workItemId = `github:${repoRef}#${id}`;
+
+  if (opts?.limit != null) {
+    const fetched = eventStore.replay({
+      projectId: slug,
+      workItemId,
+      limit: opts.limit + 1,
+      before: opts.before,
+      order: 'desc',
+    });
+    const hasMore = fetched.length > opts.limit;
+    return {
+      ok: true,
+      data: { events: hasMore ? fetched.slice(0, opts.limit) : fetched, hasMore },
+    };
+  }
+
   const ascending = eventStore.replay({ projectId: slug, workItemId });
-  const events = [...ascending].reverse();
-  return { ok: true, data: { events } };
+  return { ok: true, data: { events: [...ascending].reverse(), hasMore: false } };
 }
 
 export async function getIssueComments(

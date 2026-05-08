@@ -90,14 +90,6 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
   const jsonSchema = toJsonSchema(schema);
   const { personaId } = selectPersona(projectId, 'retrospector');
 
-  eventStore.appendEvent({
-    kind: 'agent.run-started',
-    projectId,
-    workItemId: workItem.id,
-    runId,
-    payload: { skill: skillName, tier, personaId },
-  });
-
   const itemEvents = eventStore.replay({ projectId, workItemId: workItem.id });
 
   const priorDecisionSummaries = itemEvents
@@ -166,6 +158,7 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
       personaId,
       appendSystemPrompt: prompt,
       outputJsonSchema: jsonSchema,
+      extraEventPayload: { tier },
     });
 
     const parsed =

@@ -106,7 +106,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
       projectId: (spec.context.projectId as string) ?? 'unknown',
       workItemId: (spec.context.workItemId as string) ?? null,
       kind: 'agent.run-started',
-      payload: { skill: spec.skill, runId },
+      payload: { skill: spec.skill, runId, personaId: spec.personaId, ...spec.extraEventPayload },
       runId,
       personaId: spec.personaId,
     });

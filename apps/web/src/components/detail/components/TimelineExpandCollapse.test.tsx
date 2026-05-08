@@ -23,7 +23,7 @@ afterEach(() => {
 });
 
 vi.mock('@/lib/api', () => ({
-  fetchEvents: vi.fn().mockResolvedValue([]),
+  fetchEventsPage: vi.fn().mockResolvedValue({ events: [], hasMore: false }),
 }));
 
 vi.mock('../lib/costs', () => ({
@@ -62,8 +62,8 @@ const RUN_GROUP_EVENTS: AgentEventDto[] = [
 
 describe('TimelineSection — expand/collapse all', () => {
   async function renderWithRunGroups() {
-    const { fetchEvents } = await import('@/lib/api');
-    vi.mocked(fetchEvents).mockResolvedValue([...RUN_GROUP_EVENTS]);
+    const { fetchEventsPage } = await import('@/lib/api');
+    vi.mocked(fetchEventsPage).mockResolvedValue({ events: [...RUN_GROUP_EVENTS], hasMore: false });
 
     const { TimelineSection } = await import('./TimelineSection');
     render(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
@@ -109,23 +109,27 @@ describe('TimelineSection — expand/collapse all', () => {
   });
 
   it('does not render control bar when there are no run-groups', async () => {
-    const { fetchEvents } = await import('@/lib/api');
+    const { fetchEventsPage } = await import('@/lib/api');
     // Only plain events, no runId → no run-groups
-    vi.mocked(fetchEvents).mockResolvedValue([
-      {
-        id: 1,
-        projectId: 'proj',
-        workItemId: 'wi-1',
-        kind: 'system.note',
-        payload: { text: 'hello' },
-        createdAt: new Date().toISOString(),
-      },
-    ]);
+    vi.mocked(fetchEventsPage).mockResolvedValue({
+      events: [
+        {
+          id: 1,
+          projectId: 'proj',
+          workItemId: 'wi-1',
+          kind: 'system.note',
+          payload: { text: 'hello' },
+          createdAt: new Date().toISOString(),
+        },
+      ],
+      hasMore: false,
+    });
 
     const { TimelineSection } = await import('./TimelineSection');
     render(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
 
-    // Give time for fetch to resolve
+    // Wait for loading to complete (section container appears) then assert no expand button.
+    await screen.findByTestId('timeline-section');
     await waitFor(() => {
       expect(screen.queryByTestId('timeline-expand-all')).toBeNull();
     });

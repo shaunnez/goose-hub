@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { type SQL, and, asc, eq, gt, inArray, isNotNull } from 'drizzle-orm';
+import { type SQL, and, asc, desc, eq, gt, inArray, isNotNull, lt } from 'drizzle-orm';
 import { db } from '../db/db.js';
 import { events } from '../db/schema.js';
 import { redactSecrets } from '../tool-layer/secret-redaction.js';
@@ -166,12 +166,18 @@ class EventStore {
       sinceId?: number;
       runId?: string;
       kind?: string;
+      /** Cursor: only return events with id < before (pagination, older events). */
+      before?: number;
+      /** Default 'asc'. Use 'desc' for paginated newest-first fetches. */
+      order?: 'asc' | 'desc';
+      limit?: number;
     } = {},
   ): AgentEvent[] {
     const conditions: SQL[] = [];
     if (filter.projectId != null) conditions.push(eq(events.projectId, filter.projectId));
     if (filter.workItemId != null) conditions.push(eq(events.workItemId, filter.workItemId));
     if (filter.sinceId != null) conditions.push(gt(events.id, filter.sinceId));
+    if (filter.before != null) conditions.push(lt(events.id, filter.before));
     if (filter.runId != null) conditions.push(eq(events.runId, filter.runId));
     if (filter.kind != null) conditions.push(eq(events.kind, filter.kind));
 
@@ -182,10 +188,12 @@ class EventStore {
           ? conditions[0]
           : and(...conditions);
 
-    const rows =
+    const orderBy = filter.order === 'desc' ? desc(events.id) : asc(events.id);
+    const baseQuery =
       where != null
-        ? db.select().from(events).where(where).orderBy(asc(events.id)).all()
-        : db.select().from(events).orderBy(asc(events.id)).all();
+        ? db.select().from(events).where(where).orderBy(orderBy)
+        : db.select().from(events).orderBy(orderBy);
+    const rows = filter.limit != null ? baseQuery.limit(filter.limit).all() : baseQuery.all();
 
     return rows.map((r) => ({
       id: r.id,

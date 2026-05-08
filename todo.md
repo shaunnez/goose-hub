@@ -3,6 +3,8 @@
   2. Overview shows comments... weird it shows the griller comments
   3. When i responded to the griller, this god added to github issue comments.. why?
 
+  After respodning to grill me, should show "agent is thinking" until it's reponse
+
 # Need to fix the dispatch file (so much code)
 
 # Milesotne 11 testing
