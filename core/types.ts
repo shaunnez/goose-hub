@@ -134,4 +134,6 @@ export interface ProjectConfig {
   colorStripe: string;
   activeMilestone?: string;
   tickIntervalSeconds?: number;
+  /** Maximum rounds for convergent adversarial review (M19.04). Default 3. */
+  maxReviewRounds?: number;
 }
