@@ -97,7 +97,12 @@ export type EventKind =
   | 'parallel-implement.wp-failed'
   | 'parallel-implement.wp-timeout'
   | 'parallel-implement.wp-commit-failed'
-  | 'parallel-implement.exhausted';
+  | 'parallel-implement.exhausted'
+  // M19.04 convergent adversarial review — round lifecycle events (#561)
+  | 'review.wave-completed'
+  | 'review.wave-failed'
+  | 'review.converged'
+  | 'review.escalated';
 
 export interface AgentEvent {
   id: number;
