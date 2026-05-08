@@ -1,4 +1,4 @@
-# ADR 0034 — Bash Command Timeout Scope and Field Naming
+# ADR 0035 — Bash Command Timeout Scope and Field Naming
 
 **Status:** Accepted
 **Date:** 2026-05-08
