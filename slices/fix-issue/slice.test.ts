@@ -48,6 +48,9 @@ vi.mock('@goose-hub/core/workspaces/worktree.js', () => ({
   cleanupWorktree: (...args: unknown[]) => mockCleanupWorktree(...args),
   prewarmWorktree: (...args: unknown[]) => mockPrewarmWorktree(...args),
 }));
+vi.mock('@goose-hub/core/workspaces/orchestrator-git.js', () => ({
+  orchestratorCommitAll: vi.fn().mockReturnValue('fake-sha'),
+}));
 
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 
