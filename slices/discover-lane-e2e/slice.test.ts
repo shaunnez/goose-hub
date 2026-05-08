@@ -67,6 +67,17 @@ function injectedConfig(perAdvisorMaxUsd = 5) {
       perAdvisorMaxUsd,
       perWorkflowMaxUsd: 50,
     } as unknown as import('@goose-hub/core/types.js').ProjectConfig['budgets'],
+    stack: {
+      runtime: 'node',
+      packageManager: 'pnpm',
+      testCommand: 'pnpm test',
+      detectedAt: '2026-01-01T00:00:00Z',
+    } as import('@goose-hub/core/types.js').StackConfig,
+    targetRepo: {
+      cloneUrl: 'https://github.com/test/repo',
+      defaultBranch: 'main',
+      localPath: '/tmp/test-repo',
+    } as import('@goose-hub/core/types.js').TargetRepoConfig,
   };
 }
 

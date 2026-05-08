@@ -241,10 +241,18 @@ function injectedConfig(perAdvisorMaxUsd = 5) {
     budgets: {
       perAdvisorMaxUsd,
       perWorkflowMaxUsd: 50,
-      // The remaining budget keys aren't read by the workflow but are present
-      // on the real ProjectConfig type. Cast through Pick<...,'budgets'> in
-      // workflow's deps signature absorbs the extra fields.
     } as unknown as import('@goose-hub/core/types.js').ProjectConfig['budgets'],
+    stack: {
+      runtime: 'node',
+      packageManager: 'pnpm',
+      testCommand: 'pnpm test',
+      detectedAt: '2026-01-01T00:00:00Z',
+    } as import('@goose-hub/core/types.js').StackConfig,
+    targetRepo: {
+      cloneUrl: 'https://github.com/test/repo',
+      defaultBranch: 'main',
+      localPath: '/tmp/test-repo',
+    } as import('@goose-hub/core/types.js').TargetRepoConfig,
   };
 }
 
