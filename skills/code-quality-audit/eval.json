@@ -1,0 +1,189 @@
+{
+  "skill": "code-quality-audit",
+  "description": "5 test prompts × 5 binary assertions = 25 checks. Each prompt describes a fixture repo with known characteristics; each assertion is a binary pass/fail check on the expected output.",
+  "prompts": [
+    {
+      "id": "prompt-1",
+      "description": "Clean registry-based architecture with incremental git history",
+      "fixtureCharacteristics": {
+        "extensionMechanism": "manifest directory — new capability = 1 new file",
+        "conceptCount": 4,
+        "topFilesLocRange": "50-180",
+        "maxImports": 3,
+        "gitHistory": "12 months incremental, smallest commits first"
+      },
+      "assertions": [
+        {
+          "id": "p1-a1",
+          "check": "scorecard[category=1].score >= 18",
+          "rationale": "Registry pattern scores 18-20 (1 new file, 0 existing modified)"
+        },
+        {
+          "id": "p1-a2",
+          "check": "scorecard[category=2].score >= 12",
+          "rationale": "4 concepts scores 15; tolerance for 1 missed concept gives 12"
+        },
+        {
+          "id": "p1-a3",
+          "check": "scorecard[category=5].score >= 8",
+          "rationale": "All files under 200 SLOC scores 10; tolerance for 90%+ gives 8"
+        },
+        {
+          "id": "p1-a4",
+          "check": "scorecard[category=7].score >= 7",
+          "rationale": "Incremental git history scores 10; tolerance for 1 big-bang gives 7"
+        },
+        {
+          "id": "p1-a5",
+          "check": "rating === 'Exemplary' || rating === 'Good'",
+          "rationale": "Clean architecture should score >= 75"
+        }
+      ]
+    },
+    {
+      "id": "prompt-2",
+      "description": "High coupling: orchestrator with 12 imports, 3 files above critical fan-out threshold",
+      "fixtureCharacteristics": {
+        "extensionMechanism": "if/elif dispatch — new capability = 3 files modified",
+        "maxImports": 12,
+        "couplingViolations": ["src/orchestrator.ts:12 imports", "src/router.ts:9 imports", "src/handler.ts:7 imports"]
+      },
+      "assertions": [
+        {
+          "id": "p2-a1",
+          "check": "scorecard[category=6].score <= 5",
+          "rationale": "3 files above critical threshold scores ≤5 (max 10)"
+        },
+        {
+          "id": "p2-a2",
+          "check": "recommendations.some(r => r.priority === 'P0' && r.file !== '')",
+          "rationale": "Coupling violations must produce P0 recommendation with file citation"
+        },
+        {
+          "id": "p2-a3",
+          "check": "recommendations[0].file === 'src/orchestrator.ts'",
+          "rationale": "Highest-impact violator (12 imports) cited first"
+        },
+        {
+          "id": "p2-a4",
+          "check": "scorecard[category=1].score <= 10",
+          "rationale": "if/elif dispatch means 3+ existing files modified (score ≤10)"
+        },
+        {
+          "id": "p2-a5",
+          "check": "rating !== 'Exemplary' && rating !== 'Good'",
+          "rationale": "High coupling + type-dispatch architecture cannot score >= 75"
+        }
+      ]
+    },
+    {
+      "id": "prompt-3",
+      "description": "LOC violations: 6 out of 20 files exceed 200 SLOC (70% compliant)",
+      "fixtureCharacteristics": {
+        "filesOver200": ["src/god-object.ts:450", "src/legacy-service.ts:380", "src/monolith.ts:310", "src/utils-everything.ts:290", "src/api-router.ts:250", "src/db-layer.ts:220"],
+        "totalFiles": 20,
+        "pctUnder200": 70
+      },
+      "assertions": [
+        {
+          "id": "p3-a1",
+          "check": "scorecard[category=5].score === 5",
+          "rationale": "70% compliant scores exactly 5 (70-89% band)"
+        },
+        {
+          "id": "p3-a2",
+          "check": "scorecard[category=5].evidence.length >= 6",
+          "rationale": "Each over-200 file must appear in evidence"
+        },
+        {
+          "id": "p3-a3",
+          "check": "scorecard[category=5].evidence.some(e => e.file === 'src/god-object.ts')",
+          "rationale": "Largest violator (450 SLOC) must be cited by file path"
+        },
+        {
+          "id": "p3-a4",
+          "check": "recommendations.some(r => r.file === 'src/god-object.ts')",
+          "rationale": "Highest-SLOC violator should generate a recommendation"
+        },
+        {
+          "id": "p3-a5",
+          "check": "decisionSummaries.some(d => d.kind === 'SELF_SCORE')",
+          "rationale": "SELF_SCORE decision must be emitted for Cat 5 scoring"
+        }
+      ]
+    },
+    {
+      "id": "prompt-4",
+      "description": "Big-bang architecture: single 5000-line initial commit, no intermediate states",
+      "fixtureCharacteristics": {
+        "gitHistory": "1 initial commit (+5000 lines), then small fixes",
+        "oldestFiles": "all added in week 1",
+        "incrementalEvidence": "none"
+      },
+      "assertions": [
+        {
+          "id": "p4-a1",
+          "check": "scorecard[category=7].score <= 2",
+          "rationale": "Big-bang initial commit with no intermediate states scores 0-2"
+        },
+        {
+          "id": "p4-a2",
+          "check": "scorecard[category=7].evidence.some(e => e.note.includes('big-bang') || e.note.includes('single commit'))",
+          "rationale": "Evidence must cite the big-bang commit pattern"
+        },
+        {
+          "id": "p4-a3",
+          "check": "recommendations.some(r => r.priority === 'P0' || r.priority === 'P1')",
+          "rationale": "Big-bang architecture warrants at least P1 recommendation"
+        },
+        {
+          "id": "p4-a4",
+          "check": "scorecard[category=7].score <= scorecard[category=7].max",
+          "rationale": "Score never exceeds max for the category"
+        },
+        {
+          "id": "p4-a5",
+          "check": "projectedScoreAfterTop3 >= scorecard.reduce((s,e) => s+e.score, 0)",
+          "rationale": "Projected score after fixes must be >= current total"
+        }
+      ]
+    },
+    {
+      "id": "prompt-5",
+      "description": "High complecting: top-5 files each braid 2-3 independent concerns",
+      "fixtureCharacteristics": {
+        "complectingInstances": 8,
+        "topFile1": "src/auth-and-routing.ts (auth + routing braided)",
+        "topFile2": "src/db-and-cache.ts (db + cache + business-logic braided)",
+        "topFile3": "src/api-and-websocket.ts (REST + WebSocket braided)"
+      },
+      "assertions": [
+        {
+          "id": "p5-a1",
+          "check": "scorecard[category=4].score <= 4",
+          "rationale": "6-10 complecting instances across top-5 files scores 4"
+        },
+        {
+          "id": "p5-a2",
+          "check": "scorecard[category=4].evidence.length >= 3",
+          "rationale": "Each complecting file must appear in evidence"
+        },
+        {
+          "id": "p5-a3",
+          "check": "scorecard[category=4].evidence.some(e => e.note.toLowerCase().includes('concern') || e.note.toLowerCase().includes('complect'))",
+          "rationale": "Evidence notes must describe the complecting concerns"
+        },
+        {
+          "id": "p5-a4",
+          "check": "recommendations.some(r => r.principle.toLowerCase().includes('hickey') || r.principle.toLowerCase().includes('complect'))",
+          "rationale": "Complecting violations must cite Hickey's braid principle"
+        },
+        {
+          "id": "p5-a5",
+          "check": "rating !== 'Exemplary'",
+          "rationale": "8 complecting instances cannot achieve Exemplary rating"
+        }
+      ]
+    }
+  ]
+}
