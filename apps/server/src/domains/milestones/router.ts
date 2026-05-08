@@ -1,12 +1,16 @@
 import { Hono } from 'hono';
 import { parseBody } from '#shared/middleware.js';
 import {
+  createMilestone,
+  deleteMilestone,
   getActiveMilestone,
+  getSprintReviewEligibility,
   listClosedMilestoneIssues,
   listMilestoneIssues,
   listMilestones,
   setActiveMilestone,
   triggerSprintReview,
+  updateMilestone,
 } from './service.js';
 
 const router = new Hono();
@@ -49,6 +53,44 @@ router.post('/:slug/milestones/:title/sprint-review', async (c) => {
     return c.json({ error: result.error }, result.status as 404 | 409 | 500);
   }
   return c.json(result.data);
+});
+
+router.post('/:slug/milestones', async (c) => {
+  const body = await parseBody<{ title: string }>(c);
+  if (!body.ok) return body.error;
+  const result = await createMilestone(c.req.param('slug'), body.data.title);
+  return result.ok
+    ? c.json(result.data, 201)
+    : c.json({ error: result.error }, result.status as 404 | 422);
+});
+
+router.patch('/:slug/milestones/:number', async (c) => {
+  const number = Number(c.req.param('number'));
+  if (Number.isNaN(number)) return c.json({ error: 'invalid milestone number' }, 400);
+  const body = await parseBody<{ title?: string; state?: 'open' | 'closed' }>(c);
+  if (!body.ok) return body.error;
+  const result = await updateMilestone(c.req.param('slug'), number, body.data);
+  return result.ok
+    ? c.json(result.data)
+    : c.json({ error: result.error }, result.status as 404 | 422);
+});
+
+router.delete('/:slug/milestones/:number', async (c) => {
+  const number = Number(c.req.param('number'));
+  if (Number.isNaN(number)) return c.json({ error: 'invalid milestone number' }, 400);
+  const result = await deleteMilestone(c.req.param('slug'), number);
+  return result.ok
+    ? c.json(result.data)
+    : c.json({ error: result.error }, result.status as 404 | 409);
+});
+
+router.get('/:slug/milestones/:number/sprint-review-eligibility', async (c) => {
+  const number = Number(c.req.param('number'));
+  if (Number.isNaN(number)) return c.json({ error: 'invalid milestone number' }, 400);
+  const result = await getSprintReviewEligibility(c.req.param('slug'), number);
+  return result.ok
+    ? c.json(result.data)
+    : c.json({ error: result.error }, result.status as 404);
 });
 
 export { router as milestonesRouter };
