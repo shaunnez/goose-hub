@@ -8,10 +8,13 @@ import { GrillSection } from './GrillSection';
 
 afterEach(cleanup);
 
+import { proceedToPrd } from '@/lib/api';
+
 vi.mock('@/lib/api', () => ({
   fetchComments: vi.fn(),
   addComment: vi.fn(),
   transitionState: vi.fn(),
+  proceedToPrd: vi.fn(),
 }));
 
 // Reset call history between tests so call-count assertions in one test
@@ -21,6 +24,7 @@ beforeEach(() => {
   vi.mocked(fetchComments).mockClear();
   vi.mocked(addComment).mockClear();
   vi.mocked(transitionState).mockClear();
+  vi.mocked(proceedToPrd).mockClear();
 });
 
 function comment(id: number, body: string, author = 'shaun'): IssueCommentDto {
@@ -177,5 +181,81 @@ describe('GrillSection', () => {
       expect(screen.getByTestId('grill-complete-footer')).toBeTruthy();
     });
     expect(screen.queryByTestId('grill-reply-form')).toBeNull();
+  });
+
+  it('shows recommended answer pill on the last agent question when state is gate-pending', async () => {
+    vi.mocked(fetchComments).mockResolvedValueOnce([
+      comment(
+        1,
+        '<!-- factory:grill-question -->\nWhat does "better" mean?\n<!-- factory:recommended-answer -->\nFewer user drop-offs on the checkout screen.',
+      ),
+    ]);
+    render_(
+      <GrillSection projectSlug="proj" externalId="42" id="42" state="factory:gate-pending" />,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('grill-recommended-answer')).toBeTruthy();
+    });
+    expect(screen.getByTestId('grill-recommended-answer').textContent).toContain(
+      'Fewer user drop-offs',
+    );
+    // Recommended answer text must not bleed into the question text
+    const agentMsg = screen.getByTestId('grill-msg-agent');
+    expect(agentMsg.textContent).not.toContain('factory:recommended-answer');
+  });
+
+  it('fills the textarea when "Use this" is clicked', async () => {
+    vi.mocked(fetchComments).mockResolvedValueOnce([
+      comment(
+        1,
+        '<!-- factory:grill-question -->\nQ?\n<!-- factory:recommended-answer -->\nSuggested text here.',
+      ),
+    ]);
+    render_(
+      <GrillSection projectSlug="proj" externalId="42" id="42" state="factory:gate-pending" />,
+    );
+    await waitFor(() => expect(screen.getByTestId('grill-use-answer-btn')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('grill-use-answer-btn'));
+    expect((screen.getByTestId('grill-reply-input') as HTMLTextAreaElement).value).toBe(
+      'Suggested text here.',
+    );
+  });
+
+  it('does not show recommended answer pill when state is not gate-pending', async () => {
+    vi.mocked(fetchComments).mockResolvedValueOnce([
+      comment(
+        1,
+        '<!-- factory:grill-question -->\nQ?\n<!-- factory:recommended-answer -->\nAnswer.',
+      ),
+    ]);
+    render_(<GrillSection projectSlug="proj" externalId="42" id="42" state="factory:prd-review" />);
+    await waitFor(() => expect(screen.getByTestId('grill-msg-agent')).toBeTruthy());
+    expect(screen.queryByTestId('grill-recommended-answer')).toBeNull();
+  });
+
+  it('shows "Proceed to PRD" button in gate-pending state', async () => {
+    vi.mocked(fetchComments).mockResolvedValueOnce([
+      comment(1, '<!-- factory:grill-question -->\nQ?'),
+    ]);
+    render_(
+      <GrillSection projectSlug="proj" externalId="42" id="42" state="factory:gate-pending" />,
+    );
+    await waitFor(() => expect(screen.getByTestId('grill-proceed-btn')).toBeTruthy());
+  });
+
+  it('calls proceedToPrd when "Proceed to PRD" is clicked', async () => {
+    vi.mocked(fetchComments).mockResolvedValueOnce([
+      comment(1, '<!-- factory:grill-question -->\nQ?'),
+    ]);
+    vi.mocked(proceedToPrd).mockResolvedValueOnce({ ok: true });
+
+    render_(
+      <GrillSection projectSlug="proj" externalId="42" id="42" state="factory:gate-pending" />,
+    );
+    await waitFor(() => expect(screen.getByTestId('grill-proceed-btn')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('grill-proceed-btn'));
+    await waitFor(() => {
+      expect(proceedToPrd).toHaveBeenCalledWith('proj', '42');
+    });
   });
 });
