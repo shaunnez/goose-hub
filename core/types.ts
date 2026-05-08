@@ -136,4 +136,12 @@ export interface ProjectConfig {
   tickIntervalSeconds?: number;
   /** Maximum rounds for convergent adversarial review (M19.04). Default 3. */
   maxReviewRounds?: number;
+  /**
+   * How the orchestrator responds when Tier-3 regression detection fires.
+   * 'revert'   — revert the WP commits that introduced the regression and retry
+   * 'escalate' — transition to factory:needs-human (default)
+   * 'ignore'   — log as warning only; do not block the workflow
+   * See docs/adr/0032-regression-policy.md
+   */
+  regressionPolicy?: 'revert' | 'escalate' | 'ignore';
 }

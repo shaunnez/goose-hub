@@ -24,9 +24,12 @@ export type EventKind =
   | 'agent.triage-complete'
   | 'agent.repo-override'
   | 'agent.investigation-complete'
-  // Three-tier verification framework — see docs/standards/verification.md
+  // Three-tier verification framework (M19.05, issue #562)
+  | 'qa.structural-passed'
   | 'qa.structural-failed'
+  | 'qa.functional-passed'
   | 'qa.functional-failed'
+  | 'qa.regression-passed'
   | 'qa.regression-failed'
   // M7 fix-issue workflow lifecycle (#183) + evidence-post wiring (#234)
   | 'agent.implement-complete'
