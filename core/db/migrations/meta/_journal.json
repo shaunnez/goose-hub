@@ -85,6 +85,13 @@
       "when": 1778260000000,
       "tag": "0011_rename_bash_drop_non_owners",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1778270000000,
+      "tag": "0012_project_dev_review_settings",
+      "breakpoints": true
     }
   ]
 }

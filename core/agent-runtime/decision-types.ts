@@ -38,6 +38,10 @@ export const DecisionKindSchema = z.enum([
   'DIFF_READ',
   'VERDICT',
 
+  // Dev-review dispositions (M19.12)
+  'DEV_REVIEW_ADDRESSED',
+  'DEV_REVIEW_DISMISSED',
+
   // Self-observations
   'TOOL_FAILURE',
   'RETRY',

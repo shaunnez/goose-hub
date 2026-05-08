@@ -337,3 +337,16 @@ export const agentRunCosts = sqliteTable(
     workItemIdx: index('agent_run_costs_work_item_idx').on(t.workItemId),
   }),
 );
+
+// Per-project dev-review advisor settings (M19.12). DB row wins over
+// project.config.ts agentConfig.devReview when non-null.
+export const projectDevReviewSettings = sqliteTable('project_dev_review_settings', {
+  projectId: text('project_id').primaryKey(),
+  enabled: integer('enabled', { mode: 'boolean' }),
+  triggerOn: text('trigger_on'), // 'all' | 'priority:medium+' | 'priority:high+' | 'priority:critical'
+  maxRevisionTurns: integer('max_revision_turns'),
+  perCycleMaxUsd: real('per_cycle_max_usd'),
+  timeoutMs: integer('timeout_ms'),
+  updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  updatedBy: text('updated_by'),
+});

@@ -97,6 +97,23 @@ export interface AgentConfig {
     /** Run a Codex reviewer in parallel with the Claude reviewer (M19.13). Default false. */
     codexEnabled: boolean;
   };
+  /**
+   * Codex pre-QA dev-review advisor (M19.12). Default disabled.
+   * When enabled, the implement workflow runs `skills/dev-review/` (Codex)
+   * once per dev cycle before opening the PR. If blockers are found, the
+   * developer gets ONE additional turn to address them. No second Codex pass.
+   */
+  devReview?: {
+    enabled: boolean;
+    /** Which work items trigger dev-review. Default 'priority:high+'. */
+    triggerOn: 'all' | 'priority:medium+' | 'priority:high+' | 'priority:critical';
+    /** Max additional dev turns when blockers are found. Default 1; hard-capped at 1. */
+    maxRevisionTurns?: number;
+    /** Codex budget cap per workflow cycle. On zero/negative, dev-review is skipped. */
+    perCycleMaxUsd?: number;
+    /** Codex timeout in ms. Default 180_000. */
+    timeoutMs?: number;
+  };
 }
 
 export interface BudgetConfig {

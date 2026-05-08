@@ -189,6 +189,31 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     timeoutMs: 180_000,
     modelTier: 'sonnet',
   },
+  // M19.11/M19.12 — Codex pre-QA diff review. Single-pass, read-only.
+  // Codex CLI is fast for diffing; 3-min timeout with room for moderately
+  // large diffs. perCycleMaxUsd is the project-level budget guard (M19.12).
+  'dev-review': {
+    maxTurns: 20,
+    maxBudgetUsd: 2.0,
+    timeoutMs: 180_000,
+    modelTier: 'sonnet',
+  },
+  // M19.12 — Developer response to dev-review findings. One revision turn
+  // in the integration worktree; sonnet-tier matches dev-review.
+  'dev-review-response': {
+    maxTurns: 60,
+    maxBudgetUsd: 3.0,
+    timeoutMs: 360_000,
+    modelTier: 'sonnet',
+  },
+  // M19.03 — Per-WP builder. Budget is per-WP, not per-issue.
+  'implement-wp': {
+    maxTurns: 150,
+    maxBudgetUsd: 10.0,
+    timeoutMs: 900_000,
+    modelTier: 'sonnet',
+    escalation: { modelTier: 'opus', maxBudgetUsd: 20.0 },
+  },
 };
 
 export interface ResolvedBudget {
