@@ -82,6 +82,13 @@ const config: ProjectConfig = {
       consistencyThreshold: 0.8,
       minLifecycles: 3,
     },
+    devReview: {
+      enabled: true,
+      triggerOn: 'priority:medium+',
+      maxRevisionTurns: 1,
+      perCycleMaxUsd: 2.0,
+      timeoutMs: 180_000,
+    },
   },
   budgets: {
     dailyTokens: 5_000_000,

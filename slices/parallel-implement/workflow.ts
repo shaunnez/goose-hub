@@ -1,6 +1,14 @@
 import { copyFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
+import {
+  type EffectiveDevReviewConfig,
+  getDiffForDevReview,
+  resolveDevReviewConfig,
+  runDevReview,
+  runDevReviewResponse,
+  shouldRunDevReview,
+} from '@goose-hub/core/agent-runtime/dev-review-advisor.js';
 import type {
   AgentResult,
   AgentRuntime,
@@ -41,6 +49,10 @@ export interface WpDispatchResult {
 
 export interface ParallelImplementDeps {
   runtime?: AgentRuntime;
+  /** Separate runtime for the dev-review Codex pass (defaults to auto-selected Codex runtime). */
+  devReviewRuntime?: AgentRuntime;
+  /** Separate runtime for the dev-review-response Claude pass (defaults to Claude runtime). */
+  devReviewResponseRuntime?: AgentRuntime;
   openPRImpl?: typeof openPR;
   createWpWorktreeImpl?: typeof createWpScratchWorktree;
   createIssueWorktreeImpl?: typeof createWorktree;
@@ -51,6 +63,14 @@ export interface ParallelImplementDeps {
   recordIterationImpl?: typeof recordWpIteration;
   getLastStatusImpl?: typeof getLastWpStatus;
   appendEvent?: (input: AppendEventInput) => AgentEvent;
+  /** Override getDiffForDevReview for testing. */
+  getDiffImpl?: (worktreePath: string, baseBranch?: string) => string;
+  /** Override the resolved dev-review config (for testing without a real project DB). */
+  devReviewConfigOverride?: EffectiveDevReviewConfig;
+  /** Override runDevReview for testing (avoids hitting DB/FS/Codex). */
+  runDevReviewImpl?: typeof runDevReview;
+  /** Override runDevReviewResponse for testing (avoids hitting DB/FS/Claude). */
+  runDevReviewResponseImpl?: typeof runDevReviewResponse;
 }
 
 // ─── DB helpers ───────────────────────────────────────────────────────────────
@@ -342,6 +362,12 @@ export async function runParallelImplementWorkflow(
   const maxParallel = globalSettings.maxParallelAgents ?? 3;
   const maxRetries = globalSettings.maxRetries ?? 2;
   const wpTimeoutMs = 900_000;
+  const devReviewCfg =
+    deps.devReviewConfigOverride ??
+    resolveDevReviewConfig(projectId, projectConfig?.agentConfig?.devReview);
+  const getDiffFn = deps.getDiffImpl ?? getDiffForDevReview;
+  const devReviewFn = deps.runDevReviewImpl ?? runDevReview;
+  const devReviewResponseFn = deps.runDevReviewResponseImpl ?? runDevReviewResponse;
 
   const { personaId } = selectPersona(projectId, 'developer');
   const implementWpPrompt = readPromptWithContext('implement-wp', projectId);
@@ -510,6 +536,80 @@ export async function runParallelImplementWorkflow(
           'factory:needs-human',
         );
         return;
+      }
+    }
+
+    // ── Dev-review advisor step (M19.12) ─────────────────────────────────────
+    // Runs ONCE after all WPs are committed and BEFORE the PR is opened.
+    // Budget guard: skip if perCycleMaxUsd <= 0.
+    if (
+      devReviewCfg.enabled &&
+      shouldRunDevReview(devReviewCfg.triggerOn, workItem.priority) &&
+      issueWorktreePath != null
+    ) {
+      if (devReviewCfg.perCycleMaxUsd <= 0) {
+        append({
+          projectId,
+          workItemId: workItem.id,
+          kind: 'dev-review.budget-skipped',
+          payload: { runId, reason: 'perCycleMaxUsd is zero or negative' },
+          runId,
+        });
+      } else {
+        try {
+          const prDiff = getDiffFn(issueWorktreePath, 'main');
+          const devReviewOutput = await devReviewFn({
+            runId,
+            projectId,
+            workItemId: workItem.id,
+            workItem: {
+              title: workItem.title,
+              body: workItem.body,
+              number: Number(workItem.externalId),
+              priority: workItem.priority,
+            },
+            worktreePath: issueWorktreePath,
+            baseBranch: 'main',
+            stack,
+            runtime: deps.devReviewRuntime,
+            appendEvent: append,
+          });
+
+          // If blockers found, give the dev ONE additional turn. No second Codex pass.
+          if (
+            devReviewOutput.verdict === 'blockers-found' ||
+            devReviewOutput.verdict === 'inconclusive'
+          ) {
+            await devReviewResponseFn({
+              runId,
+              projectId,
+              workItemId: workItem.id,
+              workItem: {
+                title: workItem.title,
+                body: workItem.body,
+                number: Number(workItem.externalId),
+                priority: workItem.priority,
+              },
+              prDiff,
+              devReviewFindings: devReviewOutput.findings,
+              worktreePath: issueWorktreePath,
+              stack,
+              runtime: deps.devReviewResponseRuntime,
+              appendEvent: append,
+            });
+            // No second Codex dev-review pass — proceed straight to PR.
+          }
+        } catch (devReviewErr) {
+          // Dev-review failures are non-fatal. Log and continue to PR.
+          const msg = devReviewErr instanceof Error ? devReviewErr.message : String(devReviewErr);
+          append({
+            projectId,
+            workItemId: workItem.id,
+            kind: 'dev-review.error',
+            payload: { runId, error: msg },
+            runId,
+          });
+        }
       }
     }
 

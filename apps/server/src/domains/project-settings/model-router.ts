@@ -3,6 +3,10 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { ROLE_DEFAULTS } from '@goose-hub/core/agent-runtime/roles.js';
 import {
+  readProjectDevReviewSettings,
+  writeProjectDevReviewSettings,
+} from '@goose-hub/core/db/repositories/project-dev-review-settings.js';
+import {
   deleteRoleModelSetting,
   readProjectModelSettings,
   writeComplexityOverrides,
@@ -155,6 +159,63 @@ router.get('/:slug/settings/codex-auth', async (c) => {
     authPath,
     loginCommand: 'codex login',
   });
+});
+
+// ─── Dev-review settings (M19.12) ────────────────────────────────────────────
+
+const DevReviewPatchSchema = z.object({
+  enabled: z.boolean().nullable().optional(),
+  triggerOn: z
+    .enum(['all', 'priority:medium+', 'priority:high+', 'priority:critical'])
+    .nullable()
+    .optional(),
+  maxRevisionTurns: z.number().int().min(1).max(5).nullable().optional(),
+  perCycleMaxUsd: z.number().min(0).max(50).nullable().optional(),
+  timeoutMs: z.number().int().min(30_000).max(1_800_000).nullable().optional(),
+});
+
+/** GET /projects/:slug/settings/dev-review — merged view of config + DB override */
+router.get('/:slug/settings/dev-review', async (c) => {
+  const slug = c.req.param('slug');
+  const project = await getProject(slug);
+  if (project == null) return c.json({ error: 'project not found' }, 404);
+
+  const dbRow = readProjectDevReviewSettings(project.id);
+  const configDevReview = project.agentConfig?.devReview ?? null;
+
+  return c.json({
+    projectId: project.id,
+    config: configDevReview,
+    dbOverride: dbRow
+      ? {
+          enabled: dbRow.enabled ?? null,
+          triggerOn: dbRow.triggerOn ?? null,
+          maxRevisionTurns: dbRow.maxRevisionTurns ?? null,
+          perCycleMaxUsd: dbRow.perCycleMaxUsd ?? null,
+          timeoutMs: dbRow.timeoutMs ?? null,
+          updatedAt: dbRow.updatedAt,
+          updatedBy: dbRow.updatedBy ?? null,
+        }
+      : null,
+  });
+});
+
+/** PATCH /projects/:slug/settings/dev-review — upsert dev-review config override */
+router.patch('/:slug/settings/dev-review', async (c) => {
+  const slug = c.req.param('slug');
+  const project = await getProject(slug);
+  if (project == null) return c.json({ error: 'project not found' }, 404);
+
+  const body = await parseBody<unknown>(c);
+  if (!body.ok) return body.error;
+
+  const parsed = DevReviewPatchSchema.safeParse(body.data);
+  if (!parsed.success) {
+    return c.json({ error: 'invalid body', details: parsed.error.issues }, 422);
+  }
+
+  writeProjectDevReviewSettings(project.id, parsed.data, 'ui');
+  return c.json({ ok: true });
 });
 
 export { router as projectModelRouter };

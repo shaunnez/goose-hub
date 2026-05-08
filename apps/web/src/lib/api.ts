@@ -617,3 +617,49 @@ export async function fetchCodexAuthStatus(
 ): Promise<CodexAuthStatusDto> {
   return getJson<CodexAuthStatusDto>(`/projects/${slug}/settings/codex-auth`, signal);
 }
+
+// ─── Dev-review settings (M19.12) ────────────────────────────────────────────
+
+export interface DevReviewConfigDto {
+  enabled: boolean;
+  triggerOn: 'all' | 'priority:medium+' | 'priority:high+' | 'priority:critical';
+  maxRevisionTurns?: number;
+  perCycleMaxUsd?: number;
+  timeoutMs?: number;
+}
+
+export interface DevReviewDbOverrideDto {
+  enabled: boolean | null;
+  triggerOn: string | null;
+  maxRevisionTurns: number | null;
+  perCycleMaxUsd: number | null;
+  timeoutMs: number | null;
+  updatedAt: string;
+  updatedBy: string | null;
+}
+
+export interface DevReviewSettingsDto {
+  projectId: string;
+  config: DevReviewConfigDto | null;
+  dbOverride: DevReviewDbOverrideDto | null;
+}
+
+export async function fetchDevReviewSettings(
+  slug: string,
+  signal?: AbortSignal,
+): Promise<DevReviewSettingsDto> {
+  return getJson<DevReviewSettingsDto>(`/projects/${slug}/settings/dev-review`, signal);
+}
+
+export async function patchDevReviewSettings(
+  slug: string,
+  patch: Partial<{
+    enabled: boolean | null;
+    triggerOn: string | null;
+    maxRevisionTurns: number | null;
+    perCycleMaxUsd: number | null;
+    timeoutMs: number | null;
+  }>,
+): Promise<void> {
+  await patchJson(`/projects/${slug}/settings/dev-review`, patch);
+}

@@ -1,12 +1,15 @@
 import {
   type CodexAuthStatusDto,
+  type DevReviewSettingsDto,
   type ModelTier,
   type ProjectModelSettingsDto,
   type RoleModelDto,
   deleteRoleModelSetting,
   fetchCodexAuthStatus,
+  fetchDevReviewSettings,
   fetchProjectModelSettings,
   patchComplexityOverrides,
+  patchDevReviewSettings,
   patchRoleModelSetting,
 } from '@/lib/api';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -349,6 +352,142 @@ function CodexAuthSection({ slug }: { slug: string }) {
   );
 }
 
+const TRIGGER_ON_OPTIONS = [
+  { value: 'all', label: 'All priorities' },
+  { value: 'priority:medium+', label: 'Medium and above' },
+  { value: 'priority:high+', label: 'High and above' },
+  { value: 'priority:critical', label: 'Critical only' },
+] as const;
+
+function DevReviewSection({ slug }: { slug: string }) {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery<DevReviewSettingsDto>({
+    queryKey: ['dev-review-settings', slug],
+    queryFn: ({ signal }) => fetchDevReviewSettings(slug, signal),
+    staleTime: 15_000,
+  });
+
+  const patch = useMutation({
+    mutationFn: (p: Parameters<typeof patchDevReviewSettings>[1]) =>
+      patchDevReviewSettings(slug, p),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['dev-review-settings', slug] }),
+  });
+
+  if (isLoading) return <div className="text-[12px] text-fg-3">Loading…</div>;
+
+  const effective = {
+    enabled: data?.dbOverride?.enabled ?? data?.config?.enabled ?? false,
+    triggerOn: data?.dbOverride?.triggerOn ?? data?.config?.triggerOn ?? 'priority:high+',
+    maxRevisionTurns: data?.dbOverride?.maxRevisionTurns ?? data?.config?.maxRevisionTurns ?? 1,
+    perCycleMaxUsd: data?.dbOverride?.perCycleMaxUsd ?? data?.config?.perCycleMaxUsd ?? 2.0,
+    timeoutMs: data?.dbOverride?.timeoutMs ?? data?.config?.timeoutMs ?? 180_000,
+  };
+
+  const hasDbOverride = data?.dbOverride != null;
+
+  return (
+    <div>
+      <h3 className="text-[12px] font-semibold uppercase tracking-wider text-fg-2 mb-1">
+        Codex dev-review advisor
+      </h3>
+      <p className="text-[11px] text-fg-3 mb-3">
+        Runs Codex pre-QA against the PR diff once per dev cycle. If blockers are found, the
+        developer gets one additional turn to address them. No second Codex pass.
+        {hasDbOverride && (
+          <span className="ml-1 text-accent font-medium">DB overrides active.</span>
+        )}
+      </p>
+      <div className="space-y-2">
+        <div className="flex items-center gap-3 text-[12px]">
+          <label htmlFor="dr-enabled" className="w-32 text-fg-2 shrink-0">
+            Enabled
+          </label>
+          <input
+            id="dr-enabled"
+            type="checkbox"
+            checked={effective.enabled}
+            onChange={(e) => patch.mutate({ enabled: e.target.checked })}
+            className="accent-accent"
+          />
+          {data?.config?.enabled != null && (
+            <span className="text-[10px] text-fg-3">
+              config: {data.config.enabled ? 'true' : 'false'}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3 text-[12px]">
+          <label htmlFor="dr-trigger-on" className="w-32 text-fg-2 shrink-0">
+            Trigger on
+          </label>
+          <select
+            id="dr-trigger-on"
+            value={effective.triggerOn}
+            onChange={(e) => patch.mutate({ triggerOn: e.target.value })}
+            disabled={!effective.enabled}
+            className="rounded border border-line px-2 py-0.5 text-[12px] bg-bg text-fg disabled:opacity-40"
+          >
+            {TRIGGER_ON_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-3 text-[12px]">
+          <label htmlFor="dr-max-usd" className="w-32 text-fg-2 shrink-0">
+            Max USD/cycle
+          </label>
+          <input
+            id="dr-max-usd"
+            type="number"
+            step="0.5"
+            min="0"
+            max="50"
+            value={effective.perCycleMaxUsd}
+            disabled={!effective.enabled}
+            onChange={(e) => patch.mutate({ perCycleMaxUsd: Number(e.target.value) })}
+            className="w-20 rounded border border-line px-2 py-0.5 text-[12px] bg-bg text-fg disabled:opacity-40"
+          />
+          <span className="text-[10px] text-fg-3">0 = always skip</span>
+        </div>
+        <div className="flex items-center gap-3 text-[12px]">
+          <label htmlFor="dr-timeout" className="w-32 text-fg-2 shrink-0">
+            Timeout (ms)
+          </label>
+          <input
+            id="dr-timeout"
+            type="number"
+            step="30000"
+            min="30000"
+            max="1800000"
+            value={effective.timeoutMs}
+            disabled={!effective.enabled}
+            onChange={(e) => patch.mutate({ timeoutMs: Number(e.target.value) })}
+            className="w-28 rounded border border-line px-2 py-0.5 text-[12px] bg-bg text-fg disabled:opacity-40"
+          />
+        </div>
+        {hasDbOverride && (
+          <button
+            type="button"
+            onClick={() =>
+              patch.mutate({
+                enabled: null,
+                triggerOn: null,
+                maxRevisionTurns: null,
+                perCycleMaxUsd: null,
+                timeoutMs: null,
+              })
+            }
+            className="text-[11px] text-fg-3 hover:text-danger border border-line/50 rounded px-2 py-0.5"
+          >
+            Reset to config defaults
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function ProjectModelPanel({ slug }: Props) {
   const { data, isLoading, error } = useQuery<ProjectModelSettingsDto>({
     queryKey: ['project-model-settings', slug],
@@ -397,6 +536,8 @@ export function ProjectModelPanel({ slug }: Props) {
       </div>
 
       <CodexAuthSection slug={slug} />
+
+      <DevReviewSection slug={slug} />
     </div>
   );
 }
