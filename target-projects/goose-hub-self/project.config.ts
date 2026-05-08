@@ -92,6 +92,11 @@ const config: ProjectConfig = {
     perWorkflowMaxUsd: 10,
     perAgentMaxUsd: 10,
     perAdvisorMaxUsd: 2,
+    skillBudgetOverrides: {
+      // Baseline grill-me budget is sized for Sonnet; this project runs Opus
+      // (griller.primary = 'opus') which is ~5× the price.
+      'grill-me': { maxBudgetUsd: 1.5 },
+    },
   },
   governance: {
     immutablePaths: [
