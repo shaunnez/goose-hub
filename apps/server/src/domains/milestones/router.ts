@@ -88,9 +88,7 @@ router.get('/:slug/milestones/:number/sprint-review-eligibility', async (c) => {
   const number = Number(c.req.param('number'));
   if (Number.isNaN(number)) return c.json({ error: 'invalid milestone number' }, 400);
   const result = await getSprintReviewEligibility(c.req.param('slug'), number);
-  return result.ok
-    ? c.json(result.data)
-    : c.json({ error: result.error }, result.status as 404);
+  return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);
 });
 
 export { router as milestonesRouter };

@@ -1,6 +1,6 @@
+import type { StateSource } from '@goose-hub/core/state-source/interface.js';
 import { describe, expect, it } from 'vitest';
 import { checkSprintReviewEligibility } from './sprint-review-eligibility.js';
-import type { StateSource } from '@goose-hub/core/state-source/interface.js';
 
 function makeSource(items: { schedule: string; state: string; title: string }[]): StateSource {
   return {

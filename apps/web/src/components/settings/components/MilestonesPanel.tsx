@@ -48,7 +48,9 @@ function SprintReviewButton({
     mutationFn: () => triggerSprintReview(slug, milestone.title),
     onSuccess: () => {
       setFired(true);
-      void queryClient.invalidateQueries({ queryKey: ['sprint-review-eligibility', slug, milestone.number] });
+      void queryClient.invalidateQueries({
+        queryKey: ['sprint-review-eligibility', slug, milestone.number],
+      });
       onFired();
     },
     onError: (err: Error) => setError(err.message),
@@ -114,7 +116,10 @@ function MilestoneRow({ slug, milestone, isActive, onMutated }: RowProps) {
 
   const rename = useMutation({
     mutationFn: (title: string) => updateMilestone(slug, milestone.number, { title }),
-    onSuccess: () => { setEditing(false); invalidate(); },
+    onSuccess: () => {
+      setEditing(false);
+      invalidate();
+    },
     onError: (err: Error) => setRowError(err.message),
   });
 
@@ -133,7 +138,10 @@ function MilestoneRow({ slug, milestone, isActive, onMutated }: RowProps) {
       invalidate();
       void queryClient.invalidateQueries({ queryKey: ['active-milestone', slug] });
     },
-    onError: (err: Error) => { setConfirmDelete(false); setRowError(err.message); },
+    onError: (err: Error) => {
+      setConfirmDelete(false);
+      setRowError(err.message);
+    },
   });
 
   const canDelete = milestone.openIssues + milestone.closedIssues === 0;
@@ -146,7 +154,10 @@ function MilestoneRow({ slug, milestone, isActive, onMutated }: RowProps) {
         setRowError('Title must match M<N>: <name>');
       }
     }
-    if (e.key === 'Escape') { setEditing(false); setEditTitle(milestone.title); }
+    if (e.key === 'Escape') {
+      setEditing(false);
+      setEditTitle(milestone.title);
+    }
   }
 
   return (
@@ -198,7 +209,11 @@ function MilestoneRow({ slug, milestone, isActive, onMutated }: RowProps) {
       {confirmDelete ? (
         <span className="flex items-center gap-1.5 text-[11px] shrink-0">
           <span className="text-fg-2">Delete? Cannot be undone.</span>
-          <button type="button" onClick={() => setConfirmDelete(false)} className="text-fg-2 hover:text-fg">
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(false)}
+            className="text-fg-2 hover:text-fg"
+          >
             Cancel
           </button>
           <button
@@ -214,7 +229,10 @@ function MilestoneRow({ slug, milestone, isActive, onMutated }: RowProps) {
           <button
             type="button"
             title="Rename"
-            onClick={() => { setEditing(true); setEditTitle(milestone.title); }}
+            onClick={() => {
+              setEditing(true);
+              setEditTitle(milestone.title);
+            }}
             className="p-1 text-fg-3 hover:text-fg rounded transition-colors"
           >
             <Pencil size={11} />
@@ -243,9 +261,7 @@ function MilestoneRow({ slug, milestone, isActive, onMutated }: RowProps) {
         </span>
       )}
 
-      {rowError != null && (
-        <span className="text-[10px] text-danger ml-1">{rowError}</span>
-      )}
+      {rowError != null && <span className="text-[10px] text-danger ml-1">{rowError}</span>}
     </div>
   );
 }
@@ -260,6 +276,11 @@ export function MilestonesPanel({ slug }: Props) {
   const [showAdd, setShowAdd] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
+  const addInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (showAdd) addInputRef.current?.focus();
+  }, [showAdd]);
 
   const { data: milestones = [], isLoading } = useQuery<MilestoneDto[]>({
     queryKey: ['milestones', slug],
@@ -315,7 +336,7 @@ export function MilestonesPanel({ slug }: Props) {
       {showAdd && (
         <div className="flex items-center gap-2 mb-2 px-2 py-1.5">
           <input
-            autoFocus
+            ref={addInputRef}
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             onKeyDown={(e) => {

@@ -421,7 +421,11 @@ describe('DELETE /projects/:slug/milestones/:number', () => {
   });
 
   it('returns 409 when milestone has issues', async () => {
-    mockDeleteMilestone.mockResolvedValue({ ok: false, error: 'milestone has issues', status: 409 });
+    mockDeleteMilestone.mockResolvedValue({
+      ok: false,
+      error: 'milestone has issues',
+      status: 409,
+    });
     const app = makeApp();
     const res = await app.request('/projects/my-proj/milestones/14', { method: 'DELETE' });
     expect(res.status).toBe(409);

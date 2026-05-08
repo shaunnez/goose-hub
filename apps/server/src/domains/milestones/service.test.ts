@@ -228,7 +228,15 @@ describe('createMilestone', () => {
   });
 
   it('creates milestone and returns it', async () => {
-    const created = { id: '14', number: 14, title: 'M14: Sprint', state: 'open', openIssues: 0, closedIssues: 0, isActive: true };
+    const created = {
+      id: '14',
+      number: 14,
+      title: 'M14: Sprint',
+      state: 'open',
+      openIssues: 0,
+      closedIssues: 0,
+      isActive: true,
+    };
     mockSource.createMilestone.mockResolvedValueOnce(created);
     const result = await createMilestone('my-proj', 'M14: Sprint');
     expect(result).toEqual({ ok: true, data: { milestone: created } });
@@ -251,14 +259,30 @@ describe('updateMilestone', () => {
   });
 
   it('allows state-only update without title validation', async () => {
-    const updated = { id: '14', number: 14, title: 'M14: Sprint', state: 'closed', openIssues: 0, closedIssues: 5, isActive: false };
+    const updated = {
+      id: '14',
+      number: 14,
+      title: 'M14: Sprint',
+      state: 'closed',
+      openIssues: 0,
+      closedIssues: 5,
+      isActive: false,
+    };
     mockSource.updateMilestone.mockResolvedValueOnce(updated);
     const result = await updateMilestone('my-proj', 14, { state: 'closed' });
     expect(result).toEqual({ ok: true, data: { milestone: updated } });
   });
 
   it('updates milestone and returns it', async () => {
-    const updated = { id: '14', number: 14, title: 'M14: New Name', state: 'open', openIssues: 0, closedIssues: 0, isActive: true };
+    const updated = {
+      id: '14',
+      number: 14,
+      title: 'M14: New Name',
+      state: 'open',
+      openIssues: 0,
+      closedIssues: 0,
+      isActive: true,
+    };
     mockSource.updateMilestone.mockResolvedValueOnce(updated);
     const result = await updateMilestone('my-proj', 14, { title: 'M14: New Name' });
     expect(result).toEqual({ ok: true, data: { milestone: updated } });
@@ -274,13 +298,17 @@ describe('deleteMilestone', () => {
   });
 
   it('returns 404 when milestone not found in list', async () => {
-    mockSource.listMilestones.mockResolvedValueOnce([{ number: 13, title: 'M13', state: 'open', openIssues: 0, closedIssues: 0 }]);
+    mockSource.listMilestones.mockResolvedValueOnce([
+      { number: 13, title: 'M13', state: 'open', openIssues: 0, closedIssues: 0 },
+    ]);
     const result = await deleteMilestone('my-proj', 14);
     expect(result).toEqual({ ok: false, error: 'milestone not found', status: 404 });
   });
 
   it('returns 409 when milestone has issues', async () => {
-    mockSource.listMilestones.mockResolvedValueOnce([{ number: 14, title: 'M14', state: 'open', openIssues: 3, closedIssues: 0 }]);
+    mockSource.listMilestones.mockResolvedValueOnce([
+      { number: 14, title: 'M14', state: 'open', openIssues: 3, closedIssues: 0 },
+    ]);
     const result = await deleteMilestone('my-proj', 14);
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -289,7 +317,9 @@ describe('deleteMilestone', () => {
   });
 
   it('returns 409 when milestone is currently active', async () => {
-    mockSource.listMilestones.mockResolvedValueOnce([{ number: 14, title: 'M14', state: 'open', openIssues: 0, closedIssues: 0 }]);
+    mockSource.listMilestones.mockResolvedValueOnce([
+      { number: 14, title: 'M14', state: 'open', openIssues: 0, closedIssues: 0 },
+    ]);
     vi.mocked(readActiveMilestone).mockResolvedValueOnce(14);
     const result = await deleteMilestone('my-proj', 14);
     expect(result.ok).toBe(false);
@@ -299,7 +329,9 @@ describe('deleteMilestone', () => {
   });
 
   it('deletes milestone when empty and not active', async () => {
-    mockSource.listMilestones.mockResolvedValueOnce([{ number: 14, title: 'M14', state: 'open', openIssues: 0, closedIssues: 0 }]);
+    mockSource.listMilestones.mockResolvedValueOnce([
+      { number: 14, title: 'M14', state: 'open', openIssues: 0, closedIssues: 0 },
+    ]);
     vi.mocked(readActiveMilestone).mockResolvedValueOnce(null);
     const result = await deleteMilestone('my-proj', 14);
     expect(result).toEqual({ ok: true, data: { ok: true } });

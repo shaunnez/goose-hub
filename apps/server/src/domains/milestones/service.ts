@@ -102,10 +102,7 @@ export async function updateMilestone(
   return { ok: true, data: { milestone } };
 }
 
-export async function deleteMilestone(
-  slug: string,
-  number: number,
-): Promise<Result<{ ok: true }>> {
+export async function deleteMilestone(slug: string, number: number): Promise<Result<{ ok: true }>> {
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
 
