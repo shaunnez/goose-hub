@@ -78,6 +78,8 @@ export interface SkillConfig {
   contextSchema: ZodType;
   toolBundles: string[];
   modelPin: ModelTier;
+  /** Provider that executes this skill. Defaults to 'claude' when absent. */
+  provider?: 'claude' | 'codex';
   freshContext: boolean;
   role?: Role;
   contextAllowlist?: string[];
