@@ -15,6 +15,36 @@ import { getSourceForSlug } from './source.js';
 const _triageBatchInFlight = new Set<string>();
 const _triageBatchPending = new Set<string>();
 
+type PendingWorkflowEntry = {
+  issueNumber: number;
+  dispatchFn: (slug: string, issueNumber: number) => Promise<void>;
+};
+const _workflowPending = new Map<string, PendingWorkflowEntry[]>();
+
+function enqueueWorkflow(
+  slug: string,
+  issueNumber: number,
+  dispatchFn: (slug: string, issueNumber: number) => Promise<void>,
+): void {
+  let queue = _workflowPending.get(slug);
+  if (queue == null) {
+    queue = [];
+    _workflowPending.set(slug, queue);
+  }
+  if (queue.some((e) => e.issueNumber === issueNumber)) return;
+  queue.push({ issueNumber, dispatchFn });
+}
+
+function drainPending(slug: string): void {
+  const queue = _workflowPending.get(slug);
+  if (queue == null || queue.length === 0) return;
+  const entry = queue.shift();
+  if (queue.length === 0) _workflowPending.delete(slug);
+  if (entry != null) {
+    void entry.dispatchFn(slug, entry.issueNumber);
+  }
+}
+
 async function getMaxParallelAgents(slug: string): Promise<number> {
   const cfg = await getProject(slug);
   return cfg?.budgets.maxParallelAgents ?? 1;
@@ -56,13 +86,18 @@ export function dispatchTriageBatch(slug: string): Promise<void> {
 /** Run the investigate workflow for a single issue. Drops duplicate triggers for the same issue. */
 export async function dispatchInvestigate(slug: string, issueNumber: number): Promise<void> {
   const maxParallel = await getMaxParallelAgents(slug);
+  if (parallelLock.isInFlight(slug, issueNumber)) {
+    logger.warn('dispatchInvestigate: duplicate in-flight, dropping', { slug, issueNumber });
+    return;
+  }
   if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
-    logger.warn('dispatchInvestigate: parallel-lock rejected (in-flight or at cap)', {
+    logger.info('dispatchInvestigate: cap full, queuing work item', {
       slug,
       issueNumber,
       inFlight: parallelLock.inFlightCount(slug),
       maxParallel,
     });
+    enqueueWorkflow(slug, issueNumber, dispatchInvestigate);
     return;
   }
   try {
@@ -94,6 +129,7 @@ export async function dispatchInvestigate(slug: string, issueNumber: number): Pr
     await runInvestigateWorkflow(item, source, slug, REPO_ROOT, mockInvestigateDeps);
   } finally {
     parallelLock.release(slug, issueNumber);
+    drainPending(slug);
   }
 
   // Chain to investigation-complete routing outside the lock. In production the
@@ -106,13 +142,18 @@ export async function dispatchInvestigate(slug: string, issueNumber: number): Pr
 /** Run the M7 fix-issue workflow for a single issue (#183). Drops duplicate triggers for the same issue. */
 export async function dispatchFixIssue(slug: string, issueNumber: number): Promise<void> {
   const maxParallel = await getMaxParallelAgents(slug);
+  if (parallelLock.isInFlight(slug, issueNumber)) {
+    logger.warn('dispatchFixIssue: duplicate in-flight, dropping', { slug, issueNumber });
+    return;
+  }
   if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
-    logger.warn('dispatchFixIssue: parallel-lock rejected (in-flight or at cap)', {
+    logger.info('dispatchFixIssue: cap full, queuing work item', {
       slug,
       issueNumber,
       inFlight: parallelLock.inFlightCount(slug),
       maxParallel,
     });
+    enqueueWorkflow(slug, issueNumber, dispatchFixIssue);
     return;
   }
   try {
@@ -176,19 +217,25 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
     await runFixIssueWorkflow(item, source, slug, REPO_ROOT, mockDeps);
   } finally {
     parallelLock.release(slug, issueNumber);
+    drainPending(slug);
   }
 }
 
 /** Run the merge conflict resolution workflow for a single issue. Drops duplicate triggers. */
 export async function dispatchResolveConflict(slug: string, issueNumber: number): Promise<void> {
   const maxParallel = await getMaxParallelAgents(slug);
+  if (parallelLock.isInFlight(slug, issueNumber)) {
+    logger.warn('dispatchResolveConflict: duplicate in-flight, dropping', { slug, issueNumber });
+    return;
+  }
   if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
-    logger.warn('dispatchResolveConflict: parallel-lock rejected (in-flight or at cap)', {
+    logger.info('dispatchResolveConflict: cap full, queuing work item', {
       slug,
       issueNumber,
       inFlight: parallelLock.inFlightCount(slug),
       maxParallel,
     });
+    enqueueWorkflow(slug, issueNumber, dispatchResolveConflict);
     return;
   }
   try {
@@ -230,19 +277,25 @@ export async function dispatchResolveConflict(slug: string, issueNumber: number)
     });
   } finally {
     parallelLock.release(slug, issueNumber);
+    drainPending(slug);
   }
 }
 
 /** Run the QA holdout workflow for a single issue. Drops duplicate triggers for the same issue. */
 export async function dispatchQa(slug: string, issueNumber: number): Promise<void> {
   const maxParallel = await getMaxParallelAgents(slug);
+  if (parallelLock.isInFlight(slug, issueNumber)) {
+    logger.warn('dispatchQa: duplicate in-flight, dropping', { slug, issueNumber });
+    return;
+  }
   if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
-    logger.warn('dispatchQa: parallel-lock rejected (in-flight or at cap)', {
+    logger.info('dispatchQa: cap full, queuing work item', {
       slug,
       issueNumber,
       inFlight: parallelLock.inFlightCount(slug),
       maxParallel,
     });
+    enqueueWorkflow(slug, issueNumber, dispatchQa);
     return;
   }
   try {
@@ -280,19 +333,25 @@ export async function dispatchQa(slug: string, issueNumber: number): Promise<voi
     });
   } finally {
     parallelLock.release(slug, issueNumber);
+    drainPending(slug);
   }
 }
 
 /** Run the fix-feedback workflow for a single issue. Drops duplicate triggers. */
 export async function dispatchNeedsFix(slug: string, issueNumber: number): Promise<void> {
   const maxParallel = await getMaxParallelAgents(slug);
+  if (parallelLock.isInFlight(slug, issueNumber)) {
+    logger.warn('dispatchNeedsFix: duplicate in-flight, dropping', { slug, issueNumber });
+    return;
+  }
   if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
-    logger.warn('dispatchNeedsFix: parallel-lock rejected (in-flight or at cap)', {
+    logger.info('dispatchNeedsFix: cap full, queuing work item', {
       slug,
       issueNumber,
       inFlight: parallelLock.inFlightCount(slug),
       maxParallel,
     });
+    enqueueWorkflow(slug, issueNumber, dispatchNeedsFix);
     return;
   }
   try {
@@ -325,6 +384,7 @@ export async function dispatchNeedsFix(slug: string, issueNumber: number): Promi
     await runFixFeedbackWorkflow(item, source, slug, item.repoRef ?? slug);
   } finally {
     parallelLock.release(slug, issueNumber);
+    drainPending(slug);
   }
 }
 
@@ -335,13 +395,18 @@ export async function dispatchNeedsFix(slug: string, issueNumber: number): Promi
  */
 async function dispatchQaFailed(slug: string, issueNumber: number): Promise<void> {
   const maxParallel = await getMaxParallelAgents(slug);
+  if (parallelLock.isInFlight(slug, issueNumber)) {
+    logger.warn('dispatchQaFailed: duplicate in-flight, dropping', { slug, issueNumber });
+    return;
+  }
   if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
-    logger.warn('dispatchQaFailed: parallel-lock rejected (in-flight or at cap)', {
+    logger.info('dispatchQaFailed: cap full, queuing work item', {
       slug,
       issueNumber,
       inFlight: parallelLock.inFlightCount(slug),
       maxParallel,
     });
+    enqueueWorkflow(slug, issueNumber, dispatchQaFailed);
     return;
   }
   try {
@@ -377,6 +442,7 @@ async function dispatchQaFailed(slug: string, issueNumber: number): Promise<void
     });
   } finally {
     parallelLock.release(slug, issueNumber);
+    drainPending(slug);
   }
 
   // Fire fix-feedback outside the in-flight guard so needs-fix can also
@@ -387,13 +453,18 @@ async function dispatchQaFailed(slug: string, issueNumber: number): Promise<void
 /** Run the Review holdout workflow for a single issue. Drops duplicate triggers for the same issue. */
 export async function dispatchReview(slug: string, issueNumber: number): Promise<void> {
   const maxParallel = await getMaxParallelAgents(slug);
+  if (parallelLock.isInFlight(slug, issueNumber)) {
+    logger.warn('dispatchReview: duplicate in-flight, dropping', { slug, issueNumber });
+    return;
+  }
   if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
-    logger.warn('dispatchReview: parallel-lock rejected (in-flight or at cap)', {
+    logger.info('dispatchReview: cap full, queuing work item', {
       slug,
       issueNumber,
       inFlight: parallelLock.inFlightCount(slug),
       maxParallel,
     });
+    enqueueWorkflow(slug, issueNumber, dispatchReview);
     return;
   }
   try {
@@ -417,6 +488,7 @@ export async function dispatchReview(slug: string, issueNumber: number): Promise
     await runReviewWorkflow(item, source, slug, item.repoRef ?? slug);
   } finally {
     parallelLock.release(slug, issueNumber);
+    drainPending(slug);
   }
 }
 
@@ -429,13 +501,18 @@ export async function dispatchReview(slug: string, issueNumber: number): Promise
  */
 export async function dispatchRetro(slug: string, issueNumber: number): Promise<void> {
   const maxParallel = await getMaxParallelAgents(slug);
+  if (parallelLock.isInFlight(slug, issueNumber)) {
+    logger.warn('dispatchRetro: duplicate in-flight, dropping', { slug, issueNumber });
+    return;
+  }
   if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
-    logger.warn('dispatchRetro: parallel-lock rejected (in-flight or at cap)', {
+    logger.info('dispatchRetro: cap full, queuing work item', {
       slug,
       issueNumber,
       inFlight: parallelLock.inFlightCount(slug),
       maxParallel,
     });
+    enqueueWorkflow(slug, issueNumber, dispatchRetro);
     return;
   }
   try {
@@ -456,6 +533,7 @@ export async function dispatchRetro(slug: string, issueNumber: number): Promise<
     await runRetroForItem(item, source, slug);
   } finally {
     parallelLock.release(slug, issueNumber);
+    drainPending(slug);
   }
 }
 
@@ -466,13 +544,21 @@ export async function dispatchRetro(slug: string, issueNumber: number): Promise<
  */
 async function dispatchInvestigationComplete(slug: string, issueNumber: number): Promise<void> {
   const maxParallel = await getMaxParallelAgents(slug);
+  if (parallelLock.isInFlight(slug, issueNumber)) {
+    logger.warn('dispatchInvestigationComplete: duplicate in-flight, dropping', {
+      slug,
+      issueNumber,
+    });
+    return;
+  }
   if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
-    logger.warn('dispatchInvestigationComplete: parallel-lock rejected (in-flight or at cap)', {
+    logger.info('dispatchInvestigationComplete: cap full, queuing work item', {
       slug,
       issueNumber,
       inFlight: parallelLock.inFlightCount(slug),
       maxParallel,
     });
+    enqueueWorkflow(slug, issueNumber, dispatchInvestigationComplete);
     return;
   }
   try {
@@ -525,6 +611,7 @@ async function dispatchInvestigationComplete(slug: string, issueNumber: number):
     logger.info('dispatchInvestigationComplete: transitioned', { slug, issueNumber, targetState });
   } finally {
     parallelLock.release(slug, issueNumber);
+    drainPending(slug);
   }
 }
 
@@ -678,13 +765,18 @@ function buildPriorReplies(
  */
 export async function dispatchGrillAndPrd(slug: string, issueNumber: number): Promise<void> {
   const maxParallel = await getMaxParallelAgents(slug);
+  if (parallelLock.isInFlight(slug, issueNumber)) {
+    logger.warn('dispatchGrillAndPrd: duplicate in-flight, dropping', { slug, issueNumber });
+    return;
+  }
   if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
-    logger.warn('dispatchGrillAndPrd: parallel-lock rejected (in-flight or at cap)', {
+    logger.info('dispatchGrillAndPrd: cap full, queuing work item', {
       slug,
       issueNumber,
       inFlight: parallelLock.inFlightCount(slug),
       maxParallel,
     });
+    enqueueWorkflow(slug, issueNumber, dispatchGrillAndPrd);
     return;
   }
   try {
@@ -713,6 +805,7 @@ export async function dispatchGrillAndPrd(slug: string, issueNumber: number): Pr
     });
   } finally {
     parallelLock.release(slug, issueNumber);
+    drainPending(slug);
   }
 }
 
@@ -724,13 +817,18 @@ export async function dispatchGrillAndPrd(slug: string, issueNumber: number): Pr
  */
 export async function dispatchDecomposePrd(slug: string, issueNumber: number): Promise<void> {
   const maxParallel = await getMaxParallelAgents(slug);
+  if (parallelLock.isInFlight(slug, issueNumber)) {
+    logger.warn('dispatchDecomposePrd: duplicate in-flight, dropping', { slug, issueNumber });
+    return;
+  }
   if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
-    logger.warn('dispatchDecomposePrd: parallel-lock rejected (in-flight or at cap)', {
+    logger.info('dispatchDecomposePrd: cap full, queuing work item', {
       slug,
       issueNumber,
       inFlight: parallelLock.inFlightCount(slug),
       maxParallel,
     });
+    enqueueWorkflow(slug, issueNumber, dispatchDecomposePrd);
     return;
   }
   try {
@@ -768,6 +866,7 @@ export async function dispatchDecomposePrd(slug: string, issueNumber: number): P
     });
   } finally {
     parallelLock.release(slug, issueNumber);
+    drainPending(slug);
   }
 }
 
