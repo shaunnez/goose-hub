@@ -288,7 +288,7 @@ describe('Discover Lane end-to-end integration', () => {
     // Phase 2 — Round 1 of grill: not ready, one clarifying question
     // ─────────────────────────────────────────────────────────────────────────
     const round1GrillOutput = {
-      questions: ['What does "better" specifically mean — speed, relevance, or scope?'],
+      questions: [{ text: 'What does "better" specifically mean — speed, relevance, or scope?' }],
       refinedIntent: '',
       readyForPRD: false,
       decisionSummaries: [{ kind: 'PLAN', summary: 'Asked clarifying question' }],
@@ -355,7 +355,7 @@ describe('Discover Lane end-to-end integration', () => {
       }));
 
     const round2GrillOutput = {
-      questions: ['Should results respect access permissions?'],
+      questions: [{ text: 'Should results respect access permissions?' }],
       refinedIntent: 'Improve search relevance for keyword matching',
       readyForPRD: false,
       decisionSummaries: [{ kind: 'PLAN', summary: 'Probing edge cases' }],
@@ -622,7 +622,7 @@ describe('Discover Lane: PRD decline → re-grill resumes correctly', () => {
 
     // ── Round 1 ──
     const round1Output = {
-      questions: ['What does "better" specifically mean — speed, relevance, or scope?'],
+      questions: [{ text: 'What does "better" specifically mean — speed, relevance, or scope?' }],
       refinedIntent: 'Improve search',
       readyForPRD: false,
       decisionSummaries: [{ kind: 'PLAN', summary: 'Asked about improvement axis' }],
@@ -711,7 +711,7 @@ describe('Discover Lane: PRD decline → re-grill resumes correctly', () => {
 
     // Re-grill round 2: griller asks a follow-up question, NOT readyForPRD
     const reGrillOutput = {
-      questions: ['Should search results respect per-user access permissions?'],
+      questions: [{ text: 'Should search results respect per-user access permissions?' }],
       refinedIntent: 'Improve keyword search relevance with access-aware filtering',
       readyForPRD: false,
       decisionSummaries: [{ kind: 'PLAN', summary: 'Probing permission scope after PRD decline' }],
@@ -786,7 +786,7 @@ describe('Discover Lane entry point: triage routes fresh feature to grilling (#5
 
     // Now run one round of grilling to confirm the Discover Lane continues normally
     const grillOutput = {
-      questions: ['What aspect of search needs improvement?'],
+      questions: [{ text: 'What aspect of search needs improvement?' }],
       refinedIntent: '',
       readyForPRD: false,
       decisionSummaries: [{ kind: 'PLAN', summary: 'Asked clarifying question' }],

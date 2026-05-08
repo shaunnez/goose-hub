@@ -53,7 +53,12 @@ function makeQueuedRuntime(outputs: unknown[]): AgentRuntime {
 
 function validGrillRound1NotReady() {
   return {
-    questions: ['What does "better" mean — faster, fewer errors, or higher conversion?'],
+    questions: [
+      {
+        text: 'What does "better" mean — faster, fewer errors, or higher conversion?',
+        recommendedAnswer: 'Fewer drop-offs based on existing funnel analytics.',
+      },
+    ],
     refinedIntent: 'Improve some aspect of the onboarding flow.',
     readyForPRD: false,
     decisionSummaries: [
@@ -537,7 +542,7 @@ describe('grill-and-prd: round-8 hard-cap forces PRD drafting', () => {
 
     // Griller still returns not-ready on round 8
     const grillStillNotReady = {
-      questions: ['Yet another clarification question?'],
+      questions: [{ text: 'Yet another clarification question?' }],
       refinedIntent: 'Improve onboarding (partially refined).',
       readyForPRD: false,
       decisionSummaries: [{ kind: 'UNCERTAINTY', summary: 'Still uncertain after 8 rounds.' }],
@@ -595,7 +600,7 @@ describe('grill-and-prd: malformed grill output → gate-pending', () => {
 
     // Missing decisionSummaries (required by the schema with .min(1))
     const malformed = {
-      questions: ['Question?'],
+      questions: [{ text: 'Question?' }],
       refinedIntent: 'Some intent.',
       readyForPRD: false,
     };

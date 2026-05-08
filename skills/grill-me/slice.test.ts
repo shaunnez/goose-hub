@@ -6,7 +6,12 @@ import config, { GrillMeContextSchema } from './skill.config.js';
 describe('grill-me schema', () => {
   it('accepts valid output with all required fields', () => {
     const result = GrillMeOutputSchema.safeParse({
-      questions: ['Is this feature intended for admin users only, or all users?'],
+      questions: [
+        {
+          text: 'Is this feature intended for admin users only, or all users?',
+          recommendedAnswer: 'Admin users only, per CONTEXT.md access-control convention.',
+        },
+      ],
       refinedIntent: 'Add a role-scoped notification preference panel to the settings page.',
       readyForPRD: false,
       decisionSummaries: [
@@ -21,6 +26,16 @@ describe('grill-me schema', () => {
           evidence: 'No prior replies yet',
         },
       ],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts question without recommendedAnswer (optional field)', () => {
+    const result = GrillMeOutputSchema.safeParse({
+      questions: [{ text: 'Is this for all users or a specific tier?' }],
+      refinedIntent: 'Add notification preferences.',
+      readyForPRD: false,
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Asked about audience.' }],
     });
     expect(result.success).toBe(true);
   });
@@ -44,7 +59,12 @@ describe('grill-me schema', () => {
 
   it('accepts questions array with one entry', () => {
     const result = GrillMeOutputSchema.safeParse({
-      questions: ['What does success look like for this feature after one month?'],
+      questions: [
+        {
+          text: 'What does success look like for this feature after one month?',
+          recommendedAnswer: 'Reduce drop-off rate by ≥ 20% based on existing analytics.',
+        },
+      ],
       refinedIntent: 'Improve user onboarding flow to reduce drop-off at the profile step.',
       readyForPRD: false,
       decisionSummaries: [{ kind: 'UNCERTAINTY', summary: 'Success criteria are undefined.' }],
@@ -54,7 +74,7 @@ describe('grill-me schema', () => {
 
   it('rejects missing decisionSummaries', () => {
     const result = GrillMeOutputSchema.safeParse({
-      questions: ['What is the scope?'],
+      questions: [{ text: 'What is the scope?' }],
       refinedIntent: 'Something.',
       readyForPRD: false,
     });
@@ -73,7 +93,7 @@ describe('grill-me schema', () => {
 
   it('rejects missing refinedIntent', () => {
     const result = GrillMeOutputSchema.safeParse({
-      questions: ['What is the scope?'],
+      questions: [{ text: 'What is the scope?' }],
       readyForPRD: false,
       decisionSummaries: [{ kind: 'PLAN', summary: 'ok' }],
     });
@@ -91,7 +111,7 @@ describe('grill-me schema', () => {
 
   it('accepts evidence as optional on DecisionSummary', () => {
     const result = GrillMeOutputSchema.safeParse({
-      questions: ['Who are the primary users?'],
+      questions: [{ text: 'Who are the primary users?' }],
       refinedIntent: 'Build a dashboard for tracking deployment frequency.',
       readyForPRD: false,
       decisionSummaries: [{ kind: 'PLAN', summary: 'Asked about audience.' }],
@@ -101,7 +121,7 @@ describe('grill-me schema', () => {
 
   it('rejects questions array with more than one entry', () => {
     const result = GrillMeOutputSchema.safeParse({
-      questions: ['Question one?', 'Question two?'],
+      questions: [{ text: 'Question one?' }, { text: 'Question two?' }],
       refinedIntent: 'Something.',
       readyForPRD: false,
       decisionSummaries: [{ kind: 'PLAN', summary: 'asked two questions' }],

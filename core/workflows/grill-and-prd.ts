@@ -402,8 +402,8 @@ export async function runGrillAndPrdWorkflow(
     // Defensively pick the first question even though the skill is supposed
     // to ask exactly one. Empty `questions` with readyForPRD:false is a skill
     // contract violation — escalate to the human.
-    const question = grillOutput.questions[0];
-    if (question == null || question.trim() === '') {
+    const questionEntry = grillOutput.questions[0];
+    if (questionEntry == null || questionEntry.text.trim() === '') {
       eventStore.appendEvent({
         kind: 'agent.run-failed',
         projectId,
@@ -431,9 +431,15 @@ export async function runGrillAndPrdWorkflow(
     // Prefix with the `<!-- factory:grill-question -->` HTML marker so the
     // Grill chat tab in the UI can distinguish agent questions from user
     // replies. The marker is invisible in rendered Markdown.
+    // Append the recommended answer using `<!-- factory:recommended-answer -->`
+    // so the UI can parse and render it as a clickable pill.
+    const recommendedBlock =
+      questionEntry.recommendedAnswer != null
+        ? `\n<!-- factory:recommended-answer -->\nRecommended: ${questionEntry.recommendedAnswer}`
+        : '';
     await stateSource.comment(
       workItem.externalId,
-      `<!-- factory:grill-question -->\n**Round ${roundNumber}** — ${question}`,
+      `<!-- factory:grill-question -->\n**Round ${roundNumber}** — ${questionEntry.text}${recommendedBlock}`,
     );
     await ensureGatePending(
       stateSource,
@@ -448,10 +454,10 @@ export async function runGrillAndPrdWorkflow(
       projectId,
       workItemId: workItem.id,
       runId,
-      payload: { roundNumber, question },
+      payload: { roundNumber, question: questionEntry.text },
     });
 
-    return { phase: 'grilling', questionPosted: question };
+    return { phase: 'grilling', questionPosted: questionEntry.text };
   }
 
   // readyForPRD === true — the griller is done. Emit completion (unless
