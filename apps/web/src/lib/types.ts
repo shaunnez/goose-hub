@@ -127,6 +127,28 @@ export interface IssueDiffDto {
   reason?: string;
 }
 
+export interface QualityComponentsDto {
+  p0_count: number;
+  p1_count: number;
+  p2_count: number;
+  p3_count: number;
+  regressions_open: number;
+  review_converged: boolean;
+  uat_passed: boolean;
+  static_passed: boolean;
+  harness_pass_rate: number;
+}
+
+export interface QualityTrendPointDto {
+  runId: string;
+  projectId: string;
+  iteration: number;
+  score: number;
+  components: QualityComponentsDto;
+  auditScore: number | null;
+  ts: string;
+}
+
 export type CostLabel = 'estimated' | 'exact';
 
 export type CostStage =

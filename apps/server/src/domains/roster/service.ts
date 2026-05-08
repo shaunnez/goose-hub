@@ -1,3 +1,5 @@
+import { listProjectQualityTrend } from '@goose-hub/core/quality-score/repository.js';
+import type { RunQualityScore } from '@goose-hub/core/quality-score/types.js';
 import type { Result } from '#shared/middleware.js';
 import { getProject } from '#shared/projects.js';
 import type { ImprovementCandidateRow, PersonaNameRow, PersonaStat } from './repository.js';
@@ -20,6 +22,15 @@ export interface PersonaRunDto {
 
 export type { ImprovementCandidateRow as ImprovementCandidateDto };
 export type { PersonaNameRow as PersonaNameDto };
+export type { RunQualityScore as QualityTrendPointDto };
+
+export async function getQualityTrend(
+  projectId: string,
+  limit = 50,
+): Promise<Result<{ trend: RunQualityScore[] }>> {
+  const trend = listProjectQualityTrend(projectId, limit);
+  return { ok: true, data: { trend } };
+}
 
 export async function getPersonaNames(): Promise<Result<{ names: PersonaNameRow[] }>> {
   const names = await listPersonaNames();
