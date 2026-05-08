@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "0010_project_model_settings",
+  "id": "0011_rename_bash_drop_non_owners",
   "prevId": "0010_project_model_settings",
   "tables": {
     "agent_run_costs": {
@@ -926,20 +926,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "max_bash_seconds": {
-          "name": "max_bash_seconds",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "max_issues_per_day_from_non_owners": {
-          "name": "max_issues_per_day_from_non_owners",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "updated_at": {
           "name": "updated_at",
           "type": "text",
@@ -951,6 +937,13 @@
         "updated_by": {
           "name": "updated_by",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "per_bash_command_max_seconds": {
+          "name": "per_bash_command_max_seconds",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

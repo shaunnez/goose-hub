@@ -57,7 +57,12 @@ export interface CoachPolicy {
 }
 
 export interface AgentConfig {
-  runtime: 'claude-cli';
+  /**
+   * Agent runtime backend. 'auto' picks the runtime that matches the resolved
+   * model's provider (Claude → claude-cli, Codex → codex-cli). M19.10 lands
+   * the Codex CLI; this field declares the dispatcher shape.
+   */
+  runtime: 'claude-cli' | 'codex-cli' | 'auto';
   rolesModels: Partial<Record<Role, RoleModel>>;
   fallbackPolicy: Record<string, FallbackPolicy>;
   toolAllowlists: Partial<Record<Role, ToolAllowlist>>;
@@ -80,6 +85,16 @@ export interface AgentConfig {
      * Example: { "developer+type:bug": "sonnet", "developer": "haiku" }
      */
     overrides?: Record<string, ModelTier>;
+  };
+  /**
+   * When true, rolesModels may downgrade qa or reviewer model tiers.
+   * Default false — override attempts are silently dropped to protect holdout
+   * integrity. Only set this if you have a deliberate cost/quality trade-off.
+   */
+  allowHoldoutOverride?: boolean;
+  holdoutReview?: {
+    /** Run a Codex reviewer in parallel with the Claude reviewer (M19.13). Default false. */
+    codexEnabled: boolean;
   };
 }
 
