@@ -814,12 +814,20 @@ const RESUME_WORKFLOWS: Partial<Record<StateName, ResumeEntry>> = {
   'factory:decomposing': { targetState: 'factory:decomposing', dispatch: dispatchDecomposePrd },
 };
 
+// Skills that belong to the discover lane — used to detect whether a
+// factory:needs-human escape originated from grilling so resume can route back.
+const DISCOVER_LANE_SKILLS = new Set(['grill-me', 'write-prd', 'advise-on-prd', 'grill-and-prd']);
+
 /**
  * Resume an orphaned or stalled run. Looks up the issue's current state,
  * forces it back to the canonical trigger state for that workflow (e.g.
  * factory:in-progress → factory:dev-ready), then re-dispatches. Uses
  * forceState rather than transitionState because recovery transitions are
  * not always legal in the normal workflow graph.
+ *
+ * factory:needs-human is handled specially: event history is inspected to
+ * determine which lane the failure originated from so resume can route back
+ * to the correct workflow.
  */
 export async function dispatchResumeIssue(slug: string, issueNumber: number): Promise<void> {
   if (parallelLock.isInFlight(slug, issueNumber)) {
@@ -837,6 +845,41 @@ export async function dispatchResumeIssue(slug: string, issueNumber: number): Pr
   const workItemId = `github:${source.repoRef}#${issueNumber}`;
   const item = await source.getItem(issueNumber.toString());
   const fromState = item.state;
+
+  // Special-case: needs-human is lane-agnostic. Inspect event history to find
+  // which skill last failed and route to the appropriate resume workflow.
+  if (fromState === 'factory:needs-human') {
+    const allEvents = eventStore.replay({ projectId: slug, workItemId });
+    const lastRunFailed = [...allEvents].reverse().find((e) => e.kind === 'agent.run-failed');
+    const failedSkill = (lastRunFailed?.payload as { skill?: string } | undefined)?.skill;
+
+    if (failedSkill != null && DISCOVER_LANE_SKILLS.has(failedSkill)) {
+      logger.info('dispatchResumeIssue: needs-human from discover lane, resuming grilling', {
+        slug,
+        issueNumber,
+        failedSkill,
+      });
+      await source.forceState(workItemId, 'factory:grilling');
+      eventStore.appendEvent({
+        projectId: slug,
+        workItemId,
+        kind: 'state.transitioned',
+        payload: { from: fromState, to: 'factory:grilling', by: 'resume' },
+      });
+      await dispatchGrillAndPrd(slug, issueNumber);
+      return;
+    }
+
+    logger.warn(
+      'dispatchResumeIssue: needs-human with no discover-lane failure, cannot auto-resume',
+      {
+        slug,
+        issueNumber,
+        failedSkill,
+      },
+    );
+    return;
+  }
 
   const entry = RESUME_WORKFLOWS[fromState];
   if (entry == null) {
