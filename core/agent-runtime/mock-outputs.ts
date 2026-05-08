@@ -260,7 +260,7 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
       if (roundNumber <= 1) {
         return {
           output: {
-            questions: ['What problem are you actually trying to solve?'],
+            questions: [{ text: 'What problem are you actually trying to solve?' }],
             refinedIntent: '',
             readyForPRD: false,
             decisionSummaries: [
@@ -330,6 +330,11 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
             { title: 'Mock slice 1', goal: 'Mock goal', estimatedSize: 'S', journeyRefs: ['J-1'] },
           ],
           estimatedComplexity: 'low',
+          implementationDecisions: [{ decision: 'Use existing patterns from CONTEXT.md' }],
+          testingDecisions: {
+            approach: 'Verify mock behavior end-to-end via slice.test.ts',
+            modulesToTest: ['slices/grill-and-prd/slice.test.ts'],
+          },
           decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock write-prd complete' }],
         },
         decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock write-prd complete' }],
