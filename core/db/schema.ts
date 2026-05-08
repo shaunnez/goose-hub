@@ -234,6 +234,27 @@ export const agentDecisions = sqliteTable(
   }),
 );
 
+// Per-run QualityScore (M19.08, issue #565). One row per (run_id, iteration) pair.
+// components_json holds the full QualityComponents object.
+// audit_score from code-quality-audit (#564) is informational — does NOT feed the score formula.
+export const runQualityScores = sqliteTable(
+  'run_quality_scores',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    runId: text('run_id').notNull(),
+    projectId: text('project_id').notNull(),
+    iteration: integer('iteration').notNull().default(0),
+    score: real('score').notNull(),
+    componentsJson: text('components_json').notNull(),
+    auditScore: real('audit_score'),
+    ts: text('ts').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  },
+  (t) => ({
+    runIterationUniq: uniqueIndex('run_quality_scores_run_iteration_uniq').on(t.runId, t.iteration),
+    projectTsIdx: index('run_quality_scores_project_ts_idx').on(t.projectId, t.ts),
+  }),
+);
+
 // One row per agent run. `runId` is unique — the same run is never recorded twice.
 // `costLabel`: 'exact' when the source provided authoritative usage metadata
 // (direct API), 'estimated' when only the Claude CLI's reported totals are

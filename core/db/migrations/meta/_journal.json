@@ -57,6 +57,13 @@
       "when": 1746921600000,
       "tag": "0007_agent_decisions",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1746979200000,
+      "tag": "0008_run_quality_scores",
+      "breakpoints": true
     }
   ]
 }
