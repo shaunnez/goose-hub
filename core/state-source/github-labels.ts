@@ -41,6 +41,8 @@ interface GithubMilestone {
   description: string | null;
   due_on: string | null;
   state: 'open' | 'closed';
+  open_issues: number;
+  closed_issues: number;
 }
 
 interface GithubIssue {
@@ -163,6 +165,9 @@ function mapGithubMilestone(m: GithubMilestone): Milestone {
     description: m.description ?? undefined,
     dueOn: m.due_on != null ? new Date(m.due_on) : undefined,
     isActive: m.state === 'open',
+    state: m.state,
+    openIssues: m.open_issues,
+    closedIssues: m.closed_issues,
   };
 }
 

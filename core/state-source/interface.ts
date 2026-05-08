@@ -35,6 +35,9 @@ export interface Milestone {
   description?: string;
   dueOn?: Date;
   isActive: boolean;
+  state: 'open' | 'closed';
+  openIssues: number;
+  closedIssues: number;
 }
 
 export interface Artifact {

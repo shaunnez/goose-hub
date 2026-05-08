@@ -59,6 +59,9 @@ const DEFAULT_MILESTONE: Milestone = {
   number: 1,
   description: 'In-memory milestone for E2E tests',
   isActive: true,
+  state: 'open',
+  openIssues: 0,
+  closedIssues: 0,
 };
 
 export interface SeedIssueOptions {
