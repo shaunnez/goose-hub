@@ -29,8 +29,9 @@ router.get('/runs', async (c) => {
 
 router.get('/quality-trend', async (c) => {
   const project = c.req.query('project') ?? '';
-  const limit = Number(c.req.query('limit') ?? '50');
-  const result = await getQualityTrend(project, Number.isNaN(limit) ? 50 : limit);
+  const raw = Number(c.req.query('limit') ?? '50');
+  const limit = Number.isFinite(raw) && raw > 0 ? Math.min(Math.floor(raw), 200) : 50;
+  const result = await getQualityTrend(project, limit);
   return result.ok ? c.json(result.data) : c.json({ trend: [] });
 });
 
