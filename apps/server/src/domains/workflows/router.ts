@@ -23,10 +23,13 @@ const router = new Hono();
 
 router.post('/:slug/tick', async (c) => {
   const slug = c.req.param('slug');
-  runTriageBatch(slug).catch((err: unknown) => {
+  try {
+    await runTriageBatch(slug);
+  } catch (err) {
     logger.error('triage-batch failed', { slug, error: String(err) });
-  });
-  return c.json({ ok: true, slug }, 202);
+    return c.json({ ok: false, slug, error: String(err) }, 500);
+  }
+  return c.json({ ok: true, slug }, 200);
 });
 
 router.post('/:slug/run-qa', async (c) => {
