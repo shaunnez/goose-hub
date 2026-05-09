@@ -1,4 +1,4 @@
-import { type Route, expect, test } from '@playwright/test';
+import { type Page, type Route, expect, test } from '@playwright/test';
 
 /**
  * M11.05: UI — blocked status on Kanban card (#297).
@@ -32,7 +32,7 @@ const BLOCKED_ITEM = {
 
 const UNBLOCKED_ITEM = { ...BLOCKED_ITEM, schedule: 'current', dependsOn: [] };
 
-function stubCommon(page: Parameters<typeof test>[1]['page']) {
+function stubCommon(page: Page) {
   return Promise.all([
     page.route('**/projects', (r: Route) =>
       r.fulfill({ json: { projects: [{ slug, name: 'Goose Hub (self)' }] } }),

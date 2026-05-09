@@ -8,6 +8,9 @@ function milestone(partial: Partial<MilestoneDto>): MilestoneDto {
     title: partial.title ?? 'Milestone',
     number: partial.number ?? 0,
     isActive: partial.isActive ?? false,
+    state: partial.state ?? 'open',
+    openIssues: partial.openIssues ?? 0,
+    closedIssues: partial.closedIssues ?? 0,
     ...partial,
   };
 }
