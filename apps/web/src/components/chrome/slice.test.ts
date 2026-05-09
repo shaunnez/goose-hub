@@ -14,11 +14,39 @@ const DEFERRED_SURFACES = [
   { label: 'Bootstrap', milestone: 'M12' },
 ];
 
+const LOGO_TEXT = 'hello world 2';
+
 describe('chrome slice — sidebar brand label', () => {
   const sidebarSource = readFileSync(join(import.meta.dirname, 'Sidebar.tsx'), 'utf-8');
 
-  it('sidebar header reads "Goose Hub"', () => {
-    expect(sidebarSource).toContain('Goose Hub');
+  it('sidebar header renders logo text "hello world 2" (AC-1)', () => {
+    expect(sidebarSource).toContain(LOGO_TEXT);
+  });
+
+  it('sidebar logo accessible name is "hello world 2" (AC-3)', () => {
+    // The visible text in the brand span IS the accessible name for screen readers.
+    // Verify the text node is present inside the brand span.
+    const spanMatch = sidebarSource.match(/<span[^>]*text-\[14px\][^>]*>[\s\S]*?<\/span>/);
+    expect(spanMatch?.[0]).toContain(LOGO_TEXT);
+  });
+
+  it('sidebar logo does not render legacy text "Goose Hub"', () => {
+    // Brand text span must not contain the old label.
+    const spanMatch = sidebarSource.match(/<span[^>]*text-\[14px\][^>]*>[\s\S]*?<\/span>/);
+    expect(spanMatch?.[0]).not.toContain('Goose Hub');
+  });
+
+  it('sidebar logo has no link wrapper — prior href was absent (AC-2)', () => {
+    // The brand header area must not wrap the logo text in an <a> or NavLink.
+    // Prior implementation had no click-navigation; behaviour is unchanged.
+    const headerBlock =
+      sidebarSource.match(/\{\/\* Header \*\/\}[\s\S]*?\{\/\* Project \*\/\}/)?.[0] ?? '';
+    expect(headerBlock).not.toMatch(/<a\s/);
+    // NavLink is used in nav items only; the brand header must not contain one.
+    const navLinkInHeader =
+      headerBlock.includes('<NavLink') &&
+      headerBlock.indexOf('<NavLink') < headerBlock.indexOf('/* Project */');
+    expect(navLinkInHeader).toBe(false);
   });
 
   it('sidebar header does not read "Agentic OS"', () => {

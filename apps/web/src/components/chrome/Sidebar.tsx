@@ -114,7 +114,7 @@ export function Sidebar({ activeSlug }: SidebarProps) {
               style={{ background: '#7c3aed' }}
             />
             <span className="text-[14px] font-semibold tracking-tight whitespace-nowrap">
-              Goose Hub
+              hello world 2
             </span>
           </div>
         )}
