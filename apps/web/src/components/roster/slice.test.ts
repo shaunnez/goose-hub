@@ -79,6 +79,7 @@ describe('roster — fetchPersonaCandidates', () => {
         status: 'pending',
         githubIssueUrl: null,
         errorNote: null,
+        proposedDiff: null,
         createdAt: '2026-05-01T00:00:00Z',
       },
     ];
@@ -119,6 +120,7 @@ describe('roster — approveCandidateById', () => {
       status: 'approved',
       githubIssueUrl: null,
       errorNote: null,
+      proposedDiff: null,
       createdAt: '2026-05-01T00:00:00Z',
     });
     const result = await approveCandidateById(1);

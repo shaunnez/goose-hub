@@ -93,11 +93,15 @@ describe('GET /roster/candidates', () => {
     const candidates = [
       {
         id: 1,
+        projectId: 'goose-hub-self',
         personaName: 'alice',
         sourceTaskId: 'task-1',
         suggestionText: 'Add retries',
         suggestionType: 'skill-config',
         status: 'pending',
+        githubIssueUrl: null,
+        errorNote: null,
+        proposedDiff: null,
         createdAt: '2026-05-01T00:00:00Z',
       },
     ];
@@ -126,11 +130,15 @@ describe('POST /roster/candidates/:id/approve', () => {
   it('returns 200 with updated candidate on success', async () => {
     const candidate = {
       id: 1,
+      projectId: 'goose-hub-self',
       personaName: 'alice',
       status: 'approved',
       suggestionText: 'Add retries',
       suggestionType: 'skill-config',
       sourceTaskId: null,
+      githubIssueUrl: null,
+      errorNote: null,
+      proposedDiff: null,
       createdAt: '2026-05-01T00:00:00Z',
     };
     mockApproveCandidate.mockResolvedValue({ ok: true, data: { candidate } });
@@ -167,11 +175,15 @@ describe('POST /roster/candidates/:id/reject', () => {
   it('returns 200 with updated candidate on success', async () => {
     const candidate = {
       id: 1,
+      projectId: 'goose-hub-self',
       personaName: 'alice',
       status: 'rejected',
       suggestionText: 'Add retries',
       suggestionType: 'skill-config',
       sourceTaskId: null,
+      githubIssueUrl: null,
+      errorNote: null,
+      proposedDiff: null,
       createdAt: '2026-05-01T00:00:00Z',
     };
     mockRejectCandidate.mockResolvedValue({ ok: true, data: { candidate } });
