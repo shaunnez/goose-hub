@@ -14,10 +14,11 @@ interface Props {
 }
 
 const GLOBAL_FIELDS: Array<{
-  key: keyof NonNullable<ProjectSettingsDto['dbGlobalOverrides']>;
+  key: Exclude<keyof NonNullable<ProjectSettingsDto['dbGlobalOverrides']>, 'updatedAt' | 'updatedBy'>;
   label: string;
   configKey: string;
   isFloat?: boolean;
+  notYetEnforced?: boolean;
 }> = [
   {
     key: 'perWorkflowMaxUsd',

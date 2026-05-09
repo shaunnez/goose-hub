@@ -71,7 +71,7 @@ export function MoveToCurrentDialog({
 
   const { data: projects = [] } = useQuery<ProjectSummary[]>({
     queryKey: ['projects'],
-    queryFn: fetchProjects,
+    queryFn: ({ signal }) => fetchProjects(signal),
     enabled: deps.length > 0,
   });
 

@@ -57,7 +57,7 @@ test('Kanban board milestone text truncates properly without overflow', async ({
       textOverflow: style.textOverflow,
       whiteSpace: style.whiteSpace,
       display: style.display,
-      width: el.offsetWidth,
+      width: (el as HTMLElement).offsetWidth,
     };
   });
 
