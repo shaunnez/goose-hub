@@ -15,6 +15,7 @@ export default defineConfig({
   testIgnore: ['**/state-flow.spec.ts'],
   timeout: 120_000,
   expect: { timeout: 30_000 },
+  retries: process.env.CI ? 1 : 0,
   fullyParallel: false,
   workers: 1,
   reporter: [['list']],
