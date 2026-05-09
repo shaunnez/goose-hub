@@ -1,6 +1,5 @@
 import { fetchIssue, fetchIssues, startFakeRun } from '@/lib/api';
 import { LANES, laneForState, sortLaneItems } from '@/lib/lanes.config';
-import type { WorkItemDto } from '@/lib/types';
 import { useActiveMilestone } from '@/state/active-milestone';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react';
@@ -22,7 +21,6 @@ import { PendingNextRunBanner } from './PendingNextRunBanner';
 import { QASection } from './QASection';
 import { RetrospectiveSection } from './RetrospectiveSection';
 import { ReviewSection } from './ReviewSection';
-import { RightRail } from './RightRail';
 import { TaskHeader } from './TaskHeader';
 import { TimelineSection } from './TimelineSection';
 import { TriageResultsSection } from './TriageResultsSection';
@@ -273,8 +271,6 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
               />
             )}
           </main>
-          {/* projectSlug={slug} id={id} workItemId={workItemId} */}
-          {/* <RightRail /> */}
         </div>
       </div>
     </div>
