@@ -14,7 +14,10 @@ interface Props {
 }
 
 const GLOBAL_FIELDS: Array<{
-  key: Exclude<keyof NonNullable<ProjectSettingsDto['dbGlobalOverrides']>, 'updatedAt' | 'updatedBy'>;
+  key: Exclude<
+    keyof NonNullable<ProjectSettingsDto['dbGlobalOverrides']>,
+    'updatedAt' | 'updatedBy'
+  >;
   label: string;
   configKey: string;
   isFloat?: boolean;
