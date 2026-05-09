@@ -27,7 +27,7 @@ router.post('/:slug/tick', async (c) => {
     await runTriageBatch(slug);
   } catch (err) {
     logger.error('triage-batch failed', { slug, error: String(err) });
-    return c.json({ ok: false, slug, error: String(err) }, 500);
+    return c.json({ ok: false, slug, error: 'triage-batch failed' }, 500);
   }
   return c.json({ ok: true, slug }, 200);
 });

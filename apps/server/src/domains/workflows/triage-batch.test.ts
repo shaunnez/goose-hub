@@ -5,6 +5,35 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // ─── module mocks ──────────────────────────────────────────────────────────────
 
 vi.mock('#shared/projects.js', () => ({ getProject: vi.fn().mockResolvedValue(null) }));
+vi.mock('#shared/source.js', () => ({
+  isValidSlug: (s: string) => /^[a-z0-9-]+$/.test(s),
+  getSourceForSlug: vi.fn().mockResolvedValue({
+    projectId: 'goose-hub-self',
+    repoRef: 'shaunnez/goose-hub',
+    listOpenWork: vi.fn().mockResolvedValue([]),
+    listClosedWorkByMilestone: vi.fn().mockResolvedValue([]),
+    listWorkByMilestone: vi.fn().mockResolvedValue([]),
+    getItem: vi.fn(),
+    listMilestones: vi.fn().mockResolvedValue([]),
+    getActiveMilestone: vi.fn().mockResolvedValue(null),
+    transitionState: vi.fn().mockResolvedValue(undefined),
+    forceState: vi.fn().mockResolvedValue(undefined),
+    comment: vi.fn().mockResolvedValue(undefined),
+    listComments: vi.fn().mockResolvedValue([]),
+    setMilestone: vi.fn().mockResolvedValue(undefined),
+    setLabelInGroup: vi.fn().mockResolvedValue(undefined),
+    attach: vi.fn().mockResolvedValue(undefined),
+    createIssue: vi.fn(),
+    createMilestone: vi.fn(),
+    updateMilestone: vi.fn(),
+    deleteMilestone: vi.fn(),
+    getPrDiff: vi.fn().mockResolvedValue(''),
+    addLabels: vi.fn(),
+    removeLabel: vi.fn(),
+    listLabels: vi.fn().mockResolvedValue([]),
+    watchForUpdates: vi.fn(),
+  }),
+}));
 vi.mock('#shared/budget.js', () => ({
   checkDailyBudget: vi.fn().mockResolvedValue({
     exceeded: false,
@@ -431,10 +460,10 @@ describe('runTriageBatch', () => {
 });
 
 describe('POST /projects/:slug/tick', () => {
-  it('returns 202 with ok: true', async () => {
+  it('returns 200 with ok: true', async () => {
     const { app } = await import('../../server.js');
     const res = await app.request('/projects/goose-hub-self/tick', { method: 'POST' });
-    expect(res.status).toBe(202);
+    expect(res.status).toBe(200);
     const body = (await res.json()) as { ok: boolean; slug: string };
     expect(body.ok).toBe(true);
     expect(body.slug).toBe('goose-hub-self');

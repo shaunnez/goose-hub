@@ -39,29 +39,29 @@ describe('POST /projects/:slug/tick', () => {
     vi.clearAllMocks();
   });
 
-  it('returns 202 with ok:true and slug', async () => {
+  it('returns 200 with ok:true and slug', async () => {
     const app = makeApp();
     const res = await app.request('/projects/goose-hub-self/tick', { method: 'POST' });
-    expect(res.status).toBe(202);
+    expect(res.status).toBe(200);
     const body = (await res.json()) as { ok: boolean; slug: string };
     expect(body.ok).toBe(true);
     expect(body.slug).toBe('goose-hub-self');
   });
 
-  it('fires runTriageBatch asynchronously without blocking the response', async () => {
+  it('awaits runTriageBatch before responding', async () => {
     const app = makeApp();
     const res = await app.request('/projects/my-project/tick', { method: 'POST' });
-    expect(res.status).toBe(202);
-    // runTriageBatch is called fire-and-forget — wait for the microtask queue
-    await vi.waitFor(() => expect(mockRunTriageBatch).toHaveBeenCalledWith('my-project'));
+    expect(res.status).toBe(200);
+    expect(mockRunTriageBatch).toHaveBeenCalledWith('my-project');
   });
 
-  it('still returns 202 even when runTriageBatch rejects', async () => {
+  it('returns 500 when runTriageBatch rejects', async () => {
     mockRunTriageBatch.mockRejectedValueOnce(new Error('batch error'));
     const app = makeApp();
     const res = await app.request('/projects/my-project/tick', { method: 'POST' });
-    // Response is already sent before the batch runs, so should still be 202
-    expect(res.status).toBe(202);
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { ok: boolean };
+    expect(body.ok).toBe(false);
   });
 });
 
