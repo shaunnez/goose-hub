@@ -522,6 +522,14 @@ export interface ProjectSettingsDto {
     }
   >;
   registeredSkills: string[];
+  skillDefaults: Record<
+    string,
+    {
+      maxTurns: number;
+      maxBudgetUsd: number;
+      timeoutMs: number;
+    }
+  >;
 }
 
 export async function fetchProjectSettings(

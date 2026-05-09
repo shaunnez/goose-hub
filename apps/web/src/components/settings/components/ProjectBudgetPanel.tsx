@@ -9,6 +9,26 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+/**
+ * Format a number for display based on key type.
+ * - USD fields: formatted as $N.NN
+ * - Integer fields: formatted with thousand separators
+ */
+function formatDefaultValue(key: string, value: number): string {
+  const isUsd =
+    key === 'perWorkflowMaxUsd' ||
+    key === 'perAgentMaxUsd' ||
+    key === 'perAdvisorMaxUsd' ||
+    key === 'maxBudgetUsd';
+
+  if (isUsd) {
+    return `$${value.toFixed(2)}`;
+  }
+
+  // Integer fields: use thousand separators
+  return value.toLocaleString();
+}
+
 interface Props {
   slug: string;
 }
@@ -145,6 +165,8 @@ export function ProjectBudgetPanel({ slug }: Props) {
             const configVal = configBudgets[configKey];
             const dbVal = dbGlobal?.[key] ?? null;
             const isOverridden = dbVal != null;
+            const defaultDisplay =
+              configVal != null ? ` (default: ${formatDefaultValue(configKey, configVal)})` : '';
             return (
               <>
                 <span
@@ -152,6 +174,7 @@ export function ProjectBudgetPanel({ slug }: Props) {
                   className="text-[12px] text-fg-2 flex items-center gap-1.5"
                 >
                   {label}
+                  {defaultDisplay}
                 </span>
                 <NumericInput
                   key={`${key}-input`}
@@ -189,6 +212,7 @@ export function ProjectBudgetPanel({ slug }: Props) {
           <tbody>
             {data.registeredSkills.map((skill) => {
               const row = data.dbSkillOverrides[skill] ?? null;
+              const defaults = data.skillDefaults[skill];
               const hasAny =
                 row != null &&
                 (row.maxTurns != null || row.maxBudgetUsd != null || row.timeoutMs != null);
@@ -198,7 +222,7 @@ export function ProjectBudgetPanel({ slug }: Props) {
                   <td className="py-1.5 px-2">
                     <NumericInput
                       value={row?.maxTurns ?? null}
-                      placeholder="default"
+                      placeholder={defaults ? String(defaults.maxTurns) : 'default'}
                       overridden={row?.maxTurns != null}
                       onCommit={(val) => patchSkill.mutate({ skill, patch: { maxTurns: val } })}
                     />
@@ -206,7 +230,7 @@ export function ProjectBudgetPanel({ slug }: Props) {
                   <td className="py-1.5 px-2">
                     <NumericInput
                       value={row?.maxBudgetUsd ?? null}
-                      placeholder="default"
+                      placeholder={defaults ? String(defaults.maxBudgetUsd) : 'default'}
                       isFloat
                       overridden={row?.maxBudgetUsd != null}
                       onCommit={(val) => patchSkill.mutate({ skill, patch: { maxBudgetUsd: val } })}
@@ -215,7 +239,7 @@ export function ProjectBudgetPanel({ slug }: Props) {
                   <td className="py-1.5 px-2">
                     <NumericInput
                       value={row?.timeoutMs ?? null}
-                      placeholder="default"
+                      placeholder={defaults ? String(defaults.timeoutMs) : 'default'}
                       overridden={row?.timeoutMs != null}
                       onCommit={(val) => patchSkill.mutate({ skill, patch: { timeoutMs: val } })}
                     />

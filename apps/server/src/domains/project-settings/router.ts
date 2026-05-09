@@ -56,6 +56,18 @@ router.get('/:slug/settings', async (c) => {
     };
   }
 
+  const skillDefaults: Record<
+    string,
+    { maxTurns: number; maxBudgetUsd: number; timeoutMs: number }
+  > = {};
+  for (const [skill, budget] of Object.entries(SKILL_BUDGETS)) {
+    skillDefaults[skill] = {
+      maxTurns: budget.maxTurns,
+      maxBudgetUsd: budget.maxBudgetUsd,
+      timeoutMs: budget.timeoutMs,
+    };
+  }
+
   return c.json({
     projectId: project.id,
     configBudgets: project.budgets,
@@ -74,6 +86,7 @@ router.get('/:slug/settings', async (c) => {
       : null,
     dbSkillOverrides: skillSettings,
     registeredSkills: Object.keys(SKILL_BUDGETS),
+    skillDefaults,
   });
 });
 
