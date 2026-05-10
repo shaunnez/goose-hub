@@ -1,6 +1,6 @@
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
-import { resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
+import { CodexCliRuntime } from '@goose-hub/core/agent-runtime/codex-cli.js';
 import { assembleSpawnContext } from '@goose-hub/core/agent-runtime/context-assembly.js';
 import type {
   AgentResult,
@@ -11,6 +11,11 @@ import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt
 import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
+import {
+  type ReviewerSlot,
+  parseReviewerSlots,
+  readProjectReviewSettings,
+} from '@goose-hub/core/db/repositories/project-review-settings.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
@@ -55,30 +60,18 @@ export async function runReviewWorkflow(
     const prDiff = await getPrDiff(workItem, stateSource);
     const qaVerdict = getQaVerdict(priorEvents);
 
-    const result = await runtime.run({
+    const spec = buildReviewSpec({
       runId,
-      role: 'reviewer',
-      skill: 'review',
-      context: {
-        projectId: projectSlug,
-        workItemId: workItem.id,
-        workItem: {
-          title: workItem.title,
-          body: workItem.body,
-          number: Number(workItem.externalId),
-        },
-        prDiff,
-        qaVerdict,
-      },
-      contextAllowlist: ['workItem', 'prDiff', 'qaVerdict'],
-      freshContext: true,
-      toolBundles: ['read', 'validate'],
-      toolExtras: [],
-      ...resolveBudgetsForProject('review', projectConfig?.budgets, projectSlug),
+      projectSlug,
+      workItem,
+      prDiff,
+      qaResult: qaVerdict,
       personaId,
-      outputJsonSchema: reviewJsonSchema,
-      appendSystemPrompt: reviewPrompt,
+      reviewPrompt,
+      reviewJsonSchema,
+      resolvedBudgets: resolveBudgetsForProject('review', projectConfig?.budgets, projectSlug),
     });
+    const result = await runtime.run(spec);
 
     const parsed = ReviewOutputSchema.safeParse(result.output);
     if (!parsed.success) {
@@ -203,6 +196,8 @@ export interface ReviewWaveResult {
   anyNeedsHuman: boolean;
   /** True if any reviewer returned verdict: 'needs-fix' — prevents convergence counting. */
   anyNeedsFix: boolean;
+  /** True when some reviewers approved and others returned needs-fix — escalate immediately. */
+  verdictsDiverge: boolean;
 }
 
 export interface DispatchReviewWaveOpts {
@@ -213,7 +208,8 @@ export interface DispatchReviewWaveOpts {
   priorFindings: FindingKey[];
   workItem: WorkItem;
   projectSlug: string;
-  runtime: AgentRuntime;
+  /** Returns the runtime to use for a given slot model. */
+  runtimeForSlot: (model: ReviewerSlot['model']) => AgentRuntime;
 }
 
 function toFindingKey(f: {
@@ -259,97 +255,132 @@ function extractChangedFilePaths(prDiff: string): string[] {
   return paths;
 }
 
-/**
- * Spawns 2 reviewers concurrently for one review round (M19.04).
- * Reviewer B runs unconstrained (no scope guidance). Each spawn routes
- * through assembleSpawnContext for holdout boundary enforcement (rule 1, ADR 0014).
- * No advisor (rule 20). Per-reviewer parse failure → returns parseFailure: true.
- */
-export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<ReviewWaveResult> {
-  const { pr, qaResult, round, priorFindings, workItem, projectSlug, runtime } = opts;
+/** Default reviewer slots: constrained + unconstrained, both on claude. */
+const DEFAULT_REVIEWER_SLOTS: ReviewerSlot[] = [
+  { model: 'claude', prompt: 'default' },
+  { model: 'claude', prompt: 'unconstrained' },
+];
 
-  const projectConfig = await getProjectBySlug(projectSlug);
-  const reviewPrompt = readPromptWithContext('review', projectSlug);
-  const reviewJsonSchema = toJsonSchema(ReviewOutputSchema);
-
-  const runIdA = crypto.randomUUID();
-  const runIdB = crypto.randomUUID();
-  const { personaId: personaIdA } = selectPersona(projectSlug, 'reviewer');
-  const { personaId: personaIdB } = selectPersona(projectSlug, 'reviewer');
-
-  const makeSpec = (runId: string, personaId: string, unconstrained: boolean): AgentSpec => ({
-    runId,
+/** Shared spec builder for both single and convergent review paths. */
+function buildReviewSpec(params: {
+  runId: string;
+  projectSlug: string;
+  workItem: WorkItem;
+  prDiff: string;
+  qaResult?: { verdict: string; overallScore: number };
+  personaId: string;
+  reviewPrompt: string;
+  reviewJsonSchema: Record<string, unknown>;
+  resolvedBudgets: ReturnType<typeof resolveBudgetsForProject>;
+  extraEventPayload?: Record<string, unknown>;
+}): AgentSpec {
+  return {
+    runId: params.runId,
     role: 'reviewer',
     skill: 'review',
     context: {
-      projectId: projectSlug,
-      workItemId: workItem.id,
+      projectId: params.projectSlug,
+      workItemId: params.workItem.id,
       workItem: {
-        title: workItem.title,
-        body: workItem.body,
-        number: Number(workItem.externalId),
+        title: params.workItem.title,
+        body: params.workItem.body,
+        number: Number(params.workItem.externalId),
       },
-      prDiff: pr.prDiff,
-      qaVerdict: qaResult,
+      prDiff: params.prDiff,
+      qaVerdict: params.qaResult,
     },
     contextAllowlist: ['workItem', 'prDiff', 'qaVerdict'],
     freshContext: true,
     toolBundles: ['read', 'validate'],
     toolExtras: [],
-    ...resolveBudgets('review', projectConfig?.budgets),
-    personaId,
-    outputJsonSchema: reviewJsonSchema,
-    appendSystemPrompt: reviewPrompt,
-    extraEventPayload: { round, unconstrained },
+    ...params.resolvedBudgets,
+    personaId: params.personaId,
+    outputJsonSchema: params.reviewJsonSchema,
+    appendSystemPrompt: params.reviewPrompt,
+    extraEventPayload: params.extraEventPayload,
+  };
+}
+
+/**
+ * Spawns configured reviewer slots concurrently for one review round (M19.20).
+ * Slots are read from project_review_settings DB; defaults to constrained +
+ * unconstrained on claude if not configured. Each spawn routes through
+ * assembleSpawnContext for holdout boundary enforcement (rule 1, ADR 0014).
+ * No advisor (rule 20). Any slot parse failure → returns parseFailure: true.
+ * Divergent verdicts (approved + needs-fix) → verdictsDiverge: true.
+ */
+export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<ReviewWaveResult> {
+  const { pr, qaResult, round, priorFindings, workItem, projectSlug, runtimeForSlot } = opts;
+
+  const projectConfig = await getProjectBySlug(projectSlug);
+  const reviewJsonSchema = toJsonSchema(ReviewOutputSchema);
+  const resolvedBudgets = resolveBudgetsForProject('review', projectConfig?.budgets, projectSlug);
+
+  // Read configurable slots from DB; fall back to defaults.
+  // verdictsDiverge escalation only applies when slots are explicitly configured (not defaults).
+  const settingsRow = readProjectReviewSettings(projectConfig?.id ?? projectSlug);
+  const configuredSlots = parseReviewerSlots(settingsRow);
+  const slots = configuredSlots ?? DEFAULT_REVIEWER_SLOTS;
+  const slotsAreConfigured = configuredSlots != null;
+
+  const runIds = slots.map(() => crypto.randomUUID());
+  const personaIds = slots.map(() => selectPersona(projectSlug, 'reviewer').personaId);
+
+  const specs = slots.map((slot, i) => {
+    const variant = slot.prompt === 'default' ? undefined : slot.prompt;
+    const reviewPrompt = readPromptWithContext('review', projectSlug, variant);
+    return buildReviewSpec({
+      runId: runIds[i],
+      projectSlug,
+      workItem,
+      prDiff: pr.prDiff,
+      qaResult,
+      personaId: personaIds[i],
+      reviewPrompt,
+      reviewJsonSchema,
+      resolvedBudgets,
+      extraEventPayload: { round, slotModel: slot.model, promptVariant: slot.prompt },
+    });
   });
 
-  const specA = makeSpec(runIdA, personaIdA, false);
-  const specB = makeSpec(runIdB, personaIdB, true);
-
   // Route each spawn through assembleSpawnContext to enforce holdout boundary.
-  // This fires tool.violation events if sibling decision summaries were injected.
-  assembleSpawnContext(specA);
-  assembleSpawnContext(specB);
+  specs.forEach(assembleSpawnContext);
 
-  const [resultA, resultB] = await Promise.all([
-    runtime
-      .run(specA)
-      .catch((err: unknown) => (err instanceof Error ? err : new Error(String(err)))),
-    runtime
-      .run(specB)
-      .catch((err: unknown) => (err instanceof Error ? err : new Error(String(err)))),
-  ]);
+  const rawResults = await Promise.all(
+    specs.map((spec, i) =>
+      runtimeForSlot(slots[i].model)
+        .run(spec)
+        .catch((err: unknown) => (err instanceof Error ? err : new Error(String(err)))),
+    ),
+  );
 
-  const parsedA =
-    resultA instanceof Error ? null : ReviewOutputSchema.safeParse((resultA as AgentResult).output);
-  const parsedB =
-    resultB instanceof Error ? null : ReviewOutputSchema.safeParse((resultB as AgentResult).output);
+  const parsed = rawResults.map((r) =>
+    r instanceof Error ? null : ReviewOutputSchema.safeParse((r as AgentResult).output),
+  );
 
-  if (parsedA == null || !parsedA.success || parsedB == null || !parsedB.success) {
-    const errA =
-      resultA instanceof Error
-        ? resultA.message
-        : !parsedA?.success
-          ? JSON.stringify(parsedA?.error.issues)
-          : null;
-    const errB =
-      resultB instanceof Error
-        ? resultB.message
-        : !parsedB?.success
-          ? JSON.stringify(parsedB?.error.issues)
-          : null;
+  if (parsed.some((p) => p == null || !p.success)) {
+    const errors = rawResults
+      .map((r, i) => {
+        if (r instanceof Error) return r.message;
+        const p = parsed[i];
+        if (p != null && !p.success) return JSON.stringify(p.error.issues);
+        return null;
+      })
+      .filter(Boolean);
     return {
       roundFindings: [],
       newCriticalFindings: [],
       reviewerOutputs: [],
       parseFailure: true,
-      parseFailureError: [errA, errB].filter(Boolean).join('; '),
+      parseFailureError: errors.join('; '),
       anyNeedsHuman: false,
       anyNeedsFix: false,
+      verdictsDiverge: false,
     };
   }
 
-  const allFindings = [...parsedA.data.findings, ...parsedB.data.findings];
+  const parsedData = (parsed as Array<{ success: true; data: ReviewOutput }>).map((p) => p.data);
+  const allFindings = parsedData.flatMap((d) => d.findings);
   const roundFindings = deduplicateFindings(allFindings);
 
   const priorKeyStrs = new Set(priorFindings.map(findingKeyStr));
@@ -357,16 +388,23 @@ export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<
     (k) => k.isCritical && !priorKeyStrs.has(findingKeyStr(k)),
   );
 
+  const verdicts = parsedData.map((d) => d.verdict);
+  const anyNeedsHuman = verdicts.some((v) => v === 'needs-human');
+  const anyNeedsFix = verdicts.some((v) => v === 'needs-fix');
+  // Divergent-verdict escalation only applies to explicitly configured slot sets (M19.20).
+  const verdictsDiverge =
+    slotsAreConfigured &&
+    verdicts.some((v) => v === 'approved') &&
+    verdicts.some((v) => v === 'needs-fix');
+
   return {
     roundFindings,
     newCriticalFindings,
-    reviewerOutputs: [
-      { parsed: parsedA.data, runId: runIdA },
-      { parsed: parsedB.data, runId: runIdB },
-    ],
+    reviewerOutputs: parsedData.map((d, i) => ({ parsed: d, runId: runIds[i] })),
     parseFailure: false,
-    anyNeedsHuman: parsedA.data.verdict === 'needs-human' || parsedB.data.verdict === 'needs-human',
-    anyNeedsFix: parsedA.data.verdict === 'needs-fix' || parsedB.data.verdict === 'needs-fix',
+    anyNeedsHuman,
+    anyNeedsFix,
+    verdictsDiverge,
   };
 }
 
@@ -383,7 +421,11 @@ export async function runConvergentReviewWorkflow(
   _targetRepo: string,
   deps: ReviewWorkflowDeps = {},
 ): Promise<void> {
-  const runtime = deps.runtime ?? new ClaudeCliRuntime();
+  const injectedRuntime = deps.runtime;
+  const runtimeForSlot = injectedRuntime
+    ? () => injectedRuntime
+    : (model: ReviewerSlot['model']) =>
+        model === 'codex' ? new CodexCliRuntime() : new ClaudeCliRuntime();
   const projectConfig = await getProjectBySlug(projectSlug);
   const maxReviewRounds = projectConfig?.maxReviewRounds ?? DEFAULT_MAX_REVIEW_ROUNDS;
 
@@ -405,7 +447,7 @@ export async function runConvergentReviewWorkflow(
         priorFindings: previousRoundFindings,
         workItem,
         projectSlug,
-        runtime,
+        runtimeForSlot,
       });
 
       if (waveResult.parseFailure) {
@@ -483,6 +525,46 @@ export async function runConvergentReviewWorkflow(
             'Review',
             'Needs Human',
             `Round ${round} reviewer requested human review: ${escalationReason}`,
+            [],
+          ),
+        );
+        await stateSource.transitionState(
+          workItem.externalId,
+          'factory:needs-review',
+          'factory:needs-human',
+        );
+        return;
+      }
+
+      // Divergent verdicts (approved + needs-fix) — immediate escalation (M19.20).
+      if (waveResult.verdictsDiverge) {
+        const runId = crypto.randomUUID();
+        eventStore.appendEvent({
+          projectId: projectSlug,
+          workItemId: workItem.id,
+          kind: 'review.escalated',
+          payload: { reason: 'divergent-verdicts', round },
+          runId,
+        });
+        eventStore.appendEvent({
+          projectId: projectSlug,
+          workItemId: workItem.id,
+          kind: 'review.completed',
+          payload: {
+            verdict: 'needs-human',
+            confidence: 0,
+            criteriaChecks: [],
+            findings: waveResult.reviewerOutputs.flatMap((r) => r.parsed.findings),
+            escalationReason: `Round ${round} reviewers returned divergent verdicts — human arbitration required`,
+          },
+          runId,
+        });
+        await stateSource.comment(
+          workItem.externalId,
+          buildAgentComment(
+            'Review',
+            'Needs Human',
+            `Round ${round} reviewers diverged (approved vs needs-fix) — human arbitration required`,
             [],
           ),
         );

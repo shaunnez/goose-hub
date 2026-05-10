@@ -1,10 +1,10 @@
 import {
-  type ProjectSettingsDto,
   deleteSkillBudgetSetting,
   fetchProjectSettings,
   patchGlobalBudgetSettings,
   patchSkillBudgetSetting,
 } from '@/lib/api';
+import type { ProjectSettingsDto } from '@/lib/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';

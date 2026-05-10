@@ -171,7 +171,7 @@ export async function runSkillCoachingWorkflow(
   const runId = crypto.randomUUID();
   const runtime = deps.runtime ?? new ClaudeCliRuntime();
   const skillName = 'skill-coach';
-  const prompt = readPromptWithContext(skillName, projectId, repoRoot);
+  const prompt = readPromptWithContext(skillName, projectId, undefined, repoRoot);
   const projectConfig = await getProjectBySlug(projectId);
   const jsonSchema = toJsonSchema(SkillCoachOutputSchema);
   const { personaId } = selectPersona(projectId, 'retrospector');

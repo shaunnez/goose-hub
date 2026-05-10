@@ -556,10 +556,16 @@ export async function dispatchReview(slug: string, issueNumber: number): Promise
   }
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
-    const { runReviewWorkflow } = (await import(
+    const { runReviewWorkflow, runConvergentReviewWorkflow } = (await import(
       new URL('../../../../slices/review/workflow.js', import.meta.url).href
     )) as {
       runReviewWorkflow: (
+        item: unknown,
+        source: unknown,
+        projectSlug: string,
+        targetRepo: string,
+      ) => Promise<unknown>;
+      runConvergentReviewWorkflow: (
         item: unknown,
         source: unknown,
         projectSlug: string,
@@ -572,7 +578,14 @@ export async function dispatchReview(slug: string, issueNumber: number): Promise
       return;
     }
     const item = await source.getItem(issueNumber.toString());
-    await runReviewWorkflow(item, source, slug, item.repoRef ?? slug);
+
+    const useConvergent = useM19;
+
+    if (useConvergent) {
+      await runConvergentReviewWorkflow(item, source, slug, item.repoRef ?? slug);
+    } else {
+      await runReviewWorkflow(item, source, slug, item.repoRef ?? slug);
+    }
   } finally {
     parallelLock.release(slug, issueNumber);
     drainPending(slug);

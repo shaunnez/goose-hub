@@ -1,4 +1,5 @@
-import { type PipelineSettingsDto, fetchPipelineSettings, patchPipelineSettings } from '@/lib/api';
+import { fetchPipelineSettings, patchPipelineSettings } from '@/lib/api';
+import type { PipelineSettingsDto } from '@/lib/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface Props {

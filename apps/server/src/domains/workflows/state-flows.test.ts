@@ -190,16 +190,6 @@ function makeInvestigateOutput() {
   };
 }
 
-function _makePlaywrightReproOutput() {
-  return {
-    screenshots: [],
-    gifPath: null,
-    consoleErrors: [],
-    reproSteps: ['Navigate to page'],
-    reproduced: true,
-  };
-}
-
 function makeQaOutput() {
   return {
     verdict: 'pass',
