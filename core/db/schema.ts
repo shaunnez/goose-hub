@@ -407,3 +407,26 @@ export const scoutReports = sqliteTable(
     ),
   }),
 );
+
+export const engineeringSpecs = sqliteTable(
+  'engineering_specs',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    projectId: text('project_id').notNull(),
+    workItemId: text('work_item_id').notNull(),
+    pipelineRunId: text('pipeline_run_id').notNull(),
+    spec: text('spec').notNull(), // JSON blob — EngineeringSpec
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+    updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  },
+  (t) => ({
+    projectWorkItemUniq: uniqueIndex('engineering_specs_project_work_item_uniq').on(
+      t.projectId,
+      t.workItemId,
+    ),
+    projectWorkItemIdx: index('engineering_specs_project_work_item_idx').on(
+      t.projectId,
+      t.workItemId,
+    ),
+  }),
+);

@@ -102,10 +102,5 @@ Start next M19 issue per CLAUDE.md "Starting the next issue" flow.
   If ambiguous, check CONTEXT.md, then m19-fix-plan.md, then ask the human. Do
   not guess on architectural decisions.
 
-  Begin by running the gh issue list query.
-
-reading m19-fix-plan.md, CLAUDE.md, FACTORY_RULES.md, CONTEXT.md, then
-
-   Start next M19 issue per CLAUDE.md "Starting the next issue" flow.
-  Active milestone: M19: Multi-Agent Orchestration.
-  Read m19-fix-plan.md before touching any code.
+  Begin by reading m19-fix-plan.md, CLAUDE.md, FACTORY_RULES.md, CONTEXT.md, then
+  running the gh issue list query.

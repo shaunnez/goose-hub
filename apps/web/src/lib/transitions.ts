@@ -29,7 +29,13 @@ export const LEGAL_TARGETS: Readonly<Record<string, readonly string[]>> = {
   'factory:research-complete': ['factory:dev-ready', 'factory:archived'],
   'factory:investigating': ['factory:investigation-complete', 'factory:archived'],
   'factory:investigation-complete': ['factory:dev-ready', 'factory:archived'],
-  'factory:dev-ready': ['factory:in-progress', 'factory:archived'],
+  'factory:dev-ready': [
+    'factory:spec-ready',
+    'factory:in-progress',
+    'factory:needs-human',
+    'factory:archived',
+  ],
+  'factory:spec-ready': ['factory:in-progress', 'factory:needs-human', 'factory:archived'],
   'factory:in-progress': ['factory:needs-qa', 'factory:archived'],
   'factory:needs-qa': ['factory:qa-failed', 'factory:needs-review', 'factory:archived'],
   'factory:qa-failed': ['factory:needs-fix', 'factory:archived'],
@@ -41,7 +47,12 @@ export const LEGAL_TARGETS: Readonly<Record<string, readonly string[]>> = {
     'factory:archived',
   ],
   'factory:needs-fix': ['factory:in-progress', 'factory:needs-human', 'factory:archived'],
-  'factory:approved': ['factory:retrospecting', 'factory:merge-conflict', 'factory:archived'],
+  'factory:approved': [
+    'factory:retrospecting',
+    'factory:merge-conflict',
+    'factory:needs-human',
+    'factory:archived',
+  ],
   'factory:merge-conflict': ['factory:done', 'factory:needs-human', 'factory:archived'],
   'factory:retrospecting': ['factory:done', 'factory:archived'],
   'factory:needs-human': [
