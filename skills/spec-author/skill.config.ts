@@ -1,4 +1,5 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
+import { EngineeringSpecSchema } from './schema.js';
 import { z } from 'zod';
 import { EngineeringSpecSchema } from './schema.js';
 
