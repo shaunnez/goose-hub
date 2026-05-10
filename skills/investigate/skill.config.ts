@@ -26,12 +26,14 @@ export const InvestigateContextSchema = z.object({
     number: z.number(),
   }),
   worktreePath: z.string(),
+  /** JSON-serialised wave reports + contradictions passed by the orchestrator post-M19.16. */
+  scoutReports: z.string().optional(),
 });
 
 const config: SkillConfig = {
   contextSchema: InvestigateContextSchema,
   outputSchema: InvestigateSchema,
-  contextAllowlist: ['workItem', 'worktreePath'],
+  contextAllowlist: ['workItem', 'worktreePath', 'scoutReports'],
   /**
    * Tool bundle 'read' maps to ['read', 'search', 'work-item-read'].
    * The investigator has NO write access — file writes will be rejected.

@@ -1,30 +1,57 @@
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
+import { crossValidate } from '@goose-hub/core/agent-runtime/cross-validate.js';
+import { invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
+import { ScoutOutputSchema } from '@goose-hub/core/agent-runtime/scout-output.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
+import { dispatchWave } from '@goose-hub/core/agent-runtime/swarm.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
+import { persistScoutReport } from '@goose-hub/core/scout-reports/repository.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import {
   cleanupWorktree,
   createWorktree,
   prewarmWorktree,
 } from '@goose-hub/core/workspaces/worktree.js';
-import { InvestigateSchema } from '@goose-hub/skills/investigate/schema.js';
+import type { z } from 'zod';
+import type { InvestigateSchema } from '@goose-hub/skills/investigate/schema.js';
 import { PlaywrightReproSchema } from '@goose-hub/skills/playwright-repro/schema.js';
+
+type InvestigateOutput = z.infer<typeof InvestigateSchema>;
+
+/**
+ * Wave-1 scouts dispatched on every investigation run.
+ * The orchestrator fans them all out; scouts that aren't relevant return empty findings.
+ */
+const WAVE_1_SCOUTS = [
+  { scoutName: 'scout-code-path', scoutFocus: 'Trace code paths and call sites for symbols named in the work item' },
+  { scoutName: 'scout-dependency', scoutFocus: 'Map dependencies crossing package boundaries touched by this change' },
+  { scoutName: 'scout-pattern', scoutFocus: 'Identify existing patterns the fix should follow' },
+  { scoutName: 'scout-schema', scoutFocus: 'Find DB schemas, Zod schemas, and API contracts relevant to this work item' },
+  { scoutName: 'scout-test-inventory', scoutFocus: 'Locate existing tests covering the affected area' },
+  { scoutName: 'scout-user-journey', scoutFocus: 'Map user-visible UI flows and API surfaces related to this issue' },
+];
 
 /**
  * Runs the investigate workflow for a work item in `factory:investigating` state.
  *
  * Workflow:
  * 1. createWorktree for the target repo
- * 2. Run the `investigate` skill (investigator persona, opus-tier)
- * 3. If type:bug, run the `playwright-repro` skill
- * 4. Persist findings as `agent.investigation-complete` event
- * 5. Transition state: factory:investigating → factory:investigation-complete
+ * 2. Wave 1 — dispatch 6 scouts in parallel
+ * 3. Persist ok scout reports to DB
+ * 4. If wave halted (≥2 failures) → escalate factory:needs-human
+ * 5. Cross-validate Wave 1 reports
+ * 6. Wave 2 — dispatch 2 deep agents with cross-validated context
+ * 7. Persist Wave 2 ok reports
+ * 8. Synthesis — run investigate skill with all scout reports
+ * 9. If type:bug + requiresBrowserRepro → run playwright-repro skill
+ * 10. Persist agent.investigation-complete event (includes investigationRunId)
+ * 11. Transition state: factory:investigating → factory:investigation-complete
  *
  * On failure: cleanup worktree, persist agent.run-failed event,
  * post GitHub comment, transition to factory:needs-human.
@@ -46,55 +73,137 @@ export async function runInvestigateWorkflow(
 
   const runId = crypto.randomUUID();
   const runtime = new ClaudeCliRuntime();
-  const investigatePrompt = readPromptWithContext('investigate', projectId);
-  const playwrightReproPrompt = readPromptWithContext('playwright-repro', projectId);
-  const investigateJsonSchema = toJsonSchema(InvestigateSchema);
-  const playwrightReproJsonSchema = toJsonSchema(PlaywrightReproSchema);
-
   const { personaId } = selectPersona(projectId, 'investigator');
   const projectConfig = await getProjectBySlug(projectId);
   const worktreePath = createWtFn(targetRepo, runId);
+
   if (workItem.type === 'bug') {
     prewarmWtFn(worktreePath, '@goose-hub/web');
   }
 
+  const workItemCtx = {
+    number: Number(workItem.externalId),
+    title: workItem.title,
+    body: workItem.body,
+  };
+
+  const scoutJsonSchema = toJsonSchema(ScoutOutputSchema);
+
+  function loadSkillAssets(scoutName: string) {
+    return {
+      appendSystemPrompt: readPromptWithContext(scoutName, projectId),
+      outputJsonSchema: scoutJsonSchema,
+    };
+  }
+
   try {
-    // Step a: Run the investigate skill
-    const investigateResult = await runtime.run({
-      runId,
-      role: 'investigator',
-      skill: 'investigate',
-      context: {
-        projectId,
-        workItemId: workItem.id,
-        workItem: {
-          title: workItem.title,
-          body: workItem.body,
-          number: Number(workItem.externalId),
-        },
-        worktreePath,
-      },
-      contextAllowlist: ['workItem', 'worktreePath'],
-      freshContext: false,
-      toolBundles: ['read-only'],
-      toolExtras: [],
-      ...resolveBudgetsForProject('investigate', projectConfig?.budgets, projectId),
+    // Wave 1 — parallel fact-gathering
+    const wave1Result = await dispatchWave({
+      parentRunId: runId,
+      scoutSpecs: WAVE_1_SCOUTS,
+      workItem: workItemCtx,
+      worktreePath,
+      projectId,
+      workItemId: workItem.id,
+      runtime,
       personaId,
-      outputJsonSchema: investigateJsonSchema,
-      appendSystemPrompt: investigatePrompt,
+      loadSkillAssets,
     });
 
-    // Step b: Validate investigate output
-    const investigateParsed = InvestigateSchema.safeParse(investigateResult.output);
-    if (!investigateParsed.success) {
-      throw new Error(
-        `Investigate output validation failed: ${JSON.stringify(investigateParsed.error.issues)}`,
-      );
+    for (const report of wave1Result.reports) {
+      if (report.status === 'ok') {
+        persistScoutReport(projectId, workItem.id, runId, report.scoutName, {
+          findings: report.findings,
+          decisionSummaries: report.decisionSummaries,
+        });
+      }
     }
-    const findings = investigateParsed.data;
 
-    // Step c: If type:bug and the bug manifests in the browser, run playwright-repro skill
+    if (wave1Result.shouldEscalate) {
+      await stateSource.comment(
+        workItem.externalId,
+        buildAgentComment(
+          'Investigate',
+          'Escalated',
+          'Too many scouts failed — escalating to needs-human',
+          [`Failed scouts: ${wave1Result.failedScouts.join(', ')}`],
+        ),
+      );
+      await stateSource.transitionState(
+        workItem.externalId,
+        'factory:investigating',
+        'factory:needs-human',
+      );
+      return;
+    }
+
+    // Cross-validate Wave 1 before dispatching Wave 2
+    const cvResult = crossValidate(wave1Result.reports);
+    const wave1Context = JSON.stringify({
+      wave1: wave1Result.reports,
+      contradictions: cvResult.contradictions,
+    });
+
+    // Wave 2 — deep synthesis agents with cross-validated context
+    const wave2Result = await dispatchWave({
+      parentRunId: runId,
+      scoutSpecs: [
+        {
+          scoutName: 'wave2-interface-designer',
+          scoutFocus: 'Design interfaces and type signatures based on cross-validated scout findings',
+          extraContext: { scoutReports: wave1Context },
+        },
+        {
+          scoutName: 'wave2-risk-analyst',
+          scoutFocus: 'Identify risks and edge cases in the implementation approach',
+          extraContext: { scoutReports: wave1Context },
+        },
+      ],
+      workItem: workItemCtx,
+      worktreePath,
+      projectId,
+      workItemId: workItem.id,
+      runtime,
+      personaId,
+      loadSkillAssets,
+    });
+
+    for (const report of wave2Result.reports) {
+      if (report.status === 'ok') {
+        persistScoutReport(projectId, workItem.id, runId, report.scoutName, {
+          findings: report.findings,
+          decisionSummaries: report.decisionSummaries,
+        });
+      }
+    }
+
+    // Build full context for the synthesis investigator
+    const allScoutReports = JSON.stringify({
+      wave1: wave1Result.reports,
+      wave2: wave2Result.reports,
+      contradictions: cvResult.contradictions,
+    });
+
+    // Synthesis — invoke investigate skill with scout evidence
+    const synthResult = await invokeSkill({
+      skillName: 'investigate',
+      projectId,
+      workItemId: workItem.id,
+      runId,
+      context: {
+        workItem: workItemCtx,
+        worktreePath,
+        scoutReports: allScoutReports,
+      },
+      overrides: { runtimeOverride: runtime },
+    });
+
+    const findings = synthResult.output as InvestigateOutput;
+
+    // Playwright repro for browser-manifesting bugs
     let reproOutput: unknown | undefined;
+    const playwrightReproPrompt = readPromptWithContext('playwright-repro', projectId);
+    const playwrightReproJsonSchema = toJsonSchema(PlaywrightReproSchema);
     if (workItem.type === 'bug' && findings.requiresBrowserRepro) {
       const { personaId: playwrightPersonaId } = selectPersona(projectId, 'investigator');
       const playwrightRunId = crypto.randomUUID();
@@ -155,23 +264,17 @@ export async function runInvestigateWorkflow(
           });
         }
       } catch (err) {
-        // playwright-repro failure is non-fatal — investigate findings are persisted regardless
         const error = err instanceof Error ? err : new Error(String(err));
         eventStore.appendEvent({
           projectId,
           workItemId: workItem.id,
           kind: 'agent.run-failed',
-          payload: {
-            runId: playwrightRunId,
-            skill: 'playwright-repro',
-            error: error.message,
-          },
+          payload: { runId: playwrightRunId, skill: 'playwright-repro', error: error.message },
           runId: playwrightRunId,
         });
       }
     }
 
-    // Step d: Persist findings as agent.investigation-complete event
     eventStore.appendEvent({
       projectId,
       workItemId: workItem.id,
@@ -179,11 +282,11 @@ export async function runInvestigateWorkflow(
       payload: {
         investigate: findings,
         playwrightRepro: reproOutput,
+        investigationRunId: runId,
       },
       runId,
     });
 
-    // Step e: Transition state
     accumulatePersonaStats({ personaName: personaId, role: 'investigator', outcome: 'success' });
     await stateSource.transitionState(
       workItem.externalId,
@@ -194,7 +297,6 @@ export async function runInvestigateWorkflow(
     accumulatePersonaStats({ personaName: personaId, role: 'investigator', outcome: 'failure' });
     const error = err instanceof Error ? err : new Error(String(err));
 
-    // Persist failure event
     eventStore.appendEvent({
       projectId,
       workItemId: workItem.id,
@@ -213,14 +315,12 @@ export async function runInvestigateWorkflow(
       ),
     );
 
-    // Transition to error state
     await stateSource.transitionState(
       workItem.externalId,
       'factory:investigating',
       'factory:needs-human',
     );
   } finally {
-    // Always cleanup the worktree — cleanupWorktree is idempotent
     cleanupWorktree(runId);
   }
 }

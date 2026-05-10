@@ -14,6 +14,26 @@ vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   setUseM19Pipeline: vi.fn(),
   deriveUseM19Pipeline: vi.fn().mockReturnValue(false),
 }));
+
+const mockDispatchWaveSF = vi.fn();
+vi.mock('@goose-hub/core/agent-runtime/swarm.js', () => ({
+  dispatchWave: (...args: unknown[]) => mockDispatchWaveSF(...args),
+}));
+
+const mockCrossValidateSF = vi.fn();
+vi.mock('@goose-hub/core/agent-runtime/cross-validate.js', () => ({
+  crossValidate: (...args: unknown[]) => mockCrossValidateSF(...args),
+}));
+
+const mockInvokeSkillSF = vi.fn();
+vi.mock('@goose-hub/core/agent-runtime/invoke-skill.js', () => ({
+  invokeSkill: (...args: unknown[]) => mockInvokeSkillSF(...args),
+}));
+
+vi.mock('@goose-hub/core/scout-reports/repository.js', () => ({
+  persistScoutReport: vi.fn(),
+}));
+
 const mockRun = vi.fn();
 
 vi.mock('@goose-hub/core/agent-runtime/claude-cli.js', () => ({
@@ -248,6 +268,21 @@ const SLUG = 'goose-hub-self';
 beforeEach(() => {
   vi.clearAllMocks();
   mockRun.mockReset();
+  mockDispatchWaveSF.mockReset();
+  mockCrossValidateSF.mockReset();
+  mockInvokeSkillSF.mockReset();
+
+  // Default happy-path returns for the investigation swarm mocks
+  mockDispatchWaveSF.mockResolvedValue({
+    status: 'ok',
+    reports: [],
+    failedScouts: [],
+    shouldAdvance: true,
+    shouldEscalate: false,
+  });
+  mockCrossValidateSF.mockReturnValue({ contradictions: [], hasContradictions: false });
+  mockInvokeSkillSF.mockResolvedValue(makeAgentResult(makeInvestigateOutput()));
+
   // fix-issue workflow checks GITHUB_TOKEN before calling openPRFn
   process.env.GITHUB_TOKEN = 'mock-github-token';
 });
@@ -562,11 +597,7 @@ describe('Layer A: Investigate state paths', () => {
     const source = makeMockSource();
     mockGetSourceForSlug.mockResolvedValue(source);
     (source.getItem as ReturnType<typeof vi.fn>).mockResolvedValue(item);
-
-    // bug items run investigate then playwright-repro (non-fatal if repro fails schema)
-    mockRun
-      .mockResolvedValueOnce(makeAgentResult(makeInvestigateOutput()))
-      .mockResolvedValueOnce(makeAgentResult(makePlaywrightReproOutput()));
+    // invokeSkill default returns makeInvestigateOutput() (requiresBrowserRepro: false)
 
     await dispatchInvestigate(SLUG, 42);
 
@@ -586,7 +617,8 @@ describe('Layer A: Investigate state paths', () => {
     mockGetSourceForSlug.mockResolvedValue(source);
     (source.getItem as ReturnType<typeof vi.fn>).mockResolvedValue(item);
 
-    mockRun.mockResolvedValueOnce(makeAgentResult({ invalid: 'garbage' }));
+    // invokeSkill throws OutputValidationError when synthesis output is invalid
+    mockInvokeSkillSF.mockRejectedValueOnce(new Error('Output validation failed: ...'));
 
     await dispatchInvestigate(SLUG, 42);
 
@@ -667,9 +699,7 @@ describe('Layer B: Full dispatch chain (dispatchForLabel → workflow → state)
     const source = makeMockSource();
     (source.getItem as ReturnType<typeof vi.fn>).mockResolvedValue(item);
     mockGetSourceForSlug.mockResolvedValue(source);
-    mockRun
-      .mockResolvedValueOnce(makeAgentResult(makeInvestigateOutput()))
-      .mockResolvedValueOnce(makeAgentResult(makePlaywrightReproOutput()));
+    // invokeSkill default returns makeInvestigateOutput() (requiresBrowserRepro: false)
 
     await dispatchForLabel(SLUG, 42, 'factory:investigating');
 
