@@ -11,19 +11,23 @@ import {
   runSkillCoachingWorkflow,
 } from '@goose-hub/core/workflows/skill-coaching.js';
 import { Hono } from 'hono';
-import { dispatchForIssue, dispatchQa, dispatchRetro, dispatchReview } from '#shared/dispatch.js';
+import {
+  dispatchForIssue,
+  dispatchQa,
+  dispatchRetro,
+  dispatchReview,
+  dispatchTriageBatch,
+} from '#shared/dispatch.js';
 import { parseBody } from '#shared/middleware.js';
 import { getSourceForSlug } from '#shared/source.js';
 import { runQaBatch } from './qa-batch.js';
 import { runRetroBatch } from './retro-batch.js';
 import { runReviewBatch } from './review-batch.js';
-import { runTriageBatch } from './triage-batch.js';
-
 const router = new Hono();
 
 router.post('/:slug/tick', async (c) => {
   const slug = c.req.param('slug');
-  runTriageBatch(slug).catch((err: unknown) => {
+  dispatchTriageBatch(slug).catch((err: unknown) => {
     logger.error('triage-batch failed', { slug, error: String(err) });
   });
   return c.json({ ok: true, slug }, 202);

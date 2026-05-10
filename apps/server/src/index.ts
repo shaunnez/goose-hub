@@ -7,8 +7,8 @@ import { logger } from '@goose-hub/core/logger.js';
 import { loadProjects } from '@goose-hub/core/projects/loader.js';
 import { startPerProjectScheduler } from '@goose-hub/core/projects/scheduler.js';
 import { serve } from '@hono/node-server';
-import { runTriageBatch } from './domains/workflows/triage-batch.js';
 import { app } from './server.js';
+import { dispatchTriageBatch } from './shared/dispatch.js';
 
 if (process.env.VITEST == null) {
   const closed = eventStore.closeOrphanedRuns();
@@ -24,7 +24,7 @@ if (process.env.VITEST == null) {
 
   loadProjects()
     .then((projects) => {
-      startPerProjectScheduler(projects, (slug) => runTriageBatch(slug));
+      startPerProjectScheduler(projects, (slug) => dispatchTriageBatch(slug));
       logger.info('per-project tick scheduler started', { projects: projects.map((p) => p.slug) });
     })
     .catch((err: unknown) => {
