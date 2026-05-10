@@ -23,7 +23,10 @@ vi.mock('node:fs', () => ({
   mkdirSync: vi.fn(),
   writeFileSync: vi.fn(),
 }));
-vi.mock('node:os', () => ({ homedir: vi.fn().mockReturnValue('/mock-home') }));
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>();
+  return { ...actual, homedir: vi.fn().mockReturnValue('/mock-home') };
+});
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   eventStore: {
     appendEvent: vi.fn().mockReturnValue({ id: 1, kind: 'agent.run-started', payload: {} }),
