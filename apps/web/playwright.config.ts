@@ -21,17 +21,21 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [
-    {
-      // Apps/server boots first — vite proxies /api and /events to it.
-      command: 'pnpm --filter @goose-hub/server start',
-      port: API_PORT,
-      reuseExistingServer: !process.env.CI,
-      timeout: 30_000,
-      env: {
-        GITHUB_TOKEN: process.env.GITHUB_TOKEN ?? '',
-        PORT: String(API_PORT),
-      },
-    },
+    ...(!process.env.EVIDENCE_ONLY
+      ? [
+          {
+            // Apps/server boots first — vite proxies /api and /events to it.
+            command: 'pnpm --filter @goose-hub/server start',
+            port: API_PORT,
+            reuseExistingServer: !process.env.CI,
+            timeout: 30_000,
+            env: {
+              GITHUB_TOKEN: process.env.GITHUB_TOKEN ?? '',
+              PORT: String(API_PORT),
+            },
+          },
+        ]
+      : []),
     {
       command: `pnpm dev --port ${PORT}`,
       port: PORT,

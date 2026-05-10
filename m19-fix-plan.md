@@ -1,217 +1,261 @@
-# M19 Repair Plan
+# M19 Repair Plan (v2)
 
-Goal: take 3-of-12-wired → 12-of-12-wired. One issue per PR. Order enforces dependency unblocks. Each item maps to single GitHub issue.
+Goal: 3-of-12-wired → 12-of-12-wired. M19 milestone gets follow-up issues until truly closed.
+
+**Execution model:** Opus drives, parallel Sonnet sub-agents handle independent slices. Manual human review per PR. No dogfooding the M19 pipeline on its own repair work — too risky.
+
+**All decisions locked (see questions/answers — 2026-05-10):**
+
+| # | Decision | Implication |
+|---|---|---|
+| 1 | Keep both quality scores | M19.08 wires into retro alongside QA's 8-category score |
+| 2 | Keep deterministic 3-tier verify | Runs before QA agent, feeds ground-truth tier results in |
+| 3 | Delete dead `selectModelForRole` | Cleanup pass |
+| 4 | Make `maxRevisionTurns` real + expose in settings | New settings UI control |
+| 5 | Fix swarm before spec-author wires | M19.01 unblocks M19.02 |
+| 6 | Convergent review configurable | Slot count + per-slot model (claude/codex), settings UI |
+| 7 | All in M19 milestone | Same milestone, suffix .14+ |
+| 8 | Opus + parallel Sonnet sub-agents | No self-build via pipeline |
 
 ---
 
-## Phase 0 — Prerequisites (none, runs first)
+## Phase 0 — Prerequisites
 
-### P0.A — Dispatcher feature flag
+### M19.14 — dispatcher feature flag
 
-Reason: phased rollout, avoid big-bang cutover.
-
-- Add `agentConfig.experimental.useM19Pipeline: boolean` to `core/types.ts`.
-- Default `false` everywhere except `target-projects/goose-hub-self/project.config.ts` which can flip to `true` after Phase 2 lands.
-- Read in dispatcher entry points only.
+Add `agentConfig.experimental.useM19Pipeline: boolean` to `core/types.ts`. Default false. Read in dispatcher entry points.
 
 Acceptance:
 - [ ] Type field added.
-- [ ] Default false in schema.
-- [ ] `goose-hub-self` config still defaults false (flip later).
+- [ ] Default false everywhere.
+- [ ] Dispatcher reads flag in `factory:dev-ready` and `factory:needs-qa`/`factory:needs-review` branches (no-op when false).
+- [ ] Test: legacy path still runs when flag false.
+
+### M19.15 — delete dead model-routing function
+
+Remove `selectModelForRole` (and `selectModelForRoleForProject` if unused outside it). Keep `selectModel` + `resolveComplexityOverridesForProject` — those are wired.
+
+Acceptance:
+- [ ] `core/agent-runtime/select-model-for-role.ts` deleted.
+- [ ] `core/agent-runtime/resolve-for-project.ts` cleaned (delete `selectModelForRoleForProject` if no callers).
+- [ ] All test files referencing deleted symbols removed/updated.
+- [ ] `pnpm typecheck && pnpm test` green.
 
 ---
 
-## Phase 1 — Producers (unblocks the chain)
+## Phase 1 — Producers (chain unblock)
 
-### P1.A — Wire spec-author (M19.02)
+### M19.16 — investigation swarm wired (was M19.01)
 
-Files:
-- New node in `slices/spec-author/workflow.ts` (slice may need creating; check existing scaffold).
-- Caller: new branch in dispatcher gated by `experimental.useM19Pipeline`.
-- Persistence: write `slices/<n>/spec.json` to workspace.
+Why first: spec-author needs scout reports as input.
 
-Steps:
-1. Create `slices/spec-author/workflow.ts` exposing `runSpecAuthorWorkflow(workItem, stateSource, slug, repoRef)`.
-2. Workflow: load scout reports if present (M19.01 dependency — fall back to manual mode initially), call `runtime.run({skill: 'spec-author'})`, validate output via `validateEngineeringSpec`, persist to workspace `<workspace>/spec.json`.
-3. Dispatcher: when `factory:dev-ready` AND `useM19Pipeline === true` → call `runSpecAuthorWorkflow` then transition to `factory:spec-ready` (new state).
-4. Add `factory:spec-ready` to `core/state-machine/`.
-
-Acceptance:
-- [ ] Spec written to `slices/<n>/spec.json` on workspace.
-- [ ] State transitions `factory:dev-ready` → `factory:spec-ready` when flag on.
-- [ ] Validation rejection routes to `factory:needs-human` with comment.
-- [ ] Tests: golden spec, validation failure, fallback (no scout reports).
-
-### P1.B — Wire parallel-implement (M19.03)
-
-Files:
-- `apps/server/src/shared/dispatch.ts:951-952`.
-- Read `spec.json` from workspace.
-
-Steps:
-1. New dispatcher branch: when `factory:spec-ready` → call `runParallelImplementWorkflow(workItem, stateSource, slug, spec)`.
-2. Read spec from workspace `slices/<n>/spec.json`; if missing, escalate `factory:needs-human`.
-3. Remove dead `cleanupIssueWorktreeImpl` finally branch OR implement merge handler (`workflow.ts:692-697`).
-4. Add merge-listener that runs `cleanupAllWpWorktrees` when PR merges (state-source webhook or polling node).
-
-Acceptance:
-- [ ] `factory:spec-ready` → `runParallelImplementWorkflow` invoked.
-- [ ] Workspace cleanup on PR merge confirmed by integration test.
-- [ ] Legacy `dispatchFixIssue` path remains for projects with flag off.
-- [ ] E2E: 3-WP spec → 3 concurrent builders → 1 PR with per-WP commits.
-
----
-
-## Phase 2 — Holdouts and quality (depends on P1)
-
-### P2.A — Wire convergent review (M19.04)
-
-Files:
-- `apps/server/src/shared/dispatch.ts:481-497`.
-- `apps/server/src/domains/workflows/review-batch.ts:11-27`.
-- `slices/review/workflow.ts` (prompt override logic).
-
-Steps:
-1. Swap dispatcher import: `runReviewWorkflow` → `runConvergentReviewWorkflow` when `useM19Pipeline === true`.
-2. Implement actual unconstrained-prompt override: load `skills/review/prompt.unconstrained.md` (NEW) for reviewer B; reviewer A uses default. The override strips scope guidance.
-3. `dispatchReviewWave` reads which prompt per slot; passes correct `appendSystemPrompt`.
-4. Update tests in `slices/review/slice.test.ts` to assert reviewer B receives unconstrained prompt.
-
-Acceptance:
-- [ ] Convergent path reachable from dispatcher when flag on.
-- [ ] `skills/review/prompt.unconstrained.md` exists and differs materially from `prompt.md` (no "scope" guidance).
-- [ ] Reviewer A and B receive different `appendSystemPrompt` strings.
-- [ ] Holdout context boundary preserved for both.
-- [ ] Auth-topic min-rounds = 3 still honoured.
-
-### P2.B — Wire investigation swarm (M19.01)
-
-Files:
-- `slices/investigate/workflow.ts:63-85`.
-- `skills/investigate/prompt.md:21` (remove self-admission).
-- `slices/investigate/slice.test.ts`.
+Files: `slices/investigate/workflow.ts:63-85`, `skills/investigate/prompt.md:21`, `slices/investigate/slice.test.ts`.
 
 Steps:
 1. Replace single `runtime.run({skill:'investigate'})` with:
-   a. Wave 1: `dispatchWave({ skills: ['scout-schema', 'scout-code-path', 'scout-pattern', 'scout-test-inventory', 'scout-dependency', 'scout-user-journey'], ...})`.
-   b. `crossValidate(waveResults)` — compare findings, surface contradictions.
-   c. Wave 2: `dispatchWave({ skills: ['wave2-interface-designer', 'wave2-risk-analyst'], context: <wave1 synthesized> })`.
-   d. Synthesis call: feeds Wave 2 outputs to investigate skill in single-agent mode for final report.
-2. Update `skills/investigate/prompt.md`: remove "not yet wired" admission, document the swarm flow.
-3. Spec output of synthesis call as required input to spec-author (creates dependency on P1.A which falls back if missing).
+   - Wave 1: `dispatchWave({skills: ['scout-schema','scout-code-path','scout-pattern','scout-test-inventory','scout-dependency','scout-user-journey']})`
+   - `crossValidate(waveResults)` — surface contradictions
+   - Wave 2: `dispatchWave({skills: ['wave2-interface-designer','wave2-risk-analyst'], context: <synthesized wave1>})`
+   - Synthesis: final `runtime.run({skill:'investigate'})` with wave2 outputs as context, produces final report
+2. Persist scout reports to workspace `<workspace>/scout-reports/<skill>.json` for spec-author consumption.
+3. Remove "not yet wired" line from `skills/investigate/prompt.md:21`.
 
 Acceptance:
 - [ ] Workflow calls `dispatchWave` twice + `crossValidate` once.
-- [ ] Integration test 1: cross-validate surfaces contradiction (force two scouts to disagree).
-- [ ] Integration test 2: scout timeout → killed agent → workflow continues with partial.
-- [ ] Integration test 3: 2 scout failures → escalate `factory:needs-human`.
-- [ ] Integration test 4: holdout-key in scout context throws `tool.violation`.
-- [ ] Existing single-agent tests removed or rewritten.
+- [ ] Scout reports persisted to workspace.
+- [ ] Integration test: cross-validate surfaces contradiction (force two scouts to disagree).
+- [ ] Integration test: scout timeout → killed agent → workflow continues with partial reports.
+- [ ] Integration test: 2 scout failures → escalate `factory:needs-human`.
+- [ ] Integration test: holdout-key in scout context throws `tool.violation`.
+- [ ] Existing single-agent tests removed.
+- [ ] `skills/investigate/prompt.md` updated.
 
-### P2.C — Reconcile quality scoring (M19.08)
+### M19.17 — spec-author wired (was M19.02)
 
-Decision required first: kill `core/quality-score` OR wire it as aggregate alongside QA-embedded scores.
-
-Recommended: **wire as cross-run aggregate** — QA score is per-run gate; `computeQualityScore` is per-run quality with convergence detection across history. Different concerns.
-
-Files:
-- `core/retrospective/schemas.ts:94` (already has optional field).
-- `slices/retrospective-deep/workflow.ts` and `slices/retrospective-light/workflow.ts`.
-- `apps/server/src/domains/roster/service.ts:59` (remove hardcoded null).
+Files: new `slices/spec-author/workflow.ts`, `apps/server/src/shared/dispatch.ts`, new state `factory:spec-ready`.
 
 Steps:
-1. Retro workflows: build `RunArtifacts` from event stream after run completes; call `computeQualityScore(artifacts)`; populate `RetroOutput.qualityScore`; persist via `persistRunQualityScore`.
-2. Roster service: replace `qualityScore: null` with `listRunQualityScores(personaId)` lookup.
-3. Auto-merge gate: in `slices/parallel-implement/workflow.ts` PR-open node, call `isConverged(history)` and `score >= 80` check; if not, route to `factory:needs-human`.
-4. Document divergence between QA `overallScore` (per-run gate) and `quality_score` (per-run+convergence) in CONTEXT.md.
+1. Create `slices/spec-author/workflow.ts` exposing `runSpecAuthorWorkflow(workItem, stateSource, slug, repoRef)`.
+2. Workflow:
+   - Read scout reports from workspace `<workspace>/scout-reports/*.json` (produced by M19.16).
+   - Call `runtime.run({skill: 'spec-author', context: { scoutReports, workItem }})`.
+   - Validate output via `validateEngineeringSpec`.
+   - Persist to `<workspace>/slices/<n>/spec.json`.
+3. New state `factory:spec-ready` in `core/state-machine/`.
+4. Dispatcher: when `factory:dev-ready` AND `useM19Pipeline === true` → `runSpecAuthorWorkflow` → transition `factory:dev-ready` → `factory:spec-ready`. Legacy path otherwise.
 
 Acceptance:
-- [ ] `run_quality_scores` table receives writes during retro runs.
-- [ ] `QualityTrendTab` shows non-empty data after a run cycle.
-- [ ] PR auto-merge gate blocks on `score < 80` OR `!isConverged`.
-- [ ] CONTEXT.md entry distinguishes the two scoring streams.
+- [ ] Spec written to `<workspace>/slices/<n>/spec.json`.
+- [ ] State `factory:spec-ready` exists and transitions correctly.
+- [ ] Validation rejection routes to `factory:needs-human` with comment.
+- [ ] Tests: golden spec, validation failure, missing scout reports (escalate to needs-human — hard dep on M19.16).
+- [ ] Flag-off path runs legacy unchanged.
+
+### M19.18 — parallel-implement wired (was M19.03)
+
+Files: `apps/server/src/shared/dispatch.ts:951-952`, `slices/parallel-implement/workflow.ts:692-697`, new merge handler.
+
+Steps:
+1. New dispatcher branch: `factory:spec-ready` AND `useM19Pipeline === true` → call `runParallelImplementWorkflow(workItem, stateSource, slug, spec)`. Read spec from `<workspace>/slices/<n>/spec.json`; missing → escalate.
+2. Implement workspace cleanup on PR merge (the dead `cleanupIssueWorktreeImpl` finally branch). Hook into existing GitHub webhook OR poller for merged PRs.
+3. Legacy `dispatchFixIssue` remains for projects with flag off.
+
+Acceptance:
+- [ ] `factory:spec-ready` → `runParallelImplementWorkflow` invoked.
+- [ ] Workspace cleanup confirmed by integration test on merged PR webhook.
+- [ ] E2E: 3-WP spec → 3 concurrent builders → 1 PR with per-WP commits.
+- [ ] Flag-off path runs legacy `dispatchFixIssue`.
 
 ---
 
-## Phase 3 — Audit + tooling (depends on P2.A wiring + P1.B path live)
+## Phase 2 — Holdouts + Verification
 
-### P3.A — Wire code-quality-audit skill (M19.07)
+### M19.19 — wire deterministic 3-tier verify before QA (refines M19.05)
 
-Files:
-- `target-projects/goose-hub-self/project.config.ts` — register auditor role.
-- `slices/retrospective-deep/workflow.ts` — invoke audit on priority:high or nightly.
-- `slices/review/workflow.ts` (or convergent variant) — invoke audit on priority:high PR review.
-- `core/quality-score/repository.ts` — write `audit_score` column.
-- `core/improvement-candidates/` (or wherever ImprovementCandidate emission lives).
-- `apps/web/src/components/roster/components/QualityTrendTab.tsx` — add `architecturalQualityScore` series.
+Why: QA agent currently self-reports `tierResults`. Deterministic verify (`core/verify/tiers.ts`) is the dead-but-better one. Run it FIRST, feed results to QA agent so it can't fabricate tier verdicts.
+
+Files: `slices/qa/workflow.ts`, `core/verify/tiers.ts`, `slices/three-tier-verify/`.
 
 Steps:
-1. Add `auditor` to `goose-hub-self/project.config.ts` with budgets/persona.
-2. Conditional invocation in deep retro: if `priority:high` label OR scheduled nightly → run `skill: 'code-quality-audit'`, persist output.
-3. Conditional invocation in convergent review: same condition → audit runs in parallel branch (NOT replacing review reviewers).
-4. Persist `audit_score` to `run_quality_scores`.
-5. Emit ImprovementCandidate from convergent (top-3) recommendations.
-6. Autonomous-mode gate: if `audit_score < 60` AND `mode === 'autonomous'` → `factory:needs-human`.
-7. UI: new chart series in QualityTrend chart.
+1. New node in `slices/qa/workflow.ts` (or `slices/three-tier-verify/` repurposed): before invoking QA agent, run `runTier(1)` → `runTier(2)` → `runTier(3)` if spec.json present. Stop at first failure per current tier semantics.
+2. Pass results into QA agent context as `deterministicTierResults`. QA skill schema validates: `qaOutput.tierResults[X].passed === deterministicTierResults[X].passed` — agent cannot disagree with ground truth.
+3. Failure paths:
+   - Tier 1/2 fail → `factory:needs-fix` (skip QA agent — no point).
+   - Tier 3 fail → respect `regressionPolicy`: 'escalate' (default), 'ignore' (continue with warning), 'revert' (TODO: implement or remove from ADR).
+4. Decide on `'revert'` policy: implement or document as no-op + remove from `RegressionPolicy` type. Recommend remove now, file separate issue if needed later.
+5. Test fixture parity: existing QA tests must keep passing — tier results now come from deterministic source, agent is consumer.
+
+Acceptance:
+- [ ] Deterministic tiers run before QA agent invocation.
+- [ ] QA schema validation rejects tier-result disagreement with ground truth.
+- [ ] Tier 1/2 fail short-circuits — QA agent not called.
+- [ ] `regressionPolicy: 'revert'` either implemented (with test) or removed from type union.
+- [ ] Existing QA event stream (`qa.completed` etc) unchanged for downstream consumers.
+- [ ] `slices/three-tier-verify/` either repurposed (now wired) or formally deleted with ADR amendment. Decide in this PR.
+
+### M19.20 — convergent review configurable (was M19.04)
+
+Files: `apps/server/src/shared/dispatch.ts:481-497`, `slices/review/workflow.ts`, new `skills/review/prompt.unconstrained.md`, settings UI.
+
+Steps:
+1. New config block on `agentConfig.review`:
+   ```ts
+   review: {
+     reviewerCount: 1 | 2,                     // default 1, max 2
+     reviewerSlots: Array<{
+       model: 'claude' | 'codex',
+       prompt: 'default' | 'unconstrained',
+     }>,                                       // length must equal reviewerCount
+   }
+   ```
+2. Dispatcher: when flag on AND `reviewerCount === 2` → call `runConvergentReviewWorkflow`. When 1 → existing `runReviewWorkflow`.
+3. `runConvergentReviewWorkflow` reads `reviewerSlots`, dispatches each via correct provider (Claude vs Codex via `selectRuntime`), with correct prompt overlay.
+4. Create `skills/review/prompt.unconstrained.md` — strips scope guidance, encourages broader critique.
+5. New settings UI section in `apps/web/src/components/settings/components/ProjectModelPanel.tsx` (or new `ReviewPanel.tsx`): slot count toggle + per-slot model + per-slot prompt selector. Persist to DB-backed project settings.
+6. New server route `apps/server/src/domains/project-settings/review-router.ts`: GET/PATCH `/projects/:slug/settings/review`.
+7. Holdout invariant preserved across both reviewers regardless of provider.
+
+Acceptance:
+- [ ] Convergent path reachable when `reviewerCount === 2` and flag on.
+- [ ] `prompt.unconstrained.md` exists, materially differs from default (no scope guidance).
+- [ ] Each slot can independently choose claude or codex.
+- [ ] Settings UI persists changes; agent runs read latest config.
+- [ ] Holdout context boundary holds for both providers.
+- [ ] Auth-topic minRounds=3 still honoured.
+- [ ] Test: 1 claude + 1 codex reviewer, divergent verdicts → escalate to `factory:needs-human`.
+
+### M19.21 — quality-score aggregate wired into retro + auto-merge gate (was M19.08)
+
+**Decision locked: keep both QA's 8-cat and M19.08 deterministic. Different concerns.**
+
+Files: `slices/retrospective-deep/workflow.ts`, `slices/retrospective-light/workflow.ts`, `apps/server/src/domains/roster/service.ts:59`, CONTEXT.md.
+
+Steps:
+1. Retro workflows: build `RunArtifacts` from event stream after run completes (P0/P1/P2/P3 counts from QA+review findings, harness_pass_rate from test runner, regressions_open from regression policy outcome, etc).
+2. Call `computeQualityScore(artifacts)` → populate `RetroOutput.qualityScore` → `persistRunQualityScore`.
+3. Roster service: replace `qualityScore: null` (line 59) with `listRunQualityScores(personaId)` lookup. Latest entry wins for run drill-in; trend uses full series.
+4. Auto-merge gate in `slices/parallel-implement/workflow.ts` (PR-open node): call `isConverged(history)` && `score >= 80`. If either false → `factory:needs-human` with comment explaining.
+5. CONTEXT.md entry: distinguish QA's 8-category subjective score (per-run code quality) from M19.08's deterministic outcome score (per-run pipeline + cross-run convergence). Both surface in retro JSON, both render in roster.
+
+Acceptance:
+- [ ] `run_quality_scores` table receives writes during retro runs.
+- [ ] `QualityTrendTab` renders non-empty data after one retro cycle.
+- [ ] Auto-merge gate blocks on `score < 80` OR `!isConverged`.
+- [ ] CONTEXT.md split documented with example values.
+- [ ] Hardcoded `qualityScore: null` removed from roster service.
+
+---
+
+## Phase 3 — Audit + Tooling
+
+### M19.22 — code-quality-audit wired (was M19.07)
+
+Files: `target-projects/goose-hub-self/project.config.ts`, `slices/retrospective-deep/workflow.ts`, `slices/review/workflow.ts`, `core/quality-score/repository.ts`, ImprovementCandidate emission, UI series.
+
+Steps:
+1. Register `auditor` role in `goose-hub-self/project.config.ts` with budgets/persona.
+2. Conditional invocation in deep retro: `priority:high` label OR scheduled nightly → `runtime.run({skill: 'code-quality-audit'})`. Persist output.
+3. Conditional invocation in convergent review: `priority:high` PR → audit runs as parallel branch (NOT replacing reviewers — separate slot).
+4. Persist `audit_score` column on `run_quality_scores`.
+5. Emit ImprovementCandidate from convergent recommendations top-3 (uses existing improvement-candidate emission path or build new).
+6. Autonomous-mode gate: `audit_score < 60 && mode === 'autonomous'` → `factory:needs-human`.
+7. UI: new `architecturalQualityScore` chart series in `QualityTrendTab.tsx`.
+8. Nightly trigger: cron entry or scheduler config.
 
 Acceptance:
 - [ ] `auditor` registered in `goose-hub-self/project.config.ts`.
 - [ ] Priority:high PR triggers audit (test).
-- [ ] Nightly trigger configured (cron/scheduler entry).
+- [ ] Nightly trigger configured + tested.
 - [ ] `audit_score` rows written.
 - [ ] ImprovementCandidate emitted from top-3 (test against fixture).
 - [ ] Autonomy gate fires on `audit_score < 60` (test).
-- [ ] UI series renders.
+- [ ] UI series renders with sample data.
 
-### P3.B — Expose record-decision tool (M19.06)
+### M19.23 — record-decision MCP exposure + reconciliation (was M19.06)
 
-Files:
-- `core/tool-layer/mcp-server.ts` (or equivalent agent-tool exposure layer).
-- `skills/*/skill.config.ts` — add `decision-record-only` bundle to relevant skills.
-- `core/agent-runtime/end-of-run.ts` — wire `readRunDecisions` reconciliation.
+Files: MCP server (`core/tool-layer/mcp-server.ts` if exists, else build), skill configs, `core/agent-runtime/runtime.ts`.
 
 Steps:
-1. Expose `recordDecision()` as MCP tool (or whichever runtime tool-bridge mechanism). Validate input matches schema.
-2. Add `'decision-record-only'` to `toolBundles` in: implement-wp, implement, investigate, spec-author, dev-review, retrospective-deep. NOT in qa/review/code-quality-audit (holdouts strip it anyway, but explicit is clearer).
-3. End-of-run reconciliation: in `core/agent-runtime/runtime.ts` (or wherever `agent.run-completed` fires), call `readRunDecisions(runId)`. If rows exist, emit `agent.decision-summary` events from DB rows; fall back to schema-field decisionSummaries when empty.
-4. Gate on `experimental.recordDecisionTool`.
-5. Pass iteration + phase from run context (`runtime.run({ iteration, phase })` → tool wrapper closure).
+1. **Determine MCP server status first.** Check `core/tool-layer/README.md:40` claim. If MCP server doesn't exist as infrastructure, this issue grows scope: build minimal MCP server exposing tools-as-MCP-tools. If it exists, just add `record_decision` tool registration. **Outcome of this check determines whether to split into 2 issues.**
+2. Add `'decision-record-only'` to `toolBundles` in: implement-wp, implement, investigate, spec-author, dev-review, retrospective-deep. Default-on for all non-holdout skills (simpler than per-skill opt-in; holdouts strip via existing allowlist logic).
+3. End-of-run reconciliation: in `core/agent-runtime/runtime.ts` where `agent.run-completed` fires, call `readRunDecisions(runId)`. Prefer DB rows over schema-field `decisionSummaries` when both present.
+4. Pass iteration + phase from run context (`runtime.run({iteration, phase})` → tool wrapper closure captures and writes alongside each `recordDecision` call).
+5. Gate on `experimental.recordDecisionTool` — flag default false until validated.
 
 Acceptance:
-- [ ] Live agent can call `record_decision` (integration test).
-- [ ] Holdout roles cannot (test).
-- [ ] End-of-run reconciliation prefers DB rows over schema field when both present.
-- [ ] Iteration + phase metadata captured in DB during a real run.
-- [ ] Flag gate respected.
+- [ ] MCP server status documented; if needed, server built or scope-split.
+- [ ] Live agent calls `record_decision` (integration test).
+- [ ] Holdout roles (qa, reviewer, code-quality-audit) cannot (test).
+- [ ] End-of-run reconciliation prefers DB rows over schema field.
+- [ ] Iteration + phase captured during real run.
+- [ ] Flag default false; flipping it gates bundle inclusion.
 
 ---
 
-## Phase 4 — Codex finishing (depends on P1.B live)
+## Phase 4 — Codex finishing
 
-### P4.A — Codex hook normalisation (M19.10)
+### M19.24 — Codex hook normalisation + conditional live test (was M19.10)
 
-Files:
-- `core/agent-runtime/codex-cli.ts` (around `deployHooks`).
-- New `core/agent-runtime/codex-hook-normalize.ts`.
+Files: `core/agent-runtime/codex-cli.ts`, new `core/agent-runtime/codex-hook-normalize.ts`, `slices/codex-runtime/slice.test.ts:464`.
 
 Steps:
 1. Map Codex tool taxonomy → internal Pre/PostToolUse event shape (parity with Claude hooks).
 2. Inject normalisation in spawn path before event emission.
-3. Replace `it.skip` integration test (`slices/codex-runtime/slice.test.ts:464`) with `describe.skipIf(!liveOk)` where `liveOk = existsSync(~/.codex/auth.json) || !!OPENAI_API_KEY`.
+3. Replace permanent `it.skip` with `describe.skipIf(!liveOk)` where `liveOk = existsSync(~/.codex/auth.json) || !!OPENAI_API_KEY`.
 
 Acceptance:
-- [ ] PreToolUse + PostToolUse events from Codex match Claude payload keys.
-- [ ] Conditional live-test runs locally with auth present, skips in CI without.
-- [ ] Tool-call audit stream homogeneous across providers.
+- [ ] PreToolUse + PostToolUse events from Codex match Claude payload keys (test compares shapes).
+- [ ] Conditional live-test runs locally with auth, skips without.
+- [ ] `agent.tool-call` audit stream homogeneous across providers.
 
-### P4.B — Wire dev-review opt-in (M19.12)
+### M19.25 — dev-review opt-in + maxRevisionTurns (was M19.12)
 
-Files:
-- `target-projects/goose-hub-self/project.config.ts`.
-- `slices/parallel-implement/workflow.ts` (counter for `maxRevisionTurns` if keeping).
+**Decision locked: implement `maxRevisionTurns` properly + settings UI.**
+
+Files: `target-projects/goose-hub-self/project.config.ts`, `slices/parallel-implement/workflow.ts`, `core/types.ts`, settings UI.
 
 Steps:
-1. Add to `goose-hub-self` config:
+1. Add `devReview` block to `goose-hub-self/project.config.ts`:
    ```ts
    devReview: {
      enabled: true,
@@ -221,66 +265,87 @@ Steps:
      timeoutMs: 600_000,
    }
    ```
-2. Decide `maxRevisionTurns`: either implement counter (track revision turns in run state, skip dev-review-response after N) OR remove field. Recommended: remove — current "by code shape" cap is sufficient and clearer.
-3. If keeping: counter in workflow loop; assertion in test.
+2. Implement `maxRevisionTurns` counter in `slices/parallel-implement/workflow.ts`:
+   - Track revision turns in run state (DB or in-workflow counter).
+   - After dev-review-response, if verdict still blockers-found AND turns < max → loop. Else force progression to QA.
+   - Default 1 keeps current behaviour; values >1 enable real iteration.
+3. Settings UI: new `DevReviewPanel.tsx` (or section in existing settings) — toggle `enabled`, label-multi-select for `triggerOn`, number input for `maxRevisionTurns` (1-3), $ input for `perCycleMaxUsd`, ms input for `timeoutMs`.
+4. Server route GET/PATCH `/projects/:slug/settings/dev-review`.
 
 Acceptance:
 - [ ] `goose-hub-self` opts in.
 - [ ] `priority:medium` PR triggers dev-review (test).
 - [ ] `priority:low` PR does NOT trigger (test).
-- [ ] `maxRevisionTurns` either honoured (with test) or removed from schema.
+- [ ] `maxRevisionTurns: 2` allows two revision turns (test); `: 1` allows one.
+- [ ] Settings UI persists; runtime reads.
 
 ---
 
 ## Phase 5 — Cutover
 
-### P5.A — Flip `goose-hub-self` to M19 pipeline
+### M19.26 — canary flip on goose-hub-self
 
-After all phases land + green:
-1. `target-projects/goose-hub-self/project.config.ts` → `experimental.useM19Pipeline: true`.
-2. Run one canary issue end-to-end (small bug fix). Watch event stream.
-3. If clean, leave on. If not, flip off, file regression issues.
+Pre-req: all M19.14-25 merged + green.
+
+Steps:
+1. Pick a small bug-fix issue on `goose-hub-self` as canary.
+2. Flip `experimental.useM19Pipeline: true` in `goose-hub-self/project.config.ts`.
+3. Run canary issue end-to-end. Watch event stream.
+4. Verify all landmarks: `agent.investigate-complete` (with swarm events), `spec.completed`, `agent.implement-complete` per WP, deterministic tier events, `qa.completed` with tier results from ground truth, `review.completed`, retro with QualityScore, ImprovementCandidate emitted if applicable.
+5. If clean, leave on. If not, flip off, file regression issues per failure.
 
 Acceptance:
 - [ ] Canary issue completes through full M19 pipeline.
-- [ ] All event stream landmarks present (spec.completed, agent.implement-complete per WP, qa.completed with tier results, review.completed, etc).
-- [ ] No fallback to legacy path.
+- [ ] All event-stream landmarks present.
+- [ ] No fallback to legacy path during canary.
+- [ ] Retro shows both QA's 8-cat score AND M19.08 deterministic score.
 
-### P5.B — Remove legacy path (deferred milestone)
+### Legacy path removal — deferred
 
-Once M19 pipeline stable for ≥30 days on goose-hub-self:
-- File new milestone issue: remove `runFixIssueWorkflow`, `runReviewWorkflow` (single-reviewer), legacy QA path.
-- NOT done now — keep escape hatch.
-
----
-
-## Issue creation
-
-File issues in this order. Each issue body should reference this plan and include the acceptance criteria from the relevant section verbatim.
-
-```
-M19.14: dispatcher feature flag (P0.A)
-M19.15: spec-author wired into dispatcher (P1.A)
-M19.16: parallel-implement wired into dispatcher (P1.B)
-M19.17: convergent review wired + unconstrained prompt (P2.A)
-M19.18: investigation swarm wired (P2.B)
-M19.19: quality-score aggregate wired into retro + auto-merge gate (P2.C)
-M19.20: code-quality-audit wired (P3.A)
-M19.21: record-decision MCP exposure + reconciliation (P3.B)
-M19.22: Codex hook normalisation + conditional live test (P4.A)
-M19.23: dev-review opt-in for goose-hub-self + maxRevisionTurns decision (P4.B)
-M19.24: cutover canary + flag flip (P5.A)
-```
-
-Total: 11 follow-up issues. M19.13 (Codex holdout review) remains independent — defer per existing decision.
+After ≥30 days stable on goose-hub-self (or 5 successful canaries — pick one as criterion):
+- File new milestone issue: remove `runFixIssueWorkflow`, single-reviewer `runReviewWorkflow`, dead helpers.
+- NOT done in M19. Escape hatch stays.
 
 ---
 
-## Risks / Open questions
+## Issue file order
 
-- **Spec-author input dependency.** P1.A needs scout reports from P2.B. Bootstrap: P1.A ships with manual-mode fallback (no scout reports → spec-author works from work-item body alone). P2.B wires scouts later; spec-author auto-upgrades when they exist. Both ship independently.
-- **State machine churn.** `factory:spec-ready` is new. Touch state transitions carefully — existing handlers may swallow or skip. Audit `core/state-machine/transitions.ts` before adding.
-- **Legacy + new path coexistence.** Flag-gate everything. Both paths must remain green for ≥1 milestone.
-- **Decision: kill or keep `core/quality-score`?** Plan assumes keep. If keep, document divergence from QA score. If kill, P2.C reduces to "delete dead code + remove DB table" — much smaller scope.
-- **Decision: keep `slices/three-tier-verify/`?** Same split. QA-embedded tier logic is the live one. Either delete the slice or reframe as a unit-test harness for the tier logic. File ADR.
-- **`maxRevisionTurns` decoration.** Decide: implement or delete. Don't ship a config field that has no effect.
+Sequential-ish by phase, parallel within phase. Most can be filed concurrently:
+
+```
+M19.14: dispatcher feature flag                      (P0, no deps)
+M19.15: delete dead model-routing function           (P0, no deps, parallel)
+M19.16: investigation swarm wired                    (P1.A, no deps)
+M19.17: spec-author wired                            (P1.B, depends M19.14 + M19.16)
+M19.18: parallel-implement wired                     (P1.C, depends M19.14 + M19.17)
+M19.19: deterministic 3-tier verify before QA       (P2.A, depends M19.18 indirectly — no spec means no tier 1)
+M19.20: convergent review configurable               (P2.B, depends M19.14, parallel with 19.19)
+M19.21: quality-score aggregate + auto-merge gate   (P2.C, depends M19.18 + M19.19 + M19.20)
+M19.22: code-quality-audit wired                     (P3.A, depends M19.21)
+M19.23: record-decision MCP + reconciliation        (P3.B, depends M19.14, parallel with 19.22)
+M19.24: Codex hook normalisation                     (P4.A, no deps, parallel anytime)
+M19.25: dev-review opt-in + maxRevisionTurns        (P4.B, depends M19.18)
+M19.26: canary flip on goose-hub-self                (P5, depends ALL above)
+```
+
+13 follow-up issues total. M19.13 (Codex holdout review) stays open separately — defer per existing decision.
+
+---
+
+## Risks / Open items
+
+- **M19.16 swarm scope.** 6 scouts + 2 wave-2 + cross-validate + synthesis = ~9 agent runs per investigation. Cost spike. Mitigate: cap concurrency, add per-skill budgets, monitor cost telemetry first cycle.
+- **M19.19 deterministic-vs-agent disagreement.** When QA agent produces tierResults that don't match ground truth, schema validation will reject. May cause retry storms initially. Add observability: `qa.tier-disagreement` event for debugging the first few cycles.
+- **M19.23 MCP server scope unknown.** Could be 1 issue or 2 depending on existing infrastructure. Investigate first as a sub-task before locking the issue body.
+- **M19.21 RunArtifacts assembly.** Building components from event stream requires iterating events and counting findings by priority. Add helper in `core/quality-score/build-artifacts.ts`. Test against fixture event streams.
+- **Workspace persistence.** spec.json + scout-reports live in workspace dir which is ephemeral. If workspace destroyed mid-cycle, cycle restarts from `factory:dev-ready`. Acceptable since workspaces are workflow boundaries per FACTORY_RULES, but document.
+- **Cost cap during repair.** Each phase compounds cost. Set per-project monthly cap for `goose-hub-self` before P5 canary, monitor.
+
+---
+
+## Execution model reminder
+
+- **Opus drives** the issue (this assistant in main session).
+- **Parallel Sonnet sub-agents** for independent file groups (UI vs backend vs tests) within one issue.
+- **Manual human review** (you) per PR. No M19-pipeline review during repair.
+- **Standard gates apply:** typecheck + tests + build green on both apps before any PR open.

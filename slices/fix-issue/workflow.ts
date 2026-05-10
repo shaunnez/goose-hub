@@ -606,8 +606,7 @@ async function runEvidencePost(input: RunEvidencePostInput): Promise<void> {
       env: {
         WEB_PORT: String(webPort),
         CI: 'true',
-        API_PORT: String(apiPort),
-        SERVER_PORT: String(apiPort),
+        EVIDENCE_ONLY: 'true',
       },
       ...resolveBudgetsForProject('evidence-post', projectConfig?.budgets, input.projectId),
       personaId: selectPersona(input.projectId, 'developer').personaId,
@@ -618,6 +617,9 @@ async function runEvidencePost(input: RunEvidencePostInput): Promise<void> {
     const parsed = EvidencePostSchema.safeParse(result.output);
     if (!parsed.success) {
       throw new Error('evidence-post output validation failed');
+    }
+    if (!parsed.data.commentUrl) {
+      throw new Error('evidence-post returned no commentUrl — playwright run likely failed');
     }
     eventStore.appendEvent({
       projectId: input.projectId,
