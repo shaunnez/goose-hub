@@ -93,7 +93,7 @@ export async function runSprintReviewWorkflow(input: RunSprintReviewInput): Prom
   }));
 
   let resolvedBudget: {
-    budgets: { maxTurns: number; maxBudgetUsd: number; timeoutMs?: number };
+    budgets: { maxTurns: number; maxBudgetUsd: number; timeoutMs: number };
     modelOverride: string;
   };
   try {

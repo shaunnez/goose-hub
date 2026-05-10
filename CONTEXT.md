@@ -72,7 +72,7 @@ A self-contained, end-to-end feature folder. Includes only the surfaces it genui
 
 **Context format:** structured XML tags (`<task><work_item>...</work_item><findings>...</findings></task>`). Anthropic's native delimiter. Orchestrator renders context mechanically from a typed `AgentSpec.context` object; skill authors never write template syntax.
 
-**Per-skill typed context:** each `skill.config.ts` exports a `contextSchema: ZodSchema`. Orchestrator validates `AgentSpec.context` against it before spawn. Wrong context → run fails before subprocess starts. FACTORY_RULES rule 5 applied to inputs as well as outputs.
+**Per-skill typed context:** each `skill.config.ts` exports a `contextSchema: ZodSchema`. Validation is enforced by `invokeSkill()` in `core/agent-runtime/invoke-skill.ts` — wrong context throws `ContextValidationError` before spawn; no subprocess is started. FACTORY_RULES rule 5 applied to inputs as well as outputs. See ADR 0038.
 
 **Holdout context filtering:** `contextAllowlist: ContextKey[]` in `AgentSpec` specifies which context keys the orchestrator is permitted to inject. QA allowlist includes `workItem`, `prDiff`, `sliceTests`, `projectCommands` — excludes `investigationFindings`, `devDecisionSummaries`. Orchestrator filters the context Record before rendering; excluded keys are never present in the XML block.
 
@@ -272,8 +272,10 @@ No other code in `core/` may call `insertEvent` directly. Lint rule enforces. On
 
 ## Context Assembly and Holdout Enforcement
 
+**`invokeSkill()` is the canonical spawn entry point** for skill-driven agent runs (`core/agent-runtime/invoke-skill.ts`). It enforces contextSchema validation before spawn and outputSchema validation after. `contextAllowlist` is required on every `SkillConfig` — no silent empty-allowlist fallback. See ADR 0038.
+
 **Two guards, different paths:**
-- `contextAllowlist: ContextKey[]` — the *manifest*. Filters which keys from `AgentSpec.context` render into the user-prompt XML. Guards against wrong keys at spec construction time.
+- `contextAllowlist: ContextKey[]` — the *manifest*. Filters which keys from `AgentSpec.context` render into the user-prompt XML. Guards against wrong keys at spec construction time. Now required (not optional) on `SkillConfig`.
 - `freshContext: boolean` — the *closure assertion*. When `true`, no other injection channel adds anything. Guards against runtime infrastructure adding ambient state the AgentSpec author doesn't control.
 
 **Type-level enforcement:**

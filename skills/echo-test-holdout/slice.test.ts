@@ -17,7 +17,7 @@ describe('echo-test-holdout — holdout context enforcement', () => {
     freshContext: true,
     toolBundles: [],
     toolExtras: [],
-    budgets: { maxTurns: 5, maxBudgetUsd: 0.1 },
+    budgets: { maxTurns: 5, maxBudgetUsd: 0.1, timeoutMs: 30_000 },
   };
 
   it('assembled context includes the message field', () => {

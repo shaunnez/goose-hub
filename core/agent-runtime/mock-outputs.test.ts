@@ -11,7 +11,7 @@ function makeSpec(overrides: Partial<AgentSpec> & { skill: string }): AgentSpec 
     freshContext: false,
     toolBundles: [],
     toolExtras: [],
-    budgets: { maxTurns: 1, maxBudgetUsd: 0.01 },
+    budgets: { maxTurns: 1, maxBudgetUsd: 0.01, timeoutMs: 30_000 },
     personaId: 'mock/triager/0',
     ...overrides,
   } as AgentSpec;

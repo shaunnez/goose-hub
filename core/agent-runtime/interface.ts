@@ -12,7 +12,7 @@ export interface DecisionSummary {
 export interface AgentBudgets {
   maxTurns: number;
   maxBudgetUsd: number;
-  timeoutMs?: number;
+  timeoutMs: number;
 }
 
 // ─── Role spec (discriminated union for type-level holdout enforcement) ────────
@@ -78,13 +78,16 @@ export interface AgentRuntime {
 
 export interface SkillConfig {
   contextSchema: ZodType;
+  /** Zod schema for validating the agent's JSON output. When present, invokeSkill validates
+   * post-run and throws OutputValidationError on mismatch. Skills progressively opt in. */
+  outputSchema?: ZodType;
   toolBundles: string[];
   modelPin: ModelTier;
   /** Provider that executes this skill. Defaults to 'claude' when absent. */
   provider?: 'claude' | 'codex';
   freshContext: boolean;
   role?: Role;
-  contextAllowlist?: string[];
+  contextAllowlist: string[];
 }
 
 export class HoldoutFallbackForbiddenError extends Error {

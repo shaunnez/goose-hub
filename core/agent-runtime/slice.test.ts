@@ -79,7 +79,7 @@ describe('interface types', () => {
       freshContext: false,
       toolBundles: ['read-only'],
       toolExtras: [],
-      budgets: { maxTurns: 10, maxBudgetUsd: 1.0 },
+      budgets: { maxTurns: 10, maxBudgetUsd: 1.0, timeoutMs: 30_000 },
       personaId: 'test-project/developer/0',
     };
     expect(spec.runId).toBe('01HZQKG8APXV3TYS2EW4VR6MSB');
@@ -95,7 +95,7 @@ describe('interface types', () => {
       freshContext: false,
       toolBundles: [],
       toolExtras: [],
-      budgets: { maxTurns: 5, maxBudgetUsd: 0.5 },
+      budgets: { maxTurns: 5, maxBudgetUsd: 0.5, timeoutMs: 30_000 },
       personaId: 'test-project/developer/0',
     };
     expect(spec.modelOverride).toBeUndefined();
@@ -238,7 +238,7 @@ describe('assembleSpawnContext', () => {
     freshContext: false,
     toolBundles: [],
     toolExtras: [],
-    budgets: { maxTurns: 5, maxBudgetUsd: 0.1 },
+    budgets: { maxTurns: 5, maxBudgetUsd: 0.1, timeoutMs: 30_000 },
     personaId: 'test-project/developer/0',
     ...overrides,
   });
@@ -297,7 +297,7 @@ describe('assembleSpawnContext — holdout enforcement', () => {
     freshContext: true,
     toolBundles: [],
     toolExtras: [],
-    budgets: { maxTurns: 5, maxBudgetUsd: 0.1 },
+    budgets: { maxTurns: 5, maxBudgetUsd: 0.1, timeoutMs: 30_000 },
     personaId: 'proj-abc/qa/0',
     ...overrides,
   });
@@ -470,7 +470,7 @@ describe('withFallback', () => {
     freshContext: false,
     toolBundles: [],
     toolExtras: [],
-    budgets: { maxTurns: 5, maxBudgetUsd: 0.1 },
+    budgets: { maxTurns: 5, maxBudgetUsd: 0.1, timeoutMs: 30_000 },
     personaId: 'test-project/developer/0',
     modelOverride: 'claude-opus-4-7',
     ...overrides,
@@ -556,7 +556,7 @@ function makeSecuritySpec(): AgentSpec {
     freshContext: false,
     toolBundles: [],
     toolExtras: [],
-    budgets: { maxTurns: 5, maxBudgetUsd: 0.1 },
+    budgets: { maxTurns: 5, maxBudgetUsd: 0.1, timeoutMs: 30_000 },
     personaId: 'test-project/developer/0',
   };
 }

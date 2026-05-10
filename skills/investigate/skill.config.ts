@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { InvestigateSchema } from './schema.js';
 
 /**
  * Context keys expected by the investigator agent, formatted as structured XML:
@@ -29,6 +30,8 @@ export const InvestigateContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: InvestigateContextSchema,
+  outputSchema: InvestigateSchema,
+  contextAllowlist: ['workItem', 'worktreePath'],
   /**
    * Tool bundle 'read' maps to ['read', 'search', 'work-item-read'].
    * The investigator has NO write access — file writes will be rejected.

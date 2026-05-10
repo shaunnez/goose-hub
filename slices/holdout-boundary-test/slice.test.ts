@@ -27,7 +27,7 @@ function makeHoldoutSpec(
     freshContext: true,
     toolBundles: [],
     toolExtras: [],
-    budgets: { maxTurns: 5, maxBudgetUsd: 0.1 },
+    budgets: { maxTurns: 5, maxBudgetUsd: 0.1, timeoutMs: 30_000 },
     personaId: `test-project/${role}/0`,
   };
 }
@@ -189,7 +189,7 @@ describe('Holdout boundary test — deliberate injection attempts', () => {
         freshContext: false,
         toolBundles: [],
         toolExtras: [],
-        budgets: { maxTurns: 5, maxBudgetUsd: 0.1 },
+        budgets: { maxTurns: 5, maxBudgetUsd: 0.1, timeoutMs: 30_000 },
         personaId: 'test-project/developer/0',
       };
 

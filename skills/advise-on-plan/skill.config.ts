@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { AdviseOnPlanSchema } from './schema.js';
 
 /**
  * Context expected by the advisor. Rendered as XML in the user prompt:
@@ -41,6 +42,7 @@ export const AdviseOnPlanContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: AdviseOnPlanContextSchema,
+  outputSchema: AdviseOnPlanSchema,
   contextAllowlist: [
     'workItem.title',
     'workItem.body',

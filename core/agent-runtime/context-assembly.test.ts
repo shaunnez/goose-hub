@@ -11,7 +11,7 @@ function makeSpec(context: Record<string, unknown>, allowlist: string[]) {
     freshContext: true,
     toolBundles: [] as string[],
     toolExtras: [] as never[],
-    budgets: { maxTurns: 10, maxBudgetUsd: 1 },
+    budgets: { maxTurns: 10, maxBudgetUsd: 1, timeoutMs: 30_000 },
     personaId: 'p1',
     outputJsonSchema: {},
     appendSystemPrompt: '',

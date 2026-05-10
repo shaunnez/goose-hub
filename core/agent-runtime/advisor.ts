@@ -2,15 +2,9 @@ import {
   type AdviseOnPlanOutput,
   AdviseOnPlanSchema,
 } from '@goose-hub/skills/advise-on-plan/schema.js';
-import advisorConfig from '@goose-hub/skills/advise-on-plan/skill.config.js';
 import { eventStore } from '../event-stream/store.js';
-import { getProjectBySlug } from '../projects/loader.js';
-import { ClaudeCliRuntime } from './claude-cli.js';
 import type { AgentRuntime } from './interface.js';
-import { readPromptWithContext } from './read-prompt.js';
-import { resolveBudgetsForProject } from './resolve-for-project.js';
-import { toJsonSchema } from './schema-bridge.js';
-import { selectPersona } from './select-persona.js';
+import { OutputValidationError, invokeSkill } from './invoke-skill.js';
 
 interface AdviseOnPlanInput {
   runId: string;
@@ -50,48 +44,39 @@ export async function adviseOnPlan(input: AdviseOnPlanInput): Promise<AdviseOnPl
     );
   }
 
-  const runtime = input.runtime ?? new ClaudeCliRuntime();
-  const { personaId } = selectPersona(input.projectId, 'researcher');
-  const advisorPrompt = readPromptWithContext('advise-on-plan', input.projectId);
-  const outputJsonSchema = toJsonSchema(AdviseOnPlanSchema) as Record<string, unknown>;
-  const projectConfig = await getProjectBySlug(input.projectId);
-
-  const result = await runtime.run({
-    runId: input.runId,
-    role: advisorConfig.role ?? 'researcher',
-    skill: 'advise-on-plan',
-    context: {
+  let result;
+  try {
+    result = await invokeSkill({
+      skillName: 'advise-on-plan',
       projectId: input.projectId,
       workItemId: input.workItemId,
-      workItem: input.workItem,
-      plan: input.plan,
-      revisionPass: input.revisionPass ?? 0,
-      previousAdvisorFeedback: input.previousAdvisorFeedback,
-    },
-    contextAllowlist: advisorConfig.contextAllowlist ?? [],
-    freshContext: advisorConfig.freshContext as true,
-    toolBundles: advisorConfig.toolBundles,
-    toolExtras: [],
-    ...resolveBudgetsForProject('advise-on-plan', projectConfig?.budgets, input.projectId),
-    personaId,
-    outputJsonSchema,
-    appendSystemPrompt: advisorPrompt,
-  });
-
-  const parsed = AdviseOnPlanSchema.safeParse(result.output);
-  if (!parsed.success) {
-    eventStore.appendEvent({
-      projectId: input.projectId,
-      workItemId: input.workItemId,
-      kind: 'agent.run-failed',
-      payload: { runId: input.runId, error: 'advise-on-plan output validation failed' },
       runId: input.runId,
+      context: {
+        workItem: input.workItem,
+        plan: input.plan,
+        revisionPass: input.revisionPass ?? 0,
+        previousAdvisorFeedback: input.previousAdvisorFeedback,
+      },
+      overrides: { runtimeOverride: input.runtime },
     });
-    throw new Error('advise-on-plan output validation failed');
+  } catch (err) {
+    if (err instanceof OutputValidationError) {
+      eventStore.appendEvent({
+        projectId: input.projectId,
+        workItemId: input.workItemId,
+        kind: 'agent.run-failed',
+        payload: { runId: input.runId, error: 'advise-on-plan output validation failed' },
+        runId: input.runId,
+      });
+      throw new Error('advise-on-plan output validation failed');
+    }
+    throw err;
   }
 
-  // Emit each advisor decision summary as a separate event (#206 pattern).
-  for (const summary of parsed.data.decisionSummaries) {
+  // invokeSkill already validated result.output against AdviseOnPlanSchema via outputSchema
+  const parsed = AdviseOnPlanSchema.parse(result.output);
+
+  for (const summary of parsed.decisionSummaries) {
     eventStore.appendEvent({
       projectId: input.projectId,
       workItemId: input.workItemId,
@@ -101,5 +86,5 @@ export async function adviseOnPlan(input: AdviseOnPlanInput): Promise<AdviseOnPl
     });
   }
 
-  return parsed.data;
+  return parsed;
 }

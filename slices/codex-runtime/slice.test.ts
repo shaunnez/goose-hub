@@ -81,7 +81,7 @@ function makeSpec(overrides: Partial<AgentSpec> = {}): AgentSpec {
     freshContext: true,
     toolBundles: [],
     toolExtras: [],
-    budgets: { maxTurns: 6, maxBudgetUsd: 0.5 },
+    budgets: { maxTurns: 6, maxBudgetUsd: 0.5, timeoutMs: 30_000 },
     personaId: 'test-project/dev-reviewer/0',
     modelOverride: 'gpt-5-codex',
     ...overrides,
@@ -369,7 +369,7 @@ describe('CodexCliRuntime — spawn lifecycle', () => {
     vi.mocked(spawn).mockReturnValue(proc as unknown as ReturnType<typeof spawn>);
 
     const runtime = new CodexCliRuntime();
-    const runPromise = runtime.run(makeSpec({ budgets: { maxTurns: 5, maxBudgetUsd: 0.1 } }));
+    const runPromise = runtime.run(makeSpec({ budgets: { maxTurns: 5, maxBudgetUsd: 0.1, timeoutMs: 30_000 } }));
 
     vi.advanceTimersByTime(30_001);
 

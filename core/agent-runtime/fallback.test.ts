@@ -12,7 +12,7 @@ function makeSpec(role: string, modelOverride?: string): AgentSpec {
     freshContext: role === 'qa' || role === 'reviewer',
     toolBundles: [],
     toolExtras: [],
-    budgets: { maxTurns: 5, maxBudgetUsd: 0.1 },
+    budgets: { maxTurns: 5, maxBudgetUsd: 0.1, timeoutMs: 30_000 },
     personaId: `p/${role}/0`,
     ...(modelOverride ? { modelOverride } : {}),
   };

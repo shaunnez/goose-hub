@@ -207,12 +207,12 @@ function safeResolveBudgets(
   skill: string,
   projectBudgets: ProjectConfig['budgets'] | undefined,
   fallback: {
-    budgets: { maxTurns: number; maxBudgetUsd: number; timeoutMs?: number };
+    budgets: { maxTurns: number; maxBudgetUsd: number; timeoutMs: number };
     modelOverride: string;
   },
   projectId?: string,
 ): {
-  budgets: { maxTurns: number; maxBudgetUsd: number; timeoutMs?: number };
+  budgets: { maxTurns: number; maxBudgetUsd: number; timeoutMs: number };
   modelOverride: string;
 } {
   try {

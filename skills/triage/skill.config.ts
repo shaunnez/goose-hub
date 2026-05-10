@@ -10,6 +10,7 @@ export const TriageContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: TriageContextSchema,
+  contextAllowlist: ['workItem'],
   toolBundles: [],
   modelPin: 'sonnet',
   freshContext: false,

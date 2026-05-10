@@ -10,6 +10,7 @@ export const BugEnhanceContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: BugEnhanceContextSchema,
+  contextAllowlist: ['workItem'],
   toolBundles: [],
   modelPin: 'sonnet',
   freshContext: false,

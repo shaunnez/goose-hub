@@ -895,7 +895,7 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
       freshContext: true,
       toolBundles: ['read', 'validate'],
       toolExtras: [],
-      budgets: { maxTurns: 25, maxBudgetUsd: 0.5 },
+      budgets: { maxTurns: 25, maxBudgetUsd: 0.5, timeoutMs: 30_000 },
       personaId: 'test-project/reviewer/0',
     };
 
