@@ -153,6 +153,9 @@ describe('grill-me schema', () => {
       decisionSummaries: [{ kind: 'PLAN', summary: 'Crystallized audience.' }],
     });
     expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.crystallizedDecision).toBe('Audience: admin users only.');
+    }
   });
 
   it('accepts crystallizedDecision when readyForPRD is true', () => {
@@ -164,6 +167,9 @@ describe('grill-me schema', () => {
       decisionSummaries: [{ kind: 'VERDICT', summary: 'Final crystallization.' }],
     });
     expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.crystallizedDecision).toBe('Format: CSV-only with date-range filter.');
+    }
   });
 
   it('accepts output without crystallizedDecision (round 1)', () => {
