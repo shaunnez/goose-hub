@@ -1,4 +1,4 @@
-# M19 Repair Plan (v5)
+# M19 Repair Plan (v6)
 
 Goal: 3-of-12-wired → 12-of-12-wired. M19 milestone gets follow-up issues until truly closed.
 
@@ -11,6 +11,12 @@ Goal: 3-of-12-wired → 12-of-12-wired. M19 milestone gets follow-up issues unti
 - Real state names: post-merge gate goes to existing `factory:retrospecting`, not invented `factory:merged`.
 - Real event names everywhere: `agent.investigation-complete`, `parallel-implement.wp-committed` (verified against `core/event-stream/store.ts`).
 - M19.23 ships explicit inventory of all 19 `agent.decision-summary` emitters to refactor.
+
+**v6 changes (refactor sequencing, 2026-05-10):**
+- **Hard pre-req: Plan 1 (SkillInvoker composer + type tightening) lands BEFORE M19 work starts.** Every new M19 workflow uses `invokeSkill()` from day 1, not direct `runtime.run()`. Type tightening sweep (required `contextAllowlist`, required `timeoutMs`) on ~30 skill configs done in Plan 1.
+- **Plan 3 (context-assembly split) absorbed into M19.** New M19.28 carries the holdout-validator / context-renderer split. M19.20 + M19.23 are the trigger conditions.
+- **Plan 2 (grill-and-prd extraction)** is parallel/independent. Doesn't intersect M19 — out of plan scope.
+- M19.23 reconciliation refactor coordinates with invokeSkill migration: 19 call sites get both treatments per PR.
 
 ---
 
@@ -42,6 +48,9 @@ Goal: 3-of-12-wired → 12-of-12-wired. M19 milestone gets follow-up issues unti
 | 22 | Merge-decision INSIDE approve action (post-human-click) | Preserves human-in-loop. NOT auto-dispatched on `factory:approved`. |
 | 23 | Pass-gate transition target: existing `factory:retrospecting` | NOT invented `factory:merged`. Real state per `core/state-machine/states.ts`. |
 | 24 | Real event names everywhere | `agent.investigation-complete`, `parallel-implement.wp-committed` — verified against `core/event-stream/store.ts` |
+| 25 | All M19 new workflows use `invokeSkill()` from Plan 1 | Plan 1 ships first. M19 spec-author / merge-decision / parallel-implement refactor / dev-review loop all consume composer. No direct `runtime.run()` in new code. |
+| 26 | Plan 3 (context-assembly split) absorbed as M19.28 | Single split PR co-located with first holdout change (M19.20 or M19.23). |
+| 27 | Plan 2 (grill-and-prd extraction) out of scope | Parallel, independent. Tracked separately. |
 
 ---
 
@@ -657,6 +666,39 @@ When met:
 - File new milestone issue: remove `runFixIssueWorkflow`, single-reviewer `runReviewWorkflow`, dead helpers.
 - NOT done in M19. Escape hatch stays until then.
 
+### M19.28 — context-assembly split (absorbs external Plan 3)
+
+**Trigger condition met:** M19.20 + M19.23 both touch holdout enforcement. Co-locate split with whichever lands first (or as standalone PR right before).
+
+Files: `core/agent-runtime/holdout-validator.ts` (new), `core/agent-runtime/context-renderer.ts` (new), `core/agent-runtime/context-assembly.ts` (kept as 5-line composer).
+
+Steps:
+1. Extract `findHoldoutContextLeaks(spec): ToolViolation[]` → `holdout-validator.ts`. `HOLDOUT_FORBIDDEN_KEYS` lives here only.
+2. Extract `renderContext(context, allowlist): string` (XML) → `context-renderer.ts`. No governance knowledge; takes pre-filtered context.
+3. `context-assembly.ts` becomes 5-line composer:
+   ```ts
+   export function assembleSpawnContext(spec: AgentSpec): SpawnContext {
+     const violations = findHoldoutContextLeaks(spec);
+     emitViolations(violations);
+     const filtered = filterAllowlist(spec.context, effectiveAllowlist(spec, violations));
+     const xml = renderContext(filtered, effectiveAllowlist(spec, violations));
+     if (spec.freshContext) return { xml };
+     return { xml, eventStream: ..., personaHistory: ..., inboxNotes: ... };
+   }
+   ```
+4. Lift `effectiveAllowlist` to named function. Snapshot-test against existing fixtures BEFORE split to lock current behaviour.
+5. Move existing `findHoldoutContextLeaks` tests → `holdout-validator.test.ts` (rename). Add new `context-renderer.test.ts`: dotted-path rendering, escaping, empty allowlist, missing keys. Shrink `context-assembly.test.ts` to integration only.
+6. ESLint rule pinning `assembleSpawnContext` as the only public export remains. New files re-export through `context-assembly.ts` index — call sites unchanged.
+7. Amend ADR 0014 with internal-split note. No new ADR.
+
+Acceptance:
+- [ ] `assembleSpawnContext` signature + behaviour unchanged externally.
+- [ ] Snapshot tests of `effectiveAllowlist` derivation pass against pre-split fixtures.
+- [ ] Tests previously in `context-assembly.test.ts` redistributed cleanly across three files.
+- [ ] ESLint rule does not flag the new internal imports.
+- [ ] ADR 0014 amended.
+- [ ] Single-gateway invariant preserved (no caller imports `holdout-validator` or `context-renderer` directly outside the module).
+
 ### M19.27 — auto-revert regression policy investigation (deferred)
 
 **Filed as deferred investigation, not for immediate work.** `regressionPolicy: 'revert'` was removed in M19.19 (decorative no-op). With orchestrator-owned git worktrees per WP, auto-revert may not be needed — failed WPs simply don't commit.
@@ -673,24 +715,28 @@ Acceptance:
 ## Issue file order
 
 ```
-Phase 0 (parallel, no deps):
+PRE-REQ (other agent):
+  Plan 1: SkillInvoker composer + type tightening    (lands BEFORE any M19 work)
+
+Phase 0 (parallel, no deps after Plan 1):
   M19.14: dispatcher feature flag (DB-backed)
   M19.15: delete dead model-routing function
 
 Phase 1 (sequential due to data flow):
   M19.16a: scout reports DB persistence            (no deps)
   M19.16:  investigation swarm wired               (depends M19.16a)
-  M19.17:  spec-author wired + factory:spec-ready  (depends M19.14 + M19.16, scope-heavy)
+  M19.17:  spec-author wired + factory:spec-ready  (depends M19.14 + M19.16, scope-heavy, generates pipelineRunId)
   M19.18:  parallel-implement signature + wired    (depends M19.14 + M19.17)
 
 Phase 2 (parallel within phase):
   M19.19:  deterministic 3-tier verify before QA   (depends M19.18)
   M19.20:  convergent review configurable          (depends M19.14, parallel with .19)
-  M19.21:  quality-score + auto-merge gate         (depends M19.18 + M19.19 + M19.20)
+  M19.21:  quality-score + merge-decision gate     (depends M19.18 + M19.19 + M19.20)
 
 Phase 3 (parallel):
   M19.22:  code-quality-audit wired                (depends M19.21, human action item)
   M19.23:  record-decision via JS hook + HTTP      (depends M19.14)
+  M19.28:  context-assembly split                  (co-located with first M19.20 or M19.23 PR)
 
 Phase 4 (parallel):
   M19.24:  Codex hook normalisation                (no deps)
@@ -701,9 +747,12 @@ Phase 5:
 
 Deferred:
   M19.27:  auto-revert investigation               (no deps, low priority)
+
+PARALLEL (other agent):
+  Plan 2: grill-and-prd phased extraction           (independent, anytime)
 ```
 
-15 follow-up issues total. **M19.13 (Codex holdout review) closed as duplicate of M19.20** — configurable claude+codex slots is the holdout-review feature.
+16 follow-up issues total. **M19.13 (Codex holdout review) closed as duplicate of M19.20** — configurable claude+codex slots is the holdout-review feature.
 
 ---
 
@@ -726,6 +775,8 @@ Deferred:
 - **`pipelineRunId` retry semantics.** Same PR + same pipelineRunId across QA-fail → fix-feedback → re-QA. Retro reads cumulative events. If retry semantics break (new pipelineRunId per attempt), score history fragments. Test explicitly with fix-feedback fixture.
 - **Spec-author owns pipelineRunId generation.** If M19.17 ships before scout reports key is migrated to include investigationRunId (M19.16a), correlation breaks. M19.16a must land first.
 - **New event kinds in store union.** `spec.completed` (M19.17) and `merge-decision.completed` (M19.21) added to `core/event-stream/store.ts:26+` event-kind union. Match existing `qa.completed`/`review.completed` precedent — single event per workflow step, payload carries verdict. Also any new emissions from M19.16 (cross-validate, wave2 results) need declaration. Each PR adding events updates the union.
+- **Plan 1 dependency.** All M19 issues assume `invokeSkill()` exists and ~30 skill configs have explicit `contextAllowlist` + `timeoutMs`. If Plan 1 ships partially or with a different API surface, M19 issue bodies need a quick re-pass. Verify Plan 1 PR-1 (type tightening) has shipped before opening M19.14.
+- **M19.28 timing.** Plan 3 absorbed as M19.28. Co-locate with M19.20 OR M19.23 — whichever lands first. If both PRs are open simultaneously, M19.28 lands as standalone first to avoid double-edit of context-assembly.ts.
 - **Cost cap during repair.** $2000/month for `goose-hub-self`. Cost-cap-checker enforces during canary; manual monitoring before that.
 
 ---
