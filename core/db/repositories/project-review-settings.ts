@@ -40,7 +40,7 @@ export function writeProjectReviewSettings(
 ): void {
   const now = new Date().toISOString();
   const serialized = {
-    reviewerSlots: patch.reviewerSlots != null ? JSON.stringify(patch.reviewerSlots) : undefined,
+    reviewerSlots: patch.reviewerSlots != null ? JSON.stringify(patch.reviewerSlots) : null,
   };
   const existing = db
     .select()

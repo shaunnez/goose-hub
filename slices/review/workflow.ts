@@ -318,7 +318,7 @@ export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<
 
   // Read configurable slots from DB; fall back to defaults.
   // verdictsDiverge escalation only applies when slots are explicitly configured (not defaults).
-  const settingsRow = readProjectReviewSettings(projectSlug);
+  const settingsRow = readProjectReviewSettings(projectConfig?.id ?? projectSlug);
   const configuredSlots = parseReviewerSlots(settingsRow);
   const slots = configuredSlots ?? DEFAULT_REVIEWER_SLOTS;
   const slotsAreConfigured = configuredSlots != null;
