@@ -905,3 +905,111 @@ describe('grill-and-prd: crystallization', () => {
     expect(passed[2].crystallized).toBe('Format: CSV-only.');
   });
 });
+
+describe('grill-and-prd: 3-round combined approach end-to-end', () => {
+  it('crystallizes each round, accumulates decisions, hands them to write-prd', async () => {
+    const projectId = uniqueProjectId('e2e-3-round');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await seedFeatureItem(source, { state: 'factory:grilling' });
+
+    // Round 1 — no priorReplies, no crystallization in output
+    const round1Output = {
+      questions: [{ text: 'Audience?' }],
+      refinedIntent: 'Build a thing for someone.',
+      readyForPRD: false,
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Round 1.' }],
+    };
+    // Round 2 — crystallizes round 1
+    const round2Output = {
+      questions: [{ text: 'Format?' }],
+      refinedIntent: 'Build a thing for admins.',
+      readyForPRD: false,
+      crystallizedDecision: 'Audience: admin users only.',
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Round 2.' }],
+    };
+    // Round 3 — crystallizes round 2 AND signals readyForPRD
+    const round3Output = {
+      questions: [],
+      refinedIntent: 'Add an admin-only audit-log CSV export.',
+      readyForPRD: true,
+      crystallizedDecision: 'Format: CSV-only.',
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Round 3.' }],
+    };
+
+    // Round 1
+    let runtime = makeQueuedRuntime([round1Output]);
+    let workItem = await source.getItem(item.externalId);
+    await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies: [],
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
+    });
+
+    // Round 2 — simulate the user reply being appended
+    await source.comment(item.externalId, 'Admins only.');
+    runtime = makeQueuedRuntime([round2Output]);
+    workItem = await source.getItem(item.externalId);
+    const r2Comments = await source.listComments(item.externalId);
+    const r2PriorReplies = r2Comments
+      .filter((c) => !c.body.startsWith('<!-- factory:system -->'))
+      .map((c) => ({
+        role: c.body.startsWith('<!-- factory:grill-question -->')
+          ? ('agent' as const)
+          : ('user' as const),
+        content: c.body,
+      }));
+    await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies: r2PriorReplies,
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
+    });
+
+    // Round 3 — simulate the second user reply
+    await source.comment(item.externalId, 'CSV.');
+    runtime = makeQueuedRuntime([round3Output, validPRD()]);
+    workItem = await source.getItem(item.externalId);
+    const r3Comments = await source.listComments(item.externalId);
+    const r3PriorReplies = r3Comments
+      .filter((c) => !c.body.startsWith('<!-- factory:system -->'))
+      .map((c) => ({
+        role: c.body.startsWith('<!-- factory:grill-question -->')
+          ? ('agent' as const)
+          : ('user' as const),
+        content: c.body,
+      }));
+    const r3Result = await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies: r3PriorReplies,
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
+    });
+
+    expect(r3Result.phase).toBe('prd-review');
+
+    // Both crystallizations should have landed in the event store.
+    const evs = eventStore.replay({ projectId, workItemId: workItem.id });
+    const crystEvs = evs.filter((e) => e.kind === 'grill.decision-crystallized');
+    expect(crystEvs).toHaveLength(2);
+    expect(crystEvs.map((e) => (e.payload as { roundNumber: number }).roundNumber).sort()).toEqual([
+      1, 2,
+    ]);
+
+    // write-prd should have received priorReplies with both crystallizations.
+    const writePrdCall = (runtime.run as ReturnType<typeof vi.fn>).mock.calls[1][0];
+    const passed = writePrdCall.context.priorReplies as Array<{
+      role: string;
+      crystallized?: string;
+    }>;
+    const crystallizedAgents = passed.filter(
+      (p) => p.role === 'agent' && typeof p.crystallized === 'string',
+    );
+    expect(crystallizedAgents).toHaveLength(2);
+    expect(crystallizedAgents[0].crystallized).toBe('Audience: admin users only.');
+    expect(crystallizedAgents[1].crystallized).toBe('Format: CSV-only.');
+  });
+});
