@@ -16,6 +16,17 @@ import { _clearEmittedIdsForTest, reconcileDecisionSummaries } from './reconcile
 const appendEvent = vi.mocked(eventStore.appendEvent);
 const mockReadRunDecisions = vi.mocked(readRunDecisions);
 
+type DecisionSummaryEventPayload = {
+  skill: string;
+  kind: string;
+  summary: string;
+  evidence?: string;
+};
+
+function emittedPayload(index = 0): DecisionSummaryEventPayload {
+  return appendEvent.mock.calls[index][0].payload as DecisionSummaryEventPayload;
+}
+
 beforeEach(() => {
   appendEvent.mockClear();
   mockReadRunDecisions.mockReset();
@@ -34,11 +45,11 @@ describe('reconcileDecisionSummaries', () => {
       mockReadRunDecisions.mockReturnValue([]);
       const parsedSummaries = [
         {
-          kind: 'IMPLEMENTATION_PLAN' as const,
+          kind: 'PLAN' as const,
           summary: 'Added auth check',
           evidence: 'src/api.ts:42',
         },
-        { kind: 'REPO_SELECTION' as const, summary: 'Using payments-api' },
+        { kind: 'READ' as const, summary: 'Using payments-api' },
       ];
 
       reconcileDecisionSummaries(runId, projectId, workItemId, skill, parsedSummaries);
@@ -72,43 +83,41 @@ describe('reconcileDecisionSummaries', () => {
       const dbRows = [
         {
           id: 'row-1',
-          kind: 'IMPLEMENTATION_PLAN' as const,
+          kind: 'PLAN' as const,
           summary: 'from DB',
           evidence: 'hook-captured',
         },
       ];
       mockReadRunDecisions.mockReturnValue(dbRows);
-      const parsedSummaries = [{ kind: 'REPO_SELECTION' as const, summary: 'from schema field' }];
+      const parsedSummaries = [{ kind: 'READ' as const, summary: 'from schema field' }];
 
       reconcileDecisionSummaries(runId, projectId, workItemId, skill, parsedSummaries);
 
       expect(appendEvent).toHaveBeenCalledTimes(1);
-      const emitted = appendEvent.mock.calls[0][0];
-      expect(emitted.payload).toMatchObject({ skill, summary: 'from DB' });
+      expect(emittedPayload()).toMatchObject({ skill, summary: 'from DB' });
     });
 
     it('does NOT emit schema-field summaries when DB rows exist (no double-emission)', () => {
-      const dbRows = [{ id: 'row-1', kind: 'IMPLEMENTATION_PLAN' as const, summary: 'DB row' }];
+      const dbRows = [{ id: 'row-1', kind: 'PLAN' as const, summary: 'DB row' }];
       mockReadRunDecisions.mockReturnValue(dbRows);
       const parsedSummaries = [
-        { kind: 'REPO_SELECTION' as const, summary: 'schema-field summary' },
-        { kind: 'IMPLEMENTATION_PLAN' as const, summary: 'another schema-field' },
+        { kind: 'READ' as const, summary: 'schema-field summary' },
+        { kind: 'PLAN' as const, summary: 'another schema-field' },
       ];
 
       reconcileDecisionSummaries(runId, projectId, workItemId, skill, parsedSummaries);
 
       // Only the 1 DB row emitted, not the 2 parsed summaries.
       expect(appendEvent).toHaveBeenCalledTimes(1);
-      const emitted = appendEvent.mock.calls[0][0];
-      expect(emitted.payload.summary).toBe('DB row');
+      expect(emittedPayload().summary).toBe('DB row');
     });
 
     it('does not re-emit DB rows already emitted in a prior reconcile call for the same runId', () => {
       // Simulates grill-and-prd.ts: shared runId, 3 sequential reconcile calls.
       // First call (skill='grill-me'): rows r1, r2.
       const grillRows = [
-        { id: 'r1', kind: 'IMPLEMENTATION_PLAN' as const, summary: 'grill decision 1' },
-        { id: 'r2', kind: 'REPO_SELECTION' as const, summary: 'grill decision 2' },
+        { id: 'r1', kind: 'PLAN' as const, summary: 'grill decision 1' },
+        { id: 'r2', kind: 'READ' as const, summary: 'grill decision 2' },
       ];
       mockReadRunDecisions.mockReturnValue(grillRows);
       reconcileDecisionSummaries(runId, projectId, workItemId, 'grill-me', []);
@@ -118,8 +127,8 @@ describe('reconcileDecisionSummaries', () => {
 
       // Second call (skill='write-prd'): rows r1, r2, r3 (r1+r2 already emitted).
       const prdRows = [
-        { id: 'r1', kind: 'IMPLEMENTATION_PLAN' as const, summary: 'grill decision 1' },
-        { id: 'r2', kind: 'REPO_SELECTION' as const, summary: 'grill decision 2' },
+        { id: 'r1', kind: 'PLAN' as const, summary: 'grill decision 1' },
+        { id: 'r2', kind: 'READ' as const, summary: 'grill decision 2' },
         { id: 'r3', kind: 'INSIGHT' as const, summary: 'prd decision' },
       ];
       mockReadRunDecisions.mockReturnValue(prdRows);
@@ -127,9 +136,8 @@ describe('reconcileDecisionSummaries', () => {
 
       // Only r3 is new — r1 and r2 must not be re-emitted.
       expect(appendEvent).toHaveBeenCalledTimes(1);
-      const emitted = appendEvent.mock.calls[0][0];
-      expect(emitted.payload.summary).toBe('prd decision');
-      expect(emitted.payload.skill).toBe('write-prd');
+      expect(emittedPayload().summary).toBe('prd decision');
+      expect(emittedPayload().skill).toBe('write-prd');
     });
   });
 
@@ -139,14 +147,13 @@ describe('reconcileDecisionSummaries', () => {
       reconcileDecisionSummaries(runId, projectId, workItemId, 'qa', [
         { kind: 'FUNCTIONAL_CHECK' as const, summary: 'all tests pass' },
       ]);
-      const emitted = appendEvent.mock.calls[0][0];
-      expect(emitted.payload.skill).toBe('qa');
+      expect(emittedPayload().skill).toBe('qa');
     });
 
     it('sets kind=agent.decision-summary on the event', () => {
       mockReadRunDecisions.mockReturnValue([]);
       reconcileDecisionSummaries(runId, projectId, null, skill, [
-        { kind: 'IMPLEMENTATION_PLAN' as const, summary: 'test' },
+        { kind: 'PLAN' as const, summary: 'test' },
       ]);
       const emitted = appendEvent.mock.calls[0][0];
       expect(emitted.kind).toBe('agent.decision-summary');
@@ -156,7 +163,7 @@ describe('reconcileDecisionSummaries', () => {
       mockReadRunDecisions.mockReturnValue([]);
       expect(() =>
         reconcileDecisionSummaries(runId, projectId, null, skill, [
-          { kind: 'IMPLEMENTATION_PLAN' as const, summary: 'test' },
+          { kind: 'PLAN' as const, summary: 'test' },
         ]),
       ).not.toThrow();
       expect(appendEvent.mock.calls[0][0].workItemId).toBeNull();

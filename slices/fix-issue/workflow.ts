@@ -3,7 +3,7 @@ import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { adviseOnPlan } from '@goose-hub/core/agent-runtime/advisor.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { findFreePort } from '@goose-hub/core/agent-runtime/find-free-port.js';
-import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
+import type { AgentRuntime, DecisionSummary } from '@goose-hub/core/agent-runtime/interface.js';
 import { selectModel } from '@goose-hub/core/agent-runtime/model-router.js';
 import { defaultModelForTier, tierOf } from '@goose-hub/core/agent-runtime/models.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
@@ -304,7 +304,7 @@ interface ImplementOutputShape {
   prUrl: string;
   evidenceSpecPath: string | null;
   confidence: 'low' | 'medium' | 'high';
-  decisionSummaries: { kind: string; summary: string; evidence?: string }[];
+  decisionSummaries: DecisionSummary[];
 }
 
 async function runImplement(input: RunImplementInput): Promise<ImplementOutputShape> {
