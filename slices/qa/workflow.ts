@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
@@ -14,9 +15,16 @@ import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interfa
 import { runVitest } from '@goose-hub/core/test-runner/run-vitest.js';
 import { QaOutputSchema, type TestRun } from '@goose-hub/skills/qa/schema.js';
 
-// M9+ will fetch the real diff from GitHub. Until then QA grades on test/lint results only.
-function getPrDiff(_workItem: WorkItem): string {
-  return '';
+function getPrDiff(_workItem: WorkItem, workspaceDir?: string): string {
+  if (workspaceDir == null) return '';
+  try {
+    return execFileSync('git', ['diff', 'origin/main...HEAD'], {
+      cwd: workspaceDir,
+      encoding: 'utf8',
+    });
+  } catch {
+    return '';
+  }
 }
 
 function findDevWorktreePath(workItemId: string): string | undefined {
@@ -119,8 +127,8 @@ export async function runQaWorkflow(
   const projectConfig = await getProjectBySlug(projectSlug);
   const qaJsonSchema = toJsonSchema(QaOutputSchema);
   const { personaId } = selectPersona(projectSlug, 'qa');
-  const prDiff = getPrDiff(workItem);
   const workspaceDir = findDevWorktreePath(workItem.id);
+  const prDiff = getPrDiff(workItem, workspaceDir);
 
   // Snapshot prior events BEFORE this run's outcome is appended.
   // shouldEscalateQa uses this count to decide: Nth failure = N-1 priors.
@@ -177,6 +185,9 @@ export async function runQaWorkflow(
       toolBundles: ['read', 'qa-tools'],
       workspaceDir,
       toolExtras: [],
+      ...(workspaceDir != null
+        ? { env: { WEB_PORT: '5174', CI: 'true', API_PORT: '3002', SERVER_PORT: '3002' } }
+        : {}),
       ...resolveBudgetsForProject('qa', projectConfig?.budgets, projectSlug),
       personaId,
       outputJsonSchema: qaJsonSchema,

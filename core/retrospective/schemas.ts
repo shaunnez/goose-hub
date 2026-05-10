@@ -32,6 +32,7 @@ export const ImprovementCandidateSchema = z.object({
   evidence: z.string().optional(),
   confidence: ConfidenceSchema,
   proposedDiff: z.string().optional(),
+  sourcePersonaId: z.string().optional(),
 });
 
 export const QualityScoreSchema = z.object({

@@ -5,6 +5,7 @@ import { config } from 'dotenv';
 config({ path: resolve(import.meta.dirname, '../../.env') });
 
 const PORT = Number(process.env.WEB_PORT ?? 5173);
+const API_PORT = Number(process.env.API_PORT ?? 3001);
 
 export default defineConfig({
   testDir: './e2e',
@@ -19,25 +20,26 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  webServer:
-    process.env.SKIP_WEBSERVER === '1'
-      ? undefined
-      : [
-          {
-            // Apps/server boots first — vite proxies /api and /events to it.
-            command: 'pnpm --filter @goose-hub/server start',
-            port: 3001,
-            reuseExistingServer: !process.env.CI,
-            timeout: 30_000,
-            env: {
-              GITHUB_TOKEN: process.env.GITHUB_TOKEN ?? '',
-            },
-          },
-          {
-            command: `pnpm dev --port ${PORT}`,
-            port: PORT,
-            reuseExistingServer: !process.env.CI,
-            timeout: 30_000,
-          },
-        ],
+  webServer: [
+    {
+      // Apps/server boots first — vite proxies /api and /events to it.
+      command: 'pnpm --filter @goose-hub/server start',
+      port: API_PORT,
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+      env: {
+        GITHUB_TOKEN: process.env.GITHUB_TOKEN ?? '',
+        PORT: String(API_PORT),
+      },
+    },
+    {
+      command: `pnpm dev --port ${PORT}`,
+      port: PORT,
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+      env: {
+        SERVER_PORT: String(API_PORT),
+      },
+    },
+  ],
 });

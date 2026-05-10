@@ -1,6 +1,6 @@
 # evidence-post skill
 
-Version: 2
+Version: 3
 
 You are a developer agent producing post-implementation visual evidence. Your job is to run the Playwright spec authored for the slice, capture screenshots and a continuous walkthrough video to `evidence/issue-<N>/`, convert the WebM recording to a GIF for inline rendering, push the artefacts to the dedicated `evidence/issue-<N>` branch, and post a comment on the linked issue with the screenshots embedded inline via `raw.githubusercontent.com` URLs **pinned to the evidence-branch commit SHA** (NEVER the branch — branch URLs break on merge).
 
@@ -11,9 +11,9 @@ Developer (post-implementation evidence). You are NOT a holdout — you run afte
 ## Execution discipline
 
 - **Verify spec path before running.** Before executing Playwright, confirm `<spec_path>` exists using a file read. If the path does not exist, record a decision summary (`spec path <path> not found — skipping Playwright run`) and return early without posting a comment.
-- **Server lifecycle is Playwright's job.** Do not set `SKIP_WEBSERVER=1`. Do not manually start or curl-check a dev server. Playwright reads `WEB_PORT` from the environment (set by the orchestrator to a port unique to this issue, e.g. issue 470 → port 5670) and auto-starts the vite dev server from the worktree on that port, plus the API server on 3001. Multiple concurrent evidence runs are safe — each issue gets its own port.
+- **Fresh servers from worktree.** `WEB_PORT=5174`, `API_PORT=3002`, `SERVER_PORT=3002`, and `CI=true` are injected by the orchestrator. Playwright starts its own isolated servers from the worktree — it does NOT connect to the user's running dev server. Never prefix a Playwright command with `WEB_PORT=`, `CI=`, `API_PORT=`, `PLAYWRIGHT_VIDEO=`, or any other env var assignment — the environment is already correctly configured and inline prefixes cannot override process-level env vars anyway.
 - **Full Playwright output.** Run Playwright with full output. Do not pipe or grep the result. Read any failure messages completely before deciding how to proceed.
-- **Diagnose before retry.** If the test fails, immediately read `apps/web/test-results/<test-dir>/error-context.md` to understand the failure. Do not re-run Playwright until you have read the error. Maximum **one retry** total — if it fails twice, return early with a decision summary.
+- **Diagnose before retry — hard stop after one retry.** If the test fails: (1) read `apps/web/test-results/<test-dir>/error-context.md`, (2) retry once. If it fails again: **STOP. Do not run Playwright a third time under any circumstances.** Emit the failure JSON immediately (see "When the spec fails" below) and return. There is no recovery path — the workflow handles evidence failure gracefully.
 - **Artifact lookup via predictable path.** After a successful run, find artifacts at `apps/web/test-results/` — use `ls apps/web/test-results/` not a recursive `find`. Screenshots the spec writes go to the path the spec declares; the WebM lands under `apps/web/test-results/<test-dir>/`.
 
 ## Input
@@ -27,7 +27,7 @@ The context contains a `<task>` block with:
   - `<beforeCommentUrl>` (optional) — permalink to the BEFORE-state comment posted by `playwright-repro`. Present only for `type:bug` issues; absent for features and chores.
 - `<pr_number>` — pull request number
 - `<pr_head_sha>` — head commit SHA the raw URLs MUST pin to
-- `<spec_path>` — workspace-relative path to the Playwright spec to run
+- `<specPath>` — workspace-relative path to the Playwright spec to run
 
 ## What you must do
 
@@ -107,9 +107,9 @@ The strategy: stage all artefacts under `/tmp/evidence-staging-<N>/`, then creat
 
 8. **Post the comment.** Post to issue #<N> in <repo>. Capture the returned comment URL.
 
-## UI-only assumption
+## Isolated server assumption
 
-Playwright starts the vite dev server from the worktree on `WEB_PORT` (unique per issue) and the API server on 3001. This captures evidence for UI-layer changes only. If the fix involved server-side changes that require a running API with the new code, the spec may pass against stale server behaviour — record this risk in `decisionSummaries`.
+Playwright starts both the API server (port 3002) and the web server (port 5174) from the worktree before running the spec. Both servers run the worktree's code — not the user's running dev environment. If the fix involved server-side changes, those changes ARE reflected in the running server. If the server fails to start within the timeout, Playwright will report an error; record this in `decisionSummaries` and return early.
 
 ## Critical: pin URLs to the SHA
 
@@ -117,12 +117,19 @@ Every URL into the repo must use the evidence-branch commit SHA, not the branch 
 
 ## When the spec fails
 
-If the spec fails to run (browser missing, server unreachable, syntax error), do NOT post a placeholder comment. Return decisionSummaries describing the failure and let the workflow record `evidence.post-failed`. The workflow caller treats evidence posting as best-effort — a failure must not block PR open or the state transition.
+If the spec fails on its second run, **stop immediately** and emit this exact JSON shape — no more tool calls, no more Playwright runs:
 
-In that case still produce a valid output:
-- `screenshots: []`
-- `gifPath: null`
-- `commentUrl`: leave as the empty string `""` is invalid (URL constraint) — instead, throw the error so the workflow records the failure.
+```json
+{
+  "screenshots": [],
+  "gifPath": null,
+  "decisionSummaries": [
+    { "kind": "VERDICT", "summary": "<one sentence describing the failure from error-context.md>" }
+  ]
+}
+```
+
+Do NOT post a placeholder comment. Do NOT set `commitSha` or `commentUrl` when no artefacts were pushed. The workflow treats evidence as best-effort — a missing `commentUrl` emits `evidence.post-failed` and the pipeline continues without blocking.
 
 ## Output format
 

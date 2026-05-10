@@ -52,7 +52,7 @@ function persistCandidates(
     db.insert(improvementCandidates)
       .values({
         projectId: provenance.projectId,
-        personaName: provenance.personaId,
+        personaName: c.sourcePersonaId ?? provenance.personaId,
         sourceTaskId: provenance.sourceWorkItem,
         suggestionText: c.suggestionText,
         suggestionType: c.kind,

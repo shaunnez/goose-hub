@@ -2,6 +2,40 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ─── module mocks ─────────────────────────────────────────────────────────────
 
+const { mockDbInsert } = vi.hoisted(() => ({
+  mockDbInsert: vi.fn().mockImplementation(() => ({
+    values: vi.fn().mockReturnValue({
+      run: vi.fn().mockReturnValue(undefined),
+      returning: vi.fn().mockReturnValue({
+        all: vi.fn().mockReturnValue([{ id: 1 }]),
+      }),
+    }),
+  })),
+}));
+
+// Minimal DB mock: insert is tracked for attribution tests; select chains return empty results
+// so archiveLifecycle/computeTrend don't throw when called from runRetrospectiveWorkflow.
+vi.mock('../db/db.js', () => {
+  const chainEmpty = (): unknown => {
+    const chain: Record<string, () => unknown> = {};
+    const methods = ['from', 'where', 'orderBy', 'limit', 'groupBy', 'having'];
+    for (const m of methods) chain[m] = () => chainEmpty();
+    chain.get = () => null;
+    chain.all = () => [];
+    chain.run = () => undefined;
+    chain.returning = () => Promise.resolve([]);
+    return chain;
+  };
+  return {
+    db: {
+      insert: mockDbInsert,
+      select: () => chainEmpty(),
+      update: () => chainEmpty(),
+      delete: () => chainEmpty(),
+    },
+  };
+});
+
 const mockRun = vi.fn();
 const mockAccumulatePersonaStats = vi.fn();
 
@@ -645,5 +679,85 @@ describe('skill-coaching workflow — happy path', () => {
     expect(coachEvent).toBeDefined();
     const payload = coachEvent?.[0].payload as { targetSkillName: string };
     expect(payload.targetSkillName).toBe('implement');
+  });
+});
+
+// ─── persistCandidates attribution ───────────────────────────────────────────
+
+describe('persistCandidates (via runRetrospectiveWorkflow)', () => {
+  it('uses sourcePersonaId when present', async () => {
+    const valuesRun = vi.fn().mockReturnValue(undefined);
+    const values = vi.fn().mockReturnValue({ run: valuesRun });
+    mockDbInsert.mockReturnValue({ values });
+
+    const mockRun2 = vi.fn().mockResolvedValueOnce({
+      output: {
+        outcome: 'success',
+        workItemNumber: 42,
+        summary: { wentWell: 'ok', didNotGoWell: 'none', architecturalTakeaway: 'good' },
+        improvementCandidates: [
+          {
+            kind: 'skill-prompt',
+            targetPath: 'skills/developer/prompt.md',
+            suggestionText: 'Add TDD instructions',
+            confidence: 'high',
+            sourcePersonaId: 'test-project/developer/0',
+          },
+        ],
+        decisionSummaries: [{ kind: 'VERDICT', summary: 'Done' }],
+      },
+      decisionSummaries: [],
+      events: [],
+    });
+
+    const { runRetrospectiveWorkflow } = await import('./retrospective.js');
+    await runRetrospectiveWorkflow({
+      workItem: makeWorkItem(),
+      stateSource: makeSource(),
+      projectId: 'test-project',
+      policy: 'always-light',
+      deps: { runtime: { run: mockRun2 } },
+    });
+
+    expect(mockDbInsert).toHaveBeenCalled();
+    const insertedValues = values.mock.calls[0][0];
+    expect(insertedValues.personaName).toBe('test-project/developer/0');
+  });
+
+  it('falls back to provenance personaId when sourcePersonaId absent', async () => {
+    const valuesRun = vi.fn().mockReturnValue(undefined);
+    const values = vi.fn().mockReturnValue({ run: valuesRun });
+    mockDbInsert.mockReturnValue({ values });
+
+    mockRun.mockResolvedValueOnce({
+      output: {
+        outcome: 'success',
+        workItemNumber: 42,
+        summary: { wentWell: 'ok', didNotGoWell: 'none', architecturalTakeaway: 'good' },
+        improvementCandidates: [
+          {
+            kind: 'skill-prompt',
+            targetPath: 'skills/developer/prompt.md',
+            suggestionText: 'Add TDD instructions',
+            confidence: 'high',
+          },
+        ],
+        decisionSummaries: [{ kind: 'VERDICT', summary: 'Done' }],
+      },
+      decisionSummaries: [],
+      events: [],
+    });
+
+    const { runRetrospectiveWorkflow } = await import('./retrospective.js');
+    await runRetrospectiveWorkflow({
+      workItem: makeWorkItem(),
+      stateSource: makeSource(),
+      projectId: 'test-project',
+      policy: 'always-light',
+    });
+
+    expect(mockDbInsert).toHaveBeenCalled();
+    const insertedValues = values.mock.calls[0][0];
+    expect(insertedValues.personaName).toBe('test-project/retrospector/0');
   });
 });

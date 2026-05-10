@@ -601,7 +601,7 @@ async function runEvidencePost(input: RunEvidencePostInput): Promise<void> {
       freshContext: false,
       toolBundles: ['validate'],
       toolExtras: [],
-      env: { WEB_PORT: String(5200 + (Number(input.workItem.externalId) % 800)) },
+      env: { WEB_PORT: '5174', CI: 'true', API_PORT: '3002', SERVER_PORT: '3002' },
       ...resolveBudgetsForProject('evidence-post', projectConfig?.budgets, input.projectId),
       personaId: selectPersona(input.projectId, 'developer').personaId,
       outputJsonSchema: input.outputJsonSchema,
