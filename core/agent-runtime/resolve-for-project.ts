@@ -6,15 +6,13 @@ import {
   readProjectSettings,
   readProjectSkillSettings,
 } from '../db/repositories/project-settings.js';
-import type { AgentConfig, ModelTier, Role } from '../types.js';
+import type { ModelTier, Role } from '../types.js';
 import {
   type ResolvedBudget,
   type SkillBudgetOverride,
   resolveBudgets,
   resolveEscalatedBudgets,
 } from './budgets.js';
-import type { SkillConfig } from './interface.js';
-import { type RoleModelResult, selectModelForRole } from './select-model-for-role.js';
 
 /** Merged global settings: DB row wins over projectConfig value when non-null. */
 export interface EffectiveGlobalSettings {
@@ -108,23 +106,6 @@ export function resolveEscalatedBudgetsForProject(
     globalRow?.perWorkflowMaxUsd,
     globalRow?.perAgentMaxUsd,
   );
-}
-
-/**
- * selectModelForRole with DB override applied. Reads project_model_settings for
- * the given projectId+role and passes the result to the pure selectModelForRole.
- *
- * Use this in workflow code that has a projectId; use selectModelForRole directly
- * only when no DB access is available.
- */
-export function selectModelForRoleForProject(
-  role: Role,
-  projectId: string,
-  agentConfig: Pick<AgentConfig, 'rolesModels' | 'allowHoldoutOverride'> | undefined,
-  skillConfig: Pick<SkillConfig, 'modelPin'> | undefined,
-): RoleModelResult {
-  const dbRow = readProjectModelSettingsForRole(projectId, role);
-  return selectModelForRole(role, agentConfig, skillConfig, dbRow ?? undefined);
 }
 
 /**
