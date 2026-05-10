@@ -98,7 +98,7 @@ export const PENDING_NEXT_RUN_STATES: Record<string, string> = {
   'factory:decomposing': 'decompose-issues',
   'factory:investigating': 'investigate',
   'factory:dev-ready': 'implement',
-  'factory:spec-ready': 'spec-author',
+  'factory:spec-ready': 'implement',
   'factory:in-progress': 'implement',
   'factory:needs-qa': 'qa',
   'factory:needs-review': 'review',

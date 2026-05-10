@@ -1136,6 +1136,21 @@ export async function dispatchResumeIssue(slug: string, issueNumber: number): Pr
     return;
   }
 
+  // M19: parallel-implement (M19.18) is not yet wired. Resuming factory:in-progress
+  // via dispatchFixIssue → dispatchSpecAuthor would re-run spec-author on an already-specced
+  // item and overwrite the stored spec/pipelineRunId. Skip until M19.18 lands.
+  if (fromState === 'factory:in-progress') {
+    const projectForFlag = await getProject(slug);
+    const useM19Resume = projectForFlag != null ? getUseM19Pipeline(projectForFlag.id) : false;
+    if (useM19Resume) {
+      logger.warn(
+        'dispatchResumeIssue: M19 parallel-implement not wired yet — skipping in-progress resume',
+        { slug, issueNumber },
+      );
+      return;
+    }
+  }
+
   if (entry.targetState !== fromState) {
     await source.forceState(workItemId, entry.targetState);
     eventStore.appendEvent({
