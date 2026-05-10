@@ -21,6 +21,13 @@ import type { ImplementWpOutput } from '@goose-hub/skills/implement-wp/schema.js
 import type { EngineeringSpec, WorkPackage } from '@goose-hub/skills/spec-author/schema.js';
 import { runParallelImplementWorkflow } from './workflow.js';
 
+vi.mock('@goose-hub/core/agent-runtime/select-persona.js', () => ({
+  selectPersona: vi.fn().mockReturnValue({
+    personaId: 'goose-hub-self/developer/0',
+    codename: 'Test Developer',
+  }),
+}));
+
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -141,6 +148,7 @@ describe('parallel-implement rollback: WP3 fails after WP1+WP2 committed', () =>
     await runParallelImplementWorkflow(
       makeWorkItem(),
       spec,
+      'pipeline-run-123',
       makeStateSource(),
       'goose-hub-self',
       '/tmp/repo',
@@ -228,6 +236,7 @@ describe('parallel-implement concurrency: 3 fake builders on disjoint files', ()
     await runParallelImplementWorkflow(
       makeWorkItem(),
       spec,
+      'pipeline-run-123',
       makeStateSource(),
       'goose-hub-self',
       '/tmp/repo',
@@ -277,9 +286,63 @@ describe('parallel-implement concurrency: 3 fake builders on disjoint files', ()
     // PR opened event emitted
     const prEvent = events.find((e) => (e.kind as string) === 'pr.opened');
     expect(prEvent).toBeDefined();
+    expect(prEvent?.payload).toMatchObject({
+      worktreePath: '/tmp/issue-wt',
+      pipelineRunId: 'pipeline-run-123',
+    });
+    expect(prEvent?.payload).toHaveProperty('devRunId');
+
+    const pipelineEvents = events.filter((e) =>
+      (e.kind as string).startsWith('parallel-implement.'),
+    );
+    expect(pipelineEvents.length).toBeGreaterThan(0);
+    expect(
+      pipelineEvents.every(
+        (e) => (e.payload as { pipelineRunId?: string }).pipelineRunId === 'pipeline-run-123',
+      ),
+    ).toBe(true);
 
     // No failures
     expect(iterations.some((i) => i.status === 'failed')).toBe(false);
+  });
+});
+
+describe('parallel-implement workflow contract: dispatcher owns state transitions', () => {
+  it('does not transition work item state internally on success', async () => {
+    const wp1 = makeWp('WP1', ['core/a.ts']);
+    const spec = makeSpec([wp1]);
+    const source = makeStateSource();
+    const { fn: appendEvent } = makeAppendEvent();
+
+    const result = await runParallelImplementWorkflow(
+      makeWorkItem({ state: 'factory:spec-ready' }),
+      spec,
+      'pipeline-run-456',
+      source,
+      'goose-hub-self',
+      '/tmp/repo',
+      {
+        runtime: makeRuntime({ WP1: async () => makeOkResult('WP1') }),
+        createIssueWorktreeImpl: () => '/tmp/issue-wt',
+        createWpWorktreeImpl: (_repo, _runId, wpId) => `/tmp/wp-${wpId}`,
+        cleanupWpWorktreesImpl: () => undefined,
+        cleanupIssueWorktreeImpl: () => undefined,
+        orchestratorCommitWpImpl: () => 'abc123',
+        revertWpChangesImpl: () => undefined,
+        recordIterationImpl: () => undefined,
+        getLastStatusImpl: () => 'ok',
+        openPRImpl: async () => ({
+          prNumber: 1,
+          prUrl: 'https://gh/pr/1',
+          branch: 'b',
+          base: 'main',
+        }),
+        appendEvent,
+      },
+    );
+
+    expect(result.status).toBe('success');
+    expect(source.transitionState).not.toHaveBeenCalled();
   });
 });
 
@@ -512,6 +575,7 @@ describe('dev-review e2e: P1 finding addressed in one extra turn, no second pass
     await runParallelImplementWorkflow(
       makeWorkItem({ priority: 'high' }),
       spec,
+      'pipeline-run-dev-review-1',
       makeStateSource(),
       'goose-hub-self',
       '/tmp/repo',
@@ -652,6 +716,7 @@ describe('dev-review e2e: dismissed finding captures DEV_REVIEW_DISMISSED', () =
     await runParallelImplementWorkflow(
       makeWorkItem({ priority: 'high' }),
       spec,
+      'pipeline-run-dev-review-2',
       makeStateSource(),
       'goose-hub-self',
       '/tmp/repo',
@@ -749,6 +814,7 @@ describe('dev-review e2e: perCycleMaxUsd=0 → budget-skipped, workflow continue
     await runParallelImplementWorkflow(
       makeWorkItem({ priority: 'high' }),
       spec,
+      'pipeline-run-dev-review-3',
       makeStateSource(),
       'goose-hub-self',
       '/tmp/repo',

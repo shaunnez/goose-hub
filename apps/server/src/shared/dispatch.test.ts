@@ -19,6 +19,25 @@ const mockRunRetroForItem = vi.fn();
 const mockFilterEligibleByDependencies = vi.fn();
 const mockCreateProjectAwareTargetSource = vi.fn();
 const mockRunGrillAndPrdWorkflow = vi.fn();
+const mockGetUseM19Pipeline = vi.fn();
+const mockGetEngineeringSpec = vi.fn();
+const mockRunParallelImplementWorkflow = vi.fn();
+
+vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
+  readProjectSettings: vi.fn().mockReturnValue(null),
+  readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
+  getUseM19Pipeline: mockGetUseM19Pipeline,
+  setUseM19Pipeline: vi.fn(),
+  deriveUseM19Pipeline: vi.fn().mockReturnValue(false),
+}));
+
+vi.mock('@goose-hub/core/engineering-specs/repository.js', () => ({
+  getEngineeringSpec: mockGetEngineeringSpec,
+}));
+
+vi.mock('../../../../slices/parallel-implement/workflow.js', () => ({
+  runParallelImplementWorkflow: mockRunParallelImplementWorkflow,
+}));
 
 vi.mock('@goose-hub/core/projects/dependency-scheduler.js', () => ({
   filterEligibleByDependencies: mockFilterEligibleByDependencies,
@@ -67,9 +86,12 @@ beforeEach(() => {
   mockRunTriageBatch.mockResolvedValue(undefined);
   mockRunRetroForItem.mockResolvedValue(undefined);
   mockRunGrillAndPrdWorkflow.mockResolvedValue(undefined);
+  mockRunParallelImplementWorkflow.mockResolvedValue({ status: 'success' });
   mockGetSourceForSlug.mockResolvedValue(null);
   // Default: single-workflow-per-project (backward-compat) for tests that don't override.
   mockGetProject.mockResolvedValue(null);
+  mockGetUseM19Pipeline.mockReturnValue(false);
+  mockGetEngineeringSpec.mockReturnValue(null);
   mockCreateProjectAwareTargetSource.mockResolvedValue(vi.fn());
   mockFilterEligibleByDependencies.mockResolvedValue({
     eligible: [],
@@ -577,6 +599,203 @@ describe('dispatchForLabel', () => {
     await dispatchForLabel('my-project', 1, 'factory:needs-qa');
 
     expect(mockRunTriageBatch).not.toHaveBeenCalled();
+  });
+
+  it('routes factory:spec-ready through parallel-implement when M19 pipeline is enabled', async () => {
+    const item = {
+      id: 'github:shaunnez/goose-hub#694',
+      externalId: '694',
+      repoRef: 'shaunnez/goose-hub',
+      title: 'parallel implement',
+      body: 'body',
+      state: 'factory:spec-ready',
+      priority: 'high',
+      type: 'feature',
+      schedule: 'current',
+    };
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi.fn().mockResolvedValue(item),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+      comment: vi.fn().mockResolvedValue(undefined),
+    };
+    const spec = {
+      objective: 'Implement dispatch wiring',
+      userJourneys: [],
+      functionalRequirements: [],
+      architecture: { current: 'stub', new: 'wired', decisionRationale: 'test' },
+      schemaChanges: { ddl: [], migrations: [] },
+      interfaceContracts: [],
+      workPackages: [
+        {
+          id: 'WP1',
+          filesOwned: ['apps/server/src/shared/dispatch.ts'],
+          changes: 'Wire it',
+          dependsOn: [],
+          builderTier: 'sonnet',
+        },
+      ],
+      executionOrder: [{ batch: 0, wpIds: ['WP1'] }],
+      verificationTooling: [],
+      acceptanceCriteria: [
+        { id: 'AC1', statement: 'Dispatches', verifyCommand: 'pnpm test', crossCutting: true },
+      ],
+      constraints: [],
+      riskRegister: [],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Test spec' }],
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockGetProject.mockResolvedValue({ id: 'goose-hub-self', budgets: { maxParallelAgents: 1 } });
+    mockGetUseM19Pipeline.mockReturnValue(true);
+    mockGetEngineeringSpec.mockReturnValue({
+      id: 1,
+      projectId: 'goose-hub-self',
+      workItemId: item.id,
+      pipelineRunId: 'pipeline-run-dispatch',
+      spec,
+      createdAt: '2026-05-10T00:00:00Z',
+      updatedAt: '2026-05-10T00:00:00Z',
+    });
+
+    const { dispatchForLabel } = await import('./dispatch.js');
+    await dispatchForLabel('goose-hub-self', 694, 'factory:spec-ready');
+
+    expect(source.transitionState).toHaveBeenNthCalledWith(
+      1,
+      '694',
+      'factory:spec-ready',
+      'factory:in-progress',
+    );
+    expect(mockRunParallelImplementWorkflow).toHaveBeenCalledWith(
+      item,
+      spec,
+      'pipeline-run-dispatch',
+      source,
+      'goose-hub-self',
+      expect.any(String),
+    );
+    expect(source.transitionState).toHaveBeenNthCalledWith(
+      2,
+      '694',
+      'factory:in-progress',
+      'factory:needs-qa',
+    );
+    expect(source.transitionState.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRunParallelImplementWorkflow.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('escalates factory:spec-ready to needs-human when the engineering spec is missing', async () => {
+    const item = {
+      id: 'github:shaunnez/goose-hub#694',
+      externalId: '694',
+      repoRef: 'shaunnez/goose-hub',
+      title: 'parallel implement',
+      body: 'body',
+      state: 'factory:spec-ready',
+      priority: 'high',
+      type: 'feature',
+      schedule: 'current',
+    };
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi.fn().mockResolvedValue(item),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+      comment: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockGetProject.mockResolvedValue({ id: 'goose-hub-self', budgets: { maxParallelAgents: 1 } });
+    mockGetUseM19Pipeline.mockReturnValue(true);
+    mockGetEngineeringSpec.mockReturnValue(null);
+
+    const { dispatchForLabel } = await import('./dispatch.js');
+    await dispatchForLabel('goose-hub-self', 694, 'factory:spec-ready');
+
+    expect(mockRunParallelImplementWorkflow).not.toHaveBeenCalled();
+    expect(source.comment).toHaveBeenCalledWith('694', expect.stringContaining('engineering spec'));
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '694',
+      'factory:spec-ready',
+      'factory:needs-human',
+    );
+  });
+
+  it('transitions in-progress to needs-human when parallel-implement returns failed', async () => {
+    const item = {
+      id: 'github:shaunnez/goose-hub#694',
+      externalId: '694',
+      repoRef: 'shaunnez/goose-hub',
+      title: 'parallel implement',
+      body: 'body',
+      state: 'factory:spec-ready',
+      priority: 'high',
+      type: 'feature',
+      schedule: 'current',
+    };
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi.fn().mockResolvedValue(item),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+      comment: vi.fn().mockResolvedValue(undefined),
+    };
+    const spec = {
+      objective: 'Implement dispatch wiring',
+      userJourneys: [],
+      functionalRequirements: [],
+      architecture: { current: 'stub', new: 'wired', decisionRationale: 'test' },
+      schemaChanges: { ddl: [], migrations: [] },
+      interfaceContracts: [],
+      workPackages: [
+        {
+          id: 'WP1',
+          filesOwned: ['apps/server/src/shared/dispatch.ts'],
+          changes: 'Wire it',
+          dependsOn: [],
+          builderTier: 'sonnet',
+        },
+      ],
+      executionOrder: [{ batch: 0, wpIds: ['WP1'] }],
+      verificationTooling: [],
+      acceptanceCriteria: [
+        { id: 'AC1', statement: 'Dispatches', verifyCommand: 'pnpm test', crossCutting: true },
+      ],
+      constraints: [],
+      riskRegister: [],
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Test spec' }],
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockGetProject.mockResolvedValue({ id: 'goose-hub-self', budgets: { maxParallelAgents: 1 } });
+    mockGetUseM19Pipeline.mockReturnValue(true);
+    mockGetEngineeringSpec.mockReturnValue({
+      id: 1,
+      projectId: 'goose-hub-self',
+      workItemId: item.id,
+      pipelineRunId: 'pipeline-run-dispatch',
+      spec,
+      createdAt: '2026-05-10T00:00:00Z',
+      updatedAt: '2026-05-10T00:00:00Z',
+    });
+    mockRunParallelImplementWorkflow.mockResolvedValueOnce({
+      status: 'failed',
+      devRunId: 'dev-run-123',
+      errorReason: 'builder failed',
+    });
+
+    const { dispatchForLabel } = await import('./dispatch.js');
+    await dispatchForLabel('goose-hub-self', 694, 'factory:spec-ready');
+
+    expect(source.transitionState).toHaveBeenNthCalledWith(
+      1,
+      '694',
+      'factory:spec-ready',
+      'factory:in-progress',
+    );
+    expect(source.transitionState).toHaveBeenNthCalledWith(
+      2,
+      '694',
+      'factory:in-progress',
+      'factory:needs-human',
+    );
   });
 });
 

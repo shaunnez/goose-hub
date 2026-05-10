@@ -548,6 +548,35 @@ describe('runQaWorkflow', () => {
       expect(runTests).toHaveBeenCalledWith('/wt/abc', expect.stringContaining('pnpm test'));
     });
 
+    it('uses worktreePath from the parallel-implement pr.opened payload', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: {
+            prNumber: 99,
+            prUrl: 'https://github.com/owner/repo/pull/99',
+            branch: 'factory/dev-run-123',
+            worktreePath: '/wt/parallel-abc',
+            devRunId: 'dev-run-123',
+            pipelineRunId: 'pipeline-run-123',
+          },
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+      const runTests = vi.fn().mockResolvedValue(sampleTestRun);
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', { runTests });
+
+      expect(runTests).toHaveBeenCalledWith('/wt/parallel-abc', expect.any(String));
+      const spec = mockRun.mock.calls[0][0] as { workspaceDir?: string };
+      expect(spec.workspaceDir).toBe('/wt/parallel-abc');
+    });
+
     it('passes testRun into the agent context and allowlists it', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();

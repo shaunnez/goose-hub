@@ -48,6 +48,10 @@ export interface WpDispatchResult {
   runId: string;
 }
 
+export type ParallelImplementWorkflowResult =
+  | { status: 'success'; devRunId: string; worktreePath: string; prNumber: number; prUrl: string }
+  | { status: 'failed'; devRunId: string; errorReason: string };
+
 export interface ParallelImplementDeps {
   runtime?: AgentRuntime;
   /** Separate runtime for the dev-review Codex pass (defaults to auto-selected Codex runtime). */
@@ -74,6 +78,8 @@ export interface ParallelImplementDeps {
   runDevReviewResponseImpl?: typeof runDevReviewResponse;
   /** Override the orchestrator commit-all for dev-review-response edits (for testing). */
   commitDevReviewResponseImpl?: (worktreePath: string, msg: string) => string;
+  /** Override persona selection for tests that should not touch SQLite routing state. */
+  selectPersonaImpl?: typeof selectPersona;
 }
 
 // ─── DB helpers ───────────────────────────────────────────────────────────────
@@ -337,13 +343,21 @@ async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpBuildPha
 export async function runParallelImplementWorkflow(
   workItem: WorkItem,
   spec: EngineeringSpec,
+  pipelineRunId: string,
   stateSource: StateSource,
   projectId: string,
   targetRepo: string,
   deps: ParallelImplementDeps = {},
-): Promise<void> {
+): Promise<ParallelImplementWorkflowResult> {
   const runId = crypto.randomUUID();
-  const append = deps.appendEvent ?? ((input) => eventStore.appendEvent(input));
+  const baseAppend = deps.appendEvent ?? ((input) => eventStore.appendEvent(input));
+  const append = (input: AppendEventInput): AgentEvent => {
+    const payload =
+      input.payload != null && typeof input.payload === 'object' && !Array.isArray(input.payload)
+        ? { ...(input.payload as Record<string, unknown>), pipelineRunId }
+        : { value: input.payload, pipelineRunId };
+    return baseAppend({ ...input, payload });
+  };
   const runtime =
     deps.runtime ??
     (() => {
@@ -375,7 +389,7 @@ export async function runParallelImplementWorkflow(
     deps.commitDevReviewResponseImpl ??
     ((wt: string, msg: string) => orchestratorCommitAll(wt, msg));
 
-  const { personaId } = selectPersona(projectId, 'developer');
+  const { personaId } = (deps.selectPersonaImpl ?? selectPersona)(projectId, 'developer');
   const implementWpPrompt = readPromptWithContext('implement-wp', projectId);
   const implementWpJsonSchema = toJsonSchema(ImplementWpSchema);
 
@@ -392,12 +406,6 @@ export async function runParallelImplementWorkflow(
   let issueWorktreePath: string | undefined;
 
   try {
-    await stateSource.transitionState(
-      workItem.externalId,
-      'factory:dev-ready',
-      'factory:in-progress',
-    );
-
     // Create the integration worktree (all WP commits land here).
     issueWorktreePath = createIssueFn(targetRepo, runId);
 
@@ -536,12 +544,11 @@ export async function runParallelImplementWorkflow(
             [`Failed WPs: ${stillFailed.join(', ')}`],
           ),
         );
-        await stateSource.transitionState(
-          workItem.externalId,
-          'factory:in-progress',
-          'factory:needs-human',
-        );
-        return;
+        return {
+          status: 'failed',
+          devRunId: runId,
+          errorReason: `Parallel implement exhausted ${maxRetries + 1} iterations`,
+        };
       }
     }
 
@@ -650,7 +657,13 @@ export async function runParallelImplementWorkflow(
       projectId,
       workItemId: workItem.id,
       kind: 'pr.opened',
-      payload: { prNumber: prResult.prNumber, prUrl: prResult.prUrl, branch: prResult.branch },
+      payload: {
+        prNumber: prResult.prNumber,
+        prUrl: prResult.prUrl,
+        branch: prResult.branch,
+        worktreePath: issueWorktreePath ?? '',
+        devRunId: runId,
+      },
       runId,
     });
 
@@ -664,11 +677,13 @@ export async function runParallelImplementWorkflow(
       ),
     );
 
-    await stateSource.transitionState(
-      workItem.externalId,
-      'factory:in-progress',
-      'factory:needs-qa',
-    );
+    return {
+      status: 'success',
+      devRunId: runId,
+      worktreePath: issueWorktreePath ?? '',
+      prNumber: prResult.prNumber,
+      prUrl: prResult.prUrl,
+    };
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
     append({
@@ -684,11 +699,7 @@ export async function runParallelImplementWorkflow(
         `Error: ${error.message}`,
       ]),
     );
-    await stateSource.transitionState(
-      workItem.externalId,
-      'factory:in-progress',
-      'factory:needs-human',
-    );
+    return { status: 'failed', devRunId: runId, errorReason: error.message };
   } finally {
     cleanupWpsFn(runId, allWpIds);
     if (issueWorktreePath != null) {
