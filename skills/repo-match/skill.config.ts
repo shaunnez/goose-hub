@@ -10,6 +10,7 @@ export const RepoMatchContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: RepoMatchContextSchema,
+  contextAllowlist: ['workItem'],
   toolBundles: [],
   modelPin: 'sonnet',
   freshContext: false,

@@ -7,6 +7,7 @@ export const EchoContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: EchoContextSchema,
+  contextAllowlist: ['message'],
   toolBundles: [],
   modelPin: 'sonnet',
   freshContext: false,

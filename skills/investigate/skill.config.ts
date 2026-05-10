@@ -29,6 +29,7 @@ export const InvestigateContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: InvestigateContextSchema,
+  contextAllowlist: ['workItem', 'worktreePath'],
   /**
    * Tool bundle 'read' maps to ['read', 'search', 'work-item-read'].
    * The investigator has NO write access — file writes will be rejected.

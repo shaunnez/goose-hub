@@ -12,7 +12,7 @@ export interface DecisionSummary {
 export interface AgentBudgets {
   maxTurns: number;
   maxBudgetUsd: number;
-  timeoutMs?: number;
+  timeoutMs: number;
 }
 
 // ─── Role spec (discriminated union for type-level holdout enforcement) ────────
@@ -84,7 +84,7 @@ export interface SkillConfig {
   provider?: 'claude' | 'codex';
   freshContext: boolean;
   role?: Role;
-  contextAllowlist?: string[];
+  contextAllowlist: string[];
 }
 
 export class HoldoutFallbackForbiddenError extends Error {

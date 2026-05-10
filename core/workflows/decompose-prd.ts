@@ -66,7 +66,7 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
 
   // TODO: Add 'decompose-issues' entry to SKILL_BUDGETS in core/agent-runtime/budgets.ts
   let resolvedBudget: {
-    budgets: { maxTurns: number; maxBudgetUsd: number; timeoutMs?: number };
+    budgets: { maxTurns: number; maxBudgetUsd: number; timeoutMs: number };
     modelOverride: string;
   };
   try {
