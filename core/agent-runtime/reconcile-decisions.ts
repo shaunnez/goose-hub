@@ -1,5 +1,5 @@
-import { readRunDecisions } from '../tool-layer/tools/record-decision.js';
 import { eventStore } from '../event-stream/store.js';
+import { readRunDecisions } from '../tool-layer/tools/record-decision.js';
 import type { DecisionSummary } from './interface.js';
 
 /**
@@ -55,7 +55,12 @@ export function reconcileDecisionSummaries(
         workItemId,
         runId,
         kind: 'agent.decision-summary',
-        payload: { skill, kind: r.kind, summary: r.summary, ...(r.evidence ? { evidence: r.evidence } : {}) },
+        payload: {
+          skill,
+          kind: r.kind,
+          summary: r.summary,
+          ...(r.evidence ? { evidence: r.evidence } : {}),
+        },
       });
     }
   } else {

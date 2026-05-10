@@ -17,6 +17,7 @@ import { PRDOutputSchema } from '../../skills/write-prd/schema.js';
 import { ClaudeCliRuntime } from '../agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
 import { readPromptWithContext } from '../agent-runtime/read-prompt.js';
+import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
 import {
   resolveBudgetsForProject,
   resolveGlobalSettingsForProject,
@@ -25,7 +26,6 @@ import { toJsonSchema } from '../agent-runtime/schema-bridge.js';
 import { selectPersona } from '../agent-runtime/select-persona.js';
 import { totalSpendForSkill as _totalSpendForSkill } from '../cost/repository.js';
 import { eventStore } from '../event-stream/store.js';
-import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import type { StateName } from '../state-machine/states.js';
 import type { StateSource, WorkItem } from '../state-source/interface.js';
@@ -515,7 +515,13 @@ export async function runGrillAndPrdWorkflow(
       }
 
       // Emit any decision summaries the griller produced this round.
-      reconcileDecisionSummaries(runId, projectId, workItem.id, 'grill-me', grillOutput.decisionSummaries);
+      reconcileDecisionSummaries(
+        runId,
+        projectId,
+        workItem.id,
+        'grill-me',
+        grillOutput.decisionSummaries,
+      );
 
       // Hard cap at round 7: if the griller still hasn't declared readyForPRD,
       // force the workflow forward so we don't loop indefinitely.
@@ -774,7 +780,13 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
     return { phase: 'needs-human' };
   }
 
-  reconcileDecisionSummaries(runId, projectId, workItem.id, 'write-prd', prdOutput.decisionSummaries);
+  reconcileDecisionSummaries(
+    runId,
+    projectId,
+    workItem.id,
+    'write-prd',
+    prdOutput.decisionSummaries,
+  );
 
   // ─── Step 3: advise-on-prd (conditional) ────────────────────────────────
   let advisorConcerns: string[] | null = null;
@@ -857,7 +869,13 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
         };
       }
 
-      reconcileDecisionSummaries(runId, projectId, workItem.id, 'advise-on-prd', advisor.decisionSummaries);
+      reconcileDecisionSummaries(
+        runId,
+        projectId,
+        workItem.id,
+        'advise-on-prd',
+        advisor.decisionSummaries,
+      );
     } catch (err) {
       eventStore.appendEvent({
         kind: 'agent.run-failed',

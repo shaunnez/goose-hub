@@ -8,6 +8,7 @@ import type {
   AgentSpec,
 } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
+import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
@@ -17,7 +18,6 @@ import {
   readProjectReviewSettings,
 } from '@goose-hub/core/db/repositories/project-review-settings.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
-import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { DEFAULT_MAX_RETRIES, shouldEscalateReview } from '@goose-hub/core/retry/retry-counter.js';
@@ -89,7 +89,13 @@ export async function runReviewWorkflow(
       runId,
     });
 
-    reconcileDecisionSummaries(runId, projectSlug, workItem.id, 'review', reviewOutput.decisionSummaries);
+    reconcileDecisionSummaries(
+      runId,
+      projectSlug,
+      workItem.id,
+      'review',
+      reviewOutput.decisionSummaries,
+    );
 
     let nextState: StateName;
     if (reviewOutput.verdict === 'needs-fix') {

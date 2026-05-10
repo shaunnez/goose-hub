@@ -108,7 +108,11 @@ describe('POST /api/decisions', () => {
   });
 
   it('returns 200 with recorded=false on duplicate', async () => {
-    vi.mocked(recordDecision).mockReturnValue({ recorded: false, id: 'existing-id', reason: 'duplicate' });
+    vi.mocked(recordDecision).mockReturnValue({
+      recorded: false,
+      id: 'existing-id',
+      reason: 'duplicate',
+    });
     const app = new Hono().route('/api/decisions', decisionsRouter);
     const res = await app.request('/api/decisions/', {
       method: 'POST',

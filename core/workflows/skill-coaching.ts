@@ -5,13 +5,13 @@ import { SkillCoachOutputSchema } from '../../skills/skill-coach/schema.js';
 import { ClaudeCliRuntime } from '../agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
 import { readPromptWithContext } from '../agent-runtime/read-prompt.js';
+import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
 import { resolveBudgetsForProject } from '../agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '../agent-runtime/schema-bridge.js';
 import { selectPersona } from '../agent-runtime/select-persona.js';
 import { db } from '../db/db.js';
 import { archivedLifecycles, decisionPatterns, improvementCandidates } from '../db/schema.js';
 import { eventStore } from '../event-stream/store.js';
-import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
 import { getProjectBySlug } from '../projects/loader.js';
 
 const DEFAULT_REPO_ROOT = join(import.meta.dirname, '../..');

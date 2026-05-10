@@ -33,7 +33,11 @@ describe('reconcileDecisionSummaries', () => {
     it('emits schema-field summaries when no DB rows exist', () => {
       mockReadRunDecisions.mockReturnValue([]);
       const parsedSummaries = [
-        { kind: 'IMPLEMENTATION_PLAN' as const, summary: 'Added auth check', evidence: 'src/api.ts:42' },
+        {
+          kind: 'IMPLEMENTATION_PLAN' as const,
+          summary: 'Added auth check',
+          evidence: 'src/api.ts:42',
+        },
         { kind: 'REPO_SELECTION' as const, summary: 'Using payments-api' },
       ];
 
@@ -66,12 +70,15 @@ describe('reconcileDecisionSummaries', () => {
   describe('DB-preferred when rows exist', () => {
     it('uses DB rows when present, ignoring parsedSummaries', () => {
       const dbRows = [
-        { id: 'row-1', kind: 'IMPLEMENTATION_PLAN' as const, summary: 'from DB', evidence: 'hook-captured' },
+        {
+          id: 'row-1',
+          kind: 'IMPLEMENTATION_PLAN' as const,
+          summary: 'from DB',
+          evidence: 'hook-captured',
+        },
       ];
       mockReadRunDecisions.mockReturnValue(dbRows);
-      const parsedSummaries = [
-        { kind: 'REPO_SELECTION' as const, summary: 'from schema field' },
-      ];
+      const parsedSummaries = [{ kind: 'REPO_SELECTION' as const, summary: 'from schema field' }];
 
       reconcileDecisionSummaries(runId, projectId, workItemId, skill, parsedSummaries);
 

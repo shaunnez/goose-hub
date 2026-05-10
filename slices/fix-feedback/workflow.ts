@@ -2,12 +2,12 @@ import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
+import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { runWithEscalation } from '@goose-hub/core/agent-runtime/with-escalation.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
-import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
@@ -239,7 +239,13 @@ export async function runFixFeedbackWorkflow(
       },
     });
 
-    reconcileDecisionSummaries(runId, projectId, workItem.id, 'fix-feedback', implementOutput.decisionSummaries);
+    reconcileDecisionSummaries(
+      runId,
+      projectId,
+      workItem.id,
+      'fix-feedback',
+      implementOutput.decisionSummaries,
+    );
 
     eventStore.appendEvent({
       projectId,

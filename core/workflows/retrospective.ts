@@ -3,6 +3,7 @@ import { LightRetroSchema } from '../../skills/retrospective-light/schema.js';
 import { ClaudeCliRuntime } from '../agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
 import { readPromptWithContext } from '../agent-runtime/read-prompt.js';
+import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
 import { resolveBudgetsForProject } from '../agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '../agent-runtime/schema-bridge.js';
 import { selectPersona } from '../agent-runtime/select-persona.js';
@@ -12,7 +13,6 @@ import { eventStore } from '../event-stream/store.js';
 import { archiveLifecycle } from '../learning/archive.js';
 import { computeTrend } from '../learning/convergence.js';
 import { accumulatePersonaStats } from '../persona/accumulate.js';
-import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import type { ImprovementCandidate } from '../retrospective/schemas.js';
 import type { StateSource, WorkItem } from '../state-source/interface.js';
@@ -199,7 +199,13 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
         parsed.data.improvementCandidates,
       );
     }
-    reconcileDecisionSummaries(runId, projectId, workItem.id, skillName, parsed.data.decisionSummaries);
+    reconcileDecisionSummaries(
+      runId,
+      projectId,
+      workItem.id,
+      skillName,
+      parsed.data.decisionSummaries,
+    );
 
     accumulatePersonaStats({ personaName: personaId, role: 'retrospector', outcome: 'success' });
     await stateSource.transitionState(workItem.externalId, 'factory:retrospecting', 'factory:done');

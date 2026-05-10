@@ -217,7 +217,9 @@ describe('writeWorkspaceSandbox', () => {
 describe('decision-capture hook installation', () => {
   function readSettings(dir: string) {
     const raw = readFileSync(join(dir, '.claude', 'settings.local.json'), 'utf8');
-    return JSON.parse(raw) as { hooks?: { PostToolUse?: Array<{ hooks: Array<{ command: string }> }> } };
+    return JSON.parse(raw) as {
+      hooks?: { PostToolUse?: Array<{ hooks: Array<{ command: string }> }> };
+    };
   }
 
   function hasDecisionCaptureHook(cfg: ReturnType<typeof readSettings>): boolean {

@@ -267,11 +267,7 @@ router.patch('/:slug/settings/review', async (c) => {
     return c.json({ error: 'invalid body', details: parsed.error.issues }, 422);
   }
 
-  writeProjectReviewSettings(
-    project.id,
-    { reviewerSlots: parsed.data.reviewerSlots },
-    'ui',
-  );
+  writeProjectReviewSettings(project.id, { reviewerSlots: parsed.data.reviewerSlots }, 'ui');
   return c.json({ ok: true });
 });
 

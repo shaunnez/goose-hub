@@ -4,9 +4,9 @@ import {
 } from '@goose-hub/skills/advise-on-plan/schema.js';
 import { eventStore } from '../event-stream/store.js';
 import type { AgentRuntime } from './interface.js';
-import { reconcileDecisionSummaries } from './reconcile-decisions.js';
 import type { AgentResult } from './interface.js';
 import { OutputValidationError, invokeSkill } from './invoke-skill.js';
+import { reconcileDecisionSummaries } from './reconcile-decisions.js';
 
 interface AdviseOnPlanInput {
   runId: string;

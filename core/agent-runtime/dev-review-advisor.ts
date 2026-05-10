@@ -12,13 +12,13 @@ import devReviewConfig from '@goose-hub/skills/dev-review/skill.config.js';
 import { readProjectDevReviewSettings } from '../db/repositories/project-dev-review-settings.js';
 import type { AgentEvent, AppendEventInput } from '../event-stream/store.js';
 import { eventStore } from '../event-stream/store.js';
-import { reconcileDecisionSummaries } from './reconcile-decisions.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import type { WorkItem } from '../state-source/interface.js';
 import type { AgentConfig } from '../types.js';
 import { ClaudeCliRuntime } from './claude-cli.js';
 import type { AgentRuntime } from './interface.js';
 import { readPromptWithContext } from './read-prompt.js';
+import { reconcileDecisionSummaries } from './reconcile-decisions.js';
 import { resolveBudgetsForProject } from './resolve-for-project.js';
 import { toJsonSchema } from './schema-bridge.js';
 import { selectPersona } from './select-persona.js';
@@ -283,7 +283,9 @@ export async function runDevReviewResponse(
   // Synthesize per-finding decision summaries from disposition output.
   // Passed as parsedSummaries fallback; DB rows win if hook captured them.
   const dispositionSummaries = parsed.data.findingDispositions.map((disp) => ({
-    kind: (disp.disposition === 'addressed' ? 'DEV_REVIEW_ADDRESSED' : 'DEV_REVIEW_DISMISSED') as import('./decision-types.js').DecisionKind,
+    kind: (disp.disposition === 'addressed'
+      ? 'DEV_REVIEW_ADDRESSED'
+      : 'DEV_REVIEW_DISMISSED') as import('./decision-types.js').DecisionKind,
     summary:
       disp.disposition === 'addressed'
         ? `Addressed ${disp.severity} finding at ${disp.findingRef}`

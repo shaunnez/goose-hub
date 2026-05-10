@@ -29,11 +29,7 @@ export const WP_FILE_GUARD_HOOK_PATH = join(REPO_ROOT, 'hooks', 'wp-file-guard.s
 // Roles that must NOT receive the decision-capture hook. Broader than HOLDOUT_ROLES
 // (which is qa + reviewer) — code-quality-audit is also excluded because it functions
 // like a holdout: its output must not be influenced by live-marker feedback loops.
-export const DECISION_CAPTURE_EXCLUDED_ROLES = new Set([
-  'qa',
-  'reviewer',
-  'code-quality-audit',
-]);
+export const DECISION_CAPTURE_EXCLUDED_ROLES = new Set(['qa', 'reviewer', 'code-quality-audit']);
 
 export interface SandboxOptions {
   /** Role of the spawned agent. Used to determine if decision-capture hook is installed. */
@@ -94,7 +90,9 @@ export function writeWorkspaceSandbox(workspacePath: string, opts: SandboxOption
   if (opts.recordDecisionTool && !DECISION_CAPTURE_EXCLUDED_ROLES.has(opts.role ?? '')) {
     extraPostToolUseHooks.push({
       matcher: '.*',
-      hooks: [{ type: 'command', command: `"${process.execPath}" "${DECISION_CAPTURE_HOOK_PATH}"` }],
+      hooks: [
+        { type: 'command', command: `"${process.execPath}" "${DECISION_CAPTURE_HOOK_PATH}"` },
+      ],
     });
   }
   const claudeDir = join(workspacePath, '.claude');
@@ -135,7 +133,9 @@ export function writeWpBuilderSandbox(
   if (opts.recordDecisionTool && !DECISION_CAPTURE_EXCLUDED_ROLES.has(opts.role ?? '')) {
     extraPostToolUseHooks.push({
       matcher: '.*',
-      hooks: [{ type: 'command', command: `"${process.execPath}" "${DECISION_CAPTURE_HOOK_PATH}"` }],
+      hooks: [
+        { type: 'command', command: `"${process.execPath}" "${DECISION_CAPTURE_HOOK_PATH}"` },
+      ],
     });
   }
   const claudeDir = join(workspacePath, '.claude');
