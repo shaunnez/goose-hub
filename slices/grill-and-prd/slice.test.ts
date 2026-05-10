@@ -263,6 +263,13 @@ function getPostedPrdJson(commentBody: string): unknown {
   return JSON.parse(match[1]);
 }
 
+function noopWorktreeDeps() {
+  return {
+    createWorktreeImpl: (_repo: string, runId: string) => `/tmp/wt/${runId}`,
+    cleanupWorktreeImpl: (_runId: string) => undefined,
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -285,7 +292,7 @@ describe('grill-and-prd: round 1 (not ready)', () => {
       stateSource: source,
       projectId,
       priorReplies: [],
-      deps: { runtime, projectConfig: injectedConfig() },
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
     });
 
     expect(result.phase).toBe('grilling');
@@ -338,7 +345,7 @@ describe('grill-and-prd: round 2 reaches PRD (advisor skipped by priority)', () 
       stateSource: source,
       projectId,
       priorReplies,
-      deps: { runtime, projectConfig: injectedConfig() },
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
     });
 
     expect(result.phase).toBe('prd-review');
@@ -390,7 +397,7 @@ describe('grill-and-prd: advisor runs and revises sections', () => {
       stateSource: source,
       projectId,
       priorReplies: [],
-      deps: { runtime, projectConfig: injectedConfig(5) },
+      deps: { runtime, projectConfig: injectedConfig(5), ...noopWorktreeDeps() },
     });
 
     expect(result.phase).toBe('prd-review');
@@ -440,7 +447,7 @@ describe('grill-and-prd: advisor budget exhausted', () => {
       stateSource: source,
       projectId,
       priorReplies: [],
-      deps: { runtime, projectConfig: injectedConfig(0) },
+      deps: { runtime, projectConfig: injectedConfig(0), ...noopWorktreeDeps() },
     });
 
     expect(result.phase).toBe('prd-review');
@@ -488,6 +495,7 @@ describe('grill-and-prd: advisor skipped when spend stub returns near-cap value'
         runtime,
         projectConfig: injectedConfig(1.0),
         totalSpendForSkill: vi.fn().mockReturnValue(0.95),
+        ...noopWorktreeDeps(),
       },
     });
 
@@ -531,7 +539,7 @@ describe('grill-and-prd: max rounds reached, proceed straight to PRD', () => {
       stateSource: source,
       projectId,
       priorReplies,
-      deps: { runtime, projectConfig: injectedConfig() },
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
     });
 
     expect(result.phase).toBe('prd-review');
@@ -582,7 +590,7 @@ describe('grill-and-prd: round-8 hard-cap forces PRD drafting', () => {
       stateSource: source,
       projectId,
       priorReplies,
-      deps: { runtime, projectConfig: injectedConfig() },
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
     });
 
     // Should have forced PRD drafting, not stayed in grilling
@@ -632,7 +640,7 @@ describe('grill-and-prd: malformed grill output → gate-pending', () => {
       stateSource: source,
       projectId,
       priorReplies: [],
-      deps: { runtime, projectConfig: injectedConfig() },
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
     });
 
     expect(result.phase).toBe('grilling');
@@ -678,10 +686,91 @@ describe('grill-and-prd: pre-condition guard', () => {
       stateSource: source,
       projectId,
       priorReplies: [],
-      deps: { runtime, projectConfig: injectedConfig() },
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
     });
 
     expect(result.phase).toBe('needs-human');
     expect(runtime.run).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 8. Worktree lifecycle
+// ---------------------------------------------------------------------------
+
+describe('grill-and-prd: worktree lifecycle', () => {
+  it('creates a worktree before grill, cleans up after, and injects worktreePath into the grill context', async () => {
+    const projectId = uniqueProjectId('worktree-lifecycle');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await seedFeatureItem(source, { state: 'factory:grilling' });
+    const workItem = await source.getItem(item.externalId);
+
+    const runtime = makeQueuedRuntime([validGrillRound1NotReady()]);
+
+    const createdWith: Array<{ repo: string; runId: string }> = [];
+    const cleanedRunIds: string[] = [];
+    const createWorktreeImpl = vi.fn((repo: string, runId: string) => {
+      createdWith.push({ repo, runId });
+      return `/tmp/test-wt/${runId}`;
+    });
+    const cleanupWorktreeImpl = vi.fn((runId: string) => {
+      cleanedRunIds.push(runId);
+    });
+
+    await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies: [],
+      deps: {
+        runtime,
+        projectConfig: injectedConfig(),
+        createWorktreeImpl,
+        cleanupWorktreeImpl,
+      },
+    });
+
+    expect(createdWith).toHaveLength(1);
+    expect(createdWith[0].repo).toBe('/tmp/test-repo');
+    expect(cleanedRunIds).toHaveLength(1);
+    expect(cleanedRunIds[0]).toBe(createdWith[0].runId);
+
+    const runCall = (runtime.run as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(runCall.context.worktreePath).toBe(`/tmp/test-wt/${createdWith[0].runId}`);
+    expect(runCall.workspaceDir).toBe(`/tmp/test-wt/${createdWith[0].runId}`);
+    expect(runCall.toolBundles).toEqual(['read']);
+  });
+
+  it('cleans up the worktree even when grill-me throws', async () => {
+    const projectId = uniqueProjectId('worktree-cleanup-on-throw');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await seedFeatureItem(source, { state: 'factory:grilling' });
+    const workItem = await source.getItem(item.externalId);
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockRejectedValue(new Error('boom')),
+    };
+
+    const cleanedRunIds: string[] = [];
+    const createWorktreeImpl = vi.fn((_repo: string, runId: string) => `/tmp/test-wt/${runId}`);
+    const cleanupWorktreeImpl = vi.fn((runId: string) => {
+      cleanedRunIds.push(runId);
+    });
+
+    const result = await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies: [],
+      deps: {
+        runtime,
+        projectConfig: injectedConfig(),
+        createWorktreeImpl,
+        cleanupWorktreeImpl,
+      },
+    });
+
+    expect(result.phase).toBe('grilling');
+    expect(cleanedRunIds).toHaveLength(1);
   });
 });
