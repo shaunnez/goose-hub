@@ -4,12 +4,9 @@ import { persistEngineeringSpec } from '@goose-hub/core/engineering-specs/reposi
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { listScoutReportsForInvestigation } from '@goose-hub/core/scout-reports/repository.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
-import {
-  cleanupWorktree,
-  createWorktree,
-} from '@goose-hub/core/workspaces/worktree.js';
-import { validateEngineeringSpec } from '@goose-hub/skills/spec-author/validate.js';
+import { cleanupWorktree, createWorktree } from '@goose-hub/core/workspaces/worktree.js';
 import type { EngineeringSpec } from '@goose-hub/skills/spec-author/schema.js';
+import { validateEngineeringSpec } from '@goose-hub/skills/spec-author/validate.js';
 
 export interface SpecAuthorWorkflowDeps {
   createWorktreeImpl?: typeof createWorktree;
@@ -105,7 +102,11 @@ export async function runSpecAuthorWorkflow(
         projectId,
         workItemId: workItem.id,
         kind: 'agent.run-failed',
-        payload: { runId: pipelineRunId, skill: 'spec-author', error: `Validation failed: ${errors}` },
+        payload: {
+          runId: pipelineRunId,
+          skill: 'spec-author',
+          error: `Validation failed: ${errors}`,
+        },
         runId: pipelineRunId,
       });
       await stateSource.comment(

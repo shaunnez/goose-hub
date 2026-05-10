@@ -1,4 +1,4 @@
-import type { AgentRuntime, AgentResult } from '@goose-hub/core/agent-runtime/interface.js';
+import type { AgentResult, AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import type { ScoutReport, WaveResult } from '@goose-hub/core/agent-runtime/swarm.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -263,7 +263,10 @@ describe('runInvestigateWorkflow', () => {
       });
       // Wave 2 uses different names to avoid assertion collision with wave1 scout names
       const wave2 = makeWaveResult({
-        reports: [makeScoutReport('wave2-interface-designer'), makeScoutReport('wave2-risk-analyst')],
+        reports: [
+          makeScoutReport('wave2-interface-designer'),
+          makeScoutReport('wave2-risk-analyst'),
+        ],
       });
       mockDispatchWave.mockResolvedValueOnce(wave1).mockResolvedValueOnce(wave2);
 
@@ -290,7 +293,12 @@ describe('runInvestigateWorkflow', () => {
       const wave2 = makeWaveResult({
         reports: [
           makeScoutReport('wave2-interface-designer'),
-          makeScoutReport('wave2-risk-analyst', { status: 'error', findings: [], runId: 'e', errorReason: 'oops' }),
+          makeScoutReport('wave2-risk-analyst', {
+            status: 'error',
+            findings: [],
+            runId: 'e',
+            errorReason: 'oops',
+          }),
         ],
         failedScouts: ['wave2-risk-analyst'],
       });
@@ -480,12 +488,12 @@ describe('runInvestigateWorkflow', () => {
       };
 
       const violations: Array<{ disallowedKey: string }> = [];
-      const fakeAppend = vi.fn().mockImplementation(
-        (input: { kind: string; payload: { disallowedKey: string } }) => {
+      const fakeAppend = vi
+        .fn()
+        .mockImplementation((input: { kind: string; payload: { disallowedKey: string } }) => {
           if (input.kind === 'tool.violation') violations.push(input.payload);
           return { id: 1, kind: input.kind, payload: input.payload, createdAt: '' };
-        },
-      );
+        });
 
       const { dispatchWave: realDispatchWave } = await vi.importActual<
         typeof import('@goose-hub/core/agent-runtime/swarm.js')
@@ -577,11 +585,14 @@ describe('runInvestigateWorkflow', () => {
       } satisfies AgentResult);
 
       const { runInvestigateWorkflow } = await import('./workflow.js');
-      await runInvestigateWorkflow(makeWorkItem({ type: 'bug' }), makeMockSource(), 'goose-hub-self', '/repo');
-
-      expect(mockRun).toHaveBeenCalledWith(
-        expect.objectContaining({ skill: 'playwright-repro' }),
+      await runInvestigateWorkflow(
+        makeWorkItem({ type: 'bug' }),
+        makeMockSource(),
+        'goose-hub-self',
+        '/repo',
       );
+
+      expect(mockRun).toHaveBeenCalledWith(expect.objectContaining({ skill: 'playwright-repro' }));
     });
 
     it('skips playwright-repro when requiresBrowserRepro is false', async () => {
@@ -592,7 +603,12 @@ describe('runInvestigateWorkflow', () => {
       } satisfies AgentResult);
 
       const { runInvestigateWorkflow } = await import('./workflow.js');
-      await runInvestigateWorkflow(makeWorkItem({ type: 'bug' }), makeMockSource(), 'goose-hub-self', '/repo');
+      await runInvestigateWorkflow(
+        makeWorkItem({ type: 'bug' }),
+        makeMockSource(),
+        'goose-hub-self',
+        '/repo',
+      );
 
       expect(mockRun).not.toHaveBeenCalled();
     });
@@ -611,7 +627,12 @@ describe('runInvestigateWorkflow', () => {
 
       const { runInvestigateWorkflow } = await import('./workflow.js');
       const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
-      await runInvestigateWorkflow(makeWorkItem({ type: 'bug' }), makeMockSource(), 'goose-hub-self', '/repo');
+      await runInvestigateWorkflow(
+        makeWorkItem({ type: 'bug' }),
+        makeMockSource(),
+        'goose-hub-self',
+        '/repo',
+      );
 
       const call = vi
         .mocked(eventStore.appendEvent)

@@ -201,7 +201,9 @@ export async function dispatchSpecAuthor(slug: string, issueNumber: number): Pro
     }
 
     const mockDeps: Record<string, unknown> | undefined =
-      process.env.MOCK_AGENTS === 'true' ? { createWorktreeImpl: () => '/mock/worktree' } : undefined;
+      process.env.MOCK_AGENTS === 'true'
+        ? { createWorktreeImpl: () => '/mock/worktree' }
+        : undefined;
 
     await runSpecAuthorWorkflow(item, source, slug, REPO_ROOT, mockDeps);
   } finally {
@@ -754,10 +756,13 @@ export async function dispatchForLabel(
   }
   if (labelName === 'factory:spec-ready') {
     // M19.18 will wire parallel-implement here; stub for now.
-    logger.info('dispatchForLabel: factory:spec-ready — parallel-implement not yet wired (M19.18)', {
-      slug,
-      issueNumber,
-    });
+    logger.info(
+      'dispatchForLabel: factory:spec-ready — parallel-implement not yet wired (M19.18)',
+      {
+        slug,
+        issueNumber,
+      },
+    );
     return;
   }
   if (labelName === 'factory:needs-qa') {
@@ -1033,7 +1038,8 @@ const RESUME_WORKFLOWS: Partial<Record<StateName, ResumeEntry>> = {
     dispatch: (slug: string, _issueNumber: number) => dispatchTriageBatch(slug),
   },
   'factory:dev-ready': { targetState: 'factory:dev-ready', dispatch: dispatchFixIssue },
-  'factory:spec-ready': { targetState: 'factory:spec-ready', dispatch: dispatchSpecAuthor },
+  // M19.18 will wire parallel-implement here; omitted from RESUME_WORKFLOWS until then
+  // to avoid re-running spec-author on an already-specced issue.
   'factory:in-progress': { targetState: 'factory:dev-ready', dispatch: dispatchFixIssue },
   'factory:needs-qa': { targetState: 'factory:needs-qa', dispatch: dispatchQa },
   'factory:needs-review': { targetState: 'factory:needs-review', dispatch: dispatchReview },
