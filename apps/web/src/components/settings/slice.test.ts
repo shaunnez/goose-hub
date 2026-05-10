@@ -14,4 +14,9 @@ describe('settings slice', () => {
     const mod = await import('./components/ProjectConfigPanel');
     expect(typeof mod.ProjectConfigPanel).toBe('function');
   });
+
+  it('exports PipelinePanel', async () => {
+    const mod = await import('./components/PipelinePanel');
+    expect(typeof mod.PipelinePanel).toBe('function');
+  });
 });

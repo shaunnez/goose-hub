@@ -13,6 +13,7 @@ export type GlobalBudgetPatch = {
   maxParallelAgents?: number | null;
   maxRetries?: number | null;
   perBashCommandMaxSeconds?: number | null;
+  useM19Pipeline?: number | null;
 };
 
 export type SkillBudgetPatch = {
@@ -22,12 +23,28 @@ export type SkillBudgetPatch = {
 };
 
 export function readProjectSettings(projectId: string): ProjectSettingsRow | null {
-  const rows = db
-    .select()
-    .from(projectSettings)
-    .where(eq(projectSettings.projectId, projectId))
-    .all();
-  return rows[0] ?? null;
+  try {
+    const rows = db
+      .select()
+      .from(projectSettings)
+      .where(eq(projectSettings.projectId, projectId))
+      .all();
+    return rows[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function deriveUseM19Pipeline(row: ProjectSettingsRow | null): boolean {
+  return row?.useM19Pipeline === 1;
+}
+
+export function getUseM19Pipeline(projectId: string): boolean {
+  return deriveUseM19Pipeline(readProjectSettings(projectId));
+}
+
+export function setUseM19Pipeline(projectId: string, enabled: boolean, by: string): void {
+  writeProjectSettings(projectId, { useM19Pipeline: enabled ? 1 : 0 }, by);
 }
 
 export function readProjectSkillSettings(projectId: string): Map<string, ProjectSkillSettingsRow> {

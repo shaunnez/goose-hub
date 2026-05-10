@@ -266,6 +266,7 @@ export const projectSettings = sqliteTable('project_settings', {
   maxParallelAgents: integer('max_parallel_agents'),
   maxRetries: integer('max_retries'),
   perBashCommandMaxSeconds: integer('per_bash_command_max_seconds'),
+  useM19Pipeline: integer('use_m19_pipeline'),
   updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
   updatedBy: text('updated_by'),
 });

@@ -208,6 +208,21 @@ describe('dispatchInvestigate', () => {
 // ─── dispatchFixIssue ─────────────────────────────────────────────────────
 
 describe('dispatchFixIssue', () => {
+  it('reads useM19Pipeline flag and logs at entry', { timeout: 30_000 }, async () => {
+    mockGetSourceForSlug.mockResolvedValue(null);
+
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    await dispatchFixIssue('no-source', 10);
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      'dispatchFixIssue: pipeline flag',
+      expect.objectContaining({
+        slug: 'no-source',
+        issueNumber: 10,
+        useM19Pipeline: false,
+      }),
+    );
+  });
+
   it('returns early and logs when source is null', { timeout: 30_000 }, async () => {
     mockGetSourceForSlug.mockResolvedValue(null);
 
