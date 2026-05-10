@@ -105,6 +105,7 @@ function augmentPriorRepliesWithCrystallizations(
   let agentIdx = 0;
   return priorReplies.map((entry) => {
     if (entry.role !== 'agent') return entry;
+    if (entry.content.startsWith('<!-- factory:prd -->')) return entry;
     agentIdx += 1;
     const decision = byRound.get(agentIdx);
     return decision != null ? { ...entry, crystallized: decision } : entry;
@@ -323,6 +324,7 @@ export async function runGrillAndPrdWorkflow(
       refinedIntent: priorPrd?.title ?? workItem.title,
       priorPrd,
       humanConcerns,
+      priorReplies: augmentPriorRepliesWithCrystallizations(priorReplies, projectId, workItem.id),
     });
   }
 
@@ -340,12 +342,40 @@ export async function runGrillAndPrdWorkflow(
         error: 'cannot create worktree: targetRepo.localPath is missing',
       },
     });
+    await stateSource.comment(
+      workItem.externalId,
+      '<!-- factory:system -->\nGrill cannot run: project is missing `targetRepo.localPath`. Configure it in `target-projects/<slug>/project.config.ts` and resume.',
+    );
+    await stateSource.forceState(workItem.externalId, 'factory:needs-human');
     return { phase: 'needs-human' };
   }
   const expandedRepoPath = localRepoPath.startsWith('~/')
     ? join(process.env.HOME ?? '/root', localRepoPath.slice(2))
     : localRepoPath;
-  const worktreePath = createWorktreeFn(expandedRepoPath, runId);
+  let worktreePath: string;
+  try {
+    worktreePath = createWorktreeFn(expandedRepoPath, runId);
+  } catch (err) {
+    eventStore.appendEvent({
+      kind: 'agent.run-failed',
+      projectId,
+      workItemId: workItem.id,
+      runId,
+      payload: { skill: 'grill-and-prd', error: `worktree creation failed: ${String(err)}` },
+    });
+    await stateSource.comment(
+      workItem.externalId,
+      '<!-- factory:system -->\nGrill could not start: failed to create the per-round worktree. Check the target repo and resume.',
+    );
+    await ensureGatePending(
+      stateSource,
+      workItem.externalId,
+      workItem.state,
+      projectId,
+      workItem.id,
+    );
+    return { phase: 'grilling' };
+  }
 
   // Deferred result variables — all grill-phase exits set these so the finally
   // block always fires before we return or fall through to write-prd.
@@ -363,7 +393,10 @@ export async function runGrillAndPrdWorkflow(
   try {
     // Round-number is 1-indexed and counts how many times grill-me has produced
     // a question in the conversation so far, plus one (the round we're about to run).
-    const roundNumber = augmentedPriorReplies.filter((r) => r.role === 'agent').length + 1;
+    const roundNumber =
+      augmentedPriorReplies.filter(
+        (r) => r.role === 'agent' && !r.content.startsWith('<!-- factory:prd -->'),
+      ).length + 1;
 
     // ─── Step 1: grill-me ──────────────────────────────────────────────────
     const grillerPersona = selectPersona(projectId, 'griller');
@@ -585,7 +618,17 @@ export async function runGrillAndPrdWorkflow(
       }
     }
   } finally {
-    cleanupWorktreeFn(runId);
+    try {
+      cleanupWorktreeFn(runId);
+    } catch (err) {
+      eventStore.appendEvent({
+        kind: 'agent.run-failed',
+        projectId,
+        workItemId: workItem.id,
+        runId,
+        payload: { skill: 'grill-and-prd', error: `worktree cleanup failed: ${String(err)}` },
+      });
+    }
   }
 
   if (grillPhaseReturn != null) {

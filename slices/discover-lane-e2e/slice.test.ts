@@ -664,7 +664,11 @@ describe('Discover Lane: PRD decline → re-grill resumes correctly', () => {
       stateSource: source,
       projectId,
       priorReplies: [],
-      deps: { runtime: makeQueuedRuntime([round1Output]), projectConfig: injectedConfig(), ...noopWorktreeDeps() },
+      deps: {
+        runtime: makeQueuedRuntime([round1Output]),
+        projectConfig: injectedConfig(),
+        ...noopWorktreeDeps(),
+      },
     });
 
     // Simulate user reply
@@ -736,7 +740,7 @@ describe('Discover Lane: PRD decline → re-grill resumes correctly', () => {
       }));
 
     // Should have: 1 agent (grill Q1) + 1 user (reply) + 1 agent (PRD) + 1 user (rejection) = 4
-    // roundNumber = agent count + 1 = 3
+    // roundNumber = non-PRD agent count + 1 = 2 (PRD-draft agent entries are excluded per Fix A)
     const agentCount = priorRepliesReGrill.filter((r) => r.role === 'agent').length;
     expect(agentCount).toBe(2); // grill question + PRD draft
     expect(priorRepliesReGrill).toHaveLength(4);
@@ -775,9 +779,9 @@ describe('Discover Lane: PRD decline → re-grill resumes correctly', () => {
     const qPostedEvs = evs.filter((e) => e.kind === 'grill.question-posted');
     expect(qPostedEvs).toHaveLength(2);
 
-    // Second posted event roundNumber = 3 (grill Q + PRD draft = 2 prior agent messages)
+    // Second posted event roundNumber = 2 (PRD-draft agent entry excluded from round counting)
     const reGrillQPosted = qPostedEvs[1];
-    expect((reGrillQPosted?.payload as { roundNumber: number }).roundNumber).toBe(3);
+    expect((reGrillQPosted?.payload as { roundNumber: number }).roundNumber).toBe(2);
   });
 });
 
