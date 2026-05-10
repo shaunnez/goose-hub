@@ -113,7 +113,7 @@ const config: ProjectConfig = {
   visibility: 'always_visible',
   machineScope: undefined,
   colorStripe: '#7c3aed',
-  activeMilestone: 'M14: Work Mode Foundation',
+  activeMilestone: 'M19: Multi-Agent Orchestration',
 };
 
 export default config;

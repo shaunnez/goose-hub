@@ -644,7 +644,7 @@ Acceptance:
   - Deterministic tier events from M19.19: existing `qa.structural-failed` / `qa.functional-failed` / `qa.regression-failed` (or pass equivalents — verify and reuse)
   - `qa.completed` with tier results from ground truth
   - `review.completed`
-  - `merge-decision.gate-passed` or `merge-decision.gate-failed` (NEW events — added to event store union by M19.21)
+  - `merge-decision.completed` (payload carries `passed: boolean`) (NEW events — added to event store union by M19.21)
   - Score persisted at merge-decision time
   - ImprovementCandidate emitted if applicable
 - [ ] Retro shows both QA's 8-cat score AND M19.08 deterministic score (read-only, no recomputation).
@@ -725,7 +725,7 @@ Deferred:
 - **Merge-decision human-in-loop.** Approve action is human-triggered. Gate runs synchronously inside handler — must be fast (<5s) or human waits. Score computation reads events (cheap). Convergence query is small (last 3 rows). Should be sub-second; benchmark before shipping.
 - **`pipelineRunId` retry semantics.** Same PR + same pipelineRunId across QA-fail → fix-feedback → re-QA. Retro reads cumulative events. If retry semantics break (new pipelineRunId per attempt), score history fragments. Test explicitly with fix-feedback fixture.
 - **Spec-author owns pipelineRunId generation.** If M19.17 ships before scout reports key is migrated to include investigationRunId (M19.16a), correlation breaks. M19.16a must land first.
-- **New event kinds in store union.** `spec.completed`, `merge-decision.gate-passed`, `merge-decision.gate-failed` added to `core/event-stream/store.ts:26+` event-kind union. Also any new emissions from M19.16 (cross-validate, wave2) need declaration. Each PR adding events updates the union.
+- **New event kinds in store union.** `spec.completed` (M19.17) and `merge-decision.completed` (M19.21) added to `core/event-stream/store.ts:26+` event-kind union. Match existing `qa.completed`/`review.completed` precedent — single event per workflow step, payload carries verdict. Also any new emissions from M19.16 (cross-validate, wave2 results) need declaration. Each PR adding events updates the union.
 - **Cost cap during repair.** $2000/month for `goose-hub-self`. Cost-cap-checker enforces during canary; manual monitoring before that.
 
 ---
