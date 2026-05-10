@@ -179,9 +179,9 @@ test.describe('Golden Feature flow (MOCK_AGENTS + MOCK_SOURCE + MOCK_OPEN_PR)', 
     await postServer(`/projects/${SLUG}/tick`);
     await expect(statePill).toHaveText('grilling', { timeout: 60_000 });
 
-    // Grill tab visible in left rail; PRD tab not yet (state-gated).
+    // Grill tab visible in left rail; PRD tab always rendered (tabs are disabled, not hidden).
     await expect(page.locator('[data-section-key="grill"]')).toBeVisible();
-    await expect(page.locator('[data-section-key="prd"]')).toHaveCount(0);
+    await expect(page.locator('[data-section-key="prd"]')).toBeVisible();
 
     // ── 3. Dispatch the grill workflow → posts a question → gate-pending.
     await page.goto(`/projects/${SLUG}/items/${issueNumber}/grill`);
