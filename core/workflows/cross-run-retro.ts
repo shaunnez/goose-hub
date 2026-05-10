@@ -302,22 +302,6 @@ export async function runCrossRunRetroWorkflow(
     costsUsd: row.costsUsd,
   }));
 
-  eventStore.appendEvent({
-    kind: 'agent.run-started',
-    projectId,
-    runId,
-    personaId,
-    payload: {
-      skill: skillName,
-      runId,
-      personaId,
-      tier: 'cross-run',
-      windowStartAt: window.startAt,
-      windowEndAt: window.endAt,
-      lifecycleCount: lifecycles.length,
-    },
-  });
-
   try {
     const result = await runtime.run({
       runId,
@@ -352,6 +336,12 @@ export async function runCrossRunRetroWorkflow(
       personaId,
       appendSystemPrompt: prompt,
       outputJsonSchema: jsonSchema,
+      extraEventPayload: {
+        tier: 'cross-run',
+        windowStartAt: window.startAt,
+        windowEndAt: window.endAt,
+        lifecycleCount: lifecycles.length,
+      },
     });
 
     const parsed = CrossRunRetroOutputSchema.safeParse(result.output);

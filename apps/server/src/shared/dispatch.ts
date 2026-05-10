@@ -943,6 +943,11 @@ type ResumeEntry = {
 };
 
 const RESUME_WORKFLOWS: Partial<Record<StateName, ResumeEntry>> = {
+  // Re-run the full triage batch so a stalled triage or repo-match run is retried.
+  'factory:triaging': {
+    targetState: 'factory:triaging',
+    dispatch: (slug: string, _issueNumber: number) => dispatchTriageBatch(slug),
+  },
   'factory:dev-ready': { targetState: 'factory:dev-ready', dispatch: dispatchFixIssue },
   'factory:in-progress': { targetState: 'factory:dev-ready', dispatch: dispatchFixIssue },
   'factory:needs-qa': { targetState: 'factory:needs-qa', dispatch: dispatchQa },

@@ -1,3 +1,26 @@
+# Chat 
+Implement this...
+
+# Researcher
+Implement this
+
+# Timeline bugs
+Playwright repro and evidence, nice to somehow see images here
+
+# General
+Comments on home page doesn't feel right - overview
+Chore - need to ensure the right tabs are shown in sidebar + transition drop down
+
+
+# PRD 
+Use can APPROVE or DECLINE
+- They can free edit the PRD or ADD comments 
+- Approve moves it forward, decline moves it to "blocked" or done.  
+
+# Overview
+Should show states "compelted" or "blocked" of each state 
+Like we now do on prd form
+
 # Grill me
   1. Grill page shows triage comments, probably not great.
   2. Overview shows comments... weird it shows the griller comments

@@ -189,9 +189,17 @@ Capture the comment URL `gh` returns on stdout. That URL becomes the `commentUrl
 
 ### 9. Produce output
 
-Screenshot paths in the output should be the workspace-relative `evidence/issue-<N>/step-N.png` paths (post-push, not the original `/tmp/repro-<slug>/` paths). Each screenshot must include the SHA-pinned `githubUrl`. The `gifPath` is workspace-relative (`evidence/issue-<N>/walkthrough.gif`) or `null`. Console errors come from the `REPRO_CONSOLE` line in stdout.
+Emit: `[decision] VERDICT: Reproduced bug via Playwright CLI, pushed evidence to evidence/issue-<N>, posted SHA-pinned BEFORE comment`
 
-Return JSON conforming to `PlaywrightReproSchema`:
+Then output **only** the JSON object below — no prose, no markdown, no preamble. Begin with `{` and end with `}`. Nothing else.
+
+Field notes:
+- `screenshots[].path` — workspace-relative `evidence/issue-<N>/step-N.png` (post-push, not the original `/tmp/repro-<slug>/` path)
+- `screenshots[].githubUrl` — SHA-pinned raw.githubusercontent.com URL
+- `gifPath` — workspace-relative `evidence/issue-<N>/walkthrough.gif`, or `null` if conversion was skipped
+- `consoleErrors` — from the `REPRO_CONSOLE` line in stdout
+- `reproduced` — `true` if bug behaviour was observed (assertion failed, visible error, or matching console error)
+- `commentUrl` — omit only if `gh issue comment` step failed; capture failure in `notes`
 
 ```json
 {
@@ -220,14 +228,8 @@ Return JSON conforming to `PlaywrightReproSchema`:
 }
 ```
 
-Set `reproduced: true` if the bug behaviour was observed (assertion failed, visible error, or matching console error).
-Set `gifPath` to the workspace-relative GIF path, or `null` if the conversion was skipped.
-Omit `commentUrl` only if the `gh issue comment` step failed (the failure must be captured in `notes`).
-
 ## Critical
 
 You are documenting broken behaviour — NOT fixing it. Do not modify any app source code. Push only to the `evidence/issue-<N>` branch — never to `main`.
 
 **UI-only assumption.** This skill connects to the already-running dev server at `http://localhost:5173` (`SKIP_WEBSERVER=1` is set in the environment). It reproduces UI-layer bugs only. If the bug requires server-side changes to manifest, the repro may show a false negative — record this in `notes` and set `reproduced: false`.
-
-[decision] VERDICT: Reproduced bug via Playwright CLI, pushed evidence to evidence/issue-<N>, posted SHA-pinned BEFORE comment

@@ -75,6 +75,29 @@ function extractResultJson(text: string, runId: string): unknown {
       /* continue */
     }
   }
+  // Strip [decision] marker lines emitted before the JSON object and retry.
+  const stripped = text
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('[decision]'))
+    .join('\n')
+    .trim();
+  if (stripped !== text.trim()) {
+    try {
+      return JSON.parse(stripped);
+    } catch {
+      /* continue */
+    }
+  }
+  // Last resort: extract the outermost {...} block.
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start !== -1 && end > start) {
+    try {
+      return JSON.parse(text.slice(start, end + 1));
+    } catch {
+      /* continue */
+    }
+  }
   // Could not parse as JSON — return raw string so the schema validator
   // surfaces a clear type error. Log the preview here so the raw output
   // is visible in server logs even if the caller's error message is truncated.

@@ -11,9 +11,10 @@ The application is a React + Vite frontend served at `http://localhost:5173`. Th
 Read the title and body carefully. Decide: **is this a UI/web bug?**
 
 A bug IS a UI/web bug if it describes any of:
-- Visual problems (wrong text, wrong colour, missing element, layout broken)
+- Visual problems (wrong text, wrong colour, missing element, layout broken, wrong logo or image)
 - Browser-side behaviour (button doesn't respond, page doesn't navigate, form doesn't submit)
 - React component state or rendering issues
+- Any asset displayed in the browser (logo, icon, image, font)
 - Anything a user would observe by opening `http://localhost:5173/` in a browser
 
 A bug is **NOT** a UI/web bug if it describes:
@@ -56,7 +57,9 @@ Only include sections that are genuinely missing or incomplete. If a section is 
 - Keep each section concise: 1–5 lines max.
 - Format as clean GitHub-flavoured markdown. Use `**Section name**` headers and numbered lists for repro steps.
 
-Return:
+Emit: `[decision] VERDICT: Classified bug as UI/web or not, then enhanced only if applicable`
+
+Then return **only** the JSON object below — no prose, no markdown, no preamble. Begin with `{` and end with `}`. Nothing else.
 
 ```json
 {
@@ -69,5 +72,3 @@ Return:
 ```
 
 If all sections are already present and adequate, add only a minimal `**Location**` section as the one most likely to be incomplete.
-
-[decision] VERDICT: Classified bug as UI/web or not, then enhanced only if applicable

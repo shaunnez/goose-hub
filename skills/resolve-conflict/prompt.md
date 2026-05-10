@@ -35,14 +35,22 @@ For each file in `conflictedFiles`:
 
 ## Output
 
-Return a JSON object matching `ResolveConflictSchema`:
+Emit: `[decision] VERDICT: Resolved <N> files; <M> unresolvable`
 
-- `resolved` — array of workspace-relative paths you successfully resolved (all markers gone)
-- `unresolvable` — array of paths you could not produce a confident resolution for
-- `confidence` — `"low"` | `"medium"` | `"high"` for the overall resolution. Use `low` if you had to guess on any block.
-- `decisionSummaries` — at least one entry. One sentence per file or per resolution strategy.
+Then output **only** the JSON object below — no prose, no markdown, no preamble. Begin with `{` and end with `}`. Nothing else.
 
 If `unresolvable` is non-empty OR `confidence` is `low`, the slice will escalate to `factory:needs-human` without attempting the merge.
+
+```json
+{
+  "resolved": ["src/foo.ts", "src/bar.ts"],
+  "unresolvable": [],
+  "confidence": "high",
+  "decisionSummaries": [
+    { "kind": "PLAN", "summary": "Resolved 2 files by including both sides' new imports and preferring PR-branch changes for conflicting edits." }
+  ]
+}
+```
 
 ## Critical rules
 

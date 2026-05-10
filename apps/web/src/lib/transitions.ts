@@ -3,6 +3,13 @@
 // to show in the Transition popover. Server still validates with 422 on
 // illegal inputs.
 
+// States excluded from the transition dropdown based on work item type.
+// Bugs skip the grill/PRD/research path; features skip the investigation path.
+export const TYPE_EXCLUDED_TARGETS: Readonly<Record<string, readonly string[]>> = {
+  bug: ['factory:grilling', 'factory:research-pending'],
+  feature: ['factory:investigating', 'factory:research-pending'],
+};
+
 export const LEGAL_TARGETS: Readonly<Record<string, readonly string[]>> = {
   'factory:triaging': ['factory:accepted', 'factory:rejected', 'factory:archived'],
   'factory:accepted': [

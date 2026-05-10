@@ -1,9 +1,10 @@
-import { approvePRD, declinePRD, fetchComments, revisePRD } from '@/lib/api';
+import { approvePRD, declinePRD, fetchComments, fetchEvents, revisePRD } from '@/lib/api';
 import { renderMarkdownToHtml } from '@/lib/markdown';
-import type { IssueCommentDto } from '@/lib/types';
+import type { AgentEventDto, IssueCommentDto } from '@/lib/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, FileText } from 'lucide-react';
-import { useState } from 'react';
+import { CheckCircle2, ChevronDown, ChevronRight, FileText, Loader2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   type ParsedPRDView,
   findLatestPRDCommentBody,
@@ -31,11 +32,26 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
   const [showRequestChanges, setShowRequestChanges] = useState(false);
   const [concernsText, setConcernsText] = useState('');
   const [showDeclineConfirm, setShowDeclineConfirm] = useState(false);
+  const [submittedConcerns, setSubmittedConcerns] = useState<string[] | null>(null);
+  const baselinePrdBodyRef = useRef<string | null>(null);
 
   const { data: comments = [], isLoading } = useQuery<IssueCommentDto[]>({
     queryKey: ['comments', projectSlug, id],
     queryFn: () => fetchComments(projectSlug, id),
+    refetchInterval: submittedConcerns !== null ? 3000 : false,
   });
+
+  const { data: events = [] } = useQuery<AgentEventDto[]>({
+    queryKey: ['events', projectSlug, id],
+    queryFn: () => fetchEvents(projectSlug, id),
+  });
+
+  const childIssueNumbers: number[] =
+    (
+      events.find((e) => e.kind === 'decompose.completed')?.payload as {
+        childIssueNumbers?: number[];
+      } | null
+    )?.childIssueNumbers ?? [];
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['issue', projectSlug, id] });
@@ -52,7 +68,8 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
 
   const requestChanges = useMutation({
     mutationFn: (concerns: string[]) => revisePRD(projectSlug, id, concerns),
-    onSuccess: () => {
+    onSuccess: (_, concerns) => {
+      setSubmittedConcerns(concerns);
       setShowRequestChanges(false);
       setConcernsText('');
       invalidate();
@@ -69,6 +86,14 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
     onError: (err: unknown) => setErrorMsg(err instanceof Error ? err.message : String(err)),
   });
 
+  const currentBody = findLatestPRDCommentBody(comments);
+
+  useEffect(() => {
+    if (submittedConcerns !== null && currentBody !== baselinePrdBodyRef.current) {
+      setSubmittedConcerns(null);
+    }
+  }, [currentBody, submittedConcerns]);
+
   if (isLoading) {
     return (
       <div className="px-8 py-6 text-[12.5px] text-fg-2" data-testid="prd-loading">
@@ -80,8 +105,7 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
   // Drafting state — show a friendly waiting message even before any PRD has
   // been posted.
   if (state === 'factory:prd-drafting') {
-    const body = findLatestPRDCommentBody(comments);
-    if (body == null) {
+    if (currentBody == null) {
       return (
         <div className="px-8 py-6">
           <div className="mb-5">
@@ -101,8 +125,7 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
     }
   }
 
-  const body = findLatestPRDCommentBody(comments);
-  if (body == null) {
+  if (currentBody == null) {
     return (
       <div className="px-8 py-6">
         <div className="mb-5">
@@ -121,7 +144,7 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
     );
   }
 
-  const { prd, advisorConcerns } = parsePRDComment(body);
+  const { prd, advisorConcerns } = parsePRDComment(currentBody);
 
   if (prd == null) {
     return (
@@ -137,6 +160,10 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
   }
 
   const showApproveButtons = state === 'factory:prd-review';
+  const prdApproved =
+    state === 'factory:decomposing' ||
+    state === 'factory:issues-created' ||
+    state === 'factory:done';
   const isBusy = approve.isPending || requestChanges.isPending || decline.isPending;
 
   const onSubmitRequestChanges = (e: React.FormEvent) => {
@@ -149,6 +176,7 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
       .split(/\n|;/)
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
+    baselinePrdBodyRef.current = currentBody;
     requestChanges.mutate(concerns);
   };
 
@@ -197,6 +225,37 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
         </div>
       )}
 
+      {prdApproved && (
+        <div
+          data-testid="prd-approved-banner"
+          className="rounded-md border border-green-500/30 bg-green-500/10 px-4 py-3 flex flex-col gap-2"
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={14} className="text-green-400 shrink-0" />
+            <span className="text-[13px] text-green-300 font-medium">PRD approved</span>
+            <span className="text-[12px] text-fg-3 ml-1">
+              {state === 'factory:decomposing'
+                ? '— decomposing into vertical slices'
+                : '— issues created'}
+            </span>
+          </div>
+          {childIssueNumbers.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pl-[22px]">
+              {childIssueNumbers.map((n) => (
+                <Link
+                  key={n}
+                  to={`/projects/${projectSlug}/items/${n}`}
+                  data-testid="prd-child-issue-link"
+                  className="font-mono text-[11px] text-accent bg-bg-elev px-1.5 py-0.5 rounded border border-line hover:border-accent/50 transition-colors"
+                >
+                  Issue #{n}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {showApproveButtons && (
         <div
           className="rounded-md border border-line bg-bg-elev px-4 py-3 flex flex-col gap-3"
@@ -215,122 +274,147 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
             </div>
           )}
 
-          {/* Request Changes form */}
-          {showRequestChanges && (
-            <form
-              onSubmit={onSubmitRequestChanges}
-              className="flex flex-col gap-2"
-              data-testid="prd-request-changes-form"
-            >
-              <label htmlFor="prd-concerns-input" className="text-[11.5px] text-fg-2">
-                Describe your concerns — one per line (or separated by semicolons):
-              </label>
-              <textarea
-                id="prd-concerns-input"
-                data-testid="prd-concerns-input"
-                value={concernsText}
-                onChange={(e) => setConcernsText(e.target.value)}
-                rows={4}
-                placeholder="e.g. Journey J-1 step 2 is unclear&#10;Missing error state for network timeout"
-                className="rounded-md border border-line bg-bg p-2 text-[12.5px] resize-y"
-              />
-              <div className="flex gap-2 justify-end">
-                <button
-                  type="button"
-                  data-testid="prd-cancel-changes-btn"
-                  onClick={() => {
-                    setShowRequestChanges(false);
-                    setConcernsText('');
-                  }}
-                  className="h-8 px-3 rounded-md border border-line text-[12px] hover:bg-bg-hover"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  data-testid="prd-submit-changes-btn"
-                  disabled={requestChanges.isPending || concernsText.trim().length === 0}
-                  className="h-8 px-4 rounded-md bg-amber-600 text-white text-[12px] font-medium hover:bg-amber-700 disabled:opacity-50"
-                >
-                  {requestChanges.isPending ? 'Submitting…' : 'Submit changes'}
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* Decline confirmation */}
-          {showDeclineConfirm && (
+          {submittedConcerns !== null ? (
             <div
-              className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 flex flex-col gap-2"
-              data-testid="prd-decline-confirm"
+              data-testid="prd-rewriting-banner"
+              className="rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3 flex flex-col gap-2"
             >
-              <p className="text-[12.5px] text-fg">
-                Are you sure you want to decline this feature? The work item will be closed as done.
-              </p>
-              <div className="flex gap-2 justify-end">
-                <button
-                  type="button"
-                  data-testid="prd-cancel-decline-btn"
-                  onClick={() => setShowDeclineConfirm(false)}
-                  className="h-8 px-3 rounded-md border border-line text-[12px] hover:bg-bg-hover"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  data-testid="prd-confirm-decline-btn"
-                  disabled={decline.isPending}
-                  onClick={() => {
-                    setErrorMsg(null);
-                    decline.mutate();
-                  }}
-                  className="h-8 px-4 rounded-md bg-red-700 text-white text-[12px] font-medium hover:bg-red-800 disabled:opacity-50"
-                >
-                  {decline.isPending ? 'Declining…' : 'Yes, decline feature'}
-                </button>
+              <div className="flex items-center gap-2">
+                <Loader2 size={14} className="text-amber-400 shrink-0 animate-spin" />
+                <span className="text-[13px] text-amber-300 font-medium">Rewriting PRD…</span>
+              </div>
+              <div className="pl-[22px] flex flex-col gap-1">
+                <div className="text-[11.5px] text-fg-3 mb-0.5">Your amendments:</div>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  {submittedConcerns.map((c) => (
+                    <li key={c} className="text-[12px] text-fg-2">
+                      {c}
+                    </li>
+                  ))}
+                </ul>
               </div>
             </div>
-          )}
+          ) : (
+            <>
+              {/* Request Changes form */}
+              {showRequestChanges && (
+                <form
+                  onSubmit={onSubmitRequestChanges}
+                  className="flex flex-col gap-2"
+                  data-testid="prd-request-changes-form"
+                >
+                  <label htmlFor="prd-concerns-input" className="text-[11.5px] text-fg-2">
+                    Describe your concerns — one per line (or separated by semicolons):
+                  </label>
+                  <textarea
+                    id="prd-concerns-input"
+                    data-testid="prd-concerns-input"
+                    value={concernsText}
+                    onChange={(e) => setConcernsText(e.target.value)}
+                    rows={4}
+                    placeholder="e.g. Journey J-1 step 2 is unclear&#10;Missing error state for network timeout"
+                    className="rounded-md border border-line bg-bg p-2 text-[12.5px] resize-y"
+                  />
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      type="button"
+                      data-testid="prd-cancel-changes-btn"
+                      onClick={() => {
+                        setShowRequestChanges(false);
+                        setConcernsText('');
+                      }}
+                      className="h-8 px-3 rounded-md border border-line text-[12px] hover:bg-bg-hover"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      data-testid="prd-submit-changes-btn"
+                      disabled={requestChanges.isPending || concernsText.trim().length === 0}
+                      className="h-8 px-4 rounded-md bg-amber-600 text-white text-[12px] font-medium hover:bg-amber-700 disabled:opacity-50"
+                    >
+                      {requestChanges.isPending ? 'Submitting…' : 'Submit changes'}
+                    </button>
+                  </div>
+                </form>
+              )}
 
-          {!showRequestChanges && !showDeclineConfirm && (
-            <div className="flex gap-2">
-              <button
-                type="button"
-                data-testid="prd-approve-btn"
-                disabled={isBusy}
-                onClick={() => {
-                  setErrorMsg(null);
-                  approve.mutate();
-                }}
-                className="h-8 rounded-md bg-green-600 px-3 text-[12px] font-medium text-white hover:bg-green-700 disabled:opacity-50"
-              >
-                {approve.isPending ? 'Approving…' : 'Approve PRD'}
-              </button>
-              <button
-                type="button"
-                data-testid="prd-request-changes-btn"
-                disabled={isBusy}
-                onClick={() => {
-                  setErrorMsg(null);
-                  setShowRequestChanges(true);
-                }}
-                className="h-8 rounded-md border border-amber-500/50 px-3 text-[12px] text-amber-300 hover:bg-amber-500/10 disabled:opacity-50"
-              >
-                Request Changes
-              </button>
-              <button
-                type="button"
-                data-testid="prd-decline-btn"
-                disabled={isBusy}
-                onClick={() => {
-                  setErrorMsg(null);
-                  setShowDeclineConfirm(true);
-                }}
-                className="h-8 rounded-md border border-line px-3 text-[12px] text-fg-2 hover:bg-bg-hover disabled:opacity-50"
-              >
-                Decline Feature
-              </button>
-            </div>
+              {/* Decline confirmation */}
+              {showDeclineConfirm && (
+                <div
+                  className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 flex flex-col gap-2"
+                  data-testid="prd-decline-confirm"
+                >
+                  <p className="text-[12.5px] text-fg">
+                    Are you sure you want to decline this feature? The work item will be closed as
+                    done.
+                  </p>
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      type="button"
+                      data-testid="prd-cancel-decline-btn"
+                      onClick={() => setShowDeclineConfirm(false)}
+                      className="h-8 px-3 rounded-md border border-line text-[12px] hover:bg-bg-hover"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="prd-confirm-decline-btn"
+                      disabled={decline.isPending}
+                      onClick={() => {
+                        setErrorMsg(null);
+                        decline.mutate();
+                      }}
+                      className="h-8 px-4 rounded-md bg-red-700 text-white text-[12px] font-medium hover:bg-red-800 disabled:opacity-50"
+                    >
+                      {decline.isPending ? 'Declining…' : 'Yes, decline feature'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!showRequestChanges && !showDeclineConfirm && (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    data-testid="prd-approve-btn"
+                    disabled={isBusy}
+                    onClick={() => {
+                      setErrorMsg(null);
+                      approve.mutate();
+                    }}
+                    className="h-8 rounded-md bg-green-600 px-3 text-[12px] font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {approve.isPending ? 'Approving…' : 'Approve PRD'}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="prd-request-changes-btn"
+                    disabled={isBusy}
+                    onClick={() => {
+                      setErrorMsg(null);
+                      setShowRequestChanges(true);
+                    }}
+                    className="h-8 rounded-md border border-amber-500/50 px-3 text-[12px] text-amber-300 hover:bg-amber-500/10 disabled:opacity-50"
+                  >
+                    Request Changes
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="prd-decline-btn"
+                    disabled={isBusy}
+                    onClick={() => {
+                      setErrorMsg(null);
+                      setShowDeclineConfirm(true);
+                    }}
+                    className="h-8 rounded-md border border-line px-3 text-[12px] text-fg-2 hover:bg-bg-hover disabled:opacity-50"
+                  >
+                    Decline Feature
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

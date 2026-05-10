@@ -54,11 +54,18 @@ export async function runBugEnhance(
     if (!parsed.success) {
       logger.warn('bug-enhance: output validation failed', {
         errors: parsed.error.issues,
+        raw: JSON.stringify(result.output),
       });
       return null;
     }
 
     const content = parsed.data.enhancedContent.trim();
+    if (content.length === 0) {
+      logger.warn('bug-enhance: enhancedContent empty after trim', {
+        runId,
+        decisions: parsed.data.decisionSummaries,
+      });
+    }
     return content.length > 0 ? content : null;
   } catch (err) {
     logger.error('bug-enhance: agent run failed', { err: String(err) });

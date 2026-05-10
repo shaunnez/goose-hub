@@ -155,6 +155,9 @@ export async function runQaWorkflow(
         projectCommands: {
           testCommand,
           lintCommand: 'pnpm biome check .',
+          ...(projectConfig?.stack?.e2eCommand != null
+            ? { e2eCommand: projectConfig.stack.e2eCommand }
+            : {}),
         },
         ...(verifyCommands != null && verifyCommands.length > 0 ? { verifyCommands } : {}),
         testRun,

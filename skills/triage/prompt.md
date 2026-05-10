@@ -46,7 +46,11 @@ One to three sentences explaining your classification decisions. Focus on the ev
 
 ## Output format
 
-Return a JSON object with this exact structure:
+**Your entire response must be a single valid JSON object. No markdown, no prose, no preamble. Begin with `{` and end with `}`. Nothing else.**
+
+Emit one `[decision] VERDICT: <one sentence>` line before the JSON as a progress marker.
+
+The JSON must have this exact structure:
 
 ```json
 {
@@ -62,5 +66,3 @@ Return a JSON object with this exact structure:
 ```
 
 `decisionSummaries` must have at least one entry. Include one entry per major decision (type, priority).
-
-[decision] VERDICT: Classified work item type and priority with reasoning

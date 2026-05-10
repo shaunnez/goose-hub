@@ -3,7 +3,7 @@ import { renderMarkdownToHtml } from '@/lib/markdown';
 import type { IssueCommentDto } from '@/lib/types';
 import { timeAgo } from '@/lib/utils';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { MessageCircleQuestion } from 'lucide-react';
+import { CheckCircle2, MessageCircleQuestion } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { SectionEmptyState } from './SectionEmptyState';
 
@@ -118,7 +118,8 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
     state === 'factory:prd-drafting' ||
     state === 'factory:prd-review' ||
     state === 'factory:decomposing' ||
-    state === 'factory:issues-created';
+    state === 'factory:issues-created' ||
+    state === 'factory:done';
 
   // Griller is processing a reply — hide the form but don't show "complete" yet.
   const grillingInProgress = state === 'factory:grilling';
@@ -158,6 +159,19 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
           The griller asks one question at a time until the scope is precise enough to draft a PRD.
         </p>
       </div>
+
+      {grillingComplete && (
+        <div
+          data-testid="grill-complete-footer"
+          className="rounded-md border border-green-500/30 bg-green-500/10 px-4 py-3 flex items-center gap-2"
+        >
+          <CheckCircle2 size={14} className="text-green-400 shrink-0" />
+          <span className="text-[13px] text-green-300 font-medium">Grilling complete</span>
+          <span className="text-[12px] text-fg-3 ml-1">
+            — PRD drafted, open the PRD tab to review
+          </span>
+        </div>
+      )}
 
       {merged.length === 0 ? (
         <SectionEmptyState
@@ -222,14 +236,7 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
         </ol>
       )}
 
-      {grillingComplete ? (
-        <div
-          data-testid="grill-complete-footer"
-          className="text-[12px] text-fg-2 italic border-t border-line pt-3"
-        >
-          Grilling complete — the PRD has been drafted. Open the PRD tab to review it.
-        </div>
-      ) : grillingInProgress ? (
+      {grillingInProgress ? (
         <div
           data-testid="grill-processing-footer"
           className="text-[12px] text-fg-2 border-t border-line pt-3"

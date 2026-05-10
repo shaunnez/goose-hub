@@ -1,5 +1,5 @@
 import { transitionState } from '@/lib/api';
-import { LEGAL_TARGETS } from '@/lib/transitions';
+import { LEGAL_TARGETS, TYPE_EXCLUDED_TARGETS } from '@/lib/transitions';
 import type { WorkItemDto } from '@/lib/types';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
@@ -8,11 +8,18 @@ interface TransitionButtonProps {
   projectSlug: string;
   id: string;
   currentState: string;
+  itemType?: string;
 }
 
-export function TransitionButton({ projectSlug, id, currentState }: TransitionButtonProps) {
+export function TransitionButton({
+  projectSlug,
+  id,
+  currentState,
+  itemType,
+}: TransitionButtonProps) {
   const queryClient = useQueryClient();
-  const targets = LEGAL_TARGETS[currentState] ?? [];
+  const excluded = itemType != null ? (TYPE_EXCLUDED_TARGETS[itemType] ?? []) : [];
+  const targets = (LEGAL_TARGETS[currentState] ?? []).filter((t) => !excluded.includes(t));
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

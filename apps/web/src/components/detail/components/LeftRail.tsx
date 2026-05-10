@@ -34,7 +34,6 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
 };
 
 interface LeftRailProps {
-  itemState?: string;
   itemType?: string;
   prdParent?: string;
 }
@@ -71,7 +70,7 @@ function getNotApplicableReason(
   return undefined;
 }
 
-export function LeftRail({ itemState, itemType, prdParent }: LeftRailProps) {
+export function LeftRail({ itemType, prdParent }: LeftRailProps) {
   const { slug = 'goose-hub-self', id = '' } = useParams<{ slug: string; id: string }>();
   const location = useLocation();
 
@@ -96,12 +95,6 @@ export function LeftRail({ itemState, itemType, prdParent }: LeftRailProps) {
           const isActive = activeKey === section.key;
           const number = String(idx + 1).padStart(2, '0');
           const Icon = SECTION_ICONS[section.key];
-
-          // State-gate: hide grill/prd when the current state doesn't apply.
-          if (itemState != null) {
-            if (section.key === 'prd' && !PRD_ACTIVE_STATES.has(itemState)) return null;
-            if (section.key === 'grill' && !GRILL_ACTIVE_STATES.has(itemState)) return null;
-          }
 
           const notApplicableReason = getNotApplicableReason(section.key, itemType, prdParent);
 
