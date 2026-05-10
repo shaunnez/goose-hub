@@ -221,3 +221,5 @@ Return a JSON object conforming to `ImplementSchema`. The orchestrator opens the
 - **Self-observations:** `BLOCKER`, `RETRY`, `UNCERTAINTY`, `TOOL_FAILURE`, `INSIGHT`
 
 Use uppercase enum values both in the JSON `kind` field and in the live `[decision] KIND: …` marker line. Free-text `step` strings are no longer accepted — schema validation rejects them.
+
+Live marker format: `[decision] KIND: what — why` where ` — ` (space, em-dash, space) separates the decision from its rationale. Example: `[decision] PLAN: Add helper in core/foo/bar.ts — mirrors existing baz pattern, avoids new abstraction`.

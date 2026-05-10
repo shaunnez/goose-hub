@@ -11,6 +11,7 @@ import { selectPersona } from '../agent-runtime/select-persona.js';
 import { db } from '../db/db.js';
 import { archivedLifecycles, decisionPatterns, improvementCandidates } from '../db/schema.js';
 import { eventStore } from '../event-stream/store.js';
+import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
 import { getProjectBySlug } from '../projects/loader.js';
 
 const DEFAULT_REPO_ROOT = join(import.meta.dirname, '../..');
@@ -241,14 +242,7 @@ export async function runSkillCoachingWorkflow(
 
     const candidateId = inserted?.id ?? -1;
 
-    for (const ds of output.decisionSummaries) {
-      eventStore.appendEvent({
-        kind: 'agent.decision-summary',
-        projectId,
-        runId,
-        payload: { skill: skillName, ...ds },
-      });
-    }
+    reconcileDecisionSummaries(runId, projectId, null, skillName, output.decisionSummaries);
 
     eventStore.appendEvent({
       kind: 'coach.completed',

@@ -7,8 +7,10 @@ import { recordCost } from '../cost/repository.js';
 import { stageForSkill } from '../cost/skill-stage.js';
 import { eventStore } from '../event-stream/store.js';
 import { computeAllowlist } from '../tool-layer/allowlist.js';
+import { deployDecisionCaptureHook } from '../tool-layer/decision-capture-hook.js';
 import { deployHooks } from '../tool-layer/pre-tool-use-hook.js';
 import { writeWorkspaceSandbox } from '../tool-layer/sandbox.js';
+import { getRecordDecisionTool } from '../db/repositories/project-settings.js';
 import { assembleSpawnContext } from './context-assembly.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { resolveMockOutput } from './mock-outputs.js';
@@ -270,10 +272,11 @@ export class CodexCliRuntime implements AgentRuntime {
 
     mkdirSync(workspaceDir, { recursive: true });
     writeFileSync(MCP_CONFIG_PATH, '{"mcpServers":{}}', { flag: 'w' });
-    writeWorkspaceSandbox(workspaceDir);
-    deployHooks();
-
     const projectId = (spec.context.projectId as string) ?? 'unknown';
+    const recordDecisionTool = getRecordDecisionTool(projectId);
+    writeWorkspaceSandbox(workspaceDir, { role: spec.role, recordDecisionTool });
+    deployHooks();
+    if (recordDecisionTool) deployDecisionCaptureHook();
     const workItemId = (spec.context.workItemId as string) ?? null;
     const { personaId } = spec;
 
@@ -328,7 +331,10 @@ export class CodexCliRuntime implements AgentRuntime {
             }),
         FACTORY_RUN_ALLOWLIST: allowedTools.join(','),
         FACTORY_RUN_ID: runId,
+        FACTORY_PROJECT_ID: projectId,
         FACTORY_SERVER_PORT: process.env.FACTORY_SERVER_PORT ?? '3001',
+        FACTORY_ITERATION: String(spec.iteration ?? 0),
+        FACTORY_PHASE: spec.phase ?? '',
       };
       // OPENAI_API_KEY passthrough for users who prefer key-based auth over OAuth.
       if (process.env.OPENAI_API_KEY != null) {

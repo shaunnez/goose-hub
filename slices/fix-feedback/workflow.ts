@@ -7,6 +7,7 @@ import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { runWithEscalation } from '@goose-hub/core/agent-runtime/with-escalation.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
@@ -238,15 +239,7 @@ export async function runFixFeedbackWorkflow(
       },
     });
 
-    for (const summary of implementOutput.decisionSummaries) {
-      eventStore.appendEvent({
-        projectId,
-        workItemId: workItem.id,
-        kind: 'agent.decision-summary',
-        payload: { skill: 'fix-feedback', ...summary },
-        runId,
-      });
-    }
+    reconcileDecisionSummaries(runId, projectId, workItem.id, 'fix-feedback', implementOutput.decisionSummaries);
 
     eventStore.appendEvent({
       projectId,

@@ -17,6 +17,7 @@ import {
   readProjectReviewSettings,
 } from '@goose-hub/core/db/repositories/project-review-settings.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { DEFAULT_MAX_RETRIES, shouldEscalateReview } from '@goose-hub/core/retry/retry-counter.js';
@@ -88,15 +89,7 @@ export async function runReviewWorkflow(
       runId,
     });
 
-    for (const summary of reviewOutput.decisionSummaries) {
-      eventStore.appendEvent({
-        projectId: projectSlug,
-        workItemId: workItem.id,
-        kind: 'agent.decision-summary',
-        payload: { skill: 'review', ...summary },
-        runId,
-      });
-    }
+    reconcileDecisionSummaries(runId, projectSlug, workItem.id, 'review', reviewOutput.decisionSummaries);
 
     let nextState: StateName;
     if (reviewOutput.verdict === 'needs-fix') {

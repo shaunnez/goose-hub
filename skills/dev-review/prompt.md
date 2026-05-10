@@ -141,3 +141,13 @@ Return JSON conforming to `DevReviewOutputSchema`:
 Every finding MUST include `file` and `line` — the schema rejects findings without grounded evidence. If you cannot point at a specific line, you are speculating, and speculation is not a finding.
 
 Keep `summary` and `suggestion` to a single sentence each. The dev needs scannable, actionable items, not paragraphs.
+
+## Decision-marker pattern
+
+At key review steps, emit a live marker in your text turn:
+
+```
+[decision] KIND: what — why
+```
+
+`KIND` is an uppercase value from the shared enum (`core/agent-runtime/decision-types.ts`). Use ` — ` (space, em-dash, space) to separate the decision from its rationale. Common kinds: `READ` (diff analysis), `INSIGHT` (pattern found), `VERDICT` (final verdict). Example: `[decision] VERDICT: no-blockers — all P0/P1 checks pass; 2 low-severity style findings noted`.

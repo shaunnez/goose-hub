@@ -8,6 +8,7 @@ import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { DEFAULT_MAX_RETRIES, shouldEscalateQa } from '@goose-hub/core/retry/retry-counter.js';
@@ -260,15 +261,7 @@ export async function runQaWorkflow(
       });
     }
 
-    for (const summary of qaOutput.decisionSummaries) {
-      eventStore.appendEvent({
-        projectId: projectSlug,
-        workItemId: workItem.id,
-        kind: 'agent.decision-summary',
-        payload: { skill: 'qa', ...summary },
-        runId,
-      });
-    }
+    reconcileDecisionSummaries(runId, projectSlug, workItem.id, 'qa', qaOutput.decisionSummaries);
 
     // Determine next state. Use priorEvents (snapshotted before this run) so the
     // retry count reflects completed prior failures, not the current one.

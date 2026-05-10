@@ -62,6 +62,10 @@ export type AgentSpec<R extends RoleSpec = RoleSpec> = {
    * repo node_modules, not a worktree).
    */
   mcpConfigPath?: string;
+  /** Current iteration within a multi-pass workflow (0-indexed). Written as FACTORY_ITERATION env var. */
+  iteration?: number;
+  /** Workflow phase label (e.g. 'plan', 'implement'). Written as FACTORY_PHASE env var. */
+  phase?: string;
 };
 
 export interface AgentResult {

@@ -147,18 +147,17 @@ Return a JSON object with this exact structure:
 After each major investigation step, emit a line in your text turn:
 
 ```
-[decision] KIND: <one sentence summary>
+[decision] KIND: what — why
 ```
 
 `KIND` is an uppercase value from the shared decision-kind enum (see `core/agent-runtime/decision-types.ts`). The investigator most commonly emits `READ` (issue/code reads), `INSIGHT` (root-cause hypothesis, open questions), and `UNCERTAINTY` (when evidence is thin).
 
-These marker lines are parsed by the orchestrator and stored as `agent.decision-summary` events. They are NOT forwarded to QA or Reviewer agents. Keep each summary to a single sentence. Do not include credentials, file dumps, or raw chain-of-thought.
+The ` — ` (space, em-dash, space) separates the decision (`what`) from its rationale (`why`). Both parts are required. These marker lines are parsed by the orchestrator and stored as `agent.decision-summary` events. They are NOT forwarded to QA or Reviewer agents. Keep each summary to a single sentence. Do not include credentials, file dumps, or raw chain-of-thought.
 
 Examples of good decision summaries:
-- `[decision] READ: Issue #42 — login endpoint returns 500 when email contains a plus sign`
-- `[decision] READ: Identified entry points — apps/server/src/routes/auth.ts, core/auth/validate.ts`
-- `[decision] READ: Traced email normalisation — plus signs stripped before DB lookup`
-- `[decision] INSIGHT: Root cause hypothesis — URL-decode step in normaliseEmail() drops plus sign`
+- `[decision] READ: Traced entry points to apps/server/src/routes/auth.ts — login endpoint reached via POST /auth/login`
+- `[decision] INSIGHT: Root cause in normaliseEmail() — URL-decode step strips plus signs before DB lookup`
+- `[decision] UNCERTAINTY: Cannot confirm fix without running integration tests — static analysis inconclusive`
 
 Bad decision summaries:
 - More than one sentence

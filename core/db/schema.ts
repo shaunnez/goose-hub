@@ -267,6 +267,8 @@ export const projectSettings = sqliteTable('project_settings', {
   maxRetries: integer('max_retries'),
   perBashCommandMaxSeconds: integer('per_bash_command_max_seconds'),
   useM19Pipeline: integer('use_m19_pipeline'),
+  /** experimental.recordDecisionTool — gates decision-capture hook installation. Default false (0). */
+  recordDecisionTool: integer('record_decision_tool'),
   updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
   updatedBy: text('updated_by'),
 });

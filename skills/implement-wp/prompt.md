@@ -130,4 +130,6 @@ Use the canonical `DecisionKindSchema` enum from `core/agent-runtime/decision-ty
 Common for this skill: `READ`, `PLAN`, `RED`, `GREEN`, `REFACTOR`, `LINT`, `BLOCKER`,
 `UNCERTAINTY`, `TOOL_FAILURE`.
 
+Live marker format: `[decision] KIND: what — why` where ` — ` (space, em-dash, space) separates the decision from its rationale. Example: `[decision] PLAN: Add helper in core/foo/bar.ts — mirrors existing baz pattern`.
+
 [decision] VERDICT: WP builder returned structured output; orchestrator commits

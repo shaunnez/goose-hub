@@ -9,6 +9,7 @@ import { selectPersona } from '../agent-runtime/select-persona.js';
 import { db } from '../db/db.js';
 import { improvementCandidates } from '../db/schema.js';
 import { eventStore } from '../event-stream/store.js';
+import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import type { StateSource } from '../state-source/interface.js';
 
@@ -169,14 +170,7 @@ export async function runSprintReviewWorkflow(input: RunSprintReviewInput): Prom
     await stateSource.transitionState(created.externalId, 'factory:triaging', 'factory:done');
 
     // Step 8: Emit decision summaries
-    for (const ds of decisionSummaries) {
-      eventStore.appendEvent({
-        kind: 'agent.decision-summary',
-        projectId,
-        runId,
-        payload: { skill: skillName, ...ds },
-      });
-    }
+    reconcileDecisionSummaries(runId, projectId, null, skillName, decisionSummaries);
 
     eventStore.appendEvent({
       kind: 'agent.run-completed',

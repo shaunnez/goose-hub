@@ -142,6 +142,8 @@ Return a single JSON object conforming to `EngineeringSpecSchema`. Do not includ
 
 `decisionSummaries` must have at least one entry. Use the canonical `DecisionKindSchema` enum (`READ`, `PLAN`, `INSIGHT`, `UNCERTAINTY`, etc.).
 
+Live markers use the format `[decision] KIND: what — why` where ` — ` (space, em-dash, space) separates the decision from its rationale. Example: `[decision] PLAN: Defined 5 falsifiable ACs — one per journey step, all with verifyCommand`.
+
 ## Failure modes (the validator will catch)
 
 - Same path in two WPs' `filesOwned` → `file-ownership-collision`

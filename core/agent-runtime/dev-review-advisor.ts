@@ -12,6 +12,7 @@ import devReviewConfig from '@goose-hub/skills/dev-review/skill.config.js';
 import { readProjectDevReviewSettings } from '../db/repositories/project-dev-review-settings.js';
 import type { AgentEvent, AppendEventInput } from '../event-stream/store.js';
 import { eventStore } from '../event-stream/store.js';
+import { reconcileDecisionSummaries } from './reconcile-decisions.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import type { WorkItem } from '../state-source/interface.js';
 import type { AgentConfig } from '../types.js';
@@ -178,15 +179,13 @@ export async function runDevReview(input: RunDevReviewInput): Promise<DevReviewO
     throw new Error('dev-review output validation failed');
   }
 
-  for (const summary of parsed.data.decisionSummaries) {
-    eventStore.appendEvent({
-      projectId: input.projectId,
-      workItemId: input.workItemId,
-      kind: 'agent.decision-summary',
-      payload: { skill: 'dev-review', ...summary },
-      runId: devReviewRunId,
-    });
-  }
+  reconcileDecisionSummaries(
+    devReviewRunId,
+    input.projectId,
+    input.workItemId,
+    'dev-review',
+    parsed.data.decisionSummaries,
+  );
 
   input.appendEvent({
     projectId: input.projectId,
@@ -281,25 +280,23 @@ export async function runDevReviewResponse(
     throw new Error('dev-review-response output validation failed');
   }
 
-  // Emit per-finding decision summaries.
-  for (const disp of parsed.data.findingDispositions) {
-    const kind = disp.disposition === 'addressed' ? 'DEV_REVIEW_ADDRESSED' : 'DEV_REVIEW_DISMISSED';
-    eventStore.appendEvent({
-      projectId: input.projectId,
-      workItemId: input.workItemId,
-      kind: 'agent.decision-summary',
-      payload: {
-        skill: 'dev-review-response',
-        kind,
-        summary:
-          disp.disposition === 'addressed'
-            ? `Addressed ${disp.severity} finding at ${disp.findingRef}`
-            : `Dismissed ${disp.severity} finding at ${disp.findingRef}: ${disp.reason ?? '(no reason)'}`,
-        evidence: disp.findingRef,
-      },
-      runId: responseRunId,
-    });
-  }
+  // Synthesize per-finding decision summaries from disposition output.
+  // Passed as parsedSummaries fallback; DB rows win if hook captured them.
+  const dispositionSummaries = parsed.data.findingDispositions.map((disp) => ({
+    kind: (disp.disposition === 'addressed' ? 'DEV_REVIEW_ADDRESSED' : 'DEV_REVIEW_DISMISSED') as import('./decision-types.js').DecisionKind,
+    summary:
+      disp.disposition === 'addressed'
+        ? `Addressed ${disp.severity} finding at ${disp.findingRef}`
+        : `Dismissed ${disp.severity} finding at ${disp.findingRef}: ${disp.reason ?? '(no reason)'}`,
+    evidence: disp.findingRef,
+  }));
+  reconcileDecisionSummaries(
+    responseRunId,
+    input.projectId,
+    input.workItemId,
+    'dev-review-response',
+    dispositionSummaries,
+  );
 
   input.appendEvent({
     projectId: input.projectId,
