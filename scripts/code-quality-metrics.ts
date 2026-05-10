@@ -41,6 +41,7 @@ function findSourceFiles(root: string, exts: string[]): string[] {
     '-not -path "*/dist/*"',
     '-not -path "*/build/*"',
     '-not -path "*/.factory/*"',
+    '-not -path "*/.worktrees/*"',
     '-not -name "*.d.ts"',
     '-not -name "*.min.*"',
   ].join(' ');
