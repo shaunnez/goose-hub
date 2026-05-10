@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4cf1f218-4b3b-4c2e-a1d6-0cbe7f9871b0",
-  "prevId": "6da20f23-4937-4c51-b4ee-a17d50a23a15",
+  "id": "caa72141-35db-485f-9f19-2aa5ad0ea69f",
+  "prevId": "4cf1f218-4b3b-4c2e-a1d6-0cbe7f9871b0",
   "tables": {
     "agent_decisions": {
       "name": "agent_decisions",
@@ -1337,6 +1337,13 @@
         },
         "use_m19_pipeline": {
           "name": "use_m19_pipeline",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "record_decision_tool": {
+          "name": "record_decision_tool",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,

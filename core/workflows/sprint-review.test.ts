@@ -37,6 +37,7 @@ vi.mock('@goose-hub/core/db/db.js', () => ({
     select: () => ({
       from: () => ({
         where: () => ({
+          orderBy: () => ({ all: () => [] }),
           all: () => [],
         }),
       }),

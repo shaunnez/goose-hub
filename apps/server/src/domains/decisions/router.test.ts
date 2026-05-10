@@ -16,7 +16,7 @@ describe('POST /api/decisions', () => {
 
   it('accepts valid body and calls recordDecision', async () => {
     const app = new Hono().route('/api/decisions', decisionsRouter);
-    const res = await app.request('/api/decisions/', {
+    const res = await app.request('/api/decisions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -44,7 +44,7 @@ describe('POST /api/decisions', () => {
 
   it('accepts body without optional iteration/phase', async () => {
     const app = new Hono().route('/api/decisions', decisionsRouter);
-    const res = await app.request('/api/decisions/', {
+    const res = await app.request('/api/decisions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -61,7 +61,7 @@ describe('POST /api/decisions', () => {
 
   it('returns 400 when runId is missing', async () => {
     const app = new Hono().route('/api/decisions', decisionsRouter);
-    const res = await app.request('/api/decisions/', {
+    const res = await app.request('/api/decisions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -77,7 +77,7 @@ describe('POST /api/decisions', () => {
 
   it('returns 400 when what is missing', async () => {
     const app = new Hono().route('/api/decisions', decisionsRouter);
-    const res = await app.request('/api/decisions/', {
+    const res = await app.request('/api/decisions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -93,7 +93,7 @@ describe('POST /api/decisions', () => {
 
   it('returns 400 when why is missing', async () => {
     const app = new Hono().route('/api/decisions', decisionsRouter);
-    const res = await app.request('/api/decisions/', {
+    const res = await app.request('/api/decisions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -114,7 +114,7 @@ describe('POST /api/decisions', () => {
       reason: 'duplicate',
     });
     const app = new Hono().route('/api/decisions', decisionsRouter);
-    const res = await app.request('/api/decisions/', {
+    const res = await app.request('/api/decisions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

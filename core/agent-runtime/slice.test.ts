@@ -899,7 +899,7 @@ describe('adviseOnPlan (#182)', () => {
 
 const { mockRouterDb } = vi.hoisted(() => {
   const chain: Record<string, ReturnType<typeof vi.fn>> = {} as never;
-  for (const m of ['select', 'from', 'where'] as const) {
+  for (const m of ['select', 'from', 'where', 'orderBy'] as const) {
     (chain as Record<string, unknown>)[m] = vi.fn().mockReturnValue(chain);
   }
   chain.all = vi.fn().mockReturnValue([]);
@@ -914,10 +914,12 @@ vi.mock('../db/db.js', () => ({ db: mockRouterDb }));
 vi.mock('../db/repositories/project-settings.js', () => ({
   readProjectSettings: vi.fn().mockReturnValue(null),
   readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
+  getRecordDecisionTool: vi.fn().mockReturnValue(false),
 }));
 vi.mock('../db/schema.js', () => ({
   decisionPatterns: { projectId: 'p', kind: 'k', role: 'r', consistencyScore: 'cs' },
   agentRuns: {},
+  agentDecisions: {},
 }));
 
 function makeWorkItem(

@@ -57,6 +57,10 @@ vi.mock('../learning/playbook-stats.js', () => ({
 vi.mock('../projects/loader.js', () => ({
   getProjectBySlug: (...args: unknown[]) => mockGetProjectBySlug(...args),
 }));
+vi.mock('../agent-runtime/reconcile-decisions.js', () => ({
+  reconcileDecisionSummaries: vi.fn(),
+  _clearEmittedIdsForTest: vi.fn(),
+}));
 
 import {
   CrossRunRetroInputError,
@@ -98,7 +102,7 @@ beforeEach(() => {
   mockComputeCostBaselines.mockReset().mockReturnValue([]);
   mockFetchLifecyclesInWindow.mockReset().mockReturnValue([]);
   mockSelectPersona.mockClear();
-  for (const method of ['select', 'from', 'where', 'insert', 'values', 'returning']) {
+  for (const method of ['select', 'from', 'where', 'orderBy', 'insert', 'values', 'returning']) {
     mockDb[method] = vi.fn().mockReturnValue(mockDb);
   }
   mockDb.all = vi.fn().mockReturnValue([]);
