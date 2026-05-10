@@ -903,6 +903,10 @@ const { mockRouterDb } = vi.hoisted(() => {
     (chain as Record<string, unknown>)[m] = vi.fn().mockReturnValue(chain);
   }
   chain.all = vi.fn().mockReturnValue([]);
+  // Support insert().values().run() called by ClaudeCliRuntime after each agent run
+  chain.insert = vi.fn().mockReturnValue({
+    values: vi.fn().mockReturnValue({ run: vi.fn() }),
+  });
   return { mockRouterDb: chain };
 });
 
@@ -913,6 +917,7 @@ vi.mock('../db/repositories/project-settings.js', () => ({
 }));
 vi.mock('../db/schema.js', () => ({
   decisionPatterns: { projectId: 'p', kind: 'k', role: 'r', consistencyScore: 'cs' },
+  agentRuns: {},
 }));
 
 function makeWorkItem(

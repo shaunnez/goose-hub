@@ -1,5 +1,10 @@
 import { db } from '@goose-hub/core/db/db.js';
-import { agentRuns, improvementCandidates, personaNames, personaStats } from '@goose-hub/core/db/schema.js';
+import {
+  agentRuns,
+  improvementCandidates,
+  personaNames,
+  personaStats,
+} from '@goose-hub/core/db/schema.js';
 import { and, asc, desc, eq } from 'drizzle-orm';
 
 export interface PersonaStat {

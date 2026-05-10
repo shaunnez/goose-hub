@@ -2,7 +2,12 @@ import { listProjectQualityTrend } from '@goose-hub/core/quality-score/repositor
 import type { RunQualityScore } from '@goose-hub/core/quality-score/types.js';
 import type { Result } from '#shared/middleware.js';
 import { getProject } from '#shared/projects.js';
-import type { AgentRunRow, ImprovementCandidateRow, PersonaNameRow, PersonaStat } from './repository.js';
+import type {
+  AgentRunRow,
+  ImprovementCandidateRow,
+  PersonaNameRow,
+  PersonaStat,
+} from './repository.js';
 import {
   getCandidateById,
   listCandidatesByPersona,
