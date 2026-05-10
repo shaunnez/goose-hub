@@ -22,6 +22,7 @@ const ALL_FACTORY_STATES = [
   'factory:investigating',
   'factory:investigation-complete',
   'factory:dev-ready',
+  'factory:spec-ready',
   'factory:in-progress',
   'factory:needs-qa',
   'factory:qa-failed',
