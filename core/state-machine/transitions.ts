@@ -28,7 +28,8 @@ const TRANSITIONS: Readonly<Record<StateName, readonly StateName[]>> = {
     'factory:archived',
   ],
   'factory:gate-pending': ['factory:dev-ready', 'factory:grilling', 'factory:archived'],
-  'factory:dev-ready': ['factory:in-progress', 'factory:archived'],
+  'factory:dev-ready': ['factory:spec-ready', 'factory:in-progress', 'factory:needs-human', 'factory:archived'],
+  'factory:spec-ready': ['factory:in-progress', 'factory:needs-human', 'factory:archived'],
   'factory:in-progress': ['factory:needs-qa', 'factory:needs-human', 'factory:archived'],
   'factory:needs-qa': [
     'factory:qa-failed',
@@ -50,6 +51,7 @@ const TRANSITIONS: Readonly<Record<StateName, readonly StateName[]>> = {
     'factory:retrospecting',
     'factory:merge-conflict',
     'factory:needs-fix',
+    'factory:needs-human',
     'factory:archived',
   ],
   'factory:merge-conflict': [

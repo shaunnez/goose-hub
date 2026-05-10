@@ -121,6 +121,23 @@ describe('terminal states', () => {
     expect(isLegalTransition('factory:archived', 'factory:triaging')).toBe(false));
 });
 
+describe('M19.17 spec-ready transitions', () => {
+  it('dev-ready → spec-ready', () =>
+    expect(isLegalTransition('factory:dev-ready', 'factory:spec-ready')).toBe(true));
+  it('dev-ready → needs-human', () =>
+    expect(isLegalTransition('factory:dev-ready', 'factory:needs-human')).toBe(true));
+  it('spec-ready → in-progress', () =>
+    expect(isLegalTransition('factory:spec-ready', 'factory:in-progress')).toBe(true));
+  it('spec-ready → needs-human', () =>
+    expect(isLegalTransition('factory:spec-ready', 'factory:needs-human')).toBe(true));
+  it('spec-ready → archived', () =>
+    expect(isLegalTransition('factory:spec-ready', 'factory:archived')).toBe(true));
+  it('spec-ready → dev-ready is illegal (no back-step)', () =>
+    expect(isLegalTransition('factory:spec-ready', 'factory:dev-ready')).toBe(false));
+  it('approved → needs-human (merge-decision gate fail)', () =>
+    expect(isLegalTransition('factory:approved', 'factory:needs-human')).toBe(true));
+});
+
 describe('needs-human recovery transitions', () => {
   it('needs-human → dev-ready', () =>
     expect(isLegalTransition('factory:needs-human', 'factory:dev-ready')).toBe(true));
@@ -147,9 +164,11 @@ describe('legalTargets', () => {
   it('accepted yields five targets', () =>
     expect(legalTargets('factory:accepted')).toHaveLength(5));
 
-  it('dev-ready yields in-progress and archived', () =>
+  it('dev-ready yields spec-ready, in-progress, needs-human, and archived', () =>
     expect(legalTargets('factory:dev-ready')).toStrictEqual([
+      'factory:spec-ready',
       'factory:in-progress',
+      'factory:needs-human',
       'factory:archived',
     ]));
 });
