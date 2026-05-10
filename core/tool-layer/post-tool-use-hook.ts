@@ -73,8 +73,16 @@ async function main() {
   }
 
   // Bash error capture: emit agent.tool-result when tool returned an error.
-  const toolName = call?.tool_name ?? '';
-  const toolError = call?.tool_response?.error ?? '';
+  // Normalise Codex hook aliases → canonical CC PostToolUse shape:
+  //   tool_name : call.tool_name ?? call.name
+  //   tool_error: call.tool_response?.error ?? call.error
+  const toolName = call?.tool_name ?? call?.name ?? '';
+  const toolError =
+    (call?.tool_response != null && typeof call.tool_response === 'object'
+      ? call.tool_response?.error
+      : undefined) ??
+    (typeof call?.error === 'string' ? call.error : '') ??
+    '';
   if (toolName === 'Bash' && typeof toolError === 'string' && toolError.length > 0) {
     const truncated = toolError.length > 2048;
     const errorText = truncated ? toolError.slice(0, 2048) : toolError;

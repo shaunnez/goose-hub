@@ -1,6 +1,9 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { homedir as realHomedir } from 'node:os';
+import { join as realJoin } from 'node:path';
 import {
   CodexBinaryNotFoundError,
   CodexCliRuntime,
@@ -451,21 +454,34 @@ describe('selectRuntime — dispatcher', () => {
 });
 
 // ─── live integration (skipped unless local env satisfies pre-conditions) ─────
+//
+// vi.mock('node:fs') replaces existsSync with a stub above. To check the real
+// filesystem we use createRequire (CJS require bypasses Vitest ES-module mocks)
+// and the un-mocked homedir/join imports from node:os/node:path which are not
+// intercepted by any vi.mock in this file.
+
+const _realFs = createRequire(import.meta.url)('node:fs') as typeof import('node:fs');
+const _realExistsSync = _realFs.existsSync;
 
 const liveOk = (() => {
   if (process.env.MOCK_AGENTS === 'true') return false;
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (apiKey != null && apiKey.length > 0) return true;
   try {
-    // Real existsSync, not the mocked one — vi.mock is per-file.
-    return true; // The actual gate is delegated to the runtime call below.
+    const authPath = realJoin(realHomedir(), '.codex', 'auth.json');
+    return _realExistsSync(authPath);
   } catch {
     return false;
   }
 })();
 
 describe.skipIf(!liveOk)('CodexCliRuntime — live integration', () => {
-  it.skip('codex exec produces a turn-complete event with non-zero usage (manual)', async () => {
-    // Intentionally skipped: live integration requires a real `codex` binary
-    // and ~/.codex/auth.json, neither present on CI runners. Run manually
-    // by removing `.skip` after `codex login` on the local machine.
+  it('codex exec produces a turn-complete event with non-zero usage', async () => {
+    // This test runs only when ~/.codex/auth.json exists or OPENAI_API_KEY is set.
+    // On CI neither is present so the outer describe.skipIf guard suppresses it.
+    const runtime = new CodexCliRuntime();
+    const spec = makeSpec({ runId: 'live-test-run', modelOverride: 'gpt-4o' });
+    const result = await runtime.run(spec);
+    expect(result.output).toBeDefined();
   }, 30_000);
 });

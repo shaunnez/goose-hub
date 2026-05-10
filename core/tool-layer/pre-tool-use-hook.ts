@@ -10,6 +10,11 @@ const HOOK_SCRIPT = `#!/usr/bin/env node
  * Factory PreToolUse hook — allowlist enforcement + tool-call audit.
  * Deployed by AgentRuntime to ~/.factory/hooks/pre-tool-use.js
  * Receives tool call via CC hook protocol on stdin as JSON.
+ *
+ * Normalises Codex CLI field aliases so the audit payload is homogeneous
+ * across providers (Claude and Codex both emit tool_name + tool_input):
+ *   tool_name : call.tool_name ?? call.name
+ *   tool_input: call.tool_input ?? call.parameters ?? call.arguments ?? call.input ?? {}
  */
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
@@ -20,6 +25,11 @@ const runId = process.env.FACTORY_RUN_ID ?? 'unknown';
 // subprocess (#209). Falls back to 3001 for backwards compatibility.
 const serverPort = process.env.FACTORY_SERVER_PORT ?? '3001';
 
+/** Returns v when it is a plain non-null object, else undefined. */
+function asObj(v) {
+  return (v != null && typeof v === 'object' && !Array.isArray(v)) ? v : undefined;
+}
+
 async function main() {
   let input = '';
   for await (const chunk of process.stdin) input += chunk;
@@ -27,7 +37,14 @@ async function main() {
   let call;
   try { call = JSON.parse(input); } catch { process.exit(0); }
 
+  // Normalise Codex hook aliases → canonical CC shape.
   const toolName = call?.tool_name ?? call?.name ?? '';
+  const toolInput =
+    asObj(call?.tool_input) ??
+    asObj(call?.parameters) ??
+    asObj(call?.arguments) ??
+    asObj(call?.input) ??
+    {};
 
   // Allowlist check — deny on mismatch
   if (allowlist.length > 0) {
@@ -49,7 +66,7 @@ async function main() {
     const payload = {
       tool_name: toolName,
       run_id: runId,
-      tool_input: call?.tool_input ?? {},
+      tool_input: toolInput,
     };
     await fetch(\`http://localhost:\${serverPort}/events/tool-call\`, {
       method: 'POST',
