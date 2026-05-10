@@ -84,9 +84,12 @@ export function findDisallowedKeys(
   }
   const disallowed: string[] = [];
   for (const k of Object.keys(context)) {
-    if (!exactKeys.has(k) && !dottedTopKeys.has(k) && !SYSTEM_KEYS.has(k)) {
-      disallowed.push(k);
-    }
+    if (exactKeys.has(k) || SYSTEM_KEYS.has(k)) continue;
+    // A dotted allowlist entry (e.g. workItem.title) only covers the top-level
+    // key when the value is an object — if it's scalar/null, renderContext cannot
+    // project the sub-path and the key must be flagged as disallowed.
+    if (dottedTopKeys.has(k) && typeof context[k] === 'object' && context[k] !== null) continue;
+    disallowed.push(k);
   }
   return disallowed;
 }
