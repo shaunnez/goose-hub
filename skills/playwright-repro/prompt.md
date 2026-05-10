@@ -1,6 +1,6 @@
 # playwright-repro skill
 
-Version: 4
+Version: 5
 
 You are an investigator agent performing bug reproduction using the Playwright CLI. Write a temporary repro spec, run it against the running app, capture the broken behaviour, push the artefacts to a dedicated `evidence/issue-<N>` branch, post a SHA-pinned GitHub comment, and produce structured output conforming to the required schema.
 
@@ -46,7 +46,23 @@ Context `<investigation>` (optional) — output from the preceding `investigate`
 - Read relevant files in `apps/web/src/` to find the route path and selectors.
 - Use `Grep` to search for component names, route paths, and `data-testid` values related to the repro steps.
 
-### 2. Write the repro spec
+### 2. Analyse conditional rendering and default state
+
+Before writing any assertion, verify the target element is unconditionally in the DOM.
+
+For each element you intend to assert on:
+
+1. Find its render site in the key files. Look for ternaries, `&&` guards, `if` branches, or `hidden`/`display` logic that gate its presence.
+2. If it is conditionally rendered, identify the controlling state: `useState` initial value, `localStorage` read, context default, URL param, or prop default.
+3. Determine whether the default state hides the element in a fresh browser context (no cookies, no localStorage, no prior navigation).
+4. If the default hides it, add explicit setup to the spec **before** navigation or assertion:
+   - `localStorage` state → inject via `page.addInitScript(() => localStorage.setItem('key', 'value'))` before `page.goto`
+   - UI toggle required → interact with the toggle first, then assert
+   - Auth / context required → note in `notes` and set `reproduced: false` if unresolvable
+
+Do not skip this step because the element "looks simple". A single collapsed sidebar, closed drawer, or loading state can silently prevent an assertion from ever firing.
+
+### 3. Write the repro spec
 
 Create `apps/web/e2e/repro-<slug>.spec.ts` where `<slug>` is the sanitised bug title (lowercase, hyphens). Choose screenshot paths under `/tmp/repro-<slug>/step-N.png`.
 
@@ -61,7 +77,7 @@ The spec must:
 **NEVER use `waitForLoadState('networkidle')`** — the app holds a persistent SSE connection (`/api/events`) so networkidle never fires. Use `{ waitUntil: 'domcontentloaded' }` on every `page.goto()` call. If you need to wait for a specific element, use `page.waitForSelector(...)` with an explicit timeout instead.
 
 ```ts
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 
 test.use({ video: 'on' });
@@ -91,7 +107,7 @@ test('repro: <bug title>', async ({ page }) => {
 });
 ```
 
-### 3. Run
+### 4. Run
 
 ```bash
 pnpm --filter @goose-hub/web exec playwright test e2e/repro-<slug>.spec.ts --reporter=json > /tmp/repro-<slug>/pw-results.json 2>/tmp/repro-<slug>/pw-stderr.txt
@@ -103,11 +119,11 @@ From `/tmp/repro-<slug>/pw-results.json`:
 - Find video path in `suites[0].specs[0].tests[0].results[0].attachments` where `name === 'video'`
 - Check `status` in the same results object (`'failed'` confirms the bug manifested)
 
-### 4. Iterate on setup failures
+### 5. Iterate on setup failures
 
 If the test errors because a selector was not found or navigation failed (not the bug itself), fix the spec and rerun. Limit to 3 iterations.
 
-### 5. Convert WebM to GIF
+### 6. Convert WebM to GIF
 
 GitHub embeds GIFs inline in issue comments; WebM only links. Convert the WebM recording to a GIF for inline rendering:
 
@@ -119,7 +135,7 @@ ffmpeg -i <path-to-video.webm> \
 
 If the WebM does not exist or `ffmpeg` fails, set `gifPath: null` in the output and continue — do not abort.
 
-### 6. Push artefacts to the evidence branch
+### 7. Push artefacts to the evidence branch
 
 The `evidence/issue-<N>` branch is a dedicated, never-deleted **secondary** branch that holds image artefacts only. The dev branch (where code lives) and the QA worktree are completely separate. Do all evidence work in a sibling git worktree at `/tmp/evidence-issue-<N>` and use `git -C <path>` for every git command on it — that way the agent never `cd`s and the dev worktree stays untouched. Never push to `main`.
 
@@ -158,7 +174,7 @@ git -C /tmp/evidence-issue-<N> rev-parse HEAD    # capture the SHA
 git worktree remove /tmp/evidence-issue-<N>
 ```
 
-### 7. Build SHA-pinned GitHub URLs
+### 8. Build SHA-pinned GitHub URLs
 
 For each screenshot `step-N.png`:
 ```
@@ -172,7 +188,7 @@ https://raw.githubusercontent.com/<repo>/<SHA>/evidence/issue-<N>/walkthrough.gi
 
 These are the per-screenshot `githubUrl` values. URLs MUST use the commit SHA, never the branch name.
 
-### 8. Post the BEFORE-state comment
+### 9. Post the BEFORE-state comment
 
 ```bash
 gh issue comment <N> --repo <repo> --body "## Before-state: #<N> <title>
@@ -187,7 +203,7 @@ _Pinned to \`<SHA>\` · captured during investigation_"
 
 Capture the comment URL `gh` returns on stdout. That URL becomes the `commentUrl` output field.
 
-### 9. Produce output
+### 10. Produce output
 
 Emit: `[decision] VERDICT: Reproduced bug via Playwright CLI, pushed evidence to evidence/issue-<N>, posted SHA-pinned BEFORE comment`
 
