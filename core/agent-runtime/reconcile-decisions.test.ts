@@ -11,7 +11,7 @@ vi.mock('../tool-layer/tools/record-decision.js', () => ({
 
 import { eventStore } from '../event-stream/store.js';
 import { readRunDecisions } from '../tool-layer/tools/record-decision.js';
-import { reconcileDecisionSummaries } from './reconcile-decisions.js';
+import { _clearEmittedIdsForTest, reconcileDecisionSummaries } from './reconcile-decisions.js';
 
 const appendEvent = vi.mocked(eventStore.appendEvent);
 const mockReadRunDecisions = vi.mocked(readRunDecisions);
@@ -20,6 +20,7 @@ beforeEach(() => {
   appendEvent.mockClear();
   mockReadRunDecisions.mockReset();
   mockReadRunDecisions.mockReturnValue([]);
+  _clearEmittedIdsForTest();
 });
 
 describe('reconcileDecisionSummaries', () => {
@@ -65,7 +66,7 @@ describe('reconcileDecisionSummaries', () => {
   describe('DB-preferred when rows exist', () => {
     it('uses DB rows when present, ignoring parsedSummaries', () => {
       const dbRows = [
-        { kind: 'IMPLEMENTATION_PLAN' as const, summary: 'from DB', evidence: 'hook-captured' },
+        { id: 'row-1', kind: 'IMPLEMENTATION_PLAN' as const, summary: 'from DB', evidence: 'hook-captured' },
       ];
       mockReadRunDecisions.mockReturnValue(dbRows);
       const parsedSummaries = [
@@ -80,7 +81,7 @@ describe('reconcileDecisionSummaries', () => {
     });
 
     it('does NOT emit schema-field summaries when DB rows exist (no double-emission)', () => {
-      const dbRows = [{ kind: 'IMPLEMENTATION_PLAN' as const, summary: 'DB row' }];
+      const dbRows = [{ id: 'row-1', kind: 'IMPLEMENTATION_PLAN' as const, summary: 'DB row' }];
       mockReadRunDecisions.mockReturnValue(dbRows);
       const parsedSummaries = [
         { kind: 'REPO_SELECTION' as const, summary: 'schema-field summary' },
@@ -93,6 +94,35 @@ describe('reconcileDecisionSummaries', () => {
       expect(appendEvent).toHaveBeenCalledTimes(1);
       const emitted = appendEvent.mock.calls[0][0];
       expect(emitted.payload.summary).toBe('DB row');
+    });
+
+    it('does not re-emit DB rows already emitted in a prior reconcile call for the same runId', () => {
+      // Simulates grill-and-prd.ts: shared runId, 3 sequential reconcile calls.
+      // First call (skill='grill-me'): rows r1, r2.
+      const grillRows = [
+        { id: 'r1', kind: 'IMPLEMENTATION_PLAN' as const, summary: 'grill decision 1' },
+        { id: 'r2', kind: 'REPO_SELECTION' as const, summary: 'grill decision 2' },
+      ];
+      mockReadRunDecisions.mockReturnValue(grillRows);
+      reconcileDecisionSummaries(runId, projectId, workItemId, 'grill-me', []);
+
+      expect(appendEvent).toHaveBeenCalledTimes(2);
+      appendEvent.mockClear();
+
+      // Second call (skill='write-prd'): rows r1, r2, r3 (r1+r2 already emitted).
+      const prdRows = [
+        { id: 'r1', kind: 'IMPLEMENTATION_PLAN' as const, summary: 'grill decision 1' },
+        { id: 'r2', kind: 'REPO_SELECTION' as const, summary: 'grill decision 2' },
+        { id: 'r3', kind: 'INSIGHT' as const, summary: 'prd decision' },
+      ];
+      mockReadRunDecisions.mockReturnValue(prdRows);
+      reconcileDecisionSummaries(runId, projectId, workItemId, 'write-prd', []);
+
+      // Only r3 is new — r1 and r2 must not be re-emitted.
+      expect(appendEvent).toHaveBeenCalledTimes(1);
+      const emitted = appendEvent.mock.calls[0][0];
+      expect(emitted.payload.summary).toBe('prd decision');
+      expect(emitted.payload.skill).toBe('write-prd');
     });
   });
 
