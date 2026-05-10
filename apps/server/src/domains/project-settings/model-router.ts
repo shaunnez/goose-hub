@@ -235,7 +235,7 @@ const ReviewerSlotSchema = z.object({
 });
 
 const ReviewPatchSchema = z.object({
-  reviewerSlots: z.array(ReviewerSlotSchema).min(1).max(2).nullable().optional(),
+  reviewerSlots: z.array(ReviewerSlotSchema).min(1).max(2).nullable(),
 });
 
 /** GET /projects/:slug/settings/review — current reviewer slot configuration */
@@ -269,7 +269,7 @@ router.patch('/:slug/settings/review', async (c) => {
 
   writeProjectReviewSettings(
     project.id,
-    { reviewerSlots: parsed.data.reviewerSlots ?? null },
+    { reviewerSlots: parsed.data.reviewerSlots },
     'ui',
   );
   return c.json({ ok: true });
