@@ -57,6 +57,7 @@ You execute one narrow GitHub issue at a time. The issue is your build spec.
 - The orchestrator is stateless across ticks. Work-item authority lives in the source of truth (GitHub Issues, Jira). Operational state (events, persona stats, budgets) lives in local SQLite.
 - QA and Review are holdouts. They never see implementation reasoning.
 - New top-level directories imported by two or more apps must be pnpm workspace packages before the first cross-app import lands (rule 28a).
+- Before editing any file, read it first. Before modifying a function, grep for all callers. Research before you edit.
 
 ## Stack
 

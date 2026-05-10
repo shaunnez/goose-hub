@@ -150,10 +150,76 @@ export async function dispatchInvestigate(slug: string, issueNumber: number): Pr
 }
 
 /** Run the M7 fix-issue workflow for a single issue (#183). Drops duplicate triggers for the same issue. */
+export async function dispatchSpecAuthor(slug: string, issueNumber: number): Promise<void> {
+  const maxParallel = await getMaxParallelAgents(slug);
+  if (parallelLock.isInFlight(slug, issueNumber)) {
+    logger.warn('dispatchSpecAuthor: duplicate in-flight, dropping', { slug, issueNumber });
+    return;
+  }
+  if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
+    logger.info('dispatchSpecAuthor: cap full, queuing work item', {
+      slug,
+      issueNumber,
+      inFlight: parallelLock.inFlightCount(slug),
+      maxParallel,
+    });
+    enqueueWorkflow(slug, issueNumber, dispatchSpecAuthor);
+    return;
+  }
+  try {
+    // Cross-package boundary: slices/ is not a workspace package (rule 28a).
+    const { runSpecAuthorWorkflow } = (await import(
+      new URL('../../../../slices/spec-author/workflow.js', import.meta.url).href
+    )) as {
+      runSpecAuthorWorkflow: (
+        item: unknown,
+        source: unknown,
+        slug: string,
+        repoRoot: string,
+        deps?: Record<string, unknown>,
+      ) => Promise<unknown>;
+    };
+    const source = await getSourceForSlug(slug);
+    if (source == null) {
+      logger.error('dispatchSpecAuthor: no source for slug', { slug });
+      return;
+    }
+    const item = await source.getItem(issueNumber.toString());
+
+    const depProjectConfig = await getProject(slug);
+    if (depProjectConfig != null) {
+      const fetchTarget = await createProjectAwareTargetSource();
+      const { eligible } = await filterEligibleByDependencies([item], {
+        currentRepo: depProjectConfig.source.repo,
+        fetchTarget,
+        source,
+      });
+      if (eligible.length === 0) {
+        logger.info('dispatchSpecAuthor: item blocked by deps, skipping', { slug, issueNumber });
+        return;
+      }
+    }
+
+    const mockDeps: Record<string, unknown> | undefined =
+      process.env.MOCK_AGENTS === 'true' ? { createWorktreeImpl: () => '/mock/worktree' } : undefined;
+
+    await runSpecAuthorWorkflow(item, source, slug, REPO_ROOT, mockDeps);
+  } finally {
+    parallelLock.release(slug, issueNumber);
+    drainPending(slug);
+  }
+}
+
 export async function dispatchFixIssue(slug: string, issueNumber: number): Promise<void> {
   const projectForFlag = await getProject(slug);
   const useM19 = projectForFlag != null ? getUseM19Pipeline(projectForFlag.id) : false;
   logger.info('dispatchFixIssue: pipeline flag', { slug, issueNumber, useM19Pipeline: useM19 });
+
+  if (useM19) {
+    await dispatchSpecAuthor(slug, issueNumber);
+    return;
+  }
+
   const maxParallel = await getMaxParallelAgents(slug);
   if (parallelLock.isInFlight(slug, issueNumber)) {
     logger.warn('dispatchFixIssue: duplicate in-flight, dropping', { slug, issueNumber });
@@ -686,6 +752,14 @@ export async function dispatchForLabel(
     await dispatchFixIssue(slug, issueNumber);
     return;
   }
+  if (labelName === 'factory:spec-ready') {
+    // M19.18 will wire parallel-implement here; stub for now.
+    logger.info('dispatchForLabel: factory:spec-ready — parallel-implement not yet wired (M19.18)', {
+      slug,
+      issueNumber,
+    });
+    return;
+  }
   if (labelName === 'factory:needs-qa') {
     await dispatchQa(slug, issueNumber);
     return;
@@ -959,6 +1033,7 @@ const RESUME_WORKFLOWS: Partial<Record<StateName, ResumeEntry>> = {
     dispatch: (slug: string, _issueNumber: number) => dispatchTriageBatch(slug),
   },
   'factory:dev-ready': { targetState: 'factory:dev-ready', dispatch: dispatchFixIssue },
+  'factory:spec-ready': { targetState: 'factory:spec-ready', dispatch: dispatchSpecAuthor },
   'factory:in-progress': { targetState: 'factory:dev-ready', dispatch: dispatchFixIssue },
   'factory:needs-qa': { targetState: 'factory:needs-qa', dispatch: dispatchQa },
   'factory:needs-review': { targetState: 'factory:needs-review', dispatch: dispatchReview },
