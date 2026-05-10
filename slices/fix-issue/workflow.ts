@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { adviseOnPlan } from '@goose-hub/core/agent-runtime/advisor.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
+import { findFreePort } from '@goose-hub/core/agent-runtime/find-free-port.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { selectModel } from '@goose-hub/core/agent-runtime/model-router.js';
 import { defaultModelForTier, tierOf } from '@goose-hub/core/agent-runtime/models.js';
@@ -570,6 +571,7 @@ async function runEvidencePost(input: RunEvidencePostInput): Promise<void> {
 
   const evidenceRunId = crypto.randomUUID();
   const projectConfig = await getProjectBySlug(input.projectId);
+  const [webPort, apiPort] = await Promise.all([findFreePort(), findFreePort()]);
   try {
     const result = await input.runtime.run({
       runId: evidenceRunId,
@@ -601,7 +603,12 @@ async function runEvidencePost(input: RunEvidencePostInput): Promise<void> {
       freshContext: false,
       toolBundles: ['validate'],
       toolExtras: [],
-      env: { WEB_PORT: '5174', CI: 'true', API_PORT: '3002', SERVER_PORT: '3002' },
+      env: {
+        WEB_PORT: String(webPort),
+        CI: 'true',
+        API_PORT: String(apiPort),
+        SERVER_PORT: String(apiPort),
+      },
       ...resolveBudgetsForProject('evidence-post', projectConfig?.budgets, input.projectId),
       personaId: selectPersona(input.projectId, 'developer').personaId,
       outputJsonSchema: input.outputJsonSchema,

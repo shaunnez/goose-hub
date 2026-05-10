@@ -10,8 +10,8 @@ Developer (post-implementation evidence). You are NOT a holdout — you run afte
 
 ## Execution discipline
 
-- **Verify spec path before running.** Before executing Playwright, confirm `<spec_path>` exists using a file read. If the path does not exist, record a decision summary (`spec path <path> not found — skipping Playwright run`) and return early without posting a comment.
-- **Fresh servers from worktree.** `WEB_PORT=5174`, `API_PORT=3002`, `SERVER_PORT=3002`, and `CI=true` are injected by the orchestrator. Playwright starts its own isolated servers from the worktree — it does NOT connect to the user's running dev server. Never prefix a Playwright command with `WEB_PORT=`, `CI=`, `API_PORT=`, `PLAYWRIGHT_VIDEO=`, or any other env var assignment — the environment is already correctly configured and inline prefixes cannot override process-level env vars anyway.
+- **Verify spec path before running.** Before executing Playwright, confirm `<specPath>` exists using a file read. If the path does not exist, record a decision summary (`spec path <path> not found — skipping Playwright run`) and return early without posting a comment.
+- **Fresh servers from worktree.** `WEB_PORT`, `API_PORT`, `SERVER_PORT` (all dynamically allocated free ports), and `CI=true` are injected by the orchestrator. Playwright starts its own isolated servers from the worktree — it does NOT connect to the user's running dev server. Never prefix a Playwright command with `WEB_PORT=`, `CI=`, `API_PORT=`, `PLAYWRIGHT_VIDEO=`, or any other env var assignment — the environment is already correctly configured and inline prefixes cannot override process-level env vars anyway.
 - **Full Playwright output.** Run Playwright with full output. Do not pipe or grep the result. Read any failure messages completely before deciding how to proceed.
 - **Diagnose before retry — hard stop after one retry.** If the test fails: (1) read `apps/web/test-results/<test-dir>/error-context.md`, (2) retry once. If it fails again: **STOP. Do not run Playwright a third time under any circumstances.** Emit the failure JSON immediately (see "When the spec fails" below) and return. There is no recovery path — the workflow handles evidence failure gracefully.
 - **Artifact lookup via predictable path.** After a successful run, find artifacts at `apps/web/test-results/` — use `ls apps/web/test-results/` not a recursive `find`. Screenshots the spec writes go to the path the spec declares; the WebM lands under `apps/web/test-results/<test-dir>/`.
@@ -37,7 +37,7 @@ The strategy: stage all artefacts under `/tmp/evidence-staging-<N>/`, then creat
 
 **Substitute `<N>` with the literal issue number** (e.g. `42`) in every command below. Do not use shell variables; the tool allowlist matches on the literal command text.
 
-1. **Capture.** Run the spec at `<spec_path>` with video recording enabled (`{ video: 'on' }` in the spec's project config or via `PLAYWRIGHT_VIDEO=on`). Use `pnpm --filter @goose-hub/web exec playwright test <spec_path>` — never raw `npx`. Screenshots go where the spec writes them; the WebM video lands under `test-results/`. If the spec uses `waitForLoadState('networkidle')`, the run will hang — the app holds a persistent SSE connection that prevents networkidle from firing. Specs must use `{ waitUntil: 'domcontentloaded' }` on every `page.goto()` call.
+1. **Capture.** Run the spec at `<specPath>` with video recording enabled (`{ video: 'on' }` in the spec's project config or via `PLAYWRIGHT_VIDEO=on`). Use `pnpm --filter @goose-hub/web exec playwright test <specPath>` — never raw `npx`. Screenshots go where the spec writes them; the WebM video lands under `test-results/`. If the spec uses `waitForLoadState('networkidle')`, the run will hang — the app holds a persistent SSE connection that prevents networkidle from firing. Specs must use `{ waitUntil: 'domcontentloaded' }` on every `page.goto()` call.
 
 2. **Stage artefacts in `/tmp`.**
    ```bash
@@ -109,7 +109,7 @@ The strategy: stage all artefacts under `/tmp/evidence-staging-<N>/`, then creat
 
 ## Isolated server assumption
 
-Playwright starts both the API server (port 3002) and the web server (port 5174) from the worktree before running the spec. Both servers run the worktree's code — not the user's running dev environment. If the fix involved server-side changes, those changes ARE reflected in the running server. If the server fails to start within the timeout, Playwright will report an error; record this in `decisionSummaries` and return early.
+Playwright starts both the API server and the web server from the worktree before running the spec, each on a dynamically allocated free port. Both servers run the worktree's code — not the user's running dev environment. If the fix involved server-side changes, those changes ARE reflected in the running server. If a server fails to start within the timeout, Playwright will report an error; record this in `decisionSummaries` and return early.
 
 ## Critical: pin URLs to the SHA
 

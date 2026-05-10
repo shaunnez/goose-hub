@@ -5,6 +5,8 @@ import { dirname, join } from 'node:path';
 import { costFromCliEnvelope } from '../cost/extract.js';
 import { recordCost } from '../cost/repository.js';
 import { stageForSkill } from '../cost/skill-stage.js';
+import { db } from '../db/db.js';
+import { agentRuns } from '../db/schema.js';
 import { eventStore } from '../event-stream/store.js';
 import { computeAllowlist } from '../tool-layer/allowlist.js';
 import { deployHooks } from '../tool-layer/pre-tool-use-hook.js';
@@ -286,6 +288,15 @@ export class ClaudeCliRuntime implements AgentRuntime {
         }
 
         if (code !== 0 && envelope == null) {
+          db.insert(agentRuns).values({
+            runId,
+            personaId,
+            workItemId: spec.workItemId ?? workItemId ?? null,
+            projectId,
+            role: spec.role,
+            skill: spec.skill,
+            outcome: 'failure',
+          }).run();
           eventStore.appendEvent({
             projectId,
             workItemId,
@@ -301,6 +312,15 @@ export class ClaudeCliRuntime implements AgentRuntime {
         }
 
         if (envelope?.is_error) {
+          db.insert(agentRuns).values({
+            runId,
+            personaId,
+            workItemId: spec.workItemId ?? workItemId ?? null,
+            projectId,
+            role: spec.role,
+            skill: spec.skill,
+            outcome: 'failure',
+          }).run();
           eventStore.appendEvent({
             projectId,
             workItemId,
@@ -385,6 +405,16 @@ export class ClaudeCliRuntime implements AgentRuntime {
           runId,
           personaId,
         });
+
+        db.insert(agentRuns).values({
+          runId,
+          personaId,
+          workItemId: spec.workItemId ?? workItemId ?? null,
+          projectId,
+          role: spec.role,
+          skill: spec.skill,
+          outcome: 'success',
+        }).run();
 
         resolve({
           output: extractResultJson(envelope?.result ?? stdout, runId),

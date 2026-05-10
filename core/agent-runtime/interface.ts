@@ -38,6 +38,8 @@ export type AgentSpec<R extends RoleSpec = RoleSpec> = {
   budgets: AgentBudgets;
   /** Persona identity for this run. Format: "<projectId>/<role>/<index>". Required. */
   personaId: string;
+  /** Work-item driving this run. Promotes context.workItemId to first-class for runtime use. */
+  workItemId?: string;
   modelOverride?: string;
   /** JSON Schema derived from the skill's output Zod schema, passed to --json-schema */
   outputJsonSchema?: Record<string, unknown>;

@@ -350,9 +350,7 @@ export const agentRuns = sqliteTable(
     role: text('role').notNull(),
     skill: text('skill').notNull(),
     outcome: text('outcome', { enum: ['success', 'failure'] }).notNull(),
-    createdAt: text('created_at')
-      .notNull()
-      .default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
   },
   (t) => ({
     runIdUniq: uniqueIndex('agent_runs_run_id_uniq').on(t.runId),

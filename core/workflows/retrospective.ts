@@ -127,6 +127,7 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
       runId,
       role: 'retrospector',
       skill: skillName,
+      workItemId: workItem.id,
       context: {
         workItemId: workItem.id,
         workItem: {

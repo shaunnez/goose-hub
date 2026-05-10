@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
+import { findFreePort } from '@goose-hub/core/agent-runtime/find-free-port.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
@@ -145,6 +146,8 @@ export async function runQaWorkflow(
   // here are non-fatal — the agent still runs without testRun.
   const testCommand = DEFAULT_TEST_COMMAND;
   const testRun = workspaceDir != null ? await runTests(workspaceDir, testCommand) : null;
+  const [webPort, apiPort] =
+    workspaceDir != null ? await Promise.all([findFreePort(), findFreePort()]) : [null, null];
 
   try {
     const qaResult = await runtime.run({
@@ -185,8 +188,15 @@ export async function runQaWorkflow(
       toolBundles: ['read', 'qa-tools'],
       workspaceDir,
       toolExtras: [],
-      ...(workspaceDir != null
-        ? { env: { WEB_PORT: '5174', CI: 'true', API_PORT: '3002', SERVER_PORT: '3002' } }
+      ...(workspaceDir != null && webPort != null && apiPort != null
+        ? {
+            env: {
+              WEB_PORT: String(webPort),
+              CI: 'true',
+              API_PORT: String(apiPort),
+              SERVER_PORT: String(apiPort),
+            },
+          }
         : {}),
       ...resolveBudgetsForProject('qa', projectConfig?.budgets, projectSlug),
       personaId,
