@@ -118,7 +118,9 @@ export type EventKind =
   | 'dev-review.budget-skipped'
   | 'dev-review.response-started'
   | 'dev-review.response-completed'
-  | 'dev-review.response-failed';
+  | 'dev-review.response-failed'
+  // M19.17 spec-author workflow — spec authored and persisted
+  | 'spec.completed';
 
 export interface AgentEvent {
   id: number;

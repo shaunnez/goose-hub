@@ -12,6 +12,13 @@ Comments on home page doesn't feel right - overview
 Chore - need to ensure the right tabs are shown in sidebar + transition drop down
 Playwright repo run - images posted to github but didn't exist? Maybe on weird branch or wrong path or something
 
+string values everywhere
+orkItem.priority === 'high' || workItem.priority === 'critical'
+ 'factory:needs-qa',
+      'factory:needs-human', --->centralise
+
+....././././././. -> fix?
+
 # PRD 
 Use can APPROVE or DECLINE
 - They can free edit the PRD or ADD comments 

@@ -13,6 +13,7 @@ export const STATES = Object.freeze([
   'factory:investigation-complete',
   'factory:gate-pending',
   'factory:dev-ready',
+  'factory:spec-ready',
   'factory:in-progress',
   'factory:needs-qa',
   'factory:qa-failed',

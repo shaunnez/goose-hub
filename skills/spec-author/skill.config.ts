@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { EngineeringSpecSchema } from './schema.js';
 
 /**
  * Engineering Spec authoring skill (M19.02, issue #559).
@@ -39,6 +40,7 @@ export const SpecAuthorContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: SpecAuthorContextSchema,
+  outputSchema: EngineeringSpecSchema,
   contextAllowlist: [
     'workItem.title',
     'workItem.body',
