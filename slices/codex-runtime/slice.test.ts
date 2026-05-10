@@ -369,7 +369,9 @@ describe('CodexCliRuntime — spawn lifecycle', () => {
     vi.mocked(spawn).mockReturnValue(proc as unknown as ReturnType<typeof spawn>);
 
     const runtime = new CodexCliRuntime();
-    const runPromise = runtime.run(makeSpec({ budgets: { maxTurns: 5, maxBudgetUsd: 0.1, timeoutMs: 30_000 } }));
+    const runPromise = runtime.run(
+      makeSpec({ budgets: { maxTurns: 5, maxBudgetUsd: 0.1, timeoutMs: 30_000 } }),
+    );
 
     vi.advanceTimersByTime(30_001);
 

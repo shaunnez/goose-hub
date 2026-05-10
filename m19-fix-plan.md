@@ -668,6 +668,8 @@ When met:
 
 ### M19.28 — context-assembly split (absorbs external Plan 3)
 
+**Owner: Sonnet 4.6, fresh context, standalone PR before M19.20/M19.23.** Bounded mechanical refactor with predefined contracts. Doesn't need M19 plan history. Lands first to avoid double-edit conflicts with M19.20/M19.23 holdout work.
+
 **Trigger condition met:** M19.20 + M19.23 both touch holdout enforcement. Co-locate split with whichever lands first (or as standalone PR right before).
 
 Files: `core/agent-runtime/holdout-validator.ts` (new), `core/agent-runtime/context-renderer.ts` (new), `core/agent-runtime/context-assembly.ts` (kept as 5-line composer).
@@ -715,10 +717,13 @@ Acceptance:
 ## Issue file order
 
 ```
-PRE-REQ (other agent):
+PRE-REQ-1 (other agent):
   Plan 1: SkillInvoker composer + type tightening    (lands BEFORE any M19 work)
 
-Phase 0 (parallel, no deps after Plan 1):
+PRE-REQ-2 (Sonnet 4.6, fresh context):
+  M19.28: context-assembly split                     (after Plan 1, before M19.20/M19.23)
+
+Phase 0 (parallel, no deps after Plan 1 + M19.28):
   M19.14: dispatcher feature flag (DB-backed)
   M19.15: delete dead model-routing function
 
@@ -736,7 +741,6 @@ Phase 2 (parallel within phase):
 Phase 3 (parallel):
   M19.22:  code-quality-audit wired                (depends M19.21, human action item)
   M19.23:  record-decision via JS hook + HTTP      (depends M19.14)
-  M19.28:  context-assembly split                  (co-located with first M19.20 or M19.23 PR)
 
 Phase 4 (parallel):
   M19.24:  Codex hook normalisation                (no deps)

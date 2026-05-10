@@ -13,9 +13,7 @@ const VALID_ECHO_OUTPUT = {
   decisionSummaries: [{ kind: 'PLAN', summary: 'test run' }],
 };
 
-function mockRuntime(
-  output: unknown = VALID_ECHO_OUTPUT,
-): AgentRuntime & { calls: AgentSpec[] } {
+function mockRuntime(output: unknown = VALID_ECHO_OUTPUT): AgentRuntime & { calls: AgentSpec[] } {
   const calls: AgentSpec[] = [];
   return {
     calls,
@@ -75,7 +73,7 @@ describe('invokeSkill', () => {
     expect(spec.contextAllowlist).toContain('message');
     expect(spec.personaId).toMatch(new RegExp(`^${projectId}/`));
     expect(typeof spec.appendSystemPrompt).toBe('string');
-    expect(spec.appendSystemPrompt!.length).toBeGreaterThan(0);
+    expect(spec.appendSystemPrompt?.length).toBeGreaterThan(0);
   });
 
   it('runtimeOverride short-circuits runtime selection', async () => {

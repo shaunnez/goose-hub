@@ -14,10 +14,7 @@ import { selectRuntime } from './select-runtime.js';
 export class ContextValidationError extends Error {
   issues: Array<{ path: Array<string | number>; message: string }>;
 
-  constructor(
-    issues: Array<{ path: Array<string | number>; message: string }>,
-    skillName: string,
-  ) {
+  constructor(issues: Array<{ path: Array<string | number>; message: string }>, skillName: string) {
     super(`invokeSkill: context validation failed for '${skillName}'`);
     this.name = 'ContextValidationError';
     this.issues = issues;

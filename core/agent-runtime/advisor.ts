@@ -4,6 +4,7 @@ import {
 } from '@goose-hub/skills/advise-on-plan/schema.js';
 import { eventStore } from '../event-stream/store.js';
 import type { AgentRuntime } from './interface.js';
+import type { AgentResult } from './interface.js';
 import { OutputValidationError, invokeSkill } from './invoke-skill.js';
 
 interface AdviseOnPlanInput {
@@ -44,7 +45,7 @@ export async function adviseOnPlan(input: AdviseOnPlanInput): Promise<AdviseOnPl
     );
   }
 
-  let result;
+  let result: AgentResult;
   try {
     result = await invokeSkill({
       skillName: 'advise-on-plan',
