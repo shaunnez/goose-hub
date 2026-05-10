@@ -322,3 +322,98 @@ export interface BootstrapRunDto {
   auditAction: 'create' | 'update' | 'ok';
   labelCounts?: { created: number; updated: number; skipped: number };
 }
+
+export interface ProjectSettingsDto {
+  projectId: string;
+  configBudgets: Record<string, unknown>;
+  dbGlobalOverrides: {
+    perWorkflowMaxUsd: number | null;
+    perAgentMaxUsd: number | null;
+    perAdvisorMaxUsd: number | null;
+    dailyTokens: number | null;
+    maxParallelAgents: number | null;
+    maxRetries: number | null;
+    perBashCommandMaxSeconds: number | null;
+    updatedAt: string;
+    updatedBy: string | null;
+  } | null;
+  dbSkillOverrides: Record<
+    string,
+    {
+      maxTurns: number | null;
+      maxBudgetUsd: number | null;
+      timeoutMs: number | null;
+      updatedAt: string;
+    }
+  >;
+  registeredSkills: string[];
+}
+
+export type ModelTier = 'haiku' | 'sonnet' | 'opus';
+
+export interface RoleModelDto {
+  configRoleModel: { primary: string; fallback: string | null; advisor: string | null } | null;
+  dbRoleModel: {
+    primaryModel: ModelTier | null;
+    fallbackModel: ModelTier | null;
+    advisorModel: ModelTier | null;
+    updatedAt: string | null;
+  } | null;
+  dbComplexityOverrides: Record<string, ModelTier>;
+}
+
+export interface ProjectModelSettingsDto {
+  projectId: string;
+  allowHoldoutOverride: boolean;
+  roles: Record<string, RoleModelDto>;
+}
+
+export interface CodexAuthStatusDto {
+  status: 'connected' | 'missing';
+  authPath: string;
+  loginCommand: string;
+}
+
+export interface DevReviewConfigDto {
+  enabled: boolean;
+  triggerOn: 'all' | 'priority:medium+' | 'priority:high+' | 'priority:critical';
+  maxRevisionTurns?: number;
+  perCycleMaxUsd?: number;
+  timeoutMs?: number;
+}
+
+export interface DevReviewDbOverrideDto {
+  enabled: boolean | null;
+  triggerOn: string | null;
+  maxRevisionTurns: number | null;
+  perCycleMaxUsd: number | null;
+  timeoutMs: number | null;
+  updatedAt: string;
+  updatedBy: string | null;
+}
+
+export interface DevReviewSettingsDto {
+  projectId: string;
+  config: DevReviewConfigDto | null;
+  dbOverride: DevReviewDbOverrideDto | null;
+}
+
+export interface PipelineSettingsDto {
+  projectId: string;
+  useM19Pipeline: boolean;
+}
+
+export type ReviewerSlotModel = 'claude' | 'codex';
+export type ReviewerSlotPrompt = 'default' | 'unconstrained';
+
+export interface ReviewerSlot {
+  model: ReviewerSlotModel;
+  prompt: ReviewerSlotPrompt;
+}
+
+export interface ReviewSettingsDto {
+  projectId: string;
+  reviewerSlots: ReviewerSlot[] | null;
+  updatedAt: string | null;
+  updatedBy: string | null;
+}

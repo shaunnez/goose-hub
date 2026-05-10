@@ -7,16 +7,16 @@ import {
   writeProjectDevReviewSettings,
 } from '@goose-hub/core/db/repositories/project-dev-review-settings.js';
 import {
-  parseReviewerSlots,
-  readProjectReviewSettings,
-  writeProjectReviewSettings,
-} from '@goose-hub/core/db/repositories/project-review-settings.js';
-import {
   deleteRoleModelSetting,
   readProjectModelSettings,
   writeComplexityOverrides,
   writeRoleModelSetting,
 } from '@goose-hub/core/db/repositories/project-model-settings.js';
+import {
+  parseReviewerSlots,
+  readProjectReviewSettings,
+  writeProjectReviewSettings,
+} from '@goose-hub/core/db/repositories/project-review-settings.js';
 import {
   getUseM19Pipeline,
   setUseM19Pipeline,
@@ -267,7 +267,11 @@ router.patch('/:slug/settings/review', async (c) => {
     return c.json({ error: 'invalid body', details: parsed.error.issues }, 422);
   }
 
-  writeProjectReviewSettings(project.id, { reviewerSlots: parsed.data.reviewerSlots ?? null }, 'ui');
+  writeProjectReviewSettings(
+    project.id,
+    { reviewerSlots: parsed.data.reviewerSlots ?? null },
+    'ui',
+  );
   return c.json({ ok: true });
 });
 

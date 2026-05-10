@@ -2,49 +2,33 @@ import type {
   AgentEventDto,
   BootstrapPreviewDto,
   BootstrapRunDto,
+  CodexAuthStatusDto,
   CostSummaryDto,
+  DevReviewSettingsDto,
   ImprovementCandidateDto,
   InboxItemDto,
   IssueCommentDto,
   IssueDiffDto,
   MilestoneDto,
+  ModelTier,
   PersonaNameDto,
   PersonaRunDto,
   PersonaStatDto,
+  PipelineSettingsDto,
   PlaybookDetailDto,
   PlaybookSummaryDto,
   ProjectConfigDto,
+  ProjectModelSettingsDto,
+  ProjectSettingsDto,
   ProjectSummary,
   QualityTrendPointDto,
+  ReviewSettingsDto,
+  ReviewerSlot,
   SprintReviewEligibility,
   TransitionResult,
   TriageResultDto,
   WorkItemCostsDto,
   WorkItemDto,
-} from './types.js';
-
-export type {
-  ProjectConfigDto,
-  ProjectSummary,
-  WorkItemDto,
-  IssueCommentDto,
-  IssueDiffDto,
-  MilestoneDto,
-  SprintReviewEligibility,
-  AgentEventDto,
-  TransitionResult,
-  InboxItemDto,
-  TriageResultDto,
-  PersonaStatDto,
-  PersonaNameDto,
-  PersonaRunDto,
-  ImprovementCandidateDto,
-  CostSummaryDto,
-  WorkItemCostsDto,
-  PlaybookSummaryDto,
-  PlaybookDetailDto,
-  BootstrapPreviewDto,
-  BootstrapRunDto,
 } from './types.js';
 
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -498,32 +482,6 @@ export async function runBootstrap(repoRef: string, slug?: string): Promise<Boot
   return (await res.json()) as BootstrapRunDto;
 }
 
-export interface ProjectSettingsDto {
-  projectId: string;
-  configBudgets: Record<string, unknown>;
-  dbGlobalOverrides: {
-    perWorkflowMaxUsd: number | null;
-    perAgentMaxUsd: number | null;
-    perAdvisorMaxUsd: number | null;
-    dailyTokens: number | null;
-    maxParallelAgents: number | null;
-    maxRetries: number | null;
-    perBashCommandMaxSeconds: number | null;
-    updatedAt: string;
-    updatedBy: string | null;
-  } | null;
-  dbSkillOverrides: Record<
-    string,
-    {
-      maxTurns: number | null;
-      maxBudgetUsd: number | null;
-      timeoutMs: number | null;
-      updatedAt: string;
-    }
-  >;
-  registeredSkills: string[];
-}
-
 export async function fetchProjectSettings(
   slug: string,
   signal?: AbortSignal,
@@ -548,27 +506,6 @@ export async function patchSkillBudgetSetting(
 
 export async function deleteSkillBudgetSetting(slug: string, skill: string): Promise<void> {
   await deleteRequest(`/projects/${slug}/settings/skills/${encodeURIComponent(skill)}`);
-}
-
-// ─── Model settings ──────────────────────────────────────────────────────────
-
-export type ModelTier = 'haiku' | 'sonnet' | 'opus';
-
-export interface RoleModelDto {
-  configRoleModel: { primary: string; fallback: string | null; advisor: string | null } | null;
-  dbRoleModel: {
-    primaryModel: ModelTier | null;
-    fallbackModel: ModelTier | null;
-    advisorModel: ModelTier | null;
-    updatedAt: string | null;
-  } | null;
-  dbComplexityOverrides: Record<string, ModelTier>;
-}
-
-export interface ProjectModelSettingsDto {
-  projectId: string;
-  allowHoldoutOverride: boolean;
-  roles: Record<string, RoleModelDto>;
 }
 
 export async function fetchProjectModelSettings(
@@ -605,43 +542,11 @@ export async function deleteRoleModelSetting(slug: string, role: string): Promis
   await deleteRequest(`/projects/${slug}/settings/models/${encodeURIComponent(role)}`);
 }
 
-export interface CodexAuthStatusDto {
-  status: 'connected' | 'missing';
-  authPath: string;
-  loginCommand: string;
-}
-
 export async function fetchCodexAuthStatus(
   slug: string,
   signal?: AbortSignal,
 ): Promise<CodexAuthStatusDto> {
   return getJson<CodexAuthStatusDto>(`/projects/${slug}/settings/codex-auth`, signal);
-}
-
-// ─── Dev-review settings (M19.12) ────────────────────────────────────────────
-
-export interface DevReviewConfigDto {
-  enabled: boolean;
-  triggerOn: 'all' | 'priority:medium+' | 'priority:high+' | 'priority:critical';
-  maxRevisionTurns?: number;
-  perCycleMaxUsd?: number;
-  timeoutMs?: number;
-}
-
-export interface DevReviewDbOverrideDto {
-  enabled: boolean | null;
-  triggerOn: string | null;
-  maxRevisionTurns: number | null;
-  perCycleMaxUsd: number | null;
-  timeoutMs: number | null;
-  updatedAt: string;
-  updatedBy: string | null;
-}
-
-export interface DevReviewSettingsDto {
-  projectId: string;
-  config: DevReviewConfigDto | null;
-  dbOverride: DevReviewDbOverrideDto | null;
 }
 
 export async function fetchDevReviewSettings(
@@ -664,13 +569,6 @@ export async function patchDevReviewSettings(
   await patchJson(`/projects/${slug}/settings/dev-review`, patch);
 }
 
-// ─── Pipeline flag (M19.14) ──────────────────────────────────────────────────
-
-export interface PipelineSettingsDto {
-  projectId: string;
-  useM19Pipeline: boolean;
-}
-
 export async function fetchPipelineSettings(
   slug: string,
   signal?: AbortSignal,
@@ -680,23 +578,6 @@ export async function fetchPipelineSettings(
 
 export async function patchPipelineSettings(slug: string, useM19Pipeline: boolean): Promise<void> {
   await patchJson(`/projects/${slug}/settings/pipeline`, { useM19Pipeline });
-}
-
-// ─── Review settings (M19.20) ────────────────────────────────────────────────
-
-export type ReviewerSlotModel = 'claude' | 'codex';
-export type ReviewerSlotPrompt = 'default' | 'unconstrained';
-
-export interface ReviewerSlot {
-  model: ReviewerSlotModel;
-  prompt: ReviewerSlotPrompt;
-}
-
-export interface ReviewSettingsDto {
-  projectId: string;
-  reviewerSlots: ReviewerSlot[] | null;
-  updatedAt: string | null;
-  updatedBy: string | null;
 }
 
 export async function fetchReviewSettings(

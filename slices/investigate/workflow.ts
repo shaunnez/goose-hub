@@ -18,9 +18,9 @@ import {
   createWorktree,
   prewarmWorktree,
 } from '@goose-hub/core/workspaces/worktree.js';
-import type { z } from 'zod';
 import type { InvestigateSchema } from '@goose-hub/skills/investigate/schema.js';
 import { PlaywrightReproSchema } from '@goose-hub/skills/playwright-repro/schema.js';
+import type { z } from 'zod';
 
 type InvestigateOutput = z.infer<typeof InvestigateSchema>;
 
@@ -29,12 +29,27 @@ type InvestigateOutput = z.infer<typeof InvestigateSchema>;
  * The orchestrator fans them all out; scouts that aren't relevant return empty findings.
  */
 const WAVE_1_SCOUTS = [
-  { scoutName: 'scout-code-path', scoutFocus: 'Trace code paths and call sites for symbols named in the work item' },
-  { scoutName: 'scout-dependency', scoutFocus: 'Map dependencies crossing package boundaries touched by this change' },
+  {
+    scoutName: 'scout-code-path',
+    scoutFocus: 'Trace code paths and call sites for symbols named in the work item',
+  },
+  {
+    scoutName: 'scout-dependency',
+    scoutFocus: 'Map dependencies crossing package boundaries touched by this change',
+  },
   { scoutName: 'scout-pattern', scoutFocus: 'Identify existing patterns the fix should follow' },
-  { scoutName: 'scout-schema', scoutFocus: 'Find DB schemas, Zod schemas, and API contracts relevant to this work item' },
-  { scoutName: 'scout-test-inventory', scoutFocus: 'Locate existing tests covering the affected area' },
-  { scoutName: 'scout-user-journey', scoutFocus: 'Map user-visible UI flows and API surfaces related to this issue' },
+  {
+    scoutName: 'scout-schema',
+    scoutFocus: 'Find DB schemas, Zod schemas, and API contracts relevant to this work item',
+  },
+  {
+    scoutName: 'scout-test-inventory',
+    scoutFocus: 'Locate existing tests covering the affected area',
+  },
+  {
+    scoutName: 'scout-user-journey',
+    scoutFocus: 'Map user-visible UI flows and API surfaces related to this issue',
+  },
 ];
 
 /**
@@ -150,7 +165,8 @@ export async function runInvestigateWorkflow(
       scoutSpecs: [
         {
           scoutName: 'wave2-interface-designer',
-          scoutFocus: 'Design interfaces and type signatures based on cross-validated scout findings',
+          scoutFocus:
+            'Design interfaces and type signatures based on cross-validated scout findings',
           extraContext: { scoutReports: wave1Context },
         },
         {

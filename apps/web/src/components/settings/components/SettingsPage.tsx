@@ -120,9 +120,7 @@ export function SettingsPage() {
         {tab === 'pipeline' && selectedConfig != null && (
           <PipelinePanel slug={selectedConfig.slug} />
         )}
-        {tab === 'review' && selectedConfig != null && (
-          <ReviewPanel slug={selectedConfig.slug} />
-        )}
+        {tab === 'review' && selectedConfig != null && <ReviewPanel slug={selectedConfig.slug} />}
 
         {!isLoading && !error && configs.length === 0 && (
           <div className="text-[13px] text-fg-3 py-16 text-center">

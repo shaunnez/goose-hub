@@ -1,5 +1,5 @@
-import type { ReviewerSlot, ReviewSettingsDto } from '@/lib/api';
 import { fetchReviewSettings, patchReviewSettings } from '@/lib/api';
+import type { ReviewSettingsDto, ReviewerSlot } from '@/lib/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface Props {
@@ -75,7 +75,7 @@ export function ReviewPanel({ slug }: Props) {
           <div className="space-y-3">
             {currentSlots.map((slot, idx) => (
               <div
-                key={idx}
+                key={`${slot.model}-${slot.prompt}-${idx}`}
                 className="flex items-center gap-3 border border-line rounded px-3 py-2"
               >
                 <span className="text-[11px] text-fg-3 w-12">Slot {idx + 1}</span>

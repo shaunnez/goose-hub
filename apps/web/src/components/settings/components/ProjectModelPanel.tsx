@@ -1,9 +1,4 @@
 import {
-  type CodexAuthStatusDto,
-  type DevReviewSettingsDto,
-  type ModelTier,
-  type ProjectModelSettingsDto,
-  type RoleModelDto,
   deleteRoleModelSetting,
   fetchCodexAuthStatus,
   fetchDevReviewSettings,
@@ -12,6 +7,13 @@ import {
   patchDevReviewSettings,
   patchRoleModelSetting,
 } from '@/lib/api';
+import type {
+  CodexAuthStatusDto,
+  DevReviewSettingsDto,
+  ModelTier,
+  ProjectModelSettingsDto,
+  RoleModelDto,
+} from '@/lib/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, Copy, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
