@@ -127,4 +127,18 @@ describe('deployHooks', () => {
     expect(writtenPaths.some((p) => p.includes('pre-tool-use.js'))).toBe(true);
     expect(writtenPaths.some((p) => p.includes('post-tool-use.js'))).toBe(true);
   });
+
+  it('the written script normalises Codex hook aliases (name→tool_name, parameters→tool_input)', () => {
+    vi.mocked(existsSync).mockReturnValue(false);
+
+    deployHooks();
+
+    const scriptContent = vi.mocked(writeFileSync).mock.calls[0][1] as string;
+    // Must probe `name` as alias for tool_name (Codex sends `name` not `tool_name`)
+    expect(scriptContent).toContain('call?.name');
+    // Must probe `parameters` / `arguments` / `input` as aliases for tool_input
+    expect(scriptContent).toContain('parameters');
+    expect(scriptContent).toContain('arguments');
+    expect(scriptContent).toContain('call?.input');
+  });
 });
