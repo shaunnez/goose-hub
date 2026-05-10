@@ -338,6 +338,29 @@ export const agentRunCosts = sqliteTable(
   }),
 );
 
+// One row per agent run. runId is unique — the same run is never recorded twice.
+export const agentRuns = sqliteTable(
+  'agent_runs',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    runId: text('run_id').notNull(),
+    personaId: text('persona_id').notNull(),
+    workItemId: text('work_item_id'),
+    projectId: text('project_id').notNull(),
+    role: text('role').notNull(),
+    skill: text('skill').notNull(),
+    outcome: text('outcome', { enum: ['success', 'failure'] }).notNull(),
+    createdAt: text('created_at')
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  },
+  (t) => ({
+    runIdUniq: uniqueIndex('agent_runs_run_id_uniq').on(t.runId),
+    personaIdx: index('agent_runs_persona_idx').on(t.personaId),
+    projectIdx: index('agent_runs_project_idx').on(t.projectId),
+  }),
+);
+
 // Per-project dev-review advisor settings (M19.12). DB row wins over
 // project.config.ts agentConfig.devReview when non-null.
 export const projectDevReviewSettings = sqliteTable('project_dev_review_settings', {
