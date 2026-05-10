@@ -39,13 +39,7 @@ const config: SkillConfig = {
   modelPin: 'sonnet',
   freshContext: false,
   role: 'griller',
-  contextAllowlist: [
-    'workItem',
-    'priorReplies',
-    'roundNumber',
-    'projectContext',
-    'worktreePath',
-  ],
+  contextAllowlist: ['workItem', 'priorReplies', 'roundNumber', 'projectContext', 'worktreePath'],
 };
 
 export default config;
