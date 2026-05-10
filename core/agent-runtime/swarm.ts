@@ -117,6 +117,7 @@ const SCOUT_CONTEXT_ALLOWLIST: readonly string[] = [
   'workItem.number',
   'scoutFocus',
   'worktreePath',
+  'scoutReports',
 ];
 
 const DEFAULT_MAX_SCOUTS = 6;

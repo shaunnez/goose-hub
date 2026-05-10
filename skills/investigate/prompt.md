@@ -18,9 +18,7 @@ The context contains a `<task>` block with:
 
 ## Investigation process
 
-> **Status (M19.01).** The Wave-1 / Wave-2 swarm protocol described below is the post-M19.01 *target* shape of an investigation. The primitives (`dispatchWave`, `crossValidate`, the 6 scouts, the 2 Wave-2 agents) are landed and unit-tested, but the production `runInvestigateWorkflow` is **not yet wired** to dispatch them automatically. Until a later M19 issue connects them, this skill operates in **single-agent mode**: you read the worktree directly and skip the wave steps. When the workflow caller passes Wave-1 / Wave-2 reports through `<scout_reports>`, switch to wave-aware mode and use them as primary evidence. Otherwise treat the wave protocol below as documentation, not a runtime guarantee.
-
-In wave-aware mode, you decide WHICH scouts ran and WHAT each one focused on; the orchestrator (when wired) handles fan-out, holdout boundaries, timeouts, and cross-validation.
+In wave-aware mode, you decide WHICH scouts ran and WHAT each one focused on; the orchestrator handles fan-out, holdout boundaries, timeouts, and cross-validation.
 
 ### Wave protocol overview (target shape)
 

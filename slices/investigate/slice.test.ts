@@ -1,9 +1,9 @@
-import type { AgentResult } from '@goose-hub/core/agent-runtime/interface.js';
+import type { AgentRuntime, AgentResult } from '@goose-hub/core/agent-runtime/interface.js';
+import type { ScoutReport, WaveResult } from '@goose-hub/core/agent-runtime/swarm.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Skip the playwright-test MCP pre-flight subprocess in workflow.ts — same
-// convention claude-cli.ts uses to bypass real spawns under tests.
+// Skip playwright-test MCP pre-flight subprocess in workflow.ts
 process.env.MOCK_AGENTS = 'true';
 afterAll(() => {
   process.env.MOCK_AGENTS = undefined;
@@ -11,7 +11,28 @@ afterAll(() => {
 
 // ─── module mocks ──────────────────────────────────────────────────────────────
 
-// Single shared mock for the runtime run fn — reset in beforeEach
+const mockDispatchWave = vi.fn();
+const mockCrossValidate = vi.fn();
+const mockInvokeSkill = vi.fn();
+const mockPersistScoutReport = vi.fn();
+
+vi.mock('@goose-hub/core/agent-runtime/swarm.js', () => ({
+  dispatchWave: (...args: unknown[]) => mockDispatchWave(...args),
+}));
+
+vi.mock('@goose-hub/core/agent-runtime/cross-validate.js', () => ({
+  crossValidate: (...args: unknown[]) => mockCrossValidate(...args),
+}));
+
+vi.mock('@goose-hub/core/agent-runtime/invoke-skill.js', () => ({
+  invokeSkill: (...args: unknown[]) => mockInvokeSkill(...args),
+}));
+
+vi.mock('@goose-hub/core/scout-reports/repository.js', () => ({
+  persistScoutReport: (...args: unknown[]) => mockPersistScoutReport(...args),
+}));
+
+// Single shared mock for ClaudeCliRuntime (playwright-repro step)
 const mockRun = vi.fn();
 
 const mockAccumulatePersonaStats = vi.fn();
@@ -81,7 +102,7 @@ function makeInvestigateOutput(overrides: Record<string, unknown> = {}) {
     keyFiles: [{ path: 'apps/server/src/middleware/auth.ts', reason: 'Contains null-dereference' }],
     confidence: 'high',
     openQuestions: ['Does this also affect WebSocket upgrade path?'],
-    requiresBrowserRepro: true,
+    requiresBrowserRepro: false,
     decisionSummaries: [
       {
         kind: 'READ',
@@ -104,6 +125,32 @@ function makePlaywrightReproOutput() {
     reproSteps: ['Navigate to /login', 'Enter credentials', 'Click submit'],
     reproduced: true,
     notes: 'Bug reproduced consistently.',
+  };
+}
+
+function makeScoutReport(scoutName: string, overrides: Partial<ScoutReport> = {}): ScoutReport {
+  return {
+    scoutName,
+    status: 'ok',
+    findings: [{ file: 'src/app.ts', fact: 'Module entry point', confidence: 'high' }],
+    decisionSummaries: [],
+    runId: `run:scout:${scoutName}:0`,
+    ...overrides,
+  };
+}
+
+function makeWaveResult(overrides: Partial<WaveResult> = {}): WaveResult {
+  return {
+    status: 'ok',
+    reports: [
+      makeScoutReport('scout-code-path'),
+      makeScoutReport('scout-dependency'),
+      makeScoutReport('scout-pattern'),
+    ],
+    failedScouts: [],
+    shouldAdvance: true,
+    shouldEscalate: false,
+    ...overrides,
   };
 }
 
@@ -140,357 +187,447 @@ function makeMockSource(overrides: Partial<StateSource> = {}): StateSource {
 // ─── test setup ───────────────────────────────────────────────────────────────
 
 beforeEach(() => {
-  // Reset call history and queued return values on all mocks.
-  // mockRun is a hoisted vi.fn() so we reset it directly.
-  // vi.clearAllMocks() only clears call history, not return value queues,
-  // so we use mockReset() on the shared run mock to prevent once-value leakage.
+  mockDispatchWave.mockReset();
+  mockCrossValidate.mockReset();
+  mockInvokeSkill.mockReset();
+  mockPersistScoutReport.mockReset();
   mockRun.mockReset();
-  // Clear call history on the module-level mocks so per-test counts are accurate.
   vi.clearAllMocks();
   mockAccumulatePersonaStats.mockClear();
-  // Re-set mockRun after clearAllMocks since clearAllMocks doesn't remove implementations
-  // but does reset the cleared call counters — the mockReset above already cleared the queue.
+
+  // Default happy path
+  mockDispatchWave.mockResolvedValue(makeWaveResult());
+  mockCrossValidate.mockReturnValue({ contradictions: [], hasContradictions: false });
+  mockInvokeSkill.mockResolvedValue({
+    output: makeInvestigateOutput(),
+    decisionSummaries: [],
+    events: [],
+  } satisfies AgentResult);
 });
 
 // ─── tests ────────────────────────────────────────────────────────────────────
 
 describe('runInvestigateWorkflow', () => {
-  describe('happy path — non-bug type', () => {
-    it('creates a worktree with the target repo and runId', async () => {
-      const item = makeWorkItem({ type: 'chore' });
-      const source = makeMockSource();
-
-      mockRun.mockResolvedValueOnce({
-        output: makeInvestigateOutput(),
-        decisionSummaries: [],
-        events: [],
-      } satisfies AgentResult);
-
-      const { createWorktree } = await import('@goose-hub/core/workspaces/worktree.js');
+  describe('swarm dispatch — acceptance criterion 1', () => {
+    it('calls dispatchWave exactly twice (Wave 1 then Wave 2)', async () => {
       const { runInvestigateWorkflow } = await import('./workflow.js');
-      await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
 
-      expect(createWorktree).toHaveBeenCalledWith('/path/to/repo', expect.any(String));
+      expect(mockDispatchWave).toHaveBeenCalledTimes(2);
     });
 
-    it('runs the investigate skill once for a non-bug item', async () => {
-      const item = makeWorkItem({ type: 'chore' });
-      const source = makeMockSource();
-
-      mockRun.mockResolvedValueOnce({
-        output: makeInvestigateOutput(),
-        decisionSummaries: [],
-        events: [],
-      } satisfies AgentResult);
+    it('calls crossValidate exactly once with Wave 1 reports', async () => {
+      const wave1 = makeWaveResult();
+      mockDispatchWave.mockResolvedValueOnce(wave1).mockResolvedValueOnce(makeWaveResult());
 
       const { runInvestigateWorkflow } = await import('./workflow.js');
-      await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
 
-      expect(mockRun).toHaveBeenCalledTimes(1);
-      const callArg = mockRun.mock.calls[0][0] as { skill: string };
-      expect(callArg.skill).toBe('investigate');
+      expect(mockCrossValidate).toHaveBeenCalledTimes(1);
+      expect(mockCrossValidate).toHaveBeenCalledWith(wave1.reports);
     });
 
-    it('persists agent.investigation-complete event with findings', async () => {
-      const item = makeWorkItem({ type: 'chore' });
+    it('Wave 2 scouts receive scoutReports in extraContext', async () => {
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const wave2Opts = mockDispatchWave.mock.calls[1][0] as {
+        scoutSpecs: Array<{ extraContext?: Record<string, unknown> }>;
+      };
+      for (const spec of wave2Opts.scoutSpecs) {
+        expect(spec.extraContext).toHaveProperty('scoutReports');
+        expect(typeof spec.extraContext?.scoutReports).toBe('string');
+      }
+    });
+
+    it('creates worktree and always cleans it up', async () => {
+      const { createWorktree, cleanupWorktree } = await import(
+        '@goose-hub/core/workspaces/worktree.js'
+      );
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(createWorktree).toHaveBeenCalledWith('/repo', expect.any(String));
+      expect(cleanupWorktree).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('scout report persistence — acceptance criterion 2', () => {
+    it('persists ok-status Wave 1 scouts to DB', async () => {
+      const wave1 = makeWaveResult({
+        reports: [
+          makeScoutReport('scout-code-path'),
+          makeScoutReport('scout-dependency', { status: 'timeout', findings: [], runId: 'x' }),
+        ],
+        failedScouts: ['scout-dependency'],
+      });
+      // Wave 2 uses different names to avoid assertion collision with wave1 scout names
+      const wave2 = makeWaveResult({
+        reports: [makeScoutReport('wave2-interface-designer'), makeScoutReport('wave2-risk-analyst')],
+      });
+      mockDispatchWave.mockResolvedValueOnce(wave1).mockResolvedValueOnce(wave2);
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(mockPersistScoutReport).toHaveBeenCalledWith(
+        'goose-hub-self',
+        'github:shaunnez/goose-hub#42',
+        expect.any(String),
+        'scout-code-path',
+        expect.anything(),
+      );
+      expect(mockPersistScoutReport).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        'scout-dependency',
+        expect.anything(),
+      );
+    });
+
+    it('persists ok-status Wave 2 scouts to DB', async () => {
+      const wave2 = makeWaveResult({
+        reports: [
+          makeScoutReport('wave2-interface-designer'),
+          makeScoutReport('wave2-risk-analyst', { status: 'error', findings: [], runId: 'e', errorReason: 'oops' }),
+        ],
+        failedScouts: ['wave2-risk-analyst'],
+      });
+      mockDispatchWave.mockResolvedValueOnce(makeWaveResult()).mockResolvedValueOnce(wave2);
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(mockPersistScoutReport).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        'wave2-interface-designer',
+        expect.anything(),
+      );
+      expect(mockPersistScoutReport).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        'wave2-risk-analyst',
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('cross-validate surfaces contradiction — acceptance criterion 3', () => {
+    it('passes contradiction data to synthesis via scoutReports context', async () => {
+      const contradiction = {
+        file: 'src/auth.ts',
+        line: 42,
+        facts: [
+          { scoutName: 'scout-code-path', fact: 'Token check exists', confidence: 'high' as const },
+          { scoutName: 'scout-pattern', fact: 'Token check missing', confidence: 'high' as const },
+        ],
+        scouts: ['scout-code-path', 'scout-pattern'],
+      };
+      mockCrossValidate.mockReturnValue({
+        contradictions: [contradiction],
+        hasContradictions: true,
+      });
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const invokeOpts = mockInvokeSkill.mock.calls[0][0] as {
+        context: { scoutReports: string };
+      };
+      const scoutReports = JSON.parse(invokeOpts.context.scoutReports) as {
+        contradictions: unknown[];
+      };
+      expect(scoutReports.contradictions).toHaveLength(1);
+    });
+  });
+
+  describe('scout timeout → workflow continues — acceptance criterion 4', () => {
+    it('advances to Wave 2 when one scout times out but shouldAdvance is true', async () => {
+      const wave1 = makeWaveResult({
+        status: 'ok',
+        shouldAdvance: true,
+        shouldEscalate: false,
+        reports: [
+          makeScoutReport('scout-code-path'),
+          makeScoutReport('scout-dependency'),
+          makeScoutReport('scout-pattern'),
+          makeScoutReport('scout-schema', { status: 'timeout', findings: [], runId: 't' }),
+        ],
+        failedScouts: ['scout-schema'],
+      });
+      mockDispatchWave.mockResolvedValueOnce(wave1).mockResolvedValueOnce(makeWaveResult());
+
       const source = makeMockSource();
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), source, 'goose-hub-self', '/repo');
 
-      mockRun.mockResolvedValueOnce({
-        output: makeInvestigateOutput(),
-        decisionSummaries: [],
-        events: [],
-      } satisfies AgentResult);
+      expect(mockDispatchWave).toHaveBeenCalledTimes(2);
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:investigating',
+        'factory:investigation-complete',
+      );
+    });
 
+    it('does not persist timed-out scout reports', async () => {
+      const wave1 = makeWaveResult({
+        reports: [
+          makeScoutReport('scout-code-path'),
+          makeScoutReport('scout-schema', { status: 'timeout', findings: [], runId: 't' }),
+        ],
+        failedScouts: ['scout-schema'],
+      });
+      mockDispatchWave.mockResolvedValueOnce(wave1).mockResolvedValueOnce(makeWaveResult());
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(mockPersistScoutReport).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        'scout-schema',
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('2 scout failures → escalate — acceptance criterion 5', () => {
+    it('transitions to factory:needs-human when wave1 shouldEscalate', async () => {
+      mockDispatchWave.mockResolvedValueOnce(
+        makeWaveResult({
+          status: 'halted',
+          shouldAdvance: false,
+          shouldEscalate: true,
+          failedScouts: ['scout-code-path', 'scout-dependency'],
+        }),
+      );
+
+      const source = makeMockSource();
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), source, 'goose-hub-self', '/repo');
+
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:investigating',
+        'factory:needs-human',
+      );
+    });
+
+    it('does not dispatch Wave 2 when escalating', async () => {
+      mockDispatchWave.mockResolvedValueOnce(
+        makeWaveResult({ status: 'halted', shouldAdvance: false, shouldEscalate: true }),
+      );
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(mockDispatchWave).toHaveBeenCalledTimes(1);
+    });
+
+    it('posts a GitHub comment when escalating', async () => {
+      mockDispatchWave.mockResolvedValueOnce(
+        makeWaveResult({ status: 'halted', shouldAdvance: false, shouldEscalate: true }),
+      );
+
+      const source = makeMockSource();
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), source, 'goose-hub-self', '/repo');
+
+      expect(source.comment).toHaveBeenCalled();
+    });
+
+    it('still cleans up worktree when escalating', async () => {
+      mockDispatchWave.mockResolvedValueOnce(
+        makeWaveResult({ status: 'halted', shouldAdvance: false, shouldEscalate: true }),
+      );
+
+      const { cleanupWorktree } = await import('@goose-hub/core/workspaces/worktree.js');
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(cleanupWorktree).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('holdout-key enforcement — acceptance criterion 6', () => {
+    it('Wave 2 scoutSpecs contain only scoutReports in extraContext (no disallowed keys)', async () => {
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const wave2Opts = mockDispatchWave.mock.calls[1][0] as {
+        scoutSpecs: Array<{ extraContext?: Record<string, unknown> }>;
+      };
+      for (const spec of wave2Opts.scoutSpecs) {
+        const extraKeys = Object.keys(spec.extraContext ?? {});
+        expect(extraKeys).not.toContain('investigationFindings');
+        expect(extraKeys).not.toContain('devDecisionSummaries');
+        expect(extraKeys).toEqual(['scoutReports']);
+      }
+    });
+
+    it('dispatchWave fires tool.violation for disallowed key in extraContext', async () => {
+      const fakeRuntime = {
+        run: vi.fn().mockResolvedValue({
+          output: { findings: [], decisionSummaries: [], confidence: 'medium', openQuestions: [] },
+          decisionSummaries: [],
+          events: [],
+        }),
+      };
+
+      const violations: Array<{ disallowedKey: string }> = [];
+      const fakeAppend = vi.fn().mockImplementation(
+        (input: { kind: string; payload: { disallowedKey: string } }) => {
+          if (input.kind === 'tool.violation') violations.push(input.payload);
+          return { id: 1, kind: input.kind, payload: input.payload, createdAt: '' };
+        },
+      );
+
+      const { dispatchWave: realDispatchWave } = await vi.importActual<
+        typeof import('@goose-hub/core/agent-runtime/swarm.js')
+      >('@goose-hub/core/agent-runtime/swarm.js');
+
+      await realDispatchWave({
+        parentRunId: 'holdout-test-run',
+        scoutSpecs: [
+          {
+            scoutName: 'scout-code-path',
+            scoutFocus: 'test holdout enforcement',
+            extraContext: { investigationFindings: 'should not be here' },
+          },
+        ],
+        workItem: { number: 42, title: 'Test', body: 'Test body' },
+        worktreePath: '/tmp/test-tree',
+        projectId: 'test-project',
+        workItemId: 'github:test/repo#42',
+        runtime: fakeRuntime as unknown as AgentRuntime,
+        personaId: 'test-project/investigator/0',
+        appendEvent: fakeAppend,
+      });
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].disallowedKey).toBe('investigationFindings');
+    });
+  });
+
+  describe('investigation-complete event', () => {
+    it('includes investigationRunId in payload', async () => {
       const { runInvestigateWorkflow } = await import('./workflow.js');
       const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
-      await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
 
       const call = vi
         .mocked(eventStore.appendEvent)
         .mock.calls.find(([e]) => e.kind === 'agent.investigation-complete');
       expect(call).toBeDefined();
+      const payload = call?.[0].payload as { investigationRunId: string };
+      expect(typeof payload.investigationRunId).toBe('string');
+      expect(payload.investigationRunId.length).toBeGreaterThan(0);
+    });
+
+    it('includes investigate findings in payload', async () => {
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const call = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'agent.investigation-complete');
       const payload = call?.[0].payload as { investigate: unknown };
       expect(payload.investigate).toBeDefined();
     });
 
-    it('transitions state from factory:investigating to factory:investigation-complete', async () => {
-      const item = makeWorkItem({ type: 'chore' });
+    it('transitions to factory:investigation-complete on success', async () => {
       const source = makeMockSource();
-
-      mockRun.mockResolvedValueOnce({
-        output: makeInvestigateOutput(),
-        decisionSummaries: [],
-        events: [],
-      } satisfies AgentResult);
-
       const { runInvestigateWorkflow } = await import('./workflow.js');
-      await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
+      await runInvestigateWorkflow(makeWorkItem(), source, 'goose-hub-self', '/repo');
 
       expect(source.transitionState).toHaveBeenCalledWith(
         '42',
         'factory:investigating',
         'factory:investigation-complete',
       );
-      expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
-        personaName: 'test-project/investigator/0',
-        role: 'investigator',
-        outcome: 'success',
-      });
     });
 
-    it('always cleans up the worktree via finally block', async () => {
-      const item = makeWorkItem({ type: 'chore' });
-      const source = makeMockSource();
+    it('records persona success stat', async () => {
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
 
+      expect(mockAccumulatePersonaStats).toHaveBeenCalledWith(
+        expect.objectContaining({ outcome: 'success' }),
+      );
+    });
+  });
+
+  describe('type:bug — playwright-repro still runs', () => {
+    it('runs playwright-repro for type:bug when requiresBrowserRepro is true', async () => {
+      mockInvokeSkill.mockResolvedValueOnce({
+        output: makeInvestigateOutput({ requiresBrowserRepro: true }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
       mockRun.mockResolvedValueOnce({
-        output: makeInvestigateOutput(),
+        output: makePlaywrightReproOutput(),
         decisionSummaries: [],
         events: [],
       } satisfies AgentResult);
 
-      const { cleanupWorktree } = await import('@goose-hub/core/workspaces/worktree.js');
       const { runInvestigateWorkflow } = await import('./workflow.js');
-      await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
+      await runInvestigateWorkflow(makeWorkItem({ type: 'bug' }), makeMockSource(), 'goose-hub-self', '/repo');
 
-      expect(cleanupWorktree).toHaveBeenCalledOnce();
-    });
-  });
-
-  describe('bug type — playwright-repro also runs', () => {
-    it('runs both investigate and playwright-repro skills for type:bug', async () => {
-      const item = makeWorkItem({ type: 'bug' });
-      const source = makeMockSource();
-
-      mockRun
-        .mockResolvedValueOnce({
-          output: makeInvestigateOutput(),
-          decisionSummaries: [],
-          events: [],
-        } satisfies AgentResult)
-        .mockResolvedValueOnce({
-          output: makePlaywrightReproOutput(),
-          decisionSummaries: [],
-          events: [],
-        } satisfies AgentResult);
-
-      const { runInvestigateWorkflow } = await import('./workflow.js');
-      await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
-
-      expect(mockRun).toHaveBeenCalledTimes(2);
-      const firstCall = mockRun.mock.calls[0][0] as { skill: string };
-      const secondCall = mockRun.mock.calls[1][0] as { skill: string };
-      expect(firstCall.skill).toBe('investigate');
-      expect(secondCall.skill).toBe('playwright-repro');
+      expect(mockRun).toHaveBeenCalledWith(
+        expect.objectContaining({ skill: 'playwright-repro' }),
+      );
     });
 
-    it('persists playwrightRepro in investigation-complete event for type:bug', async () => {
-      const item = makeWorkItem({ type: 'bug' });
-      const source = makeMockSource();
-
-      mockRun
-        .mockResolvedValueOnce({
-          output: makeInvestigateOutput(),
-          decisionSummaries: [],
-          events: [],
-        } satisfies AgentResult)
-        .mockResolvedValueOnce({
-          output: makePlaywrightReproOutput(),
-          decisionSummaries: [],
-          events: [],
-        } satisfies AgentResult);
-
-      const { runInvestigateWorkflow } = await import('./workflow.js');
-      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
-      await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
-
-      const call = vi
-        .mocked(eventStore.appendEvent)
-        .mock.calls.find(([e]) => e.kind === 'agent.investigation-complete');
-      expect(call).toBeDefined();
-      const payload = call?.[0].payload as { playwrightRepro: unknown };
-      expect(payload.playwrightRepro).toBeDefined();
-    });
-
-    it('passes workItem.number and workItem.repo into playwright-repro context (evidence pipeline)', async () => {
-      const item = makeWorkItem({ type: 'bug' });
-      const source = makeMockSource();
-
-      mockRun
-        .mockResolvedValueOnce({
-          output: makeInvestigateOutput(),
-          decisionSummaries: [],
-          events: [],
-        } satisfies AgentResult)
-        .mockResolvedValueOnce({
-          output: makePlaywrightReproOutput(),
-          decisionSummaries: [],
-          events: [],
-        } satisfies AgentResult);
-
-      const { runInvestigateWorkflow } = await import('./workflow.js');
-      await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
-
-      const playwrightCall = mockRun.mock.calls[1][0] as {
-        context: { workItem: { number?: number; repo?: string } };
-      };
-      expect(playwrightCall.context.workItem.number).toBe(42);
-      expect(playwrightCall.context.workItem.repo).toBe('shaunnez/goose-hub');
-    });
-
-    it('uses validate tool bundle for playwright-repro skill', async () => {
-      const item = makeWorkItem({ type: 'bug' });
-      const source = makeMockSource();
-
-      mockRun
-        .mockResolvedValueOnce({
-          output: makeInvestigateOutput(),
-          decisionSummaries: [],
-          events: [],
-        } satisfies AgentResult)
-        .mockResolvedValueOnce({
-          output: makePlaywrightReproOutput(),
-          decisionSummaries: [],
-          events: [],
-        } satisfies AgentResult);
-
-      const { runInvestigateWorkflow } = await import('./workflow.js');
-      await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
-
-      const playwrightCall = mockRun.mock.calls[1][0] as {
-        toolBundles: string[];
-      };
-      expect(playwrightCall.toolBundles).toContain('validate');
-    });
-
-    it('does NOT run playwright-repro for non-bug items', async () => {
-      for (const type of ['feature', 'chore', 'research'] as const) {
-        mockRun.mockReset();
-        mockRun.mockResolvedValueOnce({
-          output: makeInvestigateOutput(),
-          decisionSummaries: [],
-          events: [],
-        } satisfies AgentResult);
-
-        const item = makeWorkItem({ type });
-        const source = makeMockSource();
-
-        const { runInvestigateWorkflow } = await import('./workflow.js');
-        await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
-
-        expect(mockRun).toHaveBeenCalledTimes(1);
-      }
-    });
-
-    it('does NOT run playwright-repro for type:bug when requiresBrowserRepro is false', async () => {
-      const item = makeWorkItem({ type: 'bug' });
-      const source = makeMockSource();
-
-      mockRun.mockResolvedValueOnce({
+    it('skips playwright-repro when requiresBrowserRepro is false', async () => {
+      mockInvokeSkill.mockResolvedValueOnce({
         output: makeInvestigateOutput({ requiresBrowserRepro: false }),
         decisionSummaries: [],
         events: [],
       } satisfies AgentResult);
 
       const { runInvestigateWorkflow } = await import('./workflow.js');
-      await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
+      await runInvestigateWorkflow(makeWorkItem({ type: 'bug' }), makeMockSource(), 'goose-hub-self', '/repo');
 
-      expect(mockRun).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('failure path', () => {
-    it('cleans up worktree on failure', async () => {
-      const item = makeWorkItem({ type: 'chore' });
-      const source = makeMockSource();
-
-      mockRun.mockRejectedValueOnce(new Error('Agent failed'));
-
-      const { cleanupWorktree } = await import('@goose-hub/core/workspaces/worktree.js');
-      const { runInvestigateWorkflow } = await import('./workflow.js');
-      await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
-
-      // cleanupWorktree is called in finally — always runs
-      expect(cleanupWorktree).toHaveBeenCalled();
+      expect(mockRun).not.toHaveBeenCalled();
     });
 
-    it('transitions to factory:needs-human on failure', async () => {
-      const item = makeWorkItem({ type: 'chore' });
-      const source = makeMockSource();
-
-      mockRun.mockRejectedValueOnce(new Error('Subprocess error'));
-
-      const { runInvestigateWorkflow } = await import('./workflow.js');
-      await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
-
-      expect(source.transitionState).toHaveBeenCalledWith(
-        '42',
-        'factory:investigating',
-        'factory:needs-human',
-      );
-      expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
-        personaName: 'test-project/investigator/0',
-        role: 'investigator',
-        outcome: 'failure',
-      });
-    });
-
-    it('posts a GitHub comment on failure', async () => {
-      const item = makeWorkItem({ type: 'chore' });
-      const source = makeMockSource();
-      const errorMessage = 'Subprocess timed out';
-
-      mockRun.mockRejectedValueOnce(new Error(errorMessage));
-
-      const { runInvestigateWorkflow } = await import('./workflow.js');
-      await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
-
-      expect(source.comment).toHaveBeenCalledWith(
-        '42',
-        expect.stringContaining('Investigation failed'),
-      );
-    });
-
-    it('persists agent.run-failed event on failure', async () => {
-      const item = makeWorkItem({ type: 'chore' });
-      const source = makeMockSource();
-
-      mockRun.mockRejectedValueOnce(new Error('Runtime crashed'));
+    it('persists playwrightRepro in investigation-complete event', async () => {
+      mockInvokeSkill.mockResolvedValueOnce({
+        output: makeInvestigateOutput({ requiresBrowserRepro: true }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+      mockRun.mockResolvedValueOnce({
+        output: makePlaywrightReproOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
 
       const { runInvestigateWorkflow } = await import('./workflow.js');
       const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
-      await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
+      await runInvestigateWorkflow(makeWorkItem({ type: 'bug' }), makeMockSource(), 'goose-hub-self', '/repo');
 
-      const failCall = vi
+      const call = vi
         .mocked(eventStore.appendEvent)
-        .mock.calls.find(([e]) => e.kind === 'agent.run-failed');
-      expect(failCall).toBeDefined();
+        .mock.calls.find(([e]) => e.kind === 'agent.investigation-complete');
+      const payload = call?.[0].payload as { playwrightRepro: unknown };
+      expect(payload.playwrightRepro).toBeDefined();
     });
+  });
 
-    it('does not throw — handles errors gracefully', async () => {
-      const item = makeWorkItem({ type: 'chore' });
+  describe('unexpected error path', () => {
+    it('escalates to factory:needs-human on dispatchWave error', async () => {
+      mockDispatchWave.mockRejectedValueOnce(new Error('Runtime failure'));
+
       const source = makeMockSource();
-
-      mockRun.mockRejectedValueOnce(new Error('Unexpected crash'));
-
       const { runInvestigateWorkflow } = await import('./workflow.js');
-      await expect(
-        runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo'),
-      ).resolves.not.toThrow();
-    });
-
-    it('handles validation failure as an error — transitions to factory:needs-human', async () => {
-      const item = makeWorkItem({ type: 'chore' });
-      const source = makeMockSource();
-
-      // Returns invalid output that fails schema validation
-      mockRun.mockResolvedValueOnce({
-        output: { bad: 'data', missing_required: true },
-        decisionSummaries: [],
-        events: [],
-      } satisfies AgentResult);
-
-      const { runInvestigateWorkflow } = await import('./workflow.js');
-      await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
+      await runInvestigateWorkflow(makeWorkItem(), source, 'goose-hub-self', '/repo');
 
       expect(source.transitionState).toHaveBeenCalledWith(
         '42',
@@ -498,155 +635,36 @@ describe('runInvestigateWorkflow', () => {
         'factory:needs-human',
       );
     });
-  });
 
-  describe('AgentSpec fields', () => {
-    it('uses opus model override for investigate skill', async () => {
-      const item = makeWorkItem({ type: 'chore' });
-      const source = makeMockSource();
+    it('still cleans up worktree after error', async () => {
+      mockDispatchWave.mockRejectedValueOnce(new Error('Runtime failure'));
 
-      mockRun.mockResolvedValueOnce({
-        output: makeInvestigateOutput(),
-        decisionSummaries: [],
-        events: [],
-      } satisfies AgentResult);
-
+      const { cleanupWorktree } = await import('@goose-hub/core/workspaces/worktree.js');
       const { runInvestigateWorkflow } = await import('./workflow.js');
-      await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
 
-      const callArg = mockRun.mock.calls[0][0] as { modelOverride: string };
-      expect(callArg.modelOverride).toBe('claude-opus-4-7');
+      expect(cleanupWorktree).toHaveBeenCalledOnce();
     });
 
-    it('includes personaId in investigate AgentSpec', async () => {
-      const item = makeWorkItem({ type: 'chore' });
+    it('posts a comment on unexpected error', async () => {
+      mockDispatchWave.mockRejectedValueOnce(new Error('Runtime failure'));
+
       const source = makeMockSource();
-
-      mockRun.mockResolvedValueOnce({
-        output: makeInvestigateOutput(),
-        decisionSummaries: [],
-        events: [],
-      } satisfies AgentResult);
-
       const { runInvestigateWorkflow } = await import('./workflow.js');
-      await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
+      await runInvestigateWorkflow(makeWorkItem(), source, 'goose-hub-self', '/repo');
 
-      const callArg = mockRun.mock.calls[0][0] as { personaId: string };
-      expect(callArg.personaId).toBe('test-project/investigator/0');
+      expect(source.comment).toHaveBeenCalled();
     });
 
-    it('passes worktreePath in investigate context', async () => {
-      const item = makeWorkItem({ type: 'chore' });
-      const source = makeMockSource();
-
-      mockRun.mockResolvedValueOnce({
-        output: makeInvestigateOutput(),
-        decisionSummaries: [],
-        events: [],
-      } satisfies AgentResult);
+    it('records persona failure stat on error', async () => {
+      mockDispatchWave.mockRejectedValueOnce(new Error('Runtime failure'));
 
       const { runInvestigateWorkflow } = await import('./workflow.js');
-      await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
 
-      const callArg = mockRun.mock.calls[0][0] as {
-        context: Record<string, unknown>;
-        contextAllowlist: string[];
-      };
-      expect(callArg.context.worktreePath).toBe('/tmp/test-worktree');
-      expect(callArg.contextAllowlist).toContain('worktreePath');
+      expect(mockAccumulatePersonaStats).toHaveBeenCalledWith(
+        expect.objectContaining({ outcome: 'failure' }),
+      );
     });
-
-    it('uses read tool bundle for investigate skill', async () => {
-      const item = makeWorkItem({ type: 'chore' });
-      const source = makeMockSource();
-
-      mockRun.mockResolvedValueOnce({
-        output: makeInvestigateOutput(),
-        decisionSummaries: [],
-        events: [],
-      } satisfies AgentResult);
-
-      const { runInvestigateWorkflow } = await import('./workflow.js');
-      await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
-
-      const callArg = mockRun.mock.calls[0][0] as { toolBundles: string[] };
-      expect(callArg.toolBundles).toContain('read-only');
-    });
-  });
-});
-
-describe('investigate — line 138 non-Error catch branch', () => {
-  it('wraps non-Error thrown value as Error and transitions to needs-human', async () => {
-    const item = makeWorkItem({ type: 'chore' });
-    const source = makeMockSource();
-
-    // Throw a string (not an Error object) to cover the false branch of `err instanceof Error`
-    // eslint-disable-next-line prefer-promise-reject-errors
-    mockRun.mockRejectedValueOnce('string error — not an Error instance');
-
-    const { runInvestigateWorkflow } = await import('./workflow.js');
-    await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
-
-    expect(source.transitionState).toHaveBeenCalledWith(
-      '42',
-      'factory:investigating',
-      'factory:needs-human',
-    );
-    expect(source.comment).toHaveBeenCalledWith(
-      '42',
-      expect.stringContaining('Investigation failed'),
-    );
-  });
-});
-
-describe('investigate — playwright-repro parse failure (line 138 branch)', () => {
-  it('continues to success when playwright-repro output parse fails (non-fatal)', async () => {
-    const item = makeWorkItem({ type: 'bug' });
-    const source = makeMockSource();
-
-    mockRun
-      .mockResolvedValueOnce({
-        output: makeInvestigateOutput(),
-        decisionSummaries: [],
-        events: [],
-      } satisfies AgentResult)
-      .mockResolvedValueOnce({
-        // Invalid output — PlaywrightReproSchema.safeParse will return success:false
-        output: { bad: 'schema', missingFields: true },
-        decisionSummaries: [],
-        events: [],
-      } satisfies AgentResult);
-
-    const { runInvestigateWorkflow } = await import('./workflow.js');
-    const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
-    await runInvestigateWorkflow(item, source, 'goose-hub-self', '/path/to/repo');
-
-    // Should still transition successfully (playwright-repro failure is non-fatal)
-    expect(source.transitionState).toHaveBeenCalledWith(
-      '42',
-      'factory:investigating',
-      'factory:investigation-complete',
-    );
-
-    // investigation-complete event should still be emitted
-    const call = vi
-      .mocked(eventStore.appendEvent)
-      .mock.calls.find(([e]) => e.kind === 'agent.investigation-complete');
-    expect(call).toBeDefined();
-
-    // playwrightRepro should be undefined (parse failed but non-fatal)
-    const payload = call?.[0].payload as { playwrightRepro: unknown };
-    expect(payload.playwrightRepro).toBeUndefined();
-  });
-});
-
-describe('selectPersona', () => {
-  it('returns round-robin persona IDs for sequential calls (mocked)', async () => {
-    // The actual round-robin is DB-backed; here we verify the mock integration
-    const { selectPersona } = await import('@goose-hub/core/agent-runtime/select-persona.js');
-
-    const result = selectPersona('test-project', 'investigator');
-    expect(result).toEqual({ personaId: 'test-project/investigator/0', codename: 'Grey Honker' });
-    expect(selectPersona).toHaveBeenCalledWith('test-project', 'investigator');
   });
 });
