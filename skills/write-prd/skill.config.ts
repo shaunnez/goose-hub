@@ -1,6 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
-import { ProjectContextSchema } from '../grill-me/skill.config.js';
+import { GrillPriorReplyEntrySchema, ProjectContextSchema } from '../grill-me/skill.config.js';
 import { PRDOutputSchema } from './schema.js';
 
 export { ProjectContextSchema };
@@ -14,6 +14,7 @@ export const WritePRDContextSchema = z.object({
   refinedIntent: z.string(),
   priority: z.enum(['low', 'medium', 'high', 'critical']),
   projectContext: ProjectContextSchema,
+  priorReplies: z.array(GrillPriorReplyEntrySchema).optional(),
   priorPrd: PRDOutputSchema.optional(),
   humanConcerns: z.array(z.string()).optional(),
 });
@@ -31,6 +32,7 @@ const config: SkillConfig = {
     'refinedIntent',
     'priority',
     'projectContext',
+    'priorReplies',
     'priorPrd',
     'humanConcerns',
   ],
