@@ -1,4 +1,5 @@
 import { and, eq } from 'drizzle-orm';
+import { logger } from '../../logger.js';
 import { db } from '../db.js';
 import { projectSettings, projectSkillSettings } from '../schema.js';
 
@@ -23,16 +24,12 @@ export type SkillBudgetPatch = {
 };
 
 export function readProjectSettings(projectId: string): ProjectSettingsRow | null {
-  try {
-    const rows = db
-      .select()
-      .from(projectSettings)
-      .where(eq(projectSettings.projectId, projectId))
-      .all();
-    return rows[0] ?? null;
-  } catch {
-    return null;
-  }
+  const rows = db
+    .select()
+    .from(projectSettings)
+    .where(eq(projectSettings.projectId, projectId))
+    .all();
+  return rows[0] ?? null;
 }
 
 export function deriveUseM19Pipeline(row: ProjectSettingsRow | null): boolean {
@@ -40,7 +37,15 @@ export function deriveUseM19Pipeline(row: ProjectSettingsRow | null): boolean {
 }
 
 export function getUseM19Pipeline(projectId: string): boolean {
-  return deriveUseM19Pipeline(readProjectSettings(projectId));
+  try {
+    return deriveUseM19Pipeline(readProjectSettings(projectId));
+  } catch (err) {
+    logger.warn('getUseM19Pipeline: read failed, defaulting to false', {
+      projectId,
+      error: String(err),
+    });
+    return false;
+  }
 }
 
 export function setUseM19Pipeline(projectId: string, enabled: boolean, by: string): void {

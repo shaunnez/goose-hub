@@ -151,7 +151,8 @@ export async function dispatchInvestigate(slug: string, issueNumber: number): Pr
 
 /** Run the M7 fix-issue workflow for a single issue (#183). Drops duplicate triggers for the same issue. */
 export async function dispatchFixIssue(slug: string, issueNumber: number): Promise<void> {
-  const useM19 = getUseM19Pipeline(slug);
+  const projectForFlag = await getProject(slug);
+  const useM19 = projectForFlag != null ? getUseM19Pipeline(projectForFlag.id) : false;
   logger.info('dispatchFixIssue: pipeline flag', { slug, issueNumber, useM19Pipeline: useM19 });
   const maxParallel = await getMaxParallelAgents(slug);
   if (parallelLock.isInFlight(slug, issueNumber)) {
@@ -295,7 +296,8 @@ export async function dispatchResolveConflict(slug: string, issueNumber: number)
 
 /** Run the QA holdout workflow for a single issue. Drops duplicate triggers for the same issue. */
 export async function dispatchQa(slug: string, issueNumber: number): Promise<void> {
-  const useM19 = getUseM19Pipeline(slug);
+  const projectForFlag = await getProject(slug);
+  const useM19 = projectForFlag != null ? getUseM19Pipeline(projectForFlag.id) : false;
   logger.info('dispatchQa: pipeline flag', { slug, issueNumber, useM19Pipeline: useM19 });
   const maxParallel = await getMaxParallelAgents(slug);
   if (parallelLock.isInFlight(slug, issueNumber)) {
@@ -466,7 +468,8 @@ async function dispatchQaFailed(slug: string, issueNumber: number): Promise<void
 
 /** Run the Review holdout workflow for a single issue. Drops duplicate triggers for the same issue. */
 export async function dispatchReview(slug: string, issueNumber: number): Promise<void> {
-  const useM19 = getUseM19Pipeline(slug);
+  const projectForFlag = await getProject(slug);
+  const useM19 = projectForFlag != null ? getUseM19Pipeline(projectForFlag.id) : false;
   logger.info('dispatchReview: pipeline flag', { slug, issueNumber, useM19Pipeline: useM19 });
   const maxParallel = await getMaxParallelAgents(slug);
   if (parallelLock.isInFlight(slug, issueNumber)) {
