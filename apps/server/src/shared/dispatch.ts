@@ -363,7 +363,7 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
       return;
     }
 
-    const specRecord = getEngineeringSpec(projectId, item.id);
+    const specRecord = getEngineeringSpec(slug, item.id);
     if (specRecord == null) {
       await source.comment(
         item.externalId,
@@ -390,7 +390,7 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
         parsedSpec.data,
         specRecord.pipelineRunId,
         source,
-        projectId,
+        slug,
         REPO_ROOT,
       );
       if (result.status === 'success') {

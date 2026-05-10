@@ -645,7 +645,10 @@ describe('dispatchForLabel', () => {
       decisionSummaries: [{ kind: 'PLAN', summary: 'Test spec' }],
     };
     mockGetSourceForSlug.mockResolvedValue(source);
-    mockGetProject.mockResolvedValue({ id: 'goose-hub-self', budgets: { maxParallelAgents: 1 } });
+    mockGetProject.mockResolvedValue({
+      id: 'project-config-id',
+      budgets: { maxParallelAgents: 1 },
+    });
     mockGetUseM19Pipeline.mockReturnValue(true);
     mockGetEngineeringSpec.mockReturnValue({
       id: 1,
@@ -660,6 +663,8 @@ describe('dispatchForLabel', () => {
     const { dispatchForLabel } = await import('./dispatch.js');
     await dispatchForLabel('goose-hub-self', 694, 'factory:spec-ready');
 
+    expect(mockGetUseM19Pipeline).toHaveBeenCalledWith('project-config-id');
+    expect(mockGetEngineeringSpec).toHaveBeenCalledWith('goose-hub-self', item.id);
     expect(source.transitionState).toHaveBeenNthCalledWith(
       1,
       '694',
@@ -704,7 +709,10 @@ describe('dispatchForLabel', () => {
       comment: vi.fn().mockResolvedValue(undefined),
     };
     mockGetSourceForSlug.mockResolvedValue(source);
-    mockGetProject.mockResolvedValue({ id: 'goose-hub-self', budgets: { maxParallelAgents: 1 } });
+    mockGetProject.mockResolvedValue({
+      id: 'project-config-id',
+      budgets: { maxParallelAgents: 1 },
+    });
     mockGetUseM19Pipeline.mockReturnValue(true);
     mockGetEngineeringSpec.mockReturnValue(null);
 
@@ -764,7 +772,10 @@ describe('dispatchForLabel', () => {
       decisionSummaries: [{ kind: 'PLAN', summary: 'Test spec' }],
     };
     mockGetSourceForSlug.mockResolvedValue(source);
-    mockGetProject.mockResolvedValue({ id: 'goose-hub-self', budgets: { maxParallelAgents: 1 } });
+    mockGetProject.mockResolvedValue({
+      id: 'project-config-id',
+      budgets: { maxParallelAgents: 1 },
+    });
     mockGetUseM19Pipeline.mockReturnValue(true);
     mockGetEngineeringSpec.mockReturnValue({
       id: 1,
