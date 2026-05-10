@@ -27,6 +27,7 @@ const {
   updateCandidateStatus,
   updateCandidateGithubIssue,
   insertCandidate,
+  listRunsByPersona,
 } = await import('./repository.js');
 
 beforeEach(() => {
@@ -252,5 +253,49 @@ describe('insertCandidate', () => {
       suggestionType: 'skill-config',
     });
     expect(result).toEqual(inserted);
+  });
+});
+
+describe('listRunsByPersona', () => {
+  it('returns rows ordered by createdAt desc', () => {
+    const rows = [
+      {
+        id: 1,
+        runId: 'run-001',
+        personaId: 'proj/developer/0',
+        workItemId: 'github:owner/repo#1',
+        projectId: 'proj',
+        role: 'developer',
+        skill: 'fix-issue',
+        outcome: 'success',
+        createdAt: '2026-05-10T10:00:00Z',
+      },
+    ];
+    const all = vi.fn().mockReturnValue(rows);
+    const limit = vi.fn().mockReturnValue({ all });
+    const orderBy = vi.fn().mockReturnValue({ limit });
+    const where = vi.fn().mockReturnValue({ orderBy });
+    mockSelect.mockReturnValue({
+      from: vi.fn().mockReturnValue({ where }),
+    });
+
+    const result = listRunsByPersona('proj/developer/0');
+    expect(result).toEqual(rows);
+    expect(where).toHaveBeenCalled();
+    expect(orderBy).toHaveBeenCalled();
+    expect(limit).toHaveBeenCalledWith(50);
+  });
+
+  it('passes custom limit to the query', () => {
+    const all = vi.fn().mockReturnValue([]);
+    const limit = vi.fn().mockReturnValue({ all });
+    const orderBy = vi.fn().mockReturnValue({ limit });
+    const where = vi.fn().mockReturnValue({ orderBy });
+    mockSelect.mockReturnValue({
+      from: vi.fn().mockReturnValue({ where }),
+    });
+
+    listRunsByPersona('proj/developer/0', 10);
+    expect(limit).toHaveBeenCalledWith(10);
   });
 });

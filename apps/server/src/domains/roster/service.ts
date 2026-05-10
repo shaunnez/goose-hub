@@ -2,12 +2,13 @@ import { listProjectQualityTrend } from '@goose-hub/core/quality-score/repositor
 import type { RunQualityScore } from '@goose-hub/core/quality-score/types.js';
 import type { Result } from '#shared/middleware.js';
 import { getProject } from '#shared/projects.js';
-import type { ImprovementCandidateRow, PersonaNameRow, PersonaStat } from './repository.js';
+import type { AgentRunRow, ImprovementCandidateRow, PersonaNameRow, PersonaStat } from './repository.js';
 import {
   getCandidateById,
   listCandidatesByPersona,
   listPersonaNames,
   listPersonaStats,
+  listRunsByPersona,
   updateCandidateGithubIssue,
   updateCandidateStatus,
 } from './repository.js';
@@ -16,7 +17,7 @@ export interface PersonaRunDto {
   runId: string;
   workItemId: string | null;
   outcome: string;
-  qualityScore: number;
+  qualityScore: number | null;
   createdAt: string;
 }
 
@@ -43,10 +44,17 @@ export async function listPersonas(): Promise<Result<{ personas: PersonaStat[] }
 }
 
 export async function getPersonaRuns(
-  _personaName: string,
+  personaName: string,
 ): Promise<Result<{ runs: PersonaRunDto[] }>> {
-  // Per-run history table is added in a future issue; return empty for now.
-  return { ok: true, data: { runs: [] } };
+  const rows = listRunsByPersona(personaName);
+  const runs: PersonaRunDto[] = rows.map((r: AgentRunRow) => ({
+    runId: r.runId,
+    workItemId: r.workItemId,
+    outcome: r.outcome,
+    qualityScore: null,
+    createdAt: r.createdAt,
+  }));
+  return { ok: true, data: { runs } };
 }
 
 export async function getPersonaCandidates(

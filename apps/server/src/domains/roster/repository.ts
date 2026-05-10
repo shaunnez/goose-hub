@@ -1,6 +1,6 @@
 import { db } from '@goose-hub/core/db/db.js';
-import { improvementCandidates, personaNames, personaStats } from '@goose-hub/core/db/schema.js';
-import { and, asc, eq } from 'drizzle-orm';
+import { agentRuns, improvementCandidates, personaNames, personaStats } from '@goose-hub/core/db/schema.js';
+import { and, asc, desc, eq } from 'drizzle-orm';
 
 export interface PersonaStat {
   id: number;
@@ -32,6 +32,18 @@ export interface PersonaNameRow {
   personaId: string;
   codename: string;
   role: string;
+}
+
+export interface AgentRunRow {
+  id: number;
+  runId: string;
+  personaId: string;
+  workItemId: string | null;
+  projectId: string;
+  role: string;
+  skill: string;
+  outcome: string;
+  createdAt: string;
 }
 
 export async function listPersonaNames(): Promise<PersonaNameRow[]> {
@@ -122,4 +134,14 @@ export async function insertCandidate(data: {
 }): Promise<ImprovementCandidateRow> {
   const [row] = await db.insert(improvementCandidates).values(data).returning();
   return row;
+}
+
+export function listRunsByPersona(personaId: string, limit = 50): AgentRunRow[] {
+  return db
+    .select()
+    .from(agentRuns)
+    .where(eq(agentRuns.personaId, personaId))
+    .orderBy(desc(agentRuns.createdAt))
+    .limit(limit)
+    .all();
 }

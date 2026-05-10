@@ -43,12 +43,14 @@ const {
   mockUpdateCandidateStatus,
   mockGetCandidateById,
   mockUpdateCandidateGithubIssue,
+  mockListRunsByPersona,
 } = vi.hoisted(() => ({
   mockListPersonaStats: vi.fn(),
   mockListCandidatesByPersona: vi.fn(),
   mockUpdateCandidateStatus: vi.fn(),
   mockGetCandidateById: vi.fn(),
   mockUpdateCandidateGithubIssue: vi.fn(),
+  mockListRunsByPersona: vi.fn().mockReturnValue([]),
 }));
 
 vi.mock('./repository.js', () => ({
@@ -57,6 +59,7 @@ vi.mock('./repository.js', () => ({
   updateCandidateStatus: mockUpdateCandidateStatus,
   getCandidateById: mockGetCandidateById,
   updateCandidateGithubIssue: mockUpdateCandidateGithubIssue,
+  listRunsByPersona: mockListRunsByPersona,
 }));
 
 const { mockGetProject } = vi.hoisted(() => ({
@@ -108,11 +111,40 @@ describe('listPersonas', () => {
 });
 
 describe('getPersonaRuns', () => {
-  it('returns empty run history (no per-run table yet)', async () => {
+  it('returns empty array when no runs exist', async () => {
+    mockListRunsByPersona.mockReturnValue([]);
     const result = await getPersonaRuns('alice');
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.runs).toEqual([]);
+    }
+    expect(mockListRunsByPersona).toHaveBeenCalledWith('alice');
+  });
+
+  it('maps AgentRunRow to PersonaRunDto with qualityScore: null', async () => {
+    mockListRunsByPersona.mockReturnValue([
+      {
+        id: 1,
+        runId: 'run-xyz',
+        personaId: 'proj/developer/0',
+        workItemId: 'github:owner/repo#5',
+        projectId: 'proj',
+        role: 'developer',
+        skill: 'fix-issue',
+        outcome: 'success',
+        createdAt: '2026-05-10T10:00:00Z',
+      },
+    ]);
+    const result = await getPersonaRuns('proj/developer/0');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.runs).toHaveLength(1);
+      const run = result.data.runs[0];
+      expect(run.runId).toBe('run-xyz');
+      expect(run.workItemId).toBe('github:owner/repo#5');
+      expect(run.outcome).toBe('success');
+      expect(run.qualityScore).toBeNull();
+      expect(run.createdAt).toBe('2026-05-10T10:00:00Z');
     }
   });
 });
