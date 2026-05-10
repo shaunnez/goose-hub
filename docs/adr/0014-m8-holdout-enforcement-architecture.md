@@ -59,6 +59,16 @@ This module lives in `core/retry/retry-counter.ts` (not in any slice) so both `s
 - The retry counter includes the current run's event in its count (the just-appended `qa.completed` fires before the count check). This means: with `maxRetries=2`, the second consecutive failure triggers escalation. This is the intended behaviour (first fail → retry; second fail → escalate) and is documented in `slices/retry-escalate/README.md`.
 - `getQaVerdict` in `slices/review/workflow.ts` returns `undefined` for M8 scope. The Reviewer does not receive QA context as corroborating signal. A follow-up issue should be filed for M9 to read `qa.completed` from the event store.
 
+## 2026-05-10 Amendment — Internal split (M19.28)
+
+The original implementation placed `findHoldoutContextLeaks`, `HOLDOUT_FORBIDDEN_KEYS`, `renderManifest`, and `escapeXml` all inside `context-assembly.ts`. As the module grew with M19 dev-review keys, it was split into three co-located files to separate concerns while preserving the single-gateway invariant:
+
+- **`holdout-validator.ts`** — pure functions: `findHoldoutContextLeaks`, `findDisallowedKeys`, constants `HOLDOUT_FORBIDDEN_KEYS` and `SYSTEM_KEYS`. No side effects. No event emission.
+- **`context-renderer.ts`** — pure XML rendering: `renderContext(context, allowlist): string`. No governance knowledge — takes pre-filtered inputs.
+- **`context-assembly.ts`** — thin composer. The only module that imports from both sub-modules and the only place that calls `eventStore`. Re-exports `findHoldoutContextLeaks` and `HOLDOUT_FORBIDDEN_KEYS` for backward compatibility with existing callers.
+
+`assembleSpawnContext` remains the sole public gateway. Callers outside `core/agent-runtime/` must not import `holdout-validator` or `context-renderer` directly. The `effectiveAllowlist` and `effectiveContext` helpers are lifted to named private functions in the composer to avoid duplicated filtering logic.
+
 ## Alternatives Considered
 
 **Alternative A: Enforce at the CC spawn layer** — reject the spawn call itself if disallowed keys are present. Rejected: too late in the pipeline; the rendering layer is the correct gate since it is the only place all context is assembled.
