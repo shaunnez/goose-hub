@@ -112,4 +112,16 @@ describe('findDisallowedKeys', () => {
     const result = findDisallowedKeys({ workItem: { title: 'T', body: 'B' } }, ['workItem.title']);
     expect(result).not.toContain('workItem');
   });
+
+  it('flags dotted-allowlist key when value is scalar (projection impossible)', () => {
+    // workItem is a scalar — renderContext cannot project workItem.title, so
+    // this key must still be flagged as disallowed (governance regression guard).
+    const result = findDisallowedKeys({ workItem: 'plain string' }, ['workItem.title']);
+    expect(result).toContain('workItem');
+  });
+
+  it('flags dotted-allowlist key when value is null', () => {
+    const result = findDisallowedKeys({ workItem: null }, ['workItem.title']);
+    expect(result).toContain('workItem');
+  });
 });
