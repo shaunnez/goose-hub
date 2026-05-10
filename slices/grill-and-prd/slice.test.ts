@@ -15,7 +15,10 @@ import type { AgentResult, AgentRuntime } from '@goose-hub/core/agent-runtime/in
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { InMemoryLabelsSource } from '@goose-hub/core/state-source/in-memory-labels.js';
 import type { Priority } from '@goose-hub/core/state-source/interface.js';
-import { runGrillAndPrdWorkflow } from '@goose-hub/core/workflows/grill-and-prd.js';
+import {
+  type RunGrillAndPrdInput,
+  runGrillAndPrdWorkflow,
+} from '@goose-hub/core/workflows/grill-and-prd.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
@@ -1002,7 +1005,7 @@ describe('grill-and-prd: codex review hardening', () => {
       stateSource: source,
       projectId,
       priorReplies,
-      priorPrd: validPRD() as unknown as import('@goose-hub/core/workflows/grill-and-prd.js').RunGrillAndPrdInput['priorPrd'],
+      priorPrd: validPRD() as unknown as RunGrillAndPrdInput['priorPrd'],
       humanConcerns: ['Tighten the audience scope.'],
       deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
     });
