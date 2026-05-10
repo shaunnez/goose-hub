@@ -79,6 +79,7 @@ export type EventKind =
   // M13.05 grill-and-prd workflow lifecycle
   | 'grill.question-posted'
   | 'grill.completed'
+  | 'grill.decision-crystallized'
   | 'prd.drafted'
   | 'prd.advisor-skipped'
   // M13.08 PRD review actions (UI-driven approve / reject)

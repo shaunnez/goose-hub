@@ -84,6 +84,33 @@ function extractAdrMeta(
   return { title, status, oneLiner };
 }
 
+/**
+ * Walk the event-store crystallizations for a work item and attach each
+ * decision to its corresponding `agent` entry in priorReplies. Round N's
+ * crystallization decorates the Nth agent entry (1-indexed).
+ */
+function augmentPriorRepliesWithCrystallizations(
+  priorReplies: Array<{ role: 'user' | 'agent'; content: string; crystallized?: string }>,
+  projectId: string,
+  workItemId: string,
+): Array<{ role: 'user' | 'agent'; content: string; crystallized?: string }> {
+  const events = eventStore.replay({ projectId, workItemId });
+  const byRound = new Map<number, string>();
+  for (const ev of events) {
+    if (ev.kind !== 'grill.decision-crystallized') continue;
+    const payload = ev.payload as { roundNumber?: number; decision?: string };
+    if (typeof payload.roundNumber !== 'number' || typeof payload.decision !== 'string') continue;
+    byRound.set(payload.roundNumber, payload.decision);
+  }
+  let agentIdx = 0;
+  return priorReplies.map((entry) => {
+    if (entry.role !== 'agent') return entry;
+    agentIdx += 1;
+    const decision = byRound.get(agentIdx);
+    return decision != null ? { ...entry, crystallized: decision } : entry;
+  });
+}
+
 export async function buildProjectContextBundle(localPath: string): Promise<ProjectContextBundle> {
   const expanded = localPath.startsWith('~/')
     ? join(process.env.HOME ?? '/root', localPath.slice(2))
@@ -325,10 +352,18 @@ export async function runGrillAndPrdWorkflow(
   let grillPhaseReturn: GrillAndPrdResult | null = null;
   let refinedIntentForPrd: string | null = null;
 
+  // Augment priorReplies with crystallizations from the event store. Hoisted
+  // outside try/finally so the post-finally write-prd call can re-augment.
+  const augmentedPriorReplies = augmentPriorRepliesWithCrystallizations(
+    priorReplies,
+    projectId,
+    workItem.id,
+  );
+
   try {
     // Round-number is 1-indexed and counts how many times grill-me has produced
     // a question in the conversation so far, plus one (the round we're about to run).
-    const roundNumber = priorReplies.filter((r) => r.role === 'agent').length + 1;
+    const roundNumber = augmentedPriorReplies.filter((r) => r.role === 'agent').length + 1;
 
     // ─── Step 1: grill-me ──────────────────────────────────────────────────
     const grillerPersona = selectPersona(projectId, 'griller');
@@ -357,7 +392,7 @@ export async function runGrillAndPrdWorkflow(
             body: workItem.body,
             number: Number(workItem.externalId),
           },
-          priorReplies,
+          priorReplies: augmentedPriorReplies,
           roundNumber,
           projectContext: fullProjectContext,
           worktreePath,
@@ -426,6 +461,25 @@ export async function runGrillAndPrdWorkflow(
     }
 
     if (grillOutput != null) {
+      // Persist the crystallized decision from the previous Q+A round (if present).
+      // roundNumber is the current round; the crystallizedDecision describes round N-1.
+      if (
+        typeof grillOutput.crystallizedDecision === 'string' &&
+        grillOutput.crystallizedDecision.trim() !== '' &&
+        roundNumber > 1
+      ) {
+        eventStore.appendEvent({
+          kind: 'grill.decision-crystallized',
+          projectId,
+          workItemId: workItem.id,
+          runId,
+          payload: {
+            roundNumber: roundNumber - 1,
+            decision: grillOutput.crystallizedDecision.trim(),
+          },
+        });
+      }
+
       // Emit any decision summaries the griller produced this round.
       for (const ds of grillOutput.decisionSummaries) {
         eventStore.appendEvent({
@@ -548,6 +602,11 @@ export async function runGrillAndPrdWorkflow(
     totalSpendForSkill,
     fullProjectContext,
     refinedIntent: refinedIntentForPrd ?? workItem.title,
+    priorReplies: augmentPriorRepliesWithCrystallizations(
+      augmentedPriorReplies,
+      projectId,
+      workItem.id,
+    ),
   });
 }
 
@@ -563,6 +622,7 @@ interface WritePrdStepInput {
   refinedIntent: string;
   priorPrd?: PRDOutput;
   humanConcerns?: string[];
+  priorReplies?: Array<{ role: 'user' | 'agent'; content: string; crystallized?: string }>;
 }
 
 async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdResult> {
@@ -578,6 +638,7 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
     refinedIntent,
     priorPrd,
     humanConcerns,
+    priorReplies,
   } = input;
 
   // ─── Step 2: write-prd ──────────────────────────────────────────────────
@@ -626,6 +687,7 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
         refinedIntent,
         priority: workItem.priority,
         projectContext: fullProjectContext,
+        ...(priorReplies != null ? { priorReplies } : {}),
         ...(priorPrd != null ? { priorPrd } : {}),
         ...(humanConcerns != null ? { humanConcerns } : {}),
       },
@@ -636,6 +698,7 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
         'refinedIntent',
         'priority',
         'projectContext',
+        'priorReplies',
         'priorPrd',
         'humanConcerns',
       ],
