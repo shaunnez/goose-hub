@@ -306,7 +306,8 @@ Steps:
 6. New settings UI section (`ReviewPanel.tsx`): slot count toggle + per-slot model + per-slot prompt selector. Persist to DB.
 7. New server route GET/PATCH `/projects/:slug/settings/review`.
 8. Holdout invariant preserved across both reviewers regardless of provider.
-9. **Close M19.13** as duplicate with comment pointing to M19.20.
+9. **Fix concrete budget bug**: extract shared `buildReviewSpec()` helper between single + convergent paths. Currently convergent uses `resolveBudgets(...)` (skill-scoped, skips DB model overrides) while single uses project-aware budget resolution. Both must use project-aware path so DB model overrides apply uniformly. ~50 LOC.
+10. **Close M19.13** as duplicate with comment pointing to M19.20.
 
 Acceptance:
 - [ ] `readPromptWithContext()` accepts optional variant; loads `prompt.<variant>.md` cleanly.
@@ -317,6 +318,8 @@ Acceptance:
 - [ ] Holdout context boundary holds for both providers.
 - [ ] Auth-topic minRounds=3 still honoured.
 - [ ] Test: 1 claude + 1 codex reviewer, divergent verdicts → escalate to `factory:needs-human`.
+- [ ] Shared `buildReviewSpec()` helper extracted; both single + convergent paths use it.
+- [ ] DB model overrides apply to convergent reviewer slots (regression test against existing single-reviewer DB-override test).
 - [ ] M19.13 closed with cross-reference comment.
 
 ### M19.21 — quality-score wired + auto-merge gate inside approve action (was M19.08)
