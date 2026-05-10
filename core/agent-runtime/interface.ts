@@ -78,6 +78,9 @@ export interface AgentRuntime {
 
 export interface SkillConfig {
   contextSchema: ZodType;
+  /** Zod schema for validating the agent's JSON output. When present, invokeSkill validates
+   * post-run and throws OutputValidationError on mismatch. Skills progressively opt in. */
+  outputSchema?: ZodType;
   toolBundles: string[];
   modelPin: ModelTier;
   /** Provider that executes this skill. Defaults to 'claude' when absent. */

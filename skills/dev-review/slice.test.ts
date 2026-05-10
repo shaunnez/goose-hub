@@ -181,7 +181,7 @@ describe('holdout context-exclusion guard for dev-review keys', () => {
       freshContext: true,
       toolBundles: [],
       toolExtras: [],
-      budgets: { maxTurns: 10, maxBudgetUsd: 0.5 },
+      budgets: { maxTurns: 10, maxBudgetUsd: 0.5, timeoutMs: 30_000 },
       personaId: `p/${role}/0`,
       ...overrides,
     };

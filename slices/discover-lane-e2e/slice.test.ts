@@ -586,7 +586,7 @@ describe('Discover Lane end-to-end integration', () => {
       freshContext: true,
       toolBundles: ['core'],
       toolExtras: [],
-      budgets: { maxTurns: 10, maxBudgetUsd: 0.5 },
+      budgets: { maxTurns: 10, maxBudgetUsd: 0.5, timeoutMs: 30_000 },
       personaId: `${projectId}/retrospector/0`,
       modelOverride: 'sonnet',
     });
