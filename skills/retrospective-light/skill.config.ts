@@ -26,6 +26,7 @@ const config: SkillConfig = {
     'runSummary.role',
     'runSummary.outcome',
     'runSummary.decisionSummaries',
+    'activePersonas',
   ],
   toolBundles: ['core'],
   modelPin: 'sonnet',

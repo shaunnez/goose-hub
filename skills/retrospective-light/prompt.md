@@ -41,6 +41,11 @@ For each candidate, populate **only** these fields:
 - `confidence` — `low | medium | high`
 - `evidence` (optional) — short phrase pointing at the decision summary that surfaced it
 - `proposedDiff` (optional) — fenced diff if obvious
+- `sourcePersonaId` (optional) — set to the persona ID from `<active_personas>` whose role best matches the candidate's `kind`. Use this mapping:
+  - `skill-prompt`, `skill-schema`, `skill-config` → match on `targetPath` (e.g., path contains `skills/developer/` → developer persona ID from `<active_personas>`)
+  - `workflow`, `project-config` → first persona ID from `<active_personas>` with role `developer`
+  - `persona` → the persona ID being described, if present in `<active_personas>`
+  - When ambiguous or `<active_personas>` is empty, omit — orchestrator falls back to retrospector ID
 
 Do not emit `file`, `action`, `sourceRunId`, `sourceProject`, or `sourceWorkItem`. The orchestrator injects provenance.
 
