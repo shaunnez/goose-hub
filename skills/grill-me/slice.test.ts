@@ -139,6 +139,43 @@ describe('grill-me schema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts crystallizedDecision when readyForPRD is false', () => {
+    const result = GrillMeOutputSchema.safeParse({
+      questions: [
+        {
+          text: 'Is the export CSV-only or also JSON?',
+          recommendedAnswer: 'CSV-only per CONTEXT.md export convention.',
+        },
+      ],
+      refinedIntent: 'Add an admin-only audit-log export.',
+      readyForPRD: false,
+      crystallizedDecision: 'Audience: admin users only.',
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Crystallized audience.' }],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts crystallizedDecision when readyForPRD is true', () => {
+    const result = GrillMeOutputSchema.safeParse({
+      questions: [],
+      refinedIntent: 'Add an admin-only audit-log CSV export.',
+      readyForPRD: true,
+      crystallizedDecision: 'Format: CSV-only with date-range filter.',
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Final crystallization.' }],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts output without crystallizedDecision (round 1)', () => {
+    const result = GrillMeOutputSchema.safeParse({
+      questions: [{ text: 'What audience?' }],
+      refinedIntent: 'Build a thing.',
+      readyForPRD: false,
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Round 1 ask.' }],
+    });
+    expect(result.success).toBe(true);
+  });
+
   it('zod toJSONSchema roundtrip produces valid JSON Schema object', () => {
     const jsonSchema = toJSONSchema(GrillMeOutputSchema);
     expect(typeof jsonSchema).toBe('object');
