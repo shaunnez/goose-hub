@@ -121,15 +121,15 @@ Steps:
 2. Pass results into QA agent context as `deterministicTierResults`. QA skill schema validates: `qaOutput.tierResults[X].passed === deterministicTierResults[X].passed` — agent cannot disagree with ground truth.
 3. Failure paths:
    - Tier 1/2 fail → `factory:needs-fix` (skip QA agent — no point).
-   - Tier 3 fail → respect `regressionPolicy`: 'escalate' (default), 'ignore' (continue with warning), 'revert' (TODO: implement or remove from ADR).
-4. Decide on `'revert'` policy: implement or document as no-op + remove from `RegressionPolicy` type. Recommend remove now, file separate issue if needed later.
+   - Tier 3 fail → respect `regressionPolicy`: 'escalate' (default) or 'ignore' (continue with warning).
+4. **`'revert'` policy removed** — was decorative no-op. Update `RegressionPolicy` type to `'escalate' | 'ignore'`. Amend ADR 0032 with removal rationale. File separate future issue if auto-revert genuinely wanted (with proper design — atomic rollback + blame attribution).
 5. Test fixture parity: existing QA tests must keep passing — tier results now come from deterministic source, agent is consumer.
 
 Acceptance:
 - [ ] Deterministic tiers run before QA agent invocation.
 - [ ] QA schema validation rejects tier-result disagreement with ground truth.
 - [ ] Tier 1/2 fail short-circuits — QA agent not called.
-- [ ] `regressionPolicy: 'revert'` either implemented (with test) or removed from type union.
+- [ ] `regressionPolicy: 'revert'` removed from type union; ADR 0032 amended.
 - [ ] Existing QA event stream (`qa.completed` etc) unchanged for downstream consumers.
 - [ ] `slices/three-tier-verify/` either repurposed (now wired) or formally deleted with ADR amendment. Decide in this PR.
 
@@ -211,21 +211,42 @@ Acceptance:
 - [ ] Autonomy gate fires on `audit_score < 60` (test).
 - [ ] UI series renders with sample data.
 
-### M19.23 — record-decision MCP exposure + reconciliation (was M19.06)
+### M19.23a — MCP server for tool-layer
 
-Files: MCP server (`core/tool-layer/mcp-server.ts` if exists, else build), skill configs, `core/agent-runtime/runtime.ts`.
+**Precondition for M19.23.** No MCP server currently exposes `core/tool-layer/tools/*.ts` to agents.
+
+Files: new `core/tool-layer/mcp-server.ts`, runtime config in `core/agent-runtime/claude-cli.ts` (and `codex-cli.ts` for parity if Codex supports MCP).
 
 Steps:
-1. **Determine MCP server status first.** Check `core/tool-layer/README.md:40` claim. If MCP server doesn't exist as infrastructure, this issue grows scope: build minimal MCP server exposing tools-as-MCP-tools. If it exists, just add `record_decision` tool registration. **Outcome of this check determines whether to split into 2 issues.**
-2. Add `'decision-record-only'` to `toolBundles` in: implement-wp, implement, investigate, spec-author, dev-review, retrospective-deep. Default-on for all non-holdout skills (simpler than per-skill opt-in; holdouts strip via existing allowlist logic).
-3. End-of-run reconciliation: in `core/agent-runtime/runtime.ts` where `agent.run-completed` fires, call `readRunDecisions(runId)`. Prefer DB rows over schema-field `decisionSummaries` when both present.
-4. Pass iteration + phase from run context (`runtime.run({iteration, phase})` → tool wrapper closure captures and writes alongside each `recordDecision` call).
-5. Gate on `experimental.recordDecisionTool` — flag default false until validated.
+1. Build minimal stdio MCP server. Registers each tool from `core/tool-layer/tools/*.ts` as an MCP tool with proper JSON schema input + output.
+2. Generate MCP config at runtime spawn time per skill: filter tools to those in the skill's `toolBundles` resolved allowlist.
+3. Pass `--mcp-config <path>` to Claude CLI. Same path for Codex if Codex CLI supports MCP (verify; if not, document as Claude-only for now).
+4. Holdout enforcement: strip `decision-record-only` bundle from holdout roles BEFORE generating MCP config (use existing `core/tool-layer/allowlist.ts` strip logic).
+5. Tests: spawn agent with mock skill including `decision-record-only` bundle → agent successfully calls `record_decision`. Holdout role → tool absent from MCP config.
 
 Acceptance:
-- [ ] MCP server status documented; if needed, server built or scope-split.
-- [ ] Live agent calls `record_decision` (integration test).
-- [ ] Holdout roles (qa, reviewer, code-quality-audit) cannot (test).
+- [ ] MCP server registers all `core/tool-layer/tools/*.ts` exports.
+- [ ] Per-spawn MCP config filtered by skill's resolved tool allowlist.
+- [ ] Claude CLI receives `--mcp-config`.
+- [ ] Codex CLI parity OR documented as Claude-only.
+- [ ] Holdout role MCP config excludes record-decision (test).
+- [ ] Live integration test: agent run invokes `record_decision`, row appears in DB.
+
+### M19.23b — record-decision wired (was M19.06)
+
+Depends on M19.23a.
+
+Files: skill configs (multiple), `core/agent-runtime/runtime.ts`.
+
+Steps:
+1. Add `'decision-record-only'` to `toolBundles` in: implement-wp, implement, investigate, spec-author, dev-review, retrospective-deep. Default-on for all non-holdout skills.
+2. End-of-run reconciliation: in `core/agent-runtime/runtime.ts` where `agent.run-completed` fires, call `readRunDecisions(runId)`. Prefer DB rows over schema-field `decisionSummaries` when both present.
+3. Pass iteration + phase from run context (`runtime.run({iteration, phase})` → tool wrapper closure captures and writes alongside each `recordDecision` call).
+4. Gate on `experimental.recordDecisionTool` — flag default false until validated.
+
+Acceptance:
+- [ ] Live agent calls `record_decision` from a real workflow (not just integration test).
+- [ ] Holdout roles cannot (test, complementing M19.23a).
 - [ ] End-of-run reconciliation prefers DB rows over schema field.
 - [ ] Iteration + phase captured during real run.
 - [ ] Flag default false; flipping it gates bundle inclusion.
@@ -289,12 +310,14 @@ Pre-req: all M19.14-25 merged + green.
 
 Steps:
 1. Pick a small bug-fix issue on `goose-hub-self` as canary.
-2. Flip `experimental.useM19Pipeline: true` in `goose-hub-self/project.config.ts`.
-3. Run canary issue end-to-end. Watch event stream.
-4. Verify all landmarks: `agent.investigate-complete` (with swarm events), `spec.completed`, `agent.implement-complete` per WP, deterministic tier events, `qa.completed` with tier results from ground truth, `review.completed`, retro with QualityScore, ImprovementCandidate emitted if applicable.
-5. If clean, leave on. If not, flip off, file regression issues per failure.
+2. Set monthly cost cap to **$2000** for `goose-hub-self` before flipping (see Cost Caps section).
+3. Flip `experimental.useM19Pipeline: true` in `goose-hub-self/project.config.ts`.
+4. Run canary issue end-to-end. Watch event stream.
+5. Verify all landmarks: `agent.investigate-complete` (with swarm events), `spec.completed`, `agent.implement-complete` per WP, deterministic tier events, `qa.completed` with tier results from ground truth, `review.completed`, retro with QualityScore, ImprovementCandidate emitted if applicable.
+6. If clean, leave on. If not, flip off, file regression issues per failure.
 
 Acceptance:
+- [ ] Cost cap of $2000/month enforced before flag flip.
 - [ ] Canary issue completes through full M19 pipeline.
 - [ ] All event-stream landmarks present.
 - [ ] No fallback to legacy path during canary.
@@ -302,7 +325,9 @@ Acceptance:
 
 ### Legacy path removal — deferred
 
-After ≥30 days stable on goose-hub-self (or 5 successful canaries — pick one as criterion):
+**Criterion: 10 successful M19-pipeline issues end-to-end on goose-hub-self with zero legacy fallback events.** Run-based, no calendar floor.
+
+When met:
 - File new milestone issue: remove `runFixIssueWorkflow`, single-reviewer `runReviewWorkflow`, dead helpers.
 - NOT done in M19. Escape hatch stays.
 
@@ -321,14 +346,15 @@ M19.18: parallel-implement wired                     (P1.C, depends M19.14 + M19
 M19.19: deterministic 3-tier verify before QA       (P2.A, depends M19.18 indirectly — no spec means no tier 1)
 M19.20: convergent review configurable               (P2.B, depends M19.14, parallel with 19.19)
 M19.21: quality-score aggregate + auto-merge gate   (P2.C, depends M19.18 + M19.19 + M19.20)
-M19.22: code-quality-audit wired                     (P3.A, depends M19.21)
-M19.23: record-decision MCP + reconciliation        (P3.B, depends M19.14, parallel with 19.22)
-M19.24: Codex hook normalisation                     (P4.A, no deps, parallel anytime)
-M19.25: dev-review opt-in + maxRevisionTurns        (P4.B, depends M19.18)
-M19.26: canary flip on goose-hub-self                (P5, depends ALL above)
+M19.22:  code-quality-audit wired                    (P3.A, depends M19.21)
+M19.23a: MCP server for tool-layer                   (P3.B-pre, no deps, parallel anytime)
+M19.23b: record-decision wired                       (P3.B, depends M19.14 + M19.23a)
+M19.24:  Codex hook normalisation                    (P4.A, no deps, parallel anytime)
+M19.25:  dev-review opt-in + maxRevisionTurns        (P4.B, depends M19.18)
+M19.26:  canary flip on goose-hub-self               (P5, depends ALL above)
 ```
 
-13 follow-up issues total. M19.13 (Codex holdout review) stays open separately — defer per existing decision.
+14 follow-up issues total. M19.13 (Codex holdout review) stays open separately — defer per existing decision.
 
 ---
 
@@ -339,7 +365,7 @@ M19.26: canary flip on goose-hub-self                (P5, depends ALL above)
 - **M19.23 MCP server scope unknown.** Could be 1 issue or 2 depending on existing infrastructure. Investigate first as a sub-task before locking the issue body.
 - **M19.21 RunArtifacts assembly.** Building components from event stream requires iterating events and counting findings by priority. Add helper in `core/quality-score/build-artifacts.ts`. Test against fixture event streams.
 - **Workspace persistence.** spec.json + scout-reports live in workspace dir which is ephemeral. If workspace destroyed mid-cycle, cycle restarts from `factory:dev-ready`. Acceptable since workspaces are workflow boundaries per FACTORY_RULES, but document.
-- **Cost cap during repair.** Each phase compounds cost. Set per-project monthly cap for `goose-hub-self` before P5 canary, monitor.
+- **Cost cap during repair.** $2000/month cap for `goose-hub-self`. Enforced before P5 canary flip. Monitor cost telemetry from M19.16 (swarm) onward — biggest spike risk.
 
 ---
 

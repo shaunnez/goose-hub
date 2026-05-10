@@ -571,7 +571,7 @@ async function runEvidencePost(input: RunEvidencePostInput): Promise<void> {
 
   const evidenceRunId = crypto.randomUUID();
   const projectConfig = await getProjectBySlug(input.projectId);
-  const [webPort, apiPort] = await Promise.all([findFreePort(), findFreePort()]);
+  const webPort = await findFreePort();
   try {
     const result = await input.runtime.run({
       runId: evidenceRunId,
