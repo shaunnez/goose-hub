@@ -1,0 +1,1 @@
+ALTER TABLE `project_settings` ADD `use_m19_pipeline` integer;

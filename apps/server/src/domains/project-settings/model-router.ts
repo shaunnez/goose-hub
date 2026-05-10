@@ -12,6 +12,10 @@ import {
   writeComplexityOverrides,
   writeRoleModelSetting,
 } from '@goose-hub/core/db/repositories/project-model-settings.js';
+import {
+  getUseM19Pipeline,
+  setUseM19Pipeline,
+} from '@goose-hub/core/db/repositories/project-settings.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { parseBody } from '#shared/middleware.js';
@@ -215,6 +219,42 @@ router.patch('/:slug/settings/dev-review', async (c) => {
   }
 
   writeProjectDevReviewSettings(project.id, parsed.data, 'ui');
+  return c.json({ ok: true });
+});
+
+// ─── M19 pipeline flag (M19.14) ──────────────────────────────────────────────
+
+const PipelinePatchSchema = z.object({
+  useM19Pipeline: z.boolean(),
+});
+
+/** GET /projects/:slug/settings/pipeline — current useM19Pipeline flag value */
+router.get('/:slug/settings/pipeline', async (c) => {
+  const slug = c.req.param('slug');
+  const project = await getProject(slug);
+  if (project == null) return c.json({ error: 'project not found' }, 404);
+
+  return c.json({
+    projectId: project.id,
+    useM19Pipeline: getUseM19Pipeline(project.id),
+  });
+});
+
+/** PATCH /projects/:slug/settings/pipeline — toggle useM19Pipeline */
+router.patch('/:slug/settings/pipeline', async (c) => {
+  const slug = c.req.param('slug');
+  const project = await getProject(slug);
+  if (project == null) return c.json({ error: 'project not found' }, 404);
+
+  const body = await parseBody<unknown>(c);
+  if (!body.ok) return body.error;
+
+  const parsed = PipelinePatchSchema.safeParse(body.data);
+  if (!parsed.success) {
+    return c.json({ error: 'invalid body', details: parsed.error.issues }, 422);
+  }
+
+  setUseM19Pipeline(project.id, parsed.data.useM19Pipeline, 'ui');
   return c.json({ ok: true });
 });
 

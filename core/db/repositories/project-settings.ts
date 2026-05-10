@@ -1,4 +1,5 @@
 import { and, eq } from 'drizzle-orm';
+import { logger } from '../../logger.js';
 import { db } from '../db.js';
 import { projectSettings, projectSkillSettings } from '../schema.js';
 
@@ -13,6 +14,7 @@ export type GlobalBudgetPatch = {
   maxParallelAgents?: number | null;
   maxRetries?: number | null;
   perBashCommandMaxSeconds?: number | null;
+  useM19Pipeline?: number | null;
 };
 
 export type SkillBudgetPatch = {
@@ -28,6 +30,26 @@ export function readProjectSettings(projectId: string): ProjectSettingsRow | nul
     .where(eq(projectSettings.projectId, projectId))
     .all();
   return rows[0] ?? null;
+}
+
+export function deriveUseM19Pipeline(row: ProjectSettingsRow | null): boolean {
+  return row?.useM19Pipeline === 1;
+}
+
+export function getUseM19Pipeline(projectId: string): boolean {
+  try {
+    return deriveUseM19Pipeline(readProjectSettings(projectId));
+  } catch (err) {
+    logger.warn('getUseM19Pipeline: read failed, defaulting to false', {
+      projectId,
+      error: String(err),
+    });
+    return false;
+  }
+}
+
+export function setUseM19Pipeline(projectId: string, enabled: boolean, by: string): void {
+  writeProjectSettings(projectId, { useM19Pipeline: enabled ? 1 : 0 }, by);
 }
 
 export function readProjectSkillSettings(projectId: string): Map<string, ProjectSkillSettingsRow> {

@@ -663,3 +663,21 @@ export async function patchDevReviewSettings(
 ): Promise<void> {
   await patchJson(`/projects/${slug}/settings/dev-review`, patch);
 }
+
+// ─── Pipeline flag (M19.14) ──────────────────────────────────────────────────
+
+export interface PipelineSettingsDto {
+  projectId: string;
+  useM19Pipeline: boolean;
+}
+
+export async function fetchPipelineSettings(
+  slug: string,
+  signal?: AbortSignal,
+): Promise<PipelineSettingsDto> {
+  return getJson<PipelineSettingsDto>(`/projects/${slug}/settings/pipeline`, signal);
+}
+
+export async function patchPipelineSettings(slug: string, useM19Pipeline: boolean): Promise<void> {
+  await patchJson(`/projects/${slug}/settings/pipeline`, { useM19Pipeline });
+}

@@ -4,11 +4,12 @@ import type { ProjectConfigDto } from '@/lib/types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
+import { PipelinePanel } from './PipelinePanel';
 import { ProjectBudgetPanel } from './ProjectBudgetPanel';
 import { ProjectConfigPanel } from './ProjectConfigPanel';
 import { ProjectModelPanel } from './ProjectModelPanel';
 
-type Tab = 'config' | 'budgets' | 'models';
+type Tab = 'config' | 'budgets' | 'models' | 'pipeline';
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
@@ -89,7 +90,7 @@ export function SettingsPage() {
 
         {/* Tab bar */}
         <div className="flex gap-1 mb-6 border-b border-line">
-          {(['config', 'budgets', 'models'] as Tab[]).map((t) => (
+          {(['config', 'budgets', 'models', 'pipeline'] as Tab[]).map((t) => (
             <button
               key={t}
               type="button"
@@ -114,6 +115,9 @@ export function SettingsPage() {
         )}
         {tab === 'models' && selectedConfig != null && (
           <ProjectModelPanel slug={selectedConfig.slug} />
+        )}
+        {tab === 'pipeline' && selectedConfig != null && (
+          <PipelinePanel slug={selectedConfig.slug} />
         )}
 
         {!isLoading && !error && configs.length === 0 && (
