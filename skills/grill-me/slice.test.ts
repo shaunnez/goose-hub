@@ -195,10 +195,6 @@ describe('grill-me skill config', () => {
     expect(config.role).toBe('griller');
   });
 
-  it('has toolBundles containing core', () => {
-    expect(config.toolBundles).toContain('core');
-  });
-
   it('is pinned to sonnet model', () => {
     expect(config.modelPin).toBe('sonnet');
   });
@@ -233,6 +229,7 @@ describe('grill-me skill config', () => {
       ],
       roundNumber: 2,
       projectContext: validProjectContext,
+      worktreePath: '/tmp/wt/test',
     });
     expect(result.success).toBe(true);
   });
@@ -247,6 +244,7 @@ describe('grill-me skill config', () => {
       priorReplies: [],
       roundNumber: 1,
       projectContext: validProjectContext,
+      worktreePath: '/tmp/wt/test',
     });
     expect(result.success).toBe(true);
   });
@@ -283,5 +281,52 @@ describe('grill-me skill config', () => {
       roundNumber: 1,
     });
     expect(result.success).toBe(false);
+  });
+
+  it('uses the read tool bundle (sandboxed read/search/work-item-read)', () => {
+    expect(config.toolBundles).toEqual(['read']);
+  });
+
+  it('contextAllowlist includes worktreePath', () => {
+    expect(config.contextAllowlist).toContain('worktreePath');
+  });
+
+  it('contextSchema accepts a worktreePath', () => {
+    const result = GrillMeContextSchema.safeParse({
+      workItem: { title: 'T', body: 'B', number: 1 },
+      priorReplies: [],
+      roundNumber: 1,
+      projectContext: validProjectContext,
+      worktreePath: '/tmp/wt/run-abc',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('contextSchema rejects missing worktreePath', () => {
+    const result = GrillMeContextSchema.safeParse({
+      workItem: { title: 'T', body: 'B', number: 1 },
+      priorReplies: [],
+      roundNumber: 1,
+      projectContext: validProjectContext,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('contextSchema accepts crystallized field on agent priorReplies entries', () => {
+    const result = GrillMeContextSchema.safeParse({
+      workItem: { title: 'T', body: 'B', number: 1 },
+      priorReplies: [
+        {
+          role: 'agent',
+          content: 'Round 1 — what audience?',
+          crystallized: 'Audience: admins.',
+        },
+        { role: 'user', content: 'Admins only.' },
+      ],
+      roundNumber: 2,
+      projectContext: validProjectContext,
+      worktreePath: '/tmp/wt/run-abc',
+    });
+    expect(result.success).toBe(true);
   });
 });
