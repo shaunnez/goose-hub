@@ -7,6 +7,11 @@ import {
   writeProjectDevReviewSettings,
 } from '@goose-hub/core/db/repositories/project-dev-review-settings.js';
 import {
+  parseReviewerSlots,
+  readProjectReviewSettings,
+  writeProjectReviewSettings,
+} from '@goose-hub/core/db/repositories/project-review-settings.js';
+import {
   deleteRoleModelSetting,
   readProjectModelSettings,
   writeComplexityOverrides,
@@ -219,6 +224,50 @@ router.patch('/:slug/settings/dev-review', async (c) => {
   }
 
   writeProjectDevReviewSettings(project.id, parsed.data, 'ui');
+  return c.json({ ok: true });
+});
+
+// ─── Review settings (M19.20) ────────────────────────────────────────────────
+
+const ReviewerSlotSchema = z.object({
+  model: z.enum(['claude', 'codex']),
+  prompt: z.enum(['default', 'unconstrained']),
+});
+
+const ReviewPatchSchema = z.object({
+  reviewerSlots: z.array(ReviewerSlotSchema).min(1).max(2).nullable().optional(),
+});
+
+/** GET /projects/:slug/settings/review — current reviewer slot configuration */
+router.get('/:slug/settings/review', async (c) => {
+  const slug = c.req.param('slug');
+  const project = await getProject(slug);
+  if (project == null) return c.json({ error: 'project not found' }, 404);
+
+  const dbRow = readProjectReviewSettings(project.id);
+  return c.json({
+    projectId: project.id,
+    reviewerSlots: parseReviewerSlots(dbRow) ?? null,
+    updatedAt: dbRow?.updatedAt ?? null,
+    updatedBy: dbRow?.updatedBy ?? null,
+  });
+});
+
+/** PATCH /projects/:slug/settings/review — upsert reviewer slot configuration */
+router.patch('/:slug/settings/review', async (c) => {
+  const slug = c.req.param('slug');
+  const project = await getProject(slug);
+  if (project == null) return c.json({ error: 'project not found' }, 404);
+
+  const body = await parseBody<unknown>(c);
+  if (!body.ok) return body.error;
+
+  const parsed = ReviewPatchSchema.safeParse(body.data);
+  if (!parsed.success) {
+    return c.json({ error: 'invalid body', details: parsed.error.issues }, 422);
+  }
+
+  writeProjectReviewSettings(project.id, { reviewerSlots: parsed.data.reviewerSlots ?? null }, 'ui');
   return c.json({ ok: true });
 });
 

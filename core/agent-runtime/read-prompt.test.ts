@@ -19,19 +19,19 @@ beforeAll(() => {
 
 describe('readPromptWithContext', () => {
   it('returns base prompt when no project context exists', () => {
-    const result = readPromptWithContext('my-skill', 'no-such-project', root);
+    const result = readPromptWithContext('my-skill', 'no-such-project', undefined, root);
     expect(result).toBe('# base prompt');
   });
 
   it('appends project context when agent-context file exists', () => {
-    const result = readPromptWithContext('my-skill', 'my-project', root);
+    const result = readPromptWithContext('my-skill', 'my-project', undefined, root);
     expect(result).toContain('# base prompt');
     expect(result).toContain('## project context');
     expect(result.indexOf('# base prompt')).toBeLessThan(result.indexOf('## project context'));
   });
 
   it('separates base and project context with double newline + header', () => {
-    const result = readPromptWithContext('my-skill', 'my-project', root);
+    const result = readPromptWithContext('my-skill', 'my-project', undefined, root);
     expect(result).toContain('\n\n## Project-specific context\n\n');
   });
 });

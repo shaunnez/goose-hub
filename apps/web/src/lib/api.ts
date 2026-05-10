@@ -681,3 +681,34 @@ export async function fetchPipelineSettings(
 export async function patchPipelineSettings(slug: string, useM19Pipeline: boolean): Promise<void> {
   await patchJson(`/projects/${slug}/settings/pipeline`, { useM19Pipeline });
 }
+
+// ─── Review settings (M19.20) ────────────────────────────────────────────────
+
+export type ReviewerSlotModel = 'claude' | 'codex';
+export type ReviewerSlotPrompt = 'default' | 'unconstrained';
+
+export interface ReviewerSlot {
+  model: ReviewerSlotModel;
+  prompt: ReviewerSlotPrompt;
+}
+
+export interface ReviewSettingsDto {
+  projectId: string;
+  reviewerSlots: ReviewerSlot[] | null;
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
+
+export async function fetchReviewSettings(
+  slug: string,
+  signal?: AbortSignal,
+): Promise<ReviewSettingsDto> {
+  return getJson<ReviewSettingsDto>(`/projects/${slug}/settings/review`, signal);
+}
+
+export async function patchReviewSettings(
+  slug: string,
+  reviewerSlots: ReviewerSlot[] | null,
+): Promise<void> {
+  await patchJson(`/projects/${slug}/settings/review`, { reviewerSlots });
+}

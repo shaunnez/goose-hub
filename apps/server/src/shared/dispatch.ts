@@ -1,5 +1,9 @@
 import { join } from 'node:path';
 import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
+import {
+  parseReviewerSlots,
+  readProjectReviewSettings,
+} from '@goose-hub/core/db/repositories/project-review-settings.js';
 import { getUseM19Pipeline } from '@goose-hub/core/db/repositories/project-settings.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
@@ -488,10 +492,16 @@ export async function dispatchReview(slug: string, issueNumber: number): Promise
   }
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
-    const { runReviewWorkflow } = (await import(
+    const { runReviewWorkflow, runConvergentReviewWorkflow } = (await import(
       new URL('../../../../slices/review/workflow.js', import.meta.url).href
     )) as {
       runReviewWorkflow: (
+        item: unknown,
+        source: unknown,
+        projectSlug: string,
+        targetRepo: string,
+      ) => Promise<unknown>;
+      runConvergentReviewWorkflow: (
         item: unknown,
         source: unknown,
         projectSlug: string,
@@ -504,7 +514,16 @@ export async function dispatchReview(slug: string, issueNumber: number): Promise
       return;
     }
     const item = await source.getItem(issueNumber.toString());
-    await runReviewWorkflow(item, source, slug, item.repoRef ?? slug);
+
+    const reviewRow = projectForFlag != null ? readProjectReviewSettings(projectForFlag.id) : null;
+    const reviewerSlots = parseReviewerSlots(reviewRow);
+    const useConvergent = useM19 && reviewerSlots != null && reviewerSlots.length === 2;
+
+    if (useConvergent) {
+      await runConvergentReviewWorkflow(item, source, slug, item.repoRef ?? slug);
+    } else {
+      await runReviewWorkflow(item, source, slug, item.repoRef ?? slug);
+    }
   } finally {
     parallelLock.release(slug, issueNumber);
     drainPending(slug);

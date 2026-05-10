@@ -373,6 +373,15 @@ export const projectDevReviewSettings = sqliteTable('project_dev_review_settings
   updatedBy: text('updated_by'),
 });
 
+// Per-project convergent-review settings (M19.20). `reviewer_slots` is a JSON
+// array of {model, prompt} objects — length drives reviewer count (1 or 2).
+export const projectReviewSettings = sqliteTable('project_review_settings', {
+  projectId: text('project_id').primaryKey(),
+  reviewerSlots: text('reviewer_slots'), // JSON: Array<{model:'claude'|'codex', prompt:'default'|'unconstrained'}>
+  updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  updatedBy: text('updated_by'),
+});
+
 export const scoutReports = sqliteTable(
   'scout_reports',
   {

@@ -127,6 +127,13 @@
       "when": 1778413212626,
       "tag": "0017_tough_meteorite",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1747008000000,
+      "tag": "0018_project_review_settings",
+      "breakpoints": true
     }
   ]
 }

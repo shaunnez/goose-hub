@@ -8,6 +8,18 @@ vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   readProjectSettings: vi.fn().mockReturnValue(null),
   readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
 }));
+const mockReadProjectReviewSettings = vi.fn().mockReturnValue(null);
+vi.mock('@goose-hub/core/db/repositories/project-review-settings.js', () => ({
+  readProjectReviewSettings: (...args: unknown[]) => mockReadProjectReviewSettings(...args),
+  parseReviewerSlots: (row: { reviewerSlots?: string | null } | null) => {
+    if (!row?.reviewerSlots) return null;
+    try {
+      return JSON.parse(row.reviewerSlots) as unknown[];
+    } catch {
+      return null;
+    }
+  },
+}));
 const mockRun = vi.fn();
 const mockAccumulatePersonaStats = vi.fn();
 vi.mock('@goose-hub/core/persona/accumulate.js', () => ({
@@ -16,6 +28,10 @@ vi.mock('@goose-hub/core/persona/accumulate.js', () => ({
 
 vi.mock('@goose-hub/core/agent-runtime/claude-cli.js', () => ({
   ClaudeCliRuntime: vi.fn().mockImplementation(() => ({ run: mockRun })),
+}));
+
+vi.mock('@goose-hub/core/agent-runtime/codex-cli.js', () => ({
+  CodexCliRuntime: vi.fn().mockImplementation(() => ({ run: mockRun })),
 }));
 
 vi.mock('@goose-hub/core/agent-runtime/schema-bridge.js', () => ({
@@ -159,6 +175,7 @@ beforeEach(() => {
   mockExecSync.mockReset();
   mockExecSync.mockReturnValue('');
   mockAccumulatePersonaStats.mockClear();
+  mockReadProjectReviewSettings.mockReturnValue(null);
   vi.clearAllMocks();
 });
 
@@ -864,6 +881,53 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
       .mock.calls.filter(([e]) => e.kind === 'review.completed');
     expect(completedEvents).toHaveLength(1);
     expect(completedEvents[0]?.[0].payload).toMatchObject({ verdict: 'approved' });
+  });
+
+  // M19.20: configurable reviewer slots — divergent verdicts escalate immediately
+  describe('configurable reviewer slots (M19.20)', () => {
+    beforeEach(() => {
+      mockReadProjectReviewSettings.mockReturnValue(null);
+    });
+
+    it('escalates to factory:needs-human immediately when 1-claude + 1-codex reviewers return divergent verdicts (approved vs needs-fix)', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource({
+        getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+added'),
+      });
+
+      mockReadProjectReviewSettings.mockReturnValue({
+        reviewerSlots: JSON.stringify([
+          { model: 'claude', prompt: 'default' },
+          { model: 'codex', prompt: 'unconstrained' },
+        ]),
+      });
+
+      // Slot A (claude/default): approved
+      mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings());
+      // Slot B (codex/unconstrained): needs-fix with no blocker findings (divergent verdict only)
+      mockRun.mockResolvedValueOnce({
+        output: {
+          verdict: 'needs-fix',
+          confidence: 0.6,
+          criteriaChecks: [{ criterion: 'Add foo', status: 'unmet' }],
+          findings: [{ severity: 'minor', description: 'style nit' }],
+          decisionSummaries: [],
+        },
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+      const { runConvergentReviewWorkflow } = await import('./workflow.js');
+      await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-review',
+        'factory:needs-human',
+      );
+      // Must escalate after round 1 only (2 slot calls — no further rounds)
+      expect(mockRun).toHaveBeenCalledTimes(2);
+    });
   });
 
   // Test 4: holdout discipline — sibling decision summary leak is detected via tool.violation

@@ -8,8 +8,9 @@ import { PipelinePanel } from './PipelinePanel';
 import { ProjectBudgetPanel } from './ProjectBudgetPanel';
 import { ProjectConfigPanel } from './ProjectConfigPanel';
 import { ProjectModelPanel } from './ProjectModelPanel';
+import { ReviewPanel } from './ReviewPanel';
 
-type Tab = 'config' | 'budgets' | 'models' | 'pipeline';
+type Tab = 'config' | 'budgets' | 'models' | 'pipeline' | 'review';
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
@@ -90,7 +91,7 @@ export function SettingsPage() {
 
         {/* Tab bar */}
         <div className="flex gap-1 mb-6 border-b border-line">
-          {(['config', 'budgets', 'models', 'pipeline'] as Tab[]).map((t) => (
+          {(['config', 'budgets', 'models', 'pipeline', 'review'] as Tab[]).map((t) => (
             <button
               key={t}
               type="button"
@@ -118,6 +119,9 @@ export function SettingsPage() {
         )}
         {tab === 'pipeline' && selectedConfig != null && (
           <PipelinePanel slug={selectedConfig.slug} />
+        )}
+        {tab === 'review' && selectedConfig != null && (
+          <ReviewPanel slug={selectedConfig.slug} />
         )}
 
         {!isLoading && !error && configs.length === 0 && (
