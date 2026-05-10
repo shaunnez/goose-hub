@@ -372,3 +372,26 @@ export const projectDevReviewSettings = sqliteTable('project_dev_review_settings
   updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
   updatedBy: text('updated_by'),
 });
+
+export const scoutReports = sqliteTable(
+  'scout_reports',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    projectId: text('project_id').notNull(),
+    workItemId: text('work_item_id').notNull(),
+    investigationRunId: text('investigation_run_id').notNull(),
+    scoutSkill: text('scout_skill').notNull(),
+    report: text('report').notNull(), // JSON blob
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  },
+  (t) => ({
+    projectWorkItemRunSkillUniq: uniqueIndex(
+      'scout_reports_project_work_item_run_skill_uniq',
+    ).on(t.projectId, t.workItemId, t.investigationRunId, t.scoutSkill),
+    projectWorkItemRunIdx: index('scout_reports_project_work_item_run_idx').on(
+      t.projectId,
+      t.workItemId,
+      t.investigationRunId,
+    ),
+  }),
+);
