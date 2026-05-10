@@ -21,6 +21,9 @@ vi.mock('node:child_process', async (importOriginal) => {
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   eventStore: { appendEvent: vi.fn(), replay: vi.fn().mockReturnValue([]) },
 }));
+vi.mock('@goose-hub/core/workspaces/worktree.js', () => ({
+  cleanupWorktree: vi.fn(),
+}));
 vi.mock('@goose-hub/core/state-machine/states.js', () => ({
   STATES: ['factory:triaging', 'factory:accepted', 'factory:in-progress', 'factory:done'],
 }));
@@ -56,6 +59,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { isLegalTransition } from '@goose-hub/core/state-machine/transitions.js';
+import { cleanupWorktree } from '@goose-hub/core/workspaces/worktree.js';
 import { bustCache } from '#shared/cache.js';
 import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
 import { getSourceForSlug } from '#shared/source.js';
@@ -485,6 +489,33 @@ describe('approveIssue / rejectIssue (#186)', () => {
       .mocked(eventStore.appendEvent)
       .mock.calls.find(([e]) => e.kind === 'pr.merged');
     expect(merged).toBeDefined();
+  });
+
+  it('approveIssue cleans up the dev worktree using devRunId from pr.opened after merge', async () => {
+    const prOpenedEvent = {
+      id: 1,
+      projectId: 'proj',
+      workItemId: 'github:owner/repo#1',
+      kind: 'pr.opened',
+      runId: 'dev-run-123',
+      payload: {
+        prNumber: 99,
+        prUrl: 'u',
+        branch: 'b',
+        worktreePath: '/wt/dev-run-123',
+        devRunId: 'dev-run-123',
+        pipelineRunId: 'pipeline-run-123',
+      },
+      createdAt: '2026-05-02T22:00:00Z',
+    };
+    vi.mocked(eventStore.replay).mockReturnValue([prOpenedEvent] as never);
+    const mergePRImpl = vi.fn().mockResolvedValueOnce({ sha: 'abc1234', merged: true });
+
+    const { approveIssue } = await import('./service.js');
+    const result = await approveIssue('proj', '1', { mergePRImpl });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(cleanupWorktree).toHaveBeenCalledWith('dev-run-123');
   });
 
   it('approveIssue returns 409 and transitions to merge-conflict when GitHub 405', async () => {

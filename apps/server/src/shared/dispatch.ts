@@ -1,12 +1,14 @@
 import { join } from 'node:path';
 import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { getUseM19Pipeline } from '@goose-hub/core/db/repositories/project-settings.js';
+import { getEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { filterEligibleByDependencies } from '@goose-hub/core/projects/dependency-scheduler.js';
 import { parallelLock } from '@goose-hub/core/projects/parallel-lock.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { createProjectAwareTargetSource } from '@goose-hub/core/state-source/dependency-resolver.js';
+import { EngineeringSpecSchema } from '@goose-hub/skills/spec-author/schema.js';
 import { parseAcceptanceCriteria } from '../domains/issues/parse-acceptance.js';
 import { runRetroForItem } from '../domains/workflows/retro-batch.js';
 import { maybeFireSprintReview } from '../domains/workflows/sprint-review-trigger.js';
@@ -296,6 +298,114 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
         : undefined;
 
     await runFixIssueWorkflow(item, source, slug, REPO_ROOT, mockDeps);
+  } finally {
+    parallelLock.release(slug, issueNumber);
+    drainPending(slug);
+  }
+}
+
+/** Run M19 parallel-implement for a spec-ready issue. Drops duplicate triggers. */
+export async function dispatchParallelImplement(slug: string, issueNumber: number): Promise<void> {
+  const projectForFlag = await getProject(slug);
+  const projectId = projectForFlag?.id ?? slug;
+  const useM19 = projectForFlag != null ? getUseM19Pipeline(projectId) : false;
+  logger.info('dispatchParallelImplement: pipeline flag', {
+    slug,
+    issueNumber,
+    useM19Pipeline: useM19,
+  });
+  if (!useM19) {
+    logger.info('dispatchParallelImplement: pipeline disabled, skipping', { slug, issueNumber });
+    return;
+  }
+
+  const maxParallel = await getMaxParallelAgents(slug);
+  if (parallelLock.isInFlight(slug, issueNumber)) {
+    logger.warn('dispatchParallelImplement: duplicate in-flight, dropping', { slug, issueNumber });
+    return;
+  }
+  if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
+    logger.info('dispatchParallelImplement: cap full, queuing work item', {
+      slug,
+      issueNumber,
+      inFlight: parallelLock.inFlightCount(slug),
+      maxParallel,
+    });
+    enqueueWorkflow(slug, issueNumber, dispatchParallelImplement);
+    return;
+  }
+  try {
+    // Cross-package boundary: slices/ is not a workspace package (rule 28a).
+    const { runParallelImplementWorkflow } = (await import(
+      new URL('../../../../slices/parallel-implement/workflow.js', import.meta.url).href
+    )) as {
+      runParallelImplementWorkflow: (
+        item: unknown,
+        spec: unknown,
+        pipelineRunId: string,
+        source: unknown,
+        slug: string,
+        targetRepo: string,
+      ) => Promise<{ status: 'success' | 'failed'; errorReason?: string }>;
+    };
+    const source = await getSourceForSlug(slug);
+    if (source == null) {
+      logger.error('dispatchParallelImplement: no source for slug', { slug });
+      return;
+    }
+    const item = await source.getItem(issueNumber.toString());
+    if (item.state !== 'factory:spec-ready') {
+      logger.info('dispatchParallelImplement: state already moved, skipping', {
+        slug,
+        issueNumber,
+        state: item.state,
+      });
+      return;
+    }
+
+    const specRecord = getEngineeringSpec(slug, item.id);
+    if (specRecord == null) {
+      await source.comment(
+        item.externalId,
+        'parallel-implement: no engineering spec found for this work item. Escalating to needs-human.',
+      );
+      await source.transitionState(item.externalId, 'factory:spec-ready', 'factory:needs-human');
+      return;
+    }
+
+    const parsedSpec = EngineeringSpecSchema.safeParse(specRecord.spec);
+    if (!parsedSpec.success) {
+      await source.comment(
+        item.externalId,
+        'parallel-implement: persisted engineering spec failed schema validation. Escalating to needs-human.',
+      );
+      await source.transitionState(item.externalId, 'factory:spec-ready', 'factory:needs-human');
+      return;
+    }
+
+    await source.transitionState(item.externalId, 'factory:spec-ready', 'factory:in-progress');
+    try {
+      const result = await runParallelImplementWorkflow(
+        item,
+        parsedSpec.data,
+        specRecord.pipelineRunId,
+        source,
+        slug,
+        REPO_ROOT,
+      );
+      if (result.status === 'success') {
+        await source.transitionState(item.externalId, 'factory:in-progress', 'factory:needs-qa');
+      } else {
+        await source.transitionState(item.externalId, 'factory:in-progress', 'factory:needs-human');
+      }
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      await source.comment(
+        item.externalId,
+        `parallel-implement: workflow failed after dispatch. Escalating to needs-human.\n\nError: ${error.message}`,
+      );
+      await source.transitionState(item.externalId, 'factory:in-progress', 'factory:needs-human');
+    }
   } finally {
     parallelLock.release(slug, issueNumber);
     drainPending(slug);
@@ -768,14 +878,7 @@ export async function dispatchForLabel(
     return;
   }
   if (labelName === 'factory:spec-ready') {
-    // M19.18 will wire parallel-implement here; stub for now.
-    logger.info(
-      'dispatchForLabel: factory:spec-ready — parallel-implement not yet wired (M19.18)',
-      {
-        slug,
-        issueNumber,
-      },
-    );
+    await dispatchParallelImplement(slug, issueNumber);
     return;
   }
   if (labelName === 'factory:needs-qa') {
@@ -1051,8 +1154,7 @@ const RESUME_WORKFLOWS: Partial<Record<StateName, ResumeEntry>> = {
     dispatch: (slug: string, _issueNumber: number) => dispatchTriageBatch(slug),
   },
   'factory:dev-ready': { targetState: 'factory:dev-ready', dispatch: dispatchFixIssue },
-  // M19.18 will wire parallel-implement here; omitted from RESUME_WORKFLOWS until then
-  // to avoid re-running spec-author on an already-specced issue.
+  'factory:spec-ready': { targetState: 'factory:spec-ready', dispatch: dispatchParallelImplement },
   'factory:in-progress': { targetState: 'factory:dev-ready', dispatch: dispatchFixIssue },
   'factory:needs-qa': { targetState: 'factory:needs-qa', dispatch: dispatchQa },
   'factory:needs-review': { targetState: 'factory:needs-review', dispatch: dispatchReview },
@@ -1149,9 +1251,8 @@ export async function dispatchResumeIssue(slug: string, issueNumber: number): Pr
     return;
   }
 
-  // M19: parallel-implement (M19.18) is not yet wired. Resuming factory:in-progress
-  // via dispatchFixIssue → dispatchSpecAuthor would re-run spec-author on an already-specced
-  // item and overwrite the stored spec/pipelineRunId. Skip until M19.18 lands.
+  // M19: avoid resuming factory:in-progress through dev-ready, which would re-run
+  // spec-author and overwrite the stored spec/pipelineRunId.
   if (fromState === 'factory:in-progress') {
     const projectForFlag = await getProject(slug);
     const useM19Resume = projectForFlag != null ? getUseM19Pipeline(projectForFlag.id) : false;
