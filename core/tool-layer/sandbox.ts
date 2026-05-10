@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DECISION_CAPTURE_HOOK_PATH } from './decision-capture-hook.js';
 import { POST_HOOK_PATH } from './post-tool-use-hook.js';
 import { HOOK_PATH } from './pre-tool-use-hook.js';
 
@@ -25,7 +26,27 @@ export const REQUIRE_SPEC_HOOK_PATH = join(REPO_ROOT, 'hooks', 'require-spec.sh'
 export const STOP_VERIFY_AC_HOOK_PATH = join(REPO_ROOT, 'hooks', 'stop-verify-ac.sh');
 export const WP_FILE_GUARD_HOOK_PATH = join(REPO_ROOT, 'hooks', 'wp-file-guard.sh');
 
-function buildSettings(extraDenylist: string[] = [], extraPreToolUseHooks: object[] = []) {
+// Roles that must NOT receive the decision-capture hook. Broader than HOLDOUT_ROLES
+// (which is qa + reviewer) — code-quality-audit is also excluded because it functions
+// like a holdout: its output must not be influenced by live-marker feedback loops.
+export const DECISION_CAPTURE_EXCLUDED_ROLES = new Set([
+  'qa',
+  'reviewer',
+  'code-quality-audit',
+]);
+
+export interface SandboxOptions {
+  /** Role of the spawned agent. Used to determine if decision-capture hook is installed. */
+  role?: string;
+  /** When true, install the decision-capture PostToolUse hook (experimental.recordDecisionTool). */
+  recordDecisionTool?: boolean;
+}
+
+function buildSettings(
+  extraDenylist: string[] = [],
+  extraPreToolUseHooks: object[] = [],
+  extraPostToolUseHooks: object[] = [],
+) {
   return JSON.stringify(
     {
       permissions: { deny: [...DENYLIST, ...extraDenylist] },
@@ -51,6 +72,7 @@ function buildSettings(extraDenylist: string[] = [], extraPreToolUseHooks: objec
             matcher: '.*',
             hooks: [{ type: 'command', command: `"${process.execPath}" "${POST_HOOK_PATH}"` }],
           },
+          ...extraPostToolUseHooks,
         ],
         Stop: [
           {
@@ -66,10 +88,22 @@ function buildSettings(extraDenylist: string[] = [], extraPreToolUseHooks: objec
 }
 
 /** Writes workspace .claude/settings.local.json with deny rules and hook registrations. Idempotent. */
-export function writeWorkspaceSandbox(workspacePath: string): void {
+export function writeWorkspaceSandbox(workspacePath: string, opts: SandboxOptions = {}): void {
+  const extraPostToolUseHooks: object[] = [];
+  // Decision-capture hook: install only when flag is on AND role is not excluded.
+  if (opts.recordDecisionTool && !DECISION_CAPTURE_EXCLUDED_ROLES.has(opts.role ?? '')) {
+    extraPostToolUseHooks.push({
+      matcher: '.*',
+      hooks: [{ type: 'command', command: `"${process.execPath}" "${DECISION_CAPTURE_HOOK_PATH}"` }],
+    });
+  }
   const claudeDir = join(workspacePath, '.claude');
   mkdirSync(claudeDir, { recursive: true });
-  writeFileSync(join(claudeDir, 'settings.local.json'), buildSettings(), 'utf8');
+  writeFileSync(
+    join(claudeDir, 'settings.local.json'),
+    buildSettings([], [], extraPostToolUseHooks),
+    'utf8',
+  );
 }
 
 /**
@@ -83,11 +117,13 @@ export function writeWorkspaceSandbox(workspacePath: string): void {
  * @param workspacePath - Absolute path to the WP scratch worktree.
  * @param filesOwned    - Workspace-relative paths owned by this WP.
  * @param wpId          - Work Package identifier (for violation messages).
+ * @param opts          - Optional sandbox options (role, recordDecisionTool flag).
  */
 export function writeWpBuilderSandbox(
   workspacePath: string,
   _filesOwned: string[],
   _wpId: string,
+  opts: SandboxOptions = {},
 ): void {
   const extraPreToolUseHooks = [
     {
@@ -95,11 +131,18 @@ export function writeWpBuilderSandbox(
       hooks: [{ type: 'command', command: `bash "${WP_FILE_GUARD_HOOK_PATH}"` }],
     },
   ];
+  const extraPostToolUseHooks: object[] = [];
+  if (opts.recordDecisionTool && !DECISION_CAPTURE_EXCLUDED_ROLES.has(opts.role ?? '')) {
+    extraPostToolUseHooks.push({
+      matcher: '.*',
+      hooks: [{ type: 'command', command: `"${process.execPath}" "${DECISION_CAPTURE_HOOK_PATH}"` }],
+    });
+  }
   const claudeDir = join(workspacePath, '.claude');
   mkdirSync(claudeDir, { recursive: true });
   writeFileSync(
     join(claudeDir, 'settings.local.json'),
-    buildSettings(WP_BUILDER_GIT_DENYLIST, extraPreToolUseHooks),
+    buildSettings(WP_BUILDER_GIT_DENYLIST, extraPreToolUseHooks, extraPostToolUseHooks),
     'utf8',
   );
 }

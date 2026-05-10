@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { TOOL_BUNDLES, computeAllowlist } from './allowlist.js';
-import { writeWorkspaceSandbox } from './sandbox.js';
+import { DECISION_CAPTURE_EXCLUDED_ROLES, writeWorkspaceSandbox } from './sandbox.js';
 import { redactSecrets } from './secret-redaction.js';
 
 // ─── secret-redaction ────────────────────────────────────────────────────────
@@ -209,5 +209,77 @@ describe('writeWorkspaceSandbox', () => {
     } finally {
       rmSync(dir, { recursive: true });
     }
+  });
+});
+
+// ─── decision-capture hook (M19.23) ──────────────────────────────────────────
+
+describe('decision-capture hook installation', () => {
+  function readSettings(dir: string) {
+    const raw = readFileSync(join(dir, '.claude', 'settings.local.json'), 'utf8');
+    return JSON.parse(raw) as { hooks?: { PostToolUse?: Array<{ hooks: Array<{ command: string }> }> } };
+  }
+
+  function hasDecisionCaptureHook(cfg: ReturnType<typeof readSettings>): boolean {
+    return (cfg.hooks?.PostToolUse ?? []).some((entry) =>
+      entry.hooks?.some((h) => h.command?.includes('decision-capture.js')),
+    );
+  }
+
+  it('installs decision-capture hook when flag=true and role is non-holdout', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sandbox-dc-on-'));
+    try {
+      writeWorkspaceSandbox(dir, { role: 'developer', recordDecisionTool: true });
+      expect(hasDecisionCaptureHook(readSettings(dir))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('does NOT install decision-capture hook when flag=false', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sandbox-dc-off-'));
+    try {
+      writeWorkspaceSandbox(dir, { role: 'developer', recordDecisionTool: false });
+      expect(hasDecisionCaptureHook(readSettings(dir))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('does NOT install decision-capture hook for qa role even when flag=true', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sandbox-dc-qa-'));
+    try {
+      writeWorkspaceSandbox(dir, { role: 'qa', recordDecisionTool: true });
+      expect(hasDecisionCaptureHook(readSettings(dir))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('does NOT install decision-capture hook for reviewer role even when flag=true', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sandbox-dc-reviewer-'));
+    try {
+      writeWorkspaceSandbox(dir, { role: 'reviewer', recordDecisionTool: true });
+      expect(hasDecisionCaptureHook(readSettings(dir))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('does NOT install decision-capture hook for code-quality-audit role even when flag=true', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sandbox-dc-audit-'));
+    try {
+      writeWorkspaceSandbox(dir, { role: 'code-quality-audit', recordDecisionTool: true });
+      expect(hasDecisionCaptureHook(readSettings(dir))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('DECISION_CAPTURE_EXCLUDED_ROLES contains qa, reviewer, code-quality-audit', () => {
+    expect(DECISION_CAPTURE_EXCLUDED_ROLES.has('qa')).toBe(true);
+    expect(DECISION_CAPTURE_EXCLUDED_ROLES.has('reviewer')).toBe(true);
+    expect(DECISION_CAPTURE_EXCLUDED_ROLES.has('code-quality-audit')).toBe(true);
+    expect(DECISION_CAPTURE_EXCLUDED_ROLES.has('developer')).toBe(false);
   });
 });

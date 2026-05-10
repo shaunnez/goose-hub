@@ -6,6 +6,7 @@ import { resolveBudgetsForProject } from '../agent-runtime/resolve-for-project.j
 import { toJsonSchema } from '../agent-runtime/schema-bridge.js';
 import { selectPersona } from '../agent-runtime/select-persona.js';
 import { eventStore } from '../event-stream/store.js';
+import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import type { StateSource, WorkItem } from '../state-source/interface.js';
 
@@ -305,15 +306,7 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
     );
 
     // Step 8: Emit decision summaries
-    for (const ds of decisionSummaries) {
-      eventStore.appendEvent({
-        kind: 'agent.decision-summary',
-        projectId,
-        workItemId: workItem.id,
-        runId,
-        payload: { skill: skillName, ...ds },
-      });
-    }
+    reconcileDecisionSummaries(runId, projectId, workItem.id, skillName, decisionSummaries);
 
     // Step 9: Emit decompose.completed event
     eventStore.appendEvent({

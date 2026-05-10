@@ -2,6 +2,7 @@ import { logger } from '@goose-hub/core/logger.js';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { bootstrapRouter } from './domains/bootstrap/router.js';
+import { decisionsRouter } from './domains/decisions/router.js';
 import { costsRouter } from './domains/costs/router.js';
 import { eventsRouter } from './domains/events/router.js';
 import { inboxRouter } from './domains/inbox/router.js';
@@ -41,5 +42,6 @@ app.route('/inbox', inboxRouter); // GET/POST /inbox/**
 app.route('/roster', rosterRouter); // GET /roster/**
 app.route('/events', eventsRouter); // GET /events
 app.route('/webhooks', webhooksRouter); // POST /webhooks/github
+app.route('/api/decisions', decisionsRouter); // POST /api/decisions (M19.23)
 
 export { app };

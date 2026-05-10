@@ -17,6 +17,7 @@ import {
   computeGateThresholds,
   fetchLifecyclesInWindow,
 } from '../learning/playbook-stats.js';
+import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import type { CoachPolicy } from '../types.js';
 import {
@@ -371,14 +372,7 @@ export async function runCrossRunRetroWorkflow(
 
     const playbookId = inserted[0]?.id ?? -1;
 
-    for (const ds of manifest.decisionSummaries) {
-      eventStore.appendEvent({
-        kind: 'agent.decision-summary',
-        projectId,
-        runId,
-        payload: { skill: skillName, ...ds },
-      });
-    }
+    reconcileDecisionSummaries(runId, projectId, null, skillName, manifest.decisionSummaries);
 
     eventStore.appendEvent({
       kind: 'retrospective.completed',

@@ -4,6 +4,7 @@ import {
 } from '@goose-hub/skills/advise-on-plan/schema.js';
 import { eventStore } from '../event-stream/store.js';
 import type { AgentRuntime } from './interface.js';
+import { reconcileDecisionSummaries } from './reconcile-decisions.js';
 import type { AgentResult } from './interface.js';
 import { OutputValidationError, invokeSkill } from './invoke-skill.js';
 
@@ -77,15 +78,13 @@ export async function adviseOnPlan(input: AdviseOnPlanInput): Promise<AdviseOnPl
   // invokeSkill already validated result.output against AdviseOnPlanSchema via outputSchema
   const parsed = AdviseOnPlanSchema.parse(result.output);
 
-  for (const summary of parsed.decisionSummaries) {
-    eventStore.appendEvent({
-      projectId: input.projectId,
-      workItemId: input.workItemId,
-      kind: 'agent.decision-summary',
-      payload: { skill: 'advise-on-plan', ...summary },
-      runId: input.runId,
-    });
-  }
+  reconcileDecisionSummaries(
+    input.runId,
+    input.projectId,
+    input.workItemId,
+    'advise-on-plan',
+    parsed.decisionSummaries,
+  );
 
   return parsed;
 }

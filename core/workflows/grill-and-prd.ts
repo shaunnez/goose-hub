@@ -25,6 +25,7 @@ import { toJsonSchema } from '../agent-runtime/schema-bridge.js';
 import { selectPersona } from '../agent-runtime/select-persona.js';
 import { totalSpendForSkill as _totalSpendForSkill } from '../cost/repository.js';
 import { eventStore } from '../event-stream/store.js';
+import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import type { StateName } from '../state-machine/states.js';
 import type { StateSource, WorkItem } from '../state-source/interface.js';
@@ -514,15 +515,7 @@ export async function runGrillAndPrdWorkflow(
       }
 
       // Emit any decision summaries the griller produced this round.
-      for (const ds of grillOutput.decisionSummaries) {
-        eventStore.appendEvent({
-          kind: 'agent.decision-summary',
-          projectId,
-          workItemId: workItem.id,
-          runId,
-          payload: { skill: 'grill-me', ...ds },
-        });
-      }
+      reconcileDecisionSummaries(runId, projectId, workItem.id, 'grill-me', grillOutput.decisionSummaries);
 
       // Hard cap at round 7: if the griller still hasn't declared readyForPRD,
       // force the workflow forward so we don't loop indefinitely.
@@ -781,15 +774,7 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
     return { phase: 'needs-human' };
   }
 
-  for (const ds of prdOutput.decisionSummaries) {
-    eventStore.appendEvent({
-      kind: 'agent.decision-summary',
-      projectId,
-      workItemId: workItem.id,
-      runId,
-      payload: { skill: 'write-prd', ...ds },
-    });
-  }
+  reconcileDecisionSummaries(runId, projectId, workItem.id, 'write-prd', prdOutput.decisionSummaries);
 
   // ─── Step 3: advise-on-prd (conditional) ────────────────────────────────
   let advisorConcerns: string[] | null = null;
@@ -872,15 +857,7 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
         };
       }
 
-      for (const ds of advisor.decisionSummaries) {
-        eventStore.appendEvent({
-          kind: 'agent.decision-summary',
-          projectId,
-          workItemId: workItem.id,
-          runId,
-          payload: { skill: 'advise-on-prd', ...ds },
-        });
-      }
+      reconcileDecisionSummaries(runId, projectId, workItem.id, 'advise-on-prd', advisor.decisionSummaries);
     } catch (err) {
       eventStore.appendEvent({
         kind: 'agent.run-failed',

@@ -12,6 +12,7 @@ import { eventStore } from '../event-stream/store.js';
 import { archiveLifecycle } from '../learning/archive.js';
 import { computeTrend } from '../learning/convergence.js';
 import { accumulatePersonaStats } from '../persona/accumulate.js';
+import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import type { ImprovementCandidate } from '../retrospective/schemas.js';
 import type { StateSource, WorkItem } from '../state-source/interface.js';
@@ -198,15 +199,7 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
         parsed.data.improvementCandidates,
       );
     }
-    for (const ds of parsed.data.decisionSummaries) {
-      eventStore.appendEvent({
-        kind: 'agent.decision-summary',
-        projectId,
-        workItemId: workItem.id,
-        runId,
-        payload: { skill: skillName, ...ds },
-      });
-    }
+    reconcileDecisionSummaries(runId, projectId, workItem.id, skillName, parsed.data.decisionSummaries);
 
     accumulatePersonaStats({ personaName: personaId, role: 'retrospector', outcome: 'success' });
     await stateSource.transitionState(workItem.externalId, 'factory:retrospecting', 'factory:done');

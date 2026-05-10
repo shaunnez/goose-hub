@@ -15,6 +15,7 @@ export type GlobalBudgetPatch = {
   maxRetries?: number | null;
   perBashCommandMaxSeconds?: number | null;
   useM19Pipeline?: number | null;
+  recordDecisionTool?: number | null;
 };
 
 export type SkillBudgetPatch = {
@@ -50,6 +51,22 @@ export function getUseM19Pipeline(projectId: string): boolean {
 
 export function setUseM19Pipeline(projectId: string, enabled: boolean, by: string): void {
   writeProjectSettings(projectId, { useM19Pipeline: enabled ? 1 : 0 }, by);
+}
+
+export function deriveRecordDecisionTool(row: ProjectSettingsRow | null): boolean {
+  return row?.recordDecisionTool === 1;
+}
+
+export function getRecordDecisionTool(projectId: string): boolean {
+  try {
+    return deriveRecordDecisionTool(readProjectSettings(projectId));
+  } catch (err) {
+    logger.warn('getRecordDecisionTool: read failed, defaulting to false', {
+      projectId,
+      error: String(err),
+    });
+    return false;
+  }
 }
 
 export function readProjectSkillSettings(projectId: string): Map<string, ProjectSkillSettingsRow> {

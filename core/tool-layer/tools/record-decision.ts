@@ -60,13 +60,16 @@ export function recordDecision(params: RecordDecisionParams): RecordDecisionResu
 
 /**
  * Reads all decision records for a run from agent_decisions in insertion order.
+ * Returns `id` so callers can deduplicate across multiple reconcile calls for
+ * the same runId (e.g. multi-skill workflows sharing one runId).
  * Used by reconciliation at run end when the feature flag is on.
  */
 export function readRunDecisions(
   runId: string,
-): Array<{ kind: DecisionKind; summary: string; evidence?: string }> {
+): Array<{ id: string; kind: DecisionKind; summary: string; evidence?: string }> {
   const rows = db
     .select({
+      id: agentDecisions.id,
       kind: agentDecisions.kind,
       what: agentDecisions.what,
       why: agentDecisions.why,
@@ -77,6 +80,7 @@ export function readRunDecisions(
     .all();
 
   return rows.map((r) => ({
+    id: r.id,
     kind: isDecisionKind(r.kind) ? r.kind : 'UNKNOWN',
     summary: r.what,
     evidence: r.why || undefined,

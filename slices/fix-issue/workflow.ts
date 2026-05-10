@@ -16,6 +16,7 @@ import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { runWithEscalation } from '@goose-hub/core/agent-runtime/with-escalation.js';
 import { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
@@ -422,15 +423,7 @@ async function afterImplement(input: AfterImplementInput): Promise<void> {
   );
 
   // Emit implement decision summaries (#206 pattern).
-  for (const summary of implementOutput.decisionSummaries) {
-    eventStore.appendEvent({
-      projectId,
-      workItemId: workItem.id,
-      kind: 'agent.decision-summary',
-      payload: { skill: 'implement', ...summary },
-      runId,
-    });
-  }
+  reconcileDecisionSummaries(runId, projectId, workItem.id, 'implement', implementOutput.decisionSummaries);
   eventStore.appendEvent({
     projectId,
     workItemId: workItem.id,

@@ -177,4 +177,6 @@ Return JSON conforming to `DeepRetroSchema`. No free-text outside the schema fie
 }
 ```
 
-[decision] VERDICT: Deep retro complete: <one sentence on key finding>
+Live marker format: `[decision] KIND: what — why` where ` — ` (space, em-dash, space) separates the decision from its rationale. Common kinds for this skill: `READ`, `INSIGHT`, `VERDICT`.
+
+[decision] VERDICT: Deep retro complete: <one sentence on key finding> — <one sentence on primary recommendation>
