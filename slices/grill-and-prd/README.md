@@ -50,6 +50,21 @@ The `priorReplies` argument is the Discover-Lane conversation transcript so far.
 
 This workflow does not mutate `priorReplies`; it reads it to compute the round number (`agent` entries + 1) and forwards it to the `grill-me` skill so the skill can see the conversation history.
 
+## Crystallization
+
+Each grill round (after round 1) distils the prior Q+A pair into a single-sentence decision recorded as a `grill.decision-crystallized` event in the local event store. The workflow rebuilds `priorReplies` from issue comments on every tick and re-attaches crystallizations from the event store before invoking grill-me, so the griller always sees the chain of prior decisions.
+
+When `readyForPRD: true`, the same workflow tick:
+1. Crystallizes the most recent Q+A.
+2. Re-augments `priorReplies` with the just-emitted crystallization.
+3. Forwards the augmented array to write-prd as the authoritative record.
+
+Round 1 emits no crystallization (no Q+A exists yet). The round that flips `readyForPRD` to true also crystallizes the user's last answer — there is no uncrystallized tail.
+
+## Worktree access
+
+Grill-me runs with the `read` tool bundle (sandboxed `read`, `search`, `work-item-read`) against a per-round detached-HEAD worktree of the target repo. The workflow creates the worktree before the grill call and cleans it up in a `finally` block (covers success, validation failure, and exception paths). The path is injected into context as `worktreePath` and used as the agent's `cwd` via the runtime's `workspaceDir` parameter.
+
 ## Priority + budget gating for the advisor
 
 The `advise-on-prd` skill runs only when **both** are true:

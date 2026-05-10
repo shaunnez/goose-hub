@@ -15,29 +15,31 @@ export const ProjectContextSchema = z.object({
   claudeMd: z.string(),
 });
 
+export const GrillPriorReplyEntrySchema = z.object({
+  role: z.enum(['user', 'agent']),
+  content: z.string(),
+  crystallized: z.string().optional(),
+});
+
 export const GrillMeContextSchema = z.object({
   workItem: z.object({
     title: z.string(),
     body: z.string(),
     number: z.number().int(),
   }),
-  priorReplies: z.array(
-    z.object({
-      role: z.enum(['user', 'agent']),
-      content: z.string(),
-    }),
-  ),
+  priorReplies: z.array(GrillPriorReplyEntrySchema),
   roundNumber: z.number().int().min(1),
   projectContext: ProjectContextSchema,
+  worktreePath: z.string(),
 });
 
 const config: SkillConfig = {
   contextSchema: GrillMeContextSchema,
-  toolBundles: ['core'],
+  toolBundles: ['read'],
   modelPin: 'sonnet',
   freshContext: false,
   role: 'griller',
-  contextAllowlist: ['workItem', 'priorReplies', 'roundNumber', 'projectContext'],
+  contextAllowlist: ['workItem', 'priorReplies', 'roundNumber', 'projectContext', 'worktreePath'],
 };
 
 export default config;

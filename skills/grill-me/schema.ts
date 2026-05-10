@@ -14,6 +14,7 @@ export const GrillMeOutputSchema = z.object({
     .max(1),
   refinedIntent: z.string(),
   readyForPRD: z.boolean(),
+  crystallizedDecision: z.string().optional(),
   decisionSummaries: z.array(DecisionSummarySchema).min(1),
 });
 

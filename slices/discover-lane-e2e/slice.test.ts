@@ -93,6 +93,14 @@ function parsePrdFromComment(body: string): unknown {
   return JSON.parse(match[1]);
 }
 
+/** Noop worktree deps — prevents real git worktree creation in unit tests. */
+function noopWorktreeDeps() {
+  return {
+    createWorktreeImpl: (_repo: string, runId: string) => `/tmp/wt/${runId}`,
+    cleanupWorktreeImpl: (_runId: string) => undefined,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // PRD fixture — satisfies PRDOutputSchema (2 verticalSlices, 2 journeys, 2 ACs)
 // ---------------------------------------------------------------------------
@@ -323,7 +331,7 @@ describe('Discover Lane end-to-end integration', () => {
       stateSource: source,
       projectId,
       priorReplies: [],
-      deps: { runtime: runtime1, projectConfig: injectedConfig() },
+      deps: { runtime: runtime1, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
     });
 
     expect(result1.phase).toBe('grilling');
@@ -390,7 +398,7 @@ describe('Discover Lane end-to-end integration', () => {
       stateSource: source,
       projectId,
       priorReplies: priorRepliesR2,
-      deps: { runtime: runtime2, projectConfig: injectedConfig() },
+      deps: { runtime: runtime2, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
     });
 
     expect(result2.phase).toBe('grilling');
@@ -442,7 +450,7 @@ describe('Discover Lane end-to-end integration', () => {
       stateSource: source,
       projectId,
       priorReplies: priorRepliesR3,
-      deps: { runtime: runtime3, projectConfig: injectedConfig() },
+      deps: { runtime: runtime3, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
     });
 
     expect(result3.phase).toBe('prd-review');
@@ -656,7 +664,11 @@ describe('Discover Lane: PRD decline → re-grill resumes correctly', () => {
       stateSource: source,
       projectId,
       priorReplies: [],
-      deps: { runtime: makeQueuedRuntime([round1Output]), projectConfig: injectedConfig() },
+      deps: {
+        runtime: makeQueuedRuntime([round1Output]),
+        projectConfig: injectedConfig(),
+        ...noopWorktreeDeps(),
+      },
     });
 
     // Simulate user reply
@@ -694,6 +706,7 @@ describe('Discover Lane: PRD decline → re-grill resumes correctly', () => {
       deps: {
         runtime: makeQueuedRuntime([round2Output, prdOutput]),
         projectConfig: injectedConfig(),
+        ...noopWorktreeDeps(),
       },
     });
 
@@ -727,7 +740,7 @@ describe('Discover Lane: PRD decline → re-grill resumes correctly', () => {
       }));
 
     // Should have: 1 agent (grill Q1) + 1 user (reply) + 1 agent (PRD) + 1 user (rejection) = 4
-    // roundNumber = agent count + 1 = 3
+    // roundNumber = non-PRD agent count + 1 = 2 (PRD-draft agent entries are excluded per Fix A)
     const agentCount = priorRepliesReGrill.filter((r) => r.role === 'agent').length;
     expect(agentCount).toBe(2); // grill question + PRD draft
     expect(priorRepliesReGrill).toHaveLength(4);
@@ -749,6 +762,7 @@ describe('Discover Lane: PRD decline → re-grill resumes correctly', () => {
       deps: {
         runtime: makeQueuedRuntime([reGrillOutput]),
         projectConfig: injectedConfig(),
+        ...noopWorktreeDeps(),
       },
     });
 
@@ -765,9 +779,9 @@ describe('Discover Lane: PRD decline → re-grill resumes correctly', () => {
     const qPostedEvs = evs.filter((e) => e.kind === 'grill.question-posted');
     expect(qPostedEvs).toHaveLength(2);
 
-    // Second posted event roundNumber = 3 (grill Q + PRD draft = 2 prior agent messages)
+    // Second posted event roundNumber = 2 (PRD-draft agent entry excluded from round counting)
     const reGrillQPosted = qPostedEvs[1];
-    expect((reGrillQPosted?.payload as { roundNumber: number }).roundNumber).toBe(3);
+    expect((reGrillQPosted?.payload as { roundNumber: number }).roundNumber).toBe(2);
   });
 });
 
@@ -821,7 +835,7 @@ describe('Discover Lane entry point: triage routes fresh feature to grilling (#5
       stateSource: source,
       projectId,
       priorReplies: [],
-      deps: { runtime, projectConfig: injectedConfig() },
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
     });
 
     expect(result.phase).toBe('grilling');

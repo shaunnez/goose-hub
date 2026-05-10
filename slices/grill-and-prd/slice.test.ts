@@ -15,7 +15,10 @@ import type { AgentResult, AgentRuntime } from '@goose-hub/core/agent-runtime/in
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { InMemoryLabelsSource } from '@goose-hub/core/state-source/in-memory-labels.js';
 import type { Priority } from '@goose-hub/core/state-source/interface.js';
-import { runGrillAndPrdWorkflow } from '@goose-hub/core/workflows/grill-and-prd.js';
+import {
+  type RunGrillAndPrdInput,
+  runGrillAndPrdWorkflow,
+} from '@goose-hub/core/workflows/grill-and-prd.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
@@ -263,6 +266,13 @@ function getPostedPrdJson(commentBody: string): unknown {
   return JSON.parse(match[1]);
 }
 
+function noopWorktreeDeps() {
+  return {
+    createWorktreeImpl: (_repo: string, runId: string) => `/tmp/wt/${runId}`,
+    cleanupWorktreeImpl: (_runId: string) => undefined,
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -285,7 +295,7 @@ describe('grill-and-prd: round 1 (not ready)', () => {
       stateSource: source,
       projectId,
       priorReplies: [],
-      deps: { runtime, projectConfig: injectedConfig() },
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
     });
 
     expect(result.phase).toBe('grilling');
@@ -338,7 +348,7 @@ describe('grill-and-prd: round 2 reaches PRD (advisor skipped by priority)', () 
       stateSource: source,
       projectId,
       priorReplies,
-      deps: { runtime, projectConfig: injectedConfig() },
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
     });
 
     expect(result.phase).toBe('prd-review');
@@ -390,7 +400,7 @@ describe('grill-and-prd: advisor runs and revises sections', () => {
       stateSource: source,
       projectId,
       priorReplies: [],
-      deps: { runtime, projectConfig: injectedConfig(5) },
+      deps: { runtime, projectConfig: injectedConfig(5), ...noopWorktreeDeps() },
     });
 
     expect(result.phase).toBe('prd-review');
@@ -440,7 +450,7 @@ describe('grill-and-prd: advisor budget exhausted', () => {
       stateSource: source,
       projectId,
       priorReplies: [],
-      deps: { runtime, projectConfig: injectedConfig(0) },
+      deps: { runtime, projectConfig: injectedConfig(0), ...noopWorktreeDeps() },
     });
 
     expect(result.phase).toBe('prd-review');
@@ -488,6 +498,7 @@ describe('grill-and-prd: advisor skipped when spend stub returns near-cap value'
         runtime,
         projectConfig: injectedConfig(1.0),
         totalSpendForSkill: vi.fn().mockReturnValue(0.95),
+        ...noopWorktreeDeps(),
       },
     });
 
@@ -531,7 +542,7 @@ describe('grill-and-prd: max rounds reached, proceed straight to PRD', () => {
       stateSource: source,
       projectId,
       priorReplies,
-      deps: { runtime, projectConfig: injectedConfig() },
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
     });
 
     expect(result.phase).toBe('prd-review');
@@ -582,7 +593,7 @@ describe('grill-and-prd: round-8 hard-cap forces PRD drafting', () => {
       stateSource: source,
       projectId,
       priorReplies,
-      deps: { runtime, projectConfig: injectedConfig() },
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
     });
 
     // Should have forced PRD drafting, not stayed in grilling
@@ -632,7 +643,7 @@ describe('grill-and-prd: malformed grill output → gate-pending', () => {
       stateSource: source,
       projectId,
       priorReplies: [],
-      deps: { runtime, projectConfig: injectedConfig() },
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
     });
 
     expect(result.phase).toBe('grilling');
@@ -678,10 +689,533 @@ describe('grill-and-prd: pre-condition guard', () => {
       stateSource: source,
       projectId,
       priorReplies: [],
-      deps: { runtime, projectConfig: injectedConfig() },
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
     });
 
     expect(result.phase).toBe('needs-human');
     expect(runtime.run).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 8. Worktree lifecycle
+// ---------------------------------------------------------------------------
+
+describe('grill-and-prd: worktree lifecycle', () => {
+  it('creates a worktree before grill, cleans up after, and injects worktreePath into the grill context', async () => {
+    const projectId = uniqueProjectId('worktree-lifecycle');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await seedFeatureItem(source, { state: 'factory:grilling' });
+    const workItem = await source.getItem(item.externalId);
+
+    const runtime = makeQueuedRuntime([validGrillRound1NotReady()]);
+
+    const createdWith: Array<{ repo: string; runId: string }> = [];
+    const cleanedRunIds: string[] = [];
+    const createWorktreeImpl = vi.fn((repo: string, runId: string) => {
+      createdWith.push({ repo, runId });
+      return `/tmp/test-wt/${runId}`;
+    });
+    const cleanupWorktreeImpl = vi.fn((runId: string) => {
+      cleanedRunIds.push(runId);
+    });
+
+    await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies: [],
+      deps: {
+        runtime,
+        projectConfig: injectedConfig(),
+        createWorktreeImpl,
+        cleanupWorktreeImpl,
+      },
+    });
+
+    expect(createdWith).toHaveLength(1);
+    expect(createdWith[0].repo).toBe('/tmp/test-repo');
+    expect(cleanedRunIds).toHaveLength(1);
+    expect(cleanedRunIds[0]).toBe(createdWith[0].runId);
+
+    const runCall = (runtime.run as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(runCall.context.worktreePath).toBe(`/tmp/test-wt/${createdWith[0].runId}`);
+    expect(runCall.workspaceDir).toBe(`/tmp/test-wt/${createdWith[0].runId}`);
+    expect(runCall.toolBundles).toEqual(['read']);
+  });
+
+  it('cleans up the worktree even when grill-me throws', async () => {
+    const projectId = uniqueProjectId('worktree-cleanup-on-throw');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await seedFeatureItem(source, { state: 'factory:grilling' });
+    const workItem = await source.getItem(item.externalId);
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockRejectedValue(new Error('boom')),
+    };
+
+    const cleanedRunIds: string[] = [];
+    const createWorktreeImpl = vi.fn((_repo: string, runId: string) => `/tmp/test-wt/${runId}`);
+    const cleanupWorktreeImpl = vi.fn((runId: string) => {
+      cleanedRunIds.push(runId);
+    });
+
+    const result = await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies: [],
+      deps: {
+        runtime,
+        projectConfig: injectedConfig(),
+        createWorktreeImpl,
+        cleanupWorktreeImpl,
+      },
+    });
+
+    expect(result.phase).toBe('grilling');
+    expect(cleanedRunIds).toHaveLength(1);
+  });
+});
+
+describe('grill-and-prd: crystallization', () => {
+  it('persists grill.decision-crystallized when grill output includes one', async () => {
+    const projectId = uniqueProjectId('crystallize-mid');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await seedFeatureItem(source, { state: 'factory:gate-pending' });
+    const workItem = await source.getItem(item.externalId);
+
+    const grillOutput = {
+      questions: [{ text: 'Round 2 question?', recommendedAnswer: 'Recommended.' }],
+      refinedIntent: 'A more refined thing.',
+      readyForPRD: false,
+      crystallizedDecision: 'Audience: admin users only.',
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Crystallized round 1.' }],
+    };
+    const runtime = makeQueuedRuntime([grillOutput]);
+
+    const priorReplies = [
+      {
+        role: 'agent' as const,
+        content: '<!-- factory:grill-question -->\n**Round 1** — what audience?',
+      },
+      { role: 'user' as const, content: 'Admins only.' },
+    ];
+
+    await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies,
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
+    });
+
+    const evs = eventStore.replay({ projectId, workItemId: workItem.id });
+    const crystEv = evs.find((e) => e.kind === 'grill.decision-crystallized');
+    expect(crystEv).toBeDefined();
+    expect((crystEv?.payload as { roundNumber: number }).roundNumber).toBe(1);
+    expect((crystEv?.payload as { decision: string }).decision).toBe('Audience: admin users only.');
+  });
+
+  it('attaches prior crystallizations to priorReplies before invoking grill-me', async () => {
+    const projectId = uniqueProjectId('crystallize-rehydrate');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await seedFeatureItem(source, { state: 'factory:gate-pending' });
+    const workItem = await source.getItem(item.externalId);
+
+    eventStore.appendEvent({
+      projectId,
+      workItemId: workItem.id,
+      kind: 'grill.decision-crystallized',
+      payload: { roundNumber: 1, decision: 'Audience: admin users only.' },
+    });
+
+    const runtime = makeQueuedRuntime([
+      {
+        questions: [{ text: 'Round 3 question?' }],
+        refinedIntent: 'Sharper.',
+        readyForPRD: false,
+        crystallizedDecision: 'Format: CSV-only.',
+        decisionSummaries: [{ kind: 'PLAN', summary: 'Asked next.' }],
+      },
+    ]);
+
+    const priorReplies = [
+      {
+        role: 'agent' as const,
+        content: '<!-- factory:grill-question -->\n**Round 1** — audience?',
+      },
+      { role: 'user' as const, content: 'Admins.' },
+      { role: 'agent' as const, content: '<!-- factory:grill-question -->\n**Round 2** — format?' },
+      { role: 'user' as const, content: 'CSV.' },
+    ];
+
+    await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies,
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
+    });
+
+    const runCall = (runtime.run as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const passed = runCall.context.priorReplies as Array<{ role: string; crystallized?: string }>;
+    expect(passed[0].role).toBe('agent');
+    expect(passed[0].crystallized).toBe('Audience: admin users only.');
+    expect(passed[2].role).toBe('agent');
+    expect(passed[2].crystallized).toBeUndefined();
+  });
+
+  it('forwards augmented priorReplies (with crystallizations) to write-prd on readyForPRD', async () => {
+    const projectId = uniqueProjectId('crystallize-handoff');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await seedFeatureItem(source, { state: 'factory:gate-pending' });
+    const workItem = await source.getItem(item.externalId);
+
+    eventStore.appendEvent({
+      projectId,
+      workItemId: workItem.id,
+      kind: 'grill.decision-crystallized',
+      payload: { roundNumber: 1, decision: 'Audience: admin users only.' },
+    });
+
+    const runtime = makeQueuedRuntime([
+      {
+        questions: [],
+        refinedIntent: 'Final.',
+        readyForPRD: true,
+        crystallizedDecision: 'Format: CSV-only.',
+        decisionSummaries: [{ kind: 'VERDICT', summary: 'Done.' }],
+      },
+      validPRD(),
+    ]);
+
+    const priorReplies = [
+      {
+        role: 'agent' as const,
+        content: '<!-- factory:grill-question -->\n**Round 1** — audience?',
+      },
+      { role: 'user' as const, content: 'Admins.' },
+      { role: 'agent' as const, content: '<!-- factory:grill-question -->\n**Round 2** — format?' },
+      { role: 'user' as const, content: 'CSV.' },
+    ];
+
+    await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies,
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
+    });
+
+    const writePrdCall = (runtime.run as ReturnType<typeof vi.fn>).mock.calls[1][0];
+    const passed = writePrdCall.context.priorReplies as Array<{
+      role: string;
+      crystallized?: string;
+    }>;
+    expect(passed).toBeDefined();
+    expect(passed[0].crystallized).toBe('Audience: admin users only.');
+    expect(passed[2].crystallized).toBe('Format: CSV-only.');
+  });
+});
+
+describe('grill-and-prd: codex review hardening', () => {
+  it('skips PRD-draft agent comments when counting rounds and attaching crystallizations', async () => {
+    const projectId = uniqueProjectId('codex-prd-skip');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await seedFeatureItem(source, { state: 'factory:gate-pending' });
+    const workItem = await source.getItem(item.externalId);
+
+    eventStore.appendEvent({
+      projectId,
+      workItemId: workItem.id,
+      kind: 'grill.decision-crystallized',
+      payload: { roundNumber: 1, decision: 'Audience: admins.' },
+    });
+
+    const runtime = makeQueuedRuntime([
+      {
+        questions: [{ text: 'Round 2 question?' }],
+        refinedIntent: 'Refined.',
+        readyForPRD: false,
+        decisionSummaries: [{ kind: 'PLAN', summary: 'Asked next.' }],
+      },
+    ]);
+
+    const priorReplies = [
+      {
+        role: 'agent' as const,
+        content: '<!-- factory:grill-question -->\n**Round 1** — audience?',
+      },
+      { role: 'user' as const, content: 'Admins.' },
+      // A previously-rejected PRD comment that must NOT be counted as a round.
+      {
+        role: 'agent' as const,
+        content: '<!-- factory:prd -->\n# PRD\n```json\n{"title":"draft"}\n```',
+      },
+      { role: 'user' as const, content: 'Reject — try again.' },
+    ];
+
+    await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies,
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
+    });
+
+    const runCall = (runtime.run as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(runCall.context.roundNumber).toBe(2);
+    const passed = runCall.context.priorReplies as Array<{
+      role: string;
+      content: string;
+      crystallized?: string;
+    }>;
+    // The grill-question agent entry should carry the crystallization.
+    expect(passed[0].crystallized).toBe('Audience: admins.');
+    // The PRD-draft agent entry should NOT carry a crystallization.
+    expect(passed[2].crystallized).toBeUndefined();
+  });
+
+  it('forwards crystallized priorReplies in revise mode', async () => {
+    const projectId = uniqueProjectId('codex-revise-forward');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await seedFeatureItem(source, { state: 'factory:prd-review' });
+    const workItem = await source.getItem(item.externalId);
+
+    eventStore.appendEvent({
+      projectId,
+      workItemId: workItem.id,
+      kind: 'grill.decision-crystallized',
+      payload: { roundNumber: 1, decision: 'Audience: admins.' },
+    });
+
+    const priorReplies = [
+      {
+        role: 'agent' as const,
+        content: '<!-- factory:grill-question -->\n**Round 1** — audience?',
+      },
+      { role: 'user' as const, content: 'Admins.' },
+    ];
+
+    const runtime = makeQueuedRuntime([validPRD()]);
+
+    await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies,
+      priorPrd: validPRD() as unknown as RunGrillAndPrdInput['priorPrd'],
+      humanConcerns: ['Tighten the audience scope.'],
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
+    });
+
+    const writePrdCall = (runtime.run as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const passed = writePrdCall.context.priorReplies as Array<{
+      role: string;
+      crystallized?: string;
+    }>;
+    expect(passed).toBeDefined();
+    expect(passed[0].crystallized).toBe('Audience: admins.');
+  });
+
+  it('keeps the workflow result when worktree cleanup throws', async () => {
+    const projectId = uniqueProjectId('codex-cleanup-throws');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await seedFeatureItem(source, { state: 'factory:grilling' });
+    const workItem = await source.getItem(item.externalId);
+
+    const runtime = makeQueuedRuntime([validGrillRound1NotReady()]);
+
+    const result = await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies: [],
+      deps: {
+        runtime,
+        projectConfig: injectedConfig(),
+        createWorktreeImpl: (_repo: string, runId: string) => `/tmp/wt/${runId}`,
+        cleanupWorktreeImpl: () => {
+          throw new Error('cleanup boom');
+        },
+      },
+    });
+
+    expect(result.phase).toBe('grilling');
+    const evs = eventStore.replay({ projectId, workItemId: workItem.id });
+    const cleanupErr = evs.find(
+      (e) =>
+        e.kind === 'agent.run-failed' &&
+        typeof (e.payload as { error?: string }).error === 'string' &&
+        (e.payload as { error: string }).error.includes('worktree cleanup failed'),
+    );
+    expect(cleanupErr).toBeDefined();
+  });
+
+  it('transitions to factory:needs-human when targetRepo.localPath is missing', async () => {
+    const projectId = uniqueProjectId('codex-missing-localpath');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await seedFeatureItem(source, { state: 'factory:grilling' });
+    const workItem = await source.getItem(item.externalId);
+
+    const runtime = makeQueuedRuntime([]);
+
+    const cfgNoPath = {
+      ...injectedConfig(),
+      targetRepo: { ...injectedConfig().targetRepo, localPath: '' },
+    };
+
+    const result = await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies: [],
+      deps: { runtime, projectConfig: cfgNoPath, ...noopWorktreeDeps() },
+    });
+
+    expect(result.phase).toBe('needs-human');
+    const updated = await source.getItem(item.externalId);
+    expect(updated.state).toBe('factory:needs-human');
+    const comments = await source.listComments(item.externalId);
+    expect(comments.some((c) => c.body.includes('targetRepo.localPath'))).toBe(true);
+  });
+
+  it('handles createWorktree failures by transitioning to gate-pending and posting a comment', async () => {
+    const projectId = uniqueProjectId('codex-create-throws');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await seedFeatureItem(source, { state: 'factory:grilling' });
+    const workItem = await source.getItem(item.externalId);
+
+    const runtime = makeQueuedRuntime([]);
+
+    const result = await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies: [],
+      deps: {
+        runtime,
+        projectConfig: injectedConfig(),
+        createWorktreeImpl: () => {
+          throw new Error('git worktree add failed');
+        },
+        cleanupWorktreeImpl: () => undefined,
+      },
+    });
+
+    expect(result.phase).toBe('grilling');
+    const updated = await source.getItem(item.externalId);
+    expect(updated.state).toBe('factory:gate-pending');
+    const comments = await source.listComments(item.externalId);
+    expect(comments.some((c) => c.body.includes('worktree'))).toBe(true);
+  });
+});
+
+describe('grill-and-prd: 3-round combined approach end-to-end', () => {
+  it('crystallizes each round, accumulates decisions, hands them to write-prd', async () => {
+    const projectId = uniqueProjectId('e2e-3-round');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await seedFeatureItem(source, { state: 'factory:grilling' });
+
+    // Round 1 — no priorReplies, no crystallization in output
+    const round1Output = {
+      questions: [{ text: 'Audience?' }],
+      refinedIntent: 'Build a thing for someone.',
+      readyForPRD: false,
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Round 1.' }],
+    };
+    // Round 2 — crystallizes round 1
+    const round2Output = {
+      questions: [{ text: 'Format?' }],
+      refinedIntent: 'Build a thing for admins.',
+      readyForPRD: false,
+      crystallizedDecision: 'Audience: admin users only.',
+      decisionSummaries: [{ kind: 'PLAN', summary: 'Round 2.' }],
+    };
+    // Round 3 — crystallizes round 2 AND signals readyForPRD
+    const round3Output = {
+      questions: [],
+      refinedIntent: 'Add an admin-only audit-log CSV export.',
+      readyForPRD: true,
+      crystallizedDecision: 'Format: CSV-only.',
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'Round 3.' }],
+    };
+
+    // Round 1
+    let runtime = makeQueuedRuntime([round1Output]);
+    let workItem = await source.getItem(item.externalId);
+    await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies: [],
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
+    });
+
+    // Round 2 — simulate the user reply being appended
+    await source.comment(item.externalId, 'Admins only.');
+    runtime = makeQueuedRuntime([round2Output]);
+    workItem = await source.getItem(item.externalId);
+    const r2Comments = await source.listComments(item.externalId);
+    const r2PriorReplies = r2Comments
+      .filter((c) => !c.body.startsWith('<!-- factory:system -->'))
+      .map((c) => ({
+        role: c.body.startsWith('<!-- factory:grill-question -->')
+          ? ('agent' as const)
+          : ('user' as const),
+        content: c.body,
+      }));
+    await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies: r2PriorReplies,
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
+    });
+
+    // Round 3 — simulate the second user reply
+    await source.comment(item.externalId, 'CSV.');
+    runtime = makeQueuedRuntime([round3Output, validPRD()]);
+    workItem = await source.getItem(item.externalId);
+    const r3Comments = await source.listComments(item.externalId);
+    const r3PriorReplies = r3Comments
+      .filter((c) => !c.body.startsWith('<!-- factory:system -->'))
+      .map((c) => ({
+        role: c.body.startsWith('<!-- factory:grill-question -->')
+          ? ('agent' as const)
+          : ('user' as const),
+        content: c.body,
+      }));
+    const r3Result = await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies: r3PriorReplies,
+      deps: { runtime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
+    });
+
+    expect(r3Result.phase).toBe('prd-review');
+
+    // Both crystallizations should have landed in the event store.
+    const evs = eventStore.replay({ projectId, workItemId: workItem.id });
+    const crystEvs = evs.filter((e) => e.kind === 'grill.decision-crystallized');
+    expect(crystEvs).toHaveLength(2);
+    expect(crystEvs.map((e) => (e.payload as { roundNumber: number }).roundNumber).sort()).toEqual([
+      1, 2,
+    ]);
+
+    // write-prd should have received priorReplies with both crystallizations.
+    const writePrdCall = (runtime.run as ReturnType<typeof vi.fn>).mock.calls[1][0];
+    const passed = writePrdCall.context.priorReplies as Array<{
+      role: string;
+      crystallized?: string;
+    }>;
+    const crystallizedAgents = passed.filter(
+      (p) => p.role === 'agent' && typeof p.crystallized === 'string',
+    );
+    expect(crystallizedAgents).toHaveLength(2);
+    expect(crystallizedAgents[0].crystallized).toBe('Audience: admin users only.');
+    expect(crystallizedAgents[1].crystallized).toBe('Format: CSV-only.');
   });
 });
