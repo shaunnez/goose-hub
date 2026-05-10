@@ -24,7 +24,9 @@ A bug is **NOT** a UI/web bug if it describes:
 - Build, CI, or tooling failures
 - Anything that has no visible browser symptom
 
-**If the bug is not a UI/web bug**, return:
+**If the bug is not a UI/web bug**, emit: `[decision] READ: Issue #<N> "<title>" — not a UI/web bug; enhancement skipped`
+
+Then return:
 
 ```json
 {
@@ -36,6 +38,8 @@ A bug is **NOT** a UI/web bug if it describes:
 ```
 
 Do not add any sections. Do not guess at repro steps. Stop here.
+
+**If the bug IS a UI/web bug**, emit: `[decision] READ: Issue #<N> "<title>" — confirmed UI/web bug`
 
 ## Step 2 — Enhance (UI/web bugs only)
 
@@ -56,6 +60,8 @@ Only include sections that are genuinely missing or incomplete. If a section is 
 - Do not add speculation or investigation findings — this is report structure only.
 - Keep each section concise: 1–5 lines max.
 - Format as clean GitHub-flavoured markdown. Use `**Section name**` headers and numbered lists for repro steps.
+
+Emit: `[decision] PLAN: Adding <section names> — <one sentence on what was inferred from the title/body>`
 
 Emit: `[decision] VERDICT: Classified bug as UI/web or not, then enhanced only if applicable`
 

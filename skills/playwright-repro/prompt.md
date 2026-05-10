@@ -46,6 +46,8 @@ Context `<investigation>` (optional) — output from the preceding `investigate`
 - Read relevant files in `apps/web/src/` to find the route path and selectors.
 - Use `Grep` to search for component names, route paths, and `data-testid` values related to the repro steps.
 
+Emit: `[decision] READ: Issue #<N> — <investigation.confidence | discovered> confidence; located route <path> and <M> key selectors`
+
 ### 2. Analyse conditional rendering and default state
 
 Before writing any assertion, verify the target element is unconditionally in the DOM.
@@ -61,6 +63,8 @@ For each element you intend to assert on:
    - Auth / context required → note in `notes` and set `reproduced: false` if unresolvable
 
 Do not skip this step because the element "looks simple". A single collapsed sidebar, closed drawer, or loading state can silently prevent an assertion from ever firing.
+
+Emit: `[decision] PLAN: Conditional rendering analysis complete — <element> is <always visible | gated by state>; <setup needed | no setup required>`
 
 ### 3. Write the repro spec
 
@@ -107,6 +111,8 @@ test('repro: <bug title>', async ({ page }) => {
 });
 ```
 
+Emit: `[decision] PLAN: Wrote repro spec targeting <route> — <N> steps, asserting on <selector>`
+
 ### 4. Run
 
 ```bash
@@ -119,9 +125,13 @@ From `/tmp/repro-<slug>/pw-results.json`:
 - Find video path in `suites[0].specs[0].tests[0].results[0].attachments` where `name === 'video'`
 - Check `status` in the same results object (`'failed'` confirms the bug manifested)
 
+Emit: `[decision] INSIGHT: Test <passed|failed> on attempt <N> — <one sentence on what the result showed>`
+
 ### 5. Iterate on setup failures
 
 If the test errors because a selector was not found or navigation failed (not the bug itself), fix the spec and rerun. Limit to 3 iterations.
+
+On each retry, emit: `[decision] RETRY: Setup failure on attempt <N> — <selector or route that failed>; adjusting spec`
 
 ### 6. Convert WebM to GIF
 
@@ -134,6 +144,8 @@ ffmpeg -i <path-to-video.webm> \
 ```
 
 If the WebM does not exist or `ffmpeg` fails, set `gifPath: null` in the output and continue — do not abort.
+
+Emit: `[decision] INSIGHT: GIF conversion <succeeded — walkthrough.gif at /tmp/repro-<slug>/walkthrough.gif | failed — gifPath: null>`
 
 ### 7. Push artefacts to the evidence branch
 
@@ -174,6 +186,8 @@ git -C /tmp/evidence-issue-<N> rev-parse HEAD    # capture the SHA
 git worktree remove /tmp/evidence-issue-<N>
 ```
 
+Emit: `[decision] COMMIT: Pushed <N> artefacts to evidence/issue-<N> at <SHA>`
+
 ### 8. Build SHA-pinned GitHub URLs
 
 For each screenshot `step-N.png`:
@@ -202,6 +216,8 @@ _Pinned to \`<SHA>\` · captured during investigation_"
 ```
 
 Capture the comment URL `gh` returns on stdout. That URL becomes the `commentUrl` output field.
+
+Emit: `[decision] INSIGHT: Posted BEFORE-state comment to issue #<N> — <commentUrl>`
 
 ### 10. Produce output
 
