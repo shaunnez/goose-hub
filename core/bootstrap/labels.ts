@@ -30,7 +30,11 @@ export const FACTORY_LABELS: Label[] = [
     description: 'Investigation complete',
   },
   { name: 'factory:dev-ready', color: '1d76db', description: 'Ready for development' },
-  { name: 'factory:spec-ready', color: '1d76db', description: 'Spec authored; ready for parallel build' },
+  {
+    name: 'factory:spec-ready',
+    color: '1d76db',
+    description: 'Spec authored; ready for parallel build',
+  },
   { name: 'factory:in-progress', color: '1d76db', description: 'PR opened, work in progress' },
   { name: 'factory:needs-qa', color: 'f97316', description: 'Awaiting QA holdout' },
   { name: 'factory:qa-failed', color: '1d76db', description: 'QA failed; back to dev' },

@@ -1,6 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
-import { EngineeringSpecSchema } from './schema.js';
 import { z } from 'zod';
+import { EngineeringSpecSchema } from './schema.js';
 
 /**
  * Engineering Spec authoring skill (M19.02, issue #559).

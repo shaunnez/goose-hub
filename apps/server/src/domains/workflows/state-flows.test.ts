@@ -190,7 +190,7 @@ function makeInvestigateOutput() {
   };
 }
 
-function makePlaywrightReproOutput() {
+function _makePlaywrightReproOutput() {
   return {
     screenshots: [],
     gifPath: null,

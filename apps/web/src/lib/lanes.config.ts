@@ -49,7 +49,13 @@ export const LANES: readonly LaneConfig[] = [
   {
     key: 'dev',
     label: 'Dev',
-    states: ['factory:dev-ready', 'factory:spec-ready', 'factory:in-progress', 'factory:needs-fix', 'factory:qa-failed'],
+    states: [
+      'factory:dev-ready',
+      'factory:spec-ready',
+      'factory:in-progress',
+      'factory:needs-fix',
+      'factory:qa-failed',
+    ],
     hiddenByDefault: false,
   },
   {
