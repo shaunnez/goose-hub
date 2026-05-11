@@ -14,12 +14,13 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `server` | yes | API + SSE host for the Goose Hub web UI. Stands up the server process the UI talks to. Closes M2.01 (#26). |
 | `web` | yes | Vite + React 19 + Tailwind 4 + React Router v6. Closes M2.02 (#27). |
 
-## core/ (26 entries, 0 missing README)
+## core/ (27 entries, 0 missing README)
 
 | Name | README | Summary |
 |---|---|---|
 | `agent-comment` | yes | Builds structured GitHub-issue comment markdown for agent status updates. One small pure function so every agent posts comments in the same shape. |
 | `agent-runtime` | yes | Typed contracts and model registry for all agent runtime code. |
+| `audit` | yes | Orchestration glue for the `code-quality-audit` skill (M19.22, #698). |
 | `bootstrap` | yes | Library code that supports the bootstrap workflow (`slices/bootstrap-project`). Each module is independently testable and stateless; the slice composes them. |
 | `connectors` | yes | External-system adapters. Each subdirectory wraps one external API behind a narrow interface that slices and workflows depend on. Connectors own retry, timeout, and error-shape contracts so workflow code stays oblivious to transport details. |
 | `cost` | yes | Persists per-run agent cost so the UI can show: |
@@ -45,7 +46,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `workflows` | yes | Orchestration workflows that compose skills, persist results, and transition work-item state. |
 | `workspaces` | yes | Git worktree lifecycle management for Factory investigation runs. |
 
-## slices/ (35 entries, 0 missing README)
+## slices/ (36 entries, 0 missing README)
 
 | Name | README | Summary |
 |---|---|---|
@@ -68,6 +69,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `holdout-boundary-test` | yes | Verification slice for M8 exit criteria: deliberate context injection attempts on holdout roles (QA, Reviewer) must fail at the runtime layer. |
 | `investigate` | yes | Workflow slice that drives `type:bug` and `type:chore` work items through the investigation phase. |
 | `label-installer` | yes | Idempotent factory label installer. Closes M12.03 (#306). |
+| `merge-decision` | yes | Per-cycle merge-decision gate (M19.21 #697). Deterministic gate that runs |
 | `model-routing` | yes | M19.09 — provider-aware model routing with UI-configurable role and complexity overrides. |
 | `move-with-deps` | yes | M11.06: Move-with-dependencies CLI and UI confirmation. |
 | `parallel-implement` | yes | **M19.03 — Parallel WP builder dispatch (ADR 0031)** |
