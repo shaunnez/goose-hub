@@ -50,6 +50,8 @@ export type EventKind =
   // M8 QA/Review lifecycle events
   | 'qa.completed'
   | 'review.completed'
+  // M19.19 — agent tierResults disagreed with deterministic ground truth
+  | 'qa.tier-disagreement'
   // M8 retry-and-escalate
   | 'agent.retry-escalated'
   // M9 retrospective lifecycle

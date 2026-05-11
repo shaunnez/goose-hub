@@ -19,8 +19,9 @@ export const QualityComponentsSchema = z.object({
 export type QualityComponents = z.infer<typeof QualityComponentsSchema>;
 
 // Input to computeQualityScore. The components come from the aggregated pipeline
-// outputs: finding counts from QA/review, tier results from three-tier-verify,
-// and harness_pass_rate from the test runner.
+// outputs: finding counts from QA/review, tier results from the deterministic
+// 3-tier verify run inside the QA workflow (M19.19), and harness_pass_rate
+// from the test runner.
 export interface RunArtifacts {
   runId: string;
   projectId: string;

@@ -1,41 +1,17 @@
+// core/verify/tiers.test.ts
+// Pure-tier verification engine tests. Migrated from the now-deleted
+// `slices/three-tier-verify/` slice as part of M19.19 (issue #695).
+
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { AgentEvent, AppendEventInput } from '@goose-hub/core/event-stream/store.js';
-import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
-import {
-  runTier,
-  verifyFunctional,
-  verifyRegression,
-  verifyStructural,
-} from '@goose-hub/core/verify/tiers.js';
 import type { EngineeringSpec, WorkPackage } from '@goose-hub/skills/spec-author/schema.js';
-import { runThreeTierVerifyWorkflow } from './workflow.js';
+import { runTier, verifyFunctional, verifyRegression, verifyStructural } from './tiers.js';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
-
-function makeWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
-  return {
-    id: 'wi-562',
-    externalId: '562',
-    repoRef: 'shaunnez/goose-hub',
-    title: 'M19.05 3-tier verification',
-    body: '',
-    priority: 'medium',
-    type: 'feature',
-    mode: 'supervised',
-    state: 'factory:needs-qa',
-    authorIsOwner: true,
-    schedule: 'current',
-    exec: 'serial',
-    dependsOn: [],
-    blocks: [],
-    createdAt: new Date('2026-05-07'),
-    ...overrides,
-  };
-}
 
 function makeWp(id: string, filesOwned: string[]): WorkPackage {
   return { id, filesOwned, changes: `Implement ${id}`, dependsOn: [], builderTier: 'sonnet' };
@@ -62,20 +38,6 @@ function makeSpec(overrides: Partial<EngineeringSpec> = {}): EngineeringSpec {
   };
 }
 
-function makeStateSource(
-  overrides: Partial<{
-    transitionState: (...args: unknown[]) => Promise<void>;
-    comment: (...args: unknown[]) => Promise<void>;
-  }> = {},
-) {
-  return {
-    repoRef: 'shaunnez/goose-hub',
-    transitionState: vi.fn().mockResolvedValue(undefined),
-    comment: vi.fn().mockResolvedValue(undefined),
-    ...overrides,
-  } as unknown as StateSource;
-}
-
 function makeAppendEvent(): {
   fn: (input: AppendEventInput) => AgentEvent;
   events: AppendEventInput[];
@@ -90,9 +52,7 @@ function makeAppendEvent(): {
   };
 }
 
-// ─── Tier 1: Structural golden test ──────────────────────────────────────────
-// "A no-op PR that changes a comment in filesOwned fails Tier 1
-//  (call site / export never reached)"
+// ─── Tier 1: Structural ──────────────────────────────────────────────────────
 
 describe('Tier 1 (Structural) — golden test', () => {
   let worktree: string;
@@ -100,8 +60,6 @@ describe('Tier 1 (Structural) — golden test', () => {
   beforeEach(() => {
     worktree = mkdtempSync(join(tmpdir(), 'goose-hub-t1-'));
     mkdirSync(join(worktree, 'src'), { recursive: true });
-    // File exists, but the declared contract function is NOT exported
-    // (simulates a no-op change — only a comment was touched, not the function)
     writeFileSync(
       join(worktree, 'src/index.ts'),
       '// updated comment — no functional change\nexport const version = "1.0.0";\n',
@@ -162,8 +120,7 @@ describe('Tier 1 (Structural) — golden test', () => {
   });
 });
 
-// ─── Tier 2: Functional golden test ──────────────────────────────────────────
-// "A PR with broken import fails Tier 2"
+// ─── Tier 2: Functional ──────────────────────────────────────────────────────
 
 describe('Tier 2 (Functional) — golden test', () => {
   it('fails when a verification tool script exits with unexpected code', async () => {
@@ -216,9 +173,7 @@ describe('Tier 2 (Functional) — golden test', () => {
   });
 });
 
-// ─── Tier 3: Regression golden test ──────────────────────────────────────────
-// "A PR breaking a previously-passing test fails Tier 3 with
-//  project.regressionPolicy: 'escalate' triggering factory:needs-human"
+// ─── Tier 3: Regression ──────────────────────────────────────────────────────
 
 describe('Tier 3 (Regression) — golden test', () => {
   const baseRunArtifacts = {
@@ -277,169 +232,7 @@ describe('Tier 3 (Regression) — golden test', () => {
   });
 });
 
-// ─── End-to-end workflow: Tier 3 failure → factory:needs-human ────────────────
-
-describe('runThreeTierVerifyWorkflow — Tier 3 failure escalates to needs-human', () => {
-  let worktree: string;
-
-  beforeEach(() => {
-    worktree = mkdtempSync(join(tmpdir(), 'goose-hub-e2e-'));
-    mkdirSync(join(worktree, 'src'), { recursive: true });
-    writeFileSync(join(worktree, 'src/index.ts'), 'export const x = 1;\n');
-  });
-
-  afterEach(() => rmSync(worktree, { recursive: true, force: true }));
-
-  it('transitions to factory:needs-human when Tier 3 regression detected', async () => {
-    const stateSource = makeStateSource();
-    const { fn: appendEvent, events } = makeAppendEvent();
-
-    const spec = makeSpec({
-      workPackages: [makeWp('WP1', ['src/index.ts'])],
-      verificationTooling: [],
-    });
-
-    const result = await runThreeTierVerifyWorkflow(
-      makeWorkItem(),
-      spec,
-      stateSource,
-      'goose-hub-self',
-      worktree,
-      'impl-run-test-01',
-      'escalate',
-      {
-        appendEvent,
-        runTierImpl: async (tier, _spec, artifacts, tierDeps) => {
-          const r = await runTier(
-            tier,
-            _spec,
-            { ...artifacts, worktreePath: worktree },
-            {
-              ...tierDeps,
-              runRegressionTestsImpl:
-                tier === 3
-                  ? async () => ({
-                      passed: false,
-                      failedTests: ['FAIL src/index.test.ts > regression'],
-                    })
-                  : undefined,
-            },
-          );
-          return r;
-        },
-      },
-    );
-
-    expect(result.allPassed).toBe(false);
-    expect(result.failedAtTier).toBe(3);
-
-    const transition = vi.mocked(stateSource.transitionState);
-    expect(transition).toHaveBeenCalledWith('562', 'factory:needs-qa', 'factory:needs-human');
-
-    const regression = events.find((e) => (e.kind as string) === 'qa.regression-failed');
-    expect(regression).toBeDefined();
-  });
-
-  it('does NOT escalate to needs-human when Tier 3 fails with ignore policy', async () => {
-    const stateSource = makeStateSource();
-    const { fn: appendEvent } = makeAppendEvent();
-
-    const spec = makeSpec({
-      workPackages: [makeWp('WP1', ['src/index.ts'])],
-      verificationTooling: [],
-    });
-
-    const result = await runThreeTierVerifyWorkflow(
-      makeWorkItem(),
-      spec,
-      stateSource,
-      'goose-hub-self',
-      worktree,
-      'impl-run-test-01',
-      'ignore',
-      {
-        appendEvent,
-        runTierImpl: async (tier, _spec, artifacts, tierDeps) =>
-          runTier(
-            tier,
-            _spec,
-            { ...artifacts, worktreePath: worktree },
-            {
-              ...tierDeps,
-              runRegressionTestsImpl:
-                tier === 3
-                  ? async () => ({ passed: false, failedTests: ['FAIL test.ts > something'] })
-                  : undefined,
-            },
-          ),
-      },
-    );
-
-    // With 'ignore' policy, Tier 3 findings are warnings → treated as passed
-    expect(result.allPassed).toBe(true);
-    expect(vi.mocked(stateSource.transitionState)).not.toHaveBeenCalled();
-  });
-});
-
-// ─── implRunId threading — carry-forward regression check ────────────────────
-// Verifies the fix for Codex P1: workflow must use implRunId (not a fresh UUID)
-// so verifyRegression can actually find wp_iterations rows from the impl run.
-
-describe('runThreeTierVerifyWorkflow — implRunId threading', () => {
-  let worktree: string;
-
-  beforeEach(() => {
-    worktree = mkdtempSync(join(tmpdir(), 'goose-hub-rid-'));
-    mkdirSync(join(worktree, 'src'), { recursive: true });
-    writeFileSync(join(worktree, 'src/index.ts'), 'export const x = 1;\n');
-  });
-
-  afterEach(() => rmSync(worktree, { recursive: true, force: true }));
-
-  it('passes implRunId through to verifyRegression so wp_iterations queries see prior statuses', async () => {
-    const capturedRunIds: string[] = [];
-    const stateSource = makeStateSource();
-    const { fn: appendEvent } = makeAppendEvent();
-
-    const spec = makeSpec({
-      workPackages: [makeWp('WP1', ['src/index.ts'])],
-      verificationTooling: [],
-    });
-
-    await runThreeTierVerifyWorkflow(
-      makeWorkItem(),
-      spec,
-      stateSource,
-      'goose-hub-self',
-      worktree,
-      'the-impl-run-id',
-      'escalate',
-      {
-        appendEvent,
-        runTierImpl: async (tier, _spec, artifacts, tierDeps) =>
-          runTier(
-            tier,
-            _spec,
-            { ...artifacts, worktreePath: worktree },
-            {
-              ...tierDeps,
-              getLastWpStatusImpl: (runId, _wpId) => {
-                capturedRunIds.push(runId);
-                return null;
-              },
-              runRegressionTestsImpl: async () => ({ passed: true, failedTests: [] }),
-            },
-          ),
-      },
-    );
-
-    // Tier 3 must have queried with the implRunId, not a fresh UUID
-    expect(capturedRunIds.some((id) => id === 'the-impl-run-id')).toBe(true);
-    expect(capturedRunIds.every((id) => id !== '')).toBe(true);
-  });
-});
-
-// ─── runTier event emission ───────────────────────────────────────────────────
+// ─── runTier event emission ──────────────────────────────────────────────────
 
 describe('runTier — event emission', () => {
   let worktree: string;

@@ -11,7 +11,7 @@ import type { AgentEvent, AppendEventInput } from '@goose-hub/core/event-stream/
 import type { EngineeringSpec } from '@goose-hub/skills/spec-author/schema.js';
 import { and, desc, eq } from 'drizzle-orm';
 
-export type RegressionPolicy = 'revert' | 'escalate' | 'ignore';
+export type RegressionPolicy = 'escalate' | 'ignore';
 
 export interface VerifyFinding {
   message: string;
