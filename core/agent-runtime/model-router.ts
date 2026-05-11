@@ -3,8 +3,7 @@ import { db } from '../db/db.js';
 import { decisionPatterns } from '../db/schema.js';
 import type { WorkItem } from '../state-source/interface.js';
 import type { ModelTier, Role } from '../types.js';
-
-const HOLDOUT_ROLES = new Set<string>(['qa', 'reviewer']);
+import { HOLDOUT_ROLES } from './roles.js';
 
 export interface SelectModelInput {
   workItem: WorkItem;

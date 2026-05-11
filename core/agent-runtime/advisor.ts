@@ -7,6 +7,7 @@ import type { AgentRuntime } from './interface.js';
 import type { AgentResult } from './interface.js';
 import { OutputValidationError, invokeSkill } from './invoke-skill.js';
 import { reconcileDecisionSummaries } from './reconcile-decisions.js';
+import { ADVISOR_GATED_PRIORITIES } from './roles.js';
 
 interface AdviseOnPlanInput {
   runId: string;
@@ -21,8 +22,6 @@ interface AdviseOnPlanInput {
   /** Optional runtime override — defaults to a new ClaudeCliRuntime. */
   runtime?: AgentRuntime;
 }
-
-const ADVISOR_GATED_PRIORITIES = new Set(['high', 'critical']);
 
 /**
  * adviseOnPlan(input) (#182).

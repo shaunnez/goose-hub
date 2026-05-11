@@ -6,8 +6,7 @@ import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { HoldoutFallbackForbiddenError } from './interface.js';
 import { tierOf } from './models.js';
 import { resolveEscalatedBudgetsForProject } from './resolve-for-project.js';
-
-const HOLDOUT_ROLES = new Set(['qa', 'reviewer']);
+import { HOLDOUT_ROLES } from './roles.js';
 
 // Local rank table — duplicates the order in models.ts but kept private here
 // so we don't widen models.ts' public surface for one defensive check.

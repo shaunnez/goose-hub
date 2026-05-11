@@ -403,7 +403,25 @@ describe('POST /projects/:slug/issues/:id/set-label', () => {
     const res = await app.request('/projects/goose-hub-self/issues/1/set-label', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ group: 'milestone', value: 'foo' }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 200 for valid type:bug', async () => {
+    const res = await app.request('/projects/goose-hub-self/issues/1/set-label', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ group: 'type', value: 'bug' }),
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('returns 400 for invalid type value', async () => {
+    const res = await app.request('/projects/goose-hub-self/issues/1/set-label', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ group: 'type', value: 'epic' }),
     });
     expect(res.status).toBe(400);
   });

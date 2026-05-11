@@ -6,6 +6,7 @@ import {
   findHoldoutContextLeaks,
 } from './holdout-validator.js';
 import type { AgentSpec } from './interface.js';
+import { HOLDOUT_ROLES } from './roles.js';
 
 // Re-export for callers that import these from context-assembly
 export type { HoldoutContextLeak } from './holdout-validator.js';
@@ -14,9 +15,6 @@ export { HOLDOUT_FORBIDDEN_KEYS, findHoldoutContextLeaks } from './holdout-valid
 export interface SpawnContext {
   contextXml: string;
 }
-
-// Holdout roles that enforce strict context isolation (kept here for violation event emission)
-const HOLDOUT_ROLES = new Set(['qa', 'reviewer']);
 
 /**
  * Derives the effective allowlist for a spec, stripping forbidden dev-review

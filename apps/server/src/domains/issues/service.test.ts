@@ -160,8 +160,18 @@ describe('commentOnIssue — validation', () => {
 
 describe('setIssueLabel — validation', () => {
   it('returns 400 for unknown group', async () => {
-    const result = await setIssueLabel('proj', '1', 'type', 'bug');
+    const result = await setIssueLabel('proj', '1', 'milestone', 'foo');
     expect(result).toMatchObject({ ok: false, status: 400 });
+  });
+
+  it('returns 400 for invalid type value', async () => {
+    const result = await setIssueLabel('proj', '1', 'type', 'epic');
+    expect(result).toMatchObject({ ok: false, status: 400 });
+  });
+
+  it('returns ok for valid type:bug', async () => {
+    const result = await setIssueLabel('proj', '1', 'type', 'bug');
+    expect(result.ok).toBe(true);
   });
 
   it('returns 400 for invalid priority value', async () => {
@@ -197,6 +207,26 @@ describe('setIssueLabel — validation', () => {
       'github:owner/repo#1',
       'schedule',
       'blocked-by',
+    );
+  });
+
+  it('translates UI schedule:backlog to canonical schedule:next at the boundary', async () => {
+    const result = await setIssueLabel('proj', '1', 'schedule', 'backlog');
+    expect(result.ok).toBe(true);
+    expect(mockSource.setLabelInGroup).toHaveBeenCalledWith(
+      'github:owner/repo#1',
+      'schedule',
+      'next',
+    );
+  });
+
+  it('translates UI schedule:icebox to canonical schedule:later at the boundary', async () => {
+    const result = await setIssueLabel('proj', '1', 'schedule', 'icebox');
+    expect(result.ok).toBe(true);
+    expect(mockSource.setLabelInGroup).toHaveBeenCalledWith(
+      'github:owner/repo#1',
+      'schedule',
+      'later',
     );
   });
 });

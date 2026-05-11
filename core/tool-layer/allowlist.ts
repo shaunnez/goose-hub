@@ -1,3 +1,4 @@
+import { HOLDOUT_ROLES } from '../agent-runtime/roles.js';
 import type { Role } from '../types.js';
 import { type BundleName, TOOL_BUNDLES } from './bundles.js';
 
@@ -9,8 +10,6 @@ export { TOOL_BUNDLES };
  * violating the holdout discipline (FACTORY_RULES rule 1).
  */
 const HOLDOUT_BLOCKED_BUNDLES = new Set<BundleName>(['decision-record-only']);
-
-const HOLDOUT_ROLES = new Set<Role>(['qa', 'reviewer']);
 
 interface AllowlistSpec {
   toolBundles: string[];

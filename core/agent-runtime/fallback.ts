@@ -2,14 +2,12 @@ export { HoldoutFallbackForbiddenError } from './interface.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { HoldoutFallbackForbiddenError } from './interface.js';
 import { modelsAtOrAboveTier, providerOf, tierOf } from './models.js';
+import { ADVISOR_GATED_PRIORITIES, HOLDOUT_ROLES } from './roles.js';
 
 export interface FallbackPolicy {
   allowDownTier: boolean;
   maxAttempts: number;
 }
-
-const HOLDOUT_ROLES = new Set(['qa', 'reviewer']);
-const CRITICAL_PRIORITIES = new Set(['critical', 'high']);
 
 /**
  * Wraps any AgentRuntime with the M4 fallback policy:
@@ -22,7 +20,7 @@ export function withFallback(runtime: AgentRuntime, policy: FallbackPolicy): Age
     async run(spec: AgentSpec): Promise<AgentResult> {
       const isHoldout = HOLDOUT_ROLES.has(spec.role);
       const priority = (spec.context.priority as string | undefined) ?? 'medium';
-      const isCriticalOrHigh = CRITICAL_PRIORITIES.has(priority);
+      const isCriticalOrHigh = ADVISOR_GATED_PRIORITIES.has(priority);
 
       // Holdout roles: no fallback — catch primary failure and surface as typed error
       if (isHoldout) {

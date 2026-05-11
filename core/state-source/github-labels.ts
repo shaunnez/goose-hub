@@ -5,29 +5,56 @@ import { isLegalTransition } from '../state-machine/transitions.js';
 import type {
   Artifact,
   CreateIssueInput,
-  ExecMode,
   IssueComment,
   Milestone,
-  Mode,
-  Priority,
   Schedule,
   SourceEvent,
   StateSource,
   Subscription,
   WorkItem,
-  WorkItemType,
 } from './interface.js';
+import {
+  LABEL_GROUPS,
+  extractLabelValue,
+  parseExec,
+  parseMode,
+  parsePriority,
+  parseSchedule,
+  parseWorkItemType,
+} from './label-parsers.js';
 
 function parseIssueNumber(itemId: string): string {
   return itemId.match(/#(\d+)$/)?.[1] ?? itemId;
 }
 
-export const SCHEDULE_UI_TO_LABEL: Record<string, string> = {
+/**
+ * Schedule values exposed in the UI. `backlog` and `icebox` are aliases for
+ * the canonical Schedule values `next` and `later` respectively (the human-
+ * facing wording diverges from the label namespace for historical reasons).
+ */
+export type ScheduleUIValue = 'current' | 'backlog' | 'icebox' | 'blocked-by';
+
+/**
+ * UI → canonical Schedule value (the `value` part of a `schedule:<value>`
+ * label). Used at the server boundary before calling `setLabelInGroup` so
+ * the data layer never sees `backlog`/`icebox` (which would silently no-op
+ * in `in-memory-labels` and produce an invalid label name on GitHub).
+ */
+export const SCHEDULE_UI_TO_VALUE: Record<ScheduleUIValue, Schedule> = {
+  current: 'current',
+  backlog: 'next',
+  icebox: 'later',
+  // 'blocked-by' is a manual override the human sets via the UI — round-trips
+  // through unchanged (#202).
+  'blocked-by': 'blocked-by',
+};
+
+/** UI → full GitHub label (with `schedule:` prefix). Kept for callers that
+ * need to compare against raw label names directly. */
+export const SCHEDULE_UI_TO_LABEL: Record<ScheduleUIValue, string> = {
   current: 'schedule:current',
   backlog: 'schedule:next',
   icebox: 'schedule:later',
-  // 'blocked-by' is a manual override label set by the human; the API must
-  // accept it so the UI can roundtrip the value (#202).
   'blocked-by': 'schedule:blocked-by',
 };
 
@@ -87,52 +114,15 @@ function mapIssueToWorkItem(issue: GithubIssue, repoRef: string, ownerLogin: str
   // State: run full conflict resolver; handles multi-label, archived-wins, zero-label cases.
   const { state } = resolveState(labelNames);
 
-  // Type
-  const typeLabel = labelNames.find((n) => n.startsWith('type:'));
-  const typeValue = typeLabel?.slice('type:'.length);
-  const type: WorkItemType =
-    typeValue === 'feature' ||
-    typeValue === 'bug' ||
-    typeValue === 'chore' ||
-    typeValue === 'research'
-      ? typeValue
-      : 'feature';
-
-  // Priority
-  const priorityLabel = labelNames.find((n) => n.startsWith('priority:'));
-  const priorityValue = priorityLabel?.slice('priority:'.length);
-  const priority: Priority =
-    priorityValue === 'critical' ||
-    priorityValue === 'high' ||
-    priorityValue === 'medium' ||
-    priorityValue === 'low'
-      ? priorityValue
-      : 'medium';
-
-  // Mode
-  const modeLabel = labelNames.find((n) => n.startsWith('mode:'));
-  const modeValue = modeLabel?.slice('mode:'.length);
-  const mode: Mode =
-    modeValue === 'supervised' || modeValue === 'autonomous' || modeValue === 'interactive'
-      ? modeValue
-      : 'supervised';
-
-  // Schedule
-  const scheduleLabel = labelNames.find((n) => n.startsWith('schedule:'));
-  const scheduleValue = scheduleLabel?.slice('schedule:'.length);
-  const schedule: Schedule =
-    scheduleValue === 'current' ||
-    scheduleValue === 'next' ||
-    scheduleValue === 'later' ||
-    scheduleValue === 'blocked-by'
-      ? scheduleValue
-      : 'later';
-
-  // Exec
-  const execLabel = labelNames.find((n) => n.startsWith('exec:'));
-  const execValue = execLabel?.slice('exec:'.length);
-  const exec: ExecMode =
-    execValue === 'serial' || execValue === 'parallel' ? execValue : 'parallel';
+  // Per ADR 0039 the github-labels mapper is the single ingress for label
+  // values — narrow the strings to typed enums here, then trust the type
+  // downstream. Unknown values fall back to the documented DEFAULT_* in
+  // interface.ts (one place to change a default).
+  const type = parseWorkItemType(extractLabelValue(labelNames, LABEL_GROUPS.TYPE));
+  const priority = parsePriority(extractLabelValue(labelNames, LABEL_GROUPS.PRIORITY));
+  const mode = parseMode(extractLabelValue(labelNames, LABEL_GROUPS.MODE));
+  const schedule: Schedule = parseSchedule(extractLabelValue(labelNames, LABEL_GROUPS.SCHEDULE));
+  const exec = parseExec(extractLabelValue(labelNames, LABEL_GROUPS.EXEC));
 
   const body = issue.body ?? '';
 
@@ -352,7 +342,7 @@ export class GitHubLabelsSource implements StateSource {
       .map((l) => l.name)
       .filter((name) => {
         if (removeFactoryLabels === 'all') {
-          return !name.startsWith('factory:');
+          return !name.startsWith(LABEL_GROUPS.STATE);
         }
         return name !== removeFactoryLabels;
       });

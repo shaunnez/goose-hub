@@ -83,3 +83,4 @@ export type DecisionSummary = z.infer<typeof DecisionSummarySchema>;
 export type CriterionCheck = z.infer<typeof CriterionCheckSchema>;
 export type ReviewFinding = z.infer<typeof ReviewFindingSchema>;
 export type ReviewOutput = z.infer<typeof ReviewOutputSchema>;
+export type ReviewVerdict = ReviewOutput['verdict'];
