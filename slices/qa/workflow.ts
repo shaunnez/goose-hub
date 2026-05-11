@@ -31,6 +31,7 @@ function getPrDiff(_workItem: WorkItem, workspaceDir?: string): string {
     return execFileSync('git', ['diff', 'origin/main...HEAD'], {
       cwd: workspaceDir,
       encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
   } catch {
     return '';
