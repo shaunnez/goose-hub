@@ -27,6 +27,54 @@ Make Codex (`gpt-5-codex`, `gpt-5-codex-mini`) a first-class selectable provider
    - `defaultModelForTier()` body filters `provider === 'claude'` — `models.ts:25-31`.
 5. UI exposes tier only — `apps/web/src/components/settings/components/ProjectModelPanel.tsx:43-80` (`TierSelect`).
 
+## Additional UX requirements (folded in after initial review)
+
+Four UX additions requested after the initial plan was written. They are independent of the core provider-wiring work and can be implemented in a separate pass or folded into Groups 2–3 depending on capacity.
+
+### UX-1. Reset to defaults — budgets tab
+
+`apps/web/src/components/settings/components/ProjectBudgetPanel.tsx`
+
+Add a **"Reset all to defaults"** button in the "Global budget caps" section header. On click, nulls out every global override in a single API call and issues `deleteSkillBudgetSetting` for every skill row that currently has any override. The existing per-row `Trash2` delete (line 225) remains for surgical resets.
+
+Server side: a new endpoint `DELETE /projects/:slug/settings/budgets` (or `PATCH` with all-nulls body) that bulk-clears global + all skill overrides in one transaction, avoiding a waterfall of per-row calls from the client.
+
+### UX-2. Bulk provider switch — models tab
+
+`apps/web/src/components/settings/components/ProjectModelPanel.tsx`
+
+Add two pill buttons in the "Role model assignments" section header row, right-aligned:
+
+- **"All → Codex"** — fires PATCH for every non-holdout role setting `{primaryProvider: 'codex', primaryModel: 'sonnet'}` (maps to `gpt-5-codex`). Disabled if Codex CLI is not connected.
+- **"All → Claude"** — fires PATCH for every non-holdout role setting `{primaryProvider: 'claude', primaryModel: 'sonnet'}` (maps to `claude-sonnet-4-6`).
+
+Holdout roles (`qa`, `reviewer`) are excluded from bulk operations unless `allowHoldoutOverride: true`.
+
+Server side: a new endpoint `PATCH /projects/:slug/settings/models/bulk` accepting `{provider: 'claude'|'codex', tier: ModelTier}` that writes the same (tier, provider) pair for all eligible roles in one DB transaction — cleaner than the UI issuing N individual PATCHes.
+
+### UX-3. Show actual defaults below inputs
+
+**Budgets tab** — `ProjectBudgetPanel.tsx` `NumericInput` (line 55): the global rows already show the config value as `placeholder` (line 159), but the per-skill rows just say `"default"` (lines 202, 209, 217). Resolve the actual `SKILL_BUDGETS[skill]` values server-side and include them in the GET response as a `skillDefaults: Record<string, {maxTurns, maxBudgetUsd, timeoutMs}>` field. Render as `<p className="text-[10px] text-fg-3">default: {val}</p>` below each input.
+
+**Models tab** — `ProjectModelPanel.tsx` `TierSelect` (line 43): below each select, add `<p className="text-[10px] text-fg-3">{resolvedModelId}</p>` showing the concrete model ID that will be used (e.g. `claude-sonnet-4-6` or `gpt-5-codex`). Derive from the effective tier + provider: if neither DB nor config override is set, fall back to skill default. This requires the GET response to include the resolved model ID per slot (add `resolvedPrimary`, `resolvedFallback`, `resolvedAdvisor` string fields alongside the existing tier fields).
+
+### UX-4. Max turns + timeout configurable per-role — readability assessment
+
+**Decision: place in the expanded row, not as table columns.**
+
+The role table already has 4 columns (role, primary, fallback, advisor). Adding `maxTurns` and `timeoutMs` as columns would make it too wide at typical viewport widths and visually conflate budget controls with model controls.
+
+Better: when a role row is expanded (the `ChevronDown` already exists at line 219), render budget inputs beneath the complexity editor — same `ml-4 border-l-2` inset pattern — with `maxTurns` and `timeoutMs` per role. This matches the mental model ("this role, at these settings") without crowding the table.
+
+Implementation scope:
+- New DB columns `max_turns` (integer, nullable) and `timeout_ms` (integer, nullable) on `project_model_settings`.
+- Extend `RoleModelPatch` and server schema to accept them.
+- Extend the GET response to return resolved values (DB override → config `rolesModels[role].budgets` → `SKILL_BUDGETS` minimum).
+- Render two numeric inputs in the expanded row, below `ComplexityEditor`.
+- These feed into `resolveBudgetsForProject()` in `core/agent-runtime/resolve-for-project.ts` — the DB row's values win over the skill-level budget.
+
+This is the higher-effort addition; ship the other three first if time is short.
+
 ## Out of scope (phase 2)
 
 - Complexity-based provider overrides (the `complexity_overrides_json` JSON would need to carry provider per rule).
@@ -98,3 +146,7 @@ Each step lists the files to touch and an acceptance signal. Steps within a grou
 - [ ] `ProjectModelPanel` exposes provider per slot; codex options disabled without auth.
 - [ ] Existing ADR-0034 resolution tests still pass.
 - [ ] Smoke run: a project configured with `developer.primary = codex:sonnet` spawns `CodexCliRuntime` with `gpt-5-codex`.
+- [ ] UX-1: "Reset all to defaults" clears all budget overrides in one action.
+- [ ] UX-2: "All → Codex" and "All → Claude" bulk-set primary provider/tier for all non-holdout roles.
+- [ ] UX-3: Resolved model IDs and skill budget defaults are visible beneath each input in small text.
+- [ ] UX-4 (optional): Max turns + timeout editable per-role in the expanded row, below complexity rules.
