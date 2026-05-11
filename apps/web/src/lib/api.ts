@@ -576,8 +576,11 @@ export async function fetchPipelineSettings(
   return getJson<PipelineSettingsDto>(`/projects/${slug}/settings/pipeline`, signal);
 }
 
-export async function patchPipelineSettings(slug: string, useM19Pipeline: boolean): Promise<void> {
-  await patchJson(`/projects/${slug}/settings/pipeline`, { useM19Pipeline });
+export async function patchPipelineSettings(
+  slug: string,
+  useMultiAgentPipeline: boolean,
+): Promise<void> {
+  await patchJson(`/projects/${slug}/settings/pipeline`, { useMultiAgentPipeline });
 }
 
 export async function fetchReviewSettings(
