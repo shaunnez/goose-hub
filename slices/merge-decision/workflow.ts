@@ -73,10 +73,13 @@ export function runMergeDecision(input: MergeDecisionInput): MergeDecisionResult
   });
 
   // Read prior scores (ascending by ts). `listProjectQualityTrend` already
-  // returns ascending — but we exclude the row we just wrote.
+  // returns ascending — but we exclude the row we just wrote AND any legacy
+  // rows from before migration 0022 (where `pipelineRunId` is null). Those
+  // pre-pipeline runs are not comparable cycles and would prematurely exit
+  // warmup or pollute convergence if counted.
   const trend = listProjectQualityTrend(input.projectId);
   const priorScores = trend
-    .filter((r) => r.pipelineRunId !== input.pipelineRunId)
+    .filter((r) => r.pipelineRunId != null && r.pipelineRunId !== input.pipelineRunId)
     .map((r) => r.score);
 
   // Score-only warmup gate.

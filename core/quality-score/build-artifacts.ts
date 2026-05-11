@@ -137,7 +137,10 @@ export function buildRunArtifacts(
   }
 
   const staticPassed = latestQa?.tierResults?.structural?.passed === true;
-  const uatPassed = latestQa?.tierResults?.regression?.passed === true;
+  // `uat_passed` reflects the functional tier (acceptance / end-to-end pass
+  // gate). The regression tier is already captured by `regressions_open`, so
+  // sourcing uat from regression would double-count it.
+  const uatPassed = latestQa?.tierResults?.functional?.passed === true;
   const reviewConverged = latestReview?.verdict === 'approved';
 
   // harness_pass_rate: prefer the structured testRun captured by the QA

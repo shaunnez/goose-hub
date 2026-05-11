@@ -31,8 +31,11 @@ export interface ReviewWorkflowDeps {
   runtime?: AgentRuntime;
 }
 
-function findPipelineRunId(workItemId: string): string | undefined {
-  const events = eventStore.replay({ workItemId });
+function findPipelineRunId(projectId: string, workItemId: string): string | undefined {
+  // Scope by both projectId and workItemId — two projects can track the same
+  // upstream issue, and we must not attach another project's pipelineRunId
+  // to this review's event payload.
+  const events = eventStore.replay({ projectId, workItemId });
   const prOpened = events
     .slice()
     .reverse()
@@ -91,7 +94,7 @@ export async function runReviewWorkflow(
     const reviewOutput = parsed.data;
 
     const { decisionSummaries: _ds, ...reviewPayload } = reviewOutput;
-    const pipelineRunId = findPipelineRunId(workItem.id);
+    const pipelineRunId = findPipelineRunId(projectSlug, workItem.id);
     eventStore.appendEvent({
       projectId: projectSlug,
       workItemId: workItem.id,
@@ -449,7 +452,7 @@ export async function runConvergentReviewWorkflow(
     const { minRounds } = classifyTopic(changedFilePaths);
     const qaResult = getQaVerdict(eventStore.replay({ workItemId: workItem.id }));
     const pr = { externalId: workItem.externalId, prDiff };
-    const pipelineRunId = findPipelineRunId(workItem.id);
+    const pipelineRunId = findPipelineRunId(projectSlug, workItem.id);
     const pipelineRunIdPayload = pipelineRunId != null ? { pipelineRunId } : {};
 
     let previousRoundFindings: FindingKey[] = [];

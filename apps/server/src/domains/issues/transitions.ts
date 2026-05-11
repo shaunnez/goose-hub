@@ -109,7 +109,10 @@ export async function approveIssue(
       const runMergeDecisionFn = await loadMergeDecision();
       decision = runMergeDecisionFn({
         pipelineRunId,
-        projectId: projectCfg?.id ?? slug,
+        // Use the slug — that's the same key all qa.completed/review.completed
+        // events are written with, so buildRunArtifacts can find them. Falls
+        // back gracefully if a project ever has id !== slug.
+        projectId: slug,
         workItemId,
       });
     } catch (err) {
