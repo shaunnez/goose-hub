@@ -67,6 +67,13 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'decompose.completed': 'Decompose complete',
   'spec.completed': 'Spec authored',
   'agent.model-selected': 'Model selected',
+  'swarm.heartbeat': 'Swarm heartbeat',
+  'swarm.scout-completed': 'Scout completed',
+  'swarm.scout-failed': 'Scout failed',
+  'swarm.scout-timeout': 'Scout timeout',
+  'swarm.wave-completed': 'Wave completed',
+  'swarm.wave-halted': 'Wave halted',
+  'swarm.wave-incomplete': 'Wave incomplete',
 };
 
 export function formatSkillName(skill: string | null): string {

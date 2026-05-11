@@ -47,6 +47,13 @@ import { QaCompletedEvent, QaFailedEvent } from './timeline/QaEvents';
 import { RetroCompletedEvent } from './timeline/RetroCompletedEvent';
 import { ReviewCompletedEvent } from './timeline/ReviewCompletedEvent';
 import { RunGroupWrapper } from './timeline/RunGroupWrapper';
+import {
+  SwarmHeartbeatEvent,
+  SwarmScoutCompletedEvent,
+  SwarmScoutFailedEvent,
+  SwarmScoutTimeoutEvent,
+  SwarmWaveEvent,
+} from './timeline/SwarmEvents';
 import { AgentVerifyCommandEvent, ToolWarningEvent } from './timeline/VerifyToolEvents';
 
 export function renderTimelineItem(item: RenderItem, idx: number, context?: TimelineContext) {
@@ -156,6 +163,18 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <PrdDeclinedEvent key={event.id} event={event} />;
     case 'decompose.completed':
       return <DecomposeCompletedEvent key={event.id} event={event} context={context} />;
+    case 'swarm.heartbeat':
+      return <SwarmHeartbeatEvent key={event.id} event={event} />;
+    case 'swarm.scout-completed':
+      return <SwarmScoutCompletedEvent key={event.id} event={event} />;
+    case 'swarm.scout-failed':
+      return <SwarmScoutFailedEvent key={event.id} event={event} />;
+    case 'swarm.scout-timeout':
+      return <SwarmScoutTimeoutEvent key={event.id} event={event} />;
+    case 'swarm.wave-completed':
+    case 'swarm.wave-halted':
+    case 'swarm.wave-incomplete':
+      return <SwarmWaveEvent key={event.id} event={event} />;
     default:
       return <FallbackEvent key={event.id} event={event} />;
   }
