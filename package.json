@@ -17,6 +17,8 @@
     "test:e2e": "pnpm --filter @goose-hub/web test:e2e",
     "test:e2e:pipeline": "pnpm --filter @goose-hub/web test:e2e:pipeline",
     "install-labels": "tsx scripts/install-labels.ts",
+    "manifest": "tsx scripts/build-manifest.ts",
+    "audit-docs": "tsx scripts/audit-docs.ts",
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config=drizzle.config.ts",
     "cleanup-worktrees": "bash scripts/cleanup-worktrees.sh",

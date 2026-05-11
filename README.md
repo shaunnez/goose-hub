@@ -5,7 +5,11 @@ Personal command centre for AI-assisted software delivery.
 See `MISSION.md` for what this is.  
 See `FACTORY_RULES.md` for non-negotiables.  
 See `CLAUDE.md` for AI agent orientation.  
+See `CONTEXT.md` for resolved implementation decisions.  
+See `docs/inventory.md` for an auto-generated, always-current map of every package, slice, skill, app, and target-project (regenerate with `pnpm manifest`).  
 See `docs/archive/PLAN.md` for the archived full plan and milestone ladder.
+
+Drift-check: `pnpm audit-docs` reports drift between governance docs and code (role lists, file references, milestone span, skill structure). Run it before merging changes that touch `core/types.ts` or the skill catalogue.
 
 ## What's built
 
@@ -58,7 +62,7 @@ dev-ready → in-progress → needs-qa → needs-review → approved → (human 
 
 ### Skills (`@goose-hub/skills`)
 
-Versioned markdown prompts + Zod schemas under `skills/<name>/`. Current set: `triage`, `repo-match`, `investigate`, `playwright-repro`, `spec-author`, `evidence-post`, `implement`, `advise-on-plan`, `qa`, `review`, `retrospective-light`, `retrospective-deep`, `retrospective-cross-run` (M11), `skill-coach` (M11), `resolve-conflict`, `bug-enhance`, `echo-test`, `echo-test-holdout`. Each ships with `slice.test.ts`, `eval/eval.json` (where applicable), and `README.md`. Skills follow the channel-split convention from CONTEXT.md: `prompt.md` is the system prompt, per-run context is rendered as XML in the user message. All prompts are loaded via `readPromptWithContext()` (ADR 0022) which also appends an optional per-project overlay from `target-projects/<slug>/agent-context/<skillName>.md`.
+Versioned markdown prompts + Zod schemas under `skills/<name>/`. The current catalogue is enumerated in `docs/inventory.md` (auto-generated; do not hand-maintain lists here). Each skill ships with `prompt.md`, `schema.ts`, `skill.config.ts`, `slice.test.ts`, optional `eval/eval.json`, and `README.md`. Skills follow the channel-split convention from CONTEXT.md: `prompt.md` is the system prompt, per-run context is rendered as XML in the user message. All prompts are loaded via `readPromptWithContext()` (ADR 0022) which also appends an optional per-project overlay from `target-projects/<slug>/agent-context/<skillName>.md`.
 
 ### Holdouts (M8)
 
