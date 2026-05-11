@@ -400,7 +400,7 @@ export interface DevReviewSettingsDto {
 
 export interface PipelineSettingsDto {
   projectId: string;
-  useM19Pipeline: boolean;
+  useMultiAgentPipeline: boolean;
 }
 
 export type ReviewerSlotModel = 'claude' | 'codex';

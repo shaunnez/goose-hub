@@ -36,14 +36,14 @@ export function PipelinePanel({ slug }: Props) {
         <label className="flex items-center gap-2 text-[12.5px]">
           <input
             type="checkbox"
-            data-testid="use-m19-pipeline-toggle"
-            checked={data.useM19Pipeline}
+            data-testid="use-multi-agent-pipeline-toggle"
+            checked={data.useMultiAgentPipeline}
             onChange={(e) => patch.mutate(e.target.checked)}
             disabled={patch.isPending}
             className="h-4 w-4 rounded border-line"
           />
-          <span className="font-mono">useM19Pipeline</span>
-          {data.useM19Pipeline ? (
+          <span className="font-mono">useMultiAgentPipeline</span>
+          {data.useMultiAgentPipeline ? (
             <span className="text-[11px] text-accent">enabled</span>
           ) : (
             <span className="text-[11px] text-fg-3">disabled</span>
