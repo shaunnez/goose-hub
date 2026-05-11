@@ -8,15 +8,30 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import * as schema from './schema.js';
 
 /**
- * Resolve the database path. Under Vitest each worker gets its own file so
- * concurrent migrations (one per worker process) don't race on the same
- * SQLite file. Outside tests, all callers share `~/.factory/data/factory.db`
- * unless `DB_PATH` overrides it.
+ * Resolve the database path.
+ *
+ * - Under Vitest each worker gets its own file. Concurrent migrations (one
+ *   per worker process) race on a shared SQLite file otherwise — drizzle's
+ *   migrator is non-atomic across "is the migration applied?" / CREATE TABLE
+ *   so even WAL + busy_timeout can't serialize the two reads.
+ * - When the parent test runner sets `DB_PATH` (see
+ *   `scripts/run-vitest-with-db.ts`) we treat it as the *base* and append a
+ *   per-worker suffix so the temp dir is still scoped to a single
+ *   `pnpm test` invocation but workers don't collide inside it.
+ * - Outside tests, all callers share `~/.factory/data/factory.db` unless
+ *   `DB_PATH` overrides.
  */
 function resolveDbPath(): string {
-  if (process.env.DB_PATH != null) return process.env.DB_PATH;
   const workerId =
     process.env.VITEST_POOL_ID ?? process.env.VITEST_WORKER_ID ?? (process.env.VITEST ? '0' : null);
+
+  if (process.env.DB_PATH != null) {
+    if (workerId == null) return process.env.DB_PATH;
+    const ext = path.extname(process.env.DB_PATH);
+    const stem = process.env.DB_PATH.slice(0, process.env.DB_PATH.length - ext.length);
+    return `${stem}-w${workerId}${ext}`;
+  }
+
   if (workerId != null) {
     return path.join(os.tmpdir(), `factory-vitest-${process.pid}-${workerId}.db`);
   }
