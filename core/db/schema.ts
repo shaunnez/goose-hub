@@ -266,7 +266,7 @@ export const projectSettings = sqliteTable('project_settings', {
   maxParallelAgents: integer('max_parallel_agents'),
   maxRetries: integer('max_retries'),
   perBashCommandMaxSeconds: integer('per_bash_command_max_seconds'),
-  useM19Pipeline: integer('use_m19_pipeline'),
+  useMultiAgentPipeline: integer('use_multi_agent_pipeline'),
   /** experimental.recordDecisionTool — gates decision-capture hook installation. Default false (0). */
   recordDecisionTool: integer('record_decision_tool'),
   updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
