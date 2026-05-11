@@ -1,9 +1,11 @@
 import { DispositionSchema } from '@goose-hub/core/findings/disposition.js';
+import { PrioritySchema } from '@goose-hub/core/findings/priority.js';
 import { DecisionSummarySchema } from '@goose-hub/core/retrospective/schemas.js';
 import { z } from 'zod';
 
 export { DecisionSummarySchema };
 export { DispositionSchema };
+export { PrioritySchema };
 
 export const CriterionCheckSchema = z.object({
   criterion: z.string(),
@@ -12,9 +14,11 @@ export const CriterionCheckSchema = z.object({
 });
 
 /**
- * Review finding shape (#468). Disposition is required when severity is
- * `blocker` (the Review-side fix-or-register rule). Shared
- * `DispositionSchema` lives in `core/findings/disposition.ts`.
+ * Review finding shape (#468, #697). Disposition is required when severity
+ * is `blocker` (the Review-side fix-or-register rule). `priority` is optional
+ * on input — when omitted, `defaultReviewPriority(severity)` populates it
+ * post-parse so downstream consumers (quality-score, merge-decision) always
+ * see a concrete P0..P3. Shared schemas live in `core/findings/`.
  */
 export const ReviewFindingSchema = z
   .object({
@@ -28,6 +32,12 @@ export const ReviewFindingSchema = z
     disposition: DispositionSchema.optional(),
     /** Commit SHA, issue number, or rationale matching the disposition (#468) */
     dispositionRef: z.string().min(1).optional(),
+    /**
+     * Priority bucket consumed by quality-score (#697). When the agent
+     * omits this, the default mapper below promotes severity to a
+     * sensible default (blocker → P0, major → P1, minor → P2).
+     */
+    priority: PrioritySchema.optional(),
   })
   .superRefine((val, ctx) => {
     if (val.severity === 'blocker') {
@@ -79,6 +89,7 @@ export const ReviewOutputSchema = z.discriminatedUnion('verdict', [
 ]);
 
 export type { Disposition } from '@goose-hub/core/findings/disposition.js';
+export type { Priority } from '@goose-hub/core/findings/priority.js';
 export type DecisionSummary = z.infer<typeof DecisionSummarySchema>;
 export type CriterionCheck = z.infer<typeof CriterionCheckSchema>;
 export type ReviewFinding = z.infer<typeof ReviewFindingSchema>;

@@ -386,6 +386,41 @@ improvement_candidate:
 
 **Telemetry:** `agent.run-completed` carries `turns.used` (extracted from CLI `num_turns`) alongside `turns.budgeted` and `budget.usd`, so retrospectives can compare observed vs limit.
 
+## Two Quality Scores — QA 8-category vs deterministic outcome (M19.21 #697)
+
+Goose Hub records two distinct quality scores per work-item lifecycle. They
+serve different purposes and must not be conflated.
+
+**QA 8-category subjective score (per-run, written by the QA agent).**
+Lives on `qa.completed.payload.qualityScores` (open/closed, conceptCount,
+timeToCapability, complecting, loc, coupling, gallsLaw, cyclomaticComplexity)
+plus a derived `overallScore` summed across categories. Maximum 100, default
+threshold 70. This is the **agent's subjective grading** of the diff's
+craftsmanship — used to gate the QA verdict (`pass` vs `partial` vs `fail`).
+Example: `overallScore: 73, threshold: 70` → QA verdict `pass` for the score
+gate (other rules still apply).
+
+**Deterministic outcome score (per-cycle, written by merge-decision).**
+Lives on `run_quality_scores`, written by `slices/merge-decision/workflow.ts`
+right before `mergePR()` inside the approve action handler. Maximum 100,
+default threshold 80. This score is **derived mechanically** from the event
+stream — P0..P3 counts from QA + Review findings, harness_pass_rate from the
+deterministic Tier 2 test run, `static_passed` / `uat_passed` / `review_converged`
+from the pipeline's terminal events. No agent grades this; the formula is
+fixed (see `docs/adr/0033-quality-score-weights.md`). Example: with
+`p0_count: 0, p1_count: 1, p2_count: 2, harness_pass_rate: 0.8,
+static_passed: true, uat_passed: true, review_converged: true` the formula
+gives `score: 82`.
+
+**Gate semantics differ.** The QA score gates the QA agent's verdict only.
+The deterministic score gates auto-merge — `prior < 3` cycles → score-only
+(`score >= 80`); `prior >= 3` cycles → score AND `isConverged([...prior.slice(-2), score], components)`.
+
+**Both flow into retro.** Retrospectives read both. The QA 8-category score
+captures "did the agent think the diff is well-crafted?"; the deterministic
+score captures "did the cycle actually converge?" — they tell different
+stories about the same PR and a divergence between them is itself a signal.
+
 ## Cost Module (ADR 0016)
 
 All cost logic lives in `core/cost/`: `extract.ts` (parsers), `repository.ts` (writes), `skill-stage.ts` (skill→UI-stage mapping), `types.ts`. The `costs/` server domain only reads. Only the agent runtime appends rows, called once per successful skill run via `recordCost()`.

@@ -1,14 +1,20 @@
 import { DispositionSchema } from '@goose-hub/core/findings/disposition.js';
+import { PrioritySchema } from '@goose-hub/core/findings/priority.js';
 import { DecisionSummarySchema } from '@goose-hub/core/retrospective/schemas.js';
 import { z } from 'zod';
 
 export { DecisionSummarySchema };
 export { DispositionSchema };
+export { PrioritySchema };
 
 /**
- * QA finding shape (#468). Disposition is required when severity is `error`
- * (the QA-side fix-or-register rule). The shared `DispositionSchema` lives
- * in `core/findings/disposition.ts` so QA and Review can't drift.
+ * QA finding shape (#468, #697). Disposition is required when severity is
+ * `error` (the QA-side fix-or-register rule). `priority` is optional — when
+ * omitted, `defaultQaPriority(severity)` (in `core/findings/priority.ts`)
+ * promotes severity to a sensible default at the consumer side
+ * (quality-score's `buildRunArtifacts`, merge-decision). The schema itself
+ * does not transform, so existing test fixtures and call sites that don't
+ * set priority continue to type-check unchanged.
  */
 export const FindingSchema = z
   .object({
@@ -25,6 +31,12 @@ export const FindingSchema = z
     disposition: DispositionSchema.optional(),
     /** Commit SHA, issue number, or rationale matching the disposition (#468) */
     dispositionRef: z.string().min(1).optional(),
+    /**
+     * Priority bucket consumed by quality-score (#697). When the agent
+     * omits this, the default mapper below promotes severity to a
+     * sensible default.
+     */
+    priority: PrioritySchema.optional(),
   })
   .superRefine((val, ctx) => {
     if (val.severity === 'error') {
@@ -142,6 +154,7 @@ export const QaOutputSchema = z.object({
 });
 
 export type { Disposition } from '@goose-hub/core/findings/disposition.js';
+export type { Priority } from '@goose-hub/core/findings/priority.js';
 export type DecisionSummary = z.infer<typeof DecisionSummarySchema>;
 export type Finding = z.infer<typeof FindingSchema>;
 export type TierResult = z.infer<typeof TierResultSchema>;

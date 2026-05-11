@@ -142,6 +142,28 @@ For each finding, set `disposition` and `dispositionRef`:
 
 Review records the finding; Review does not file the follow-up issue itself (holdout discipline). The orchestrator or human reviewer is responsible for filing `disposition: 'registered'` issues.
 
+## Priority classification
+
+Every finding carries a `priority` from the shared P0..P3 enum (#697). The
+per-cycle quality score uses these counts to gate auto-merge.
+
+| `priority` | When | Score impact |
+|---|---|---|
+| `P0` | Must fix before merge. Production-breaking, security exposure, governance violation, or any condition that makes the PR unmergeable. | Zeros the per-cycle score. |
+| `P1` | Significant defect. AC unmet, broken public contract, missing required slice/skill artefacts. | -8 per finding. |
+| `P2` | Notable issue. Naming divergence, partial test coverage of an AC, doc gap. | -4 per finding. |
+| `P3` | Nit / informational. Style, low-impact suggestion. | -1 per finding. |
+
+`priority` is OPTIONAL — when omitted, the orchestrator applies the default
+mapping below. Set it explicitly whenever the default doesn't match the
+real impact:
+
+- `severity: 'blocker'` → default `P0`. Demote to `P1` only if the finding
+  is dispositioned `out-of-scope` and does not actually bar merge.
+- `severity: 'major'` → default `P1`. Promote to `P0` when the issue must
+  block merge (e.g. unmet AC the developer claimed satisfied).
+- `severity: 'minor'` → default `P2`. Demote to `P3` for cosmetic nits.
+
 ## Step 5 — Determine the verdict
 
 Set `verdict` using the following rules, evaluated in order:

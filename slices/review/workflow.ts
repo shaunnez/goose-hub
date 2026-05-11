@@ -31,6 +31,19 @@ export interface ReviewWorkflowDeps {
   runtime?: AgentRuntime;
 }
 
+function findPipelineRunId(projectId: string, workItemId: string): string | undefined {
+  // Scope by both projectId and workItemId — two projects can track the same
+  // upstream issue, and we must not attach another project's pipelineRunId
+  // to this review's event payload.
+  const events = eventStore.replay({ projectId, workItemId });
+  const prOpened = events
+    .slice()
+    .reverse()
+    .find((e) => e.kind === 'pr.opened');
+  const payload = prOpened?.payload as { pipelineRunId?: string } | undefined;
+  return typeof payload?.pipelineRunId === 'string' ? payload.pipelineRunId : undefined;
+}
+
 /**
  * Runs the Review holdout workflow for a work item in `factory:needs-review` state.
  * Reviewer is a holdout: fresh context, no advisor, no fallback (FACTORY_RULES 1, 20, 23).
@@ -81,11 +94,12 @@ export async function runReviewWorkflow(
     const reviewOutput = parsed.data;
 
     const { decisionSummaries: _ds, ...reviewPayload } = reviewOutput;
+    const pipelineRunId = findPipelineRunId(projectSlug, workItem.id);
     eventStore.appendEvent({
       projectId: projectSlug,
       workItemId: workItem.id,
       kind: 'review.completed',
-      payload: reviewPayload,
+      payload: { ...reviewPayload, ...(pipelineRunId != null ? { pipelineRunId } : {}) },
       runId,
     });
 
@@ -438,6 +452,8 @@ export async function runConvergentReviewWorkflow(
     const { minRounds } = classifyTopic(changedFilePaths);
     const qaResult = getQaVerdict(eventStore.replay({ workItemId: workItem.id }));
     const pr = { externalId: workItem.externalId, prDiff };
+    const pipelineRunId = findPipelineRunId(projectSlug, workItem.id);
+    const pipelineRunIdPayload = pipelineRunId != null ? { pipelineRunId } : {};
 
     let previousRoundFindings: FindingKey[] = [];
     let consecutiveZeroCriticalRounds = 0;
@@ -519,6 +535,7 @@ export async function runConvergentReviewWorkflow(
             criteriaChecks: humanReviewer?.parsed.criteriaChecks ?? [],
             findings: humanReviewer?.parsed.findings ?? [],
             escalationReason,
+            ...pipelineRunIdPayload,
           },
           runId,
         });
@@ -559,6 +576,7 @@ export async function runConvergentReviewWorkflow(
             criteriaChecks: [],
             findings: waveResult.reviewerOutputs.flatMap((r) => r.parsed.findings),
             escalationReason: `Round ${round} reviewers returned divergent verdicts — human arbitration required`,
+            ...pipelineRunIdPayload,
           },
           runId,
         });
@@ -615,6 +633,7 @@ export async function runConvergentReviewWorkflow(
             confidence: avgConfidence,
             criteriaChecks: [],
             findings: lastOutputs.flatMap((r) => r.parsed.findings),
+            ...pipelineRunIdPayload,
           },
           runId,
         });
@@ -661,6 +680,7 @@ export async function runConvergentReviewWorkflow(
             criteriaChecks: [],
             findings: allFindings,
             escalationReason: `Failed to converge after ${round} rounds: ${waveResult.newCriticalFindings.length} unresolved CRITICAL finding(s)`,
+            ...pipelineRunIdPayload,
           },
           runId,
         });

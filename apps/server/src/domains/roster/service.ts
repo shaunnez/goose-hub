@@ -1,4 +1,7 @@
-import { listProjectQualityTrend } from '@goose-hub/core/quality-score/repository.js';
+import {
+  getLatestQualityScoreForRun,
+  listProjectQualityTrend,
+} from '@goose-hub/core/quality-score/repository.js';
 import type { RunQualityScore } from '@goose-hub/core/quality-score/types.js';
 import type { Result } from '#shared/middleware.js';
 import { getProject } from '#shared/projects.js';
@@ -52,13 +55,21 @@ export async function getPersonaRuns(
   personaName: string,
 ): Promise<Result<{ runs: PersonaRunDto[] }>> {
   const rows = listRunsByPersona(personaName);
-  const runs: PersonaRunDto[] = rows.map((r: AgentRunRow) => ({
-    runId: r.runId,
-    workItemId: r.workItemId,
-    outcome: r.outcome,
-    qualityScore: null,
-    createdAt: r.createdAt,
-  }));
+  const runs: PersonaRunDto[] = rows.map((r: AgentRunRow) => {
+    // M19.21 #697 — replace the previous hardcoded null with a real lookup.
+    // The score row is written by merge-decision keyed on the pipeline-level
+    // runId; for per-skill agent_runs whose runId is not a pipeline anchor
+    // the lookup returns null, which is the honest answer ("no per-cycle
+    // score is anchored on this run").
+    const score = getLatestQualityScoreForRun(r.runId);
+    return {
+      runId: r.runId,
+      workItemId: r.workItemId,
+      outcome: r.outcome,
+      qualityScore: score?.score ?? null,
+      createdAt: r.createdAt,
+    };
+  });
   return { ok: true, data: { runs } };
 }
 
