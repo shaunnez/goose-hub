@@ -6,7 +6,7 @@ import type { ResolvedBudget } from './budgets.js';
 import type { AgentResult, AgentRuntime, SkillConfig } from './interface.js';
 import { defaultModelForTier } from './models.js';
 import { readPromptWithContext } from './read-prompt.js';
-import { resolveBudgetsForProject } from './resolve-for-project.js';
+import { resolveBudgetsForProject, resolveRoleModelForProject } from './resolve-for-project.js';
 import { toJsonSchema } from './schema-bridge.js';
 import { selectPersona } from './select-persona.js';
 import { selectRuntime } from './select-runtime.js';
@@ -113,8 +113,27 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<AgentResult>
     };
   }
 
-  // 6. Resolve model — caller override wins over budget-derived model ID
-  const modelOverride = overrides?.modelOverride ?? resolved.modelOverride;
+  // 6. Resolve model — precedence: caller override > per-role override (DB / config) > skill budget default
+  let modelOverride: string;
+  if (overrides?.modelOverride != null) {
+    modelOverride = overrides.modelOverride;
+  } else {
+    const roleModel = resolveRoleModelForProject({
+      role,
+      projectId,
+      configRoleModel: projectConfig?.agentConfig?.rolesModels?.[role],
+      allowHoldoutOverride: projectConfig?.agentConfig?.allowHoldoutOverride,
+      skill: skillName,
+      skillProvider: skillConfig.provider,
+    });
+    // Use the role's resolved model when it differs from the skill-budget default
+    // (i.e. a DB or config override is active). Otherwise stick with the budget
+    // resolution so skill-pinned tiers still drive budget math correctly.
+    modelOverride =
+      roleModel.source === 'db' || roleModel.source === 'config'
+        ? roleModel.modelId
+        : resolved.modelOverride;
+  }
 
   // 7. Select runtime — runtimeOverride short-circuits for tests and bespoke callers
   const runtime =

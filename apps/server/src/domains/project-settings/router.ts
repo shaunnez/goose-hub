@@ -3,6 +3,7 @@ import {
   deleteProjectSkillSetting,
   readProjectSettings,
   readProjectSkillSettings,
+  resetAllProjectBudgets,
   writeProjectSettings,
   writeProjectSkillSetting,
 } from '@goose-hub/core/db/repositories/project-settings.js';
@@ -56,6 +57,21 @@ router.get('/:slug/settings', async (c) => {
     };
   }
 
+  // UX-3: surface the actual SKILL_BUDGETS defaults so the UI can render them
+  // beneath each per-skill input ("default: 25 turns") instead of just showing
+  // "default" as placeholder text.
+  const skillDefaults: Record<
+    string,
+    { maxTurns: number; maxBudgetUsd: number; timeoutMs: number }
+  > = {};
+  for (const [skill, budget] of Object.entries(SKILL_BUDGETS)) {
+    skillDefaults[skill] = {
+      maxTurns: budget.maxTurns,
+      maxBudgetUsd: budget.maxBudgetUsd,
+      timeoutMs: budget.timeoutMs,
+    };
+  }
+
   return c.json({
     projectId: project.id,
     configBudgets: project.budgets,
@@ -74,7 +90,23 @@ router.get('/:slug/settings', async (c) => {
       : null,
     dbSkillOverrides: skillSettings,
     registeredSkills: Object.keys(SKILL_BUDGETS),
+    skillDefaults,
   });
+});
+
+/**
+ * DELETE /projects/:slug/settings/budgets — clear ALL budget overrides for
+ * this project. Both global caps and every per-skill override are removed in
+ * one transaction. The project then falls back to config + SKILL_BUDGETS
+ * defaults. Backs the "Reset all to defaults" button in the Budgets UI.
+ */
+router.delete('/:slug/settings/budgets', async (c) => {
+  const slug = c.req.param('slug');
+  const project = await getProject(slug);
+  if (project == null) return c.json({ error: 'project not found' }, 404);
+
+  resetAllProjectBudgets(project.id);
+  return c.json({ ok: true });
 });
 
 /** PATCH /projects/:slug/settings/global — upsert global budget caps */

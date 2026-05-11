@@ -37,10 +37,15 @@ export type Role =
   | 'researcher'
   | 'auditor';
 
+export type ModelProvider = 'claude' | 'codex';
+
 export interface RoleModel {
   primary: ModelTier;
   fallback: ModelTier | null;
   advisor: ModelTier | null;
+  primaryProvider?: ModelProvider;
+  fallbackProvider?: ModelProvider;
+  advisorProvider?: ModelProvider;
 }
 
 export interface ToolAllowlist {

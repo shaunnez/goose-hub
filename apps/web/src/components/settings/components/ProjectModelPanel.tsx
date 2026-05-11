@@ -3,6 +3,7 @@ import {
   fetchCodexAuthStatus,
   fetchDevReviewSettings,
   fetchProjectModelSettings,
+  patchBulkRoleModel,
   patchComplexityOverrides,
   patchDevReviewSettings,
   patchRoleModelSetting,
@@ -10,6 +11,7 @@ import {
 import type {
   CodexAuthStatusDto,
   DevReviewSettingsDto,
+  ModelProvider,
   ModelTier,
   ProjectModelSettingsDto,
   RoleModelDto,
@@ -23,6 +25,7 @@ interface Props {
 }
 
 const TIERS: ModelTier[] = ['haiku', 'sonnet', 'opus'];
+const PROVIDERS: ModelProvider[] = ['claude', 'codex'];
 // Mirrors HOLDOUT_ROLES in core/agent-runtime/roles.ts. Duplicated here because
 // apps/web does not import @goose-hub/core (would pull server-only modules into
 // the React bundle). Keep in sync if the canonical set changes.
@@ -40,42 +43,81 @@ const COMPLEXITY_KEY_OPTIONS = [
   { value: 'default', label: 'default (all others)' },
 ];
 
-function TierSelect({
-  value,
+function TierProviderSelect({
+  tier,
+  provider,
   overridden,
   placeholder,
   disabled,
+  codexDisabled,
+  subtitle,
   onChange,
 }: {
-  value: ModelTier | null;
+  tier: ModelTier | null;
+  provider: ModelProvider | null;
   overridden: boolean;
   placeholder: string;
   disabled?: boolean;
-  onChange: (val: ModelTier | null) => void;
+  codexDisabled?: boolean;
+  /** UX-3: small hint rendered below the selects (e.g. resolved model ID). */
+  subtitle?: string | null;
+  onChange: (next: { tier: ModelTier | null; provider: ModelProvider | null }) => void;
 }) {
   return (
-    <div className="relative flex items-center gap-1">
-      <select
-        disabled={disabled}
-        value={value ?? ''}
-        onChange={(e) => {
-          const v = e.target.value;
-          onChange(v === '' ? null : (v as ModelTier));
-        }}
-        className={[
-          'rounded border px-2 py-0.5 text-[12px] bg-bg text-fg appearance-none pr-6',
-          overridden ? 'border-accent' : 'border-line',
-          disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer',
-        ].join(' ')}
-      >
-        <option value="">{placeholder}</option>
-        {TIERS.map((t) => (
-          <option key={t} value={t}>
-            {t}
-          </option>
-        ))}
-      </select>
-      {overridden && <span className="text-[10px] text-accent font-medium shrink-0">override</span>}
+    <div className="flex flex-col gap-0.5">
+      <div className="flex items-center gap-1">
+        <select
+          disabled={disabled}
+          value={tier ?? ''}
+          onChange={(e) => {
+            const v = e.target.value;
+            onChange({
+              tier: v === '' ? null : (v as ModelTier),
+              // When user clears tier, also clear provider so the row goes back to inherit.
+              provider: v === '' ? null : (provider ?? 'claude'),
+            });
+          }}
+          className={[
+            'rounded border px-2 py-0.5 text-[12px] bg-bg text-fg appearance-none pr-6',
+            overridden ? 'border-accent' : 'border-line',
+            disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer',
+          ].join(' ')}
+        >
+          <option value="">{placeholder}</option>
+          {TIERS.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+        <select
+          disabled={disabled || tier == null}
+          value={provider ?? 'claude'}
+          onChange={(e) => {
+            onChange({ tier, provider: e.target.value as ModelProvider });
+          }}
+          title={codexDisabled ? 'Codex CLI not connected — sign in below' : undefined}
+          className={[
+            'rounded border px-2 py-0.5 text-[11px] bg-bg text-fg-2 appearance-none pr-5',
+            'border-line',
+            disabled || tier == null ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer',
+          ].join(' ')}
+        >
+          {PROVIDERS.map((p) => (
+            <option key={p} value={p} disabled={p === 'codex' && codexDisabled}>
+              {p}
+            </option>
+          ))}
+        </select>
+        {overridden && (
+          <span className="text-[10px] text-accent font-medium shrink-0">override</span>
+        )}
+      </div>
+      {subtitle != null && subtitle !== '' && (
+        <span className="text-[10px] text-fg-3 font-mono truncate" title={subtitle}>
+          {subtitle}
+        </span>
+      )}
     </div>
   );
 }
@@ -176,11 +218,13 @@ function RoleRow({
   slug,
   data,
   allowHoldoutOverride,
+  codexAvailable,
 }: {
   role: string;
   slug: string;
   data: RoleModelDto;
   allowHoldoutOverride: boolean;
+  codexAvailable: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const qc = useQueryClient();
@@ -193,6 +237,9 @@ function RoleRow({
       primaryModel?: ModelTier | null;
       fallbackModel?: ModelTier | null;
       advisorModel?: ModelTier | null;
+      primaryProvider?: ModelProvider | null;
+      fallbackProvider?: ModelProvider | null;
+      advisorProvider?: ModelProvider | null;
     }) => patchRoleModelSetting(slug, role, patch),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['project-model-settings', slug] }),
   });
@@ -208,6 +255,7 @@ function RoleRow({
   const hasComplexity = Object.keys(data.dbComplexityOverrides).length > 0;
 
   const configPrimary = (data.configRoleModel?.primary as ModelTier) ?? null;
+  const codexDisabled = !codexAvailable;
 
   return (
     <>
@@ -227,31 +275,55 @@ function RoleRow({
             )}
           </button>
         </td>
-        <td className="py-1.5 px-2">
-          <TierSelect
-            value={db?.primaryModel ?? null}
+        <td className="py-1.5 px-2 align-top">
+          <TierProviderSelect
+            tier={db?.primaryModel ?? null}
+            provider={db?.primaryProvider ?? null}
             overridden={db?.primaryModel != null}
             placeholder={configPrimary ?? 'skill default'}
             disabled={locked}
-            onChange={(val) => patchRole.mutate({ primaryModel: val })}
+            codexDisabled={codexDisabled}
+            subtitle={data.resolvedPrimary ?? `default: ${data.roleDefaultTier}`}
+            onChange={(next) =>
+              patchRole.mutate({
+                primaryModel: next.tier,
+                primaryProvider: next.tier == null ? null : next.provider,
+              })
+            }
           />
         </td>
-        <td className="py-1.5 px-2">
-          <TierSelect
-            value={db?.fallbackModel ?? null}
+        <td className="py-1.5 px-2 align-top">
+          <TierProviderSelect
+            tier={db?.fallbackModel ?? null}
+            provider={db?.fallbackProvider ?? null}
             overridden={db?.fallbackModel != null}
             placeholder={data.configRoleModel?.fallback ?? '—'}
             disabled={locked}
-            onChange={(val) => patchRole.mutate({ fallbackModel: val })}
+            codexDisabled={codexDisabled}
+            subtitle={null}
+            onChange={(next) =>
+              patchRole.mutate({
+                fallbackModel: next.tier,
+                fallbackProvider: next.tier == null ? null : next.provider,
+              })
+            }
           />
         </td>
-        <td className="py-1.5 px-2">
-          <TierSelect
-            value={db?.advisorModel ?? null}
+        <td className="py-1.5 px-2 align-top">
+          <TierProviderSelect
+            tier={db?.advisorModel ?? null}
+            provider={db?.advisorProvider ?? null}
             overridden={db?.advisorModel != null}
             placeholder={data.configRoleModel?.advisor ?? '—'}
             disabled={locked}
-            onChange={(val) => patchRole.mutate({ advisorModel: val })}
+            codexDisabled={codexDisabled}
+            subtitle={null}
+            onChange={(next) =>
+              patchRole.mutate({
+                advisorModel: next.tier,
+                advisorProvider: next.tier == null ? null : next.provider,
+              })
+            }
           />
         </td>
         <td className="py-1.5 pl-1">
@@ -494,10 +566,24 @@ function DevReviewSection({ slug }: { slug: string }) {
 }
 
 export function ProjectModelPanel({ slug }: Props) {
+  const qc = useQueryClient();
   const { data, isLoading, error } = useQuery<ProjectModelSettingsDto>({
     queryKey: ['project-model-settings', slug],
     queryFn: ({ signal }) => fetchProjectModelSettings(slug, signal),
     staleTime: 10_000,
+  });
+
+  const codexAuth = useQuery<CodexAuthStatusDto>({
+    queryKey: ['codex-auth-status', slug],
+    queryFn: ({ signal }) => fetchCodexAuthStatus(slug, signal),
+    staleTime: 30_000,
+  });
+  const codexAvailable = codexAuth.data?.status === 'connected';
+
+  const bulkMutation = useMutation({
+    mutationFn: (body: { tier: ModelTier; provider: ModelProvider }) =>
+      patchBulkRoleModel(slug, body),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['project-model-settings', slug] }),
   });
 
   if (isLoading) return <div className="text-[12px] text-fg-3 py-4">Loading…</div>;
@@ -509,12 +595,39 @@ export function ProjectModelPanel({ slug }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-[12px] font-semibold uppercase tracking-wider text-fg-2 mb-1">
-          Role model assignments
-        </h3>
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-[12px] font-semibold uppercase tracking-wider text-fg-2">
+            Role model assignments
+          </h3>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => bulkMutation.mutate({ tier: 'sonnet', provider: 'claude' })}
+              disabled={bulkMutation.isPending}
+              className="text-[11px] border border-line/70 rounded-full px-2.5 py-0.5 text-fg-2 hover:text-fg hover:bg-bg-hover transition-colors"
+              title="Set primary to claude:sonnet for every non-holdout role"
+            >
+              All → Claude
+            </button>
+            <button
+              type="button"
+              onClick={() => bulkMutation.mutate({ tier: 'sonnet', provider: 'codex' })}
+              disabled={bulkMutation.isPending || !codexAvailable}
+              className="text-[11px] border border-line/70 rounded-full px-2.5 py-0.5 text-fg-2 hover:text-fg hover:bg-bg-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              title={
+                codexAvailable
+                  ? 'Set primary to codex:sonnet (gpt-5-codex) for every non-holdout role'
+                  : 'Codex CLI not connected — sign in below'
+              }
+            >
+              All → Codex
+            </button>
+          </div>
+        </div>
         <p className="text-[11px] text-fg-3 mb-4">
           DB overrides win over project config <code>rolesModels</code> and skill defaults. Clear a
-          field to revert to config. Expand a row to set complexity-based rules.
+          field to revert to config. Expand a row to set complexity-based rules. The model ID below
+          each primary select is the resolved dispatch target.
         </p>
         <table className="w-full text-[12px]">
           <thead>
@@ -534,6 +647,7 @@ export function ProjectModelPanel({ slug }: Props) {
                 slug={slug}
                 data={data.roles[role]}
                 allowHoldoutOverride={data.allowHoldoutOverride}
+                codexAvailable={codexAvailable}
               />
             ))}
           </tbody>
