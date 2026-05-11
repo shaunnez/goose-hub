@@ -14,7 +14,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `server` | yes | API + SSE host for the Goose Hub web UI. Stands up the server process the UI talks to. Closes M2.01 (#26). |
 | `web` | yes | Vite + React 19 + Tailwind 4 + React Router v6. Closes M2.02 (#27). |
 
-## core/ (25 entries, 0 missing README)
+## core/ (26 entries, 0 missing README)
 
 | Name | README | Summary |
 |---|---|---|
@@ -38,6 +38,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `scout-reports` | yes | SQLite persistence for scout skill outputs produced during investigation workflows. |
 | `state-machine` | yes | Typed state machine for Goose Hub issue lifecycle management. |
 | `state-source` | yes | Adapter layer between Goose Hub and the source of truth for work items (currently GitHub Issues; Jira lands in M14). |
+| `symbol-index` | yes | Local, regenerable SQLite index of every exported symbol and import statement across the Goose Hub codebase. Use it to answer "where is X defined?" / "who imports X?" without an LLM spawn or a `grep`. See ADR 0040 for the rationale. |
 | `test-runner` | yes | Runs Vitest with the JSON reporter and parses the output into a runner-agnostic `TestRun` shape. The QA holdout consumes the parsed structure; nothing else should depend on Vitest's raw report shape. |
 | `tool-layer` | yes | Tool management and security infrastructure for agent runtime. |
 | `verify` | yes | Three-tier deterministic verification engine that runs **before** the QA holdout. The point is to catch obvious failures cheaply — without spending a QA agent budget on diffs that don't even compile. |
