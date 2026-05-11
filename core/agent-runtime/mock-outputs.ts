@@ -424,6 +424,91 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
         events: [],
       };
 
+    // Wave-1 scouts (M19.01) — canonical empty-findings success keeps the
+    // investigate workflow flowing in MOCK_AGENTS=true. Each scout shares the
+    // ScoutOutputSchema shape; findings can legitimately be empty.
+    case 'scout-schema':
+    case 'scout-code-path':
+    case 'scout-pattern':
+    case 'scout-test-inventory':
+    case 'scout-dependency':
+    case 'scout-user-journey': {
+      const scoutSummary = `Mock ${spec.skill} for e2e test`;
+      return {
+        output: {
+          findings: [],
+          status: 'ok' as const,
+          decisionSummaries: [{ kind: 'INSIGHT', summary: scoutSummary }],
+        },
+        decisionSummaries: [{ kind: 'INSIGHT', summary: scoutSummary }],
+        events: [],
+      };
+    }
+
+    case 'wave2-interface-designer':
+      return {
+        output: {
+          artefacts: [],
+          openQuestions: [],
+          decisionSummaries: [
+            { kind: 'INSIGHT', summary: 'Mock wave2-interface-designer for e2e test' },
+          ],
+        },
+        decisionSummaries: [
+          { kind: 'INSIGHT', summary: 'Mock wave2-interface-designer for e2e test' },
+        ],
+        events: [],
+      };
+
+    case 'wave2-risk-analyst':
+      return {
+        output: {
+          risks: [],
+          openQuestions: [],
+          decisionSummaries: [{ kind: 'INSIGHT', summary: 'Mock wave2-risk-analyst for e2e test' }],
+        },
+        decisionSummaries: [{ kind: 'INSIGHT', summary: 'Mock wave2-risk-analyst for e2e test' }],
+        events: [],
+      };
+
+    // M19.22 (#698) — code-quality-audit. Defensive mock for the nightly
+    // scheduler in case its existsSync gate is ever bypassed. Canonical
+    // 'Good' rating with no recommendations and minimum-valid scorecard.
+    case 'code-quality-audit': {
+      const maxes = [20, 15, 15, 15, 10, 10, 10, 5] as const;
+      const names = [
+        'Open/Closed Compliance',
+        'Concept Count',
+        'Time-to-New-Capability',
+        'Complecting Score',
+        'LOC Discipline',
+        'Coupling / Fan-Out',
+        "Gall's Law Compliance",
+        'Cyclomatic Complexity',
+      ];
+      // Distribute 80 points across the 8 categories so the rating is 'Good'.
+      const scores = [16, 12, 12, 12, 8, 8, 8, 4];
+      return {
+        output: {
+          scorecard: scores.map((score, i) => ({
+            category: (i + 1) as 1,
+            name: names[i],
+            score,
+            max: maxes[i],
+            evidence: [{ file: 'mock-file.ts', line: 1, note: 'mock evidence' }],
+          })),
+          rating: 'Good' as const,
+          strengths: ['Mock audit passed'],
+          recommendations: [],
+          mcIlroyQuestion: 'Mock audit: no architectural questions raised.',
+          projectedScoreAfterTop3: 80,
+          decisionSummaries: [{ kind: 'INSIGHT', summary: 'Mock code-quality-audit for e2e' }],
+        },
+        decisionSummaries: [{ kind: 'INSIGHT', summary: 'Mock code-quality-audit for e2e' }],
+        events: [],
+      };
+    }
+
     default:
       throw new Error(`resolveMockOutput: no preset for skill "${spec.skill}"`);
   }

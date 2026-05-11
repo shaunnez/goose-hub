@@ -214,6 +214,15 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     modelTier: 'sonnet',
     escalation: { modelTier: 'opus', maxBudgetUsd: 20.0 },
   },
+  // M19.22 (#698) — code-quality-audit. Opus-tier qualitative scoring across
+  // 8 categories; read-only + git log/blame access. Higher turn cap to allow
+  // the auditor to verify evidence across multiple files.
+  'code-quality-audit': {
+    maxTurns: 60,
+    maxBudgetUsd: 3.0,
+    timeoutMs: 480_000,
+    modelTier: 'opus',
+  },
 };
 
 export interface ResolvedBudget {

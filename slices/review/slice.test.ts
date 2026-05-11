@@ -974,4 +974,168 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
       role: 'reviewer',
     });
   });
+
+  // M19.22 (#698) — parallel code-quality-audit branch
+  describe('code-quality-audit parallel branch (M19.22 #698)', () => {
+    it('does NOT invoke the audit when work item priority is medium', async () => {
+      vi.resetModules();
+      const mockAudit = vi.fn();
+      vi.doMock('@goose-hub/core/audit/run-audit.js', () => ({
+        runCodeQualityAudit: mockAudit,
+      }));
+      vi.doMock('@goose-hub/core/workspaces/worktree.js', () => ({
+        existingWorktreePath: () => '/tmp/wt',
+      }));
+
+      const item = makeWorkItem({ priority: 'medium' });
+      const source = makeMockSource({
+        getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+x'),
+      });
+      for (let i = 0; i < 6; i++) mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings());
+
+      const { runConvergentReviewWorkflow } = await import('./workflow.js');
+      await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+      expect(mockAudit).not.toHaveBeenCalled();
+      vi.doUnmock('@goose-hub/core/audit/run-audit.js');
+      vi.doUnmock('@goose-hub/core/workspaces/worktree.js');
+    });
+
+    it('invokes the audit and approves when priority:high but autonomy gate does not fire', async () => {
+      vi.resetModules();
+      const mockAudit = vi.fn().mockResolvedValue({
+        ok: true,
+        auditScore: 88,
+        pipelineRunId: 'pipe-test',
+        improvementCandidates: [],
+        autonomyGateFired: false,
+        output: { rating: 'Good', recommendations: [] },
+      });
+      vi.doMock('@goose-hub/core/audit/run-audit.js', () => ({
+        runCodeQualityAudit: mockAudit,
+      }));
+      vi.doMock('@goose-hub/core/workspaces/worktree.js', () => ({
+        existingWorktreePath: () => '/tmp/wt',
+      }));
+
+      const item = makeWorkItem({ priority: 'high' });
+      const source = makeMockSource({
+        getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+x'),
+      });
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          projectId: 'test-project',
+          workItemId: 'github:owner/repo#42',
+          kind: 'pr.opened',
+          payload: { devRunId: 'dev-run-1' },
+          runId: null,
+          personaId: null,
+          createdAt: '2026-05-11T00:00:00Z',
+        },
+      ]);
+      for (let i = 0; i < 6; i++) mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings());
+
+      const { runConvergentReviewWorkflow } = await import('./workflow.js');
+      await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+      expect(mockAudit).toHaveBeenCalledOnce();
+      expect((mockAudit.mock.calls[0][0] as { trigger: string }).trigger).toBe('convergent-review');
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-review',
+        'factory:approved',
+      );
+      vi.doUnmock('@goose-hub/core/audit/run-audit.js');
+      vi.doUnmock('@goose-hub/core/workspaces/worktree.js');
+    });
+
+    it('routes to factory:needs-human when the autonomy gate fires', async () => {
+      vi.resetModules();
+      const mockAudit = vi.fn().mockResolvedValue({
+        ok: true,
+        auditScore: 42,
+        pipelineRunId: 'pipe-test',
+        improvementCandidates: [],
+        autonomyGateFired: true,
+        output: { rating: 'Concerning', recommendations: [{ fix: 'Refactor X' }] },
+      });
+      vi.doMock('@goose-hub/core/audit/run-audit.js', () => ({
+        runCodeQualityAudit: mockAudit,
+      }));
+      vi.doMock('@goose-hub/core/workspaces/worktree.js', () => ({
+        existingWorktreePath: () => '/tmp/wt',
+      }));
+
+      const item = makeWorkItem({ priority: 'critical', mode: 'autonomous' });
+      const source = makeMockSource({
+        getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+x'),
+      });
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          projectId: 'test-project',
+          workItemId: 'github:owner/repo#42',
+          kind: 'pr.opened',
+          payload: { devRunId: 'dev-run-1' },
+          runId: null,
+          personaId: null,
+          createdAt: '2026-05-11T00:00:00Z',
+        },
+      ]);
+      for (let i = 0; i < 6; i++) mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings());
+
+      const { runConvergentReviewWorkflow } = await import('./workflow.js');
+      await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-review',
+        'factory:needs-human',
+      );
+      expect(source.transitionState).not.toHaveBeenCalledWith(
+        '42',
+        'factory:needs-review',
+        'factory:approved',
+      );
+      vi.doUnmock('@goose-hub/core/audit/run-audit.js');
+      vi.doUnmock('@goose-hub/core/workspaces/worktree.js');
+    });
+
+    it('skips audit when dev worktree is missing', async () => {
+      vi.resetModules();
+      const mockAudit = vi.fn();
+      vi.doMock('@goose-hub/core/audit/run-audit.js', () => ({
+        runCodeQualityAudit: mockAudit,
+      }));
+      vi.doMock('@goose-hub/core/workspaces/worktree.js', () => ({
+        existingWorktreePath: () => null,
+      }));
+
+      const item = makeWorkItem({ priority: 'high' });
+      const source = makeMockSource({
+        getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+x'),
+      });
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          projectId: 'test-project',
+          workItemId: 'github:owner/repo#42',
+          kind: 'pr.opened',
+          payload: { devRunId: 'dev-run-1' },
+          runId: null,
+          personaId: null,
+          createdAt: '2026-05-11T00:00:00Z',
+        },
+      ]);
+      for (let i = 0; i < 6; i++) mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings());
+
+      const { runConvergentReviewWorkflow } = await import('./workflow.js');
+      await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+      expect(mockAudit).not.toHaveBeenCalled();
+      vi.doUnmock('@goose-hub/core/audit/run-audit.js');
+      vi.doUnmock('@goose-hub/core/workspaces/worktree.js');
+    });
+  });
 });
