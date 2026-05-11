@@ -10,7 +10,7 @@ export { DecisionSummarySchema };
  */
 export const DevReviewFindingSchema = z.object({
   severity: z.enum(['P0', 'P1', 'P2', 'P3']),
-  category: z.enum(['correctness', 'security', 'edge-case', 'design', 'other']),
+  category: z.enum(['correctness', 'security', 'edge-case', 'design', 'performance', 'other']),
   file: z.string().min(1),
   line: z.number().int().nonnegative(),
   summary: z.string().min(1),

@@ -47,7 +47,7 @@ The `DEV_REVIEW_*` decision-summary kinds (added in M19.12) are emitted into the
   verdict: 'no-blockers' | 'blockers-found' | 'inconclusive',
   findings: Array<{
     severity: 'P0' | 'P1' | 'P2' | 'P3',
-    category: 'correctness' | 'security' | 'edge-case' | 'design' | 'other',
+    category: 'correctness' | 'security' | 'edge-case' | 'design' | 'performance' | 'other',
     file: string,    // required
     line: number,    // required (non-negative integer)
     summary: string, // one sentence

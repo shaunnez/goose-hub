@@ -1290,7 +1290,7 @@ describe('dev-review cost telemetry: multi-turn produces multiple dev-review.com
             findings: [
               {
                 severity: 'P2' as const,
-                category: 'other' as const,
+                category: 'performance' as const,
                 file: 'core/g.ts',
                 line: 5,
                 summary: 'Perf issue',

@@ -79,9 +79,16 @@ For each finding category below, consider whether the diff exhibits it. If yes, 
 - Coupling that crosses a slice boundary in violation of FACTORY_RULES rule 28
 - A change that quietly introduces a new responsibility into a module that already had one job
 
+### performance
+
+- N+1 query patterns: loop containing a DB or network call that could be batched
+- Unbounded loops or scans on collections that can grow arbitrarily large
+- Synchronous, blocking work on a hot path (request handler, event loop tick, render cycle)
+- Missing memoisation or caching where the cost is structurally obvious from the diff (e.g. recomputing an expensive value on every call with identical inputs)
+
 ### other
 
-- Use sparingly. Anything not fitting the four categories above but still worth raising.
+- Use sparingly. Anything not fitting the five categories above but still worth raising.
 
 ## Step 3 — Severity assignment
 
