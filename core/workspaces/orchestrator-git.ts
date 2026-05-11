@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { GIT_ENV } from './git-env.js';
 
 const WORKSPACES_DIR = join(homedir(), '.factory', 'workspaces');
 
@@ -33,6 +34,7 @@ export function createWpScratchWorktree(repo: string, runId: string, wpId: strin
   execFileSync('git', ['worktree', 'add', '--detach', wtPath], {
     cwd: repo,
     stdio: 'pipe',
+    env: GIT_ENV,
   });
   return wtPath;
 }
@@ -48,6 +50,7 @@ export function cleanupWpWorktree(runId: string, wpId: string): void {
     execFileSync('git', ['worktree', 'remove', '--force', wtPath], {
       cwd: wtPath,
       stdio: 'pipe',
+      env: GIT_ENV,
     });
   } catch {
     // Fall through — forcibly remove below.
@@ -81,11 +84,20 @@ export function orchestratorCommitWp(
   filesOwned: string[],
   commitMsg: string,
 ): string {
-  execFileSync('git', ['add', '--', ...filesOwned], { cwd: worktreePath, stdio: 'pipe' });
-  execFileSync('git', ['commit', '-m', commitMsg], { cwd: worktreePath, stdio: 'pipe' });
+  execFileSync('git', ['add', '--', ...filesOwned], {
+    cwd: worktreePath,
+    stdio: 'pipe',
+    env: GIT_ENV,
+  });
+  execFileSync('git', ['commit', '-m', commitMsg], {
+    cwd: worktreePath,
+    stdio: 'pipe',
+    env: GIT_ENV,
+  });
   return execFileSync('git', ['rev-parse', 'HEAD'], {
     cwd: worktreePath,
     encoding: 'utf8',
+    env: GIT_ENV,
   }).trim();
 }
 
@@ -101,14 +113,16 @@ export function orchestratorCommitWp(
  * @returns The resulting commit SHA (40 chars).
  */
 export function orchestratorCommitAll(worktreePath: string, commitMsg: string): string {
-  execFileSync('git', ['add', '-A'], { cwd: worktreePath, stdio: 'pipe' });
+  execFileSync('git', ['add', '-A'], { cwd: worktreePath, stdio: 'pipe', env: GIT_ENV });
   execFileSync('git', ['commit', '--allow-empty', '-m', commitMsg], {
     cwd: worktreePath,
     stdio: 'pipe',
+    env: GIT_ENV,
   });
   return execFileSync('git', ['rev-parse', 'HEAD'], {
     cwd: worktreePath,
     encoding: 'utf8',
+    env: GIT_ENV,
   }).trim();
 }
 
@@ -126,7 +140,11 @@ export function orchestratorCommitAll(worktreePath: string, commitMsg: string): 
 export function revertWpChanges(worktreePath: string, filesOwned: string[]): void {
   for (const file of filesOwned) {
     try {
-      execFileSync('git', ['checkout', '--', file], { cwd: worktreePath, stdio: 'pipe' });
+      execFileSync('git', ['checkout', '--', file], {
+        cwd: worktreePath,
+        stdio: 'pipe',
+        env: GIT_ENV,
+      });
     } catch {
       // `git checkout --` fails for untracked files (never staged). Remove them
       // so they don't leak into subsequent retry iterations in the same worktree.

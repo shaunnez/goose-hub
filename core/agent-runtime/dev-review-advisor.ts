@@ -15,6 +15,7 @@ import { eventStore } from '../event-stream/store.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import type { WorkItem } from '../state-source/interface.js';
 import type { AgentConfig } from '../types.js';
+import { GIT_ENV } from '../workspaces/git-env.js';
 import { ClaudeCliRuntime } from './claude-cli.js';
 import type { AgentRuntime } from './interface.js';
 import { readPromptWithContext } from './read-prompt.js';
@@ -52,6 +53,7 @@ export function getDiffForDevReview(worktreePath: string, baseBranch = 'main'): 
     cwd: worktreePath,
     encoding: 'utf8',
     maxBuffer: 200 * 1024,
+    env: GIT_ENV,
   });
   if (result.error) throw result.error;
   return result.stdout ?? '';

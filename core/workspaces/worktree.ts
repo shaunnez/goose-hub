@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { GIT_ENV } from './git-env.js';
 
 const WORKSPACES_DIR = join(homedir(), '.factory', 'workspaces');
 
@@ -42,6 +43,7 @@ export function createWorktree(repo: string, runId: string): string {
   execFileSync('git', ['worktree', 'add', '--detach', wtPath], {
     cwd: repo,
     stdio: 'pipe',
+    env: GIT_ENV,
   });
 
   return wtPath;
@@ -85,6 +87,7 @@ export function cleanupWorktree(runId: string): void {
     execFileSync('git', ['worktree', 'remove', '--force', wtPath], {
       cwd: wtPath,
       stdio: 'pipe',
+      env: GIT_ENV,
     });
   } catch {
     // git worktree remove may fail if the git repo is gone or corrupted.
