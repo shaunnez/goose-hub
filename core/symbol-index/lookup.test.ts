@@ -80,7 +80,9 @@ describe('lookupWorkItemSymbols', () => {
   });
 
   it('returns [] when the DB file does not exist', () => {
-    const result = lookupWorkItemSymbols('Fix dispatchWave', 'details', '/nonexistent/path.db');
+    const result = lookupWorkItemSymbols('Fix dispatchWave', 'details', {
+      dbPath: '/nonexistent/path.db',
+    });
     expect(result).toEqual([]);
   });
 
@@ -89,7 +91,7 @@ describe('lookupWorkItemSymbols', () => {
     buildIndex({ repoRoot: tmp, db, includeDirs: ['core'] });
     db.close();
 
-    const result = lookupWorkItemSymbols('Fix AuthService bug', 'body', dbPath);
+    const result = lookupWorkItemSymbols('Fix AuthService bug', 'body', { dbPath });
     expect(result).toEqual([]);
   });
 
@@ -98,7 +100,7 @@ describe('lookupWorkItemSymbols', () => {
     buildIndex({ repoRoot: tmp, db, includeDirs: ['core'] });
     db.close();
 
-    const result = lookupWorkItemSymbols('Fix AuthService crash', 'auth breaks', dbPath);
+    const result = lookupWorkItemSymbols('Fix AuthService crash', 'auth breaks', { dbPath });
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe('AuthService');
     expect(result[0].definedIn).toBe('core/auth.ts');
@@ -111,7 +113,7 @@ describe('lookupWorkItemSymbols', () => {
     buildIndex({ repoRoot: tmp, db, includeDirs: ['core'] });
     db.close();
 
-    const result = lookupWorkItemSymbols('Fix AuthService crash', '', dbPath);
+    const result = lookupWorkItemSymbols('Fix AuthService crash', '', { dbPath });
     expect(result[0].callers).toContain('core/app.ts');
   });
 
@@ -120,7 +122,7 @@ describe('lookupWorkItemSymbols', () => {
     buildIndex({ repoRoot: tmp, db, includeDirs: ['core'] });
     db.close();
 
-    const result = lookupWorkItemSymbols('Fix internalHelper', '', dbPath);
+    const result = lookupWorkItemSymbols('Fix internalHelper', '', { dbPath });
     expect(result).toHaveLength(0);
   });
 
@@ -136,7 +138,7 @@ describe('lookupWorkItemSymbols', () => {
     buildIndex({ repoRoot: tmp, db, includeDirs: ['core'] });
     db.close();
 
-    const result = lookupWorkItemSymbols('Fix SharedUtil', '', dbPath);
+    const result = lookupWorkItemSymbols('Fix SharedUtil', '', { dbPath });
     expect(result[0].callers.length).toBeLessThanOrEqual(5);
   });
 
@@ -149,14 +151,79 @@ describe('lookupWorkItemSymbols', () => {
 
     // Use backtick-quoted identifiers to ensure high extraction confidence
     const title = Array.from({ length: 12 }, (_, i) => `\`Symbol${i}\``).join(' ');
-    const result = lookupWorkItemSymbols(title, '', dbPath);
+    const result = lookupWorkItemSymbols(title, '', { dbPath });
     expect(result.length).toBeLessThanOrEqual(20);
   });
 
   it('returns [] on DB error without throwing', () => {
     // Write a non-SQLite file at the DB path
     fs.writeFileSync(dbPath, 'not a sqlite file');
-    const result = lookupWorkItemSymbols('Fix AuthService', '', dbPath);
+    const result = lookupWorkItemSymbols('Fix AuthService', '', { dbPath });
     expect(result).toEqual([]);
+  });
+
+  it('worktreePath guard: excludes hints whose definedIn does not exist in worktree', () => {
+    writeFile(tmp, 'core/auth.ts', 'export function AuthService() {}');
+    buildIndex({ repoRoot: tmp, db, includeDirs: ['core'] });
+    db.close();
+
+    // Use a worktreePath that does NOT contain core/auth.ts
+    const emptyWorktree = fs.mkdtempSync(path.join(os.tmpdir(), 'empty-wt-'));
+    try {
+      const result = lookupWorkItemSymbols('Fix AuthService', '', {
+        dbPath,
+        worktreePath: emptyWorktree,
+      });
+      expect(result).toHaveLength(0);
+    } finally {
+      fs.rmSync(emptyWorktree, { recursive: true, force: true });
+    }
+  });
+
+  it('worktreePath guard: includes hints when definedIn exists in worktree', () => {
+    writeFile(tmp, 'core/auth.ts', 'export function AuthService() {}');
+    buildIndex({ repoRoot: tmp, db, includeDirs: ['core'] });
+    db.close();
+
+    // tmp is also the worktree root — core/auth.ts exists there
+    const result = lookupWorkItemSymbols('Fix AuthService', '', {
+      dbPath,
+      worktreePath: tmp,
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('AuthService');
+  });
+
+  it('returns empty callers when same name exported from multiple files', () => {
+    writeFile(tmp, 'core/a.ts', 'export function Config() {}');
+    writeFile(tmp, 'core/b.ts', 'export function Config() {}');
+    writeFile(tmp, 'core/app.ts', `import { Config } from './a.js';`);
+    buildIndex({ repoRoot: tmp, db, includeDirs: ['core'] });
+    db.close();
+
+    const result = lookupWorkItemSymbols('Fix Config', '', { dbPath });
+    // Two symbols named Config — callers are ambiguous
+    for (const hint of result) {
+      expect(hint.callers).toHaveLength(0);
+    }
+  });
+
+  it('includes callers when name is unambiguous', () => {
+    writeFile(tmp, 'core/auth.ts', 'export function UniqueService() {}');
+    writeFile(tmp, 'core/app.ts', `import { UniqueService } from './auth.js';`);
+    buildIndex({ repoRoot: tmp, db, includeDirs: ['core'] });
+    db.close();
+
+    const result = lookupWorkItemSymbols('Fix UniqueService', '', { dbPath });
+    expect(result[0].callers).toContain('core/app.ts');
+  });
+
+  it('extracts identifier tokens from backtick spans containing punctuation', () => {
+    const ids = extractIdentifiers('fix `dispatchWave()` and `AuthService.login`');
+    expect(ids).toContain('dispatchWave');
+    expect(ids).toContain('AuthService');
+    // The punctuation-bearing spans should not appear as-is
+    expect(ids).not.toContain('dispatchWave()');
+    expect(ids).not.toContain('AuthService.login');
   });
 });

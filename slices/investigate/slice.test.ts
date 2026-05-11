@@ -744,14 +744,18 @@ describe('runInvestigateWorkflow', () => {
       }
     });
 
-    it('lookupWorkItemSymbols called with work item title and body', async () => {
+    it('lookupWorkItemSymbols called with work item title, body, and worktreePath', async () => {
       const workItem = makeWorkItem({ title: 'Fix AuthService', body: 'Crashes on login' });
       mockLookupWorkItemSymbols.mockReturnValue([]);
 
       const { runInvestigateWorkflow } = await import('./workflow.js');
       await runInvestigateWorkflow(workItem, makeMockSource(), 'goose-hub-self', '/repo');
 
-      expect(mockLookupWorkItemSymbols).toHaveBeenCalledWith('Fix AuthService', 'Crashes on login');
+      expect(mockLookupWorkItemSymbols).toHaveBeenCalledWith(
+        'Fix AuthService',
+        'Crashes on login',
+        expect.objectContaining({ worktreePath: '/tmp/test-worktree' }),
+      );
     });
   });
 });

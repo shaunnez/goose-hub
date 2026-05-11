@@ -113,8 +113,10 @@ export async function runInvestigateWorkflow(
   }
 
   try {
-    // Pre-fetch symbol index hints for scout-code-path (best-effort; empty if index absent)
-    const symbolIndexHints = lookupWorkItemSymbols(workItem.title, workItem.body);
+    // Pre-fetch symbol index hints for scout-code-path (best-effort; empty if index absent).
+    // Pass worktreePath so hints are filtered to files that actually exist in the target repo,
+    // preventing Goose Hub-internal paths from leaking into non-goose-hub investigations.
+    const symbolIndexHints = lookupWorkItemSymbols(workItem.title, workItem.body, { worktreePath });
     const wave1Scouts = WAVE_1_SCOUTS.map((spec) =>
       spec.scoutName === 'scout-code-path' && symbolIndexHints.length > 0
         ? { ...spec, extraContext: { symbolIndexHints } }
