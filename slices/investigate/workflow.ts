@@ -13,6 +13,7 @@ import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { persistScoutReport } from '@goose-hub/core/scout-reports/repository.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
+import { lookupWorkItemSymbols } from '@goose-hub/core/symbol-index/lookup.js';
 import {
   cleanupWorktree,
   createWorktree,
@@ -112,10 +113,20 @@ export async function runInvestigateWorkflow(
   }
 
   try {
+    // Pre-fetch symbol index hints for scout-code-path (best-effort; empty if index absent).
+    // Pass worktreePath so hints are filtered to files that actually exist in the target repo,
+    // preventing Goose Hub-internal paths from leaking into non-goose-hub investigations.
+    const symbolIndexHints = lookupWorkItemSymbols(workItem.title, workItem.body, { worktreePath });
+    const wave1Scouts = WAVE_1_SCOUTS.map((spec) =>
+      spec.scoutName === 'scout-code-path' && symbolIndexHints.length > 0
+        ? { ...spec, extraContext: { symbolIndexHints } }
+        : spec,
+    );
+
     // Wave 1 — parallel fact-gathering
     const wave1Result = await dispatchWave({
       parentRunId: runId,
-      scoutSpecs: WAVE_1_SCOUTS,
+      scoutSpecs: wave1Scouts,
       workItem: workItemCtx,
       worktreePath,
       projectId,
