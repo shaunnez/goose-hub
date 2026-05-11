@@ -61,18 +61,21 @@ export function recordVerifyCommand(payload: VerifyCommandPayload): RecordVerify
   const runId = typeof payload.run_id === 'string' ? payload.run_id : null;
   let projectId = 'unknown';
   let workItemId: string | null = null;
+  let skill: string | null = null;
   if (runId != null) {
     const startEvent = eventStore.replay({ runId }).find((e) => e.kind === 'agent.run-started');
     if (startEvent != null) {
       projectId = startEvent.projectId;
       workItemId = startEvent.workItemId;
+      const p = startEvent.payload as { skill?: string } | null;
+      if (p?.skill != null) skill = p.skill;
     }
   }
   eventStore.appendEvent({
     projectId,
     workItemId,
     kind: 'agent.verify-command',
-    payload,
+    payload: skill != null ? { ...payload, skill } : payload,
     runId,
   });
   return { ok: true };
@@ -100,18 +103,21 @@ export function recordToolCall(payload: ToolCallHookPayload): RecordToolCallResu
   const runId = typeof payload.run_id === 'string' ? payload.run_id : null;
   let projectId = 'unknown';
   let workItemId: string | null = null;
+  let skill: string | null = null;
   if (runId != null) {
     const startEvent = eventStore.replay({ runId }).find((e) => e.kind === 'agent.run-started');
     if (startEvent != null) {
       projectId = startEvent.projectId;
       workItemId = startEvent.workItemId;
+      const p = startEvent.payload as { skill?: string } | null;
+      if (p?.skill != null) skill = p.skill;
     }
   }
   eventStore.appendEvent({
     projectId,
     workItemId,
     kind: 'agent.tool-call',
-    payload,
+    payload: skill != null ? { ...payload, skill } : payload,
     runId,
   });
   return { ok: true };
@@ -147,18 +153,21 @@ export function recordToolResult(payload: ToolResultHookPayload): RecordToolResu
   const runId = typeof payload.run_id === 'string' ? payload.run_id : null;
   let projectId = 'unknown';
   let workItemId: string | null = null;
+  let skill: string | null = null;
   if (runId != null) {
     const startEvent = eventStore.replay({ runId }).find((e) => e.kind === 'agent.run-started');
     if (startEvent != null) {
       projectId = startEvent.projectId;
       workItemId = startEvent.workItemId;
+      const p = startEvent.payload as { skill?: string } | null;
+      if (p?.skill != null) skill = p.skill;
     }
   }
   eventStore.appendEvent({
     projectId,
     workItemId,
     kind: 'agent.tool-result',
-    payload,
+    payload: skill != null ? { ...payload, skill } : payload,
     runId,
   });
   return { ok: true };
@@ -172,18 +181,21 @@ export function recordDecisionSummary(
   const normalisedPayload = { ...payload, kind: normalisedKind };
   let projectId = 'unknown';
   let workItemId: string | null = null;
+  let skill: string | null = null;
   if (runId != null) {
     const startEvent = eventStore.replay({ runId }).find((e) => e.kind === 'agent.run-started');
     if (startEvent != null) {
       projectId = startEvent.projectId;
       workItemId = startEvent.workItemId;
+      const p = startEvent.payload as { skill?: string } | null;
+      if (p?.skill != null) skill = p.skill;
     }
   }
   eventStore.appendEvent({
     projectId,
     workItemId,
     kind: 'agent.decision-summary-live',
-    payload: normalisedPayload,
+    payload: skill != null ? { ...normalisedPayload, skill } : normalisedPayload,
     runId,
   });
   return { ok: true };

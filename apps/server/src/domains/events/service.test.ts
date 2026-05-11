@@ -13,6 +13,7 @@ import {
   recordDecisionSummary,
   recordToolCall,
   recordToolResult,
+  recordVerifyCommand,
 } from './service.js';
 
 describe('parseSseFilter (#208)', () => {
@@ -175,5 +176,61 @@ describe('recordToolResult', () => {
     recordToolResult({ run_id: 'run-missing', tool_name: 'Bash', error: 'fail' });
     const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
     expect(arg.projectId).toBe('unknown');
+  });
+});
+
+describe('skill forwarding from run-started', () => {
+  function makeStartEvent(runId: string, skill: string) {
+    return {
+      id: 1,
+      kind: 'agent.run-started' as const,
+      projectId: 'proj',
+      workItemId: 'wi-1',
+      runId,
+      payload: { skill },
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  it('recordToolCall includes skill from run-started', () => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    vi.mocked(eventStore.replay).mockReturnValueOnce([makeStartEvent('run-s1', 'implement')]);
+    recordToolCall({ tool_name: 'Bash', run_id: 'run-s1' });
+    const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
+    expect((arg.payload as Record<string, unknown>).skill).toBe('implement');
+  });
+
+  it('recordToolResult includes skill from run-started', () => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    vi.mocked(eventStore.replay).mockReturnValueOnce([makeStartEvent('run-s2', 'triage')]);
+    recordToolResult({ run_id: 'run-s2', tool_name: 'Bash', error: 'oops' });
+    const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
+    expect((arg.payload as Record<string, unknown>).skill).toBe('triage');
+  });
+
+  it('recordDecisionSummary includes skill from run-started', () => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    vi.mocked(eventStore.replay).mockReturnValueOnce([makeStartEvent('run-s3', 'qa')]);
+    recordDecisionSummary({ run_id: 'run-s3', summary: 'Chose approach A' });
+    const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
+    expect((arg.payload as Record<string, unknown>).skill).toBe('qa');
+  });
+
+  it('recordVerifyCommand includes skill from run-started', () => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    vi.mocked(eventStore.replay).mockReturnValueOnce([makeStartEvent('run-s4', 'qa')]);
+    recordVerifyCommand({ run_id: 'run-s4', ac: 'AC1', passed: true });
+    const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
+    expect((arg.payload as Record<string, unknown>).skill).toBe('qa');
+  });
+
+  it('omits skill when run-started has none', () => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    vi.mocked(eventStore.replay).mockReturnValueOnce([
+      { ...makeStartEvent('run-s5', 'x'), payload: {} as Record<string, unknown> },
+    ]);
+    recordToolCall({ tool_name: 'Bash', run_id: 'run-s5' });
+    const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
+    expect((arg.payload as Record<string, unknown>).skill).toBeUndefined();
   });
 });

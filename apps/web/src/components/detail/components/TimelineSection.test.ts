@@ -268,4 +268,17 @@ describe('groupEvents — run-group metadata', () => {
       expect(result[0].endedAt).toBe(events[1].createdAt);
     }
   });
+
+  it('resolves skill from any event payload, not just lifecycle events', () => {
+    const events: AgentEventDto[] = [
+      { ...makeRunEvent(1, 'run-abc', 'agent.tool-call'), payload: { skill: 'implement' } },
+      makeRunEvent(2, 'run-abc', 'agent.run-started'),
+      makeRunEvent(3, 'run-abc', 'agent.run-completed'),
+    ];
+    const result = groupEvents(events);
+    expect(result).toHaveLength(1);
+    if (result[0].kind === 'run-group') {
+      expect(result[0].skill).toBe('implement');
+    }
+  });
 });

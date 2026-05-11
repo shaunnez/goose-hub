@@ -257,7 +257,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
               projectId,
               workItemId,
               kind: 'tool.stdout-truncated',
-              payload: { runId },
+              payload: { runId, skill: spec.skill },
               runId,
               personaId,
             });
@@ -274,7 +274,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
           projectId,
           workItemId,
           kind: 'tool.timeout',
-          payload: { runId },
+          payload: { runId, skill: spec.skill },
           runId,
           personaId,
         });

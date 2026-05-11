@@ -368,7 +368,7 @@ export class CodexCliRuntime implements AgentRuntime {
               projectId,
               workItemId,
               kind: 'tool.stdout-truncated',
-              payload: { runId },
+              payload: { runId, skill: spec.skill },
               runId,
               personaId,
             });
@@ -385,7 +385,7 @@ export class CodexCliRuntime implements AgentRuntime {
           projectId,
           workItemId,
           kind: 'tool.timeout',
-          payload: { runId },
+          payload: { runId, skill: spec.skill },
           runId,
           personaId,
         });
@@ -402,7 +402,7 @@ export class CodexCliRuntime implements AgentRuntime {
             projectId,
             workItemId,
             kind: 'agent.run-failed',
-            payload: { runId, exitCode: code },
+            payload: { runId, skill: spec.skill, exitCode: code },
             runId,
             personaId,
           });
@@ -417,7 +417,7 @@ export class CodexCliRuntime implements AgentRuntime {
             projectId,
             workItemId,
             kind: 'agent.run-failed',
-            payload: { runId, exitCode: code },
+            payload: { runId, skill: spec.skill, exitCode: code },
             runId,
             personaId,
           });
