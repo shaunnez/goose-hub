@@ -6,13 +6,15 @@ import {
   readProjectSettings,
   readProjectSkillSettings,
 } from '../db/repositories/project-settings.js';
-import type { ModelTier, Role } from '../types.js';
+import type { ModelTier, Role, RoleModel } from '../types.js';
 import {
   type ResolvedBudget,
   type SkillBudgetOverride,
   resolveBudgets,
   resolveEscalatedBudgets,
 } from './budgets.js';
+import type { ModelProvider } from './models.js';
+import { type SelectModelForRoleResult, selectModelForRole } from './select-model-for-role.js';
 
 /** Merged global settings: DB row wins over projectConfig value when non-null. */
 export interface EffectiveGlobalSettings {
@@ -106,6 +108,31 @@ export function resolveEscalatedBudgetsForProject(
     globalRow?.perWorkflowMaxUsd,
     globalRow?.perAgentMaxUsd,
   );
+}
+
+/**
+ * Resolves the per-role primary model for a project, honouring DB row +
+ * project config + skill default + role default in that order. Used by
+ * invokeSkill to override the skill-budget-derived default model when the
+ * user (or project config) has explicitly picked one for the role.
+ */
+export function resolveRoleModelForProject(input: {
+  role: Role;
+  projectId: string;
+  configRoleModel?: RoleModel;
+  allowHoldoutOverride?: boolean;
+  skill?: string;
+  skillProvider?: ModelProvider;
+}): SelectModelForRoleResult {
+  const dbRow = readProjectModelSettingsForRole(input.projectId, input.role);
+  return selectModelForRole({
+    role: input.role,
+    configRoleModel: input.configRoleModel,
+    allowHoldoutOverride: input.allowHoldoutOverride,
+    dbRow,
+    skill: input.skill,
+    skillProvider: input.skillProvider,
+  });
 }
 
 /**

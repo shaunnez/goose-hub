@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import type { ModelTier } from '../../types.js';
+import type { ModelProvider, ModelTier } from '../../types.js';
 import { db } from '../db.js';
 import { projectModelSettings } from '../schema.js';
 
@@ -9,6 +9,9 @@ export type RoleModelPatch = {
   primaryModel?: ModelTier | null;
   fallbackModel?: ModelTier | null;
   advisorModel?: ModelTier | null;
+  primaryProvider?: ModelProvider | null;
+  fallbackProvider?: ModelProvider | null;
+  advisorProvider?: ModelProvider | null;
 };
 
 /** Complexity overrides for a single role: keys are "type:<T>", "priority:<P>", or "default". */
@@ -94,6 +97,24 @@ export function deleteRoleModelSetting(projectId: string, role: string): void {
   db.delete(projectModelSettings)
     .where(and(eq(projectModelSettings.projectId, projectId), eq(projectModelSettings.role, role)))
     .run();
+}
+
+/**
+ * Sets the same (tier, provider) for `primaryModel` + `primaryProvider` across
+ * many roles in one call. Used by the "All → Codex" / "All → Claude" bulk
+ * switch in the Models settings UI. Existing fallback/advisor/complexity values
+ * on each row are preserved.
+ */
+export function writeBulkRoleModelPrimary(
+  projectId: string,
+  roles: string[],
+  tier: ModelTier,
+  provider: ModelProvider,
+  by: string,
+): void {
+  for (const role of roles) {
+    writeRoleModelSetting(projectId, role, { primaryModel: tier, primaryProvider: provider }, by);
+  }
 }
 
 export function parseComplexityOverrides(row: ProjectModelSettingsRow): ComplexityOverrides {

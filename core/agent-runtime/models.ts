@@ -1,8 +1,6 @@
-import type { ModelTier } from '../types.js';
+import type { ModelProvider, ModelTier } from '../types.js';
 
-export type { ModelTier };
-
-export type ModelProvider = 'claude' | 'codex';
+export type { ModelProvider, ModelTier };
 
 export interface ModelEntry {
   id: string;

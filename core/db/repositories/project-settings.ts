@@ -141,3 +141,13 @@ export function deleteProjectSkillSetting(projectId: string, skillName: string):
     )
     .run();
 }
+
+/**
+ * Clears ALL budget overrides for a project — both the global row and every
+ * per-skill override. Used by the "Reset all to defaults" action in the
+ * Budgets settings UI. The project then falls back to config + SKILL_BUDGETS.
+ */
+export function resetAllProjectBudgets(projectId: string): void {
+  db.delete(projectSkillSettings).where(eq(projectSkillSettings.projectId, projectId)).run();
+  db.delete(projectSettings).where(eq(projectSettings.projectId, projectId)).run();
+}

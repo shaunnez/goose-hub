@@ -10,6 +10,7 @@ import type {
   IssueCommentDto,
   IssueDiffDto,
   MilestoneDto,
+  ModelProvider,
   ModelTier,
   PersonaNameDto,
   PersonaRunDto,
@@ -522,9 +523,25 @@ export async function patchRoleModelSetting(
     primaryModel?: ModelTier | null;
     fallbackModel?: ModelTier | null;
     advisorModel?: ModelTier | null;
+    primaryProvider?: ModelProvider | null;
+    fallbackProvider?: ModelProvider | null;
+    advisorProvider?: ModelProvider | null;
   },
 ): Promise<void> {
   await patchJson(`/projects/${slug}/settings/models/${encodeURIComponent(role)}`, patch);
+}
+
+/** UX-2: bulk-set primary (tier, provider) for every eligible role. */
+export async function patchBulkRoleModel(
+  slug: string,
+  body: { tier: ModelTier; provider: ModelProvider },
+): Promise<{ ok: true; rolesUpdated: number }> {
+  return patchJson(`/projects/${slug}/settings/models/bulk`, body);
+}
+
+/** UX-1: reset ALL budget overrides (global + per-skill) for a project. */
+export async function resetAllProjectBudgets(slug: string): Promise<void> {
+  await deleteRequest(`/projects/${slug}/settings/budgets`);
 }
 
 export async function patchComplexityOverrides(

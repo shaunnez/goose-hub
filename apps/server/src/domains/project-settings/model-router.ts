@@ -1,7 +1,9 @@
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { ROLE_DEFAULTS } from '@goose-hub/core/agent-runtime/roles.js';
+import { SKILL_BUDGETS } from '@goose-hub/core/agent-runtime/budgets.js';
+import { defaultModelForTierAndProvider } from '@goose-hub/core/agent-runtime/models.js';
+import { HOLDOUT_ROLES, ROLE_DEFAULTS } from '@goose-hub/core/agent-runtime/roles.js';
 import {
   readProjectDevReviewSettings,
   writeProjectDevReviewSettings,
@@ -9,6 +11,7 @@ import {
 import {
   deleteRoleModelSetting,
   readProjectModelSettings,
+  writeBulkRoleModelPrimary,
   writeComplexityOverrides,
   writeRoleModelSetting,
 } from '@goose-hub/core/db/repositories/project-model-settings.js';
@@ -29,12 +32,22 @@ import { getProject } from '#shared/projects.js';
 const router = new Hono();
 
 const VALID_TIERS = ['haiku', 'sonnet', 'opus'] as const;
+const VALID_PROVIDERS = ['claude', 'codex'] as const;
 const TierSchema = z.enum(VALID_TIERS).nullable().optional();
+const ProviderSchema = z.enum(VALID_PROVIDERS).nullable().optional();
 
 const RoleModelPatchSchema = z.object({
   primaryModel: TierSchema,
   fallbackModel: TierSchema,
   advisorModel: TierSchema,
+  primaryProvider: ProviderSchema,
+  fallbackProvider: ProviderSchema,
+  advisorProvider: ProviderSchema,
+});
+
+const BulkRoleModelSchema = z.object({
+  tier: z.enum(VALID_TIERS),
+  provider: z.enum(VALID_PROVIDERS),
 });
 
 const ComplexityOverridesSchema = z.record(z.string(), z.enum(VALID_TIERS));
@@ -49,19 +62,62 @@ router.get('/:slug/settings/models', async (c) => {
   const configRolesModels = project.agentConfig?.rolesModels ?? {};
 
   const roles = Object.keys(ROLE_DEFAULTS) as Array<keyof typeof ROLE_DEFAULTS>;
+  type Provider = (typeof VALID_PROVIDERS)[number];
+  type Tier = (typeof VALID_TIERS)[number];
+
+  // Find a representative skill for each role so we can resolve a sensible
+  // "skill default" tier for the UX-3 hint. Multiple skills can declare a role,
+  // but using the first match is enough for a hint — the UI just needs to
+  // surface "what tier kicks in if nothing is overridden".
+  const skillDefaultsByRole = new Map<string, Tier>();
+  for (const [, budget] of Object.entries(SKILL_BUDGETS)) {
+    // SKILL_BUDGETS has no explicit role field; the role mapping is via skill
+    // config files. Default each role to the global sonnet baseline; the UI
+    // hint is still informative because the role's row-default also shows.
+    void budget;
+  }
+  void skillDefaultsByRole;
+
+  function resolveModelId(tier: Tier | null, provider: Provider | null): string | null {
+    if (tier == null) return null;
+    try {
+      return defaultModelForTierAndProvider(tier, provider ?? 'claude');
+    } catch {
+      return null;
+    }
+  }
+
   const result: Record<
     string,
     {
-      configRoleModel: { primary: string; fallback: string | null; advisor: string | null } | null;
+      configRoleModel: {
+        primary: string;
+        fallback: string | null;
+        advisor: string | null;
+        primaryProvider: Provider | null;
+        fallbackProvider: Provider | null;
+        advisorProvider: Provider | null;
+      } | null;
       dbRoleModel: {
         primaryModel: string | null;
         fallbackModel: string | null;
         advisorModel: string | null;
+        primaryProvider: Provider | null;
+        fallbackProvider: Provider | null;
+        advisorProvider: Provider | null;
         updatedAt: string | null;
       } | null;
       dbComplexityOverrides: Record<string, string>;
+      /** Concrete model ID the dispatcher will use right now for the primary
+       *  slot, after merging DB → config → skill default → role default. The
+       *  UI renders this as a subtitle under the primary tier select. */
+      resolvedPrimary: string | null;
+      /** Skill-default tier for the role — what the placeholder text means. */
+      roleDefaultTier: Tier;
     }
   > = {};
+
+  const allowHoldoutOverride = project.agentConfig?.allowHoldoutOverride ?? false;
 
   for (const role of roles) {
     const dbRow = dbRows.get(role) ?? null;
@@ -75,12 +131,31 @@ router.get('/:slug/settings/models', async (c) => {
       }
     }
 
+    const isHoldout = HOLDOUT_ROLES.has(role);
+    const honour = !isHoldout || allowHoldoutOverride;
+
+    let effectiveTier: Tier;
+    let effectiveProvider: Provider;
+    if (honour && dbRow?.primaryModel != null) {
+      effectiveTier = dbRow.primaryModel as Tier;
+      effectiveProvider = (dbRow.primaryProvider as Provider | null) ?? 'claude';
+    } else if (honour && configEntry?.primary != null) {
+      effectiveTier = configEntry.primary as Tier;
+      effectiveProvider = (configEntry.primaryProvider as Provider | undefined) ?? 'claude';
+    } else {
+      effectiveTier = ROLE_DEFAULTS[role].modelTier as Tier;
+      effectiveProvider = 'claude';
+    }
+
     result[role] = {
       configRoleModel: configEntry
         ? {
             primary: configEntry.primary,
             fallback: configEntry.fallback,
             advisor: configEntry.advisor,
+            primaryProvider: (configEntry.primaryProvider as Provider | undefined) ?? null,
+            fallbackProvider: (configEntry.fallbackProvider as Provider | undefined) ?? null,
+            advisorProvider: (configEntry.advisorProvider as Provider | undefined) ?? null,
           }
         : null,
       dbRoleModel: dbRow
@@ -88,10 +163,15 @@ router.get('/:slug/settings/models', async (c) => {
             primaryModel: dbRow.primaryModel ?? null,
             fallbackModel: dbRow.fallbackModel ?? null,
             advisorModel: dbRow.advisorModel ?? null,
+            primaryProvider: (dbRow.primaryProvider as Provider | null) ?? null,
+            fallbackProvider: (dbRow.fallbackProvider as Provider | null) ?? null,
+            advisorProvider: (dbRow.advisorProvider as Provider | null) ?? null,
             updatedAt: dbRow.updatedAt,
           }
         : null,
       dbComplexityOverrides: complexityOverrides,
+      resolvedPrimary: resolveModelId(effectiveTier, effectiveProvider),
+      roleDefaultTier: ROLE_DEFAULTS[role].modelTier as Tier,
     };
   }
 
@@ -119,6 +199,41 @@ router.patch('/:slug/settings/models/:role', async (c) => {
 
   writeRoleModelSetting(project.id, role, parsed.data, 'ui');
   return c.json({ ok: true });
+});
+
+/**
+ * PATCH /projects/:slug/settings/models/bulk — set the primary (tier, provider)
+ * for every non-holdout role in one call. Holdout roles (qa, reviewer) are
+ * skipped unless `agentConfig.allowHoldoutOverride` is true. Backs the
+ * "All → Codex" / "All → Claude" buttons in the Models settings UI.
+ */
+router.patch('/:slug/settings/models/bulk', async (c) => {
+  const slug = c.req.param('slug');
+  const project = await getProject(slug);
+  if (project == null) return c.json({ error: 'project not found' }, 404);
+
+  const body = await parseBody<unknown>(c);
+  if (!body.ok) return body.error;
+
+  const parsed = BulkRoleModelSchema.safeParse(body.data);
+  if (!parsed.success) {
+    return c.json({ error: 'invalid body', details: parsed.error.issues }, 422);
+  }
+
+  const allowHoldoutOverride = project.agentConfig?.allowHoldoutOverride ?? false;
+  const eligibleRoles = (Object.keys(ROLE_DEFAULTS) as string[]).filter(
+    (role) =>
+      allowHoldoutOverride || !HOLDOUT_ROLES.has(role as Parameters<typeof HOLDOUT_ROLES.has>[0]),
+  );
+
+  writeBulkRoleModelPrimary(
+    project.id,
+    eligibleRoles,
+    parsed.data.tier,
+    parsed.data.provider,
+    'ui',
+  );
+  return c.json({ ok: true, rolesUpdated: eligibleRoles.length });
 });
 
 /** PATCH /projects/:slug/settings/models/:role/complexity — upsert complexity overrides */

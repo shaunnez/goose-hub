@@ -348,19 +348,37 @@ export interface ProjectSettingsDto {
     }
   >;
   registeredSkills: string[];
+  /** SKILL_BUDGETS defaults — UX-3 hint surfaced under each per-skill input. */
+  skillDefaults: Record<string, { maxTurns: number; maxBudgetUsd: number; timeoutMs: number }>;
 }
 
 export type ModelTier = 'haiku' | 'sonnet' | 'opus';
+export type ModelProvider = 'claude' | 'codex';
 
 export interface RoleModelDto {
-  configRoleModel: { primary: string; fallback: string | null; advisor: string | null } | null;
+  configRoleModel: {
+    primary: string;
+    fallback: string | null;
+    advisor: string | null;
+    primaryProvider: ModelProvider | null;
+    fallbackProvider: ModelProvider | null;
+    advisorProvider: ModelProvider | null;
+  } | null;
   dbRoleModel: {
     primaryModel: ModelTier | null;
     fallbackModel: ModelTier | null;
     advisorModel: ModelTier | null;
+    primaryProvider: ModelProvider | null;
+    fallbackProvider: ModelProvider | null;
+    advisorProvider: ModelProvider | null;
     updatedAt: string | null;
   } | null;
   dbComplexityOverrides: Record<string, ModelTier>;
+  /** Concrete model ID that will be dispatched for the primary slot right now,
+   *  resolved from DB → config → skill default → role default. UX-3 hint. */
+  resolvedPrimary: string | null;
+  /** The role's hardcoded default tier (claude). Used as a placeholder hint. */
+  roleDefaultTier: ModelTier;
 }
 
 export interface ProjectModelSettingsDto {

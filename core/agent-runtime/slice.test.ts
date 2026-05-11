@@ -920,6 +920,7 @@ vi.mock('../db/schema.js', () => ({
   decisionPatterns: { projectId: 'p', kind: 'k', role: 'r', consistencyScore: 'cs' },
   agentRuns: {},
   agentDecisions: {},
+  projectModelSettings: { projectId: 'p', role: 'r' },
 }));
 
 function makeWorkItem(

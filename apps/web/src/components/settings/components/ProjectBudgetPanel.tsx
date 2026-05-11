@@ -3,10 +3,11 @@ import {
   fetchProjectSettings,
   patchGlobalBudgetSettings,
   patchSkillBudgetSetting,
+  resetAllProjectBudgets,
 } from '@/lib/api';
 import type { ProjectSettingsDto } from '@/lib/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Trash2 } from 'lucide-react';
+import { RotateCcw, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 interface Props {
@@ -57,12 +58,15 @@ function NumericInput({
   placeholder,
   isFloat,
   overridden,
+  subtitle,
   onCommit,
 }: {
   value: number | null;
   placeholder: string;
   isFloat?: boolean;
   overridden: boolean;
+  /** UX-3: small subtitle rendered beneath the input (e.g. "default: 25"). */
+  subtitle?: string | null;
   onCommit: (val: number | null) => void;
 }) {
   const [draft, setDraft] = useState<string>(value != null ? String(value) : '');
@@ -81,20 +85,25 @@ function NumericInput({
   }
 
   return (
-    <div className="relative flex items-center gap-1">
-      <input
-        type="number"
-        step={isFloat ? '0.01' : '1'}
-        value={draft}
-        placeholder={placeholder}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={handleBlur}
-        className={[
-          'w-28 rounded border px-2 py-0.5 text-[12px] font-mono bg-bg text-fg',
-          overridden ? 'border-accent' : 'border-line',
-        ].join(' ')}
-      />
-      {overridden && <span className="text-[10px] text-accent font-medium">override</span>}
+    <div className="flex flex-col gap-0.5">
+      <div className="flex items-center gap-1">
+        <input
+          type="number"
+          step={isFloat ? '0.01' : '1'}
+          value={draft}
+          placeholder={placeholder}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={handleBlur}
+          className={[
+            'w-28 rounded border px-2 py-0.5 text-[12px] font-mono bg-bg text-fg',
+            overridden ? 'border-accent' : 'border-line',
+          ].join(' ')}
+        />
+        {overridden && <span className="text-[10px] text-accent font-medium">override</span>}
+      </div>
+      {subtitle != null && subtitle !== '' && (
+        <span className="text-[10px] text-fg-3 font-mono">{subtitle}</span>
+      )}
     </div>
   );
 }
@@ -123,24 +132,53 @@ export function ProjectBudgetPanel({ slug }: Props) {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['project-settings', slug] }),
   });
 
+  const resetAll = useMutation({
+    mutationFn: () => resetAllProjectBudgets(slug),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['project-settings', slug] }),
+  });
+
   if (isLoading) return <div className="text-[12px] text-fg-3 py-4">Loading…</div>;
   if (error || !data)
     return <div className="text-[12px] text-danger py-4">Failed to load budget settings.</div>;
 
   const configBudgets = data.configBudgets as Record<string, number>;
   const dbGlobal = data.dbGlobalOverrides;
+  const hasAnyOverride = dbGlobal != null || Object.keys(data.dbSkillOverrides ?? {}).length > 0;
+  const skillDefaults = data.skillDefaults ?? {};
+
+  function confirmReset() {
+    if (!hasAnyOverride) return;
+    const ok = window.confirm(
+      'Reset all budget overrides for this project? Global caps and every per-skill override will be cleared. The project will fall back to config and SKILL_BUDGETS defaults.',
+    );
+    if (ok) resetAll.mutate();
+  }
 
   return (
     <div className="space-y-8">
       {/* Global caps */}
       <section>
-        <h3 className="text-[12px] font-semibold uppercase tracking-wider text-fg-2 mb-3">
-          Global budget caps
-        </h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-[12px] font-semibold uppercase tracking-wider text-fg-2">
+            Global budget caps
+          </h3>
+          {hasAnyOverride && (
+            <button
+              type="button"
+              onClick={confirmReset}
+              disabled={resetAll.isPending}
+              className="flex items-center gap-1 text-[11px] text-fg-3 hover:text-danger border border-line/60 rounded-full px-2.5 py-0.5 transition-colors disabled:opacity-40"
+              title="Clear ALL budget overrides (global + per-skill)"
+            >
+              <RotateCcw size={11} />
+              Reset all to defaults
+            </button>
+          )}
+        </div>
         <p className="text-[11px] text-fg-3 mb-4">
           DB overrides win over config file values. Clear a field (leave blank) to revert to config.
         </p>
-        <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 items-center">
+        <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 items-start">
           {GLOBAL_FIELDS.map(({ key, label, configKey, isFloat }) => {
             const configVal = configBudgets[configKey];
             const dbVal = dbGlobal?.[key] ?? null;
@@ -149,7 +187,7 @@ export function ProjectBudgetPanel({ slug }: Props) {
               <>
                 <span
                   key={`${key}-label`}
-                  className="text-[12px] text-fg-2 flex items-center gap-1.5"
+                  className="text-[12px] text-fg-2 flex items-center gap-1.5 pt-1"
                 >
                   {label}
                 </span>
@@ -159,6 +197,7 @@ export function ProjectBudgetPanel({ slug }: Props) {
                   placeholder={configVal != null ? String(configVal) : '—'}
                   isFloat={isFloat}
                   overridden={isOverridden}
+                  subtitle={configVal != null ? `default: ${configVal}` : null}
                   onCommit={(val) => patchGlobal.mutate({ [key]: val })}
                 />
               </>
@@ -189,34 +228,40 @@ export function ProjectBudgetPanel({ slug }: Props) {
           <tbody>
             {data.registeredSkills.map((skill) => {
               const row = data.dbSkillOverrides[skill] ?? null;
+              const defaults = skillDefaults[skill];
               const hasAny =
                 row != null &&
                 (row.maxTurns != null || row.maxBudgetUsd != null || row.timeoutMs != null);
               return (
-                <tr key={skill} className="border-b border-line/50 hover:bg-bg-hover">
+                <tr key={skill} className="border-b border-line/50 hover:bg-bg-hover align-top">
                   <td className="py-1.5 font-mono text-fg">{skill}</td>
                   <td className="py-1.5 px-2">
                     <NumericInput
                       value={row?.maxTurns ?? null}
-                      placeholder="default"
+                      placeholder={defaults != null ? String(defaults.maxTurns) : 'default'}
                       overridden={row?.maxTurns != null}
+                      subtitle={defaults != null ? `default: ${defaults.maxTurns}` : null}
                       onCommit={(val) => patchSkill.mutate({ skill, patch: { maxTurns: val } })}
                     />
                   </td>
                   <td className="py-1.5 px-2">
                     <NumericInput
                       value={row?.maxBudgetUsd ?? null}
-                      placeholder="default"
+                      placeholder={defaults != null ? defaults.maxBudgetUsd.toFixed(2) : 'default'}
                       isFloat
                       overridden={row?.maxBudgetUsd != null}
+                      subtitle={
+                        defaults != null ? `default: $${defaults.maxBudgetUsd.toFixed(2)}` : null
+                      }
                       onCommit={(val) => patchSkill.mutate({ skill, patch: { maxBudgetUsd: val } })}
                     />
                   </td>
                   <td className="py-1.5 px-2">
                     <NumericInput
                       value={row?.timeoutMs ?? null}
-                      placeholder="default"
+                      placeholder={defaults != null ? String(defaults.timeoutMs) : 'default'}
                       overridden={row?.timeoutMs != null}
+                      subtitle={defaults != null ? `default: ${defaults.timeoutMs} ms` : null}
                       onCommit={(val) => patchSkill.mutate({ skill, patch: { timeoutMs: val } })}
                     />
                   </td>
