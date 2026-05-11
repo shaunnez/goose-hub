@@ -52,44 +52,62 @@ test.describe('Settings → Models (3A smoke)', () => {
       'Codex CLI not connected — skipping codex provider assertion',
     );
 
-    // Expand the developer role row.
-    const roleBtn = page
-      .locator('button')
-      .filter({ hasText: new RegExp(`^${TEST_ROLE}`) })
-      .first();
-    await roleBtn.click();
+    // Snapshot the current primary settings so we can restore them exactly,
+    // rather than deleting the whole row (which would wipe unrelated overrides).
+    const beforeRes = await page.request.get(`/api/projects/${PROJECT_SLUG}/settings/models`);
+    const before = (await beforeRes.json()) as {
+      roles: Record<
+        string,
+        { dbRoleModel: { primaryModel: string | null; primaryProvider: string | null } | null }
+      >;
+    };
+    const priorPrimary = before.roles[TEST_ROLE]?.dbRoleModel?.primaryModel ?? null;
+    const priorProvider = before.roles[TEST_ROLE]?.dbRoleModel?.primaryProvider ?? null;
 
-    // Find the primary tier select in the developer row and pick sonnet.
-    const primaryTierSelect = page
-      .locator('tr')
-      .filter({ hasText: TEST_ROLE })
-      .locator('select')
-      .first();
-    await primaryTierSelect.selectOption('sonnet');
+    try {
+      // Expand the developer role row.
+      const roleBtn = page
+        .locator('button')
+        .filter({ hasText: new RegExp(`^${TEST_ROLE}`) })
+        .first();
+      await roleBtn.click();
 
-    // Find the provider select and pick codex.
-    const primaryProviderSelect = page
-      .locator('tr')
-      .filter({ hasText: TEST_ROLE })
-      .locator('select')
-      .nth(1);
-    await primaryProviderSelect.selectOption('codex');
+      // Find the primary tier select in the developer row and pick sonnet.
+      const primaryTierSelect = page
+        .locator('tr')
+        .filter({ hasText: TEST_ROLE })
+        .locator('select')
+        .first();
+      await primaryTierSelect.selectOption('sonnet');
 
-    // After selection the resolved model subtitle should update to gpt-5-codex.
-    await expect(
-      page.locator('span.font-mono').filter({ hasText: 'gpt-5-codex' }).first(),
-    ).toBeVisible({ timeout: 5_000 });
+      // Find the provider select and pick codex.
+      const primaryProviderSelect = page
+        .locator('tr')
+        .filter({ hasText: TEST_ROLE })
+        .locator('select')
+        .nth(1);
+      await primaryProviderSelect.selectOption('codex');
 
-    // Reload and confirm the setting persisted.
-    await page.reload();
-    await page.waitForSelector('table', { timeout: 10_000 });
+      // After selection the resolved model subtitle should update to gpt-5-codex.
+      await expect(
+        page.locator('span.font-mono').filter({ hasText: 'gpt-5-codex' }).first(),
+      ).toBeVisible({ timeout: 5_000 });
 
-    await expect(
-      page.locator('span.font-mono').filter({ hasText: 'gpt-5-codex' }).first(),
-    ).toBeVisible({ timeout: 5_000 });
+      // Reload and confirm the setting persisted.
+      await page.reload();
+      await page.waitForSelector('table', { timeout: 10_000 });
 
-    // Restore: reset the developer row.
-    await page.request.delete(`/api/projects/${PROJECT_SLUG}/settings/models/${TEST_ROLE}`);
+      await expect(
+        page.locator('span.font-mono').filter({ hasText: 'gpt-5-codex' }).first(),
+      ).toBeVisible({ timeout: 5_000 });
+    } finally {
+      // Restore only the fields this test changed, preserving any other overrides
+      // (complexity rules, budget fields, etc.) that may exist on the row.
+      await page.request.patch(`/api/projects/${PROJECT_SLUG}/settings/models/${TEST_ROLE}`, {
+        data: { primaryModel: priorPrimary, primaryProvider: priorProvider },
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
   });
 
   test('per-role max-turns input is visible in expanded row', async ({ page }) => {

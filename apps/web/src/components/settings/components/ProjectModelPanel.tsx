@@ -18,7 +18,7 @@ import type {
 } from '@/lib/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, Copy, Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 interface Props {
   slug: string;
@@ -253,8 +253,27 @@ function RoleRow({
 
   const db = data.dbRoleModel;
   const hasDbOverride =
-    db != null && (db.primaryModel != null || db.fallbackModel != null || db.advisorModel != null);
+    db != null &&
+    (db.primaryModel != null ||
+      db.fallbackModel != null ||
+      db.advisorModel != null ||
+      db.maxTurns != null ||
+      db.timeoutMs != null);
   const hasComplexity = Object.keys(data.dbComplexityOverrides).length > 0;
+
+  // Local state for budget inputs — PATCH on blur, not on every keystroke.
+  // This avoids sending invalid intermediate values (e.g. "1", "12", "120"
+  // while the user is typing "120000") that would be rejected with 422.
+  const [localMaxTurns, setLocalMaxTurns] = useState(db?.maxTurns?.toString() ?? '');
+  const [localTimeoutMs, setLocalTimeoutMs] = useState(db?.timeoutMs?.toString() ?? '');
+
+  useEffect(() => {
+    setLocalMaxTurns(db?.maxTurns?.toString() ?? '');
+  }, [db?.maxTurns]);
+
+  useEffect(() => {
+    setLocalTimeoutMs(db?.timeoutMs?.toString() ?? '');
+  }, [db?.timeoutMs]);
 
   const configPrimary = (data.configRoleModel?.primary as ModelTier) ?? null;
   const codexDisabled = !codexAvailable;
@@ -373,11 +392,13 @@ function RoleRow({
                         max={500}
                         step={1}
                         placeholder="default"
-                        value={db?.maxTurns ?? ''}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          patchRole.mutate({ maxTurns: v === '' ? null : Number(v) });
-                        }}
+                        value={localMaxTurns}
+                        onChange={(e) => setLocalMaxTurns(e.target.value)}
+                        onBlur={() =>
+                          patchRole.mutate({
+                            maxTurns: localMaxTurns === '' ? null : Number(localMaxTurns),
+                          })
+                        }
                         className="w-20 rounded border border-line px-2 py-0.5 text-[12px] bg-bg text-fg"
                       />
                       <span className="text-[10px] text-fg-3">
@@ -395,11 +416,13 @@ function RoleRow({
                         max={3_600_000}
                         step={5000}
                         placeholder="default"
-                        value={db?.timeoutMs ?? ''}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          patchRole.mutate({ timeoutMs: v === '' ? null : Number(v) });
-                        }}
+                        value={localTimeoutMs}
+                        onChange={(e) => setLocalTimeoutMs(e.target.value)}
+                        onBlur={() =>
+                          patchRole.mutate({
+                            timeoutMs: localTimeoutMs === '' ? null : Number(localTimeoutMs),
+                          })
+                        }
                         className="w-28 rounded border border-line px-2 py-0.5 text-[12px] bg-bg text-fg"
                       />
                       <span className="text-[10px] text-fg-3">
