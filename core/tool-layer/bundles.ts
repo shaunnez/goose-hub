@@ -10,11 +10,12 @@ export const TOOL_BUNDLES = {
   'read-write': ['Read', 'Write', 'Edit', 'Glob', 'Grep'],
   'bash-restricted': ['Bash'],
   /**
-   * Sandboxed read bundle for investigator agents.
-   * Uses workspace-sandboxed `read` and `search` tools (no raw filesystem access).
-   * `work-item-read` is the work-item query tool.
+   * Read bundle for investigator agents (scouts, grill-and-prd).
+   * Temporarily uses native tools — MCP sandboxed tool server not yet wired up.
+   * When core/tool-layer/tools/ is exposed as an MCP server, revert to:
+   *   ['read', 'search', 'work-item-read']
    */
-  read: ['read', 'search', 'work-item-read'],
+  read: ['Read', 'Glob', 'Grep', 'Bash(cat *)', 'Bash(ls *)'],
   /**
    * Developer bundle for the fix-issue agent. Uses Claude's native built-in tools.
    * The MCP sandboxed tool server (core/tool-layer/tools/) is not yet wired up;
