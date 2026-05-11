@@ -3,6 +3,7 @@ import { formatCost } from '@/lib/utils';
 
 const STAGE_LABEL: Record<CostStage, string> = {
   triage: 'Triage',
+  discover: 'Discover',
   investigate: 'Investigate',
   dev: 'Dev',
   qa: 'QA',

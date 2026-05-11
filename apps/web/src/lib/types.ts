@@ -154,6 +154,7 @@ export type CostLabel = 'estimated' | 'exact';
 
 export type CostStage =
   | 'triage'
+  | 'discover'
   | 'investigate'
   | 'dev'
   | 'qa'

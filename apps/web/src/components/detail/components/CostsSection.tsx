@@ -15,6 +15,7 @@ interface CostsSectionProps {
 
 const STAGE_LABEL: Record<CostRowDto['stage'], string> = {
   triage: 'Triage',
+  discover: 'Discover',
   investigate: 'Investigate',
   dev: 'Dev',
   qa: 'QA',

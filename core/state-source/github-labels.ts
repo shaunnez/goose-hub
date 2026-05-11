@@ -517,7 +517,7 @@ export class GitHubLabelsSource implements StateSource {
       'factory:triaging',
       `type:${input.type ?? 'feature'}`,
       `priority:${input.priority ?? 'medium'}`,
-      'schedule:later',
+      'schedule:current',
       'mode:supervised',
       'exec:serial',
     ];
