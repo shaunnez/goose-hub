@@ -216,8 +216,13 @@ export async function dispatchSpecAuthor(slug: string, issueNumber: number): Pro
 
 export async function dispatchFixIssue(slug: string, issueNumber: number): Promise<void> {
   const projectForFlag = await getProject(slug);
-  const useMultiAgent = projectForFlag != null ? getUseMultiAgentPipeline(projectForFlag.id) : false;
-  logger.info('dispatchFixIssue: pipeline flag', { slug, issueNumber, useMultiAgentPipeline: useMultiAgent });
+  const useMultiAgent =
+    projectForFlag != null ? getUseMultiAgentPipeline(projectForFlag.id) : false;
+  logger.info('dispatchFixIssue: pipeline flag', {
+    slug,
+    issueNumber,
+    useMultiAgentPipeline: useMultiAgent,
+  });
 
   if (useMultiAgent) {
     await dispatchSpecAuthor(slug, issueNumber);
@@ -475,8 +480,13 @@ export async function dispatchResolveConflict(slug: string, issueNumber: number)
 /** Run the QA holdout workflow for a single issue. Drops duplicate triggers for the same issue. */
 export async function dispatchQa(slug: string, issueNumber: number): Promise<void> {
   const projectForFlag = await getProject(slug);
-  const useMultiAgent = projectForFlag != null ? getUseMultiAgentPipeline(projectForFlag.id) : false;
-  logger.info('dispatchQa: pipeline flag', { slug, issueNumber, useMultiAgentPipeline: useMultiAgent });
+  const useMultiAgent =
+    projectForFlag != null ? getUseMultiAgentPipeline(projectForFlag.id) : false;
+  logger.info('dispatchQa: pipeline flag', {
+    slug,
+    issueNumber,
+    useMultiAgentPipeline: useMultiAgent,
+  });
   const maxParallel = await getMaxParallelAgents(slug);
   if (parallelLock.isInFlight(slug, issueNumber)) {
     logger.warn('dispatchQa: duplicate in-flight, dropping', { slug, issueNumber });
@@ -647,8 +657,13 @@ async function dispatchQaFailed(slug: string, issueNumber: number): Promise<void
 /** Run the Review holdout workflow for a single issue. Drops duplicate triggers for the same issue. */
 export async function dispatchReview(slug: string, issueNumber: number): Promise<void> {
   const projectForFlag = await getProject(slug);
-  const useMultiAgent = projectForFlag != null ? getUseMultiAgentPipeline(projectForFlag.id) : false;
-  logger.info('dispatchReview: pipeline flag', { slug, issueNumber, useMultiAgentPipeline: useMultiAgent });
+  const useMultiAgent =
+    projectForFlag != null ? getUseMultiAgentPipeline(projectForFlag.id) : false;
+  logger.info('dispatchReview: pipeline flag', {
+    slug,
+    issueNumber,
+    useMultiAgentPipeline: useMultiAgent,
+  });
   const maxParallel = await getMaxParallelAgents(slug);
   if (parallelLock.isInFlight(slug, issueNumber)) {
     logger.warn('dispatchReview: duplicate in-flight, dropping', { slug, issueNumber });
@@ -1255,7 +1270,8 @@ export async function dispatchResumeIssue(slug: string, issueNumber: number): Pr
   // spec-author and overwrite the stored spec/pipelineRunId.
   if (fromState === 'factory:in-progress') {
     const projectForFlag = await getProject(slug);
-    const useMultiAgentResume = projectForFlag != null ? getUseMultiAgentPipeline(projectForFlag.id) : false;
+    const useMultiAgentResume =
+      projectForFlag != null ? getUseMultiAgentPipeline(projectForFlag.id) : false;
     if (useMultiAgentResume) {
       logger.warn(
         'dispatchResumeIssue: M19 parallel-implement not wired yet — skipping in-progress resume',

@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { deriveUseM19Pipeline } from './project-settings.js';
+import { deriveUseMultiAgentPipeline } from './project-settings.js';
 
-describe('deriveUseM19Pipeline', () => {
+describe('deriveUseMultiAgentPipeline', () => {
   it('returns false when row is null', () => {
-    expect(deriveUseM19Pipeline(null)).toBe(false);
+    expect(deriveUseMultiAgentPipeline(null)).toBe(false);
   });
 
   it('returns false when column is null on existing row', () => {
     expect(
-      deriveUseM19Pipeline({
+      deriveUseMultiAgentPipeline({
         projectId: 'p1',
         perWorkflowMaxUsd: null,
         perAgentMaxUsd: null,
@@ -27,7 +27,7 @@ describe('deriveUseM19Pipeline', () => {
 
   it('returns false when column is 0', () => {
     expect(
-      deriveUseM19Pipeline({
+      deriveUseMultiAgentPipeline({
         projectId: 'p1',
         perWorkflowMaxUsd: null,
         perAgentMaxUsd: null,
@@ -46,7 +46,7 @@ describe('deriveUseM19Pipeline', () => {
 
   it('returns true when column is 1', () => {
     expect(
-      deriveUseM19Pipeline({
+      deriveUseMultiAgentPipeline({
         projectId: 'p1',
         perWorkflowMaxUsd: null,
         perAgentMaxUsd: null,
