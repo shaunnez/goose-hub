@@ -1,3 +1,6 @@
+# Pretty sure our bootstrap is out of data with agents
+fix
+
 # Chat 
 Implement this...
 

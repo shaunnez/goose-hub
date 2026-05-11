@@ -135,6 +135,25 @@ export async function runInvestigateWorkflow(
     }
 
     if (wave1Result.shouldEscalate) {
+      eventStore.appendEvent({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'agent.run-started',
+        payload: { skill: 'investigate', runId, personaId },
+        runId,
+        personaId,
+      });
+      eventStore.appendEvent({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'agent.run-failed',
+        payload: {
+          skill: 'investigate',
+          runId,
+          error: `Wave halted — failed scouts: ${wave1Result.failedScouts.join(', ')}`,
+        },
+        runId,
+      });
       await stateSource.comment(
         workItem.externalId,
         buildAgentComment(
@@ -317,7 +336,7 @@ export async function runInvestigateWorkflow(
       projectId,
       workItemId: workItem.id,
       kind: 'agent.run-failed',
-      payload: { runId, error: error.message },
+      payload: { skill: 'investigate', runId, error: error.message },
       runId,
     });
 
