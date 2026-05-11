@@ -15,6 +15,7 @@ export const MODELS: ModelEntry[] = [
   { id: 'claude-sonnet-4-6', tier: 'sonnet', provider: 'claude' },
   { id: 'claude-haiku-4-5-20251001', tier: 'haiku', provider: 'claude' },
   { id: 'gpt-5-codex', tier: 'sonnet', provider: 'codex' },
+  { id: 'gpt-5-codex', tier: 'opus', provider: 'codex' },
   { id: 'gpt-5-codex-mini', tier: 'haiku', provider: 'codex' },
 ];
 
