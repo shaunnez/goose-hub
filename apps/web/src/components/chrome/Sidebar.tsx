@@ -183,9 +183,7 @@ export function Sidebar({ activeSlug }: SidebarProps) {
         )}
       >
         {!collapsed && (
-          <span className="text-[11px] text-fg-2 flex-1 whitespace-nowrap">
-            Local-first · M2 preview
-          </span>
+          <span className="text-[11px] text-fg-2 flex-1 whitespace-nowrap">Local-first</span>
         )}
         <button
           type="button"

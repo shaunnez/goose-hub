@@ -27,10 +27,10 @@ export function PipelinePanel({ slug }: Props) {
     <div className="space-y-6">
       <section>
         <h3 className="text-[12px] font-semibold uppercase tracking-wider text-fg-2 mb-3">
-          M19 Multi-Agent Pipeline
+          Multi-Agent Pipeline
         </h3>
         <p className="text-[11px] text-fg-3 mb-4">
-          Toggle the M19 multi-agent pipeline (spec-author, parallel-implement, convergent review,
+          Toggle the multi-agent pipeline (spec-author, parallel-implement, convergent review,
           merge-decision gate). When off, the legacy single-agent fix-issue → QA → review path runs.
         </p>
         <label className="flex items-center gap-2 text-[12.5px]">

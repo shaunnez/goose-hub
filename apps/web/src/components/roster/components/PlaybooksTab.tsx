@@ -36,9 +36,7 @@ export function PlaybooksTab({ projectSlug }: PlaybooksTabProps) {
       <div className="flex-1 overflow-y-auto px-8 py-6">
         <div className="flex items-baseline justify-between mb-3">
           <h1 className="text-[15px] font-semibold">Playbooks</h1>
-          <span className="text-[11.5px] text-fg-3">
-            Cross-run retrospective manifests (M11.12)
-          </span>
+          <span className="text-[11.5px] text-fg-3">Cross-run retrospective manifests</span>
         </div>
 
         {isLoading && <div className="text-fg-3 text-[13px]">Loading playbooks…</div>}
