@@ -678,6 +678,7 @@ describe('dispatchForLabel', () => {
       source,
       'goose-hub-self',
       expect.any(String),
+      {},
     );
     expect(source.transitionState).toHaveBeenNthCalledWith(
       2,

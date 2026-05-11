@@ -471,6 +471,218 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
         events: [],
       };
 
+    // M19.02 — spec-author. Single-WP spec that passes validateEngineeringSpec
+    // (no repoRoot, so filesystem checks are skipped; issueType defaults to
+    // 'feature' for non-bug work items, so journey coverage is enforced).
+    case 'spec-author':
+      return {
+        output: {
+          objective: 'E2E mock engineering spec',
+          userJourneys: [
+            {
+              id: 'J-1',
+              actor: 'Developer',
+              steps: [{ idx: 0, description: 'Implement the feature end-to-end' }],
+            },
+          ],
+          functionalRequirements: [{ id: 'FR-1', statement: 'Feature works as specified' }],
+          architecture: {
+            current: 'Existing codebase',
+            new: 'No structural changes — mock',
+            decisionRationale: 'Mock spec for e2e test harness',
+          },
+          schemaChanges: { ddl: [], migrations: [] },
+          interfaceContracts: [],
+          workPackages: [
+            {
+              id: 'wp-1',
+              filesOwned: ['slices/mock-e2e/mock.ts'],
+              changes: 'Add mock e2e fixture file for parallel pipeline test',
+              dependsOn: [],
+              builderTier: 'sonnet',
+            },
+          ],
+          executionOrder: [{ batch: 0, wpIds: ['wp-1'] }],
+          verificationTooling: [],
+          acceptanceCriteria: [
+            {
+              id: 'AC-1',
+              statement: 'Mock fixture file is created',
+              journeyRef: 'J-1',
+              stepIdx: 0,
+              verifyCommand: 'pnpm test',
+            },
+          ],
+          constraints: [],
+          riskRegister: [],
+          decisionSummaries: [{ kind: 'PLAN', summary: 'Mock spec-author for e2e test' }],
+        },
+        decisionSummaries: [{ kind: 'PLAN', summary: 'Mock spec-author for e2e test' }],
+        events: [],
+      };
+
+    // M19.03 — implement-wp. Returns empty filesWritten so the serial commit
+    // phase skips the copyFileSync step (no scratch worktree files to copy).
+    case 'implement-wp': {
+      const wpCtx = spec.context.wp as { id?: string } | undefined;
+      const wpId = wpCtx?.id ?? 'wp-1';
+      return {
+        output: {
+          wpId,
+          plan: 'E2E mock WP implementation plan',
+          filesWritten: [],
+          testsWritten: [],
+          testsRun: { command: 'pnpm test', paths: [] },
+          confidence: 'high' as const,
+          decisionSummaries: [{ kind: 'GREEN', summary: `Mock implement-wp ${wpId} for e2e test` }],
+        },
+        decisionSummaries: [{ kind: 'GREEN', summary: `Mock implement-wp ${wpId} for e2e test` }],
+        events: [],
+      };
+    }
+
+    // M19.12 — dev-review-response. Addresses every finding from context.
+    case 'dev-review-response': {
+      const findings =
+        (spec.context.devReviewFindings as
+          | Array<{ file?: string; line?: number; severity?: string }>
+          | undefined) ?? [];
+      const findingDispositions = findings.map((f) => ({
+        findingRef: `${f.file ?? 'unknown'}:${f.line ?? 0}`,
+        severity: (f.severity ?? 'P1') as 'P0' | 'P1' | 'P2' | 'P3',
+        disposition: 'addressed' as const,
+        commitSha: 'mock-abc1234',
+      }));
+      return {
+        output: {
+          findingDispositions,
+          decisionSummaries: [
+            {
+              kind: 'VERDICT',
+              summary: 'Mock dev-review-response: all findings addressed',
+            },
+          ],
+        },
+        decisionSummaries: [
+          { kind: 'VERDICT', summary: 'Mock dev-review-response: all findings addressed' },
+        ],
+        events: [],
+      };
+    }
+
+    // evidence-post (#234) — best-effort step in fix-issue. Provides a
+    // commentUrl so the workflow's non-null check passes.
+    case 'evidence-post':
+      return {
+        output: {
+          screenshots: [],
+          gifPath: null,
+          commentUrl: 'https://github.com/mock/repo/issues/999#issuecomment-evidence-mock',
+          decisionSummaries: [{ kind: 'INSIGHT', summary: 'Mock evidence-post for e2e test' }],
+        },
+        decisionSummaries: [{ kind: 'INSIGHT', summary: 'Mock evidence-post for e2e test' }],
+        events: [],
+      };
+
+    // playwright-repro — only fires when requiresBrowserRepro=true (mock
+    // investigate always returns false, so this is defensive only).
+    case 'playwright-repro':
+      return {
+        output: {
+          screenshots: [],
+          gifPath: null,
+          consoleErrors: [],
+          reproSteps: ['Mock repro step'],
+          reproduced: true,
+          commentUrl: 'https://github.com/mock/repo/issues/999#issuecomment-before-state-mock',
+        },
+        decisionSummaries: [{ kind: 'INSIGHT', summary: 'Mock playwright-repro for e2e test' }],
+        events: [],
+      };
+
+    // bug-enhance — called from inbox enhance endpoint (not standard pipeline).
+    case 'bug-enhance':
+      return {
+        output: {
+          enhancedContent:
+            '## Steps to Reproduce\n\n1. Mock step\n\n## Expected vs Actual\n\nMock e2e enhancement',
+          decisionSummaries: [{ kind: 'INSIGHT', summary: 'Mock bug-enhance for e2e test' }],
+        },
+        decisionSummaries: [{ kind: 'INSIGHT', summary: 'Mock bug-enhance for e2e test' }],
+        events: [],
+      };
+
+    // retrospective-cross-run — triggered by the nightly playbook service.
+    case 'retrospective-cross-run': {
+      const now = new Date().toISOString();
+      return {
+        output: {
+          outcome: 'success' as const,
+          workItemNumber: 0,
+          summary: {
+            wentWell: 'Mock cross-run retro completed',
+            didNotGoWell: 'Nothing — mock',
+            architecturalTakeaway: 'MOCK_AGENTS=true bypasses real model calls',
+          },
+          improvementCandidates: [],
+          decisionSummaries: [
+            { kind: 'INSIGHT', summary: 'Mock retrospective-cross-run for e2e test' },
+          ],
+          windowStartAt: now,
+          windowEndAt: now,
+          lifecycleCount: 0,
+          aggregatedLearnings: [],
+          topPatterns: [],
+          gateThresholds: [],
+          costBaselines: [],
+        },
+        decisionSummaries: [
+          { kind: 'INSIGHT', summary: 'Mock retrospective-cross-run for e2e test' },
+        ],
+        events: [],
+      };
+    }
+
+    // skill-coach — triggered via the /coach endpoint.
+    case 'skill-coach':
+      return {
+        output: {
+          skillName: (spec.context.targetSkillName as string | undefined) ?? 'unknown-skill',
+          diagnosis: 'Mock diagnosis: no real patterns analysed in MOCK_AGENTS mode',
+          proposedPatch: '',
+          rationale: 'Mock rationale for e2e test',
+          evidencePatternIds: [],
+          confidence: 'low' as const,
+          decisionSummaries: [{ kind: 'INSIGHT', summary: 'Mock skill-coach for e2e test' }],
+        },
+        decisionSummaries: [{ kind: 'INSIGHT', summary: 'Mock skill-coach for e2e test' }],
+        events: [],
+      };
+
+    // advise-on-plan — advisor pattern (proceed verdict, no concerns).
+    case 'advise-on-plan':
+      return {
+        output: {
+          verdict: 'proceed' as const,
+          confidence: 'high' as const,
+          decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock advise-on-plan: proceed' }],
+        },
+        decisionSummaries: [{ kind: 'VERDICT', summary: 'Mock advise-on-plan: proceed' }],
+        events: [],
+      };
+
+    // echo-test / echo-test-holdout — debug/smoke skills.
+    case 'echo-test':
+    case 'echo-test-holdout':
+      return {
+        output: {
+          echo: 'mock-echo',
+          decisionSummaries: [{ kind: 'INSIGHT', summary: `Mock ${spec.skill} for e2e test` }],
+        },
+        decisionSummaries: [{ kind: 'INSIGHT', summary: `Mock ${spec.skill} for e2e test` }],
+        events: [],
+      };
+
     // M19.22 (#698) — code-quality-audit. Defensive mock for the nightly
     // scheduler in case its existsSync gate is ever bypassed. Canonical
     // 'Good' rating with no recommendations and minimum-valid scorecard.

@@ -1,6 +1,7 @@
 import { copyFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
+import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import {
   type EffectiveDevReviewConfig,
   getDiffForDevReview,
@@ -358,11 +359,7 @@ export async function runParallelImplementWorkflow(
         : { value: input.payload, pipelineRunId };
     return baseAppend({ ...input, payload });
   };
-  const runtime =
-    deps.runtime ??
-    (() => {
-      throw new Error('runtime required');
-    })();
+  const runtime = deps.runtime ?? new ClaudeCliRuntime();
   const openPRFn = deps.openPRImpl ?? openPR;
   const createWpFn = deps.createWpWorktreeImpl ?? createWpScratchWorktree;
   const createIssueFn = deps.createIssueWorktreeImpl ?? createWorktree;

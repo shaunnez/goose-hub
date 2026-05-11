@@ -12,3 +12,5 @@ claude-design/
 coverage/
 .codex
 AGENTS.md
+.e2e-pipeline.db-shm
+.e2e-pipeline.db-wal

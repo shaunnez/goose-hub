@@ -1,4 +1,7 @@
+import { mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { getUseMultiAgentPipeline } from '@goose-hub/core/db/repositories/project-settings.js';
 import { getEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
@@ -351,6 +354,7 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
         source: unknown,
         slug: string,
         targetRepo: string,
+        deps?: Record<string, unknown>,
       ) => Promise<{ status: 'success' | 'failed'; errorReason?: string }>;
     };
     const source = await getSourceForSlug(slug);
@@ -388,6 +392,37 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
       return;
     }
 
+    // Inject mock deps when running under the e2e harness so filesystem/git
+    // operations don't fail against non-existent worktrees.
+    const parallelMockDeps: Record<string, unknown> =
+      process.env.MOCK_AGENTS === 'true' || process.env.MOCK_OPEN_PR === 'true'
+        ? {
+            runtime: new ClaudeCliRuntime(),
+            openPRImpl: () =>
+              Promise.resolve({
+                prNumber: 999,
+                prUrl: 'https://github.com/shaunnez/goose-hub/pull/999',
+                branch: 'factory/mock-parallel-run',
+                base: 'main',
+              }),
+            createIssueWorktreeImpl: (_repo: string, runId: string) => {
+              const dir = join(tmpdir(), `e2e-parallel-issue-${runId}`);
+              mkdirSync(dir, { recursive: true });
+              return dir;
+            },
+            createWpWorktreeImpl: (_repo: string, runId: string, wpId: string) => {
+              const dir = join(tmpdir(), `e2e-parallel-wp-${runId}-${wpId}`);
+              mkdirSync(dir, { recursive: true });
+              return dir;
+            },
+            cleanupWpWorktreesImpl: () => {},
+            orchestratorCommitWpImpl: () => 'mock-commit-sha',
+            revertWpChangesImpl: () => {},
+            getDiffImpl: () => '',
+            commitDevReviewResponseImpl: () => 'mock-dr-commit-sha',
+          }
+        : {};
+
     await source.transitionState(item.externalId, 'factory:spec-ready', 'factory:in-progress');
     try {
       const result = await runParallelImplementWorkflow(
@@ -397,6 +432,7 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
         source,
         slug,
         REPO_ROOT,
+        parallelMockDeps,
       );
       if (result.status === 'success') {
         await source.transitionState(item.externalId, 'factory:in-progress', 'factory:needs-qa');
