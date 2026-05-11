@@ -34,6 +34,12 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Audit docs (drift check)
+        run: pnpm audit-docs
+
+      - name: Manifest freshness check
+        run: pnpm manifest --check
+
       - name: Test
         run: pnpm test
 

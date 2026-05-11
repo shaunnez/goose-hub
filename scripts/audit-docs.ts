@@ -80,12 +80,14 @@ export function extractRoleUnion(typesSrc: string): string[] {
 }
 
 export function extractClaudeRoleList(claudeMd: string): string[] {
-  // Find the "Role —" bullet in the domain vocabulary.
-  const m = claudeMd.match(/-\s+\*\*Role\*\*\s+—\s+([^\n]+)/);
+  // Find the "Role —" bullet in the domain vocabulary. Capture only up to
+  // the first period or newline — the bullet may include an explanatory
+  // sentence afterwards that should not be parsed as role names.
+  const m = claudeMd.match(/-\s+\*\*Role\*\*\s+—\s+([^.\n]+)/);
   if (!m) return [];
   return m[1]
     .split(',')
-    .map((s) => s.trim().replace(/\.$/, '').toLowerCase().replace(/\s+/g, '-'))
+    .map((s) => s.trim().toLowerCase().replace(/\s+/g, '-'))
     .filter(Boolean);
 }
 
@@ -102,7 +104,7 @@ export function compareRoleLists(canonical: string[], claimed: string[]): Findin
   for (const role of canonical) {
     if (!claimed.includes(role)) {
       findings.push({
-        severity: 'warn',
+        severity: 'error',
         area: 'roles',
         message: `Role \`${role}\` exists in core/types.ts but is not listed in CLAUDE.md domain vocabulary`,
         file: 'CLAUDE.md',
@@ -113,7 +115,7 @@ export function compareRoleLists(canonical: string[], claimed: string[]): Findin
     if (role === 'advisor') continue;
     if (!canonical.includes(role)) {
       findings.push({
-        severity: 'warn',
+        severity: 'error',
         area: 'roles',
         message: `Role \`${role}\` is listed in CLAUDE.md but not in the core/types.ts Role union`,
         file: 'CLAUDE.md',
@@ -187,7 +189,7 @@ export function compareMilestoneSpan(
   if (active <= span.hi) return [];
   return [
     {
-      severity: 'warn',
+      severity: 'error',
       area: 'milestone',
       message: `CLAUDE.md claims milestones M${span.lo}–M${span.hi}, but goose-hub-self is on M${active}. Update the span.`,
       file: 'CLAUDE.md',

@@ -14,6 +14,10 @@ You execute one narrow GitHub issue at a time. The issue is your build spec.
 
 `docs/adr/` is the long-form record. CONTEXT.md summarizes; ADRs justify. When you need the *why* behind a decision (or are filing a new one), go to ADRs.
 
+`docs/inventory.md` is an auto-generated map of every package, slice, skill, app, and target-project — one line per entry. Regenerate with `pnpm manifest`. Use it to orient before writing code. Do not hand-maintain catalogue lists elsewhere; point at this file.
+
+`pnpm audit-docs` checks for drift between this file (CLAUDE.md), `core/types.ts`, the skills directory, and other governance-adjacent surfaces. Run it before opening a PR that touches `core/types.ts`, the skill catalogue, or governance docs.
+
 ## Domain vocabulary
 
 - **Goose Hub** — the product. The app, UI, and runtime.
@@ -27,7 +31,7 @@ You execute one narrow GitHub issue at a time. The issue is your build spec.
 - **Node** — a single async function inside a workflow.
 - **Lane** — a UI column on the Kanban. Visual grouping of states. Pure display; never drives behaviour.
 - **Agent Run** — one invocation of an AI agent with role, prompt, tool allowlist, budget, output schema.
-- **Role** — Triager, Griller, PRD-Writer, Decomposer, Researcher, Investigator, Developer, QA, Reviewer, Retrospector, Advisor.
+- **Role** — Triager, Griller, PRD-Writer, Decomposer, Researcher, Investigator, Developer, Dev-Reviewer, QA, Reviewer, Retrospector, Auditor. Canonical source is the `Role` union in `core/types.ts`; this list mirrors it. (Note: "Advisor" is a model-tier *concept*, not a role — see the entry below.)
 - **Persona** — a named instance of a role with personality, history, performance metrics. Project-scoped.
 - **Skill** — a packaged capability: prompt + role + tool bundle list + model config + JSON output schema. Versioned markdown plus a TypeScript schema file.
 - **Tool Bundle** — a named set of related tools. Roles compose allowlists from bundles plus per-role extras.
@@ -158,7 +162,7 @@ Tool-call audit (`agent.tool-call`) is a separate, automatic stream emitted by t
 
 ## What's currently in scope
 
-Goose Hub is built milestone-by-milestone (M0–M18). Work on the issue you're given. Do not scope-creep into earlier or later milestones.
+Goose Hub is built milestone-by-milestone (M0–M19). Work on the issue you're given. Do not scope-creep into earlier or later milestones. The active milestone for each project is declared in `target-projects/<slug>/project.config.ts`; this span tracks the highest milestone any registered project has touched.
 
 If you find work that should belong in a later milestone, file a new issue (don't do the work now).
 

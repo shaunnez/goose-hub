@@ -58,7 +58,7 @@ describe('compareRoleLists', () => {
     const out = compareRoleLists(['developer', 'qa', 'auditor'], ['developer', 'qa']);
     expect(out).toHaveLength(1);
     expect(out[0].message).toContain('auditor');
-    expect(out[0].severity).toBe('warn');
+    expect(out[0].severity).toBe('error');
   });
 
   it('flags roles in claimed but missing from canonical', () => {
@@ -118,7 +118,7 @@ describe('compareMilestoneSpan', () => {
   it('warns when active milestone exceeds the span hi', () => {
     const out = compareMilestoneSpan({ lo: 0, hi: 18 }, 19);
     expect(out).toHaveLength(1);
-    expect(out[0].severity).toBe('warn');
+    expect(out[0].severity).toBe('error');
     expect(out[0].message).toContain('M0–M18');
     expect(out[0].message).toContain('M19');
   });
