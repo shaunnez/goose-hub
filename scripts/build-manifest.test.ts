@@ -58,6 +58,19 @@ describe('gatherEntries', () => {
   });
 });
 
+describe('write+check round-trip', () => {
+  it('writes a file that --check reads back without reporting drift (no trailing-newline mismatch)', () => {
+    const out = formatManifest(
+      [{ section: 'core', name: 'a', hasReadme: true, summary: 'a' }],
+      { generatedAt: '2026-05-11' },
+    );
+    // Simulate the same logic as main(): write `${out}\n`, then compare with `out`.
+    const writtenToDisk = `${out}\n`;
+    const stripDate = (s: string) => s.replace(/^Generated: .+$/m, 'Generated: <date>').trimEnd();
+    expect(stripDate(writtenToDisk)).toBe(stripDate(out));
+  });
+});
+
 describe('formatManifest', () => {
   it('produces a stable Markdown report with section headings', () => {
     const out = formatManifest(

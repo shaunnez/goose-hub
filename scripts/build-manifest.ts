@@ -123,7 +123,7 @@ function main(): void {
 
   if (checkMode) {
     const existing = fs.existsSync(outPath) ? fs.readFileSync(outPath, 'utf8') : '';
-    const stripDate = (s: string) => s.replace(/^Generated: .+$/m, 'Generated: <date>');
+    const stripDate = (s: string) => s.replace(/^Generated: .+$/m, 'Generated: <date>').trimEnd();
     if (stripDate(existing) !== stripDate(out)) {
       console.error('docs/inventory.md is out of date. Run `pnpm manifest` and commit the result.');
       process.exit(1);

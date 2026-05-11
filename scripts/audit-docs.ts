@@ -71,7 +71,7 @@ export function auditSkillStructure(repoRoot: string): Finding[] {
   return findings;
 }
 
-function extractRoleUnion(typesSrc: string): string[] {
+export function extractRoleUnion(typesSrc: string): string[] {
   // Match `export type Role =` followed by union members until the next semicolon.
   const m = typesSrc.match(/export\s+type\s+Role\s*=\s*([^;]+);/);
   if (!m) return [];
@@ -79,35 +79,28 @@ function extractRoleUnion(typesSrc: string): string[] {
   return Array.from(body.matchAll(/'([a-z-]+)'/g)).map((g) => g[1]);
 }
 
-function extractClaudeRoleList(claudeMd: string): string[] {
+export function extractClaudeRoleList(claudeMd: string): string[] {
   // Find the "Role —" bullet in the domain vocabulary.
   const m = claudeMd.match(/-\s+\*\*Role\*\*\s+—\s+([^\n]+)/);
   if (!m) return [];
   return m[1]
     .split(',')
-    .map((s) => s.trim().replace(/\.$/, '').toLowerCase())
+    .map((s) => s.trim().replace(/\.$/, '').toLowerCase().replace(/\s+/g, '-'))
     .filter(Boolean);
 }
 
-export function auditRolesInClaude(repoRoot: string): Finding[] {
+/**
+ * Pure comparison: canonical roles (from core/types.ts) vs claimed roles
+ * (from CLAUDE.md). Exported so tests can verify the comparison logic
+ * without depending on the live state of either file.
+ *
+ * `advisor` in CLAUDE.md is a model-tier *concept*, not a Role-union member,
+ * so it is treated as expected when claimed but missing from canonical.
+ */
+export function compareRoleLists(canonical: string[], claimed: string[]): Finding[] {
   const findings: Finding[] = [];
-  const typesPath = path.join(repoRoot, 'core', 'types.ts');
-  const claudePath = path.join(repoRoot, 'CLAUDE.md');
-  if (!fs.existsSync(typesPath) || !fs.existsSync(claudePath)) {
-    findings.push({
-      severity: 'error',
-      area: 'roles',
-      message: 'core/types.ts or CLAUDE.md is missing — cannot compare role list',
-    });
-    return findings;
-  }
-  const canonical = extractRoleUnion(fs.readFileSync(typesPath, 'utf8'));
-  const claimed = extractClaudeRoleList(fs.readFileSync(claudePath, 'utf8'));
-  // Normalise CLAUDE.md spellings to the canonical kebab form for comparison.
-  const claimedNorm = claimed.map((r) => r.replace(/\s+/g, '-'));
-
   for (const role of canonical) {
-    if (!claimedNorm.includes(role)) {
+    if (!claimed.includes(role)) {
       findings.push({
         severity: 'warn',
         area: 'roles',
@@ -116,8 +109,7 @@ export function auditRolesInClaude(repoRoot: string): Finding[] {
       });
     }
   }
-  for (const role of claimedNorm) {
-    // "advisor" appears in CLAUDE.md as a *concept* (model-tier review) — not in the Role union.
+  for (const role of claimed) {
     if (role === 'advisor') continue;
     if (!canonical.includes(role)) {
       findings.push({
@@ -129,6 +121,23 @@ export function auditRolesInClaude(repoRoot: string): Finding[] {
     }
   }
   return findings;
+}
+
+export function auditRolesInClaude(repoRoot: string): Finding[] {
+  const typesPath = path.join(repoRoot, 'core', 'types.ts');
+  const claudePath = path.join(repoRoot, 'CLAUDE.md');
+  if (!fs.existsSync(typesPath) || !fs.existsSync(claudePath)) {
+    return [
+      {
+        severity: 'error',
+        area: 'roles',
+        message: 'core/types.ts or CLAUDE.md is missing — cannot compare role list',
+      },
+    ];
+  }
+  const canonical = extractRoleUnion(fs.readFileSync(typesPath, 'utf8'));
+  const claimed = extractClaudeRoleList(fs.readFileSync(claudePath, 'utf8'));
+  return compareRoleLists(canonical, claimed);
 }
 
 const CANONICAL_FILE_REFS = [
@@ -153,61 +162,95 @@ export function auditFileReferences(repoRoot: string): Finding[] {
   return findings;
 }
 
-function extractClaudeMilestoneSpan(claudeMd: string): { lo: number; hi: number } | null {
+export function extractClaudeMilestoneSpan(claudeMd: string): { lo: number; hi: number } | null {
   const m = claudeMd.match(/M(\d+)\s*[–-]\s*M(\d+)/);
   if (!m) return null;
   return { lo: Number(m[1]), hi: Number(m[2]) };
 }
 
-function extractProjectActiveMilestone(configSrc: string): number | null {
+export function extractProjectActiveMilestone(configSrc: string): number | null {
   // Match `activeMilestone: 'M19: ...'` or similar.
   const m = configSrc.match(/activeMilestone\s*:\s*['"]M(\d+)/);
   return m ? Number(m[1]) : null;
 }
 
-export function auditMilestoneSpan(repoRoot: string): Finding[] {
-  const findings: Finding[] = [];
-  const claudePath = path.join(repoRoot, 'CLAUDE.md');
-  const configPath = path.join(repoRoot, 'target-projects', 'goose-hub-self', 'project.config.ts');
-  if (!fs.existsSync(claudePath) || !fs.existsSync(configPath)) return findings;
-  const span = extractClaudeMilestoneSpan(fs.readFileSync(claudePath, 'utf8'));
-  const active = extractProjectActiveMilestone(fs.readFileSync(configPath, 'utf8'));
-  if (!span || active === null) return findings;
-  if (active > span.hi) {
-    findings.push({
+/**
+ * Pure comparison: parsed CLAUDE.md milestone span vs active milestone
+ * from a target-project config. Exported so tests can drive it with
+ * fixtures rather than the live (drifting) state of CLAUDE.md.
+ */
+export function compareMilestoneSpan(
+  span: { lo: number; hi: number } | null,
+  active: number | null,
+): Finding[] {
+  if (!span || active === null) return [];
+  if (active <= span.hi) return [];
+  return [
+    {
       severity: 'warn',
       area: 'milestone',
       message: `CLAUDE.md claims milestones M${span.lo}–M${span.hi}, but goose-hub-self is on M${active}. Update the span.`,
       file: 'CLAUDE.md',
-    });
-  }
-  return findings;
+    },
+  ];
 }
 
+export function auditMilestoneSpan(repoRoot: string): Finding[] {
+  const claudePath = path.join(repoRoot, 'CLAUDE.md');
+  const configPath = path.join(repoRoot, 'target-projects', 'goose-hub-self', 'project.config.ts');
+  if (!fs.existsSync(claudePath) || !fs.existsSync(configPath)) return [];
+  const span = extractClaudeMilestoneSpan(fs.readFileSync(claudePath, 'utf8'));
+  const active = extractProjectActiveMilestone(fs.readFileSync(configPath, 'utf8'));
+  return compareMilestoneSpan(span, active);
+}
+
+/**
+ * Validate skill references in README.md against the filesystem. Scans for
+ * backtick-quoted kebab tokens that sit on the same line as the word "skill"
+ * and flags any whose `skills/<name>/` directory doesn't exist.
+ *
+ * Direction: README → filesystem. README is not required to enumerate every
+ * skill (we point at docs/inventory.md instead), so "skill X not mentioned
+ * in README" is *not* drift.
+ */
 export function auditReadmeSkillsCoverage(repoRoot: string): Finding[] {
   const findings: Finding[] = [];
   const readmePath = path.join(repoRoot, 'README.md');
   const skillsDir = path.join(repoRoot, 'skills');
   if (!fs.existsSync(readmePath) || !fs.existsSync(skillsDir)) return findings;
   const readme = fs.readFileSync(readmePath, 'utf8');
-  const actualSkills = listDirs(skillsDir);
-  const missing: string[] = [];
-  for (const skill of actualSkills) {
-    // Look for backtick-wrapped skill name or table-cell mention.
-    const re = new RegExp(`\\b${skill.replace(/-/g, '[-\\s]')}\\b`);
-    if (!re.test(readme)) {
-      missing.push(skill);
+  const actualSkills = new Set(listDirs(skillsDir));
+  return findStaleSkillRefs(readme, actualSkills);
+}
+
+/**
+ * Pure helper: extract stale skill references from README text. Matches
+ * the precise patterns `skill `<name>``, `skills `<name>``, and ``<name>` skill`
+ * (with one optional article like "the"/"a"). Avoids matching arbitrary
+ * kebab tokens that happen to share a line with the word "skill".
+ */
+export function findStaleSkillRefs(readme: string, actualSkills: Set<string>): Finding[] {
+  const stale = new Set<string>();
+  const patterns = [
+    /skills?\s+(?:the\s+|a\s+)?`([a-z][a-z0-9-]+)`/gi,
+    /`([a-z][a-z0-9-]+)`\s+skill\b/gi,
+  ];
+  for (const re of patterns) {
+    for (const m of readme.matchAll(re)) {
+      const token = m[1];
+      if (!token || token.includes('/') || token.includes('.')) continue;
+      if (!actualSkills.has(token)) stale.add(token);
     }
   }
-  if (missing.length > 0) {
-    findings.push({
-      severity: 'info',
+  if (stale.size === 0) return [];
+  return [
+    {
+      severity: 'warn',
       area: 'readme',
-      message: `README.md does not mention ${missing.length} skills: ${missing.slice(0, 8).join(', ')}${missing.length > 8 ? ', …' : ''}`,
+      message: `README.md references ${stale.size} skill name(s) not present under skills/: ${Array.from(stale).join(', ')}`,
       file: 'README.md',
-    });
-  }
-  return findings;
+    },
+  ];
 }
 
 export function formatFindings(findings: Finding[]): string {

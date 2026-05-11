@@ -6,54 +6,166 @@ import {
   auditReadmeSkillsCoverage,
   auditRolesInClaude,
   auditSkillStructure,
+  compareMilestoneSpan,
+  compareRoleLists,
+  extractClaudeMilestoneSpan,
+  extractClaudeRoleList,
+  extractProjectActiveMilestone,
+  extractRoleUnion,
+  findStaleSkillRefs,
   formatFindings,
 } from './audit-docs.js';
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 
 describe('auditSkillStructure', () => {
-  it('reports nothing if all skills have the required trio', () => {
+  it('reports no errors against the real skills/ directory', () => {
     const findings = auditSkillStructure(REPO_ROOT);
     const errors = findings.filter((f) => f.severity === 'error');
-    // We expect this to be clean; if it fails, the failure message tells us which skill is broken.
-    if (errors.length > 0) {
-      console.error('Skill structure errors:', errors);
-    }
+    if (errors.length > 0) console.error('Skill structure errors:', errors);
     expect(errors).toEqual([]);
   });
 });
 
-describe('auditRolesInClaude', () => {
-  it('extracts the Role union from core/types.ts and compares to CLAUDE.md', () => {
-    const findings = auditRolesInClaude(REPO_ROOT);
-    // Knowing the current state of CLAUDE.md: it lists Triager..Advisor but misses dev-reviewer and auditor.
-    // The audit must flag at least those two.
-    const missingMessages = findings.map((f) => f.message);
-    expect(missingMessages.some((m) => m.toLowerCase().includes('dev-reviewer'))).toBe(true);
-    expect(missingMessages.some((m) => m.toLowerCase().includes('auditor'))).toBe(true);
+describe('extractRoleUnion', () => {
+  it('parses the canonical Role union from a types-file string', () => {
+    const src = "export type Role = 'a' | 'b-c' | 'd';";
+    expect(extractRoleUnion(src)).toEqual(['a', 'b-c', 'd']);
+  });
+
+  it('returns [] when the Role union is missing', () => {
+    expect(extractRoleUnion('export type Other = string;')).toEqual([]);
+  });
+});
+
+describe('extractClaudeRoleList', () => {
+  it('parses the Role vocabulary bullet into kebab-cased tokens', () => {
+    const md = '- **Role** — Triager, Griller, PRD-Writer, Dev-Reviewer, QA.\n- **Persona** — …';
+    expect(extractClaudeRoleList(md)).toEqual(['triager', 'griller', 'prd-writer', 'dev-reviewer', 'qa']);
+  });
+
+  it('returns [] when no Role bullet is found', () => {
+    expect(extractClaudeRoleList('# heading\n\nnothing')).toEqual([]);
+  });
+});
+
+describe('compareRoleLists', () => {
+  it('returns no findings when sets match', () => {
+    expect(compareRoleLists(['developer', 'qa'], ['developer', 'qa'])).toEqual([]);
+  });
+
+  it('flags roles in canonical but missing from claimed', () => {
+    const out = compareRoleLists(['developer', 'qa', 'auditor'], ['developer', 'qa']);
+    expect(out).toHaveLength(1);
+    expect(out[0].message).toContain('auditor');
+    expect(out[0].severity).toBe('warn');
+  });
+
+  it('flags roles in claimed but missing from canonical', () => {
+    const out = compareRoleLists(['developer'], ['developer', 'ghost-role']);
+    expect(out).toHaveLength(1);
+    expect(out[0].message).toContain('ghost-role');
+  });
+
+  it('treats `advisor` in claimed as expected even when missing from canonical (model-tier concept)', () => {
+    expect(compareRoleLists(['developer'], ['developer', 'advisor'])).toEqual([]);
+  });
+});
+
+describe('auditRolesInClaude (live)', () => {
+  it('runs against the live repo without throwing and returns Finding[]', () => {
+    expect(Array.isArray(auditRolesInClaude(REPO_ROOT))).toBe(true);
   });
 });
 
 describe('auditFileReferences', () => {
   it('confirms canonical referenced files exist', () => {
-    const findings = auditFileReferences(REPO_ROOT);
-    const errors = findings.filter((f) => f.severity === 'error');
+    const errors = auditFileReferences(REPO_ROOT).filter((f) => f.severity === 'error');
     expect(errors).toEqual([]);
   });
 });
 
-describe('auditMilestoneSpan', () => {
-  it('flags drift when CLAUDE.md milestone span lags the active milestone', () => {
-    const findings = auditMilestoneSpan(REPO_ROOT);
-    // CLAUDE.md says "M0–M18". goose-hub-self is on M19. We expect a warning.
-    expect(findings.some((f) => f.severity === 'warn' && /M\d+/.test(f.message))).toBe(true);
+describe('extractClaudeMilestoneSpan', () => {
+  it('parses an M0-M18 span (ascii dash)', () => {
+    expect(extractClaudeMilestoneSpan('Goose Hub is built M0-M18.')).toEqual({ lo: 0, hi: 18 });
+  });
+
+  it('parses an M0–M18 span (en dash)', () => {
+    expect(extractClaudeMilestoneSpan('Goose Hub is built M0–M18.')).toEqual({ lo: 0, hi: 18 });
+  });
+
+  it('returns null when no span is present', () => {
+    expect(extractClaudeMilestoneSpan('no milestones here')).toBeNull();
   });
 });
 
-describe('auditReadmeSkillsCoverage', () => {
-  it('returns findings as an array (informational only)', () => {
-    const findings = auditReadmeSkillsCoverage(REPO_ROOT);
-    expect(Array.isArray(findings)).toBe(true);
+describe('extractProjectActiveMilestone', () => {
+  it('parses the activeMilestone number out of a project config', () => {
+    expect(extractProjectActiveMilestone("activeMilestone: 'M19: foo'")).toBe(19);
+  });
+
+  it('returns null when no activeMilestone is present', () => {
+    expect(extractProjectActiveMilestone('export default { tickIntervalSeconds: 60 }')).toBeNull();
+  });
+});
+
+describe('compareMilestoneSpan', () => {
+  it('returns no findings when active milestone is within span', () => {
+    expect(compareMilestoneSpan({ lo: 0, hi: 19 }, 19)).toEqual([]);
+    expect(compareMilestoneSpan({ lo: 0, hi: 20 }, 19)).toEqual([]);
+  });
+
+  it('warns when active milestone exceeds the span hi', () => {
+    const out = compareMilestoneSpan({ lo: 0, hi: 18 }, 19);
+    expect(out).toHaveLength(1);
+    expect(out[0].severity).toBe('warn');
+    expect(out[0].message).toContain('M0–M18');
+    expect(out[0].message).toContain('M19');
+  });
+
+  it('is a no-op when either input is null', () => {
+    expect(compareMilestoneSpan(null, 19)).toEqual([]);
+    expect(compareMilestoneSpan({ lo: 0, hi: 18 }, null)).toEqual([]);
+  });
+});
+
+describe('auditMilestoneSpan (live)', () => {
+  it('runs against the live repo without throwing and returns Finding[]', () => {
+    expect(Array.isArray(auditMilestoneSpan(REPO_ROOT))).toBe(true);
+  });
+});
+
+describe('findStaleSkillRefs', () => {
+  const skills = new Set(['triage', 'qa', 'investigate']);
+
+  it('returns nothing for a README that only mentions real skills', () => {
+    const md = 'The `triage` skill classifies items. The `qa` skill holds out.';
+    expect(findStaleSkillRefs(md, skills)).toEqual([]);
+  });
+
+  it('flags a stale "skill `<name>`" reference', () => {
+    const md = 'We run the skill `removed-skill` after triage.';
+    const out = findStaleSkillRefs(md, skills);
+    expect(out).toHaveLength(1);
+    expect(out[0].message).toContain('removed-skill');
+  });
+
+  it('flags a stale "`<name>` skill" reference', () => {
+    const md = 'The `ghost-skill` skill no longer exists.';
+    const out = findStaleSkillRefs(md, skills);
+    expect(out).toHaveLength(1);
+    expect(out[0].message).toContain('ghost-skill');
+  });
+
+  it('ignores backtick tokens that are not adjacent to the word "skill"', () => {
+    const md = 'The workflow `triage-batch` runs every tick. `contextAllowlist` is enforced.';
+    expect(findStaleSkillRefs(md, skills)).toEqual([]);
+  });
+});
+
+describe('auditReadmeSkillsCoverage (live)', () => {
+  it('returns no findings for the current README (no stale skill refs)', () => {
+    expect(auditReadmeSkillsCoverage(REPO_ROOT)).toEqual([]);
   });
 });
 
