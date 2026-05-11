@@ -14,7 +14,7 @@ export type GlobalBudgetPatch = {
   maxParallelAgents?: number | null;
   maxRetries?: number | null;
   perBashCommandMaxSeconds?: number | null;
-  useM19Pipeline?: number | null;
+  useMultiAgentPipeline?: number | null;
   recordDecisionTool?: number | null;
 };
 
@@ -33,15 +33,15 @@ export function readProjectSettings(projectId: string): ProjectSettingsRow | nul
   return rows[0] ?? null;
 }
 
-export function deriveUseM19Pipeline(row: ProjectSettingsRow | null): boolean {
-  return row?.useM19Pipeline === 1;
+export function deriveUseMultiAgentPipeline(row: ProjectSettingsRow | null): boolean {
+  return row?.useMultiAgentPipeline === 1;
 }
 
-export function getUseM19Pipeline(projectId: string): boolean {
+export function getUseMultiAgentPipeline(projectId: string): boolean {
   try {
-    return deriveUseM19Pipeline(readProjectSettings(projectId));
+    return deriveUseMultiAgentPipeline(readProjectSettings(projectId));
   } catch (err) {
-    logger.warn('getUseM19Pipeline: read failed, defaulting to false', {
+    logger.warn('getUseMultiAgentPipeline: read failed, defaulting to false', {
       projectId,
       error: String(err),
     });
@@ -49,8 +49,8 @@ export function getUseM19Pipeline(projectId: string): boolean {
   }
 }
 
-export function setUseM19Pipeline(projectId: string, enabled: boolean, by: string): void {
-  writeProjectSettings(projectId, { useM19Pipeline: enabled ? 1 : 0 }, by);
+export function setUseMultiAgentPipeline(projectId: string, enabled: boolean, by: string): void {
+  writeProjectSettings(projectId, { useMultiAgentPipeline: enabled ? 1 : 0 }, by);
 }
 
 export function deriveRecordDecisionTool(row: ProjectSettingsRow | null): boolean {
