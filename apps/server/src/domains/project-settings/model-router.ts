@@ -43,6 +43,8 @@ const RoleModelPatchSchema = z.object({
   primaryProvider: ProviderSchema,
   fallbackProvider: ProviderSchema,
   advisorProvider: ProviderSchema,
+  maxTurns: z.number().int().min(1).max(500).nullable().optional(),
+  timeoutMs: z.number().int().min(5_000).max(3_600_000).nullable().optional(),
 });
 
 const BulkRoleModelSchema = z.object({
@@ -105,6 +107,8 @@ router.get('/:slug/settings/models', async (c) => {
         primaryProvider: Provider | null;
         fallbackProvider: Provider | null;
         advisorProvider: Provider | null;
+        maxTurns: number | null;
+        timeoutMs: number | null;
         updatedAt: string | null;
       } | null;
       dbComplexityOverrides: Record<string, string>;
@@ -114,6 +118,8 @@ router.get('/:slug/settings/models', async (c) => {
       resolvedPrimary: string | null;
       /** Skill-default tier for the role — what the placeholder text means. */
       roleDefaultTier: Tier;
+      /** ROLE_DEFAULTS budgets for this role — used by the UI as "default: N" hints. */
+      roleDefaultBudgets: { maxTurns: number; timeoutMs: number };
     }
   > = {};
 
@@ -166,12 +172,18 @@ router.get('/:slug/settings/models', async (c) => {
             primaryProvider: (dbRow.primaryProvider as Provider | null) ?? null,
             fallbackProvider: (dbRow.fallbackProvider as Provider | null) ?? null,
             advisorProvider: (dbRow.advisorProvider as Provider | null) ?? null,
+            maxTurns: dbRow.maxTurns ?? null,
+            timeoutMs: dbRow.timeoutMs ?? null,
             updatedAt: dbRow.updatedAt,
           }
         : null,
       dbComplexityOverrides: complexityOverrides,
       resolvedPrimary: resolveModelId(effectiveTier, effectiveProvider),
       roleDefaultTier: ROLE_DEFAULTS[role].modelTier as Tier,
+      roleDefaultBudgets: {
+        maxTurns: ROLE_DEFAULTS[role].budgets.maxTurns,
+        timeoutMs: ROLE_DEFAULTS[role].budgets.timeoutMs,
+      },
     };
   }
 

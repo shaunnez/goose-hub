@@ -12,6 +12,8 @@ export type RoleModelPatch = {
   primaryProvider?: ModelProvider | null;
   fallbackProvider?: ModelProvider | null;
   advisorProvider?: ModelProvider | null;
+  maxTurns?: number | null;
+  timeoutMs?: number | null;
 };
 
 /** Complexity overrides for a single role: keys are "type:<T>", "priority:<P>", or "default". */

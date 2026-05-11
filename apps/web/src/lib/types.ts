@@ -371,6 +371,8 @@ export interface RoleModelDto {
     primaryProvider: ModelProvider | null;
     fallbackProvider: ModelProvider | null;
     advisorProvider: ModelProvider | null;
+    maxTurns: number | null;
+    timeoutMs: number | null;
     updatedAt: string | null;
   } | null;
   dbComplexityOverrides: Record<string, ModelTier>;
@@ -379,6 +381,8 @@ export interface RoleModelDto {
   resolvedPrimary: string | null;
   /** The role's hardcoded default tier (claude). Used as a placeholder hint. */
   roleDefaultTier: ModelTier;
+  /** ROLE_DEFAULTS budgets — used by the UI as "default: N" hints under each input. */
+  roleDefaultBudgets: { maxTurns: number; timeoutMs: number };
 }
 
 export interface ProjectModelSettingsDto {

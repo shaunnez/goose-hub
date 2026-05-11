@@ -526,6 +526,8 @@ export async function patchRoleModelSetting(
     primaryProvider?: ModelProvider | null;
     fallbackProvider?: ModelProvider | null;
     advisorProvider?: ModelProvider | null;
+    maxTurns?: number | null;
+    timeoutMs?: number | null;
   },
 ): Promise<void> {
   await patchJson(`/projects/${slug}/settings/models/${encodeURIComponent(role)}`, patch);
