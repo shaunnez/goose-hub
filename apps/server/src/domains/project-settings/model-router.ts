@@ -18,8 +18,8 @@ import {
   writeProjectReviewSettings,
 } from '@goose-hub/core/db/repositories/project-review-settings.js';
 import {
-  getUseM19Pipeline,
-  setUseM19Pipeline,
+  getUseMultiAgentPipeline,
+  setUseMultiAgentPipeline,
 } from '@goose-hub/core/db/repositories/project-settings.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -271,13 +271,13 @@ router.patch('/:slug/settings/review', async (c) => {
   return c.json({ ok: true });
 });
 
-// ─── M19 pipeline flag (M19.14) ──────────────────────────────────────────────
+// ─── Multi-agent pipeline flag (M19.14) ──────────────────────────────────────
 
 const PipelinePatchSchema = z.object({
-  useM19Pipeline: z.boolean(),
+  useMultiAgentPipeline: z.boolean(),
 });
 
-/** GET /projects/:slug/settings/pipeline — current useM19Pipeline flag value */
+/** GET /projects/:slug/settings/pipeline — current useMultiAgentPipeline flag value */
 router.get('/:slug/settings/pipeline', async (c) => {
   const slug = c.req.param('slug');
   const project = await getProject(slug);
@@ -285,11 +285,11 @@ router.get('/:slug/settings/pipeline', async (c) => {
 
   return c.json({
     projectId: project.id,
-    useM19Pipeline: getUseM19Pipeline(project.id),
+    useMultiAgentPipeline: getUseMultiAgentPipeline(project.id),
   });
 });
 
-/** PATCH /projects/:slug/settings/pipeline — toggle useM19Pipeline */
+/** PATCH /projects/:slug/settings/pipeline — toggle useMultiAgentPipeline */
 router.patch('/:slug/settings/pipeline', async (c) => {
   const slug = c.req.param('slug');
   const project = await getProject(slug);
@@ -303,7 +303,7 @@ router.patch('/:slug/settings/pipeline', async (c) => {
     return c.json({ error: 'invalid body', details: parsed.error.issues }, 422);
   }
 
-  setUseM19Pipeline(project.id, parsed.data.useM19Pipeline, 'ui');
+  setUseMultiAgentPipeline(project.id, parsed.data.useMultiAgentPipeline, 'ui');
   return c.json({ ok: true });
 });
 
