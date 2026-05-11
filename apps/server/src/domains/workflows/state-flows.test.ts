@@ -10,9 +10,9 @@ import { runTriageBatch } from './triage-batch.js';
 vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   readProjectSettings: vi.fn().mockReturnValue(null),
   readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
-  getUseM19Pipeline: vi.fn().mockReturnValue(false),
-  setUseM19Pipeline: vi.fn(),
-  deriveUseM19Pipeline: vi.fn().mockReturnValue(false),
+  getUseMultiAgentPipeline: vi.fn().mockReturnValue(false),
+  setUseMultiAgentPipeline: vi.fn(),
+  deriveUseMultiAgentPipeline: vi.fn().mockReturnValue(false),
 }));
 
 const mockDispatchWaveSF = vi.fn();
