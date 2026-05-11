@@ -2,7 +2,7 @@ import type { AgentResult, AgentSpec } from './interface.js';
 import { getNextOutcome } from './mock-test-registry.js';
 
 export function resolveMockOutput(spec: AgentSpec): AgentResult {
-  const workItemId = spec.context.workItemId as string | undefined;
+  const workItemId = (spec.context.workItemId as string | undefined) ?? spec.workItemId;
   const testOutcome =
     getNextOutcome(workItemId, spec.skill) ?? (spec.context.testOutcome as string | undefined);
 
