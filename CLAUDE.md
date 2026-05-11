@@ -18,6 +18,8 @@ You execute one narrow GitHub issue at a time. The issue is your build spec.
 
 `pnpm audit-docs` checks for drift between this file (CLAUDE.md), `core/types.ts`, the skills directory, and other governance-adjacent surfaces. Run it before opening a PR that touches `core/types.ts`, the skill catalogue, or governance docs.
 
+`~/.factory/symbol-index.db` is a local SQLite cache of every exported symbol and import in the repo. Use it to answer "where is X defined?" / "who imports X?" via `core/symbol-index/query.ts` (`findSymbol`, `findCallers`, `listExportsOf`, `listImports`) instead of grepping or spawning a scout. Regenerate with `pnpm symbol-index` at the start of any investigation-heavy session or after large refactors. The index is gitignored and regenerable — a missing or stale index is not an error, just run the script. See ADR 0040 for rationale.
+
 ## Domain vocabulary
 
 - **Goose Hub** — the product. The app, UI, and runtime.
