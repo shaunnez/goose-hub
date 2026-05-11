@@ -122,7 +122,10 @@ export type EventKind =
   | 'dev-review.response-completed'
   | 'dev-review.response-failed'
   // M19.17 spec-author workflow — spec authored and persisted
-  | 'spec.completed';
+  | 'spec.completed'
+  // M19.21 merge-decision gate — per-cycle quality score + convergence gate
+  // run inside the approve action handler, before mergePR (#697).
+  | 'merge-decision.completed';
 
 export interface AgentEvent {
   id: number;

@@ -334,6 +334,42 @@ describe('FindingSchema', () => {
       }).success,
     ).toBe(true);
   });
+
+  // ── #697 — priority field on findings ─────────────────────────────────────
+
+  it('accepts an explicit priority on a finding (#697)', () => {
+    const result = FindingSchema.safeParse({
+      tier: 'functional',
+      severity: 'error',
+      description: 'broken behaviour',
+      disposition: 'fixed',
+      dispositionRef: 'abc123',
+      priority: 'P0',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.priority).toBe('P0');
+    }
+  });
+
+  it('treats priority as optional — omitting it does not fail validation (#697)', () => {
+    const result = FindingSchema.safeParse({
+      tier: 'structural',
+      severity: 'warning',
+      description: 'lint nit',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects an invalid priority literal (#697)', () => {
+    const result = FindingSchema.safeParse({
+      tier: 'structural',
+      severity: 'warning',
+      description: 'lint nit',
+      priority: 'p4',
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 // ─── TierResultSchema ────────────────────────────────────────────────────────

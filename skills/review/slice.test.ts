@@ -367,6 +367,39 @@ describe('ReviewFindingSchema', () => {
       }).success,
     ).toBe(true);
   });
+
+  // ── #697 — priority field on review findings ────────────────────────────
+
+  it('accepts an explicit priority on a review finding (#697)', () => {
+    const result = ReviewFindingSchema.safeParse({
+      severity: 'blocker',
+      description: 'missing required file',
+      disposition: 'registered',
+      dispositionRef: '#123',
+      priority: 'P0',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.priority).toBe('P0');
+    }
+  });
+
+  it('treats priority as optional (#697)', () => {
+    const result = ReviewFindingSchema.safeParse({
+      severity: 'minor',
+      description: 'naming nit',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects an invalid priority literal (#697)', () => {
+    const result = ReviewFindingSchema.safeParse({
+      severity: 'minor',
+      description: 'naming nit',
+      priority: 'low',
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 // ─── confidence range validation ──────────────────────────────────────────────

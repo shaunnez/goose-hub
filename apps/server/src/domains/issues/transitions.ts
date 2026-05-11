@@ -4,8 +4,10 @@ import {
   MergeConflictError,
   mergePR as defaultMergePR,
 } from '@goose-hub/core/connectors/github/merge-pr.js';
+import { getUseMultiAgentPipeline } from '@goose-hub/core/db/repositories/project-settings.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
+import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { STATES } from '@goose-hub/core/state-machine/states.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { isLegalTransition, legalTargets } from '@goose-hub/core/state-machine/transitions.js';
@@ -15,6 +17,33 @@ import { dispatchRetro } from '#shared/dispatch.js';
 import type { Result } from '#shared/middleware.js';
 import { getSourceForSlug } from '#shared/source.js';
 import { getRepoRef } from './internal.js';
+
+// Slice imports cross the package boundary (FACTORY_RULES rule 28a — slices/
+// is not a workspace package). Use dynamic import via import.meta.url so the
+// resolution works regardless of cwd.
+type MergeDecisionResult =
+  | { passed: true; score: number; reason: 'score-only-pass' | 'score-plus-convergence-pass' }
+  | {
+      passed: false;
+      score: number;
+      reason: 'score-below-threshold' | 'not-converged';
+      detail: string;
+    };
+
+type RunMergeDecisionFn = (input: {
+  pipelineRunId: string;
+  projectId: string;
+  workItemId?: string | null;
+  runId?: string;
+  iteration?: number;
+}) => MergeDecisionResult;
+
+async function loadMergeDecision(): Promise<RunMergeDecisionFn> {
+  const mod = (await import(
+    new URL('../../../../../slices/merge-decision/workflow.js', import.meta.url).href
+  )) as { runMergeDecision: RunMergeDecisionFn };
+  return mod.runMergeDecision;
+}
 
 export type TransitionResult =
   | { ok: true; data: { ok: true; from: StateName; to: StateName } }
@@ -50,10 +79,13 @@ export async function approveIssue(
       status: 400,
     };
   }
-  const prNumber = (prEvent.payload as { prNumber?: number }).prNumber;
+  const prPayload = prEvent.payload as { prNumber?: number; pipelineRunId?: string };
+  const prNumber = prPayload.prNumber;
   if (typeof prNumber !== 'number') {
     return { ok: false, error: 'pr.opened event missing prNumber', status: 500 };
   }
+  const pipelineRunId =
+    typeof prPayload.pipelineRunId === 'string' ? prPayload.pipelineRunId : undefined;
 
   const token = process.env.GITHUB_TOKEN ?? '';
   if (token.length === 0 && process.env.MOCK_SOURCE !== 'true') {
@@ -61,6 +93,69 @@ export async function approveIssue(
   }
 
   const mergePR = options.mergePRImpl ?? defaultMergePR;
+
+  // ─── Merge-decision gate (M19.21 #697) ──────────────────────────────────────
+  // When the multi-agent pipeline is enabled and the PR carries a
+  // pipelineRunId, run the deterministic quality-score gate BEFORE mergePR.
+  // Pass → proceed to merge. Fail → skip merge, transition to needs-human.
+  // Human escape hatch: merging directly via the GitHub UI bypasses this gate
+  // entirely (we only run it inside the Goose Hub approve action).
+  const projectCfg = await getProjectBySlug(slug);
+  const pipelineEnabled = projectCfg != null ? getUseMultiAgentPipeline(projectCfg.id) : false;
+
+  if (pipelineEnabled && pipelineRunId != null) {
+    let decision: MergeDecisionResult;
+    try {
+      const runMergeDecisionFn = await loadMergeDecision();
+      decision = runMergeDecisionFn({
+        pipelineRunId,
+        projectId: projectCfg?.id ?? slug,
+        workItemId,
+      });
+    } catch (err) {
+      logger.error('merge-decision gate failed', { slug, id, error: String(err) });
+      // Treat a gate runtime error as an explicit fail — never silently merge.
+      decision = {
+        passed: false,
+        score: 0,
+        reason: 'score-below-threshold',
+        detail: `merge-decision gate threw: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+
+    eventStore.appendEvent({
+      projectId: slug,
+      workItemId,
+      kind: 'merge-decision.completed',
+      payload: { ...decision, pipelineRunId, prNumber },
+    });
+
+    if (!decision.passed) {
+      await source.comment(
+        id,
+        buildAgentComment('Merge gate', 'Blocked', `Auto-merge gate blocked: ${decision.reason}`, [
+          `Score: ${decision.score}`,
+          decision.detail,
+        ]),
+      );
+      await source.transitionState(id, 'factory:approved', 'factory:needs-human');
+      eventStore.appendEvent({
+        projectId: slug,
+        workItemId,
+        kind: 'state.transitioned',
+        payload: {
+          from: 'factory:approved',
+          to: 'factory:needs-human',
+          by: 'merge-decision',
+        },
+      });
+      return {
+        ok: false,
+        error: `merge-decision blocked: ${decision.reason}`,
+        status: 409,
+      };
+    }
+  }
 
   if (process.env.MOCK_SOURCE === 'true' && checkAndClearMergeConflict(workItemId)) {
     eventStore.appendEvent({

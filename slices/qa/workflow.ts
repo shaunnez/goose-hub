@@ -342,8 +342,10 @@ export async function runQaWorkflow(
           threshold: synthetic.threshold,
           tierResults: synthetic.tierResults,
           qualityScores: synthetic.qualityScores,
+          findings: synthetic.findings,
           deterministic: true,
           agentSkipped: true,
+          ...(prHints.pipelineRunId != null ? { pipelineRunId: prHints.pipelineRunId } : {}),
         },
         runId,
       });
@@ -529,8 +531,10 @@ export async function runQaWorkflow(
         threshold: qaOutput.threshold,
         tierResults: groundTruthTierResults,
         qualityScores: qaOutput.qualityScores,
+        findings: qaOutput.findings,
         ...(testRun ? { testRun } : {}),
         ...(deterministic != null ? { deterministic: true } : {}),
+        ...(prHints.pipelineRunId != null ? { pipelineRunId: prHints.pipelineRunId } : {}),
       },
       runId,
     });

@@ -160,6 +160,28 @@ For each finding, set `disposition` and `dispositionRef`:
 
 QA records the finding; QA does not file the follow-up issue itself (holdout discipline). The orchestrator or the human reviewer is responsible for actually filing `disposition: 'registered'` issues.
 
+## Priority classification
+
+Every finding carries a `priority` from the shared P0..P3 enum (#697). The
+per-cycle quality score uses these counts to gate auto-merge — get them right.
+
+| `priority` | When | Score impact |
+|---|---|---|
+| `P0` | Must fix before merge. Production-breaking, data loss, security exposure, or any condition that makes the PR unmergeable. | Zeros the per-cycle score. |
+| `P1` | Significant defect. AC unmet, regression in covered behaviour, broken contract on a touched module. | -8 per finding. |
+| `P2` | Notable issue. Missing test coverage for a side path, minor regression, doc gap that misleads. | -4 per finding. |
+| `P3` | Nit / informational. Style, naming, low-impact cleanup. | -1 per finding. |
+
+`priority` is OPTIONAL in the schema — if you omit it, the orchestrator
+applies the default mapping below. Set it explicitly whenever the default
+under- or over-states severity:
+
+- `severity: 'error'` → default `P1`. Promote to `P0` when the finding bars
+  merge outright (broken AC, missing required artefact, security issue).
+- `severity: 'warning'` → default `P2`. Demote to `P3` for purely cosmetic
+  items.
+- `severity: 'info'` → default `P3`. Effectively never promote.
+
 ## 8-category quality scoring rubric
 
 Score each category independently. Be honest — low scores are informative, not punitive.
