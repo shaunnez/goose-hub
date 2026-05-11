@@ -7,6 +7,7 @@ import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions
 import { resolveBudgetsForProject } from '../agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '../agent-runtime/schema-bridge.js';
 import { selectPersona } from '../agent-runtime/select-persona.js';
+import { runCodeQualityAudit } from '../audit/run-audit.js';
 import { db } from '../db/db.js';
 import { improvementCandidates } from '../db/schema.js';
 import { eventStore } from '../event-stream/store.js';
@@ -36,6 +37,11 @@ export interface RunRetrospectiveInput {
   policy: RetrospectivePolicy;
   triggers?: TriggerContext;
   deps?: { runtime?: AgentRuntime };
+  /** Local worktree to audit. When supplied AND deep retro fires on a
+   * priority:high work item, the code-quality-audit skill runs as a tail
+   * step (#698). Caller is responsible for providing a stable, fully
+   * checked-out path — typically the dev worktree from the just-merged PR. */
+  auditWorktreePath?: string | null;
 }
 
 interface CandidateProvenance {
@@ -60,6 +66,17 @@ function persistCandidates(
       })
       .run();
   }
+}
+
+function pipelineRunIdFromEvents(
+  events: Array<{ kind: string; payload: unknown }>,
+): string | undefined {
+  for (const e of [...events].reverse()) {
+    if (e.kind !== 'pr.opened') continue;
+    const p = e.payload as { pipelineRunId?: string } | null;
+    if (p?.pipelineRunId != null && typeof p.pipelineRunId === 'string') return p.pipelineRunId;
+  }
+  return undefined;
 }
 
 function selectTier(policy: RetrospectivePolicy, triggers: TriggerContext): 'light' | 'deep' {
@@ -208,6 +225,47 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
     );
 
     accumulatePersonaStats({ personaName: personaId, role: 'retrospector', outcome: 'success' });
+
+    // ─── code-quality-audit hook (#698) ────────────────────────────────────────
+    // Deep retro on a priority:high lifecycle gets a tail audit run when the
+    // caller supplied a worktree. Top-3 audit recommendations become extra
+    // ImprovementCandidates. Autonomy gate fires when audit_score < 60 in
+    // autonomous mode — the lifecycle transitions to factory:needs-human
+    // instead of factory:done so the human can review the architectural
+    // regression before the next cycle starts.
+    const shouldAudit =
+      tier === 'deep' && triggers.priorityHigh === true && input.auditWorktreePath != null;
+
+    let auditAutonomyGateFired = false;
+    if (shouldAudit) {
+      const auditResult = await runCodeQualityAudit({
+        projectId,
+        workItemId: workItem.id,
+        worktreePath: input.auditWorktreePath as string,
+        pipelineRunId: pipelineRunIdFromEvents(itemEvents),
+        workItem: { title: workItem.title, number: Number(workItem.externalId) },
+        trigger: 'deep-retro',
+        mode: projectConfig?.mode ?? 'supervised',
+      });
+      if (auditResult.ok) {
+        persistCandidates(
+          { runId, projectId, sourceWorkItem: workItem.id, personaId },
+          auditResult.improvementCandidates,
+        );
+        auditAutonomyGateFired = auditResult.autonomyGateFired;
+      }
+    }
+
+    if (auditAutonomyGateFired) {
+      await stateSource.transitionState(
+        workItem.externalId,
+        'factory:retrospecting',
+        'factory:needs-human',
+      );
+      // Skip archive — the lifecycle hasn't reached factory:done.
+      return;
+    }
+
     await stateSource.transitionState(workItem.externalId, 'factory:retrospecting', 'factory:done');
     // Archive only after the state transition succeeds — otherwise a transition
     // failure would leave a phantom archive row for a lifecycle that never

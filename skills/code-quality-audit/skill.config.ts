@@ -1,8 +1,9 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
-import { CodeQualityAuditContextSchema } from './schema.js';
+import { CodeQualityAuditContextSchema, CodeQualityAuditOutputSchema } from './schema.js';
 
 const config: SkillConfig = {
   contextSchema: CodeQualityAuditContextSchema,
+  outputSchema: CodeQualityAuditOutputSchema,
   /**
    * Tool bundles:
    * - 'read'  — Read files, Grep, Glob against the working tree
@@ -18,5 +19,5 @@ const config: SkillConfig = {
   contextAllowlist: ['worktreePath', 'metricsJson', 'workItem'],
 };
 
-export { CodeQualityAuditContextSchema };
+export { CodeQualityAuditContextSchema, CodeQualityAuditOutputSchema };
 export default config;

@@ -125,7 +125,14 @@ export type EventKind =
   | 'spec.completed'
   // M19.21 merge-decision gate — per-cycle quality score + convergence gate
   // run inside the approve action handler, before mergePR (#697).
-  | 'merge-decision.completed';
+  | 'merge-decision.completed'
+  // M19.22 (#698) — code-quality-audit invocation lifecycle. Fires from deep
+  // retro (priority:high or scheduled-nightly) and convergent review
+  // (priority:high parallel branch). Output drives audit_score, top-3
+  // ImprovementCandidates, and the autonomous-mode escalation gate.
+  | 'audit.completed'
+  | 'audit.failed'
+  | 'audit.autonomy-gate-fired';
 
 export interface AgentEvent {
   id: number;

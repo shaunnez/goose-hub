@@ -67,6 +67,15 @@ function ComponentsBadges({ point }: { point: QualityTrendPointDto }) {
   );
 }
 
+function ArchitecturalScoreBar({ score }: { score: number }) {
+  return (
+    <div className="flex items-center gap-2 mt-1">
+      <span className="text-[10px] uppercase tracking-wider text-fg-3 w-12 shrink-0">arch</span>
+      <ScoreBar score={score} />
+    </div>
+  );
+}
+
 function TrendRow({ point }: { point: QualityTrendPointDto }) {
   return (
     <div className="py-3 border-b border-line last:border-0">
@@ -77,6 +86,7 @@ function TrendRow({ point }: { point: QualityTrendPointDto }) {
         <span className="text-[11px] text-fg-3 shrink-0">{timeAgo(point.ts)}</span>
       </div>
       <ScoreBar score={point.score} />
+      {point.auditScore != null && <ArchitecturalScoreBar score={point.auditScore} />}
       <ComponentsBadges point={point} />
     </div>
   );
@@ -120,6 +130,14 @@ export function QualityTrendTab({ projectSlug }: { projectSlug: string }) {
   const latest = trend[trend.length - 1];
   const avg =
     trend.length > 0 ? Math.round(trend.reduce((sum, p) => sum + p.score, 0) / trend.length) : 0;
+  const auditPoints = trend.filter((p) => p.auditScore != null);
+  const latestAudit = auditPoints[auditPoints.length - 1]?.auditScore;
+  const avgAudit =
+    auditPoints.length > 0
+      ? Math.round(
+          auditPoints.reduce((sum, p) => sum + (p.auditScore ?? 0), 0) / auditPoints.length,
+        )
+      : null;
 
   return (
     <div data-testid="quality-trend-tab" className="flex flex-col h-full overflow-hidden">
@@ -142,6 +160,22 @@ export function QualityTrendTab({ projectSlug }: { projectSlug: string }) {
             {avg}
           </div>
         </div>
+        {latestAudit != null && (
+          <div data-testid="architectural-quality-score">
+            <div className="text-[11px] uppercase tracking-wider text-fg-3 mb-0.5">
+              Architectural ({auditPoints.length})
+            </div>
+            <div
+              className="text-[22px] font-bold font-mono"
+              style={{ color: scoreColor(latestAudit) }}
+            >
+              {latestAudit}
+              {avgAudit != null && (
+                <span className="text-[11px] font-normal text-fg-3 ml-2">avg {avgAudit}</span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Run list */}

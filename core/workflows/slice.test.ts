@@ -536,6 +536,116 @@ describe('state transitions', () => {
   });
 });
 
+// ─── code-quality-audit hook (M19.22 #698) ────────────────────────────────────
+
+describe('code-quality-audit hook in deep retro', () => {
+  it('does NOT invoke the audit when triggers.priorityHigh is false', async () => {
+    vi.resetModules();
+    const mockAudit = vi.fn();
+    vi.doMock('../audit/run-audit.js', () => ({ runCodeQualityAudit: mockAudit }));
+    const { runRetrospectiveWorkflow } = await import('./retrospective.js');
+    mockRun.mockResolvedValueOnce(makeDeepResult());
+
+    await runRetrospectiveWorkflow({
+      workItem: makeWorkItem(),
+      stateSource: makeSource(),
+      projectId: 'test-project',
+      policy: 'always-deep',
+      auditWorktreePath: '/tmp/wt',
+    });
+
+    expect(mockAudit).not.toHaveBeenCalled();
+    vi.doUnmock('../audit/run-audit.js');
+  });
+
+  it('does NOT invoke the audit when auditWorktreePath is omitted', async () => {
+    vi.resetModules();
+    const mockAudit = vi.fn();
+    vi.doMock('../audit/run-audit.js', () => ({ runCodeQualityAudit: mockAudit }));
+    const { runRetrospectiveWorkflow } = await import('./retrospective.js');
+    mockRun.mockResolvedValueOnce(makeDeepResult());
+
+    await runRetrospectiveWorkflow({
+      workItem: makeWorkItem(),
+      stateSource: makeSource(),
+      projectId: 'test-project',
+      policy: 'always-deep',
+      triggers: { priorityHigh: true },
+    });
+
+    expect(mockAudit).not.toHaveBeenCalled();
+    vi.doUnmock('../audit/run-audit.js');
+  });
+
+  it('invokes the audit and proceeds to factory:done when score passes the autonomy gate', async () => {
+    vi.resetModules();
+    const mockAudit = vi.fn().mockResolvedValue({
+      ok: true,
+      auditScore: 82,
+      pipelineRunId: 'pipe-x',
+      improvementCandidates: [
+        { kind: 'workflow', targetPath: 'src/a.ts', suggestionText: 's', confidence: 'high' },
+      ],
+      autonomyGateFired: false,
+      output: { rating: 'Good' } as never,
+    });
+    vi.doMock('../audit/run-audit.js', () => ({ runCodeQualityAudit: mockAudit }));
+    const { runRetrospectiveWorkflow } = await import('./retrospective.js');
+    const source = makeSource();
+    mockRun.mockResolvedValueOnce(makeDeepResult());
+
+    await runRetrospectiveWorkflow({
+      workItem: makeWorkItem(),
+      stateSource: source,
+      projectId: 'test-project',
+      policy: 'always-deep',
+      triggers: { priorityHigh: true },
+      auditWorktreePath: '/tmp/wt',
+    });
+
+    expect(mockAudit).toHaveBeenCalledOnce();
+    expect((mockAudit.mock.calls[0][0] as { trigger: string }).trigger).toBe('deep-retro');
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:retrospecting',
+      'factory:done',
+    );
+    vi.doUnmock('../audit/run-audit.js');
+  });
+
+  it('routes to factory:needs-human when audit fires the autonomy gate', async () => {
+    vi.resetModules();
+    const mockAudit = vi.fn().mockResolvedValue({
+      ok: true,
+      auditScore: 45,
+      pipelineRunId: 'pipe-x',
+      improvementCandidates: [],
+      autonomyGateFired: true,
+      output: { rating: 'Concerning' } as never,
+    });
+    vi.doMock('../audit/run-audit.js', () => ({ runCodeQualityAudit: mockAudit }));
+    const { runRetrospectiveWorkflow } = await import('./retrospective.js');
+    const source = makeSource();
+    mockRun.mockResolvedValueOnce(makeDeepResult());
+
+    await runRetrospectiveWorkflow({
+      workItem: makeWorkItem(),
+      stateSource: source,
+      projectId: 'test-project',
+      policy: 'always-deep',
+      triggers: { priorityHigh: true },
+      auditWorktreePath: '/tmp/wt',
+    });
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:retrospecting',
+      'factory:needs-human',
+    );
+    vi.doUnmock('../audit/run-audit.js');
+  });
+});
+
 // ─── skill-coaching workflow ──────────────────────────────────────────────────
 
 function makeCoachResult() {

@@ -386,6 +386,39 @@ improvement_candidate:
 
 **Telemetry:** `agent.run-completed` carries `turns.used` (extracted from CLI `num_turns`) alongside `turns.budgeted` and `budget.usd`, so retrospectives can compare observed vs limit.
 
+## Code-quality audit (M19.22 #698)
+
+`code-quality-audit` is invoked through `core/audit/run-audit.ts`. Three
+triggers, one orchestration:
+
+| Trigger              | Caller                                            | Priority gate                                |
+|----------------------|---------------------------------------------------|----------------------------------------------|
+| `deep-retro`         | `core/workflows/retrospective.ts`                 | `tier==='deep' && triggers.priorityHigh`     |
+| `convergent-review`  | `slices/review/workflow.ts` (parallel branch)     | `workItem.priority ∈ {high, critical}`       |
+| `nightly`            | `core/audit/nightly-scheduler.ts` (per project)   | all registered projects                       |
+
+The auditor scorecard sums to `audit_score` (0..100) which is written to
+the `run_quality_scores.audit_score` column. Lookups by `pipelineRunId`
+upgrade an existing merge-decision row in place; nightly audits synthesise
+`pipelineRunId = "nightly-<slug>-<isoDate>"` to keep the row queryable
+from the trend UI without colliding with real cycles. **`audit_score` is
+informational** — it does NOT feed `computeQualityScore` and the
+merge-decision gate ignores it. Its job is the autonomous-mode gate:
+`audit_score < 60 && mode === 'autonomous'` transitions the lifecycle to
+`factory:needs-human` instead of `factory:done` / `factory:approved`. In
+supervised mode the gate never fires (the human reads the audit and
+decides).
+
+The top three audit recommendations become `ImprovementCandidates` filed
+through the same path as retro candidates. Mapping is structural:
+`principle` mentioning "prompt" → `skill-prompt`, "config" → `skill-config`,
+"schema" → `skill-schema`, "governance" → `governance-suggestion`,
+otherwise → `workflow`. The auditor sets `priority`; mapping is in
+`mapPrincipleToKind()`. Top-3 selection sorts by (priority, impactPoints
+desc).
+
+Events: `audit.completed`, `audit.failed`, `audit.autonomy-gate-fired`.
+
 ## Two Quality Scores — QA 8-category vs deterministic outcome (M19.21 #697)
 
 Goose Hub records two distinct quality scores per work-item lifecycle. They

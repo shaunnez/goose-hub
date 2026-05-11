@@ -12,11 +12,14 @@ import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconc
 import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
+import { runCodeQualityAudit } from '@goose-hub/core/audit/run-audit.js';
+import { db } from '@goose-hub/core/db/db.js';
 import {
   type ReviewerSlot,
   parseReviewerSlots,
   readProjectReviewSettings,
 } from '@goose-hub/core/db/repositories/project-review-settings.js';
+import { improvementCandidates as improvementCandidatesTable } from '@goose-hub/core/db/schema.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
@@ -24,6 +27,7 @@ import { DEFAULT_MAX_RETRIES, shouldEscalateReview } from '@goose-hub/core/retry
 import { classifyTopic } from '@goose-hub/core/review/topic-classifier.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
+import { existingWorktreePath } from '@goose-hub/core/workspaces/worktree.js';
 import { ReviewOutputSchema } from '@goose-hub/skills/review/schema.js';
 import type { ReviewOutput, ReviewVerdict } from '@goose-hub/skills/review/schema.js';
 
@@ -455,6 +459,19 @@ export async function runConvergentReviewWorkflow(
     const pipelineRunId = findPipelineRunId(projectSlug, workItem.id);
     const pipelineRunIdPayload = pipelineRunId != null ? { pipelineRunId } : {};
 
+    // ─── code-quality-audit parallel branch (#698) ──────────────────────────
+    // priority:high (or critical) PRs trigger an audit alongside the
+    // reviewers. The audit is a *separate slot* — its findings never block a
+    // reviewer's verdict, but its top-3 recommendations become
+    // ImprovementCandidates and the autonomy gate (score < 60 in autonomous
+    // mode) blocks transition to factory:approved.
+    const auditPromise = startConvergentReviewAudit({
+      workItem,
+      projectSlug,
+      pipelineRunId,
+      mode: projectConfig?.mode ?? 'supervised',
+    });
+
     let previousRoundFindings: FindingKey[] = [];
     let consecutiveZeroCriticalRounds = 0;
 
@@ -637,6 +654,32 @@ export async function runConvergentReviewWorkflow(
           },
           runId,
         });
+
+        // Collect the parallel audit (#698) before final transition. The
+        // audit branch runs alongside reviewers; we only block transition to
+        // approved when the autonomy gate fires.
+        const auditOutcome = await finalizeConvergentReviewAudit(auditPromise, {
+          projectSlug,
+          workItem,
+        });
+        if (auditOutcome.autonomyGateFired) {
+          await stateSource.comment(
+            workItem.externalId,
+            buildAgentComment(
+              'Review',
+              'Needs Human',
+              `Architectural quality audit blocked auto-merge (score ${auditOutcome.auditScore} < 60)`,
+              [auditOutcome.summaryDetail ?? 'See audit.completed event for full breakdown.'],
+            ),
+          );
+          await stateSource.transitionState(
+            workItem.externalId,
+            'factory:needs-review',
+            'factory:needs-human',
+          );
+          return;
+        }
+
         await stateSource.comment(
           workItem.externalId,
           buildAgentComment(
@@ -763,4 +806,104 @@ function buildReviewComment(
     `Confidence ${pct}% — transitioning to ${nextState}`,
     details.length > 0 ? details : undefined,
   );
+}
+
+// ─── code-quality-audit parallel branch helpers (#698) ────────────────────────
+
+type ReviewAuditOutcome = {
+  ran: boolean;
+  autonomyGateFired: boolean;
+  auditScore?: number;
+  summaryDetail?: string;
+};
+
+type StartedAudit =
+  | { ran: false }
+  | {
+      ran: true;
+      pipelineRunId: string;
+      promise: ReturnType<typeof runCodeQualityAudit>;
+    };
+
+function findDevRunId(events: { kind: string; payload: unknown }[]): string | undefined {
+  for (const e of [...events].reverse()) {
+    if (e.kind !== 'pr.opened') continue;
+    const p = e.payload as { devRunId?: string } | null;
+    if (p?.devRunId != null && typeof p.devRunId === 'string') return p.devRunId;
+  }
+  return undefined;
+}
+
+function startConvergentReviewAudit(input: {
+  workItem: WorkItem;
+  projectSlug: string;
+  pipelineRunId?: string;
+  mode: 'interactive' | 'supervised' | 'autonomous';
+}): StartedAudit {
+  const isHighPriority =
+    input.workItem.priority === 'high' || input.workItem.priority === 'critical';
+  if (!isHighPriority) return { ran: false };
+
+  // Locate a worktree to audit. The dev worktree from implementation should
+  // still exist at review time (cleanupWorktree fires post-merge). If the
+  // dev worktree is gone (e.g. orphaned PR, manual replay) we skip the audit
+  // rather than fabricate a synthetic path.
+  const events = eventStore.replay({ projectId: input.projectSlug, workItemId: input.workItem.id });
+  const devRunId = findDevRunId(events);
+  if (devRunId == null) return { ran: false };
+
+  const worktreePath = existingWorktreePath(devRunId);
+  if (worktreePath == null) return { ran: false };
+
+  const pipelineRunId = input.pipelineRunId ?? `review-${input.workItem.id}-${devRunId}`;
+  const promise = runCodeQualityAudit({
+    projectId: input.projectSlug,
+    workItemId: input.workItem.id,
+    worktreePath,
+    pipelineRunId,
+    workItem: { title: input.workItem.title, number: Number(input.workItem.externalId) },
+    trigger: 'convergent-review',
+    mode: input.mode,
+  });
+
+  return { ran: true, pipelineRunId, promise };
+}
+
+async function finalizeConvergentReviewAudit(
+  started: StartedAudit,
+  ctx: { projectSlug: string; workItem: WorkItem },
+): Promise<ReviewAuditOutcome> {
+  if (!started.ran) return { ran: false, autonomyGateFired: false };
+
+  const result = await started.promise.catch((err: unknown) => ({
+    ok: false as const,
+    error: err instanceof Error ? err.message : String(err),
+  }));
+
+  if (!result.ok) return { ran: true, autonomyGateFired: false };
+
+  // Persist top-3 ImprovementCandidates to the database. The retro path
+  // re-uses `core/workflows/retrospective.ts#persistCandidates`; here we
+  // open a small inline persister because review and retro live in
+  // different packages.
+  for (const c of result.improvementCandidates) {
+    db.insert(improvementCandidatesTable)
+      .values({
+        projectId: ctx.projectSlug,
+        personaName: c.sourcePersonaId ?? `${ctx.projectSlug}/auditor/0`,
+        sourceTaskId: ctx.workItem.id,
+        suggestionText: c.suggestionText,
+        suggestionType: c.kind,
+      })
+      .run();
+  }
+
+  return {
+    ran: true,
+    autonomyGateFired: result.autonomyGateFired,
+    auditScore: result.auditScore,
+    summaryDetail: `Rating: ${result.output.rating}. Top recommendation: ${
+      result.output.recommendations[0]?.fix ?? '(none)'
+    }`,
+  };
 }

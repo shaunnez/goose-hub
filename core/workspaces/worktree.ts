@@ -14,6 +14,16 @@ function worktreePath(runId: string): string {
 }
 
 /**
+ * Returns the worktree path for `runId` IF the directory exists on disk.
+ * Used by tail workflows (audit, retro) that want to attach to the dev
+ * worktree opportunistically without recreating it.
+ */
+export function existingWorktreePath(runId: string): string | null {
+  const wtPath = worktreePath(runId);
+  return existsSync(wtPath) ? wtPath : null;
+}
+
+/**
  * Creates a git worktree for the given repo at ~/.factory/workspaces/<runId>/.
  *
  * Uses `git worktree add --detach` to create a detached HEAD worktree,
