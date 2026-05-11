@@ -240,6 +240,8 @@ function RoleRow({
       primaryProvider?: ModelProvider | null;
       fallbackProvider?: ModelProvider | null;
       advisorProvider?: ModelProvider | null;
+      maxTurns?: number | null;
+      timeoutMs?: number | null;
     }) => patchRoleModelSetting(slug, role, patch),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['project-model-settings', slug] }),
   });
@@ -348,12 +350,65 @@ function RoleRow({
                 config to enable overrides.
               </p>
             ) : (
-              <ComplexityEditor
-                role={role}
-                slug={slug}
-                overrides={data.dbComplexityOverrides}
-                onSave={() => setExpanded(true)}
-              />
+              <>
+                <ComplexityEditor
+                  role={role}
+                  slug={slug}
+                  overrides={data.dbComplexityOverrides}
+                  onSave={() => setExpanded(true)}
+                />
+                <div className="mt-3 ml-4 border-l-2 border-line pl-4 space-y-2">
+                  <p className="text-[11px] text-fg-3">
+                    Per-role budget overrides. Leave blank to use the skill budget default.
+                  </p>
+                  <div className="flex items-center gap-4">
+                    <div className="flex flex-col gap-0.5">
+                      <label htmlFor={`${role}-max-turns`} className="text-[11px] text-fg-2">
+                        Max turns
+                      </label>
+                      <input
+                        id={`${role}-max-turns`}
+                        type="number"
+                        min={1}
+                        max={500}
+                        step={1}
+                        placeholder="default"
+                        value={db?.maxTurns ?? ''}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          patchRole.mutate({ maxTurns: v === '' ? null : Number(v) });
+                        }}
+                        className="w-20 rounded border border-line px-2 py-0.5 text-[12px] bg-bg text-fg"
+                      />
+                      <span className="text-[10px] text-fg-3">
+                        default: {data.roleDefaultBudgets.maxTurns}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <label htmlFor={`${role}-timeout-ms`} className="text-[11px] text-fg-2">
+                        Timeout (ms)
+                      </label>
+                      <input
+                        id={`${role}-timeout-ms`}
+                        type="number"
+                        min={5000}
+                        max={3_600_000}
+                        step={5000}
+                        placeholder="default"
+                        value={db?.timeoutMs ?? ''}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          patchRole.mutate({ timeoutMs: v === '' ? null : Number(v) });
+                        }}
+                        className="w-28 rounded border border-line px-2 py-0.5 text-[12px] bg-bg text-fg"
+                      />
+                      <span className="text-[10px] text-fg-3">
+                        default: {data.roleDefaultBudgets.timeoutMs}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </>
             )}
           </td>
         </tr>

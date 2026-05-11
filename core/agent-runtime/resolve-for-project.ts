@@ -14,6 +14,7 @@ import {
   resolveEscalatedBudgets,
 } from './budgets.js';
 import type { ModelProvider } from './models.js';
+import { HOLDOUT_ROLES } from './roles.js';
 import { type SelectModelForRoleResult, selectModelForRole } from './select-model-for-role.js';
 
 /** Merged global settings: DB row wins over projectConfig value when non-null. */
@@ -108,6 +109,48 @@ export function resolveEscalatedBudgetsForProject(
     globalRow?.perWorkflowMaxUsd,
     globalRow?.perAgentMaxUsd,
   );
+}
+
+export interface RoleBudgetOverride {
+  maxTurns: number | null;
+  timeoutMs: number | null;
+}
+
+/**
+ * Pure resolver for per-role budget overrides. Reads maxTurns / timeoutMs
+ * from the DB row and returns them as nullable numbers. null means "no
+ * override — use the skill budget default".
+ *
+ * Holdout gating: when honourOverrides is false (holdout role without
+ * allowHoldoutOverride), returns {maxTurns: null, timeoutMs: null} so that
+ * the holdout always runs with its skill-default budget.
+ */
+export function resolveRoleBudgetOverride(
+  dbRow: { maxTurns?: number | null; timeoutMs?: number | null } | null | undefined,
+  honourOverrides: boolean,
+): RoleBudgetOverride {
+  if (!honourOverrides || dbRow == null) {
+    return { maxTurns: null, timeoutMs: null };
+  }
+  return {
+    maxTurns: dbRow.maxTurns ?? null,
+    timeoutMs: dbRow.timeoutMs ?? null,
+  };
+}
+
+/**
+ * DB-backed wrapper around resolveRoleBudgetOverride. Reads the
+ * project_model_settings row for the given role and applies holdout gating.
+ */
+export function resolveRoleBudgetOverrideForProject(
+  projectId: string,
+  role: Role,
+  allowHoldoutOverride?: boolean,
+): RoleBudgetOverride {
+  const dbRow = readProjectModelSettingsForRole(projectId, role);
+  const isHoldout = HOLDOUT_ROLES.has(role);
+  const honourOverrides = !isHoldout || allowHoldoutOverride === true;
+  return resolveRoleBudgetOverride(dbRow, honourOverrides);
 }
 
 /**

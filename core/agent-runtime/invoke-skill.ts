@@ -6,7 +6,11 @@ import type { ResolvedBudget } from './budgets.js';
 import type { AgentResult, AgentRuntime, SkillConfig } from './interface.js';
 import { defaultModelForTier } from './models.js';
 import { readPromptWithContext } from './read-prompt.js';
-import { resolveBudgetsForProject, resolveRoleModelForProject } from './resolve-for-project.js';
+import {
+  resolveBudgetsForProject,
+  resolveRoleBudgetOverrideForProject,
+  resolveRoleModelForProject,
+} from './resolve-for-project.js';
 import { toJsonSchema } from './schema-bridge.js';
 import { selectPersona } from './select-persona.js';
 import { selectRuntime } from './select-runtime.js';
@@ -112,6 +116,23 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<AgentResult>
       modelOverride: defaultModelForTier(skillConfig.modelPin),
     };
   }
+
+  // 5b. Apply per-role budget overrides (maxTurns / timeoutMs) from DB on top of
+  //     the skill-level resolution. null means "no override — keep skill default".
+  //     Holdout gating is applied inside resolveRoleBudgetOverrideForProject.
+  const roleBudget = resolveRoleBudgetOverrideForProject(
+    projectId,
+    role,
+    projectConfig?.agentConfig?.allowHoldoutOverride,
+  );
+  resolved = {
+    ...resolved,
+    budgets: {
+      ...resolved.budgets,
+      ...(roleBudget.maxTurns != null && { maxTurns: roleBudget.maxTurns }),
+      ...(roleBudget.timeoutMs != null && { timeoutMs: roleBudget.timeoutMs }),
+    },
+  };
 
   // 6. Resolve model — precedence: caller override > per-role override (DB / config) > skill budget default
   let modelOverride: string;

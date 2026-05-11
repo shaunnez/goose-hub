@@ -313,6 +313,8 @@ export const projectModelSettings = sqliteTable(
     fallbackProvider: text('fallback_provider'),
     advisorProvider: text('advisor_provider'),
     complexityOverridesJson: text('complexity_overrides_json'),
+    maxTurns: integer('max_turns'),
+    timeoutMs: integer('timeout_ms'),
     updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
     updatedBy: text('updated_by'),
   },

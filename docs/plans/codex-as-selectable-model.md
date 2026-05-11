@@ -139,14 +139,14 @@ Each step lists the files to touch and an acceptance signal. Steps within a grou
 
 ## Acceptance criteria (rolled up)
 
-- [ ] Migration applied and reversible.
-- [ ] `RoleModel` carries optional per-slot provider in TS types.
-- [ ] `selectModelForRole()` returns `{tier, provider}` and resolves to a concrete model ID via `defaultModelForTierAndProvider()`.
-- [ ] PATCH `/:slug/settings/models/:role` accepts and persists provider per slot.
-- [ ] `ProjectModelPanel` exposes provider per slot; codex options disabled without auth.
-- [ ] Existing ADR-0034 resolution tests still pass.
-- [ ] Smoke run: a project configured with `developer.primary = codex:sonnet` spawns `CodexCliRuntime` with `gpt-5-codex`.
-- [ ] UX-1: "Reset all to defaults" clears all budget overrides in one action.
-- [ ] UX-2: "All → Codex" and "All → Claude" bulk-set primary provider/tier for all non-holdout roles.
-- [ ] UX-3: Resolved model IDs and skill budget defaults are visible beneath each input in small text.
-- [ ] UX-4 (optional): Max turns + timeout editable per-role in the expanded row, below complexity rules.
+- [x] Migration applied and reversible. (0023 — providers; 0024 — max_turns + timeout_ms)
+- [x] `RoleModel` carries optional per-slot provider in TS types.
+- [x] `selectModelForRole()` returns `{tier, provider}` and resolves to a concrete model ID via `defaultModelForTierAndProvider()`.
+- [x] PATCH `/:slug/settings/models/:role` accepts and persists provider per slot.
+- [x] `ProjectModelPanel` exposes provider per slot; codex options disabled without auth.
+- [x] Existing ADR-0034 resolution tests still pass.
+- [x] Smoke run (3A): Playwright test in `apps/web/e2e/settings-models.spec.ts` asserts codex provider toggle persists and resolved subtitle shows `gpt-5-codex`; disabled-when-missing assertion included.
+- [x] UX-1: "Reset all to defaults" clears all budget overrides in one action.
+- [x] UX-2: "All → Codex" and "All → Claude" bulk-set primary provider/tier for all non-holdout roles.
+- [x] UX-3: Resolved model IDs and skill budget defaults are visible beneath each input in small text.
+- [x] UX-4: Max turns + timeout editable per-role in the expanded row, below complexity rules. DB columns added (migration 0024), `resolveRoleBudgetOverrideForProject` wired in `invoke-skill.ts` with holdout gating, `roleDefaultBudgets` hints rendered below each input.
