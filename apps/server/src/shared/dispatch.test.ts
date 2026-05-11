@@ -19,16 +19,16 @@ const mockRunRetroForItem = vi.fn();
 const mockFilterEligibleByDependencies = vi.fn();
 const mockCreateProjectAwareTargetSource = vi.fn();
 const mockRunGrillAndPrdWorkflow = vi.fn();
-const mockGetUseM19Pipeline = vi.fn();
+const mockGetUseMultiAgentPipeline = vi.fn();
 const mockGetEngineeringSpec = vi.fn();
 const mockRunParallelImplementWorkflow = vi.fn();
 
 vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   readProjectSettings: vi.fn().mockReturnValue(null),
   readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
-  getUseM19Pipeline: mockGetUseM19Pipeline,
-  setUseM19Pipeline: vi.fn(),
-  deriveUseM19Pipeline: vi.fn().mockReturnValue(false),
+  getUseMultiAgentPipeline: mockGetUseMultiAgentPipeline,
+  setUseMultiAgentPipeline: vi.fn(),
+  deriveUseMultiAgentPipeline: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock('@goose-hub/core/engineering-specs/repository.js', () => ({
@@ -90,7 +90,7 @@ beforeEach(() => {
   mockGetSourceForSlug.mockResolvedValue(null);
   // Default: single-workflow-per-project (backward-compat) for tests that don't override.
   mockGetProject.mockResolvedValue(null);
-  mockGetUseM19Pipeline.mockReturnValue(false);
+  mockGetUseMultiAgentPipeline.mockReturnValue(false);
   mockGetEngineeringSpec.mockReturnValue(null);
   mockCreateProjectAwareTargetSource.mockResolvedValue(vi.fn());
   mockFilterEligibleByDependencies.mockResolvedValue({
@@ -230,7 +230,7 @@ describe('dispatchInvestigate', () => {
 // ─── dispatchFixIssue ─────────────────────────────────────────────────────
 
 describe('dispatchFixIssue', () => {
-  it('reads useM19Pipeline flag and logs at entry', { timeout: 30_000 }, async () => {
+  it('reads useMultiAgentPipeline flag and logs at entry', { timeout: 30_000 }, async () => {
     mockGetSourceForSlug.mockResolvedValue(null);
 
     const { dispatchFixIssue } = await import('./dispatch.js');
@@ -240,7 +240,7 @@ describe('dispatchFixIssue', () => {
       expect.objectContaining({
         slug: 'no-source',
         issueNumber: 10,
-        useM19Pipeline: false,
+        useMultiAgentPipeline: false,
       }),
     );
   });
@@ -649,7 +649,7 @@ describe('dispatchForLabel', () => {
       id: 'project-config-id',
       budgets: { maxParallelAgents: 1 },
     });
-    mockGetUseM19Pipeline.mockReturnValue(true);
+    mockGetUseMultiAgentPipeline.mockReturnValue(true);
     mockGetEngineeringSpec.mockReturnValue({
       id: 1,
       projectId: 'goose-hub-self',
@@ -663,7 +663,7 @@ describe('dispatchForLabel', () => {
     const { dispatchForLabel } = await import('./dispatch.js');
     await dispatchForLabel('goose-hub-self', 694, 'factory:spec-ready');
 
-    expect(mockGetUseM19Pipeline).toHaveBeenCalledWith('project-config-id');
+    expect(mockGetUseMultiAgentPipeline).toHaveBeenCalledWith('project-config-id');
     expect(mockGetEngineeringSpec).toHaveBeenCalledWith('goose-hub-self', item.id);
     expect(source.transitionState).toHaveBeenNthCalledWith(
       1,
@@ -713,7 +713,7 @@ describe('dispatchForLabel', () => {
       id: 'project-config-id',
       budgets: { maxParallelAgents: 1 },
     });
-    mockGetUseM19Pipeline.mockReturnValue(true);
+    mockGetUseMultiAgentPipeline.mockReturnValue(true);
     mockGetEngineeringSpec.mockReturnValue(null);
 
     const { dispatchForLabel } = await import('./dispatch.js');
@@ -776,7 +776,7 @@ describe('dispatchForLabel', () => {
       id: 'project-config-id',
       budgets: { maxParallelAgents: 1 },
     });
-    mockGetUseM19Pipeline.mockReturnValue(true);
+    mockGetUseMultiAgentPipeline.mockReturnValue(true);
     mockGetEngineeringSpec.mockReturnValue({
       id: 1,
       projectId: 'goose-hub-self',
