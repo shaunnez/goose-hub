@@ -3,7 +3,7 @@ import { LANES, laneForState, sortLaneItems } from '@/lib/lanes.config';
 import { useActiveMilestone } from '@/state/active-milestone';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { SECTIONS } from '../lib/sections';
 import { useHasOpenDep } from '../lib/useHasOpenDep';
@@ -41,6 +41,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
     // isLoading,
     isError,
     error,
+    refetch,
   } = useQuery({
     queryKey: ['issue', slug, id],
     queryFn: () => fetchIssue(slug, id),
@@ -121,19 +122,27 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
   const currentSection = SECTIONS.find((s) => s.key === section) ?? SECTIONS[0];
   const workItemId = item != null ? `github:${item.repoRef}#${item.externalId}` : '';
 
+  const refetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Re-fetch the issue when an agent transitions its state (e.g. after triage).
   useEffect(() => {
     if (!workItemId) return;
     const url = `/events?projectId=${encodeURIComponent(slug)}&workItemId=${encodeURIComponent(workItemId)}`;
     const es = new EventSource(url);
     const onTransitioned = () => {
-      void queryClient.invalidateQueries({ queryKey: ['issue', slug, id] });
-      void queryClient.invalidateQueries({ queryKey: ['issues', slug] });
+      if (refetchTimer.current) clearTimeout(refetchTimer.current);
+      refetchTimer.current = setTimeout(() => {
+        void refetch();
+      }, 150);
     };
     es.addEventListener('state.transitioned', onTransitioned);
     es.addEventListener('gate.rejected', onTransitioned);
-    return () => es.close();
-  }, [slug, id, workItemId, queryClient]);
+    return () => {
+      if (refetchTimer.current) clearTimeout(refetchTimer.current);
+      es.removeEventListener('state.transitioned', onTransitioned);
+      es.removeEventListener('gate.rejected', onTransitioned);
+      es.close();
+    };
+  }, [slug, workItemId, refetch]);
 
   if (isError) {
     return (

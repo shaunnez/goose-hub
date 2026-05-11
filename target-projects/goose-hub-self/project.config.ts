@@ -28,7 +28,8 @@ const config: ProjectConfig = {
   storage: { kind: 'local', path: '~/.factory/data/goose-hub-self' },
   repos: ['shaunnez/goose-hub'],
   agentConfig: {
-    runtime: 'claude-cli',
+    runtime: 'auto',
+    allowHoldoutOverride: true,
     rolesModels: {
       triager: { primary: 'haiku', fallback: 'haiku', advisor: null },
       griller: { primary: 'opus', fallback: 'sonnet', advisor: null },

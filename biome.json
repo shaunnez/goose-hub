@@ -30,7 +30,8 @@
       "claude-design/",
       "coverage/",
       "docs/design/",
-      "target-projects/"
+      "target-projects/",
+      "apps/web/test-results/"
     ]
   }
 }

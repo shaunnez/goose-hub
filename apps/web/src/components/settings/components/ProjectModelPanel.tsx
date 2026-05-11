@@ -1,4 +1,5 @@
 import {
+  deleteAllRoleModelSettings,
   deleteRoleModelSetting,
   fetchCodexAuthStatus,
   fetchDevReviewSettings,
@@ -303,7 +304,7 @@ function RoleRow({
             overridden={db?.primaryModel != null}
             placeholder={configPrimary ?? 'skill default'}
             disabled={locked}
-            codexDisabled={codexDisabled}
+            codexDisabled={false}
             subtitle={data.resolvedPrimary ?? `default: ${data.roleDefaultTier}`}
             onChange={(next) =>
               patchRole.mutate({
@@ -664,6 +665,11 @@ export function ProjectModelPanel({ slug }: Props) {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['project-model-settings', slug] }),
   });
 
+  const resetMutation = useMutation({
+    mutationFn: () => deleteAllRoleModelSettings(slug),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['project-model-settings', slug] }),
+  });
+
   if (isLoading) return <div className="text-[12px] text-fg-3 py-4">Loading…</div>;
   if (error || !data)
     return <div className="text-[12px] text-danger py-4">Failed to load model settings.</div>;
@@ -700,12 +706,25 @@ export function ProjectModelPanel({ slug }: Props) {
             >
               All → Codex
             </button>
+            <button
+              type="button"
+              onClick={() => resetMutation.mutate()}
+              disabled={resetMutation.isPending}
+              className="text-[11px] border border-line/70 rounded-full px-2.5 py-0.5 text-fg-3 hover:text-danger hover:border-danger/50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Clear all DB overrides — revert every role to config/skill defaults"
+            >
+              Restore defaults
+            </button>
           </div>
         </div>
         <p className="text-[11px] text-fg-3 mb-4">
           DB overrides win over project config <code>rolesModels</code> and skill defaults. Clear a
           field to revert to config. Expand a row to set complexity-based rules. The model ID below
           each primary select is the resolved dispatch target.
+        </p>
+        <p className="text-[11px] text-fg-3 mb-4">
+          To switch to codex/claude there must be an entry in the db. So change the "tier" first
+          then the "model" e.g. Haiku then Codex
         </p>
         <table className="w-full text-[12px]">
           <thead>

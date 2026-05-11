@@ -9,6 +9,7 @@ import {
   writeProjectDevReviewSettings,
 } from '@goose-hub/core/db/repositories/project-dev-review-settings.js';
 import {
+  deleteAllRoleModelSettings,
   deleteRoleModelSetting,
   readProjectModelSettings,
   writeBulkRoleModelPrimary,
@@ -194,30 +195,12 @@ router.get('/:slug/settings/models', async (c) => {
   });
 });
 
-/** PATCH /projects/:slug/settings/models/:role — upsert per-role model assignment */
-router.patch('/:slug/settings/models/:role', async (c) => {
-  const slug = c.req.param('slug');
-  const role = c.req.param('role');
-  const project = await getProject(slug);
-  if (project == null) return c.json({ error: 'project not found' }, 404);
-
-  const body = await parseBody<unknown>(c);
-  if (!body.ok) return body.error;
-
-  const parsed = RoleModelPatchSchema.safeParse(body.data);
-  if (!parsed.success) {
-    return c.json({ error: 'invalid body', details: parsed.error.issues }, 422);
-  }
-
-  writeRoleModelSetting(project.id, role, parsed.data, 'ui');
-  return c.json({ ok: true });
-});
-
 /**
  * PATCH /projects/:slug/settings/models/bulk — set the primary (tier, provider)
  * for every non-holdout role in one call. Holdout roles (qa, reviewer) are
  * skipped unless `agentConfig.allowHoldoutOverride` is true. Backs the
  * "All → Codex" / "All → Claude" buttons in the Models settings UI.
+ * Must be registered before /:role to avoid Hono matching "bulk" as a role name.
  */
 router.patch('/:slug/settings/models/bulk', async (c) => {
   const slug = c.req.param('slug');
@@ -248,6 +231,25 @@ router.patch('/:slug/settings/models/bulk', async (c) => {
   return c.json({ ok: true, rolesUpdated: eligibleRoles.length });
 });
 
+/** PATCH /projects/:slug/settings/models/:role — upsert per-role model assignment */
+router.patch('/:slug/settings/models/:role', async (c) => {
+  const slug = c.req.param('slug');
+  const role = c.req.param('role');
+  const project = await getProject(slug);
+  if (project == null) return c.json({ error: 'project not found' }, 404);
+
+  const body = await parseBody<unknown>(c);
+  if (!body.ok) return body.error;
+
+  const parsed = RoleModelPatchSchema.safeParse(body.data);
+  if (!parsed.success) {
+    return c.json({ error: 'invalid body', details: parsed.error.issues }, 422);
+  }
+
+  writeRoleModelSetting(project.id, role, parsed.data, 'ui');
+  return c.json({ ok: true });
+});
+
 /** PATCH /projects/:slug/settings/models/:role/complexity — upsert complexity overrides */
 router.patch('/:slug/settings/models/:role/complexity', async (c) => {
   const slug = c.req.param('slug');
@@ -264,6 +266,16 @@ router.patch('/:slug/settings/models/:role/complexity', async (c) => {
   }
 
   writeComplexityOverrides(project.id, role, parsed.data, 'ui');
+  return c.json({ ok: true });
+});
+
+/** DELETE /projects/:slug/settings/models — remove all DB overrides for every role */
+router.delete('/:slug/settings/models', async (c) => {
+  const slug = c.req.param('slug');
+  const project = await getProject(slug);
+  if (project == null) return c.json({ error: 'project not found' }, 404);
+
+  deleteAllRoleModelSettings(project.id);
   return c.json({ ok: true });
 });
 

@@ -101,6 +101,10 @@ export function deleteRoleModelSetting(projectId: string, role: string): void {
     .run();
 }
 
+export function deleteAllRoleModelSettings(projectId: string): void {
+  db.delete(projectModelSettings).where(eq(projectModelSettings.projectId, projectId)).run();
+}
+
 /**
  * Sets the same (tier, provider) for `primaryModel` + `primaryProvider` across
  * many roles in one call. Used by the "All → Codex" / "All → Claude" bulk

@@ -561,6 +561,10 @@ export async function deleteRoleModelSetting(slug: string, role: string): Promis
   await deleteRequest(`/projects/${slug}/settings/models/${encodeURIComponent(role)}`);
 }
 
+export async function deleteAllRoleModelSettings(slug: string): Promise<void> {
+  await deleteRequest(`/projects/${slug}/settings/models`);
+}
+
 export async function fetchCodexAuthStatus(
   slug: string,
   signal?: AbortSignal,
