@@ -570,8 +570,9 @@ export async function runParallelImplementWorkflow(
         });
       } else {
         try {
+          const maxTurns = Math.max(1, Math.min(5, devReviewCfg.maxRevisionTurns));
           let turns = 0;
-          while (turns < devReviewCfg.maxRevisionTurns) {
+          while (turns < maxTurns) {
             // Each iteration = one Codex dev-review call.
             // Use turn-scoped runId so multi-turn events are distinguishable.
             const turnRunId = turns === 0 ? runId : `${runId}:turn-${turns}`;
@@ -594,11 +595,7 @@ export async function runParallelImplementWorkflow(
 
             if (devReviewOutput.verdict === 'approved') break;
             // On the last turn, inconclusive = no more passes available; skip response.
-            if (
-              devReviewOutput.verdict === 'inconclusive' &&
-              turns === devReviewCfg.maxRevisionTurns - 1
-            )
-              break;
+            if (devReviewOutput.verdict === 'inconclusive' && turns === maxTurns - 1) break;
 
             // Re-fetch diff after any previous response commits so Codex sees current state.
             const currentDiff = getDiffFn(issueWorktreePath, 'main');

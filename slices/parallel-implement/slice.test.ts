@@ -891,9 +891,7 @@ describe('dev-review e2e: maxRevisionTurns=2 → 2 Codex dev-review passes', () 
       },
     ];
 
-    const mockResponseOutput: import(
-      '@goose-hub/skills/dev-review-response/schema.js',
-    ).DevReviewResponseOutput = {
+    const mockResponseOutput: DevReviewResponseOutput = {
       findingDispositions: [
         {
           findingRef: 'core/a.ts:10',
