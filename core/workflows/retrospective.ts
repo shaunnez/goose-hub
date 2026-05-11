@@ -238,21 +238,29 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
 
     let auditAutonomyGateFired = false;
     if (shouldAudit) {
-      const auditResult = await runCodeQualityAudit({
-        projectId,
-        workItemId: workItem.id,
-        worktreePath: input.auditWorktreePath as string,
-        pipelineRunId: pipelineRunIdFromEvents(itemEvents),
-        workItem: { title: workItem.title, number: Number(workItem.externalId) },
-        trigger: 'deep-retro',
-        mode: projectConfig?.mode ?? 'supervised',
-      });
-      if (auditResult.ok) {
-        persistCandidates(
-          { runId, projectId, sourceWorkItem: workItem.id, personaId },
-          auditResult.improvementCandidates,
-        );
-        auditAutonomyGateFired = auditResult.autonomyGateFired;
+      // Skip the audit cleanly when the tracker uses non-numeric IDs — the
+      // skill's context schema requires `workItem.number: number` and
+      // coercing a Jira-style ID would produce NaN.
+      const numericIssue = /^\d+$/.test(workItem.externalId)
+        ? Number.parseInt(workItem.externalId, 10)
+        : null;
+      if (numericIssue != null) {
+        const auditResult = await runCodeQualityAudit({
+          projectId,
+          workItemId: workItem.id,
+          worktreePath: input.auditWorktreePath as string,
+          pipelineRunId: pipelineRunIdFromEvents(itemEvents),
+          workItem: { title: workItem.title, number: numericIssue },
+          trigger: 'deep-retro',
+          mode: projectConfig?.mode ?? 'supervised',
+        });
+        if (auditResult.ok) {
+          persistCandidates(
+            { runId, projectId, sourceWorkItem: workItem.id, personaId },
+            auditResult.improvementCandidates,
+          );
+          auditAutonomyGateFired = auditResult.autonomyGateFired;
+        }
       }
     }
 

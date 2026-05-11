@@ -89,12 +89,52 @@ describe('startNightlyAuditScheduler', () => {
     });
 
     expect(runAudit).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(100);
+    // Per-project jitter spreads timers up to firstDelayMs; advance well
+    // past the longest staggered fire so both projects have run.
+    await vi.advanceTimersByTimeAsync(250);
     expect(runAudit).toHaveBeenCalledTimes(2);
     expect(
       runAudit.mock.calls.every(([arg]) => (arg as { trigger: string }).trigger === 'nightly'),
     ).toBe(true);
 
+    scheduler.stop();
+  });
+
+  it('staggers per-project fires within firstDelayMs ceiling', async () => {
+    mockExistsSync.mockReturnValue(true);
+    const fireTimes: number[] = [];
+    const runAudit = vi.fn().mockImplementation(() => {
+      fireTimes.push(Date.now());
+      return Promise.resolve({
+        ok: true,
+        auditScore: 80,
+        pipelineRunId: 'p',
+        autonomyGateFired: false,
+        output: {} as never,
+        improvementCandidates: [],
+      });
+    });
+    const projects = [
+      projectStub('a', '/tmp/a'),
+      projectStub('b', '/tmp/b'),
+      projectStub('c', '/tmp/c'),
+      projectStub('d', '/tmp/d'),
+    ];
+    const start = Date.now();
+    const scheduler = startNightlyAuditScheduler(projects, {
+      firstDelayMs: 200,
+      intervalMs: 1_000,
+      runAudit: runAudit as unknown as typeof import('./run-audit.js').runCodeQualityAudit,
+    });
+
+    await vi.advanceTimersByTimeAsync(450);
+    expect(runAudit).toHaveBeenCalledTimes(4);
+    // First fire must respect the base delay; subsequent fires must be
+    // strictly later than the prior one (deterministic stagger).
+    expect(fireTimes[0] - start).toBeGreaterThanOrEqual(200);
+    for (let i = 1; i < fireTimes.length; i++) {
+      expect(fireTimes[i]).toBeGreaterThanOrEqual(fireTimes[i - 1]);
+    }
     scheduler.stop();
   });
 

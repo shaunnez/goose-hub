@@ -74,17 +74,29 @@ export function startNightlyAuditScheduler(
   };
 
   const firstDelayMs = opts.firstDelayMs ?? 0;
-  for (const project of projects) {
+  // Deterministic per-project offset so timers don't fire in a synchronized
+  // burst when many projects are registered. Offset is bounded by either
+  // `firstDelayMs` (preserves the no-jitter test seam when caller passes 0)
+  // or 5 minutes, whichever is smaller — large enough to spread expensive
+  // audits, small enough that all projects still fire on the same calendar
+  // night.
+  const MAX_JITTER_MS = 5 * 60 * 1000;
+  const offsetCeiling = firstDelayMs > 0 ? Math.min(firstDelayMs, MAX_JITTER_MS) : 0;
+
+  for (const [index, project] of projects.entries()) {
+    const jitterMs =
+      offsetCeiling === 0 ? 0 : Math.floor((index * offsetCeiling) / Math.max(projects.length, 1));
+    const totalDelay = firstDelayMs + jitterMs;
     const kickoff = setTimeout(() => {
       fire(project);
       const timer = setInterval(() => fire(project), intervalMs);
       timers.push(timer);
-    }, firstDelayMs);
+    }, totalDelay);
     timers.push(kickoff as unknown as ReturnType<typeof setInterval>);
     logger.info('nightly audit scheduler armed', {
       slug: project.slug,
       intervalHours: intervalMs / HOURS,
-      firstDelayMs,
+      firstDelayMs: totalDelay,
     });
   }
 

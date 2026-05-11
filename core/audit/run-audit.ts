@@ -24,30 +24,17 @@ import {
 } from '../../skills/code-quality-audit/schema.js';
 import { OutputValidationError, invokeSkill } from '../agent-runtime/invoke-skill.js';
 import { eventStore } from '../event-stream/store.js';
-import {
-  getLatestQualityScoreByPipelineRun,
-  persistRunQualityScore,
-} from '../quality-score/repository.js';
-import type { QualityComponents } from '../quality-score/types.js';
+import { insertAuditOnlyRow, updateAuditScoreByPipelineRun } from '../quality-score/repository.js';
 import type { ImprovementCandidate } from '../retrospective/schemas.js';
 
 /** Configurable autonomy-gate threshold. Audit scores below this fail the
  * autonomous-mode gate. Issue #698 spec: 60. */
 export const AUDIT_AUTONOMY_THRESHOLD = 60;
 
-/** Default empty components used when persisting a project-level nightly
- * audit row — there is no PR cycle to derive QA/Review counts from. */
-const EMPTY_COMPONENTS: QualityComponents = {
-  p0_count: 0,
-  p1_count: 0,
-  p2_count: 0,
-  p3_count: 0,
-  regressions_open: 0,
-  review_converged: false,
-  uat_passed: false,
-  static_passed: false,
-  harness_pass_rate: 0,
-};
+/** Prefix used for synthetic nightly pipelineRunIds. Callers downstream
+ * (merge-decision, trend filters) use this to exclude project-level audit
+ * rows from cycle-trend calculations. */
+export const NIGHTLY_PIPELINE_RUN_PREFIX = 'nightly-';
 
 export interface RunAuditInput {
   projectId: string;
@@ -143,7 +130,7 @@ export function computeAuditScore(output: CodeQualityAuditOutput): number {
 
 function syntheticNightlyPipelineRunId(projectId: string, when: Date): string {
   const iso = when.toISOString().slice(0, 10);
-  return `nightly-${projectId}-${iso}`;
+  return `${NIGHTLY_PIPELINE_RUN_PREFIX}${projectId}-${iso}`;
 }
 
 /** Public entry point. See module header for the contract. */
@@ -195,19 +182,27 @@ export async function runCodeQualityAudit(input: RunAuditInput): Promise<AuditRe
   const auditScore = computeAuditScore(output);
   const iteration = input.iteration ?? 0;
 
-  // Persist on the existing per-cycle score row when one exists. If not
-  // (project-level nightly), insert a fresh row using the synthetic
-  // pipelineRunId — components are zeroed because no PR cycle anchors them.
-  const existing = getLatestQualityScoreByPipelineRun(pipelineRunId);
-  persistRunQualityScore({
-    runId: existing?.runId ?? pipelineRunId,
-    pipelineRunId,
-    projectId: input.projectId,
-    iteration: existing?.iteration ?? iteration,
-    score: existing?.score ?? 0,
-    components: existing?.components ?? EMPTY_COMPONENTS,
-    auditScore,
-  });
+  // Persistence strategy keyed on trigger to avoid trend pollution:
+  //   - In-PR audits (deep-retro, convergent-review) update the existing
+  //     run_quality_scores row keyed by pipelineRunId. If no row exists yet
+  //     (audit beat merge-decision to it), do NOT write a synthetic zero-
+  //     score row. The merge-decision gate later reads the latest
+  //     audit.completed event for this pipelineRunId and folds the score
+  //     into its persist call.
+  //   - Nightly audits write a row with the synthetic
+  //     `nightly-<slug>-<isoDate>` pipelineRunId; merge-decision filters
+  //     these out of cycle trend reads.
+  if (input.trigger === 'nightly') {
+    insertAuditOnlyRow({
+      runId: pipelineRunId,
+      pipelineRunId,
+      projectId: input.projectId,
+      iteration,
+      auditScore,
+    });
+  } else {
+    updateAuditScoreByPipelineRun({ pipelineRunId, auditScore });
+  }
 
   const improvementCandidates = buildImprovementCandidates(output);
   const autonomyGateFired = auditScore < AUDIT_AUTONOMY_THRESHOLD && input.mode === 'autonomous';

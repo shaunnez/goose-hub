@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockInvokeSkill = vi.fn();
 const mockAppendEvent = vi.fn();
-const mockPersist = vi.fn();
-const mockGetByPipeline = vi.fn();
+const mockUpdateByPipeline = vi.fn();
+const mockInsertAuditOnly = vi.fn();
 
 vi.mock('../agent-runtime/invoke-skill.js', async () => {
   const actual = await vi.importActual<typeof import('../agent-runtime/invoke-skill.js')>(
@@ -20,9 +20,11 @@ vi.mock('../event-stream/store.js', () => ({
 }));
 
 vi.mock('../quality-score/repository.js', () => ({
-  persistRunQualityScore: mockPersist,
-  getLatestQualityScoreByPipelineRun: mockGetByPipeline,
+  updateAuditScoreByPipelineRun: mockUpdateByPipeline,
+  insertAuditOnlyRow: mockInsertAuditOnly,
   listProjectQualityTrend: vi.fn(() => []),
+  getLatestQualityScoreByPipelineRun: vi.fn(() => null),
+  persistRunQualityScore: vi.fn(),
 }));
 
 const {
@@ -103,7 +105,7 @@ function buildOutput(
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockGetByPipeline.mockReturnValue(null);
+  mockUpdateByPipeline.mockReturnValue(1);
 });
 
 describe('computeAuditScore', () => {
@@ -152,7 +154,7 @@ describe('buildImprovementCandidates — top-3 emission', () => {
 });
 
 describe('runCodeQualityAudit — happy path', () => {
-  it('persists audit_score on the run_quality_scores row', async () => {
+  it('in-PR audit (deep-retro) updates audit_score in place by pipelineRunId without writing score=0', async () => {
     mockInvokeSkill.mockResolvedValueOnce({
       output: buildOutput({ totalScore: 82 }),
       decisionSummaries: [],
@@ -174,40 +176,20 @@ describe('runCodeQualityAudit — happy path', () => {
       expect(result.autonomyGateFired).toBe(false);
     }
 
-    expect(mockPersist).toHaveBeenCalledOnce();
-    const persistCall = mockPersist.mock.calls[0][0] as {
-      auditScore: number;
-      pipelineRunId: string;
-    };
-    expect(persistCall.auditScore).toBe(82);
-    expect(persistCall.pipelineRunId).toBe('pipe-1');
+    expect(mockUpdateByPipeline).toHaveBeenCalledOnce();
+    expect(mockUpdateByPipeline.mock.calls[0][0]).toEqual({
+      pipelineRunId: 'pipe-1',
+      auditScore: 82,
+    });
+    expect(mockInsertAuditOnly).not.toHaveBeenCalled();
 
     const eventKinds = mockAppendEvent.mock.calls.map((c) => (c[0] as { kind: string }).kind);
     expect(eventKinds).toContain('audit.completed');
     expect(eventKinds).not.toContain('audit.autonomy-gate-fired');
   });
 
-  it('upgrades an existing run_quality_scores row in-place by pipelineRunId', async () => {
-    mockGetByPipeline.mockReturnValueOnce({
-      runId: 'existing-run',
-      pipelineRunId: 'pipe-2',
-      projectId: 'proj-1',
-      iteration: 0,
-      score: 85,
-      components: {
-        p0_count: 0,
-        p1_count: 1,
-        p2_count: 0,
-        p3_count: 0,
-        regressions_open: 0,
-        review_converged: true,
-        uat_passed: true,
-        static_passed: true,
-        harness_pass_rate: 1,
-      },
-      auditScore: null,
-      ts: '2026-05-11T00:00:00Z',
-    });
+  it('convergent-review audit does not pollute trend when no row exists yet — update is no-op until merge-decision runs', async () => {
+    mockUpdateByPipeline.mockReturnValueOnce(0); // simulate: no row found
     mockInvokeSkill.mockResolvedValueOnce({
       output: buildOutput({ totalScore: 78 }),
       decisionSummaries: [],
@@ -222,14 +204,44 @@ describe('runCodeQualityAudit — happy path', () => {
       mode: 'supervised',
     });
 
-    const persistCall = mockPersist.mock.calls[0][0] as {
-      runId: string;
-      score: number;
+    // Update was attempted; no synthetic insert happened.
+    expect(mockUpdateByPipeline).toHaveBeenCalledOnce();
+    expect(mockInsertAuditOnly).not.toHaveBeenCalled();
+
+    // The audit.completed event carries the auditScore so merge-decision can
+    // later persist it as part of its own row write.
+    const completedEvent = mockAppendEvent.mock.calls
+      .map((c) => c[0] as { kind: string; payload: { auditScore?: number } })
+      .find((e) => e.kind === 'audit.completed');
+    expect(completedEvent?.payload.auditScore).toBe(78);
+  });
+
+  it('nightly audit inserts an audit-only row with the synthetic nightly pipelineRunId', async () => {
+    mockInvokeSkill.mockResolvedValueOnce({
+      output: buildOutput({ totalScore: 72 }),
+      decisionSummaries: [],
+      events: [],
+    });
+
+    const result = await runCodeQualityAudit({
+      projectId: 'proj-nightly',
+      worktreePath: '/tmp/wt',
+      trigger: 'nightly',
+      mode: 'supervised',
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.pipelineRunId).toMatch(/^nightly-proj-nightly-\d{4}-\d{2}-\d{2}$/);
+    }
+    expect(mockInsertAuditOnly).toHaveBeenCalledOnce();
+    expect(mockUpdateByPipeline).not.toHaveBeenCalled();
+    const insertCall = mockInsertAuditOnly.mock.calls[0][0] as {
+      pipelineRunId: string;
       auditScore: number;
     };
-    expect(persistCall.runId).toBe('existing-run'); // preserves anchor runId
-    expect(persistCall.score).toBe(85); // does NOT clobber the merge-decision score
-    expect(persistCall.auditScore).toBe(78); // writes the new audit score
+    expect(insertCall.auditScore).toBe(72);
+    expect(insertCall.pipelineRunId).toMatch(/^nightly-/);
   });
 });
 
@@ -313,7 +325,8 @@ describe('runCodeQualityAudit — failure path', () => {
     const eventKinds = mockAppendEvent.mock.calls.map((c) => (c[0] as { kind: string }).kind);
     expect(eventKinds).toContain('audit.failed');
     // No audit_score persisted on failure
-    expect(mockPersist).not.toHaveBeenCalled();
+    expect(mockUpdateByPipeline).not.toHaveBeenCalled();
+    expect(mockInsertAuditOnly).not.toHaveBeenCalled();
   });
 
   it('synthesises a nightly pipelineRunId when none is supplied', async () => {

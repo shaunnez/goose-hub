@@ -6,6 +6,7 @@ import type {
   TriggerContext,
 } from '@goose-hub/core/workflows/retrospective.js';
 import { runRetrospectiveWorkflow } from '@goose-hub/core/workflows/retrospective.js';
+import { existingWorktreePath } from '@goose-hub/core/workspaces/worktree.js';
 import { getProject } from '#shared/projects.js';
 import { getSourceForSlug } from '#shared/source.js';
 import { maybeFireSprintReview } from './sprint-review-trigger.js';
@@ -55,6 +56,23 @@ function computeTriggers(slug: string, workItem: WorkItem): TriggerContext {
   };
 }
 
+/** Locate the dev worktree path for the work item's most recent `pr.opened`
+ * event. M19.22 (#698) — deep retro on a priority:high lifecycle attaches an
+ * audit run when a worktree is still around (cleanupWorktree fires post-
+ * merge, so the worktree may already be gone for some retro runs). */
+function findAuditWorktreePath(slug: string, workItemId: string): string | null {
+  const events = eventStore.replay({ projectId: slug, workItemId });
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.kind !== 'pr.opened') continue;
+    const payload = e.payload as { devRunId?: string } | null;
+    if (payload?.devRunId != null && typeof payload.devRunId === 'string') {
+      return existingWorktreePath(payload.devRunId);
+    }
+  }
+  return null;
+}
+
 export async function runRetroForItem(
   workItem: WorkItem,
   stateSource: StateSource,
@@ -63,12 +81,14 @@ export async function runRetroForItem(
   const cfg = await getProject(slug);
   const policy = resolvePolicy(cfg?.agentConfig.retrospectivePolicy.defaultTier);
   const triggers = computeTriggers(slug, workItem);
+  const auditWorktreePath = triggers.priorityHigh ? findAuditWorktreePath(slug, workItem.id) : null;
   await runRetrospectiveWorkflow({
     workItem,
     stateSource,
     projectId: slug,
     policy,
     triggers,
+    auditWorktreePath,
   });
 
   // Auto-trigger sprint review when the last schedule:current item in the

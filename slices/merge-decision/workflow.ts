@@ -1,3 +1,5 @@
+import { NIGHTLY_PIPELINE_RUN_PREFIX } from '@goose-hub/core/audit/run-audit.js';
+import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { buildRunArtifacts } from '@goose-hub/core/quality-score/build-artifacts.js';
 import {
   getLatestQualityScoreByPipelineRun,
@@ -63,6 +65,12 @@ export function runMergeDecision(input: MergeDecisionInput): MergeDecisionResult
 
   const { score, components } = computeQualityScore(artifacts);
 
+  // Fold in any pre-existing audit score for this pipelineRunId. The audit
+  // can fire BEFORE merge-decision (parallel branch during convergent
+  // review) and emits `audit.completed` events that this gate reads. Pass
+  // the value explicitly to persistRunQualityScore so it's not erased.
+  const auditScore = readLatestAuditScore(input.projectId, input.pipelineRunId);
+
   persistRunQualityScore({
     runId,
     pipelineRunId: input.pipelineRunId,
@@ -70,16 +78,22 @@ export function runMergeDecision(input: MergeDecisionInput): MergeDecisionResult
     iteration,
     score,
     components,
+    ...(auditScore != null ? { auditScore } : {}),
   });
 
   // Read prior scores (ascending by ts). `listProjectQualityTrend` already
-  // returns ascending — but we exclude the row we just wrote AND any legacy
-  // rows from before migration 0022 (where `pipelineRunId` is null). Those
-  // pre-pipeline runs are not comparable cycles and would prematurely exit
-  // warmup or pollute convergence if counted.
+  // returns ascending — exclude the row we just wrote, legacy rows from
+  // before migration 0022 (where `pipelineRunId` is null), and project-
+  // level nightly audit rows (M19.22 #698) which don't represent merge
+  // cycles and would distort convergence math.
   const trend = listProjectQualityTrend(input.projectId);
   const priorScores = trend
-    .filter((r) => r.pipelineRunId != null && r.pipelineRunId !== input.pipelineRunId)
+    .filter(
+      (r) =>
+        r.pipelineRunId != null &&
+        r.pipelineRunId !== input.pipelineRunId &&
+        !r.pipelineRunId.startsWith(NIGHTLY_PIPELINE_RUN_PREFIX),
+    )
     .map((r) => r.score);
 
   // Score-only warmup gate.
@@ -119,6 +133,20 @@ export function runMergeDecision(input: MergeDecisionInput): MergeDecisionResult
   }
 
   return { passed: true, score, reason: 'score-plus-convergence-pass' };
+}
+
+/** Read the most recent `audit.completed` payload's `auditScore` for the
+ * given pipelineRunId. Returns null when no audit ran (or only failed). */
+function readLatestAuditScore(projectId: string, pipelineRunId: string): number | null {
+  const events = eventStore.replay({ projectId, kind: 'audit.completed' });
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    const p = e.payload as { pipelineRunId?: string; auditScore?: number } | null;
+    if (p?.pipelineRunId === pipelineRunId && typeof p.auditScore === 'number') {
+      return p.auditScore;
+    }
+  }
+  return null;
 }
 
 export { getLatestQualityScoreByPipelineRun };

@@ -640,37 +640,44 @@ export async function runConvergentReviewWorkflow(
           payload: { totalRounds: round },
           runId,
         });
-        // P2 fix: emit canonical review.completed so UI and fix-feedback loop can consume it.
+
+        // Settle the parallel audit (#698) BEFORE emitting review.completed
+        // so downstream consumers (merge-decision, quality assembly) never
+        // see a transient 'approved' verdict for a cycle the audit blocked.
+        const auditOutcome = await finalizeConvergentReviewAudit(auditPromise, {
+          projectSlug,
+          workItem,
+        });
+
+        const finalVerdict: ReviewVerdict = auditOutcome.autonomyGateFired
+          ? 'needs-human'
+          : 'approved';
+
+        const escalationReason = auditOutcome.autonomyGateFired
+          ? `Architectural quality audit blocked auto-merge (score ${auditOutcome.auditScore} < 60)`
+          : undefined;
+
         eventStore.appendEvent({
           projectId: projectSlug,
           workItemId: workItem.id,
           kind: 'review.completed',
           payload: {
-            verdict: 'approved',
+            verdict: finalVerdict,
             confidence: avgConfidence,
             criteriaChecks: [],
             findings: lastOutputs.flatMap((r) => r.parsed.findings),
             ...pipelineRunIdPayload,
+            ...(escalationReason != null ? { escalationReason } : {}),
           },
           runId,
         });
 
-        // Collect the parallel audit (#698) before final transition. The
-        // audit branch runs alongside reviewers; we only block transition to
-        // approved when the autonomy gate fires.
-        const auditOutcome = await finalizeConvergentReviewAudit(auditPromise, {
-          projectSlug,
-          workItem,
-        });
         if (auditOutcome.autonomyGateFired) {
           await stateSource.comment(
             workItem.externalId,
-            buildAgentComment(
-              'Review',
-              'Needs Human',
-              `Architectural quality audit blocked auto-merge (score ${auditOutcome.auditScore} < 60)`,
-              [auditOutcome.summaryDetail ?? 'See audit.completed event for full breakdown.'],
-            ),
+            buildAgentComment('Review', 'Needs Human', escalationReason ?? 'Audit gate failed', [
+              auditOutcome.summaryDetail ?? 'See audit.completed event for full breakdown.',
+            ]),
           );
           await stateSource.transitionState(
             workItem.externalId,
@@ -817,12 +824,17 @@ type ReviewAuditOutcome = {
   summaryDetail?: string;
 };
 
+type SettledAudit = Awaited<ReturnType<typeof runCodeQualityAudit>> | { ok: false; error: string };
+
 type StartedAudit =
   | { ran: false }
   | {
       ran: true;
       pipelineRunId: string;
-      promise: ReturnType<typeof runCodeQualityAudit>;
+      /** Eagerly-attached `.catch` keeps the rejection observed even when
+       * an early-exit path (escalation, divergence, cap) returns before
+       * the convergent gate awaits it. */
+      promise: Promise<SettledAudit>;
     };
 
 function findDevRunId(events: { kind: string; payload: unknown }[]): string | undefined {
@@ -832,6 +844,16 @@ function findDevRunId(events: { kind: string; payload: unknown }[]): string | un
     if (p?.devRunId != null && typeof p.devRunId === 'string') return p.devRunId;
   }
   return undefined;
+}
+
+/** Parse a state-source externalId to a number for the audit context. Not
+ * every tracker uses numeric IDs — e.g. Jira's `PROJ-123`. Returns undefined
+ * when the ID is non-numeric so the caller can skip the audit cleanly
+ * rather than send NaN through the Zod context schema. */
+function externalIdAsNumber(externalId: string): number | undefined {
+  if (!/^\d+$/.test(externalId)) return undefined;
+  const n = Number.parseInt(externalId, 10);
+  return Number.isSafeInteger(n) ? n : undefined;
 }
 
 function startConvergentReviewAudit(input: {
@@ -848,23 +870,38 @@ function startConvergentReviewAudit(input: {
   // still exist at review time (cleanupWorktree fires post-merge). If the
   // dev worktree is gone (e.g. orphaned PR, manual replay) we skip the audit
   // rather than fabricate a synthetic path.
-  const events = eventStore.replay({ projectId: input.projectSlug, workItemId: input.workItem.id });
+  const events = eventStore.replay({
+    projectId: input.projectSlug,
+    workItemId: input.workItem.id,
+  });
   const devRunId = findDevRunId(events);
   if (devRunId == null) return { ran: false };
 
   const worktreePath = existingWorktreePath(devRunId);
   if (worktreePath == null) return { ran: false };
 
+  const issueNumber = externalIdAsNumber(input.workItem.externalId);
+  if (issueNumber == null) return { ran: false };
+
   const pipelineRunId = input.pipelineRunId ?? `review-${input.workItem.id}-${devRunId}`;
-  const promise = runCodeQualityAudit({
+  const rawPromise = runCodeQualityAudit({
     projectId: input.projectSlug,
     workItemId: input.workItem.id,
     worktreePath,
     pipelineRunId,
-    workItem: { title: input.workItem.title, number: Number(input.workItem.externalId) },
+    workItem: { title: input.workItem.title, number: issueNumber },
     trigger: 'convergent-review',
     mode: input.mode,
   });
+
+  // Attach a catch immediately so an unawaited rejection (early review-exit
+  // path) cannot bubble as an unhandled rejection.
+  const promise = rawPromise.catch<SettledAudit>(
+    (err: unknown): SettledAudit => ({
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    }),
+  );
 
   return { ran: true, pipelineRunId, promise };
 }
@@ -875,10 +912,7 @@ async function finalizeConvergentReviewAudit(
 ): Promise<ReviewAuditOutcome> {
   if (!started.ran) return { ran: false, autonomyGateFired: false };
 
-  const result = await started.promise.catch((err: unknown) => ({
-    ok: false as const,
-    error: err instanceof Error ? err.message : String(err),
-  }));
+  const result = await started.promise;
 
   if (!result.ok) return { ran: true, autonomyGateFired: false };
 
