@@ -1055,13 +1055,17 @@ describe('dev-review e2e: maxRevisionTurns=1 (default) with approved verdict exi
             projectId: input.projectId,
             workItemId: input.workItemId,
             kind: 'dev-review.completed',
-            payload: { runId: `${input.runId}:dev-review`, verdict: 'approved', findingCount: 0 },
+            payload: {
+              runId: `${input.runId}:dev-review`,
+              verdict: 'no-blockers',
+              findingCount: 0,
+            },
             runId: `${input.runId}:dev-review`,
           });
-          return { verdict: 'approved', findings: [], decisionSummaries: [] };
+          return { verdict: 'no-blockers', findings: [], decisionSummaries: [] };
         },
         runDevReviewResponseImpl: async () => {
-          throw new Error('runDevReviewResponse should NOT be called when verdict is approved');
+          throw new Error('runDevReviewResponse should NOT be called when verdict is no-blockers');
         },
         createIssueWorktreeImpl: () => '/tmp/issue-wt',
         createWpWorktreeImpl: (_repo, _runId, wpId) => `/tmp/wp-${wpId}`,
@@ -1197,10 +1201,14 @@ describe('dev-review: triggerOn priority:medium+ does not trigger for priority:l
             projectId: input.projectId,
             workItemId: input.workItemId,
             kind: 'dev-review.completed',
-            payload: { runId: `${input.runId}:dev-review`, verdict: 'approved', findingCount: 0 },
+            payload: {
+              runId: `${input.runId}:dev-review`,
+              verdict: 'no-blockers',
+              findingCount: 0,
+            },
             runId: `${input.runId}:dev-review`,
           });
-          return { verdict: 'approved', findings: [], decisionSummaries: [] };
+          return { verdict: 'no-blockers', findings: [], decisionSummaries: [] };
         },
         createIssueWorktreeImpl: () => '/tmp/issue-wt',
         createWpWorktreeImpl: (_repo, _runId, wpId) => `/tmp/wp-${wpId}`,
@@ -1282,7 +1290,7 @@ describe('dev-review cost telemetry: multi-turn produces multiple dev-review.com
             findings: [
               {
                 severity: 'P2' as const,
-                category: 'performance' as const,
+                category: 'other' as const,
                 file: 'core/g.ts',
                 line: 5,
                 summary: 'Perf issue',

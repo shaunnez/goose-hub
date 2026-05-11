@@ -593,7 +593,7 @@ export async function runParallelImplementWorkflow(
               appendEvent: append,
             });
 
-            if (devReviewOutput.verdict === 'approved') break;
+            if (devReviewOutput.verdict === 'no-blockers') break;
             // On the last turn, inconclusive = no more passes available; skip response.
             if (devReviewOutput.verdict === 'inconclusive' && turns === maxTurns - 1) break;
 
