@@ -1,8 +1,8 @@
 # ADR 0032 — Regression Policy for Tier-3 Verification Failures
 
-**Status:** Accepted  
-**Date:** 2026-05-08  
-**Issue:** #562 (M19.05 — 3-tier verification)
+**Status:** Accepted (amended 2026-05-11 in M19.19 — `'revert'` policy removed)
+**Date:** 2026-05-08
+**Issue:** #562 (M19.05 — 3-tier verification); amended in #695 (M19.19)
 
 ---
 
@@ -12,50 +12,62 @@ M19.05 introduces a 3-tier verification cascade. Tier 3 runs the full regression
 test suite and checks carry-forward WP failures. When Tier 3 detects a regression
 (test suite exits non-zero) the orchestrator must decide what to do.
 
-Three options exist:
-
-1. **Escalate** — block the workflow, transition to `factory:needs-human`. Safe default.
-2. **Revert** — automatically undo the WP commits that likely introduced the regression,
-   then retry. Requires the caller to perform the revert *before* the transition;
-   the policy alone does not trigger git operations.
-3. **Ignore** — treat Tier-3 findings as warnings only; the workflow continues as passed.
-   Only safe for known-flaky suites or provisional builds.
+Originally three options existed: `'revert'`, `'escalate'`, `'ignore'`. The
+`'revert'` policy was decorative — it never triggered an actual revert; the
+caller was expected to revert WP commits *before* invoking the workflow, and the
+policy itself behaved identically to `'escalate'` (transition to needs-human).
+With orchestrator-owned git worktrees per WP (ADR 0031), failed WPs simply do
+not commit, so an explicit auto-revert is redundant. M19.27 tracks the deferred
+investigation into whether a properly-designed auto-revert would add value
+beyond worktree isolation; until then the policy union is narrowed to the two
+options that carry real behaviour.
 
 ## Decision
 
-Add `regressionPolicy?: 'revert' | 'escalate' | 'ignore'` to `ProjectConfig` in
-`core/types.ts`. Default is `'escalate'` when the field is absent.
+`ProjectConfig.regressionPolicy?: 'escalate' | 'ignore'` (`core/types.ts`).
+Default `'escalate'` when the field is absent.
 
-The three-tier verify workflow reads this field and:
+The QA workflow (M19.19) runs deterministic tier verification before the QA
+agent. On Tier-3 failure:
 
-- **`escalate` / `revert`** → `stateSource.transitionState('factory:needs-qa', 'factory:needs-human')`.  
-  For `revert`, the caller is expected to revert the offending WP commits via
-  `revertWpChanges()` (ADR 0031) *before* calling the workflow; the transition
-  ensures a human confirms the revert completed correctly before re-running.
+- **`escalate`** (default) → short-circuit. The workflow emits a synthetic
+  `qa.completed` event with `verdict: 'fail'`, ground-truth `tierResults`, and
+  routes to `factory:qa-failed` via the existing retry-counter logic (which
+  escalates to `factory:needs-human` once `DEFAULT_MAX_RETRIES` is exhausted).
+  The QA agent is **not** invoked.
 - **`ignore`** → findings are emitted at `severity: 'warning'`; `TierResult.passed`
-  is `true` despite the warning. The `qa.regression-failed` event is NOT emitted;
-  `qa.regression-passed` is emitted instead (the workflow continued). A `qa.regression-warning`
-  note is included in the event payload for observability.
+  is `true` despite the warning. The workflow continues to the QA agent as
+  though Tier 3 had passed.
+
+`'revert'` is no longer a legal value. Existing project configs that set it
+will fail TypeScript compilation; this is intentional — `'revert'` never did
+anything load-bearing and the schema bump makes the dead path impossible.
 
 ## Why not auto-revert?
 
 Automatic git reverts on regression are dangerous:
-- Factory doesn't know *which* WP caused the regression — all previously-ok WPs are
-  equally suspect.
-- Reverting commits that other WPs may depend on breaks the parallel-build invariants
-  (ADR 0031).
-- The human must verify the revert didn't introduce new problems.
 
-The `'revert'` option exists as a policy signal for the caller to implement targeted
-revert logic; it still escalates to `factory:needs-human` as the termination state.
+- Factory doesn't know *which* WP caused the regression — all previously-ok WPs
+  are equally suspect.
+- Reverting commits that other WPs may depend on breaks the parallel-build
+  invariants (ADR 0031).
+- A human must verify the revert didn't introduce new problems.
+
+The deferred investigation lives in M19.27. If a future design adds genuine
+auto-revert (atomic rollback, blame attribution, retry semantics), the policy
+union can be reopened then.
 
 ## Consequences
 
-- `ProjectConfig.regressionPolicy` is optional. Any existing project config that omits
-  it gets `'escalate'` semantics — no migration needed.
-- `target-projects/goose-hub-self/project.config.ts` does not set `regressionPolicy`
-  (defaults to `'escalate'`).
-- The QA workflow (existing `slices/qa/`) is unaffected — it does not use the
-  3-tier verify engine. That engine is for the parallel-implement post-build gate.
-- Autonomous mode (M16) will surface `regressionPolicy: 'revert'` as a candidate
-  for auto-revert wiring once the parallel-implement feedback loop matures.
+- `ProjectConfig.regressionPolicy` is optional. Any project config that omits
+  it gets `'escalate'` semantics — no migration needed for the default case.
+- Any project config that explicitly set `regressionPolicy: 'revert'` must be
+  changed to `'escalate'` (behaviour is identical to the prior `'revert'`).
+- `target-projects/goose-hub-self/project.config.ts` does not set
+  `regressionPolicy` (defaults to `'escalate'`).
+- The QA workflow (M19.19) is now the sole consumer of `regressionPolicy`. The
+  standalone `slices/three-tier-verify/` slice was removed in M19.19 — its
+  tier-running logic moved into `slices/qa/workflow.ts`; the pure tier-engine
+  tests moved into `core/verify/tiers.test.ts`.
+- Autonomous mode (M16) will no longer surface `regressionPolicy: 'revert'` as
+  an auto-revert candidate — see M19.27.

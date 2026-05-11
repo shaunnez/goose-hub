@@ -8,6 +8,11 @@ vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   readProjectSettings: vi.fn().mockReturnValue(null),
   readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
 }));
+
+const mockGetEngineeringSpec = vi.fn().mockReturnValue(null);
+vi.mock('@goose-hub/core/engineering-specs/repository.js', () => ({
+  getEngineeringSpec: (...args: unknown[]) => mockGetEngineeringSpec(...args),
+}));
 const mockAccumulatePersonaStats = vi.fn();
 vi.mock('@goose-hub/core/persona/accumulate.js', () => ({
   accumulatePersonaStats: (...args: unknown[]) => mockAccumulatePersonaStats(...args),
@@ -232,6 +237,8 @@ beforeEach(() => {
   mockReplay.mockReset();
   mockReplay.mockReturnValue([]);
   mockAccumulatePersonaStats.mockClear();
+  mockGetEngineeringSpec.mockReset();
+  mockGetEngineeringSpec.mockReturnValue(null);
   vi.clearAllMocks();
 });
 
@@ -904,6 +911,483 @@ describe('runQaWorkflow', () => {
         '42',
         expect.stringContaining('string error from qa runtime'),
       );
+    });
+  });
+
+  // ─── M19.19: deterministic 3-tier verify before QA agent ──────────────────
+  describe('deterministic 3-tier verify (M19.19)', () => {
+    function makeSpecRow() {
+      return {
+        spec: {
+          objective: 'Test',
+          userJourneys: [],
+          functionalRequirements: [],
+          architecture: { current: 'a', new: 'b', decisionRationale: 'r' },
+          schemaChanges: { ddl: [], migrations: [] },
+          interfaceContracts: [],
+          workPackages: [
+            {
+              id: 'WP1',
+              filesOwned: ['src/x.ts'],
+              changes: 'x',
+              dependsOn: [],
+              builderTier: 'sonnet',
+            },
+          ],
+          executionOrder: [{ batch: 0, wpIds: ['WP1'] }],
+          verificationTooling: [],
+          acceptanceCriteria: [
+            { id: 'AC1', statement: 'ok', verifyCommand: 'pnpm test', crossCutting: true },
+          ],
+          constraints: [],
+          riskRegister: [],
+          decisionSummaries: [{ kind: 'PLAN', summary: 'test' }],
+        },
+      };
+    }
+
+    function makePassingTier(tier: 1 | 2 | 3) {
+      return { tier, passed: true, evidence: [], findings: [] };
+    }
+    function makeFailingTier(tier: 1 | 2 | 3) {
+      return {
+        tier,
+        passed: false,
+        evidence: [],
+        findings: [
+          {
+            message: `tier ${tier} broke something`,
+            severity: 'error' as const,
+          },
+        ],
+      };
+    }
+
+    it('runs deterministic tiers before invoking the QA agent when spec + worktree are present', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: { worktreePath: '/wt/abc', devRunId: 'dev-run-1' },
+          createdAt: '',
+        },
+      ]);
+      mockGetEngineeringSpec.mockReturnValue(makeSpecRow());
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const runTierImpl = vi.fn(
+        async (tier: 1 | 2 | 3, _spec: unknown, _artifacts: unknown, _deps?: unknown) =>
+          makePassingTier(tier),
+      );
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn().mockResolvedValue(null),
+        runTierImpl,
+      });
+
+      expect(runTierImpl).toHaveBeenCalledTimes(3);
+      // runTier was called before the agent.run (mockRun)
+      const tierCallOrder = runTierImpl.mock.invocationCallOrder[0];
+      const agentCallOrder = mockRun.mock.invocationCallOrder[0];
+      expect(tierCallOrder).toBeLessThan(agentCallOrder);
+      // Spec, projectId, worktreePath threaded through
+      const firstCall = runTierImpl.mock.calls[0];
+      expect(firstCall[0]).toBe(1);
+      expect((firstCall[2] as { runId: string }).runId).toBe('dev-run-1');
+      expect((firstCall[2] as { worktreePath: string }).worktreePath).toBe('/wt/abc');
+    });
+
+    it('passes deterministicTierResults into the agent context and allowlist on all-pass', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: { worktreePath: '/wt/abc', devRunId: 'dev-run-1' },
+          createdAt: '',
+        },
+      ]);
+      mockGetEngineeringSpec.mockReturnValue(makeSpecRow());
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn().mockResolvedValue(null),
+        runTierImpl: vi.fn(
+          async (tier: 1 | 2 | 3, _spec: unknown, _artifacts: unknown, _deps?: unknown) =>
+            makePassingTier(tier),
+        ),
+      });
+
+      const spec = mockRun.mock.calls[0][0] as {
+        context: Record<string, unknown>;
+        contextAllowlist: string[];
+      };
+      expect(spec.context.deterministicTierResults).toBeDefined();
+      expect(spec.contextAllowlist).toContain('deterministicTierResults');
+    });
+
+    it('short-circuits on tier 1 fail — synthetic qa.completed emitted, agent NOT called', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: { worktreePath: '/wt/abc', devRunId: 'dev-run-1' },
+          createdAt: '',
+        },
+      ]);
+      mockGetEngineeringSpec.mockReturnValue(makeSpecRow());
+
+      const runTierImpl = vi.fn(
+        async (tier: 1 | 2 | 3, _spec: unknown, _artifacts: unknown, _deps?: unknown) =>
+          tier === 1 ? makeFailingTier(1) : makePassingTier(tier),
+      );
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn().mockResolvedValue(null),
+        runTierImpl,
+      });
+
+      expect(mockRun).not.toHaveBeenCalled();
+      expect(runTierImpl).toHaveBeenCalledTimes(1);
+
+      const completed = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'qa.completed');
+      expect(completed).toBeDefined();
+      const payload = completed?.[0].payload as Record<string, unknown>;
+      expect(payload.verdict).toBe('fail');
+      expect(payload.overallScore).toBe(0);
+      expect(payload.agentSkipped).toBe(true);
+      expect(payload.deterministic).toBe(true);
+
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-qa',
+        'factory:qa-failed',
+      );
+    });
+
+    it('short-circuits on tier 2 fail with synthetic qa.completed → factory:qa-failed', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: { worktreePath: '/wt/abc', devRunId: 'dev-run-1' },
+          createdAt: '',
+        },
+      ]);
+      mockGetEngineeringSpec.mockReturnValue(makeSpecRow());
+
+      const runTierImpl = vi.fn(
+        async (tier: 1 | 2 | 3, _spec: unknown, _artifacts: unknown, _deps?: unknown) =>
+          tier === 2 ? makeFailingTier(2) : makePassingTier(tier),
+      );
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn().mockResolvedValue(null),
+        runTierImpl,
+      });
+
+      expect(mockRun).not.toHaveBeenCalled();
+      expect(runTierImpl).toHaveBeenCalledTimes(2);
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-qa',
+        'factory:qa-failed',
+      );
+    });
+
+    it('tier 3 fail with regressionPolicy=ignore continues to the agent', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: { worktreePath: '/wt/abc', devRunId: 'dev-run-1' },
+          createdAt: '',
+        },
+      ]);
+      mockGetEngineeringSpec.mockReturnValue(makeSpecRow());
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      // verifyRegression itself flips the tier-3 result to passed=true under
+      // 'ignore', so we simulate that here — tier 3 returns passed:true with
+      // warning findings.
+      const tier3Result = {
+        tier: 3 as const,
+        passed: true,
+        evidence: [],
+        findings: [{ message: 'Regression [ignore]: FAIL x', severity: 'warning' as const }],
+      };
+      const runTierImpl = vi.fn(
+        async (tier: 1 | 2 | 3, _spec: unknown, _artifacts: unknown, _deps?: unknown) =>
+          tier === 3 ? tier3Result : makePassingTier(tier),
+      );
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn().mockResolvedValue(null),
+        runTierImpl,
+      });
+
+      // Agent did run because tier 3 logically passed under 'ignore'
+      expect(mockRun).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects QA disagreement with deterministic tier verdict → factory:needs-human', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: { worktreePath: '/wt/abc', devRunId: 'dev-run-1' },
+          createdAt: '',
+        },
+      ]);
+      mockGetEngineeringSpec.mockReturnValue(makeSpecRow());
+
+      // Deterministic ground truth: all tiers pass.
+      const runTierImpl = vi.fn(
+        async (tier: 1 | 2 | 3, _spec: unknown, _artifacts: unknown, _deps?: unknown) =>
+          makePassingTier(tier),
+      );
+
+      // Agent fabricates tier 1 failure.
+      const lying: AgentResult = {
+        output: {
+          ...(makePassResult().output as object),
+          verdict: 'fail',
+          tierResults: {
+            structural: {
+              passed: false,
+              findings: [
+                {
+                  tier: 'structural',
+                  severity: 'error',
+                  description: 'made-up failure',
+                  disposition: 'fixed',
+                  dispositionRef: 'abc',
+                },
+              ],
+            },
+            functional: { passed: true, findings: [] },
+            regression: { passed: true, findings: [] },
+          },
+        },
+        decisionSummaries: [],
+        events: [],
+      };
+      mockRun.mockResolvedValueOnce(lying);
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn().mockResolvedValue(null),
+        runTierImpl,
+      });
+
+      const disagreement = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'qa.tier-disagreement');
+      expect(disagreement).toBeDefined();
+      const payload = disagreement?.[0].payload as { disagreements: unknown[] };
+      expect(payload.disagreements.length).toBeGreaterThan(0);
+
+      // Disagreement is treated as a runtime failure → needs-human.
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-qa',
+        'factory:needs-human',
+      );
+    });
+
+    it('skips deterministic verify when no engineering spec exists (legacy path)', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: { worktreePath: '/wt/abc' },
+          createdAt: '',
+        },
+      ]);
+      mockGetEngineeringSpec.mockReturnValue(null); // no spec persisted
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const runTierImpl = vi.fn();
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn().mockResolvedValue(null),
+        runTierImpl,
+      });
+
+      expect(runTierImpl).not.toHaveBeenCalled();
+      expect(mockRun).toHaveBeenCalledTimes(1);
+      const spec = mockRun.mock.calls[0][0] as {
+        context: Record<string, unknown>;
+        contextAllowlist: string[];
+      };
+      expect(spec.context.deterministicTierResults).toBeUndefined();
+      expect(spec.contextAllowlist).not.toContain('deterministicTierResults');
+    });
+
+    it('skips deterministic verify when no worktree is available', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([]); // no pr.opened → no worktreePath
+      mockGetEngineeringSpec.mockReturnValue(makeSpecRow());
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const runTierImpl = vi.fn();
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn().mockResolvedValue(null),
+        runTierImpl,
+      });
+
+      expect(runTierImpl).not.toHaveBeenCalled();
+      expect(mockRun).toHaveBeenCalledTimes(1);
+    });
+
+    it('emits qa.completed payload with ground-truth tier results on agree-and-pass', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: { worktreePath: '/wt/abc', devRunId: 'dev-run-1' },
+          createdAt: '',
+        },
+      ]);
+      mockGetEngineeringSpec.mockReturnValue(makeSpecRow());
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn().mockResolvedValue(null),
+        runTierImpl: vi.fn(
+          async (tier: 1 | 2 | 3, _spec: unknown, _artifacts: unknown, _deps?: unknown) =>
+            makePassingTier(tier),
+        ),
+      });
+
+      const completed = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'qa.completed');
+      expect(completed).toBeDefined();
+      const payload = completed?.[0].payload as Record<string, unknown>;
+      expect(payload.deterministic).toBe(true);
+      expect((payload.tierResults as { structural: { passed: boolean } }).structural.passed).toBe(
+        true,
+      );
+    });
+
+    it('uses devRunId from pr.opened as the implRunId for tier-3 carry-forward', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: { worktreePath: '/wt/abc', devRunId: 'impl-run-xyz' },
+          createdAt: '',
+        },
+      ]);
+      mockGetEngineeringSpec.mockReturnValue(makeSpecRow());
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const runTierImpl = vi.fn(
+        async (tier: 1 | 2 | 3, _spec: unknown, _artifacts: unknown, _deps?: unknown) =>
+          makePassingTier(tier),
+      );
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn().mockResolvedValue(null),
+        runTierImpl,
+      });
+
+      for (const call of runTierImpl.mock.calls) {
+        expect((call[2] as { runId: string }).runId).toBe('impl-run-xyz');
+      }
+    });
+  });
+
+  // ─── M19.19: synthetic output unit checks ─────────────────────────────────
+  describe('buildSyntheticQaOutput (M19.19)', () => {
+    it('produces a QA-schema-valid payload for tier 1 fail', async () => {
+      const { buildSyntheticQaOutput } = await import('./synthetic-output.js');
+      const { QaOutputSchema } = await import('@goose-hub/skills/qa/schema.js');
+      const synthetic = buildSyntheticQaOutput({
+        tierResults: {
+          1: {
+            tier: 1,
+            passed: false,
+            evidence: [],
+            findings: [{ message: 'file missing', severity: 'error' }],
+          },
+          2: null,
+          3: null,
+        },
+        failedTier: 1,
+      });
+      const parsed = QaOutputSchema.safeParse(synthetic);
+      expect(parsed.success).toBe(true);
+      expect(synthetic.verdict).toBe('fail');
+      expect(synthetic.overallScore).toBe(0);
+      // Synthetic error finding carries a registered disposition so it passes
+      // QA schema validation under fix-or-register (#468).
+      const errorFinding = synthetic.findings.find((f) => f.severity === 'error');
+      expect(errorFinding?.disposition).toBe('registered');
+      expect(errorFinding?.dispositionRef).toBe('deterministic-verification');
+    });
+
+    it('uses the correct DecisionKind per failed tier', async () => {
+      const { buildSyntheticQaOutput } = await import('./synthetic-output.js');
+      const makeT = (tier: 1 | 2 | 3) => ({
+        tier,
+        passed: false,
+        evidence: [],
+        findings: [],
+      });
+      expect(
+        buildSyntheticQaOutput({
+          tierResults: { 1: makeT(1), 2: null, 3: null },
+          failedTier: 1,
+        }).decisionSummaries[0].kind,
+      ).toBe('STRUCTURAL_CHECK');
+      expect(
+        buildSyntheticQaOutput({
+          tierResults: { 1: null, 2: makeT(2), 3: null },
+          failedTier: 2,
+        }).decisionSummaries[0].kind,
+      ).toBe('FUNCTIONAL_CHECK');
+      expect(
+        buildSyntheticQaOutput({
+          tierResults: { 1: null, 2: null, 3: makeT(3) },
+          failedTier: 3,
+          regressionPolicy: 'escalate',
+        }).decisionSummaries[0].kind,
+      ).toBe('REGRESSION_CHECK');
     });
   });
 });

@@ -171,12 +171,11 @@ export interface ProjectConfig {
   maxReviewRounds?: number;
   /**
    * How the orchestrator responds when Tier-3 regression detection fires.
-   * 'revert'   — revert the WP commits that introduced the regression and retry
-   * 'escalate' — transition to factory:needs-human (default)
+   * 'escalate' — short-circuit with synthetic qa.completed → factory:qa-failed (default)
    * 'ignore'   — log as warning only; do not block the workflow
    * See docs/adr/0032-regression-policy.md
    */
-  regressionPolicy?: 'revert' | 'escalate' | 'ignore';
+  regressionPolicy?: 'escalate' | 'ignore';
   /** Feature flags for experimental capabilities. Opt-in per project. */
   experimental?: {
     /** M19.06 — ship record-decision MCP tool for A/B evaluation. Default false. */
