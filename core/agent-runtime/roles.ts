@@ -7,6 +7,21 @@ export interface RoleDefaults {
 }
 
 /**
+ * Roles that enforce holdout discipline (FACTORY_RULES rule 1): they never
+ * see implementation reasoning, never receive a fallback retry, and never
+ * have their model tier overridden by the router. Any reference to
+ * `new Set(['qa', 'reviewer'])` should import this constant instead.
+ */
+export const HOLDOUT_ROLES: ReadonlySet<Role> = new Set<Role>(['qa', 'reviewer']);
+
+/**
+ * Priorities that gate the advise-on-plan skill and disable model fallback.
+ * Same data was previously duplicated as `CRITICAL_PRIORITIES` (fallback.ts)
+ * and `ADVISOR_GATED_PRIORITIES` (advisor.ts) — single source of truth here.
+ */
+export const ADVISOR_GATED_PRIORITIES: ReadonlySet<string> = new Set(['critical', 'high']);
+
+/**
  * Per-role default model tier and agent budgets.
  * Project configs override these via agentConfig.rolesModels and budgets.skillBudgetOverrides.
  * The orchestrator merges project overrides on top of these defaults at runtime.

@@ -22,7 +22,7 @@ import {
   type SetScheduleFn,
   moveIssueToCurrent,
 } from '@goose-hub/core/projects/move-with-deps.js';
-import { STATES } from '@goose-hub/core/state-machine/states.js';
+import { STATES, TERMINAL_STATES } from '@goose-hub/core/state-machine/states.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { GitHubLabelsSource } from '@goose-hub/core/state-source/github-labels.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
@@ -135,8 +135,6 @@ async function statusCommand(slug: string): Promise<void> {
     // DB may not be initialised in CI or dry-run environments — silently skip
   }
 }
-
-const TERMINAL_STATES = new Set<string>(['factory:done', 'factory:archived', 'factory:rejected']);
 
 async function sweepCommand(slug: string, milestoneArg: string): Promise<void> {
   if (!slug || !milestoneArg) {

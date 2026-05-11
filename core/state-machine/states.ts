@@ -29,3 +29,13 @@ export const STATES = Object.freeze([
 
 export type StateName = (typeof STATES)[number];
 export type State = StateName;
+
+/**
+ * Terminal states a work item can settle into. Used by sprint-review filtering
+ * and CLI dashboards to exclude items no longer in active flow.
+ */
+export const TERMINAL_STATES: ReadonlySet<StateName> = new Set<StateName>([
+  'factory:done',
+  'factory:archived',
+  'factory:rejected',
+]);

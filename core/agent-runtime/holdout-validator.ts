@@ -1,7 +1,5 @@
 import type { AgentSpec } from './interface.js';
-
-// Holdout roles that enforce strict context isolation
-const HOLDOUT_ROLES = new Set(['qa', 'reviewer']);
+import { HOLDOUT_ROLES } from './roles.js';
 // Keys managed by the runtime itself — not user-injected, so not violations
 export const SYSTEM_KEYS: ReadonlySet<string> = new Set(['projectId', 'workItemId']);
 

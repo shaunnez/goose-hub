@@ -7,6 +7,17 @@ export type Mode = 'interactive' | 'supervised' | 'autonomous';
 export type Schedule = 'current' | 'next' | 'later' | 'blocked-by';
 export type ExecMode = 'serial' | 'parallel';
 
+/**
+ * Default values applied when a work item has no label in the corresponding
+ * group. Used by the ingress parsers in `github-labels.ts` so the fallback
+ * value is named once in a single, type-checked location.
+ */
+export const DEFAULT_WORK_ITEM_TYPE: WorkItemType = 'feature';
+export const DEFAULT_PRIORITY: Priority = 'medium';
+export const DEFAULT_MODE: Mode = 'supervised';
+export const DEFAULT_SCHEDULE: Schedule = 'later';
+export const DEFAULT_EXEC: ExecMode = 'parallel';
+
 export interface WorkItem {
   id: string; // global: "github:shaunnez/goose-hub#42"
   externalId: string; // "42" or "PROJ-123"

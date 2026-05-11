@@ -1,3 +1,4 @@
+import { TERMINAL_STATES } from '@goose-hub/core/state-machine/states.js';
 import type { StateSource } from '@goose-hub/core/state-source/interface.js';
 
 export interface SprintReviewEligibility {
@@ -6,8 +7,6 @@ export interface SprintReviewEligibility {
   alreadyExists: boolean;
   existingIssueUrl?: string;
 }
-
-const TERMINAL_STATES = new Set(['factory:done', 'factory:archived', 'factory:rejected']);
 
 export async function checkSprintReviewEligibility(
   stateSource: StateSource,

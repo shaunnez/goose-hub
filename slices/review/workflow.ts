@@ -25,7 +25,7 @@ import { classifyTopic } from '@goose-hub/core/review/topic-classifier.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { ReviewOutputSchema } from '@goose-hub/skills/review/schema.js';
-import type { ReviewOutput } from '@goose-hub/skills/review/schema.js';
+import type { ReviewOutput, ReviewVerdict } from '@goose-hub/skills/review/schema.js';
 
 export interface ReviewWorkflowDeps {
   runtime?: AgentRuntime;
@@ -112,9 +112,13 @@ export async function runReviewWorkflow(
         });
       }
     } else {
-      const VERDICT_TO_STATE: Record<string, StateName> = {
+      // verdict is narrowed to Exclude<ReviewVerdict, 'needs-fix'> here, but
+      // the lookup map covers the full union for defence-in-depth — if a new
+      // verdict literal is added to the schema, TypeScript flags this branch.
+      const VERDICT_TO_STATE: Record<ReviewVerdict, StateName> = {
         approved: 'factory:approved',
         'needs-human': 'factory:needs-human',
+        'needs-fix': 'factory:needs-fix',
       };
       nextState = VERDICT_TO_STATE[reviewOutput.verdict] ?? 'factory:needs-human';
     }

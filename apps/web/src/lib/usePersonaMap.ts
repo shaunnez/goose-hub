@@ -47,6 +47,9 @@ export function getPersonaInitials(
     .join('');
 }
 
+// Mirrors ROLE_ABBREV in core/agent-runtime/persona-names.ts. Duplicated
+// because apps/web does not import from @goose-hub/core (no path alias / vite
+// alias is wired). Keep in sync if a new role is added.
 const ROLE_ABBREV: Record<string, string> = {
   triager: 'TRG',
   developer: 'DEV',

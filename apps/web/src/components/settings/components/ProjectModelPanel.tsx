@@ -23,6 +23,9 @@ interface Props {
 }
 
 const TIERS: ModelTier[] = ['haiku', 'sonnet', 'opus'];
+// Mirrors HOLDOUT_ROLES in core/agent-runtime/roles.ts. Duplicated here because
+// apps/web does not import @goose-hub/core (would pull server-only modules into
+// the React bundle). Keep in sync if the canonical set changes.
 const HOLDOUT_ROLES = new Set(['qa', 'reviewer']);
 
 const COMPLEXITY_KEY_OPTIONS = [

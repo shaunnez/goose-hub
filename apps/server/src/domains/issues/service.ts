@@ -1,4 +1,8 @@
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import {
+  SCHEDULE_UI_TO_VALUE,
+  type ScheduleUIValue,
+} from '@goose-hub/core/state-source/github-labels.js';
 import type { Result } from '#shared/middleware.js';
 import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
 import { getSourceForSlug } from '#shared/source.js';
@@ -159,7 +163,13 @@ export async function setIssueMilestone(
 }
 
 const VALID_PRIORITY = ['low', 'medium', 'high', 'critical'] as const;
+/**
+ * UI-facing schedule values. The labels written to GitHub use `next`/`later`
+ * (canonical Schedule), but the UI exposes `backlog`/`icebox` as friendlier
+ * synonyms — `SCHEDULE_UI_TO_VALUE` translates before calling the data layer.
+ */
 const VALID_SCHEDULE = ['current', 'backlog', 'icebox', 'blocked-by'] as const;
+const VALID_TYPE = ['feature', 'bug', 'chore', 'research'] as const;
 
 export async function setIssueLabel(
   slug: string,
@@ -167,8 +177,8 @@ export async function setIssueLabel(
   group: unknown,
   value: unknown,
 ): Promise<Result<{ ok: true }>> {
-  if (group !== 'priority' && group !== 'schedule') {
-    return { ok: false, error: 'group must be priority or schedule', status: 400 };
+  if (group !== 'priority' && group !== 'schedule' && group !== 'type') {
+    return { ok: false, error: 'group must be priority, schedule, or type', status: 400 };
   }
   if (group === 'priority' && !VALID_PRIORITY.includes(value as never)) {
     return { ok: false, error: 'invalid priority', status: 400 };
@@ -176,16 +186,25 @@ export async function setIssueLabel(
   if (group === 'schedule' && !VALID_SCHEDULE.includes(value as never)) {
     return { ok: false, error: 'invalid schedule', status: 400 };
   }
+  if (group === 'type' && !VALID_TYPE.includes(value as never)) {
+    return { ok: false, error: 'invalid type', status: 400 };
+  }
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
   const repoRef = await getRepoRef(slug);
   const workItemId = `github:${repoRef}#${id}`;
-  await source.setLabelInGroup(workItemId, group, value as string);
+  // Translate UI-facing schedule synonyms (`backlog`/`icebox`) to the canonical
+  // label values (`next`/`later`) before the data layer sees them. Without
+  // this, the in-memory source silently no-ops and GitHub gets an invalid
+  // `schedule:backlog` label name.
+  const persistedValue =
+    group === 'schedule' ? SCHEDULE_UI_TO_VALUE[value as ScheduleUIValue] : (value as string);
+  await source.setLabelInGroup(workItemId, group, persistedValue);
   eventStore.appendEvent({
     projectId: slug,
     workItemId,
     kind: 'manual.action',
-    payload: { action: `set-${group}`, value },
+    payload: { action: `set-${group}`, value: persistedValue },
   });
   return { ok: true, data: { ok: true } };
 }
