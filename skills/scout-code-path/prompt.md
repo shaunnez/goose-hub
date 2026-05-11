@@ -9,6 +9,7 @@ You have **read and search access only**.
 - `<work_item>` — title, body, number
 - `<scout_focus>` — one sentence telling you which symbol to trace
 - `<worktree_path>` — the worktree to read from
+- `<symbol_index_hints>` *(optional)* — pre-resolved symbol locations from the local symbol index. Each entry has `name`, `definedIn` (file path), `line`, `kind`, and `callers` (files that import this symbol). **When present, start your trace here instead of grepping.** Jump directly to `definedIn:line`. Still read the file — the index gives location, not content.
 
 ## Discipline
 

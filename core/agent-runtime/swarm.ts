@@ -118,6 +118,7 @@ const SCOUT_CONTEXT_ALLOWLIST: readonly string[] = [
   'scoutFocus',
   'worktreePath',
   'scoutReports',
+  'symbolIndexHints',
 ];
 
 const DEFAULT_MAX_SCOUTS = 6;

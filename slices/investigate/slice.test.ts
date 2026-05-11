@@ -15,9 +15,14 @@ const mockDispatchWave = vi.fn();
 const mockCrossValidate = vi.fn();
 const mockInvokeSkill = vi.fn();
 const mockPersistScoutReport = vi.fn();
+const mockLookupWorkItemSymbols = vi.fn();
 
 vi.mock('@goose-hub/core/agent-runtime/swarm.js', () => ({
   dispatchWave: (...args: unknown[]) => mockDispatchWave(...args),
+}));
+
+vi.mock('@goose-hub/core/symbol-index/lookup.js', () => ({
+  lookupWorkItemSymbols: (...args: unknown[]) => mockLookupWorkItemSymbols(...args),
 }));
 
 vi.mock('@goose-hub/core/agent-runtime/cross-validate.js', () => ({
@@ -194,6 +199,7 @@ beforeEach(() => {
   mockRun.mockReset();
   vi.clearAllMocks();
   mockAccumulatePersonaStats.mockClear();
+  mockLookupWorkItemSymbols.mockReturnValue([]);
 
   // Default happy path
   mockDispatchWave.mockResolvedValue(makeWaveResult());
@@ -686,6 +692,66 @@ describe('runInvestigateWorkflow', () => {
       expect(mockAccumulatePersonaStats).toHaveBeenCalledWith(
         expect.objectContaining({ outcome: 'failure' }),
       );
+    });
+  });
+
+  describe('symbol index pre-lookup — acceptance criterion (issue #724)', () => {
+    it('injects symbolIndexHints into scout-code-path extraContext when hints found', async () => {
+      const hints = [
+        { name: 'AuthService', definedIn: 'core/auth.ts', line: 10, kind: 'function', callers: [] },
+      ];
+      mockLookupWorkItemSymbols.mockReturnValue(hints);
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const wave1Opts = mockDispatchWave.mock.calls[0][0] as {
+        scoutSpecs: Array<{ scoutName: string; extraContext?: Record<string, unknown> }>;
+      };
+      const codePath = wave1Opts.scoutSpecs.find((s) => s.scoutName === 'scout-code-path');
+      expect(codePath?.extraContext).toEqual({ symbolIndexHints: hints });
+    });
+
+    it('does not inject extraContext when symbol index returns empty', async () => {
+      mockLookupWorkItemSymbols.mockReturnValue([]);
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const wave1Opts = mockDispatchWave.mock.calls[0][0] as {
+        scoutSpecs: Array<{ scoutName: string; extraContext?: Record<string, unknown> }>;
+      };
+      const codePath = wave1Opts.scoutSpecs.find((s) => s.scoutName === 'scout-code-path');
+      expect(codePath?.extraContext).toBeUndefined();
+    });
+
+    it('other Wave 1 scouts are unaffected by symbol index hints', async () => {
+      const hints = [
+        { name: 'AuthService', definedIn: 'core/auth.ts', line: 10, kind: 'function', callers: [] },
+      ];
+      mockLookupWorkItemSymbols.mockReturnValue(hints);
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const wave1Opts = mockDispatchWave.mock.calls[0][0] as {
+        scoutSpecs: Array<{ scoutName: string; extraContext?: Record<string, unknown> }>;
+      };
+      for (const spec of wave1Opts.scoutSpecs) {
+        if (spec.scoutName !== 'scout-code-path') {
+          expect(spec.extraContext).toBeUndefined();
+        }
+      }
+    });
+
+    it('lookupWorkItemSymbols called with work item title and body', async () => {
+      const workItem = makeWorkItem({ title: 'Fix AuthService', body: 'Crashes on login' });
+      mockLookupWorkItemSymbols.mockReturnValue([]);
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(workItem, makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(mockLookupWorkItemSymbols).toHaveBeenCalledWith('Fix AuthService', 'Crashes on login');
     });
   });
 });
