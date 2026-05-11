@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
-import { getUseM19Pipeline } from '@goose-hub/core/db/repositories/project-settings.js';
+import { getUseMultiAgentPipeline } from '@goose-hub/core/db/repositories/project-settings.js';
 import { getEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
@@ -216,10 +216,10 @@ export async function dispatchSpecAuthor(slug: string, issueNumber: number): Pro
 
 export async function dispatchFixIssue(slug: string, issueNumber: number): Promise<void> {
   const projectForFlag = await getProject(slug);
-  const useM19 = projectForFlag != null ? getUseM19Pipeline(projectForFlag.id) : false;
-  logger.info('dispatchFixIssue: pipeline flag', { slug, issueNumber, useM19Pipeline: useM19 });
+  const useMultiAgent = projectForFlag != null ? getUseMultiAgentPipeline(projectForFlag.id) : false;
+  logger.info('dispatchFixIssue: pipeline flag', { slug, issueNumber, useMultiAgentPipeline: useMultiAgent });
 
-  if (useM19) {
+  if (useMultiAgent) {
     await dispatchSpecAuthor(slug, issueNumber);
     return;
   }
@@ -308,13 +308,13 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
 export async function dispatchParallelImplement(slug: string, issueNumber: number): Promise<void> {
   const projectForFlag = await getProject(slug);
   const projectId = projectForFlag?.id ?? slug;
-  const useM19 = projectForFlag != null ? getUseM19Pipeline(projectId) : false;
+  const useMultiAgent = projectForFlag != null ? getUseMultiAgentPipeline(projectId) : false;
   logger.info('dispatchParallelImplement: pipeline flag', {
     slug,
     issueNumber,
-    useM19Pipeline: useM19,
+    useMultiAgentPipeline: useMultiAgent,
   });
-  if (!useM19) {
+  if (!useMultiAgent) {
     logger.info('dispatchParallelImplement: pipeline disabled, skipping', { slug, issueNumber });
     return;
   }
@@ -475,8 +475,8 @@ export async function dispatchResolveConflict(slug: string, issueNumber: number)
 /** Run the QA holdout workflow for a single issue. Drops duplicate triggers for the same issue. */
 export async function dispatchQa(slug: string, issueNumber: number): Promise<void> {
   const projectForFlag = await getProject(slug);
-  const useM19 = projectForFlag != null ? getUseM19Pipeline(projectForFlag.id) : false;
-  logger.info('dispatchQa: pipeline flag', { slug, issueNumber, useM19Pipeline: useM19 });
+  const useMultiAgent = projectForFlag != null ? getUseMultiAgentPipeline(projectForFlag.id) : false;
+  logger.info('dispatchQa: pipeline flag', { slug, issueNumber, useMultiAgentPipeline: useMultiAgent });
   const maxParallel = await getMaxParallelAgents(slug);
   if (parallelLock.isInFlight(slug, issueNumber)) {
     logger.warn('dispatchQa: duplicate in-flight, dropping', { slug, issueNumber });
@@ -647,8 +647,8 @@ async function dispatchQaFailed(slug: string, issueNumber: number): Promise<void
 /** Run the Review holdout workflow for a single issue. Drops duplicate triggers for the same issue. */
 export async function dispatchReview(slug: string, issueNumber: number): Promise<void> {
   const projectForFlag = await getProject(slug);
-  const useM19 = projectForFlag != null ? getUseM19Pipeline(projectForFlag.id) : false;
-  logger.info('dispatchReview: pipeline flag', { slug, issueNumber, useM19Pipeline: useM19 });
+  const useMultiAgent = projectForFlag != null ? getUseMultiAgentPipeline(projectForFlag.id) : false;
+  logger.info('dispatchReview: pipeline flag', { slug, issueNumber, useMultiAgentPipeline: useMultiAgent });
   const maxParallel = await getMaxParallelAgents(slug);
   if (parallelLock.isInFlight(slug, issueNumber)) {
     logger.warn('dispatchReview: duplicate in-flight, dropping', { slug, issueNumber });
@@ -689,7 +689,7 @@ export async function dispatchReview(slug: string, issueNumber: number): Promise
     }
     const item = await source.getItem(issueNumber.toString());
 
-    const useConvergent = useM19;
+    const useConvergent = useMultiAgent;
 
     if (useConvergent) {
       await runConvergentReviewWorkflow(item, source, slug, item.repoRef ?? slug);
@@ -1255,8 +1255,8 @@ export async function dispatchResumeIssue(slug: string, issueNumber: number): Pr
   // spec-author and overwrite the stored spec/pipelineRunId.
   if (fromState === 'factory:in-progress') {
     const projectForFlag = await getProject(slug);
-    const useM19Resume = projectForFlag != null ? getUseM19Pipeline(projectForFlag.id) : false;
-    if (useM19Resume) {
+    const useMultiAgentResume = projectForFlag != null ? getUseMultiAgentPipeline(projectForFlag.id) : false;
+    if (useMultiAgentResume) {
       logger.warn(
         'dispatchResumeIssue: M19 parallel-implement not wired yet — skipping in-progress resume',
         { slug, issueNumber },

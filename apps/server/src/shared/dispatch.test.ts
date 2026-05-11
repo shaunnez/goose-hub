@@ -26,9 +26,9 @@ const mockRunParallelImplementWorkflow = vi.fn();
 vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   readProjectSettings: vi.fn().mockReturnValue(null),
   readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
-  getUseM19Pipeline: mockGetUseM19Pipeline,
-  setUseM19Pipeline: vi.fn(),
-  deriveUseM19Pipeline: vi.fn().mockReturnValue(false),
+  getUseMultiAgentPipeline: mockGetUseM19Pipeline,
+  setUseMultiAgentPipeline: vi.fn(),
+  deriveUseMultiAgentPipeline: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock('@goose-hub/core/engineering-specs/repository.js', () => ({
@@ -230,7 +230,7 @@ describe('dispatchInvestigate', () => {
 // ─── dispatchFixIssue ─────────────────────────────────────────────────────
 
 describe('dispatchFixIssue', () => {
-  it('reads useM19Pipeline flag and logs at entry', { timeout: 30_000 }, async () => {
+  it('reads useMultiAgentPipeline flag and logs at entry', { timeout: 30_000 }, async () => {
     mockGetSourceForSlug.mockResolvedValue(null);
 
     const { dispatchFixIssue } = await import('./dispatch.js');
@@ -240,7 +240,7 @@ describe('dispatchFixIssue', () => {
       expect.objectContaining({
         slug: 'no-source',
         issueNumber: 10,
-        useM19Pipeline: false,
+        useMultiAgentPipeline: false,
       }),
     );
   });
