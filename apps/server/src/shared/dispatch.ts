@@ -1062,11 +1062,19 @@ export async function dispatchGrillAndPrd(slug: string, issueNumber: number): Pr
     }
     const comments = await source.listComments(issueNumber.toString());
     const priorReplies = buildPriorReplies(comments);
+    const mockGrillDeps =
+      process.env.MOCK_AGENTS === 'true'
+        ? {
+            createWorktreeImpl: (_repo: string, _runId: string) => '/mock/worktree',
+            cleanupWorktreeImpl: (_runId: string) => undefined,
+          }
+        : undefined;
     await runGrillAndPrdWorkflow({
       workItem: item,
       stateSource: source,
       projectId: slug,
       priorReplies,
+      ...(mockGrillDeps != null ? { deps: mockGrillDeps } : {}),
     });
   } finally {
     parallelLock.release(slug, issueNumber);
