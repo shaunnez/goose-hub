@@ -19,4 +19,9 @@ describe('settings slice', () => {
     const mod = await import('./components/PipelinePanel');
     expect(typeof mod.PipelinePanel).toBe('function');
   });
+
+  it('exports DevReviewPanel', async () => {
+    const mod = await import('./components/DevReviewPanel');
+    expect(typeof mod.DevReviewPanel).toBe('function');
+  });
 });

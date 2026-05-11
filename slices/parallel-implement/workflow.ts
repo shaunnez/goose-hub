@@ -552,8 +552,8 @@ export async function runParallelImplementWorkflow(
       }
     }
 
-    // ── Dev-review advisor step (M19.12) ─────────────────────────────────────
-    // Runs ONCE after all WPs are committed and BEFORE the PR is opened.
+    // ── Dev-review advisor step with maxRevisionTurns loop (M19.25) ─────────
+    // Runs after all WPs are committed, before the PR is opened.
     // Budget guard: skip if perCycleMaxUsd <= 0.
     if (
       devReviewCfg.enabled &&
@@ -570,31 +570,14 @@ export async function runParallelImplementWorkflow(
         });
       } else {
         try {
-          const prDiff = getDiffFn(issueWorktreePath, 'main');
-          const devReviewOutput = await devReviewFn({
-            runId,
-            projectId,
-            workItemId: workItem.id,
-            workItem: {
-              title: workItem.title,
-              body: workItem.body,
-              number: Number(workItem.externalId),
-              priority: workItem.priority,
-            },
-            worktreePath: issueWorktreePath,
-            baseBranch: 'main',
-            stack,
-            runtime: deps.devReviewRuntime,
-            appendEvent: append,
-          });
-
-          // If blockers found, give the dev ONE additional turn. No second Codex pass.
-          if (
-            devReviewOutput.verdict === 'blockers-found' ||
-            devReviewOutput.verdict === 'inconclusive'
-          ) {
-            await devReviewResponseFn({
-              runId,
+          const maxTurns = Math.max(1, Math.min(5, devReviewCfg.maxRevisionTurns));
+          let turns = 0;
+          while (turns < maxTurns) {
+            // Each iteration = one Codex dev-review call.
+            // Use turn-scoped runId so multi-turn events are distinguishable.
+            const turnRunId = turns === 0 ? runId : `${runId}:turn-${turns}`;
+            const devReviewOutput = await devReviewFn({
+              runId: turnRunId,
               projectId,
               workItemId: workItem.id,
               workItem: {
@@ -603,20 +586,43 @@ export async function runParallelImplementWorkflow(
                 number: Number(workItem.externalId),
                 priority: workItem.priority,
               },
-              prDiff,
+              worktreePath: issueWorktreePath,
+              baseBranch: 'main',
+              stack,
+              runtime: deps.devReviewRuntime,
+              appendEvent: append,
+            });
+
+            if (devReviewOutput.verdict === 'approved') break;
+            // On the last turn, inconclusive = no more passes available; skip response.
+            if (devReviewOutput.verdict === 'inconclusive' && turns === maxTurns - 1) break;
+
+            // Re-fetch diff after any previous response commits so Codex sees current state.
+            const currentDiff = getDiffFn(issueWorktreePath, 'main');
+            await devReviewResponseFn({
+              runId: turnRunId,
+              projectId,
+              workItemId: workItem.id,
+              workItem: {
+                title: workItem.title,
+                body: workItem.body,
+                number: Number(workItem.externalId),
+                priority: workItem.priority,
+              },
+              prDiff: currentDiff,
               devReviewFindings: devReviewOutput.findings,
               worktreePath: issueWorktreePath,
               stack,
               runtime: deps.devReviewResponseRuntime,
               appendEvent: append,
             });
-            // Commit any edits the response agent made before opening the PR.
-            // orchestratorCommitAll uses --allow-empty, so no-ops safely when nothing changed.
+            // Commit response edits so the next iteration's Codex diff is current.
+            // orchestratorCommitAll uses --allow-empty, so no-ops when nothing changed.
             commitDevReviewFn(
               issueWorktreePath,
-              'chore: dev-review-response addressing/dismissing findings',
+              `chore: dev-review-response turn-${turns} addressing/dismissing findings`,
             );
-            // No second Codex dev-review pass — proceed straight to PR.
+            turns++;
           }
         } catch (devReviewErr) {
           // Dev-review failures are non-fatal. Log and continue to PR.
