@@ -7,6 +7,7 @@ dist
 .worktrees/
 goose-hub.db
 .e2e-pipeline.db
+.factory/
 claude-design/
 coverage/
 .codex
