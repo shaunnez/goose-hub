@@ -4,13 +4,14 @@ import type { ProjectConfigDto } from '@/lib/types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
+import { DevReviewPanel } from './DevReviewPanel';
 import { PipelinePanel } from './PipelinePanel';
 import { ProjectBudgetPanel } from './ProjectBudgetPanel';
 import { ProjectConfigPanel } from './ProjectConfigPanel';
 import { ProjectModelPanel } from './ProjectModelPanel';
 import { ReviewPanel } from './ReviewPanel';
 
-type Tab = 'config' | 'budgets' | 'models' | 'pipeline' | 'review';
+type Tab = 'config' | 'budgets' | 'models' | 'pipeline' | 'review' | 'dev-review';
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
@@ -91,21 +92,23 @@ export function SettingsPage() {
 
         {/* Tab bar */}
         <div className="flex gap-1 mb-6 border-b border-line">
-          {(['config', 'budgets', 'models', 'pipeline', 'review'] as Tab[]).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              className={[
-                'px-3 py-1.5 text-[12px] capitalize -mb-px border-b-2 transition-colors',
-                tab === t
-                  ? 'border-accent text-fg font-medium'
-                  : 'border-transparent text-fg-2 hover:text-fg',
-              ].join(' ')}
-            >
-              {t}
-            </button>
-          ))}
+          {(['config', 'budgets', 'models', 'pipeline', 'review', 'dev-review'] as Tab[]).map(
+            (t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTab(t)}
+                className={[
+                  'px-3 py-1.5 text-[12px] capitalize -mb-px border-b-2 transition-colors',
+                  tab === t
+                    ? 'border-accent text-fg font-medium'
+                    : 'border-transparent text-fg-2 hover:text-fg',
+                ].join(' ')}
+              >
+                {t}
+              </button>
+            ),
+          )}
         </div>
 
         {tab === 'config' && selectedConfig != null && (
@@ -121,6 +124,9 @@ export function SettingsPage() {
           <PipelinePanel slug={selectedConfig.slug} />
         )}
         {tab === 'review' && selectedConfig != null && <ReviewPanel slug={selectedConfig.slug} />}
+        {tab === 'dev-review' && selectedConfig != null && (
+          <DevReviewPanel slug={selectedConfig.slug} />
+        )}
 
         {!isLoading && !error && configs.length === 0 && (
           <div className="text-[13px] text-fg-3 py-16 text-center">

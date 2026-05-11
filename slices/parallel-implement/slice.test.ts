@@ -869,3 +869,482 @@ describe('dev-review e2e: perCycleMaxUsd=0 → budget-skipped, workflow continue
     expect(prOpened).toBeDefined();
   });
 });
+
+// ─── maxRevisionTurns=2 → 2 Codex passes ────────────────────────────────────
+
+describe('dev-review e2e: maxRevisionTurns=2 → 2 Codex dev-review passes', () => {
+  it('calls runDevReview twice and emits 2 dev-review.started events', async () => {
+    const wp1 = makeWp('WP1', ['core/a.ts']);
+    const spec = makeSpec([wp1]);
+    const { fn: appendEvent, events } = makeAppendEvent();
+
+    let devReviewCallCount = 0;
+
+    const mockFindings = [
+      {
+        severity: 'P1' as const,
+        category: 'correctness' as const,
+        file: 'core/a.ts',
+        line: 10,
+        summary: 'Missing null check',
+        suggestion: 'Add null guard',
+      },
+    ];
+
+    const mockResponseOutput: import(
+      '@goose-hub/skills/dev-review-response/schema.js',
+    ).DevReviewResponseOutput = {
+      findingDispositions: [
+        {
+          findingRef: 'core/a.ts:10',
+          severity: 'P1',
+          disposition: 'addressed',
+          reason: 'Added null guard',
+        },
+      ],
+      decisionSummaries: [
+        {
+          kind: 'DEV_REVIEW_ADDRESSED',
+          summary: 'Addressed P1 at core/a.ts:10',
+          evidence: 'core/a.ts:10',
+        },
+      ],
+    };
+
+    const commitMessages: string[] = [];
+
+    await runParallelImplementWorkflow(
+      makeWorkItem({ priority: 'high' }),
+      spec,
+      'pipeline-run-multi-turn',
+      makeStateSource(),
+      'goose-hub-self',
+      '/tmp/repo',
+      {
+        runtime: makeRuntime({ WP1: async () => makeOkResult('WP1') }),
+        devReviewConfigOverride: {
+          enabled: true,
+          triggerOn: 'all',
+          maxRevisionTurns: 2,
+          perCycleMaxUsd: 2.0,
+          timeoutMs: 180_000,
+        },
+        runDevReviewImpl: async (input) => {
+          devReviewCallCount++;
+          input.appendEvent({
+            projectId: input.projectId,
+            workItemId: input.workItemId,
+            kind: 'dev-review.started',
+            payload: { runId: `${input.runId}:dev-review`, worktreePath: input.worktreePath },
+            runId: `${input.runId}:dev-review`,
+          });
+          input.appendEvent({
+            projectId: input.projectId,
+            workItemId: input.workItemId,
+            kind: 'dev-review.completed',
+            payload: {
+              runId: `${input.runId}:dev-review`,
+              verdict: 'blockers-found',
+              findingCount: mockFindings.length,
+            },
+            runId: `${input.runId}:dev-review`,
+          });
+          return { verdict: 'blockers-found', findings: mockFindings, decisionSummaries: [] };
+        },
+        runDevReviewResponseImpl: async (input) => {
+          input.appendEvent({
+            projectId: input.projectId,
+            workItemId: input.workItemId,
+            kind: 'dev-review.response-completed',
+            payload: {
+              runId: `${input.runId}:dev-review-response`,
+              addressed: 1,
+              dismissed: 0,
+            },
+            runId: `${input.runId}:dev-review-response`,
+          });
+          return mockResponseOutput;
+        },
+        commitDevReviewResponseImpl: (_wt, msg) => {
+          commitMessages.push(msg);
+          return 'sha-commit';
+        },
+        createIssueWorktreeImpl: () => '/tmp/issue-wt',
+        createWpWorktreeImpl: (_repo, _runId, wpId) => `/tmp/wp-${wpId}`,
+        cleanupWpWorktreesImpl: () => undefined,
+        cleanupIssueWorktreeImpl: () => undefined,
+        orchestratorCommitWpImpl: () => 'sha1',
+        revertWpChangesImpl: () => undefined,
+        recordIterationImpl: () => undefined,
+        getLastStatusImpl: (_runId, wpId) => {
+          const seen = events.some(
+            (e) =>
+              (e.kind as string).includes('wp-committed') &&
+              (e.payload as { wpId?: string }).wpId === wpId,
+          );
+          return seen ? 'ok' : null;
+        },
+        openPRImpl: async () => ({
+          prNumber: 10,
+          prUrl: 'https://gh/pr/10',
+          branch: 'b',
+          base: 'main',
+        }),
+        getDiffImpl: () => 'diff --git a/core/a.ts b/core/a.ts\n+null check added',
+        appendEvent,
+      },
+    );
+
+    const devReviewStartedEvents = events.filter(
+      (e) => (e.kind as string) === 'dev-review.started',
+    );
+    const devReviewCompletedEvents = events.filter(
+      (e) => (e.kind as string) === 'dev-review.completed',
+    );
+    const responseCompletedEvents = events.filter(
+      (e) => (e.kind as string) === 'dev-review.response-completed',
+    );
+
+    // Exactly 2 Codex passes for maxRevisionTurns=2 with blockers-found each time.
+    expect(devReviewCallCount).toBe(2);
+    expect(devReviewStartedEvents).toHaveLength(2);
+    expect(devReviewCompletedEvents).toHaveLength(2);
+    // 2 response turns (one per blockers-found verdict, both non-last-turn for first, last-turn for second).
+    // Turn 0: blockers-found → response; turn 1: blockers-found, last turn, NOT inconclusive → response.
+    expect(responseCompletedEvents).toHaveLength(2);
+    // Commits include turn-N suffix.
+    expect(commitMessages.some((m) => m.includes('turn-0'))).toBe(true);
+    expect(commitMessages.some((m) => m.includes('turn-1'))).toBe(true);
+    // PR still opened after loop.
+    const prOpened = events.find((e) => (e.kind as string) === 'pr.opened');
+    expect(prOpened).toBeDefined();
+  });
+});
+
+// ─── maxRevisionTurns=1 default: approved verdict exits without response ──────
+
+describe('dev-review e2e: maxRevisionTurns=1 (default) with approved verdict exits early', () => {
+  it('emits 1 dev-review.started and no response when approved', async () => {
+    const wp1 = makeWp('WP1', ['core/d.ts']);
+    const spec = makeSpec([wp1]);
+    const { fn: appendEvent, events } = makeAppendEvent();
+
+    await runParallelImplementWorkflow(
+      makeWorkItem({ priority: 'high' }),
+      spec,
+      'pipeline-run-approved',
+      makeStateSource(),
+      'goose-hub-self',
+      '/tmp/repo',
+      {
+        runtime: makeRuntime({ WP1: async () => makeOkResult('WP1') }),
+        devReviewConfigOverride: {
+          enabled: true,
+          triggerOn: 'all',
+          maxRevisionTurns: 1,
+          perCycleMaxUsd: 2.0,
+          timeoutMs: 180_000,
+        },
+        runDevReviewImpl: async (input) => {
+          input.appendEvent({
+            projectId: input.projectId,
+            workItemId: input.workItemId,
+            kind: 'dev-review.started',
+            payload: { runId: `${input.runId}:dev-review`, worktreePath: input.worktreePath },
+            runId: `${input.runId}:dev-review`,
+          });
+          input.appendEvent({
+            projectId: input.projectId,
+            workItemId: input.workItemId,
+            kind: 'dev-review.completed',
+            payload: { runId: `${input.runId}:dev-review`, verdict: 'approved', findingCount: 0 },
+            runId: `${input.runId}:dev-review`,
+          });
+          return { verdict: 'approved', findings: [], decisionSummaries: [] };
+        },
+        runDevReviewResponseImpl: async () => {
+          throw new Error('runDevReviewResponse should NOT be called when verdict is approved');
+        },
+        createIssueWorktreeImpl: () => '/tmp/issue-wt',
+        createWpWorktreeImpl: (_repo, _runId, wpId) => `/tmp/wp-${wpId}`,
+        cleanupWpWorktreesImpl: () => undefined,
+        cleanupIssueWorktreeImpl: () => undefined,
+        orchestratorCommitWpImpl: () => 'sha1',
+        revertWpChangesImpl: () => undefined,
+        recordIterationImpl: () => undefined,
+        getLastStatusImpl: (_runId, wpId) => {
+          const seen = events.some(
+            (e) =>
+              (e.kind as string).includes('wp-committed') &&
+              (e.payload as { wpId?: string }).wpId === wpId,
+          );
+          return seen ? 'ok' : null;
+        },
+        openPRImpl: async () => ({
+          prNumber: 11,
+          prUrl: 'https://gh/pr/11',
+          branch: 'b',
+          base: 'main',
+        }),
+        getDiffImpl: () => '',
+        appendEvent,
+      },
+    );
+
+    const devReviewStartedEvents = events.filter(
+      (e) => (e.kind as string) === 'dev-review.started',
+    );
+    const responseCompletedEvents = events.filter(
+      (e) => (e.kind as string) === 'dev-review.response-completed',
+    );
+
+    // Exactly 1 Codex pass, no response.
+    expect(devReviewStartedEvents).toHaveLength(1);
+    expect(responseCompletedEvents).toHaveLength(0);
+    // PR still opened.
+    expect(events.find((e) => (e.kind as string) === 'pr.opened')).toBeDefined();
+  });
+});
+
+// ─── triggerOn priority matching: low does not trigger when set to medium+ ───
+
+describe('dev-review: triggerOn priority:medium+ does not trigger for priority:low', () => {
+  it('skips dev-review entirely for low priority work item', async () => {
+    const wp1 = makeWp('WP1', ['core/e.ts']);
+    const spec = makeSpec([wp1]);
+    const { fn: appendEvent, events } = makeAppendEvent();
+
+    await runParallelImplementWorkflow(
+      makeWorkItem({ priority: 'low' }),
+      spec,
+      'pipeline-run-low-priority',
+      makeStateSource(),
+      'goose-hub-self',
+      '/tmp/repo',
+      {
+        runtime: makeRuntime({ WP1: async () => makeOkResult('WP1') }),
+        devReviewConfigOverride: {
+          enabled: true,
+          triggerOn: 'priority:medium+',
+          maxRevisionTurns: 2,
+          perCycleMaxUsd: 2.0,
+          timeoutMs: 180_000,
+        },
+        runDevReviewImpl: async () => {
+          throw new Error('runDevReview should NOT be called for low priority');
+        },
+        createIssueWorktreeImpl: () => '/tmp/issue-wt',
+        createWpWorktreeImpl: (_repo, _runId, wpId) => `/tmp/wp-${wpId}`,
+        cleanupWpWorktreesImpl: () => undefined,
+        cleanupIssueWorktreeImpl: () => undefined,
+        orchestratorCommitWpImpl: () => 'sha1',
+        revertWpChangesImpl: () => undefined,
+        recordIterationImpl: () => undefined,
+        getLastStatusImpl: (_runId, wpId) => {
+          const seen = events.some(
+            (e) =>
+              (e.kind as string).includes('wp-committed') &&
+              (e.payload as { wpId?: string }).wpId === wpId,
+          );
+          return seen ? 'ok' : null;
+        },
+        openPRImpl: async () => ({
+          prNumber: 12,
+          prUrl: 'https://gh/pr/12',
+          branch: 'b',
+          base: 'main',
+        }),
+        getDiffImpl: () => '',
+        appendEvent,
+      },
+    );
+
+    // No dev-review events for low priority item.
+    expect(events.find((e) => (e.kind as string) === 'dev-review.started')).toBeUndefined();
+    expect(events.find((e) => (e.kind as string) === 'dev-review.budget-skipped')).toBeUndefined();
+    // PR still opened.
+    expect(events.find((e) => (e.kind as string) === 'pr.opened')).toBeDefined();
+  });
+
+  it('triggers dev-review for medium priority with priority:medium+ config', async () => {
+    const wp1 = makeWp('WP1', ['core/f.ts']);
+    const spec = makeSpec([wp1]);
+    const { fn: appendEvent, events } = makeAppendEvent();
+
+    await runParallelImplementWorkflow(
+      makeWorkItem({ priority: 'medium' }),
+      spec,
+      'pipeline-run-medium-priority',
+      makeStateSource(),
+      'goose-hub-self',
+      '/tmp/repo',
+      {
+        runtime: makeRuntime({ WP1: async () => makeOkResult('WP1') }),
+        devReviewConfigOverride: {
+          enabled: true,
+          triggerOn: 'priority:medium+',
+          maxRevisionTurns: 1,
+          perCycleMaxUsd: 2.0,
+          timeoutMs: 180_000,
+        },
+        runDevReviewImpl: async (input) => {
+          input.appendEvent({
+            projectId: input.projectId,
+            workItemId: input.workItemId,
+            kind: 'dev-review.started',
+            payload: { runId: `${input.runId}:dev-review`, worktreePath: input.worktreePath },
+            runId: `${input.runId}:dev-review`,
+          });
+          input.appendEvent({
+            projectId: input.projectId,
+            workItemId: input.workItemId,
+            kind: 'dev-review.completed',
+            payload: { runId: `${input.runId}:dev-review`, verdict: 'approved', findingCount: 0 },
+            runId: `${input.runId}:dev-review`,
+          });
+          return { verdict: 'approved', findings: [], decisionSummaries: [] };
+        },
+        createIssueWorktreeImpl: () => '/tmp/issue-wt',
+        createWpWorktreeImpl: (_repo, _runId, wpId) => `/tmp/wp-${wpId}`,
+        cleanupWpWorktreesImpl: () => undefined,
+        cleanupIssueWorktreeImpl: () => undefined,
+        orchestratorCommitWpImpl: () => 'sha1',
+        revertWpChangesImpl: () => undefined,
+        recordIterationImpl: () => undefined,
+        getLastStatusImpl: (_runId, wpId) => {
+          const seen = events.some(
+            (e) =>
+              (e.kind as string).includes('wp-committed') &&
+              (e.payload as { wpId?: string }).wpId === wpId,
+          );
+          return seen ? 'ok' : null;
+        },
+        openPRImpl: async () => ({
+          prNumber: 13,
+          prUrl: 'https://gh/pr/13',
+          branch: 'b',
+          base: 'main',
+        }),
+        getDiffImpl: () => '',
+        appendEvent,
+      },
+    );
+
+    // dev-review DID run for medium priority.
+    expect(events.find((e) => (e.kind as string) === 'dev-review.started')).toBeDefined();
+  });
+});
+
+// ─── Cost telemetry: multi-turn = multiple dev-review.completed events ────────
+
+describe('dev-review cost telemetry: multi-turn produces multiple dev-review.completed events', () => {
+  it('emits N dev-review.completed events for N Codex passes', async () => {
+    const wp1 = makeWp('WP1', ['core/g.ts']);
+    const spec = makeSpec([wp1]);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const MAX_TURNS = 3;
+
+    await runParallelImplementWorkflow(
+      makeWorkItem({ priority: 'critical' }),
+      spec,
+      'pipeline-run-cost-telemetry',
+      makeStateSource(),
+      'goose-hub-self',
+      '/tmp/repo',
+      {
+        runtime: makeRuntime({ WP1: async () => makeOkResult('WP1') }),
+        devReviewConfigOverride: {
+          enabled: true,
+          triggerOn: 'all',
+          maxRevisionTurns: MAX_TURNS,
+          perCycleMaxUsd: 5.0,
+          timeoutMs: 180_000,
+        },
+        runDevReviewImpl: async (input) => {
+          input.appendEvent({
+            projectId: input.projectId,
+            workItemId: input.workItemId,
+            kind: 'dev-review.started',
+            payload: { runId: `${input.runId}:dev-review`, worktreePath: input.worktreePath },
+            runId: `${input.runId}:dev-review`,
+          });
+          input.appendEvent({
+            projectId: input.projectId,
+            workItemId: input.workItemId,
+            kind: 'dev-review.completed',
+            payload: {
+              runId: `${input.runId}:dev-review`,
+              verdict: 'blockers-found',
+              findingCount: 1,
+            },
+            runId: `${input.runId}:dev-review`,
+          });
+          return {
+            verdict: 'blockers-found',
+            findings: [
+              {
+                severity: 'P2' as const,
+                category: 'performance' as const,
+                file: 'core/g.ts',
+                line: 5,
+                summary: 'Perf issue',
+                suggestion: 'Cache result',
+              },
+            ],
+            decisionSummaries: [],
+          };
+        },
+        runDevReviewResponseImpl: async (input) => {
+          input.appendEvent({
+            projectId: input.projectId,
+            workItemId: input.workItemId,
+            kind: 'dev-review.response-completed',
+            payload: { runId: `${input.runId}:dev-review-response`, addressed: 1, dismissed: 0 },
+            runId: `${input.runId}:dev-review-response`,
+          });
+          return {
+            findingDispositions: [
+              {
+                findingRef: 'core/g.ts:5',
+                severity: 'P2',
+                disposition: 'addressed' as const,
+                reason: 'Cached',
+              },
+            ],
+            decisionSummaries: [],
+          };
+        },
+        commitDevReviewResponseImpl: () => 'sha-x',
+        createIssueWorktreeImpl: () => '/tmp/issue-wt',
+        createWpWorktreeImpl: (_repo, _runId, wpId) => `/tmp/wp-${wpId}`,
+        cleanupWpWorktreesImpl: () => undefined,
+        cleanupIssueWorktreeImpl: () => undefined,
+        orchestratorCommitWpImpl: () => 'sha1',
+        revertWpChangesImpl: () => undefined,
+        recordIterationImpl: () => undefined,
+        getLastStatusImpl: (_runId, wpId) => {
+          const seen = events.some(
+            (e) =>
+              (e.kind as string).includes('wp-committed') &&
+              (e.payload as { wpId?: string }).wpId === wpId,
+          );
+          return seen ? 'ok' : null;
+        },
+        openPRImpl: async () => ({
+          prNumber: 14,
+          prUrl: 'https://gh/pr/14',
+          branch: 'b',
+          base: 'main',
+        }),
+        getDiffImpl: () => 'diff --git a/core/g.ts',
+        appendEvent,
+      },
+    );
+
+    const completedEvents = events.filter((e) => (e.kind as string) === 'dev-review.completed');
+    // One completed event per Codex call = MAX_TURNS calls.
+    expect(completedEvents).toHaveLength(MAX_TURNS);
+    // PR still opened after exhausting turns.
+    expect(events.find((e) => (e.kind as string) === 'pr.opened')).toBeDefined();
+  });
+});
