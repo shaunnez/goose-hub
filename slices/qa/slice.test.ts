@@ -1330,6 +1330,137 @@ describe('runQaWorkflow', () => {
         expect((call[2] as { runId: string }).runId).toBe('impl-run-xyz');
       }
     });
+
+    it('emits deterministic tier events under the QA runId, not implRunId', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: { worktreePath: '/wt/abc', devRunId: 'impl-run-xyz' },
+          createdAt: '',
+        },
+      ]);
+      mockGetEngineeringSpec.mockReturnValue(makeSpecRow());
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      // runTierImpl that calls the injected appendEvent (mirrors the real
+      // runTier signature: deps.appendEvent emits per-tier events).
+      const runTierImpl = vi.fn(
+        async (tier: 1 | 2 | 3, _spec: unknown, artifacts: unknown, callDeps?: unknown) => {
+          const a = artifacts as {
+            projectId: string;
+            workItemId?: string | null;
+            runId: string;
+          };
+          const ce = callDeps as { appendEvent?: (input: unknown) => unknown } | undefined;
+          ce?.appendEvent?.({
+            projectId: a.projectId,
+            workItemId: a.workItemId ?? null,
+            kind:
+              tier === 1
+                ? 'qa.structural-passed'
+                : tier === 2
+                  ? 'qa.functional-passed'
+                  : 'qa.regression-passed',
+            payload: { tier, runId: a.runId },
+            runId: a.runId,
+          });
+          return makePassingTier(tier);
+        },
+      );
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn().mockResolvedValue(null),
+        runTierImpl,
+      });
+
+      const tierEvents = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.filter(([e]) =>
+          ['qa.structural-passed', 'qa.functional-passed', 'qa.regression-passed'].includes(e.kind),
+        );
+      expect(tierEvents.length).toBe(3);
+      // Event-row runId must NOT be the impl run; should be a fresh UUID.
+      for (const [event] of tierEvents) {
+        expect(event.runId).not.toBe('impl-run-xyz');
+        expect(typeof event.runId).toBe('string');
+      }
+    });
+
+    it('routes getEngineeringSpec failure through the QA error path', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: { worktreePath: '/wt/abc', devRunId: 'dev-run-1' },
+          createdAt: '',
+        },
+      ]);
+      mockGetEngineeringSpec.mockImplementation(() => {
+        throw new Error('bad spec JSON');
+      });
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn().mockResolvedValue(null),
+        runTierImpl: vi.fn(),
+      });
+
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-qa',
+        'factory:needs-human',
+      );
+      const failed = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'agent.run-failed');
+      expect(failed).toBeDefined();
+    });
+
+    it('routes runTier failure through the QA error path', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: { worktreePath: '/wt/abc', devRunId: 'dev-run-1' },
+          createdAt: '',
+        },
+      ]);
+      mockGetEngineeringSpec.mockReturnValue(makeSpecRow());
+
+      const runTierImpl = vi.fn(async () => {
+        throw new Error('tier 1 carry-forward query exploded');
+      });
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn().mockResolvedValue(null),
+        runTierImpl,
+      });
+
+      expect(mockRun).not.toHaveBeenCalled();
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-qa',
+        'factory:needs-human',
+      );
+      const failed = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'agent.run-failed');
+      expect(failed).toBeDefined();
+      const payload = failed?.[0].payload as { error: string };
+      expect(payload.error).toContain('carry-forward');
+    });
   });
 
   // ─── M19.19: synthetic output unit checks ─────────────────────────────────

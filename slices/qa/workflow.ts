@@ -148,9 +148,17 @@ async function runDeterministicTiers(opts: {
     regressionPolicy: opts.regressionPolicy,
   };
 
+  // The `runArtifacts.runId` field is `implRunId` because verifyRegression's
+  // wp_iterations carry-forward query is keyed by the implementation run that
+  // built the worktree. But the EVENT stream rows we emit for tier 1/2/3
+  // pass/fail belong to this QA run — rewrite the runId before persisting so
+  // run-scoped queries don't conflate implement and QA stages.
+  const tierAppendEvent = (input: Parameters<typeof eventStore.appendEvent>[0]) =>
+    eventStore.appendEvent({ ...input, runId: opts.runId });
+
   for (const tier of [1, 2, 3] as const) {
     const result = await opts.runTier(tier, opts.spec, runArtifacts, {
-      appendEvent: (input) => eventStore.appendEvent(input),
+      appendEvent: tierAppendEvent,
     });
     tierResults[tier] = result;
     if (!result.passed) {
@@ -288,117 +296,121 @@ export async function runQaWorkflow(
 
   const devTestsRun = findDevTestsRun(workItem.id);
 
-  // ─── Deterministic 3-tier verify (M19.19) ──────────────────────────────────
-  // Pulls the engineering spec persisted by spec-author (M19.17) and runs the
-  // structural / functional / regression checks against the worktree. Ground
-  // truth here precludes the QA agent from fabricating tier verdicts.
-  const specRecord = getSpec(projectSlug, workItem.id);
-  let deterministic: DeterministicVerifyOutcome | null = null;
-  if (specRecord != null && workspaceDir != null) {
-    const implRunId = prHints.devRunId ?? prHints.pipelineRunId ?? runId;
-    deterministic = await runDeterministicTiers({
-      spec: specRecord.spec as EngineeringSpec,
-      worktreePath: workspaceDir,
-      implRunId,
-      projectSlug,
-      workItemId: workItem.id,
-      runId,
-      regressionPolicy,
-      runTier,
-    });
-  }
-
-  // Tier 1/2 fail, or tier 3 fail with 'escalate' — synthesize qa.completed
-  // and skip the agent entirely. Retry-counter routes to needs-fix loop or
-  // escalates to needs-human exactly like a non-deterministic QA failure.
-  if (deterministic?.shortCircuitTier != null) {
-    const failedTier = deterministic.shortCircuitTier;
-    const synthetic = buildSyntheticQaOutput({
-      tierResults: deterministic.tierResults,
-      failedTier,
-      regressionPolicy,
-    });
-
-    eventStore.appendEvent({
-      projectId: projectSlug,
-      workItemId: workItem.id,
-      kind: 'qa.completed',
-      payload: {
-        verdict: synthetic.verdict,
-        overallScore: synthetic.overallScore,
-        threshold: synthetic.threshold,
-        tierResults: synthetic.tierResults,
-        qualityScores: synthetic.qualityScores,
-        deterministic: true,
-        agentSkipped: true,
-      },
-      runId,
-    });
-
-    for (const summary of synthetic.decisionSummaries) {
-      eventStore.appendEvent({
-        projectId: projectSlug,
-        workItemId: workItem.id,
-        kind: 'agent.decision-summary',
-        payload: { skill: 'qa', ...summary },
-        runId,
-      });
-    }
-
-    const needsEscalation = shouldEscalateQa(priorEvents);
-    const nextState: StateName = needsEscalation ? 'factory:needs-human' : 'factory:qa-failed';
-    if (needsEscalation) {
-      eventStore.appendEvent({
-        projectId: projectSlug,
-        workItemId: workItem.id,
-        kind: 'agent.retry-escalated',
-        payload: { stage: 'qa', maxRetries: DEFAULT_MAX_RETRIES, runId },
-        runId,
-      });
-    }
-
-    await stateSource.comment(
-      workItem.externalId,
-      buildAgentComment(
-        'QA',
-        `Tier ${failedTier} Failed (deterministic)`,
-        `Deterministic verification failed at tier ${failedTier} — QA agent skipped. Transitioning to ${nextState}.`,
-        [
-          `Tier ${failedTier} findings: ${
-            deterministic.tierResults[failedTier]?.findings.length ?? 0
-          }`,
-          `Next state: ${nextState}`,
-        ],
-      ),
-    );
-    accumulatePersonaStats({
-      personaName: personaId,
-      role: 'qa',
-      outcome: 'failure',
-      qualityScore: 0,
-    });
-    await stateSource.transitionState(workItem.externalId, 'factory:needs-qa', nextState);
-    return;
-  }
-
-  // Tier 3 fail with 'ignore' is non-blocking: runTier already emitted
-  // qa.regression-passed (since verifyRegression flips passed=true under
-  // 'ignore') and the warning findings ride along on the qa.completed payload
-  // via tierResults.regression. No extra event needed.
-
-  // Run tests deterministically before invoking the QA agent so the agent
-  // grades against real numbers instead of re-running the suite. Failures
-  // here are non-fatal — the agent still runs without testRun.
-  const testCommand = DEFAULT_TEST_COMMAND;
-  const testRun = workspaceDir != null ? await runTests(workspaceDir, testCommand) : null;
-  const [webPort, apiPort] =
-    workspaceDir != null ? await Promise.all([findFreePort(), findFreePort()]) : [null, null];
-
-  const deterministicTierResults = deterministic
-    ? toAgentTierResults(deterministic.tierResults)
-    : undefined;
-
   try {
+    // ─── Deterministic 3-tier verify (M19.19) ────────────────────────────────
+    // Pulls the engineering spec persisted by spec-author (M19.17) and runs
+    // the structural / functional / regression checks against the worktree.
+    // Ground truth here precludes the QA agent from fabricating tier verdicts.
+    // Lives inside the outer try/catch so getSpec/runDeterministicTiers
+    // failures route through the standard QA escalation path
+    // (agent.run-failed + factory:needs-human) instead of leaving the work
+    // item stuck in factory:needs-qa.
+    const specRecord = getSpec(projectSlug, workItem.id);
+    let deterministic: DeterministicVerifyOutcome | null = null;
+    if (specRecord != null && workspaceDir != null) {
+      const implRunId = prHints.devRunId ?? prHints.pipelineRunId ?? runId;
+      deterministic = await runDeterministicTiers({
+        spec: specRecord.spec as EngineeringSpec,
+        worktreePath: workspaceDir,
+        implRunId,
+        projectSlug,
+        workItemId: workItem.id,
+        runId,
+        regressionPolicy,
+        runTier,
+      });
+    }
+
+    // Tier 1/2 fail, or tier 3 fail with 'escalate' — synthesize qa.completed
+    // and skip the agent entirely. Retry-counter routes to needs-fix loop or
+    // escalates to needs-human exactly like a non-deterministic QA failure.
+    if (deterministic?.shortCircuitTier != null) {
+      const failedTier = deterministic.shortCircuitTier;
+      const synthetic = buildSyntheticQaOutput({
+        tierResults: deterministic.tierResults,
+        failedTier,
+        regressionPolicy,
+      });
+
+      eventStore.appendEvent({
+        projectId: projectSlug,
+        workItemId: workItem.id,
+        kind: 'qa.completed',
+        payload: {
+          verdict: synthetic.verdict,
+          overallScore: synthetic.overallScore,
+          threshold: synthetic.threshold,
+          tierResults: synthetic.tierResults,
+          qualityScores: synthetic.qualityScores,
+          deterministic: true,
+          agentSkipped: true,
+        },
+        runId,
+      });
+
+      for (const summary of synthetic.decisionSummaries) {
+        eventStore.appendEvent({
+          projectId: projectSlug,
+          workItemId: workItem.id,
+          kind: 'agent.decision-summary',
+          payload: { skill: 'qa', ...summary },
+          runId,
+        });
+      }
+
+      const needsEscalation = shouldEscalateQa(priorEvents);
+      const nextState: StateName = needsEscalation ? 'factory:needs-human' : 'factory:qa-failed';
+      if (needsEscalation) {
+        eventStore.appendEvent({
+          projectId: projectSlug,
+          workItemId: workItem.id,
+          kind: 'agent.retry-escalated',
+          payload: { stage: 'qa', maxRetries: DEFAULT_MAX_RETRIES, runId },
+          runId,
+        });
+      }
+
+      await stateSource.comment(
+        workItem.externalId,
+        buildAgentComment(
+          'QA',
+          `Tier ${failedTier} Failed (deterministic)`,
+          `Deterministic verification failed at tier ${failedTier} — QA agent skipped. Transitioning to ${nextState}.`,
+          [
+            `Tier ${failedTier} findings: ${
+              deterministic.tierResults[failedTier]?.findings.length ?? 0
+            }`,
+            `Next state: ${nextState}`,
+          ],
+        ),
+      );
+      accumulatePersonaStats({
+        personaName: personaId,
+        role: 'qa',
+        outcome: 'failure',
+        qualityScore: 0,
+      });
+      await stateSource.transitionState(workItem.externalId, 'factory:needs-qa', nextState);
+      return;
+    }
+
+    // Tier 3 fail with 'ignore' is non-blocking: runTier already emitted
+    // qa.regression-passed (since verifyRegression flips passed=true under
+    // 'ignore') and the warning findings ride along on the qa.completed
+    // payload via tierResults.regression. No extra event needed.
+
+    // Run tests deterministically before invoking the QA agent so the agent
+    // grades against real numbers instead of re-running the suite. Failures
+    // here are non-fatal — the agent still runs without testRun.
+    const testCommand = DEFAULT_TEST_COMMAND;
+    const testRun = workspaceDir != null ? await runTests(workspaceDir, testCommand) : null;
+    const [webPort, apiPort] =
+      workspaceDir != null ? await Promise.all([findFreePort(), findFreePort()]) : [null, null];
+
+    const deterministicTierResults = deterministic
+      ? toAgentTierResults(deterministic.tierResults)
+      : undefined;
+
     const qaResult = await runtime.run({
       runId,
       role: 'qa',
