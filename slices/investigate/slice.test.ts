@@ -16,6 +16,7 @@ const mockCrossValidate = vi.fn();
 const mockInvokeSkill = vi.fn();
 const mockPersistScoutReport = vi.fn();
 const mockLookupWorkItemSymbols = vi.fn();
+const mockExtractIdentifiers = vi.fn();
 
 vi.mock('@goose-hub/core/agent-runtime/swarm.js', () => ({
   dispatchWave: (...args: unknown[]) => mockDispatchWave(...args),
@@ -23,6 +24,7 @@ vi.mock('@goose-hub/core/agent-runtime/swarm.js', () => ({
 
 vi.mock('@goose-hub/core/symbol-index/lookup.js', () => ({
   lookupWorkItemSymbols: (...args: unknown[]) => mockLookupWorkItemSymbols(...args),
+  extractIdentifiers: (...args: unknown[]) => mockExtractIdentifiers(...args),
 }));
 
 vi.mock('@goose-hub/core/agent-runtime/cross-validate.js', () => ({
@@ -200,6 +202,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockAccumulatePersonaStats.mockClear();
   mockLookupWorkItemSymbols.mockReturnValue([]);
+  mockExtractIdentifiers.mockReturnValue([]);
 
   // Default happy path
   mockDispatchWave.mockResolvedValue(makeWaveResult());

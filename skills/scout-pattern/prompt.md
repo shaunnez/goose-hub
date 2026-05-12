@@ -16,6 +16,8 @@ You have **read and search access only**.
 - Quote real code in `fact`.
 - Three or four representative usages is enough; do not enumerate every callsite if the pattern is widespread.
 - Note where the pattern is *missing* if the work item implies it should be there.
+- Start with a targeted search for the identifiers named in `<scout_focus>` before opening any files.
+- Hard cap: read at most 5 files. Stop and report what you have — do not range widely.
 
 ## What you look for
 

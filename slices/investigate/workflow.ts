@@ -14,7 +14,7 @@ import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { persistScoutReport } from '@goose-hub/core/scout-reports/repository.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
-import { lookupWorkItemSymbols } from '@goose-hub/core/symbol-index/lookup.js';
+import { extractIdentifiers, lookupWorkItemSymbols } from '@goose-hub/core/symbol-index/lookup.js';
 import {
   cleanupWorktree,
   createWorktree,
@@ -129,11 +129,19 @@ export async function runInvestigateWorkflow(
     // Pass worktreePath so hints are filtered to files that actually exist in the target repo,
     // preventing Goose Hub-internal paths from leaking into non-goose-hub investigations.
     const symbolIndexHints = lookupWorkItemSymbols(workItem.title, workItem.body, { worktreePath });
-    const wave1Scouts = WAVE_1_SCOUTS.map((spec) =>
-      spec.scoutName === 'scout-code-path' && symbolIndexHints.length > 0
-        ? { ...spec, extraContext: { symbolIndexHints } }
-        : spec,
-    );
+
+    const patternTokens = extractIdentifiers(`${workItem.title} ${workItem.body}`).slice(0, 4);
+    const patternFocus =
+      patternTokens.length > 0
+        ? `Find existing usages of: ${patternTokens.join(', ')} — patterns this fix must follow`
+        : 'Identify existing patterns the fix should follow';
+
+    const wave1Scouts = WAVE_1_SCOUTS.map((spec) => {
+      if (spec.scoutName === 'scout-code-path' && symbolIndexHints.length > 0)
+        return { ...spec, extraContext: { symbolIndexHints } };
+      if (spec.scoutName === 'scout-pattern') return { ...spec, scoutFocus: patternFocus };
+      return spec;
+    });
 
     // Wave 1 — parallel fact-gathering
     const wave1Result = await dispatchWave({
