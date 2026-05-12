@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import {
   resolveBudgetsForProject,
@@ -8,6 +7,7 @@ import {
 } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
+import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
@@ -87,7 +87,7 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
   }
 
   const reposContext = readReposContext(slug);
-  const runtime = new ClaudeCliRuntime();
+  const runtime = selectRuntime({ configRuntime: projectConfig?.agentConfig?.runtime ?? 'auto' });
   const triagePrompt = readPromptWithContext('triage', slug);
   const repoMatchPrompt = readPromptWithContext('repo-match', slug);
   const triageJsonSchema = toJsonSchema(TriageOutputSchema);

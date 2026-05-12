@@ -168,4 +168,19 @@ describe('invokeSkill', () => {
     // echo-test modelPin is 'sonnet' — resolved model should contain 'sonnet'
     expect(runtime.calls[0].modelOverride).toMatch(/sonnet/i);
   });
+
+  it('runtimeOverride suppresses DB provider model — modelOverride stays on skill-budget default', async () => {
+    // Guard against a DB row with primary_provider:'codex' leaking gpt-5-codex into a
+    // ClaudeCliRuntime call when the caller has provided runtimeOverride.
+    const runtime = mockRuntime();
+    await invokeSkill({
+      skillName: 'echo-test',
+      projectId: uid(),
+      runId: uid(),
+      context: VALID_ECHO_CTX,
+      overrides: { runtimeOverride: runtime },
+    });
+    expect(runtime.calls[0].modelOverride).not.toMatch(/codex/i);
+    expect(runtime.calls[0].modelOverride).toMatch(/sonnet/i);
+  });
 });

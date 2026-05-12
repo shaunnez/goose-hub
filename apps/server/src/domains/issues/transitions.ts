@@ -15,6 +15,7 @@ import { cleanupWorktree } from '@goose-hub/core/workspaces/worktree.js';
 import { CACHE_KEY, bustCache } from '#shared/cache.js';
 import { dispatchRetro } from '#shared/dispatch.js';
 import type { Result } from '#shared/middleware.js';
+import { sliceUrl } from '#shared/slice-url.js';
 import { getSourceForSlug } from '#shared/source.js';
 import { getRepoRef } from './internal.js';
 
@@ -39,9 +40,9 @@ type RunMergeDecisionFn = (input: {
 }) => MergeDecisionResult;
 
 async function loadMergeDecision(): Promise<RunMergeDecisionFn> {
-  const mod = (await import(
-    new URL('../../../../../slices/merge-decision/workflow.js', import.meta.url).href
-  )) as { runMergeDecision: RunMergeDecisionFn };
+  const mod = (await import(sliceUrl('merge-decision'))) as {
+    runMergeDecision: RunMergeDecisionFn;
+  };
   return mod.runMergeDecision;
 }
 

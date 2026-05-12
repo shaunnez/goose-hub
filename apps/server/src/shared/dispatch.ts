@@ -17,6 +17,7 @@ import { runRetroForItem } from '../domains/workflows/retro-batch.js';
 import { maybeFireSprintReview } from '../domains/workflows/sprint-review-trigger.js';
 import { runTriageBatch } from '../domains/workflows/triage-batch.js';
 import { getProject } from './projects.js';
+import { REPO_ROOT, sliceUrl } from './slice-url.js';
 import { getSourceForSlug } from './source.js';
 
 const _triageBatchInFlight = new Set<string>();
@@ -72,11 +73,8 @@ async function getMaxParallelAgents(slug: string): Promise<number> {
  *
  * Slice workflows are dynamic-imported by URL because `slices/` lives at the
  * repo root (outside any workspace package) — see FACTORY_RULES rule 28a.
- * Resolving them via `import.meta.url` keeps the dispatcher portable across
- * worktrees.
+ * URLs are resolved via `sliceUrl()` from `./slice-url.js`.
  */
-
-const REPO_ROOT = join(import.meta.dirname, '../../../..');
 
 /** Run the triage batch for a project. Coalesces concurrent calls per slug. */
 export function dispatchTriageBatch(slug: string): Promise<void> {
@@ -117,9 +115,7 @@ export async function dispatchInvestigate(slug: string, issueNumber: number): Pr
   }
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
-    const { runInvestigateWorkflow } = (await import(
-      new URL('../../../../slices/investigate/workflow.js', import.meta.url).href
-    )) as {
+    const { runInvestigateWorkflow } = (await import(sliceUrl('investigate'))) as {
       runInvestigateWorkflow: (
         item: unknown,
         source: unknown,
@@ -173,9 +169,7 @@ export async function dispatchSpecAuthor(slug: string, issueNumber: number): Pro
   }
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
-    const { runSpecAuthorWorkflow } = (await import(
-      new URL('../../../../slices/spec-author/workflow.js', import.meta.url).href
-    )) as {
+    const { runSpecAuthorWorkflow } = (await import(sliceUrl('spec-author'))) as {
       runSpecAuthorWorkflow: (
         item: unknown,
         source: unknown,
@@ -249,9 +243,7 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
   }
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
-    const { runFixIssueWorkflow } = (await import(
-      new URL('../../../../slices/fix-issue/workflow.js', import.meta.url).href
-    )) as {
+    const { runFixIssueWorkflow } = (await import(sliceUrl('fix-issue'))) as {
       runFixIssueWorkflow: (
         item: unknown,
         source: unknown,
@@ -344,9 +336,7 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
   }
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
-    const { runParallelImplementWorkflow } = (await import(
-      new URL('../../../../slices/parallel-implement/workflow.js', import.meta.url).href
-    )) as {
+    const { runParallelImplementWorkflow } = (await import(sliceUrl('parallel-implement'))) as {
       runParallelImplementWorkflow: (
         item: unknown,
         spec: unknown,
@@ -472,9 +462,7 @@ export async function dispatchResolveConflict(slug: string, issueNumber: number)
   }
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
-    const { runResolveConflictWorkflow } = (await import(
-      new URL('../../../../slices/resolve-conflict/workflow.js', import.meta.url).href
-    )) as {
+    const { runResolveConflictWorkflow } = (await import(sliceUrl('resolve-conflict'))) as {
       runResolveConflictWorkflow: (
         item: unknown,
         source: unknown,
@@ -540,9 +528,7 @@ export async function dispatchQa(slug: string, issueNumber: number): Promise<voi
   }
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
-    const { runQaWorkflow } = (await import(
-      new URL('../../../../slices/qa/workflow.js', import.meta.url).href
-    )) as {
+    const { runQaWorkflow } = (await import(sliceUrl('qa'))) as {
       runQaWorkflow: (
         item: unknown,
         source: unknown,
@@ -596,9 +582,7 @@ export async function dispatchNeedsFix(slug: string, issueNumber: number): Promi
   }
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
-    const { runFixFeedbackWorkflow } = (await import(
-      new URL('../../../../slices/fix-feedback/workflow.js', import.meta.url).href
-    )) as {
+    const { runFixFeedbackWorkflow } = (await import(sliceUrl('fix-feedback'))) as {
       runFixFeedbackWorkflow: (
         item: unknown,
         source: unknown,
@@ -718,7 +702,7 @@ export async function dispatchReview(slug: string, issueNumber: number): Promise
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
     const { runReviewWorkflow, runConvergentReviewWorkflow } = (await import(
-      new URL('../../../../slices/review/workflow.js', import.meta.url).href
+      sliceUrl('review')
     )) as {
       runReviewWorkflow: (
         item: unknown,
@@ -1074,7 +1058,7 @@ export async function dispatchGrillAndPrd(slug: string, issueNumber: number): Pr
       stateSource: source,
       projectId: slug,
       priorReplies,
-      ...(mockGrillDeps != null ? { deps: mockGrillDeps } : {}),
+      deps: { repoRoot: REPO_ROOT, ...(mockGrillDeps ?? {}) },
     });
   } finally {
     parallelLock.release(slug, issueNumber);
@@ -1119,6 +1103,7 @@ export async function dispatchRevisePrd(
       priorReplies,
       priorPrd,
       humanConcerns,
+      deps: { repoRoot: REPO_ROOT },
     });
   } finally {
     parallelLock.release(slug, issueNumber);

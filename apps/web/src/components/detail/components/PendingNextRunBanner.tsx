@@ -53,7 +53,7 @@ export function PendingNextRunBanner({ state, projectSlug, id }: PendingNextRunB
       className={cn(
         'flex items-center gap-2.5 px-6 py-2.5 shrink-0',
         'border-b border-fg-3/20 bg-fg-3/5',
-        'text-[12.5px] font-medium text-fg-3',
+        'text-[12.5px] font-medium text-info',
       )}
     >
       <Clock size={14} className="shrink-0" />
