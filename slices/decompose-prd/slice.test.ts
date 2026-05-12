@@ -415,11 +415,11 @@ describe('child issue type derived from labels', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 7. Children land at factory:accepted (AC #316)
+// 7. Children land at factory:dev-ready with factory:from-prd (AC #316)
 // ---------------------------------------------------------------------------
 
-describe('children land at factory:accepted', () => {
-  it('removes factory:triaging and adds factory:accepted to each child', async () => {
+describe('children land at factory:dev-ready', () => {
+  it('creates children directly in factory:dev-ready with factory:from-prd label', async () => {
     const source = new InMemoryLabelsSource(PROJECT_ID, REPO_REF);
     const parent = await source.seedIssue({
       title: 'Parent PRD epic',
@@ -442,7 +442,7 @@ describe('children land at factory:accepted', () => {
     });
 
     for (const childNum of result.childIssueNumbers) {
-      // State must be factory:dev-ready (workflow promotes triaging → accepted → dev-ready)
+      // State must be factory:dev-ready (set atomically at creation via initialState)
       const child = await source.getItem(String(childNum));
       expect(child.state).toBe('factory:dev-ready');
 

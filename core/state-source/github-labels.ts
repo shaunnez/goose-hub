@@ -504,12 +504,13 @@ export class GitHubLabelsSource implements StateSource {
 
   async createIssue(input: CreateIssueInput): Promise<WorkItem> {
     const labels: string[] = [
-      'factory:triaging',
+      input.initialState ?? 'factory:triaging',
       `type:${input.type ?? 'feature'}`,
       `priority:${input.priority ?? 'medium'}`,
       'schedule:current',
       'mode:supervised',
       'exec:serial',
+      ...(input.extraLabels ?? []),
     ];
     const url = `https://api.github.com/repos/${this.repoRef}/issues`;
     const res = await fetch(url, {

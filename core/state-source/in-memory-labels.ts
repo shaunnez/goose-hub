@@ -271,7 +271,7 @@ export class InMemoryLabelsSource implements StateSource {
       externalId,
       title: input.title,
       body,
-      state: 'factory:triaging',
+      state: input.initialState ?? 'factory:triaging',
       type: input.type ?? 'chore',
       priority: input.priority ?? 'medium',
       mode: 'supervised',
@@ -287,7 +287,7 @@ export class InMemoryLabelsSource implements StateSource {
       blocks: [],
       comments: [],
       createdAt: new Date(),
-      extraLabels: new Set<string>(),
+      extraLabels: new Set<string>(input.extraLabels ?? []),
     };
     this.store.set(externalId, issue);
     return this.toWorkItem(issue);

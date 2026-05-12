@@ -63,6 +63,10 @@ export interface CreateIssueInput {
   type?: WorkItemType;
   priority?: Priority;
   milestoneId?: string;
+  /** Override the default initial state (factory:triaging). */
+  initialState?: StateName;
+  /** Additional labels to include at creation time. */
+  extraLabels?: string[];
 }
 
 export interface SourceEvent {

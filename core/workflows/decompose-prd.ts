@@ -218,26 +218,6 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
           }
         }
 
-        const created = await stateSource.createIssue({
-          title: issue.title,
-          body: resolvedBody,
-          type: issueType,
-          priority: issuePriority,
-        });
-
-        const childNumber = Number(created.externalId);
-        siblingNumbers.set(i, childNumber);
-        childIssueNumbers.push(childNumber);
-
-        // Set milestone if parent has one
-        if (parentMilestoneNumber != null && !Number.isNaN(parentMilestoneNumber)) {
-          await stateSource.setMilestone(created.externalId, parentMilestoneNumber);
-        }
-
-        // Apply label groups via setLabelInGroup (supports priority, schedule, type)
-        await stateSource.setLabelInGroup(created.externalId, 'type', issueType);
-        await stateSource.setLabelInGroup(created.externalId, 'priority', issuePriority);
-
         // Determine schedule label (default: 'current')
         let scheduleValue = 'current';
         for (const lbl of labelSet) {
@@ -254,19 +234,28 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
             break;
           }
         }
-        await stateSource.setLabelInGroup(created.externalId, 'schedule', scheduleValue);
 
-        // Promote child from factory:triaging (the createIssue default) to
-        // factory:accepted, leaving exec:serial and mode:supervised unchanged.
-        // Apply factory:from-prd so triage skips grilling for these children
-        // if they ever re-enter triaging (e.g. after a needs-human recovery).
-        await stateSource.removeLabel(created.externalId, 'factory:triaging');
-        await stateSource.addLabels(created.externalId, ['factory:accepted', 'factory:from-prd']);
-        await stateSource.transitionState(
-          created.externalId,
-          'factory:accepted',
-          'factory:dev-ready',
-        );
+        const created = await stateSource.createIssue({
+          title: issue.title,
+          body: resolvedBody,
+          type: issueType,
+          priority: issuePriority,
+          initialState: 'factory:dev-ready',
+          extraLabels: ['factory:from-prd'],
+        });
+
+        const childNumber = Number(created.externalId);
+        siblingNumbers.set(i, childNumber);
+        childIssueNumbers.push(childNumber);
+
+        // Set milestone if parent has one
+        if (parentMilestoneNumber != null && !Number.isNaN(parentMilestoneNumber)) {
+          await stateSource.setMilestone(created.externalId, parentMilestoneNumber);
+        }
+
+        if (scheduleValue !== 'current') {
+          await stateSource.setLabelInGroup(created.externalId, 'schedule', scheduleValue);
+        }
       }
     } catch (loopErr) {
       // Partial-create: some children were created before the failure.
