@@ -1,15 +1,22 @@
 import { describe, expect, it, vi } from 'vitest';
 
-const { mockTotalsForProject, mockTotalsByStage, mockListCostsForWorkItem } = vi.hoisted(() => ({
+const {
+  mockTotalsForProject,
+  mockTotalsByStage,
+  mockListCostsForWorkItem,
+  mockListCostsForProjectSince,
+} = vi.hoisted(() => ({
   mockTotalsForProject: vi.fn(),
   mockTotalsByStage: vi.fn(),
   mockListCostsForWorkItem: vi.fn(),
+  mockListCostsForProjectSince: vi.fn(),
 }));
 
 vi.mock('./repository.js', () => ({
   totalsForProjectSince: mockTotalsForProject,
   totalsByStageForProjectSince: mockTotalsByStage,
   listCostsForWorkItem: mockListCostsForWorkItem,
+  listCostsForProjectSince: mockListCostsForProjectSince,
 }));
 
 const { getCostSummary, getCostsForWorkItem } = await import('./service.js');
@@ -28,6 +35,38 @@ describe('getCostSummary', () => {
       { stage: 'dev', totalUsd: 3.0, totalRuns: 10, hasEstimated: true },
       { stage: 'qa', totalUsd: 1.0, totalRuns: 8, hasEstimated: false },
     ]);
+    mockListCostsForProjectSince.mockReturnValue([
+      {
+        id: 1,
+        runId: 'r1',
+        projectId: 'goose-hub-self',
+        workItemId: 'github:owner/repo#1',
+        stage: 'dev',
+        skill: 'implement',
+        modelId: 'claude-sonnet-4-6',
+        inputTokens: 100,
+        outputTokens: 50,
+        costUsd: 1.5,
+        costLabel: 'estimated',
+        personaId: null,
+        createdAt: '2026-05-01T00:00:00Z',
+      },
+      {
+        id: 2,
+        runId: 'r2',
+        projectId: 'goose-hub-self',
+        workItemId: 'github:owner/repo#2',
+        stage: 'qa',
+        skill: 'qa',
+        modelId: 'gpt-5.4',
+        inputTokens: 80,
+        outputTokens: 30,
+        costUsd: 2.0,
+        costLabel: 'exact',
+        personaId: null,
+        createdAt: '2026-05-01T00:00:00Z',
+      },
+    ]);
 
     const r = await getCostSummary('goose-hub-self');
     expect(r.ok).toBe(true);
@@ -36,6 +75,16 @@ describe('getCostSummary', () => {
     expect(r.data.windows.month.totalUsd).toBe(4.5);
     expect(r.data.byStage).toHaveLength(2);
     expect(r.data.byStage[0].stage).toBe('dev');
+    expect(r.data.byProvider.claude).toMatchObject({
+      totalUsd: 1.5,
+      totalRuns: 1,
+      hasEstimated: true,
+    });
+    expect(r.data.byProvider.codex).toMatchObject({
+      totalUsd: 2.0,
+      totalRuns: 1,
+      hasEstimated: false,
+    });
   });
 });
 

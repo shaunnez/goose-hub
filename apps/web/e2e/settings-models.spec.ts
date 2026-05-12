@@ -88,9 +88,9 @@ test.describe('Settings → Models (3A smoke)', () => {
         .nth(1);
       await primaryProviderSelect.selectOption('codex');
 
-      // After selection the resolved model subtitle should update to gpt-5-codex.
+      // After selection the resolved model subtitle should update to the current Codex sonnet ID.
       await expect(
-        page.locator('span.font-mono').filter({ hasText: 'gpt-5-codex' }).first(),
+        page.locator('span.font-mono').filter({ hasText: 'gpt-5.4' }).first(),
       ).toBeVisible({ timeout: 5_000 });
 
       // Reload and confirm the setting persisted.
@@ -98,7 +98,7 @@ test.describe('Settings → Models (3A smoke)', () => {
       await page.waitForSelector('table', { timeout: 10_000 });
 
       await expect(
-        page.locator('span.font-mono').filter({ hasText: 'gpt-5-codex' }).first(),
+        page.locator('span.font-mono').filter({ hasText: 'gpt-5.4' }).first(),
       ).toBeVisible({ timeout: 5_000 });
     } finally {
       // Restore only the fields this test changed, preserving any other overrides

@@ -170,7 +170,7 @@ describe('invokeSkill', () => {
   });
 
   it('runtimeOverride suppresses DB provider model — modelOverride stays on skill-budget default', async () => {
-    // Guard against a DB row with primary_provider:'codex' leaking gpt-5-codex into a
+    // Guard against a DB row with primary_provider:'codex' leaking a Codex model into a
     // ClaudeCliRuntime call when the caller has provided runtimeOverride.
     const runtime = mockRuntime();
     await invokeSkill({

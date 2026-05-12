@@ -125,13 +125,15 @@ describe('models registry', () => {
     expect(claudeCount).toBe(3);
   });
 
-  it('contains the Codex model IDs registered for M19.10', () => {
+  it('contains the current Codex model IDs', () => {
     const codex = MODELS.filter((m) => m.provider === 'codex');
     const ids = codex.map((m) => m.id);
-    expect(ids).toContain('gpt-5-codex');
-    expect(ids).toContain('gpt-5-codex-mini');
-    expect(codex.find((m) => m.id === 'gpt-5-codex')?.tier).toBe('sonnet');
-    expect(codex.find((m) => m.id === 'gpt-5-codex-mini')?.tier).toBe('haiku');
+    expect(ids).toContain('gpt-5.5');
+    expect(ids).toContain('gpt-5.4');
+    expect(ids).toContain('gpt-5.4-mini');
+    expect(codex.find((m) => m.id === 'gpt-5.5')?.tier).toBe('opus');
+    expect(codex.find((m) => m.id === 'gpt-5.4')?.tier).toBe('sonnet');
+    expect(codex.find((m) => m.id === 'gpt-5.4-mini')?.tier).toBe('haiku');
   });
 
   it('each model has a valid tier', () => {
@@ -203,8 +205,9 @@ describe('models registry', () => {
       const result = modelsAtOrAboveTier('haiku', 'codex');
       expect(result.every((m) => m.provider === 'codex')).toBe(true);
       const ids = result.map((m) => m.id);
-      expect(ids).toContain('gpt-5-codex');
-      expect(ids).toContain('gpt-5-codex-mini');
+      expect(ids).toContain('gpt-5.5');
+      expect(ids).toContain('gpt-5.4');
+      expect(ids).toContain('gpt-5.4-mini');
     });
 
     it('returns only opus when tier is opus', () => {

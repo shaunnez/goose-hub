@@ -136,7 +136,7 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<AgentResult>
 
   // 6. Resolve model — precedence: caller override > per-role override (DB / config) > skill budget default
   // When runtimeOverride is supplied the caller owns the runtime; skip DB provider overrides so a
-  // codex-targeted DB row can't inject a gpt-5-codex model ID into a ClaudeCliRuntime call.
+  // codex-targeted DB row can't inject a Codex model ID into a ClaudeCliRuntime call.
   let modelOverride: string;
   if (overrides?.modelOverride != null) {
     modelOverride = overrides.modelOverride;

@@ -700,7 +700,7 @@ export function ProjectModelPanel({ slug }: Props) {
               className="text-[11px] border border-line/70 rounded-full px-2.5 py-0.5 text-fg-2 hover:text-fg hover:bg-bg-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               title={
                 codexAvailable
-                  ? 'Set primary to codex:sonnet (gpt-5-codex) for every non-holdout role'
+                  ? 'Set primary to codex:sonnet (gpt-5.4) for every non-holdout role'
                   : 'Codex CLI not connected — sign in below'
               }
             >

@@ -86,7 +86,7 @@ function makeSpec(overrides: Partial<AgentSpec> = {}): AgentSpec {
     toolExtras: [],
     budgets: { maxTurns: 6, maxBudgetUsd: 0.5, timeoutMs: 30_000 },
     personaId: 'test-project/dev-reviewer/0',
-    modelOverride: 'gpt-5-codex',
+    modelOverride: 'gpt-5.4',
     ...overrides,
   };
 }
@@ -177,7 +177,7 @@ describe('CodexCliRuntime — pre-flight errors', () => {
 describe('buildCodexArgv', () => {
   it('builds argv with exec --json --cd <workspace> --model <id> and prompt as final positional', () => {
     const argv = buildCodexArgv({
-      model: 'gpt-5-codex',
+      model: 'gpt-5.4',
       workspaceDir: '/work',
       prompt: '<task>hello</task>',
     });
@@ -186,13 +186,13 @@ describe('buildCodexArgv', () => {
     expect(argv).toContain('--cd');
     expect(argv[argv.indexOf('--cd') + 1]).toBe('/work');
     expect(argv).toContain('--model');
-    expect(argv[argv.indexOf('--model') + 1]).toBe('gpt-5-codex');
+    expect(argv[argv.indexOf('--model') + 1]).toBe('gpt-5.4');
     expect(argv[argv.length - 1]).toBe('<task>hello</task>');
   });
 
   it('passes systemPrompt via -c instructions= override using TOML multi-line basic string', () => {
     const argv = buildCodexArgv({
-      model: 'gpt-5-codex',
+      model: 'gpt-5.4',
       workspaceDir: '/work',
       prompt: '<task></task>',
       systemPrompt: 'be terse',
@@ -204,7 +204,7 @@ describe('buildCodexArgv', () => {
 
   it('preserves multi-line systemPrompt content without escaping newlines', () => {
     const argv = buildCodexArgv({
-      model: 'gpt-5-codex',
+      model: 'gpt-5.4',
       workspaceDir: '/work',
       prompt: '<task></task>',
       systemPrompt: 'line one\nline two\nline three',
@@ -215,7 +215,7 @@ describe('buildCodexArgv', () => {
 
   it('does not escape inner double-quotes (multi-line basic strings carry them raw)', () => {
     const argv = buildCodexArgv({
-      model: 'gpt-5-codex',
+      model: 'gpt-5.4',
       workspaceDir: '/work',
       prompt: '<task></task>',
       systemPrompt: 'say "hi"',
@@ -431,7 +431,7 @@ describe('CodexCliRuntime — spawn lifecycle', () => {
 
 describe('selectRuntime — dispatcher', () => {
   it("configRuntime: 'claude-cli' returns ClaudeCliRuntime regardless of model", () => {
-    const rt = selectRuntime({ configRuntime: 'claude-cli', model: 'gpt-5-codex' });
+    const rt = selectRuntime({ configRuntime: 'claude-cli', model: 'gpt-5.4' });
     expect(rt.constructor.name).toBe('ClaudeCliRuntime');
   });
 
@@ -446,7 +446,7 @@ describe('selectRuntime — dispatcher', () => {
   });
 
   it("configRuntime: 'auto' picks runtime by model provider — codex → CodexCliRuntime", () => {
-    const rt = selectRuntime({ configRuntime: 'auto', model: 'gpt-5-codex' });
+    const rt = selectRuntime({ configRuntime: 'auto', model: 'gpt-5.4' });
     expect(rt.constructor.name).toBe('CodexCliRuntime');
   });
 
