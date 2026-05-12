@@ -164,42 +164,53 @@ export function RunGroupWrapper({
           setOpen((e.target as HTMLDetailsElement).open);
         }}
       >
-        <summary className="flex flex-wrap items-center gap-2 cursor-pointer list-none px-4 py-2 font-mono text-[11px] select-none">
-          {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-          <span title={runId} className="cursor-help border-b border-dashed border-fg-5/40">
-            {formatSkillName(skill)} Run
+        <summary className="flex items-center gap-2 cursor-pointer list-none px-4 py-2 font-mono text-[11px] select-none">
+          <span className="shrink-0">
+            {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          </span>
+          <span title={runId} className="w-[160px] shrink-0 truncate">
+            <span className="cursor-help border-b border-dashed border-fg-5/40">
+              {formatSkillName(skill)} Run
+            </span>
           </span>
           {getPersonaLabel(personaMap, personaId) != null && (
             <>
-              <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
-              <span className="text-[color:var(--accent)] text-[10px]">
+              <span aria-hidden className="w-[3px] h-[3px] shrink-0 rounded-full bg-fg-4" />
+              <span className="w-[130px] shrink-0 truncate text-[color:var(--accent)] text-[10px]">
                 {getPersonaLabel(personaMap, personaId)}
               </span>
             </>
           )}
-          <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
-          {statusBadge}
+          <span aria-hidden className="w-[3px] h-[3px] shrink-0 rounded-full bg-fg-4" />
+          <span className="shrink-0">{statusBadge}</span>
           {costRow && (
-            <CostBadge
-              tokens={runTokens}
-              usd={costRow.costUsd}
-              label={costRow.costLabel}
-              size="sm"
-            />
+            <span className="shrink-0">
+              <CostBadge
+                tokens={runTokens}
+                usd={costRow.costUsd}
+                label={costRow.costLabel}
+                size="sm"
+              />
+            </span>
           )}
-          {metaLine}
+          {costRow?.modelId && (
+            <span className="shrink-0 w-[80px] truncate px-1.5 py-0.5 rounded text-[10px] font-mono bg-fg-5/10 text-fg-4 border border-line/40">
+              {costRow.modelId.replace(/^claude-/, '')}
+            </span>
+          )}
+          <span className="flex-1 min-w-0 truncate">{metaLine}</span>
           {canResume && (
             <button
               type="button"
               onClick={handleResume}
               disabled={resuming}
-              className="ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-[color:var(--accent)]/10 text-[color:var(--accent)] border border-[color:var(--accent)]/30 hover:bg-[color:var(--accent)]/20 disabled:opacity-50 transition-colors"
+              className="shrink-0 ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-[color:var(--accent)]/10 text-[color:var(--accent)] border border-[color:var(--accent)]/30 hover:bg-[color:var(--accent)]/20 disabled:opacity-50 transition-colors"
             >
               <RefreshCw size={10} className={resuming ? 'animate-spin' : ''} />
               {resuming ? 'Dispatching…' : 'Resume'}
             </button>
           )}
-          <span className="ml-auto text-fg-5">{items.length} events</span>
+          <span className="ml-auto shrink-0 text-fg-5">{items.length} events</span>
         </summary>
         <ol className="flex flex-col gap-2 px-3 pb-3">
           {isStalled && (

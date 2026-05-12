@@ -109,6 +109,14 @@ export type RenderItem =
       endedAt: string | null;
       lastEventAt: string | null;
       personaId: string | null;
+    }
+  | {
+      kind: 'phase-group';
+      phase: string;
+      label: string;
+      items: RenderItem[];
+      startedAt: string | null;
+      endedAt: string | null;
     };
 
 /**
@@ -127,7 +135,44 @@ function effectiveTimestamp(item: RenderItem): number {
 export function groupEvents(events: AgentEventDto[]): RenderItem[] {
   const collapsed = collapseLogRuns(events);
   const grouped = groupByRunId(collapsed);
-  return [...grouped].sort((a, b) => effectiveTimestamp(b) - effectiveTimestamp(a));
+  const sorted = [...grouped].sort((a, b) => effectiveTimestamp(b) - effectiveTimestamp(a));
+  return groupByPhase(sorted);
+}
+
+function isInvestigationRunGroup(item: RenderItem): boolean {
+  if (item.kind !== 'run-group') return false;
+  if (item.skill?.startsWith('investigate')) return true;
+  return item.items.some(
+    (child) => child.kind === 'event' && child.event.kind.startsWith('swarm.'),
+  );
+}
+
+function groupByPhase(items: RenderItem[]): RenderItem[] {
+  const investigationItems = items.filter(isInvestigationRunGroup);
+  if (investigationItems.length === 0) return items;
+
+  const firstIdx = items.findIndex(isInvestigationRunGroup);
+  const others = items.filter((item) => !isInvestigationRunGroup(item));
+
+  const starts = investigationItems
+    .map((i) => (i.kind === 'run-group' ? i.startedAt : null))
+    .filter((s): s is string => s != null);
+  const ends = investigationItems
+    .map((i) => (i.kind === 'run-group' ? (i.endedAt ?? i.lastEventAt) : null))
+    .filter((s): s is string => s != null);
+
+  const phaseGroup: RenderItem = {
+    kind: 'phase-group',
+    phase: 'investigation',
+    label: 'Investigation',
+    items: investigationItems,
+    startedAt: starts.length > 0 ? starts.reduce((a, b) => (a < b ? a : b)) : null,
+    endedAt: ends.length > 0 ? ends.reduce((a, b) => (a > b ? a : b)) : null,
+  };
+
+  const result = [...others];
+  result.splice(firstIdx, 0, phaseGroup);
+  return result;
 }
 
 function collapseLogRuns(events: AgentEventDto[]): RenderItem[] {
