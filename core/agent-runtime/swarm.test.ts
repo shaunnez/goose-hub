@@ -108,6 +108,60 @@ describe('swarm.dispatchWave', () => {
     expect(events.filter((e) => e.kind === 'swarm.scout-completed')).toHaveLength(3);
   });
 
+  it('uses custom minSuccessfulScouts so two successful scouts complete a wave', async () => {
+    const { fn: appendEvent, events } = makeFakeAppendEvent();
+    const runtime = makeRuntime({
+      'wave2-interface-designer': () => Promise.resolve(okResult('wave2-interface-designer')),
+      'wave2-risk-analyst': () => Promise.resolve(okResult('wave2-risk-analyst')),
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-wave2',
+      scoutSpecs: [makeScoutSpec('wave2-interface-designer'), makeScoutSpec('wave2-risk-analyst')],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      heartbeatIntervalMs: 60_000,
+      scoutTimeoutMs: 5_000,
+      minSuccessfulScouts: 2,
+      resolveScoutBudget: testBudgetResolver,
+    });
+
+    expect(result.status).toBe('ok');
+    expect(result.shouldAdvance).toBe(true);
+    expect(events.some((e) => e.kind === 'swarm.wave-completed')).toBe(true);
+  });
+
+  it('keeps default Wave-1 policy so two successes without override are incomplete', async () => {
+    const { fn: appendEvent, events } = makeFakeAppendEvent();
+    const runtime = makeRuntime({
+      'scout-a': () => Promise.resolve(okResult('scout-a')),
+      'scout-b': () => Promise.resolve(okResult('scout-b')),
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-default-min',
+      scoutSpecs: [makeScoutSpec('scout-a'), makeScoutSpec('scout-b')],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      heartbeatIntervalMs: 60_000,
+      scoutTimeoutMs: 5_000,
+      resolveScoutBudget: testBudgetResolver,
+    });
+
+    expect(result.status).toBe('incomplete');
+    expect(result.shouldAdvance).toBe(false);
+    expect(result.shouldEscalate).toBe(false);
+    expect(events.some((e) => e.kind === 'swarm.wave-incomplete')).toBe(true);
+  });
+
   it('caps concurrency at maxScoutAgents (default 6) — never exceeded even with 8 specs', async () => {
     const { fn: appendEvent } = makeFakeAppendEvent();
     let live = 0;

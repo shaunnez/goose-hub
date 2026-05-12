@@ -54,6 +54,10 @@ vi.mock('#shared/dispatch.js', () => ({
   dispatchTriageBatch: mocks.dispatchTriageBatch,
 }));
 
+function unsetEnv(name: string): void {
+  Reflect.deleteProperty(process.env, name);
+}
+
 describe('server startup', () => {
   const originalVitest = process.env.VITEST;
   const originalSecret = process.env.GITHUB_WEBHOOK_SECRET;
@@ -62,9 +66,9 @@ describe('server startup', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.resetAllMocks();
-    process.env.VITEST = undefined;
+    unsetEnv('VITEST');
     process.env.GITHUB_WEBHOOK_SECRET = 'test-secret';
-    process.env.PORT = undefined;
+    unsetEnv('PORT');
     mocks.closeOrphanedRuns.mockReturnValue(0);
     mocks.dispatchTriageBatch.mockResolvedValue(undefined);
     mocks.loadProjects.mockResolvedValue([{ slug: 'goose-hub-self' }]);
@@ -72,19 +76,19 @@ describe('server startup', () => {
 
   afterEach(() => {
     if (originalVitest == null) {
-      process.env.VITEST = undefined;
+      unsetEnv('VITEST');
     } else {
       process.env.VITEST = originalVitest;
     }
 
     if (originalSecret == null) {
-      process.env.GITHUB_WEBHOOK_SECRET = undefined;
+      unsetEnv('GITHUB_WEBHOOK_SECRET');
     } else {
       process.env.GITHUB_WEBHOOK_SECRET = originalSecret;
     }
 
     if (originalPort == null) {
-      process.env.PORT = undefined;
+      unsetEnv('PORT');
     } else {
       process.env.PORT = originalPort;
     }

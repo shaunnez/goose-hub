@@ -13,7 +13,7 @@ export function AgentDecisionSummaryEvent({ event }: { event: AgentEventDto }) {
   return (
     <li
       data-event-kind={event.kind}
-      className="rounded-md border border-info bg-bg-elev/60 px-4 py-3"
+      className="rounded-md border border-black bg-bg-elev/60 px-4 py-3"
     >
       <div className="flex items-center gap-2 mb-1 text-[11px] text-fg-3">
         <Sparkles size={13} className="shrink-0" />

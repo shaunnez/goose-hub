@@ -57,6 +57,7 @@ function makeSpec(overrides: Record<string, unknown> = {}) {
 }
 
 type FakeChild = EventEmitter & {
+  stdin: { end: ReturnType<typeof vi.fn> };
   stdout: EventEmitter;
   stderr: EventEmitter;
   kill: ReturnType<typeof vi.fn>;
@@ -64,6 +65,7 @@ type FakeChild = EventEmitter & {
 
 function makeChild(exitCode: number, stdout: string): FakeChild {
   const child = new EventEmitter() as FakeChild;
+  child.stdin = { end: vi.fn() };
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
   child.kill = vi.fn();
@@ -88,6 +90,20 @@ afterEach(() => {
 });
 
 describe('ClaudeCliRuntime — agentRuns write path', () => {
+  it('passes the rendered prompt through stdin when using --print', async () => {
+    const envelope = JSON.stringify({ is_error: false, result: '{"ok":true}' });
+    const child = makeChild(0, envelope);
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new ClaudeCliRuntime();
+    await runtime.run(makeSpec());
+
+    const argv = mockSpawn.mock.calls[0][1] as string[];
+    expect(argv).toContain('--print');
+    expect(argv).not.toContain('<task></task>');
+    expect(child.stdin.end).toHaveBeenCalledWith('<task></task>');
+  });
+
   it('inserts a success row when CLI exits with valid envelope', async () => {
     const valuesRun = vi.fn();
     const values = vi.fn().mockReturnValue({ run: valuesRun });

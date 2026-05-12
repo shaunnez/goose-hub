@@ -18,6 +18,11 @@ export { DecisionSummarySchema };
 export const BuilderTierSchema = z.enum(['opus', 'sonnet', 'haiku']);
 export const SeveritySchema = z.enum(['low', 'medium', 'high']);
 export const ConstraintKindSchema = z.enum(['phase', 'gate', 'hook', 'model', 'output-format']);
+export const CONSTRAINT_SOURCE_PATTERN = /^([^\s:]+):(\d+|[A-Za-z_][\w-]*)$/;
+export const ConstraintSourceSchema = z.string().regex(CONSTRAINT_SOURCE_PATTERN, {
+  message:
+    'Use exactly path/to/file.ts:123 or path/to/file.ts:SymbolName; do not use line ranges or SYMBOL: prefixes',
+});
 
 export const JourneyStepSchema = z.object({
   idx: z.number().int().nonnegative(),
@@ -109,7 +114,7 @@ export const ConstraintSchema = z.object({
    * `path/to/file.ts:LINE` or `path/to/file.ts:SYMBOL`. Pseudo refs are
    * rejected by `validateEngineeringSpec`.
    */
-  source: z.string().min(1),
+  source: ConstraintSourceSchema,
 });
 
 export const RiskEntrySchema = z.object({

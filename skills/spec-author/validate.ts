@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { EngineeringSpec } from './schema.js';
+import { CONSTRAINT_SOURCE_PATTERN, type EngineeringSpec } from './schema.js';
 
 /**
  * Engineering Spec validators (M19.02, issue #559).
@@ -60,7 +60,6 @@ export interface ValidationOptions {
 }
 
 const DEFAULT_SENSITIVE_PATTERN = /(auth|session|crypto|secret)/i;
-const CONSTRAINT_SOURCE_PATTERN = /^([^\s:]+):(\d+|[A-Za-z_][\w-]*)$/;
 
 export function validateEngineeringSpec(
   spec: EngineeringSpec,

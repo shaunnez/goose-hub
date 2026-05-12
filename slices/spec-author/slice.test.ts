@@ -167,6 +167,53 @@ beforeEach(() => {
 
 // ─── tests ────────────────────────────────────────────────────────────────────
 
+describe('EngineeringSpecSchema constraint source format', () => {
+  it('accepts single-line and symbol constraint citations', async () => {
+    const { EngineeringSpecSchema } = await import('@goose-hub/skills/spec-author/schema.js');
+
+    const result = EngineeringSpecSchema.safeParse(
+      makeSpecOutput({
+        constraints: [
+          { kind: 'model', name: 'EventLike interface', source: 'core/event-types.ts:EventLike' },
+          { kind: 'output-format', name: 'server README shape', source: 'apps/server/README.md:5' },
+        ],
+      }),
+    );
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects SYMBOL prefixes and line ranges at schema validation', async () => {
+    const { EngineeringSpecSchema } = await import('@goose-hub/skills/spec-author/schema.js');
+
+    const symbolPrefix = EngineeringSpecSchema.safeParse(
+      makeSpecOutput({
+        constraints: [
+          {
+            kind: 'model',
+            name: 'EventLike interface',
+            source: 'core/agent-runtime/event-types.ts:SYMBOL:EventLike',
+          },
+        ],
+      }),
+    );
+    const lineRange = EngineeringSpecSchema.safeParse(
+      makeSpecOutput({
+        constraints: [
+          {
+            kind: 'output-format',
+            name: 'README response shape',
+            source: 'apps/server/README.md:5-20',
+          },
+        ],
+      }),
+    );
+
+    expect(symbolPrefix.success).toBe(false);
+    expect(lineRange.success).toBe(false);
+  });
+});
+
 describe('runSpecAuthorWorkflow', () => {
   describe('golden path — acceptance criterion 1', () => {
     it('persists the engineering spec on success', async () => {
@@ -221,6 +268,93 @@ describe('runSpecAuthorWorkflow', () => {
   });
 
   describe('validation failure — acceptance criterion 2', () => {
+    it('retries once with repair feedback when structural validation fails, then persists repaired spec', async () => {
+      mockValidateEngineeringSpec
+        .mockReturnValueOnce({
+          ok: false,
+          errors: [
+            {
+              rule: 'constraint-source-format',
+              message:
+                "constraint 'EventLike interface' source 'core/agent-runtime/event-types.ts:SYMBOL:EventLike' is not 'path:line' or 'path:symbol' format",
+            },
+          ],
+        })
+        .mockReturnValueOnce({ ok: true });
+
+      const source = makeMockSource();
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), source, 'goose-hub-self', '/repo');
+
+      expect(mockInvokeSkill).toHaveBeenCalledTimes(2);
+      const retryInput = mockInvokeSkill.mock.calls[1]?.[0] as {
+        overrides?: {
+          appendContext?: { repairFeedback?: string };
+          extraEventPayload?: Record<string, unknown>;
+          workspaceDir?: string;
+        };
+      };
+      expect(retryInput.overrides?.appendContext?.repairFeedback).toContain(
+        'core/agent-runtime/event-types.ts:SYMBOL:EventLike',
+      );
+      expect(retryInput.overrides?.extraEventPayload).toMatchObject({
+        attempt: 'repair',
+        repairOf: expect.any(String),
+      });
+      expect(retryInput.overrides?.workspaceDir).toBe('/tmp/test-spec-worktree');
+      expect(mockPersistEngineeringSpec).toHaveBeenCalledOnce();
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '55',
+        'factory:dev-ready',
+        'factory:spec-ready',
+      );
+    });
+
+    it('retries once with repair feedback when output schema validation fails', async () => {
+      const outputError = Object.assign(
+        new Error("invokeSkill: output validation failed for 'spec-author'"),
+        {
+          name: 'OutputValidationError',
+          runTelemetry: { runId: 'first-run-id', skill: 'spec-author' },
+          issues: [
+            {
+              path: ['constraints', 0, 'source'],
+              message:
+                'Use exactly path/to/file.ts:123 or path/to/file.ts:SymbolName; do not use line ranges or SYMBOL: prefixes',
+            },
+          ],
+        },
+      );
+      mockInvokeSkill.mockRejectedValueOnce(outputError).mockResolvedValueOnce({
+        output: makeSpecOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+      const source = makeMockSource();
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), source, 'goose-hub-self', '/repo');
+
+      expect(mockInvokeSkill).toHaveBeenCalledTimes(2);
+      const retryInput = mockInvokeSkill.mock.calls[1]?.[0] as {
+        overrides?: {
+          appendContext?: { repairFeedback?: string };
+          extraEventPayload?: Record<string, unknown>;
+        };
+      };
+      expect(retryInput.overrides?.appendContext?.repairFeedback).toContain('constraints.0.source');
+      expect(retryInput.overrides?.extraEventPayload).toMatchObject({
+        attempt: 'repair',
+        repairOf: 'first-run-id',
+      });
+      expect(mockPersistEngineeringSpec).toHaveBeenCalledOnce();
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '55',
+        'factory:dev-ready',
+        'factory:spec-ready',
+      );
+    });
+
     it('transitions to factory:needs-human when validateEngineeringSpec fails', async () => {
       mockValidateEngineeringSpec.mockReturnValue({
         ok: false,
@@ -362,6 +496,7 @@ describe('runSpecAuthorWorkflow', () => {
         new Error("invokeSkill: output validation failed for 'spec-author'"),
         {
           name: 'OutputValidationError',
+          runTelemetry: { runId: 'terminal-run-id', skill: 'spec-author' },
           issues: [
             {
               path: ['decisionSummaries', 0, 'kind'],
@@ -370,7 +505,7 @@ describe('runSpecAuthorWorkflow', () => {
           ],
         },
       );
-      mockInvokeSkill.mockRejectedValueOnce(outputError);
+      mockInvokeSkill.mockRejectedValueOnce(outputError).mockRejectedValueOnce(outputError);
 
       const source = makeMockSource();
       const { eventStore } = await import('@goose-hub/core/event-stream/store.js');

@@ -78,7 +78,7 @@ export interface WaveResult {
   reports: ScoutReport[];
   /** Names of scouts whose `status` is `'error'` or `'timeout'`. */
   failedScouts: string[];
-  /** True if Wave 2 may dispatch (≤1 failure AND ≥3 successes). */
+  /** True if the caller may advance (≤1 failure AND enough successful scouts). */
   shouldAdvance: boolean;
   /** True if 2+ failures triggered halt → escalate `factory:needs-human`. */
   shouldEscalate: boolean;
@@ -106,6 +106,8 @@ export interface DispatchWaveOptions {
   resolveScoutBudget?: ScoutBudgetResolver;
   /** Per-scout deadline override. Defaults to the resolved skill timeout. */
   scoutTimeoutMs?: number;
+  /** Minimum ok scout reports required for a completed wave. Default: Wave-1 policy (3). */
+  minSuccessfulScouts?: number;
   /** Heartbeat cadence. Default 30_000 ms. */
   heartbeatIntervalMs?: number;
   /** Runtime — production: ClaudeCliRuntime; tests: stub. */
@@ -162,6 +164,7 @@ export async function dispatchWave(opts: DispatchWaveOptions): Promise<WaveResul
     Math.min(opts.scoutSpecs.length, opts.maxScoutAgents ?? DEFAULT_MAX_SCOUTS),
   );
   const heartbeatIntervalMs = opts.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_MS;
+  const minSuccessfulScouts = opts.minSuccessfulScouts ?? MIN_SCOUT_SUCCESS;
 
   const heartbeat = startHeartbeat({
     intervalMs: heartbeatIntervalMs,
@@ -192,7 +195,7 @@ export async function dispatchWave(opts: DispatchWaveOptions): Promise<WaveResul
     status = 'halted';
     shouldAdvance = false;
     shouldEscalate = true;
-  } else if (okCount < MIN_SCOUT_SUCCESS) {
+  } else if (okCount < minSuccessfulScouts) {
     status = 'incomplete';
     shouldAdvance = false;
     shouldEscalate = false;

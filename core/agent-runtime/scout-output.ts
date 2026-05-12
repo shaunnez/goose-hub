@@ -15,10 +15,12 @@ import { DecisionKindSchema } from './decision-types.js';
  */
 export const ScoutFindingSchema = z.object({
   file: z.string().min(1),
-  line: z.preprocess(
-    (value) => (value === null ? undefined : value),
-    z.number().int().nonnegative().optional(),
-  ),
+  line: z
+    .number()
+    .int()
+    .nonnegative()
+    .nullish()
+    .transform((value) => value ?? undefined),
   fact: z.string().min(1),
   confidence: z.enum(['high', 'medium', 'low']),
 });

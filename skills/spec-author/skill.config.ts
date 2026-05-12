@@ -19,6 +19,7 @@ import { EngineeringSpecSchema } from './schema.js';
  *     <prd>...</prd>?                      <!-- when type:feature, copied from #313 -->
  *     <scout_reports>[json]</scout_reports>?   <!-- M19.01 Wave-1 reports when present -->
  *     <wave2_reports>[json]</wave2_reports>?   <!-- M19.01 Wave-2 reports when present -->
+ *     <repair_feedback>...</repair_feedback>?   <!-- one-shot validator feedback on retry -->
  *   </task>
  */
 export const SpecAuthorContextSchema = z.object({
@@ -36,6 +37,8 @@ export const SpecAuthorContextSchema = z.object({
   scoutReports: z.string().optional(),
   /** JSON-stringified Wave-2 deep-agent reports (M19.01). Optional. */
   wave2Reports: z.string().optional(),
+  /** One-shot validation feedback when the workflow retries a mechanically invalid spec. */
+  repairFeedback: z.string().optional(),
 });
 
 const config: SkillConfig = {
@@ -50,6 +53,7 @@ const config: SkillConfig = {
     'prd',
     'scoutReports',
     'wave2Reports',
+    'repairFeedback',
   ],
   /**
    * Read bundle: spec-author authors a JSON artefact in its terminal

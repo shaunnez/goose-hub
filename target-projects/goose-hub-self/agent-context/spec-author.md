@@ -23,3 +23,9 @@ Strict shape reminders for fields that commonly fail schema validation:
 - Every `constraints[]` item must use one of these exact `kind` values:
   `phase`, `gate`, `hook`, `model`, or `output-format`. Put domain concepts
   like "API route", "database", "UI", or "test" in `name`, not `kind`.
+- Every `constraints[].source` must be exactly `path/to/file.ts:123` or
+  `path/to/file.ts:SymbolName`.
+  - Good: `core/agent-runtime/event-types.ts:EventLike`
+  - Good: `apps/server/README.md:5`
+  - Bad: `core/agent-runtime/event-types.ts:SYMBOL:EventLike`
+  - Bad: `apps/server/README.md:5-20`

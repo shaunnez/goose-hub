@@ -14,6 +14,7 @@ The `<task>` block contains:
 - `<prd>` (optional) — copied from PRD issue (#313 lineage). Use as the source of `userJourneys` and `functionalRequirements`. When absent and `issueType: feature`, derive minimal journeys from the work item.
 - `<scout_reports>` (optional) — JSON-stringified Wave-1 scout reports (M19.01). When present, use them as primary evidence and **cite scout findings (file:line) for every claim**.
 - `<wave2_reports>` (optional) — JSON-stringified Wave-2 deep-agent reports (interface-designer artefacts, risk-analyst register).
+- `<repair_feedback>` (optional) — validator errors from a prior attempt. When present, return a complete corrected JSON object and address every listed error.
 
 **Fallback rule.** If `<scout_reports>` is absent (the swarm is not yet wired or not dispatched for this run), fall back to manual investigation: read the worktree directly via the read bundle. The spec format does not require the swarm to be implementable.
 
@@ -30,6 +31,12 @@ A single JSON object conforming to `EngineeringSpecSchema` (`skills/spec-author/
 - Every `constraints[]` item must use one of these exact `kind` values:
   `phase`, `gate`, `hook`, `model`, or `output-format`. Put domain concepts
   like "API route", "database", "UI", or "test" in `name`, not `kind`.
+- Every `constraints[].source` must be exactly `path/to/file.ts:123` or
+  `path/to/file.ts:SymbolName`.
+  - Good: `core/agent-runtime/event-types.ts:EventLike`
+  - Good: `apps/server/README.md:5`
+  - Bad: `core/agent-runtime/event-types.ts:SYMBOL:EventLike`
+  - Bad: `apps/server/README.md:5-20`
 
 ### Required sections (Steve `01-planning-phase.md:287-300`)
 
@@ -57,6 +64,10 @@ The same file path **cannot appear in `filesOwned` of two WPs anywhere in the sp
 #### Constraint inventory cites real code
 
 Every entry in `constraints` must have `source` in the form `path/to/file.ts:LINE` or `path/to/file.ts:SYMBOL`. The validator checks the file exists and contains the cited symbol. Mocked or pseudo references are rejected.
+
+Do not use line ranges and do not write `SYMBOL:`. For symbols, put the symbol
+name after the final colon: `path/to/file.ts:EventLike`, not
+`path/to/file.ts:SYMBOL:EventLike`.
 
 You must run constraint inventory for every:
 - State-machine phase referenced (read the enum)
@@ -96,6 +107,10 @@ The validator runs:
 ### Step 1 — Read the work item and the PRD
 
 Identify the change being requested. Pull `userJourneys` and `functionalRequirements` from the PRD when present; otherwise derive minimal journeys from the work item body.
+
+If `<repair_feedback>` is present, read it first. Treat it as mandatory
+feedback from the validator and make the smallest correction needed while still
+returning a complete `EngineeringSpecSchema` JSON object.
 
 Emit: `[decision] READ: Issue #<n> — <one-sentence summary>`
 

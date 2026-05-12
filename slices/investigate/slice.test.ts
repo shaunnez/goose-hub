@@ -249,6 +249,61 @@ describe('runInvestigateWorkflow', () => {
       }
     });
 
+    it('passes minSuccessfulScouts: 2 when both Wave 2 agents are selected', async () => {
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(
+        makeWorkItem({
+          title: 'Update API schema for auth sessions',
+          body: 'The endpoint contract changes session handling and Zod validation.',
+        }),
+        makeMockSource(),
+        'goose-hub-self',
+        '/repo',
+      );
+
+      const wave2Opts = mockDispatchWave.mock.calls[1][0] as {
+        scoutSpecs: Array<{ scoutName: string }>;
+        minSuccessfulScouts?: number;
+      };
+      expect(wave2Opts.scoutSpecs.map((s) => s.scoutName).sort()).toEqual([
+        'wave2-interface-designer',
+        'wave2-risk-analyst',
+      ]);
+      expect(wave2Opts.minSuccessfulScouts).toBe(2);
+    });
+
+    it('selects only wave2-interface-designer for schema/API boundary work', async () => {
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(
+        makeWorkItem({
+          title: 'Add billing export API contract',
+          body: 'Define the Zod schema and endpoint response shape.',
+        }),
+        makeMockSource(),
+        'goose-hub-self',
+        '/repo',
+      );
+
+      const wave2Opts = mockDispatchWave.mock.calls[1][0] as {
+        scoutSpecs: Array<{ scoutName: string }>;
+        minSuccessfulScouts?: number;
+      };
+      expect(wave2Opts.scoutSpecs.map((s) => s.scoutName)).toEqual(['wave2-interface-designer']);
+      expect(wave2Opts.minSuccessfulScouts).toBe(1);
+    });
+
+    it('selects wave2-risk-analyst for auth/session work without interface signals', async () => {
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const wave2Opts = mockDispatchWave.mock.calls[1][0] as {
+        scoutSpecs: Array<{ scoutName: string }>;
+        minSuccessfulScouts?: number;
+      };
+      expect(wave2Opts.scoutSpecs.map((s) => s.scoutName)).toEqual(['wave2-risk-analyst']);
+      expect(wave2Opts.minSuccessfulScouts).toBe(1);
+    });
+
     it('creates worktree and always cleans it up', async () => {
       const { createWorktree, cleanupWorktree } = await import(
         '@goose-hub/core/workspaces/worktree.js'
@@ -329,6 +384,58 @@ describe('runInvestigateWorkflow', () => {
         expect.anything(),
         'wave2-risk-analyst',
         expect.anything(),
+      );
+    });
+
+    it('persists a successful Wave 2 report and continues synthesis when the other Wave 2 scout fails', async () => {
+      const wave2 = makeWaveResult({
+        status: 'incomplete',
+        reports: [
+          makeScoutReport('wave2-interface-designer'),
+          makeScoutReport('wave2-risk-analyst', {
+            status: 'error',
+            findings: [],
+            runId: 'e',
+            errorReason: 'risk analyst failed',
+          }),
+        ],
+        failedScouts: ['wave2-risk-analyst'],
+        shouldAdvance: false,
+        shouldEscalate: false,
+      });
+      mockDispatchWave.mockResolvedValueOnce(makeWaveResult()).mockResolvedValueOnce(wave2);
+
+      const source = makeMockSource();
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(
+        makeWorkItem({
+          title: 'Update API schema for auth sessions',
+          body: 'The endpoint contract changes session handling and Zod validation.',
+        }),
+        source,
+        'goose-hub-self',
+        '/repo',
+      );
+
+      expect(mockPersistScoutReport).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        'wave2-interface-designer',
+        expect.anything(),
+      );
+      expect(mockPersistScoutReport).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        'wave2-risk-analyst',
+        expect.anything(),
+      );
+      expect(mockInvokeSkill).toHaveBeenCalledOnce();
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:investigating',
+        'factory:investigation-complete',
       );
     });
   });

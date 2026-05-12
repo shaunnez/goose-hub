@@ -183,10 +183,6 @@ export class ClaudeCliRuntime implements AgentRuntime {
     if (jsonSchema != null && Object.keys(jsonSchema).length > 0) {
       argv.push('--json-schema', JSON.stringify(jsonSchema));
     }
-
-    // Per-run context as the user message
-    argv.push(contextXml);
-
     const { personaId } = spec;
 
     return new Promise((resolve, reject) => {
@@ -237,8 +233,9 @@ export class ClaudeCliRuntime implements AgentRuntime {
         env: minimalEnv,
         cwd: workspaceDir,
         shell: false, // Security rule: never shell: true
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['pipe', 'pipe', 'pipe'],
       });
+      child.stdin?.end(contextXml);
 
       let stdout = '';
       let stderr = '';

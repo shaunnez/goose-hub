@@ -57,6 +57,16 @@ const WAVE_1_SCOUTS = [
   },
 ];
 
+const WAVE_2_INTERFACE_SPEC = {
+  scoutName: 'wave2-interface-designer',
+  scoutFocus: 'Design interfaces and type signatures based on cross-validated scout findings',
+};
+
+const WAVE_2_RISK_SPEC = {
+  scoutName: 'wave2-risk-analyst',
+  scoutFocus: 'Identify risks and edge cases in the implementation approach',
+};
+
 /**
  * Runs the investigate workflow for a work item in `factory:investigating` state.
  *
@@ -66,7 +76,7 @@ const WAVE_1_SCOUTS = [
  * 3. Persist ok scout reports to DB
  * 4. If wave halted (≥2 failures) → escalate factory:needs-human
  * 5. Cross-validate Wave 1 reports
- * 6. Wave 2 — dispatch 2 deep agents with cross-validated context
+ * 6. Wave 2 — dispatch 1-2 deep agents with cross-validated context
  * 7. Persist Wave 2 ok reports
  * 8. Synthesis — run investigate skill with all scout reports
  * 9. If type:bug + requiresBrowserRepro → run playwright-repro skill
@@ -225,22 +235,17 @@ export async function runInvestigateWorkflow(
       contradictions: cvResult.contradictions,
     });
 
+    const wave2Scouts = selectWave2Scouts({
+      workItem: workItemCtx,
+      reports: wave1Result.reports,
+      contradictions: cvResult.contradictions,
+      scoutReportsContext: wave1Context,
+    });
+
     // Wave 2 — deep synthesis agents with cross-validated context
     const wave2Result = await dispatchWave({
       parentRunId: runId,
-      scoutSpecs: [
-        {
-          scoutName: 'wave2-interface-designer',
-          scoutFocus:
-            'Design interfaces and type signatures based on cross-validated scout findings',
-          extraContext: { scoutReports: wave1Context },
-        },
-        {
-          scoutName: 'wave2-risk-analyst',
-          scoutFocus: 'Identify risks and edge cases in the implementation approach',
-          extraContext: { scoutReports: wave1Context },
-        },
-      ],
+      scoutSpecs: wave2Scouts,
       workItem: workItemCtx,
       worktreePath,
       projectId,
@@ -248,6 +253,7 @@ export async function runInvestigateWorkflow(
       runtime,
       personaId,
       projectBudgets: projectConfig?.budgets,
+      minSuccessfulScouts: wave2Scouts.length,
       loadSkillAssets,
     });
 
@@ -416,4 +422,64 @@ export async function runInvestigateWorkflow(
   } finally {
     cleanupWorktree(runId);
   }
+}
+
+interface SelectWave2ScoutsOptions {
+  workItem: { number: number; title: string; body: string };
+  reports: ScoutReportLike[];
+  contradictions: unknown[];
+  scoutReportsContext: string;
+}
+
+interface ScoutReportLike {
+  scoutName: string;
+  findings: Array<{ file: string; fact: string }>;
+}
+
+function selectWave2Scouts(opts: SelectWave2ScoutsOptions) {
+  const signalText = collectWave2SignalText(opts);
+  const specs: Array<typeof WAVE_2_INTERFACE_SPEC & { extraContext: { scoutReports: string } }> =
+    [];
+
+  if (implicatesInterfaceBoundaries(signalText)) {
+    specs.push({
+      ...WAVE_2_INTERFACE_SPEC,
+      extraContext: { scoutReports: opts.scoutReportsContext },
+    });
+  }
+
+  if (implicatesRiskAnalysis(signalText) || specs.length === 0) {
+    specs.push({
+      ...WAVE_2_RISK_SPEC,
+      extraContext: { scoutReports: opts.scoutReportsContext },
+    });
+  }
+
+  return specs;
+}
+
+function collectWave2SignalText(opts: SelectWave2ScoutsOptions): string {
+  return [
+    opts.workItem.title,
+    opts.workItem.body,
+    ...opts.reports.flatMap((report) => [
+      report.scoutName,
+      ...report.findings.flatMap((finding) => [finding.file, finding.fact]),
+    ]),
+    JSON.stringify(opts.contradictions),
+  ]
+    .join('\n')
+    .toLowerCase();
+}
+
+function implicatesInterfaceBoundaries(text: string): boolean {
+  return /\b(schema|schemas|zod|json schema|api|endpoint|route|contract|interface|interfaces|ddl|drizzle|boundary|boundaries|type signature|typescript interface|work package|work packages|multi[-\s]?wp|multi[-\s]?work package|wp)\b/.test(
+    text,
+  );
+}
+
+function implicatesRiskAnalysis(text: string): boolean {
+  return /\b(auth|authentication|authorization|session|secret|secrets|token|credential|credentials|migration|migrations|concurrency|concurrent|race|parallel|state|state machine|error[-\s]?handling|rollback|retry|high[-\s]?risk|critical|security|permission|permissions)\b/.test(
+    text,
+  );
 }

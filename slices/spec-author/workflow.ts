@@ -6,7 +6,10 @@ import { listScoutReportsForInvestigation } from '@goose-hub/core/scout-reports/
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { cleanupWorktree, createWorktree } from '@goose-hub/core/workspaces/worktree.js';
 import type { EngineeringSpec } from '@goose-hub/skills/spec-author/schema.js';
-import { validateEngineeringSpec } from '@goose-hub/skills/spec-author/validate.js';
+import {
+  type ValidationResult,
+  validateEngineeringSpec,
+} from '@goose-hub/skills/spec-author/validate.js';
 
 export interface SpecAuthorWorkflowDeps {
   createWorktreeImpl?: typeof createWorktree;
@@ -31,6 +34,63 @@ function formatOutputValidationIssues(error: Error): string[] {
     const path = candidate.path.length > 0 ? candidate.path.join('.') : '<root>';
     return `${path}: ${candidate.message}`;
   });
+}
+
+type SpecAuthorContext = {
+  workItem: {
+    number: number;
+    title: string;
+    body: string;
+  };
+  worktreePath: string;
+  issueType: 'feature' | 'bug';
+  scoutReports?: string;
+  wave2Reports?: string;
+};
+
+type SpecAttempt = {
+  runId: string;
+  spec: EngineeringSpec;
+  validation: ValidationResult;
+};
+
+function formatValidationErrors(validation: Exclude<ValidationResult, { ok: true }>): string[] {
+  return validation.errors.map((e) => e.message);
+}
+
+function buildRepairFeedback(kind: 'schema' | 'structural', errors: string[]): string {
+  return [
+    `Previous spec-author attempt failed ${kind} validation.`,
+    'Return a complete corrected EngineeringSpecSchema JSON object only.',
+    'Address every error below:',
+    ...errors.map((error) => `- ${error}`),
+  ].join('\n');
+}
+
+function appendRepairRetryEvent(
+  projectId: string,
+  workItemId: string,
+  runId: string,
+  kind: 'schema' | 'structural',
+  errors: string[],
+): void {
+  eventStore.appendEvent({
+    projectId,
+    workItemId,
+    kind: 'agent.log',
+    payload: {
+      runId,
+      skill: 'spec-author',
+      stream: 'validation',
+      text: `Spec author ${kind} validation failed; retrying once.\n${errors.join('\n')}`,
+    },
+    runId,
+  });
+}
+
+function errorRunId(error: Error, fallbackRunId: string): string {
+  const telemetry = (error as { runTelemetry?: { runId?: unknown } }).runTelemetry;
+  return typeof telemetry?.runId === 'string' ? telemetry.runId : fallbackRunId;
 }
 
 function recordStateTransition(
@@ -110,39 +170,85 @@ export async function runSpecAuthorWorkflow(
       body: workItem.body,
     };
 
-    const result = await invokeSkill({
-      skillName: 'spec-author',
-      projectId,
-      workItemId: workItem.id,
-      runId: pipelineRunId,
-      context: {
-        workItem: workItemCtx,
-        worktreePath,
-        issueType: workItem.type === 'bug' ? 'bug' : 'feature',
-        scoutReports,
-        wave2Reports,
-      },
-    });
-
-    const spec = result.output as EngineeringSpec;
-
-    // Structural validation (business rules beyond schema shape).
-    const validation = validateEngineeringSpec(spec, {
+    const baseContext: SpecAuthorContext = {
+      workItem: workItemCtx,
+      worktreePath,
       issueType: workItem.type === 'bug' ? 'bug' : 'feature',
-    });
+      scoutReports,
+      wave2Reports,
+    };
 
-    if (!validation.ok) {
-      const errors = validation.errors.map((e) => e.message).join('; ');
+    const runAttempt = async (
+      runId: string,
+      repairFeedback?: string,
+      repairOf?: string,
+    ): Promise<SpecAttempt> => {
+      const result = await invokeSkill({
+        skillName: 'spec-author',
+        projectId,
+        workItemId: workItem.id,
+        runId,
+        context: baseContext,
+        overrides: {
+          workspaceDir: worktreePath,
+          ...(repairFeedback != null && {
+            appendContext: { repairFeedback },
+            extraEventPayload: { attempt: 'repair', repairOf },
+          }),
+        },
+      });
+
+      const spec = result.output as EngineeringSpec;
+      return {
+        runId,
+        spec,
+        validation: validateEngineeringSpec(spec, {
+          issueType: workItem.type === 'bug' ? 'bug' : 'feature',
+        }),
+      };
+    };
+
+    let attempt: SpecAttempt;
+    let didRepair = false;
+
+    try {
+      attempt = await runAttempt(pipelineRunId);
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      const issues = formatOutputValidationIssues(error);
+      if (issues.length === 0) throw error;
+
+      didRepair = true;
+      const failedRunId = errorRunId(error, pipelineRunId);
+      const retryRunId = crypto.randomUUID();
+      appendRepairRetryEvent(projectId, workItem.id, failedRunId, 'schema', issues);
+      attempt = await runAttempt(retryRunId, buildRepairFeedback('schema', issues), failedRunId);
+    }
+
+    if (!attempt.validation.ok && !didRepair) {
+      didRepair = true;
+      const errors = formatValidationErrors(attempt.validation);
+      const retryRunId = crypto.randomUUID();
+      appendRepairRetryEvent(projectId, workItem.id, attempt.runId, 'structural', errors);
+      attempt = await runAttempt(
+        retryRunId,
+        buildRepairFeedback('structural', errors),
+        attempt.runId,
+      );
+    }
+
+    if (!attempt.validation.ok) {
+      const errors = formatValidationErrors(attempt.validation).join('; ');
       eventStore.appendEvent({
         projectId,
         workItemId: workItem.id,
         kind: 'agent.run-failed',
         payload: {
-          runId: pipelineRunId,
+          runId: attempt.runId,
           skill: 'spec-author',
           error: `Validation failed: ${errors}`,
         },
-        runId: pipelineRunId,
+        runId: attempt.runId,
       });
       await stateSource.comment(
         workItem.externalId,
@@ -162,14 +268,14 @@ export async function runSpecAuthorWorkflow(
       return;
     }
 
-    persistEngineeringSpec(projectId, workItem.id, pipelineRunId, spec);
+    persistEngineeringSpec(projectId, workItem.id, attempt.runId, attempt.spec);
 
     eventStore.appendEvent({
       projectId,
       workItemId: workItem.id,
       kind: 'spec.completed',
-      payload: { pipelineRunId, workItemId: workItem.id },
-      runId: pipelineRunId,
+      payload: { pipelineRunId: attempt.runId, workItemId: workItem.id },
+      runId: attempt.runId,
     });
 
     await stateSource.transitionState(
@@ -181,18 +287,19 @@ export async function runSpecAuthorWorkflow(
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
     const outputValidationIssues = formatOutputValidationIssues(error);
+    const failedRunId = errorRunId(error, pipelineRunId);
 
     eventStore.appendEvent({
       projectId,
       workItemId: workItem.id,
       kind: 'agent.run-failed',
       payload: {
-        runId: pipelineRunId,
+        runId: failedRunId,
         skill: 'spec-author',
         error: error.message,
         ...(outputValidationIssues.length > 0 && { issues: outputValidationIssues }),
       },
-      runId: pipelineRunId,
+      runId: failedRunId,
     });
 
     const details = [
