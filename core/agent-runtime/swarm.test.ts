@@ -347,6 +347,50 @@ describe('swarm.dispatchWave', () => {
     expect(result.shouldAdvance).toBe(true);
   });
 
+  it('succeeds when a scout returns a decisionSummaries kind not in the enum (coerced to UNKNOWN)', async () => {
+    const { fn: appendEvent, events } = makeFakeAppendEvent();
+    const runtime = makeRuntime({
+      'scout-schema': () => Promise.resolve(okResult('scout-schema')),
+      'scout-code-path': () => Promise.resolve(okResult('scout-code-path')),
+      'scout-pattern': () =>
+        Promise.resolve({
+          output: {
+            findings: [{ file: 'src/foo.ts', line: 1, fact: 'exists', confidence: 'high' }],
+            decisionSummaries: [
+              { kind: 'READ', summary: 'scanned' },
+              { kind: 'HALLUCINATED_KIND', summary: 'model invented this kind' },
+            ],
+            status: 'ok',
+          },
+          decisionSummaries: [],
+          events: [],
+        }),
+    });
+
+    const result = await dispatchWave({
+      parentRunId: 'parent-coerce',
+      scoutSpecs: [
+        makeScoutSpec('scout-schema'),
+        makeScoutSpec('scout-code-path'),
+        makeScoutSpec('scout-pattern'),
+      ],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+    });
+
+    const patternReport = result.reports.find((r) => r.scoutName === 'scout-pattern');
+    expect(patternReport?.status).toBe('ok');
+    expect(patternReport?.decisionSummaries.some((d) => d.kind === 'UNKNOWN')).toBe(true);
+    expect(events.some((e) => e.kind === 'swarm.scout-failed')).toBe(false);
+    expect(result.shouldAdvance).toBe(true);
+  });
+
   it('forwards loadSkillAssets results to the AgentSpec on each scout spawn', async () => {
     const { fn: appendEvent } = makeFakeAppendEvent();
     const seenSpecs: AgentSpec[] = [];
