@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import {
   type RenderItem,
   type TimelineContext,
+  computeIsWritePrdStuck,
   formatDuration,
   formatSkillName,
 } from '../../lib/timeline';
@@ -98,8 +99,13 @@ export function RunGroupWrapper({
       (item.event.payload as { orphaned?: boolean } | null)?.orphaned === true,
   );
 
+  const groupEventList = items
+    .filter((item): item is Extract<RenderItem, { kind: 'event' }> => item.kind === 'event')
+    .map((item) => item.event);
+  const isWritePrdStuck = computeIsWritePrdStuck(groupEventList);
   const isLatestRun = context?.latestRunId === runId;
-  const canResume = context != null && (isFailed || isStalled) && isLatestRun && !resumed;
+  const canResume =
+    context != null && (isFailed || isStalled || isWritePrdStuck) && isLatestRun && !resumed;
 
   const costRow = context?.runCosts?.get(runId);
   const runTokens = costRow ? costRow.inputTokens + costRow.outputTokens : 0;
