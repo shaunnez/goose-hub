@@ -6,7 +6,7 @@ export function SwarmHeartbeatEvent({ event }: { event: AgentEventDto }) {
   return (
     <li
       data-event-kind={event.kind}
-      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+      className="rounded-md border border-line-400 bg-bg-elev/60 px-4 py-3"
     >
       <div className="flex items-center gap-2 text-[11px] text-fg-3">
         <Activity size={13} className="shrink-0" />
@@ -32,7 +32,7 @@ export function SwarmScoutCompletedEvent({ event }: { event: AgentEventDto }) {
   return (
     <li
       data-event-kind={event.kind}
-      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+      className="rounded-md border border-success bg-bg-elev/60 px-4 py-3"
     >
       <div className="flex items-center gap-2 text-[11px] text-fg-3">
         <CheckCircle size={13} className="shrink-0 text-green-400" />
@@ -54,7 +54,7 @@ export function SwarmScoutFailedEvent({ event }: { event: AgentEventDto }) {
   return (
     <li
       data-event-kind={event.kind}
-      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+      className="rounded-md border border-red-400 bg-bg-elev/60 px-4 py-3"
     >
       <div className="flex items-center gap-2 mb-1 text-[11px] text-fg-3">
         <XCircle size={13} className="shrink-0 text-[color:var(--danger)]" />
@@ -74,7 +74,7 @@ export function SwarmScoutTimeoutEvent({ event }: { event: AgentEventDto }) {
   return (
     <li
       data-event-kind={event.kind}
-      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+      className="rounded-md border border-warning bg-bg-elev/60 px-4 py-3"
     >
       <div className="flex items-center gap-2 text-[11px] text-fg-3">
         <Clock size={13} className="shrink-0 text-amber-400" />
@@ -113,7 +113,7 @@ export function SwarmWaveEvent({ event }: { event: AgentEventDto }) {
   return (
     <li
       data-event-kind={event.kind}
-      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+      className={`rounded-md border border-info bg-bg-elev/60 px-4 py-3 ${isHalted || isIncomplete ? 'border-red-400' : ''}`}
     >
       <div className="flex items-center gap-2 mb-1 text-[11px] text-fg-3">
         <Icon size={13} className={iconClass} />

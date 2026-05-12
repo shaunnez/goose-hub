@@ -18,7 +18,7 @@ export function AgentTriageCompleteEvent({ event }: { event: AgentEventDto }) {
   return (
     <li
       data-event-kind={event.kind}
-      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+      className="rounded-md border border-success bg-bg-elev/60 px-4 py-3"
     >
       <div className="flex items-center gap-2 mb-2 text-[11px] text-fg-3">
         <Tag size={13} className="shrink-0 text-[color:var(--accent)]" />
