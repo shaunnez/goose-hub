@@ -26,11 +26,13 @@ You have **read access only**.
 Each risk becomes one finding entry:
 - `file` = the primary source file from the evidence citation (e.g. `apps/server/src/routes/auth.ts`)
 - `line` = the line number from the evidence citation if present
+- If no concrete line is known, omit `line` entirely. Never emit `"line": null`.
 - `fact` = `RISK[<severity>]: <concrete failure mode> | EVIDENCE: <file:line citation> | MITIGATION: <falsifiable fix>`
 - `confidence` = matches severity: `high`→`"high"`, `medium`→`"medium"`, `low`→`"low"`
 
 Encode open questions as findings:
 - `file` = `"open-questions"`
+- Omit `line` entirely.
 - `fact` = `OPEN_QUESTION: <one sentence describing the gap>`
 - `confidence` = `"low"`
 

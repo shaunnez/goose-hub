@@ -21,6 +21,16 @@ The `<task>` block contains:
 
 A single JSON object conforming to `EngineeringSpecSchema` (`skills/spec-author/schema.ts`). The orchestrator validates it against the Zod schema first, then runs `validateEngineeringSpec` for the structural rules. Both must pass before the spec is persisted.
 
+### Shape guardrails
+
+- `schemaChanges` is always an object: `{"ddl":[],"migrations":[]}` when there
+  are no DB changes. Never return it as an array.
+- Every `interfaceContracts[]` item must include `name`, `signature`, and
+  `file`.
+- Every `constraints[]` item must use one of these exact `kind` values:
+  `phase`, `gate`, `hook`, `model`, or `output-format`. Put domain concepts
+  like "API route", "database", "UI", or "test" in `name`, not `kind`.
+
 ### Required sections (Steve `01-planning-phase.md:287-300`)
 
 1. **`objective`** — one paragraph naming the change in user-visible terms.

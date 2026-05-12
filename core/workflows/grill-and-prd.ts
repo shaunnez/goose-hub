@@ -273,7 +273,8 @@ export async function runGrillAndPrdWorkflow(
     humanConcerns,
     deps = {},
   } = input;
-  const runId = crypto.randomUUID();
+  const workflowRunId = crypto.randomUUID();
+  const childRunId = (skill: string) => `${workflowRunId}:${skill}`;
   const runtime = deps.runtime ?? new ClaudeCliRuntime();
   const totalSpendForSkill = deps.totalSpendForSkill ?? _totalSpendForSkill;
   const _buildContext = deps.buildContext ?? buildProjectContextBundle;
@@ -296,9 +297,10 @@ export async function runGrillAndPrdWorkflow(
       kind: 'agent.run-failed',
       projectId,
       workItemId: workItem.id,
-      runId,
+      runId: workflowRunId,
       payload: {
         skill: 'grill-and-prd',
+        workflowRunId,
         error: `expected workItem.state in {${validStates.join(', ')}}, got '${workItem.state}'`,
       },
     });
@@ -335,7 +337,7 @@ export async function runGrillAndPrdWorkflow(
       workItem,
       stateSource,
       projectId,
-      runId,
+      workflowRunId,
       runtime,
       projectConfig,
       totalSpendForSkill,
@@ -351,7 +353,7 @@ export async function runGrillAndPrdWorkflow(
       workItem,
       stateSource,
       projectId,
-      runId,
+      workflowRunId,
       runtime,
       projectConfig,
       totalSpendForSkill,
@@ -372,9 +374,10 @@ export async function runGrillAndPrdWorkflow(
       kind: 'agent.run-failed',
       projectId,
       workItemId: workItem.id,
-      runId,
+      runId: workflowRunId,
       payload: {
         skill: 'grill-and-prd',
+        workflowRunId,
         error: 'cannot create worktree: targetRepo.localPath is missing',
       },
     });
@@ -390,14 +393,18 @@ export async function runGrillAndPrdWorkflow(
     : localRepoPath;
   let worktreePath: string;
   try {
-    worktreePath = createWorktreeFn(expandedRepoPath, runId);
+    worktreePath = createWorktreeFn(expandedRepoPath, workflowRunId);
   } catch (err) {
     eventStore.appendEvent({
       kind: 'agent.run-failed',
       projectId,
       workItemId: workItem.id,
-      runId,
-      payload: { skill: 'grill-and-prd', error: `worktree creation failed: ${String(err)}` },
+      runId: workflowRunId,
+      payload: {
+        skill: 'grill-and-prd',
+        workflowRunId,
+        error: `worktree creation failed: ${String(err)}`,
+      },
     });
     await stateSource.comment(
       workItem.externalId,
@@ -444,12 +451,13 @@ export async function runGrillAndPrdWorkflow(
     );
     const grillPrompt = readPromptWithContext('grill-me', projectId);
     const grillJsonSchema = toJsonSchema(GrillMeOutputSchema);
+    const grillRunId = childRunId('grill-me');
 
     let grillOutput: import('../../skills/grill-me/schema.js').GrillMeOutput | null = null;
 
     try {
       const grillResult = await runtime.run({
-        runId,
+        runId: grillRunId,
         role: 'griller',
         skill: 'grill-me',
         workspaceDir: worktreePath,
@@ -480,7 +488,7 @@ export async function runGrillAndPrdWorkflow(
         personaId: grillerPersona.personaId,
         appendSystemPrompt: grillPrompt,
         outputJsonSchema: grillJsonSchema,
-        extraEventPayload: { roundNumber },
+        extraEventPayload: { roundNumber, workflowRunId },
       });
 
       const parsed = GrillMeOutputSchema.safeParse(grillResult.output);
@@ -489,8 +497,8 @@ export async function runGrillAndPrdWorkflow(
           kind: 'agent.run-failed',
           projectId,
           workItemId: workItem.id,
-          runId,
-          payload: { skill: 'grill-me', error: parsed.error.message },
+          runId: grillRunId,
+          payload: { skill: 'grill-me', workflowRunId, error: parsed.error.message },
         });
         await stateSource.comment(
           workItem.externalId,
@@ -512,8 +520,8 @@ export async function runGrillAndPrdWorkflow(
         kind: 'agent.run-failed',
         projectId,
         workItemId: workItem.id,
-        runId,
-        payload: { skill: 'grill-me', error: String(err) },
+        runId: grillRunId,
+        payload: { skill: 'grill-me', workflowRunId, error: String(err) },
       });
       await stateSource.comment(
         workItem.externalId,
@@ -541,8 +549,9 @@ export async function runGrillAndPrdWorkflow(
           kind: 'grill.decision-crystallized',
           projectId,
           workItemId: workItem.id,
-          runId,
+          runId: workflowRunId,
           payload: {
+            workflowRunId,
             roundNumber: roundNumber - 1,
             decision: grillOutput.crystallizedDecision.trim(),
           },
@@ -551,7 +560,7 @@ export async function runGrillAndPrdWorkflow(
 
       // Emit any decision summaries the griller produced this round.
       reconcileDecisionSummaries(
-        runId,
+        grillRunId,
         projectId,
         workItem.id,
         'grill-me',
@@ -568,8 +577,13 @@ export async function runGrillAndPrdWorkflow(
           kind: 'grill.completed',
           projectId,
           workItemId: workItem.id,
-          runId,
-          payload: { refinedIntent: forcedRefinedIntent, rounds: roundNumber, forced: true },
+          runId: workflowRunId,
+          payload: {
+            workflowRunId,
+            refinedIntent: forcedRefinedIntent,
+            rounds: roundNumber,
+            forced: true,
+          },
         });
         grillCompletedEmitted = true;
         grillOutput = { ...grillOutput, refinedIntent: forcedRefinedIntent, readyForPRD: true };
@@ -585,9 +599,10 @@ export async function runGrillAndPrdWorkflow(
             kind: 'agent.run-failed',
             projectId,
             workItemId: workItem.id,
-            runId,
+            runId: grillRunId,
             payload: {
               skill: 'grill-me',
+              workflowRunId,
               error: 'grill-me returned readyForPRD:false with no questions',
             },
           });
@@ -629,8 +644,8 @@ export async function runGrillAndPrdWorkflow(
             kind: 'grill.question-posted',
             projectId,
             workItemId: workItem.id,
-            runId,
-            payload: { roundNumber, question: questionEntry.text },
+            runId: workflowRunId,
+            payload: { workflowRunId, roundNumber, question: questionEntry.text },
           });
 
           grillPhaseReturn = { phase: 'grilling', questionPosted: questionEntry.text };
@@ -643,8 +658,12 @@ export async function runGrillAndPrdWorkflow(
             kind: 'grill.completed',
             projectId,
             workItemId: workItem.id,
-            runId,
-            payload: { refinedIntent: grillOutput.refinedIntent, rounds: roundNumber },
+            runId: workflowRunId,
+            payload: {
+              workflowRunId,
+              refinedIntent: grillOutput.refinedIntent,
+              rounds: roundNumber,
+            },
           });
         }
 
@@ -653,14 +672,18 @@ export async function runGrillAndPrdWorkflow(
     }
   } finally {
     try {
-      cleanupWorktreeFn(runId);
+      cleanupWorktreeFn(workflowRunId);
     } catch (err) {
       eventStore.appendEvent({
         kind: 'agent.run-failed',
         projectId,
         workItemId: workItem.id,
-        runId,
-        payload: { skill: 'grill-and-prd', error: `worktree cleanup failed: ${String(err)}` },
+        runId: workflowRunId,
+        payload: {
+          skill: 'grill-and-prd',
+          workflowRunId,
+          error: `worktree cleanup failed: ${String(err)}`,
+        },
       });
     }
   }
@@ -673,7 +696,7 @@ export async function runGrillAndPrdWorkflow(
     workItem,
     stateSource,
     projectId,
-    runId,
+    workflowRunId,
     runtime,
     projectConfig,
     totalSpendForSkill,
@@ -691,7 +714,7 @@ interface WritePrdStepInput {
   workItem: WorkItem;
   stateSource: StateSource;
   projectId: string;
-  runId: string;
+  workflowRunId: string;
   runtime: AgentRuntime;
   projectConfig: Pick<ProjectConfig, 'budgets' | 'stack' | 'targetRepo'> | null | undefined;
   totalSpendForSkill: (projectId: string, skill: string) => number;
@@ -707,7 +730,7 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
     workItem,
     stateSource,
     projectId,
-    runId,
+    workflowRunId,
     runtime,
     projectConfig,
     totalSpendForSkill,
@@ -745,12 +768,13 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
   );
   const prdPrompt = readPromptWithContext('write-prd', projectId);
   const prdJsonSchema = toJsonSchema(PRDOutputSchema);
+  const prdRunId = `${workflowRunId}:write-prd`;
 
   let prdOutput: PRDOutput;
 
   try {
     const prdResult = await runtime.run({
-      runId,
+      runId: prdRunId,
       role: 'prd-writer',
       skill: 'write-prd',
       context: {
@@ -786,6 +810,7 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
       personaId: prdPersona.personaId,
       appendSystemPrompt: prdPrompt,
       outputJsonSchema: prdJsonSchema,
+      extraEventPayload: { workflowRunId },
     });
 
     const parsed = PRDOutputSchema.safeParse(prdResult.output);
@@ -794,8 +819,8 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
         kind: 'agent.run-failed',
         projectId,
         workItemId: workItem.id,
-        runId,
-        payload: { skill: 'write-prd', error: parsed.error.message },
+        runId: prdRunId,
+        payload: { skill: 'write-prd', workflowRunId, error: parsed.error.message },
       });
       // Leave state as factory:prd-drafting so dispatchResumeIssue can re-enter
       // via the existing prd-drafting resume handler (forces → grilling).
@@ -807,8 +832,8 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
       kind: 'agent.run-failed',
       projectId,
       workItemId: workItem.id,
-      runId,
-      payload: { skill: 'write-prd', error: String(err) },
+      runId: prdRunId,
+      payload: { skill: 'write-prd', workflowRunId, error: String(err) },
     });
     // Leave state as factory:prd-drafting so dispatchResumeIssue can re-enter
     // via the existing prd-drafting resume handler (forces → grilling).
@@ -816,7 +841,7 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
   }
 
   reconcileDecisionSummaries(
-    runId,
+    prdRunId,
     projectId,
     workItem.id,
     'write-prd',
@@ -844,26 +869,27 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
       kind: 'prd.advisor-skipped',
       projectId,
       workItemId: workItem.id,
-      runId,
-      payload: { reason: 'priority' },
+      runId: workflowRunId,
+      payload: { workflowRunId, reason: 'priority' },
     });
   } else if (!advisorBudgetAvailable) {
     eventStore.appendEvent({
       kind: 'prd.advisor-skipped',
       projectId,
       workItemId: workItem.id,
-      runId,
-      payload: { reason: 'budget' },
+      runId: workflowRunId,
+      payload: { workflowRunId, reason: 'budget' },
     });
   } else {
     // The advisor uses the same `prd-writer` role (advisor mode).
     const advisorPersona = selectPersona(projectId, 'prd-writer');
     const advisorPrompt = readPromptWithContext('advise-on-prd', projectId);
     const advisorJsonSchema = toJsonSchema(AdvisePRDOutputSchema);
+    const advisorRunId = `${workflowRunId}:advise-on-prd`;
 
     try {
       const advisorResult = await runtime.run({
-        runId,
+        runId: advisorRunId,
         role: 'prd-writer',
         skill: 'advise-on-prd',
         context: { projectId, workItemId: workItem.id, prdOutput, priority: workItem.priority },
@@ -875,6 +901,7 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
         personaId: advisorPersona.personaId,
         appendSystemPrompt: advisorPrompt,
         outputJsonSchema: advisorJsonSchema,
+        extraEventPayload: { workflowRunId },
       });
 
       const parsed = AdvisePRDOutputSchema.safeParse(advisorResult.output);
@@ -883,8 +910,8 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
           kind: 'agent.run-failed',
           projectId,
           workItemId: workItem.id,
-          runId,
-          payload: { skill: 'advise-on-prd', error: parsed.error.message },
+          runId: advisorRunId,
+          payload: { skill: 'advise-on-prd', workflowRunId, error: parsed.error.message },
         });
         // Fail loud — do not silently continue with un-revised PRD when the
         // advisor produced malformed output. Human triage required.
@@ -905,7 +932,7 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
       }
 
       reconcileDecisionSummaries(
-        runId,
+        advisorRunId,
         projectId,
         workItem.id,
         'advise-on-prd',
@@ -916,8 +943,8 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
         kind: 'agent.run-failed',
         projectId,
         workItemId: workItem.id,
-        runId,
-        payload: { skill: 'advise-on-prd', error: String(err) },
+        runId: advisorRunId,
+        payload: { skill: 'advise-on-prd', workflowRunId, error: String(err) },
       });
       await stateSource.forceState(workItem.externalId, 'factory:needs-human');
       return { phase: 'needs-human' };
@@ -943,8 +970,8 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
       kind: 'agent.run-failed',
       projectId,
       workItemId: workItem.id,
-      runId,
-      payload: { skill: 'grill-and-prd', error: String(err) },
+      runId: workflowRunId,
+      payload: { skill: 'grill-and-prd', workflowRunId, error: String(err) },
     });
     await stateSource.forceState(workItem.externalId, 'factory:needs-human');
     return { phase: 'needs-human' };
@@ -955,16 +982,20 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
       kind: 'prd.drafted',
       projectId,
       workItemId: workItem.id,
-      runId,
-      payload: { prd: prdOutput, advisorConcerns },
+      runId: workflowRunId,
+      payload: { workflowRunId, prd: prdOutput, advisorConcerns },
     });
   } catch (err) {
     eventStore.appendEvent({
       kind: 'agent.run-failed',
       projectId,
       workItemId: workItem.id,
-      runId,
-      payload: { skill: 'write-prd', error: `prd.drafted emit failed: ${String(err)}` },
+      runId: prdRunId,
+      payload: {
+        skill: 'write-prd',
+        workflowRunId,
+        error: `prd.drafted emit failed: ${String(err)}`,
+      },
     });
     return { phase: 'needs-human' };
   }

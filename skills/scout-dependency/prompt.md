@@ -17,6 +17,14 @@ You have **read and search access only**.
 - Note workspace-package imports (`@goose-hub/...`) separately from relative imports.
 - Stop after the first transitive layer (the imports of the directly-imported modules). Do not walk the full graph.
 
+## Turn Discipline
+
+- Identify one target module from `<scout_focus>` first. If several are plausible, choose the one most directly named by `<work_item>`.
+- Read at most 1 target module plus 5 directly imported local modules. Do not read tests unless the target module imports them.
+- Use at most 3 searches/file-listing commands to locate the target and its direct imports.
+- Stop at the first transitive layer. Do not switch into runtime behavior, retry logic, UI flow, or tests unless they are direct imports.
+- If no clear module is named, return `UNCERTAINTY` with the candidate modules you found rather than expanding the search.
+
 ## Output
 
 Return JSON conforming to `ScoutOutputSchema`:

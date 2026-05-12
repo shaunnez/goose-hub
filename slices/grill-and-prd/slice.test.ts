@@ -11,7 +11,11 @@
  * are seeded directly in the lane state the workflow expects (factory:grilling
  * for round 1, factory:gate-pending for round 2 onwards).
  */
-import type { AgentResult, AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
+import type {
+  AgentResult,
+  AgentRuntime,
+  AgentSpec,
+} from '@goose-hub/core/agent-runtime/interface.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { InMemoryLabelsSource } from '@goose-hub/core/state-source/in-memory-labels.js';
 import type { Priority } from '@goose-hub/core/state-source/interface.js';
@@ -426,6 +430,53 @@ describe('grill-and-prd: advisor runs and revises sections', () => {
 
     // grill+prd+advisor → 3 calls
     expect(runtime.run).toHaveBeenCalledTimes(3);
+  });
+
+  it('uses distinct child run IDs for grill, PRD, and advisor while preserving workflow correlation', async () => {
+    const projectId = uniqueProjectId('distinct-child-runs');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await seedFeatureItem(source, {
+      state: 'factory:grilling',
+      priority: 'high',
+    });
+    const workItem = await source.getItem(item.externalId);
+
+    const runtime = makeQueuedRuntime([validGrillReady(), validPRD(), validAdvisorRevise()]);
+
+    const result = await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies: [],
+      deps: { runtime, projectConfig: injectedConfig(5), ...noopWorktreeDeps() },
+    });
+
+    expect(result.phase).toBe('prd-review');
+
+    const specs = (runtime.run as ReturnType<typeof vi.fn>).mock.calls.map(
+      ([spec]) => spec as AgentSpec,
+    );
+    expect(specs.map((spec) => spec.skill)).toEqual(['grill-me', 'write-prd', 'advise-on-prd']);
+    expect(new Set(specs.map((spec) => spec.runId)).size).toBe(3);
+
+    const workflowRunIds = specs.map(
+      (spec) => (spec.extraEventPayload as { workflowRunId?: string } | undefined)?.workflowRunId,
+    );
+    expect(new Set(workflowRunIds).size).toBe(1);
+    const workflowRunId = workflowRunIds[0];
+    expect(workflowRunId).toBeDefined();
+    expect(specs.map((spec) => spec.runId)).toEqual([
+      `${workflowRunId}:grill-me`,
+      `${workflowRunId}:write-prd`,
+      `${workflowRunId}:advise-on-prd`,
+    ]);
+
+    const evs = eventStore.replay({ projectId, workItemId: workItem.id });
+    const drafted = evs.find((e) => e.kind === 'prd.drafted');
+    expect(drafted?.runId).toBe(workflowRunId);
+    expect((drafted?.payload as { workflowRunId?: string } | undefined)?.workflowRunId).toBe(
+      workflowRunId,
+    );
   });
 });
 

@@ -110,6 +110,31 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
     expect(row.workItemId).toBe('github:owner/repo#1');
   });
 
+  it('uses top-level workItemId for events and costs when context omits it', async () => {
+    const envelope = JSON.stringify({ is_error: false, result: '{"ok":true}' });
+    mockSpawn.mockReturnValue(makeChild(0, envelope));
+
+    const runtime = new ClaudeCliRuntime();
+    await runtime.run(
+      makeSpec({
+        context: { projectId: 'test-project' },
+        workItemId: 'github:owner/repo#1',
+      }),
+    );
+
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-started',
+        workItemId: 'github:owner/repo#1',
+      }),
+    );
+    expect(mockRecordCost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workItemId: 'github:owner/repo#1',
+      }),
+    );
+  });
+
   it('inserts a failure row when CLI reports is_error=true', async () => {
     const valuesRun = vi.fn();
     const values = vi.fn().mockReturnValue({ run: valuesRun });

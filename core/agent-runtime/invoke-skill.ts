@@ -178,6 +178,8 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<AgentResult>
   const mergedContext: Record<string, unknown> = {
     ...context,
     ...overrides?.appendContext,
+    projectId,
+    ...(workItemId != null && { workItemId }),
   };
 
   // 10. Spawn

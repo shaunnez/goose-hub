@@ -17,6 +17,14 @@ You have **read and search access only**.
 - Map both unit (`*.test.ts`, `slice.test.ts`) and e2e (`apps/web/e2e/*.spec.ts`) tests.
 - If the area has no tests, say so with one finding pointing at the directory and `confidence: 'high'`.
 
+## Turn Discipline
+
+- Run at most 3 searches: likely unit tests, likely slice tests, and likely e2e tests.
+- Read at most 6 test files total. Prefer files whose names or test titles match `<scout_focus>`.
+- Report representative coverage, not every test in a large suite. Cap findings at 12 unless the work item explicitly asks for exhaustive inventory.
+- Do not judge test quality or inspect implementation files except to identify the target module name.
+- If no matching tests exist after the search pass, return one high-confidence absence finding and stop.
+
 ## Output
 
 Return JSON conforming to `ScoutOutputSchema`:

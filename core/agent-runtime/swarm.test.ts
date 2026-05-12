@@ -59,6 +59,17 @@ function makeRuntime(impls: Record<string, () => Promise<AgentResult>>): AgentRu
   };
 }
 
+function testBudgetResolver(skill: string) {
+  return {
+    budgets: {
+      maxTurns: skill === 'scout-code-path' ? 21 : 20,
+      maxBudgetUsd: 0.5,
+      timeoutMs: 120_000,
+    },
+    modelOverride: `model-for-${skill}`,
+  };
+}
+
 describe('swarm.dispatchWave', () => {
   it('dispatches all scouts in parallel and returns ok status when all succeed', async () => {
     const { fn: appendEvent, events } = makeFakeAppendEvent();
@@ -83,6 +94,7 @@ describe('swarm.dispatchWave', () => {
       appendEvent,
       heartbeatIntervalMs: 60_000, // long enough never to fire in test
       scoutTimeoutMs: 5_000,
+      resolveScoutBudget: testBudgetResolver,
     });
 
     expect(result.status).toBe('ok');
@@ -131,6 +143,7 @@ describe('swarm.dispatchWave', () => {
       heartbeatIntervalMs: 60_000,
       scoutTimeoutMs: 5_000,
       maxScoutAgents: 4,
+      resolveScoutBudget: testBudgetResolver,
     });
 
     expect(peak).toBeLessThanOrEqual(4);
@@ -165,6 +178,7 @@ describe('swarm.dispatchWave', () => {
       appendEvent,
       scoutTimeoutMs: 30,
       heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
     });
 
     const slow = result.reports.find((r) => r.scoutName === 'scout-slow');
@@ -202,6 +216,7 @@ describe('swarm.dispatchWave', () => {
       appendEvent,
       scoutTimeoutMs: 5_000,
       heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
     });
 
     expect(result.status).toBe('halted');
@@ -234,6 +249,7 @@ describe('swarm.dispatchWave', () => {
       appendEvent,
       scoutTimeoutMs: 5_000,
       heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
     });
 
     // 2 failures → halted (still escalation).
@@ -263,6 +279,7 @@ describe('swarm.dispatchWave', () => {
       appendEvent,
       scoutTimeoutMs: 1_000,
       heartbeatIntervalMs: 20,
+      resolveScoutBudget: testBudgetResolver,
     });
 
     const heartbeats = events.filter((e) => e.kind === 'swarm.heartbeat');
@@ -297,6 +314,7 @@ describe('swarm.dispatchWave', () => {
       appendEvent,
       scoutTimeoutMs: 1_000,
       heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
     });
 
     const violations = events.filter((e) => e.kind === 'tool.violation');
@@ -337,6 +355,7 @@ describe('swarm.dispatchWave', () => {
       appendEvent,
       scoutTimeoutMs: 1_000,
       heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
     });
 
     const broken = result.reports.find((r) => r.scoutName === 'scout-broken');
@@ -382,6 +401,7 @@ describe('swarm.dispatchWave', () => {
       appendEvent,
       scoutTimeoutMs: 1_000,
       heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
     });
 
     const patternReport = result.reports.find((r) => r.scoutName === 'scout-pattern');
@@ -420,6 +440,7 @@ describe('swarm.dispatchWave', () => {
         appendSystemPrompt: `prompt for ${scoutName}`,
         outputJsonSchema: { type: 'object', $id: scoutName },
       }),
+      resolveScoutBudget: testBudgetResolver,
     });
 
     expect(seenSpecs).toHaveLength(3);
@@ -427,6 +448,58 @@ describe('swarm.dispatchWave', () => {
       expect(spec.appendSystemPrompt).toBe(`prompt for ${spec.skill}`);
       expect(spec.outputJsonSchema).toEqual({ type: 'object', $id: spec.skill });
     }
+  });
+
+  it('uses resolved per-skill budgets and model overrides for child scout spawns', async () => {
+    const { fn: appendEvent } = makeFakeAppendEvent();
+    const seenSpecs: AgentSpec[] = [];
+    const runtime: AgentRuntime = {
+      async run(spec: AgentSpec): Promise<AgentResult> {
+        seenSpecs.push(spec);
+        return okResult(spec.skill);
+      },
+    };
+
+    await dispatchWave({
+      parentRunId: 'parent-budget',
+      scoutSpecs: [
+        makeScoutSpec('scout-schema'),
+        makeScoutSpec('scout-code-path'),
+        makeScoutSpec('scout-pattern'),
+      ],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      projectBudgets: { skillBudgetOverrides: { 'scout-schema': { maxTurns: 25 } } },
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: (skill, projectBudgets, projectId) => {
+        expect(projectId).toBe('goose-hub-self');
+        expect(projectBudgets?.skillBudgetOverrides?.['scout-schema']?.maxTurns).toBe(25);
+        return {
+          budgets: {
+            maxTurns: skill === 'scout-schema' ? 25 : 20,
+            maxBudgetUsd: 0.5,
+            timeoutMs: 120_000,
+          },
+          modelOverride: `resolved-${skill}`,
+        };
+      },
+    });
+
+    expect(seenSpecs).toHaveLength(3);
+    const schemaSpec = seenSpecs.find((s) => s.skill === 'scout-schema');
+    const codePathSpec = seenSpecs.find((s) => s.skill === 'scout-code-path');
+    expect(schemaSpec?.budgets).toEqual({
+      maxTurns: 25,
+      maxBudgetUsd: 0.5,
+      timeoutMs: 120_000,
+    });
+    expect(schemaSpec?.modelOverride).toBe('resolved-scout-schema');
+    expect(codePathSpec?.budgets.maxTurns).toBe(20);
+    expect(codePathSpec?.modelOverride).toBe('resolved-scout-code-path');
   });
 
   it('routes each child spawn through assembleSpawnContext (freshContext: true per scout)', async () => {
@@ -454,6 +527,7 @@ describe('swarm.dispatchWave', () => {
       appendEvent,
       scoutTimeoutMs: 1_000,
       heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
     });
 
     expect(seenSpecs).toHaveLength(3);

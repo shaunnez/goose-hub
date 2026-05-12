@@ -37,4 +37,24 @@ describe('ScoutOutputSchema', () => {
       expect(result.data.decisionSummaries[0]?.kind).toBe('UNKNOWN');
     }
   });
+
+  it('treats null finding line as omitted', () => {
+    const result = ScoutOutputSchema.safeParse({
+      findings: [
+        {
+          file: 'open-questions',
+          line: null,
+          fact: 'OPEN_QUESTION: unclear',
+          confidence: 'low',
+        },
+      ],
+      decisionSummaries: [{ kind: 'INSIGHT', summary: 'captured open question' }],
+      status: 'ok',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.findings[0]?.line).toBeUndefined();
+      expect(JSON.stringify(result.data.findings[0])).not.toContain('line');
+    }
+  });
 });

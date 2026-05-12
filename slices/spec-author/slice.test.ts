@@ -291,6 +291,26 @@ describe('runSpecAuthorWorkflow', () => {
         'factory:spec-ready',
       );
     });
+
+    it('emits a state.transitioned event after moving to spec-ready', async () => {
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      const source = makeMockSource();
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), source, 'goose-hub-self', '/repo');
+
+      const transitionCall = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'state.transitioned');
+      expect(transitionCall?.[0]).toMatchObject({
+        projectId: 'goose-hub-self',
+        workItemId: 'github:shaunnez/goose-hub#55',
+        payload: {
+          from: 'factory:dev-ready',
+          to: 'factory:spec-ready',
+          by: 'spec-author',
+        },
+      });
+    });
   });
 
   describe('spec survives worktree cleanup — acceptance criterion 4', () => {
@@ -335,6 +355,48 @@ describe('runSpecAuthorWorkflow', () => {
       await runSpecAuthorWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
 
       expect(cleanupWorktree).toHaveBeenCalledOnce();
+    });
+
+    it('surfaces output validation issue paths in the event and comment', async () => {
+      const outputError = Object.assign(
+        new Error("invokeSkill: output validation failed for 'spec-author'"),
+        {
+          name: 'OutputValidationError',
+          issues: [
+            {
+              path: ['decisionSummaries', 0, 'kind'],
+              message: 'Invalid enum value',
+            },
+          ],
+        },
+      );
+      mockInvokeSkill.mockRejectedValueOnce(outputError);
+
+      const source = makeMockSource();
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), source, 'goose-hub-self', '/repo');
+
+      const failureCall = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'agent.run-failed');
+      expect(failureCall?.[0].payload).toMatchObject({
+        skill: 'spec-author',
+        issues: ['decisionSummaries.0.kind: Invalid enum value'],
+      });
+      expect(source.comment).toHaveBeenCalledWith(
+        '55',
+        expect.stringContaining('Schema issue: decisionSummaries.0.kind: Invalid enum value'),
+      );
+
+      const transitionCall = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'state.transitioned');
+      expect(transitionCall?.[0].payload).toMatchObject({
+        from: 'factory:dev-ready',
+        to: 'factory:needs-human',
+        by: 'spec-author',
+      });
     });
   });
 

@@ -12,6 +12,41 @@ export interface SpecAuthorWorkflowDeps {
   createWorktreeImpl?: typeof createWorktree;
 }
 
+type OutputValidationIssue = {
+  path: Array<string | number>;
+  message: string;
+};
+
+function formatOutputValidationIssues(error: Error): string[] {
+  if (error.name !== 'OutputValidationError') return [];
+
+  const issues = (error as { issues?: unknown }).issues;
+  if (!Array.isArray(issues)) return [];
+
+  return issues.flatMap((issue) => {
+    if (issue == null || typeof issue !== 'object') return [];
+    const candidate = issue as Partial<OutputValidationIssue>;
+    if (!Array.isArray(candidate.path) || typeof candidate.message !== 'string') return [];
+
+    const path = candidate.path.length > 0 ? candidate.path.join('.') : '<root>';
+    return `${path}: ${candidate.message}`;
+  });
+}
+
+function recordStateTransition(
+  projectId: string,
+  workItemId: string,
+  from: 'factory:dev-ready',
+  to: 'factory:spec-ready' | 'factory:needs-human',
+): void {
+  eventStore.appendEvent({
+    projectId,
+    workItemId,
+    kind: 'state.transitioned',
+    payload: { from, to, by: 'spec-author' },
+  });
+}
+
 /**
  * Runs the spec-author workflow for a work item in `factory:dev-ready` state.
  *
@@ -123,6 +158,7 @@ export async function runSpecAuthorWorkflow(
         'factory:dev-ready',
         'factory:needs-human',
       );
+      recordStateTransition(projectId, workItem.id, 'factory:dev-ready', 'factory:needs-human');
       return;
     }
 
@@ -141,16 +177,28 @@ export async function runSpecAuthorWorkflow(
       'factory:dev-ready',
       'factory:spec-ready',
     );
+    recordStateTransition(projectId, workItem.id, 'factory:dev-ready', 'factory:spec-ready');
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
+    const outputValidationIssues = formatOutputValidationIssues(error);
 
     eventStore.appendEvent({
       projectId,
       workItemId: workItem.id,
       kind: 'agent.run-failed',
-      payload: { runId: pipelineRunId, error: error.message },
+      payload: {
+        runId: pipelineRunId,
+        skill: 'spec-author',
+        error: error.message,
+        ...(outputValidationIssues.length > 0 && { issues: outputValidationIssues }),
+      },
       runId: pipelineRunId,
     });
+
+    const details = [
+      `Error: ${error.message}`,
+      ...outputValidationIssues.map((issue) => `Schema issue: ${issue}`),
+    ];
 
     await stateSource.comment(
       workItem.externalId,
@@ -158,7 +206,7 @@ export async function runSpecAuthorWorkflow(
         'Spec Author',
         'Failed',
         'Spec authoring failed — escalating to needs-human',
-        [`Error: ${error.message}`],
+        details,
       ),
     );
 
@@ -167,6 +215,7 @@ export async function runSpecAuthorWorkflow(
       'factory:dev-ready',
       'factory:needs-human',
     );
+    recordStateTransition(projectId, workItem.id, 'factory:dev-ready', 'factory:needs-human');
   } finally {
     cleanupWorktree(pipelineRunId);
   }

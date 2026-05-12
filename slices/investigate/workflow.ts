@@ -176,6 +176,7 @@ export async function runInvestigateWorkflow(
       workItemId: workItem.id,
       runtime,
       personaId,
+      projectBudgets: projectConfig?.budgets,
       loadSkillAssets,
     });
 
@@ -246,6 +247,7 @@ export async function runInvestigateWorkflow(
       workItemId: workItem.id,
       runtime,
       personaId,
+      projectBudgets: projectConfig?.budgets,
       loadSkillAssets,
     });
 

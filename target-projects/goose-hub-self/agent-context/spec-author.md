@@ -1,19 +1,25 @@
-## Playwright config
+## Engineering Spec overlay
 
-Read `apps/web/playwright.config.ts` before writing any spec. It defines:
-- `webServer` auto-start (do NOT manually start the dev server in the spec)
-- Base URL: `http://localhost:5173`
+This skill authors Engineering Spec JSON only. Do not write Playwright specs,
+test files, or implementation files from this skill.
 
-## Known routes
+Use the app README before citing app code:
+- Server work: read `apps/server/README.md`
+- Web work: read `apps/web/README.md`
 
-| Route | Page |
-|---|---|
-| `/` | Project list |
-| `/projects/<slug>` | Project overview |
-| `/projects/<slug>/issues` | Issue board |
-| `/projects/<slug>/issues/<number>` | Issue detail |
+For feature items created from a PRD, derive `userJourneys` and
+`functionalRequirements` from the work item body when no explicit `<prd>` block
+is present.
 
-## Spec filename
+Put required tests and commands in `acceptanceCriteria.verifyCommand` and
+`verificationTooling`; do not create e2e file paths as the output artefact.
 
-`apps/web/e2e/issue-<number>.spec.ts`
-No spaces. No non-ASCII. No slashes in the filename portion.
+Strict shape reminders for fields that commonly fail schema validation:
+- `schemaChanges` is always an object: `{"ddl":[],"migrations":[]}` when there
+  are no DB changes. Never return it as an array.
+- Every `interfaceContracts[]` item must include `name`, `signature`, and
+  `file`. Use a short descriptive `name` even for one-off functions or Zod
+  blocks.
+- Every `constraints[]` item must use one of these exact `kind` values:
+  `phase`, `gate`, `hook`, `model`, or `output-format`. Put domain concepts
+  like "API route", "database", "UI", or "test" in `name`, not `kind`.

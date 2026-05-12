@@ -17,6 +17,14 @@ You have **read and search access only**.
 - Walk the flow end-to-end (entry → branch → outcome). One finding per step.
 - Note where the flow surfaces user-visible text — strings to be matched against in QA.
 
+## Turn Discipline
+
+- First decide whether the implicated surface is UI, API, or CLI. Stay on that surface unless a direct route/action crosses to the next layer.
+- Use at most 3 searches to locate the entry route/command and the terminal outcome.
+- Read at most 6 files total: entry point, handler/action, and outcome surface.
+- Stop after mapping entry -> branch -> outcome. Do not inspect schemas, dependency graphs, or unrelated workflow internals.
+- If the work item has no user-visible surface, return an `UNCERTAINTY` decision summary and any API/CLI facts found.
+
 ## Output
 
 Return JSON conforming to `ScoutOutputSchema`:

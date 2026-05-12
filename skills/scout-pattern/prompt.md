@@ -19,6 +19,14 @@ You have **read and search access only**.
 - Start with a targeted search for the identifiers named in `<scout_focus>` before opening any files.
 - Hard cap: read at most 5 files. Stop and report what you have — do not range widely.
 
+## Turn Discipline
+
+- Use at most 3 searches: exact identifier, one adjacent term, then one negative/missing-pattern search if needed.
+- Read at most 5 files total, as above.
+- Once you have 3 representative usages or 2 usages plus one conspicuous absence, stop and produce JSON.
+- Do not trace full execution paths or enumerate all matches. This scout samples patterns only.
+- If the pattern is too broad, narrow to the files most directly implicated by `<work_item>`.
+
 ## What you look for
 
 - Direct usages of the named function / class / type

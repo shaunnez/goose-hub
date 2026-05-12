@@ -76,6 +76,25 @@ describe('invokeSkill', () => {
     expect(spec.appendSystemPrompt?.length).toBeGreaterThan(0);
   });
 
+  it('adds projectId and workItemId to runtime context after validation', async () => {
+    const runtime = mockRuntime();
+    const projectId = uid();
+    await invokeSkill({
+      skillName: 'echo-test',
+      projectId,
+      workItemId: 'github:owner/repo#123',
+      runId: 'run-system-context',
+      context: VALID_ECHO_CTX,
+      overrides: { runtimeOverride: runtime },
+    });
+
+    expect(runtime.calls[0].context).toMatchObject({
+      message: 'hello',
+      projectId,
+      workItemId: 'github:owner/repo#123',
+    });
+  });
+
   it('runtimeOverride short-circuits runtime selection', async () => {
     const overrideRuntime = mockRuntime();
     await invokeSkill({

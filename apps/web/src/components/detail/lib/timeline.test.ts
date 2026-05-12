@@ -54,6 +54,64 @@ describe('groupEvents — investigation runs', () => {
       items.some((item) => item.kind === 'event' && item.event.kind === 'state.transitioned'),
     ).toBe(true);
   });
+
+  it('orders run-groups by latest activity, not start time', () => {
+    const events: AgentEventDto[] = [
+      makeEvent(1, 'agent.run-started', 'run-investigate', {
+        payload: { skill: 'investigate' },
+      }),
+      makeEvent(5, 'agent.run-started', 'run-investigate:scout:pattern:0', {
+        payload: { skill: 'scout-pattern' },
+      }),
+      makeEvent(6, 'agent.run-completed', 'run-investigate:scout:pattern:0'),
+      makeEvent(10, 'agent.investigation-complete', 'run-investigate'),
+    ];
+
+    const items = groupEvents(events);
+    const runGroups = items.filter((item) => item.kind === 'run-group');
+
+    expect(runGroups.map((item) => item.runId)).toEqual([
+      'run-investigate',
+      'run-investigate:scout:pattern:0',
+    ]);
+  });
+
+  it('uses start time and runId as stable tie-breakers for same-second activity', () => {
+    const sameActivity = '2026-05-12T10:00:10Z';
+    const sameStart = '2026-05-12T10:00:01Z';
+    const events: AgentEventDto[] = [
+      makeEvent(1, 'agent.run-started', 'run-late-start', {
+        payload: { skill: 'scout-schema' },
+        createdAt: '2026-05-12T10:00:02Z',
+      }),
+      makeEvent(2, 'swarm.heartbeat', 'run-late-start', { createdAt: sameActivity }),
+      makeEvent(3, 'agent.run-started', 'run-early-start', {
+        payload: { skill: 'scout-pattern' },
+        createdAt: '2026-05-12T10:00:01Z',
+      }),
+      makeEvent(4, 'swarm.heartbeat', 'run-early-start', { createdAt: sameActivity }),
+      makeEvent(5, 'agent.run-started', 'run-z', {
+        payload: { skill: 'scout-code-path' },
+        createdAt: sameStart,
+      }),
+      makeEvent(6, 'swarm.heartbeat', 'run-z', { createdAt: sameActivity }),
+      makeEvent(7, 'agent.run-started', 'run-a', {
+        payload: { skill: 'scout-user-journey' },
+        createdAt: sameStart,
+      }),
+      makeEvent(8, 'swarm.heartbeat', 'run-a', { createdAt: sameActivity }),
+    ];
+
+    const items = groupEvents(events);
+    const runGroups = items.filter((item) => item.kind === 'run-group');
+
+    expect(runGroups.map((item) => item.runId)).toEqual([
+      'run-a',
+      'run-early-start',
+      'run-z',
+      'run-late-start',
+    ]);
+  });
 });
 
 describe('computeIsLive', () => {

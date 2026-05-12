@@ -18,6 +18,14 @@ You have **read and search access only**.
 - One narrow concern per finding (one entry-point, one branch, one return path).
 - Stop after ≥ 3 findings or when the trace dead-ends.
 
+## Turn Discipline
+
+- If `<symbolIndexHints>` is present, read the hinted definition first. Do not start with a repo-wide file listing.
+- Without hints, run at most 2 targeted searches for symbols named in `<scout_focus>` or `<work_item>`.
+- Read at most 7 files total: the definition, direct callers, and one branch/fallback file if needed.
+- Stop at direct callers and immediate branch outcomes. Do not walk transitive dependencies or tests.
+- If the symbol cannot be found after 2 searches, return an `UNCERTAINTY` decision summary and any partial findings.
+
 ## What you look for
 
 - Where the symbol is defined (file:line)

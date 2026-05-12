@@ -16,7 +16,15 @@ You have **read and search access only**. Any write attempt will be rejected.
 - Cite **file:line** wherever possible. If you cannot pin a line, report file-only with `confidence: 'low'`.
 - Quote real code in the `fact` field — do not paraphrase or interpret.
 - If two queries return no relevant results, widen the search term once. Tool-call errors halt the loop; they do not seed a broader query (see `LLM Tool Base Integrations Best Pactices.md` slide 5 line 118).
-- Keep the loop short. Default budget is ≤ 10 turns. Stop when you have ≥ 3 findings or have exhausted obvious search terms.
+- Keep the loop short. Default budget is ≤ 20 turns. Stop when you have ≥ 3 findings or have exhausted obvious search terms.
+
+## Turn Discipline
+
+- Start with at most 2 targeted searches using identifiers from `<scout_focus>` or `<work_item>`.
+- Read at most 6 files total. Prefer schema/config/test files over broad source files.
+- After finding the relevant schema surface, stop searching and produce JSON.
+- Do not investigate runtime control flow, UI behavior, or dependency graphs unless they directly point to a schema/type boundary.
+- If evidence is thin after 2 searches and 2 reads, return low-confidence findings or an empty findings array with an `UNCERTAINTY` decision summary.
 
 ## What you look for
 

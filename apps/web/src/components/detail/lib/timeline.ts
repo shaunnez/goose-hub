@@ -125,16 +125,33 @@ export type RenderItem =
  */
 function effectiveTimestamp(item: RenderItem): number {
   if (item.kind === 'run-group') {
-    return new Date((item.startedAt ?? item.lastEventAt) as string).getTime();
+    return new Date(item.lastEventAt ?? item.startedAt ?? 0).getTime();
   }
   if (item.kind === 'event') return new Date(item.event.createdAt).getTime();
   return new Date(item.events[0]?.createdAt ?? 0).getTime();
 }
 
+function optionalTimestamp(value: string | null): number {
+  return value == null ? 0 : new Date(value).getTime();
+}
+
+function compareRenderItems(a: RenderItem, b: RenderItem): number {
+  const activityDelta = effectiveTimestamp(b) - effectiveTimestamp(a);
+  if (activityDelta !== 0) return activityDelta;
+
+  if (a.kind === 'run-group' && b.kind === 'run-group') {
+    const startedDelta = optionalTimestamp(a.startedAt) - optionalTimestamp(b.startedAt);
+    if (startedDelta !== 0) return startedDelta;
+    return a.runId.localeCompare(b.runId);
+  }
+
+  return 0;
+}
+
 export function groupEvents(events: AgentEventDto[]): RenderItem[] {
   const collapsed = collapseLogRuns(events);
   const grouped = groupByRunId(collapsed);
-  return [...grouped].sort((a, b) => effectiveTimestamp(b) - effectiveTimestamp(a));
+  return [...grouped].sort(compareRenderItems);
 }
 
 function collapseLogRuns(events: AgentEventDto[]): RenderItem[] {

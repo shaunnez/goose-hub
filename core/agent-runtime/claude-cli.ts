@@ -126,6 +126,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
     mkdirSync(workspaceDir, { recursive: true });
     writeFileSync(MCP_CONFIG_PATH, '{"mcpServers":{}}', { flag: 'w' });
     const projectId = (spec.context.projectId as string) ?? 'unknown';
+    const workItemId = (spec.context.workItemId as string | undefined) ?? spec.workItemId ?? null;
     const recordDecisionTool = getRecordDecisionTool(projectId);
     writeWorkspaceSandbox(workspaceDir, { role: spec.role, recordDecisionTool });
     deployHooks();
@@ -133,8 +134,8 @@ export class ClaudeCliRuntime implements AgentRuntime {
 
     // Emit run-started
     eventStore.appendEvent({
-      projectId: (spec.context.projectId as string) ?? 'unknown',
-      workItemId: (spec.context.workItemId as string) ?? null,
+      projectId,
+      workItemId,
       kind: 'agent.run-started',
       payload: { skill: spec.skill, runId, personaId: spec.personaId, ...spec.extraEventPayload },
       runId,
@@ -186,7 +187,6 @@ export class ClaudeCliRuntime implements AgentRuntime {
     // Per-run context as the user message
     argv.push(contextXml);
 
-    const workItemId = (spec.context.workItemId as string) ?? null;
     const { personaId } = spec;
 
     return new Promise((resolve, reject) => {

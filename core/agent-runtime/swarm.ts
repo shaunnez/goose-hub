@@ -1,7 +1,9 @@
 import type { AgentEvent, AppendEventInput, EventKind } from '../event-stream/store.js';
 import { eventStore } from '../event-stream/store.js';
+import type { ResolvedBudget, SkillBudgetOverride } from './budgets.js';
 import { assembleSpawnContext } from './context-assembly.js';
 import type { AgentResult, AgentRuntime, AgentSpec, DecisionSummary } from './interface.js';
+import { resolveBudgetsForProject } from './resolve-for-project.js';
 import { ScoutOutputSchema } from './scout-output.js';
 
 /**
@@ -59,6 +61,18 @@ export interface ScoutReport {
 /** Status of a full wave dispatch. */
 export type WaveStatus = 'ok' | 'incomplete' | 'halted';
 
+export interface ScoutProjectBudgets {
+  perWorkflowMaxUsd?: number;
+  perAgentMaxUsd?: number;
+  skillBudgetOverrides?: Record<string, SkillBudgetOverride>;
+}
+
+export type ScoutBudgetResolver = (
+  skill: string,
+  projectBudgets: ScoutProjectBudgets | undefined,
+  projectId: string,
+) => ResolvedBudget;
+
 export interface WaveResult {
   status: WaveStatus;
   reports: ScoutReport[];
@@ -80,7 +94,17 @@ export interface DispatchWaveOptions {
   workItemId?: string;
   /** Per-issue scout fan-out cap (BudgetConfig.maxScoutAgents). Default 6. */
   maxScoutAgents?: number;
-  /** Per-scout deadline. Default 90_000 ms (rule 32 + ADR 0030). */
+  /**
+   * Project budget config from project.config.ts. Used with DB overrides to
+   * resolve per-skill scout budgets.
+   */
+  projectBudgets?: ScoutProjectBudgets;
+  /**
+   * Test seam for budget resolution. Production uses resolveBudgetsForProject
+   * so UI/project overrides apply to scout and wave spawns.
+   */
+  resolveScoutBudget?: ScoutBudgetResolver;
+  /** Per-scout deadline override. Defaults to the resolved skill timeout. */
   scoutTimeoutMs?: number;
   /** Heartbeat cadence. Default 30_000 ms. */
   heartbeatIntervalMs?: number;
@@ -122,7 +146,6 @@ const SCOUT_CONTEXT_ALLOWLIST: readonly string[] = [
 ];
 
 const DEFAULT_MAX_SCOUTS = 6;
-const DEFAULT_SCOUT_TIMEOUT_MS = 90_000;
 const DEFAULT_HEARTBEAT_MS = 30_000;
 const MIN_SCOUT_SUCCESS = 3;
 const MAX_TOLERATED_FAILURES = 1;
@@ -138,7 +161,6 @@ export async function dispatchWave(opts: DispatchWaveOptions): Promise<WaveResul
     1,
     Math.min(opts.scoutSpecs.length, opts.maxScoutAgents ?? DEFAULT_MAX_SCOUTS),
   );
-  const scoutTimeoutMs = opts.scoutTimeoutMs ?? DEFAULT_SCOUT_TIMEOUT_MS;
   const heartbeatIntervalMs = opts.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_MS;
 
   const heartbeat = startHeartbeat({
@@ -153,7 +175,7 @@ export async function dispatchWave(opts: DispatchWaveOptions): Promise<WaveResul
   let reports: ScoutReport[];
   try {
     reports = await runWithConcurrencyCap(opts.scoutSpecs, maxParallel, (spec, idx) =>
-      runOneScout(spec, idx, opts, scoutTimeoutMs, append),
+      runOneScout(spec, idx, opts, append),
     );
   } finally {
     heartbeat.stop();
@@ -211,6 +233,9 @@ interface RunOneScoutContext {
   workItemId?: string;
   runtime: AgentRuntime;
   personaId: string;
+  projectBudgets?: ScoutProjectBudgets;
+  scoutTimeoutMs?: number;
+  resolveScoutBudget?: ScoutBudgetResolver;
   loadSkillAssets?: (scoutName: string) => {
     appendSystemPrompt?: string;
     outputJsonSchema?: Record<string, unknown>;
@@ -221,7 +246,6 @@ async function runOneScout(
   spec: ScoutSpec,
   idx: number,
   ctx: RunOneScoutContext,
-  scoutTimeoutMs: number,
   append: (input: AppendEventInput) => AgentEvent,
 ): Promise<ScoutReport> {
   const runId = `${ctx.parentRunId}:scout:${spec.scoutName}:${idx}`;
@@ -262,6 +286,15 @@ async function runOneScout(
   // populated; without them the runtime would skip --system-prompt and
   // --json-schema and the scout would run with generic CLI behaviour.
   const skillAssets = ctx.loadSkillAssets?.(spec.scoutName);
+  const resolvedBudget = (ctx.resolveScoutBudget ?? resolveBudgetsForProject)(
+    spec.scoutName,
+    ctx.projectBudgets,
+    ctx.projectId,
+  );
+  const budgets = {
+    ...resolvedBudget.budgets,
+    ...(ctx.scoutTimeoutMs != null ? { timeoutMs: ctx.scoutTimeoutMs } : {}),
+  };
   const spawnSpec: AgentSpec = {
     runId,
     role: 'investigator',
@@ -271,8 +304,9 @@ async function runOneScout(
     freshContext: true,
     toolBundles: ['read'],
     toolExtras: [],
-    budgets: { maxTurns: 10, maxBudgetUsd: 0.5, timeoutMs: scoutTimeoutMs },
+    budgets,
     personaId: ctx.personaId,
+    modelOverride: resolvedBudget.modelOverride,
     appendSystemPrompt: skillAssets?.appendSystemPrompt,
     outputJsonSchema: skillAssets?.outputJsonSchema,
   };
@@ -287,7 +321,7 @@ async function runOneScout(
   let errorReason: string | undefined;
 
   try {
-    result = await runWithDeadline(ctx.runtime.run(spawnSpec), scoutTimeoutMs);
+    result = await runWithDeadline(ctx.runtime.run(spawnSpec), budgets.timeoutMs);
   } catch (err) {
     if (err instanceof ScoutTimeoutError) {
       timedOut = true;
@@ -308,7 +342,7 @@ async function runOneScout(
       projectId: ctx.projectId,
       workItemId: ctx.workItemId ?? null,
       kind: 'swarm.scout-timeout',
-      payload: { runId, scoutName: spec.scoutName, scoutTimeoutMs },
+      payload: { runId, scoutName: spec.scoutName, scoutTimeoutMs: budgets.timeoutMs },
       runId,
     });
     return {
