@@ -158,8 +158,15 @@ function isChildInvestigationRunGroup(item: RenderItem): boolean {
   );
 }
 
+function scoutIdx(item: RenderItem): number {
+  if (item.kind !== 'run-group') return Number.MAX_SAFE_INTEGER;
+  const suffix = item.runId.match(/:(\d+)$/);
+  return suffix ? Number(suffix[1]) : Number.MAX_SAFE_INTEGER;
+}
+
 function buildPhaseGroup(anchorItem: RenderItem, childItems: RenderItem[]): RenderItem {
-  const all = [...childItems, anchorItem];
+  const all = [...childItems].sort((a, b) => scoutIdx(a) - scoutIdx(b));
+  all.push(anchorItem);
   const starts = all
     .map((i) => (i.kind === 'run-group' ? i.startedAt : null))
     .filter((s): s is string => s != null);
