@@ -74,6 +74,13 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'swarm.wave-completed': 'Wave completed',
   'swarm.wave-halted': 'Wave halted',
   'swarm.wave-incomplete': 'Wave incomplete',
+  'parallel-implement.iteration-started': 'Parallel iteration started',
+  'parallel-implement.wp-started': 'Work package started',
+  'parallel-implement.wp-committed': 'Work package committed',
+  'parallel-implement.wp-failed': 'Work package failed',
+  'parallel-implement.wp-timeout': 'Work package timed out',
+  'parallel-implement.wp-commit-failed': 'Work package commit failed',
+  'parallel-implement.exhausted': 'Parallel implement exhausted',
 };
 
 export function formatSkillName(skill: string | null): string {

@@ -38,6 +38,15 @@ import {
   StateTransitionedEvent,
   SystemNoteEvent,
 } from './timeline/MiscEvents';
+import {
+  ParallelExhaustedEvent,
+  ParallelIterationStartedEvent,
+  ParallelWpCommittedEvent,
+  ParallelWpFailedEvent,
+  ParallelWpStartedEvent,
+  ParallelWpTimeoutEvent,
+  SpecCompletedEvent,
+} from './timeline/ParallelImplementEvents';
 import { PhaseGroupWrapper } from './timeline/PhaseGroupWrapper';
 import { PrMergedEvent, PrOpenedEvent } from './timeline/PrEvents';
 import {
@@ -196,6 +205,21 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
     case 'swarm.wave-halted':
     case 'swarm.wave-incomplete':
       return <SwarmWaveEvent key={event.id} event={event} />;
+    case 'spec.completed':
+      return <SpecCompletedEvent key={event.id} event={event} />;
+    case 'parallel-implement.iteration-started':
+      return <ParallelIterationStartedEvent key={event.id} event={event} />;
+    case 'parallel-implement.wp-started':
+      return <ParallelWpStartedEvent key={event.id} event={event} />;
+    case 'parallel-implement.wp-committed':
+      return <ParallelWpCommittedEvent key={event.id} event={event} />;
+    case 'parallel-implement.wp-failed':
+    case 'parallel-implement.wp-commit-failed':
+      return <ParallelWpFailedEvent key={event.id} event={event} />;
+    case 'parallel-implement.wp-timeout':
+      return <ParallelWpTimeoutEvent key={event.id} event={event} />;
+    case 'parallel-implement.exhausted':
+      return <ParallelExhaustedEvent key={event.id} event={event} />;
     default:
       return <FallbackEvent key={event.id} event={event} />;
   }
