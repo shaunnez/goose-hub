@@ -17,8 +17,8 @@ import { runRetroForItem } from '../domains/workflows/retro-batch.js';
 import { maybeFireSprintReview } from '../domains/workflows/sprint-review-trigger.js';
 import { runTriageBatch } from '../domains/workflows/triage-batch.js';
 import { getProject } from './projects.js';
-import { getSourceForSlug } from './source.js';
 import { REPO_ROOT, sliceUrl } from './slice-url.js';
+import { getSourceForSlug } from './source.js';
 
 const _triageBatchInFlight = new Set<string>();
 const _triageBatchPending = new Set<string>();
@@ -115,9 +115,7 @@ export async function dispatchInvestigate(slug: string, issueNumber: number): Pr
   }
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
-    const { runInvestigateWorkflow } = (await import(
-      sliceUrl('investigate')
-    )) as {
+    const { runInvestigateWorkflow } = (await import(sliceUrl('investigate'))) as {
       runInvestigateWorkflow: (
         item: unknown,
         source: unknown,
@@ -171,9 +169,7 @@ export async function dispatchSpecAuthor(slug: string, issueNumber: number): Pro
   }
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
-    const { runSpecAuthorWorkflow } = (await import(
-      sliceUrl('spec-author')
-    )) as {
+    const { runSpecAuthorWorkflow } = (await import(sliceUrl('spec-author'))) as {
       runSpecAuthorWorkflow: (
         item: unknown,
         source: unknown,
@@ -247,9 +243,7 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
   }
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
-    const { runFixIssueWorkflow } = (await import(
-      sliceUrl('fix-issue')
-    )) as {
+    const { runFixIssueWorkflow } = (await import(sliceUrl('fix-issue'))) as {
       runFixIssueWorkflow: (
         item: unknown,
         source: unknown,
@@ -342,9 +336,7 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
   }
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
-    const { runParallelImplementWorkflow } = (await import(
-      sliceUrl('parallel-implement')
-    )) as {
+    const { runParallelImplementWorkflow } = (await import(sliceUrl('parallel-implement'))) as {
       runParallelImplementWorkflow: (
         item: unknown,
         spec: unknown,
@@ -470,9 +462,7 @@ export async function dispatchResolveConflict(slug: string, issueNumber: number)
   }
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
-    const { runResolveConflictWorkflow } = (await import(
-      sliceUrl('resolve-conflict')
-    )) as {
+    const { runResolveConflictWorkflow } = (await import(sliceUrl('resolve-conflict'))) as {
       runResolveConflictWorkflow: (
         item: unknown,
         source: unknown,
@@ -538,9 +528,7 @@ export async function dispatchQa(slug: string, issueNumber: number): Promise<voi
   }
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
-    const { runQaWorkflow } = (await import(
-      sliceUrl('qa')
-    )) as {
+    const { runQaWorkflow } = (await import(sliceUrl('qa'))) as {
       runQaWorkflow: (
         item: unknown,
         source: unknown,
@@ -594,9 +582,7 @@ export async function dispatchNeedsFix(slug: string, issueNumber: number): Promi
   }
   try {
     // Cross-package boundary: slices/ is not a workspace package (rule 28a).
-    const { runFixFeedbackWorkflow } = (await import(
-      sliceUrl('fix-feedback')
-    )) as {
+    const { runFixFeedbackWorkflow } = (await import(sliceUrl('fix-feedback'))) as {
       runFixFeedbackWorkflow: (
         item: unknown,
         source: unknown,
@@ -1072,7 +1058,7 @@ export async function dispatchGrillAndPrd(slug: string, issueNumber: number): Pr
       stateSource: source,
       projectId: slug,
       priorReplies,
-      ...(mockGrillDeps != null ? { deps: mockGrillDeps } : {}),
+      deps: { repoRoot: REPO_ROOT, ...(mockGrillDeps ?? {}) },
     });
   } finally {
     parallelLock.release(slug, issueNumber);
@@ -1117,6 +1103,7 @@ export async function dispatchRevisePrd(
       priorReplies,
       priorPrd,
       humanConcerns,
+      deps: { repoRoot: REPO_ROOT },
     });
   } finally {
     parallelLock.release(slug, issueNumber);

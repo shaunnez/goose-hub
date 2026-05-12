@@ -1,9 +1,10 @@
-import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
+import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
 import { logger } from '@goose-hub/core/logger.js';
+import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { BugEnhanceOutputSchema } from '@goose-hub/skills/bug-enhance/schema.js';
 
 const jsonSchema = toJsonSchema(BugEnhanceOutputSchema);
@@ -21,7 +22,8 @@ export async function runBugEnhance(
   title: string,
   body: string,
 ): Promise<string | null> {
-  const runtime = new ClaudeCliRuntime();
+  const projectConfig = await getProjectBySlug(projectId);
+  const runtime = selectRuntime({ configRuntime: projectConfig?.agentConfig?.runtime ?? 'auto' });
   const runId = crypto.randomUUID();
   const { personaId } = selectPersona(projectId, 'triager');
   const workItemId = `inbox:${inboxItemId}`;

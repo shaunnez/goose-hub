@@ -1,12 +1,13 @@
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
-import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { crossValidate } from '@goose-hub/core/agent-runtime/cross-validate.js';
+import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { ScoutOutputSchema } from '@goose-hub/core/agent-runtime/scout-output.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
+import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
 import { dispatchWave } from '@goose-hub/core/agent-runtime/swarm.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
@@ -75,6 +76,7 @@ const WAVE_1_SCOUTS = [
 export interface InvestigateWorkflowDeps {
   createWorktreeImpl?: typeof createWorktree;
   prewarmWorktreeImpl?: typeof prewarmWorktree;
+  runtime?: AgentRuntime;
 }
 
 export async function runInvestigateWorkflow(
@@ -88,9 +90,10 @@ export async function runInvestigateWorkflow(
   const prewarmWtFn = deps.prewarmWorktreeImpl ?? prewarmWorktree;
 
   const runId = crypto.randomUUID();
-  const runtime = new ClaudeCliRuntime();
   const { personaId } = selectPersona(projectId, 'investigator');
   const projectConfig = await getProjectBySlug(projectId);
+  const runtime =
+    deps.runtime ?? selectRuntime({ configRuntime: projectConfig?.agentConfig?.runtime ?? 'auto' });
   const worktreePath = createWtFn(targetRepo, runId);
 
   if (workItem.type === 'bug') {
@@ -111,6 +114,15 @@ export async function runInvestigateWorkflow(
       outputJsonSchema: scoutJsonSchema,
     };
   }
+
+  eventStore.appendEvent({
+    projectId,
+    workItemId: workItem.id,
+    kind: 'agent.run-started',
+    payload: { skill: 'investigate', runId, personaId },
+    runId,
+    personaId,
+  });
 
   try {
     // Pre-fetch symbol index hints for scout-code-path (best-effort; empty if index absent).
@@ -146,14 +158,6 @@ export async function runInvestigateWorkflow(
     }
 
     if (wave1Result.shouldEscalate) {
-      eventStore.appendEvent({
-        projectId,
-        workItemId: workItem.id,
-        kind: 'agent.run-started',
-        payload: { skill: 'investigate', runId, personaId },
-        runId,
-        personaId,
-      });
       eventStore.appendEvent({
         projectId,
         workItemId: workItem.id,

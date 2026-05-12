@@ -182,6 +182,12 @@ export interface RunGrillAndPrdInput {
     createWorktreeImpl?: typeof createWorktree;
     /** Stubbed in tests to avoid real git worktree cleanup. */
     cleanupWorktreeImpl?: typeof cleanupWorktree;
+    /**
+     * Absolute path to the target repository on disk. When provided, overrides
+     * `projectConfig.targetRepo.localPath`. Callers that know the repo root
+     * (e.g. `REPO_ROOT` in dispatch.ts) should always pass this.
+     */
+    repoRoot?: string;
   };
 }
 
@@ -297,7 +303,8 @@ export async function runGrillAndPrdWorkflow(
     deps.projectConfig !== undefined ? deps.projectConfig : await getProjectBySlug(projectId);
 
   // Build project context bundle for injection into grill-me and write-prd.
-  const localPath = (projectConfig as ProjectConfig | null)?.targetRepo?.localPath ?? '';
+  const localPath =
+    deps.repoRoot ?? (projectConfig as ProjectConfig | null)?.targetRepo?.localPath ?? '';
   const projectContext = localPath
     ? await _buildContext(localPath).catch(() => ({
         stackSummary: '',
@@ -331,7 +338,8 @@ export async function runGrillAndPrdWorkflow(
 
   // Create a per-round detached-HEAD worktree so the grill-me agent has a
   // real checkout to read from. Cleanup always runs in the finally block.
-  const localRepoPath = (projectConfig as ProjectConfig | null)?.targetRepo?.localPath;
+  const localRepoPath =
+    deps.repoRoot ?? (projectConfig as ProjectConfig | null)?.targetRepo?.localPath;
   if (localRepoPath == null || localRepoPath === '') {
     eventStore.appendEvent({
       kind: 'agent.run-failed',
