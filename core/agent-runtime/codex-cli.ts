@@ -126,6 +126,22 @@ interface CodexEnvelope {
 }
 
 /**
+ * If `obj` is a Codex transport event of the form
+ * `{"type":"item.completed","item":{"type":"agent_message","text":"..."}}`,
+ * returns the inner assistant text. Returns null for all other shapes.
+ * Exported for unit testing.
+ */
+export function pickCodexAgentMessageText(obj: Record<string, unknown>): string | null {
+  if (obj.type === 'item.completed' && typeof obj.item === 'object' && obj.item !== null) {
+    const item = obj.item as Record<string, unknown>;
+    if (item.type === 'agent_message' && typeof item.text === 'string') {
+      return item.text;
+    }
+  }
+  return null;
+}
+
+/**
  * Best-effort parser for the `codex exec --json` output. Codex emits either
  * a single JSON envelope or a stream of newline-delimited events terminating
  * in a final summary; we accept either. Field aliases probed in order.
@@ -142,34 +158,53 @@ export function parseCodexEnvelope(stdout: string): CodexEnvelope | null {
   try {
     const parsed = JSON.parse(trimmed) as unknown;
     if (parsed != null && typeof parsed === 'object') {
-      envelope = parsed as Record<string, unknown>;
+      const candidate = parsed as Record<string, unknown>;
+      // Unwrap Codex transport events so they never reach the skill schema validator.
+      const agentText = pickCodexAgentMessageText(candidate);
+      envelope = agentText != null ? { result: agentText } : candidate;
     }
   } catch {
     /* not a single envelope — try NDJSON */
   }
 
-  // NDJSON: take the last terminal event with summary fields.
+  // NDJSON: scan all events to collect both the terminal envelope (for cost/usage)
+  // and any Codex API agent_message text (for the actual result content).
+  // These may arrive in different events, so we do a single full pass without
+  // breaking early, then merge.
   if (envelope == null) {
     const lines = trimmed.split(/\r?\n/).filter((l) => l.length > 0);
+    let terminalEnvelope: Record<string, unknown> | null = null;
+    let agentMessageText: string | null = null;
     for (let i = lines.length - 1; i >= 0; i--) {
       try {
         const parsed = JSON.parse(lines[i]) as unknown;
         if (parsed != null && typeof parsed === 'object') {
           const candidate = parsed as Record<string, unknown>;
-          // Look for a terminal event: has `result` / `output` / `usage` or `error`.
+          // Collect the last terminal event for cost/usage fields.
           if (
-            'result' in candidate ||
-            'output' in candidate ||
-            'usage' in candidate ||
-            'error' in candidate
+            terminalEnvelope == null &&
+            ('result' in candidate ||
+              'output' in candidate ||
+              'usage' in candidate ||
+              'error' in candidate)
           ) {
-            envelope = candidate;
-            break;
+            terminalEnvelope = candidate;
+          }
+          // Codex API streaming format: item.completed with agent_message carries the result.
+          if (agentMessageText == null) {
+            const agentText = pickCodexAgentMessageText(candidate);
+            if (agentText != null) agentMessageText = agentText;
           }
         }
       } catch {
         /* non-JSON line — ignore */
       }
+    }
+    if (agentMessageText != null) {
+      // Merge: agent_message provides the result; terminal event provides usage/cost.
+      envelope = { ...terminalEnvelope, result: agentMessageText };
+    } else if (terminalEnvelope != null) {
+      envelope = terminalEnvelope;
     }
   }
 
@@ -233,10 +268,11 @@ function pickNumber(obj: Record<string, unknown>, keys: string[]): number | null
 
 /**
  * Extracts the JSON value the agent returned. Mirrors the Claude runtime's
- * `extractResultJson` — handles bare JSON, markdown-fenced blocks, and falls
- * back to the raw string so the schema validator surfaces a clear type error.
+ * `extractResultJson` — handles bare JSON, markdown-fenced blocks, [decision]-prefixed
+ * output, and falls back to the raw string so the schema validator surfaces a clear type error.
+ * Exported for unit testing.
  */
-function extractResultJson(text: string, runId: string): unknown {
+export function extractResultJson(text: string, runId: string): unknown {
   try {
     return JSON.parse(text);
   } catch {
@@ -246,6 +282,29 @@ function extractResultJson(text: string, runId: string): unknown {
   if (match?.[1]) {
     try {
       return JSON.parse(match[1].trim());
+    } catch {
+      /* continue */
+    }
+  }
+  // Strip [decision] marker lines emitted before the JSON object and retry.
+  const stripped = text
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('[decision]'))
+    .join('\n')
+    .trim();
+  if (stripped !== text.trim()) {
+    try {
+      return JSON.parse(stripped);
+    } catch {
+      /* continue */
+    }
+  }
+  // Last resort: extract the outermost {...} block.
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start !== -1 && end > start) {
+    try {
+      return JSON.parse(text.slice(start, end + 1));
     } catch {
       /* continue */
     }
@@ -490,7 +549,7 @@ export class CodexCliRuntime implements AgentRuntime {
         });
 
         resolve({
-          output: extractResultJson(envelope?.result ?? stdout, runId),
+          output: extractResultJson(envelope == null ? stdout : (envelope.result ?? ''), runId),
           decisionSummaries: [],
           events: eventStore.replay({ runId }),
         });

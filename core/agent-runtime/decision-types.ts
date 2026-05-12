@@ -19,6 +19,8 @@ export const DecisionKindSchema = z.enum([
   'FIX_STRATEGY',
   'SKIP_GATE',
   'ESCALATE',
+  'IMPLEMENTATION_PLAN',
+  'QUERY_PIVOT',
 
   // Phase markers
   'READ',

@@ -147,7 +147,7 @@ Every agent run emits decision summaries. Two streams (see CONTEXT.md for the fu
 1. **Canonical (schema field).** Each skill schema declares `decisionSummaries: Array<{kind, summary, evidence?}>`. The agent populates this in its terminal JSON; the orchestrator extracts and emits `agent.decision-summary` events post-validation. This is the record QA and Review will never see, but Retro will.
 2. **Live markers (`[decision] KIND: ...`).** Mid-run, emit `[decision] KIND: <one sentence>` lines in your text turn. The PostToolUse hook scans the transcript and forwards them as best-effort progress events.
 
-`KIND` is constrained to the `DecisionKindSchema` enum in `core/agent-runtime/decision-types.ts`. Use a recognized value (e.g. `REPO_SELECTION`, `IMPLEMENTATION_PLAN`, `QUERY_PIVOT`); unknown kinds are coerced to `UNKNOWN` rather than dropped. Both streams reconcile at run end.
+`KIND` is constrained to the `DecisionKindSchema` enum in `core/agent-runtime/decision-types.ts`. Use a recognized value (e.g. `PLAN`, `IMPLEMENTATION_PLAN`, `SCOPE_CHANGE`, `QUERY_PIVOT`, `UNCERTAINTY`); unrecognized kinds fail schema validation and cause the run to be marked failed. Both streams reconcile at run end.
 
 Good summaries:
 - "Selected payments-api as primary repo based on keyword match + code search hits"

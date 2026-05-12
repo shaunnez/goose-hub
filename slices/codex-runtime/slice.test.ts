@@ -366,6 +366,23 @@ describe('CodexCliRuntime — spawn lifecycle', () => {
     expect(typeof result.output).toBe('string');
   });
 
+  it('does not expose a single Codex transport event as structured skill output', async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as unknown as ReturnType<typeof spawn>);
+
+    const runtime = new CodexCliRuntime();
+    const runPromise = runtime.run(makeSpec());
+
+    proc.stdout.emit(
+      'data',
+      Buffer.from(JSON.stringify({ type: 'thread.started', thread_id: 'thread-1' })),
+    );
+    proc.simulateClose(0);
+
+    const result = await runPromise;
+    expect(result.output).toBe('');
+  });
+
   it('rejects with timeout error and emits tool.timeout when budget timeoutMs elapses', async () => {
     vi.useFakeTimers();
     const proc = createMockProcess();
