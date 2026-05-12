@@ -1,11 +1,15 @@
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
 import { persistEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
+import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { listScoutReportsForInvestigation } from '@goose-hub/core/scout-reports/repository.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { cleanupWorktree, createWorktree } from '@goose-hub/core/workspaces/worktree.js';
-import type { EngineeringSpec } from '@goose-hub/skills/spec-author/schema.js';
+import {
+  type EngineeringSpec,
+  EngineeringSpecSchema,
+} from '@goose-hub/skills/spec-author/schema.js';
 import {
   type ValidationResult,
   validateEngineeringSpec,
@@ -93,18 +97,31 @@ function errorRunId(error: Error, fallbackRunId: string): string {
   return typeof telemetry?.runId === 'string' ? telemetry.runId : fallbackRunId;
 }
 
-function recordStateTransition(
-  projectId: string,
-  workItemId: string,
-  from: 'factory:dev-ready',
-  to: 'factory:spec-ready' | 'factory:needs-human',
-): void {
-  eventStore.appendEvent({
-    projectId,
-    workItemId,
-    kind: 'state.transitioned',
-    payload: { from, to, by: 'spec-author' },
-  });
+function normalizeSpecAuthorOutput(output: unknown): EngineeringSpec {
+  const spec = EngineeringSpecSchema.parse(output);
+
+  return {
+    ...spec,
+    interfaceContracts: spec.interfaceContracts.map((contract) => {
+      const next = { ...contract };
+      if (next.lineRange == null) next.lineRange = undefined;
+      return next;
+    }),
+    verificationTooling: spec.verificationTooling.map((tool) => {
+      const next = { ...tool };
+      if (next.inputSpec == null) next.inputSpec = undefined;
+      return next;
+    }),
+    acceptanceCriteria: spec.acceptanceCriteria.map((criterion) => {
+      const next = { ...criterion };
+      if (next.journeyRef == null) next.journeyRef = undefined;
+      if (next.stepIdx == null) next.stepIdx = undefined;
+      if (next.tolerance == null) next.tolerance = undefined;
+      if (next.crossCutting == null) next.crossCutting = undefined;
+      if (next.source == null) next.source = undefined;
+      return next;
+    }),
+  };
 }
 
 /**
@@ -198,7 +215,7 @@ export async function runSpecAuthorWorkflow(
         },
       });
 
-      const spec = result.output as EngineeringSpec;
+      const spec = normalizeSpecAuthorOutput(result.output);
       return {
         runId,
         spec,
@@ -264,7 +281,13 @@ export async function runSpecAuthorWorkflow(
         'factory:dev-ready',
         'factory:needs-human',
       );
-      recordStateTransition(projectId, workItem.id, 'factory:dev-ready', 'factory:needs-human');
+      emitStateTransitionEvent({
+        projectId,
+        workItemId: workItem.id,
+        from: 'factory:dev-ready',
+        to: 'factory:needs-human',
+        by: 'spec-author',
+      });
       return;
     }
 
@@ -283,7 +306,13 @@ export async function runSpecAuthorWorkflow(
       'factory:dev-ready',
       'factory:spec-ready',
     );
-    recordStateTransition(projectId, workItem.id, 'factory:dev-ready', 'factory:spec-ready');
+    emitStateTransitionEvent({
+      projectId,
+      workItemId: workItem.id,
+      from: 'factory:dev-ready',
+      to: 'factory:spec-ready',
+      by: 'spec-author',
+    });
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
     const outputValidationIssues = formatOutputValidationIssues(error);
@@ -322,7 +351,13 @@ export async function runSpecAuthorWorkflow(
       'factory:dev-ready',
       'factory:needs-human',
     );
-    recordStateTransition(projectId, workItem.id, 'factory:dev-ready', 'factory:needs-human');
+    emitStateTransitionEvent({
+      projectId,
+      workItemId: workItem.id,
+      from: 'factory:dev-ready',
+      to: 'factory:needs-human',
+      by: 'spec-author',
+    });
   } finally {
     cleanupWorktree(pipelineRunId);
   }

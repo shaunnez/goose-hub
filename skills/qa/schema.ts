@@ -18,10 +18,7 @@ export { PrioritySchema };
  */
 export const FindingSchema = z
   .object({
-    tier: z
-      .string()
-      .transform((s) => s.toLowerCase())
-      .pipe(z.enum(['structural', 'functional', 'regression'])),
+    tier: z.enum(['structural', 'functional', 'regression']),
     severity: z.enum(['error', 'warning', 'info']),
     file: z.string().nullable().optional(),
     line: z.number().int().nullable().optional(),

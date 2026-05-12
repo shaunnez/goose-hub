@@ -24,6 +24,10 @@ export const ConstraintSourceSchema = z.string().regex(CONSTRAINT_SOURCE_PATTERN
     'Use exactly path/to/file.ts:123 or path/to/file.ts:SymbolName; do not use line ranges or SYMBOL: prefixes',
 });
 
+const optionalAiString = z.string().min(1).nullable().optional();
+const optionalAiNumber = z.number().int().nonnegative().nullable().optional();
+const optionalAiBoolean = z.boolean().nullable().optional();
+
 export const JourneyStepSchema = z.object({
   idx: z.number().int().nonnegative(),
   description: z.string().min(1),
@@ -60,7 +64,7 @@ export const InterfaceContractSchema = z.object({
   /** Workspace-relative file the signature lives in (or will live in). */
   file: z.string().min(1),
   /** Optional `start-end` line range as a string, e.g. "12-34". */
-  lineRange: z.string().optional(),
+  lineRange: optionalAiString,
 });
 
 export const WorkPackageSchema = z.object({
@@ -86,24 +90,24 @@ export const VerificationToolSchema = z.object({
   /** Exit codes that count as success. */
   expectedExitCodes: z.array(z.number().int()).min(1),
   /** Optional input format spec (e.g. JSON schema for stdin). */
-  inputSpec: z.string().optional(),
+  inputSpec: optionalAiString,
 });
 
 export const AcceptanceCriterionSchema = z.object({
   id: z.string().min(1),
   statement: z.string().min(1),
   /** Reference to a journey id; required unless `crossCutting: true`. */
-  journeyRef: z.string().optional(),
+  journeyRef: optionalAiString,
   /** Step index inside the journey (matches Journey.steps.idx). */
-  stepIdx: z.number().int().nonnegative().optional(),
+  stepIdx: optionalAiNumber,
   /** Falsifiable verification command — Steve "no subjective criteria". */
   verifyCommand: z.string().min(1),
   /** Optional tolerance string (numerical, time, etc). */
-  tolerance: z.string().optional(),
+  tolerance: optionalAiString,
   /** When true, AC is exempt from the journey-coverage rule. */
-  crossCutting: z.boolean().optional(),
+  crossCutting: optionalAiBoolean,
   /** Origin of this AC. */
-  source: z.enum(['user-journey', 'functional-requirement']).optional(),
+  source: z.enum(['user-journey', 'functional-requirement']).nullable().optional(),
 });
 
 export const ConstraintSchema = z.object({

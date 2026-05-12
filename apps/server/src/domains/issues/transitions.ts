@@ -5,6 +5,7 @@ import {
   mergePR as defaultMergePR,
 } from '@goose-hub/core/connectors/github/merge-pr.js';
 import { getUseMultiAgentPipeline } from '@goose-hub/core/db/repositories/project-settings.js';
+import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
@@ -143,15 +144,12 @@ export async function approveIssue(
         ]),
       );
       await source.transitionState(id, 'factory:approved', 'factory:needs-human');
-      eventStore.appendEvent({
+      emitStateTransitionEvent({
         projectId: slug,
         workItemId,
-        kind: 'state.transitioned',
-        payload: {
-          from: 'factory:approved',
-          to: 'factory:needs-human',
-          by: 'merge-decision',
-        },
+        from: 'factory:approved',
+        to: 'factory:needs-human',
+        by: 'merge-decision',
       });
       return {
         ok: false,
@@ -169,11 +167,12 @@ export async function approveIssue(
       payload: { prNumber },
     });
     await source.transitionState(id, 'factory:approved', 'factory:merge-conflict');
-    eventStore.appendEvent({
+    emitStateTransitionEvent({
       projectId: slug,
       workItemId,
-      kind: 'state.transitioned',
-      payload: { from: 'factory:approved', to: 'factory:merge-conflict', by: 'orchestrator' },
+      from: 'factory:approved',
+      to: 'factory:merge-conflict',
+      by: 'orchestrator',
     });
     return { ok: false, error: 'merge-conflict', status: 409 };
   }
@@ -190,11 +189,12 @@ export async function approveIssue(
         payload: { prNumber },
       });
       await source.transitionState(id, 'factory:approved', 'factory:merge-conflict');
-      eventStore.appendEvent({
+      emitStateTransitionEvent({
         projectId: slug,
         workItemId,
-        kind: 'state.transitioned',
-        payload: { from: 'factory:approved', to: 'factory:merge-conflict', by: 'orchestrator' },
+        from: 'factory:approved',
+        to: 'factory:merge-conflict',
+        by: 'orchestrator',
       });
       return { ok: false, error: 'merge-conflict', status: 409 };
     }
@@ -312,12 +312,7 @@ export async function transitionIssue(
   const workItemId = `github:${source.repoRef}#${id}`;
   await source.transitionState(workItemId, fromState, toState);
 
-  eventStore.appendEvent({
-    projectId: slug,
-    workItemId,
-    kind: 'state.transitioned',
-    payload: { from: fromState, to: toState, by: 'ui' },
-  });
+  emitStateTransitionEvent({ projectId: slug, workItemId, from: fromState, to: toState, by: 'ui' });
 
   bustCache(CACHE_KEY.issues(slug));
   return { ok: true, data: { ok: true, from: fromState, to: toState } };

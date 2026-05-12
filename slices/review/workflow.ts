@@ -20,6 +20,7 @@ import {
   readProjectReviewSettings,
 } from '@goose-hub/core/db/repositories/project-review-settings.js';
 import { improvementCandidates as improvementCandidatesTable } from '@goose-hub/core/db/schema.js';
+import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
@@ -46,6 +47,29 @@ function findPipelineRunId(projectId: string, workItemId: string): string | unde
     .find((e) => e.kind === 'pr.opened');
   const payload = prOpened?.payload as { pipelineRunId?: string } | undefined;
   return typeof payload?.pipelineRunId === 'string' ? payload.pipelineRunId : undefined;
+}
+
+async function transitionReviewState(input: {
+  stateSource: StateSource;
+  workItem: WorkItem;
+  projectSlug: string;
+  to: StateName;
+  by: string;
+  runId?: string;
+}): Promise<void> {
+  await input.stateSource.transitionState(
+    input.workItem.externalId,
+    'factory:needs-review',
+    input.to,
+  );
+  emitStateTransitionEvent({
+    projectId: input.projectSlug,
+    workItemId: input.workItem.id,
+    from: 'factory:needs-review',
+    to: input.to,
+    by: input.by,
+    ...(input.runId != null ? { runId: input.runId } : {}),
+  });
 }
 
 /**
@@ -150,7 +174,14 @@ export async function runReviewWorkflow(
       outcome: reviewOutput.verdict === 'approved' ? 'success' : 'failure',
       qualityScore: reviewOutput.confidence,
     });
-    await stateSource.transitionState(workItem.externalId, 'factory:needs-review', nextState);
+    await transitionReviewState({
+      stateSource,
+      workItem,
+      projectSlug,
+      to: nextState,
+      by: 'review',
+      runId,
+    });
   } catch (err) {
     accumulatePersonaStats({ personaName: personaId, role: 'reviewer', outcome: 'failure' });
     const error = err instanceof Error ? err : new Error(String(err));
@@ -169,11 +200,14 @@ export async function runReviewWorkflow(
         `Error: ${error.message}`,
       ]),
     );
-    await stateSource.transitionState(
-      workItem.externalId,
-      'factory:needs-review',
-      'factory:needs-human',
-    );
+    await transitionReviewState({
+      stateSource,
+      workItem,
+      projectSlug,
+      to: 'factory:needs-human',
+      by: 'review',
+      runId,
+    });
   }
 }
 
@@ -508,6 +542,13 @@ export async function runConvergentReviewWorkflow(
           'factory:needs-review',
           'factory:needs-human',
         );
+        emitStateTransitionEvent({
+          projectId: projectSlug,
+          workItemId: workItem.id,
+          from: 'factory:needs-review',
+          to: 'factory:needs-human',
+          by: 'convergent-review',
+        });
         return;
       }
 
@@ -570,6 +611,14 @@ export async function runConvergentReviewWorkflow(
           'factory:needs-review',
           'factory:needs-human',
         );
+        emitStateTransitionEvent({
+          projectId: projectSlug,
+          workItemId: workItem.id,
+          from: 'factory:needs-review',
+          to: 'factory:needs-human',
+          by: 'convergent-review',
+          runId,
+        });
         return;
       }
 
@@ -611,6 +660,14 @@ export async function runConvergentReviewWorkflow(
           'factory:needs-review',
           'factory:needs-human',
         );
+        emitStateTransitionEvent({
+          projectId: projectSlug,
+          workItemId: workItem.id,
+          from: 'factory:needs-review',
+          to: 'factory:needs-human',
+          by: 'convergent-review',
+          runId,
+        });
         return;
       }
 
@@ -684,6 +741,14 @@ export async function runConvergentReviewWorkflow(
             'factory:needs-review',
             'factory:needs-human',
           );
+          emitStateTransitionEvent({
+            projectId: projectSlug,
+            workItemId: workItem.id,
+            from: 'factory:needs-review',
+            to: 'factory:needs-human',
+            by: 'convergent-review',
+            runId,
+          });
           return;
         }
 
@@ -701,6 +766,14 @@ export async function runConvergentReviewWorkflow(
           'factory:needs-review',
           'factory:approved',
         );
+        emitStateTransitionEvent({
+          projectId: projectSlug,
+          workItemId: workItem.id,
+          from: 'factory:needs-review',
+          to: 'factory:approved',
+          by: 'convergent-review',
+          runId,
+        });
         return;
       }
 
@@ -751,6 +824,14 @@ export async function runConvergentReviewWorkflow(
           'factory:needs-review',
           'factory:needs-human',
         );
+        emitStateTransitionEvent({
+          projectId: projectSlug,
+          workItemId: workItem.id,
+          from: 'factory:needs-review',
+          to: 'factory:needs-human',
+          by: 'convergent-review',
+          runId,
+        });
         return;
       }
     }
@@ -761,14 +842,22 @@ export async function runConvergentReviewWorkflow(
       'factory:needs-review',
       'factory:needs-human',
     );
+    emitStateTransitionEvent({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      from: 'factory:needs-review',
+      to: 'factory:needs-human',
+      by: 'convergent-review',
+    });
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
+    const catchRunId = crypto.randomUUID();
     eventStore.appendEvent({
       projectId: projectSlug,
       workItemId: workItem.id,
       kind: 'agent.run-failed',
       payload: { error: error.message, skill: 'review' },
-      runId: crypto.randomUUID(),
+      runId: catchRunId,
     });
     await stateSource.comment(
       workItem.externalId,
@@ -784,6 +873,14 @@ export async function runConvergentReviewWorkflow(
       'factory:needs-review',
       'factory:needs-human',
     );
+    emitStateTransitionEvent({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      from: 'factory:needs-review',
+      to: 'factory:needs-human',
+      by: 'convergent-review',
+      runId: catchRunId,
+    });
   }
 }
 

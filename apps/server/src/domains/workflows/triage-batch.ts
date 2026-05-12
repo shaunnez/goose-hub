@@ -9,9 +9,11 @@ import {
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
+import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
+import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import type { StateSource } from '@goose-hub/core/state-source/interface.js';
 import { RepoMatchOutputSchema } from '@goose-hub/skills/repo-match/schema.js';
 import { TriageOutputSchema } from '@goose-hub/skills/triage/schema.js';
@@ -316,11 +318,12 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
 
     // Transition state: factory:triaging → factory:accepted → next state
     await stateSource.transitionState(item.externalId, 'factory:triaging', 'factory:accepted');
-    eventStore.appendEvent({
+    emitStateTransitionEvent({
       projectId,
       workItemId,
-      kind: 'state.transitioned',
-      payload: { from: 'factory:triaging', to: 'factory:accepted', by: 'agent' },
+      from: 'factory:triaging',
+      to: 'factory:accepted',
+      by: 'agent',
       runId,
     });
 
@@ -328,7 +331,7 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
     const itemLabels = (await stateSource.listLabels?.(item.externalId)) ?? [];
     const isFromPrd = itemLabels.includes('factory:from-prd');
 
-    let finalState: string;
+    let finalState: StateName;
     if (triageOutput.type === 'bug') {
       await stateSource.transitionState(
         item.externalId,
@@ -352,11 +355,12 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       await stateSource.transitionState(item.externalId, 'factory:accepted', 'factory:dev-ready');
       finalState = 'factory:dev-ready';
     }
-    eventStore.appendEvent({
+    emitStateTransitionEvent({
       projectId,
       workItemId,
-      kind: 'state.transitioned',
-      payload: { from: 'factory:accepted', to: finalState, by: 'agent' },
+      from: 'factory:accepted',
+      to: finalState,
+      by: 'agent',
       runId,
     });
     logger.info('triage-batch item complete', { slug, workItemId, externalId: item.externalId });

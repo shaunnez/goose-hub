@@ -9,6 +9,7 @@ import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { getEngineeringSpec as defaultGetEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
+import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
@@ -394,6 +395,14 @@ export async function runQaWorkflow(
         qualityScore: 0,
       });
       await stateSource.transitionState(workItem.externalId, 'factory:needs-qa', nextState);
+      emitStateTransitionEvent({
+        projectId: projectSlug,
+        workItemId: workItem.id,
+        from: 'factory:needs-qa',
+        to: nextState,
+        by: 'qa',
+        runId,
+      });
       return;
     }
 
@@ -592,6 +601,14 @@ export async function runQaWorkflow(
       qualityScore: qaOutput.overallScore / 100,
     });
     await stateSource.transitionState(workItem.externalId, 'factory:needs-qa', nextState);
+    emitStateTransitionEvent({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      from: 'factory:needs-qa',
+      to: nextState,
+      by: 'qa',
+      runId,
+    });
   } catch (err) {
     accumulatePersonaStats({ personaName: personaId, role: 'qa', outcome: 'failure' });
     const error = err instanceof Error ? err : new Error(String(err));
@@ -613,5 +630,13 @@ export async function runQaWorkflow(
       'factory:needs-qa',
       'factory:needs-human',
     );
+    emitStateTransitionEvent({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      from: 'factory:needs-qa',
+      to: 'factory:needs-human',
+      by: 'qa',
+      runId,
+    });
   }
 }

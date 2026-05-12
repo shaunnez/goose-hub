@@ -15,6 +15,7 @@ Put required tests and commands in `acceptanceCriteria.verifyCommand` and
 `verificationTooling`; do not create e2e file paths as the output artefact.
 
 Strict shape reminders for fields that commonly fail schema validation:
+- Optional fields should be omitted when they do not apply. Do not emit `null`.
 - `schemaChanges` is always an object: `{"ddl":[],"migrations":[]}` when there
   are no DB changes. Never return it as an array.
 - Every `interfaceContracts[]` item must include `name`, `signature`, and

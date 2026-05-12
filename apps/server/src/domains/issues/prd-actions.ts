@@ -8,6 +8,7 @@
  * `rejectPRD` is kept for backwards compatibility but is a no-op alias for
  * `declinePRD`.
  */
+import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
@@ -63,11 +64,12 @@ export async function approvePRD(slug: string, id: string): Promise<Result<{ ok:
     kind: 'prd.approved',
     payload: { source: 'ui' },
   });
-  eventStore.appendEvent({
+  emitStateTransitionEvent({
     projectId: slug,
     workItemId,
-    kind: 'state.transitioned',
-    payload: { from: 'factory:prd-review', to: 'factory:decomposing', by: 'ui' },
+    from: 'factory:prd-review',
+    to: 'factory:decomposing',
+    by: 'ui',
   });
 
   // Fire decompose-prd outside the response path. Mirrors the
@@ -150,11 +152,12 @@ export async function declinePRD(slug: string, id: string): Promise<Result<{ ok:
     kind: 'prd.declined',
     payload: { source: 'ui' },
   });
-  eventStore.appendEvent({
+  emitStateTransitionEvent({
     projectId: slug,
     workItemId,
-    kind: 'state.transitioned',
-    payload: { from: 'factory:prd-review', to: 'factory:done', by: 'ui' },
+    from: 'factory:prd-review',
+    to: 'factory:done',
+    by: 'ui',
   });
 
   return { ok: true, data: { ok: true } };
@@ -177,11 +180,12 @@ export async function proceedToPrd(slug: string, id: string): Promise<Result<{ o
 
   await moveOrForce(source, id, 'factory:gate-pending', 'factory:grilling');
 
-  eventStore.appendEvent({
+  emitStateTransitionEvent({
     projectId: slug,
     workItemId,
-    kind: 'state.transitioned',
-    payload: { from: 'factory:gate-pending', to: 'factory:grilling', by: 'ui-proceed' },
+    from: 'factory:gate-pending',
+    to: 'factory:grilling',
+    by: 'ui-proceed',
   });
 
   // Dispatch grill-and-prd with readyForPRD forced by marking priorReplies as complete.

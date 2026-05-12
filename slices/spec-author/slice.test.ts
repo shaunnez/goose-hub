@@ -228,6 +228,78 @@ describe('runSpecAuthorWorkflow', () => {
       );
     });
 
+    it('normalizes null optional leaf fields before validation and persistence', async () => {
+      mockInvokeSkill.mockResolvedValueOnce({
+        output: makeSpecOutput({
+          interfaceContracts: [
+            {
+              name: 'SpecContract',
+              signature: 'export type SpecContract = { ok: true };',
+              file: 'core/spec.ts',
+              lineRange: null,
+            },
+          ],
+          verificationTooling: [
+            {
+              name: 'spec-check',
+              scriptPath: 'scripts/spec-check.ts',
+              expectedExitCodes: [0],
+              inputSpec: null,
+            },
+          ],
+          acceptanceCriteria: [
+            {
+              id: 'AC1',
+              statement: 'Spec emitted and persisted.',
+              journeyRef: null,
+              stepIdx: null,
+              verifyCommand: 'pnpm test',
+              tolerance: null,
+              crossCutting: null,
+              source: null,
+            },
+          ],
+        }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const validatedSpec = mockValidateEngineeringSpec.mock.calls[0]?.[0] as Record<
+        string,
+        unknown
+      >;
+      const persistedSpec = mockPersistEngineeringSpec.mock.calls[0]?.[3] as Record<
+        string,
+        unknown
+      >;
+
+      expect(validatedSpec).toEqual(persistedSpec);
+      expect(persistedSpec).toMatchObject({
+        interfaceContracts: [
+          expect.not.objectContaining({
+            lineRange: expect.anything(),
+          }),
+        ],
+        verificationTooling: [
+          expect.not.objectContaining({
+            inputSpec: expect.anything(),
+          }),
+        ],
+        acceptanceCriteria: [
+          expect.not.objectContaining({
+            journeyRef: expect.anything(),
+            stepIdx: expect.anything(),
+            tolerance: expect.anything(),
+            crossCutting: expect.anything(),
+            source: expect.anything(),
+          }),
+        ],
+      });
+    });
+
     it('emits spec.completed event with pipelineRunId and workItemId', async () => {
       const { runSpecAuthorWorkflow } = await import('./workflow.js');
       const { eventStore } = await import('@goose-hub/core/event-stream/store.js');

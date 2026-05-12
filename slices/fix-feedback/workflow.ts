@@ -7,6 +7,7 @@ import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { runWithEscalation } from '@goose-hub/core/agent-runtime/with-escalation.js';
+import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
@@ -166,6 +167,14 @@ export async function runFixFeedbackWorkflow(
       'factory:needs-fix',
       'factory:needs-human',
     );
+    emitStateTransitionEvent({
+      projectId,
+      workItemId: workItem.id,
+      from: 'factory:needs-fix',
+      to: 'factory:needs-human',
+      by: 'fix-feedback',
+      runId,
+    });
     eventStore.appendEvent({
       projectId,
       workItemId: workItem.id,
@@ -186,6 +195,14 @@ export async function runFixFeedbackWorkflow(
     'factory:needs-fix',
     'factory:in-progress',
   );
+  emitStateTransitionEvent({
+    projectId,
+    workItemId: workItem.id,
+    from: 'factory:needs-fix',
+    to: 'factory:in-progress',
+    by: 'fix-feedback',
+    runId,
+  });
 
   try {
     const { output: implementOutput } = await runWithEscalation({
@@ -271,6 +288,14 @@ export async function runFixFeedbackWorkflow(
       'factory:in-progress',
       'factory:needs-qa',
     );
+    emitStateTransitionEvent({
+      projectId,
+      workItemId: workItem.id,
+      from: 'factory:in-progress',
+      to: 'factory:needs-qa',
+      by: 'fix-feedback',
+      runId,
+    });
   } catch (err) {
     accumulatePersonaStats({ personaName: personaId, role: 'developer', outcome: 'failure' });
     const error = err instanceof Error ? err : new Error(String(err));
@@ -292,5 +317,13 @@ export async function runFixFeedbackWorkflow(
       'factory:in-progress',
       'factory:needs-human',
     );
+    emitStateTransitionEvent({
+      projectId,
+      workItemId: workItem.id,
+      from: 'factory:in-progress',
+      to: 'factory:needs-human',
+      by: 'fix-feedback',
+      runId,
+    });
   }
 }

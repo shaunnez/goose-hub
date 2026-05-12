@@ -136,6 +136,77 @@ describe('EngineeringSpecSchema (shape)', () => {
     expect(result.success).toBe(false);
   });
 
+  it('accepts null optional leaf fields from AI output', () => {
+    const result = EngineeringSpecSchema.safeParse({
+      ...baseSpec(),
+      interfaceContracts: [
+        {
+          ...baseSpec().interfaceContracts[0],
+          lineRange: null,
+        },
+      ],
+      verificationTooling: [
+        {
+          name: 'healthz-check',
+          scriptPath: 'scripts/check-healthz.ts',
+          expectedExitCodes: [0],
+          inputSpec: null,
+        },
+      ],
+      acceptanceCriteria: [
+        {
+          id: 'AC1',
+          statement: 'GET /healthz returns 200 with body "ok"',
+          journeyRef: null,
+          stepIdx: null,
+          verifyCommand: 'curl -fsS http://localhost:3000/healthz',
+          tolerance: null,
+          crossCutting: null,
+          source: null,
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.interfaceContracts[0].lineRange).toBeNull();
+    expect(result.data.verificationTooling[0].inputSpec).toBeNull();
+    expect(result.data.acceptanceCriteria[0].journeyRef).toBeNull();
+    expect(result.data.acceptanceCriteria[0].stepIdx).toBeNull();
+    expect(result.data.acceptanceCriteria[0].tolerance).toBeNull();
+    expect(result.data.acceptanceCriteria[0].crossCutting).toBeNull();
+    expect(result.data.acceptanceCriteria[0].source).toBeNull();
+  });
+
+  it('keeps required spec-author contract fields strict against null', () => {
+    const verifyCommand = EngineeringSpecSchema.safeParse({
+      ...baseSpec(),
+      acceptanceCriteria: [
+        {
+          ...baseSpec().acceptanceCriteria[0],
+          verifyCommand: null,
+        },
+      ],
+    });
+    const schemaChanges = EngineeringSpecSchema.safeParse({
+      ...baseSpec(),
+      schemaChanges: null,
+    });
+    const interfaceContracts = EngineeringSpecSchema.safeParse({
+      ...baseSpec(),
+      interfaceContracts: null,
+    });
+    const constraints = EngineeringSpecSchema.safeParse({
+      ...baseSpec(),
+      constraints: null,
+    });
+
+    expect(verifyCommand.success).toBe(false);
+    expect(schemaChanges.success).toBe(false);
+    expect(interfaceContracts.success).toBe(false);
+    expect(constraints.success).toBe(false);
+  });
+
   it('rejects empty decisionSummaries', () => {
     const result = EngineeringSpecSchema.safeParse(baseSpec({ decisionSummaries: [] }));
     expect(result.success).toBe(false);

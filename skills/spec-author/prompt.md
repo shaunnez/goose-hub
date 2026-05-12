@@ -37,6 +37,7 @@ A single JSON object conforming to `EngineeringSpecSchema` (`skills/spec-author/
   - Good: `apps/server/README.md:5`
   - Bad: `core/agent-runtime/event-types.ts:SYMBOL:EventLike`
   - Bad: `apps/server/README.md:5-20`
+- Optional fields should be omitted when they do not apply. Do not emit `null`.
 
 ### Required sections (Steve `01-planning-phase.md:287-300`)
 
@@ -87,6 +88,9 @@ For `issueType: feature` every AC must either:
 For `issueType: bug` the journey link is advisory; orphan ACs are accepted.
 
 Every AC must have a `verifyCommand` — a single shell command (or grep pattern, or test invocation) that decides pass/fail. **No subjective criteria.** Numerical or time-based ACs use `tolerance` to declare the band (e.g. `"<= 50ms"`).
+
+If no tolerance applies to an AC, omit `tolerance`; do not set it to `null` or
+an empty string.
 
 #### Risk register on sensitive paths
 

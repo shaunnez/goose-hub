@@ -5,6 +5,7 @@ import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { getUseMultiAgentPipeline } from '@goose-hub/core/db/repositories/project-settings.js';
 import { getEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
+import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { filterEligibleByDependencies } from '@goose-hub/core/projects/dependency-scheduler.js';
@@ -417,6 +418,13 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
         'parallel-implement: no engineering spec found for this work item. Escalating to needs-human.',
       );
       await source.transitionState(item.externalId, 'factory:spec-ready', 'factory:needs-human');
+      emitStateTransitionEvent({
+        projectId: slug,
+        workItemId: item.id,
+        from: 'factory:spec-ready',
+        to: 'factory:needs-human',
+        by: 'parallel-implement',
+      });
       return;
     }
 
@@ -427,6 +435,13 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
         'parallel-implement: persisted engineering spec failed schema validation. Escalating to needs-human.',
       );
       await source.transitionState(item.externalId, 'factory:spec-ready', 'factory:needs-human');
+      emitStateTransitionEvent({
+        projectId: slug,
+        workItemId: item.id,
+        from: 'factory:spec-ready',
+        to: 'factory:needs-human',
+        by: 'parallel-implement',
+      });
       return;
     }
 
@@ -462,6 +477,14 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
         : {};
 
     await source.transitionState(item.externalId, 'factory:spec-ready', 'factory:in-progress');
+    emitStateTransitionEvent({
+      projectId: slug,
+      workItemId: item.id,
+      from: 'factory:spec-ready',
+      to: 'factory:in-progress',
+      by: 'parallel-implement',
+      runId: specRecord.pipelineRunId,
+    });
     try {
       const result = await runParallelImplementWorkflow(
         item,
@@ -474,8 +497,24 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
       );
       if (result.status === 'success') {
         await source.transitionState(item.externalId, 'factory:in-progress', 'factory:needs-qa');
+        emitStateTransitionEvent({
+          projectId: slug,
+          workItemId: item.id,
+          from: 'factory:in-progress',
+          to: 'factory:needs-qa',
+          by: 'parallel-implement',
+          runId: specRecord.pipelineRunId,
+        });
       } else {
         await source.transitionState(item.externalId, 'factory:in-progress', 'factory:needs-human');
+        emitStateTransitionEvent({
+          projectId: slug,
+          workItemId: item.id,
+          from: 'factory:in-progress',
+          to: 'factory:needs-human',
+          by: 'parallel-implement',
+          runId: specRecord.pipelineRunId,
+        });
       }
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
@@ -484,6 +523,14 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
         `parallel-implement: workflow failed after dispatch. Escalating to needs-human.\n\nError: ${error.message}`,
       );
       await source.transitionState(item.externalId, 'factory:in-progress', 'factory:needs-human');
+      emitStateTransitionEvent({
+        projectId: slug,
+        workItemId: item.id,
+        from: 'factory:in-progress',
+        to: 'factory:needs-human',
+        by: 'parallel-implement',
+        runId: specRecord.pipelineRunId,
+      });
     }
   } finally {
     parallelLock.release(slug, issueNumber);
@@ -701,11 +748,12 @@ async function dispatchQaFailed(slug: string, issueNumber: number): Promise<void
     const workItemId = `github:${source.repoRef}#${issueNumber}`;
     await source.transitionState(workItemId, 'factory:qa-failed', 'factory:needs-fix');
 
-    eventStore.appendEvent({
+    emitStateTransitionEvent({
       projectId: slug,
       workItemId,
-      kind: 'state.transitioned',
-      payload: { from: 'factory:qa-failed', to: 'factory:needs-fix', by: 'orchestrator' },
+      from: 'factory:qa-failed',
+      to: 'factory:needs-fix',
+      by: 'orchestrator',
     });
 
     logger.info('dispatchQaFailed: transitioned to needs-fix, dispatching fix-feedback', {
@@ -882,11 +930,12 @@ async function dispatchInvestigationComplete(slug: string, issueNumber: number):
     const targetState = confidence === 'low' ? 'factory:gate-pending' : 'factory:dev-ready';
     await source.transitionState(workItemId, 'factory:investigation-complete', targetState);
 
-    eventStore.appendEvent({
+    emitStateTransitionEvent({
       projectId: slug,
       workItemId,
-      kind: 'state.transitioned',
-      payload: { from: 'factory:investigation-complete', to: targetState, by: 'orchestrator' },
+      from: 'factory:investigation-complete',
+      to: targetState,
+      by: 'orchestrator',
     });
 
     if (targetState === 'factory:gate-pending') {
@@ -1371,11 +1420,12 @@ export async function dispatchResumeIssue(slug: string, issueNumber: number): Pr
         issueNumber,
       });
       await source.forceState(workItemId, 'factory:grilling');
-      eventStore.appendEvent({
+      emitStateTransitionEvent({
         projectId: slug,
         workItemId,
-        kind: 'state.transitioned',
-        payload: { from: fromState, to: 'factory:grilling', by: 'resume' },
+        from: fromState,
+        to: 'factory:grilling',
+        by: 'resume',
       });
       await dispatchGrillAndPrd(slug, issueNumber);
       return;
@@ -1420,11 +1470,12 @@ export async function dispatchResumeIssue(slug: string, issueNumber: number): Pr
         issueNumber,
       });
       await source.forceState(workItemId, 'factory:spec-ready');
-      eventStore.appendEvent({
+      emitStateTransitionEvent({
         projectId: slug,
         workItemId,
-        kind: 'state.transitioned',
-        payload: { from: fromState, to: 'factory:spec-ready', by: 'resume' },
+        from: fromState,
+        to: 'factory:spec-ready',
+        by: 'resume',
       });
       await dispatchParallelImplement(slug, issueNumber);
       return;
@@ -1434,11 +1485,12 @@ export async function dispatchResumeIssue(slug: string, issueNumber: number): Pr
 
   if (entry.targetState !== fromState) {
     await source.forceState(workItemId, entry.targetState);
-    eventStore.appendEvent({
+    emitStateTransitionEvent({
       projectId: slug,
       workItemId,
-      kind: 'state.transitioned',
-      payload: { from: fromState, to: entry.targetState, by: 'resume' },
+      from: fromState,
+      to: entry.targetState,
+      by: 'resume',
     });
     logger.info('dispatchResumeIssue: forced state for resume', {
       slug,

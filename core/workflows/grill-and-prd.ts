@@ -25,6 +25,7 @@ import {
 import { toJsonSchema } from '../agent-runtime/schema-bridge.js';
 import { selectPersona } from '../agent-runtime/select-persona.js';
 import { totalSpendForSkill as _totalSpendForSkill } from '../cost/repository.js';
+import { emitStateTransitionEvent } from '../event-stream/state-transition.js';
 import { eventStore } from '../event-stream/store.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import type { StateName } from '../state-machine/states.js';
@@ -253,11 +254,12 @@ async function ensureGatePending(
   } catch {
     await stateSource.forceState(externalId, 'factory:gate-pending');
   }
-  eventStore.appendEvent({
+  emitStateTransitionEvent({
     projectId,
     workItemId,
-    kind: 'state.transitioned',
-    payload: { from: fromState, to: 'factory:gate-pending', by: 'grill-and-prd' },
+    from: fromState,
+    to: 'factory:gate-pending',
+    by: 'grill-and-prd',
   });
 }
 

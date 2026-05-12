@@ -16,6 +16,7 @@ import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { runWithEscalation } from '@goose-hub/core/agent-runtime/with-escalation.js';
 import { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
+import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
@@ -122,6 +123,14 @@ export async function runFixIssueWorkflow(
       'factory:dev-ready',
       'factory:in-progress',
     );
+    emitStateTransitionEvent({
+      projectId,
+      workItemId: workItem.id,
+      from: 'factory:dev-ready',
+      to: 'factory:in-progress',
+      by: 'fix-issue',
+      runId,
+    });
 
     // Pre-warm: install dependencies before spawning the agent so it doesn't
     // waste its first turn running pnpm install.
@@ -175,6 +184,14 @@ export async function runFixIssueWorkflow(
           'factory:in-progress',
           'factory:needs-human',
         );
+        emitStateTransitionEvent({
+          projectId,
+          workItemId: workItem.id,
+          from: 'factory:in-progress',
+          to: 'factory:needs-human',
+          by: 'fix-issue',
+          runId,
+        });
         accumulatePersonaStats({
           personaName: implementPersonaId,
           role: 'developer',
@@ -275,6 +292,14 @@ export async function runFixIssueWorkflow(
       'factory:in-progress',
       'factory:needs-human',
     );
+    emitStateTransitionEvent({
+      projectId,
+      workItemId: workItem.id,
+      from: 'factory:in-progress',
+      to: 'factory:needs-human',
+      by: 'fix-issue',
+      runId,
+    });
     // Error path: no PR was opened, no merge is coming — clean up now.
     cleanupWtFn(runId);
   }
@@ -523,6 +548,14 @@ async function afterImplement(input: AfterImplementInput): Promise<void> {
 
   // Step 7: M8 path — route through QA before approval (factory:in-progress → factory:needs-qa)
   await stateSource.transitionState(workItem.externalId, 'factory:in-progress', 'factory:needs-qa');
+  emitStateTransitionEvent({
+    projectId,
+    workItemId: workItem.id,
+    from: 'factory:in-progress',
+    to: 'factory:needs-qa',
+    by: 'fix-issue',
+    runId,
+  });
 }
 
 interface RunEvidencePostInput {
