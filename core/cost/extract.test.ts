@@ -48,6 +48,18 @@ describe('costFromCliEnvelope', () => {
       costLabel: 'estimated',
     });
   });
+
+  it('returns costUsd:0 (not null) when tokens are present but no cost field exists', () => {
+    // Load-bearing behavior: callers that need to detect "no explicit cost" must check
+    // the CodexEnvelope.usage.costUsd (number|null), not this return value.
+    const envelope = { usage: { input_tokens: 500, output_tokens: 200 } };
+    expect(costFromCliEnvelope(envelope)).toEqual({
+      inputTokens: 500,
+      outputTokens: 200,
+      costUsd: 0,
+      costLabel: 'estimated',
+    });
+  });
 });
 
 describe('costFromApiUsage', () => {

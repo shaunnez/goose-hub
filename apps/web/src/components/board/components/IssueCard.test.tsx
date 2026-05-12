@@ -101,6 +101,7 @@ describe('IssueCard', () => {
             stage: 'dev',
             skill: 'implement',
             modelId: 'claude-sonnet-4-6',
+            provider: 'claude' as const,
             inputTokens: 800,
             outputTokens: 400,
             costUsd: 0.42,

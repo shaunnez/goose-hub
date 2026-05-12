@@ -168,6 +168,7 @@ export interface CostRowDto {
   stage: CostStage;
   skill: string;
   modelId: string;
+  provider: 'claude' | 'codex';
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
@@ -190,6 +191,10 @@ export interface CostSummaryDto {
   projectId: string;
   windows: { week: CostWindowTotals; month: CostWindowTotals };
   byStage: CostStageTotal[];
+  byProvider: {
+    claude: CostWindowTotals;
+    codex: CostWindowTotals;
+  };
 }
 
 export interface WorkItemCostsDto {

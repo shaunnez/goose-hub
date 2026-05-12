@@ -1,7 +1,9 @@
+import { tryProviderOf } from '@goose-hub/core/agent-runtime/models.js';
 import type { CostLabel, Stage } from '@goose-hub/core/cost/types.js';
 import type { Result } from '#shared/middleware.js';
 import {
   type CostRow,
+  listCostsForProjectSince,
   listCostsForWorkItem,
   totalsByStageForProjectSince,
   totalsForProjectSince,
@@ -19,6 +21,10 @@ export interface CostSummaryDto {
     totalRuns: number;
     hasEstimated: boolean;
   }>;
+  byProvider: {
+    claude: { totalUsd: number; totalRuns: number; hasEstimated: boolean };
+    codex: { totalUsd: number; totalRuns: number; hasEstimated: boolean };
+  };
 }
 
 export interface CostRowDto {
@@ -27,6 +33,7 @@ export interface CostRowDto {
   stage: Stage;
   skill: string;
   modelId: string;
+  provider: 'claude' | 'codex';
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
@@ -47,6 +54,18 @@ function isoDaysAgo(days: number, now: Date = new Date()): string {
   return d.toISOString();
 }
 
+function toProviderTotals(rows: CostRow[]): {
+  totalUsd: number;
+  totalRuns: number;
+  hasEstimated: boolean;
+} {
+  return {
+    totalUsd: rows.reduce((s, r) => s + r.costUsd, 0),
+    totalRuns: rows.length,
+    hasEstimated: rows.some((r) => r.costLabel === 'estimated'),
+  };
+}
+
 export async function getCostSummary(
   projectId: string,
   now: Date = new Date(),
@@ -61,12 +80,20 @@ export async function getCostSummary(
   const month = totalsForProjectSince(projectId, monthSince);
   const byStage = totalsByStageForProjectSince(projectId, monthSince);
 
+  const monthRows = listCostsForProjectSince(projectId, monthSince);
+  const claudeRows = monthRows.filter((r) => tryProviderOf(r.modelId) === 'claude');
+  const codexRows = monthRows.filter((r) => tryProviderOf(r.modelId) === 'codex');
+
   return {
     ok: true,
     data: {
       projectId,
       windows: { week, month },
       byStage,
+      byProvider: {
+        claude: toProviderTotals(claudeRows),
+        codex: toProviderTotals(codexRows),
+      },
     },
   };
 }
@@ -96,6 +123,7 @@ function toRowDto(r: CostRow): CostRowDto {
     stage: r.stage,
     skill: r.skill,
     modelId: r.modelId,
+    provider: tryProviderOf(r.modelId),
     inputTokens: r.inputTokens,
     outputTokens: r.outputTokens,
     costUsd: r.costUsd,

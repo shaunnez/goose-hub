@@ -59,7 +59,7 @@ export function CostsPage() {
 
       {data && (
         <>
-          <div className="flex gap-3 mb-8">
+          <div className="flex gap-3 mb-6">
             <StatTile
               testId="cost-week"
               label="This week"
@@ -79,6 +79,35 @@ export function CostsPage() {
               sub={`${data.windows.month.totalRuns} runs`}
             />
           </div>
+
+          <section
+            data-testid="provider-breakdown"
+            className="border border-line rounded-lg p-5 mb-6"
+          >
+            <h2 className="text-[11px] uppercase tracking-wider text-fg-2 mb-4">
+              By provider · last 30 days
+            </h2>
+            <div className="flex gap-3">
+              <StatTile
+                testId="cost-provider-claude"
+                label="Claude"
+                value={formatCost(
+                  data.byProvider.claude.totalUsd,
+                  data.byProvider.claude.hasEstimated ? 'estimated' : 'exact',
+                )}
+                sub={`${data.byProvider.claude.totalRuns} run${data.byProvider.claude.totalRuns === 1 ? '' : 's'}`}
+              />
+              <StatTile
+                testId="cost-provider-codex"
+                label="Codex"
+                value={formatCost(
+                  data.byProvider.codex.totalUsd,
+                  data.byProvider.codex.hasEstimated ? 'estimated' : 'exact',
+                )}
+                sub={`${data.byProvider.codex.totalRuns} run${data.byProvider.codex.totalRuns === 1 ? '' : 's'}`}
+              />
+            </div>
+          </section>
 
           <section data-testid="stage-breakdown" className="border border-line rounded-lg p-5">
             <h2 className="text-[11px] uppercase tracking-wider text-fg-2 mb-4">

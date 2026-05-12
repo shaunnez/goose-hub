@@ -8,15 +8,47 @@ export interface ModelEntry {
   /** Provider that executes this model. Defaults to 'claude' when absent. */
   provider?: ModelProvider;
   deprecated?: boolean;
+  /** Published per-1M-token rates (USD). Missing means no pricing data; estimateCostUsd returns 0. */
+  pricing?: { inputPer1M: number; outputPer1M: number };
 }
 
 export const MODELS: ModelEntry[] = [
-  { id: 'claude-opus-4-7', tier: 'opus', provider: 'claude' },
-  { id: 'claude-sonnet-4-6', tier: 'sonnet', provider: 'claude' },
-  { id: 'claude-haiku-4-5-20251001', tier: 'haiku', provider: 'claude' },
-  { id: 'gpt-5.4', tier: 'sonnet', provider: 'codex' },
-  { id: 'gpt-5.5', tier: 'opus', provider: 'codex' },
-  { id: 'gpt-5.4-mini', tier: 'haiku', provider: 'codex' },
+  {
+    id: 'claude-opus-4-7',
+    tier: 'opus',
+    provider: 'claude',
+    pricing: { inputPer1M: 15.0, outputPer1M: 75.0 },
+  },
+  {
+    id: 'claude-sonnet-4-6',
+    tier: 'sonnet',
+    provider: 'claude',
+    pricing: { inputPer1M: 3.0, outputPer1M: 15.0 },
+  },
+  {
+    id: 'claude-haiku-4-5-20251001',
+    tier: 'haiku',
+    provider: 'claude',
+    pricing: { inputPer1M: 0.8, outputPer1M: 4.0 },
+  },
+  {
+    id: 'gpt-5.5',
+    tier: 'opus',
+    provider: 'codex',
+    pricing: { inputPer1M: 5.0, outputPer1M: 30.0 },
+  },
+  {
+    id: 'gpt-5.4',
+    tier: 'sonnet',
+    provider: 'codex',
+    pricing: { inputPer1M: 2.5, outputPer1M: 15.0 },
+  },
+  {
+    id: 'gpt-5.4-mini',
+    tier: 'haiku',
+    provider: 'codex',
+    pricing: { inputPer1M: 0.75, outputPer1M: 4.5 },
+  },
 ];
 
 const TIER_ORDER: ModelTier[] = ['haiku', 'sonnet', 'opus'];
@@ -43,6 +75,27 @@ export function providerOf(modelId: string): ModelProvider {
   const entry = MODELS.find((m) => m.id === modelId);
   if (!entry) throw new Error(`Unknown model ID: ${modelId}`);
   return entry.provider ?? 'claude';
+}
+
+/** Safe variant — returns 'claude' for unknown model IDs. Never throws.
+ * Use in cost reporting paths that touch historical DB rows with unrecognised model IDs. */
+export function tryProviderOf(modelId: string): ModelProvider {
+  return MODELS.find((m) => m.id === modelId)?.provider ?? 'claude';
+}
+
+/** Estimates cost in USD from token counts using published per-1M-token rates.
+ * Returns 0 when the model has no pricing entry or tokens are zero. Never throws. */
+export function estimateCostUsd(
+  modelId: string,
+  inputTokens: number,
+  outputTokens: number,
+): number {
+  const pricing = MODELS.find((m) => m.id === modelId)?.pricing;
+  if (!pricing) return 0;
+  return (
+    (inputTokens / 1_000_000) * pricing.inputPer1M +
+    (outputTokens / 1_000_000) * pricing.outputPer1M
+  );
 }
 
 export function tierOf(modelId: string): ModelTier {

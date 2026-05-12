@@ -84,6 +84,22 @@ describe('parseCodexEnvelope', () => {
     expect(envelope).not.toBeNull();
     expect(envelope?.result).toBeNull();
   });
+
+  it('leaves costUsd as null when no cost field is present in the envelope', () => {
+    const stdout = [
+      JSON.stringify({
+        type: 'item.completed',
+        item: { type: 'agent_message', text: '{"ok":true}' },
+      }),
+      JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 300, output_tokens: 120 } }),
+    ].join('\n');
+
+    const envelope = parseCodexEnvelope(stdout);
+    expect(envelope).not.toBeNull();
+    expect(envelope?.usage.inputTokens).toBe(300);
+    expect(envelope?.usage.outputTokens).toBe(120);
+    expect(envelope?.usage.costUsd).toBeNull();
+  });
 });
 
 // ─── pickCodexAgentMessageText ────────────────────────────────────────────────

@@ -41,6 +41,16 @@ export function listCostsForWorkItem(workItemId: string): CostRow[] {
   return rows.map(toRow);
 }
 
+export function listCostsForProjectSince(projectId: string, sinceIso: string): CostRow[] {
+  const rows = db
+    .select()
+    .from(agentRunCosts)
+    .where(and(eq(agentRunCosts.projectId, projectId), gte(agentRunCosts.createdAt, sinceIso)))
+    .orderBy(asc(agentRunCosts.createdAt))
+    .all();
+  return rows.map(toRow);
+}
+
 export interface ProjectTotals {
   totalUsd: number;
   totalRuns: number;

@@ -22,6 +22,7 @@ function row(partial: Partial<CostRowDto>): CostRowDto {
     stage: 'qa',
     skill: 'qa-test',
     modelId: 'claude-sonnet-4-6',
+    provider: 'claude',
     inputTokens: 100,
     outputTokens: 50,
     costUsd: 0.01,

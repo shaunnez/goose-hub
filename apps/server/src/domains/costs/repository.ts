@@ -1,5 +1,6 @@
 import {
   type CostRow,
+  listCostsForProjectSince as coreListCostsForProjectSince,
   listCostsForWorkItem as coreListCostsForWorkItem,
   totalsByStageForProjectSince as coreTotalsByStage,
   totalsForProjectSince as coreTotalsForProject,
@@ -9,6 +10,10 @@ export type { CostRow, ProjectTotals, StageTotal } from '@goose-hub/core/cost/re
 
 export function listCostsForWorkItem(workItemId: string): CostRow[] {
   return coreListCostsForWorkItem(workItemId);
+}
+
+export function listCostsForProjectSince(projectId: string, sinceIso: string): CostRow[] {
+  return coreListCostsForProjectSince(projectId, sinceIso);
 }
 
 export function totalsForProjectSince(projectId: string, sinceIso: string) {

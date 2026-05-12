@@ -192,6 +192,7 @@ describe('QASection', () => {
           stage: 'qa',
           skill: 'qa-test',
           modelId: 'claude-sonnet-4-6',
+          provider: 'claude' as const,
           inputTokens: 600,
           outputTokens: 200,
           costUsd: 0.05,

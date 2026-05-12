@@ -208,8 +208,9 @@ export function CostsSection({ projectSlug, id }: CostsSectionProps) {
 
         {/* Raw run table */}
         <div className="border border-line rounded-lg overflow-hidden min-w-0">
-          <div className="grid grid-cols-[120px_1fr_80px_80px] px-4 py-2.5 border-b border-line bg-bg-elev/50 text-[10.5px] uppercase tracking-wider text-fg-2">
-            <span className="pr-4">Stage</span>
+          <div className="grid grid-cols-[100px_62px_1fr_80px_80px] px-4 py-2.5 border-b border-line bg-bg-elev/50 text-[10.5px] uppercase tracking-wider text-fg-2">
+            <span className="pr-3">Stage</span>
+            <span className="pr-3">Provider</span>
             <span className="pr-4">Skill</span>
             <span className="pr-4">Tokens</span>
             <span>Cost</span>
@@ -218,9 +219,20 @@ export function CostsSection({ projectSlug, id }: CostsSectionProps) {
             <div
               key={r.runId}
               data-testid={`costs-row-${r.runId}`}
-              className="grid grid-cols-[120px_1fr_80px_80px] px-4 py-2.5 border-t border-line items-center text-[12px]"
+              className="grid grid-cols-[100px_62px_1fr_80px_80px] px-4 py-2.5 border-t border-line items-center text-[12px]"
             >
-              <span className="text-fg-2 pr-4">{STAGE_LABEL[r.stage]}</span>
+              <span className="text-fg-2 pr-3">{STAGE_LABEL[r.stage]}</span>
+              <span className="pr-3">
+                <span
+                  className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                    r.provider === 'codex'
+                      ? 'bg-emerald-500/15 text-emerald-400'
+                      : 'bg-blue-500/15 text-blue-400'
+                  }`}
+                >
+                  {r.provider === 'codex' ? 'Codex' : 'Claude'}
+                </span>
+              </span>
               <span className="font-mono text-fg-3 text-[11.5px] pr-4 truncate">{r.skill}</span>
               <span className="font-mono text-fg-2 text-[11.5px] pr-4">
                 {formatTokens(r.inputTokens + r.outputTokens)}

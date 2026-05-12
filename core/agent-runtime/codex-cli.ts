@@ -14,7 +14,7 @@ import { writeWorkspaceSandbox } from '../tool-layer/sandbox.js';
 import { assembleSpawnContext } from './context-assembly.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { resolveMockOutput } from './mock-outputs.js';
-import { defaultModelForTierAndProvider } from './models.js';
+import { defaultModelForTierAndProvider, estimateCostUsd } from './models.js';
 
 const STDOUT_CAP = 4 * 1024 * 1024; // 4 MB
 const TIMEOUT_MS = 30_000; // 30 seconds — FACTORY_RULES rule 32
@@ -231,9 +231,15 @@ export function parseCodexEnvelope(stdout: string): CodexEnvelope | null {
   }
 
   // Cost extraction reuses the existing alias-probing logic. costFromCliEnvelope
-  // already handles `usage.input_tokens` / `usage.output_tokens` / `total_cost_usd`
-  // and tolerates unknown shapes.
-  const cost = costFromCliEnvelope(envelope);
+  // returns costUsd:0 when tokens are present but no cost field exists — that's
+  // indistinguishable from a true $0 result. We check for an explicit cost field
+  // ourselves so the caller can apply pricing fallback when costUsd is null.
+  const rawCost = costFromCliEnvelope(envelope);
+  const hasExplicitCostField =
+    typeof envelope.total_cost_usd === 'number' ||
+    typeof envelope.cost_usd === 'number' ||
+    typeof envelope.cost === 'number';
+  const resolvedCostUsd: number | null = hasExplicitCostField ? (rawCost?.costUsd ?? null) : null;
 
   const numTurns = pickNumber(envelope, ['num_turns', 'turns']);
 
@@ -242,9 +248,9 @@ export function parseCodexEnvelope(stdout: string): CodexEnvelope | null {
     isError,
     errorDetail,
     usage: {
-      inputTokens: cost?.inputTokens ?? 0,
-      outputTokens: cost?.outputTokens ?? 0,
-      costUsd: cost?.costUsd ?? null,
+      inputTokens: rawCost?.inputTokens ?? 0,
+      outputTokens: rawCost?.outputTokens ?? 0,
+      costUsd: resolvedCostUsd,
     },
     numTurns,
   };
@@ -488,7 +494,8 @@ export class CodexCliRuntime implements AgentRuntime {
 
         const usageInputTokens = envelope?.usage.inputTokens ?? 0;
         const usageOutputTokens = envelope?.usage.outputTokens ?? 0;
-        const costUsd = envelope?.usage.costUsd ?? 0;
+        const rawCostUsd = envelope?.usage.costUsd ?? null;
+        const costUsd = rawCostUsd ?? estimateCostUsd(model, usageInputTokens, usageOutputTokens);
         const costLabel: 'estimated' | 'exact' = 'estimated';
 
         recordCost({
