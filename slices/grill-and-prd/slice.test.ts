@@ -1219,3 +1219,153 @@ describe('grill-and-prd: 3-round combined approach end-to-end', () => {
     expect(crystallizedAgents[1].crystallized).toBe('Format: CSV-only.');
   });
 });
+
+describe('skipGrill mode — retry write-prd directly', () => {
+  it('calls write-prd without calling grill-me when skipGrill:true', async () => {
+    const projectId = uniqueProjectId('skip-grill');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await source.seedIssue({
+      title: 'Retry PRD',
+      body: 'Some feature request.',
+      type: 'feature',
+      priority: 'medium',
+      state: 'factory:prd-drafting',
+    });
+    const workItem = await source.getItem(item.externalId);
+
+    eventStore.appendEvent({
+      projectId,
+      workItemId: workItem.id,
+      kind: 'grill.completed',
+      payload: { refinedIntent: 'Retry PRD with recovered intent', rounds: 2 },
+    });
+
+    const prdOutput = validPRD({ title: 'Retry PRD with recovered intent' });
+    const runtime = makeQueuedRuntime([prdOutput]);
+
+    const result = await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies: [],
+      skipGrill: true,
+      deps: {
+        runtime,
+        projectConfig: null,
+        totalSpendForSkill: () => 0,
+        buildContext: async () => ({
+          stackSummary: '',
+          contextMd: '',
+          adrSummaries: [],
+          claudeMd: '',
+        }),
+        createWorktreeImpl: () => {
+          throw new Error('should not create worktree in skipGrill mode');
+        },
+        cleanupWorktreeImpl: () => {
+          throw new Error('should not clean worktree in skipGrill mode');
+        },
+      },
+    });
+
+    expect(result.phase).toBe('prd-review');
+    expect(runtime.run).toHaveBeenCalledTimes(1);
+    const callArgs = (runtime.run as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(callArgs.skill).toBe('write-prd');
+  });
+
+  it('uses refinedIntent from grill.completed event when skipGrill:true', async () => {
+    const projectId = uniqueProjectId('skip-grill-intent');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await source.seedIssue({
+      title: 'Fallback title',
+      body: 'Body.',
+      type: 'feature',
+      priority: 'medium',
+      state: 'factory:prd-drafting',
+    });
+    const workItem = await source.getItem(item.externalId);
+
+    eventStore.appendEvent({
+      projectId,
+      workItemId: workItem.id,
+      kind: 'grill.completed',
+      payload: { refinedIntent: 'Recovered: reduce sign-up friction', rounds: 1 },
+    });
+
+    const prdOutput = validPRD({ title: 'Recovered: reduce sign-up friction' });
+    const runtime = makeQueuedRuntime([prdOutput]);
+
+    await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies: [],
+      skipGrill: true,
+      deps: {
+        runtime,
+        projectConfig: null,
+        totalSpendForSkill: () => 0,
+        buildContext: async () => ({
+          stackSummary: '',
+          contextMd: '',
+          adrSummaries: [],
+          claudeMd: '',
+        }),
+        createWorktreeImpl: () => {
+          throw new Error('no worktree');
+        },
+        cleanupWorktreeImpl: () => {
+          throw new Error('no worktree');
+        },
+      },
+    });
+
+    const callArgs = (runtime.run as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(callArgs.context.refinedIntent).toBe('Recovered: reduce sign-up friction');
+  });
+
+  it('falls back to workItem.title when no grill.completed event found', async () => {
+    const projectId = uniqueProjectId('skip-grill-fallback');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await source.seedIssue({
+      title: 'Fallback title used',
+      body: 'Body.',
+      type: 'feature',
+      priority: 'medium',
+      state: 'factory:prd-drafting',
+    });
+    const workItem = await source.getItem(item.externalId);
+
+    const prdOutput = validPRD({ title: 'Fallback title used' });
+    const runtime = makeQueuedRuntime([prdOutput]);
+
+    await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies: [],
+      skipGrill: true,
+      deps: {
+        runtime,
+        projectConfig: null,
+        totalSpendForSkill: () => 0,
+        buildContext: async () => ({
+          stackSummary: '',
+          contextMd: '',
+          adrSummaries: [],
+          claudeMd: '',
+        }),
+        createWorktreeImpl: () => {
+          throw new Error('no worktree');
+        },
+        cleanupWorktreeImpl: () => {
+          throw new Error('no worktree');
+        },
+      },
+    });
+
+    const callArgs = (runtime.run as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(callArgs.context.refinedIntent).toBe('Fallback title used');
+  });
+});

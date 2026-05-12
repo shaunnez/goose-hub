@@ -1,8 +1,8 @@
 /** @vitest-environment jsdom */
 import type { AgentEventDto } from '@/lib/types';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { computeIsLive } from '../lib/timeline';
 import { PendingNextRunBanner } from './PendingNextRunBanner';
@@ -92,11 +92,7 @@ describe('PendingNextRunBanner stuck detection', () => {
     ]);
     render(
       wrapper(
-        <PendingNextRunBanner
-          state="factory:prd-drafting"
-          projectSlug="my-project"
-          id="42"
-        />,
+        <PendingNextRunBanner state="factory:prd-drafting" projectSlug="my-project" id="42" />,
       ),
     );
     const retryBtn = await screen.findByRole('button', { name: /retry/i });
@@ -111,11 +107,7 @@ describe('PendingNextRunBanner stuck detection', () => {
     ]);
     render(
       wrapper(
-        <PendingNextRunBanner
-          state="factory:prd-drafting"
-          projectSlug="my-project"
-          id="42"
-        />,
+        <PendingNextRunBanner state="factory:prd-drafting" projectSlug="my-project" id="42" />,
       ),
     );
     await screen.findByText(/next run pending/i);
@@ -129,11 +121,7 @@ describe('PendingNextRunBanner stuck detection', () => {
     ]);
     render(
       wrapper(
-        <PendingNextRunBanner
-          state="factory:prd-drafting"
-          projectSlug="my-project"
-          id="42"
-        />,
+        <PendingNextRunBanner state="factory:prd-drafting" projectSlug="my-project" id="42" />,
       ),
     );
     const btn = await screen.findByRole('button', { name: /retry/i });

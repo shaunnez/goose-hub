@@ -50,8 +50,8 @@ export function PendingNextRunBanner({ state, projectSlug, id }: PendingNextRunB
       >
         <AlertTriangle size={14} className="shrink-0" />
         <span className="flex-1">
-          Write PRD stalled — completed without advancing state. Retry to re-run write-prd
-          directly (grill context preserved).
+          Write PRD stalled — completed without advancing state. Retry to re-run write-prd directly
+          (grill context preserved).
         </span>
         <button
           type="button"

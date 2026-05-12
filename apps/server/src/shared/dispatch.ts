@@ -1343,19 +1343,37 @@ export async function dispatchResumeIssue(slug: string, issueNumber: number): Pr
     return;
   }
 
-  // M19: avoid resuming factory:in-progress through dev-ready, which would re-run
-  // spec-author and overwrite the stored spec/pipelineRunId.
+  // If the issue reached in-progress via spec-ready it was launched by the parallel-implement
+  // pipeline. Resume by restoring spec-ready and re-dispatching (clean restart — no WP-level
+  // checkpoint recovery across server restarts). If it arrived via dev-ready, fall through to
+  // the legacy fix-issue path in RESUME_WORKFLOWS.
   if (fromState === 'factory:in-progress') {
-    const projectForFlag = await getProject(slug);
-    const useMultiAgentResume =
-      projectForFlag != null ? getUseMultiAgentPipeline(projectForFlag.id) : false;
-    if (useMultiAgentResume) {
-      logger.warn(
-        'dispatchResumeIssue: M19 parallel-implement not wired yet — skipping in-progress resume',
-        { slug, issueNumber },
+    const allEvents = eventStore.replay({ projectId: slug, workItemId });
+    const lastToInProgress = [...allEvents]
+      .reverse()
+      .find(
+        (e) =>
+          e.kind === 'state.transitioned' &&
+          (e.payload as { to?: string }).to === 'factory:in-progress',
       );
+    const arrivedFrom = (lastToInProgress?.payload as { from?: string } | undefined)?.from;
+
+    if (arrivedFrom === 'factory:spec-ready') {
+      logger.info('dispatchResumeIssue: in-progress via M19, resuming from spec-ready', {
+        slug,
+        issueNumber,
+      });
+      await source.forceState(workItemId, 'factory:spec-ready');
+      eventStore.appendEvent({
+        projectId: slug,
+        workItemId,
+        kind: 'state.transitioned',
+        payload: { from: fromState, to: 'factory:spec-ready', by: 'resume' },
+      });
+      await dispatchParallelImplement(slug, issueNumber);
       return;
     }
+    // Legacy path: fall through to RESUME_WORKFLOWS entry (dev-ready → fix-issue)
   }
 
   if (entry.targetState !== fromState) {

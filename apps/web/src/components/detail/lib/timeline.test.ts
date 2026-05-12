@@ -198,10 +198,7 @@ describe('computeIsLive', () => {
 
   it('returns true when run-started with no terminal event after', () => {
     expect(
-      computeIsLive([
-        makeEvent(1, 'agent.run-started', 'r1'),
-        makeEvent(2, 'agent.spawned', 'r1'),
-      ]),
+      computeIsLive([makeEvent(1, 'agent.run-started', 'r1'), makeEvent(2, 'agent.spawned', 'r1')]),
     ).toBe(true);
   });
 
@@ -216,10 +213,7 @@ describe('computeIsLive', () => {
 
   it('returns false when run-started followed by prd.drafted', () => {
     expect(
-      computeIsLive([
-        makeEvent(1, 'agent.run-started', 'r1'),
-        makeEvent(2, 'prd.drafted', 'r1'),
-      ]),
+      computeIsLive([makeEvent(1, 'agent.run-started', 'r1'), makeEvent(2, 'prd.drafted', 'r1')]),
     ).toBe(false);
   });
 });

@@ -1,5 +1,8 @@
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
-import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
+import {
+  resolveBudgetsForProject,
+  resolveRoleModelForProject,
+} from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
@@ -23,7 +26,22 @@ export async function runBugEnhance(
   body: string,
 ): Promise<string | null> {
   const projectConfig = await getProjectBySlug(projectId);
-  const runtime = selectRuntime({ configRuntime: projectConfig?.agentConfig?.runtime ?? 'auto' });
+  const bugEnhanceBudget = resolveBudgetsForProject('bug-enhance', undefined, projectId);
+  const bugEnhanceRoleModel = resolveRoleModelForProject({
+    role: 'triager',
+    projectId,
+    configRoleModel: projectConfig?.agentConfig?.rolesModels?.triager,
+    allowHoldoutOverride: projectConfig?.agentConfig?.allowHoldoutOverride,
+    skill: 'bug-enhance',
+  });
+  const bugEnhanceModelOverride =
+    bugEnhanceRoleModel.source === 'db' || bugEnhanceRoleModel.source === 'config'
+      ? bugEnhanceRoleModel.modelId
+      : bugEnhanceBudget.modelOverride;
+  const runtime = selectRuntime({
+    configRuntime: projectConfig?.agentConfig?.runtime ?? 'auto',
+    model: bugEnhanceModelOverride,
+  });
   const runId = crypto.randomUUID();
   const { personaId } = selectPersona(projectId, 'triager');
   const workItemId = `inbox:${inboxItemId}`;
@@ -46,7 +64,8 @@ export async function runBugEnhance(
       freshContext: false,
       toolBundles: [],
       toolExtras: [],
-      ...resolveBudgetsForProject('bug-enhance', undefined, projectId),
+      ...bugEnhanceBudget,
+      modelOverride: bugEnhanceModelOverride,
       personaId,
       outputJsonSchema: jsonSchema,
       appendSystemPrompt: prompt,

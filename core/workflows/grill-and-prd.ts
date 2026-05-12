@@ -160,6 +160,9 @@ export interface RunGrillAndPrdInput {
   priorPrd?: PRDOutput;
   /** Concerns from the human to address during revision */
   humanConcerns?: string[];
+  /** When true: skip grill-me entirely and go straight to write-prd.
+   * Recovers refinedIntent from the last grill.completed event in the event store. */
+  skipGrill?: boolean;
   deps?: {
     runtime?: AgentRuntime;
     /**
@@ -278,13 +281,16 @@ export async function runGrillAndPrdWorkflow(
   const cleanupWorktreeFn = deps.cleanupWorktreeImpl ?? cleanupWorktree;
 
   const isReviseMode = priorPrd != null;
+  const skipGrill = input.skipGrill === true;
 
   // Pre-condition: only run when the orchestrator has placed us in the
   // discover lane. Anything else means the workflow was invoked out of band.
   // Revise mode accepts prd-review state (re-running write-prd with concerns).
   const validStates: string[] = isReviseMode
     ? ['factory:grilling', 'factory:gate-pending', 'factory:prd-review']
-    : ['factory:grilling', 'factory:gate-pending'];
+    : skipGrill
+      ? ['factory:prd-drafting']
+      : ['factory:grilling', 'factory:gate-pending'];
   if (!validStates.includes(workItem.state)) {
     eventStore.appendEvent({
       kind: 'agent.run-failed',
@@ -317,6 +323,27 @@ export async function runGrillAndPrdWorkflow(
   // Merge stackSummary from config into the bundle
   const stackSummary = serializeStack((projectConfig as ProjectConfig | null)?.stack);
   const fullProjectContext = { ...projectContext, stackSummary };
+
+  // ─── Skip-grill mode: jump directly to write-prd ─────────────────────────
+  if (skipGrill) {
+    const allEvents = eventStore.replay({ projectId, workItemId: workItem.id });
+    const grillCompleted = [...allEvents].reverse().find((e) => e.kind === 'grill.completed');
+    const refinedIntent =
+      (grillCompleted?.payload as { refinedIntent?: string } | null)?.refinedIntent ??
+      workItem.title;
+    return runWritePrdStep({
+      workItem,
+      stateSource,
+      projectId,
+      runId,
+      runtime,
+      projectConfig,
+      totalSpendForSkill,
+      fullProjectContext,
+      refinedIntent,
+      priorReplies: augmentPriorRepliesWithCrystallizations(priorReplies, projectId, workItem.id),
+    });
+  }
 
   // ─── Revise mode: skip grill rounds, go straight to write-prd ───────────
   if (isReviseMode) {
@@ -923,13 +950,23 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
     return { phase: 'needs-human' };
   }
 
-  eventStore.appendEvent({
-    kind: 'prd.drafted',
-    projectId,
-    workItemId: workItem.id,
-    runId,
-    payload: { prd: prdOutput, advisorConcerns },
-  });
-
+  try {
+    eventStore.appendEvent({
+      kind: 'prd.drafted',
+      projectId,
+      workItemId: workItem.id,
+      runId,
+      payload: { prd: prdOutput, advisorConcerns },
+    });
+  } catch (err) {
+    eventStore.appendEvent({
+      kind: 'agent.run-failed',
+      projectId,
+      workItemId: workItem.id,
+      runId,
+      payload: { skill: 'write-prd', error: `prd.drafted emit failed: ${String(err)}` },
+    });
+    return { phase: 'needs-human' };
+  }
   return { phase: 'prd-review', prdOutput };
 }

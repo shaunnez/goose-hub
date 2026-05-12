@@ -3,7 +3,10 @@ import { crossValidate } from '@goose-hub/core/agent-runtime/cross-validate.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
-import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
+import {
+  resolveBudgetsForProject,
+  resolveRoleModelForProject,
+} from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { ScoutOutputSchema } from '@goose-hub/core/agent-runtime/scout-output.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
@@ -92,8 +95,28 @@ export async function runInvestigateWorkflow(
   const runId = crypto.randomUUID();
   const { personaId } = selectPersona(projectId, 'investigator');
   const projectConfig = await getProjectBySlug(projectId);
+  const investigateBudget = resolveBudgetsForProject(
+    'investigate',
+    projectConfig?.budgets,
+    projectId,
+  );
+  const investigateRoleModel = resolveRoleModelForProject({
+    role: 'investigator',
+    projectId,
+    configRoleModel: projectConfig?.agentConfig?.rolesModels?.investigator,
+    allowHoldoutOverride: projectConfig?.agentConfig?.allowHoldoutOverride,
+    skill: 'investigate',
+  });
+  const investigatorModelOverride =
+    investigateRoleModel.source === 'db' || investigateRoleModel.source === 'config'
+      ? investigateRoleModel.modelId
+      : investigateBudget.modelOverride;
   const runtime =
-    deps.runtime ?? selectRuntime({ configRuntime: projectConfig?.agentConfig?.runtime ?? 'auto' });
+    deps.runtime ??
+    selectRuntime({
+      configRuntime: projectConfig?.agentConfig?.runtime ?? 'auto',
+      model: investigatorModelOverride,
+    });
   const worktreePath = createWtFn(targetRepo, runId);
 
   if (workItem.type === 'bug') {
@@ -253,7 +276,7 @@ export async function runInvestigateWorkflow(
         worktreePath,
         scoutReports: allScoutReports,
       },
-      overrides: { runtimeOverride: runtime },
+      overrides: { runtimeOverride: runtime, modelOverride: investigatorModelOverride },
     });
 
     const findings = synthResult.output as InvestigateOutput;
@@ -267,6 +290,15 @@ export async function runInvestigateWorkflow(
       const playwrightRunId = crypto.randomUUID();
 
       try {
+        const playwrightBudget = resolveBudgetsForProject(
+          'playwright-repro',
+          projectConfig?.budgets,
+          projectId,
+        );
+        const playwrightModelOverride =
+          investigateRoleModel.source === 'db' || investigateRoleModel.source === 'config'
+            ? investigatorModelOverride
+            : playwrightBudget.modelOverride;
         const playwrightResult = await runtime.run({
           runId: playwrightRunId,
           role: 'investigator',
@@ -294,7 +326,8 @@ export async function runInvestigateWorkflow(
           toolBundles: ['validate'],
           toolExtras: [],
           env: { SKIP_WEBSERVER: '1' },
-          ...resolveBudgetsForProject('playwright-repro', projectConfig?.budgets, projectId),
+          ...playwrightBudget,
+          modelOverride: playwrightModelOverride,
           personaId: playwrightPersonaId,
           outputJsonSchema: playwrightReproJsonSchema,
           appendSystemPrompt: playwrightReproPrompt,
