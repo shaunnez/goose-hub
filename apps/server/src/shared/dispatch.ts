@@ -1115,6 +1115,62 @@ export async function dispatchGrillAndPrd(slug: string, issueNumber: number): Pr
 }
 
 /**
+ * Retry write-prd directly, skipping re-grilling. Used when an issue is stuck
+ * in factory:prd-drafting after a failed or incomplete write-prd run. Grill
+ * context (refinedIntent) is recovered from the grill.completed event in the
+ * event store; priorReplies are rebuilt from issue comments so the PRD writer
+ * has the full Q&A history.
+ */
+export async function dispatchRetryWritePrd(slug: string, issueNumber: number): Promise<void> {
+  const maxParallel = await getMaxParallelAgents(slug);
+  if (parallelLock.isInFlight(slug, issueNumber)) {
+    logger.warn('dispatchRetryWritePrd: duplicate in-flight, dropping', { slug, issueNumber });
+    return;
+  }
+  if (!parallelLock.tryAcquire(slug, issueNumber, maxParallel)) {
+    logger.info('dispatchRetryWritePrd: cap full, queuing work item', {
+      slug,
+      issueNumber,
+      inFlight: parallelLock.inFlightCount(slug),
+      maxParallel,
+    });
+    enqueueWorkflow(slug, issueNumber, dispatchRetryWritePrd);
+    return;
+  }
+  try {
+    // Case 2: runtime-resolved path — module path depends on per-project config loaded at runtime.
+    const { runGrillAndPrdWorkflow } = await import('@goose-hub/core/workflows/grill-and-prd.js');
+    const source = await getSourceForSlug(slug);
+    if (source == null) {
+      logger.error('dispatchRetryWritePrd: no source for slug', { slug });
+      return;
+    }
+    const item = await source.getItem(issueNumber.toString());
+    if (item.state !== 'factory:prd-drafting') {
+      logger.info('dispatchRetryWritePrd: state already advanced, skipping', {
+        slug,
+        issueNumber,
+        state: item.state,
+      });
+      return;
+    }
+    const comments = await source.listComments(issueNumber.toString());
+    const priorReplies = buildPriorReplies(comments);
+    await runGrillAndPrdWorkflow({
+      workItem: item,
+      stateSource: source,
+      projectId: slug,
+      priorReplies,
+      skipGrill: true,
+      deps: { repoRoot: REPO_ROOT },
+    });
+  } finally {
+    parallelLock.release(slug, issueNumber);
+    drainPending(slug);
+  }
+}
+
+/**
  * Re-run write-prd with prior PRD + human concerns (revise path).
  * Drops duplicate triggers via parallel-lock. State stays prd-review.
  */
@@ -1262,7 +1318,7 @@ const RESUME_WORKFLOWS: Partial<Record<StateName, ResumeEntry>> = {
   'factory:grilling': { targetState: 'factory:grilling', dispatch: dispatchGrillAndPrd },
   // factory:gate-pending is handled above with lane-origin inspection; it is
   // intentionally absent from this table so the special-case runs first.
-  'factory:prd-drafting': { targetState: 'factory:grilling', dispatch: dispatchGrillAndPrd },
+  'factory:prd-drafting': { targetState: 'factory:prd-drafting', dispatch: dispatchRetryWritePrd },
   'factory:decomposing': { targetState: 'factory:decomposing', dispatch: dispatchDecomposePrd },
 };
 
