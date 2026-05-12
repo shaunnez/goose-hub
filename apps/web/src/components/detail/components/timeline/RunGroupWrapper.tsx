@@ -182,7 +182,7 @@ export function RunGroupWrapper({
             </>
           )}
           <span aria-hidden className="w-[3px] h-[3px] shrink-0 rounded-full bg-fg-4" />
-          <span className="shrink-0">{statusBadge}</span>
+          <span className="w-[72px] shrink-0 flex justify-start">{statusBadge}</span>
           {costRow && (
             <span className="shrink-0">
               <CostBadge
