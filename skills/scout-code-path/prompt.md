@@ -41,4 +41,6 @@ Return JSON conforming to `ScoutOutputSchema`:
 }
 ```
 
-Emit `[decision] KIND: <one sentence>` markers in your text turn at major checkpoints. The shared decision-kind enum lives in `core/agent-runtime/decision-types.ts`. The orchestrator never synthesises decisions on your behalf.
+Emit `[decision] KIND: <one sentence>` markers in your text turn at major checkpoints. Use the canonical `DecisionKindSchema` enum (`core/agent-runtime/decision-types.ts`). The most useful kinds for a code-path scout are `READ` (you read a file or followed a call), `INSIGHT` (you noticed a branch or invariant worth flagging), `UNCERTAINTY` (the trace dead-ended or the symbol was not found).
+
+You must include **at least one** `decisionSummaries` entry in the JSON output. The orchestrator never synthesises decisions on your behalf; only the ones you emit are recorded against your `runId`.

@@ -33,4 +33,6 @@ Return JSON conforming to `ScoutOutputSchema`:
 }
 ```
 
-Emit `[decision] KIND: <one sentence>` markers at major checkpoints. Use the canonical `DecisionKindSchema` enum.
+Emit `[decision] KIND: <one sentence>` markers at major checkpoints. Use the canonical `DecisionKindSchema` enum (`core/agent-runtime/decision-types.ts`). The most useful kinds for a dependency scout are `READ` (you read a file), `INSIGHT` (you noticed a structural or import-rule concern), `UNCERTAINTY` (the dependency graph is incomplete or ambiguous).
+
+You must include **at least one** `decisionSummaries` entry in the JSON output. The orchestrator never synthesises decisions on your behalf; only the ones you emit are recorded against your `runId`.

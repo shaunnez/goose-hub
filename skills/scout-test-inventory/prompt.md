@@ -33,4 +33,6 @@ Return JSON conforming to `ScoutOutputSchema`:
 }
 ```
 
-Emit `[decision] KIND: <one sentence>` markers in your text turn. Use the canonical `DecisionKindSchema` enum.
+Emit `[decision] KIND: <one sentence>` markers in your text turn. Use the canonical `DecisionKindSchema` enum (`core/agent-runtime/decision-types.ts`). The most useful kinds for a test-inventory scout are `READ` (you read a file), `INSIGHT` (you noticed something notable about test coverage), `UNCERTAINTY` (the evidence is thin or ambiguous).
+
+You must include **at least one** `decisionSummaries` entry in the JSON output. The orchestrator never synthesises decisions on your behalf; only the ones you emit are recorded against your `runId`.
