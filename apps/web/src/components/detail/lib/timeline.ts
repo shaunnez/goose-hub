@@ -116,14 +116,6 @@ export type RenderItem =
       endedAt: string | null;
       lastEventAt: string | null;
       personaId: string | null;
-    }
-  | {
-      kind: 'phase-group';
-      phase: string;
-      label: string;
-      items: RenderItem[];
-      startedAt: string | null;
-      endedAt: string | null;
     };
 
 /**
@@ -135,9 +127,6 @@ function effectiveTimestamp(item: RenderItem): number {
   if (item.kind === 'run-group') {
     return new Date((item.startedAt ?? item.lastEventAt) as string).getTime();
   }
-  if (item.kind === 'phase-group') {
-    return item.startedAt ? new Date(item.startedAt).getTime() : 0;
-  }
   if (item.kind === 'event') return new Date(item.event.createdAt).getTime();
   return new Date(item.events[0]?.createdAt ?? 0).getTime();
 }
@@ -145,113 +134,7 @@ function effectiveTimestamp(item: RenderItem): number {
 export function groupEvents(events: AgentEventDto[]): RenderItem[] {
   const collapsed = collapseLogRuns(events);
   const grouped = groupByRunId(collapsed);
-  const sorted = [...grouped].sort((a, b) => effectiveTimestamp(b) - effectiveTimestamp(a));
-  return groupByPhase(sorted);
-}
-
-function isAnchorInvestigationRunGroup(item: RenderItem): boolean {
-  if (item.kind !== 'run-group' || item.skill == null) return false;
-  if (item.skill.startsWith('scout-') || item.skill.startsWith('wave2-')) return false;
-  return item.skill.startsWith('investigate');
-}
-
-function isChildInvestigationRunGroup(item: RenderItem): boolean {
-  if (item.kind !== 'run-group') return false;
-  if (isAnchorInvestigationRunGroup(item)) return false;
-  if (item.skill?.startsWith('scout-')) return true;
-  if (item.skill?.startsWith('wave2-')) return true;
-  return item.items.some(
-    (child) => child.kind === 'event' && child.event.kind.startsWith('swarm.'),
-  );
-}
-
-function scoutIdx(item: RenderItem): number {
-  if (item.kind !== 'run-group') return Number.MAX_SAFE_INTEGER;
-  const suffix = item.runId.match(/:(\d+)$/);
-  return suffix ? Number(suffix[1]) : Number.MAX_SAFE_INTEGER;
-}
-
-function buildPhaseGroup(anchorItem: RenderItem, childItems: RenderItem[]): RenderItem {
-  const all = [...childItems].sort((a, b) => scoutIdx(a) - scoutIdx(b));
-  all.push(anchorItem);
-  const starts = all
-    .map((i) => (i.kind === 'run-group' ? i.startedAt : null))
-    .filter((s): s is string => s != null);
-  const ends = all
-    .map((i) => (i.kind === 'run-group' ? (i.endedAt ?? i.lastEventAt) : null))
-    .filter((s): s is string => s != null);
-  return {
-    kind: 'phase-group',
-    phase: 'investigation',
-    label: 'Investigation',
-    items: all,
-    startedAt: starts.length > 0 ? starts.reduce((a, b) => (a < b ? a : b)) : null,
-    endedAt: ends.length > 0 ? ends.reduce((a, b) => (a > b ? a : b)) : null,
-  };
-}
-
-function groupByPhase(items: RenderItem[]): RenderItem[] {
-  const anchors = items.filter(isAnchorInvestigationRunGroup);
-  const children = items.filter(isChildInvestigationRunGroup);
-
-  if (anchors.length === 0 && children.length === 0) return items;
-
-  // Link each child to its anchor via runId prefix: child.runId.startsWith(`${anchor.runId}:`)
-  const claimedChildRunIds = new Set<string>();
-  const phaseGroups: RenderItem[] = anchors.map((anchor) => {
-    const anchorRunId = (anchor as Extract<RenderItem, { kind: 'run-group' }>).runId;
-    const ownChildren = children.filter((child) => {
-      const childRunId = (child as Extract<RenderItem, { kind: 'run-group' }>).runId;
-      return childRunId.startsWith(`${anchorRunId}:`);
-    });
-    for (const c of ownChildren) {
-      claimedChildRunIds.add((c as Extract<RenderItem, { kind: 'run-group' }>).runId);
-    }
-    return buildPhaseGroup(anchor, ownChildren);
-  });
-
-  // Orphaned children (anchor not yet emitted — live run still in progress)
-  const orphans = children.filter(
-    (c) => !claimedChildRunIds.has((c as Extract<RenderItem, { kind: 'run-group' }>).runId),
-  );
-  if (orphans.length > 0) {
-    const starts = orphans
-      .map((i) => (i.kind === 'run-group' ? i.startedAt : null))
-      .filter((s): s is string => s != null);
-    const ends = orphans
-      .map((i) => (i.kind === 'run-group' ? (i.endedAt ?? i.lastEventAt) : null))
-      .filter((s): s is string => s != null);
-    phaseGroups.push({
-      kind: 'phase-group',
-      phase: 'investigation',
-      label: 'Investigation',
-      items: orphans,
-      startedAt: starts.length > 0 ? starts.reduce((a, b) => (a < b ? a : b)) : null,
-      endedAt: ends.length > 0 ? ends.reduce((a, b) => (a > b ? a : b)) : null,
-    });
-  }
-
-  // Remove all investigation run-groups from the flat list
-  const investigationRunIds = new Set<string>([
-    ...anchors.map((a) => (a as Extract<RenderItem, { kind: 'run-group' }>).runId),
-    ...children.map((c) => (c as Extract<RenderItem, { kind: 'run-group' }>).runId),
-  ]);
-  const flatWithout = items.filter(
-    (item) => item.kind !== 'run-group' || !investigationRunIds.has(item.runId),
-  );
-
-  // Insert each phase-group at the correct position (list is sorted descending by timestamp)
-  const sortedPhaseGroups = [...phaseGroups].sort(
-    (a, b) => effectiveTimestamp(b) - effectiveTimestamp(a),
-  );
-  const result = [...flatWithout];
-  for (const pg of sortedPhaseGroups) {
-    const pgTime = effectiveTimestamp(pg);
-    let insertIdx = result.findIndex((item) => effectiveTimestamp(item) < pgTime);
-    if (insertIdx === -1) insertIdx = result.length;
-    result.splice(insertIdx, 0, pg);
-  }
-  return result;
+  return [...grouped].sort((a, b) => effectiveTimestamp(b) - effectiveTimestamp(a));
 }
 
 function collapseLogRuns(events: AgentEventDto[]): RenderItem[] {

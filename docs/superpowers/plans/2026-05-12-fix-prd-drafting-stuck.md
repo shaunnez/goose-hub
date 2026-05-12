@@ -39,7 +39,7 @@ Add a new `describe` block at the bottom of the existing `timeline.test.ts`. The
 
 ```typescript
 // At bottom of apps/web/src/components/detail/lib/timeline.test.ts
-// (after the existing phase-grouping describe block)
+// (after the existing groupEvents describe blocks)
 
 import { computeIsLive, computeIsWritePrdStuck } from './timeline';
 

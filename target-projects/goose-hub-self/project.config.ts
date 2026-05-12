@@ -87,7 +87,7 @@ const config: ProjectConfig = {
     },
   },
   budgets: {
-    dailyTokens: 5_000_000,
+    dailyTokens: 50_000_000,
     maxParallelAgents: 3,
     maxRetries: 2,
     perBashCommandMaxSeconds: 120,

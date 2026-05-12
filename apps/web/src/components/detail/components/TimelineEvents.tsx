@@ -47,7 +47,6 @@ import {
   ParallelWpTimeoutEvent,
   SpecCompletedEvent,
 } from './timeline/ParallelImplementEvents';
-import { PhaseGroupWrapper } from './timeline/PhaseGroupWrapper';
 import { PrMergedEvent, PrOpenedEvent } from './timeline/PrEvents';
 import {
   PrdAdvisorSkippedEvent,
@@ -71,20 +70,6 @@ import {
 import { AgentVerifyCommandEvent, ToolWarningEvent } from './timeline/VerifyToolEvents';
 
 export function renderTimelineItem(item: RenderItem, idx: number, context?: TimelineContext) {
-  if (item.kind === 'phase-group') {
-    return (
-      <PhaseGroupWrapper
-        key={`phase-group-${item.phase}`}
-        phase={item.phase}
-        label={item.label}
-        items={item.items}
-        startedAt={item.startedAt}
-        endedAt={item.endedAt}
-        context={context}
-        renderItem={renderTimelineItem}
-      />
-    );
-  }
   if (item.kind === 'log-group') {
     return <AgentLogGroupEvent key={`log-group-${idx}`} events={item.events} />;
   }
