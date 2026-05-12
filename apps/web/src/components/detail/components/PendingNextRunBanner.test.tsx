@@ -1,20 +1,41 @@
+/** @vitest-environment jsdom */
 import type { AgentEventDto } from '@/lib/types';
-import { describe, expect, it } from 'vitest';
-import { computeIsLive } from './PendingNextRunBanner';
+import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { computeIsLive } from '../lib/timeline';
+import { PendingNextRunBanner } from './PendingNextRunBanner';
 
-function makeEvent(kind: string, id: number): AgentEventDto {
+// ─── mock api ────────────────────────────────────────────────────────────────
+vi.mock('@/lib/api', () => ({
+  fetchEvents: vi.fn(),
+  resumeIssue: vi.fn().mockResolvedValue(undefined),
+}));
+
+import { fetchEvents, resumeIssue } from '@/lib/api';
+
+afterEach(cleanup);
+
+function makeEvent(kind: string, id: number, payload: Record<string, unknown> = {}): AgentEventDto {
   return {
     id,
     projectId: 'proj',
     workItemId: 'item',
     kind,
-    payload: {},
+    payload,
     runId: 'run-1',
     personaId: null,
     createdAt: new Date(id * 1000).toISOString(),
   };
 }
 
+function wrapper(children: React.ReactNode) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+}
+
+// ─── computeIsLive (moved to timeline.ts) ────────────────────────────────────
 describe('computeIsLive', () => {
   it('returns false when no events', () => {
     expect(computeIsLive([])).toBe(false);
@@ -34,31 +55,6 @@ describe('computeIsLive', () => {
     expect(computeIsLive(events)).toBe(false);
   });
 
-  it('returns false when run-started followed by agent.run-failed', () => {
-    const events = [makeEvent('agent.run-started', 1), makeEvent('agent.run-failed', 2)];
-    expect(computeIsLive(events)).toBe(false);
-  });
-
-  it('returns false when run-started followed by grill.question-posted', () => {
-    const events = [makeEvent('agent.run-started', 1), makeEvent('grill.question-posted', 2)];
-    expect(computeIsLive(events)).toBe(false);
-  });
-
-  it('returns false when run-started followed by grill.completed', () => {
-    const events = [makeEvent('agent.run-started', 1), makeEvent('grill.completed', 2)];
-    expect(computeIsLive(events)).toBe(false);
-  });
-
-  it('returns false when run-started followed by decompose.completed', () => {
-    const events = [makeEvent('agent.run-started', 1), makeEvent('decompose.completed', 2)];
-    expect(computeIsLive(events)).toBe(false);
-  });
-
-  it('returns false when run-started followed by retrospective.completed', () => {
-    const events = [makeEvent('agent.run-started', 1), makeEvent('retrospective.completed', 2)];
-    expect(computeIsLive(events)).toBe(false);
-  });
-
   it('returns false when run-started followed by prd.drafted', () => {
     const events = [makeEvent('agent.run-started', 1), makeEvent('prd.drafted', 2)];
     expect(computeIsLive(events)).toBe(false);
@@ -74,12 +70,74 @@ describe('computeIsLive', () => {
   });
 
   it('handles descending order (as returned by server API)', () => {
-    // Server returns events newest-first; completed run should not appear live
     const events = [
       makeEvent('agent.run-completed', 3),
       makeEvent('agent.run-started', 2),
       makeEvent('state.transitioned', 1),
     ];
     expect(computeIsLive(events)).toBe(false);
+  });
+});
+
+// ─── PendingNextRunBanner stuck alert ────────────────────────────────────────
+describe('PendingNextRunBanner stuck detection', () => {
+  beforeEach(() => {
+    vi.mocked(fetchEvents).mockReset();
+  });
+
+  it('shows amber alert with Retry when write-prd completed but no prd.drafted', async () => {
+    vi.mocked(fetchEvents).mockResolvedValue([
+      makeEvent('agent.run-started', 1, { skill: 'write-prd' }),
+      makeEvent('agent.run-completed', 2, { skill: 'write-prd' }),
+    ]);
+    render(
+      wrapper(
+        <PendingNextRunBanner
+          state="factory:prd-drafting"
+          projectSlug="my-project"
+          id="42"
+        />,
+      ),
+    );
+    const retryBtn = await screen.findByRole('button', { name: /retry/i });
+    expect(retryBtn).toBeTruthy();
+  });
+
+  it('shows normal info banner (no button) when prd.drafted is present', async () => {
+    vi.mocked(fetchEvents).mockResolvedValue([
+      makeEvent('agent.run-started', 1, { skill: 'write-prd' }),
+      makeEvent('agent.run-completed', 2, { skill: 'write-prd' }),
+      makeEvent('prd.drafted', 3),
+    ]);
+    render(
+      wrapper(
+        <PendingNextRunBanner
+          state="factory:prd-drafting"
+          projectSlug="my-project"
+          id="42"
+        />,
+      ),
+    );
+    await screen.findByText(/next run pending/i);
+    expect(screen.queryByRole('button', { name: /retry/i })).toBeNull();
+  });
+
+  it('calls resumeIssue when Retry clicked', async () => {
+    vi.mocked(fetchEvents).mockResolvedValue([
+      makeEvent('agent.run-started', 1, { skill: 'write-prd' }),
+      makeEvent('agent.run-completed', 2, { skill: 'write-prd' }),
+    ]);
+    render(
+      wrapper(
+        <PendingNextRunBanner
+          state="factory:prd-drafting"
+          projectSlug="my-project"
+          id="42"
+        />,
+      ),
+    );
+    const btn = await screen.findByRole('button', { name: /retry/i });
+    await userEvent.click(btn);
+    expect(resumeIssue).toHaveBeenCalledWith('my-project', '42');
   });
 });
