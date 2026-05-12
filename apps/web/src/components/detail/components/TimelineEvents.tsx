@@ -24,7 +24,11 @@ import {
   GateAwaitingHumanEvent,
   GateRejectedEvent,
 } from './timeline/GateEvents';
-import { GrillCompletedEvent, GrillQuestionPostedEvent } from './timeline/GrillEvents';
+import {
+  GrillCompletedEvent,
+  GrillDecisionCrystallizedEvent,
+  GrillQuestionPostedEvent,
+} from './timeline/GrillEvents';
 import { AgentLogEvent, AgentLogGroupEvent } from './timeline/LogEvents';
 import {
   AgentModelSelectedEvent,
@@ -156,6 +160,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <AgentImplementCompleteEvent key={event.id} event={event} />;
     case 'grill.question-posted':
       return <GrillQuestionPostedEvent key={event.id} event={event} />;
+    case 'grill.decision-crystallized':
+      return <GrillDecisionCrystallizedEvent key={event.id} event={event} />;
     case 'grill.completed':
       return <GrillCompletedEvent key={event.id} event={event} />;
     case 'evidence.no-spec-declared':

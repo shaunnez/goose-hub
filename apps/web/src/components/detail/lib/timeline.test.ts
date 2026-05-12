@@ -154,18 +154,18 @@ describe('groupEvents — phase grouping', () => {
 
     // Run A's scout is only in group A
     expect(
-      groupA!.items.some((c) => c.kind === 'run-group' && c.runId === 'run-A:scout:code-path:0'),
+      groupA?.items.some((c) => c.kind === 'run-group' && c.runId === 'run-A:scout:code-path:0'),
     ).toBe(true);
     expect(
-      groupB!.items.some((c) => c.kind === 'run-group' && c.runId === 'run-A:scout:code-path:0'),
+      groupB?.items.some((c) => c.kind === 'run-group' && c.runId === 'run-A:scout:code-path:0'),
     ).toBe(false);
 
     // Run B's scout is only in group B
     expect(
-      groupB!.items.some((c) => c.kind === 'run-group' && c.runId === 'run-B:scout:pattern:1'),
+      groupB?.items.some((c) => c.kind === 'run-group' && c.runId === 'run-B:scout:pattern:1'),
     ).toBe(true);
     expect(
-      groupA!.items.some((c) => c.kind === 'run-group' && c.runId === 'run-B:scout:pattern:1'),
+      groupA?.items.some((c) => c.kind === 'run-group' && c.runId === 'run-B:scout:pattern:1'),
     ).toBe(false);
 
     // state.transitioned is outside both phase-groups

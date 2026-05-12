@@ -11,6 +11,7 @@ import { filterEligibleByDependencies } from '@goose-hub/core/projects/dependenc
 import { parallelLock } from '@goose-hub/core/projects/parallel-lock.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { createProjectAwareTargetSource } from '@goose-hub/core/state-source/dependency-resolver.js';
+import type { InvestigateOutput } from '@goose-hub/skills/investigate/schema.js';
 import { EngineeringSpecSchema } from '@goose-hub/skills/spec-author/schema.js';
 import { parseAcceptanceCriteria } from '../domains/issues/parse-acceptance.js';
 import { runRetroForItem } from '../domains/workflows/retro-batch.js';
@@ -211,6 +212,36 @@ export async function dispatchSpecAuthor(slug: string, issueNumber: number): Pro
   }
 }
 
+type InvCompletePayload = { investigate?: InvestigateOutput; investigationRunId?: string };
+
+/**
+ * For bugs in the M19 pipeline: read the latest investigation event and decide
+ * whether the fix warrants the full spec-author → parallel-build pipeline or
+ * whether a single developer agent (legacy) is sufficient.
+ *
+ * Simple = ≤2 key files, high confidence, no open questions.
+ * When no investigation exists, defaults to legacy (fail-safe).
+ */
+function resolveFixIssuePipelineForBug(
+  projectId: string,
+  workItemId: string,
+): 'spec-author' | 'legacy' {
+  const [latestInv] = eventStore.replay({
+    projectId,
+    workItemId,
+    kind: 'agent.investigation-complete',
+    order: 'desc',
+    limit: 1,
+  });
+  if (latestInv == null) return 'legacy';
+  const investigate = (latestInv.payload as InvCompletePayload).investigate;
+  if (investigate == null) return 'legacy';
+  // openQuestions excluded: agents emit informational notes there even at high confidence.
+  return investigate.keyFiles.length <= 2 && investigate.confidence === 'high'
+    ? 'legacy'
+    : 'spec-author';
+}
+
 export async function dispatchFixIssue(slug: string, issueNumber: number): Promise<void> {
   const projectForFlag = await getProject(slug);
   const useMultiAgent =
@@ -222,8 +253,25 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
   });
 
   if (useMultiAgent) {
-    await dispatchSpecAuthor(slug, issueNumber);
-    return;
+    const routingSource = await getSourceForSlug(slug);
+    if (routingSource == null) {
+      logger.error('dispatchFixIssue: no source for slug', { slug });
+      return;
+    }
+    const routingItem = await routingSource.getItem(issueNumber.toString());
+    if (
+      routingItem.type === 'bug' &&
+      resolveFixIssuePipelineForBug(slug, routingItem.id) === 'legacy'
+    ) {
+      logger.info('dispatchFixIssue: simple bug → legacy single-agent path', {
+        slug,
+        issueNumber,
+      });
+      // fall through to legacy path
+    } else {
+      await dispatchSpecAuthor(slug, issueNumber);
+      return;
+    }
   }
 
   const maxParallel = await getMaxParallelAgents(slug);

@@ -47,7 +47,7 @@ export function StateTransitionedEvent({ event }: { event: AgentEventDto }) {
   return (
     <li
       data-event-kind={event.kind}
-      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+      className="rounded-md border bg-bg-elev/60 px-4 py-3 border-info"
     >
       <div className="flex items-center gap-2 mb-1 text-[11px] text-fg-3">
         <ArrowRight size={13} className="shrink-0" />

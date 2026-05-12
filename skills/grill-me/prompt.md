@@ -84,3 +84,5 @@ Return a single JSON object conforming to this exact structure. Free-text-only o
 When `readyForPRD: true`, set `questions` to an empty array `[]`.
 
 `decisionSummaries` must have at least one entry. Include one per major decision or uncertainty surfaced this round.
+
+`kind` must be one of the canonical values from `core/agent-runtime/decision-types.ts`. For the griller role, the most common are: `PLAN` (what unknown you chose to interrogate), `READ` (codebase exploration performed), `INSIGHT` (something discovered from the worktree), `UNCERTAINTY` (genuine unknown requiring the user's answer), `SCOPE_CHANGE` (scope boundary identified or shifted). Use `UNKNOWN` only when none fit.

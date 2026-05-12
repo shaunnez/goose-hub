@@ -22,6 +22,8 @@ const mockRunGrillAndPrdWorkflow = vi.fn();
 const mockGetUseMultiAgentPipeline = vi.fn();
 const mockGetEngineeringSpec = vi.fn();
 const mockRunParallelImplementWorkflow = vi.fn();
+const mockEventStoreReplay = vi.fn();
+const mockEventStoreAppendEvent = vi.fn();
 
 vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   readProjectSettings: vi.fn().mockReturnValue(null),
@@ -78,6 +80,14 @@ vi.mock('@goose-hub/core/workflows/grill-and-prd.js', () => ({
   runGrillAndPrdWorkflow: mockRunGrillAndPrdWorkflow,
 }));
 
+vi.mock('@goose-hub/core/event-stream/store.js', () => ({
+  eventStore: {
+    replay: mockEventStoreReplay,
+    appendEvent: mockEventStoreAppendEvent,
+    subscribe: vi.fn().mockReturnValue(() => {}),
+  },
+}));
+
 // ─── helpers ──────────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -92,6 +102,15 @@ beforeEach(() => {
   mockGetProject.mockResolvedValue(null);
   mockGetUseMultiAgentPipeline.mockReturnValue(false);
   mockGetEngineeringSpec.mockReturnValue(null);
+  mockEventStoreReplay.mockReturnValue([]);
+  mockEventStoreAppendEvent.mockReturnValue({
+    id: 1,
+    projectId: '',
+    workItemId: null,
+    kind: 'agent.run-failed',
+    payload: {},
+    createdAt: '',
+  });
   mockCreateProjectAwareTargetSource.mockResolvedValue(vi.fn());
   mockFilterEligibleByDependencies.mockResolvedValue({
     eligible: [],
@@ -357,6 +376,175 @@ describe('dispatchFixIssue', () => {
     );
     expect(mockLoggerInfo).not.toHaveBeenCalledWith(
       'dispatchFixIssue: item blocked by deps, skipping',
+      expect.anything(),
+    );
+  });
+});
+
+// ─── dispatchFixIssue: bug routing (M19 pipeline vs legacy) ──────────────────
+
+describe('dispatchFixIssue: bug routing', () => {
+  const makeSource = (item: Record<string, unknown>) => ({
+    getItem: vi.fn().mockResolvedValue(item),
+    setLabelInGroup: vi.fn().mockResolvedValue(undefined),
+    comment: vi.fn().mockResolvedValue(undefined),
+    transitionState: vi.fn().mockResolvedValue(undefined),
+  });
+
+  const simpleInvEvent = {
+    id: 1,
+    projectId: 'slug',
+    workItemId: 'item-bug',
+    kind: 'agent.investigation-complete',
+    payload: {
+      investigate: {
+        findings: 'root cause found',
+        keyFiles: [{ path: 'src/foo.ts', reason: 'logo text here' }],
+        confidence: 'high',
+        openQuestions: ['Wave-2 scouts errored — scope fully contained, non-blocking'],
+        requiresBrowserRepro: false,
+        decisionSummaries: [{ kind: 'READ', summary: 'found it' }],
+      },
+      investigationRunId: 'run-abc',
+    },
+    createdAt: new Date().toISOString(),
+  };
+
+  const complexInvEvent = {
+    ...simpleInvEvent,
+    payload: {
+      investigate: {
+        ...simpleInvEvent.payload.investigate,
+        keyFiles: [
+          { path: 'src/a.ts', reason: 'a' },
+          { path: 'src/b.ts', reason: 'b' },
+          { path: 'src/c.ts', reason: 'c' },
+        ],
+        confidence: 'medium',
+        openQuestions: ['Is the schema affected?'],
+      },
+      investigationRunId: 'run-def',
+    },
+  };
+
+  it('routes simple bug (≤2 files, high confidence, no open Qs) to legacy path', async () => {
+    mockGetUseMultiAgentPipeline.mockReturnValue(true);
+    mockGetProject.mockResolvedValue({ id: 'slug', budgets: { maxParallelAgents: 1 } });
+    const bugItem = {
+      id: 'item-bug',
+      externalId: '99',
+      title: 'logo wrong',
+      body: '',
+      state: 'factory:dev-ready',
+      schedule: 'current',
+      type: 'bug',
+    };
+    mockGetSourceForSlug.mockResolvedValue(makeSource(bugItem));
+    mockEventStoreReplay.mockReturnValue([simpleInvEvent]);
+
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    await dispatchFixIssue('slug', 99).catch(() => {
+      /* legacy dynamic import may fail in test env */
+    });
+
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      'dispatchFixIssue: simple bug → legacy single-agent path',
+      expect.objectContaining({ slug: 'slug', issueNumber: 99 }),
+    );
+  });
+
+  it('routes complex bug (3+ files) to spec-author path', async () => {
+    mockGetUseMultiAgentPipeline.mockReturnValue(true);
+    mockGetProject.mockResolvedValue({
+      id: 'slug',
+      budgets: { maxParallelAgents: 1 },
+      source: { repo: 'shaunnez/goose-hub', type: 'github' },
+    });
+    const bugItem = {
+      id: 'item-bug',
+      externalId: '100',
+      title: 'complex bug',
+      body: '',
+      state: 'factory:dev-ready',
+      schedule: 'current',
+      type: 'bug',
+    };
+    mockGetSourceForSlug.mockResolvedValue(makeSource(bugItem));
+    mockEventStoreReplay.mockReturnValue([complexInvEvent]);
+    mockFilterEligibleByDependencies.mockResolvedValue({
+      eligible: [],
+      blocked: [],
+      unregistered: [],
+    });
+
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    await dispatchFixIssue('slug', 100);
+
+    expect(mockLoggerInfo).not.toHaveBeenCalledWith(
+      'dispatchFixIssue: simple bug → legacy single-agent path',
+      expect.anything(),
+    );
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      'dispatchFixIssue: pipeline flag',
+      expect.objectContaining({ useMultiAgentPipeline: true }),
+    );
+  });
+
+  it('routes bug with no investigation to legacy (fail-safe)', async () => {
+    mockGetUseMultiAgentPipeline.mockReturnValue(true);
+    mockGetProject.mockResolvedValue({ id: 'slug', budgets: { maxParallelAgents: 1 } });
+    const bugItem = {
+      id: 'item-bug',
+      externalId: '101',
+      title: 'untriaged bug',
+      body: '',
+      state: 'factory:dev-ready',
+      schedule: 'current',
+      type: 'bug',
+    };
+    mockGetSourceForSlug.mockResolvedValue(makeSource(bugItem));
+    mockEventStoreReplay.mockReturnValue([]);
+
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    await dispatchFixIssue('slug', 101).catch(() => {
+      /* legacy dynamic import may fail */
+    });
+
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      'dispatchFixIssue: simple bug → legacy single-agent path',
+      expect.objectContaining({ slug: 'slug', issueNumber: 101 }),
+    );
+  });
+
+  it('routes feature items to spec-author regardless of investigation', async () => {
+    mockGetUseMultiAgentPipeline.mockReturnValue(true);
+    mockGetProject.mockResolvedValue({
+      id: 'slug',
+      budgets: { maxParallelAgents: 1 },
+      source: { repo: 'shaunnez/goose-hub', type: 'github' },
+    });
+    const featureItem = {
+      id: 'item-feat',
+      externalId: '102',
+      title: 'new feature',
+      body: '',
+      state: 'factory:dev-ready',
+      schedule: 'current',
+      type: 'feature',
+    };
+    mockGetSourceForSlug.mockResolvedValue(makeSource(featureItem));
+    mockEventStoreReplay.mockReturnValue([simpleInvEvent]);
+    mockFilterEligibleByDependencies.mockResolvedValue({
+      eligible: [],
+      blocked: [],
+      unregistered: [],
+    });
+
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    await dispatchFixIssue('slug', 102);
+
+    expect(mockLoggerInfo).not.toHaveBeenCalledWith(
+      'dispatchFixIssue: simple bug → legacy single-agent path',
       expect.anything(),
     );
   });

@@ -21,7 +21,7 @@ export function PhaseGroupWrapper({
   context,
   renderItem,
 }: PhaseGroupWrapperProps) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   const expandTick = context?.expandSignal?.tick ?? 0;
   const expandOpen = context?.expandSignal?.open ?? true;

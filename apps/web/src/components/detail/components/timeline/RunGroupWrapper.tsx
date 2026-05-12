@@ -36,7 +36,7 @@ export function RunGroupWrapper({
   renderItem: (item: RenderItem, idx: number, context?: TimelineContext) => React.ReactNode;
 }) {
   const personaMap = usePersonaMap();
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [resuming, setResuming] = useState(false);
   const [resumed, setResumed] = useState(false);

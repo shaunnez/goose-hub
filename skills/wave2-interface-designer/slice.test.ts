@@ -3,35 +3,34 @@ import { Wave2InterfaceDesignerSchema } from './schema.js';
 import config, { Wave2InterfaceDesignerContextSchema } from './skill.config.js';
 
 describe('wave2-interface-designer skill', () => {
-  it('accepts a valid output with one paste-ready Zod schema artefact', () => {
+  it('accepts a valid output with one paste-ready artefact finding', () => {
     const result = Wave2InterfaceDesignerSchema.safeParse({
-      artefacts: [
+      findings: [
         {
-          kind: 'zod-schema',
-          targetPath: 'core/x/schema.ts',
-          body: 'export const FooSchema = z.object({ id: z.string() });',
-          rationale: 'scout-schema saw id text not null at core/db/schema.ts:12',
+          file: 'core/x/schema.ts',
+          fact: 'ARTEFACT[zod-schema]: export const FooSchema = z.object({ id: z.string() }); | RATIONALE: scout-schema saw id text not null at core/db/schema.ts:12',
+          confidence: 'high',
         },
       ],
-      openQuestions: [],
+      status: 'ok',
       decisionSummaries: [{ kind: 'PLAN', summary: 'Designed FooSchema' }],
     });
     expect(result.success).toBe(true);
   });
 
-  it('rejects an artefact with empty body (paste-ready required)', () => {
+  it('rejects a finding with empty fact', () => {
     const result = Wave2InterfaceDesignerSchema.safeParse({
-      artefacts: [{ kind: 'zod-schema', targetPath: 'x.ts', body: '', rationale: 'r' }],
-      openQuestions: [],
+      findings: [{ file: 'core/x/schema.ts', fact: '', confidence: 'high' }],
+      status: 'ok',
       decisionSummaries: [{ kind: 'PLAN', summary: 'x' }],
     });
     expect(result.success).toBe(false);
   });
 
-  it('rejects an unknown artefact kind', () => {
+  it('rejects an invalid status value', () => {
     const result = Wave2InterfaceDesignerSchema.safeParse({
-      artefacts: [{ kind: 'pseudocode', targetPath: 'x.ts', body: 'x', rationale: 'y' }],
-      openQuestions: [],
+      findings: [],
+      status: 'success',
       decisionSummaries: [{ kind: 'PLAN', summary: 'x' }],
     });
     expect(result.success).toBe(false);
@@ -39,8 +38,8 @@ describe('wave2-interface-designer skill', () => {
 
   it('rejects empty decisionSummaries', () => {
     const result = Wave2InterfaceDesignerSchema.safeParse({
-      artefacts: [],
-      openQuestions: [],
+      findings: [],
+      status: 'ok',
       decisionSummaries: [],
     });
     expect(result.success).toBe(false);
