@@ -56,7 +56,7 @@ export function AgentRunStatusEvent({ event }: { event: AgentEventDto }) {
   return (
     <li
       data-event-kind={event.kind}
-      className={`rounded-md border bg-bg-elev/60 px-4 py-3 border-info`}
+      className="rounded-md border bg-bg-elev/60 px-4 py-3 border-info"
     >
       <div className="flex items-center gap-2 text-[11px]  ">
         {isCompleted ? (

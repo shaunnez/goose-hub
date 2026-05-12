@@ -419,15 +419,16 @@ describe('dispatchFixIssue: bug routing', () => {
           { path: 'src/a.ts', reason: 'a' },
           { path: 'src/b.ts', reason: 'b' },
           { path: 'src/c.ts', reason: 'c' },
+          { path: 'src/d.ts', reason: 'd' },
         ],
-        confidence: 'medium',
+        confidence: 'high',
         openQuestions: ['Is the schema affected?'],
       },
       investigationRunId: 'run-def',
     },
   };
 
-  it('routes simple bug (≤2 files, high confidence, no open Qs) to legacy path', async () => {
+  it('routes simple bug (≤3 non-test files, high confidence) to legacy path', async () => {
     mockGetUseMultiAgentPipeline.mockReturnValue(true);
     mockGetProject.mockResolvedValue({ id: 'slug', budgets: { maxParallelAgents: 1 } });
     const bugItem = {
@@ -453,7 +454,49 @@ describe('dispatchFixIssue: bug routing', () => {
     );
   });
 
-  it('routes complex bug (3+ files) to spec-author path', async () => {
+  it('excludes test files from complexity count (source + test → legacy)', async () => {
+    mockGetUseMultiAgentPipeline.mockReturnValue(true);
+    mockGetProject.mockResolvedValue({ id: 'slug', budgets: { maxParallelAgents: 1 } });
+    const bugItem = {
+      id: 'item-bug',
+      externalId: '99',
+      title: 'logo wrong',
+      body: '',
+      state: 'factory:dev-ready',
+      schedule: 'current',
+      type: 'bug',
+    };
+    mockGetSourceForSlug.mockResolvedValue(makeSource(bugItem));
+    mockEventStoreReplay.mockReturnValue([
+      {
+        ...simpleInvEvent,
+        payload: {
+          investigate: {
+            ...simpleInvEvent.payload.investigate,
+            keyFiles: [
+              { path: 'apps/web/src/Sidebar.tsx', reason: 'primary fix' },
+              { path: 'apps/web/src/Sidebar.test.ts', reason: 'must update assertion' },
+              { path: 'apps/web/index.html', reason: 'title tag' },
+            ],
+            confidence: 'high',
+          },
+          investigationRunId: 'run-xyz',
+        },
+      },
+    ]);
+
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    await dispatchFixIssue('slug', 99).catch(() => {
+      /* legacy dynamic import may fail in test env */
+    });
+
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      'dispatchFixIssue: simple bug → legacy single-agent path',
+      expect.objectContaining({ slug: 'slug', issueNumber: 99 }),
+    );
+  });
+
+  it('routes complex bug (3+ non-test files) to spec-author path', async () => {
     mockGetUseMultiAgentPipeline.mockReturnValue(true);
     mockGetProject.mockResolvedValue({
       id: 'slug',

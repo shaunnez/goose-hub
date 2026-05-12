@@ -4,6 +4,7 @@ import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt
 import {
   resolveBudgetsForProject,
   resolveGlobalSettingsForProject,
+  resolveRoleModelForProject,
 } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
@@ -87,7 +88,6 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
   }
 
   const reposContext = readReposContext(slug);
-  const runtime = selectRuntime({ configRuntime: projectConfig?.agentConfig?.runtime ?? 'auto' });
   const triagePrompt = readPromptWithContext('triage', slug);
   const repoMatchPrompt = readPromptWithContext('repo-match', slug);
   const triageJsonSchema = toJsonSchema(TriageOutputSchema);
@@ -110,8 +110,24 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
     const { personaId: triagerPersonaId } = selectPersona(projectId, 'triager');
 
     // Run triage skill
+    const triageBudget = resolveBudgetsForProject('triage', projectConfig?.budgets, projectId);
+    const triageRoleModel = resolveRoleModelForProject({
+      role: 'triager',
+      projectId,
+      configRoleModel: projectConfig?.agentConfig?.rolesModels?.triager,
+      allowHoldoutOverride: projectConfig?.agentConfig?.allowHoldoutOverride,
+      skill: 'triage',
+    });
+    const triageModelOverride =
+      triageRoleModel.source === 'db' || triageRoleModel.source === 'config'
+        ? triageRoleModel.modelId
+        : triageBudget.modelOverride;
+    const triageRuntime = selectRuntime({
+      configRuntime: projectConfig?.agentConfig?.runtime ?? 'auto',
+      model: triageModelOverride,
+    });
     logger.info('triage-batch running triage skill', { slug, workItemId, runId });
-    const triageResult = await runtime.run({
+    const triageResult = await triageRuntime.run({
       runId,
       role: 'triager',
       skill: 'triage',
@@ -124,7 +140,8 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       freshContext: false,
       toolBundles: [],
       toolExtras: [],
-      ...resolveBudgetsForProject('triage', projectConfig?.budgets, projectId),
+      ...triageBudget,
+      modelOverride: triageModelOverride,
       personaId: triagerPersonaId,
       outputJsonSchema: triageJsonSchema,
       appendSystemPrompt: triagePrompt,
@@ -179,12 +196,32 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
     // Run repo-match skill
     const repoMatchRunId = crypto.randomUUID();
     const { personaId: researcherPersonaId } = selectPersona(projectId, 'researcher');
+    const repoMatchBudget = resolveBudgetsForProject(
+      'repo-match',
+      projectConfig?.budgets,
+      projectId,
+    );
+    const repoMatchRoleModel = resolveRoleModelForProject({
+      role: 'researcher',
+      projectId,
+      configRoleModel: projectConfig?.agentConfig?.rolesModels?.researcher,
+      allowHoldoutOverride: projectConfig?.agentConfig?.allowHoldoutOverride,
+      skill: 'repo-match',
+    });
+    const repoMatchModelOverride =
+      repoMatchRoleModel.source === 'db' || repoMatchRoleModel.source === 'config'
+        ? repoMatchRoleModel.modelId
+        : repoMatchBudget.modelOverride;
+    const repoMatchRuntime = selectRuntime({
+      configRuntime: projectConfig?.agentConfig?.runtime ?? 'auto',
+      model: repoMatchModelOverride,
+    });
     logger.info('triage-batch running repo-match skill', {
       slug,
       workItemId,
       runId: repoMatchRunId,
     });
-    const repoMatchResult = await runtime.run({
+    const repoMatchResult = await repoMatchRuntime.run({
       runId: repoMatchRunId,
       role: 'researcher',
       skill: 'repo-match',
@@ -198,7 +235,8 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       freshContext: false,
       toolBundles: [],
       toolExtras: [],
-      ...resolveBudgetsForProject('repo-match', projectConfig?.budgets, projectId),
+      ...repoMatchBudget,
+      modelOverride: repoMatchModelOverride,
       personaId: researcherPersonaId,
       outputJsonSchema: repoMatchJsonSchema,
       appendSystemPrompt: repoMatchPrompt,

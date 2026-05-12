@@ -236,10 +236,10 @@ function resolveFixIssuePipelineForBug(
   if (latestInv == null) return 'legacy';
   const investigate = (latestInv.payload as InvCompletePayload).investigate;
   if (investigate == null) return 'legacy';
+  // Test files are co-changed with their source; exclude from complexity count.
   // openQuestions excluded: agents emit informational notes there even at high confidence.
-  return investigate.keyFiles.length <= 2 && investigate.confidence === 'high'
-    ? 'legacy'
-    : 'spec-author';
+  const nonTestFiles = investigate.keyFiles.filter((f) => !/\.(test|spec)\.[jt]sx?$/.test(f.path));
+  return nonTestFiles.length <= 3 && investigate.confidence === 'high' ? 'legacy' : 'spec-author';
 }
 
 export async function dispatchFixIssue(slug: string, issueNumber: number): Promise<void> {
