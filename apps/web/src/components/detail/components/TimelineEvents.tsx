@@ -15,6 +15,16 @@ import {
 } from './timeline/DecisionSummaryEvents';
 import { DecomposeCompletedEvent } from './timeline/DecomposeEvents';
 import {
+  DevReviewBudgetSkippedEvent,
+  DevReviewCompletedEvent,
+  DevReviewErrorEvent,
+  DevReviewFailedEvent,
+  DevReviewResponseCompletedEvent,
+  DevReviewResponseFailedEvent,
+  DevReviewResponseStartedEvent,
+  DevReviewStartedEvent,
+} from './timeline/DevReviewEvents';
+import {
   EvidenceNoSpecEvent,
   EvidencePostFailedEvent,
   EvidencePostedEvent,
@@ -47,6 +57,7 @@ import {
   ParallelWpTimeoutEvent,
   SpecCompletedEvent,
 } from './timeline/ParallelImplementEvents';
+import { PhaseGroupWrapper } from './timeline/PhaseGroupWrapper';
 import { PrMergedEvent, PrOpenedEvent } from './timeline/PrEvents';
 import {
   PrdAdvisorSkippedEvent,
@@ -85,6 +96,19 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
         endedAt={item.endedAt}
         lastEventAt={item.lastEventAt}
         personaId={item.personaId}
+        context={context}
+        renderItem={renderTimelineItem}
+      />
+    );
+  }
+  if (item.kind === 'phase-group') {
+    return (
+      <PhaseGroupWrapper
+        key={`phase-group-${item.pipelineRunId}`}
+        pipelineRunId={item.pipelineRunId}
+        items={item.items}
+        startedAt={item.startedAt}
+        endedAt={item.endedAt}
         context={context}
         renderItem={renderTimelineItem}
       />
@@ -205,6 +229,22 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <ParallelWpTimeoutEvent key={event.id} event={event} />;
     case 'parallel-implement.exhausted':
       return <ParallelExhaustedEvent key={event.id} event={event} />;
+    case 'dev-review.started':
+      return <DevReviewStartedEvent key={event.id} event={event} />;
+    case 'dev-review.completed':
+      return <DevReviewCompletedEvent key={event.id} event={event} />;
+    case 'dev-review.failed':
+      return <DevReviewFailedEvent key={event.id} event={event} />;
+    case 'dev-review.error':
+      return <DevReviewErrorEvent key={event.id} event={event} />;
+    case 'dev-review.budget-skipped':
+      return <DevReviewBudgetSkippedEvent key={event.id} event={event} />;
+    case 'dev-review.response-started':
+      return <DevReviewResponseStartedEvent key={event.id} event={event} />;
+    case 'dev-review.response-completed':
+      return <DevReviewResponseCompletedEvent key={event.id} event={event} />;
+    case 'dev-review.response-failed':
+      return <DevReviewResponseFailedEvent key={event.id} event={event} />;
     default:
       return <FallbackEvent key={event.id} event={event} />;
   }

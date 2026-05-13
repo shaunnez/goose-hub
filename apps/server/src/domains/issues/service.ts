@@ -1,3 +1,4 @@
+import { getEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import {
   SCHEDULE_UI_TO_VALUE,
@@ -80,6 +81,38 @@ export async function getIssue(slug: string, id: string): Promise<Result<{ item:
     prdParent: byChild.get(externalId),
   };
   return { ok: true, data: { item: enriched } };
+}
+
+export async function getIssueSpec(
+  slug: string,
+  id: string,
+): Promise<
+  Result<{
+    spec: {
+      pipelineRunId: string;
+      objective: string;
+      workPackages: Array<{ id: string; filesOwned: string[]; builderTier: string }>;
+      acceptanceCriteriaCount: number;
+    } | null;
+  }>
+> {
+  const source = await getSourceForSlug(slug);
+  if (source == null) return { ok: false, error: 'project not found', status: 404 };
+  const repoRef = await getRepoRef(slug);
+  const workItemId = `github:${repoRef}#${id}`;
+  const record = getEngineeringSpec(slug, workItemId);
+  if (record == null) return { ok: true, data: { spec: null } };
+  return {
+    ok: true,
+    data: {
+      spec: record.spec as {
+        pipelineRunId: string;
+        objective: string;
+        workPackages: Array<{ id: string; filesOwned: string[]; builderTier: string }>;
+        acceptanceCriteriaCount: number;
+      },
+    },
+  };
 }
 
 export async function getIssueEvents(

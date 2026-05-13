@@ -11,6 +11,7 @@ import {
   getIssue,
   getIssueComments,
   getIssueEvents,
+  getIssueSpec,
   getIssueTriage,
   getIssueWorktreeDiff,
   listIssues,
@@ -57,6 +58,11 @@ router.get('/:slug/issues/:id/comments', async (c) => {
 
 router.get('/:slug/issues/:id/triage', async (c) => {
   const result = await getIssueTriage(c.req.param('slug'), c.req.param('id'));
+  return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);
+});
+
+router.get('/:slug/issues/:id/spec', async (c) => {
+  const result = await getIssueSpec(c.req.param('slug'), c.req.param('id'));
   return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);
 });
 

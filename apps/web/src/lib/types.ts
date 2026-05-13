@@ -31,6 +31,19 @@ export interface WorkItemDto {
   lastPersonaId?: string | null;
 }
 
+export interface WorkPackageDto {
+  id: string;
+  filesOwned: string[];
+  builderTier: string;
+}
+
+export interface EngineeringSpecDto {
+  pipelineRunId: string;
+  objective: string;
+  workPackages: WorkPackageDto[];
+  acceptanceCriteriaCount: number;
+}
+
 export interface IssueCommentDto {
   id: number;
   body: string;

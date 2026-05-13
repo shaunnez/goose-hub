@@ -24,6 +24,7 @@ const {
   mockProceedToPrd,
   mockFakeRun,
   mockDispatchResolveConflict,
+  mockGetIssueSpec,
 } = vi.hoisted(() => ({
   mockListIssues: vi.fn(),
   mockGetIssue: vi.fn(),
@@ -45,6 +46,7 @@ const {
   mockProceedToPrd: vi.fn(),
   mockFakeRun: vi.fn(),
   mockDispatchResolveConflict: vi.fn().mockResolvedValue(undefined),
+  mockGetIssueSpec: vi.fn(),
 }));
 
 vi.mock('./service.js', () => ({
@@ -67,6 +69,7 @@ vi.mock('./service.js', () => ({
   revisePRD: mockRevisePRD,
   proceedToPrd: mockProceedToPrd,
   fakeRun: mockFakeRun,
+  getIssueSpec: mockGetIssueSpec,
 }));
 
 vi.mock('@goose-hub/core/logger.js', () => ({
@@ -924,6 +927,50 @@ describe('POST /projects/:slug/issues/:id/fake-run', () => {
 
     const app = makeApp();
     const res = await postJson(app, '/projects/unknown/issues/1/fake-run', { skill: 'triage' });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('GET /:slug/issues/:id/spec', () => {
+  it('returns spec when found', async () => {
+    mockGetIssueSpec.mockResolvedValue({
+      ok: true,
+      data: {
+        spec: {
+          pipelineRunId: 'pipe-abc',
+          objective: 'Add feature X',
+          workPackages: [{ id: 'WP1', filesOwned: ['src/foo.ts'], builderTier: 'sonnet' }],
+          acceptanceCriteriaCount: 3,
+        },
+      },
+    });
+
+    const app = makeApp();
+    const res = await app.request('/projects/test-slug/issues/42/spec');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      spec: { objective: string; workPackages: unknown[]; acceptanceCriteriaCount: number };
+    };
+    expect(body.spec.objective).toBe('Add feature X');
+    expect(body.spec.workPackages).toHaveLength(1);
+    expect(body.spec.acceptanceCriteriaCount).toBe(3);
+  });
+
+  it('returns spec: null when not found', async () => {
+    mockGetIssueSpec.mockResolvedValue({ ok: true, data: { spec: null } });
+
+    const app = makeApp();
+    const res = await app.request('/projects/test-slug/issues/42/spec');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { spec: null };
+    expect(body.spec).toBeNull();
+  });
+
+  it('returns 404 when project not found', async () => {
+    mockGetIssueSpec.mockResolvedValue({ ok: false, error: 'project not found', status: 404 });
+
+    const app = makeApp();
+    const res = await app.request('/projects/test-slug/issues/42/spec');
     expect(res.status).toBe(404);
   });
 });
