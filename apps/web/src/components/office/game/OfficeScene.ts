@@ -1,5 +1,5 @@
-// Thin Phaser scene: lifecycle, input, camera, and composition of FloorLayer
-// + SpriteLayer. All floor and sprite logic lives in those layers.
+// Thin Phaser scene: lifecycle, input, camera, and composition of RoomLayer
+// + PersonaLayer + TicketLayer. All floor and sprite logic lives in those layers.
 //
 // Wiring contract:
 //   - React owns the React state (active project, work items, projects list)
@@ -12,24 +12,13 @@
 // owns the bridge in both directions.
 
 import Phaser from 'phaser';
-import type { AgentPlacement, PersonaPlacement, TicketPlacement } from '../lib/agent-positions';
-import type { RoomId } from '../lib/rooms';
-import type { OfficeRole } from '../lib/state-to-role';
+import type { PersonaPlacement, TicketPlacement } from '../lib/agent-positions';
 import { FLOOR_PIXEL_WIDTH, floorCenterY, totalWorldHeight } from '../lib/layout';
 import { queueVerifiedPngAssets } from './asset-loader';
-import { FloorLayer } from './layers/FloorLayer';
-import { SpriteLayer } from './layers/SpriteLayer';
+import { PersonaLayer } from './layers/PersonaLayer';
+import { RoomLayer } from './layers/RoomLayer';
+import { TicketLayer } from './layers/TicketLayer';
 import { ensureOfficeTextures } from './textures';
-
-// Temporary adapter — maps room → representative OfficeRole for SpriteLayer
-// until SpriteLayer is deleted in step 6.
-const ROOM_TO_ROLE: Partial<Record<RoomId, OfficeRole>> = {
-  triage: 'triager',
-  investigation: 'investigator',
-  dev: 'developer',
-  qa: 'qa',
-  review: 'reviewer',
-};
 
 // Re-export types so the React mount (OfficeGameMount.tsx) doesn't need
 // import-path changes.
@@ -49,8 +38,9 @@ export class OfficeScene extends Phaser.Scene {
   private currentFloorIndex = 0;
   private resizeListener?: () => void;
   private verifiedAssets: VerifiedAsset[] = [];
-  private floorLayer!: FloorLayer;
-  private spriteLayer!: SpriteLayer;
+  private roomLayer!: RoomLayer;
+  private personaLayer!: PersonaLayer;
+  private ticketLayer!: TicketLayer;
 
   constructor() {
     super({ key: 'OfficeScene' });
@@ -78,14 +68,21 @@ export class OfficeScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#0d0a13');
     ensureOfficeTextures(this);
 
-    // Layers constructed before 'ready' so click handlers are wired when the
-    // React mount's once('ready') callback pushes the first applyProjects.
-    this.floorLayer = new FloorLayer(this, this.emitter, {
+    // Construction order: RoomLayer → PersonaLayer → TicketLayer (ascending z).
+    // All layers are constructed before the first 'ready' emit so click handlers
+    // are wired when the React mount's once('ready') callback pushes initial data.
+    this.roomLayer = new RoomLayer(this, {
       navigateFloor: (delta) => this.navigateFloor(delta),
-      getPlacements: () => this.spriteLayer.getPlacements(),
     });
-    this.spriteLayer = new SpriteLayer(this, this.emitter, {
+
+    this.personaLayer = new PersonaLayer(this, this.emitter, {
       getProjects: () => this.projects,
+    });
+
+    this.ticketLayer = new TicketLayer(this, this.emitter, {
+      personaLayer: this.personaLayer,
+      setHeroTicketCell: (text) => this.roomLayer.setHeroTicketCell(text),
+      getFloorIndex: (slug) => this.floorIndexFor(slug),
     });
 
     this.input.keyboard?.on('keydown-UP', () => {
@@ -110,16 +107,15 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   /**
-   * Replace the project list. Re-builds floors, banners, desks, and
-   * stair-click zones. Idempotent — diffing isn't worth it given the small
-   * project count (<10 in practice).
+   * Replace the project list. Re-builds all floor rooms and resets sprites.
+   * Accepts a single OfficeProject (per spec: applyProjects is NOT an array
+   * in the spec sense — the scene manages a list internally).
    */
   applyProjects(projects: readonly OfficeProject[]): void {
     this.projects = projects.slice();
-    this.floorLayer.applyProjects(this.projects);
-    // Existing sprites lose their floor binding — drop them; the next
-    // applyPlacements call will recreate as needed.
-    this.spriteLayer.dropAll();
+    this.roomLayer.applyProjects(this.projects);
+    this.personaLayer.dropAll();
+    this.ticketLayer.dropAll();
 
     const worldH = Math.max(totalWorldHeight(this.projects.length), this.scale.height);
     this.cameras.main.setBounds(0, 0, FLOOR_PIXEL_WIDTH, worldH);
@@ -128,15 +124,13 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   /**
-   * Drop / add / move sprites to match the new placement data.
-   * Accepts the phase-3 { personas, tickets } shape; internally converts
-   * personas to the legacy AgentPlacement[] shape for SpriteLayer.
-   * The adapter and SpriteLayer are removed in step 6.
+   * Drop / add / move personas and tickets to match the new placement data.
+   * Personas must settle before tickets so tickets can read persona positions.
    */
   applyPlacements(result: { personas: PersonaPlacement[]; tickets: TicketPlacement[] }): void {
-    const legacy = this.toSpriteLayerPlacements(result.personas);
-    this.spriteLayer.applyPlacements(legacy);
-    this.floorLayer.refreshIdleDeskIndicators(this.spriteLayer.occupiedDeskKeys());
+    this.personaLayer.applyPlacements(result.personas);
+    this.ticketLayer.applyPlacements(result.tickets);
+    this.roomLayer.refreshIdleDeskIndicators(this.personaLayer.occupiedDeskKeys());
   }
 
   /**
@@ -176,21 +170,6 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   // ─── private ─────────────────────────────────────────────────────────────
-
-  /** Temporary adapter; removed when SpriteLayer is deleted in step 6. */
-  private toSpriteLayerPlacements(personas: PersonaPlacement[]): AgentPlacement[] {
-    return personas
-      .filter((p) => p.roomId !== null)
-      .map((p) => ({
-        spriteId: p.personaId,
-        workItemId: p.workItemId,
-        externalId: p.externalId,
-        projectSlug: p.projectSlug,
-        role: ROOM_TO_ROLE[p.roomId as RoomId] ?? null,
-        indicator: p.indicator,
-        title: p.title,
-      }));
-  }
 
   private floorIndexFor(slug: string): number {
     return this.projects.findIndex((p) => p.slug === slug);
