@@ -4,7 +4,7 @@ import { AlertTriangle, CheckCircle, Clock, GitBranch, SkipForward, XCircle } fr
 type DevReviewPayload = {
   pipelineRunId?: string;
   verdict?: string;
-  error?: string;
+  errorReason?: string;
   iteration?: number;
 };
 
@@ -111,7 +111,7 @@ export function DevReviewFailedEvent({ event }: { event: AgentEventDto }) {
       tone="danger"
     >
       <div className="space-y-1">
-        {p?.error != null && <DetailRow>{p.error}</DetailRow>}
+        {p?.errorReason != null && <DetailRow>{p.errorReason}</DetailRow>}
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-fg-3">
           <PipelineChip pipelineRunId={p?.pipelineRunId} />
         </div>
@@ -130,7 +130,7 @@ export function DevReviewErrorEvent({ event }: { event: AgentEventDto }) {
       tone="warning"
     >
       <div className="space-y-1">
-        {p?.error != null && <DetailRow>{p.error}</DetailRow>}
+        {p?.errorReason != null && <DetailRow>{p.errorReason}</DetailRow>}
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-fg-3">
           <PipelineChip pipelineRunId={p?.pipelineRunId} />
         </div>
@@ -197,7 +197,7 @@ export function DevReviewResponseFailedEvent({ event }: { event: AgentEventDto }
       tone="danger"
     >
       <div className="space-y-1">
-        {p?.error != null && <DetailRow>{p.error}</DetailRow>}
+        {p?.errorReason != null && <DetailRow>{p.errorReason}</DetailRow>}
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-fg-3">
           <PipelineChip pipelineRunId={p?.pipelineRunId} />
         </div>
