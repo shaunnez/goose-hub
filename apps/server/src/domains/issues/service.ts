@@ -102,14 +102,19 @@ export async function getIssueSpec(
   const workItemId = `github:${repoRef}#${id}`;
   const record = getEngineeringSpec(slug, workItemId);
   if (record == null) return { ok: true, data: { spec: null } };
+  const s = record.spec as {
+    objective: string;
+    workPackages: Array<{ id: string; filesOwned: string[]; builderTier: string }>;
+    acceptanceCriteria: unknown[];
+  };
   return {
     ok: true,
     data: {
-      spec: record.spec as {
-        pipelineRunId: string;
-        objective: string;
-        workPackages: Array<{ id: string; filesOwned: string[]; builderTier: string }>;
-        acceptanceCriteriaCount: number;
+      spec: {
+        pipelineRunId: record.pipelineRunId,
+        objective: s.objective,
+        workPackages: s.workPackages,
+        acceptanceCriteriaCount: s.acceptanceCriteria.length,
       },
     },
   };

@@ -23,7 +23,7 @@ import { ScoutOutputSchema } from './scout-output.js';
 /** Per-scout findings. Mirrors `ScoutOutputSchema` in each scout's schema.ts. */
 export interface ScoutFinding {
   file: string;
-  line?: number;
+  line?: number | null;
   fact: string;
   confidence: 'high' | 'medium' | 'low';
 }

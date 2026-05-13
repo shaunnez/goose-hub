@@ -187,7 +187,9 @@ export function groupByDevPhase(items: RenderItem[]): RenderItem[] {
     if (item.kind === 'run-group') {
       if (pipelines.has(item.runId)) return item.runId;
       for (const pid of pipelines) {
-        if (item.runId.startsWith(`${pid}:wp:`)) return pid;
+        if (item.runId.startsWith(`${pid}:wp:`) || item.runId.startsWith(`${pid}:dev-review`)) {
+          return pid;
+        }
       }
       return null;
     }
@@ -236,7 +238,7 @@ export function groupByDevPhase(items: RenderItem[]): RenderItem[] {
     });
   }
 
-  return [...ungrouped, ...phaseGroups];
+  return [...ungrouped, ...phaseGroups].sort(compareRenderItems);
 }
 
 export function groupEvents(events: AgentEventDto[]): RenderItem[] {

@@ -7,9 +7,11 @@ const DEV_OR_LATER_STATES = new Set([
   'factory:spec-ready',
   'factory:in-progress',
   'factory:needs-qa',
+  'factory:qa-failed',
   'factory:needs-review',
-  'factory:review-approved',
-  'factory:merged',
+  'factory:needs-fix',
+  'factory:approved',
+  'factory:merge-conflict',
   'factory:retrospecting',
   'factory:done',
 ]);

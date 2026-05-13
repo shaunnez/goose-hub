@@ -140,8 +140,12 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
   }
 
   const items = groupEvents(events);
-  const hasRunGroups = items.some((item: RenderItem) => item.kind === 'run-group');
-  const latestRunId = items.find((item: RenderItem) => item.kind === 'run-group')?.runId ?? null;
+  const allRunItems = items.flatMap((item: RenderItem) =>
+    item.kind === 'phase-group' ? item.items : [item],
+  );
+  const hasRunGroups = allRunItems.some((item: RenderItem) => item.kind === 'run-group');
+  const latestRunId =
+    allRunItems.find((item: RenderItem) => item.kind === 'run-group')?.runId ?? null;
   const context = { slug: projectSlug, issueId: id, latestRunId, runCosts, expandSignal };
 
   const sendSignal = (open: boolean) => setExpandSignal((prev) => ({ tick: prev.tick + 1, open }));

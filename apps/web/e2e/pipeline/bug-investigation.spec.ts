@@ -45,7 +45,8 @@ test.describe('Bug investigation (MOCK_AGENTS + MOCK_SOURCE)', () => {
 
     // Investigate (high-confidence) → investigation-complete → dev-ready
     await postServer(`/projects/${SLUG}/dispatch/${issueNumber}`);
-    await expect(statePill).toHaveText('dev-ready', { timeout: 60_000 });
+    await expect(statePill).toHaveText('investigation-complete', { timeout: 60_000 });
+    await expect(statePill).toHaveText('dev-ready', { timeout: 15_000 });
   });
 
   test('low-confidence investigate → investigation-complete → gate-pending', async ({ page }) => {
@@ -67,6 +68,7 @@ test.describe('Bug investigation (MOCK_AGENTS + MOCK_SOURCE)', () => {
 
     // Investigate (low-confidence) → investigation-complete → gate-pending
     await postServer(`/projects/${SLUG}/dispatch/${issueNumber}`);
-    await expect(statePill).toHaveText('gate-pending', { timeout: 60_000 });
+    await expect(statePill).toHaveText('investigation-complete', { timeout: 60_000 });
+    await expect(statePill).toHaveText('gate-pending', { timeout: 15_000 });
   });
 });

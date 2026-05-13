@@ -12,6 +12,7 @@ import { ScoutOutputSchema } from '@goose-hub/core/agent-runtime/scout-output.js
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
 import { dispatchWave } from '@goose-hub/core/agent-runtime/swarm.js';
+import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
@@ -392,6 +393,14 @@ export async function runInvestigateWorkflow(
       'factory:investigating',
       'factory:investigation-complete',
     );
+    emitStateTransitionEvent({
+      projectId,
+      workItemId: workItem.id,
+      from: 'factory:investigating',
+      to: 'factory:investigation-complete',
+      by: 'agent',
+      runId,
+    });
   } catch (err) {
     accumulatePersonaStats({ personaName: personaId, role: 'investigator', outcome: 'failure' });
     const error = err instanceof Error ? err : new Error(String(err));
