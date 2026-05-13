@@ -47,6 +47,10 @@ async function seed(
 }
 
 test.describe('Office tab — visual capture', () => {
+  // Opt-in via `RUN_SCREENSHOTS=1` so this demo spec doesn't run in regular
+  // CI (it seeds extra issues into the shared mock InMemoryLabelsSource and
+  // its only purpose is generating the PNGs in docs/screenshots/m17/).
+  test.skip(process.env.RUN_SCREENSHOTS !== '1', 'set RUN_SCREENSHOTS=1 to capture');
   test.use({ viewport: { width: 1440, height: 900 } });
 
   test('walks the Office UI and captures screenshots', async ({ page }) => {
