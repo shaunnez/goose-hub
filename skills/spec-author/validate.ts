@@ -241,12 +241,13 @@ export function validateEngineeringSpec(
     }
   }
 
-  // TDD contract — WP that owns production .ts files must also own a test file.
-  // Exempt: *.test.ts, *.spec.ts, *.config.ts, *.d.ts, *types.ts, *type.ts, *schema.ts, *index.ts
+  // TDD contract — WP that owns production .ts/.tsx files must also own a test file.
+  // Exempt: *.test.ts/x, *.spec.ts/x, *.config.ts, *.d.ts, *types.ts, *schema.ts, *index.ts
   const EXEMPT_SUFFIX =
-    /\.(test|spec)\.ts$|\.(config|d)\.ts$|(types?|interfaces?|schema|index|constants?|errors?)\.ts$/;
-  const isProductionTs = (f: string) => f.endsWith('.ts') && !EXEMPT_SUFFIX.test(f);
-  const isTestFile = (f: string) => /\.(test|spec)\.ts$/.test(f);
+    /\.(test|spec)\.(ts|tsx)$|\.(config|d)\.ts$|(types?|interfaces?|schema|index|constants?|errors?)\.(ts|tsx)$/;
+  const isProductionTs = (f: string) =>
+    (f.endsWith('.ts') || f.endsWith('.tsx')) && !EXEMPT_SUFFIX.test(f);
+  const isTestFile = (f: string) => /\.(test|spec)\.(ts|tsx)$/.test(f);
   for (const wp of spec.workPackages) {
     const hasProductionTs = wp.filesOwned.some(isProductionTs);
     const hasTestFile = wp.filesOwned.some(isTestFile);

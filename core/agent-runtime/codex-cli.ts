@@ -63,7 +63,9 @@ export class CodexCliRuntime implements AgentRuntime {
     writeFileSync(MCP_CONFIG_PATH, '{"mcpServers":{}}', { flag: 'w' });
     const projectId = (spec.context.projectId as string) ?? 'unknown';
     const recordDecisionTool = getRecordDecisionTool(projectId);
-    writeWorkspaceSandbox(workspaceDir, { role: spec.role, recordDecisionTool });
+    if (spec.sandboxMode !== 'preconfigured') {
+      writeWorkspaceSandbox(workspaceDir, { role: spec.role, recordDecisionTool });
+    }
     deployHooks();
     if (recordDecisionTool) deployDecisionCaptureHook();
     const workItemId = (spec.context.workItemId as string) ?? null;

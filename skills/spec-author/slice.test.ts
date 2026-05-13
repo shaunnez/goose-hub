@@ -697,4 +697,73 @@ describe('validateEngineeringSpec — TDD contract (wp-missing-test-file)', () =
     );
     expect(testFileErrors).toHaveLength(0);
   });
+
+  it('flags WP with .tsx production file but no test file', () => {
+    const spec = baseSpec({
+      workPackages: [
+        {
+          id: 'WP1',
+          filesOwned: [
+            'apps/server/src/routes/healthz.ts',
+            'apps/server/src/routes/healthz.test.ts',
+          ],
+          changes: 'Add healthz route and test.',
+          dependsOn: [],
+          builderTier: 'haiku',
+        },
+        {
+          id: 'WP2',
+          filesOwned: ['apps/web/src/components/HealthBadge.tsx'],
+          changes: 'Add HealthBadge component displaying /healthz status.',
+          dependsOn: ['WP1'],
+          builderTier: 'haiku',
+        },
+      ],
+      executionOrder: [
+        { batch: 0, wpIds: ['WP1'] },
+        { batch: 1, wpIds: ['WP2'] },
+      ],
+    });
+    const result = validateEngineeringSpec(spec);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const err = result.errors.find((e) => e.rule === 'wp-missing-test-file');
+    expect(err?.ref).toBe('WP2');
+  });
+
+  it('accepts WP with .tsx production file when test.tsx is also owned', () => {
+    const spec = baseSpec({
+      workPackages: [
+        {
+          id: 'WP1',
+          filesOwned: [
+            'apps/server/src/routes/healthz.ts',
+            'apps/server/src/routes/healthz.test.ts',
+          ],
+          changes: 'Add healthz route and test.',
+          dependsOn: [],
+          builderTier: 'haiku',
+        },
+        {
+          id: 'WP2',
+          filesOwned: [
+            'apps/web/src/components/HealthBadge.tsx',
+            'apps/web/src/components/HealthBadge.test.tsx',
+          ],
+          changes: 'Add HealthBadge component and test.',
+          dependsOn: ['WP1'],
+          builderTier: 'haiku',
+        },
+      ],
+      executionOrder: [
+        { batch: 0, wpIds: ['WP1'] },
+        { batch: 1, wpIds: ['WP2'] },
+      ],
+    });
+    const result = validateEngineeringSpec(spec);
+    const testFileErrors = (result.ok ? [] : result.errors).filter(
+      (e) => e.rule === 'wp-missing-test-file',
+    );
+    expect(testFileErrors).toHaveLength(0);
+  });
 });

@@ -20,7 +20,6 @@ import type { AgentEvent, AppendEventInput } from '@goose-hub/core/event-stream/
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
-import { writeWpBuilderSandbox } from '@goose-hub/core/tool-layer/sandbox.js';
 import {
   cleanupAllWpWorktrees,
   createWpScratchWorktree,
@@ -145,11 +144,11 @@ export async function runParallelImplementWorkflow(
     // Create the integration worktree (all WP commits land here).
     issueWorktreePath = createIssueFn(targetRepo, runId);
 
-    // Create per-WP scratch worktrees and write file-guard sandboxes.
+    // Create per-WP scratch worktrees. Sandbox is written in runOneWpBuilder
+    // (per-spawn, so retries always get a fresh sandbox with correct opts).
     for (const wp of spec.workPackages) {
       const wtPath = createWpFn(targetRepo, runId, wp.id);
       scratchWorktrees.set(wp.id, wtPath);
-      writeWpBuilderSandbox(wtPath, wp.filesOwned, wp.id);
     }
 
     const allWpResults: WpDispatchResult[] = [];
