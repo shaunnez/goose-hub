@@ -28,6 +28,7 @@ import { assembleSpawnContext } from './context-assembly.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { resolveMockOutput } from './mock-outputs.js';
 import { defaultModelForTierAndProvider, estimateCostUsd } from './models.js';
+import { killProcessGroupOrChild } from './process-kill.js';
 
 export { CodexBinaryNotFoundError, CodexNotAuthenticatedError } from './codex-config.js';
 export {
@@ -125,6 +126,7 @@ export class CodexCliRuntime implements AgentRuntime {
         FACTORY_RUN_ALLOWLIST: allowedTools.join(','),
         FACTORY_RUN_ID: runId,
         FACTORY_PROJECT_ID: projectId,
+        FACTORY_WORKSPACE_DIR: workspaceDir,
         FACTORY_SERVER_PORT: process.env.FACTORY_SERVER_PORT ?? '3001',
         FACTORY_ITERATION: String(spec.iteration ?? 0),
         FACTORY_PHASE: spec.phase ?? '',
@@ -140,6 +142,7 @@ export class CodexCliRuntime implements AgentRuntime {
       const child = spawn(binaryPath, argv, {
         env: minimalEnv,
         cwd: workspaceDir,
+        detached: !isWindows,
         shell: false,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -148,6 +151,7 @@ export class CodexCliRuntime implements AgentRuntime {
       let stderr = '';
       let stdoutLineBuffer = '';
       let truncated = false;
+      let settled = false;
 
       const handleStdoutLine = (line: string) => {
         if (line.trim().length === 0) return;
@@ -205,7 +209,9 @@ export class CodexCliRuntime implements AgentRuntime {
 
       const effectiveTimeoutMs = spec.budgets.timeoutMs ?? TIMEOUT_MS;
       const timeout = setTimeout(() => {
-        child.kill('SIGKILL');
+        if (settled) return;
+        settled = true;
+        killProcessGroupOrChild(child);
         eventStore.appendEvent({
           projectId,
           workItemId,
@@ -214,10 +220,25 @@ export class CodexCliRuntime implements AgentRuntime {
           runId,
           personaId,
         });
+        eventStore.appendEvent({
+          projectId,
+          workItemId,
+          kind: 'agent.run-failed',
+          payload: {
+            runId,
+            skill: spec.skill,
+            error: `timed out after ${effectiveTimeoutMs}ms`,
+            timeoutMs: effectiveTimeoutMs,
+          },
+          runId,
+          personaId,
+        });
         reject(new Error(`Agent run ${runId} timed out after ${effectiveTimeoutMs}ms`));
       }, effectiveTimeoutMs);
 
       child.on('close', (code) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timeout);
         handleStdoutLine(stdoutLineBuffer);
         stdoutLineBuffer = '';
@@ -325,6 +346,8 @@ export class CodexCliRuntime implements AgentRuntime {
       });
 
       child.on('error', (err) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timeout);
         reject(err);
       });
