@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ScoutOutputSchema } from './schema.js';
 import config, { ScoutSchemaContextSchema } from './skill.config.js';
@@ -77,5 +78,22 @@ describe('scout-schema skill', () => {
       worktreePath: '/tmp/x',
     });
     expect(result.success).toBe(true);
+  });
+
+  it('prompt locks schema-scout early-exit and uncertainty discipline', () => {
+    const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+
+    expect(prompt).toContain('Default budget is ≤ 10 turns');
+    expect(prompt).toContain('return `findings: []` with an `UNCERTAINTY` decision summary');
+    expect(prompt).toContain('If you read `core/db/schema.ts`, `skills/*/schema.ts`');
+  });
+
+  it('prompt explicitly forbids runtime/retry pivots that belong to other scouts', () => {
+    const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+
+    expect(prompt).toContain('## Forbidden pivots');
+    expect(prompt).toContain('retry counters');
+    expect(prompt).toContain('Reading test files to infer behaviour instead of contracts');
+    expect(prompt).toContain('triage-batch.ts');
   });
 });

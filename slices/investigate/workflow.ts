@@ -46,7 +46,8 @@ const WAVE_1_SCOUTS = [
   { scoutName: 'scout-pattern', scoutFocus: 'Identify existing patterns the fix should follow' },
   {
     scoutName: 'scout-schema',
-    scoutFocus: 'Find DB schemas, Zod schemas, and API contracts relevant to this work item',
+    scoutFocus:
+      'Schema/type contracts only: find DB schemas, Zod schemas, event payload types, state enums, and API contracts relevant to this work item. Do not trace runtime, retry, or workflow control flow; return UNCERTAINTY if no schema surface exists.',
   },
   {
     scoutName: 'scout-test-inventory',
@@ -57,6 +58,28 @@ const WAVE_1_SCOUTS = [
     scoutFocus: 'Map user-visible UI flows and API surfaces related to this issue',
   },
 ];
+
+function buildSchemaScoutFocus(workItem: { title: string; body: string }): string {
+  const text = `${workItem.title}\n${workItem.body}`.toLowerCase();
+  const surfaces: string[] = [];
+
+  if (/\btriage\b|repo[-\s]?match|repo run/.test(text)) {
+    surfaces.push('triage/repo-match output schemas');
+  }
+  if (/run-failed|fail(?:s|ed|ure)?|error|event/.test(text)) {
+    surfaces.push('agent.run-failed/event payload contracts');
+  }
+  if (/needs-human|human intervention|state|transition/.test(text)) {
+    surfaces.push('state label/type contracts');
+  }
+
+  const target =
+    surfaces.length > 0
+      ? surfaces.join(', ')
+      : 'DB schemas, Zod schemas, event payload types, state enums, and API contracts relevant to this work item';
+
+  return `Schema/type contracts only for ${target}. Do not trace runtime, retry, scheduler, or workflow control flow; return UNCERTAINTY if no schema surface exists after the first targeted reads.`;
+}
 
 const WAVE_2_INTERFACE_SPEC = {
   scoutName: 'wave2-interface-designer',
@@ -174,6 +197,9 @@ export async function runInvestigateWorkflow(
       if (spec.scoutName === 'scout-code-path' && symbolIndexHints.length > 0)
         return { ...spec, extraContext: { symbolIndexHints } };
       if (spec.scoutName === 'scout-pattern') return { ...spec, scoutFocus: patternFocus };
+      if (spec.scoutName === 'scout-schema') {
+        return { ...spec, scoutFocus: buildSchemaScoutFocus(workItemCtx) };
+      }
       return spec;
     });
 

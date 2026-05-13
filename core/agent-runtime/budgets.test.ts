@@ -31,6 +31,10 @@ describe('SKILL_BUDGETS', () => {
       expect(budget.timeoutMs, `${skill}.timeoutMs`).toBeGreaterThan(0);
     }
   });
+
+  it('keeps scout-schema cheap enough to force early exit instead of runtime tracing', () => {
+    expect(SKILL_BUDGETS['scout-schema']?.maxTurns).toBeLessThanOrEqual(10);
+  });
 });
 
 describe('resolveBudgets', () => {

@@ -132,11 +132,10 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     modelTier: 'sonnet',
   },
   // M19.01 — Wave-1 scouts. Read-only fact-gathering; cheap and bounded.
-  // Item #754 showed real scouts needing 13-17 turns for useful findings, so
-  // the default is now 20 turns / 120s while prompt discipline keeps scope
-  // narrow enough to avoid repo-wide wandering.
+  // Schema scouting should exit after locating a contract surface or declaring
+  // uncertainty; longer runs tend to duplicate code-path/runtime scouts.
   'scout-schema': {
-    maxTurns: 20,
+    maxTurns: 10,
     maxBudgetUsd: 0.5,
     timeoutMs: 120_000,
     modelTier: 'haiku',
@@ -182,9 +181,9 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     modelTier: 'sonnet',
   },
   'wave2-risk-analyst': {
-    maxTurns: 25,
-    maxBudgetUsd: 0.75,
-    timeoutMs: 180_000,
+    maxTurns: 30,
+    maxBudgetUsd: 1.0,
+    timeoutMs: 240_000,
     modelTier: 'sonnet',
   },
   // M19.11/M19.12 — Codex pre-QA diff review. Single-pass, read-only.
