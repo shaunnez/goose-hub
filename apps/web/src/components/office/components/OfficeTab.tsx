@@ -9,12 +9,17 @@
 import { fetchIssues, fetchProjects } from '@/lib/api';
 import type { WorkItemDto } from '@/lib/types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import type { DeskClickPayload, FloorChangePayload, OfficeProject } from '../game/OfficeScene';
 import { placementsFromItems } from '../lib/agent-positions';
 import { DeskDetailPanel } from './DeskDetailPanel';
 import { FloorIndicator } from './FloorIndicator';
-import { OfficeGameMount } from './OfficeGameMount';
+
+// Lazy-load the Phaser-backed mount so Phaser (~1MB) ships in its own chunk
+// instead of bloating the initial bundle that every other tab pays for.
+const OfficeGameMount = lazy(() =>
+  import('./OfficeGameMount').then((m) => ({ default: m.OfficeGameMount })),
+);
 
 interface OfficeTabProps {
   /** Project to focus the camera on initially. */
@@ -125,13 +130,24 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
 
   return (
     <div className="relative h-full w-full" data-testid="office-tab">
-      <OfficeGameMount
-        projects={officeProjects}
-        placements={placements}
-        activeProjectSlug={activeSlug}
-        onDeskClick={handleDeskClick}
-        onFloorChange={handleFloorChange}
-      />
+      <Suspense
+        fallback={
+          <div
+            data-testid="office-canvas-loading"
+            className="absolute inset-0 flex items-center justify-center text-fg-2 text-[12px] bg-[#0d0a13]"
+          >
+            Loading office…
+          </div>
+        }
+      >
+        <OfficeGameMount
+          projects={officeProjects}
+          placements={placements}
+          activeProjectSlug={activeSlug}
+          onDeskClick={handleDeskClick}
+          onFloorChange={handleFloorChange}
+        />
+      </Suspense>
       {projects.length > 0 && activeProject && (
         <FloorIndicator
           floorIndex={floorIndex}
