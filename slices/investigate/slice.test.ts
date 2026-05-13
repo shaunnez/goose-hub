@@ -17,6 +17,9 @@ const mockInvokeSkill = vi.fn();
 const mockPersistScoutReport = vi.fn();
 const mockLookupWorkItemSymbols = vi.fn();
 const mockExtractIdentifiers = vi.fn();
+const mockGetUseInvestigationSwarm = vi.fn();
+const mockReadProjectSettings = vi.fn();
+const mockReadProjectSkillSettings = vi.fn();
 
 vi.mock('@goose-hub/core/agent-runtime/swarm.js', () => ({
   dispatchWave: (...args: unknown[]) => mockDispatchWave(...args),
@@ -37,6 +40,12 @@ vi.mock('@goose-hub/core/agent-runtime/invoke-skill.js', () => ({
 
 vi.mock('@goose-hub/core/scout-reports/repository.js', () => ({
   persistScoutReport: (...args: unknown[]) => mockPersistScoutReport(...args),
+}));
+
+vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
+  getUseInvestigationSwarm: (...args: unknown[]) => mockGetUseInvestigationSwarm(...args),
+  readProjectSettings: (...args: unknown[]) => mockReadProjectSettings(...args),
+  readProjectSkillSettings: (...args: unknown[]) => mockReadProjectSkillSettings(...args),
 }));
 
 // Single shared mock for ClaudeCliRuntime (playwright-repro step)
@@ -198,11 +207,17 @@ beforeEach(() => {
   mockCrossValidate.mockReset();
   mockInvokeSkill.mockReset();
   mockPersistScoutReport.mockReset();
+  mockGetUseInvestigationSwarm.mockReset();
+  mockReadProjectSettings.mockReset();
+  mockReadProjectSkillSettings.mockReset();
   mockRun.mockReset();
   vi.clearAllMocks();
   mockAccumulatePersonaStats.mockClear();
   mockLookupWorkItemSymbols.mockReturnValue([]);
   mockExtractIdentifiers.mockReturnValue([]);
+  mockGetUseInvestigationSwarm.mockReturnValue(true);
+  mockReadProjectSettings.mockReturnValue(null);
+  mockReadProjectSkillSettings.mockReturnValue(new Map());
 
   // Default happy path
   mockDispatchWave.mockResolvedValue(makeWaveResult());
@@ -265,6 +280,53 @@ describe('runInvestigateWorkflow', () => {
       await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
 
       expect(mockDispatchWave).toHaveBeenCalledTimes(2);
+    });
+
+    it('skips Wave 1 and Wave 2 when investigation swarm is disabled', async () => {
+      mockGetUseInvestigationSwarm.mockReturnValue(false);
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(mockDispatchWave).not.toHaveBeenCalled();
+      expect(mockCrossValidate).not.toHaveBeenCalled();
+      expect(mockPersistScoutReport).not.toHaveBeenCalled();
+      expect(mockInvokeSkill).toHaveBeenCalledWith(
+        expect.objectContaining({
+          skillName: 'investigate',
+          context: expect.not.objectContaining({ scoutReports: expect.anything() }),
+        }),
+      );
+    });
+
+    it('passes the effective maxScoutAgents cap into both waves', async () => {
+      mockReadProjectSettings.mockReturnValue({
+        projectId: 'goose-hub-self',
+        perWorkflowMaxUsd: null,
+        perAgentMaxUsd: null,
+        perAdvisorMaxUsd: null,
+        dailyTokens: null,
+        maxParallelAgents: null,
+        maxScoutAgents: 2,
+        maxRetries: null,
+        perBashCommandMaxSeconds: null,
+        useMultiAgentPipeline: null,
+        useInvestigationSwarm: null,
+        recordDecisionTool: null,
+        updatedAt: 'now',
+        updatedBy: null,
+      });
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(mockDispatchWave).toHaveBeenCalledTimes(2);
+      expect(mockDispatchWave.mock.calls[0][0]).toEqual(
+        expect.objectContaining({ maxScoutAgents: 2 }),
+      );
+      expect(mockDispatchWave.mock.calls[1][0]).toEqual(
+        expect.objectContaining({ maxScoutAgents: 2 }),
+      );
     });
 
     it('calls crossValidate exactly once with Wave 1 reports', async () => {

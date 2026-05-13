@@ -98,6 +98,17 @@ const DEFAULT_HEARTBEAT_MS = 30_000;
 const MIN_SCOUT_SUCCESS = 3;
 const MAX_TOLERATED_FAILURES = 1;
 
+export function resolveScoutConcurrencyCap(
+  scoutCount: number,
+  maxScoutAgents: number | undefined,
+): number {
+  if (scoutCount <= 0) return 0;
+  const requested = Number.isFinite(maxScoutAgents)
+    ? Math.floor(maxScoutAgents as number)
+    : DEFAULT_MAX_SCOUTS;
+  return Math.max(1, Math.min(scoutCount, Math.max(1, requested)));
+}
+
 /**
  * Dispatch a Wave-1 scout swarm. Returns a `WaveResult` with per-scout reports
  * plus advance/escalate flags. Never throws — all failures are surfaced as
@@ -105,10 +116,7 @@ const MAX_TOLERATED_FAILURES = 1;
  */
 export async function dispatchWave(opts: DispatchWaveOptions): Promise<WaveResult> {
   const append = opts.appendEvent ?? ((input) => eventStore.appendEvent(input));
-  const maxParallel = Math.max(
-    1,
-    Math.min(opts.scoutSpecs.length, opts.maxScoutAgents ?? DEFAULT_MAX_SCOUTS),
-  );
+  const maxParallel = resolveScoutConcurrencyCap(opts.scoutSpecs.length, opts.maxScoutAgents);
   const heartbeatIntervalMs = opts.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_MS;
   const minSuccessfulScouts = opts.minSuccessfulScouts ?? MIN_SCOUT_SUCCESS;
 

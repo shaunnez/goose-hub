@@ -15,7 +15,8 @@ export function PipelinePanel({ slug }: Props) {
   });
 
   const patch = useMutation({
-    mutationFn: (next: boolean) => patchPipelineSettings(slug, next),
+    mutationFn: (next: { useMultiAgentPipeline?: boolean; useInvestigationSwarm?: boolean }) =>
+      patchPipelineSettings(slug, next),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['pipeline-settings', slug] }),
   });
 
@@ -33,17 +34,33 @@ export function PipelinePanel({ slug }: Props) {
           Toggle the multi-agent pipeline (spec-author, parallel-implement, convergent review,
           merge-decision gate). When off, the legacy single-agent fix-issue → QA → review path runs.
         </p>
-        <label className="flex items-center gap-2 text-[12.5px]">
+        <label className="flex items-center gap-2 text-[12.5px] mb-3">
           <input
             type="checkbox"
             data-testid="use-multi-agent-pipeline-toggle"
             checked={data.useMultiAgentPipeline}
-            onChange={(e) => patch.mutate(e.target.checked)}
+            onChange={(e) => patch.mutate({ useMultiAgentPipeline: e.target.checked })}
             disabled={patch.isPending}
             className="h-4 w-4 rounded border-line"
           />
           <span className="font-mono">useMultiAgentPipeline</span>
           {data.useMultiAgentPipeline ? (
+            <span className="text-[11px] text-accent">enabled</span>
+          ) : (
+            <span className="text-[11px] text-fg-3">disabled</span>
+          )}
+        </label>
+        <label className="flex items-center gap-2 text-[12.5px]">
+          <input
+            type="checkbox"
+            data-testid="use-investigation-swarm-toggle"
+            checked={data.useInvestigationSwarm}
+            onChange={(e) => patch.mutate({ useInvestigationSwarm: e.target.checked })}
+            disabled={patch.isPending}
+            className="h-4 w-4 rounded border-line"
+          />
+          <span className="font-mono">useInvestigationSwarm</span>
+          {data.useInvestigationSwarm ? (
             <span className="text-[11px] text-accent">enabled</span>
           ) : (
             <span className="text-[11px] text-fg-3">disabled</span>

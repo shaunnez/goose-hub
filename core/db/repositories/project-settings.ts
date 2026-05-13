@@ -12,9 +12,11 @@ export type GlobalBudgetPatch = {
   perAdvisorMaxUsd?: number | null;
   dailyTokens?: number | null;
   maxParallelAgents?: number | null;
+  maxScoutAgents?: number | null;
   maxRetries?: number | null;
   perBashCommandMaxSeconds?: number | null;
   useMultiAgentPipeline?: number | null;
+  useInvestigationSwarm?: number | null;
   recordDecisionTool?: number | null;
 };
 
@@ -51,6 +53,31 @@ export function getUseMultiAgentPipeline(projectId: string): boolean {
 
 export function setUseMultiAgentPipeline(projectId: string, enabled: boolean, by: string): void {
   writeProjectSettings(projectId, { useMultiAgentPipeline: enabled ? 1 : 0 }, by);
+}
+
+export function deriveUseInvestigationSwarm(
+  row: ProjectSettingsRow | null,
+  configDefault = true,
+): boolean {
+  if (row?.useInvestigationSwarm == null) return configDefault;
+  return row.useInvestigationSwarm === 1;
+}
+
+export function getUseInvestigationSwarm(projectId: string, configDefault = true): boolean {
+  try {
+    return deriveUseInvestigationSwarm(readProjectSettings(projectId), configDefault);
+  } catch (err) {
+    logger.warn('getUseInvestigationSwarm: read failed, defaulting to config value', {
+      projectId,
+      configDefault,
+      error: String(err),
+    });
+    return configDefault;
+  }
+}
+
+export function setUseInvestigationSwarm(projectId: string, enabled: boolean, by: string): void {
+  writeProjectSettings(projectId, { useInvestigationSwarm: enabled ? 1 : 0 }, by);
 }
 
 export function deriveRecordDecisionTool(row: ProjectSettingsRow | null): boolean {
@@ -145,9 +172,24 @@ export function deleteProjectSkillSetting(projectId: string, skillName: string):
 /**
  * Clears ALL budget overrides for a project — both the global row and every
  * per-skill override. Used by the "Reset all to defaults" action in the
- * Budgets settings UI. The project then falls back to config + SKILL_BUDGETS.
+ * Budgets settings UI. Non-budget project flags in project_settings are
+ * preserved.
  */
 export function resetAllProjectBudgets(projectId: string): void {
   db.delete(projectSkillSettings).where(eq(projectSkillSettings.projectId, projectId)).run();
-  db.delete(projectSettings).where(eq(projectSettings.projectId, projectId)).run();
+  db.update(projectSettings)
+    .set({
+      perWorkflowMaxUsd: null,
+      perAgentMaxUsd: null,
+      perAdvisorMaxUsd: null,
+      dailyTokens: null,
+      maxParallelAgents: null,
+      maxScoutAgents: null,
+      maxRetries: null,
+      perBashCommandMaxSeconds: null,
+      updatedAt: new Date().toISOString(),
+      updatedBy: 'ui',
+    })
+    .where(eq(projectSettings.projectId, projectId))
+    .run();
 }

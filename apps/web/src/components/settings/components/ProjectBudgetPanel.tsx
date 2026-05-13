@@ -44,6 +44,7 @@ const GLOBAL_FIELDS: Array<{
   },
   { key: 'dailyTokens', label: 'Daily tokens', configKey: 'dailyTokens' },
   { key: 'maxParallelAgents', label: 'Max parallel agents', configKey: 'maxParallelAgents' },
+  { key: 'maxScoutAgents', label: 'Max scout agents', configKey: 'maxScoutAgents' },
   { key: 'maxRetries', label: 'Max retries', configKey: 'maxRetries' },
   {
     key: 'perBashCommandMaxSeconds',

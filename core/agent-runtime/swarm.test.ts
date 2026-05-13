@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentEvent, AppendEventInput } from '../event-stream/store.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
-import { type ScoutSpec, dispatchWave } from './swarm.js';
+import { type ScoutSpec, dispatchWave, resolveScoutConcurrencyCap } from './swarm.js';
 
 function makeFakeAppendEvent(): {
   fn: (input: AppendEventInput) => AgentEvent;
@@ -71,6 +71,23 @@ function testBudgetResolver(skill: string) {
 }
 
 describe('swarm.dispatchWave', () => {
+  describe('resolveScoutConcurrencyCap', () => {
+    it('defaults to the smaller of six and the scout count', () => {
+      expect(resolveScoutConcurrencyCap(8, undefined)).toBe(6);
+      expect(resolveScoutConcurrencyCap(3, undefined)).toBe(3);
+    });
+
+    it('keeps enabled swarms at one scout minimum for zero or invalid caps', () => {
+      expect(resolveScoutConcurrencyCap(6, 0)).toBe(1);
+      expect(resolveScoutConcurrencyCap(6, -2)).toBe(1);
+      expect(resolveScoutConcurrencyCap(6, Number.NaN)).toBe(6);
+    });
+
+    it('never exceeds the actual scout count', () => {
+      expect(resolveScoutConcurrencyCap(2, 10)).toBe(2);
+    });
+  });
+
   it('dispatches all scouts in parallel and returns ok status when all succeed', async () => {
     const { fn: appendEvent, events } = makeFakeAppendEvent();
     const runtime = makeRuntime({

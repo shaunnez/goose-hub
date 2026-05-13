@@ -269,9 +269,11 @@ export const projectSettings = sqliteTable('project_settings', {
   perAdvisorMaxUsd: real('per_advisor_max_usd'),
   dailyTokens: integer('daily_tokens'),
   maxParallelAgents: integer('max_parallel_agents'),
+  maxScoutAgents: integer('max_scout_agents'),
   maxRetries: integer('max_retries'),
   perBashCommandMaxSeconds: integer('per_bash_command_max_seconds'),
   useMultiAgentPipeline: integer('use_multi_agent_pipeline'),
+  useInvestigationSwarm: integer('use_investigation_swarm'),
   /** experimental.recordDecisionTool — gates decision-capture hook installation. Default false (0). */
   recordDecisionTool: integer('record_decision_tool'),
   updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),

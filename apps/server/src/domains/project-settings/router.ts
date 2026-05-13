@@ -20,6 +20,7 @@ const GlobalBudgetPatchSchema = z.object({
   perAdvisorMaxUsd: z.number().min(0).max(1000).nullable().optional(),
   dailyTokens: z.number().int().min(0).max(100_000_000).nullable().optional(),
   maxParallelAgents: z.number().int().min(0).max(50).nullable().optional(),
+  maxScoutAgents: z.number().int().min(1).max(50).nullable().optional(),
   maxRetries: z.number().int().min(0).max(20).nullable().optional(),
   perBashCommandMaxSeconds: z.number().int().min(0).max(3600).nullable().optional(),
 });
@@ -72,22 +73,36 @@ router.get('/:slug/settings', async (c) => {
     };
   }
 
-  return c.json({
-    projectId: project.id,
-    configBudgets: project.budgets,
-    dbGlobalOverrides: globalRow
+  const dbGlobalOverrides =
+    globalRow != null &&
+    [
+      globalRow.perWorkflowMaxUsd,
+      globalRow.perAgentMaxUsd,
+      globalRow.perAdvisorMaxUsd,
+      globalRow.dailyTokens,
+      globalRow.maxParallelAgents,
+      globalRow.maxScoutAgents,
+      globalRow.maxRetries,
+      globalRow.perBashCommandMaxSeconds,
+    ].some((value) => value != null)
       ? {
           perWorkflowMaxUsd: globalRow.perWorkflowMaxUsd,
           perAgentMaxUsd: globalRow.perAgentMaxUsd,
           perAdvisorMaxUsd: globalRow.perAdvisorMaxUsd,
           dailyTokens: globalRow.dailyTokens,
           maxParallelAgents: globalRow.maxParallelAgents,
+          maxScoutAgents: globalRow.maxScoutAgents,
           maxRetries: globalRow.maxRetries,
           perBashCommandMaxSeconds: globalRow.perBashCommandMaxSeconds,
           updatedAt: globalRow.updatedAt,
           updatedBy: globalRow.updatedBy,
         }
-      : null,
+      : null;
+
+  return c.json({
+    projectId: project.id,
+    configBudgets: project.budgets,
+    dbGlobalOverrides,
     dbSkillOverrides: skillSettings,
     registeredSkills: Object.keys(SKILL_BUDGETS),
     skillDefaults,

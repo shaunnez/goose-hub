@@ -129,9 +129,9 @@ export async function fetchPipelineSettings(
 
 export async function patchPipelineSettings(
   slug: string,
-  useMultiAgentPipeline: boolean,
+  patch: { useMultiAgentPipeline?: boolean; useInvestigationSwarm?: boolean },
 ): Promise<void> {
-  await patchJson(`/projects/${slug}/settings/pipeline`, { useMultiAgentPipeline });
+  await patchJson(`/projects/${slug}/settings/pipeline`, patch);
 }
 
 export async function fetchReviewSettings(
