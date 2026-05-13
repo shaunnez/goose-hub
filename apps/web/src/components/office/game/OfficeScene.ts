@@ -140,15 +140,28 @@ export class OfficeScene extends Phaser.Scene {
   /**
    * Drop / add / move sprites to match the new placement list. Walks any
    * sprite whose role changed; preserves sprites whose role didn't change.
+   *
+   * Stay-put placements (`p.role == null`, e.g. `needs-human` /
+   * `gate-pending`): if a sprite already exists, keep it at its current desk
+   * and only swap the indicator. If no sprite exists yet (rare — first ever
+   * sighting in a blocked state), drop the placement; we have no prior desk
+   * to anchor it to.
    */
   applyPlacements(placements: readonly AgentPlacement[]): void {
     this.placements = placements.slice();
     const seen = new Set<string>();
     for (const p of placements) {
-      seen.add(p.spriteId);
       const floorIndex = this.floorIndexFor(p.projectSlug);
       if (floorIndex < 0) continue;
       const existing = this.sprites.get(p.spriteId);
+      if (p.role == null) {
+        // Stay-put: only meaningful if a sprite already exists.
+        if (existing == null) continue;
+        seen.add(p.spriteId);
+        this.updateIndicator(existing, p);
+        continue;
+      }
+      seen.add(p.spriteId);
       if (existing == null) {
         this.spawnSprite(p, floorIndex);
       } else if (existing.role !== p.role || existing.floorIndex !== floorIndex) {
@@ -157,13 +170,17 @@ export class OfficeScene extends Phaser.Scene {
         this.updateIndicator(existing, p);
       }
     }
-    // Despawn sprites no longer in the placement list.
+    // Despawn sprites no longer in the placement list (including those that
+    // entered a terminal state — done / archived / rejected — and were
+    // dropped by `placementsFromItems`).
     for (const [id, s] of this.sprites) {
       if (!seen.has(id)) {
         s.container.destroy();
         this.sprites.delete(id);
       }
     }
+    // Reposition any same-desk sprites so they're individually clickable.
+    this.restackSpritesAtSharedDesks();
     // Refresh idle indicators on empty desks.
     this.refreshIdleDeskIndicators();
   }
@@ -289,6 +306,7 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   private spawnSprite(p: AgentPlacement, floorIndex: number): void {
+    if (p.role == null) return;
     const desks = deskPositions(floorIndex);
     const target = desks.find((d) => d.role === p.role);
     if (target == null) return;
@@ -305,6 +323,33 @@ export class OfficeScene extends Phaser.Scene {
     container.setData('projectSlug', p.projectSlug);
     container.setData('title', p.title ?? '');
     container.setData('role', p.role);
+    container.setData('spriteId', p.spriteId);
+    // Per-sprite click → emits with this exact work item, so multiple sprites
+    // sharing a desk are each independently reachable from the click-through
+    // panel (M17.05 + Codex P2 review).
+    container.setInteractive(
+      new Phaser.Geom.Rectangle(-TILE_SIZE / 2, -TILE_SIZE * 2, TILE_SIZE, TILE_SIZE * 2),
+      Phaser.Geom.Rectangle.Contains,
+    );
+    container.on(
+      'pointerdown',
+      (
+        _pointer: Phaser.Input.Pointer,
+        _x: number,
+        _y: number,
+        evt: Phaser.Types.Input.EventData,
+      ) => {
+        this.emitter.emit('desk-click', {
+          projectSlug: p.projectSlug,
+          workItemId: container.getData('workItemId') as string,
+          externalId: container.getData('externalId') as string,
+          title: (container.getData('title') as string) || undefined,
+        } satisfies DeskClickPayload);
+        // Prevent the underlying desk zone from firing a second click for
+        // the same pointerdown.
+        evt?.stopPropagation();
+      },
+    );
     this.sprites.set(p.spriteId, {
       workItemId: p.workItemId,
       externalId: p.externalId,
@@ -325,6 +370,12 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   private walkSprite(entry: SpriteEntry, p: AgentPlacement, toFloorIndex: number): void {
+    if (p.role == null) {
+      // Stay-put — caller (`applyPlacements`) already handled this via
+      // `updateIndicator`, but be defensive in case of future callers.
+      this.updateIndicator(entry, p);
+      return;
+    }
     const fromDesks = deskPositions(entry.floorIndex);
     const toDesks = deskPositions(toFloorIndex);
     const fromDesk = fromDesks.find((d) => d.role === entry.role);
@@ -371,17 +422,24 @@ export class OfficeScene extends Phaser.Scene {
       tweens,
       onComplete: () => {
         entry.body.setFlipX(false);
-        entry.role = p.role;
+        if (p.role != null) entry.role = p.role;
         entry.floorIndex = toFloorIndex;
         this.updateIndicator(entry, p);
+        this.restackSpritesAtSharedDesks();
       },
     });
     void accum;
   }
 
   private refreshIdleDeskIndicators(): void {
+    // Source of truth for "this desk has someone at it" is the live sprite
+    // map (which reflects walk-in-progress positions), not the placement
+    // list. That way stay-put blocked sprites still hide their desk's idle
+    // coffee even though their placement carries a null role.
     const occupied = new Set<string>();
-    for (const p of this.placements) occupied.add(`${this.floorIndexFor(p.projectSlug)}:${p.role}`);
+    for (const s of this.sprites.values()) {
+      occupied.add(`${s.floorIndex}:${s.role}`);
+    }
     for (const c of this.floorContainers) {
       const children = c.list as Phaser.GameObjects.GameObject[];
       for (const child of children) {
@@ -396,6 +454,50 @@ export class OfficeScene extends Phaser.Scene {
     void OFFICE_ROLES;
   }
 
+  /**
+   * Spread sprites that share a floor+role across a small horizontal range so
+   * each one is individually clickable. With ≤1 sprite per desk this is a
+   * no-op; with N sprites, they're laid out across ±(N-1)/2 × OFFSET pixels.
+   */
+  private restackSpritesAtSharedDesks(): void {
+    const groups = new Map<string, SpriteEntry[]>();
+    for (const s of this.sprites.values()) {
+      const key = `${s.floorIndex}:${s.role}`;
+      const arr = groups.get(key);
+      if (arr) arr.push(s);
+      else groups.set(key, [s]);
+    }
+    const OFFSET = TILE_SIZE; // one tile between stacked sprites
+    for (const [key, group] of groups) {
+      if (group.length <= 1) continue;
+      const [floorIdxStr, role] = key.split(':');
+      const floorIdx = Number(floorIdxStr);
+      const desks = deskPositions(floorIdx);
+      const desk = desks.find((d) => d.role === role);
+      if (desk == null) continue;
+      // Sort for deterministic placement.
+      group.sort((a, b) => a.externalId.localeCompare(b.externalId));
+      const baseX = desk.x;
+      const span = (group.length - 1) * OFFSET;
+      const startX = baseX - span / 2;
+      for (let i = 0; i < group.length; i++) {
+        const s = group[i];
+        // Skip mid-walk: that tween owns the position.
+        if (s.walkTween && (s.walkTween as Phaser.Tweens.Tween).isPlaying?.()) continue;
+        s.container.x = startX + i * OFFSET;
+      }
+    }
+  }
+
+  /**
+   * Fallback handler for clicks on the desk zone (vs. directly on a sprite).
+   * Per-sprite clicks are wired in `spawnSprite` and emit precise payloads;
+   * this only fires when the click landed on a desk with no sprite covering
+   * it (or the user clicked a thin sliver around the sprite). Matches the
+   * first placement at the desk — adequate for "open something at this desk"
+   * UX since the per-sprite path already lets users pick a specific issue
+   * when multiple share a desk.
+   */
   private handleDeskClick(floorIndex: number, role: string): void {
     const project = this.projects[floorIndex];
     if (project == null) return;

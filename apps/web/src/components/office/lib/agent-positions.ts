@@ -15,26 +15,42 @@ export interface AgentPlacementInput {
   title?: string;
 }
 
+// State labels that should KEEP a sprite at its previous desk and only swap
+// its indicator (the "blocked but still alive" cases). Distinct from terminal
+// states (`done` / `archived` / `rejected`) which remove the sprite entirely.
+const STAY_PUT_STATES = new Set<string>(['factory:needs-human', 'factory:gate-pending']);
+
 export interface AgentPlacement {
   /** Stable identity key used by the scene to track sprites across re-renders. */
   spriteId: string;
   workItemId: string;
   externalId: string;
   projectSlug: string;
-  role: OfficeRole;
+  /**
+   * Desk role for this placement. `null` means "stay at the sprite's previous
+   * desk and only update the indicator" — used for blocked states like
+   * `needs-human` and `gate-pending`. The scene drops such placements when no
+   * existing sprite is found (rare: first-ever sighting in a blocked state).
+   */
+  role: OfficeRole | null;
   indicator: IndicatorKind;
   title?: string;
 }
 
 /**
- * Returns one placement per work item with a real desk. Items in terminal /
- * human-gate states (no desk mapping) are dropped.
+ * Returns one placement per work item that should be visible in the office.
+ * Includes:
+ *   - items with a real desk-mapped state (`role` set), and
+ *   - items in stay-put blocked states (`role: null`, indicator `bang` or
+ *     `question`) so the scene can preserve their sprite at the previous desk.
+ *
+ * Drops items in terminal states (`done`, `archived`, `rejected`).
  */
 export function placementsFromItems(items: readonly AgentPlacementInput[]): AgentPlacement[] {
   const out: AgentPlacement[] = [];
   for (const item of items) {
     const role = deskForState(item.state);
-    if (role == null) continue;
+    if (role == null && !STAY_PUT_STATES.has(item.state)) continue;
     out.push({
       spriteId: `${item.projectSlug}:${item.externalId}`,
       workItemId: item.workItemId,
@@ -54,7 +70,9 @@ export function placementsFromItems(items: readonly AgentPlacementInput[]): Agen
  */
 export function busyRoles(placements: readonly AgentPlacement[]): Set<OfficeRole> {
   const set = new Set<OfficeRole>();
-  for (const p of placements) set.add(p.role);
+  for (const p of placements) {
+    if (p.role != null) set.add(p.role);
+  }
   return set;
 }
 

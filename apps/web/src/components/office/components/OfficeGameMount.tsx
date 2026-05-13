@@ -97,11 +97,13 @@ export function OfficeGameMount({
     };
   }, []);
 
-  // Push project list updates.
+  // Push project list updates. NOTE: do NOT include activeProjectSlug here
+  // — applyProjects is a full-rebuild that destroys every sprite, so it must
+  // only run when the project list itself changes. Camera pans live in their
+  // own effect below.
   useEffect(() => {
     sceneRef.current?.applyProjects(projects);
-    if (activeProjectSlug != null) sceneRef.current?.panToProject(activeProjectSlug);
-  }, [projects, activeProjectSlug]);
+  }, [projects]);
 
   // Push placement updates.
   useEffect(() => {

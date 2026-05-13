@@ -214,7 +214,7 @@ describe('pathfinding', () => {
 });
 
 describe('placementsFromItems', () => {
-  it('drops items whose state has no desk mapping', () => {
+  it('drops terminal-state items but preserves blocked-state items as stay-put placements', () => {
     const placements = placementsFromItems([
       {
         workItemId: 'github:org/repo#1',
@@ -234,11 +234,44 @@ describe('placementsFromItems', () => {
         projectSlug: 'p',
         state: 'factory:gate-pending',
       },
+      {
+        workItemId: 'github:org/repo#4',
+        externalId: '4',
+        projectSlug: 'p',
+        state: 'factory:needs-human',
+      },
     ]);
-    expect(placements.map((p) => p.externalId)).toEqual(['1']);
-    expect(placements[0].role).toBe('developer');
-    expect(placements[0].indicator).toBe('speech');
-    expect(placements[0].spriteId).toBe('p:1');
+    // factory:done dropped; gate-pending + needs-human kept (stay-put), in-progress kept normally.
+    expect(placements.map((p) => p.externalId).sort()).toEqual(['1', '3', '4']);
+    const byId = Object.fromEntries(placements.map((p) => [p.externalId, p]));
+    expect(byId['1'].role).toBe('developer');
+    expect(byId['1'].indicator).toBe('speech');
+    expect(byId['3'].role).toBeNull();
+    expect(byId['3'].indicator).toBe('question');
+    expect(byId['4'].role).toBeNull();
+    expect(byId['4'].indicator).toBe('bang');
+  });
+
+  it('uses spriteId stable across state transitions (blocked → unblocked round-trips reuse sprite)', () => {
+    const before = placementsFromItems([
+      {
+        workItemId: 'a',
+        externalId: '7',
+        projectSlug: 'p',
+        state: 'factory:in-progress',
+      },
+    ]);
+    const blocked = placementsFromItems([
+      {
+        workItemId: 'a',
+        externalId: '7',
+        projectSlug: 'p',
+        state: 'factory:gate-pending',
+      },
+    ]);
+    expect(before[0].spriteId).toBe(blocked[0].spriteId);
+    expect(before[0].role).toBe('developer');
+    expect(blocked[0].role).toBeNull();
   });
 
   it('preserves title and projectSlug on the placement', () => {
