@@ -12,12 +12,24 @@
 // owns the bridge in both directions.
 
 import Phaser from 'phaser';
-import type { AgentPlacement } from '../lib/agent-positions';
+import type { AgentPlacement, PersonaPlacement, TicketPlacement } from '../lib/agent-positions';
+import type { RoomId } from '../lib/rooms';
+import type { OfficeRole } from '../lib/state-to-role';
 import { FLOOR_PIXEL_WIDTH, floorCenterY, totalWorldHeight } from '../lib/layout';
 import { queueVerifiedPngAssets } from './asset-loader';
 import { FloorLayer } from './layers/FloorLayer';
 import { SpriteLayer } from './layers/SpriteLayer';
 import { ensureOfficeTextures } from './textures';
+
+// Temporary adapter — maps room → representative OfficeRole for SpriteLayer
+// until SpriteLayer is deleted in step 6.
+const ROOM_TO_ROLE: Partial<Record<RoomId, OfficeRole>> = {
+  triage: 'triager',
+  investigation: 'investigator',
+  dev: 'developer',
+  qa: 'qa',
+  review: 'reviewer',
+};
 
 // Re-export types so the React mount (OfficeGameMount.tsx) doesn't need
 // import-path changes.
@@ -116,10 +128,14 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   /**
-   * Drop / add / move sprites to match the new placement list.
+   * Drop / add / move sprites to match the new placement data.
+   * Accepts the phase-3 { personas, tickets } shape; internally converts
+   * personas to the legacy AgentPlacement[] shape for SpriteLayer.
+   * The adapter and SpriteLayer are removed in step 6.
    */
-  applyPlacements(placements: readonly AgentPlacement[]): void {
-    this.spriteLayer.applyPlacements(placements);
+  applyPlacements(result: { personas: PersonaPlacement[]; tickets: TicketPlacement[] }): void {
+    const legacy = this.toSpriteLayerPlacements(result.personas);
+    this.spriteLayer.applyPlacements(legacy);
     this.floorLayer.refreshIdleDeskIndicators(this.spriteLayer.occupiedDeskKeys());
   }
 
@@ -160,6 +176,21 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   // ─── private ─────────────────────────────────────────────────────────────
+
+  /** Temporary adapter; removed when SpriteLayer is deleted in step 6. */
+  private toSpriteLayerPlacements(personas: PersonaPlacement[]): AgentPlacement[] {
+    return personas
+      .filter((p) => p.roomId !== null)
+      .map((p) => ({
+        spriteId: p.personaId,
+        workItemId: p.workItemId,
+        externalId: p.externalId,
+        projectSlug: p.projectSlug,
+        role: ROOM_TO_ROLE[p.roomId as RoomId] ?? null,
+        indicator: p.indicator,
+        title: p.title,
+      }));
+  }
 
   private floorIndexFor(slug: string): number {
     return this.projects.findIndex((p) => p.slug === slug);
