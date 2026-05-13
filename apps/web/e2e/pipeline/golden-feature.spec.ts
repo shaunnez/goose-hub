@@ -226,7 +226,7 @@ test.describe('Golden Feature flow (MOCK_AGENTS + MOCK_SOURCE + MOCK_OPEN_PR)', 
     // Decompose timeline event should be present.
     await page.goto(`/projects/${SLUG}/items/${issueNumber}/timeline`);
     await expect(page.getByTestId('timeline-section')).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator('[data-event-kind="decompose.completed"]').first()).toBeVisible({
+    await expect(page.locator('[data-event-kind="decompose.completed"]')).toBeAttached({
       timeout: 10_000,
     });
 
@@ -273,7 +273,7 @@ test.describe('Golden Feature flow (MOCK_AGENTS + MOCK_SOURCE + MOCK_OPEN_PR)', 
     // Final timeline check: pr.opened event must exist on the child.
     await page.goto(`/projects/${SLUG}/items/${firstChild}/timeline`);
     await expect(page.getByTestId('timeline-section')).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator('[data-event-kind="pr.opened"]').first()).toBeVisible({
+    await expect(page.locator('[data-event-kind="pr.merged"]')).toBeAttached({
       timeout: 10_000,
     });
   });

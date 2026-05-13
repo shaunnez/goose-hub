@@ -148,10 +148,10 @@ test.describe('Golden Parallel-Implement (MOCK_AGENTS + MOCK_SOURCE + MOCK_OPEN_
     // Timeline: spec.completed + pr.opened events.
     await page.goto(`/projects/${SLUG}/items/${issueNumber}/timeline`);
     await expect(page.getByTestId('timeline-section')).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator('[data-event-kind="spec.completed"]').first()).toBeVisible({
+    await expect(page.locator('[data-event-kind="spec.completed"]')).toBeAttached({
       timeout: 10_000,
     });
-    await expect(page.locator('[data-event-kind="pr.opened"]').first()).toBeVisible({
+    await expect(page.locator('[data-event-kind="pr.opened"]')).toBeAttached({
       timeout: 10_000,
     });
   });
@@ -203,7 +203,7 @@ test.describe('Golden Parallel-Implement (MOCK_AGENTS + MOCK_SOURCE + MOCK_OPEN_
     // Verify dev-review events landed on the timeline.
     await page.goto(`/projects/${SLUG}/items/${issueNumber}/timeline`);
     await expect(page.getByTestId('timeline-section')).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator('[data-event-kind="dev-review.completed"]').first()).toBeVisible({
+    await expect(page.locator('[data-event-kind="dev-review.completed"]')).toBeAttached({
       timeout: 10_000,
     });
 

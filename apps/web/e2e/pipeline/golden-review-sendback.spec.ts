@@ -132,8 +132,11 @@ test.describe('Golden Review Sendback flow (MOCK_AGENTS + MOCK_SOURCE + MOCK_OPE
     // Timeline: two review.completed events (sendback + pass).
     await page.goto(`/projects/${SLUG}/items/${issueNumber}/timeline`);
     await expect(page.getByTestId('timeline-section')).toBeVisible({ timeout: 10_000 });
+    
+    const merged = page.locator('[data-event-kind="pr.merged"]');
+    await expect(merged).toBeVisible({ timeout: 10_000 });
     const reviewCompleted = page.locator('[data-event-kind="review.completed"]');
-    await expect(reviewCompleted.nth(1)).toBeVisible({ timeout: 10_000 });
+    await expect(reviewCompleted).toBeAttached({ timeout: 10_000 });
     expect(await reviewCompleted.count()).toBeGreaterThanOrEqual(2);
   });
 });

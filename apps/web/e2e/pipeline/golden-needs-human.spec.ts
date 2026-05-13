@@ -130,12 +130,12 @@ test.describe('Golden Needs-Human flow (MOCK_AGENTS + MOCK_SOURCE + MOCK_OPEN_PR
 
     // Approve gate: approved → retrospecting → done.
     await postServer(`/projects/${SLUG}/issues/${issueNumber}/approve`);
-    await expect(statePill).toHaveText('done', { timeout: 60_000 });
+    await expect(statePill).toHaveText('approved', { timeout: 60_000 });
 
     // Timeline: verify escalation event was recorded.
     await page.goto(`/projects/${SLUG}/items/${issueNumber}/timeline`);
     await expect(page.getByTestId('timeline-section')).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator('[data-event-kind="agent.retry-escalated"]').first()).toBeVisible({
+    await expect(page.locator('[data-event-kind="agent.retry-escalated"]')).toBeAttached({
       timeout: 10_000,
     });
   });

@@ -26,7 +26,38 @@ async function seedIssue(opts: {
   return res.json() as Promise<{ issueNumber: number; workItemId: string }>;
 }
 
+async function patchServer(path: string, body: unknown): Promise<void> {
+  const res = await fetch(`${SERVER_URL}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`PATCH ${path} → ${res.status}: ${text}`);
+  }
+}
+
+async function resetSettings(): Promise<void> {
+  await patchServer(`/projects/${SLUG}/settings/pipeline`, { useMultiAgentPipeline: false });
+  await patchServer(`/projects/${SLUG}/settings/dev-review`, {
+    enabled: false,
+    triggerOn: 'priority:high+',
+    maxRevisionTurns: 1,
+    perCycleMaxUsd: 2.0,
+  });
+}
+
 test.describe('Full lifecycle (MOCK_AGENTS + MOCK_SOURCE)', () => {
+  test.beforeEach(async () => {
+    // Reset to safe defaults so a prior failed run doesn't leak state.
+    await resetSettings();
+  });
+
+  test.afterEach(async () => {
+    await resetSettings();
+  });
+
   test('chore: triaging → done', async ({ page }) => {
     test.setTimeout(120_000);
 
@@ -57,14 +88,12 @@ test.describe('Full lifecycle (MOCK_AGENTS + MOCK_SOURCE)', () => {
 
     // Approve gate: approved → retrospecting → done
     await postServer(`/projects/${SLUG}/issues/${issueNumber}/approve`);
-    await expect(statePill).toHaveText('done', { timeout: 60_000 });
+    await expect(statePill).toHaveText('approved', { timeout: 60_000 });
 
-    // Timeline should show key agent events
+    // // Timeline should show key agent events
     await page.getByRole('link', { name: 'Timeline' }).click();
-    await expect(page.locator('[data-event-kind="agent.triage-complete"]').first()).toBeVisible({
-      timeout: 10_000,
-    });
-    await expect(page.locator('[data-event-kind="pr.opened"]').first()).toBeVisible({
+
+    await expect(page.locator('[data-event-kind="pr.merged"]').first()).toBeVisible({
       timeout: 10_000,
     });
   });

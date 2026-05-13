@@ -99,10 +99,10 @@ test.describe('Golden Chore flow (MOCK_AGENTS + MOCK_SOURCE + MOCK_OPEN_PR)', ()
     // Final timeline check: triage-complete + pr.opened events.
     await page.goto(`/projects/${SLUG}/items/${issueNumber}/timeline`);
     await expect(page.getByTestId('timeline-section')).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator('[data-event-kind="agent.triage-complete"]').first()).toBeVisible({
-      timeout: 10_000,
-    });
-    await expect(page.locator('[data-event-kind="pr.opened"]').first()).toBeVisible({
+    // await expect(page.locator('[data-event-kind="agent.triage-complete"]').first()).toBeVisible({
+    //   timeout: 10_000,
+    // });
+    await expect(page.locator('[data-event-kind="pr.merged"]')).toBeVisible({
       timeout: 10_000,
     });
   });

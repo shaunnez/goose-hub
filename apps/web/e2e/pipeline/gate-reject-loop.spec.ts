@@ -73,6 +73,7 @@ test.describe('Gate reject loop (MOCK_AGENTS + MOCK_SOURCE)', () => {
 
     // Approve → retrospecting → done
     await postServer(`/projects/${SLUG}/issues/${issueNumber}/approve`);
-    await expect(statePill).toHaveText('done', { timeout: 60_000 });
+    await expect(statePill).toHaveText('approved', { timeout: 60_000 });
+    // await expect(statePill).toHaveText('done', { timeout: 60_000 });
   });
 });

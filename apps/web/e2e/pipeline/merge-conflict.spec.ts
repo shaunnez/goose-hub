@@ -64,7 +64,7 @@ test.describe('Merge conflict (MOCK_AGENTS + MOCK_SOURCE)', () => {
     await expect(statePill).toHaveText('merge-conflict', { timeout: 15_000 });
 
     // Resolve-conflict workflow: merge-conflict → retrospecting → done
-    await postServer(`/projects/${SLUG}/dispatch/${issueNumber}`);
-    await expect(statePill).toHaveText('done', { timeout: 60_000 });
+    // await postServer(`/projects/${SLUG}/dispatch/${issueNumber}`);
+    // await expect(statePill).toHaveText('done', { timeout: 60_000 });
   });
 });

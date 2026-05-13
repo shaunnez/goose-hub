@@ -1,3 +1,7 @@
+# Skill enhancement
+review claude-code-skills-training-deck.md
+
+
 # Todo more
 Triage / repo run fails -- needs to error out
 

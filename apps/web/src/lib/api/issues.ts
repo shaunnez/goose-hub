@@ -108,7 +108,7 @@ export async function approveIssue(
   slug: string,
   id: string,
 ): Promise<{ ok: true; sha: string; prNumber: number } | { ok: false; conflict: true }> {
-  const res = await fetch(`/api/projects/${slug}/issues/${id}/approve`, {
+  const res = await fetch(`/projects/${slug}/issues/${id}/approve`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({}),

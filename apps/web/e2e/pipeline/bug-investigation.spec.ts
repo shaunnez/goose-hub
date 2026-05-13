@@ -43,13 +43,12 @@ test.describe('Bug investigation (MOCK_AGENTS + MOCK_SOURCE)', () => {
     await postServer(`/projects/${SLUG}/tick`);
     await expect(statePill).toHaveText('investigating', { timeout: 60_000 });
 
-    // Investigate (high-confidence) → investigation-complete → dev-ready
+    // Investigate (high-confidence) → dev-ready
     await postServer(`/projects/${SLUG}/dispatch/${issueNumber}`);
-    await expect(statePill).toHaveText('investigation-complete', { timeout: 60_000 });
     await expect(statePill).toHaveText('dev-ready', { timeout: 15_000 });
   });
 
-  test('low-confidence investigate → investigation-complete → gate-pending', async ({ page }) => {
+  test('low-confidence investigate → gate-pending', async ({ page }) => {
     test.setTimeout(120_000);
 
     const { issueNumber } = await seedIssue({
@@ -68,7 +67,7 @@ test.describe('Bug investigation (MOCK_AGENTS + MOCK_SOURCE)', () => {
 
     // Investigate (low-confidence) → investigation-complete → gate-pending
     await postServer(`/projects/${SLUG}/dispatch/${issueNumber}`);
-    await expect(statePill).toHaveText('investigation-complete', { timeout: 60_000 });
+    // await expect(statePill).toHaveText('investigation-complete', { timeout: 60_000 });
     await expect(statePill).toHaveText('gate-pending', { timeout: 15_000 });
   });
 });

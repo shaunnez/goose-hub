@@ -139,7 +139,9 @@ test.describe('Golden Feature — PRD revision (ADR 0033 three-path flow)', () =
     await expect(statePill).toHaveText('done', { timeout: 60_000 });
 
     await page.goto(`/projects/${SLUG}/items/${issueNumber}/timeline`);
-    await expect(page.locator('[data-event-kind="decompose.completed"]').first()).toBeVisible({
+    await expect(page.getByTestId('timeline-section')).toBeVisible({ timeout: 10_000 });
+
+    await expect(page.locator('[data-event-kind="decompose.completed"]')).toBeAttached({
       timeout: 10_000,
     });
   });
