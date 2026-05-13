@@ -7,8 +7,6 @@
 
 import { describe, expect, it } from 'vitest';
 import { OFFICE_ROLES, busyRoles, idleIndicator, placementsFromItems } from './lib/agent-positions';
-import { CODENAME_POOL, codenameFor } from './lib/persona-codenames';
-import { ticketAtDeskOffset, ticketCarryOffset } from './lib/ticket-carry';
 import {
   FLOOR_GAP_PX,
   FLOOR_PIXEL_HEIGHT,
@@ -26,6 +24,7 @@ import {
   planWalk,
   sameFloorPath,
 } from './lib/pathfinding';
+import { CODENAME_POOL, codenameFor } from './lib/persona-codenames';
 import {
   CORRIDOR_WALK_Y,
   FLOOR_WORLD,
@@ -40,6 +39,7 @@ import {
 } from './lib/rooms';
 import { IDLE_INDICATOR, indicatorForState } from './lib/state-indicators';
 import { deskForState, shouldWalk } from './lib/state-to-role';
+import { ticketAtDeskOffset, ticketCarryOffset } from './lib/ticket-carry';
 
 describe('state → desk role mapping', () => {
   it('maps every lane state to a valid role', () => {

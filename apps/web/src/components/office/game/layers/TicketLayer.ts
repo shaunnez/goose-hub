@@ -17,8 +17,8 @@ import { roomDeskAnchors, roomQueueAnchor, roomSlotAnchors } from '../../lib/roo
 import type { RoomId } from '../../lib/rooms';
 import { ticketCarryOffset } from '../../lib/ticket-carry';
 import { TEXTURE_KEYS } from '../textures';
-import type { DeskClickPayload } from './types';
 import type { PersonaLayer } from './PersonaLayer';
+import type { DeskClickPayload } from './types';
 
 const TICKET_DEPTH = 40;
 const TICKET_HERO_DEPTH = 45;
@@ -62,11 +62,7 @@ export class TicketLayer {
   private heroTicketId: string | null = null;
   private heroTimer: Phaser.Time.TimerEvent | null = null;
 
-  constructor(
-    scene: Phaser.Scene,
-    emitter: Phaser.Events.EventEmitter,
-    deps: TicketLayerDeps,
-  ) {
+  constructor(scene: Phaser.Scene, emitter: Phaser.Events.EventEmitter, deps: TicketLayerDeps) {
     this.scene = scene;
     this.emitter = emitter;
     this.deps = deps;
@@ -261,11 +257,7 @@ export class TicketLayer {
     this.positionTicket(entry, p, floorIndex);
   }
 
-  private updatePosition(
-    entry: TicketEntry,
-    p: TicketPlacement,
-    floorIndex: number,
-  ): void {
+  private updatePosition(entry: TicketEntry, p: TicketPlacement, floorIndex: number): void {
     entry.carrierPersonaId = p.carrierPersonaId;
     entry.position = p.position;
     entry.roomId = p.roomId;
@@ -273,11 +265,7 @@ export class TicketLayer {
     this.positionTicket(entry, p, floorIndex);
   }
 
-  private positionTicket(
-    entry: TicketEntry,
-    p: TicketPlacement,
-    floorIndex: number,
-  ): void {
+  private positionTicket(entry: TicketEntry, p: TicketPlacement, floorIndex: number): void {
     if (p.position === 'carried' && p.carrierPersonaId != null) {
       this.parentToPersona(entry, p.carrierPersonaId);
       return;

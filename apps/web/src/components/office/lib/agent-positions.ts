@@ -6,8 +6,9 @@
 // TicketPlacement: one entry per visible work item, including done (shelf)
 //   and stay-put (carried by frozen persona).
 
-import { IDLE_INDICATOR, type IndicatorKind, indicatorForState } from './state-indicators';
 import { codenameFor } from './persona-codenames';
+import type { RoomId } from './rooms';
+import { IDLE_INDICATOR, type IndicatorKind, indicatorForState } from './state-indicators';
 import { OFFICE_ROLES, type OfficeRole } from './state-to-role';
 import {
   DONE_STATES,
@@ -16,7 +17,6 @@ import {
   deskSlotForRoom,
   roomForState,
 } from './state-to-room';
-import type { RoomId } from './rooms';
 
 // ─── Input ───────────────────────────────────────────────────────────────────
 

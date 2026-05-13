@@ -47,11 +47,7 @@ export class PersonaLayer {
   private readonly deps: PersonaLayerDeps;
   private personas = new Map<string, PersonaEntry>();
 
-  constructor(
-    scene: Phaser.Scene,
-    emitter: Phaser.Events.EventEmitter,
-    deps: PersonaLayerDeps,
-  ) {
+  constructor(scene: Phaser.Scene, emitter: Phaser.Events.EventEmitter, deps: PersonaLayerDeps) {
     this.scene = scene;
     this.emitter = emitter;
     this.deps = deps;
