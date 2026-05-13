@@ -4,6 +4,8 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { eventStore } from '../event-stream/store.js';
+import { deployHooks } from '../tool-layer/pre-tool-use-hook.js';
+import { writeWorkspaceSandbox } from '../tool-layer/sandbox.js';
 import { ClaudeCliRuntime, resolveMcpConfigPath } from './claude-cli.js';
 import { assembleSpawnContext } from './context-assembly.js';
 import { withFallback } from './fallback.js';
@@ -595,6 +597,70 @@ describe('resolveMcpConfigPath', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     const result = resolveMcpConfigPath('/work/dir', ['validate', 'playwright-mcp']);
     expect(result).toBe(path.join('/work/dir', 'apps/web/.mcp.json'));
+  });
+});
+
+// ─── sandbox overwrite regression (#wp-sandbox-overwrite) ────────────────────
+
+describe('ClaudeCliRuntime sandbox mode', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(spawn).mockReturnValue(undefined as unknown as ReturnType<typeof spawn>);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('skips writeWorkspaceSandbox when sandboxMode is preconfigured', async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as unknown as ReturnType<typeof spawn>);
+
+    const runtime = new ClaudeCliRuntime();
+    const spec: AgentSpec = { ...makeSecuritySpec(), sandboxMode: 'preconfigured' };
+    const runPromise = runtime.run(spec);
+    proc.simulateClose(0);
+    await runPromise;
+
+    expect(vi.mocked(writeWorkspaceSandbox)).not.toHaveBeenCalled();
+  });
+
+  it('still calls deployHooks when sandboxMode is preconfigured', async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as unknown as ReturnType<typeof spawn>);
+
+    const runtime = new ClaudeCliRuntime();
+    const spec: AgentSpec = { ...makeSecuritySpec(), sandboxMode: 'preconfigured' };
+    const runPromise = runtime.run(spec);
+    proc.simulateClose(0);
+    await runPromise;
+
+    expect(vi.mocked(deployHooks)).toHaveBeenCalledOnce();
+  });
+
+  it('calls writeWorkspaceSandbox when sandboxMode is absent (default)', async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as unknown as ReturnType<typeof spawn>);
+
+    const runtime = new ClaudeCliRuntime();
+    const runPromise = runtime.run(makeSecuritySpec());
+    proc.simulateClose(0);
+    await runPromise;
+
+    expect(vi.mocked(writeWorkspaceSandbox)).toHaveBeenCalledOnce();
+  });
+
+  it('calls writeWorkspaceSandbox when sandboxMode is default', async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as unknown as ReturnType<typeof spawn>);
+
+    const runtime = new ClaudeCliRuntime();
+    const spec: AgentSpec = { ...makeSecuritySpec(), sandboxMode: 'default' };
+    const runPromise = runtime.run(spec);
+    proc.simulateClose(0);
+    await runPromise;
+
+    expect(vi.mocked(writeWorkspaceSandbox)).toHaveBeenCalledOnce();
   });
 });
 

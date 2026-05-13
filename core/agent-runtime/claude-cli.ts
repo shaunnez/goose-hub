@@ -128,8 +128,10 @@ export class ClaudeCliRuntime implements AgentRuntime {
     const projectId = (spec.context.projectId as string) ?? 'unknown';
     const workItemId = (spec.context.workItemId as string | undefined) ?? spec.workItemId ?? null;
     const recordDecisionTool = getRecordDecisionTool(projectId);
-    writeWorkspaceSandbox(workspaceDir, { role: spec.role, recordDecisionTool });
-    deployHooks();
+    if (spec.sandboxMode !== 'preconfigured') {
+      writeWorkspaceSandbox(workspaceDir, { role: spec.role, recordDecisionTool });
+    }
+    deployHooks(); // always — writes to ~/.factory/hooks/, not workspace-specific
     if (recordDecisionTool) deployDecisionCaptureHook();
 
     // Emit run-started

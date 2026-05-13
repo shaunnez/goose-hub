@@ -20,6 +20,20 @@ const WP_BUILDER_GIT_DENYLIST = [
   'Bash(git branch*)',
 ];
 
+// Deny list applied to WP builders: blocks risky bash patterns (shell chaining,
+// dependency mutation, path escapes). WP-only — normal developer runs unaffected.
+const WP_BASH_DENYLIST = [
+  'Bash(* | *)',
+  'Bash(* && *)',
+  'Bash(* ; *)',
+  'Bash(* > *)',
+  'Bash(pnpm install*)',
+  'Bash(npm install*)',
+  'Bash(rm -rf node_modules*)',
+  'Bash(mv node_modules*)',
+  'Bash(ln -s*)',
+];
+
 // Absolute paths to SDLC shell hooks shipped with the repo (M11.16).
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const REQUIRE_SPEC_HOOK_PATH = join(REPO_ROOT, 'hooks', 'require-spec.sh');
@@ -142,7 +156,11 @@ export function writeWpBuilderSandbox(
   mkdirSync(claudeDir, { recursive: true });
   writeFileSync(
     join(claudeDir, 'settings.local.json'),
-    buildSettings(WP_BUILDER_GIT_DENYLIST, extraPreToolUseHooks, extraPostToolUseHooks),
+    buildSettings(
+      [...WP_BUILDER_GIT_DENYLIST, ...WP_BASH_DENYLIST],
+      extraPreToolUseHooks,
+      extraPostToolUseHooks,
+    ),
     'utf8',
   );
 }

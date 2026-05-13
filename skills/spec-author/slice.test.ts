@@ -34,15 +34,17 @@ function baseSpec(overrides: Partial<EngineeringSpec> = {}): EngineeringSpec {
     workPackages: [
       {
         id: 'WP1',
-        filesOwned: ['apps/server/src/routes/healthz.ts'],
-        changes: 'Add a new file exporting healthzHandler bound to GET /healthz at line 1-12.',
+        filesOwned: ['apps/server/src/routes/healthz.ts', 'apps/server/src/routes/healthz.test.ts'],
+        changes:
+          'Add a new file exporting healthzHandler bound to GET /healthz at line 1-12. Add test asserting 200 response.',
         dependsOn: [],
         builderTier: 'haiku',
       },
       {
         id: 'WP2',
-        filesOwned: ['apps/server/src/router.ts'],
-        changes: 'Wire healthzHandler into router at app.get("/healthz", healthzHandler).',
+        filesOwned: ['apps/server/src/router.ts', 'apps/server/src/router.test.ts'],
+        changes:
+          'Wire healthzHandler into router at app.get("/healthz", healthzHandler). Update router test.',
         dependsOn: ['WP1'],
         builderTier: 'haiku',
       },
@@ -579,5 +581,120 @@ describe('validateEngineeringSpec — repoRoot-backed checks', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.errors.some((e) => e.rule === 'constraint-source-symbol-missing')).toBe(true);
+  });
+});
+
+// ─── TDD contract: wp-missing-test-file ──────────────────────────────────────
+
+describe('validateEngineeringSpec — TDD contract (wp-missing-test-file)', () => {
+  it('rejects WP with production .ts files but no test file', () => {
+    const spec = baseSpec({
+      workPackages: [
+        {
+          id: 'WP1',
+          filesOwned: ['core/tool-layer/sandbox.ts'],
+          changes: 'Add WP_BASH_DENYLIST applied in writeWpBuilderSandbox to block risky bash.',
+          dependsOn: [],
+          builderTier: 'haiku',
+        },
+        {
+          id: 'WP2',
+          filesOwned: ['core/tool-layer/slice.test.ts'],
+          changes: 'Add tests for WP_BASH_DENYLIST entries in writeWpBuilderSandbox output.',
+          dependsOn: ['WP1'],
+          builderTier: 'haiku',
+        },
+      ],
+      executionOrder: [
+        { batch: 0, wpIds: ['WP1'] },
+        { batch: 1, wpIds: ['WP2'] },
+      ],
+    });
+    const result = validateEngineeringSpec(spec);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.some((e) => e.rule === 'wp-missing-test-file')).toBe(true);
+    const err = result.errors.find((e) => e.rule === 'wp-missing-test-file');
+    expect(err?.ref).toBe('WP1');
+  });
+
+  it('accepts WP that owns both source and test file', () => {
+    const spec = baseSpec({
+      workPackages: [
+        {
+          id: 'WP1',
+          filesOwned: ['core/tool-layer/sandbox.ts', 'core/tool-layer/slice.test.ts'],
+          changes: 'Add WP_BASH_DENYLIST and tests for it.',
+          dependsOn: [],
+          builderTier: 'haiku',
+        },
+      ],
+      executionOrder: [{ batch: 0, wpIds: ['WP1'] }],
+      interfaceContracts: [],
+    });
+    const result = validateEngineeringSpec(spec);
+    expect(result.ok).toBe(true);
+  });
+
+  it('accepts WP that owns only a test file (test-only WP)', () => {
+    const spec = baseSpec({
+      workPackages: [
+        {
+          id: 'WP1',
+          filesOwned: ['apps/server/src/routes/healthz.ts', 'core/tool-layer/slice.test.ts'],
+          changes: 'Add healthz route and wire up existing test coverage.',
+          dependsOn: [],
+          builderTier: 'haiku',
+        },
+        {
+          id: 'WP2',
+          filesOwned: ['apps/server/src/router.ts'],
+          changes: 'Wire healthzHandler into router.',
+          dependsOn: ['WP1'],
+          builderTier: 'haiku',
+        },
+      ],
+      executionOrder: [
+        { batch: 0, wpIds: ['WP1'] },
+        { batch: 1, wpIds: ['WP2'] },
+      ],
+    });
+    // WP2 owns router.ts but no test file — should fire
+    const result = validateEngineeringSpec(spec);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const err = result.errors.find((e) => e.rule === 'wp-missing-test-file');
+    expect(err?.ref).toBe('WP2');
+  });
+
+  it('does not flag WP that owns only config/schema/types files', () => {
+    const spec = baseSpec({
+      workPackages: [
+        {
+          id: 'WP1',
+          filesOwned: ['apps/server/src/routes/healthz.ts', 'core/tool-layer/slice.test.ts'],
+          changes: 'Add healthz and tests.',
+          dependsOn: [],
+          builderTier: 'haiku',
+        },
+        {
+          id: 'WP2',
+          filesOwned: ['core/agent-runtime/interface.ts'],
+          changes: 'Add sandboxMode field to AgentSpec.',
+          dependsOn: ['WP1'],
+          builderTier: 'haiku',
+        },
+      ],
+      executionOrder: [
+        { batch: 0, wpIds: ['WP1'] },
+        { batch: 1, wpIds: ['WP2'] },
+      ],
+    });
+    // WP2 owns interface.ts (types-only, exempt). WP1 owns source + test, ok.
+    const result = validateEngineeringSpec(spec);
+    const testFileErrors = (result.ok ? [] : result.errors).filter(
+      (e) => e.rule === 'wp-missing-test-file',
+    );
+    expect(testFileErrors).toHaveLength(0);
   });
 });
