@@ -1,3 +1,27 @@
+# Todo more
+Triage / repo run fails -- needs to error out
+
+Cannot see claude $ on timeline
+
+Budgets for claude were too low on triage 
+
+When grill me is ready to ask question, banner should appear saying "question ready - grill " with link
+
+It would be good to see what the grill question was in timeline, all i can see is it going and searching files - no context of what its doing
+
+Scouts .. not sure what model .. nor plahwright
+
+REPO MATCH ON OPUS??
+
+How many turns should scouts have
+
+MIssing budget for scouts and things
+
+Wave agents now showing "started at" and appearing abnove investigation run which is also not showing started at...
+
+Missing cost / tokens on swarm / wave / investigation
+
+
 # Pretty sure our bootstrap is out of data with agents
 fix
 
