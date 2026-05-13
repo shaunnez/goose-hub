@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { Wave2RiskAnalystSchema } from './schema.js';
 import config, { Wave2RiskAnalystContextSchema } from './skill.config.js';
@@ -59,5 +60,14 @@ describe('wave2-risk-analyst skill', () => {
       worktreePath: '/tmp/x',
     });
     expect(result.success).toBe(true);
+  });
+
+  it('prompt locks timeout-avoidance discipline to scout evidence and partial JSON', () => {
+    const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+
+    expect(prompt).toContain('3 targeted reads/greps');
+    expect(prompt).toContain('Do not re-run Wave-1 discovery');
+    expect(prompt).toContain('valid partial risk register');
+    expect(prompt).toContain('OPEN_QUESTION');
   });
 });

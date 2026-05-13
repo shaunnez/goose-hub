@@ -15,6 +15,11 @@ You have **read access only**.
 - Each risk must name a **concrete** failure mode (e.g. "concurrent writes can race the unique-index check"), not a vague concern ("performance might suffer").
 - Evidence must cite at least one scout finding (file:line) — the risk must be grounded in observed code.
 - Mitigation must be **falsifiable** — a concrete change or a concrete test that would catch a regression.
+- Start from `<scout_reports>` as primary evidence. Use `<worktree_path>` only for targeted verification of scout claims or contradictions.
+- Cap worktree verification at **3 targeted reads/greps** unless scout reports directly contradict each other. Do not re-run Wave-1 discovery.
+- Prefer a valid partial risk register with 2-4 high-signal findings over exhaustive analysis that risks timeout.
+- If evidence is thin, encode the gap as an `OPEN_QUESTION` finding and return valid JSON instead of continuing to investigate.
+- Do not duplicate `wave2-interface-designer` output. Focus on failure modes, missing tests, state/event regressions, security/data risks, and ambiguous implementation scope.
 - Severity rubric:
   - `high` — corrupts data, leaks secrets, or breaks a documented contract
   - `medium` — degrades a primary flow under realistic load or input

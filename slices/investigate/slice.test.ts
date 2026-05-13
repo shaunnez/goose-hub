@@ -249,6 +249,31 @@ describe('runInvestigateWorkflow', () => {
       }
     });
 
+    it('narrows scout-schema focus to schema/type contracts and forbids retry control-flow tracing', async () => {
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(
+        makeWorkItem({
+          title: 'Triage repo run bug 3',
+          body: 'Triage / repo run fails and restarts. Move to human intervention after max 2 turns.',
+        }),
+        makeMockSource(),
+        'goose-hub-self',
+        '/repo',
+      );
+
+      const wave1Opts = mockDispatchWave.mock.calls[0][0] as {
+        scoutSpecs: Array<{ scoutName: string; scoutFocus: string }>;
+      };
+      const schema = wave1Opts.scoutSpecs.find((s) => s.scoutName === 'scout-schema');
+      expect(schema?.scoutFocus).toContain('Schema/type contracts only');
+      expect(schema?.scoutFocus).toContain('triage/repo-match output schemas');
+      expect(schema?.scoutFocus).toContain('agent.run-failed/event payload contracts');
+      expect(schema?.scoutFocus).toContain('state label/type contracts');
+      expect(schema?.scoutFocus).toContain(
+        'Do not trace runtime, retry, scheduler, or workflow control flow',
+      );
+    });
+
     it('passes minSuccessfulScouts: 2 when both Wave 2 agents are selected', async () => {
       const { runInvestigateWorkflow } = await import('./workflow.js');
       await runInvestigateWorkflow(

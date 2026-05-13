@@ -1,4 +1,5 @@
 import type {
+  CostSummaryDto,
   ImprovementCandidateDto,
   PersonaNameDto,
   PersonaRunDto,
@@ -57,4 +58,8 @@ export async function rejectCandidateById(id: number): Promise<ImprovementCandid
     {},
   );
   return candidate;
+}
+
+export async function fetchCostSummary(slug: string): Promise<CostSummaryDto> {
+  return getJson<CostSummaryDto>(`/projects/${slug}/costs/summary`);
 }

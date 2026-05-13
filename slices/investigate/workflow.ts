@@ -31,6 +31,28 @@ import { WAVE_1_SCOUTS, selectWave2Scouts } from './wave2-selection.js';
 
 type InvestigateOutput = z.infer<typeof InvestigateSchema>;
 
+function buildSchemaScoutFocus(workItem: { title: string; body: string }): string {
+  const text = `${workItem.title}\n${workItem.body}`.toLowerCase();
+  const surfaces: string[] = [];
+
+  if (/\btriage\b|repo[-\s]?match|repo run/.test(text)) {
+    surfaces.push('triage/repo-match output schemas');
+  }
+  if (/run-failed|fail(?:s|ed|ure)?|error|event/.test(text)) {
+    surfaces.push('agent.run-failed/event payload contracts');
+  }
+  if (/needs-human|human intervention|state|transition/.test(text)) {
+    surfaces.push('state label/type contracts');
+  }
+
+  const target =
+    surfaces.length > 0
+      ? surfaces.join(', ')
+      : 'DB schemas, Zod schemas, event payload types, state enums, and API contracts relevant to this work item';
+
+  return `Schema/type contracts only for ${target}. Do not trace runtime, retry, scheduler, or workflow control flow; return UNCERTAINTY if no schema surface exists after the first targeted reads.`;
+}
+
 /**
  * Runs the investigate workflow for a work item in `factory:investigating` state.
  *
@@ -137,6 +159,7 @@ export async function runInvestigateWorkflow(
       if (spec.scoutName === 'scout-code-path' && symbolIndexHints.length > 0)
         return { ...spec, extraContext: { symbolIndexHints } };
       if (spec.scoutName === 'scout-pattern') return { ...spec, scoutFocus: patternFocus };
+      if (spec.scoutName === 'scout-schema') return { ...spec, scoutFocus: buildSchemaScoutFocus(workItemCtx) };
       return spec;
     });
 

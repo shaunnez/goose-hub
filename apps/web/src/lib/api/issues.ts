@@ -1,6 +1,5 @@
 import type {
   AgentEventDto,
-  CostSummaryDto,
   EngineeringSpecDto,
   IssueCommentDto,
   IssueDiffDto,
@@ -9,7 +8,7 @@ import type {
   WorkItemCostsDto,
   WorkItemDto,
 } from '../types.js';
-import { getJson, postJson } from './client.js';
+import { getJson, patchJson, postJson } from './client.js';
 
 export async function fetchIssues(slug: string, opts?: { all?: boolean }): Promise<WorkItemDto[]> {
   const qs = opts?.all ? '?all=true' : '';
@@ -101,6 +100,10 @@ export async function fetchIssueDiff(slug: string, id: string): Promise<IssueDif
   return getJson<IssueDiffDto>(`/projects/${slug}/issues/${id}/diff`);
 }
 
+export async function fetchIssueCosts(slug: string, id: string): Promise<WorkItemCostsDto> {
+  return getJson<WorkItemCostsDto>(`/projects/${slug}/issues/${id}/costs`);
+}
+
 export async function approveIssue(
   slug: string,
   id: string,
@@ -160,14 +163,6 @@ export async function addComment(slug: string, id: string, body: string): Promis
   await postJson(`/projects/${slug}/issues/${id}/comment`, { body });
 }
 
-export async function setMilestone(
-  slug: string,
-  id: string,
-  milestoneNumber: number | null,
-): Promise<void> {
-  await postJson(`/projects/${slug}/issues/${id}/set-milestone`, { milestoneNumber });
-}
-
 export async function setLabel(
   slug: string,
   id: string,
@@ -204,10 +199,10 @@ export async function transitionState(
   return { status: res.status, data };
 }
 
-export async function fetchCostSummary(slug: string): Promise<CostSummaryDto> {
-  return getJson<CostSummaryDto>(`/projects/${slug}/costs/summary`);
-}
-
-export async function fetchIssueCosts(slug: string, id: string): Promise<WorkItemCostsDto> {
-  return getJson<WorkItemCostsDto>(`/projects/${slug}/issues/${id}/costs`);
+export async function setMilestone(
+  slug: string,
+  id: string,
+  milestoneNumber: number | null,
+): Promise<void> {
+  await postJson(`/projects/${slug}/issues/${id}/set-milestone`, { milestoneNumber });
 }
