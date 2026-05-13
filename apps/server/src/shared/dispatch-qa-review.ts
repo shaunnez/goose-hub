@@ -1,12 +1,12 @@
-import { logger } from '@goose-hub/core/logger.js';
 import { getUseMultiAgentPipeline } from '@goose-hub/core/db/repositories/project-settings.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
-import { runRetroForItem } from '../domains/workflows/retro-batch.js';
+import { logger } from '@goose-hub/core/logger.js';
 import { parseAcceptanceCriteria } from '../domains/issues/parse-acceptance.js';
+import { runRetroForItem } from '../domains/workflows/retro-batch.js';
+import { withParallelLock } from './dispatch-lock.js';
 import { getProject } from './projects.js';
 import { REPO_ROOT, sliceUrl } from './slice-url.js';
 import { getSourceForSlug } from './source.js';
-import { withParallelLock } from './dispatch-lock.js';
 
 /** Run the QA holdout workflow for a single issue. Drops duplicate triggers for the same issue. */
 export async function dispatchQa(slug: string, issueNumber: number): Promise<void> {

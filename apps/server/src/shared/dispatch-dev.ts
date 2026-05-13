@@ -11,11 +11,11 @@ import { filterEligibleByDependencies } from '@goose-hub/core/projects/dependenc
 import { createProjectAwareTargetSource } from '@goose-hub/core/state-source/dependency-resolver.js';
 import type { InvestigateOutput } from '@goose-hub/skills/investigate/schema.js';
 import { EngineeringSpecSchema } from '@goose-hub/skills/spec-author/schema.js';
+import { withParallelLock } from './dispatch-lock.js';
+import { dispatchRetro } from './dispatch-qa-review.js';
 import { getProject } from './projects.js';
 import { REPO_ROOT, sliceUrl } from './slice-url.js';
 import { getSourceForSlug } from './source.js';
-import { withParallelLock } from './dispatch-lock.js';
-import { dispatchRetro } from './dispatch-qa-review.js';
 
 type InvCompletePayload = { investigate?: InvestigateOutput; investigationRunId?: string };
 
@@ -48,38 +48,44 @@ function resolveFixIssuePipelineForBug(
 
 /** Run the investigate workflow for a single issue. Drops duplicate triggers for the same issue. */
 export async function dispatchInvestigate(slug: string, issueNumber: number): Promise<void> {
-  await withParallelLock(slug, issueNumber, 'dispatchInvestigate', dispatchInvestigate, async () => {
-    // Cross-package boundary: slices/ is not a workspace package (rule 28a).
-    const { runInvestigateWorkflow } = (await import(sliceUrl('investigate'))) as {
-      runInvestigateWorkflow: (
-        item: unknown,
-        source: unknown,
-        slug: string,
-        repoRoot: string,
-        deps?: Record<string, unknown>,
-      ) => Promise<unknown>;
-    };
-    const source = await getSourceForSlug(slug);
-    if (source == null) {
-      logger.error('dispatchInvestigate: no source for slug', { slug });
-      return;
-    }
-    const item = await source.getItem(issueNumber.toString());
-    const mockInvestigateDeps: Record<string, unknown> | undefined =
-      process.env.MOCK_AGENTS === 'true'
-        ? {
-            createWorktreeImpl: () => '/mock/worktree',
-            prewarmWorktreeImpl: () => undefined,
-          }
-        : undefined;
-    await runInvestigateWorkflow(item, source, slug, REPO_ROOT, mockInvestigateDeps);
+  await withParallelLock(
+    slug,
+    issueNumber,
+    'dispatchInvestigate',
+    dispatchInvestigate,
+    async () => {
+      // Cross-package boundary: slices/ is not a workspace package (rule 28a).
+      const { runInvestigateWorkflow } = (await import(sliceUrl('investigate'))) as {
+        runInvestigateWorkflow: (
+          item: unknown,
+          source: unknown,
+          slug: string,
+          repoRoot: string,
+          deps?: Record<string, unknown>,
+        ) => Promise<unknown>;
+      };
+      const source = await getSourceForSlug(slug);
+      if (source == null) {
+        logger.error('dispatchInvestigate: no source for slug', { slug });
+        return;
+      }
+      const item = await source.getItem(issueNumber.toString());
+      const mockInvestigateDeps: Record<string, unknown> | undefined =
+        process.env.MOCK_AGENTS === 'true'
+          ? {
+              createWorktreeImpl: () => '/mock/worktree',
+              prewarmWorktreeImpl: () => undefined,
+            }
+          : undefined;
+      await runInvestigateWorkflow(item, source, slug, REPO_ROOT, mockInvestigateDeps);
 
-    // Chain to investigation-complete routing outside the lock. In production the
-    // GitHub label-change webhook fires dispatchForLabel('factory:investigation-complete')
-    // instead; in MOCK_SOURCE mode there are no webhooks so we chain explicitly.
-    // Idempotency is enforced by the state check inside dispatchInvestigationComplete.
-    return () => dispatchInvestigationComplete(slug, issueNumber);
-  });
+      // Chain to investigation-complete routing outside the lock. In production the
+      // GitHub label-change webhook fires dispatchForLabel('factory:investigation-complete')
+      // instead; in MOCK_SOURCE mode there are no webhooks so we chain explicitly.
+      // Idempotency is enforced by the state check inside dispatchInvestigationComplete.
+      return () => dispatchInvestigationComplete(slug, issueNumber);
+    },
+  );
 }
 
 /**
@@ -312,9 +318,7 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
     dispatchParallelImplement,
     async () => {
       // Cross-package boundary: slices/ is not a workspace package (rule 28a).
-      const { runParallelImplementWorkflow } = (await import(
-        sliceUrl('parallel-implement')
-      )) as {
+      const { runParallelImplementWorkflow } = (await import(sliceUrl('parallel-implement'))) as {
         runParallelImplementWorkflow: (
           item: unknown,
           spec: unknown,
@@ -363,11 +367,7 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
           item.externalId,
           'parallel-implement: persisted engineering spec failed schema validation. Escalating to needs-human.',
         );
-        await source.transitionState(
-          item.externalId,
-          'factory:spec-ready',
-          'factory:needs-human',
-        );
+        await source.transitionState(item.externalId, 'factory:spec-ready', 'factory:needs-human');
         emitStateTransitionEvent({
           projectId: slug,
           workItemId: item.id,
@@ -429,11 +429,7 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
           parallelMockDeps,
         );
         if (result.status === 'success') {
-          await source.transitionState(
-            item.externalId,
-            'factory:in-progress',
-            'factory:needs-qa',
-          );
+          await source.transitionState(item.externalId, 'factory:in-progress', 'factory:needs-qa');
           emitStateTransitionEvent({
             projectId: slug,
             workItemId: item.id,
@@ -463,11 +459,7 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
           item.externalId,
           `parallel-implement: workflow failed after dispatch. Escalating to needs-human.\n\nError: ${error.message}`,
         );
-        await source.transitionState(
-          item.externalId,
-          'factory:in-progress',
-          'factory:needs-human',
-        );
+        await source.transitionState(item.externalId, 'factory:in-progress', 'factory:needs-human');
         emitStateTransitionEvent({
           projectId: slug,
           workItemId: item.id,

@@ -1,6 +1,6 @@
 import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
-import { parallelLock } from '@goose-hub/core/projects/parallel-lock.js';
 import { logger } from '@goose-hub/core/logger.js';
+import { parallelLock } from '@goose-hub/core/projects/parallel-lock.js';
 import { getProject } from './projects.js';
 
 type PendingWorkflowEntry = {

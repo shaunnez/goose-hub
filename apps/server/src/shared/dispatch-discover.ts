@@ -1,11 +1,11 @@
-import { parallelLock } from '@goose-hub/core/projects/parallel-lock.js';
 import { logger } from '@goose-hub/core/logger.js';
+import { parallelLock } from '@goose-hub/core/projects/parallel-lock.js';
 import { runDecomposePrdWorkflow } from '@goose-hub/core/workflows/decompose-prd.js';
 import { runGrillAndPrdWorkflow } from '@goose-hub/core/workflows/grill-and-prd.js';
 import type { PRDOutput } from '@goose-hub/skills/write-prd/schema.js';
-import { getSourceForSlug } from './source.js';
+import { getMaxParallelAgents, withParallelLock } from './dispatch-lock.js';
 import { REPO_ROOT } from './slice-url.js';
-import { withParallelLock, getMaxParallelAgents } from './dispatch-lock.js';
+import { getSourceForSlug } from './source.js';
 
 const PRD_MARKER = '<!-- factory:prd -->';
 const GRILL_QUESTION_MARKER = '<!-- factory:grill-question -->';

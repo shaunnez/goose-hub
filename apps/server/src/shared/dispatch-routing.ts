@@ -1,30 +1,30 @@
-import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { parallelLock } from '@goose-hub/core/projects/parallel-lock.js';
+import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { maybeFireSprintReview } from '../domains/workflows/sprint-review-trigger.js';
-import { getSourceForSlug } from './source.js';
-import { dispatchTriageBatch } from './dispatch-triage.js';
 import {
+  dispatchFixIssue,
   dispatchInvestigate,
   dispatchInvestigationComplete,
-  dispatchFixIssue,
   dispatchParallelImplement,
   dispatchResolveConflict,
 } from './dispatch-dev.js';
 import {
-  dispatchQa,
-  dispatchReview,
-  dispatchRetro,
-  dispatchNeedsFix,
-  dispatchQaFailed,
-} from './dispatch-qa-review.js';
-import {
+  dispatchDecomposePrd,
   dispatchGrillAndPrd,
   dispatchRetryWritePrd,
-  dispatchDecomposePrd,
 } from './dispatch-discover.js';
+import {
+  dispatchNeedsFix,
+  dispatchQa,
+  dispatchQaFailed,
+  dispatchRetro,
+  dispatchReview,
+} from './dispatch-qa-review.js';
+import { dispatchTriageBatch } from './dispatch-triage.js';
+import { getSourceForSlug } from './source.js';
 
 /**
  * Handles terminal labels (factory:archived, factory:rejected) that bypass the
