@@ -81,6 +81,14 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'parallel-implement.wp-timeout': 'Work package timed out',
   'parallel-implement.wp-commit-failed': 'Work package commit failed',
   'parallel-implement.exhausted': 'Parallel implement exhausted',
+  'dev-review.started': 'Dev review started',
+  'dev-review.completed': 'Dev review completed',
+  'dev-review.failed': 'Dev review failed',
+  'dev-review.error': 'Dev review error',
+  'dev-review.budget-skipped': 'Dev review budget skipped',
+  'dev-review.response-started': 'Dev review response started',
+  'dev-review.response-completed': 'Dev review response completed',
+  'dev-review.response-failed': 'Dev review response failed',
 };
 
 export function formatSkillName(skill: string | null): string {
@@ -116,6 +124,14 @@ export type RenderItem =
       endedAt: string | null;
       lastEventAt: string | null;
       personaId: string | null;
+    }
+  | {
+      kind: 'phase-group';
+      phase: 'dev';
+      pipelineRunId: string;
+      items: RenderItem[];
+      startedAt: string | null;
+      endedAt: string | null;
     };
 
 /**
@@ -148,10 +164,84 @@ function compareRenderItems(a: RenderItem, b: RenderItem): number {
   return 0;
 }
 
+export function groupByDevPhase(items: RenderItem[]): RenderItem[] {
+  const pipelines = new Set<string>();
+
+  function findSpecCompleted(renderItems: RenderItem[]): void {
+    for (const item of renderItems) {
+      if (item.kind === 'event' && item.event.kind === 'spec.completed') {
+        const p = item.event.payload as { pipelineRunId?: string } | null;
+        if (p?.pipelineRunId != null) pipelines.add(p.pipelineRunId);
+      } else if (item.kind === 'run-group') {
+        findSpecCompleted(item.items);
+      }
+    }
+  }
+
+  findSpecCompleted(items);
+
+  if (pipelines.size === 0) return items;
+
+  function resolvedPipelineId(item: RenderItem): string | null {
+    if (item.kind === 'run-group') {
+      if (pipelines.has(item.runId)) return item.runId;
+      for (const pid of pipelines) {
+        if (item.runId.startsWith(`${pid}:wp:`)) return pid;
+      }
+      return null;
+    }
+    if (item.kind === 'event') {
+      const p = item.event.payload as { pipelineRunId?: string } | null;
+      if (p?.pipelineRunId != null && pipelines.has(p.pipelineRunId)) return p.pipelineRunId;
+      return null;
+    }
+    return null;
+  }
+
+  const pipelineItems = new Map<string, RenderItem[]>();
+  for (const pid of pipelines) pipelineItems.set(pid, []);
+
+  const ungrouped: RenderItem[] = [];
+  for (const item of items) {
+    const pid = resolvedPipelineId(item);
+    if (pid != null) {
+      pipelineItems.get(pid)!.push(item);
+    } else {
+      ungrouped.push(item);
+    }
+  }
+
+  const phaseGroups: RenderItem[] = [];
+  for (const [pid, phaseItemList] of pipelineItems) {
+    if (phaseItemList.length === 0) continue;
+    const timestamps: number[] = [];
+    for (const item of phaseItemList) {
+      if (item.kind === 'event') timestamps.push(new Date(item.event.createdAt).getTime());
+      else if (item.kind === 'run-group') {
+        if (item.startedAt) timestamps.push(new Date(item.startedAt).getTime());
+        if (item.endedAt) timestamps.push(new Date(item.endedAt).getTime());
+      }
+    }
+    const startedAt = timestamps.length > 0 ? new Date(Math.min(...timestamps)).toISOString() : null;
+    const endedAt = timestamps.length > 0 ? new Date(Math.max(...timestamps)).toISOString() : null;
+    phaseGroups.push({
+      kind: 'phase-group',
+      phase: 'dev',
+      pipelineRunId: pid,
+      items: phaseItemList,
+      startedAt,
+      endedAt,
+    });
+  }
+
+  return [...ungrouped, ...phaseGroups];
+}
+
 export function groupEvents(events: AgentEventDto[]): RenderItem[] {
   const collapsed = collapseLogRuns(events);
   const grouped = groupByRunId(collapsed);
-  return [...grouped].sort(compareRenderItems);
+  const withDevPhases = groupByDevPhase([...grouped].sort(compareRenderItems));
+  return withDevPhases;
 }
 
 function collapseLogRuns(events: AgentEventDto[]): RenderItem[] {

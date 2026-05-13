@@ -5,6 +5,7 @@ import type {
   CodexAuthStatusDto,
   CostSummaryDto,
   DevReviewSettingsDto,
+  EngineeringSpecDto,
   ImprovementCandidateDto,
   InboxItemDto,
   IssueCommentDto,
@@ -97,6 +98,16 @@ export async function fetchIssues(slug: string, opts?: { all?: boolean }): Promi
 export async function fetchIssue(slug: string, id: string): Promise<WorkItemDto> {
   const { item } = await getJson<{ item: WorkItemDto }>(`/projects/${slug}/issues/${id}`);
   return item;
+}
+
+export async function fetchEngineeringSpec(
+  slug: string,
+  id: string,
+): Promise<EngineeringSpecDto | null> {
+  const { spec } = await getJson<{ spec: EngineeringSpecDto | null }>(
+    `/projects/${slug}/issues/${id}/spec`,
+  );
+  return spec;
 }
 
 export async function fetchClosedIssues(

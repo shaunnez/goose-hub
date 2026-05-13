@@ -1,6 +1,6 @@
-import { addComment, fetchComments, fetchEvents, transitionState } from '@/lib/api';
+import { addComment, fetchComments, fetchEngineeringSpec, fetchEvents, transitionState } from '@/lib/api';
 import { renderMarkdownToHtml } from '@/lib/markdown';
-import type { AgentEventDto, IssueCommentDto } from '@/lib/types';
+import type { AgentEventDto, EngineeringSpecDto, IssueCommentDto } from '@/lib/types';
 import { getPersonaInitials, getPersonaLabel, usePersonaMap } from '@/lib/usePersonaMap';
 import { timeAgo } from '@/lib/utils';
 import { useActiveProject } from '@/state/active-project';
@@ -18,6 +18,7 @@ import {
   extractInvestigationPayload,
 } from '../lib/investigation';
 import { ConfidenceBadge } from './ConfidenceBadge';
+import { SpecDetails } from './SpecDetails';
 import { CostBadge } from './CostBadge';
 import { FindingCard } from './FindingCard';
 import { PlaywrightCaptureSection } from './PlaywrightCaptureSection';
@@ -61,6 +62,11 @@ export function InvestigationSection({
 
   const { byStage } = useIssueCostsBreakdown(projectSlug, id);
   const investigateCost = byStage.get('investigate');
+
+  const { data: spec } = useQuery<EngineeringSpecDto | null>({
+    queryKey: ['spec', projectSlug, id],
+    queryFn: () => fetchEngineeringSpec(projectSlug, id),
+  });
 
   const humanNotes = comments.filter((c) => c.body.startsWith('Human review notes:'));
 
@@ -253,6 +259,11 @@ export function InvestigationSection({
             );
           })}
         </div>
+      )}
+
+      {/* Engineering spec */}
+      {spec != null && (
+        <SpecDetails spec={spec} itemState={itemState} />
       )}
 
       {/* Open questions */}
