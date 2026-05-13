@@ -68,6 +68,16 @@ import {
   SwarmWaveEvent,
 } from './timeline/SwarmEvents';
 import { AgentVerifyCommandEvent, ToolWarningEvent } from './timeline/VerifyToolEvents';
+import {
+  DevReviewBudgetSkippedEvent,
+  DevReviewCompletedEvent,
+  DevReviewErrorEvent,
+  DevReviewFailedEvent,
+  DevReviewResponseCompletedEvent,
+  DevReviewResponseFailedEvent,
+  DevReviewResponseStartedEvent,
+  DevReviewStartedEvent,
+} from './timeline/DevReviewEvents';
 
 export function renderTimelineItem(item: RenderItem, idx: number, context?: TimelineContext) {
   if (item.kind === 'log-group') {
@@ -205,6 +215,22 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <ParallelWpTimeoutEvent key={event.id} event={event} />;
     case 'parallel-implement.exhausted':
       return <ParallelExhaustedEvent key={event.id} event={event} />;
+    case 'dev-review.started':
+      return <DevReviewStartedEvent key={event.id} event={event} />;
+    case 'dev-review.completed':
+      return <DevReviewCompletedEvent key={event.id} event={event} />;
+    case 'dev-review.failed':
+      return <DevReviewFailedEvent key={event.id} event={event} />;
+    case 'dev-review.error':
+      return <DevReviewErrorEvent key={event.id} event={event} />;
+    case 'dev-review.budget-skipped':
+      return <DevReviewBudgetSkippedEvent key={event.id} event={event} />;
+    case 'dev-review.response-started':
+      return <DevReviewResponseStartedEvent key={event.id} event={event} />;
+    case 'dev-review.response-completed':
+      return <DevReviewResponseCompletedEvent key={event.id} event={event} />;
+    case 'dev-review.response-failed':
+      return <DevReviewResponseFailedEvent key={event.id} event={event} />;
     default:
       return <FallbackEvent key={event.id} event={event} />;
   }
