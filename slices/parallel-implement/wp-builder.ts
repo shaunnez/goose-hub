@@ -5,10 +5,10 @@ import type {
 } from '@goose-hub/core/agent-runtime/interface.js';
 import type { AgentEvent, AppendEventInput } from '@goose-hub/core/event-stream/store.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
-import { revertWpChanges } from '@goose-hub/core/workspaces/orchestrator-git.js';
+import type { revertWpChanges } from '@goose-hub/core/workspaces/orchestrator-git.js';
 import { ImplementWpSchema } from '@goose-hub/skills/implement-wp/schema.js';
 import type { WorkPackage } from '@goose-hub/skills/spec-author/schema.js';
-import { recordWpIteration } from './parallel-helpers.js';
+import type { recordWpIteration } from './parallel-helpers.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

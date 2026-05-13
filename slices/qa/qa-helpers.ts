@@ -42,7 +42,9 @@ export function findPrOpenedHints(workItemId: string): PrOpenedHints {
  * undefined if no implement-complete event exists or the payload is
  * missing/malformed — QA still runs, just without cross-reference data.
  */
-export function findDevTestsRun(workItemId: string): { command: string; paths: string[] } | undefined {
+export function findDevTestsRun(
+  workItemId: string,
+): { command: string; paths: string[] } | undefined {
   const events = eventStore.replay({ workItemId });
   const implementComplete = events
     .slice()

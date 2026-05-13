@@ -65,7 +65,11 @@ export function parseBlocks(body: string): string[] {
   return parseRefs(body, /blocks\s*:/i);
 }
 
-export function mapIssueToWorkItem(issue: GithubIssue, repoRef: string, ownerLogin: string): WorkItem {
+export function mapIssueToWorkItem(
+  issue: GithubIssue,
+  repoRef: string,
+  ownerLogin: string,
+): WorkItem {
   const labelNames = issue.labels.map((l) => l.name);
 
   // State: run full conflict resolver; handles multi-label, archived-wins, zero-label cases.

@@ -1,7 +1,7 @@
+import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { spawn } from 'node:child_process';
 import { recordCost } from '../cost/repository.js';
 import { stageForSkill } from '../cost/skill-stage.js';
 import { getRecordDecisionTool } from '../db/repositories/project-settings.js';
@@ -10,23 +10,36 @@ import { computeAllowlist } from '../tool-layer/allowlist.js';
 import { deployDecisionCaptureHook } from '../tool-layer/decision-capture-hook.js';
 import { deployHooks } from '../tool-layer/pre-tool-use-hook.js';
 import { writeWorkspaceSandbox } from '../tool-layer/sandbox.js';
+import {
+  CodexBinaryNotFoundError,
+  CodexNotAuthenticatedError,
+  assertCodexAuthenticated,
+  buildCodexArgv,
+  escapeForTomlMultilineBasic,
+  resolveCodexBinary,
+} from './codex-config.js';
+import {
+  extractResultJson,
+  parseCodexEnvelope,
+  pickCodexAgentMessageText,
+} from './codex-parser.js';
 import { assembleSpawnContext } from './context-assembly.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { resolveMockOutput } from './mock-outputs.js';
 import { defaultModelForTierAndProvider, estimateCostUsd } from './models.js';
-import {
-  CodexBinaryNotFoundError,
-  CodexNotAuthenticatedError,
+
+export { CodexBinaryNotFoundError, CodexNotAuthenticatedError } from './codex-config.js';
+export {
   resolveCodexBinary,
   assertCodexAuthenticated,
   buildCodexArgv,
   escapeForTomlMultilineBasic,
 } from './codex-config.js';
-import { parseCodexEnvelope, extractResultJson, pickCodexAgentMessageText } from './codex-parser.js';
-
-export { CodexBinaryNotFoundError, CodexNotAuthenticatedError } from './codex-config.js';
-export { resolveCodexBinary, assertCodexAuthenticated, buildCodexArgv, escapeForTomlMultilineBasic } from './codex-config.js';
-export { parseCodexEnvelope, extractResultJson, pickCodexAgentMessageText } from './codex-parser.js';
+export {
+  parseCodexEnvelope,
+  extractResultJson,
+  pickCodexAgentMessageText,
+} from './codex-parser.js';
 
 const STDOUT_CAP = 4 * 1024 * 1024; // 4 MB
 const TIMEOUT_MS = 30_000; // 30 seconds — FACTORY_RULES rule 32

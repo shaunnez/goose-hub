@@ -159,7 +159,8 @@ export async function runInvestigateWorkflow(
       if (spec.scoutName === 'scout-code-path' && symbolIndexHints.length > 0)
         return { ...spec, extraContext: { symbolIndexHints } };
       if (spec.scoutName === 'scout-pattern') return { ...spec, scoutFocus: patternFocus };
-      if (spec.scoutName === 'scout-schema') return { ...spec, scoutFocus: buildSchemaScoutFocus(workItemCtx) };
+      if (spec.scoutName === 'scout-schema')
+        return { ...spec, scoutFocus: buildSchemaScoutFocus(workItemCtx) };
       return spec;
     });
 
@@ -418,4 +419,3 @@ export async function runInvestigateWorkflow(
     cleanupWorktree(runId);
   }
 }
-

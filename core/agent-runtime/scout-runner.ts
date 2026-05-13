@@ -1,10 +1,10 @@
 import type { AgentEvent, AppendEventInput } from '../event-stream/store.js';
+import type { ResolvedBudget, SkillBudgetOverride } from './budgets.js';
 import { assembleSpawnContext } from './context-assembly.js';
 import type { AgentResult, AgentRuntime, AgentSpec, DecisionSummary } from './interface.js';
 import { resolveBudgetsForProject } from './resolve-for-project.js';
 import { ScoutOutputSchema } from './scout-output.js';
-import type { ResolvedBudget, SkillBudgetOverride } from './budgets.js';
-import { runWithDeadline, ScoutTimeoutError } from './swarm-utils.js';
+import { ScoutTimeoutError, runWithDeadline } from './swarm-utils.js';
 
 /** Per-scout findings. Mirrors `ScoutOutputSchema` in each scout's schema.ts. */
 export interface ScoutFinding {

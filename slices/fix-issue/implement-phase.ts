@@ -1,20 +1,20 @@
-import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { selectModel } from '@goose-hub/core/agent-runtime/model-router.js';
 import { defaultModelForTier, tierOf } from '@goose-hub/core/agent-runtime/models.js';
+import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import {
   resolveBudgetsForProject,
   resolveComplexityOverridesForProject,
 } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { runWithEscalation } from '@goose-hub/core/agent-runtime/with-escalation.js';
+import type { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
+import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
+import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import type { orchestratorCommitAll } from '@goose-hub/core/workspaces/orchestrator-git.js';
-import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
-import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
-import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import { ImplementSchema } from '@goose-hub/skills/implement/schema.js';
-import type { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
 import { buildPrBody, runEvidencePost } from './pr-helpers.js';
 import type { ImplementOutputShape } from './types.js';
 

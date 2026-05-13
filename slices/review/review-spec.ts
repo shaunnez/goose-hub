@@ -1,6 +1,6 @@
-// slices/review/review-spec.ts
-import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import type { AgentRuntime, AgentSpec } from '@goose-hub/core/agent-runtime/interface.js';
+// slices/review/review-spec.ts
+import type { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import type { ReviewerSlot } from '@goose-hub/core/db/repositories/project-review-settings.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
 import type { ReviewOutput } from '@goose-hub/skills/review/schema.js';

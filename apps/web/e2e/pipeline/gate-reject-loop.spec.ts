@@ -79,6 +79,5 @@ test.describe('Gate reject loop (MOCK_AGENTS + MOCK_SOURCE)', () => {
     await page.goto(`/projects/${SLUG}/items/${issueNumber}/timeline`);
     await expect(page.getByTestId('timeline-section')).toBeVisible({ timeout: 10_000 });
     await expect(statePill).toHaveText('done', { timeout: 60_000 });
-    
   });
 });

@@ -10,9 +10,7 @@ import {
   runDevReviewResponse,
   shouldRunDevReview,
 } from '@goose-hub/core/agent-runtime/dev-review-advisor.js';
-import type {
-  AgentRuntime,
-} from '@goose-hub/core/agent-runtime/interface.js';
+import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
@@ -34,11 +32,11 @@ import { type cleanupWorktree, createWorktree } from '@goose-hub/core/workspaces
 import { ImplementWpSchema } from '@goose-hub/skills/implement-wp/schema.js';
 import type { EngineeringSpec } from '@goose-hub/skills/spec-author/schema.js';
 import {
+  type WpDispatchResult,
   buildParallelPrBody,
   getLastWpStatus,
   recordWpIteration,
   runWithConcurrencyCap,
-  type WpDispatchResult,
 } from './parallel-helpers.js';
 import { runOneWpBuilder } from './wp-builder.js';
 

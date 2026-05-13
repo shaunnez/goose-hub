@@ -3,10 +3,7 @@ import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { CodexCliRuntime } from '@goose-hub/core/agent-runtime/codex-cli.js';
 import { assembleSpawnContext } from '@goose-hub/core/agent-runtime/context-assembly.js';
-import type {
-  AgentResult,
-  AgentRuntime,
-} from '@goose-hub/core/agent-runtime/interface.js';
+import type { AgentResult, AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
@@ -24,20 +21,17 @@ import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interfa
 import { ReviewOutputSchema } from '@goose-hub/skills/review/schema.js';
 import type { ReviewOutput, ReviewVerdict } from '@goose-hub/skills/review/schema.js';
 
-import {
-  finalizeConvergentReviewAudit,
-  startConvergentReviewAudit,
-} from './review-audit.js';
+import { finalizeConvergentReviewAudit, startConvergentReviewAudit } from './review-audit.js';
 import {
   DEFAULT_MAX_REVIEW_ROUNDS,
   DEFAULT_REVIEWER_SLOTS,
+  type DispatchReviewWaveOpts,
+  type FindingKey,
+  type ReviewWaveResult,
   buildReviewSpec,
   deduplicateFindings,
   extractChangedFilePaths,
   findingKeyStr,
-  type DispatchReviewWaveOpts,
-  type FindingKey,
-  type ReviewWaveResult,
 } from './review-spec.js';
 
 export type { DispatchReviewWaveOpts, FindingKey, ReviewWaveResult };

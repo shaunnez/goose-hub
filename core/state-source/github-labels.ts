@@ -1,6 +1,8 @@
 import { eventStore } from '../event-stream/store.js';
 import type { StateName } from '../state-machine/states.js';
 import { isLegalTransition } from '../state-machine/transitions.js';
+import type { GithubIssue, GithubMilestone } from './github-issue-mapper.js';
+import { mapGithubMilestone, mapIssueToWorkItem, parseIssueNumber } from './github-issue-mapper.js';
 import type {
   Artifact,
   CreateIssueInput,
@@ -12,12 +14,6 @@ import type {
   Subscription,
   WorkItem,
 } from './interface.js';
-import type { GithubIssue, GithubMilestone } from './github-issue-mapper.js';
-import {
-  mapGithubMilestone,
-  mapIssueToWorkItem,
-  parseIssueNumber,
-} from './github-issue-mapper.js';
 import { LABEL_GROUPS } from './label-parsers.js';
 
 /**

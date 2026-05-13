@@ -1,9 +1,9 @@
 import { execFileSync } from 'node:child_process';
-import { eventStore } from '@goose-hub/core/event-stream/store.js';
-import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { findFreePort } from '@goose-hub/core/agent-runtime/find-free-port.js';
+import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
+import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { EvidencePostSchema } from '@goose-hub/skills/evidence-post/schema.js';

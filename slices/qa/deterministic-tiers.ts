@@ -4,8 +4,8 @@ import type {
   RegressionPolicy,
   TierResult as VerifyTierResult,
 } from '@goose-hub/core/verify/tiers.js';
-import { runTier as defaultRunTier } from '@goose-hub/core/verify/tiers.js';
-import { type QaOutput, type TestRun } from '@goose-hub/skills/qa/schema.js';
+import type { runTier as defaultRunTier } from '@goose-hub/core/verify/tiers.js';
+import type { QaOutput, TestRun } from '@goose-hub/skills/qa/schema.js';
 import type { EngineeringSpec } from '@goose-hub/skills/spec-author/schema.js';
 
 export type { TestRun };
@@ -116,7 +116,9 @@ export function detectTierDisagreement(
   return disagreements;
 }
 
-export function toAgentTierResults(d: DeterministicTierResults): QaOutput['tierResults'] | undefined {
+export function toAgentTierResults(
+  d: DeterministicTierResults,
+): QaOutput['tierResults'] | undefined {
   if (d[1] == null && d[2] == null && d[3] == null) return undefined;
   const map = (vt: VerifyTierResult | null) =>
     vt == null

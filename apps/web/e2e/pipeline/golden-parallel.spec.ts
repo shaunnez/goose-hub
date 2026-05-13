@@ -37,18 +37,18 @@ test.use({ trace: 'on', video: 'on' });
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function postServer(path: string, body?: unknown): Promise<Response> {
-  const res = await fetch(`${SERVER_URL}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: body != null ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`POST ${path} → ${res.status}: ${text}`);
-  }
-  return res;
-}
+// async function postServer(path: string, body?: unknown): Promise<Response> {
+//   const res = await fetch(`${SERVER_URL}${path}`, {
+//     method: 'POST',
+//     headers: { 'Content-Type': 'application/json' },
+//     body: body != null ? JSON.stringify(body) : undefined,
+//   });
+//   if (!res.ok) {
+//     const text = await res.text().catch(() => '');
+//     throw new Error(`POST ${path} → ${res.status}: ${text}`);
+//   }
+//   return res;
+// }
 
 async function patchServer(path: string, body: unknown): Promise<void> {
   const res = await fetch(`${SERVER_URL}${path}`, {
@@ -62,22 +62,22 @@ async function patchServer(path: string, body: unknown): Promise<void> {
   }
 }
 
-async function seedIssue(opts: {
-  title: string;
-  type?: string;
-  outcomes?: Record<string, string | string[]>;
-}): Promise<{ issueNumber: number; workItemId: string }> {
-  const res = await postServer(`/projects/test/${SLUG}/seed-issue`, opts);
-  return res.json() as Promise<{ issueNumber: number; workItemId: string }>;
-}
+// async function seedIssue(opts: {
+//   title: string;
+//   type?: string;
+//   outcomes?: Record<string, string | string[]>;
+// }): Promise<{ issueNumber: number; workItemId: string }> {
+//   const res = await postServer(`/projects/test/${SLUG}/seed-issue`, opts);
+//   return res.json() as Promise<{ issueNumber: number; workItemId: string }>;
+// }
 
-const PARALLEL_EMOJIS = ['⚙️', '🔀', '🧩', '🏗️', '🛠️', '🔧'];
-function goldenTitle(tag: string): string {
-  const ts = Date.now();
-  const emoji = PARALLEL_EMOJIS[ts % PARALLEL_EMOJIS.length];
-  const iso = new Date(ts).toISOString().replace(/[:.]/g, '-');
-  return `${emoji} [${tag}] ${iso}`;
-}
+// const PARALLEL_EMOJIS = ['⚙️', '🔀', '🧩', '🏗️', '🛠️', '🔧'];
+// function goldenTitle(tag: string): string {
+//   const ts = Date.now();
+//   const emoji = PARALLEL_EMOJIS[ts % PARALLEL_EMOJIS.length];
+//   const iso = new Date(ts).toISOString().replace(/[:.]/g, '-');
+//   return `${emoji} [${tag}] ${iso}`;
+// }
 
 async function resetSettings(): Promise<void> {
   await patchServer(`/projects/${SLUG}/settings/pipeline`, { useMultiAgentPipeline: false });

@@ -32,7 +32,10 @@ export function recordWpIteration(
     .run();
 }
 
-export function getLastWpStatus(runId: string, wpId: string): 'ok' | 'failed' | 'in-progress' | null {
+export function getLastWpStatus(
+  runId: string,
+  wpId: string,
+): 'ok' | 'failed' | 'in-progress' | null {
   const rows = db
     .select()
     .from(wpIterations)
