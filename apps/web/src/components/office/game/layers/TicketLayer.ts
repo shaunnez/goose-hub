@@ -137,7 +137,8 @@ export class TicketLayer {
     if (anchor == null) return;
 
     this.deparentFromPersona(entry);
-    entry.container.setPosition(anchor.x, anchor.y);
+    const oy = floorOriginY(this.deps.getFloorIndex(entry.projectSlug));
+    entry.container.setPosition(anchor.x, oy + anchor.y);
   }
 
   /** Promotes a ticket to hero for 10 seconds (or resets the timer if already hero). */
@@ -226,12 +227,16 @@ export class TicketLayer {
         _y: number,
         evt: Phaser.Types.Input.EventData,
       ) => {
-        this.emitter.emit('desk-click', {
-          projectSlug: p.projectSlug,
-          workItemId: p.workItemId,
-          externalId: p.externalId,
-          title: p.title || undefined,
-        } satisfies DeskClickPayload);
+        // Read from the live entry so metadata reflects the latest applyPlacements.
+        const current = this.tickets.get(p.ticketId);
+        if (current != null) {
+          this.emitter.emit('desk-click', {
+            projectSlug: current.projectSlug,
+            workItemId: current.workItemId,
+            externalId: current.externalId,
+            title: current.title || undefined,
+          } satisfies DeskClickPayload);
+        }
         this.promote(p.ticketId);
         evt?.stopPropagation();
       },
@@ -258,6 +263,16 @@ export class TicketLayer {
   }
 
   private updatePosition(entry: TicketEntry, p: TicketPlacement, floorIndex: number): void {
+    // If the hero ticket's carrier changes, transfer the codename label.
+    if (entry.hero && entry.carrierPersonaId !== p.carrierPersonaId) {
+      if (entry.carrierPersonaId != null) {
+        this.deps.personaLayer.removeCodenameLabel(entry.carrierPersonaId);
+      }
+      if (p.carrierPersonaId != null) {
+        this.deps.personaLayer.addCodenameLabel(p.carrierPersonaId);
+      }
+    }
+    entry.title = p.title;
     entry.carrierPersonaId = p.carrierPersonaId;
     entry.position = p.position;
     entry.roomId = p.roomId;
@@ -335,48 +350,61 @@ export class TicketLayer {
   }
 
   private updateQueueStacks(placements: readonly TicketPlacement[]): void {
-    const roomQueues = new Map<string, number>();
-    const heroIsQueued = new Set<string>();
+    // Key: `${floorIndex}:${roomId}` → accumulated depth
+    const floorRoomDepths = new Map<
+      string,
+      { roomId: RoomId; floorIndex: number; depth: number }
+    >();
+    const heroIsQueued = new Set<string>(); // `${floorIndex}:${roomId}`
 
     for (const p of placements) {
-      if (p.position === 'queue' && p.roomId != null) {
-        if (p.ticketId === this.heroTicketId) {
-          heroIsQueued.add(p.roomId);
+      if (p.position !== 'queue' || p.roomId == null) continue;
+      const floorIndex = this.deps.getFloorIndex(p.projectSlug);
+      if (floorIndex < 0) continue;
+      const ck = `${floorIndex}:${p.roomId}`;
+      if (p.ticketId === this.heroTicketId) {
+        heroIsQueued.add(ck);
+      } else {
+        const e = floorRoomDepths.get(ck);
+        if (e) {
+          e.depth++;
         } else {
-          roomQueues.set(p.roomId, (roomQueues.get(p.roomId) ?? 0) + 1);
+          floorRoomDepths.set(ck, { roomId: p.roomId as RoomId, floorIndex, depth: 1 });
         }
       }
     }
 
-    const allRoomIds: RoomId[] = ['triage', 'investigation', 'dev', 'qa', 'review'];
-    for (const roomId of allRoomIds) {
-      const depth = roomQueues.get(roomId) ?? 0;
-      const key = `queue:${roomId}`;
-      let qs = this.queueStacks.get(key);
-
-      if (depth === 0 && !heroIsQueued.has(roomId)) {
-        if (qs) {
-          qs.sprite.setVisible(false);
-          qs.badge?.setVisible(false);
-        }
-        continue;
+    // Hide stacks for floor/room combos that no longer have queued tickets.
+    for (const storeKey of this.queueStacks.keys()) {
+      const ck = storeKey.slice('queue:'.length);
+      if (!floorRoomDepths.has(ck) && !heroIsQueued.has(ck)) {
+        const qs = this.queueStacks.get(storeKey);
+        if (qs == null) continue;
+        qs.sprite.setVisible(false);
+        qs.badge?.setVisible(false);
       }
+    }
 
+    // Create or update stacks for active floor/room combos.
+    for (const [ck, { roomId, floorIndex, depth }] of floorRoomDepths) {
       const qa = roomQueueAnchor(roomId);
       if (qa == null) continue;
+      const oy = floorOriginY(floorIndex);
+
+      const storeKey = `queue:${ck}`;
+      let qs = this.queueStacks.get(storeKey);
 
       if (qs == null) {
-        const sprite = this.scene.add.image(qa.x, qa.y, TEXTURE_KEYS.queueStack1);
+        const sprite = this.scene.add.image(qa.x, oy + qa.y, TEXTURE_KEYS.queueStack1);
         sprite.setOrigin(0.5, 0.5);
         sprite.setDepth(TICKET_DEPTH - 1);
         qs = { sprite };
-        this.queueStacks.set(key, qs);
+        this.queueStacks.set(storeKey, qs);
       }
 
       qs.sprite.setVisible(depth > 0);
-      qs.sprite.setPosition(qa.x, qa.y);
+      qs.sprite.setPosition(qa.x, oy + qa.y);
 
-      // Texture tier based on depth
       if (depth >= 4) {
         qs.sprite.setTexture(TEXTURE_KEYS.queueStackMany);
       } else if (depth >= 3) {
@@ -387,10 +415,9 @@ export class TicketLayer {
         qs.sprite.setTexture(TEXTURE_KEYS.queueStack1);
       }
 
-      // Badge for depth >= 4
       if (depth >= 4) {
         if (qs.badge == null) {
-          qs.badge = this.scene.add.text(qa.x + 6, qa.y - 4, '', {
+          qs.badge = this.scene.add.text(qa.x + 6, oy + qa.y - 4, '', {
             fontFamily: 'JetBrains Mono, monospace',
             fontSize: '6px',
             color: '#ffffff',

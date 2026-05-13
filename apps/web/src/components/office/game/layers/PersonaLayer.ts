@@ -18,7 +18,6 @@ import type { DeskClickPayload, OfficeProject } from './types';
 
 const WALK_PIXELS_PER_MS = 0.35;
 const PERSONA_DEPTH = 30;
-const LABEL_DEPTH = 35;
 
 interface PersonaEntry {
   personaId: string;
@@ -140,7 +139,8 @@ export class PersonaLayer {
   addCodenameLabel(personaId: string): void {
     const e = this.personas.get(personaId);
     if (e == null || e.label != null) return;
-    const label = this.scene.add.text(e.container.x, e.container.y - 28, e.codename, {
+    // Parented to the container so it follows walk tweens and restack moves.
+    const label = this.scene.add.text(0, -28, e.codename, {
       fontFamily: 'JetBrains Mono, monospace',
       fontSize: '7px',
       color: '#ffd700',
@@ -148,7 +148,7 @@ export class PersonaLayer {
       padding: { left: 3, right: 3, top: 1, bottom: 1 },
     });
     label.setOrigin(0.5, 1);
-    label.setDepth(LABEL_DEPTH);
+    e.container.add(label);
     e.label = label;
   }
 

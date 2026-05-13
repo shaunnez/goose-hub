@@ -81,7 +81,7 @@ export function placementsFromItems(items: readonly AgentPlacementInput[]): {
 } {
   const personas: PersonaPlacement[] = [];
   const tickets: TicketPlacement[] = [];
-  let shelfIndex = 0;
+  const shelfIndices = new Map<string, number>();
 
   for (const item of items) {
     const { workItemId, externalId, projectSlug, state, priority = 'normal', title } = item;
@@ -103,12 +103,12 @@ export function placementsFromItems(items: readonly AgentPlacementInput[]): {
         position: 'shelf',
         roomId: 'done',
         slotId: null,
-        shelfSlot: shelfIndex % 5,
+        shelfSlot: (shelfIndices.get(projectSlug) ?? 0) % 5,
         indicator,
         projectSlug,
         workItemId,
       });
-      shelfIndex++;
+      shelfIndices.set(projectSlug, (shelfIndices.get(projectSlug) ?? 0) + 1);
       continue;
     }
 
@@ -125,13 +125,15 @@ export function placementsFromItems(items: readonly AgentPlacementInput[]): {
         indicator,
         title,
       });
+      // Stay-put has no concrete room, so the ticket floats free.
+      // TicketLayer cannot parent to a persona with no known desk position.
       tickets.push({
         ticketId,
         externalId,
         title: title ?? '',
         priority,
-        carrierPersonaId: personaId,
-        position: 'carried',
+        carrierPersonaId: null,
+        position: 'free',
         roomId: null,
         slotId: null,
         shelfSlot: null,
