@@ -199,9 +199,19 @@ export class JiraStateSource implements StateSource {
     const jql = encodeURIComponent(
       `project = ${this.projectKey} AND issuetype in (${types}) AND resolution != Unresolved`,
     );
-    const res = await this.jFetch(`/rest/api/3/search?jql=${jql}&maxResults=100`);
-    const body = (await res.json()) as JiraSearchResponse;
-    return body.issues.map((i) => this.mapIssue(i));
+    const results: WorkItem[] = [];
+    let startAt = 0;
+    const pageSize = 50;
+    while (true) {
+      const res = await this.jFetch(
+        `/rest/api/3/search?jql=${jql}&startAt=${startAt}&maxResults=${pageSize}`,
+      );
+      const body = (await res.json()) as JiraSearchResponse;
+      for (const issue of body.issues) results.push(this.mapIssue(issue));
+      if (body.issues.length < pageSize || results.length >= body.total) break;
+      startAt += pageSize;
+    }
+    return results;
   }
 
   async listWorkByMilestone(_milestoneNumber: number): Promise<WorkItem[]> {
@@ -323,21 +333,37 @@ export class JiraStateSource implements StateSource {
 
   async listComments(itemId: string): Promise<IssueComment[]> {
     const key = parseJiraKey(itemId);
-    const res = await this.jFetch(`/rest/api/3/issue/${key}/comment?maxResults=100`);
-    const body = (await res.json()) as {
-      comments: Array<{
-        id: string;
-        body: unknown;
-        author?: { accountId: string; displayName?: string };
-        created: string;
-      }>;
-    };
-    return body.comments.map((c) => ({
-      id: Number.parseInt(c.id, 10),
-      body: adfToText(c.body),
-      authorLogin: c.author?.displayName ?? c.author?.accountId ?? 'unknown',
-      createdAt: c.created,
-    }));
+    const results: IssueComment[] = [];
+    let startAt = 0;
+    const pageSize = 100;
+    while (true) {
+      const res = await this.jFetch(
+        `/rest/api/3/issue/${key}/comment?startAt=${startAt}&maxResults=${pageSize}`,
+      );
+      const body = (await res.json()) as {
+        comments: Array<{
+          id: string;
+          body: unknown;
+          author?: { accountId: string; displayName?: string };
+          created: string;
+        }>;
+        total?: number;
+        maxResults?: number;
+        startAt?: number;
+      };
+      for (const c of body.comments) {
+        results.push({
+          id: Number.parseInt(c.id, 10),
+          body: adfToText(c.body),
+          authorLogin: c.author?.displayName ?? c.author?.accountId ?? 'unknown',
+          createdAt: c.created,
+        });
+      }
+      if (body.comments.length < pageSize) break;
+      if (typeof body.total === 'number' && results.length >= body.total) break;
+      startAt += pageSize;
+    }
+    return results;
   }
 
   async setMilestone(_itemId: string, _milestoneNumber: number | null): Promise<void> {

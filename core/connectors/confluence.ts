@@ -20,9 +20,14 @@
  *   https://example.atlassian.net/wiki/spaces/SPACE/pages/12345
  *
  * Self-hosted servers using `/display/SPACE/Page+Title` are deferred.
+ *
+ * The trailing-slug class deliberately excludes common sentence-boundary
+ * punctuation (`,`, `.`, `!`, `?`, `;`, `"`, `'`, `<`, `>`) so links
+ * pasted inline at the end of a sentence don't include the trailing
+ * stop / quote in the matched URL.
  */
 const CONFLUENCE_URL_PATTERN =
-  /https:\/\/[a-z0-9.-]+\.atlassian\.net\/wiki\/spaces\/[A-Za-z0-9_-]+\/pages\/(\d+)(?:\/[^\s)\]]*)?/g;
+  /https:\/\/[a-z0-9.-]+\.atlassian\.net\/wiki\/spaces\/[A-Za-z0-9_-]+\/pages\/(\d+)(?:\/[^\s)\],.!?;"'<>]*)?/g;
 
 export interface ConfluencePageRef {
   /** Full URL exactly as it appeared in the text. */
@@ -55,7 +60,16 @@ export function extractConfluenceLinks(body: string): ConfluencePageRef[] {
 function extractSlugFromUrl(url: string): string | null {
   const match = url.match(/\/pages\/\d+\/(.+)$/);
   if (match == null) return null;
-  return decodeURIComponent(match[1])
+  // decodeURIComponent throws URIError on malformed `%` sequences (e.g.
+  // a stray `%` typed mid-sentence). Fall back to the raw segment so a
+  // single bad URL doesn't break extraction for the whole panel.
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(match[1]);
+  } catch {
+    decoded = match[1];
+  }
+  return decoded
     .replace(/\+/g, ' ')
     .replace(/[?#].*$/, '')
     .trim();

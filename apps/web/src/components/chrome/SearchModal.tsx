@@ -53,8 +53,16 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
 
   const filtered = useMemo(() => {
     if (query.length === 0) {
+      // Mixed sources (GitHub numeric ids + Jira keys like PAY-42) — sort
+      // by createdAt desc (most recent first), falling back to a string
+      // compare so the order stays deterministic when timestamps tie.
       return [...hits]
-        .sort((a, b) => Number(b.item.externalId) - Number(a.item.externalId))
+        .sort((a, b) => {
+          const at = new Date(a.item.createdAt).getTime();
+          const bt = new Date(b.item.createdAt).getTime();
+          if (bt !== at) return bt - at;
+          return a.item.externalId.localeCompare(b.item.externalId);
+        })
         .slice(0, 20);
     }
     return hits.filter((h) => matches(query, h)).slice(0, 50);
@@ -125,6 +133,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
       onClick={onClose}
       onKeyDown={handleKeyDown}
     >
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: keydown is handled on the parent backdrop; this inner stopPropagation prevents bubbling */}
       <div
         style={{
           background: 'var(--bg-elev)',
@@ -139,7 +148,6 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
           overflow: 'hidden',
         }}
         onClick={(e) => e.stopPropagation()}
-        onKeyDown={handleKeyDown}
       >
         <input
           ref={inputRef}

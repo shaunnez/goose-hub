@@ -76,8 +76,12 @@ export class BitbucketConnector {
     };
   }
 
-  private async bbFetch(path: string): Promise<Response> {
-    const url = `https://api.bitbucket.org/2.0${path}`;
+  private async bbFetch(pathOrUrl: string): Promise<Response> {
+    // Accept an absolute Bitbucket API URL (used to follow `next` cursors
+    // during pagination) or a relative path rooted at `/2.0/...`.
+    const url = pathOrUrl.startsWith('http')
+      ? pathOrUrl
+      : `https://api.bitbucket.org/2.0${pathOrUrl}`;
     const response = await this.fetchImpl(url, { headers: this.baseHeaders });
     if (response.status === 401) {
       throw new Error(`Bitbucket API authentication failed (401) for ${url}`);
@@ -210,16 +214,25 @@ export class BitbucketConnector {
     };
   }
 
-  /** List repos under a workspace. Used by the repo-matcher. */
+  /** List repos under a workspace. Used by the repo-matcher. Follows
+   * Bitbucket's `next` cursor so workspaces with more than 100 repos
+   * are fully enumerated. */
   async listWorkspaceRepos(workspace: string): Promise<BitbucketRepoRef[]> {
-    const res = await this.bbFetch(`/repositories/${workspace}?pagelen=100`);
-    if (res.status === 404) return [];
-    const body = (await res.json()) as {
-      values?: Array<{ slug?: string; name?: string }>;
-    };
-    return (body.values ?? [])
-      .filter((v) => typeof v.slug === 'string')
-      .map((v) => ({ workspace, repoSlug: v.slug as string }));
+    const refs: BitbucketRepoRef[] = [];
+    let url: string | null = `/repositories/${workspace}?pagelen=100`;
+    while (url != null) {
+      const res = await this.bbFetch(url);
+      if (res.status === 404) return refs;
+      const body = (await res.json()) as {
+        values?: Array<{ slug?: string }>;
+        next?: string;
+      };
+      for (const v of body.values ?? []) {
+        if (typeof v.slug === 'string') refs.push({ workspace, repoSlug: v.slug });
+      }
+      url = typeof body.next === 'string' ? body.next : null;
+    }
+    return refs;
   }
 }
 
