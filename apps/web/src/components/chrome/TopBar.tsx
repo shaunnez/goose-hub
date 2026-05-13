@@ -1,6 +1,7 @@
 import { CaptureModal } from '@/components/ui/CaptureModal';
-import { Plus, Search, Terminal } from 'lucide-react';
+import { Plus, ScrollText, Search } from 'lucide-react';
 import { useState } from 'react';
+import { ChangelogModal } from './ChangelogModal';
 
 interface TopBarProps {
   breadcrumb?: React.ReactNode;
@@ -8,6 +9,7 @@ interface TopBarProps {
 
 export function TopBar({ breadcrumb }: TopBarProps) {
   const [showCapture, setShowCapture] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
 
   return (
     <>
@@ -17,6 +19,16 @@ export function TopBar({ breadcrumb }: TopBarProps) {
       >
         <div className="text-[12.5px] text-fg-2 min-w-0 truncate">{breadcrumb}</div>
         <span className="grow" />
+        <button
+          type="button"
+          data-testid="changelog-button"
+          onClick={() => setShowChangelog(true)}
+          title="What shipped in the last 7 days"
+          className="flex items-center gap-2 h-7 px-2.5 rounded-md text-[12px] text-fg-2 border border-line bg-bg hover:bg-bg-elev cursor-pointer"
+        >
+          <ScrollText size={13} />
+          <span>Changelog</span>
+        </button>
         <button
           type="button"
           data-testid="capture-button"
@@ -38,6 +50,7 @@ export function TopBar({ breadcrumb }: TopBarProps) {
         </button>
       </header>
       <CaptureModal open={showCapture} onClose={() => setShowCapture(false)} />
+      <ChangelogModal open={showChangelog} onClose={() => setShowChangelog(false)} />
     </>
   );
 }
