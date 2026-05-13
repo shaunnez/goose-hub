@@ -24,7 +24,13 @@ import {
   totalWorldHeight,
 } from '../lib/layout';
 import { facingFromMovement, pathLength, planWalk } from '../lib/pathfinding';
-import { queueOptionalPngAssets } from './asset-loader';
+import { queueVerifiedPngAssets } from './asset-loader';
+
+/** Verified PNG assets to queue in preload (probed by the React mount). */
+interface VerifiedAsset {
+  key: string;
+  url: string;
+}
 import {
   TEXTURE_KEYS,
   ensureOfficeTextures,
@@ -75,6 +81,7 @@ export class OfficeScene extends Phaser.Scene {
   private floorContainers: Phaser.GameObjects.Container[] = [];
   private currentFloorIndex = 0;
   private resizeListener?: () => void;
+  private verifiedAssets: VerifiedAsset[] = [];
 
   constructor() {
     super({ key: 'OfficeScene' });
@@ -85,8 +92,17 @@ export class OfficeScene extends Phaser.Scene {
     return this.emitter;
   }
 
+  /**
+   * Inject the list of PixelLab PNGs that the React mount has confirmed exist
+   * on disk. Called before adding the scene to the Game so they're queued in
+   * `preload`. Empty list → procedural textures are the sole source.
+   */
+  setVerifiedAssets(entries: readonly VerifiedAsset[]): void {
+    this.verifiedAssets = entries.slice();
+  }
+
   preload(): void {
-    queueOptionalPngAssets(this);
+    queueVerifiedPngAssets(this, this.verifiedAssets);
   }
 
   create(): void {
@@ -103,6 +119,11 @@ export class OfficeScene extends Phaser.Scene {
     });
 
     this.scale.on('resize', this.handleResize, this);
+
+    // Signal the React mount that the scene is fully wired and safe to push
+    // initial data into. Emitted on our own emitter (not `this.events`) so
+    // listeners attached pre-boot still receive it.
+    this.emitter.emit('ready');
   }
 
   shutdown(): void {

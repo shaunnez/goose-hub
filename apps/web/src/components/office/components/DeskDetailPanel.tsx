@@ -37,11 +37,10 @@ export function DeskDetailPanel({ payload, onClose }: DeskDetailPanelProps) {
         onClick={onClose}
         className="fixed inset-0 z-30 bg-black/30"
       />
-      <dialog
-        open
+      <aside
         aria-label={`Issue ${payload.externalId}`}
         data-testid="office-desk-detail"
-        className="fixed top-0 right-0 z-40 h-full w-[320px] flex flex-col border-l border-line bg-bg-elev shadow-2xl m-0 p-0"
+        className="fixed top-0 right-0 z-40 h-full w-[320px] flex flex-col border-l border-line bg-bg-elev shadow-2xl"
       >
         <header className="flex items-center gap-2 px-4 py-3 border-b border-line">
           <span className="font-mono text-[12px] text-fg-3 tabular-nums">
@@ -72,7 +71,7 @@ export function DeskDetailPanel({ payload, onClose }: DeskDetailPanelProps) {
             Open full detail →
           </Link>
         </div>
-      </dialog>
+      </aside>
     </>
   );
 }

@@ -14,6 +14,7 @@ import Phaser from 'phaser';
 import { useEffect, useRef } from 'react';
 import type { DeskClickPayload, FloorChangePayload, OfficeProject } from '../game/OfficeScene';
 import { OfficeScene } from '../game/OfficeScene';
+import { probeOfficePngAssets } from '../game/asset-loader';
 import type { AgentPlacement } from '../lib/agent-positions';
 
 interface OfficeGameMountProps {
@@ -43,6 +44,10 @@ export function OfficeGameMount({
   const initialProjectsRef = useRef(projects);
   const initialPlacementsRef = useRef(placements);
   const initialActiveSlugRef = useRef(activeProjectSlug);
+  // Always-fresh slug ref so the projects effect can pan without listing
+  // activeProjectSlug as a dep (which would trigger applyProjects rebuilds
+  // on every floor navigation — see Codex P1 review on PR #765).
+  const activeSlugRef = useRef(activeProjectSlug);
 
   // Keep the latest callbacks in refs so the scene listeners (set up once)
   // always invoke the current React handlers.
@@ -57,52 +62,78 @@ export function OfficeGameMount({
     const container = containerRef.current;
     if (container == null) return;
 
-    if (cancelled) return;
-    const scene = new OfficeScene();
-    sceneRef.current = scene;
-    const game = new Phaser.Game({
-      type: Phaser.AUTO,
-      parent: container,
-      backgroundColor: '#0d0a13',
-      scale: {
-        mode: Phaser.Scale.RESIZE,
-        width: container.clientWidth || 800,
-        height: container.clientHeight || 480,
-      },
-      scene: [scene],
-      pixelArt: true,
-      banner: false,
-    });
-    gameRef.current = game;
-    const onDesk = (p: DeskClickPayload) => onDeskClickRef.current(p);
-    const onFloor = (p: FloorChangePayload) => onFloorChangeRef.current(p);
-    // Wait for scene `create` so the emitter is ready.
-    scene.events.once('create', () => {
+    let cleanup: (() => void) | undefined;
+    void (async () => {
+      // Probe for PixelLab PNGs first; the scene queues only verified assets
+      // in preload() to avoid Phaser's noisy 404 console.errors.
+      const verified = await probeOfficePngAssets();
+      if (cancelled || containerRef.current == null) return;
+      const scene = new OfficeScene();
+      scene.setVerifiedAssets(verified);
+      sceneRef.current = scene;
+      const game = new Phaser.Game({
+        type: Phaser.AUTO,
+        parent: container,
+        backgroundColor: '#0d0a13',
+        scale: {
+          mode: Phaser.Scale.RESIZE,
+          width: container.clientWidth || 800,
+          height: container.clientHeight || 480,
+        },
+        scene: [scene],
+        pixelArt: true,
+        banner: false,
+      });
+      gameRef.current = game;
+      // Dev-only debug hook so e2e screenshot tests + manual debugging can
+      // push events into the scene without going through Phaser hit-testing.
+      // Stripped at build time when import.meta.env.DEV is false.
+      if (import.meta.env.DEV) {
+        (window as unknown as { __officeScene?: OfficeScene }).__officeScene = scene;
+      }
+      const onDesk = (p: DeskClickPayload) => onDeskClickRef.current(p);
+      const onFloor = (p: FloorChangePayload) => onFloorChangeRef.current(p);
+      // Attach desk/floor listeners on the scene's own emitter (a class field,
+      // safe to subscribe to immediately) and push initial data once the
+      // scene signals it's `create`-complete by emitting `'ready'`.
       scene.events_().on('desk-click', onDesk);
       scene.events_().on('floor-change', onFloor);
-      // Initial push from refs so the boot effect has no React-state deps.
-      scene.applyProjects(initialProjectsRef.current);
-      scene.applyPlacements(initialPlacementsRef.current);
-      const initialSlug = initialActiveSlugRef.current;
-      if (initialSlug != null) scene.panToProject(initialSlug);
-    });
+      scene.events_().once('ready', () => {
+        // Initial push from refs so the boot effect has no React-state deps.
+        scene.applyProjects(initialProjectsRef.current);
+        scene.applyPlacements(initialPlacementsRef.current);
+        const initialSlug = initialActiveSlugRef.current;
+        if (initialSlug != null) scene.panToProject(initialSlug);
+      });
+      cleanup = () => {
+        scene.events_().off('desk-click', onDesk);
+        scene.events_().off('floor-change', onFloor);
+        game.destroy(true);
+        sceneRef.current = null;
+        gameRef.current = null;
+      };
+    })();
 
     return () => {
       cancelled = true;
-      scene.events_().off('desk-click', onDesk);
-      scene.events_().off('floor-change', onFloor);
-      game.destroy(true);
-      sceneRef.current = null;
-      gameRef.current = null;
+      cleanup?.();
     };
   }, []);
 
-  // Push project list updates. NOTE: do NOT include activeProjectSlug here
-  // — applyProjects is a full-rebuild that destroys every sprite, so it must
-  // only run when the project list itself changes. Camera pans live in their
-  // own effect below.
+  // Keep the activeSlugRef current so the projects effect can read it
+  // without listing it as a dep (would force a full rebuild on floor nav).
+  useEffect(() => {
+    activeSlugRef.current = activeProjectSlug;
+  }, [activeProjectSlug]);
+
+  // Push project list updates. NOTE: do NOT include activeProjectSlug in the
+  // deps — applyProjects is a full-rebuild that destroys every sprite, so it
+  // must only run when the project list itself changes. We re-pan the camera
+  // here after the rebuild because applyProjects snaps to floor 0 by default,
+  // which would clobber the URL-driven activeProjectSlug otherwise.
   useEffect(() => {
     sceneRef.current?.applyProjects(projects);
+    if (activeSlugRef.current != null) sceneRef.current?.panToProject(activeSlugRef.current);
   }, [projects]);
 
   // Push placement updates.

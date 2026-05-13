@@ -1,20 +1,26 @@
 // Asset loader: prefers PNGs from /public/office/<key>.png when present,
 // otherwise lets the procedural texture generator (textures.ts) take over.
 //
-// This lets `pnpm gen:office-assets` (which runs PixelLab) progressively
-// upgrade the visual quality of the Office tab without any code changes.
+// We probe each candidate URL with a `fetch` HEAD before handing it to
+// Phaser's loader. Phaser's loader logs `console.error('Failed to process
+// file…')` on every 404 and there's no clean public hook to silence it —
+// pre-flighting via fetch keeps the console clean when no PixelLab assets
+// have been generated (the common case in dev / CI).
+//
+// `pnpm gen:office-assets` writes PNGs that this loader will then pick up
+// automatically on the next page load.
 
 import type Phaser from 'phaser';
 import { TEXTURE_KEYS } from './textures';
 
 const ASSET_BASE = '/office';
 
-/**
- * Map of texture-key → relative URL under /public/office/. The loader fires a
- * HEAD-style preload for each; missing files fail silently and the procedural
- * generator fills the gap.
- */
-function pngManifest(): Array<{ key: string; url: string }> {
+interface AssetEntry {
+  key: string;
+  url: string;
+}
+
+function pngManifest(): AssetEntry[] {
   return [
     { key: TEXTURE_KEYS.floorTile, url: `${ASSET_BASE}/floor-tile.png` },
     { key: TEXTURE_KEYS.floorTileAlt, url: `${ASSET_BASE}/floor-tile-alt.png` },
@@ -31,19 +37,37 @@ function pngManifest(): Array<{ key: string; url: string }> {
 }
 
 /**
- * Queues optional PNG loads in `scene.preload()`. Errors are swallowed so a
- * missing asset is a no-op, not a scene crash.
+ * HEAD-probe each candidate PNG and return only those that exist. Runs once
+ * per scene boot, in parallel. Failures (network errors, 404s, no fetch in
+ * the runtime) silently fall back to procedural textures.
  */
-export function queueOptionalPngAssets(scene: Phaser.Scene): void {
+export async function probeOfficePngAssets(): Promise<AssetEntry[]> {
+  if (typeof fetch === 'undefined') return [];
   const manifest = pngManifest();
-  for (const { key, url } of manifest) {
+  const results = await Promise.all(
+    manifest.map(async (entry) => {
+      try {
+        const res = await fetch(entry.url, { method: 'HEAD', cache: 'no-store' });
+        if (!res.ok) return null;
+        // Vite's SPA fallback returns 200 with text/html for unknown paths,
+        // which would falsely "verify" missing PNGs. Require an image MIME.
+        const ct = res.headers.get('content-type') ?? '';
+        if (!ct.startsWith('image/')) return null;
+        return entry;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return results.filter((e): e is AssetEntry => e != null);
+}
+
+/**
+ * Queue the verified PNG bundle into the scene's loader. Assumes the caller
+ * already probed via `probeOfficePngAssets`.
+ */
+export function queueVerifiedPngAssets(scene: Phaser.Scene, entries: readonly AssetEntry[]): void {
+  for (const { key, url } of entries) {
     scene.load.image(key, url);
   }
-  // Suppress missing-file errors so procedural fallback runs cleanly.
-  scene.load.on('loaderror', (file: Phaser.Loader.File) => {
-    const url = typeof file.url === 'string' ? file.url : '';
-    if (url.startsWith(ASSET_BASE)) {
-      // expected when no /public/office/<file>.png is present
-    }
-  });
 }
