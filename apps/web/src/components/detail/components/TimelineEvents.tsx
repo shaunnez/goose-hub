@@ -60,6 +60,7 @@ import { QaCompletedEvent, QaFailedEvent } from './timeline/QaEvents';
 import { RetroCompletedEvent } from './timeline/RetroCompletedEvent';
 import { ReviewCompletedEvent } from './timeline/ReviewCompletedEvent';
 import { RunGroupWrapper } from './timeline/RunGroupWrapper';
+import { PhaseGroupWrapper } from './timeline/PhaseGroupWrapper';
 import {
   SwarmHeartbeatEvent,
   SwarmScoutCompletedEvent,
@@ -95,6 +96,19 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
         endedAt={item.endedAt}
         lastEventAt={item.lastEventAt}
         personaId={item.personaId}
+        context={context}
+        renderItem={renderTimelineItem}
+      />
+    );
+  }
+  if (item.kind === 'phase-group') {
+    return (
+      <PhaseGroupWrapper
+        key={`phase-group-${item.pipelineRunId}`}
+        pipelineRunId={item.pipelineRunId}
+        items={item.items}
+        startedAt={item.startedAt}
+        endedAt={item.endedAt}
         context={context}
         renderItem={renderTimelineItem}
       />

@@ -1,6 +1,6 @@
 import type { AgentEventDto } from '@/lib/types';
 import { describe, expect, it } from 'vitest';
-import { EVENT_KIND_LABEL, computeIsLive, computeIsWritePrdStuck, groupEvents } from './timeline';
+import { EVENT_KIND_LABEL, computeIsLive, computeIsWritePrdStuck, groupByDevPhase, groupEvents } from './timeline';
 
 function makeEvent(
   id: number,
@@ -190,6 +190,79 @@ describe('computeIsWritePrdStuck', () => {
         makeEvent(3, 'agent.run-failed', 'r1', { payload: { skill: 'write-prd' } }),
       ]),
     ).toBe(true);
+  });
+});
+
+describe('groupByDevPhase', () => {
+  it('returns items unchanged when no spec.completed event exists', () => {
+    const events: AgentEventDto[] = [
+      makeEvent(1, 'state.transitioned', null),
+      makeEvent(2, 'agent.run-started', 'run-abc', { payload: { skill: 'investigate' } }),
+      makeEvent(3, 'agent.run-completed', 'run-abc'),
+    ];
+    const grouped = groupEvents(events);
+    const result = groupByDevPhase(grouped);
+    expect(result).toHaveLength(grouped.length);
+    expect(result.some((item) => item.kind === 'phase-group')).toBe(false);
+  });
+
+  it('wraps spec.completed + WP runs + pipeline events into a phase-group', () => {
+    const PID = 'pipe-xyz-123';
+    const events: AgentEventDto[] = [
+      makeEvent(1, 'agent.run-started', PID, { payload: { skill: 'spec-author' } }),
+      makeEvent(2, 'spec.completed', PID, { payload: { pipelineRunId: PID, workItemId: 'github:org/repo#1' } }),
+      makeEvent(3, 'agent.run-completed', PID),
+      makeEvent(4, 'parallel-implement.iteration-started', null, {
+        payload: { pipelineRunId: PID, iteration: 1, wpCount: 1, wpIds: ['WP1'] },
+      }),
+      makeEvent(5, 'agent.run-started', `${PID}:wp:WP1:iter:1`, { payload: { skill: 'developer' } }),
+      makeEvent(6, 'parallel-implement.wp-started', `${PID}:wp:WP1:iter:1`, {
+        payload: { pipelineRunId: PID, wpId: 'WP1' },
+      }),
+      makeEvent(7, 'agent.run-completed', `${PID}:wp:WP1:iter:1`),
+      makeEvent(8, 'state.transitioned', null),
+    ];
+
+    const grouped = groupEvents(events);
+    const result = groupByDevPhase(grouped);
+
+    const phaseGroups = result.filter((item) => item.kind === 'phase-group');
+    expect(phaseGroups).toHaveLength(1);
+
+    const pg = phaseGroups[0] as Extract<typeof phaseGroups[0], { kind: 'phase-group' }>;
+    expect(pg.phase).toBe('dev');
+    expect(pg.pipelineRunId).toBe(PID);
+
+    const ungrouped = result.filter((item) => item.kind !== 'phase-group');
+    expect(ungrouped.some((item) => item.kind === 'event' && item.event.kind === 'state.transitioned')).toBe(true);
+  });
+
+  it('groups dev-review.* events with matching pipelineRunId into the phase-group', () => {
+    const PID = 'pipe-review-456';
+    const events: AgentEventDto[] = [
+      makeEvent(1, 'agent.run-started', PID, { payload: { skill: 'spec-author' } }),
+      makeEvent(2, 'spec.completed', PID, { payload: { pipelineRunId: PID } }),
+      makeEvent(3, 'agent.run-completed', PID),
+      makeEvent(4, 'dev-review.started', null, { payload: { pipelineRunId: PID } }),
+      makeEvent(5, 'dev-review.completed', null, { payload: { pipelineRunId: PID, verdict: 'proceed' } }),
+      makeEvent(6, 'state.transitioned', null),
+    ];
+
+    const grouped = groupEvents(events);
+    const result = groupByDevPhase(grouped);
+
+    const pg = result.find((item) => item.kind === 'phase-group') as Extract<
+      (typeof result)[0],
+      { kind: 'phase-group' }
+    >;
+    expect(pg).toBeDefined();
+
+    const phaseEventKinds = pg.items
+      .filter((item) => item.kind === 'event')
+      .map((item) => (item as Extract<typeof item, { kind: 'event' }>).event.kind);
+
+    expect(phaseEventKinds).toContain('dev-review.started');
+    expect(phaseEventKinds).toContain('dev-review.completed');
   });
 });
 
