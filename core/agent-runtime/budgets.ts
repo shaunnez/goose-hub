@@ -135,7 +135,7 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
   // Schema scouting should exit after locating a contract surface or declaring
   // uncertainty; longer runs tend to duplicate code-path/runtime scouts.
   'scout-schema': {
-    maxTurns: 10,
+    maxTurns: 20,
     maxBudgetUsd: 0.5,
     timeoutMs: 120_000,
     modelTier: 'haiku',

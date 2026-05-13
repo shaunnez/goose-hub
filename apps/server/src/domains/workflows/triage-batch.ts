@@ -292,7 +292,10 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
     }
 
     // Apply labels
-    await stateSource.setLabelInGroup(item.externalId, 'type', triageOutput.type);
+    // Only stamp type on first triage — never reclassify an already-typed item.
+    if (item.type == null) {
+      await stateSource.setLabelInGroup(item.externalId, 'type', triageOutput.type);
+    }
     await stateSource.setLabelInGroup(
       item.externalId,
       'priority',

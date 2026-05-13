@@ -43,29 +43,29 @@ function getNotApplicableReason(
   itemType: string | undefined,
   prdParent: string | undefined,
 ): string | undefined {
-  const isRawFeature = itemType === 'feature' && prdParent == null;
-  const isFromPrd = prdParent != null;
+  // const isRawFeature = itemType === 'feature' && prdParent == null;
+  // const isFromPrd = prdParent != null;
 
-  if (key === 'investigation') {
-    if (itemType !== 'bug') {
-      return itemType != null
-        ? `Investigation runs on bugs only — this is a ${itemType}`
-        : 'Investigation runs on bugs only';
-    }
-  }
+  // if (key === 'investigation') {
+  //   if (itemType !== 'bug') {
+  //     return itemType != null
+  //       ? `Investigation runs on bugs only — this is a ${itemType}`
+  //       : 'Investigation runs on bugs only';
+  //   }
+  // }
 
   if (key === 'grill' || key === 'prd') {
-    if (isFromPrd) return `Generated from PRD — see parent #${prdParent}`;
+    if (itemType === 'feature') return `Generated from PRD — see parent #${prdParent}`;
     if (itemType != null && itemType !== 'feature') {
       return `${itemType === 'bug' ? 'Bugs go straight to investigation' : `${itemType.charAt(0).toUpperCase()}${itemType.slice(1)}s skip`} the Discover lane`;
     }
   }
 
-  if (key === 'code' || key === 'qa' || key === 'review' || key === 'retrospective') {
-    if (isRawFeature) {
-      return 'This feature is decomposed into child issues — dev work happens there, not here';
-    }
-  }
+  // if (key === 'code' || key === 'qa' || key === 'review' || key === 'retrospective') {
+  //   if (isRawFeature) {
+  //     return 'This feature is decomposed into child issues — dev work happens there, not here';
+  //   }
+  // }
 
   return undefined;
 }

@@ -50,6 +50,7 @@ type SpecAuthorContext = {
   issueType: 'feature' | 'bug';
   scoutReports?: string;
   wave2Reports?: string;
+  investigationSynthesis?: string;
 };
 
 type SpecAttempt = {
@@ -165,9 +166,10 @@ export async function runSpecAuthorWorkflow(
 
     let scoutReports: string | undefined;
     let wave2Reports: string | undefined;
+    let investigationSynthesis: string | undefined;
 
     if (latestInv != null) {
-      const payload = latestInv.payload as { investigationRunId?: string };
+      const payload = latestInv.payload as { investigationRunId?: string; investigate?: unknown };
       if (payload.investigationRunId) {
         const allReports = listScoutReportsForInvestigation(
           projectId,
@@ -178,6 +180,9 @@ export async function runSpecAuthorWorkflow(
         const wave2 = allReports.filter((r) => r.scoutSkill.startsWith('wave2-'));
         if (wave1.length > 0) scoutReports = JSON.stringify(wave1);
         if (wave2.length > 0) wave2Reports = JSON.stringify(wave2);
+      }
+      if (payload.investigate != null) {
+        investigationSynthesis = JSON.stringify(payload.investigate);
       }
     }
 
@@ -193,6 +198,7 @@ export async function runSpecAuthorWorkflow(
       issueType: workItem.type === 'bug' ? 'bug' : 'feature',
       scoutReports,
       wave2Reports,
+      investigationSynthesis,
     };
 
     const runAttempt = async (

@@ -237,6 +237,54 @@ export async function dispatchResumeIssue(slug: string, issueNumber: number): Pr
     return;
   }
 
+  // needs-human: inspect last agent.run-failed to determine which skill to retry.
+  if (fromState === 'factory:needs-human') {
+    const allEvents = eventStore.replay({ projectId: slug, workItemId });
+    const lastRunFailed = [...allEvents].reverse().find((e) => e.kind === 'agent.run-failed');
+    const failedSkill = (lastRunFailed?.payload as { skill?: string } | undefined)?.skill;
+
+    if (failedSkill === 'spec-author') {
+      logger.info(
+        'dispatchResumeIssue: needs-human from spec-author failure, resuming to dev-ready',
+        { slug, issueNumber },
+      );
+      await source.forceState(workItemId, 'factory:dev-ready');
+      emitStateTransitionEvent({
+        projectId: slug,
+        workItemId,
+        from: fromState,
+        to: 'factory:dev-ready',
+        by: 'resume',
+      });
+      await dispatchFixIssue(slug, issueNumber);
+      return;
+    }
+
+    if (failedSkill === 'investigate') {
+      logger.info(
+        'dispatchResumeIssue: needs-human from investigate failure, resuming to investigating',
+        { slug, issueNumber },
+      );
+      await source.forceState(workItemId, 'factory:investigating');
+      emitStateTransitionEvent({
+        projectId: slug,
+        workItemId,
+        from: fromState,
+        to: 'factory:investigating',
+        by: 'resume',
+      });
+      await dispatchInvestigate(slug, issueNumber);
+      return;
+    }
+
+    logger.warn('dispatchResumeIssue: needs-human from unknown skill, cannot auto-resume', {
+      slug,
+      issueNumber,
+      failedSkill,
+    });
+    return;
+  }
+
   const entry = RESUME_WORKFLOWS[fromState];
   if (entry == null) {
     logger.warn('dispatchResumeIssue: no resume handler for state', {

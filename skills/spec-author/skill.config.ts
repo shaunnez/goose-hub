@@ -37,6 +37,8 @@ export const SpecAuthorContextSchema = z.object({
   scoutReports: z.string().optional(),
   /** JSON-stringified Wave-2 deep-agent reports (M19.01). Optional. */
   wave2Reports: z.string().optional(),
+  /** JSON-stringified InvestigateOutput (findings, keyFiles, confidence, openQuestions) from the synthesis step. Primary signal; scout reports are supporting evidence. */
+  investigationSynthesis: z.string().optional(),
   /** One-shot validation feedback when the workflow retries a mechanically invalid spec. */
   repairFeedback: z.string().optional(),
 });
@@ -53,6 +55,7 @@ const config: SkillConfig = {
     'prd',
     'scoutReports',
     'wave2Reports',
+    'investigationSynthesis',
     'repairFeedback',
   ],
   /**

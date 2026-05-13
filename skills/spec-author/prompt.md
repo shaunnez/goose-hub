@@ -12,7 +12,8 @@ The `<task>` block contains:
 - `<issue_type>` — `feature` or `bug` (drives strictness of AC→Journey mapping)
 - `<worktree_path>` — absolute path to the checked-out worktree to consult
 - `<prd>` (optional) — copied from PRD issue (#313 lineage). Use as the source of `userJourneys` and `functionalRequirements`. When absent and `issueType: feature`, derive minimal journeys from the work item.
-- `<scout_reports>` (optional) — JSON-stringified Wave-1 scout reports (M19.01). When present, use them as primary evidence and **cite scout findings (file:line) for every claim**.
+- `<investigation_synthesis>` (optional) — JSON-stringified `InvestigateOutput` (`findings`, `keyFiles`, `confidence`, `openQuestions`) produced by the synthesis step of the investigate workflow. **Read this first.** It is the distilled signal: use `findings` to understand the root cause or intent, `keyFiles` to orient your architecture section, and `openQuestions` to flag risks. When present, treat it as authoritative; use scout reports only for file:line citations.
+- `<scout_reports>` (optional) — JSON-stringified Wave-1 scout reports (M19.01). When present, use them for file:line citations to support claims from the synthesis. When `<investigation_synthesis>` is absent, use them as primary evidence.
 - `<wave2_reports>` (optional) — JSON-stringified Wave-2 deep-agent reports (interface-designer artefacts, risk-analyst register).
 - `<repair_feedback>` (optional) — validator errors from a prior attempt. When present, return a complete corrected JSON object and address every listed error.
 
@@ -81,9 +82,15 @@ You must run constraint inventory for every:
 
 #### AC → Journey → Verification map
 
-For `issueType: feature` every AC must either:
-- have `journeyRef` pointing at a journey, AND optional `stepIdx` matching a step in that journey, OR
-- declare `crossCutting: true` (e.g. an architectural AC that doesn't sit on the user path).
+For `issueType: feature`:
+
+**Coverage is per-step, not per-journey.** For every journey in `userJourneys`, for every step in `journey.steps`, you MUST write at least one AC where:
+- `journeyRef` equals that journey's `id` (exact string match), AND
+- `stepIdx` equals that step's `idx` (exact integer match).
+
+`stepIdx` is NOT optional for feature specs — every step needs its own AC. The validator checks the inverse: it iterates every step and fails if no AC has matching `journeyRef` + `stepIdx`. An AC covering a journey without a `stepIdx` does NOT satisfy step coverage.
+
+ACs that don't sit on any user step (architectural, non-functional) must declare `crossCutting: true`.
 
 For `issueType: bug` the journey link is advisory; orphan ACs are accepted.
 
@@ -118,11 +125,11 @@ returning a complete `EngineeringSpecSchema` JSON object.
 
 Emit: `[decision] READ: Issue #<n> — <one-sentence summary>`
 
-### Step 2 — Read evidence (Wave reports OR manual investigation)
+### Step 2 — Read evidence (synthesis → scouts → manual)
 
-If `<scout_reports>` and/or `<wave2_reports>` are present, read them and cite them. Otherwise read the worktree directly to ground the spec in real code.
+If `<investigation_synthesis>` is present, read it first — it contains the pre-processed root cause (`findings`), relevant files (`keyFiles`), and unresolved gaps (`openQuestions`). Then use `<scout_reports>` / `<wave2_reports>` for specific file:line citations. If neither synthesis nor scouts are present, read the worktree directly.
 
-Emit: `[decision] READ: <wave-1 + wave-2 | manual> evidence — <one-sentence summary>`
+Emit: `[decision] READ: <synthesis + scouts | scouts only | manual> evidence — <one-sentence summary>`
 
 ### Step 3 — Constraint inventory
 
@@ -155,9 +162,16 @@ Group WPs into batches. WPs with no dependencies on each other can share a batch
 
 ### Step 7 — Acceptance criteria with verification commands
 
-For every functional requirement (or journey step), write at least one AC. Every AC has a `verifyCommand`. Mark `crossCutting: true` only for ACs that don't sit on a user journey (architectural / non-functional).
+For every step in every journey, write at least one AC with:
+- `journeyRef` = the journey's `id` (exact string)
+- `stepIdx` = the step's `idx` (exact integer)
+- `verifyCommand` = a single falsifiable shell command
 
-Emit: `[decision] PLAN: Wrote <N> falsifiable ACs`
+Before emitting, do a self-check: for each `journey.id` + `step.idx` pair in `userJourneys`, confirm at least one AC in your `acceptanceCriteria` array has matching `journeyRef` and `stepIdx`. If any step is uncovered, add the missing AC before finalising.
+
+Mark `crossCutting: true` only for ACs that genuinely don't sit on any journey step (architectural / non-functional).
+
+Emit: `[decision] PLAN: Wrote <N> falsifiable ACs covering <M> journey steps`
 
 ### Step 8 — Verification tooling and risk register
 
