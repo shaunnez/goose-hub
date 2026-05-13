@@ -10,20 +10,10 @@
  */
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { AdvisePRDOutputSchema } from '../../skills/advise-on-prd/schema.js';
-import { GrillMeOutputSchema } from '../../skills/grill-me/schema.js';
 import type { PRDOutput } from '../../skills/write-prd/schema.js';
-import { PRDOutputSchema } from '../../skills/write-prd/schema.js';
 import { ClaudeCliRuntime } from '../agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
-import { readPromptWithContext } from '../agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
-import {
-  resolveBudgetsForProject,
-  resolveGlobalSettingsForProject,
-} from '../agent-runtime/resolve-for-project.js';
-import { toJsonSchema } from '../agent-runtime/schema-bridge.js';
-import { selectPersona } from '../agent-runtime/select-persona.js';
 import { totalSpendForSkill as _totalSpendForSkill } from '../cost/repository.js';
 import { emitStateTransitionEvent } from '../event-stream/state-transition.js';
 import { eventStore } from '../event-stream/store.js';
@@ -32,6 +22,10 @@ import type { StateName } from '../state-machine/states.js';
 import type { StateSource, WorkItem } from '../state-source/interface.js';
 import type { ProjectConfig, StackConfig } from '../types.js';
 import { cleanupWorktree, createWorktree } from '../workspaces/worktree.js';
+import { runAdvisorReview } from './grill-and-prd/advisor-review.js';
+import { runGrillRound } from './grill-and-prd/grill-round.js';
+import { runPrdDraft } from './grill-and-prd/prd-draft.js';
+import { withManagedWorktree } from './grill-and-prd/worktree-lifecycle.js';
 
 export interface ProjectContextBundle {
   stackSummary: string;
@@ -201,38 +195,6 @@ export interface GrillAndPrdResult {
   prdOutput?: unknown;
 }
 
-const FALLBACK_GRILL_BUDGET = {
-  budgets: { maxTurns: 15, maxBudgetUsd: 0.2, timeoutMs: 300_000 },
-  modelOverride: 'sonnet',
-};
-const FALLBACK_PRD_BUDGET = {
-  budgets: { maxTurns: 40, maxBudgetUsd: 2.0, timeoutMs: 420_000 },
-  modelOverride: 'opus',
-};
-const FALLBACK_ADVISOR_BUDGET = {
-  budgets: { maxTurns: 15, maxBudgetUsd: 1.0, timeoutMs: 180_000 },
-  modelOverride: 'opus',
-};
-
-function safeResolveBudgets(
-  skill: string,
-  projectBudgets: ProjectConfig['budgets'] | undefined,
-  fallback: {
-    budgets: { maxTurns: number; maxBudgetUsd: number; timeoutMs: number };
-    modelOverride: string;
-  },
-  projectId?: string,
-): {
-  budgets: { maxTurns: number; maxBudgetUsd: number; timeoutMs: number };
-  modelOverride: string;
-} {
-  try {
-    return resolveBudgetsForProject(skill, projectBudgets, projectId ?? '');
-  } catch {
-    return fallback;
-  }
-}
-
 /**
  * Move the work item into `factory:gate-pending` and emit a `state.transitioned`
  * event. The legal-transition table does not allow `factory:grilling ->
@@ -390,12 +352,160 @@ export async function runGrillAndPrdWorkflow(
     await stateSource.forceState(workItem.externalId, 'factory:needs-human');
     return { phase: 'needs-human' };
   }
-  const expandedRepoPath = localRepoPath.startsWith('~/')
-    ? join(process.env.HOME ?? '/root', localRepoPath.slice(2))
-    : localRepoPath;
-  let worktreePath: string;
+
+  // Deferred result variables — all grill-phase exits set these so the finally
+  // block always fires before we return or fall through to write-prd.
+  let grillPhaseReturn: GrillAndPrdResult | null = null;
+  let refinedIntentForPrd: string | null = null;
+
+  // Augment priorReplies with crystallizations from the event store. Hoisted
+  // outside try/finally so the post-finally write-prd call can re-augment.
+  const augmentedPriorReplies = augmentPriorRepliesWithCrystallizations(
+    priorReplies,
+    projectId,
+    workItem.id,
+  );
+
   try {
-    worktreePath = createWorktreeFn(expandedRepoPath, workflowRunId);
+    await withManagedWorktree(
+      localRepoPath,
+      workflowRunId,
+      async (worktreePath) => {
+        const roundNumber =
+          augmentedPriorReplies.filter(
+            (r) => r.role === 'agent' && !r.content.startsWith('<!-- factory:prd -->'),
+          ).length + 1;
+
+        const grillRunId = childRunId('grill-me');
+
+        const outcome = await runGrillRound({
+          workItem: {
+            id: workItem.id,
+            title: workItem.title,
+            body: workItem.body,
+            externalId: workItem.externalId,
+          },
+          projectId,
+          workItemId: workItem.id,
+          runId: grillRunId,
+          workflowRunId,
+          worktreePath,
+          priorReplies: augmentedPriorReplies,
+          projectContext: fullProjectContext,
+          projectConfig,
+          deps: { runtime: deps.runtime },
+        });
+
+        if (outcome.status === 'invalid' || outcome.status === 'failed') {
+          const errMsg =
+            outcome.status === 'invalid'
+              ? 'grill-me returned invalid output; waiting for human to resume grilling.'
+              : 'grill-me failed; waiting for human to resume grilling.';
+          eventStore.appendEvent({
+            kind: 'agent.run-failed',
+            projectId,
+            workItemId: workItem.id,
+            runId: grillRunId,
+            payload: { skill: 'grill-me', workflowRunId, error: outcome.error },
+          });
+          await stateSource.comment(workItem.externalId, `<!-- factory:system -->\n${errMsg}`);
+          await ensureGatePending(
+            stateSource,
+            workItem.externalId,
+            workItem.state,
+            projectId,
+            workItem.id,
+          );
+          grillPhaseReturn = { phase: 'grilling' };
+          return;
+        }
+
+        const grillOutput = outcome.output;
+
+        if (
+          typeof grillOutput.crystallizedDecision === 'string' &&
+          grillOutput.crystallizedDecision.trim() !== '' &&
+          roundNumber > 1
+        ) {
+          eventStore.appendEvent({
+            kind: 'grill.decision-crystallized',
+            projectId,
+            workItemId: workItem.id,
+            runId: workflowRunId,
+            payload: {
+              workflowRunId,
+              roundNumber: roundNumber - 1,
+              decision: grillOutput.crystallizedDecision.trim(),
+            },
+          });
+        }
+
+        reconcileDecisionSummaries(
+          grillRunId,
+          projectId,
+          workItem.id,
+          'grill-me',
+          grillOutput.decisionSummaries,
+        );
+
+        if (outcome.status === 'question') {
+          const recommendedBlock =
+            outcome.recommendedAnswer != null
+              ? `\n<!-- factory:recommended-answer -->\nRecommended: ${outcome.recommendedAnswer}`
+              : '';
+          await stateSource.comment(
+            workItem.externalId,
+            `<!-- factory:grill-question -->\n**Round ${roundNumber}** — ${outcome.question}${recommendedBlock}`,
+          );
+          await ensureGatePending(
+            stateSource,
+            workItem.externalId,
+            workItem.state,
+            projectId,
+            workItem.id,
+          );
+          eventStore.appendEvent({
+            kind: 'grill.question-posted',
+            projectId,
+            workItemId: workItem.id,
+            runId: workflowRunId,
+            payload: { workflowRunId, roundNumber, question: outcome.question },
+          });
+          grillPhaseReturn = { phase: 'grilling', questionPosted: outcome.question };
+          return;
+        }
+
+        // outcome.status === 'ready'
+        const forced = roundNumber > 7;
+        eventStore.appendEvent({
+          kind: 'grill.completed',
+          projectId,
+          workItemId: workItem.id,
+          runId: workflowRunId,
+          payload: {
+            workflowRunId,
+            refinedIntent: outcome.refinedIntent,
+            rounds: roundNumber,
+            ...(forced && { forced: true }),
+          },
+        });
+        refinedIntentForPrd = outcome.refinedIntent;
+      },
+      (err) => {
+        eventStore.appendEvent({
+          kind: 'agent.run-failed',
+          projectId,
+          workItemId: workItem.id,
+          runId: workflowRunId,
+          payload: {
+            skill: 'grill-and-prd',
+            workflowRunId,
+            error: `worktree cleanup failed: ${String(err)}`,
+          },
+        });
+      },
+      { createWorktreeImpl: createWorktreeFn, cleanupWorktreeImpl: cleanupWorktreeFn },
+    );
   } catch (err) {
     eventStore.appendEvent({
       kind: 'agent.run-failed',
@@ -420,274 +530,6 @@ export async function runGrillAndPrdWorkflow(
       workItem.id,
     );
     return { phase: 'grilling' };
-  }
-
-  // Deferred result variables — all grill-phase exits set these so the finally
-  // block always fires before we return or fall through to write-prd.
-  let grillPhaseReturn: GrillAndPrdResult | null = null;
-  let refinedIntentForPrd: string | null = null;
-
-  // Augment priorReplies with crystallizations from the event store. Hoisted
-  // outside try/finally so the post-finally write-prd call can re-augment.
-  const augmentedPriorReplies = augmentPriorRepliesWithCrystallizations(
-    priorReplies,
-    projectId,
-    workItem.id,
-  );
-
-  try {
-    // Round-number is 1-indexed and counts how many times grill-me has produced
-    // a question in the conversation so far, plus one (the round we're about to run).
-    const roundNumber =
-      augmentedPriorReplies.filter(
-        (r) => r.role === 'agent' && !r.content.startsWith('<!-- factory:prd -->'),
-      ).length + 1;
-
-    // ─── Step 1: grill-me ──────────────────────────────────────────────────
-    const grillerPersona = selectPersona(projectId, 'griller');
-    const grillBudget = safeResolveBudgets(
-      'grill-me',
-      projectConfig?.budgets,
-      FALLBACK_GRILL_BUDGET,
-      projectId,
-    );
-    const grillPrompt = readPromptWithContext('grill-me', projectId);
-    const grillJsonSchema = toJsonSchema(GrillMeOutputSchema);
-    const grillRunId = childRunId('grill-me');
-
-    let grillOutput: import('../../skills/grill-me/schema.js').GrillMeOutput | null = null;
-
-    try {
-      const grillResult = await runtime.run({
-        runId: grillRunId,
-        role: 'griller',
-        skill: 'grill-me',
-        workspaceDir: worktreePath,
-        context: {
-          projectId,
-          workItemId: workItem.id,
-          workItem: {
-            title: workItem.title,
-            body: workItem.body,
-            number: Number(workItem.externalId),
-          },
-          priorReplies: augmentedPriorReplies,
-          roundNumber,
-          projectContext: fullProjectContext,
-          worktreePath,
-        },
-        contextAllowlist: [
-          'workItem',
-          'priorReplies',
-          'roundNumber',
-          'projectContext',
-          'worktreePath',
-        ],
-        freshContext: false,
-        toolBundles: ['read'],
-        toolExtras: [],
-        ...grillBudget,
-        personaId: grillerPersona.personaId,
-        appendSystemPrompt: grillPrompt,
-        outputJsonSchema: grillJsonSchema,
-        extraEventPayload: { roundNumber, workflowRunId },
-      });
-
-      const parsed = GrillMeOutputSchema.safeParse(grillResult.output);
-      if (!parsed.success) {
-        eventStore.appendEvent({
-          kind: 'agent.run-failed',
-          projectId,
-          workItemId: workItem.id,
-          runId: grillRunId,
-          payload: { skill: 'grill-me', workflowRunId, error: parsed.error.message },
-        });
-        await stateSource.comment(
-          workItem.externalId,
-          '<!-- factory:system -->\ngrill-me returned invalid output; waiting for human to resume grilling.',
-        );
-        await ensureGatePending(
-          stateSource,
-          workItem.externalId,
-          workItem.state,
-          projectId,
-          workItem.id,
-        );
-        grillPhaseReturn = { phase: 'grilling' };
-      } else {
-        grillOutput = parsed.data;
-      }
-    } catch (err) {
-      eventStore.appendEvent({
-        kind: 'agent.run-failed',
-        projectId,
-        workItemId: workItem.id,
-        runId: grillRunId,
-        payload: { skill: 'grill-me', workflowRunId, error: String(err) },
-      });
-      await stateSource.comment(
-        workItem.externalId,
-        '<!-- factory:system -->\ngrill-me failed; waiting for human to resume grilling.',
-      );
-      await ensureGatePending(
-        stateSource,
-        workItem.externalId,
-        workItem.state,
-        projectId,
-        workItem.id,
-      );
-      grillPhaseReturn = { phase: 'grilling' };
-    }
-
-    if (grillOutput != null) {
-      // Persist the crystallized decision from the previous Q+A round (if present).
-      // roundNumber is the current round; the crystallizedDecision describes round N-1.
-      if (
-        typeof grillOutput.crystallizedDecision === 'string' &&
-        grillOutput.crystallizedDecision.trim() !== '' &&
-        roundNumber > 1
-      ) {
-        eventStore.appendEvent({
-          kind: 'grill.decision-crystallized',
-          projectId,
-          workItemId: workItem.id,
-          runId: workflowRunId,
-          payload: {
-            workflowRunId,
-            roundNumber: roundNumber - 1,
-            decision: grillOutput.crystallizedDecision.trim(),
-          },
-        });
-      }
-
-      // Emit any decision summaries the griller produced this round.
-      reconcileDecisionSummaries(
-        grillRunId,
-        projectId,
-        workItem.id,
-        'grill-me',
-        grillOutput.decisionSummaries,
-      );
-
-      // Hard cap at round 7: if the griller still hasn't declared readyForPRD,
-      // force the workflow forward so we don't loop indefinitely.
-      let grillCompletedEmitted = false;
-      if (!grillOutput.readyForPRD && roundNumber > 7) {
-        const forcedRefinedIntent =
-          grillOutput.refinedIntent.trim() !== '' ? grillOutput.refinedIntent : workItem.body;
-        eventStore.appendEvent({
-          kind: 'grill.completed',
-          projectId,
-          workItemId: workItem.id,
-          runId: workflowRunId,
-          payload: {
-            workflowRunId,
-            refinedIntent: forcedRefinedIntent,
-            rounds: roundNumber,
-            forced: true,
-          },
-        });
-        grillCompletedEmitted = true;
-        grillOutput = { ...grillOutput, refinedIntent: forcedRefinedIntent, readyForPRD: true };
-      }
-
-      if (!grillOutput.readyForPRD) {
-        // Defensively pick the first question even though the skill is supposed
-        // to ask exactly one. Empty `questions` with readyForPRD:false is a skill
-        // contract violation — escalate to the human.
-        const questionEntry = grillOutput.questions[0];
-        if (questionEntry == null || questionEntry.text.trim() === '') {
-          eventStore.appendEvent({
-            kind: 'agent.run-failed',
-            projectId,
-            workItemId: workItem.id,
-            runId: grillRunId,
-            payload: {
-              skill: 'grill-me',
-              workflowRunId,
-              error: 'grill-me returned readyForPRD:false with no questions',
-            },
-          });
-          await stateSource.comment(
-            workItem.externalId,
-            '<!-- factory:system -->\ngrill-me returned no questions; waiting for human to resume grilling.',
-          );
-          await ensureGatePending(
-            stateSource,
-            workItem.externalId,
-            workItem.state,
-            projectId,
-            workItem.id,
-          );
-          grillPhaseReturn = { phase: 'grilling' };
-        } else {
-          // Prefix with the `<!-- factory:grill-question -->` HTML marker so the
-          // Grill chat tab in the UI can distinguish agent questions from user
-          // replies. The marker is invisible in rendered Markdown.
-          // Append the recommended answer using `<!-- factory:recommended-answer -->`
-          // so the UI can parse and render it as a clickable pill.
-          const recommendedBlock =
-            questionEntry.recommendedAnswer != null
-              ? `\n<!-- factory:recommended-answer -->\nRecommended: ${questionEntry.recommendedAnswer}`
-              : '';
-          await stateSource.comment(
-            workItem.externalId,
-            `<!-- factory:grill-question -->\n**Round ${roundNumber}** — ${questionEntry.text}${recommendedBlock}`,
-          );
-          await ensureGatePending(
-            stateSource,
-            workItem.externalId,
-            workItem.state,
-            projectId,
-            workItem.id,
-          );
-
-          eventStore.appendEvent({
-            kind: 'grill.question-posted',
-            projectId,
-            workItemId: workItem.id,
-            runId: workflowRunId,
-            payload: { workflowRunId, roundNumber, question: questionEntry.text },
-          });
-
-          grillPhaseReturn = { phase: 'grilling', questionPosted: questionEntry.text };
-        }
-      } else {
-        // readyForPRD === true — the griller is done. Emit completion (unless
-        // already emitted by the round-7 forced cap above) and proceed to write-prd.
-        if (!grillCompletedEmitted) {
-          eventStore.appendEvent({
-            kind: 'grill.completed',
-            projectId,
-            workItemId: workItem.id,
-            runId: workflowRunId,
-            payload: {
-              workflowRunId,
-              refinedIntent: grillOutput.refinedIntent,
-              rounds: roundNumber,
-            },
-          });
-        }
-
-        refinedIntentForPrd = grillOutput.refinedIntent;
-      }
-    }
-  } finally {
-    try {
-      cleanupWorktreeFn(workflowRunId);
-    } catch (err) {
-      eventStore.appendEvent({
-        kind: 'agent.run-failed',
-        projectId,
-        workItemId: workItem.id,
-        runId: workflowRunId,
-        payload: {
-          skill: 'grill-and-prd',
-          workflowRunId,
-          error: `worktree cleanup failed: ${String(err)}`,
-        },
-      });
-    }
   }
 
   if (grillPhaseReturn != null) {
@@ -743,10 +585,6 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
     priorReplies,
   } = input;
 
-  // ─── Step 2: write-prd ──────────────────────────────────────────────────
-  // Transition into prd-drafting. Only `factory:grilling` legally targets
-  // `factory:prd-drafting`; if we entered here from `factory:gate-pending`
-  // (e.g. user replied while we were waiting), force the state.
   try {
     if (workItem.state === 'factory:grilling') {
       await stateSource.transitionState(
@@ -761,86 +599,35 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
     await stateSource.forceState(workItem.externalId, 'factory:prd-drafting');
   }
 
-  const prdPersona = selectPersona(projectId, 'prd-writer');
-  const prdBudget = safeResolveBudgets(
-    'write-prd',
-    projectConfig?.budgets,
-    FALLBACK_PRD_BUDGET,
-    projectId,
-  );
-  const prdPrompt = readPromptWithContext('write-prd', projectId);
-  const prdJsonSchema = toJsonSchema(PRDOutputSchema);
   const prdRunId = `${workflowRunId}:write-prd`;
 
-  let prdOutput: PRDOutput;
+  const prdDraftOutcome = await runPrdDraft({
+    workItem,
+    projectId,
+    workItemId: workItem.id,
+    runId: prdRunId,
+    workflowRunId,
+    refinedIntent,
+    fullProjectContext,
+    projectConfig,
+    priorReplies,
+    priorPrd,
+    humanConcerns,
+    deps: { runtime },
+  });
 
-  try {
-    const prdResult = await runtime.run({
-      runId: prdRunId,
-      role: 'prd-writer',
-      skill: 'write-prd',
-      context: {
-        projectId,
-        workItemId: workItem.id,
-        workItem: {
-          title: workItem.title,
-          body: workItem.body,
-          number: Number(workItem.externalId),
-        },
-        refinedIntent,
-        priority: workItem.priority,
-        projectContext: fullProjectContext,
-        ...(priorReplies != null ? { priorReplies } : {}),
-        ...(priorPrd != null ? { priorPrd } : {}),
-        ...(humanConcerns != null ? { humanConcerns } : {}),
-      },
-      contextAllowlist: [
-        'workItem.title',
-        'workItem.body',
-        'workItem.number',
-        'refinedIntent',
-        'priority',
-        'projectContext',
-        'priorReplies',
-        'priorPrd',
-        'humanConcerns',
-      ],
-      freshContext: true,
-      toolBundles: ['read', 'core'],
-      toolExtras: [],
-      ...prdBudget,
-      personaId: prdPersona.personaId,
-      appendSystemPrompt: prdPrompt,
-      outputJsonSchema: prdJsonSchema,
-      extraEventPayload: { workflowRunId },
-    });
-
-    const parsed = PRDOutputSchema.safeParse(prdResult.output);
-    if (!parsed.success) {
-      eventStore.appendEvent({
-        kind: 'agent.run-failed',
-        projectId,
-        workItemId: workItem.id,
-        runId: prdRunId,
-        payload: { skill: 'write-prd', workflowRunId, error: parsed.error.message },
-      });
-      // Leave state as factory:prd-drafting so dispatchResumeIssue can re-enter
-      // via the existing prd-drafting resume handler (forces → grilling).
-      return { phase: 'needs-human' };
-    }
-    prdOutput = parsed.data;
-  } catch (err) {
+  if (prdDraftOutcome.status === 'invalid' || prdDraftOutcome.status === 'failed') {
     eventStore.appendEvent({
       kind: 'agent.run-failed',
       projectId,
       workItemId: workItem.id,
       runId: prdRunId,
-      payload: { skill: 'write-prd', workflowRunId, error: String(err) },
+      payload: { skill: 'write-prd', workflowRunId, error: prdDraftOutcome.error },
     });
-    // Leave state as factory:prd-drafting so dispatchResumeIssue can re-enter
-    // via the existing prd-drafting resume handler (forces → grilling).
     return { phase: 'needs-human' };
   }
+
+  let prdOutput = prdDraftOutcome.prdOutput;
 
   reconcileDecisionSummaries(
     prdRunId,
@@ -850,110 +637,52 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
     prdOutput.decisionSummaries,
   );
 
-  // ─── Step 3: advise-on-prd (conditional) ────────────────────────────────
-  let advisorConcerns: string[] | null = null;
-  const advisorEligibleByPriority =
-    workItem.priority === 'high' || workItem.priority === 'critical';
-  const advisorBudget = safeResolveBudgets(
-    'advise-on-prd',
-    projectConfig?.budgets,
-    FALLBACK_ADVISOR_BUDGET,
+  const advisorRunId = `${workflowRunId}:advise-on-prd`;
+
+  const advisorOutcome = await runAdvisorReview({
+    workItem,
     projectId,
-  );
-  const globalSettings = resolveGlobalSettingsForProject(projectId, projectConfig?.budgets);
-  const perAdvisorMaxUsd = globalSettings.perAdvisorMaxUsd ?? Number.POSITIVE_INFINITY;
-  const advisorSpentUsd = totalSpendForSkill(projectId, 'advise-on-prd');
-  const advisorBudgetAvailable =
-    advisorSpentUsd + advisorBudget.budgets.maxBudgetUsd <= perAdvisorMaxUsd;
+    workItemId: workItem.id,
+    runId: advisorRunId,
+    workflowRunId,
+    prdOutput,
+    projectConfig,
+    totalSpendForSkill,
+    deps: { runtime },
+  });
 
-  if (!advisorEligibleByPriority) {
+  let advisorConcerns: string[] | null = null;
+
+  if (advisorOutcome.status === 'skipped') {
     eventStore.appendEvent({
       kind: 'prd.advisor-skipped',
       projectId,
       workItemId: workItem.id,
       runId: workflowRunId,
-      payload: { workflowRunId, reason: 'priority' },
+      payload: { workflowRunId, reason: advisorOutcome.reason },
     });
-  } else if (!advisorBudgetAvailable) {
+  } else if (advisorOutcome.status === 'invalid' || advisorOutcome.status === 'failed') {
     eventStore.appendEvent({
-      kind: 'prd.advisor-skipped',
+      kind: 'agent.run-failed',
       projectId,
       workItemId: workItem.id,
-      runId: workflowRunId,
-      payload: { workflowRunId, reason: 'budget' },
+      runId: advisorRunId,
+      payload: { skill: 'advise-on-prd', workflowRunId, error: advisorOutcome.error },
     });
+    await stateSource.forceState(workItem.externalId, 'factory:needs-human');
+    return { phase: 'needs-human' };
   } else {
-    // The advisor uses the same `prd-writer` role (advisor mode).
-    const advisorPersona = selectPersona(projectId, 'prd-writer');
-    const advisorPrompt = readPromptWithContext('advise-on-prd', projectId);
-    const advisorJsonSchema = toJsonSchema(AdvisePRDOutputSchema);
-    const advisorRunId = `${workflowRunId}:advise-on-prd`;
-
-    try {
-      const advisorResult = await runtime.run({
-        runId: advisorRunId,
-        role: 'prd-writer',
-        skill: 'advise-on-prd',
-        context: { projectId, workItemId: workItem.id, prdOutput, priority: workItem.priority },
-        contextAllowlist: ['prdOutput', 'priority'],
-        freshContext: true,
-        toolBundles: ['read', 'core'],
-        toolExtras: [],
-        ...advisorBudget,
-        personaId: advisorPersona.personaId,
-        appendSystemPrompt: advisorPrompt,
-        outputJsonSchema: advisorJsonSchema,
-        extraEventPayload: { workflowRunId },
-      });
-
-      const parsed = AdvisePRDOutputSchema.safeParse(advisorResult.output);
-      if (!parsed.success) {
-        eventStore.appendEvent({
-          kind: 'agent.run-failed',
-          projectId,
-          workItemId: workItem.id,
-          runId: advisorRunId,
-          payload: { skill: 'advise-on-prd', workflowRunId, error: parsed.error.message },
-        });
-        // Fail loud — do not silently continue with un-revised PRD when the
-        // advisor produced malformed output. Human triage required.
-        await stateSource.forceState(workItem.externalId, 'factory:needs-human');
-        return { phase: 'needs-human' };
-      }
-
-      const advisor = parsed.data;
-      advisorConcerns = advisor.concerns.length > 0 ? advisor.concerns : null;
-
-      // Shallow merge revised sections over the PRD. Schema invariant
-      // already guarantees `revisedSections` is empty on `approve`.
-      if (Object.keys(advisor.revisedSections).length > 0) {
-        prdOutput = {
-          ...prdOutput,
-          ...(advisor.revisedSections as unknown as Partial<typeof prdOutput>),
-        };
-      }
-
-      reconcileDecisionSummaries(
-        advisorRunId,
-        projectId,
-        workItem.id,
-        'advise-on-prd',
-        advisor.decisionSummaries,
-      );
-    } catch (err) {
-      eventStore.appendEvent({
-        kind: 'agent.run-failed',
-        projectId,
-        workItemId: workItem.id,
-        runId: advisorRunId,
-        payload: { skill: 'advise-on-prd', workflowRunId, error: String(err) },
-      });
-      await stateSource.forceState(workItem.externalId, 'factory:needs-human');
-      return { phase: 'needs-human' };
-    }
+    prdOutput = advisorOutcome.prdOutput;
+    advisorConcerns = advisorOutcome.concerns;
+    reconcileDecisionSummaries(
+      advisorRunId,
+      projectId,
+      workItem.id,
+      'advise-on-prd',
+      advisorOutcome.decisionSummaries,
+    );
   }
 
-  // ─── Step 4: post final PRD and transition to prd-review ────────────────
   const concernsBlock =
     advisorConcerns != null && advisorConcerns.length > 0
       ? `\n\n## Advisor concerns\n${advisorConcerns.map((c) => `- ${c}`).join('\n')}`
