@@ -1,6 +1,6 @@
 import type { AgentEventDto } from '@/lib/types';
 import { describe, expect, it } from 'vitest';
-import { computeIsLive, computeIsWritePrdStuck, groupEvents } from './timeline';
+import { EVENT_KIND_LABEL, computeIsLive, computeIsWritePrdStuck, groupEvents } from './timeline';
 
 function makeEvent(
   id: number,
@@ -190,5 +190,24 @@ describe('computeIsWritePrdStuck', () => {
         makeEvent(3, 'agent.run-failed', 'r1', { payload: { skill: 'write-prd' } }),
       ]),
     ).toBe(true);
+  });
+});
+
+describe('EVENT_KIND_LABEL — dev-review kinds', () => {
+  const DEV_REVIEW_KINDS = [
+    'dev-review.started',
+    'dev-review.completed',
+    'dev-review.failed',
+    'dev-review.error',
+    'dev-review.budget-skipped',
+    'dev-review.response-started',
+    'dev-review.response-completed',
+    'dev-review.response-failed',
+  ] as const;
+
+  it.each(DEV_REVIEW_KINDS)('has a label for %s', (kind) => {
+    expect(EVENT_KIND_LABEL[kind]).toBeDefined();
+    expect(typeof EVENT_KIND_LABEL[kind]).toBe('string');
+    expect(EVENT_KIND_LABEL[kind].length).toBeGreaterThan(0);
   });
 });

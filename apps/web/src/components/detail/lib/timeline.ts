@@ -81,6 +81,14 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'parallel-implement.wp-timeout': 'Work package timed out',
   'parallel-implement.wp-commit-failed': 'Work package commit failed',
   'parallel-implement.exhausted': 'Parallel implement exhausted',
+  'dev-review.started': 'Dev review started',
+  'dev-review.completed': 'Dev review completed',
+  'dev-review.failed': 'Dev review failed',
+  'dev-review.error': 'Dev review error',
+  'dev-review.budget-skipped': 'Dev review budget skipped',
+  'dev-review.response-started': 'Dev review response started',
+  'dev-review.response-completed': 'Dev review response completed',
+  'dev-review.response-failed': 'Dev review response failed',
 };
 
 export function formatSkillName(skill: string | null): string {
