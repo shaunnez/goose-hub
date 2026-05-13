@@ -32,6 +32,63 @@ a change in code without changing this file is a bug.
 
 ---
 
+## 1.5 Ownership invariant (read this first)
+
+**The Phaser office is a visualisation layer only.**
+
+The canonical sources of truth remain, unchanged:
+
+- WorkItem state on the source-of-truth backend (GitHub Issues, indexed in SQLite).
+- `factory:*` state labels.
+- Orchestration events on the SSE `/events` stream.
+- Persona routing, budgets, and any other operational state — all server-side.
+
+The office:
+
+- **Reads** orchestration truth (work items + events + labels).
+- **Derives** placements, tickets, and choreography intents from that truth.
+- **Renders** those derivations as personas, tickets, rooms, animations, overlays.
+
+The office **never**:
+
+- Mutates a `factory:*` label.
+- Writes to the WorkItem store.
+- Posts a GitHub comment, opens an issue, edits a body.
+- Holds any state that another system would treat as authoritative.
+
+### Sprite ownership
+
+`PersonaSprite` and `TicketSprite` are **visual projections only.**
+They expose properties (position, attached desk, indicator, badge counters)
+that describe what they currently render. They do not expose methods that
+mutate workflow state. A click on either may emit a scene event that React
+forwards to a workflow-aware handler (e.g. open the detail panel) — the scene
+itself does not initiate a transition.
+
+### Movement ownership rules
+
+When a WorkItem is actively being carried or worked by a visible persona,
+the `TicketSprite` follows the `PersonaSprite`'s rendered movement
+(see §5.3 carry conventions).
+
+When a WorkItem is:
+
+- queued at a room doorway,
+- passing through a sealed slot (Library envelope-out, QA input/output, Review door),
+- represented as a verdict scroll or scout-report envelope,
+- mid-merge celebration,
+- resting on the Done shelf,
+
+…the `TicketSprite` owns its own rendered movement. No persona drives it.
+This is the "ticket as autonomous prop" case: a verdict scroll emerging from
+the QA output slot is not carried by any goose.
+
+In every case the **rendered** movement is derived from real WorkItem state,
+labels, and orchestration events. No Phaser sprite owns workflow state or
+mutates kanban state.
+
+---
+
 ## 2. Coordinate system & conventions
 
 | Concept              | Value                                                            |
@@ -79,12 +136,24 @@ Outer walls at tx = 0 and tx = 79
 | Tile rows | Pixel rows  | Purpose                                                                 |
 | --------- | ----------- | ----------------------------------------------------------------------- |
 | `ty=0`    | `py=0..15`  | Top exterior wall                                                       |
-| `ty=1..3` | `py=16..63` | Banner zone — project name, floor identity, hero-ticket codename pops   |
+| `ty=1..3` | `py=16..63` | Banner zone — three cells (see below)                                    |
 | `ty=4..6` | `py=64..111`| **Main corridor** — east-west walking lane; queue stacks live here      |
 | `ty=7`    | `py=112..127`| Room ceiling row — door gaps and slot gaps live here                   |
 | `ty=8..21`| `py=128..351`| Room interiors                                                         |
 | `ty=22`   | `py=352..367`| Lower utility strip (reserved; no v1 furniture)                        |
 | `ty=23`   | `py=368..383`| Bottom exterior wall                                                   |
+
+### Banner zone (ty=1..3) — three cells
+
+| Cell | Tile range (tx) | Pixel range (px) | Content                                           |
+| ---- | --------------- | ---------------- | ------------------------------------------------- |
+| L    | `tx=1..26`      | `16..431`        | **Project Name** (left-aligned, 14px JetBrains Mono) |
+| C    | `tx=27..52`     | `432..847`       | **Mode** badge (`interactive` / `supervised` / `autonomous`) — center-aligned, 12px, mode-tinted background |
+| R    | `tx=53..78`     | `848..1263`      | **Active Hero Ticket** — `#1234 — title` truncated; right-aligned, 12px; blank when no hero |
+
+The hero-ticket cell updates as a side-effect of hero promotion (§11); other
+cells are static per session. All three are rendered as `Phaser.GameObjects.Text`
+on the canvas-hud layer (`z=60`).
 
 ### Horizontal zones (left to right)
 
@@ -156,9 +225,13 @@ The Library is the Wave-1 scout holdout and is fully enclosed inside the larger 
 | Active states (v1)           | `factory:research-pending`, `factory:research-complete`, `factory:investigating`, `factory:investigation-complete` |
 | Hero promotion               | scout wave fan-out — entire wave promotes to hero until `swarm.wave-completed` |
 
-**Scout count is configurable.** v1 visualises 3 of up to 6 (canonical) plus 0..2 Wave-2.
-Anchor table is pre-allocated so the configurable upper bound does not require
-geometry changes:
+**Scout count: hardcoded to 3 in v1.** Canonical maximum is 6 plus 0..2 Wave-2;
+those anchors are pre-allocated so the configurable upper bound does not
+require geometry changes when v1 is followed by a slice that scales up. A
+v1 implementation must instantiate exactly 3 scout sprites and never read a
+configurable value for this count — that's a deliberate constraint to keep the
+slice readable and to defer the "configurable per-project scout count" decision
+to a later spec.
 
 | Scout slot | Tile center  | Pixel center   |
 | ---------- | ------------ | -------------- |
@@ -197,24 +270,39 @@ the chamber to the corridor. Personas inside QA never leave the room
 literal counterpart of the QA-skill `contextAllowlist` and the holdout-context
 validator.
 
-| Field                  | Value                                                                        |
-| ---------------------- | ---------------------------------------------------------------------------- |
-| Interior tx            | `46..57` (12 tiles wide)                                                     |
-| Interior ty            | `8..21` (14 tiles tall)                                                      |
-| Pixel bounds           | `(736, 128) → (927, 351)`                                                    |
-| North wall             | `ty=7` — opaque, contains two slots only                                     |
-| **Input slot**         | `ty=7`, `tx=49..50` — slot **center: (792, 112)**. Tickets enter here.       |
-| **Output slot**        | `ty=7`, `tx=53..54` — slot **center: (856, 112)**. Verdict scrolls exit here.|
-| Retry-counter overlay  | corridor side, tile `(49, 6)` → world **(784, 96)** — numeric badge above input slot |
-| Tier-disagreement light| corridor side, tile `(53, 6)` → world **(848, 96)** — pulses on `qa.tier-disagreement`; idle in v1 |
+Each slot has **three distinct anchors** (this naming applies to every slot
+in the building — see §9):
+
+- `queueAnchor` — corridor-side, on the walking lane (`py=88`). Where the queue stack visually sits and where a ticket pauses in the corridor before entering / after leaving the slot.
+- `exteriorAnchor` — corridor-side, immediately adjacent to the wall (`py=96`). The "lip" of the slot on the outside.
+- `interiorAnchor` — inside the room, one tile south of the wall (`py=136`). The "lip" of the slot on the inside.
+
+A ticket traverses a slot by tweening `queueAnchor → exteriorAnchor →
+interiorAnchor` (inbound) or the reverse (outbound). The exterior and interior
+anchors only differ from the queue anchor by ~25 px each, but distinguishing
+them lets the slot "punching through" animation read cleanly.
+
+| Field                       | Value                                                                        |
+| --------------------------- | ---------------------------------------------------------------------------- |
+| Interior tx                 | `46..57` (12 tiles wide)                                                     |
+| Interior ty                 | `8..21` (14 tiles tall)                                                      |
+| Pixel bounds                | `(736, 128) → (927, 351)`                                                    |
+| North wall                  | `ty=7` — opaque, contains two slots only                                     |
+| **Input slot**              | `ty=7`, `tx=49..50`                                                          |
+| — queue anchor              | `(792, 88)`                                                                  |
+| — exterior anchor           | `(792, 96)`                                                                  |
+| — interior anchor           | `(792, 136)`                                                                 |
+| **Output slot**             | `ty=7`, `tx=53..54`                                                          |
+| — queue anchor              | `(856, 88)` (used only for verdict-scroll exit pause; no queue stack here)   |
+| — exterior anchor           | `(856, 96)`                                                                  |
+| — interior anchor           | `(856, 136)`                                                                 |
+| Retry-counter overlay       | corridor side, tile `(49, 6)` → world **(784, 96)** — numeric badge above input slot |
+| Tier-disagreement light     | corridor side, tile `(53, 6)` → world **(848, 96)** — anchor reserved; not wired in v1 (see §16) |
 | QA stations (3 silhouettes) | tile `(48, 14.5)`, `(52, 14.5)`, `(56, 14.5)` → **(768, 232)**, **(832, 232)**, **(896, 232)** |
-| Inbound-conveyor anchor| just inside input slot, tile `(49.5, 8.5)` → **(792, 136)** — ticket enters here, conveyor animates south to the active station |
-| Outbound-scroll anchor | just inside output slot, tile `(53.5, 8.5)` → **(856, 136)** — verdict scroll generates here, animates north through the slot |
-| Queue zone             | corridor strip `tx=48..51, ty=4..6` — stack anchor **(792, 88)** (input side only) |
-| Click zone             | rect `tile (46..57, 7..9)` → world `(736..927, 112..159)` — covers north wall and slots; opens "QA status" panel |
-| Seal indicator         | wall texture rendered with frosted-blue tint; persona silhouettes inside dimmed 40% |
-| Active states (v1)     | `factory:needs-qa`                                                           |
-| Hero promotion         | ticket promotes to hero during `qa.functional-failed` cinematic (verdict scroll exit + corridor pulse + reroute) |
+| Click zone                  | rect `tile (46..57, 7..9)` → world `(736..927, 112..159)` — covers north wall and slots; opens "QA status" panel |
+| Seal indicator              | wall texture rendered with frosted-blue tint; persona silhouettes inside dimmed 40% |
+| Active states (v1)          | `factory:needs-qa`                                                           |
+| Hero promotion              | ticket promotes to hero during `qa.functional-failed` cinematic (verdict scroll exit + corridor pulse + reroute) |
 
 ### 4.5 Review chamber — `room.review`
 
@@ -251,7 +339,7 @@ review-convergence events:
 | Door (north wall)      | `ty=7`, `tx=74..75` — door **center: (1192, 112)**                            |
 | Seal                   | open                                                                         |
 | Shelf row              | tile row `ty=10`, slot centers at `tx=71.5, 73, 74.5, 76, 77.5` → **(1144, 168)**, **(1168, 168)**, **(1192, 168)**, **(1216, 168)**, **(1240, 168)** |
-| Shelf semantics        | most recent merged ticket appears at **slot 3 (1192, 168)**; existing tickets shift outward; overflow off the ends fades after 5 s |
+| Shelf semantics        | most recent merged ticket appears at **slot 3 (1192, 168)**; existing tickets shift outward; tickets pushed off either end **fade outward over 800 ms** then despawn |
 | Done-day badge         | tile `(74, 18)` → world **(1184, 296)** — small counter ("3 today") below shelves |
 | Queue zone             | none (no items wait to enter; merge celebration delivers them directly)      |
 | Click zone             | rect `tile (70..78, 10..13)` → world `(1120..1263, 160..223)` — opens "Recent merges" panel |
@@ -299,18 +387,27 @@ just north of the slot (corridor side). The ticket transfers through the slot;
 the persona does not enter the chamber. The slot exterior anchor is the
 queue-zone stack anchor (`(792, 88)` for QA).
 
-### 5.3 Ticket carry conventions
+### 5.3 Ticket carry conventions & movement ownership
 
-| Carrier state | Ticket sprite position                                              |
-| ------------- | ------------------------------------------------------------------- |
-| Persona walking | offset `(+10, −12)` relative to persona container (above-right) — feels like the persona is holding it |
-| Persona seated at desk | snapped to desk's ticket-attach anchor (1 tile above desk top edge) |
-| In a queue stack | offset within the stack quad; stack determines render position |
-| In transit through a slot | tweened along the slot's inbound/outbound anchor line |
-| On Done shelf | snapped to shelf slot anchor                                       |
+See §1.5 for the foundational rule. The ownership detail per render state:
+
+| WorkItem situation                          | Movement owner    | Ticket sprite position                                              |
+| ------------------------------------------- | ----------------- | ------------------------------------------------------------------- |
+| being carried/worked by a visible persona   | `PersonaSprite`   | offset `(+10, −12)` relative to persona container (above-right) — ticket follows persona |
+| persona seated at desk                      | `PersonaSprite`   | snapped to desk's ticket-attach anchor (1 tile above desk top edge) |
+| queued at a room doorway                    | `TicketSprite`    | offset within the queue stack quad; stack determines render position |
+| passing through a sealed slot               | `TicketSprite`    | tweened along the slot's `queueAnchor → exteriorAnchor → interiorAnchor` line (or reverse) |
+| represented as a verdict scroll             | `TicketSprite`    | scroll-prop tween from interior anchor through slot to corridor    |
+| represented as a scout-report envelope      | `TicketSprite`    | envelope-prop tween from Library `envelope-out` slot to lead investigator desk |
+| mid-merge celebration                       | `TicketSprite`    | corridor → Done door → shelf slot                                  |
+| resting on Done shelf                       | `TicketSprite`    | snapped to shelf slot anchor                                       |
 
 Tickets are **never freely orphaned** in the middle of the floor. If no carrier
 exists, the ticket either belongs to a queue, a desk, a slot, or a shelf.
+
+Neither sprite class exposes mutators for workflow state. Both expose
+read-only properties describing their current rendered position, and a
+click-event channel that emits scene events for React to handle.
 
 ### 5.4 Pathfinding rules for v1
 
@@ -373,6 +470,13 @@ z-stack. The bridge between them is the scene emitter, unchanged.
 Each open-entry room (Triage, Investigation, Dev, QA-input, Review, but **not** Done)
 has a queue stack rendered at its corridor-side door / slot.
 
+The **queue anchor** is distinct from the **slot exterior anchor**:
+
+- queue anchor sits on the corridor walking lane (`py = 88`) — same `py` as walking personas; the stack reads as "items waiting in the hallway."
+- exterior anchor sits at the slot/door lip (`py = 96`) — immediately adjacent to the wall.
+
+Both anchors share the same `tx` (room door's tx); they differ only in `py`.
+
 | Property               | Value                                                                       |
 | ---------------------- | --------------------------------------------------------------------------- |
 | Stack zone shape       | 2 × 3 tiles centered on the door tx, occupying `ty=4..6`                    |
@@ -417,21 +521,32 @@ SlotSpec {
   side: 'north' | 'south' | 'east' | 'west'
   tileRange: [number, number]    // tx or ty inclusive endpoints along the side
   direction: 'inbound' | 'outbound' | 'bidirectional'
-  exteriorAnchor: Point          // pixel point on the corridor side
-  interiorAnchor: Point          // pixel point on the room side
+  queueAnchor: Point             // pixel point on the corridor walking lane (py=88 for north slots)
+  exteriorAnchor: Point          // pixel point at the slot lip on the corridor side
+  interiorAnchor: Point          // pixel point at the slot lip on the room side
   tint: 'frosted' | 'opaque'     // wall texture treatment around the slot
 }
 ```
 
+The three anchors are not interchangeable. A ticket traversing a slot
+**must** pass through all three positions sequentially; collapsing them to a
+single point breaks the "slot crossing" animation and removes the visual
+signal that the room boundary is meaningful.
+
 ### 9.2 v1 slot inventory
 
-| Slot id                          | Room          | Side  | Tile range  | Exterior anchor | Interior anchor | Direction   |
-| -------------------------------- | ------------- | ----- | ----------- | --------------- | --------------- | ----------- |
-| `library.envelope-out`           | Library       | south | `tx=17..18` | `(288, 200)`    | `(288, 224)`    | outbound    |
-| `library.envelope-in` (reserved) | Library       | south | `tx=17..18` | `(288, 200)`    | `(288, 224)`    | inbound (deferred — scouts emerge through walls in v1) |
-| `qa.input`                       | QA            | north | `tx=49..50` | `(792, 96)`     | `(792, 128)`    | inbound     |
-| `qa.output`                      | QA            | north | `tx=53..54` | `(856, 96)`     | `(856, 128)`    | outbound    |
-| `review.door`                    | Review        | north | `tx=63..64` | `(1016, 96)`    | `(1016, 128)`   | bidirectional (gated by door state) |
+| Slot id                          | Room          | Side  | Tile range  | Queue anchor    | Exterior anchor | Interior anchor | Direction   |
+| -------------------------------- | ------------- | ----- | ----------- | --------------- | --------------- | --------------- | ----------- |
+| `library.envelope-out`           | Library       | south | `tx=17..18` | n/a (no corridor on south side) | `(288, 200)` | `(288, 224)` | outbound    |
+| `library.envelope-in` (reserved) | Library       | south | `tx=17..18` | n/a             | `(288, 200)`    | `(288, 224)`    | inbound (deferred — scouts emerge through walls in v1) |
+| `qa.input`                       | QA            | north | `tx=49..50` | `(792, 88)`     | `(792, 96)`     | `(792, 136)`    | inbound     |
+| `qa.output`                      | QA            | north | `tx=53..54` | `(856, 88)`     | `(856, 96)`     | `(856, 136)`    | outbound    |
+| `review.door`                    | Review        | north | `tx=63..64` | `(1016, 88)`    | `(1016, 96)`    | `(1016, 136)`   | bidirectional (gated by door state) |
+
+For the Library `envelope-out` slot, the absence of a `queueAnchor` reflects
+that the slot opens south into the Investigation Lab interior, not into the
+corridor. Envelopes emitted from this slot travel directly to the lead
+investigator desk; no corridor pause.
 
 ### 9.3 FrostedRoom contract
 
@@ -510,6 +625,12 @@ performs the work.**
 
 ### 12.1 New: `lib/rooms.ts`
 
+**Single source of truth for all room-floor coordinates.** Scene and layer
+code consume this table and **must not duplicate coordinate literals.** A
+coordinate appearing in any `apps/web/src/components/office/{game,components}/`
+file that is not imported from `lib/rooms.ts` is a bug — see §18 acceptance
+criterion.
+
 Authoritative anchor table. Exports:
 
 - `ROOM_IDS = ['triage','investigation','dev','qa','review','done'] as const`
@@ -550,11 +671,38 @@ Authoritative anchor table. Exports:
 
 See §13 for the state → room mapping.
 
+### 12.6 New: `lib/persona-codenames.ts`
+
+Deterministic persona-codename derivation. Exports:
+
+- `CODENAME_POOL: readonly string[]` — local list of ~30 codenames (e.g.
+  "Grey Honker", "Cinder Drake"). Sourced from the canonical pool referenced
+  in operational-model §1A.
+- `codenameFor(seed: string): string` — deterministic hash of `seed` into
+  `CODENAME_POOL`. v1 callers pass `seed = "${projectSlug}:${externalId}"` to
+  derive a stable codename per work-item-instance until server-side
+  `personaId` is plumbed (see §16 still-open item 2 — now resolved here).
+
+This is a **visual-stability shim**, not a substitute for real persona
+routing. When the server starts emitting `personaId` on `WorkItemDto`, the
+scene switches its seed source; the codename list and hash function stay.
+
+### 12.7 Project selection lives in React
+
+`OfficeTab` selects `activeProject` before passing data to `OfficeGameMount`.
+`OfficeScene.applyProjects` receives **exactly one** `OfficeProject` in v1; it
+must not accept an array and silently drop the rest. The multi-project picker
+(if any) is React's concern, not Phaser's.
+
 ---
 
 ## 13. State → room mapping (v1)
 
 Single source of truth for "where does this work item live?"
+
+This table is **read-only** from the scene's perspective. The scene observes
+which state a work item is in and renders accordingly; it never writes to the
+state. See §1.5.
 
 | factory state                                                                                   | Room              | Indicator       | Notes                              |
 | ----------------------------------------------------------------------------------------------- | ----------------- | --------------- | ---------------------------------- |
@@ -595,6 +743,12 @@ contract: keep the sprite at its current room/desk and only swap the indicator.
 Per the slice plan, three orchestration lanes coexist:
 **critical**, **primary**, **ambient**. Each lane is bound to specific anchors
 and primitives in this floor.
+
+Every timeline below is **driven by real orchestration events** consumed
+from the SSE `/events` stream by `OfficeTab`, mapped to `ChoreographyIntent`s,
+and pushed into the scene as derived data (see §1.5). No timeline starts
+because of a scene-internal heuristic; no timeline writes back to workflow
+state on completion.
 
 | Lane     | Driver events                                              | Anchors used                                                         | Visual primitives                                              |
 | -------- | ---------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------- |
@@ -682,23 +836,26 @@ Out of scope for this floor spec:
 
 ---
 
-## 16. Open questions / follow-ups
+## 16. Resolved decisions & remaining open questions
 
-Resolve before Phase 2 begins:
+### Resolved (frozen for v1)
 
-1. **Floor banner content.** v1 single-project: just project name? Active milestone? Mode (interactive / supervised / autonomous)? Currently `ty=1..3` is reserved but not specified.
-2. **Persona codename source.** Op-model §1 references a 30-name codename pool. For v1 stand-in (`spriteId = projectSlug:externalId`), persona codename is decorative only — but the label still needs a string. Pull from a deterministic hash into a small name list, or omit codenames until server plumbs `personaId`?
-3. **Library scout count beyond 3.** Reserved anchor slots 4..6 are defined; the configurable cap and source-of-truth (per-project config? hardcoded?) is not.
-4. **QA tier-disagreement light.** Anchor reserved at `(848, 96)`; v1 wires the event or defers?
-5. **Done shelf overflow.** When more than 5 merged tickets fall into Done within the fade window, do older ones cascade off the ends visually or just instant-disappear? Suggested: fade-out over 800ms then despawn.
-6. **Resize behaviour.** At canvas widths &lt; 1280, the world is wider than the view. Default camera anchor `floor-overview` centers on `(640, 192)` — the floor reads left-clipped and right-clipped. Acceptable? Or auto-zoom-out to fit? Suggested: accept letterbox + center; user can `hero-ticket-follow` for narrative focus.
-7. **Banner & label fonts.** M17 uses `'JetBrains Mono, monospace'` system fallback. Spec assumes the same. Web font load is out of scope.
+1. **Banner content** — three cells: `Project Name | Mode | Active Hero Ticket`. See §3 banner-zone table.
+2. **Persona codename source** — deterministic hash of `"${projectSlug}:${externalId}"` into a local `CODENAME_POOL` of ~30 names. See §12.6 `lib/persona-codenames.ts`. Visual stand-in only; replaced when server plumbs `personaId`.
+3. **Library scout count** — hardcoded to 3 in v1. Anchors for 4..6 stay reserved. See §4.2.
+4. **Done shelf overflow** — tickets pushed off either end fade outward over 800 ms, then despawn. See §4.6.
+5. **Resize behaviour** — camera stays at `floor-overview` `(640, 192)` at zoom `1.0`. Accept letterbox / clipping at narrow viewports; user can switch to `hero-ticket-follow` for narrative focus. No auto-fit. See §6.
+
+### Still open (defer to Phase 2 or later)
+
+6. **QA tier-disagreement light wiring.** Anchor `(848, 96)` is reserved. Whether v1 wires the `qa.tier-disagreement` event to pulse it, or defers entirely, is unresolved. Suggested: defer to a post-v1 polish slice; v1 leaves the anchor unused.
+7. **Banner & label fonts.** M17 uses `'JetBrains Mono, monospace'` system fallback. Spec assumes the same. Web font loading is out of scope for v1 but will likely come up when atmospheric polish lands.
 
 ---
 
 ## 17. Out-of-band notes
 
-- This spec replaces — implicitly — the per-project-floor model from M17. The `applyProjects` API in `OfficeScene.ts` should accept a single `OfficeProject` (or the first of an array) and ignore the rest in v1. Cross-project navigation deferred per the slice plan.
+- This spec replaces — implicitly — the per-project-floor model from M17. **`OfficeTab` selects `activeProject` before passing data to `OfficeGameMount`. `OfficeScene.applyProjects` receives exactly one `OfficeProject` in v1.** Cross-project navigation is deferred per the slice plan (see §12.7).
 - The image-prompt for this board (`image-prompt.md`) was written before this spec. It is consistent with the layout above but does not commit to specific tile coordinates. When the image is regenerated, use the prompt **plus** the ASCII diagram in §3 as visual references.
 - The 12-panel storyboard in Board 03 (`03-ticket-lifecycle-storyboard/design-spec.md`, currently scaffolded) must align with the anchors in this spec. Phase 9 of the slice plan authors that board once the cinematic is real.
 
@@ -713,3 +870,6 @@ A future implementation of `lib/rooms.ts` satisfies this spec if and only if:
 - The lane / anchor mapping in §14 is the single source of truth used by the choreography player.
 - No furniture, anchor, or click zone appears in code that is not enumerated here.
 - No room from the operational-model canon outside the v1 six appears in code (Triage, Investigation+Library, Dev, QA, Review, Done).
+- **No coordinate literal appears in any file under `apps/web/src/components/office/{game,components}/` except via import from `lib/rooms.ts`.** Lint hint: `grep -rE '\b(1280|1016|856|792|568|312|280|232|88|112|136|168|200|232|280)\b' apps/web/src/components/office/{game,components}/ | grep -v -F 'rooms.ts'` should return only comments and asset-key strings.
+- **No scene method mutates workflow state.** No `OfficeScene`, layer, or sprite class issues a `fetch`, `postMessage`, or label write. Click events emit on the scene emitter; React handles workflow-aware side effects.
+- **`OfficeScene.applyProjects` accepts exactly one `OfficeProject`** in v1 (not an array). The mount and tab enforce single-project selection upstream.
