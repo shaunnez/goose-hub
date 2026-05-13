@@ -28,7 +28,7 @@ _Avoid_: "prompt", "template", "capability"
 One invocation of an AI agent with role, prompt, tool allowlist, budget, output schema. Produces JSON conforming to its skill schema.
 
 **Role**:
-A typed agent identity: Triager, Griller, PRD-Writer, Decomposer, Researcher, Investigator, Developer, QA, Reviewer, Retrospector, Advisor.
+A typed agent identity: Triager, Griller, PRD-Writer, Decomposer, Researcher, Investigator, Developer, Dev-Reviewer, QA, Reviewer, Retrospector, Auditor.
 
 **Persona**:
 A named instance of a Role with history and performance stats. Project-scoped. 3 seeded per role per project.
@@ -95,8 +95,6 @@ A self-contained, end-to-end feature folder. Includes only the surfaces it genui
 **Zod ↔ JSON Schema:** Spike at M4 (echo-test). Strategy: author in Zod, emit via `zod-to-json-schema`, pass to `--json-schema`. Fall back to Zod-only post-hoc validation if roundtrip is lossy.
 
 **Decision-summary events:** Emitted via PostToolUse hooks during the run — orchestrator synthesizes from tool call context. The agent does NOT call a `emit_decision_summary` tool.
-
-## Model Tier Registry
 
 ## Advisor Flow
 
@@ -169,8 +167,9 @@ type AdvisorVerdict =
 - `opus` → `claude-opus-4-7` (provider: claude)
 - `sonnet` → `claude-sonnet-4-6` (provider: claude)
 - `haiku` → `claude-haiku-4-5-20251001` (provider: claude)
-- `sonnet` → `gpt-5-codex` (provider: codex; added M19.10)
-- `haiku` → `gpt-5-codex-mini` (provider: codex; added M19.10)
+- `opus` → `gpt-5.5` (provider: codex; added M19.10)
+- `sonnet` → `gpt-5.4` (provider: codex; added M19.10)
+- `haiku` → `gpt-5.4-mini` (provider: codex; added M19.10)
 
 **Exported helpers:**
 - `defaultModelForTier(tier)` — head non-deprecated **claude** entry for the tier (back-compat default)
@@ -476,7 +475,7 @@ All cost logic lives in `core/cost/`: `extract.ts` (parsers), `repository.ts` (w
 
 **Disallowed key on holdout role:** emit one `tool.violation` event per key with `{ role, disallowedKey, runId }`. Non-holdout roles silently omit disallowed keys (matches pre-M8 behaviour). The violation event is the observable signal for the M8 exit criterion.
 
-**`HoldoutFallbackForbiddenError`** in `core/agent-runtime/fallback.ts`: typed error thrown when `withFallback()` would otherwise down-tier a QA or Reviewer primary failure. Workflow catch blocks detect the class and transition to `factory:needs-human`.
+**`HoldoutFallbackForbiddenError`** in `core/agent-runtime/interface.ts` (re-exported by `fallback.ts`): typed error thrown when `withFallback()` would otherwise down-tier a QA or Reviewer primary failure. Workflow catch blocks detect the class and transition to `factory:needs-human`.
 
 **Retry counter** in `core/retry/retry-counter.ts`: derived from event stream (`qa.completed` non-pass, `review.completed` `needs-fix`). No new DB table — consistent with stateless-orchestrator. `DEFAULT_MAX_RETRIES = 2`. Lives in `core/retry/` so both `slices/qa/` and `slices/review/` can import without violating slice-import rules. With `maxRetries=2`, second consecutive failure escalates (the just-appended event is included in the count by design — see `slices/retry-escalate/README.md`).
 
@@ -506,7 +505,7 @@ Both `target-projects/` and `skills/` are pnpm workspace packages (`@goose-hub/t
 
 **PreToolUse hook deployed once** to `~/.factory/hooks/` on first run (idempotent). Per-run identity carried in `FACTORY_RUN_ID` / `FACTORY_RUN_ALLOWLIST` env vars, not the hook path.
 
-**No `bash-denylist.ts`, no `interface.ts`** despite PLAN.md §6 listing them. The denylist is a constant in `sandbox.ts`; an interface module belongs only when a second tool-layer implementation exists (e.g. remote tool proxy).
+**No `bash-denylist.ts`** despite PLAN.md §6 listing it. The denylist is a constant in `sandbox.ts`. (`interface.ts` was added post-M10 as the canonical home for `AgentSpec`, `AgentRuntime`, `SkillConfig`, and `HoldoutFallbackForbiddenError` — the original note saying it didn't exist is stale.)
 
 ## Multi-project Loader and Per-project Scheduler (ADR 0021)
 
