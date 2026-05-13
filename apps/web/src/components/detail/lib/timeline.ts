@@ -205,7 +205,7 @@ export function groupByDevPhase(items: RenderItem[]): RenderItem[] {
   for (const item of items) {
     const pid = resolvedPipelineId(item);
     if (pid != null) {
-      pipelineItems.get(pid)!.push(item);
+      pipelineItems.get(pid)?.push(item);
     } else {
       ungrouped.push(item);
     }
