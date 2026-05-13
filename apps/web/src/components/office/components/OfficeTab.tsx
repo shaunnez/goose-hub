@@ -9,9 +9,12 @@
 import { fetchIssues, fetchProjects } from '@/lib/api';
 import type { WorkItemDto } from '@/lib/types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DeskClickPayload, FloorChangePayload, OfficeProject } from '../game/OfficeScene';
 import { placementsFromItems } from '../lib/agent-positions';
+import type { OrchestrationEvent, Timeline } from '../lib/choreography';
+import { LANE_FOR_EVENT, timelinesForEvent } from '../lib/choreography';
+import { ROOM_IDS } from '../lib/rooms';
 import { DeskDetailPanel } from './DeskDetailPanel';
 import { FloorIndicator } from './FloorIndicator';
 
@@ -31,6 +34,18 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
   const [activeSlug, setActiveSlug] = useState<string | null>(initialProjectSlug ?? null);
   const [floorIndex, setFloorIndex] = useState(0);
   const [deskPayload, setDeskPayload] = useState<DeskClickPayload | null>(null);
+
+  // Hero ticket ID is tracked in a ref (not state) so SSE handlers read the
+  // latest value without needing to be re-registered on every change.
+  const heroTicketIdRef = useRef<string | null>(null);
+  // Choreography bridge: set by OfficeGameMount once the scene is ready.
+  const choreographyRef = useRef<((timelines: Timeline[]) => void) | null>(null);
+  // Reverse lookup: internal workItemId (UUID) → office scene { projectSlug, externalId }.
+  // Allows SSE AgentEvent.workItemId to be mapped to the ${projectSlug}:${externalId}
+  // format used by PersonaLayer and TicketLayer as entity keys.
+  const workItemLookupRef = useRef<Map<string, { projectSlug: string; externalId: string }>>(
+    new Map(),
+  );
 
   const { data: projects = [] } = useQuery({
     queryKey: ['office-projects'],
@@ -85,18 +100,68 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
     return placementsFromItems(flat);
   }, [projects, itemsByProject]);
 
-  // SSE: invalidate the issues query when any state transitions so placements
-  // re-derive. Match the Board.tsx pattern of subscribing to the unfiltered
-  // /events stream when there's no single active project.
+  // Keep workItemLookupRef current whenever the issue cache refreshes.
+  useEffect(() => {
+    const map = new Map<string, { projectSlug: string; externalId: string }>();
+    for (const [projectSlug, items] of Object.entries(itemsByProject)) {
+      for (const item of items) {
+        map.set(item.id, { projectSlug, externalId: item.externalId });
+      }
+    }
+    workItemLookupRef.current = map;
+  }, [itemsByProject]);
+
+  // SSE: dual path — React Query invalidation (placements re-derive) + choreography.
+  // Subscribes to all event kinds listed in LANE_FOR_EVENT.
   useEffect(() => {
     if (typeof EventSource === 'undefined') return;
     const es = new EventSource('/events');
-    const onTransition = () => {
-      void queryClient.invalidateQueries({ queryKey: ['office-issues'] });
-    };
-    es.addEventListener('state.transitioned', onTransition);
+
+    const handlers = new Map<string, (e: MessageEvent) => void>();
+    for (const kind of Object.keys(LANE_FOR_EVENT) as Array<keyof typeof LANE_FOR_EVENT>) {
+      const handler = (e: MessageEvent) => {
+        // Invalidate issues on state transitions so placements re-derive.
+        if (kind === 'state.transitioned') {
+          void queryClient.invalidateQueries({ queryKey: ['office-issues'] });
+        }
+        // Normalize SSE AgentEvent → OrchestrationEvent.
+        // AgentEvent has: { workItemId (UUID), personaId (roster format), payload: {...} }.
+        // Office scene uses ${projectSlug}:${externalId} as entity keys.
+        let parsed: Record<string, unknown> = {};
+        try {
+          parsed = JSON.parse(e.data as string) as Record<string, unknown>;
+        } catch {
+          // malformed SSE data — treat as empty payload
+        }
+        const workItemId = typeof parsed.workItemId === 'string' ? parsed.workItemId : null;
+        const entry = workItemId ? workItemLookupRef.current.get(workItemId) : undefined;
+        const officeId = entry ? `${entry.projectSlug}:${entry.externalId}` : undefined;
+        // state.transitioned wraps { from, to, by } in payload; extract toState from payload.to.
+        const innerPayload =
+          typeof parsed.payload === 'object' && parsed.payload !== null
+            ? (parsed.payload as Record<string, unknown>)
+            : {};
+        const event: OrchestrationEvent = {
+          kind,
+          ticketId: officeId,
+          personaId: officeId,
+          toState: typeof innerPayload.to === 'string' ? innerPayload.to : undefined,
+          projectSlug: entry?.projectSlug,
+        };
+        const timelines = timelinesForEvent(event, {
+          hero: heroTicketIdRef.current,
+          rooms: ROOM_IDS,
+        });
+        if (timelines.length > 0) choreographyRef.current?.(timelines);
+      };
+      handlers.set(kind, handler);
+      es.addEventListener(kind, handler);
+    }
+
     return () => {
-      es.removeEventListener('state.transitioned', onTransition);
+      for (const [kind, handler] of handlers) {
+        es.removeEventListener(kind, handler);
+      }
       es.close();
     };
   }, [queryClient]);
@@ -108,6 +173,10 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
 
   const handleDeskClick = useCallback((payload: DeskClickPayload) => {
     setDeskPayload(payload);
+  }, []);
+
+  const handleHeroChanged = useCallback((ticketId: string | null) => {
+    heroTicketIdRef.current = ticketId;
   }, []);
 
   const handleFloorChange = useCallback((payload: FloorChangePayload) => {
@@ -146,6 +215,8 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
           activeProjectSlug={activeSlug}
           onDeskClick={handleDeskClick}
           onFloorChange={handleFloorChange}
+          choreographyRef={choreographyRef}
+          onHeroChanged={handleHeroChanged}
         />
       </Suspense>
       {projects.length > 0 && activeProject && (

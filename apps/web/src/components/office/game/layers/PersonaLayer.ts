@@ -13,8 +13,9 @@ import type { PersonaPlacement } from '../../lib/agent-positions';
 import { TILE_SIZE, floorOriginY } from '../../lib/layout';
 import { facingFromMovement, pathLength, planWalk } from '../../lib/pathfinding';
 import { roomDeskAnchors } from '../../lib/rooms';
+import type { IndicatorKind } from '../../lib/state-indicators';
 import { indicatorTextureKey, spriteTextureKeyForRole } from '../textures';
-import type { DeskClickPayload, OfficeProject } from './types';
+import type { DeskClickPayload, IntentResult, OfficeProject } from './types';
 
 const WALK_PIXELS_PER_MS = 0.35;
 const PERSONA_DEPTH = 30;
@@ -32,6 +33,8 @@ interface PersonaEntry {
   body: Phaser.GameObjects.Image;
   indicator: Phaser.GameObjects.Image;
   walkTween?: Phaser.Tweens.Tween | Phaser.Tweens.TweenChain;
+  /** Resolve function for an in-flight intent walk; called by cancelWalk(). */
+  walkResolve?: (result: IntentResult) => void;
   /** Codename label; only present when this persona is carrying the hero ticket. */
   label?: Phaser.GameObjects.Text;
 }
@@ -160,6 +163,153 @@ export class PersonaLayer {
     e.label = undefined;
   }
 
+  // ─── Intent-layer primitives (called by ChoreographyPlayer intents) ──────────
+
+  /**
+   * Intent primitive: walk the persona to the given room + desk slot via the
+   * path-planned route. Returns a promise that resolves when the walk completes
+   * or is cancelled. Called by the `walkToRoom` intent module.
+   */
+  walkToRoom(personaId: string, destRoomId: string, deskSlot: number): Promise<IntentResult> {
+    return new Promise<IntentResult>((resolve) => {
+      const entry = this.personas.get(personaId);
+      if (entry == null) {
+        resolve({ status: 'failed', reason: 'persona-not-found' });
+        return;
+      }
+      const floorIndex = entry.floorIndex;
+      const toAnchor = this.deskWorldPos(destRoomId, deskSlot, floorIndex);
+      if (toAnchor == null) {
+        resolve({ status: 'failed', reason: 'invalid-destination' });
+        return;
+      }
+      const toPos = { x: toAnchor.x, y: toAnchor.y - TILE_SIZE };
+      const fromPos = { x: entry.container.x, y: entry.container.y };
+      const segment = planWalk(fromPos, floorIndex, toPos, floorIndex);
+      const targets = segment.waypoints.slice(1);
+
+      const settle = (result: IntentResult) => {
+        entry.walkResolve = undefined;
+        resolve(result);
+      };
+
+      // Cancel any existing tween (including a previous intent walk).
+      if (entry.walkResolve) {
+        entry.walkResolve({ status: 'cancelled' });
+      }
+      if (entry.walkTween) {
+        entry.walkTween.stop();
+        entry.walkTween = undefined;
+      }
+
+      if (targets.length === 0) {
+        entry.roomId = destRoomId;
+        entry.deskSlot = deskSlot;
+        settle({ status: 'completed' });
+        return;
+      }
+
+      entry.walkResolve = settle;
+      const totalLen = pathLength(segment.waypoints);
+      const baseDuration = Math.max(150, totalLen / WALK_PIXELS_PER_MS);
+      const tweens: Phaser.Types.Tweens.TweenBuilderConfig[] = targets.map((next, i) => {
+        const prev = i === 0 ? fromPos : targets[i - 1];
+        const len = Math.abs(next.x - prev.x) + Math.abs(next.y - prev.y);
+        const dur = totalLen === 0 ? baseDuration : (len / totalLen) * baseDuration;
+        return {
+          targets: entry.container,
+          x: next.x,
+          y: next.y,
+          duration: dur,
+          ease: 'Linear',
+          onStart: () => {
+            entry.body.setFlipX(facingFromMovement(prev, next) === 'left');
+          },
+        };
+      });
+
+      entry.walkTween = this.scene.tweens.chain({
+        tweens,
+        onComplete: () => {
+          entry.body.setFlipX(false);
+          entry.roomId = destRoomId;
+          entry.deskSlot = deskSlot;
+          entry.walkTween = undefined;
+          this.restackAtSharedDesks();
+          settle({ status: 'completed' });
+        },
+      });
+    });
+  }
+
+  /** Intent primitive: cancel an in-flight walkToRoom or seat tween. */
+  cancelWalk(personaId: string): void {
+    const entry = this.personas.get(personaId);
+    if (entry == null) return;
+    if (entry.walkTween) {
+      entry.walkTween.stop();
+      entry.walkTween = undefined;
+    }
+    if (entry.walkResolve) {
+      entry.walkResolve({ status: 'cancelled' });
+      entry.walkResolve = undefined;
+    }
+  }
+
+  /**
+   * Intent primitive: seat the persona at a specific desk slot within their
+   * current room via a short tween. Called by the `attachToDesk` intent.
+   */
+  seat(personaId: string, deskSlot: number): Promise<IntentResult> {
+    return new Promise<IntentResult>((resolve) => {
+      const entry = this.personas.get(personaId);
+      if (entry == null || entry.roomId == null) {
+        resolve({ status: 'failed', reason: 'persona-not-found' });
+        return;
+      }
+      const toAnchor = this.deskWorldPos(entry.roomId, deskSlot, entry.floorIndex);
+      if (toAnchor == null) {
+        resolve({ status: 'failed', reason: 'invalid-desk' });
+        return;
+      }
+      const toPos = { x: toAnchor.x, y: toAnchor.y - TILE_SIZE };
+
+      const settle = (result: IntentResult) => {
+        entry.walkResolve = undefined;
+        resolve(result);
+      };
+
+      if (entry.walkResolve) entry.walkResolve({ status: 'cancelled' });
+      if (entry.walkTween) {
+        entry.walkTween.stop();
+        entry.walkTween = undefined;
+      }
+
+      entry.walkResolve = settle;
+      const tween = this.scene.tweens.add({
+        targets: entry.container,
+        x: toPos.x,
+        y: toPos.y,
+        duration: 300,
+        ease: 'Linear',
+        onComplete: () => {
+          entry.deskSlot = deskSlot;
+          entry.walkTween = undefined;
+          this.restackAtSharedDesks();
+          settle({ status: 'completed' });
+        },
+      });
+      entry.walkTween = tween as unknown as Phaser.Tweens.Tween;
+    });
+  }
+
+  /** Intent primitive: swap the indicator glyph (null → idle/coffee). */
+  setIndicator(personaId: string, glyph: IndicatorKind | null): void {
+    const entry = this.personas.get(personaId);
+    if (entry == null) return;
+    entry.indicator.setTexture(indicatorTextureKey(glyph ?? 'coffee'));
+  }
+
   // ─── private ─────────────────────────────────────────────────────────────
 
   private floorIndexFor(slug: string): number {
@@ -268,6 +418,11 @@ export class PersonaLayer {
       return;
     }
 
+    // Cancel any in-flight intent walk promise before overriding the tween.
+    if (entry.walkResolve) {
+      entry.walkResolve({ status: 'cancelled' });
+      entry.walkResolve = undefined;
+    }
     if (entry.walkTween) entry.walkTween.stop();
 
     const tweens: Phaser.Types.Tweens.TweenBuilderConfig[] = [];

@@ -15,8 +15,9 @@ import type { TicketPlacement } from '../../lib/agent-positions';
 import { floorOriginY } from '../../lib/layout';
 import { roomDeskAnchors, roomQueueAnchor, roomSlotAnchors } from '../../lib/rooms';
 import type { RoomId } from '../../lib/rooms';
+import type { IndicatorKind } from '../../lib/state-indicators';
 import { ticketCarryOffset } from '../../lib/ticket-carry';
-import { TEXTURE_KEYS } from '../textures';
+import { TEXTURE_KEYS, indicatorTextureKey } from '../textures';
 import type { PersonaLayer } from './PersonaLayer';
 import type { DeskClickPayload } from './types';
 
@@ -38,6 +39,8 @@ interface TicketEntry {
   shelfSlot: number | null;
   container: Phaser.GameObjects.Container;
   body: Phaser.GameObjects.Image;
+  /** Small indicator badge above the ticket body (hidden by default, shown by swapIndicator intent). */
+  indicator: Phaser.GameObjects.Image;
   hero: boolean;
   glow?: Phaser.GameObjects.Image;
 }
@@ -154,6 +157,7 @@ export class TicketLayer {
     if (this.heroTicketId != null) this.releaseHeroVisuals(this.heroTicketId);
 
     this.heroTicketId = ticketId;
+    this.emitter.emit('hero-changed', ticketId);
 
     const entry = this.tickets.get(ticketId);
     if (entry == null) return;
@@ -188,6 +192,7 @@ export class TicketLayer {
     this.heroTimer = null;
     this.releaseHeroVisuals(id);
     this.heroTicketId = null;
+    this.emitter.emit('hero-changed', null);
     this.deps.setHeroTicketCell(null);
   }
 
@@ -205,6 +210,18 @@ export class TicketLayer {
     }
   }
 
+  /** Intent primitive: swap the indicator glyph on a ticket (null → hidden). */
+  setIndicator(ticketId: string, glyph: IndicatorKind | null): void {
+    const entry = this.tickets.get(ticketId);
+    if (entry == null) return;
+    if (glyph == null) {
+      entry.indicator.setAlpha(0);
+    } else {
+      entry.indicator.setTexture(indicatorTextureKey(glyph));
+      entry.indicator.setAlpha(1);
+    }
+  }
+
   private spawn(p: TicketPlacement, floorIndex: number): void {
     const container = this.scene.add.container(0, 0);
     container.setDepth(TICKET_DEPTH);
@@ -213,6 +230,13 @@ export class TicketLayer {
     body.setOrigin(0.5, 0.5);
     this.applyPriorityTint(body, p.priority);
     container.add(body);
+
+    // Small indicator badge above the ticket body; hidden by default.
+    const indicator = this.scene.add.image(0, -9, TEXTURE_KEYS.indicatorCoffee);
+    indicator.setOrigin(0.5, 1);
+    indicator.setScale(0.6);
+    indicator.setAlpha(0);
+    container.add(indicator);
 
     container.setSize(14, 10);
     container.setInteractive(
@@ -255,6 +279,7 @@ export class TicketLayer {
       shelfSlot: p.shelfSlot,
       container,
       body,
+      indicator,
       hero: false,
     };
     this.tickets.set(p.ticketId, entry);

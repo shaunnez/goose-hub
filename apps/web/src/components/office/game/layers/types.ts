@@ -32,3 +32,14 @@ export interface VerifiedAsset {
   key: string;
   url: string;
 }
+
+// ─── Choreography intent result types ────────────────────────────────────────
+// Defined here (not in lib/) so PersonaLayer and TicketLayer can import them
+// without pulling Phaser into lib/.
+
+export type IntentStatus = 'pending' | 'running' | 'completed' | 'cancelled' | 'failed';
+
+export interface IntentResult {
+  status: IntentStatus;
+  reason?: string;
+}

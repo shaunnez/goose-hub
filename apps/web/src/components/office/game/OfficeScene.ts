@@ -13,8 +13,10 @@
 
 import Phaser from 'phaser';
 import type { PersonaPlacement, TicketPlacement } from '../lib/agent-positions';
+import type { Timeline } from '../lib/choreography';
 import { FLOOR_PIXEL_WIDTH, floorCenterY, totalWorldHeight } from '../lib/layout';
 import { queueVerifiedPngAssets } from './asset-loader';
+import { ChoreographyPlayer } from './choreography/ChoreographyPlayer';
 import { PersonaLayer } from './layers/PersonaLayer';
 import { RoomLayer } from './layers/RoomLayer';
 import { TicketLayer } from './layers/TicketLayer';
@@ -41,6 +43,7 @@ export class OfficeScene extends Phaser.Scene {
   private roomLayer!: RoomLayer;
   private personaLayer!: PersonaLayer;
   private ticketLayer!: TicketLayer;
+  private choreographyPlayer!: ChoreographyPlayer;
 
   constructor() {
     super({ key: 'OfficeScene' });
@@ -83,6 +86,13 @@ export class OfficeScene extends Phaser.Scene {
       personaLayer: this.personaLayer,
       setHeroTicketCell: (text) => this.roomLayer.setHeroTicketCell(text),
       getFloorIndex: (slug) => this.floorIndexFor(slug),
+    });
+
+    this.choreographyPlayer = new ChoreographyPlayer({
+      personaLayer: this.personaLayer,
+      ticketLayer: this.ticketLayer,
+      scene: this,
+      emitter: this.emitter,
     });
 
     this.input.keyboard?.on('keydown-UP', () => {
@@ -158,6 +168,10 @@ export class OfficeScene extends Phaser.Scene {
       projectSlug: project.slug,
       projectName: project.name,
     } satisfies FloorChangePayload);
+  }
+
+  applyChoreography(timelines: Timeline[]): void {
+    this.choreographyPlayer.applyChoreography(timelines);
   }
 
   navigateFloor(delta: number): void {

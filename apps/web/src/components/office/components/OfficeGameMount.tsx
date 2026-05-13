@@ -11,11 +11,12 @@
 // `applyPlacements`.
 
 import Phaser from 'phaser';
-import { useEffect, useRef } from 'react';
+import { type MutableRefObject, useEffect, useRef } from 'react';
 import type { DeskClickPayload, FloorChangePayload, OfficeProject } from '../game/OfficeScene';
 import { OfficeScene } from '../game/OfficeScene';
 import { probeOfficePngAssets } from '../game/asset-loader';
 import type { PersonaPlacement, TicketPlacement } from '../lib/agent-positions';
+import type { Timeline } from '../lib/choreography';
 
 interface OfficeGameMountProps {
   projects: readonly OfficeProject[];
@@ -24,6 +25,10 @@ interface OfficeGameMountProps {
   activeProjectSlug: string | null;
   onDeskClick: (payload: DeskClickPayload) => void;
   onFloorChange: (payload: FloorChangePayload) => void;
+  /** If provided, set to a function that pushes timelines into the scene. Set to null on unmount. */
+  choreographyRef?: MutableRefObject<((timelines: Timeline[]) => void) | null>;
+  /** Called when the hero ticket changes (promoted or released). */
+  onHeroChanged?: (ticketId: string | null) => void;
 }
 
 export function OfficeGameMount({
@@ -32,6 +37,8 @@ export function OfficeGameMount({
   activeProjectSlug,
   onDeskClick,
   onFloorChange,
+  choreographyRef,
+  onHeroChanged,
 }: OfficeGameMountProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<import('phaser').Game | null>(null);
@@ -49,14 +56,18 @@ export function OfficeGameMount({
   // on every floor navigation — see Codex P1 review on PR #765).
   const activeSlugRef = useRef(activeProjectSlug);
 
+  const onHeroChangedRef = useRef(onHeroChanged);
+
   // Keep the latest callbacks in refs so the scene listeners (set up once)
   // always invoke the current React handlers.
   useEffect(() => {
     onDeskClickRef.current = onDeskClick;
     onFloorChangeRef.current = onFloorChange;
-  }, [onDeskClick, onFloorChange]);
+    onHeroChangedRef.current = onHeroChanged;
+  }, [onDeskClick, onFloorChange, onHeroChanged]);
 
   // Boot Phaser once per mount.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: choreographyRef is a stable MutableRefObject; boot effect is intentionally one-shot with no deps
   useEffect(() => {
     let cancelled = false;
     const container = containerRef.current;
@@ -93,21 +104,28 @@ export function OfficeGameMount({
       }
       const onDesk = (p: DeskClickPayload) => onDeskClickRef.current(p);
       const onFloor = (p: FloorChangePayload) => onFloorChangeRef.current(p);
+      const onHero = (ticketId: string | null) => onHeroChangedRef.current?.(ticketId);
       // Attach desk/floor listeners on the scene's own emitter (a class field,
       // safe to subscribe to immediately) and push initial data once the
       // scene signals it's `create`-complete by emitting `'ready'`.
       scene.events_().on('desk-click', onDesk);
       scene.events_().on('floor-change', onFloor);
+      scene.events_().on('hero-changed', onHero);
       scene.events_().once('ready', () => {
         // Initial push from refs so the boot effect has no React-state deps.
         scene.applyProjects(initialProjectsRef.current);
         scene.applyPlacements(initialPlacementsRef.current);
         const initialSlug = initialActiveSlugRef.current;
         if (initialSlug != null) scene.panToProject(initialSlug);
+        if (choreographyRef != null) {
+          choreographyRef.current = (timelines) => scene.applyChoreography(timelines);
+        }
       });
       cleanup = () => {
         scene.events_().off('desk-click', onDesk);
         scene.events_().off('floor-change', onFloor);
+        scene.events_().off('hero-changed', onHero);
+        if (choreographyRef != null) choreographyRef.current = null;
         game.destroy(true);
         sceneRef.current = null;
         gameRef.current = null;
