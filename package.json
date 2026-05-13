@@ -17,6 +17,7 @@
     "test:e2e": "pnpm --filter @goose-hub/web test:e2e",
     "test:e2e:pipeline": "pnpm --filter @goose-hub/web test:e2e:pipeline",
     "install-labels": "tsx scripts/install-labels.ts",
+    "gen:office-assets": "tsx scripts/generate-office-assets.ts",
     "manifest": "tsx scripts/build-manifest.ts",
     "audit-docs": "tsx scripts/audit-docs.ts",
     "symbol-index": "tsx scripts/build-symbol-index.ts",

@@ -11,6 +11,21 @@ pnpm --filter @goose-hub/server dev       # http://localhost:3001 (proxied behin
 
 `/api` proxies to `apps/server` and `/events` proxies the SSE stream — see `vite.config.ts`.
 
+## Office tab (M17 — Goose Mode skin)
+
+The Office tab (`/projects/:slug/office`) renders a pixel-art top-down view of every project. The Phaser scene generates all textures procedurally on boot, so it works in a fresh checkout with no asset build step.
+
+To upgrade visuals with PixelLab-generated art:
+
+```sh
+# .env at the repo root (gitignored)
+PIXELLAB_API_KEY=<your key from https://api.pixellab.ai/mcp>
+
+pnpm gen:office-assets   # writes PNGs to apps/web/public/office/
+```
+
+See `src/components/office/README.md` for the full design.
+
 ## Conventions
 
 See [`STANDARDS.md`](./STANDARDS.md) for the feature folder structure, shared lib rules, component naming, and import rules. Read it before touching any file in `src/`.
