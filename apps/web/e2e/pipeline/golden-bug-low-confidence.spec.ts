@@ -122,11 +122,14 @@ test.describe('Golden Bug — low-confidence gate (MOCK_AGENTS + MOCK_SOURCE + M
     await postServer(`/projects/${SLUG}/issues/${issueNumber}/approve`);
     await expect(statePill).toHaveText('done', { timeout: 60_000 });
 
+        await postServer(`/projects/${SLUG}/run-retro/${issueNumber}`);
     // Timeline: triage and investigation events recorded.
     await page.goto(`/projects/${SLUG}/items/${issueNumber}/timeline`);
     await expect(page.getByTestId('timeline-section')).toBeVisible({ timeout: 10_000 });
     await expect(
       page.locator('[data-event-kind="agent.investigation-complete"]'),
     ).toBeAttached({ timeout: 10_000 });
+
+    await expect(statePill).toHaveText('done', { timeout: 60_000 });
   });
 });

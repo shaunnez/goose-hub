@@ -96,5 +96,8 @@ test.describe('Full lifecycle (MOCK_AGENTS + MOCK_SOURCE)', () => {
     await expect(page.locator('[data-event-kind="pr.merged"]').first()).toBeVisible({
       timeout: 10_000,
     });
+
+    await postServer(`/projects/${SLUG}/run-retro/${issueNumber}`);
+    await expect(statePill).toHaveText('done', { timeout: 60_000 });
   });
 });
