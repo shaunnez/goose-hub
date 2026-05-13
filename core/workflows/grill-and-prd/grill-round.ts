@@ -7,7 +7,7 @@ import type { ProjectContextBundle } from '../grill-and-prd.js';
 
 export type GrillRoundOutcome =
   | { status: 'question'; question: string; recommendedAnswer?: string; output: GrillMeOutput }
-  | { status: 'ready'; refinedIntent: string; output: GrillMeOutput }
+  | { status: 'ready'; refinedIntent: string; output: GrillMeOutput; forced?: boolean }
   | { status: 'invalid'; error: string }
   | { status: 'failed'; error: string };
 
@@ -34,6 +34,7 @@ export async function runGrillRound(input: RunGrillRoundInput): Promise<GrillRou
     worktreePath,
     priorReplies,
     projectContext,
+    projectConfig,
     deps,
   } = input;
 
@@ -55,7 +56,7 @@ export async function runGrillRound(input: RunGrillRoundInput): Promise<GrillRou
         workItem: {
           title: workItem.title,
           body: workItem.body,
-          number: Number(workItem.externalId),
+          number: workItem.externalId,
         },
         priorReplies,
         roundNumber,
@@ -66,6 +67,7 @@ export async function runGrillRound(input: RunGrillRoundInput): Promise<GrillRou
         workspaceDir: worktreePath,
         runtimeOverride: deps?.runtime,
         extraEventPayload: { roundNumber, workflowRunId },
+        ...(projectConfig != null && { projectConfigOverride: projectConfig }),
       },
     });
   } catch (err) {
@@ -89,6 +91,7 @@ export async function runGrillRound(input: RunGrillRoundInput): Promise<GrillRou
       status: 'ready',
       refinedIntent,
       output: { ...grillOutput, readyForPRD: true, refinedIntent },
+      forced: true,
     };
   }
 

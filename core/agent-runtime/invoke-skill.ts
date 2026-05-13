@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { skillsRoot } from '@goose-hub/skills';
 import { getProjectBySlug } from '../projects/loader.js';
+import type { ProjectConfig } from '../types.js';
 import type { ResolvedBudget } from './budgets.js';
 import type { AgentResult, AgentRuntime, SkillConfig } from './interface.js';
 import { defaultModelForTier } from './models.js';
@@ -55,6 +56,8 @@ export type InvokeSkillInput = {
     extraEventPayload?: Record<string, unknown>;
     /** Test seam: bypasses selectRuntime when provided. */
     runtimeOverride?: AgentRuntime;
+    /** Pre-resolved project config. When provided, skips getProjectBySlug disk read. */
+    projectConfigOverride?: Partial<ProjectConfig> | null;
   };
 };
 
@@ -106,7 +109,10 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<AgentResult>
   const { personaId } = selectPersona(projectId, role);
 
   // 5. Resolve budgets — fall back for skills not yet in SKILL_BUDGETS
-  const projectConfig = await getProjectBySlug(projectId);
+  const projectConfig =
+    overrides?.projectConfigOverride !== undefined
+      ? overrides.projectConfigOverride
+      : await getProjectBySlug(projectId);
   let resolved: ResolvedBudget;
   try {
     resolved = resolveBudgetsForProject(skillName, projectConfig?.budgets, projectId);

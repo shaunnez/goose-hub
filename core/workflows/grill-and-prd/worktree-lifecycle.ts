@@ -1,6 +1,14 @@
 import { join } from 'node:path';
 import { cleanupWorktree, createWorktree } from '../../workspaces/worktree.js';
 
+export class WorktreeCreationError extends Error {
+  constructor(cause: unknown) {
+    super(`worktree creation failed: ${String(cause)}`);
+    this.name = 'WorktreeCreationError';
+    this.cause = cause;
+  }
+}
+
 export async function withManagedWorktree<T>(
   repoPath: string,
   runId: string,
@@ -18,7 +26,12 @@ export async function withManagedWorktree<T>(
   const createImpl = deps?.createWorktreeImpl ?? createWorktree;
   const cleanupImpl = deps?.cleanupWorktreeImpl ?? cleanupWorktree;
 
-  const worktreePath = createImpl(expanded, runId);
+  let worktreePath: string;
+  try {
+    worktreePath = createImpl(expanded, runId);
+  } catch (err) {
+    throw new WorktreeCreationError(err);
+  }
 
   try {
     return await body(worktreePath);

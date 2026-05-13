@@ -25,7 +25,7 @@ export const GrillMeContextSchema = z.object({
   workItem: z.object({
     title: z.string(),
     body: z.string(),
-    number: z.number().int(),
+    number: z.union([z.number().int(), z.string()]),
   }),
   priorReplies: z.array(GrillPriorReplyEntrySchema),
   roundNumber: z.number().int().min(1),

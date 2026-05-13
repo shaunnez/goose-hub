@@ -25,7 +25,7 @@ import { cleanupWorktree, createWorktree } from '../workspaces/worktree.js';
 import { runAdvisorReview } from './grill-and-prd/advisor-review.js';
 import { runGrillRound } from './grill-and-prd/grill-round.js';
 import { runPrdDraft } from './grill-and-prd/prd-draft.js';
-import { withManagedWorktree } from './grill-and-prd/worktree-lifecycle.js';
+import { WorktreeCreationError, withManagedWorktree } from './grill-and-prd/worktree-lifecycle.js';
 
 export interface ProjectContextBundle {
   stackSummary: string;
@@ -393,7 +393,7 @@ export async function runGrillAndPrdWorkflow(
           priorReplies: augmentedPriorReplies,
           projectContext: fullProjectContext,
           projectConfig,
-          deps: { runtime: deps.runtime },
+          deps: { runtime },
         });
 
         if (outcome.status === 'invalid' || outcome.status === 'failed') {
@@ -476,7 +476,7 @@ export async function runGrillAndPrdWorkflow(
         }
 
         // outcome.status === 'ready'
-        const forced = roundNumber > 7;
+        const forced = outcome.forced === true;
         eventStore.appendEvent({
           kind: 'grill.completed',
           projectId,
@@ -507,6 +507,7 @@ export async function runGrillAndPrdWorkflow(
       { createWorktreeImpl: createWorktreeFn, cleanupWorktreeImpl: cleanupWorktreeFn },
     );
   } catch (err) {
+    const isWorktreeCreation = err instanceof WorktreeCreationError;
     eventStore.appendEvent({
       kind: 'agent.run-failed',
       projectId,
@@ -515,12 +516,16 @@ export async function runGrillAndPrdWorkflow(
       payload: {
         skill: 'grill-and-prd',
         workflowRunId,
-        error: `worktree creation failed: ${String(err)}`,
+        error: isWorktreeCreation
+          ? `worktree creation failed: ${String(err)}`
+          : `grill round failed: ${String(err)}`,
       },
     });
     await stateSource.comment(
       workItem.externalId,
-      '<!-- factory:system -->\nGrill could not start: failed to create the per-round worktree. Check the target repo and resume.',
+      isWorktreeCreation
+        ? '<!-- factory:system -->\nGrill could not start: failed to create the per-round worktree. Check the target repo and resume.'
+        : '<!-- factory:system -->\nGrill round failed unexpectedly. Check the error log and resume.',
     );
     await ensureGatePending(
       stateSource,
