@@ -53,7 +53,7 @@ import {
 } from './bootstrap-renderers.js';
 
 // Re-export renderer helpers so existing importers keep working.
-export { renderProjectConfig, renderReposMd, summariseStack };
+export { renderPrBody, renderProjectConfig, renderReposMd, summariseStack };
 
 // ---------------------------------------------------------------------------
 // Public types

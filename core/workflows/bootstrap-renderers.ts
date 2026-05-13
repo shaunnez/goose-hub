@@ -163,7 +163,7 @@ export default config;
 `;
 }
 
-export function renderStackBlock(stack: StackInfo, detectedAt: string): string {
+function renderStackBlock(stack: StackInfo, detectedAt: string): string {
   const ts = JSON.stringify(detectedAt);
   switch (stack.type) {
     case 'node': {
@@ -279,7 +279,7 @@ After saving, send a test ping and confirm the goose-hub server logs an
 `;
 }
 
-export function renderClaudeBlock(audit: AuditResult): string {
+function renderClaudeBlock(audit: AuditResult): string {
   switch (audit.action) {
     case 'create':
       return [

@@ -19,7 +19,7 @@ interface GhJson {
   [key: string]: unknown;
 }
 
-export async function ghJson(
+async function ghJson(
   fetchImpl: typeof fetch,
   url: string,
   init: RequestInit & { token: string },
