@@ -24,6 +24,18 @@ import {
   planWalk,
   sameFloorPath,
 } from './lib/pathfinding';
+import {
+  CORRIDOR_WALK_Y,
+  FLOOR_WORLD,
+  ROOM_IDS,
+  allClickZones,
+  cameraAnchor,
+  roomBounds,
+  roomDeskAnchors,
+  roomDoor,
+  roomQueueAnchor,
+  roomSlotAnchors,
+} from './lib/rooms';
 import { IDLE_INDICATOR, indicatorForState } from './lib/state-indicators';
 import { deskForState, shouldWalk } from './lib/state-to-role';
 
@@ -311,5 +323,95 @@ describe('placementsFromItems', () => {
 
   it('idleIndicator returns coffee', () => {
     expect(idleIndicator()).toBe('coffee');
+  });
+});
+
+describe('rooms.ts — Board 02 canonical floor geometry', () => {
+  it('FLOOR_WORLD matches the 80×24 tile grid', () => {
+    expect(FLOOR_WORLD.width).toBe(1280);
+    expect(FLOOR_WORLD.height).toBe(384);
+  });
+
+  it('CORRIDOR_WALK_Y is the center of the corridor band (ty=4..6)', () => {
+    expect(CORRIDOR_WALK_Y).toBe(88);
+  });
+
+  it('corridorY(0) matches CORRIDOR_WALK_Y', () => {
+    expect(corridorY(0)).toBe(CORRIDOR_WALK_Y);
+  });
+
+  it('ROOM_IDS contains exactly the six canonical rooms', () => {
+    expect(ROOM_IDS).toEqual(['triage', 'investigation', 'dev', 'qa', 'review', 'done']);
+  });
+
+  it('roomBounds returns non-overlapping interior rects', () => {
+    const bounds = ROOM_IDS.map((id) => roomBounds(id));
+    // All rooms share the same y-range (interior ty=8..21)
+    for (const b of bounds) {
+      expect(b.y1).toBe(128);
+      expect(b.y2).toBe(351);
+    }
+    // Rooms are left-to-right non-overlapping
+    for (let i = 1; i < bounds.length; i++) {
+      expect(bounds[i].x1).toBeGreaterThan(bounds[i - 1].x2);
+    }
+    // Last room ends before or at floor width
+    expect(bounds[bounds.length - 1].x2).toBeLessThanOrEqual(FLOOR_WORLD.width);
+  });
+
+  it('rooms with doors have door py=112 (ceiling row ty=7)', () => {
+    for (const id of ROOM_IDS) {
+      const door = roomDoor(id);
+      if (door) expect(door.y).toBe(112);
+    }
+  });
+
+  it('qa has no door (sealed)', () => {
+    expect(roomDoor('qa')).toBeNull();
+  });
+
+  it('qa has two slots (input and output)', () => {
+    const slots = roomSlotAnchors('qa');
+    expect(slots).toHaveLength(2);
+    expect(slots.map((s) => s.id)).toEqual(['qa.input', 'qa.output']);
+  });
+
+  it('qa slots have queueAnchor on py=88', () => {
+    for (const slot of roomSlotAnchors('qa')) {
+      expect(slot.queueAnchor?.y).toBe(88);
+    }
+  });
+
+  it('queue anchors are on the corridor walking lane (py=88)', () => {
+    for (const id of ROOM_IDS) {
+      const qa = roomQueueAnchor(id);
+      if (qa) expect(qa.y).toBe(CORRIDOR_WALK_Y);
+    }
+  });
+
+  it('done has no queue anchor', () => {
+    expect(roomQueueAnchor('done')).toBeNull();
+  });
+
+  it('floor-overview camera anchor is at (640, 192) with zoom 1.0', () => {
+    const anchor = cameraAnchor('floor-overview');
+    expect(anchor?.center).toEqual({ x: 640, y: 192 });
+    expect(anchor?.zoom).toBe(1.0);
+  });
+
+  it('allClickZones returns 14 zones covering all rooms and queues', () => {
+    expect(allClickZones()).toHaveLength(14);
+  });
+
+  it('dev room has 3 desk anchors', () => {
+    expect(roomDeskAnchors('dev')).toHaveLength(3);
+  });
+
+  it('done room has 5 shelf slot anchors', () => {
+    expect(roomDeskAnchors('done')).toHaveLength(5);
+  });
+
+  it('investigation room has 4 desk anchors (3 scout + 1 lead)', () => {
+    expect(roomDeskAnchors('investigation')).toHaveLength(4);
   });
 });
