@@ -27,37 +27,9 @@ import {
 import type { InvestigateSchema } from '@goose-hub/skills/investigate/schema.js';
 import { PlaywrightReproSchema } from '@goose-hub/skills/playwright-repro/schema.js';
 import type { z } from 'zod';
+import { WAVE_1_SCOUTS, selectWave2Scouts } from './wave2-selection.js';
 
 type InvestigateOutput = z.infer<typeof InvestigateSchema>;
-
-/**
- * Wave-1 scouts dispatched on every investigation run.
- * The orchestrator fans them all out; scouts that aren't relevant return empty findings.
- */
-const WAVE_1_SCOUTS = [
-  {
-    scoutName: 'scout-code-path',
-    scoutFocus: 'Trace code paths and call sites for symbols named in the work item',
-  },
-  {
-    scoutName: 'scout-dependency',
-    scoutFocus: 'Map dependencies crossing package boundaries touched by this change',
-  },
-  { scoutName: 'scout-pattern', scoutFocus: 'Identify existing patterns the fix should follow' },
-  {
-    scoutName: 'scout-schema',
-    scoutFocus:
-      'Schema/type contracts only: find DB schemas, Zod schemas, event payload types, state enums, and API contracts relevant to this work item. Do not trace runtime, retry, or workflow control flow; return UNCERTAINTY if no schema surface exists.',
-  },
-  {
-    scoutName: 'scout-test-inventory',
-    scoutFocus: 'Locate existing tests covering the affected area',
-  },
-  {
-    scoutName: 'scout-user-journey',
-    scoutFocus: 'Map user-visible UI flows and API surfaces related to this issue',
-  },
-];
 
 function buildSchemaScoutFocus(workItem: { title: string; body: string }): string {
   const text = `${workItem.title}\n${workItem.body}`.toLowerCase();
@@ -80,16 +52,6 @@ function buildSchemaScoutFocus(workItem: { title: string; body: string }): strin
 
   return `Schema/type contracts only for ${target}. Do not trace runtime, retry, scheduler, or workflow control flow; return UNCERTAINTY if no schema surface exists after the first targeted reads.`;
 }
-
-const WAVE_2_INTERFACE_SPEC = {
-  scoutName: 'wave2-interface-designer',
-  scoutFocus: 'Design interfaces and type signatures based on cross-validated scout findings',
-};
-
-const WAVE_2_RISK_SPEC = {
-  scoutName: 'wave2-risk-analyst',
-  scoutFocus: 'Identify risks and edge cases in the implementation approach',
-};
 
 /**
  * Runs the investigate workflow for a work item in `factory:investigating` state.
@@ -197,9 +159,7 @@ export async function runInvestigateWorkflow(
       if (spec.scoutName === 'scout-code-path' && symbolIndexHints.length > 0)
         return { ...spec, extraContext: { symbolIndexHints } };
       if (spec.scoutName === 'scout-pattern') return { ...spec, scoutFocus: patternFocus };
-      if (spec.scoutName === 'scout-schema') {
-        return { ...spec, scoutFocus: buildSchemaScoutFocus(workItemCtx) };
-      }
+      if (spec.scoutName === 'scout-schema') return { ...spec, scoutFocus: buildSchemaScoutFocus(workItemCtx) };
       return spec;
     });
 
@@ -459,62 +419,3 @@ export async function runInvestigateWorkflow(
   }
 }
 
-interface SelectWave2ScoutsOptions {
-  workItem: { number: number; title: string; body: string };
-  reports: ScoutReportLike[];
-  contradictions: unknown[];
-  scoutReportsContext: string;
-}
-
-interface ScoutReportLike {
-  scoutName: string;
-  findings: Array<{ file: string; fact: string }>;
-}
-
-function selectWave2Scouts(opts: SelectWave2ScoutsOptions) {
-  const signalText = collectWave2SignalText(opts);
-  const specs: Array<typeof WAVE_2_INTERFACE_SPEC & { extraContext: { scoutReports: string } }> =
-    [];
-
-  if (implicatesInterfaceBoundaries(signalText)) {
-    specs.push({
-      ...WAVE_2_INTERFACE_SPEC,
-      extraContext: { scoutReports: opts.scoutReportsContext },
-    });
-  }
-
-  if (implicatesRiskAnalysis(signalText) || specs.length === 0) {
-    specs.push({
-      ...WAVE_2_RISK_SPEC,
-      extraContext: { scoutReports: opts.scoutReportsContext },
-    });
-  }
-
-  return specs;
-}
-
-function collectWave2SignalText(opts: SelectWave2ScoutsOptions): string {
-  return [
-    opts.workItem.title,
-    opts.workItem.body,
-    ...opts.reports.flatMap((report) => [
-      report.scoutName,
-      ...report.findings.flatMap((finding) => [finding.file, finding.fact]),
-    ]),
-    JSON.stringify(opts.contradictions),
-  ]
-    .join('\n')
-    .toLowerCase();
-}
-
-function implicatesInterfaceBoundaries(text: string): boolean {
-  return /\b(schema|schemas|zod|json schema|api|endpoint|route|contract|interface|interfaces|ddl|drizzle|boundary|boundaries|type signature|typescript interface|work package|work packages|multi[-\s]?wp|multi[-\s]?work package|wp)\b/.test(
-    text,
-  );
-}
-
-function implicatesRiskAnalysis(text: string): boolean {
-  return /\b(auth|authentication|authorization|session|secret|secrets|token|credential|credentials|migration|migrations|concurrency|concurrent|race|parallel|state|state machine|error[-\s]?handling|rollback|retry|high[-\s]?risk|critical|security|permission|permissions)\b/.test(
-    text,
-  );
-}

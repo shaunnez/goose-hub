@@ -1,4 +1,4 @@
-async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+export async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(`/api${path}`, { headers: { Accept: 'application/json' }, signal });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -7,7 +7,7 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await res.json()) as T;
 }
 
-async function postJson<T>(path: string, body: unknown): Promise<T> {
+export async function postJson<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -20,7 +20,7 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
-async function patchJson<T>(path: string, body: unknown): Promise<T> {
+export async function patchJson<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -33,7 +33,7 @@ async function patchJson<T>(path: string, body: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
-async function deleteRequest(path: string): Promise<void> {
+export async function deleteRequest(path: string): Promise<void> {
   const res = await fetch(`/api${path}`, {
     method: 'DELETE',
     headers: { Accept: 'application/json' },
@@ -43,5 +43,3 @@ async function deleteRequest(path: string): Promise<void> {
     throw new Error(`DELETE ${path} failed: ${res.status} ${res.statusText} ${text}`);
   }
 }
-
-export { getJson, postJson, patchJson, deleteRequest };
