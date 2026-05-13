@@ -56,6 +56,8 @@ test.describe('Office tab — visual capture', () => {
   test('walks the Office UI and captures screenshots', async ({ page }) => {
     // Seed enough issues to populate every lane and let two share a desk.
     await seed('🦫 Triage me', 'factory:triaging');
+    // Dedicated issue for the walk animation step (step 2b–2d): in-progress → needs-qa.
+    const { issueNumber: walkIssueNumber } = await seed('🚶 Walk test', 'factory:in-progress');
     await seed('🛸 Grill draft', 'factory:grilling');
     await seed('🪐 PRD in flight', 'factory:prd-drafting');
     await seed('🌈 Investigating', 'factory:investigating');
@@ -109,6 +111,41 @@ test.describe('Office tab — visual capture', () => {
     await expect(page.getByTestId('office-floor-indicator')).toBeVisible();
     await page.screenshot({
       path: resolve(OUT_DIR, '02-office-tab-loaded.png'),
+      fullPage: false,
+    });
+
+    // 2b — Walk animation — before state.
+    // The triaging sprite should be visible at the triager desk at this point.
+    await page.screenshot({
+      path: resolve(OUT_DIR, '02b-walk-before.png'),
+      fullPage: false,
+    });
+
+    // Trigger a state transition on the server. The mock SSE stream fires,
+    // React Query invalidates ['office-issues'], applyPlacements runs, and
+    // SpriteLayer.walk starts the tween chain.
+    // in-progress → needs-qa moves the sprite from the developer desk to the QA desk.
+    await postServer(`/projects/${SLUG}/issues/${walkIssueNumber}/transition`, {
+      from: 'factory:in-progress',
+      to: 'factory:needs-qa',
+    });
+
+    // Wait for SSE propagation + React Query refetch + Phaser tween start.
+    await page.waitForTimeout(600);
+
+    // 2c — mid-walk: sprite should be animating toward the investigator desk.
+    await page.screenshot({
+      path: resolve(OUT_DIR, '02c-walk-mid.png'),
+      fullPage: false,
+    });
+
+    // Give the tween time to complete (distance-based; triager→investigator is
+    // roughly 100–150px at 0.35 px/ms ≈ 300–430ms plus SSE lag).
+    await page.waitForTimeout(2_500);
+
+    // 2d — after-walk: sprite should now be at the investigator desk.
+    await page.screenshot({
+      path: resolve(OUT_DIR, '02d-walk-after.png'),
       fullPage: false,
     });
 
