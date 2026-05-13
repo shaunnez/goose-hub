@@ -1,4 +1,3 @@
-import { getJson, patchJson, deleteRequest } from './client.js';
 import type {
   CodexAuthStatusDto,
   DevReviewSettingsDto,
@@ -10,6 +9,7 @@ import type {
   ReviewSettingsDto,
   ReviewerSlot,
 } from '../types.js';
+import { deleteRequest, getJson, patchJson } from './client.js';
 
 export async function fetchProjectSettings(
   slug: string,

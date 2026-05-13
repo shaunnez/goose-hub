@@ -1,5 +1,5 @@
-import { getJson, postJson, patchJson, deleteRequest } from './client.js';
 import type { MilestoneDto, SprintReviewEligibility } from '../types.js';
+import { deleteRequest, getJson, patchJson, postJson } from './client.js';
 
 export async function fetchMilestones(slug: string, signal?: AbortSignal): Promise<MilestoneDto[]> {
   const { milestones } = await getJson<{ milestones: MilestoneDto[] }>(

@@ -1,4 +1,3 @@
-import { getJson, postJson } from './client.js';
 import type {
   CostSummaryDto,
   ImprovementCandidateDto,
@@ -7,6 +6,7 @@ import type {
   PersonaStatDto,
   QualityTrendPointDto,
 } from '../types.js';
+import { getJson, postJson } from './client.js';
 
 export async function fetchRoster(): Promise<PersonaStatDto[]> {
   const { personas } = await getJson<{ personas: PersonaStatDto[] }>('/roster');

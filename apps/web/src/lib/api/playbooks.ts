@@ -1,5 +1,5 @@
-import { getJson, postJson } from './client.js';
 import type { PlaybookDetailDto, PlaybookSummaryDto } from '../types.js';
+import { getJson, postJson } from './client.js';
 
 export async function fetchPlaybooks(slug: string): Promise<PlaybookSummaryDto[]> {
   const { playbooks } = await getJson<{ playbooks: PlaybookSummaryDto[] }>(

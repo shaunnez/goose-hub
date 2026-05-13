@@ -1,5 +1,10 @@
+import type {
+  BootstrapPreviewDto,
+  BootstrapRunDto,
+  ProjectConfigDto,
+  ProjectSummary,
+} from '../types.js';
 import { getJson } from './client.js';
-import type { BootstrapPreviewDto, BootstrapRunDto, ProjectConfigDto, ProjectSummary } from '../types.js';
 
 export async function fetchProjects(signal?: AbortSignal): Promise<ProjectSummary[]> {
   const { projects } = await getJson<{ projects: ProjectSummary[] }>('/projects', signal);

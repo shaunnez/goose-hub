@@ -1,5 +1,5 @@
-import { getJson, postJson } from './client.js';
 import type { InboxItemDto } from '../types.js';
+import { getJson, postJson } from './client.js';
 
 export async function createInboxItem(data: {
   title: string;

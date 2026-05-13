@@ -1,13 +1,14 @@
-import { getJson, postJson, patchJson } from './client.js';
 import type {
+  AgentEventDto,
   EngineeringSpecDto,
   IssueCommentDto,
   IssueDiffDto,
-  TriageResultDto,
   TransitionResult,
+  TriageResultDto,
   WorkItemCostsDto,
   WorkItemDto,
 } from '../types.js';
+import { getJson, patchJson, postJson } from './client.js';
 
 export async function fetchIssues(slug: string, opts?: { all?: boolean }): Promise<WorkItemDto[]> {
   const qs = opts?.all ? '?all=true' : '';
@@ -73,8 +74,8 @@ export async function fetchEvents(
   slug: string,
   id: string,
   signal?: AbortSignal,
-): Promise<any[]> {
-  const { events } = await getJson<{ events: any[]; hasMore: boolean }>(
+): Promise<AgentEventDto[]> {
+  const { events } = await getJson<{ events: AgentEventDto[]; hasMore: boolean }>(
     `/projects/${slug}/issues/${id}/events`,
     signal,
   );
@@ -86,10 +87,10 @@ export async function fetchEventsPage(
   id: string,
   opts?: { limit?: number; before?: number },
   signal?: AbortSignal,
-): Promise<{ events: any[]; hasMore: boolean }> {
+): Promise<{ events: AgentEventDto[]; hasMore: boolean }> {
   const params = new URLSearchParams({ limit: String(opts?.limit ?? 100) });
   if (opts?.before != null) params.set('before', String(opts.before));
-  return getJson<{ events: any[]; hasMore: boolean }>(
+  return getJson<{ events: AgentEventDto[]; hasMore: boolean }>(
     `/projects/${slug}/issues/${id}/events?${params}`,
     signal,
   );
