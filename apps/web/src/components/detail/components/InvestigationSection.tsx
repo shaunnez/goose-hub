@@ -1,4 +1,10 @@
-import { addComment, fetchComments, fetchEngineeringSpec, fetchEvents, transitionState } from '@/lib/api';
+import {
+  addComment,
+  fetchComments,
+  fetchEngineeringSpec,
+  fetchEvents,
+  transitionState,
+} from '@/lib/api';
 import { renderMarkdownToHtml } from '@/lib/markdown';
 import type { AgentEventDto, EngineeringSpecDto, IssueCommentDto } from '@/lib/types';
 import { getPersonaInitials, getPersonaLabel, usePersonaMap } from '@/lib/usePersonaMap';
@@ -18,11 +24,11 @@ import {
   extractInvestigationPayload,
 } from '../lib/investigation';
 import { ConfidenceBadge } from './ConfidenceBadge';
-import { SpecDetails } from './SpecDetails';
 import { CostBadge } from './CostBadge';
 import { FindingCard } from './FindingCard';
 import { PlaywrightCaptureSection } from './PlaywrightCaptureSection';
 import { SectionEmptyState } from './SectionEmptyState';
+import { SpecDetails } from './SpecDetails';
 import { StatCard } from './StatCard';
 
 interface InvestigationSectionProps {
@@ -262,9 +268,7 @@ export function InvestigationSection({
       )}
 
       {/* Engineering spec */}
-      {spec != null && (
-        <SpecDetails spec={spec} itemState={itemState} />
-      )}
+      {spec != null && <SpecDetails spec={spec} itemState={itemState} />}
 
       {/* Open questions */}
       {investigate.openQuestions.length > 0 && (

@@ -222,7 +222,8 @@ export function groupByDevPhase(items: RenderItem[]): RenderItem[] {
         if (item.endedAt) timestamps.push(new Date(item.endedAt).getTime());
       }
     }
-    const startedAt = timestamps.length > 0 ? new Date(Math.min(...timestamps)).toISOString() : null;
+    const startedAt =
+      timestamps.length > 0 ? new Date(Math.min(...timestamps)).toISOString() : null;
     const endedAt = timestamps.length > 0 ? new Date(Math.max(...timestamps)).toISOString() : null;
     phaseGroups.push({
       kind: 'phase-group',

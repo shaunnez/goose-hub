@@ -1,8 +1,8 @@
+import type { EngineeringSpecDto } from '@/lib/types';
 /** @vitest-environment jsdom */
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { EngineeringSpecDto } from '@/lib/types';
 import { SpecDetails } from './SpecDetails';
 
 afterEach(cleanup);

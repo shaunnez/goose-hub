@@ -1,7 +1,7 @@
-import type { RenderItem, TimelineContext } from '../../lib/timeline';
-import { formatDuration } from '../../lib/timeline';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import type { RenderItem, TimelineContext } from '../../lib/timeline';
+import { formatDuration } from '../../lib/timeline';
 
 export function PhaseGroupWrapper({
   pipelineRunId,
@@ -33,7 +33,10 @@ export function PhaseGroupWrapper({
   const shortId = pipelineRunId.length > 8 ? pipelineRunId.slice(0, 8) : pipelineRunId;
 
   return (
-    <li data-pipeline-run-id={pipelineRunId} className="rounded-md border border-[color:var(--accent)]/20 bg-bg/30">
+    <li
+      data-pipeline-run-id={pipelineRunId}
+      className="rounded-md border border-[color:var(--accent)]/20 bg-bg/30"
+    >
       <details
         open={open}
         onToggle={(e) => {

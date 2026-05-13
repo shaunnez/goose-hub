@@ -30,7 +30,9 @@ describe('DevReviewEvents', () => {
   it('renders dev-review.started with title', () => {
     render(
       <ul>
-        <DevReviewStartedEvent event={makeEvent('dev-review.started', { pipelineRunId: 'abc123' })} />
+        <DevReviewStartedEvent
+          event={makeEvent('dev-review.started', { pipelineRunId: 'abc123' })}
+        />
       </ul>,
     );
     expect(screen.getByText('Dev review started')).toBeTruthy();
@@ -52,7 +54,10 @@ describe('DevReviewEvents', () => {
     render(
       <ul>
         <DevReviewFailedEvent
-          event={makeEvent('dev-review.failed', { errorReason: 'agent timed out', pipelineRunId: 'abc123' })}
+          event={makeEvent('dev-review.failed', {
+            errorReason: 'agent timed out',
+            pipelineRunId: 'abc123',
+          })}
         />
       </ul>,
     );
@@ -63,7 +68,9 @@ describe('DevReviewEvents', () => {
   it('renders dev-review.budget-skipped', () => {
     render(
       <ul>
-        <DevReviewBudgetSkippedEvent event={makeEvent('dev-review.budget-skipped', { pipelineRunId: 'abc123' })} />
+        <DevReviewBudgetSkippedEvent
+          event={makeEvent('dev-review.budget-skipped', { pipelineRunId: 'abc123' })}
+        />
       </ul>,
     );
     expect(screen.getByText('Dev review budget skipped')).toBeTruthy();
@@ -95,7 +102,10 @@ describe('DevReviewEvents', () => {
     render(
       <ul>
         <DevReviewResponseFailedEvent
-          event={makeEvent('dev-review.response-failed', { errorReason: 'network error', pipelineRunId: 'abc123' })}
+          event={makeEvent('dev-review.response-failed', {
+            errorReason: 'network error',
+            pipelineRunId: 'abc123',
+          })}
         />
       </ul>,
     );
@@ -107,7 +117,10 @@ describe('DevReviewEvents', () => {
     render(
       <ul>
         <DevReviewErrorEvent
-          event={makeEvent('dev-review.error', { errorReason: 'internal error', pipelineRunId: 'abc123' })}
+          event={makeEvent('dev-review.error', {
+            errorReason: 'internal error',
+            pipelineRunId: 'abc123',
+          })}
         />
       </ul>,
     );

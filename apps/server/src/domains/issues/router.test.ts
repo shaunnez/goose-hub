@@ -948,7 +948,9 @@ describe('GET /:slug/issues/:id/spec', () => {
     const app = makeApp();
     const res = await app.request('/projects/test-slug/issues/42/spec');
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { spec: { objective: string; workPackages: unknown[]; acceptanceCriteriaCount: number } };
+    const body = (await res.json()) as {
+      spec: { objective: string; workPackages: unknown[]; acceptanceCriteriaCount: number };
+    };
     expect(body.spec.objective).toBe('Add feature X');
     expect(body.spec.workPackages).toHaveLength(1);
     expect(body.spec.acceptanceCriteriaCount).toBe(3);

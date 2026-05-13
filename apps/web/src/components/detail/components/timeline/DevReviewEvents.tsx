@@ -94,9 +94,7 @@ export function DevReviewCompletedEvent({ event }: { event: AgentEventDto }) {
       tone="success"
     >
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-fg-3">
-        {p?.verdict != null && (
-          <span className="font-mono text-fg-2">{p.verdict}</span>
-        )}
+        {p?.verdict != null && <span className="font-mono text-fg-2">{p.verdict}</span>}
         <PipelineChip pipelineRunId={p?.pipelineRunId} />
       </div>
     </DevReviewShell>

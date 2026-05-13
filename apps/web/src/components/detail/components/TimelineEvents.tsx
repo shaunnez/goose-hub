@@ -15,6 +15,16 @@ import {
 } from './timeline/DecisionSummaryEvents';
 import { DecomposeCompletedEvent } from './timeline/DecomposeEvents';
 import {
+  DevReviewBudgetSkippedEvent,
+  DevReviewCompletedEvent,
+  DevReviewErrorEvent,
+  DevReviewFailedEvent,
+  DevReviewResponseCompletedEvent,
+  DevReviewResponseFailedEvent,
+  DevReviewResponseStartedEvent,
+  DevReviewStartedEvent,
+} from './timeline/DevReviewEvents';
+import {
   EvidenceNoSpecEvent,
   EvidencePostFailedEvent,
   EvidencePostedEvent,
@@ -47,6 +57,7 @@ import {
   ParallelWpTimeoutEvent,
   SpecCompletedEvent,
 } from './timeline/ParallelImplementEvents';
+import { PhaseGroupWrapper } from './timeline/PhaseGroupWrapper';
 import { PrMergedEvent, PrOpenedEvent } from './timeline/PrEvents';
 import {
   PrdAdvisorSkippedEvent,
@@ -60,7 +71,6 @@ import { QaCompletedEvent, QaFailedEvent } from './timeline/QaEvents';
 import { RetroCompletedEvent } from './timeline/RetroCompletedEvent';
 import { ReviewCompletedEvent } from './timeline/ReviewCompletedEvent';
 import { RunGroupWrapper } from './timeline/RunGroupWrapper';
-import { PhaseGroupWrapper } from './timeline/PhaseGroupWrapper';
 import {
   SwarmHeartbeatEvent,
   SwarmScoutCompletedEvent,
@@ -69,16 +79,6 @@ import {
   SwarmWaveEvent,
 } from './timeline/SwarmEvents';
 import { AgentVerifyCommandEvent, ToolWarningEvent } from './timeline/VerifyToolEvents';
-import {
-  DevReviewBudgetSkippedEvent,
-  DevReviewCompletedEvent,
-  DevReviewErrorEvent,
-  DevReviewFailedEvent,
-  DevReviewResponseCompletedEvent,
-  DevReviewResponseFailedEvent,
-  DevReviewResponseStartedEvent,
-  DevReviewStartedEvent,
-} from './timeline/DevReviewEvents';
 
 export function renderTimelineItem(item: RenderItem, idx: number, context?: TimelineContext) {
   if (item.kind === 'log-group') {
