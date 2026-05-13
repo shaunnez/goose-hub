@@ -3,8 +3,9 @@ import { cn } from '@/lib/cn';
 import { GATE_STATES } from '@/lib/constants';
 import type { AgentEventDto } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
-import { ShieldAlert } from 'lucide-react';
+import { Info, MessageCircleQuestion, ShieldAlert } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 
 export { GATE_STATES } from '@/lib/constants';
 
@@ -61,6 +62,7 @@ export function GatePendingBanner({
   const [error, setError] = useState<string | null>(null);
 
   const isNeedsHuman = state === 'factory:needs-human';
+  const isGatePending = state === 'factory:gate-pending';
 
   const { data: events = [] } = useQuery({
     queryKey: ['events', projectSlug, id],
@@ -94,26 +96,52 @@ export function GatePendingBanner({
     }
   };
 
-  const isDanger = isNeedsHuman;
+  const variant: 'danger' | 'warning' | 'info' = isNeedsHuman
+    ? 'danger'
+    : isGatePending
+      ? 'info'
+      : 'warning';
 
   return (
     <div
       data-testid="gate-pending-banner"
+      data-variant={variant}
       className={cn(
         'flex flex-col px-6 py-2.5 shrink-0',
         'border-b',
         'text-[12.5px] font-medium',
-        isDanger
-          ? 'border-[color:var(--danger)]/40 bg-[color:var(--danger)]/10 text-[color:var(--danger)]'
-          : 'border-[color:var(--warning)]/40 bg-[color:var(--warning)]/10 text-[color:var(--warning)]',
+        variant === 'danger' &&
+          'border-[color:var(--danger)]/40 bg-[color:var(--danger)]/10 text-[color:var(--danger)]',
+        variant === 'warning' &&
+          'border-[color:var(--warning)]/40 bg-[color:var(--warning)]/10 text-[color:var(--warning)]',
+        variant === 'info' &&
+          'border-[color:var(--info)]/40 bg-[color:var(--info)]/10 text-[color:var(--info)]',
       )}
     >
       <div className="flex items-center gap-2.5">
-        <ShieldAlert size={14} className="shrink-0" />
+        {variant === 'info' ? (
+          <Info size={14} className="shrink-0" />
+        ) : (
+          <ShieldAlert size={14} className="shrink-0" />
+        )}
         <span>{message}</span>
         {error && <span className="text-[color:var(--danger)] ml-2">{error}</span>}
         <span className="grow" />
         <span className="flex items-center gap-2">
+          {isGatePending && projectSlug && id && (
+            <Link
+              to={`/projects/${projectSlug}/items/${id}/grill`}
+              data-testid="gate-action-grill"
+              className={cn(
+                'flex items-center gap-1 h-6 px-2.5 rounded text-[11.5px] font-medium border',
+                'border-[color:var(--info)]/60 text-[color:var(--info)]',
+                'hover:bg-[color:var(--info)]/20',
+              )}
+            >
+              <MessageCircleQuestion size={12} />
+              Grill
+            </Link>
+          )}
           {actions.sendToTriage && (
             <button
               type="button"

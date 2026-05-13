@@ -2,6 +2,7 @@
 import { fetchEvents, transitionState } from '@/lib/api';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GatePendingBanner } from './GatePendingBanner';
 
@@ -14,7 +15,11 @@ vi.mock('@/lib/api', () => ({
 
 function render_(jsx: React.ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}>{jsx}</QueryClientProvider>);
+  return render(
+    <MemoryRouter>
+      <QueryClientProvider client={client}>{jsx}</QueryClientProvider>
+    </MemoryRouter>,
+  );
 }
 
 const DECISION_SUMMARY_EVENT = {
@@ -115,5 +120,32 @@ describe('GatePendingBanner — factory:needs-human', () => {
         'factory:triaging',
       );
     });
+  });
+});
+
+describe('GatePendingBanner — factory:gate-pending', () => {
+  it('renders info-variant banner with "Question ready — grill" message', () => {
+    render_(<GatePendingBanner state="factory:gate-pending" projectSlug="proj" id="42" />);
+    const banner = screen.getByTestId('gate-pending-banner');
+    expect(banner.getAttribute('data-variant')).toBe('info');
+    expect(banner.textContent).toContain('Question ready');
+  });
+
+  it('renders Grill link pointing at the grill section of this issue', () => {
+    render_(<GatePendingBanner state="factory:gate-pending" projectSlug="proj" id="42" />);
+    const grill = screen.getByTestId('gate-action-grill') as HTMLAnchorElement;
+    expect(grill).toBeTruthy();
+    expect(grill.getAttribute('href')).toBe('/projects/proj/items/42/grill');
+  });
+
+  it('does not render needs-human action buttons in gate-pending variant', () => {
+    render_(<GatePendingBanner state="factory:gate-pending" projectSlug="proj" id="42" />);
+    expect(screen.queryByTestId('gate-action-send-to-triage')).toBeNull();
+    expect(screen.queryByTestId('gate-action-reject')).toBeNull();
+  });
+
+  it('omits Grill link when projectSlug/id are absent', () => {
+    render_(<GatePendingBanner state="factory:gate-pending" />);
+    expect(screen.queryByTestId('gate-action-grill')).toBeNull();
   });
 });
