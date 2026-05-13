@@ -38,7 +38,8 @@ export type ValidationRule =
   | 'self-check-complete-interfaces'
   | 'self-check-falsifiable-acs'
   | 'self-check-builder-independence'
-  | 'self-check-verification-tooling';
+  | 'self-check-verification-tooling'
+  | 'wp-missing-test-file';
 
 export type ValidationResult = { ok: true } | { ok: false; errors: ValidationError[] };
 
@@ -235,6 +236,25 @@ export function validateEngineeringSpec(
       errors.push({
         rule: 'self-check-builder-independence',
         message: `WP '${wp.id}' changes description is too short to be builder-actionable`,
+        ref: wp.id,
+      });
+    }
+  }
+
+  // TDD contract — WP that owns production .ts/.tsx files must also own a test file.
+  // Exempt: *.test.ts/x, *.spec.ts/x, *.config.ts, *.d.ts, *types.ts, *schema.ts, *index.ts
+  const EXEMPT_SUFFIX =
+    /\.(test|spec)\.(ts|tsx)$|\.(config|d)\.ts$|(types?|interfaces?|schema|index|constants?|errors?)\.(ts|tsx)$/;
+  const isProductionTs = (f: string) =>
+    (f.endsWith('.ts') || f.endsWith('.tsx')) && !EXEMPT_SUFFIX.test(f);
+  const isTestFile = (f: string) => /\.(test|spec)\.(ts|tsx)$/.test(f);
+  for (const wp of spec.workPackages) {
+    const hasProductionTs = wp.filesOwned.some(isProductionTs);
+    const hasTestFile = wp.filesOwned.some(isTestFile);
+    if (hasProductionTs && !hasTestFile) {
+      errors.push({
+        rule: 'wp-missing-test-file',
+        message: `WP '${wp.id}' owns production .ts files but no *.test.ts or *.spec.ts — add the test file to filesOwned or split TDD into a separate WP`,
         ref: wp.id,
       });
     }

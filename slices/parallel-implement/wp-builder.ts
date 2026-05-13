@@ -3,8 +3,10 @@ import type {
   AgentRuntime,
   AgentSpec,
 } from '@goose-hub/core/agent-runtime/interface.js';
+import { getRecordDecisionTool } from '@goose-hub/core/db/repositories/project-settings.js';
 import type { AgentEvent, AppendEventInput } from '@goose-hub/core/event-stream/store.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
+import { writeWpBuilderSandbox } from '@goose-hub/core/tool-layer/sandbox.js';
 import type { revertWpChanges } from '@goose-hub/core/workspaces/orchestrator-git.js';
 import { ImplementWpSchema } from '@goose-hub/skills/implement-wp/schema.js';
 import type { WorkPackage } from '@goose-hub/skills/spec-author/schema.js';
@@ -103,11 +105,19 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
     personaId: opts.personaId,
     outputJsonSchema: opts.implementWpJsonSchema,
     appendSystemPrompt: opts.implementWpPrompt,
+    sandboxMode: 'preconfigured', // writeWpBuilderSandbox already ran in workflow.ts before spawn
     env: {
       FACTORY_WP_FILESOWNED: wp.filesOwned.join(':'),
       FACTORY_WP_ID: wp.id,
     },
   };
+
+  // Write WP sandbox fresh for each spawn attempt (covers retries and preserves
+  // decision-capture hook when experimental.recordDecisionTool is enabled).
+  writeWpBuilderSandbox(opts.scratchWorktreePath, wp.filesOwned, wp.id, {
+    role: 'developer',
+    recordDecisionTool: getRecordDecisionTool(projectId),
+  });
 
   let result: AgentResult | undefined;
   let errorReason: string | undefined;

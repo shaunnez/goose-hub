@@ -66,6 +66,12 @@ export type AgentSpec<R extends RoleSpec = RoleSpec> = {
   iteration?: number;
   /** Workflow phase label (e.g. 'plan', 'implement'). Written as FACTORY_PHASE env var. */
   phase?: string;
+  /**
+   * 'preconfigured': caller already wrote .claude/settings.local.json (e.g. writeWpBuilderSandbox).
+   * Runtime skips writeWorkspaceSandbox. deployHooks() still runs unconditionally.
+   * Default ('default' or absent): runtime writes the generic workspace sandbox.
+   */
+  sandboxMode?: 'default' | 'preconfigured';
 };
 
 export interface AgentResult {

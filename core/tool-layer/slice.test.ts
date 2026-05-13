@@ -3,7 +3,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { TOOL_BUNDLES, computeAllowlist } from './allowlist.js';
-import { DECISION_CAPTURE_EXCLUDED_ROLES, writeWorkspaceSandbox } from './sandbox.js';
+import {
+  DECISION_CAPTURE_EXCLUDED_ROLES,
+  writeWorkspaceSandbox,
+  writeWpBuilderSandbox,
+} from './sandbox.js';
 import { redactSecrets } from './secret-redaction.js';
 
 // ─── secret-redaction ────────────────────────────────────────────────────────
@@ -206,6 +210,109 @@ describe('writeWorkspaceSandbox', () => {
       const cfg = JSON.parse(raw) as { hooks?: { PostToolUse?: unknown[] } };
       expect(cfg.hooks?.PostToolUse).toBeDefined();
       expect(Array.isArray(cfg.hooks?.PostToolUse)).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+});
+
+// ─── WP builder sandbox content ──────────────────────────────────────────────
+
+describe('writeWpBuilderSandbox', () => {
+  type Settings = {
+    permissions: { deny: string[] };
+    hooks: {
+      PreToolUse: Array<{ matcher: string; hooks: Array<{ command: string }> }>;
+      PostToolUse: Array<{ matcher: string; hooks: Array<{ command: string }> }>;
+      Stop?: unknown[];
+    };
+  };
+
+  function readSettings(dir: string): Settings {
+    const raw = readFileSync(join(dir, '.claude', 'settings.local.json'), 'utf8');
+    return JSON.parse(raw) as Settings;
+  }
+
+  it('writes git mutation denylist entries', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wp-sandbox-git-'));
+    try {
+      writeWpBuilderSandbox(dir, ['src/foo.ts'], 'WP1');
+      const cfg = readSettings(dir);
+      expect(cfg.permissions.deny).toContain('Bash(git commit*)');
+      expect(cfg.permissions.deny).toContain('Bash(git add*)');
+      expect(cfg.permissions.deny).toContain('Bash(git push*)');
+      expect(cfg.permissions.deny).toContain('Bash(git reset*)');
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('includes base denylist entries alongside WP git denylist', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wp-sandbox-base-'));
+    try {
+      writeWpBuilderSandbox(dir, ['src/foo.ts'], 'WP1');
+      const cfg = readSettings(dir);
+      expect(cfg.permissions.deny).toContain('Read(./.env*)');
+      expect(cfg.permissions.deny).toContain('Bash(sudo *)');
+      expect(cfg.permissions.deny).toContain('Bash(rm -rf *)');
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('registers wp-file-guard.sh as a PreToolUse hook on Edit|Write', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wp-sandbox-guard-'));
+    try {
+      writeWpBuilderSandbox(dir, ['src/foo.ts'], 'WP1');
+      const cfg = readSettings(dir);
+      const guardEntry = cfg.hooks.PreToolUse.find((e) =>
+        e.hooks.some((h) => h.command.includes('wp-file-guard.sh')),
+      );
+      expect(guardEntry).toBeDefined();
+      expect(guardEntry?.matcher).toBe('Edit|Write');
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('registers standard pre-tool-use hook on all tools', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wp-sandbox-pre-'));
+    try {
+      writeWpBuilderSandbox(dir, ['src/foo.ts'], 'WP1');
+      const cfg = readSettings(dir);
+      const stdHook = cfg.hooks.PreToolUse.find((e) =>
+        e.hooks.some((h) => h.command.includes('pre-tool-use')),
+      );
+      expect(stdHook).toBeDefined();
+      expect(stdHook?.matcher).toBe('.*');
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('registers standard post-tool-use hook', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wp-sandbox-post-'));
+    try {
+      writeWpBuilderSandbox(dir, ['src/foo.ts'], 'WP1');
+      const cfg = readSettings(dir);
+      expect(Array.isArray(cfg.hooks.PostToolUse)).toBe(true);
+      expect(cfg.hooks.PostToolUse.length).toBeGreaterThan(0);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('includes WP bash drift denylist entries (pipes, chaining, dep mutation)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wp-sandbox-bash-'));
+    try {
+      writeWpBuilderSandbox(dir, ['src/foo.ts'], 'WP1');
+      const cfg = readSettings(dir);
+      expect(cfg.permissions.deny).toContain('Bash(* | *)');
+      expect(cfg.permissions.deny).toContain('Bash(* && *)');
+      expect(cfg.permissions.deny).toContain('Bash(* ; *)');
+      expect(cfg.permissions.deny).toContain('Bash(* > *)');
+      expect(cfg.permissions.deny).toContain('Bash(pnpm install*)');
+      expect(cfg.permissions.deny).toContain('Bash(npm install*)');
     } finally {
       rmSync(dir, { recursive: true });
     }
