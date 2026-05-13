@@ -144,6 +144,7 @@ function effectiveTimestamp(item: RenderItem): number {
     return new Date(item.lastEventAt ?? item.startedAt ?? 0).getTime();
   }
   if (item.kind === 'event') return new Date(item.event.createdAt).getTime();
+  if (item.kind === 'phase-group') return new Date(item.startedAt ?? 0).getTime();
   return new Date(item.events[0]?.createdAt ?? 0).getTime();
 }
 
