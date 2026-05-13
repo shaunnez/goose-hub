@@ -4,10 +4,10 @@
 import { OFFICE_ROLES, type OfficeRole } from './state-to-role';
 
 export const TILE_SIZE = 16;
-export const FLOOR_TILES_WIDE = 30;
-export const FLOOR_TILES_TALL = 12;
-export const FLOOR_PIXEL_WIDTH = TILE_SIZE * FLOOR_TILES_WIDE;
-export const FLOOR_PIXEL_HEIGHT = TILE_SIZE * FLOOR_TILES_TALL;
+export const FLOOR_TILES_WIDE = 80; // v1 canonical floor: 80 tiles × 16 px = 1280 px
+export const FLOOR_TILES_TALL = 24; // v1 canonical floor: 24 tiles × 16 px = 384 px
+export const FLOOR_PIXEL_WIDTH = TILE_SIZE * FLOOR_TILES_WIDE; // 1280
+export const FLOOR_PIXEL_HEIGHT = TILE_SIZE * FLOOR_TILES_TALL; // 384
 export const FLOOR_GAP_PX = TILE_SIZE * 2;
 
 /**
@@ -34,11 +34,9 @@ export interface DeskPosition {
 }
 
 /**
- * Returns one desk per role, evenly spaced across the floor. Roles are placed
- * left-to-right in the canonical `OFFICE_ROLES` order.
- *
- * The desks sit at ~70% of the floor height (lower section), leaving the top
- * for the project banner.
+ * @deprecated v1 — use room desk anchors from `lib/rooms.ts` instead.
+ * Kept for SpriteLayer backward-compat during Phase 2 transition.
+ * Returns one desk per role evenly spaced across the floor.
  */
 export function deskPositions(floorIndex: number): DeskPosition[] {
   const originY = floorOriginY(floorIndex);

@@ -25,11 +25,12 @@ export interface PathSegment {
 }
 
 /**
- * Y coordinate of the corridor row on a given floor — where sprites travel
- * horizontally without bumping into desks.
+ * Y coordinate of the corridor walking lane on a given floor (py=88 for floor 0).
+ * Returns the center of the corridor band (ty=4..6): floorOriginY + TILE_SIZE*5 + TILE_SIZE/2.
+ * Matches CORRIDOR_WALK_Y in lib/rooms.ts.
  */
 export function corridorY(floorIndex: number): number {
-  return floorOriginY(floorIndex) + TILE_SIZE * 4;
+  return floorOriginY(floorIndex) + TILE_SIZE * 5 + TILE_SIZE / 2;
 }
 
 /**
