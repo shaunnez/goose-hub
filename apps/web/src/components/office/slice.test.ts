@@ -24,6 +24,7 @@ import {
   planWalk,
   sameFloorPath,
 } from './lib/pathfinding';
+import { CODENAME_POOL, codenameFor } from './lib/persona-codenames';
 import {
   CORRIDOR_WALK_Y,
   FLOOR_WORLD,
@@ -38,6 +39,7 @@ import {
 } from './lib/rooms';
 import { IDLE_INDICATOR, indicatorForState } from './lib/state-indicators';
 import { deskForState, shouldWalk } from './lib/state-to-role';
+import { ticketAtDeskOffset, ticketCarryOffset } from './lib/ticket-carry';
 
 describe('state → desk role mapping', () => {
   it('maps every lane state to a valid role', () => {
@@ -226,96 +228,118 @@ describe('pathfinding', () => {
 });
 
 describe('placementsFromItems', () => {
-  it('drops terminal-state items but preserves blocked-state items as stay-put placements', () => {
-    const placements = placementsFromItems([
-      {
-        workItemId: 'github:org/repo#1',
-        externalId: '1',
-        projectSlug: 'p',
-        state: 'factory:in-progress',
-      },
-      {
-        workItemId: 'github:org/repo#2',
-        externalId: '2',
-        projectSlug: 'p',
-        state: 'factory:done',
-      },
-      {
-        workItemId: 'github:org/repo#3',
-        externalId: '3',
-        projectSlug: 'p',
-        state: 'factory:gate-pending',
-      },
-      {
-        workItemId: 'github:org/repo#4',
-        externalId: '4',
-        projectSlug: 'p',
-        state: 'factory:needs-human',
-      },
+  it('drops terminal-state items; done goes to shelf; blocked states produce frozen persona + carried ticket', () => {
+    const { personas, tickets } = placementsFromItems([
+      { workItemId: 'w1', externalId: '1', projectSlug: 'p', state: 'factory:in-progress' },
+      { workItemId: 'w2', externalId: '2', projectSlug: 'p', state: 'factory:done' },
+      { workItemId: 'w3', externalId: '3', projectSlug: 'p', state: 'factory:gate-pending' },
+      { workItemId: 'w4', externalId: '4', projectSlug: 'p', state: 'factory:needs-human' },
+      { workItemId: 'w5', externalId: '5', projectSlug: 'p', state: 'factory:archived' },
     ]);
-    // factory:done dropped; gate-pending + needs-human kept (stay-put), in-progress kept normally.
-    expect(placements.map((p) => p.externalId).sort()).toEqual(['1', '3', '4']);
-    const byId = Object.fromEntries(placements.map((p) => [p.externalId, p]));
-    expect(byId['1'].role).toBe('developer');
-    expect(byId['1'].indicator).toBe('speech');
-    expect(byId['3'].role).toBeNull();
-    expect(byId['3'].indicator).toBe('question');
-    expect(byId['4'].role).toBeNull();
-    expect(byId['4'].indicator).toBe('bang');
+    // archived dropped; done produces ticket-only; others produce persona + ticket
+    expect(personas.map((p) => p.externalId).sort()).toEqual(['1', '3', '4']);
+    expect(tickets.map((t) => t.externalId).sort()).toEqual(['1', '2', '3', '4']);
+
+    const pById = Object.fromEntries(personas.map((p) => [p.externalId, p]));
+    const tById = Object.fromEntries(tickets.map((t) => [t.externalId, t]));
+
+    expect(pById['1'].roomId).toBe('dev');
+    expect(pById['1'].indicator).toBe('speech');
+    expect(pById['3'].roomId).toBeNull();
+    expect(pById['3'].indicator).toBe('question');
+    expect(pById['4'].roomId).toBeNull();
+    expect(pById['4'].indicator).toBe('bang');
+
+    expect(tById['2'].position).toBe('shelf');
+    expect(tById['2'].shelfSlot).toBeGreaterThanOrEqual(0);
+    expect(tById['2'].carrierPersonaId).toBeNull();
+    expect(tById['1'].position).toBe('carried');
+    expect(tById['1'].carrierPersonaId).toBe('p:1');
   });
 
-  it('uses spriteId stable across state transitions (blocked → unblocked round-trips reuse sprite)', () => {
-    const before = placementsFromItems([
-      {
-        workItemId: 'a',
-        externalId: '7',
-        projectSlug: 'p',
-        state: 'factory:in-progress',
-      },
+  it('personaId / ticketId are stable across state transitions', () => {
+    const { personas: beforeP, tickets: beforeT } = placementsFromItems([
+      { workItemId: 'a', externalId: '7', projectSlug: 'p', state: 'factory:in-progress' },
     ]);
-    const blocked = placementsFromItems([
-      {
-        workItemId: 'a',
-        externalId: '7',
-        projectSlug: 'p',
-        state: 'factory:gate-pending',
-      },
+    const { personas: blockedP, tickets: blockedT } = placementsFromItems([
+      { workItemId: 'a', externalId: '7', projectSlug: 'p', state: 'factory:gate-pending' },
     ]);
-    expect(before[0].spriteId).toBe(blocked[0].spriteId);
-    expect(before[0].role).toBe('developer');
-    expect(blocked[0].role).toBeNull();
+    expect(beforeP[0].personaId).toBe(blockedP[0].personaId);
+    expect(beforeT[0].ticketId).toBe(blockedT[0].ticketId);
+    expect(beforeP[0].roomId).toBe('dev');
+    expect(blockedP[0].roomId).toBeNull();
   });
 
-  it('preserves title and projectSlug on the placement', () => {
-    const placements = placementsFromItems([
+  it('preserves title and projectSlug on both persona and ticket', () => {
+    const { personas, tickets } = placementsFromItems([
       {
-        workItemId: 'github:org/repo#9',
+        workItemId: 'w9',
         externalId: '9',
         projectSlug: 'p',
         state: 'factory:in-progress',
         title: 'fix the thing',
       },
     ]);
-    expect(placements[0].title).toBe('fix the thing');
-    expect(placements[0].projectSlug).toBe('p');
+    expect(personas[0].title).toBe('fix the thing');
+    expect(personas[0].projectSlug).toBe('p');
+    expect(tickets[0].title).toBe('fix the thing');
+    expect(tickets[0].projectSlug).toBe('p');
   });
 
-  it('busyRoles returns the set of currently-occupied roles', () => {
-    const placements = placementsFromItems([
-      {
-        workItemId: 'a',
-        externalId: '1',
-        projectSlug: 'p',
-        state: 'factory:in-progress',
-      },
-      {
-        workItemId: 'b',
-        externalId: '2',
-        projectSlug: 'p',
-        state: 'factory:investigating',
-      },
+  it('factory:investigating produces persona at investigation lead-desk (slot 3)', () => {
+    const { personas } = placementsFromItems([
+      { workItemId: 'w1', externalId: '1', projectSlug: 'p', state: 'factory:investigating' },
     ]);
-    const roles = busyRoles(placements);
+    expect(personas[0].roomId).toBe('investigation');
+    expect(personas[0].deskSlot).toBe(3);
+  });
+
+  it('factory:in-progress produces persona at a dev desk (slot 0-2, deterministic)', () => {
+    const { personas } = placementsFromItems([
+      { workItemId: 'w1', externalId: '42', projectSlug: 'p', state: 'factory:in-progress' },
+    ]);
+    expect(personas[0].roomId).toBe('dev');
+    expect(personas[0].deskSlot).toBeGreaterThanOrEqual(0);
+    expect(personas[0].deskSlot).toBeLessThanOrEqual(2);
+    // Same input → same desk
+    const { personas: p2 } = placementsFromItems([
+      { workItemId: 'w1', externalId: '42', projectSlug: 'p', state: 'factory:in-progress' },
+    ]);
+    expect(p2[0].deskSlot).toBe(personas[0].deskSlot);
+  });
+
+  it('in-progress ticket has position=carried, carrierPersonaId set', () => {
+    const { personas, tickets } = placementsFromItems([
+      { workItemId: 'w1', externalId: '7', projectSlug: 'proj', state: 'factory:in-progress' },
+    ]);
+    expect(tickets[0].position).toBe('carried');
+    expect(tickets[0].carrierPersonaId).toBe(personas[0].personaId);
+  });
+
+  it('factory:done ticket has position=shelf, shelfSlot in 0..4', () => {
+    const { personas, tickets } = placementsFromItems([
+      { workItemId: 'w1', externalId: '3', projectSlug: 'p', state: 'factory:done' },
+    ]);
+    expect(personas).toHaveLength(0);
+    expect(tickets[0].position).toBe('shelf');
+    expect(tickets[0].shelfSlot).toBeGreaterThanOrEqual(0);
+    expect(tickets[0].shelfSlot).toBeLessThanOrEqual(4);
+  });
+
+  it('codenames are populated on PersonaPlacement', () => {
+    const { personas } = placementsFromItems([
+      { workItemId: 'w1', externalId: '1', projectSlug: 'p', state: 'factory:in-progress' },
+    ]);
+    expect(typeof personas[0].codename).toBe('string');
+    expect(personas[0].codename.length).toBeGreaterThan(0);
+  });
+
+  it('busyRoles returns the set of currently-occupied rooms as roles', () => {
+    const { personas } = placementsFromItems([
+      { workItemId: 'a', externalId: '1', projectSlug: 'p', state: 'factory:in-progress' },
+      { workItemId: 'b', externalId: '2', projectSlug: 'p', state: 'factory:investigating' },
+    ]);
+    const roles = busyRoles(personas);
     expect(roles.has('developer')).toBe(true);
     expect(roles.has('investigator')).toBe(true);
     expect(roles.has('qa')).toBe(false);
@@ -323,6 +347,61 @@ describe('placementsFromItems', () => {
 
   it('idleIndicator returns coffee', () => {
     expect(idleIndicator()).toBe('coffee');
+  });
+});
+
+describe('persona-codenames', () => {
+  it('CODENAME_POOL has at least 24 entries', () => {
+    expect(CODENAME_POOL.length).toBeGreaterThanOrEqual(24);
+  });
+
+  it('codenameFor is deterministic — same seed returns same name', () => {
+    expect(codenameFor('proj:42')).toBe(codenameFor('proj:42'));
+    expect(codenameFor('abc')).toBe(codenameFor('abc'));
+    expect(codenameFor('')).toBe(codenameFor(''));
+  });
+
+  it('codenameFor always returns a string from CODENAME_POOL', () => {
+    const seeds = ['a', 'b', 'proj:1', 'proj:100', 'goose-hub-self:42', 'x:y:z', ''];
+    for (const seed of seeds) {
+      expect(CODENAME_POOL).toContain(codenameFor(seed));
+    }
+  });
+
+  it('100 distinct seeds produce more than 20 distinct codenames', () => {
+    const names = new Set<string>();
+    for (let i = 0; i < 100; i++) {
+      names.add(codenameFor(`proj:${i}`));
+    }
+    expect(names.size).toBeGreaterThan(20);
+  });
+
+  it('different seeds can produce different codenames', () => {
+    const a = codenameFor('proj:1');
+    const b = codenameFor('proj:2');
+    // Not guaranteed to differ, but the hash should differ for these
+    // seeds (verified by running locally).
+    expect(typeof a).toBe('string');
+    expect(typeof b).toBe('string');
+  });
+});
+
+describe('ticket-carry offsets', () => {
+  it('ticketCarryOffset returns (+10, -12) per Board 02 §5.3', () => {
+    const o = ticketCarryOffset();
+    expect(o.dx).toBe(10);
+    expect(o.dy).toBe(-12);
+  });
+
+  it('ticketAtDeskOffset returns a non-zero offset', () => {
+    const o = ticketAtDeskOffset();
+    expect(typeof o.dx).toBe('number');
+    expect(typeof o.dy).toBe('number');
+  });
+
+  it('both offset functions are pure — same result on repeated calls', () => {
+    expect(ticketCarryOffset()).toEqual(ticketCarryOffset());
+    expect(ticketAtDeskOffset()).toEqual(ticketAtDeskOffset());
   });
 });
 

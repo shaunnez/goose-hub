@@ -1,91 +1,211 @@
-// Derives one "agent placement" per active issue: which floor (project), which
-// desk (role), and which indicator to draw above the sprite. Pure derivation
-// from the canonical work-item list.
+// Derives { personas, tickets } from the canonical work-item list.
+// Pure derivation — no Phaser imports, no side effects.
+//
+// PersonaPlacement: one entry per active non-terminal item (with optional
+//   freeze for stay-put states).
+// TicketPlacement: one entry per visible work item, including done (shelf)
+//   and stay-put (carried by frozen persona).
 
+import { codenameFor } from './persona-codenames';
+import type { RoomId } from './rooms';
 import { IDLE_INDICATOR, type IndicatorKind, indicatorForState } from './state-indicators';
-import { OFFICE_ROLES, type OfficeRole, deskForState } from './state-to-role';
+import { OFFICE_ROLES, type OfficeRole } from './state-to-role';
+import {
+  DONE_STATES,
+  STAY_PUT_STATES,
+  TERMINAL_STATES,
+  deskSlotForRoom,
+  roomForState,
+} from './state-to-room';
+
+// ─── Input ───────────────────────────────────────────────────────────────────
 
 export interface AgentPlacementInput {
   workItemId: string;
   externalId: string;
   projectSlug: string;
   state: string;
-  /** Optional persona id used to keep the same sprite stable across ticks. */
   personaId?: string | null;
+  priority?: 'critical' | 'high' | 'normal' | 'low';
   title?: string;
 }
 
-// State labels that should KEEP a sprite at its previous desk and only swap
-// its indicator (the "blocked but still alive" cases). Distinct from terminal
-// states (`done` / `archived` / `rejected`) which remove the sprite entirely.
-const STAY_PUT_STATES = new Set<string>(['factory:needs-human', 'factory:gate-pending']);
+// ─── Output types ─────────────────────────────────────────────────────────────
 
-export interface AgentPlacement {
-  /** Stable identity key used by the scene to track sprites across re-renders. */
-  spriteId: string;
+export interface PersonaPlacement {
+  /** "${projectSlug}:${externalId}" — stable across state transitions */
+  personaId: string;
+  codename: string;
+  projectSlug: string;
   workItemId: string;
   externalId: string;
-  projectSlug: string;
-  /**
-   * Desk role for this placement. `null` means "stay at the sprite's previous
-   * desk and only update the indicator" — used for blocked states like
-   * `needs-human` and `gate-pending`. The scene drops such placements when no
-   * existing sprite is found (rare: first-ever sighting in a blocked state).
-   */
-  role: OfficeRole | null;
+  /** null = freeze in place (needs-human / gate-pending) */
+  roomId: RoomId | null;
+  /** 0-based index into roomDeskAnchors(roomId); -1 when frozen / queued */
+  deskSlot: number;
   indicator: IndicatorKind;
   title?: string;
 }
 
-/**
- * Returns one placement per work item that should be visible in the office.
- * Includes:
- *   - items with a real desk-mapped state (`role` set), and
- *   - items in stay-put blocked states (`role: null`, indicator `bang` or
- *     `question`) so the scene can preserve their sprite at the previous desk.
- *
- * Drops items in terminal states (`done`, `archived`, `rejected`).
- */
-export function placementsFromItems(items: readonly AgentPlacementInput[]): AgentPlacement[] {
-  const out: AgentPlacement[] = [];
-  for (const item of items) {
-    const role = deskForState(item.state);
-    if (role == null && !STAY_PUT_STATES.has(item.state)) continue;
-    out.push({
-      spriteId: `${item.projectSlug}:${item.externalId}`,
-      workItemId: item.workItemId,
-      externalId: item.externalId,
-      projectSlug: item.projectSlug,
-      role,
-      indicator: indicatorForState(item.state),
-      title: item.title,
-    });
-  }
-  return out;
+export interface TicketPlacement {
+  /** "${projectSlug}:${externalId}" — stable identity key */
+  ticketId: string;
+  externalId: string;
+  title: string;
+  priority: 'critical' | 'high' | 'normal' | 'low';
+  /** null when ticket has no active carrier (queue, slot, shelf, free) */
+  carrierPersonaId: string | null;
+  position: 'carried' | 'desk' | 'queue' | 'slot' | 'shelf' | 'free';
+  roomId: RoomId | null;
+  slotId: string | null;
+  /** 0-based shelf slot in Done room (0..4); null when not on shelf */
+  shelfSlot: number | null;
+  indicator: IndicatorKind | null;
+  projectSlug: string;
+  workItemId: string;
 }
 
+// ─── Main derivation ──────────────────────────────────────────────────────────
+
 /**
- * Returns the set of roles that currently have at least one active issue —
- * useful for picking the IDLE_INDICATOR for empty desks.
+ * Returns { personas, tickets } for all visible work items.
+ *
+ * Exclusions:
+ *   - archived / rejected → dropped entirely
+ *   - unknown states without a room mapping → dropped
+ *   - done → ticket only (shelf), no persona
  */
-export function busyRoles(placements: readonly AgentPlacement[]): Set<OfficeRole> {
+export function placementsFromItems(items: readonly AgentPlacementInput[]): {
+  personas: PersonaPlacement[];
+  tickets: TicketPlacement[];
+} {
+  const personas: PersonaPlacement[] = [];
+  const tickets: TicketPlacement[] = [];
+  const shelfIndices = new Map<string, number>();
+
+  for (const item of items) {
+    const { workItemId, externalId, projectSlug, state, priority = 'normal', title } = item;
+    const personaId = `${projectSlug}:${externalId}`;
+    const ticketId = personaId;
+    const indicator = indicatorForState(state);
+
+    // Archived / rejected — removed entirely
+    if (TERMINAL_STATES.has(state)) continue;
+
+    // Done — ticket only, positioned on the shelf
+    if (DONE_STATES.has(state)) {
+      tickets.push({
+        ticketId,
+        externalId,
+        title: title ?? '',
+        priority,
+        carrierPersonaId: null,
+        position: 'shelf',
+        roomId: 'done',
+        slotId: null,
+        shelfSlot: (shelfIndices.get(projectSlug) ?? 0) % 5,
+        indicator,
+        projectSlug,
+        workItemId,
+      });
+      shelfIndices.set(projectSlug, (shelfIndices.get(projectSlug) ?? 0) + 1);
+      continue;
+    }
+
+    // Stay-put — persona freezes at last known position; ticket stays carried
+    if (STAY_PUT_STATES.has(state)) {
+      personas.push({
+        personaId,
+        codename: codenameFor(personaId),
+        projectSlug,
+        workItemId,
+        externalId,
+        roomId: null,
+        deskSlot: -1,
+        indicator,
+        title,
+      });
+      // Stay-put has no concrete room, so the ticket floats free.
+      // TicketLayer cannot parent to a persona with no known desk position.
+      tickets.push({
+        ticketId,
+        externalId,
+        title: title ?? '',
+        priority,
+        carrierPersonaId: null,
+        position: 'free',
+        roomId: null,
+        slotId: null,
+        shelfSlot: null,
+        indicator,
+        projectSlug,
+        workItemId,
+      });
+      continue;
+    }
+
+    // Active state — map to room + desk slot
+    const roomId = roomForState(state);
+    if (roomId == null) continue; // unknown state — drop
+
+    const deskSlot = deskSlotForRoom(roomId, externalId);
+
+    personas.push({
+      personaId,
+      codename: codenameFor(personaId),
+      projectSlug,
+      workItemId,
+      externalId,
+      roomId,
+      deskSlot,
+      indicator,
+      title,
+    });
+    tickets.push({
+      ticketId,
+      externalId,
+      title: title ?? '',
+      priority,
+      carrierPersonaId: personaId,
+      position: 'carried',
+      roomId,
+      slotId: null,
+      shelfSlot: null,
+      indicator,
+      projectSlug,
+      workItemId,
+    });
+  }
+
+  return { personas, tickets };
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const ROOM_REPRESENTATIVE_ROLE: Partial<Record<RoomId, OfficeRole>> = {
+  triage: 'triager',
+  investigation: 'investigator',
+  dev: 'developer',
+  qa: 'qa',
+  review: 'reviewer',
+};
+
+/**
+ * Returns the set of roles that currently have at least one active persona.
+ * Used by the scene to toggle idle desk indicators in RoomLayer.
+ */
+export function busyRoles(personas: PersonaPlacement[]): Set<OfficeRole> {
   const set = new Set<OfficeRole>();
-  for (const p of placements) {
-    if (p.role != null) set.add(p.role);
+  for (const p of personas) {
+    if (p.roomId == null) continue;
+    const role = ROOM_REPRESENTATIVE_ROLE[p.roomId];
+    if (role != null) set.add(role);
   }
   return set;
 }
 
-/**
- * Returns the indicator to draw above an empty desk (no active issue at that
- * role). Always `IDLE_INDICATOR`; centralized here so the scene doesn't need
- * to know the constant.
- */
 export function idleIndicator(): IndicatorKind {
   return IDLE_INDICATOR;
 }
 
-/**
- * Re-exported for the scene's convenience: canonical desk order.
- */
 export { OFFICE_ROLES };

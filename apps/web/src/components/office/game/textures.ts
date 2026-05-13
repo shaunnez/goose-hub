@@ -55,6 +55,13 @@ export const TEXTURE_KEYS = {
   indicatorCoffee: 'office:indicator-coffee',
   indicatorBang: 'office:indicator-bang',
   indicatorCheck: 'office:indicator-check',
+  // Phase-3 ticket and queue-stack textures
+  ticket: 'office:ticket',
+  queueStack1: 'office:queue-stack-1',
+  queueStack2: 'office:queue-stack-2',
+  queueStack3: 'office:queue-stack-3',
+  queueStackMany: 'office:queue-stack-many',
+  ticketGlow: 'office:ticket-glow',
 } as const;
 
 export function indicatorTextureKey(kind: IndicatorKind): string {
@@ -105,6 +112,9 @@ export function ensureOfficeTextures(scene: Phaser.Scene): void {
   for (const role of Object.keys(ROLE_COLOR)) {
     generateSprite(scene, role, ROLE_COLOR[role]);
   }
+  generateTicket(scene);
+  generateQueueStacks(scene);
+  generateTicketGlow(scene);
   generateSpeechBubble(scene);
   generateThoughtBubble(scene);
   generateQuestionBubble(scene);
@@ -325,5 +335,60 @@ function generateCheckIcon(scene: Phaser.Scene): void {
   g.lineTo(11, 4);
   g.strokePath();
   g.generateTexture(key, 14, 14);
+  g.destroy();
+}
+
+function generateTicket(scene: Phaser.Scene): void {
+  const key = TEXTURE_KEYS.ticket;
+  if (scene.textures.exists(key)) return;
+  const g = scene.add.graphics({ x: 0, y: 0 });
+  // Card body
+  g.fillStyle(0xf5f0e8, 1);
+  g.fillRoundedRect(0, 0, 14, 10, 2);
+  g.lineStyle(1, 0x8a7355, 1);
+  g.strokeRoundedRect(0, 0, 14, 10, 2);
+  // Priority tint strip at top
+  g.fillStyle(0x6b4a8e, 1);
+  g.fillRect(0, 0, 14, 2);
+  // Text lines
+  g.fillStyle(0x4a3a5e, 0.5);
+  g.fillRect(2, 4, 8, 1);
+  g.fillRect(2, 6, 6, 1);
+  g.generateTexture(key, 14, 10);
+  g.destroy();
+}
+
+function generateQueueStacks(scene: Phaser.Scene): void {
+  const configs = [
+    { key: TEXTURE_KEYS.queueStack1, count: 1 },
+    { key: TEXTURE_KEYS.queueStack2, count: 2 },
+    { key: TEXTURE_KEYS.queueStack3, count: 3 },
+    { key: TEXTURE_KEYS.queueStackMany, count: 4 },
+  ];
+  for (const { key, count } of configs) {
+    if (scene.textures.exists(key)) continue;
+    const g = scene.add.graphics({ x: 0, y: 0 });
+    for (let i = count - 1; i >= 0; i--) {
+      const ox = i * 2;
+      const oy = i * 2;
+      g.fillStyle(0xf5f0e8, 1);
+      g.fillRoundedRect(ox, oy, 14, 10, 2);
+      g.lineStyle(1, 0x8a7355, 1);
+      g.strokeRoundedRect(ox, oy, 14, 10, 2);
+    }
+    g.generateTexture(key, 14 + 6, 10 + 6);
+    g.destroy();
+  }
+}
+
+function generateTicketGlow(scene: Phaser.Scene): void {
+  const key = TEXTURE_KEYS.ticketGlow;
+  if (scene.textures.exists(key)) return;
+  const g = scene.add.graphics({ x: 0, y: 0 });
+  g.fillStyle(0xffd700, 0.25);
+  g.fillRoundedRect(0, 0, 20, 16, 4);
+  g.lineStyle(1, 0xffd700, 0.6);
+  g.strokeRoundedRect(0, 0, 20, 16, 4);
+  g.generateTexture(key, 20, 16);
   g.destroy();
 }

@@ -15,11 +15,11 @@ import { useEffect, useRef } from 'react';
 import type { DeskClickPayload, FloorChangePayload, OfficeProject } from '../game/OfficeScene';
 import { OfficeScene } from '../game/OfficeScene';
 import { probeOfficePngAssets } from '../game/asset-loader';
-import type { AgentPlacement } from '../lib/agent-positions';
+import type { PersonaPlacement, TicketPlacement } from '../lib/agent-positions';
 
 interface OfficeGameMountProps {
   projects: readonly OfficeProject[];
-  placements: readonly AgentPlacement[];
+  placements: { personas: PersonaPlacement[]; tickets: TicketPlacement[] };
   /** Slug of the project whose floor the camera should focus on. */
   activeProjectSlug: string | null;
   onDeskClick: (payload: DeskClickPayload) => void;
