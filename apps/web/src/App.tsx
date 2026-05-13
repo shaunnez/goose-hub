@@ -7,6 +7,7 @@ import { AppShell } from './components/chrome/AppShell';
 import { CostsPage } from './components/costs/CostsPage';
 import { DetailPage } from './components/detail/components/DetailPage';
 import { InboxList } from './components/inbox/components/InboxList';
+import { OfficePage } from './components/office/components/OfficePage';
 import { RosterPage } from './components/roster/components/RosterPage';
 import { SettingsPage } from './components/settings/components/SettingsPage';
 import { ActiveMilestoneProvider } from './state/active-milestone';
@@ -151,6 +152,14 @@ export function App() {
             element={
               <ProjectShell>
                 <CostsPageRoute />
+              </ProjectShell>
+            }
+          />
+          <Route
+            path="/projects/:slug/office"
+            element={
+              <ProjectShell>
+                <OfficePage />
               </ProjectShell>
             }
           />
