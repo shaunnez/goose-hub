@@ -42,11 +42,6 @@ import {
 
 export type { DispatchReviewWaveOpts, FindingKey, ReviewWaveResult };
 
-/** Injected dependencies for review workflows (shared with workflow.ts). */
-interface ReviewWorkflowDeps {
-  runtime?: AgentRuntime;
-}
-
 function findPipelineRunId(projectSlug: string, workItemId: string): string | undefined {
   const events = eventStore.replay({ projectId: projectSlug, workItemId });
   const prOpened = events
@@ -189,7 +184,7 @@ export async function runConvergentReviewWorkflow(
   stateSource: StateSource,
   projectSlug: string,
   _targetRepo: string,
-  deps: ReviewWorkflowDeps = {},
+  deps: { runtime?: AgentRuntime } = {},
 ): Promise<void> {
   const injectedRuntime = deps.runtime;
   const runtimeForSlot = injectedRuntime
