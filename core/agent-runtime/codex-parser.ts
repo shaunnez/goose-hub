@@ -8,6 +8,11 @@ export interface CodexEnvelope {
   numTurns: number | null;
 }
 
+export interface CodexToolCall {
+  toolName: string;
+  toolInput: Record<string, unknown>;
+}
+
 /**
  * If `obj` is a Codex transport event of the form
  * `{"type":"item.completed","item":{"type":"agent_message","text":"..."}}`,
@@ -22,6 +27,22 @@ export function pickCodexAgentMessageText(obj: Record<string, unknown>): string 
     }
   }
   return null;
+}
+
+/**
+ * If `obj` is a Codex transport event for tool execution, returns the canonical
+ * tool-call shape used by Goose Hub timeline events. Today Codex exposes shell
+ * execution as `command_execution`, which corresponds to Claude Code's `Bash`.
+ */
+export function pickCodexToolCall(obj: Record<string, unknown>): CodexToolCall | null {
+  if (obj.type !== 'item.started' || typeof obj.item !== 'object' || obj.item === null) {
+    return null;
+  }
+  const item = obj.item as Record<string, unknown>;
+  if (item.type !== 'command_execution') return null;
+  const command = typeof item.command === 'string' ? item.command : null;
+  if (command == null || command.length === 0) return null;
+  return { toolName: 'Bash', toolInput: { command } };
 }
 
 /**

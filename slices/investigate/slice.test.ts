@@ -217,6 +217,48 @@ beforeEach(() => {
 // ─── tests ────────────────────────────────────────────────────────────────────
 
 describe('runInvestigateWorkflow', () => {
+  describe('chooseScoutModelOverride', () => {
+    it('uses the provider-aware investigator role model for DB role overrides', async () => {
+      const { chooseScoutModelOverride } = await import('./workflow.js');
+
+      const model = chooseScoutModelOverride({
+        resolvedBudget: {
+          budgets: { maxTurns: 20, maxBudgetUsd: 0.5, timeoutMs: 120_000 },
+          modelOverride: 'claude-haiku-4-5-20251001',
+        },
+        investigatorRoleModel: {
+          tier: 'sonnet',
+          provider: 'codex',
+          modelId: 'gpt-5.4',
+          source: 'db',
+        },
+        forcedRuntimeProvider: null,
+      });
+
+      expect(model).toBe('gpt-5.4');
+    });
+
+    it('coerces per-skill budget tier to a forced Codex runtime when no role override exists', async () => {
+      const { chooseScoutModelOverride } = await import('./workflow.js');
+
+      const model = chooseScoutModelOverride({
+        resolvedBudget: {
+          budgets: { maxTurns: 20, maxBudgetUsd: 0.5, timeoutMs: 120_000 },
+          modelOverride: 'claude-haiku-4-5-20251001',
+        },
+        investigatorRoleModel: {
+          tier: 'opus',
+          provider: 'claude',
+          modelId: 'claude-opus-4-7',
+          source: 'skill',
+        },
+        forcedRuntimeProvider: 'codex',
+      });
+
+      expect(model).toBe('gpt-5.4-mini');
+    });
+  });
+
   describe('swarm dispatch — acceptance criterion 1', () => {
     it('calls dispatchWave exactly twice (Wave 1 then Wave 2)', async () => {
       const { runInvestigateWorkflow } = await import('./workflow.js');

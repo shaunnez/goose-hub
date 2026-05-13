@@ -1,7 +1,13 @@
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
+import type { ResolvedBudget } from '@goose-hub/core/agent-runtime/budgets.js';
 import { crossValidate } from '@goose-hub/core/agent-runtime/cross-validate.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
+import {
+  type ModelProvider,
+  defaultModelForTierAndProvider,
+  tierOf,
+} from '@goose-hub/core/agent-runtime/models.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import {
   resolveBudgetsForProject,
@@ -9,9 +15,10 @@ import {
 } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { ScoutOutputSchema } from '@goose-hub/core/agent-runtime/scout-output.js';
+import type { SelectModelForRoleResult } from '@goose-hub/core/agent-runtime/select-model-for-role.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
-import { dispatchWave } from '@goose-hub/core/agent-runtime/swarm.js';
+import { type ScoutBudgetResolver, dispatchWave } from '@goose-hub/core/agent-runtime/swarm.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
@@ -30,6 +37,30 @@ import type { z } from 'zod';
 import { WAVE_1_SCOUTS, selectWave2Scouts } from './wave2-selection.js';
 
 type InvestigateOutput = z.infer<typeof InvestigateSchema>;
+
+export function chooseScoutModelOverride(input: {
+  resolvedBudget: ResolvedBudget;
+  investigatorRoleModel: SelectModelForRoleResult;
+  forcedRuntimeProvider: ModelProvider | null;
+}): string {
+  const { resolvedBudget, investigatorRoleModel, forcedRuntimeProvider } = input;
+
+  if (investigatorRoleModel.source === 'db' || investigatorRoleModel.source === 'config') {
+    return defaultModelForTierAndProvider(
+      investigatorRoleModel.tier,
+      forcedRuntimeProvider ?? investigatorRoleModel.provider,
+    );
+  }
+
+  if (forcedRuntimeProvider != null) {
+    return defaultModelForTierAndProvider(
+      tierOf(resolvedBudget.modelOverride),
+      forcedRuntimeProvider,
+    );
+  }
+
+  return resolvedBudget.modelOverride;
+}
 
 function buildSchemaScoutFocus(workItem: { title: string; body: string }): string {
   const text = `${workItem.title}\n${workItem.body}`.toLowerCase();
@@ -103,14 +134,24 @@ export async function runInvestigateWorkflow(
     allowHoldoutOverride: projectConfig?.agentConfig?.allowHoldoutOverride,
     skill: 'investigate',
   });
-  const investigatorModelOverride =
+  const configRuntime = projectConfig?.agentConfig?.runtime ?? 'auto';
+  const forcedRuntimeProvider: ModelProvider | null =
+    configRuntime === 'codex-cli' ? 'codex' : configRuntime === 'claude-cli' ? 'claude' : null;
+  const configuredInvestigatorModelOverride =
     investigateRoleModel.source === 'db' || investigateRoleModel.source === 'config'
       ? investigateRoleModel.modelId
       : investigateBudget.modelOverride;
+  const investigatorModelOverride =
+    forcedRuntimeProvider != null
+      ? defaultModelForTierAndProvider(
+          tierOf(configuredInvestigatorModelOverride),
+          forcedRuntimeProvider,
+        )
+      : configuredInvestigatorModelOverride;
   const runtime =
     deps.runtime ??
     selectRuntime({
-      configRuntime: projectConfig?.agentConfig?.runtime ?? 'auto',
+      configRuntime,
       model: investigatorModelOverride,
     });
   const worktreePath = createWtFn(targetRepo, runId);
@@ -133,6 +174,22 @@ export async function runInvestigateWorkflow(
       outputJsonSchema: scoutJsonSchema,
     };
   }
+
+  const resolveInvestigateScoutBudget: ScoutBudgetResolver = (
+    skill,
+    projectBudgets,
+    currentProjectId,
+  ) => {
+    const resolved = resolveBudgetsForProject(skill, projectBudgets, currentProjectId);
+    return {
+      ...resolved,
+      modelOverride: chooseScoutModelOverride({
+        resolvedBudget: resolved,
+        investigatorRoleModel: investigateRoleModel,
+        forcedRuntimeProvider,
+      }),
+    };
+  };
 
   eventStore.appendEvent({
     projectId,
@@ -175,6 +232,7 @@ export async function runInvestigateWorkflow(
       runtime,
       personaId,
       projectBudgets: projectConfig?.budgets,
+      resolveScoutBudget: resolveInvestigateScoutBudget,
       loadSkillAssets,
     });
 
@@ -242,6 +300,7 @@ export async function runInvestigateWorkflow(
       personaId,
       projectBudgets: projectConfig?.budgets,
       minSuccessfulScouts: wave2Scouts.length,
+      resolveScoutBudget: resolveInvestigateScoutBudget,
       loadSkillAssets,
     });
 

@@ -22,6 +22,7 @@ import {
   extractResultJson,
   parseCodexEnvelope,
   pickCodexAgentMessageText,
+  pickCodexToolCall,
 } from './codex-parser.js';
 import { assembleSpawnContext } from './context-assembly.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
@@ -39,6 +40,7 @@ export {
   parseCodexEnvelope,
   extractResultJson,
   pickCodexAgentMessageText,
+  pickCodexToolCall,
 } from './codex-parser.js';
 
 const STDOUT_CAP = 4 * 1024 * 1024; // 4 MB
@@ -68,7 +70,7 @@ export class CodexCliRuntime implements AgentRuntime {
     }
     deployHooks();
     if (recordDecisionTool) deployDecisionCaptureHook();
-    const workItemId = (spec.context.workItemId as string) ?? null;
+    const workItemId = (spec.context.workItemId as string | undefined) ?? spec.workItemId ?? null;
     const { personaId } = spec;
 
     eventStore.appendEvent({
@@ -144,13 +146,45 @@ export class CodexCliRuntime implements AgentRuntime {
 
       let stdout = '';
       let stderr = '';
+      let stdoutLineBuffer = '';
       let truncated = false;
+
+      const handleStdoutLine = (line: string) => {
+        if (line.trim().length === 0) return;
+        try {
+          const parsed = JSON.parse(line) as unknown;
+          if (parsed == null || typeof parsed !== 'object') return;
+          const toolCall = pickCodexToolCall(parsed as Record<string, unknown>);
+          if (toolCall == null) return;
+          eventStore.appendEvent({
+            projectId,
+            workItemId,
+            kind: 'agent.tool-call',
+            payload: {
+              tool_name: toolCall.toolName,
+              run_id: runId,
+              tool_input: toolCall.toolInput,
+              skill: spec.skill,
+            },
+            runId,
+            personaId,
+          });
+        } catch {
+          /* non-JSON stdout lines are handled by parseCodexEnvelope at close */
+        }
+      };
 
       child.stderr?.on('data', (chunk: Buffer) => {
         stderr += chunk.toString();
       });
 
       child.stdout.on('data', (chunk: Buffer) => {
+        const text = chunk.toString();
+        stdoutLineBuffer += text;
+        const lines = stdoutLineBuffer.split(/\r?\n/);
+        stdoutLineBuffer = lines.pop() ?? '';
+        for (const line of lines) handleStdoutLine(line);
+
         const remaining = STDOUT_CAP - stdout.length;
         if (remaining <= 0) {
           if (!truncated) {
@@ -166,7 +200,7 @@ export class CodexCliRuntime implements AgentRuntime {
           }
           return;
         }
-        stdout += chunk.slice(0, remaining).toString();
+        stdout += text.slice(0, remaining);
       });
 
       const effectiveTimeoutMs = spec.budgets.timeoutMs ?? TIMEOUT_MS;
@@ -185,6 +219,8 @@ export class CodexCliRuntime implements AgentRuntime {
 
       child.on('close', (code) => {
         clearTimeout(timeout);
+        handleStdoutLine(stdoutLineBuffer);
+        stdoutLineBuffer = '';
 
         const envelope = parseCodexEnvelope(stdout);
 

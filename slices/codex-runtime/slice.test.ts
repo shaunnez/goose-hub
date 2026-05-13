@@ -11,6 +11,7 @@ import {
   buildCodexArgv,
   escapeForTomlMultilineBasic,
   parseCodexEnvelope,
+  pickCodexToolCall,
   resolveCodexBinary,
 } from '@goose-hub/core/agent-runtime/codex-cli.js';
 import type { AgentSpec } from '@goose-hub/core/agent-runtime/interface.js';
@@ -308,6 +309,39 @@ describe('parseCodexEnvelope', () => {
   });
 });
 
+describe('pickCodexToolCall', () => {
+  it('normalises Codex command_execution start events to Bash tool calls', () => {
+    const toolCall = pickCodexToolCall({
+      type: 'item.started',
+      item: {
+        id: 'item_0',
+        type: 'command_execution',
+        command: '/bin/zsh -lc pwd',
+        status: 'in_progress',
+      },
+    });
+
+    expect(toolCall).toEqual({
+      toolName: 'Bash',
+      toolInput: { command: '/bin/zsh -lc pwd' },
+    });
+  });
+
+  it('ignores completed command events so the runtime does not double-count calls', () => {
+    expect(
+      pickCodexToolCall({
+        type: 'item.completed',
+        item: {
+          id: 'item_0',
+          type: 'command_execution',
+          command: '/bin/zsh -lc pwd',
+          status: 'completed',
+        },
+      }),
+    ).toBeNull();
+  });
+});
+
 describe('CodexCliRuntime — spawn lifecycle', () => {
   it('emits agent.run-started and agent.run-completed on a happy path', async () => {
     const proc = createMockProcess();
@@ -348,6 +382,84 @@ describe('CodexCliRuntime — spawn lifecycle', () => {
     expect((startCall?.[0].payload as { runtime: string }).runtime).toBe('codex-cli');
     expect(completeCall).toBeDefined();
     expect((completeCall?.[0].payload as { runtime: string }).runtime).toBe('codex-cli');
+  });
+
+  it('emits agent.tool-call events from Codex JSONL command_execution items', async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as unknown as ReturnType<typeof spawn>);
+
+    const runtime = new CodexCliRuntime();
+    const runPromise = runtime.run(makeSpec());
+
+    proc.stdout.emit(
+      'data',
+      Buffer.from(
+        [
+          JSON.stringify({
+            type: 'item.started',
+            item: {
+              id: 'item_0',
+              type: 'command_execution',
+              command: '/bin/zsh -lc pwd',
+              aggregated_output: '',
+              exit_code: null,
+              status: 'in_progress',
+            },
+          }),
+          JSON.stringify({
+            type: 'item.completed',
+            item: { id: 'item_1', type: 'agent_message', text: '{"ok":true}' },
+          }),
+          JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 10, output_tokens: 2 } }),
+        ].join('\n'),
+      ),
+    );
+    proc.simulateClose(0);
+
+    await runPromise;
+
+    const eventStore = await import('@goose-hub/core/event-stream/store.js');
+    const toolCall = vi
+      .mocked(eventStore.eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'agent.tool-call');
+    expect(toolCall).toBeDefined();
+    expect(toolCall?.[0]).toMatchObject({
+      projectId: 'proj-test',
+      workItemId: 'item-1',
+      runId: 'codex-test-run',
+      personaId: 'test-project/dev-reviewer/0',
+      payload: {
+        tool_name: 'Bash',
+        run_id: 'codex-test-run',
+        tool_input: { command: '/bin/zsh -lc pwd' },
+        skill: 'dev-review',
+      },
+    });
+  });
+
+  it('falls back to spec.workItemId when context omits workItemId', async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as unknown as ReturnType<typeof spawn>);
+
+    const runtime = new CodexCliRuntime();
+    const runPromise = runtime.run(
+      makeSpec({
+        context: { projectId: 'proj-test' },
+        contextAllowlist: ['projectId'],
+        workItemId: 'item-from-spec',
+      }),
+    );
+
+    proc.stdout.emit('data', Buffer.from(JSON.stringify({ result: '{"ok":true}', usage: {} })));
+    proc.simulateClose(0);
+
+    await runPromise;
+
+    const eventStore = await import('@goose-hub/core/event-stream/store.js');
+    const startCall = vi
+      .mocked(eventStore.eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'agent.run-started');
+    expect(startCall?.[0].workItemId).toBe('item-from-spec');
   });
 
   it('surfaces malformed output as raw string so the schema validator handles it', async () => {

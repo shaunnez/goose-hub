@@ -291,9 +291,13 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       });
     }
 
+    const itemLabels = (await stateSource.listLabels?.(item.externalId)) ?? [];
+
     // Apply labels
     // Only stamp type on first triage — never reclassify an already-typed item.
-    if (item.type == null) {
+    // `WorkItem.type` is normalized with a default, so label presence is the
+    // source of truth for whether this item was explicitly typed already.
+    if (!itemLabels.some((label) => label.startsWith('type:'))) {
       await stateSource.setLabelInGroup(item.externalId, 'type', triageOutput.type);
     }
     await stateSource.setLabelInGroup(
@@ -331,7 +335,6 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
     });
 
     // Determine whether this item carries factory:from-prd (decomposed child)
-    const itemLabels = (await stateSource.listLabels?.(item.externalId)) ?? [];
     const isFromPrd = itemLabels.includes('factory:from-prd');
 
     let finalState: StateName;

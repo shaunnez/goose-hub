@@ -3,7 +3,7 @@ import type { ResolvedBudget, SkillBudgetOverride } from './budgets.js';
 import { assembleSpawnContext } from './context-assembly.js';
 import type { AgentResult, AgentRuntime, AgentSpec, DecisionSummary } from './interface.js';
 import { resolveBudgetsForProject } from './resolve-for-project.js';
-import { ScoutOutputSchema } from './scout-output.js';
+import { ScoutOutputSchema, normalizeScoutOutput } from './scout-output.js';
 import { ScoutTimeoutError, runWithDeadline } from './swarm-utils.js';
 
 /** Per-scout findings. Mirrors `ScoutOutputSchema` in each scout's schema.ts. */
@@ -240,9 +240,10 @@ export async function runOneScout(
     };
   }
 
-  const findings = parsed.data.findings;
+  const scoutOutput = normalizeScoutOutput(parsed.data);
+  const findings = scoutOutput.findings;
   const decisionSummaries =
-    result.decisionSummaries.length > 0 ? result.decisionSummaries : parsed.data.decisionSummaries;
+    result.decisionSummaries.length > 0 ? result.decisionSummaries : scoutOutput.decisionSummaries;
 
   append({
     projectId: ctx.projectId,
