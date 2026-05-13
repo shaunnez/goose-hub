@@ -5,6 +5,7 @@ import { STATES } from '@goose-hub/core/state-machine/states.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { GitHubLabelsSource } from '@goose-hub/core/state-source/github-labels.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
+import { githubRepoRef } from '@goose-hub/core/types.js';
 import { targetProjectsRoot } from '@goose-hub/target-projects';
 import { and, eq, gte, lt } from 'drizzle-orm';
 
@@ -31,7 +32,8 @@ export async function statusCommand(slug: string): Promise<void> {
     process.exit(1);
   }
 
-  const source = new GitHubLabelsSource(config.id, config.source.repo, token);
+  const repoRef = githubRepoRef(config.source);
+  const source = new GitHubLabelsSource(config.id, repoRef, token);
 
   let items: WorkItem[];
   let milestoneLabel: string | null = null;
@@ -57,7 +59,7 @@ export async function statusCommand(slug: string): Promise<void> {
     process.exit(1);
   }
 
-  console.log(`${config.name} (${config.source.repo})`);
+  console.log(`${config.name} (${repoRef})`);
   if (milestoneLabel) {
     console.log(`Active milestone: ${milestoneLabel}`);
   }

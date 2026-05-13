@@ -142,6 +142,11 @@ export async function createProjectAwareTargetSource(
   const fetchers = new Map<string, ProjectIssueFetcher>();
 
   for (const project of projects) {
+    // Dependency resolution is GitHub-only — Jira-backed projects don't
+    // participate in cross-repo dep tracking yet (M14 ships Work Mode read
+    // surfaces only). Skip non-github sources to avoid widening the map
+    // with a non-functional key.
+    if (project.source.kind !== 'github') continue;
     const repoRef = project.source.repo;
     const fetcher =
       options.fetchTargetForProject != null

@@ -1,7 +1,33 @@
-export interface SourceConfig {
+export interface GithubSourceConfig {
   kind: 'github';
   repo: string;
   stateMachine: 'labels';
+}
+
+export interface JiraSourceConfig {
+  kind: 'jira';
+  /** Jira project key, e.g. "PROJ". */
+  projectKey: string;
+  /** Issue types treated as factory-relevant. Default: Story, Bug, Task. */
+  issueTypes?: string[];
+  /**
+   * Optional per-project status mapping override. Keys are Jira status
+   * strings ("To Do", "In Progress"); values are factory:* state labels.
+   * Merged over the defaults in `core/state-source/jira-state-map.ts`.
+   */
+  statusMap?: Record<string, string>;
+}
+
+export type SourceConfig = GithubSourceConfig | JiraSourceConfig;
+
+/**
+ * Narrowing helper for code paths that only support GitHub sources.
+ * Throws if the project is Jira-backed — callers should check `.kind`
+ * upstream, but having this central helper avoids ad-hoc casts.
+ */
+export function githubRepoRef(source: SourceConfig): string {
+  if (source.kind === 'github') return source.repo;
+  throw new Error(`Expected github source, got ${source.kind}`);
 }
 
 export interface TargetRepoConfig {

@@ -254,7 +254,9 @@ describe('createProjectAwareTargetSource', () => {
     const fetch = await createProjectAwareTargetSource({
       projects: [makeProject('shaunnez/goose-hub'), makeProject('shaunnez/other-repo')],
       fetchTargetForProject: (p) =>
-        p.source.repo === 'shaunnez/goose-hub' ? goosehubFetcher : otherFetcher,
+        p.source.kind === 'github' && p.source.repo === 'shaunnez/goose-hub'
+          ? goosehubFetcher
+          : otherFetcher,
     });
 
     const result = await fetch('shaunnez/other-repo', 99);

@@ -7,6 +7,7 @@ import {
 } from '@goose-hub/core/projects/move-with-deps.js';
 import { GitHubLabelsSource } from '@goose-hub/core/state-source/github-labels.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
+import { githubRepoRef } from '@goose-hub/core/types.js';
 import { targetProjectsRoot } from '@goose-hub/target-projects';
 
 export async function taskMoveCommand(rawArgs: string[]): Promise<void> {
@@ -46,7 +47,8 @@ export async function taskMoveCommand(rawArgs: string[]): Promise<void> {
     process.exit(1);
   }
 
-  const source = new GitHubLabelsSource(config.id, config.source.repo, token);
+  const repoRef = githubRepoRef(config.source);
+  const source = new GitHubLabelsSource(config.id, repoRef, token);
   let item: WorkItem;
   try {
     item = await source.getItem(id);
@@ -92,7 +94,7 @@ export async function taskMoveCommand(rawArgs: string[]): Promise<void> {
   try {
     result = await moveIssueToCurrent(
       item.body,
-      config.source.repo,
+      repoRef,
       Number(item.externalId),
       mode,
       fetchLifecycle,

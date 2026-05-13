@@ -10,6 +10,7 @@ import { useParams } from 'react-router-dom';
 import { parseDiff } from '../lib/code-diff';
 import { useIssueCostsBreakdown } from '../lib/costs';
 import { CommentsSection } from './CommentsSection';
+import { ConfluenceLinksSection } from './ConfluenceLinksSection';
 import { DependenciesSection } from './DependenciesSection';
 import { StatCard } from './StatCard';
 
@@ -129,6 +130,16 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
         {/* Dependencies */}
         {item != null && projectSlug != null && (
           <DependenciesSection item={item} projectSlug={projectSlug} />
+        )}
+
+        {/* Confluence references (M14.05 / #324) — appears only when the
+            body or comments contain Confluence URLs. */}
+        {item != null && projectSlug != null && (
+          <ConfluenceLinksSection
+            body={item.body}
+            projectSlug={projectSlug}
+            externalId={item.externalId}
+          />
         )}
 
         {/* Comments card */}

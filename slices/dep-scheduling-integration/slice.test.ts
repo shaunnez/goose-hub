@@ -155,8 +155,12 @@ describe('cross-repo registered dependency', () => {
     const buildFetchTarget = () =>
       createProjectAwareTargetSource({
         projects: [makeProject(MAIN_REPO), makeProject(CROSS_REPO)],
-        fetchTargetForProject: (p) =>
-          fetchers[p.source.repo] ?? (async () => ({ state: 'open', title: 'fallback' })),
+        fetchTargetForProject: (p) => {
+          if (p.source.kind === 'github' && fetchers[p.source.repo] != null) {
+            return fetchers[p.source.repo];
+          }
+          return async () => ({ state: 'open', title: 'fallback' });
+        },
       });
 
     const itemA = makeItem('400', `Depends on ${CROSS_REPO}#55`);

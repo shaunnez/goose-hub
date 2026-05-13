@@ -212,4 +212,71 @@ describe('startPerProjectScheduler', () => {
     const scheduler = startPerProjectScheduler([], async () => {});
     expect(() => scheduler.stop()).not.toThrow();
   });
+
+  it('refuses to schedule jira-backed projects when WORK_MACHINE is unset (M14.06)', async () => {
+    const saved = process.env.WORK_MACHINE;
+    // biome-ignore lint/performance/noDelete: env restore for test isolation
+    delete process.env.WORK_MACHINE;
+    try {
+      const ticks: string[] = [];
+      const projects = [
+        { slug: 'gh-project', source: { kind: 'github' } } as unknown as ProjectConfig,
+        { slug: 'work-project', source: { kind: 'jira' } } as unknown as ProjectConfig,
+      ];
+      const scheduler = startPerProjectScheduler(projects, async (slug) => {
+        ticks.push(slug);
+      });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(ticks).toContain('gh-project');
+      expect(ticks).not.toContain('work-project');
+      scheduler.stop();
+    } finally {
+      if (saved !== undefined) process.env.WORK_MACHINE = saved;
+    }
+  });
+
+  it('schedules jira-backed projects when WORK_MACHINE=true (M14.06)', async () => {
+    const saved = process.env.WORK_MACHINE;
+    process.env.WORK_MACHINE = 'true';
+    try {
+      const ticks: string[] = [];
+      const projects = [
+        { slug: 'work-project', source: { kind: 'jira' } } as unknown as ProjectConfig,
+      ];
+      const scheduler = startPerProjectScheduler(projects, async (slug) => {
+        ticks.push(slug);
+      });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(ticks).toContain('work-project');
+      scheduler.stop();
+    } finally {
+      // biome-ignore lint/performance/noDelete: env restore for test isolation
+      if (saved === undefined) delete process.env.WORK_MACHINE;
+      else process.env.WORK_MACHINE = saved;
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Work-machine gate (M14.06 / #325)
+// ---------------------------------------------------------------------------
+
+describe('work-machine gate', () => {
+  it('isWorkMachine returns true only when env is exactly "true"', async () => {
+    const { isWorkMachine } = await import('./loader.js');
+    expect(isWorkMachine({ WORK_MACHINE: 'true' })).toBe(true);
+    expect(isWorkMachine({ WORK_MACHINE: 'TRUE' })).toBe(false);
+    expect(isWorkMachine({ WORK_MACHINE: '1' })).toBe(false);
+    expect(isWorkMachine({})).toBe(false);
+  });
+
+  it('projectRequiresWorkMachine flags Jira sources', async () => {
+    const { projectRequiresWorkMachine } = await import('./loader.js');
+    expect(
+      projectRequiresWorkMachine({ source: { kind: 'jira' } } as unknown as ProjectConfig),
+    ).toBe(true);
+    expect(
+      projectRequiresWorkMachine({ source: { kind: 'github' } } as unknown as ProjectConfig),
+    ).toBe(false);
+  });
 });

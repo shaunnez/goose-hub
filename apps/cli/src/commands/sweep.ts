@@ -3,6 +3,7 @@ import { loadProjects } from '@goose-hub/core/projects/loader.js';
 import { TERMINAL_STATES } from '@goose-hub/core/state-machine/states.js';
 import { GitHubLabelsSource } from '@goose-hub/core/state-source/github-labels.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
+import { githubRepoRef } from '@goose-hub/core/types.js';
 import { targetProjectsRoot } from '@goose-hub/target-projects';
 
 export async function sweepCommand(slug: string, milestoneArg: string): Promise<void> {
@@ -31,7 +32,7 @@ export async function sweepCommand(slug: string, milestoneArg: string): Promise<
     process.exit(1);
   }
 
-  const source = new GitHubLabelsSource(config.id, config.source.repo, token);
+  const source = new GitHubLabelsSource(config.id, githubRepoRef(config.source), token);
 
   let allOpen: WorkItem[];
   try {

@@ -176,7 +176,8 @@ export async function dispatchSpecAuthor(slug: string, issueNumber: number): Pro
     if (depProjectConfig != null) {
       const fetchTarget = await createProjectAwareTargetSource();
       const { eligible } = await filterEligibleByDependencies([item], {
-        currentRepo: depProjectConfig.source.repo,
+        currentRepo:
+          depProjectConfig.source.kind === 'github' ? depProjectConfig.source.repo : slug,
         fetchTarget,
         source,
       });
@@ -252,7 +253,8 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
     if (depProjectConfig != null) {
       const fetchTarget = await createProjectAwareTargetSource();
       const { eligible } = await filterEligibleByDependencies([item], {
-        currentRepo: depProjectConfig.source.repo,
+        currentRepo:
+          depProjectConfig.source.kind === 'github' ? depProjectConfig.source.repo : slug,
         fetchTarget,
         source,
       });

@@ -53,3 +53,46 @@ describe('chrome slice — deferred surfaces config', () => {
     expect(collapsed).toBe(false);
   });
 });
+
+describe('chrome slice — search modal (#603)', () => {
+  const topBarSource = readFileSync(join(import.meta.dirname, 'TopBar.tsx'), 'utf-8');
+  const searchModalSource = readFileSync(join(import.meta.dirname, 'SearchModal.tsx'), 'utf-8');
+
+  it('TopBar imports the SearchModal', () => {
+    expect(topBarSource).toContain('SearchModal');
+    expect(topBarSource).toContain("from '@/components/chrome/SearchModal'");
+  });
+
+  it('TopBar wires a ⌘K / Ctrl+K keyboard shortcut', () => {
+    expect(topBarSource).toContain('metaKey');
+    expect(topBarSource).toContain('ctrlKey');
+    expect(topBarSource).toMatch(/key.*toLowerCase\(\).*===.*'k'/);
+  });
+
+  it('TopBar no longer renders the disabled search button', () => {
+    expect(topBarSource).not.toContain('Search — available later');
+    expect(topBarSource).toContain('data-testid="search-button"');
+  });
+
+  it('SearchModal exposes test-ids the e2e suite hooks into', () => {
+    for (const id of [
+      '"search-modal"',
+      '"search-modal-input"',
+      '"search-modal-results"',
+      '"search-modal-empty"',
+      '"search-modal-result"',
+    ]) {
+      expect(searchModalSource).toContain(id);
+    }
+  });
+
+  it('SearchModal navigates to /projects/:slug/items/:id on select', () => {
+    expect(searchModalSource).toMatch(/\/projects\/\$\{[^}]+\}\/items\/\$\{[^}]+\}/);
+    expect(searchModalSource).toContain('useNavigate');
+  });
+
+  it('SearchModal closes on Escape', () => {
+    expect(searchModalSource).toContain("e.key === 'Escape'");
+    expect(searchModalSource).toContain('onClose');
+  });
+});

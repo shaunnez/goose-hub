@@ -1,6 +1,7 @@
+import { SearchModal } from '@/components/chrome/SearchModal';
 import { CaptureModal } from '@/components/ui/CaptureModal';
-import { Plus, Search, Terminal } from 'lucide-react';
-import { useState } from 'react';
+import { Plus, Search } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 interface TopBarProps {
   breadcrumb?: React.ReactNode;
@@ -8,6 +9,19 @@ interface TopBarProps {
 
 export function TopBar({ breadcrumb }: TopBarProps) {
   const [showCapture, setShowCapture] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+
+  // ⌘K / Ctrl+K opens the search modal globally (#603).
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setShowSearch(true);
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   return (
     <>
@@ -29,15 +43,23 @@ export function TopBar({ breadcrumb }: TopBarProps) {
         </button>
         <button
           type="button"
-          disabled
-          title="Search — available later"
-          className="flex items-center gap-2 h-7 px-2.5 rounded-md text-[12px] text-fg-2 border border-line bg-bg cursor-not-allowed"
+          data-testid="search-button"
+          onClick={() => setShowSearch(true)}
+          title="Search issues (⌘K)"
+          className="flex items-center gap-2 h-7 px-2.5 rounded-md text-[12px] text-fg-2 border border-line bg-bg hover:bg-bg-elev cursor-pointer"
         >
           <Search size={13} />
           <span>Search</span>
+          <span
+            aria-hidden
+            className="ml-1 hidden sm:inline-flex items-center gap-0.5 text-[10.5px] text-fg-3 font-mono"
+          >
+            ⌘K
+          </span>
         </button>
       </header>
       <CaptureModal open={showCapture} onClose={() => setShowCapture(false)} />
+      <SearchModal open={showSearch} onClose={() => setShowSearch(false)} />
     </>
   );
 }

@@ -1,6 +1,6 @@
 # core/state-source
 
-Adapter layer between Goose Hub and the source of truth for work items (currently GitHub Issues; Jira lands in M14).
+Adapter layer between Goose Hub and the source of truth for work items. Two backends are supported: GitHub Issues (default) and Jira (M14).
 
 ## Modules
 
@@ -50,9 +50,36 @@ Lifecycle (open/closed) is read straight from the GitHub issues endpoint inside 
 - Read methods (`listOpenWork`, `getItem`, `listMilestones`, `getActiveMilestone`) are implemented in M1.
 - Write methods (`transitionState`, `comment`, `attach`, `createIssue`, `watchForUpdates`) throw `NotImplementedError` in M1; wired up in M2.
 
+### `jira.ts` (M14.01 / #322)
+
+`JiraStateSource` — `StateSource` backed by the Atlassian Cloud REST API v3.
+
+- Reads issues via `GET /rest/api/3/search` with a JQL query scoped to the
+  configured project key + `issuetype in (Story, Bug, Task)` (configurable
+  via `JiraSourceConfig.issueTypes`).
+- HTTP Basic auth from `JIRA_HOST`, `JIRA_USER`, `JIRA_API_TOKEN`. The
+  constructor throws if any of these are unset — no silent fallback.
+- Status is mapped to `factory:*` state via `jira-state-map.ts`; per-project
+  overrides live on `JiraSourceConfig.statusMap` (#327).
+- Jira has no native milestone primitive; `listMilestones()` synthesises a
+  single milestone covering open + closed counts so milestone-aware code
+  paths in the orchestrator don't need to branch on `source.kind`.
+- Bodies are ADF documents; `adfFromMarkdown` / `adfToText` handle the
+  document conversion. Rich formatting is deferred.
+- `transitionStatus()` looks up the Jira transition id for the target
+  status and POSTs `POST /rest/api/3/issue/{key}/transitions`. Missing
+  transitions log a warning and skip rather than throw.
+
+### `jira-state-map.ts` (M14.02 / #327)
+
+Default Jira status → `factory:*` mapping plus helpers
+(`jiraStatusToState`, `factoryStateToJiraStatus`). Defaults cover the
+canonical Atlassian workflow (To Do, In Progress, In Review, Done,
+Blocked) and accept per-project overrides merged on top.
+
 ## Consumers
 
 - `apps/cli` — `goose status <slug>` (read-only).
 - `apps/server` — REST + SSE routes (M2).
 
-Slices and surface code must go through `StateSource`; never call the GitHub API directly.
+Slices and surface code must go through `StateSource`; never call the GitHub or Jira APIs directly.

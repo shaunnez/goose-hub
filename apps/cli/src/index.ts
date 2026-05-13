@@ -1,5 +1,6 @@
 #!/usr/bin/env tsx
 import 'dotenv/config';
+import { isWorkMachine } from '@goose-hub/core/projects/loader.js';
 import { bootstrapProject } from '@goose-hub/core/workflows/bootstrap-project.js';
 import { bootstrapCommand } from './bootstrap-command.js';
 import { runAgentCommand } from './commands/agent.js';
@@ -8,6 +9,7 @@ import { skillCommand } from './commands/skill.js';
 import { statusCommand } from './commands/status.js';
 import { sweepCommand } from './commands/sweep.js';
 import { taskMoveCommand } from './commands/task-move.js';
+import { workCommand, workHelpLines } from './commands/work.js';
 
 const [, , command, ...args] = process.argv;
 
@@ -37,6 +39,11 @@ switch (command) {
   case 'skill':
     await skillCommand(args);
     break;
+  case 'work': {
+    const exitCode = await workCommand(args);
+    process.exit(exitCode);
+    break;
+  }
   case 'project':
     if (args[0] === 'bootstrap') {
       const exitCode = await bootstrapCommand({
@@ -66,5 +73,8 @@ switch (command) {
     console.error('  playbook export|import <project-slug> [--json]');
     console.error('  skill triggers <skill-name> [--json]');
     console.error('  project bootstrap <owner>/<repo>  Bootstrap a new project into Factory');
+    if (isWorkMachine()) {
+      for (const line of workHelpLines()) console.error(line);
+    }
     process.exit(1);
 }

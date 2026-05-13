@@ -143,7 +143,8 @@ export async function approveCandidate(
       return { ok: true, data: { candidate: updated ?? candidate } };
     }
 
-    const issueUrl = await createGithubImprovementIssue(cfg.source.repo, token, existing);
+    const githubRepo = cfg.source.repo;
+    const issueUrl = await createGithubImprovementIssue(githubRepo, token, existing);
     const updated = await updateCandidateGithubIssue(id, issueUrl, null);
     return { ok: true, data: { candidate: updated ?? candidate } };
   } catch (err) {

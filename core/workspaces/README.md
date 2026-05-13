@@ -6,20 +6,40 @@ Git worktree lifecycle management for Factory investigation runs.
 
 | File | Exports |
 |------|---------|
-| `worktree.ts` | `createWorktree`, `cleanupWorktree` |
+| `worktree.ts` | `createWorktree`, `cleanupWorktree`, `parseCloneUrl`, `ensureClonedRepo` |
 
 ## Interface
 
-### `createWorktree(repo, runId): string`
+### `createWorktree(repoOrUrl, runId): string`
 
-Creates a git worktree for the given local repo at `~/.factory/workspaces/<runId>/`.
+Creates a git worktree at `~/.factory/workspaces/<runId>/`.
 
-- **`repo`** — Absolute path to a local git repository (already cloned on disk).
+- **`repoOrUrl`** — Absolute path to a local git repository, OR an SSH /
+  HTTPS clone URL (M14.07 / #328). Clone URLs are recognised via
+  `parseCloneUrl` and lazily cloned into
+  `~/.factory/clones/<host>/<workspace>/<repoSlug>` if not already
+  present. Bitbucket HTTPS URLs are authenticated by injecting
+  `BITBUCKET_USER` / `BITBUCKET_APP_PASSWORD` from the environment; SSH
+  URLs rely on the agent host's SSH key configuration.
 - **`runId`** — Canonical workflow isolation key (ULID/UUID string). Matches the `runId` used by `AgentSpec`, events, and tool hooks.
 - **Returns** — The absolute path to the created worktree (`~/.factory/workspaces/<runId>/`).
-- **Throws** — If `git worktree add` fails (e.g. repo path is invalid or not a git repo).
+- **Throws** — If `git clone` (for URL inputs) or `git worktree add` fails (bad credentials, missing repo, etc.).
 
 Internally uses `git worktree add --detach` so the worktree starts at the current HEAD without creating or checking out a branch. This avoids branch conflicts when multiple parallel runs use the same repo.
+
+### `parseCloneUrl(url): ParsedCloneUrl | null`
+
+Parse an SSH (`git@host:workspace/repo.git`) or HTTPS
+(`https://host/workspace/repo.git`) git URL into its components. Returns
+`null` for non-URL inputs so callers can treat the value as a local
+path. The `isBitbucket` flag is set for `bitbucket.org` hosts and drives
+credential injection in `ensureClonedRepo`.
+
+### `ensureClonedRepo(cloneUrl): string`
+
+Idempotent clone — clones the URL if no local copy exists at
+`~/.factory/clones/<host>/<workspace>/<repoSlug>`, otherwise returns the
+cached path. Used internally by `createWorktree` when given a URL.
 
 ### `cleanupWorktree(runId): void`
 

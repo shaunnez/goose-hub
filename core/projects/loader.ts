@@ -19,6 +19,43 @@ const DEFAULT_PROJECTS_ROOT = path.resolve(
 const cache = new Map<string, ProjectConfig>();
 
 /**
+ * Work-mode machine scoping (M14.06 / #325).
+ *
+ * Work projects (Jira-backed) are restricted to machines where the user
+ * has explicitly opted in via `WORK_MACHINE=true`. On any other machine
+ * these projects are hidden from `loadProjects` output so the UI, CLI,
+ * and scheduler all converge on the same answer: Work projects don't
+ * exist here.
+ *
+ * The gate fires once per process — `recordWorkMachineGate` ensures we
+ * emit the startup log message exactly once instead of on every reload.
+ */
+export function isWorkMachine(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.WORK_MACHINE === 'true';
+}
+
+/** Projects whose source requires WORK_MACHINE to be set. Tolerant of
+ * partial test fixtures that omit `source` entirely. */
+export function projectRequiresWorkMachine(cfg: ProjectConfig): boolean {
+  return cfg.source?.kind === 'jira';
+}
+
+let workMachineLogFired = false;
+
+function logWorkMachineGate(filteredCount: number): void {
+  if (workMachineLogFired) return;
+  workMachineLogFired = true;
+  if (filteredCount > 0) {
+    logger.info('WORK_MACHINE not set — Work projects hidden', { filteredCount });
+  }
+}
+
+/** Reset the one-shot log latch. Test-only. */
+export function resetWorkMachineGateForTests(): void {
+  workMachineLogFired = false;
+}
+
+/**
  * Throws DuplicateSlugError if any two configs share the same slug.
  * Exported for isolated testing.
  */
@@ -34,6 +71,12 @@ export function detectDuplicateSlugs(configs: ProjectConfig[]): void {
  * Load all registered project configs from disk.
  * Missing or malformed configs are skipped with a warning.
  * Throws DuplicateSlugError if two projects share the same slug.
+ *
+ * Work projects (Jira-backed) are filtered out unless `WORK_MACHINE=true`
+ * (M14.06 / #325). The filter is applied AFTER duplicate detection so
+ * that adding a Jira-backed project to a machine without the env var
+ * still surfaces a duplicate-slug bug at startup rather than silently
+ * masking it.
  */
 export async function loadProjects(projectsRoot = DEFAULT_PROJECTS_ROOT): Promise<ProjectConfig[]> {
   let entries: string[];
@@ -59,18 +102,32 @@ export async function loadProjects(projectsRoot = DEFAULT_PROJECTS_ROOT): Promis
   }
 
   detectDuplicateSlugs(configs);
+
+  if (!isWorkMachine()) {
+    const filtered = configs.filter((c) => projectRequiresWorkMachine(c));
+    if (filtered.length > 0) {
+      logWorkMachineGate(filtered.length);
+      return configs.filter((c) => !projectRequiresWorkMachine(c));
+    }
+  }
   return configs;
 }
 
 /**
  * Load a single project config by slug.
- * Returns null if the project directory or config file does not exist.
+ * Returns null if the project directory or config file does not exist,
+ * OR if the project requires WORK_MACHINE and the env var is unset.
+ * Bypassing the gate at this level would re-introduce Work projects via
+ * any code path that looks them up by slug.
  */
 export async function getProjectBySlug(
   slug: string,
   projectsRoot = DEFAULT_PROJECTS_ROOT,
 ): Promise<ProjectConfig | null> {
-  return loadOne(slug, path.join(projectsRoot, slug));
+  const cfg = await loadOne(slug, path.join(projectsRoot, slug));
+  if (cfg == null) return null;
+  if (projectRequiresWorkMachine(cfg) && !isWorkMachine()) return null;
+  return cfg;
 }
 
 async function loadOne(slug: string, dir: string): Promise<ProjectConfig | null> {
