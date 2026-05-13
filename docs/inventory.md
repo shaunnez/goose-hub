@@ -38,7 +38,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `review` | yes | Pure helpers used by the Review slice. The slice itself lives in `slices/review/`; this module hosts logic that's reusable, deterministic, and easier to test outside the slice's workflow harness. |
 | `scout-reports` | yes | SQLite persistence for scout skill outputs produced during investigation workflows. |
 | `state-machine` | yes | Typed state machine for Goose Hub issue lifecycle management. |
-| `state-source` | yes | Adapter layer between Goose Hub and the source of truth for work items (currently GitHub Issues; Jira lands in M14). |
+| `state-source` | yes | Adapter layer between Goose Hub and the source of truth for work items. Two backends are supported: GitHub Issues (default) and Jira (M14). |
 | `symbol-index` | yes | Local, regenerable SQLite index of every exported symbol and import statement across the Goose Hub codebase. Use it to answer "where is X defined?" / "who imports X?" without an LLM spawn or a `grep`. See ADR 0040 for the rationale. |
 | `test-runner` | yes | Runs Vitest with the JSON reporter and parses the output into a runner-agnostic `TestRun` shape. The QA holdout consumes the parsed structure; nothing else should depend on Vitest's raw report shape. |
 | `tool-layer` | yes | Tool management and security infrastructure for agent runtime. |
