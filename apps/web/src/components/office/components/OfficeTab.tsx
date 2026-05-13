@@ -40,6 +40,12 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
   const heroTicketIdRef = useRef<string | null>(null);
   // Choreography bridge: set by OfficeGameMount once the scene is ready.
   const choreographyRef = useRef<((timelines: Timeline[]) => void) | null>(null);
+  // Reverse lookup: internal workItemId (UUID) → office scene { projectSlug, externalId }.
+  // Allows SSE AgentEvent.workItemId to be mapped to the ${projectSlug}:${externalId}
+  // format used by PersonaLayer and TicketLayer as entity keys.
+  const workItemLookupRef = useRef<Map<string, { projectSlug: string; externalId: string }>>(
+    new Map(),
+  );
 
   const { data: projects = [] } = useQuery({
     queryKey: ['office-projects'],
@@ -94,6 +100,17 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
     return placementsFromItems(flat);
   }, [projects, itemsByProject]);
 
+  // Keep workItemLookupRef current whenever the issue cache refreshes.
+  useEffect(() => {
+    const map = new Map<string, { projectSlug: string; externalId: string }>();
+    for (const [projectSlug, items] of Object.entries(itemsByProject)) {
+      for (const item of items) {
+        map.set(item.id, { projectSlug, externalId: item.externalId });
+      }
+    }
+    workItemLookupRef.current = map;
+  }, [itemsByProject]);
+
   // SSE: dual path — React Query invalidation (placements re-derive) + choreography.
   // Subscribes to all event kinds listed in LANE_FOR_EVENT.
   useEffect(() => {
@@ -107,14 +124,30 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
         if (kind === 'state.transitioned') {
           void queryClient.invalidateQueries({ queryKey: ['office-issues'] });
         }
-        // Build timelines from event and dispatch into the Phaser scene.
+        // Normalize SSE AgentEvent → OrchestrationEvent.
+        // AgentEvent has: { workItemId (UUID), personaId (roster format), payload: {...} }.
+        // Office scene uses ${projectSlug}:${externalId} as entity keys.
         let parsed: Record<string, unknown> = {};
         try {
           parsed = JSON.parse(e.data as string) as Record<string, unknown>;
         } catch {
           // malformed SSE data — treat as empty payload
         }
-        const event: OrchestrationEvent = { kind, ...parsed };
+        const workItemId = typeof parsed.workItemId === 'string' ? parsed.workItemId : null;
+        const entry = workItemId ? workItemLookupRef.current.get(workItemId) : undefined;
+        const officeId = entry ? `${entry.projectSlug}:${entry.externalId}` : undefined;
+        // state.transitioned wraps { from, to, by } in payload; extract toState from payload.to.
+        const innerPayload =
+          typeof parsed.payload === 'object' && parsed.payload !== null
+            ? (parsed.payload as Record<string, unknown>)
+            : {};
+        const event: OrchestrationEvent = {
+          kind,
+          ticketId: officeId,
+          personaId: officeId,
+          toState: typeof innerPayload.to === 'string' ? innerPayload.to : undefined,
+          projectSlug: entry?.projectSlug,
+        };
         const timelines = timelinesForEvent(event, {
           hero: heroTicketIdRef.current,
           rooms: ROOM_IDS,

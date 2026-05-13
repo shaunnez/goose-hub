@@ -68,7 +68,8 @@ export class ChoreographyPlayer {
   }
 
   private coalesce(timelines: Timeline[]): Timeline[] {
-    // Same lane + same first-step target → keep latest only.
+    // Same lane + same first-step intent + same first-step target → keep latest only.
+    // Including intent id prevents collapsing different-intent timelines for the same target.
     // Timelines with no steps (no-op) are all kept (no meaningful target to key on).
     const latest = new Map<string, Timeline>();
     const noops: Timeline[] = [];
@@ -78,7 +79,7 @@ export class ChoreographyPlayer {
         noops.push(t);
         continue;
       }
-      const key = `${t.lane}:${firstStep.target.kind}:${firstStep.target.id}`;
+      const key = `${t.lane}:${firstStep.id}:${firstStep.target.kind}:${firstStep.target.id}`;
       latest.set(key, t); // later entry wins
     }
     return [...latest.values(), ...noops];
@@ -89,8 +90,19 @@ export class ChoreographyPlayer {
   private dispatch(t: Timeline): void {
     if (t.lane === 'critical') {
       this.preemptForCritical(t);
+    } else if (t.lane === 'primary') {
+      // primary-cancel-ambient (spec §4.4): primary work cancels in-flight ambient (no resume).
+      this.cancelAmbientForPrimary();
+      this.enqueue('primary', t);
     } else {
       this.enqueue(t.lane, t);
+    }
+  }
+
+  private cancelAmbientForPrimary(): void {
+    if (this.active.ambient != null) {
+      this.cancelStep(this.active.ambient.timeline.steps[this.active.ambient.stepIndex], 'ambient');
+      this.active.ambient = null;
     }
   }
 
