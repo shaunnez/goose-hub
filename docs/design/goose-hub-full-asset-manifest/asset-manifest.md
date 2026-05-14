@@ -74,10 +74,10 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 - [x] sealed_slot_library.png
 
 ### Dev
-- [ ] desk_dev_single.png
-- [ ] desk_dev_dual.png
-- [ ] dev_monitor_single.png
-- [ ] dev_monitor_dual.png
+- [x] desk_dev_single.png
+- [x] desk_dev_dual.png
+- [x] dev_monitor_single.png
+- [x] dev_monitor_dual.png
 - [ ] keyboard_glow.png
 - [ ] desk_lamp.png
 
