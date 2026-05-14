@@ -46,19 +46,27 @@ coherent cinematic. Nothing more.
 
 ## 2. Documents in this directory
 
-| File                              | Phase | Scope                                                          | Status      |
-| --------------------------------- | ----- | -------------------------------------------------------------- | ----------- |
-| `phase-1-pure-refactor.md`        | 1     | Split `OfficeScene` into `FloorLayer` + `SpriteLayer`         | merged      |
-| `phase-2-rooms-and-anchors.md`*   | 2     | Adopt Board 02 canon: 6 rooms on a single 1280×384 floor       | merged      |
-| `phase-3-persona-ticket-split.md` | 3     | Split sprite rendering into `PersonaSprite` + `TicketSprite`   | specified   |
-| `phase-4-event-choreography.md`   | 4     | Add `ChoreographyPlayer` + lane model + SSE-driven intents     | specified   |
-| `phase-5-cinematics.md`           | 5     | Implement 4 canonical v1 cinematics                            | specified   |
-| `phase-6-runtime-hud.md`          | 6     | Minimum runtime overlays — physically integrated into the world | specified   |
+| File                                       | Phase | Scope                                                          | Status      |
+| ------------------------------------------ | ----- | -------------------------------------------------------------- | ----------- |
+| `phase-1-pure-refactor.md`                 | 1     | Split `OfficeScene` into `FloorLayer` + `SpriteLayer`         | merged      |
+| `phase-2-rooms-and-anchors.md`*            | 2     | Adopt Board 02 canon: 6 rooms on a single 1280×384 floor       | merged      |
+| `phase-2.5-visual-canon-adoption.md`       | 2.5   | Repalette `textures.ts` to Board 06; expand PixelLab manifest  | specified   |
+| `phase-3-persona-ticket-split.md`          | 3     | Split sprite rendering into `PersonaSprite` + `TicketSprite`   | specified   |
+| `phase-4-event-choreography.md`            | 4     | Add `ChoreographyPlayer` + lane model + SSE-driven intents     | specified   |
+| `phase-5-cinematics.md`                    | 5     | Implement 4 canonical v1 cinematics                            | specified   |
+| `phase-6-runtime-hud.md`                   | 6     | Minimum runtime overlays — physically integrated into the world | specified   |
 
 \* Phase 2 plan was not authored as a standalone file; its contract is the
 spec at `docs/design/office-mode/goose-hub-office-mode-design-pack/02-canonical-project-floor/design-spec.md`
 (Board 02). Phase 2 implementation landed in PR #770. Future phase docs
 should reference Board 02 for floor geometry rather than restating it.
+
+Phase 2.5 was authored retroactively after Phases 1–6 all merged. It
+closes the visual-fidelity gap that the geometry/runtime/HUD phases
+left open: every phase added its own ad-hoc hex literals, and Board
+06's palette was never enforced. Phase 2.5 sweeps the full
+`apps/web/src/components/office/` tree and collapses ~72 distinct
+hex codes down to 28 enumerated entries.
 
 Each phase doc is self-contained and consumable in isolation. They share
 the invariants listed in §6.
@@ -71,6 +79,7 @@ the invariants listed in §6.
 | ----- | -------------------------------- | -------------------------------------------------------- | ---------- |
 | 1     | Pure refactor                    | `FloorLayer`, `SpriteLayer` siblings; behaviour preserved | —          |
 | 2     | Rooms & anchors                  | `lib/rooms.ts`, 6-room single-floor geometry              | 1          |
+| 2.5   | Visual canon adoption            | Board 06 palette enforced across all 13 office source files; new tint constants (CINEMATIC_TINTS, HUD_TINTS); PixelLab manifest mirrors TEXTURE_KEYS (20 sprites) | 1–6 merged |
 | 3     | Persona/ticket split             | `PersonaSprite`, `TicketSprite`, carry semantics          | 2          |
 | 4     | Event choreography               | `ChoreographyPlayer`, lanes, intent registry              | 3          |
 | 5     | Cinematics                       | 4 named cinematics: wave, qaFailed, reviewConverged, mergeCelebration | 4 |
@@ -80,6 +89,10 @@ Each phase ships behind its own PR. Phases do not skip; phase 5 cannot
 land before phase 4 because it consumes the choreography player; phase 4
 cannot land before phase 3 because it dispatches intents to the persona /
 ticket sprite contracts.
+
+Phase 2.5 is retroactive against the full v1 stack — Phases 1–6 all
+shipped before Phase 2.5 was authored. It is the final step before v1
+is shippable: see phase-2.5 doc §14.
 
 ---
 
