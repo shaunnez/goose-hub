@@ -19,6 +19,23 @@ function makeEvent(kind: string, payload: unknown): AgentEventDto {
 }
 
 describe('QA timeline events', () => {
+  it('renders named tier pass payloads with tierNumber', () => {
+    const event = makeEvent('qa.structural-passed', {
+      tier: 'structural',
+      tierNumber: 1,
+      evidence: ['file-exists: src/index.ts (WP WP1)'],
+      findingCount: 0,
+      runId: '0eca3ecb-034d-4467-8573-7c691ec8b6e2',
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('QA Structural passed')).toBeTruthy();
+    expect(screen.getByText('0 findings')).toBeTruthy();
+    expect(screen.getByText('file-exists: src/index.ts (WP WP1)')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('"tierNumber"');
+  });
+
   it('renders numeric tier pass payloads as named QA tiers', () => {
     const event = makeEvent('qa.functional-passed', {
       tier: 2,

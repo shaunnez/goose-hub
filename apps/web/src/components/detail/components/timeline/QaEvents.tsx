@@ -10,6 +10,7 @@ type TierResult = {
 
 type TierPayload = {
   tier?: string | number;
+  tierNumber?: number;
   evidence?: string[];
   findingCount?: number;
   findings?: { tier?: string; severity?: string; description?: string }[];

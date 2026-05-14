@@ -301,6 +301,8 @@ export async function verifyRegression(
 
 // ─── Main entry point ─────────────────────────────────────────────────────────
 
+const TIER_NAME = { 1: 'structural', 2: 'functional', 3: 'regression' } as const;
+
 /**
  * Run a single verification tier and emit the appropriate event.
  * Orchestrator calls this sequentially (1 → 2 → 3) and stops on first failure.
@@ -340,7 +342,8 @@ export async function runTier(
       workItemId: runArtifacts.workItemId ?? null,
       kind: result.passed ? passKind : failKind,
       payload: {
-        tier,
+        tier: TIER_NAME[tier],
+        tierNumber: tier,
         evidence: result.evidence,
         findingCount: result.findings.length,
         runId: runArtifacts.runId,
