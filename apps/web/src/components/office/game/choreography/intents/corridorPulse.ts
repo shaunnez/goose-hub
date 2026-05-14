@@ -10,6 +10,7 @@
 
 import type { Intent } from '../../../lib/choreography';
 import type { IntentResult } from '../../layers/types';
+import { CINEMATIC_TINTS } from '../../textures';
 import type { ChoreographyCtx } from '../Timeline';
 
 const inflightCancels = new Map<Intent, () => void>();
@@ -19,7 +20,7 @@ export function run(intent: Intent, ctx: ChoreographyCtx): Promise<IntentResult>
   const toWorldX = typeof intent.params.toWorldX === 'number' ? intent.params.toWorldX : 0;
   const worldY = typeof intent.params.worldY === 'number' ? intent.params.worldY : 0;
   const durationMs = typeof intent.params.durationMs === 'number' ? intent.params.durationMs : 1000;
-  const color = typeof intent.params.color === 'number' ? intent.params.color : 0xff4444;
+  const color = typeof intent.params.color === 'number' ? intent.params.color : CINEMATIC_TINTS.pulseFail;
   const effectId =
     typeof intent.params.effectId === 'string' ? intent.params.effectId : intent.target.id;
 

@@ -24,7 +24,7 @@ import {
   roomDoor,
   roomQueueAnchor,
 } from '../../lib/rooms';
-import { TEXTURE_KEYS, applyOfficeTextureDisplaySize } from '../textures';
+import { HUD_TINTS, PALETTE, TEXTURE_KEYS, applyOfficeTextureDisplaySize } from '../textures';
 import type { IntentResult, OfficeProject } from './types';
 
 interface RoomLayerCallbacks {
@@ -452,7 +452,7 @@ export class RoomLayer {
       return entry;
     }
     const g = this.scene.add.graphics();
-    g.fillStyle(0x6a4a8e, 1);
+    g.fillStyle(PALETTE.reviewWall, 1);
     g.fillRect(door.x - DOOR_WIDTH / 2, originY + door.y, DOOR_WIDTH, TILE_SIZE);
     g.setDepth(35); // above room overlays
     const entry: DoorEntry = { graphics: g };
@@ -464,7 +464,7 @@ export class RoomLayer {
     const originY = floorOriginY(floorIndex);
     const bounds = roomBounds(roomId);
     const g = this.scene.add.graphics();
-    g.fillStyle(0x000000, 1);
+    g.fillStyle(PALETTE.wall, 1);
     g.fillRect(bounds.x1, originY + bounds.y1, bounds.x2 - bounds.x1, bounds.y2 - bounds.y1);
     g.setAlpha(0);
     g.setDepth(52); // above standard overlays
@@ -493,17 +493,17 @@ export class RoomLayer {
 
   private drawBase(container: Phaser.GameObjects.Container, originY: number): void {
     const bg = this.scene.add.graphics();
-    bg.fillStyle(0x2a2333, 1);
+    bg.fillStyle(PALETTE.floor, 1);
     bg.fillRect(0, originY, FLOOR_WORLD.width, FLOOR_WORLD.height);
     container.add(bg);
 
     const corridor = this.scene.add.graphics();
-    corridor.fillStyle(0x322a3e, 1);
+    corridor.fillStyle(PALETTE.floorAlt, 1);
     corridor.fillRect(0, originY + ROW_CORRIDOR_TOP, FLOOR_WORLD.width, TILE_SIZE * 3);
     container.add(corridor);
 
     const bannerBg = this.scene.add.graphics();
-    bannerBg.fillStyle(0x1a1622, 1);
+    bannerBg.fillStyle(PALETTE.wall, 1);
     bannerBg.fillRect(0, originY + ROW_BANNER_TOP, FLOOR_WORLD.width, TILE_SIZE * 3);
     container.add(bannerBg);
   }
@@ -511,7 +511,7 @@ export class RoomLayer {
   private drawWalls(container: Phaser.GameObjects.Container, originY: number): void {
     const W = FLOOR_WORLD.width;
     const walls = this.scene.add.graphics();
-    walls.fillStyle(0x4a3a5e, 1);
+    walls.fillStyle(PALETTE.wall, 1);
 
     walls.fillRect(0, originY + ROW_TOP_WALL, W, TILE_SIZE);
     walls.fillRect(0, originY + ROW_BOTTOM_WALL, W, TILE_SIZE);
@@ -557,13 +557,13 @@ export class RoomLayer {
     const roomH = ROW_ROOM_BOTTOM - ROW_ROOM_TOP;
     const overlays = this.scene.add.graphics();
 
-    overlays.fillStyle(0x0a1a3a, 0.45);
+    overlays.fillStyle(PALETTE.qaWall, 0.45);
     overlays.fillRect(736, originY + ROW_ROOM_TOP, 192, roomH);
 
-    overlays.fillStyle(0x1a1a2a, 0.35);
+    overlays.fillStyle(PALETTE.reviewWall, 0.35);
     overlays.fillRect(944, originY + ROW_ROOM_TOP, 160, roomH);
 
-    overlays.fillStyle(0x0e0b18, 0.55);
+    overlays.fillStyle(PALETTE.wall, 0.55);
     overlays.fillRect(
       LIBRARY_BOUNDS.x1,
       originY + LIBRARY_BOUNDS.y1,
@@ -571,7 +571,7 @@ export class RoomLayer {
       LIBRARY_BOUNDS.y2 - LIBRARY_BOUNDS.y1,
     );
 
-    overlays.lineStyle(1, 0x6b4a8e, 1);
+    overlays.lineStyle(1, PALETTE.reviewWall, 1);
     overlays.strokeRect(
       LIBRARY_BOUNDS.x1,
       originY + LIBRARY_BOUNDS.y1,
@@ -584,9 +584,9 @@ export class RoomLayer {
 
   private drawDoneShelf(container: Phaser.GameObjects.Container, originY: number): void {
     const shelf = this.scene.add.graphics();
-    shelf.fillStyle(0x5c3a1e, 1);
+    shelf.fillStyle(PALETTE.desk, 1);
     shelf.fillRect(1120, originY + 160, 143, 8);
-    shelf.fillStyle(0x8a6541, 1);
+    shelf.fillStyle(PALETTE.deskTop, 1);
     shelf.fillRect(1120, originY + 160, 143, 2);
     container.add(shelf);
   }
@@ -605,8 +605,8 @@ export class RoomLayer {
       {
         fontFamily: 'JetBrains Mono, monospace',
         fontSize: '10px',
-        color: '#c7b8ff',
-        backgroundColor: '#1a1622',
+        color: HUD_TINTS.hudCounterText,
+        backgroundColor: '#2B2D42',
         padding: { left: 6, right: 6, top: 2, bottom: 2 },
       },
     );
@@ -621,8 +621,8 @@ export class RoomLayer {
       {
         fontFamily: 'JetBrains Mono, monospace',
         fontSize: '9px',
-        color: '#ffd700',
-        backgroundColor: '#1a1622',
+        color: HUD_TINTS.hudBadgeText,
+        backgroundColor: '#2B2D42',
         padding: { left: 4, right: 4, top: 2, bottom: 2 },
       },
     );
@@ -635,7 +635,7 @@ export class RoomLayer {
 
   private drawRoomLabels(container: Phaser.GameObjects.Container, originY: number): void {
     const labelY = originY + ROW_CEILING + TILE_SIZE * 2;
-    const style = { fontFamily: 'JetBrains Mono, monospace', fontSize: '8px', color: '#8877aa' };
+    const style = { fontFamily: 'JetBrains Mono, monospace', fontSize: '8px', color: HUD_TINTS.hudCounterText };
     const labels = [
       { x: 96, text: 'TRIAGE' },
       { x: 312, text: 'INVESTIGATION' },
@@ -697,7 +697,7 @@ export class RoomLayer {
     }
 
     const dots = this.scene.add.graphics();
-    dots.fillStyle(0x6655aa, 0.4);
+    dots.fillStyle(PALETTE.reviewWall, 0.4);
     for (const id of ROOM_IDS) {
       const qa = roomQueueAnchor(id as RoomId);
       if (qa) dots.fillCircle(qa.x, originY + qa.y, 3);

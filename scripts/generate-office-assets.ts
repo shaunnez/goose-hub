@@ -41,75 +41,132 @@ interface AssetSpec {
   height: number;
 }
 
-const MANIFEST: AssetSpec[] = [
+export const MANIFEST: AssetSpec[] = [
   // Tiles
   {
     file: 'floor-tile.png',
-    prompt: 'top-down dark purple office carpet tile, seamless, pixel art, 16x16',
+    prompt: 'top-down office carpet tile colour #3A3D5C dark slate-blue, seamless, pixel art, 16x16',
     width: 16,
     height: 16,
   },
   {
     file: 'floor-tile-alt.png',
-    prompt: 'top-down dark indigo office carpet tile, slightly lighter, seamless, pixel art, 16x16',
+    prompt: 'top-down office carpet tile colour #42466A slightly lighter slate-blue, seamless, pixel art, 16x16',
     width: 16,
     height: 16,
   },
   {
     file: 'wall-tile.png',
-    prompt: 'top-down purple office wall tile with shadow at base, pixel art, 16x16',
+    prompt: 'top-down office wall tile colour #2B2D42 dark navy with shadow at base, pixel art, 16x16',
     width: 16,
     height: 16,
   },
   // Furniture
   {
     file: 'desk.png',
-    prompt: 'top-down pixel art office desk with monitor showing blue screen, brown wood, 32x24',
+    prompt: 'top-down pixel art office desk wood #6B4F3B with monitor showing cyan #6FE7FF screen glow, 32x24',
     width: 32,
     height: 24,
   },
   {
     file: 'stairs.png',
-    prompt: 'top-down pixel art staircase with wooden steps and dark rail, isometric hint, 32x32',
+    prompt: 'top-down pixel art staircase wooden steps #85694F with dark rail #6B4F3B, isometric hint, 32x32',
     width: 32,
     height: 32,
   },
-  // Indicators (speech / thought / question / coffee / bang / check)
+  // Sprite
+  {
+    file: 'sprite.png',
+    prompt: 'top-down pixel art office goose character neutral pose, body colour #3B3D55, skin #85694F, 12x16, transparent bg',
+    width: 16,
+    height: 16,
+  },
+  // Indicators
   {
     file: 'indicator-speech.png',
-    prompt: 'pixel art white speech bubble with three small black dots, 14x16, transparent bg',
+    prompt: 'pixel art speech bubble colour #F2CC8F amber with three dark #2B2D42 dots, 14x16, transparent bg',
     width: 14,
     height: 16,
   },
   {
     file: 'indicator-thought.png',
-    prompt: 'pixel art white cloud thought bubble with trailing dot, 14x16, transparent bg',
+    prompt: 'pixel art cloud thought bubble colour #F2CC8F amber with trailing dot, outline #2B2D42, 14x16, transparent bg',
     width: 14,
     height: 16,
   },
   {
     file: 'indicator-question.png',
-    prompt: 'pixel art white speech bubble with bold black question mark, 14x16, transparent bg',
+    prompt: 'pixel art speech bubble #F2CC8F amber with bold #2B2D42 question mark, 14x16, transparent bg',
     width: 14,
     height: 16,
   },
   {
     file: 'indicator-coffee.png',
-    prompt: 'pixel art white coffee mug with steam wisps, brown coffee inside, 14x14, transparent bg',
+    prompt: 'pixel art coffee mug #F2CC8F amber with steam wisps, brown coffee #6B4F3B inside, 14x14, transparent bg',
     width: 14,
     height: 14,
   },
   {
     file: 'indicator-bang.png',
-    prompt: 'pixel art red warning triangle with white exclamation mark, 14x14, transparent bg',
+    prompt: 'pixel art red #FF6B6B warning triangle with #F2CC8F exclamation mark, outline #2B2D42, 14x14, transparent bg',
     width: 14,
     height: 14,
   },
   {
     file: 'indicator-check.png',
-    prompt: 'pixel art green circle with white checkmark, 14x14, transparent bg',
+    prompt: 'pixel art green #8BD17C circle with #F2CC8F checkmark, outline #2B2D42, 14x14, transparent bg',
     width: 14,
     height: 14,
+  },
+  // Ticket variants
+  {
+    file: 'ticket.png',
+    prompt: 'pixel art work ticket card #F2CC8F amber body with #473A55 priority strip, outline #85694F, 14x10, transparent bg',
+    width: 14,
+    height: 16,
+  },
+  {
+    file: 'queue-stack-many.png',
+    prompt: 'pixel art stack of 4 staggered #F2CC8F amber cards with #85694F outlines, 20x16, transparent bg',
+    width: 20,
+    height: 16,
+  },
+  {
+    file: 'ticket-glow.png',
+    prompt: 'pixel art glowing halo #F2CC8F amber rounded rect glow effect, 20x16, transparent bg',
+    width: 20,
+    height: 16,
+  },
+  {
+    file: 'ticket-scroll.png',
+    prompt: 'pixel art parchment scroll #F2CC8F amber with dark #6B4F3B rolled ends and text lines, 10x16, transparent bg',
+    width: 10,
+    height: 16,
+  },
+  {
+    file: 'ticket-envelope.png',
+    prompt: 'pixel art envelope #F2CC8F amber with V-flap and #6FE7FF cyan wax seal dot, 14x10, transparent bg',
+    width: 14,
+    height: 16,
+  },
+  // Phase 2.5 wall variants
+  {
+    file: 'wall-frosted-blue.png',
+    prompt: 'top-down office wall tile #3F6B80 teal with subtle #6FE7FF cyan frost, pixel art, 16x16',
+    width: 16,
+    height: 16,
+  },
+  {
+    file: 'wall-frosted-grey.png',
+    prompt: 'top-down office wall tile #3B3D55 muted blue-grey with shadow at base, pixel art, 16x16',
+    width: 16,
+    height: 16,
+  },
+  {
+    file: 'scout-desk.png',
+    prompt: 'top-down pixel art scout desk wood #6B4F3B with #6FE7FF cyan monitor and #F2CC8F report on surface, 32x24',
+    width: 32,
+    height: 24,
   },
 ];
 
@@ -166,7 +223,10 @@ async function main(): Promise<void> {
   console.log('Done. Restart the dev server to pick up new assets.');
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Only run when invoked directly (not when imported as a module in tests).
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

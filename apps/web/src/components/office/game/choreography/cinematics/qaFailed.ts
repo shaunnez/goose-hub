@@ -22,6 +22,7 @@ import { TIMING } from '../../../lib/cinematic-timings';
 import { floorOriginY } from '../../../lib/layout';
 import { CORRIDOR_WALK_Y, roomSlotAnchors } from '../../../lib/rooms';
 import { Timeline as TL } from '../Timeline';
+import { CINEMATIC_TINTS } from '../../textures';
 
 let _seq = 0;
 function nextId(): string {
@@ -89,7 +90,7 @@ export function qaFailedTimeline(
             toWorldX: 36,
             worldY: corridorY,
             durationMs: TIMING.corridorPulseMs,
-            color: 0xff4444,
+            color: CINEMATIC_TINTS.pulseFail,
             effectId: `qa-pulse-${ticketId}`,
           },
           lane: 'critical',

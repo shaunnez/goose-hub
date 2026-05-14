@@ -7,6 +7,7 @@ import type { HudState } from '../../lib/hud-state';
 import { resetDoneToday } from '../../lib/hud-state';
 import { floorOriginY } from '../../lib/layout';
 import { type HudAnchorName, type RoomId, hudAnchor, roomQueueAnchor } from '../../lib/rooms';
+import { HUD_TINTS } from '../textures';
 
 const HUD_DEPTH = 60;
 const SPOTLIGHT_DEPTH = 50;
@@ -14,22 +15,22 @@ const MONO = 'JetBrains Mono, monospace';
 const BADGE_STYLE = {
   fontFamily: MONO,
   fontSize: '8px',
-  color: '#ffd700',
-  backgroundColor: '#1a162299',
+  color: HUD_TINTS.hudBadgeText,
+  backgroundColor: HUD_TINTS.hudPanelBgDark,
   padding: { left: 3, right: 3, top: 1, bottom: 1 },
 } as const;
 const CTR_STYLE = {
   fontFamily: MONO,
   fontSize: '9px',
-  color: '#c7b8ff',
-  backgroundColor: '#1a162299',
+  color: HUD_TINTS.hudCounterText,
+  backgroundColor: HUD_TINTS.hudPanelBgDark,
   padding: { left: 3, right: 3, top: 1, bottom: 1 },
 } as const;
 const CAM_STYLE = {
   fontFamily: MONO,
   fontSize: '8px',
-  color: '#ffffff',
-  backgroundColor: '#00000066',
+  color: HUD_TINTS.hudCameraStateText,
+  backgroundColor: HUD_TINTS.hudShadowOverlay,
   padding: { left: 3, right: 3, top: 1, bottom: 1 },
 } as const;
 const ROOM_IDS: RoomId[] = ['triage', 'investigation', 'dev', 'qa', 'review', 'done'];
@@ -245,7 +246,7 @@ export class HudLayer {
     for (const { personaId, mode } of state.blocked) {
       if (this.spotlights.has(personaId)) continue;
       const circle = this.scene.add
-        .arc(0, 0, 28, 0, 360, false, 0xffffff, 0.12)
+        .arc(0, 0, 28, 0, 360, false, HUD_TINTS.hudSpotlight, 0.12)
         .setDepth(SPOTLIGHT_DEPTH)
         .setVisible(false);
       const entry: SpotlightEntry = { circle };

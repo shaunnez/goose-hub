@@ -12,14 +12,14 @@ Mounted at `/projects/:slug/office`. Sidebar entry "Office" between Kanban and I
 - `components/FloorIndicator.tsx` — out-of-canvas DOM overlay (floor number, project name, up/down buttons).
 - `components/DeskDetailPanel.tsx` — slide-in panel that opens when a desk is clicked. Links out to the full DetailPage.
 - `game/OfficeScene.ts` — the only Phaser scene. Owns the floors, desks, sprites, indicators, walks, click zones, stair navigation, camera pans.
-- `game/textures.ts` — procedural pixel-art generator (16×16 tiles, 32×24 desks, 12×16 sprites, 14×14–14×16 indicators). Used as the ground-truth fallback when no PNGs are present.
-- `game/asset-loader.ts` — optional preload of `/office/<key>.png` files; missing files are silently ignored so procedural textures take over.
+- `game/textures.ts` — canonical colour registry (`PALETTE` 13 entries, `ROLE_TINTS` 12 entries, `CINEMATIC_TINTS` 8 entries, `HUD_TINTS` 8 entries) plus `TEXTURE_KEYS` (20 entries) and procedural pixel-art fallback generators (16×16 tiles, 32×24 desks, 12×16 sprites, 14×14–14×16 indicators). All colours derived from the 28-code Board 06 visual system.
+- `game/asset-loader.ts` — optional preload of `/office/<key>.png` files via `pngManifest()` (20 entries, exported); missing files are silently ignored so procedural textures take over.
 - `lib/state-to-role.ts` — `factory:*` state → role-desk mapping; `shouldWalk()` predicate.
 - `lib/state-indicators.ts` — `factory:*` state → indicator glyph (speech / thought / question / coffee / bang / check).
 - `lib/layout.ts` — pure floor/desk/stairs world-coordinate math. Tiles are 16 px; floors are 30 × 12 tiles.
 - `lib/pathfinding.ts` — same-floor and cross-floor (via stairs) waypoint paths. `pathLength()` scales tween duration; `facingFromMovement()` flips the sprite.
 - `lib/agent-positions.ts` — derives one `AgentPlacement` per active issue from `WorkItemDto[]`.
-- `slice.test.ts` — 27 unit tests covering all pure logic. Phaser scene + React mount are exercised by Playwright e2e.
+- `slice.test.ts` — unit tests covering all pure logic including Phase 2.5 visual-canon assertions. Phaser scene + React mount are exercised by Playwright e2e.
 
 ## Data flow
 
@@ -74,7 +74,7 @@ To upgrade visual quality with PixelLab:
 3. Run `pnpm gen:office-assets`. PNGs land in `apps/web/public/office/` (also gitignored — they're regenerable).
 4. Reload the Office tab — the scene's preload pulls PNGs from `/office/<key>.png` and skips the procedural fallback for any key that loaded successfully.
 
-The 11-asset manifest is in `scripts/generate-office-assets.ts`. Edit prompts there if you want a different style.
+The 20-asset manifest (`MANIFEST`, exported) is in `scripts/generate-office-assets.ts`. Every prompt references at least one Board 06 hex code. Edit prompts there if you want a different style. The 3 Phase 2.5 additions are `wall-frosted-blue.png`, `wall-frosted-grey.png`, and `scout-desk.png`.
 
 ## Phaser version
 

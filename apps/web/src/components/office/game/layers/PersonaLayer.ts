@@ -15,10 +15,23 @@ import { facingFromMovement, pathLength, planWalk } from '../../lib/pathfinding'
 import { type Priority, priorityTintColor, roomDeskAnchors } from '../../lib/rooms';
 import type { IndicatorKind } from '../../lib/state-indicators';
 import {
+  HUD_TINTS,
+  PALETTE,
+  ROLE_TINTS,
+  TEXTURE_KEYS,
   applyOfficeTextureDisplaySize,
   indicatorTextureKey,
-  spriteTextureKeyForRole,
 } from '../textures';
+
+// Derive default role tint from room for spriteBase colouring
+const ROOM_DEFAULT_ROLE: Record<string, string> = {
+  triage: 'triager',
+  investigation: 'investigator',
+  dev: 'developer',
+  qa: 'qa',
+  review: 'reviewer',
+  done: 'retrospector',
+};
 import type { DeskClickPayload, IntentResult, OfficeProject } from './types';
 
 const WALK_PIXELS_PER_MS = 0.35;
@@ -146,13 +159,13 @@ export class PersonaLayer {
   addCodenameLabel(personaId: string, priority?: Priority): void {
     const e = this.personas.get(personaId);
     if (e == null || e.label != null) return;
-    const color = priority != null ? priorityTintColor(priority) : '#ffd700';
+    const color = priority != null ? priorityTintColor(priority) : HUD_TINTS.hudBadgeText;
     // Parented to the container so it follows walk tweens and restack moves.
     const label = this.scene.add.text(0, -28, e.codename, {
       fontFamily: 'JetBrains Mono, monospace',
       fontSize: '7px',
       color,
-      backgroundColor: '#1a162299',
+      backgroundColor: HUD_TINTS.hudPanelBgDark,
       padding: { left: 3, right: 3, top: 1, bottom: 1 },
     });
     label.setOrigin(0.5, 1);
@@ -380,8 +393,10 @@ export class PersonaLayer {
     const container = this.scene.add.container(pos.x, pos.y - TILE_SIZE);
     container.setDepth(PERSONA_DEPTH);
 
-    const body = this.scene.add.image(0, 0, spriteTextureKeyForRole('developer'));
+    const body = this.scene.add.image(0, 0, TEXTURE_KEYS.spriteBase);
     body.setOrigin(0.5, 1);
+    const role = p.roomId != null ? (ROOM_DEFAULT_ROLE[p.roomId] ?? 'developer') : 'developer';
+    body.setTint(ROLE_TINTS[role] ?? PALETTE.amber);
     container.add(body);
 
     const indicator = this.scene.add.image(0, -TILE_SIZE - 4, indicatorTextureKey(p.indicator));
