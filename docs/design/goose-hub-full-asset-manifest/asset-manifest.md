@@ -94,12 +94,12 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 - [x] review_chair.png
 - [x] convergence_counter.png
 - [x] quality_score_gauge.png
-- [ ] review_glass_overlay.png
+- [x] review_glass_overlay.png
 
 ### Done / Archive
-- [ ] done_shelf.png
-- [ ] archive_shelf.png
-- [ ] archive_drawer.png
+- [x] done_shelf.png
+- [x] archive_shelf.png
+- [x] archive_drawer.png
 - [ ] merge_trophy_small.png
 - [ ] merge_trophy_large.png
 
