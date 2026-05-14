@@ -1,7 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { adviseOnPlan } from '@goose-hub/core/agent-runtime/advisor.js';
-import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
@@ -19,7 +18,7 @@ import {
 } from '@goose-hub/core/workspaces/worktree.js';
 import { EvidencePostSchema } from '@goose-hub/skills/evidence-post/schema.js';
 import { ImplementSchema } from '@goose-hub/skills/implement/schema.js';
-import { afterImplement, runImplement } from './implement-phase.js';
+import { afterImplement, resolveImplementExecution, runImplement } from './implement-phase.js';
 import { deriveStack, resolveWorktreeHeadSha } from './pr-helpers.js';
 
 // Re-export for test access (slice.test.ts imports resolveWorktreeHeadSha from workflow.js).
@@ -41,7 +40,7 @@ function resolveBaseBranch(repoPath: string): string {
 }
 
 export interface FixIssueDeps {
-  /** Override the runtime (used by tests). Defaults to ClaudeCliRuntime. */
+  /** Override the runtime (used by tests). Defaults to provider-aware runtime dispatch. */
   runtime?: AgentRuntime;
   /** Override openPR (used by tests). Defaults to the real connector. */
   openPRImpl?: typeof openPR;
@@ -92,7 +91,6 @@ export async function runFixIssueWorkflow(
   deps: FixIssueDeps = {},
 ): Promise<void> {
   const runId = crypto.randomUUID();
-  const runtime = deps.runtime ?? new ClaudeCliRuntime();
   const openPRFn = deps.openPRImpl ?? openPR;
   const advisorFn = deps.adviseOnPlanImpl ?? adviseOnPlan;
   const createWtFn = deps.createWorktreeImpl ?? createWorktree;
@@ -109,6 +107,12 @@ export async function runFixIssueWorkflow(
 
   const { personaId: implementPersonaId } = selectPersona(projectId, 'developer');
   const baseBranch = resolveBaseBranchFn(targetRepo);
+  const implementExecution = await resolveImplementExecution({
+    projectId,
+    workItem,
+    injectedRuntime: deps.runtime,
+  });
+  const runtime = implementExecution.runtime;
   const worktreePath = createWtFn(targetRepo, runId);
 
   try {
@@ -142,7 +146,7 @@ export async function runFixIssueWorkflow(
       // advisor on the produced plan; on revise, we re-spawn implement
       // once with the feedback. Single revise pass per rule 21.
       const firstAttempt = await runImplement({
-        runtime,
+        execution: implementExecution,
         runId,
         projectId,
         workItem,
@@ -228,7 +232,7 @@ export async function runFixIssueWorkflow(
 
     // Step 4: implement (or re-spawn after revise).
     const implementOutput = await runImplement({
-      runtime,
+      execution: implementExecution,
       runId,
       projectId,
       workItem,

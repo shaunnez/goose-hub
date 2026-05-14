@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
+import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
 import { getUseMultiAgentPipeline } from '@goose-hub/core/db/repositories/project-settings.js';
 import { getEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
@@ -374,7 +374,7 @@ export async function dispatchParallelImplement(slug: string, issueNumber: numbe
       const parallelMockDeps: Record<string, unknown> =
         process.env.MOCK_AGENTS === 'true' || process.env.MOCK_OPEN_PR === 'true'
           ? {
-              runtime: new ClaudeCliRuntime(),
+              runtime: selectRuntime({ configRuntime: 'auto' }),
               openPRImpl: () =>
                 Promise.resolve({
                   prNumber: 999,

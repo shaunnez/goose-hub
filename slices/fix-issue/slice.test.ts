@@ -6,6 +6,13 @@ vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   readProjectSettings: vi.fn().mockReturnValue(null),
   readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
 }));
+let mockProjectModelSettingsRow: Record<string, unknown> | null = null;
+vi.mock('@goose-hub/core/db/repositories/project-model-settings.js', () => ({
+  readProjectModelSettingsForRole: vi.fn(() => mockProjectModelSettingsRow),
+  parseComplexityOverrides: vi.fn((row: { complexityOverridesJson?: string | null }) =>
+    row.complexityOverridesJson ? JSON.parse(row.complexityOverridesJson) : {},
+  ),
+}));
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   eventStore: {
     appendEvent: vi.fn().mockReturnValue({ id: 1 }),
@@ -33,6 +40,22 @@ vi.mock('node:fs', async (importOriginal) => {
 const mockClaudeCliRun = vi.fn();
 vi.mock('@goose-hub/core/agent-runtime/claude-cli.js', () => ({
   ClaudeCliRuntime: vi.fn().mockImplementation(() => ({ run: mockClaudeCliRun })),
+}));
+const mockCodexCliRun = vi.fn();
+vi.mock('@goose-hub/core/agent-runtime/codex-cli.js', () => ({
+  CodexCliRuntime: vi.fn().mockImplementation(() => ({ run: mockCodexCliRun })),
+}));
+let mockProjectConfig: Record<string, unknown> | null = {
+  agentConfig: { runtime: 'auto' },
+  budgets: undefined,
+  stack: {
+    testCommand: 'pnpm test',
+    lintCommand: 'pnpm lint',
+    typecheckCommand: 'pnpm typecheck',
+  },
+};
+vi.mock('@goose-hub/core/projects/loader.js', () => ({
+  getProjectBySlug: vi.fn(() => mockProjectConfig),
 }));
 const mockOpenPR = vi
   .fn()
@@ -131,10 +154,24 @@ function makeImplementOutput(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function resetRuntimeRoutingMocks(): void {
+  mockProjectModelSettingsRow = null;
+  mockProjectConfig = {
+    agentConfig: { runtime: 'auto' },
+    budgets: undefined,
+    stack: {
+      testCommand: 'pnpm test',
+      lintCommand: 'pnpm lint',
+      typecheckCommand: 'pnpm typecheck',
+    },
+  };
+}
+
 describe('runFixIssueWorkflow — default deps (lines 68-73 ?? fallbacks)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockAccumulatePersonaStats.mockClear();
+    resetRuntimeRoutingMocks();
     process.env.GITHUB_TOKEN = 'ghp_test';
     mockClaudeCliRun.mockResolvedValueOnce({
       output: makeImplementOutput(),
@@ -166,10 +203,168 @@ describe('runFixIssueWorkflow — default deps (lines 68-73 ?? fallbacks)', () =
   });
 });
 
+describe('runFixIssueWorkflow — provider-aware runtime dispatch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAccumulatePersonaStats.mockClear();
+    resetRuntimeRoutingMocks();
+    process.env.GITHUB_TOKEN = 'ghp_test';
+    mockCodexCliRun.mockResolvedValue({
+      output: makeImplementOutput(),
+      decisionSummaries: [],
+      events: [],
+    } satisfies AgentResult);
+  });
+
+  afterEach(() => {
+    process.env.GITHUB_TOKEN = undefined;
+  });
+
+  it('uses CodexCliRuntime and a gpt model when DB developer provider is codex', async () => {
+    mockProjectModelSettingsRow = {
+      projectId: 'proj',
+      role: 'developer',
+      primaryModel: 'haiku',
+      primaryProvider: 'codex',
+    };
+    const item = makeWorkItem({ priority: 'medium', type: 'chore' });
+    const source = makeStateSource();
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      openPRImpl: vi.fn().mockResolvedValue({
+        prNumber: 100,
+        prUrl: 'https://github.com/owner/repo/pull/100',
+        branch: 'factory/abc',
+        base: 'main',
+      }),
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    expect(mockCodexCliRun).toHaveBeenCalledTimes(1);
+    expect(mockClaudeCliRun).not.toHaveBeenCalled();
+    const spec = mockCodexCliRun.mock.calls[0][0] as { modelOverride?: string };
+    expect(spec.modelOverride).toBe('gpt-5.4-mini');
+  });
+
+  it("agentConfig.runtime: 'codex-cli' coerces tier defaults to Codex models", async () => {
+    mockProjectConfig = {
+      agentConfig: { runtime: 'codex-cli' },
+      budgets: undefined,
+      stack: { testCommand: 'pnpm test' },
+    };
+    const item = makeWorkItem({ priority: 'medium', type: 'feature', body: 'Small feature' });
+    const source = makeStateSource();
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      openPRImpl: vi.fn().mockResolvedValue({
+        prNumber: 100,
+        prUrl: 'https://github.com/owner/repo/pull/100',
+        branch: 'factory/abc',
+        base: 'main',
+      }),
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    expect(mockCodexCliRun).toHaveBeenCalledTimes(1);
+    const spec = mockCodexCliRun.mock.calls[0][0] as { modelOverride?: string };
+    expect(spec.modelOverride).toBe('gpt-5.4');
+  });
+
+  it('keeps an injected runtime instead of replacing it with provider dispatch', async () => {
+    mockProjectModelSettingsRow = {
+      projectId: 'proj',
+      role: 'developer',
+      primaryModel: 'haiku',
+      primaryProvider: 'codex',
+    };
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockResolvedValueOnce({
+        output: makeImplementOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult),
+    };
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(
+      makeWorkItem({ priority: 'medium' }),
+      makeStateSource(),
+      'proj',
+      '/repo',
+      {
+        runtime,
+        openPRImpl: vi.fn().mockResolvedValue({
+          prNumber: 100,
+          prUrl: 'https://github.com/owner/repo/pull/100',
+          branch: 'factory/abc',
+          base: 'main',
+        }),
+        adviseOnPlanImpl: vi.fn(),
+        createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+        cleanupWorktreeImpl: vi.fn(),
+        resolveWorktreeHeadShaImpl: vi
+          .fn()
+          .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+      },
+    );
+
+    expect(runtime.run).toHaveBeenCalledTimes(1);
+    expect(mockCodexCliRun).not.toHaveBeenCalled();
+    expect(mockClaudeCliRun).not.toHaveBeenCalled();
+  });
+
+  it('maps implement router type:bug -> haiku onto Codex haiku when provider is Codex', async () => {
+    mockProjectModelSettingsRow = {
+      projectId: 'proj',
+      role: 'developer',
+      primaryModel: 'sonnet',
+      primaryProvider: 'codex',
+    };
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(
+      makeWorkItem({ priority: 'medium', type: 'bug', body: 'Fix the crash' }),
+      makeStateSource(),
+      'proj',
+      '/repo',
+      {
+        openPRImpl: vi.fn().mockResolvedValue({
+          prNumber: 100,
+          prUrl: 'https://github.com/owner/repo/pull/100',
+          branch: 'factory/abc',
+          base: 'main',
+        }),
+        adviseOnPlanImpl: vi.fn(),
+        createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+        cleanupWorktreeImpl: vi.fn(),
+        resolveWorktreeHeadShaImpl: vi
+          .fn()
+          .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+      },
+    );
+
+    const spec = mockCodexCliRun.mock.calls[0][0] as { modelOverride?: string };
+    expect(spec.modelOverride).toBe('gpt-5.4-mini');
+  });
+});
+
 describe('runFixIssueWorkflow (#183)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockAccumulatePersonaStats.mockClear();
+    resetRuntimeRoutingMocks();
     process.env.GITHUB_TOKEN = 'ghp_test';
   });
 

@@ -4,7 +4,7 @@ import type { ModelTier } from '../types.js';
 import type { SkillBudgetOverride } from './budgets.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { HoldoutFallbackForbiddenError } from './interface.js';
-import { tierOf } from './models.js';
+import { defaultModelForTierAndProvider, providerOf, tierOf } from './models.js';
 import { resolveEscalatedBudgetsForProject } from './resolve-for-project.js';
 import { HOLDOUT_ROLES } from './roles.js';
 
@@ -73,6 +73,10 @@ export async function runWithEscalation<T>(
 
   const currentTier = spec.modelOverride != null ? tierOf(spec.modelOverride) : null;
   const targetTier = tierOf(escalated.modelOverride);
+  const escalatedModelOverride =
+    spec.modelOverride != null
+      ? defaultModelForTierAndProvider(targetTier, providerOf(spec.modelOverride))
+      : escalated.modelOverride;
   // Allow same-tier retry (e.g. opus→opus when there is no higher tier — give
   // the same model one more shot at producing valid output). Reject only
   // strict downgrade, which is a misconfiguration.
@@ -85,7 +89,7 @@ export async function runWithEscalation<T>(
     ...spec,
     runId: retryRunId,
     budgets: escalated.budgets,
-    modelOverride: escalated.modelOverride,
+    modelOverride: escalatedModelOverride,
   };
 
   eventStore.appendEvent({
@@ -101,7 +105,7 @@ export async function runWithEscalation<T>(
       retryRunId,
       skill: spec.skill,
       fromModel: spec.modelOverride ?? null,
-      toModel: escalated.modelOverride,
+      toModel: escalatedModelOverride,
       reason: 'schema-validation-failed',
     },
     runId: retryRunId,

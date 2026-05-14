@@ -1,7 +1,6 @@
 import { copyFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
-import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import {
   type EffectiveDevReviewConfig,
   getDiffForDevReview,
@@ -13,6 +12,7 @@ import {
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
+import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
@@ -97,7 +97,6 @@ export async function runParallelImplementWorkflow(
         : { value: input.payload, pipelineRunId };
     return baseAppend({ ...input, payload });
   };
-  const runtime = deps.runtime ?? new ClaudeCliRuntime();
   const openPRFn = deps.openPRImpl ?? openPR;
   const createWpFn = deps.createWpWorktreeImpl ?? createWpScratchWorktree;
   const createIssueFn = deps.createIssueWorktreeImpl ?? createWorktree;
@@ -110,6 +109,13 @@ export async function runParallelImplementWorkflow(
   const getStatusFn = deps.getLastStatusImpl ?? getLastWpStatus;
 
   const projectConfig = await getProjectBySlug(projectId);
+  const { runtime, resolvedBudget: implementWpBudget } = resolveProjectAgentExecution({
+    skill: 'implement-wp',
+    role: 'developer',
+    projectId,
+    projectConfig,
+    injectedRuntime: deps.runtime,
+  });
   const globalSettings = resolveGlobalSettingsForProject(projectId, projectConfig?.budgets);
   const maxParallel = globalSettings.maxParallelAgents ?? 3;
   const maxRetries = globalSettings.maxRetries ?? 2;
@@ -190,6 +196,8 @@ export async function runParallelImplementWorkflow(
             scratchWorktreePath: scratchWorktrees.get(wp.id) ?? '/tmp/missing-scratch',
             stack,
             runtime,
+            budgets: implementWpBudget.budgets,
+            modelOverride: implementWpBudget.modelOverride,
             personaId,
             wpTimeoutMs,
             appendEvent: append,

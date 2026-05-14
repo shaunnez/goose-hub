@@ -13,6 +13,7 @@ import { computeAllowlist } from '../tool-layer/allowlist.js';
 import { deployDecisionCaptureHook } from '../tool-layer/decision-capture-hook.js';
 import { deployHooks } from '../tool-layer/pre-tool-use-hook.js';
 import { writeWorkspaceSandbox } from '../tool-layer/sandbox.js';
+import { emitBudgetExceededIfNeeded } from './budget-guard.js';
 import { assembleSpawnContext } from './context-assembly.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { resolveMockOutput } from './mock-outputs.js';
@@ -401,6 +402,57 @@ export class ClaudeCliRuntime implements AgentRuntime {
           costLabel: usage?.costLabel ?? 'estimated',
           personaId: personaId ?? null,
         });
+
+        const costUsd = usage?.costUsd ?? 0;
+        const inputTokens = usage?.inputTokens ?? 0;
+        const outputTokens = usage?.outputTokens ?? 0;
+        const exceededBudget = emitBudgetExceededIfNeeded({
+          runId,
+          skill: spec.skill,
+          modelId: model,
+          costUsd,
+          maxBudgetUsd: spec.budgets.maxBudgetUsd,
+          inputTokens,
+          outputTokens,
+          projectId,
+          workItemId,
+          personaId,
+        });
+
+        if (exceededBudget) {
+          db.insert(agentRuns)
+            .values({
+              runId,
+              personaId,
+              workItemId: spec.workItemId ?? workItemId ?? null,
+              projectId,
+              role: spec.role,
+              skill: spec.skill,
+              outcome: 'failure',
+            })
+            .run();
+          eventStore.appendEvent({
+            projectId,
+            workItemId,
+            kind: 'agent.run-failed',
+            payload: {
+              runId,
+              skill: spec.skill,
+              reason: 'budget-exceeded',
+              error: `budget exceeded: $${costUsd} > $${spec.budgets.maxBudgetUsd}`,
+              costUsd,
+              budgetUsd: spec.budgets.maxBudgetUsd,
+            },
+            runId,
+            personaId,
+          });
+          reject(
+            new Error(
+              `Agent run ${runId} exceeded budget: $${costUsd} > $${spec.budgets.maxBudgetUsd}`,
+            ),
+          );
+          return;
+        }
 
         // Surface non-empty stderr even on successful runs. The Claude CLI
         // forwards MCP server stderr (startup banners, registration warnings,

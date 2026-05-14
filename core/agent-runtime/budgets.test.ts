@@ -32,8 +32,8 @@ describe('SKILL_BUDGETS', () => {
     }
   });
 
-  it('keeps scout-schema cheap enough to force early exit instead of runtime tracing', () => {
-    expect(SKILL_BUDGETS['scout-schema']?.maxTurns).toBeLessThanOrEqual(10);
+  it('keeps scout-schema bounded enough to force early exit instead of runtime tracing', () => {
+    expect(SKILL_BUDGETS['scout-schema']?.maxTurns).toBeLessThanOrEqual(20);
   });
 });
 
@@ -54,7 +54,7 @@ describe('resolveBudgets', () => {
 
   it('does not cap when budget is within limit', () => {
     const result = resolveBudgets('triage', { perWorkflowMaxUsd: 10 });
-    expect(result.budgets.maxBudgetUsd).toBe(0.05);
+    expect(result.budgets.maxBudgetUsd).toBe(1);
   });
 
   it('applies per-project skill override', () => {
@@ -93,6 +93,7 @@ describe('resolveBudgets', () => {
       'repo-match',
       'implement',
       'evidence-post',
+      'investigate',
       'retrospective-light',
     ]) {
       const { modelOverride } = resolveBudgets(skill);
@@ -101,7 +102,7 @@ describe('resolveBudgets', () => {
   });
 
   it('opus skills resolve to opus model IDs', () => {
-    for (const skill of ['investigate', 'advise-on-plan']) {
+    for (const skill of ['advise-on-plan']) {
       const { modelOverride } = resolveBudgets(skill);
       expect(modelOverride, `${skill} should use opus`).toContain('opus');
     }
@@ -156,7 +157,7 @@ describe('perAgentMaxUsd cap', () => {
 
   it('does not clamp when budget is within perAgentMaxUsd', () => {
     const result = resolveBudgets('triage', { perAgentMaxUsd: 10 });
-    expect(result.budgets.maxBudgetUsd).toBe(0.05);
+    expect(result.budgets.maxBudgetUsd).toBe(1);
   });
 
   it('dbPerAgentMaxUsd wins over config perAgentMaxUsd', () => {

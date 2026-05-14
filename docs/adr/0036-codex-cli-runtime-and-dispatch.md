@@ -120,6 +120,10 @@ Codex CLI's `exec` mode reads its prompt from argv (or `--prompt-file`). We pass
 - Holdout roles do not gain a Codex variant in this issue. M19.13 (parallel reviewer) is filed separately and currently deferred for evaluation.
 - The 12+ existing call sites continue to construct `new ClaudeCliRuntime()` directly. Migrating them is a follow-up issue and not required for #595/#596.
 
+## Follow-up implementation note — 2026-05-14
+
+The deferred migration has now been applied to the `fix-issue` implement path. When no test runtime is injected, `slices/fix-issue` resolves the developer model/provider from DB and project config, maps the selected tier through `defaultModelForTierAndProvider()`, and dispatches via `selectRuntime()`. Injected runtimes keep the legacy test seam. Schema-validation escalation now preserves the provider of the first attempt, so a Codex haiku run retries on Codex sonnet rather than Claude sonnet.
+
 ## References
 
 - ADR 0034 (provider-aware model routing) — `runtime: 'auto'` field + `provider` on models

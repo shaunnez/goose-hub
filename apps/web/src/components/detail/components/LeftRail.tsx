@@ -55,7 +55,7 @@ function getNotApplicableReason(
   // }
 
   if (key === 'grill' || key === 'prd') {
-    if (itemType === 'feature') return `Generated from PRD — see parent #${prdParent}`;
+    // if (itemType === 'feature') return `Generated from PRD — see parent #${prdParent}`;
     if (itemType != null && itemType !== 'feature') {
       return `${itemType === 'bug' ? 'Bugs go straight to investigation' : `${itemType.charAt(0).toUpperCase()}${itemType.slice(1)}s skip`} the Discover lane`;
     }

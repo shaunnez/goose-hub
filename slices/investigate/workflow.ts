@@ -41,11 +41,19 @@ import { WAVE_1_SCOUTS, selectWave2Scouts } from './wave2-selection.js';
 type InvestigateOutput = z.infer<typeof InvestigateSchema>;
 
 export function chooseScoutModelOverride(input: {
+  skill: string;
   resolvedBudget: ResolvedBudget;
   investigatorRoleModel: SelectModelForRoleResult;
   forcedRuntimeProvider: ModelProvider | null;
 }): string {
-  const { resolvedBudget, investigatorRoleModel, forcedRuntimeProvider } = input;
+  const { skill, resolvedBudget, investigatorRoleModel, forcedRuntimeProvider } = input;
+
+  if (skill.startsWith('scout-') || skill.startsWith('wave2-')) {
+    return defaultModelForTierAndProvider(
+      'haiku',
+      forcedRuntimeProvider ?? investigatorRoleModel.provider,
+    );
+  }
 
   if (investigatorRoleModel.source === 'db' || investigatorRoleModel.source === 'config') {
     return defaultModelForTierAndProvider(
@@ -192,6 +200,7 @@ export async function runInvestigateWorkflow(
     return {
       ...resolved,
       modelOverride: chooseScoutModelOverride({
+        skill,
         resolvedBudget: resolved,
         investigatorRoleModel: investigateRoleModel,
         forcedRuntimeProvider,

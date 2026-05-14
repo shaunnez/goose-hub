@@ -1,9 +1,8 @@
 import { DecomposeOutputSchema } from '../../skills/decompose-issues/schema.js';
-import { ClaudeCliRuntime } from '../agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
 import { readPromptWithContext } from '../agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
-import { resolveBudgetsForProject } from '../agent-runtime/resolve-for-project.js';
+import { resolveProjectAgentExecution } from '../agent-runtime/resolve-runtime-for-project.js';
 import { toJsonSchema } from '../agent-runtime/schema-bridge.js';
 import { selectPersona } from '../agent-runtime/select-persona.js';
 import { eventStore } from '../event-stream/store.js';
@@ -49,10 +48,16 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
 }> {
   const { workItem, prdOutput, stateSource, projectId, deps = {} } = input;
   const runId = crypto.randomUUID();
-  const runtime = deps.runtime ?? new ClaudeCliRuntime();
   const skillName = 'decompose-issues';
   const prompt = readPromptWithContext(skillName, projectId);
   const projectConfig = await getProjectBySlug(projectId);
+  const { runtime, resolvedBudget } = resolveProjectAgentExecution({
+    skill: skillName,
+    role: 'decomposer',
+    projectId,
+    projectConfig,
+    injectedRuntime: deps.runtime,
+  });
   const jsonSchema = toJsonSchema(DecomposeOutputSchema);
   const { personaId } = selectPersona(projectId, 'decomposer');
 
@@ -63,20 +68,6 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
     throw new Error(
       `runDecomposePrdWorkflow: expected workItem.state 'factory:decomposing', got '${workItem.state}'`,
     );
-  }
-
-  // TODO: Add 'decompose-issues' entry to SKILL_BUDGETS in core/agent-runtime/budgets.ts
-  let resolvedBudget: {
-    budgets: { maxTurns: number; maxBudgetUsd: number; timeoutMs: number };
-    modelOverride: string;
-  };
-  try {
-    resolvedBudget = resolveBudgetsForProject(skillName, projectConfig?.budgets, projectId);
-  } catch {
-    resolvedBudget = {
-      budgets: { maxTurns: 30, maxBudgetUsd: 0.5, timeoutMs: 300_000 },
-      modelOverride: 'sonnet',
-    };
   }
 
   try {
