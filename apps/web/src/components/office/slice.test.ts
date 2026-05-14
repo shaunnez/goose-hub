@@ -1426,10 +1426,15 @@ describe('Phase 2.5 — visual canon', () => {
     expect(Object.keys(TEXTURE_KEYS)).toHaveLength(20);
   });
 
-  it('pngManifest keys match all TEXTURE_KEYS values', () => {
+  it('pngManifest covers every TEXTURE_KEYS value', () => {
+    // Loop-generated assets (from docs/design/goose-hub-full-asset-manifest)
+    // append additional `office:<filename>` keys directly to pngManifest()
+    // without going through TEXTURE_KEYS — they don't yet have scene
+    // composition. So this is a superset check, not equality.
     const manifestKeys = new Set(pngManifest().map((e) => e.key));
-    const textureValues = new Set(Object.values(TEXTURE_KEYS));
-    expect(manifestKeys).toEqual(textureValues);
+    for (const v of Object.values(TEXTURE_KEYS)) {
+      expect(manifestKeys.has(v), `pngManifest is missing TEXTURE_KEYS value "${v}"`).toBe(true);
+    }
   });
 
   it('MANIFEST has 20 entries matching TEXTURE_KEYS count', async () => {
