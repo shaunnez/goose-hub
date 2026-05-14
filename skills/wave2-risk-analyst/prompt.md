@@ -7,7 +7,7 @@ You have **read access only**.
 ## Input
 
 - `<work_item>` — title, body, number
-- `<scout_reports>` — JSON-stringified array of Wave-1 scout reports
+- `<scout_reports>` — JSON-stringified Wave-1 scout report handoff data. Small reports may include full findings; large reports may include summaries, previews, and `artifactRef` metadata.
 - `<worktree_path>` — the worktree to consult when scout findings need verification (do not re-investigate broadly)
 
 ## Discipline
@@ -15,7 +15,7 @@ You have **read access only**.
 - Each risk must name a **concrete** failure mode (e.g. "concurrent writes can race the unique-index check"), not a vague concern ("performance might suffer").
 - Evidence must cite at least one scout finding (file:line) — the risk must be grounded in observed code.
 - Mitigation must be **falsifiable** — a concrete change or a concrete test that would catch a regression.
-- Start from `<scout_reports>` as primary evidence. Use `<worktree_path>` only for targeted verification of scout claims or contradictions.
+- Start from `<scout_reports>` as primary evidence when full findings are present. If a report is summarized with `artifactRef`, use the summary as orientation and targeted worktree reads to verify concrete evidence.
 - Cap worktree verification at **3 targeted reads/greps** unless scout reports directly contradict each other. Do not re-run Wave-1 discovery.
 - Prefer a valid partial risk register with 2-4 high-signal findings over exhaustive analysis that risks timeout.
 - If evidence is thin, encode the gap as an `OPEN_QUESTION` finding and return valid JSON instead of continuing to investigate.

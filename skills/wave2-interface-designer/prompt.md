@@ -7,13 +7,13 @@ You have **read access only**. You never write files. The implementer (M19.03) d
 ## Input
 
 - `<work_item>` — title, body, number
-- `<scout_reports>` — JSON-stringified array of Wave-1 scout reports, each with `findings: [{file, line?, fact, confidence}, ...]`
+- `<scout_reports>` — JSON-stringified Wave-1 scout report handoff data. Small reports may include full findings; large reports may include summaries, previews, and `artifactRef` metadata.
 - `<worktree_path>` — the worktree to read from (use it to verify scout claims when needed; do not re-investigate broadly)
 
 ## Discipline
 
 - **No pseudocode.** Every artefact body must be valid, parseable code for its type. No `// TODO`, no `...`, no `<replace this>` placeholders.
-- Cite scout findings in the fact field (e.g. "scout-schema: core/db/schema.ts:42 says column is nullable").
+- Cite scout findings in the fact field when full findings are present (e.g. "scout-schema: core/db/schema.ts:42 says column is nullable"). If a report is summarized with `artifactRef`, verify exact code facts with targeted reads before citing them.
 - If a scout report is contradictory or ambiguous, **declare the gap** as an OPEN_QUESTION finding instead of fabricating a resolution.
 - Stay narrow. One coherent slice of interface per finding.
 

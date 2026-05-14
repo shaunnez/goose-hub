@@ -422,6 +422,37 @@ export const scoutReports = sqliteTable(
   }),
 );
 
+export const agentArtifacts = sqliteTable(
+  'agent_artifacts',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    artifactKey: text('artifact_key').notNull(),
+    projectId: text('project_id').notNull(),
+    workItemId: text('work_item_id'),
+    runId: text('run_id').notNull(),
+    kind: text('kind').notNull(),
+    summary: text('summary').notNull(),
+    payloadJson: text('payload_json').notNull(),
+    bytes: integer('bytes').notNull(),
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+    expiresAt: text('expires_at'),
+  },
+  (t) => ({
+    artifactKeyUniq: uniqueIndex('agent_artifacts_artifact_key_uniq').on(t.artifactKey),
+    projectWorkItemIdx: index('agent_artifacts_project_work_item_idx').on(
+      t.projectId,
+      t.workItemId,
+    ),
+    runIdIdx: index('agent_artifacts_run_id_idx').on(t.runId),
+    projectWorkItemRunKindIdx: index('agent_artifacts_project_work_item_run_kind_idx').on(
+      t.projectId,
+      t.workItemId,
+      t.runId,
+      t.kind,
+    ),
+  }),
+);
+
 export const engineeringSpecs = sqliteTable(
   'engineering_specs',
   {

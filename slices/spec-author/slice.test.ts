@@ -517,6 +517,56 @@ describe('runSpecAuthorWorkflow', () => {
         },
       });
     });
+
+    it('passes scout report summaries and refs to spec-author without rehydrating full blobs', async () => {
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      const scoutRepo = await import('@goose-hub/core/scout-reports/repository.js');
+      vi.mocked(eventStore.replay).mockReturnValue([
+        {
+          id: 1,
+          projectId: 'goose-hub-self',
+          workItemId: 'github:shaunnez/goose-hub#55',
+          kind: 'agent.investigation-complete',
+          payload: { investigationRunId: 'investigation-run' },
+          runId: 'investigation-run',
+          createdAt: '2026-05-14T00:00:00Z',
+        },
+      ] as never);
+      vi.mocked(scoutRepo.listScoutReportsForInvestigation).mockReturnValue([
+        {
+          id: 1,
+          projectId: 'goose-hub-self',
+          workItemId: 'github:shaunnez/goose-hub#55',
+          investigationRunId: 'investigation-run',
+          scoutSkill: 'scout-code-path',
+          report: {
+            summary: 'scout-code-path: 1 findings, 1 decision summaries',
+            findingCount: 1,
+            decisionSummaryCount: 1,
+            artifactRef: {
+              artifactKey: 'scout-report:abc',
+              kind: 'scout-report',
+              summary: 'scout-code-path: 1 findings, 1 decision summaries',
+              bytes: 40_000,
+              stored: true,
+            },
+          },
+          createdAt: '2026-05-14T00:00:00Z',
+        },
+      ]);
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const invokeOpts = mockInvokeSkill.mock.calls[0][0] as {
+        context: { scoutReports?: string };
+      };
+      expect(invokeOpts.context.scoutReports).toContain('scout-report:abc');
+      expect(invokeOpts.context.scoutReports).toContain(
+        'scout-code-path: 1 findings, 1 decision summaries',
+      );
+      expect(invokeOpts.context.scoutReports).not.toContain('large full finding body');
+    });
   });
 
   describe('spec survives worktree cleanup — acceptance criterion 4', () => {

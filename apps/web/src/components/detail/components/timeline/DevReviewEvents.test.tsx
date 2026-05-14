@@ -38,6 +38,30 @@ describe('DevReviewEvents', () => {
     expect(screen.getByText('Dev review started')).toBeTruthy();
   });
 
+  it('renders dev-review.started artifact metadata without opening the payload', () => {
+    render(
+      <ul>
+        <DevReviewStartedEvent
+          event={makeEvent('dev-review.started', {
+            pipelineRunId: 'abc123',
+            diffSummary: '1 changed files: src/a.ts; +20/-1',
+            diffArtifactRef: {
+              artifactKey: 'pr-diff:abc',
+              kind: 'pr-diff',
+              summary: '1 changed files: src/a.ts; +20/-1',
+              bytes: 4096,
+              stored: true,
+            },
+          })}
+        />
+      </ul>,
+    );
+
+    expect(screen.getByText('1 changed files: src/a.ts; +20/-1')).toBeTruthy();
+    expect(screen.getByText('pr-diff:abc')).toBeTruthy();
+    expect(screen.getByText(/4\.0 KB/)).toBeTruthy();
+  });
+
   it('renders dev-review.completed with verdict', () => {
     render(
       <ul>

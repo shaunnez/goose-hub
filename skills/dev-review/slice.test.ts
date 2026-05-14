@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import {
   HOLDOUT_FORBIDDEN_KEYS,
   assembleSpawnContext,
@@ -57,6 +58,12 @@ describe('skills/dev-review skill.config', () => {
         prDiff: 'diff --git a/x b/x',
       }),
     ).not.toThrow();
+  });
+
+  it('prompt tells reviewer how to handle summarized artifact diffs', () => {
+    const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+    expect(prompt).toContain('ArtifactRef');
+    expect(prompt).toContain('Do not invent hunk-level or line-specific findings');
   });
 });
 

@@ -183,6 +183,13 @@
       "when": 1778713026343,
       "tag": "0025_solid_daredevil",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1778737181566,
+      "tag": "0026_furry_umar",
+      "breakpoints": true
     }
   ]
 }

@@ -641,6 +641,54 @@ describe('runInvestigateWorkflow', () => {
       };
       expect(scoutReports.contradictions).toHaveLength(1);
     });
+
+    it('passes compact artifact refs, not full large scout JSON, to synthesis', async () => {
+      mockPersistScoutReport.mockImplementation(
+        (_projectId, _workItemId, _runId, scoutSkill: string) => ({
+          summary: `${scoutSkill}: large report`,
+          findingCount: 1,
+          decisionSummaryCount: 1,
+          artifactRef: {
+            artifactKey: `scout-report:${scoutSkill}`,
+            kind: 'scout-report',
+            summary: `${scoutSkill}: large report`,
+            bytes: 40_000,
+            stored: true,
+          },
+        }),
+      );
+
+      const largeReport = makeScoutReport('scout-code-path', {
+        findings: [
+          {
+            file: 'src/auth.ts',
+            line: 42,
+            fact: 'LARGE_FULL_SCOUT_BODY'.repeat(2000),
+            confidence: 'high',
+          },
+        ],
+      });
+      mockDispatchWave
+        .mockResolvedValueOnce(
+          makeWaveResult({
+            reports: [
+              largeReport,
+              makeScoutReport('scout-schema'),
+              makeScoutReport('scout-pattern'),
+            ],
+          }),
+        )
+        .mockResolvedValueOnce(makeWaveResult());
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const invokeOpts = mockInvokeSkill.mock.calls[0][0] as {
+        context: { scoutReports: string };
+      };
+      expect(invokeOpts.context.scoutReports).toContain('scout-report:scout-code-path');
+      expect(invokeOpts.context.scoutReports).not.toContain('LARGE_FULL_SCOUT_BODY');
+    });
   });
 
   describe('scout timeout → workflow continues — acceptance criterion 4', () => {

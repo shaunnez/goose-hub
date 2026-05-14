@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   type DevReviewResponseOutput,
   DevReviewResponseOutputSchema,
@@ -9,6 +10,8 @@ import {
   DevReviewOutputSchema,
 } from '@goose-hub/skills/dev-review/schema.js';
 import devReviewConfig from '@goose-hub/skills/dev-review/skill.config.js';
+import { maybeStoreLargePayload } from '../agent-artifacts/repository.js';
+import type { ArtifactRef } from '../agent-artifacts/types.js';
 import { readProjectDevReviewSettings } from '../db/repositories/project-dev-review-settings.js';
 import type { AgentEvent, AppendEventInput } from '../event-stream/store.js';
 import { eventStore } from '../event-stream/store.js';
@@ -45,17 +48,94 @@ export function shouldRunDevReview(triggerOn: string, priority: string): boolean
 /**
  * Returns the unified diff of the integration worktree vs base branch.
  * Pure git diff — no shell interpolation (FACTORY_RULES rule 29).
- * Truncated at 200 KB to avoid blowing Codex's context.
+ * The prompt handoff stores large diffs as artifacts before spawning Codex.
  */
 export function getDiffForDevReview(worktreePath: string, baseBranch = 'main'): string {
   const result = spawnSync('git', ['diff', `${baseBranch}...HEAD`], {
     cwd: worktreePath,
     encoding: 'utf8',
-    maxBuffer: 200 * 1024,
+    maxBuffer: 5 * 1024 * 1024,
     env: GIT_ENV,
   });
   if (result.error) throw result.error;
   return result.stdout ?? '';
+}
+
+function extractChangedFiles(prDiff: string): string[] {
+  const files = new Set<string>();
+  for (const line of prDiff.split('\n')) {
+    const match = /^diff --git a\/(.+) b\/(.+)$/.exec(line);
+    if (match != null) files.add(match[2]);
+  }
+  return [...files];
+}
+
+function summarizePrDiff(prDiff: string): string {
+  const changedFiles = extractChangedFiles(prDiff);
+  const additions = prDiff
+    .split('\n')
+    .filter((line) => line.startsWith('+') && !line.startsWith('+++')).length;
+  const deletions = prDiff
+    .split('\n')
+    .filter((line) => line.startsWith('-') && !line.startsWith('---')).length;
+  const fileText =
+    changedFiles.length === 0
+      ? 'no changed files detected'
+      : `${changedFiles.length} changed files: ${changedFiles.slice(0, 12).join(', ')}${
+          changedFiles.length > 12 ? ', ...' : ''
+        }`;
+  return `${fileText}; +${additions}/-${deletions}`;
+}
+
+function diffArtifactKey(
+  projectId: string,
+  workItemId: string,
+  runId: string,
+  prDiff: string,
+): string {
+  const hash = createHash('sha256')
+    .update(JSON.stringify({ projectId, workItemId, runId, prDiff }))
+    .digest('hex')
+    .slice(0, 24);
+  return `pr-diff:${hash}`;
+}
+
+export function preparePrDiffContext(input: {
+  projectId: string;
+  workItemId: string;
+  runId: string;
+  prDiff: string;
+  thresholdBytes?: number;
+}): { prDiffContext: string; artifactRef?: ArtifactRef; summary: string; changedFiles: string[] } {
+  const summary = summarizePrDiff(input.prDiff);
+  const changedFiles = extractChangedFiles(input.prDiff);
+  const maybeStored = maybeStoreLargePayload({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    runId: input.runId,
+    kind: 'pr-diff',
+    payload: input.prDiff,
+    summary,
+    thresholdBytes: input.thresholdBytes,
+    artifactKey: diffArtifactKey(input.projectId, input.workItemId, input.runId, input.prDiff),
+  });
+
+  if (maybeStored.stored === false) {
+    return { prDiffContext: maybeStored.payload, summary, changedFiles };
+  }
+
+  return {
+    prDiffContext: [
+      'Large PR diff omitted from prompt context and stored as an agent artifact.',
+      `Summary: ${summary}`,
+      `ArtifactRef: ${JSON.stringify(maybeStored)}`,
+      `Changed files: ${changedFiles.length > 0 ? changedFiles.join(', ') : '(none detected)'}`,
+      'Review from this summary plus targeted file reads in the worktree. Do not fabricate line-specific findings unless verified from provided context or a file read.',
+    ].join('\n'),
+    artifactRef: maybeStored,
+    summary,
+    changedFiles,
+  };
 }
 
 // ─── Effective config ─────────────────────────────────────────────────────────
@@ -138,12 +218,23 @@ export async function runDevReview(input: RunDevReviewInput): Promise<DevReviewO
 
   const prDiff = getDiffForDevReview(input.worktreePath, input.baseBranch ?? 'main');
   const devReviewRunId = `${input.runId}:dev-review`;
+  const preparedDiff = preparePrDiffContext({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    runId: input.runId,
+    prDiff,
+  });
 
   input.appendEvent({
     projectId: input.projectId,
     workItemId: input.workItemId,
     kind: 'dev-review.started',
-    payload: { runId: devReviewRunId, worktreePath: input.worktreePath },
+    payload: {
+      runId: devReviewRunId,
+      worktreePath: input.worktreePath,
+      diffSummary: preparedDiff.summary,
+      diffArtifactRef: preparedDiff.artifactRef,
+    },
     runId: devReviewRunId,
   });
 
@@ -155,7 +246,7 @@ export async function runDevReview(input: RunDevReviewInput): Promise<DevReviewO
       projectId: input.projectId,
       workItemId: input.workItemId,
       workItem: input.workItem,
-      prDiff,
+      prDiff: preparedDiff.prDiffContext,
       projectCommands: input.stack,
     },
     contextAllowlist: devReviewConfig.contextAllowlist ?? [],
@@ -236,12 +327,23 @@ export async function runDevReviewResponse(
   );
 
   const responseRunId = `${input.runId}:dev-review-response`;
+  const preparedDiff = preparePrDiffContext({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    runId: input.runId,
+    prDiff: input.prDiff,
+  });
 
   input.appendEvent({
     projectId: input.projectId,
     workItemId: input.workItemId,
     kind: 'dev-review.response-started',
-    payload: { runId: responseRunId, findingCount: input.devReviewFindings.length },
+    payload: {
+      runId: responseRunId,
+      findingCount: input.devReviewFindings.length,
+      diffSummary: preparedDiff.summary,
+      diffArtifactRef: preparedDiff.artifactRef,
+    },
     runId: responseRunId,
   });
 
@@ -253,7 +355,7 @@ export async function runDevReviewResponse(
       projectId: input.projectId,
       workItemId: input.workItemId,
       workItem: input.workItem,
-      prDiff: input.prDiff,
+      prDiff: preparedDiff.prDiffContext,
       devReviewFindings: input.devReviewFindings,
       worktreePath: input.worktreePath,
       stack: input.stack,

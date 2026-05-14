@@ -272,12 +272,20 @@ export async function runInvestigateWorkflow(
         loadSkillAssets,
       });
 
+      const wave1HandoffReports: unknown[] = [];
       for (const report of wave1Result.reports) {
         if (report.status === 'ok') {
-          persistScoutReport(projectId, workItem.id, runId, report.scoutName, {
+          const storedReport = persistScoutReport(projectId, workItem.id, runId, report.scoutName, {
             findings: report.findings,
             decisionSummaries: report.decisionSummaries,
           });
+          wave1HandoffReports.push({
+            scoutName: report.scoutName,
+            status: report.status,
+            ...((storedReport ?? {}) as object),
+          });
+        } else {
+          wave1HandoffReports.push(report);
         }
       }
 
@@ -313,7 +321,7 @@ export async function runInvestigateWorkflow(
       // Cross-validate Wave 1 before dispatching Wave 2
       const cvResult = crossValidate(wave1Result.reports);
       const wave1Context = JSON.stringify({
-        wave1: wave1Result.reports,
+        wave1: wave1HandoffReports,
         contradictions: cvResult.contradictions,
       });
 
@@ -341,19 +349,27 @@ export async function runInvestigateWorkflow(
         loadSkillAssets,
       });
 
+      const wave2HandoffReports: unknown[] = [];
       for (const report of wave2Result.reports) {
         if (report.status === 'ok') {
-          persistScoutReport(projectId, workItem.id, runId, report.scoutName, {
+          const storedReport = persistScoutReport(projectId, workItem.id, runId, report.scoutName, {
             findings: report.findings,
             decisionSummaries: report.decisionSummaries,
           });
+          wave2HandoffReports.push({
+            scoutName: report.scoutName,
+            status: report.status,
+            ...((storedReport ?? {}) as object),
+          });
+        } else {
+          wave2HandoffReports.push(report);
         }
       }
 
       // Build full context for the synthesis investigator
       allScoutReports = JSON.stringify({
-        wave1: wave1Result.reports,
-        wave2: wave2Result.reports,
+        wave1: wave1HandoffReports,
+        wave2: wave2HandoffReports,
         contradictions: cvResult.contradictions,
       });
     }

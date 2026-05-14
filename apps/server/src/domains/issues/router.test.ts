@@ -7,6 +7,7 @@ const {
   mockListIssues,
   mockGetIssue,
   mockGetIssueEvents,
+  mockGetIssueArtifact,
   mockGetIssueComments,
   mockGetIssueTriage,
   mockGetIssueWorktreeDiff,
@@ -29,6 +30,7 @@ const {
   mockListIssues: vi.fn(),
   mockGetIssue: vi.fn(),
   mockGetIssueEvents: vi.fn(),
+  mockGetIssueArtifact: vi.fn(),
   mockGetIssueComments: vi.fn(),
   mockGetIssueTriage: vi.fn(),
   mockGetIssueWorktreeDiff: vi.fn(),
@@ -53,6 +55,7 @@ vi.mock('./service.js', () => ({
   listIssues: mockListIssues,
   getIssue: mockGetIssue,
   getIssueEvents: mockGetIssueEvents,
+  getIssueArtifact: mockGetIssueArtifact,
   getIssueComments: mockGetIssueComments,
   getIssueTriage: mockGetIssueTriage,
   getIssueWorktreeDiff: mockGetIssueWorktreeDiff,
@@ -237,6 +240,55 @@ describe('GET /projects/:slug/issues/:id/triage', () => {
     const app = makeApp();
     const res = await app.request('/projects/unknown/issues/1/triage', { method: 'GET' });
     expect(res.status).toBe(404);
+  });
+});
+
+describe('GET /projects/:slug/issues/:id/artifacts/:artifactKey', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns 200 with artifact payload on success', async () => {
+    const artifact = {
+      artifactKey: 'pr-diff:abc',
+      projectId: 'my-project',
+      workItemId: 'github:owner/repo#42',
+      runId: 'run-abc',
+      kind: 'pr-diff',
+      summary: '1 changed file',
+      bytes: 123,
+      createdAt: '2026-05-14T00:00:00Z',
+      expiresAt: null,
+      payload: 'diff --git a/foo.ts b/foo.ts',
+    };
+    mockGetIssueArtifact.mockResolvedValue({ ok: true, data: { artifact } });
+
+    const app = makeApp();
+    const res = await app.request('/projects/my-project/issues/42/artifacts/pr-diff:abc', {
+      method: 'GET',
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { artifact: unknown };
+    expect(body.artifact).toEqual(artifact);
+    expect(mockGetIssueArtifact).toHaveBeenCalledWith('my-project', '42', 'pr-diff:abc');
+  });
+
+  it('returns 404 for unknown or unauthorized artifacts', async () => {
+    mockGetIssueArtifact.mockResolvedValue({
+      ok: false,
+      error: 'artifact not found',
+      status: 404,
+    });
+
+    const app = makeApp();
+    const res = await app.request('/projects/my-project/issues/42/artifacts/nope', {
+      method: 'GET',
+    });
+
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('artifact not found');
   });
 });
 

@@ -6,6 +6,14 @@ type DevReviewPayload = {
   verdict?: string;
   errorReason?: string;
   iteration?: number;
+  diffSummary?: string;
+  diffArtifactRef?: {
+    artifactKey: string;
+    kind: string;
+    summary: string;
+    bytes: number;
+    stored: true;
+  };
 };
 
 function formatShortId(value: string | undefined): string | null {
@@ -67,6 +75,29 @@ function DetailRow({ children }: { children: React.ReactNode }) {
   return <div className="text-[11.5px] text-fg-3 break-words">{children}</div>;
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  return `${(bytes / 1024).toFixed(1)} KB`;
+}
+
+function ArtifactRows({ payload }: { payload: DevReviewPayload | null }) {
+  if (payload?.diffSummary == null && payload?.diffArtifactRef == null) return null;
+  return (
+    <div className="mt-2 space-y-1">
+      {payload.diffSummary != null && <DetailRow>{payload.diffSummary}</DetailRow>}
+      {payload.diffArtifactRef != null && (
+        <DetailRow>
+          <span className="font-mono">{payload.diffArtifactRef.kind}</span>
+          {' artifact '}
+          <span className="font-mono">{payload.diffArtifactRef.artifactKey}</span>
+          {' · '}
+          {formatBytes(payload.diffArtifactRef.bytes)}
+        </DetailRow>
+      )}
+    </div>
+  );
+}
+
 export function DevReviewStartedEvent({ event }: { event: AgentEventDto }) {
   const p = event.payload as DevReviewPayload | null;
   return (
@@ -80,6 +111,7 @@ export function DevReviewStartedEvent({ event }: { event: AgentEventDto }) {
         {p?.iteration != null && <span>Iteration {p.iteration}</span>}
         <PipelineChip pipelineRunId={p?.pipelineRunId} />
       </div>
+      <ArtifactRows payload={p} />
     </DevReviewShell>
   );
 }
@@ -151,6 +183,7 @@ export function DevReviewBudgetSkippedEvent({ event }: { event: AgentEventDto })
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-fg-3">
         <PipelineChip pipelineRunId={p?.pipelineRunId} />
       </div>
+      <ArtifactRows payload={p} />
     </DevReviewShell>
   );
 }
