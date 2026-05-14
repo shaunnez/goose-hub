@@ -46,19 +46,26 @@ coherent cinematic. Nothing more.
 
 ## 2. Documents in this directory
 
-| File                              | Phase | Scope                                                          | Status      |
-| --------------------------------- | ----- | -------------------------------------------------------------- | ----------- |
-| `phase-1-pure-refactor.md`        | 1     | Split `OfficeScene` into `FloorLayer` + `SpriteLayer`         | merged      |
-| `phase-2-rooms-and-anchors.md`*   | 2     | Adopt Board 02 canon: 6 rooms on a single 1280×384 floor       | merged      |
-| `phase-3-persona-ticket-split.md` | 3     | Split sprite rendering into `PersonaSprite` + `TicketSprite`   | specified   |
-| `phase-4-event-choreography.md`   | 4     | Add `ChoreographyPlayer` + lane model + SSE-driven intents     | specified   |
-| `phase-5-cinematics.md`           | 5     | Implement 4 canonical v1 cinematics                            | specified   |
-| `phase-6-runtime-hud.md`          | 6     | Minimum runtime overlays — physically integrated into the world | specified   |
+| File                                       | Phase | Scope                                                          | Status      |
+| ------------------------------------------ | ----- | -------------------------------------------------------------- | ----------- |
+| `phase-1-pure-refactor.md`                 | 1     | Split `OfficeScene` into `FloorLayer` + `SpriteLayer`         | merged      |
+| `phase-2-rooms-and-anchors.md`*            | 2     | Adopt Board 02 canon: 6 rooms on a single 1280×384 floor       | merged      |
+| `phase-2.5-visual-canon-adoption.md`       | 2.5   | Repalette `textures.ts` to Board 06; expand PixelLab manifest  | specified   |
+| `phase-3-persona-ticket-split.md`          | 3     | Split sprite rendering into `PersonaSprite` + `TicketSprite`   | specified   |
+| `phase-4-event-choreography.md`            | 4     | Add `ChoreographyPlayer` + lane model + SSE-driven intents     | specified   |
+| `phase-5-cinematics.md`                    | 5     | Implement 4 canonical v1 cinematics                            | specified   |
+| `phase-6-runtime-hud.md`                   | 6     | Minimum runtime overlays — physically integrated into the world | specified   |
 
 \* Phase 2 plan was not authored as a standalone file; its contract is the
 spec at `docs/design/office-mode/goose-hub-office-mode-design-pack/02-canonical-project-floor/design-spec.md`
 (Board 02). Phase 2 implementation landed in PR #770. Future phase docs
 should reference Board 02 for floor geometry rather than restating it.
+
+Phase 2.5 was inserted retroactively after Phases 1–2 merged. It closes
+the visual-fidelity gap that Board 02's geometry-only spec did not
+address: the runtime had been using an ad-hoc palette and an
+under-scoped PixelLab manifest. It may run in parallel with Phase 3
+because the two phases touch disjoint code.
 
 Each phase doc is self-contained and consumable in isolation. They share
 the invariants listed in §6.
@@ -71,6 +78,7 @@ the invariants listed in §6.
 | ----- | -------------------------------- | -------------------------------------------------------- | ---------- |
 | 1     | Pure refactor                    | `FloorLayer`, `SpriteLayer` siblings; behaviour preserved | —          |
 | 2     | Rooms & anchors                  | `lib/rooms.ts`, 6-room single-floor geometry              | 1          |
+| 2.5   | Visual canon adoption            | Board 06 palette wired into `textures.ts`; PixelLab manifest expanded to ~30 sprites | 2 |
 | 3     | Persona/ticket split             | `PersonaSprite`, `TicketSprite`, carry semantics          | 2          |
 | 4     | Event choreography               | `ChoreographyPlayer`, lanes, intent registry              | 3          |
 | 5     | Cinematics                       | 4 named cinematics: wave, qaFailed, reviewConverged, mergeCelebration | 4 |
@@ -80,6 +88,12 @@ Each phase ships behind its own PR. Phases do not skip; phase 5 cannot
 land before phase 4 because it consumes the choreography player; phase 4
 cannot land before phase 3 because it dispatches intents to the persona /
 ticket sprite contracts.
+
+Phase 2.5 has no downstream dependency — Phases 3–6 animate against
+whatever assets exist, and the procedural fallback in `textures.ts`
+keeps everything renderable if Phase 2.5 hasn't landed. Running it
+before Phase 5 is strongly recommended so cinematic visuals match the
+canon out of the gate.
 
 ---
 
