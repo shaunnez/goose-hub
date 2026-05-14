@@ -156,11 +156,17 @@ runtime picks up new assets without scene changes.
 The single source of truth. Phase 2.5 wires `textures.ts:PALETTE` and
 `generate-office-assets.ts` prompts to these values, exactly.
 
+### 4.0 Canonical base palette (8 entries)
+
+These eight hex codes are the canonical Board 06 palette. Verbatim
+from `06-visual-system/design-spec.md`. Anything outside this set is
+a derived shade (§4.1), a derived blend (§4.2), or a role tint
+(§5.3) — and must be explicitly enumerated there.
+
 | Concept                    | Board 06 hex | Hex literal (TS) | Used by                                          |
 | -------------------------- | ------------ | ---------------- | ------------------------------------------------ |
 | Background wall            | `#2B2D42`    | `0x2B2D42`       | wall tiles, room walls, outer walls               |
 | Floor                      | `#3A3D5C`    | `0x3A3D5C`       | floor tiles (primary)                             |
-| Floor (alt checker)        | derived ~`#42466A` | `0x42466A` | floor-tile-alt (subtle stripe; see §4.1)         |
 | Desk wood                  | `#6B4F3B`    | `0x6B4F3B`       | desk surface, scout desks, lead desk              |
 | Monitor glow (cyan)        | `#6FE7FF`    | `0x6FE7FF`       | desk monitor on state, dev lamp on, cyan accents |
 | Amber light                | `#F2CC8F`    | `0xF2CC8F`       | warm lamp, budget-pressure tint, banner middle   |
@@ -168,31 +174,36 @@ The single source of truth. Phase 2.5 wires `textures.ts:PALETTE` and
 | Success green              | `#8BD17C`    | `0x8BD17C`       | check indicators, merge pulse, dial-good zone    |
 | Review purple              | `#D68FD6`    | `0xD68FD6`       | review-chamber tint, review indicators           |
 
-### 4.1 Derived shades
+### 4.1 Derived shades (3 entries)
 
 Procedural textures sometimes need a slightly lighter / darker
 companion shade for tile alternation, top edges, etc. Constrain
 derivation to:
 
-- `floorAlt = floor + 8% L (HSL)` ≈ `#42466A`.
-- `wallTop` (1-pixel highlight along wall north edge) = `wall + 12% L` ≈ `#3B3D55`.
-- `deskTop` (desk surface highlight) = `desk + 12% L` ≈ `#85694F`.
+| Concept   | Hex literal (TS) | Derivation                            | Used by                          |
+| --------- | ---------------- | ------------------------------------- | -------------------------------- |
+| `floorAlt`| `0x42466A`       | `floor + 8% L (HSL)` from `#3A3D5C`   | floor-tile-alt (subtle stripe)   |
+| `wallTop` | `0x3B3D55`       | `wall + 12% L` from `#2B2D42`         | 1-px highlight along wall north edge |
+| `deskTop` | `0x85694F`       | `desk + 12% L` from `#6B4F3B`         | desk surface highlight           |
 
-Do **not** invent new base colours. Anything outside the 9 canonical
-hex codes + the 3 derived shades is a palette drift bug.
+Do **not** invent new base colours. Anything outside the 8 canonical
+entries (§4.0) + the 3 derived shades (§4.1) + the 2 derived blends
+(§4.2) + the 12 role tints (§5.3) is a palette drift bug. **Total
+allowable palette surface: 25 hex codes**, all enumerated in this
+document.
 
-### 4.2 Frosted wall variants
+### 4.2 Derived blends — frosted wall variants (2 entries)
 
 Board 02 §4.4 + §4.5 specify QA = frosted-blue, Review = frosted-grey,
 both translucent. Implementation:
 
-- QA wall tint: `#2B2D42` blended 60/40 with `#6FE7FF` → `#3F6B80`
-  (cool blue cast).
-- Review wall tint: `#2B2D42` blended 70/30 with `#D68FD6` → `#473A55`
-  (warm grey-purple cast).
+| Concept             | Hex literal (TS) | Derivation                                         | Used by             |
+| ------------------- | ---------------- | -------------------------------------------------- | ------------------- |
+| `qaWall`            | `0x3F6B80`       | `#2B2D42` blended 60/40 with `#6FE7FF` (cool blue) | QA chamber walls    |
+| `reviewWall`        | `0x473A55`       | `#2B2D42` blended 70/30 with `#D68FD6` (warm grey-purple) | Review chamber walls |
 
 These two tinted textures replace the standard wall-tile within those
-rooms. No new colours introduced — only canonical blends.
+rooms. They are derived (canonical-blends), not free-choice colours.
 
 ---
 
@@ -237,7 +248,7 @@ Suggested set. Adjust naming to match `TEXTURE_KEYS` in `textures.ts`.
 | shelf-back.png             | 80    | "top-down wall-mounted wooden shelf back with 5 slots, palette: wood #6B4F3B over wall #2B2D42, pixel art, 80×16" |
 | scout-desk.png             | 24    | "small top-down library reading desk, modest pixel art, palette: wood #6B4F3B on floor #3A3D5C, 24×16" |
 | score-dial-frame.png       | 32    | "top-down circular gauge dial with tick marks, no needle, palette: brass over wall #2B2D42, fail red #FF6B6B → amber #F2CC8F → success green #8BD17C gradient ticks, pixel art, 32×32" |
-| score-dial-needle.png      | 32    | "small thin gauge needle, palette: white over transparent, pixel art, 32×32"                |
+| score-dial-needle.png      | 32    | "small thin gauge needle pointing up, palette: cyan #6FE7FF over transparent background, pixel art, 32×32" |
 | retry-counter-frame.png    | 24    | "small rectangular numeric counter display housing, palette: wall #2B2D42 with fail red #FF6B6B border, pixel art, 24×16" |
 | banner-frame.png           | 64    | "horizontal banner sign frame, palette: wall #2B2D42 with cyan #6FE7FF edge, pixel art, 64×24" |
 | stairs.png                 | 32    | (existing — keep)                                                                            |
@@ -260,30 +271,42 @@ Suggested set. Adjust naming to match `TEXTURE_KEYS` in `textures.ts`.
 Total: ~30 assets. Hobby-tier PixelLab credit budget should be fine
 for a single run.
 
-### 5.3 Per-role persona tinting
+### 5.3 Per-role persona tinting — enumerated extension (12 entries)
 
 Phase 2.5 ships **one** persona body PNG. Per-role colour variation
-happens at runtime via `Phaser.GameObjects.Image.setTint(0xRRGGBB)`
-using the existing per-role `spriteXxx` palette entries.
+happens at runtime via `Phaser.GameObjects.Image.setTint(0xRRGGBB)`.
 
-The values move from `textures.ts:PALETTE` to Board 06-aligned hues.
-Suggested mapping (constrained to canonical palette + tasteful
-neighbours):
+The 12 roles need 12 distinct, glanceable tints. The 8-entry canonical
+palette (§4.0) has only 5 chromatic entries (cyan / amber / fail red /
+success green / review purple) suitable as tint hues — not enough for
+12 distinct roles. Phase 2.5 therefore **carves out a single enumerated
+extension table of 12 role tints** (below) that is treated as part of
+the canonical palette surface for the purpose of palette-drift checks.
 
-| Role             | Tint hex      | Source                              |
-| ---------------- | ------------- | ----------------------------------- |
-| triager          | `#A78BFA`     | violet, neighbour of review purple  |
-| griller          | `#F2CC8F`     | amber (canonical)                   |
-| prd-writer       | `#F59E0B`     | warm amber                          |
-| decomposer       | `#8BD17C`     | success green (canonical)           |
-| researcher       | `#6FE7FF`     | monitor cyan (canonical)            |
-| investigator     | `#7DD3FC`     | lighter cyan                        |
-| developer        | `#34D399`     | mint, neighbour of success          |
-| dev-reviewer     | `#A7F3D0`     | pale mint                           |
-| qa               | `#FF6B6B`     | fail red (canonical)                |
-| reviewer         | `#D68FD6`     | review purple (canonical)           |
-| retrospector     | `#C084FC`     | soft purple                         |
-| auditor          | `#FBBF24`     | watchtower amber                    |
+Constraint on these 12 entries: each must either be a canonical hue
+(§4.0) reused as-is, or a near-neighbour of one (same Board 06 hue
+family, ±20° H, ±15% S, ±15% L). New hue families are forbidden.
+
+| Role             | Tint hex      | Relationship to canonical             |
+| ---------------- | ------------- | ------------------------------------- |
+| triager          | `0xA78BFA`    | neighbour of review purple `#D68FD6`  |
+| griller          | `0xF2CC8F`    | amber (canonical, reused as-is)       |
+| prd-writer       | `0xF59E0B`    | neighbour of amber                    |
+| decomposer       | `0x8BD17C`    | success green (canonical, reused)     |
+| researcher       | `0x6FE7FF`    | monitor cyan (canonical, reused)      |
+| investigator     | `0x7DD3FC`    | neighbour of cyan (lighter)           |
+| developer        | `0x34D399`    | neighbour of success green (cooler)   |
+| dev-reviewer     | `0xA7F3D0`    | neighbour of success green (paler)    |
+| qa               | `0xFF6B6B`    | fail red (canonical, reused)          |
+| reviewer         | `0xD68FD6`    | review purple (canonical, reused)     |
+| retrospector     | `0xC084FC`    | neighbour of review purple            |
+| auditor          | `0xFBBF24`    | neighbour of amber (warmer)           |
+
+This table is the **only** carve-out from the canonical palette in
+Phase 2.5. Total allowable palette surface remains as stated in §4.1:
+8 canonical + 3 derived + 2 derived blends + 12 role tints = 25 hex
+codes, all enumerated in this document. Any per-role colour outside
+this table is a palette drift bug.
 
 Codify in `textures.ts` as a single exported `ROLE_TINTS` constant.
 Replace any per-role colour usage in `textures.ts` or elsewhere with
@@ -366,11 +389,14 @@ The PR is mergeable iff:
 - [ ] `pnpm typecheck` passes.
 - [ ] `pnpm lint` passes.
 - [ ] `office-click-through.spec.ts` passes in CI.
-- [ ] `textures.ts:PALETTE` contains exactly the 9 canonical hex codes
-      (§4) plus 3 derived shades (§4.1). No other base colours.
-- [ ] `textures.ts:ROLE_TINTS` exists and is the only source of
-      per-role colour. Grep returns no other per-role colour literals
-      under `apps/web/src/components/office/`.
+- [ ] `textures.ts:PALETTE` contains exactly the 8 canonical hex codes
+      (§4.0) plus 3 derived shades (§4.1) plus 2 derived blends (§4.2).
+      No other base colours. (Role tints live separately in
+      `ROLE_TINTS` per §5.3.)
+- [ ] `textures.ts:ROLE_TINTS` exists with exactly the 12 entries
+      enumerated in §5.3, and is the only source of per-role colour.
+      Grep returns no other per-role colour literals under
+      `apps/web/src/components/office/`.
 - [ ] `asset-loader.ts:pngManifest()` covers every key in
       `TEXTURE_KEYS`. (Soft acceptance: a manifest-key/texture-key
       diff test in `slice.test.ts`.)
@@ -378,9 +404,12 @@ The PR is mergeable iff:
       (range 25..35 acceptable as scope evolves).
 - [ ] Every PixelLab prompt embeds at least one Board 06 hex code.
       (Soft acceptance: a unit test that scans the MANIFEST.)
-- [ ] All PNGs in `apps/web/public/office/` are committed and load
-      without 404 in the dev server (no console warnings about
-      missing assets).
+- [ ] **Conditional on §9.1 (no-network exception below).** All PNGs
+      in `apps/web/public/office/` are committed and load without 404
+      in the dev server (no console warnings about missing assets).
+      If the §9.1 exception applies, this criterion is deferred to the
+      follow-on commit and the PR may merge with procedural fallbacks
+      only.
 - [ ] Manual verification checklist (§11) all ticked.
 - [ ] No new dependencies in `apps/web/package.json`.
 - [ ] **No mutation of workflow state.** Phase 2.5 only touches
@@ -388,7 +417,7 @@ The PR is mergeable iff:
 - [ ] **No new architecture.** No new layers, no new modules, no new
       event flows, no behaviour change.
 
-### Sandbox / no-network exception
+### 9.1 Sandbox / no-network exception
 
 If the PR is authored in a sandbox without outbound HTTPS to PixelLab,
 the run-the-generator step (8.6) is skipped. The PR still merges
@@ -407,8 +436,11 @@ Surface this clearly in the PR body. Do not invent PNGs.
 
 ### Unit tests (`slice.test.ts`)
 
-- `PALETTE` contains exactly the canonical set.
-- `ROLE_TINTS` covers every entry in `OFFICE_ROLES`.
+- `PALETTE` contains exactly 13 entries: the 8 canonical hex codes
+  (§4.0) + 3 derived shades (§4.1) + 2 derived blends (§4.2). Test
+  asserts set equality against the §4 tables.
+- `ROLE_TINTS` covers every entry in `OFFICE_ROLES` (12 entries) and
+  every value matches §5.3's enumerated table exactly.
 - `pngManifest()` keys = `TEXTURE_KEYS` keys (set equality).
 - `generate-office-assets.ts:MANIFEST` entries each contain at least
   one Board 06 hex code in their prompt (regex over `#[0-9A-F]{6}`).
