@@ -359,10 +359,12 @@ export async function runInvestigateWorkflow(
 
     // Synthesis — invoke investigate skill with scout evidence when swarm is enabled.
     // In wave-aware mode scouts have gathered all facts; synthesis only reads a JSON
-    // blob and writes findings, so we use a lighter model and fresh context (no
-    // accumulated conversation history needed).
+    // blob and writes findings, so we cap at sonnet when the configured tier is above
+    // sonnet. If the project already configured a cheaper tier, respect it.
     const synthModelOverride =
-      investigationSwarmEnabled && allScoutReports != null
+      investigationSwarmEnabled &&
+      allScoutReports != null &&
+      tierOf(investigatorModelOverride) === 'opus'
         ? defaultModelForTierAndProvider(
             'sonnet',
             forcedRuntimeProvider ?? investigateRoleModel.provider,

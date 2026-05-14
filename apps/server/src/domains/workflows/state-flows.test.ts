@@ -13,6 +13,7 @@ vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   getUseMultiAgentPipeline: vi.fn().mockReturnValue(false),
   setUseMultiAgentPipeline: vi.fn(),
   deriveUseMultiAgentPipeline: vi.fn().mockReturnValue(false),
+  getUseInvestigationSwarm: vi.fn().mockReturnValue(false),
 }));
 
 const mockDispatchWaveSF = vi.fn();
