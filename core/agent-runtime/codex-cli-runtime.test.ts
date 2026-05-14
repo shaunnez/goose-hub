@@ -1,12 +1,13 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockEventStore, mockSpawn } = vi.hoisted(() => ({
+const { mockEventStore, mockRecordCost, mockSpawn } = vi.hoisted(() => ({
   mockEventStore: { appendEvent: vi.fn(), replay: vi.fn().mockReturnValue([]) },
+  mockRecordCost: vi.fn(),
   mockSpawn: vi.fn(),
 }));
 
-vi.mock('../cost/repository.js', () => ({ recordCost: vi.fn() }));
+vi.mock('../cost/repository.js', () => ({ recordCost: mockRecordCost }));
 vi.mock('../event-stream/store.js', () => ({ eventStore: mockEventStore }));
 vi.mock('../cost/skill-stage.js', () => ({ stageForSkill: vi.fn().mockReturnValue('develop') }));
 vi.mock('../db/repositories/project-settings.js', () => ({
@@ -81,7 +82,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
-  vi.restoreAllMocks();
 });
 
 describe('CodexCliRuntime timeout handling', () => {
@@ -122,6 +122,115 @@ describe('CodexCliRuntime timeout handling', () => {
     );
     child.emit('close', 0);
 
+    expect(mockEventStore.appendEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent.run-completed' }),
+    );
+    processKill.mockRestore();
+  });
+
+  it('kills and rejects when streamed tool calls exceed maxTurns', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+    const processKill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(
+      makeSpec({ budgets: { maxTurns: 1, maxBudgetUsd: 1, timeoutMs: 5000 } }),
+    );
+    const rejection = expect(run).rejects.toThrow('tool-call budget exceeded');
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        [
+          JSON.stringify({
+            type: 'item.started',
+            item: { type: 'command_execution', command: '/bin/zsh -lc pwd' },
+          }),
+          JSON.stringify({
+            type: 'item.started',
+            item: { type: 'command_execution', command: '/bin/zsh -lc ls' },
+          }),
+          '',
+        ].join('\n'),
+      ),
+    );
+    await rejection;
+
+    expect(processKill).toHaveBeenCalledWith(-4321, 'SIGKILL');
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-failed',
+        payload: expect.objectContaining({
+          reason: 'tool-call-budget-exceeded',
+          toolCallsUsed: 2,
+          maxToolCalls: 1,
+        }),
+      }),
+    );
+
+    child.emit('close', 0);
+    expect(mockEventStore.appendEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent.run-completed' }),
+    );
+    processKill.mockRestore();
+  });
+
+  it('records cost, emits budget-exceeded and run-failed, and rejects over-budget runs', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(
+      makeSpec({ budgets: { maxTurns: 10, maxBudgetUsd: 0.5, timeoutMs: 5000 } }),
+    );
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        JSON.stringify({
+          result: '{"ok":true}',
+          usage: { input_tokens: 100, output_tokens: 50 },
+          total_cost_usd: 0.75,
+        }),
+      ),
+    );
+    child.emit('close', 0);
+
+    await expect(run).rejects.toThrow('exceeded budget');
+
+    expect(mockRecordCost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-codex',
+        costUsd: 0.75,
+        inputTokens: 100,
+        outputTokens: 50,
+      }),
+    );
+    const calls = mockEventStore.appendEvent.mock.calls;
+    const recordCostOrder = mockRecordCost.mock.invocationCallOrder[0];
+    const budgetCall = calls.find(([e]) => e.kind === 'agent.budget-exceeded');
+    const budgetIndex = calls.findIndex(([e]) => e.kind === 'agent.budget-exceeded');
+    const failedCall = calls.find(([e]) => {
+      const payload = e.payload as { reason?: string };
+      return e.kind === 'agent.run-failed' && payload.reason === 'budget-exceeded';
+    });
+    expect(budgetCall).toBeDefined();
+    expect(budgetCall?.[0].payload).toMatchObject({
+      runId: 'run-codex',
+      skill: 'fix-issue',
+      modelId: 'gpt-5.3-codex',
+      costUsd: 0.75,
+      budgetUsd: 0.5,
+      inputTokens: 100,
+      outputTokens: 50,
+      overByUsd: 0.25,
+    });
+    expect(failedCall).toBeDefined();
+    expect(budgetIndex).toBeGreaterThanOrEqual(0);
+    expect(recordCostOrder).toBeLessThan(
+      mockEventStore.appendEvent.mock.invocationCallOrder[budgetIndex],
+    );
     expect(mockEventStore.appendEvent).not.toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'agent.run-completed' }),
     );

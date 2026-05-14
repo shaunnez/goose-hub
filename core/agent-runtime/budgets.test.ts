@@ -93,6 +93,7 @@ describe('resolveBudgets', () => {
       'repo-match',
       'implement',
       'evidence-post',
+      'investigate',
       'retrospective-light',
     ]) {
       const { modelOverride } = resolveBudgets(skill);
@@ -101,7 +102,7 @@ describe('resolveBudgets', () => {
   });
 
   it('opus skills resolve to opus model IDs', () => {
-    for (const skill of ['investigate', 'advise-on-plan']) {
+    for (const skill of ['advise-on-plan']) {
       const { modelOverride } = resolveBudgets(skill);
       expect(modelOverride, `${skill} should use opus`).toContain('opus');
     }

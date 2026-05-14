@@ -60,7 +60,7 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
   qa: { maxTurns: 100, maxBudgetUsd: 3.0, timeoutMs: 600_000, modelTier: 'sonnet' },
   review: { maxTurns: 25, maxBudgetUsd: 0.5, timeoutMs: 180_000, modelTier: 'sonnet' },
   'resolve-conflict': { maxTurns: 75, maxBudgetUsd: 4.0, timeoutMs: 600_000, modelTier: 'sonnet' },
-  investigate: { maxTurns: 75, maxBudgetUsd: 4.0, timeoutMs: 600_000, modelTier: 'opus' },
+  investigate: { maxTurns: 18, maxBudgetUsd: 1.5, timeoutMs: 180_000, modelTier: 'haiku' },
   'playwright-repro': { maxTurns: 60, maxBudgetUsd: 3.0, timeoutMs: 600_000, modelTier: 'sonnet' },
   'advise-on-plan': { maxTurns: 15, maxBudgetUsd: 1.5, timeoutMs: 180_000, modelTier: 'opus' },
   'spec-author': { maxTurns: 50, maxBudgetUsd: 2.0, timeoutMs: 900_000, modelTier: 'sonnet' },
