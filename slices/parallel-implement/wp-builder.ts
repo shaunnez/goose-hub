@@ -1,4 +1,5 @@
 import type {
+  AgentBudgets,
   AgentResult,
   AgentRuntime,
   AgentSpec,
@@ -36,6 +37,8 @@ export interface RunOneWpBuilderOptions {
   scratchWorktreePath: string;
   stack: { testCommand: string; lintCommand?: string; typecheckCommand?: string };
   runtime: AgentRuntime;
+  budgets: AgentBudgets;
+  modelOverride: string;
   personaId: string;
   wpTimeoutMs: number;
   appendEvent: (input: AppendEventInput) => AgentEvent;
@@ -101,7 +104,8 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
     freshContext: false,
     toolBundles: ['dev-tools'],
     toolExtras: [],
-    budgets: { maxTurns: 150, maxBudgetUsd: 10.0, timeoutMs: opts.wpTimeoutMs },
+    budgets: { ...opts.budgets, timeoutMs: opts.wpTimeoutMs },
+    modelOverride: opts.modelOverride,
     personaId: opts.personaId,
     outputJsonSchema: opts.implementWpJsonSchema,
     appendSystemPrompt: opts.implementWpPrompt,

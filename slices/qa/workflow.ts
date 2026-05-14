@@ -1,10 +1,9 @@
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
-import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { findFreePort } from '@goose-hub/core/agent-runtime/find-free-port.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
-import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
+import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { getEngineeringSpec as defaultGetEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
@@ -83,13 +82,19 @@ export async function runQaWorkflow(
   deps: QaWorkflowDeps = {},
 ): Promise<void> {
   const runId = crypto.randomUUID();
-  const runtime = deps.runtime ?? new ClaudeCliRuntime();
   const runTests = deps.runTests ?? defaultRunTests;
   const verifyCommands = deps.verifyCommands;
   const getSpec = deps.getEngineeringSpecImpl ?? defaultGetEngineeringSpec;
   const runTier = deps.runTierImpl ?? defaultRunTier;
   const qaPrompt = readPromptWithContext('qa', projectSlug);
   const projectConfig = await getProjectBySlug(projectSlug);
+  const { runtime, resolvedBudget } = resolveProjectAgentExecution({
+    skill: 'qa',
+    role: 'qa',
+    projectId: projectSlug,
+    projectConfig,
+    injectedRuntime: deps.runtime,
+  });
   const qaJsonSchema = toJsonSchema(QaOutputSchema);
   const { personaId } = selectPersona(projectSlug, 'qa');
   const prHints = findPrOpenedHints(workItem.id);
@@ -282,7 +287,7 @@ export async function runQaWorkflow(
             },
           }
         : {}),
-      ...resolveBudgetsForProject('qa', projectConfig?.budgets, projectSlug),
+      ...resolvedBudget,
       personaId,
       outputJsonSchema: qaJsonSchema,
       appendSystemPrompt: qaPrompt,

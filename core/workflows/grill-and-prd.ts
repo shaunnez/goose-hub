@@ -11,7 +11,6 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { PRDOutput } from '../../skills/write-prd/schema.js';
-import { ClaudeCliRuntime } from '../agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
 import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
 import { totalSpendForSkill as _totalSpendForSkill } from '../cost/repository.js';
@@ -239,7 +238,7 @@ export async function runGrillAndPrdWorkflow(
   } = input;
   const workflowRunId = crypto.randomUUID();
   const childRunId = (skill: string) => `${workflowRunId}:${skill}`;
-  const runtime = deps.runtime ?? new ClaudeCliRuntime();
+  const runtime = deps.runtime;
   const totalSpendForSkill = deps.totalSpendForSkill ?? _totalSpendForSkill;
   const _buildContext = deps.buildContext ?? buildProjectContextBundle;
   const createWorktreeFn = deps.createWorktreeImpl ?? createWorktree;
@@ -564,7 +563,7 @@ interface WritePrdStepInput {
   stateSource: StateSource;
   projectId: string;
   workflowRunId: string;
-  runtime: AgentRuntime;
+  runtime?: AgentRuntime;
   projectConfig: Pick<ProjectConfig, 'budgets' | 'stack' | 'targetRepo'> | null | undefined;
   totalSpendForSkill: (projectId: string, skill: string) => number;
   fullProjectContext: ProjectContextBundle;

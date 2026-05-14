@@ -3,10 +3,9 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
-import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
-import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
+import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import {
@@ -112,7 +111,13 @@ export async function runResolveConflictWorkflow(
 
       if (conflictedFiles.length > 0) {
         const { personaId } = selectPersona(slug, 'developer');
-        const runtime = runtimeOverride ?? new ClaudeCliRuntime();
+        const { runtime, resolvedBudget } = resolveProjectAgentExecution({
+          skill: 'resolve-conflict',
+          role: 'developer',
+          projectId: slug,
+          projectConfig,
+          injectedRuntime: runtimeOverride,
+        });
 
         const agentResult = await runtime.run({
           runId,
@@ -128,7 +133,7 @@ export async function runResolveConflictWorkflow(
           freshContext: false,
           toolBundles: config.toolBundles,
           toolExtras: [],
-          ...resolveBudgetsForProject('resolve-conflict', projectConfig?.budgets, slug),
+          ...resolvedBudget,
           personaId,
           outputJsonSchema: toJsonSchema(ResolveConflictSchema),
           appendSystemPrompt: readPromptWithContext('resolve-conflict', slug),

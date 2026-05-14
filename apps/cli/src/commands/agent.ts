@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { SKILL_BUDGETS, resolveBudgets } from '@goose-hub/core/agent-runtime/budgets.js';
-import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import { assembleSpawnContext } from '@goose-hub/core/agent-runtime/context-assembly.js';
 import { withFallback } from '@goose-hub/core/agent-runtime/fallback.js';
 import type { AgentSpec } from '@goose-hub/core/agent-runtime/interface.js';
 import { validateOutput } from '@goose-hub/core/agent-runtime/output-validator.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
+import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
 
 export async function runAgentCommand(rawArgs: string[]): Promise<void> {
   // Parse --skill=<name> --input='<json>' [--project=<slug>] [--dry-run]
@@ -119,7 +119,14 @@ export async function runAgentCommand(rawArgs: string[]): Promise<void> {
     spec.outputJsonSchema = toJsonSchema(outputSchema);
   }
 
-  const runtime = withFallback(new ClaudeCliRuntime(), { allowDownTier: true, maxAttempts: 2 });
+  const runtime = withFallback(
+    selectRuntime({
+      configRuntime: 'auto',
+      model: spec.modelOverride,
+      skillProvider: skillConfig.provider,
+    }),
+    { allowDownTier: true, maxAttempts: 2 },
+  );
 
   let result: import('@goose-hub/core/agent-runtime/interface.js').AgentResult;
   try {

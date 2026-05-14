@@ -1,12 +1,19 @@
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { selectModel } from '@goose-hub/core/agent-runtime/model-router.js';
-import { defaultModelForTier, tierOf } from '@goose-hub/core/agent-runtime/models.js';
+import {
+  type ModelProvider,
+  type ModelTier,
+  defaultModelForTierAndProvider,
+  tierOf,
+} from '@goose-hub/core/agent-runtime/models.js';
 import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import {
   resolveBudgetsForProject,
   resolveComplexityOverridesForProject,
+  resolveRoleModelForProject,
 } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
+import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
 import { runWithEscalation } from '@goose-hub/core/agent-runtime/with-escalation.js';
 import type { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
@@ -21,7 +28,7 @@ import type { ImplementOutputShape } from './types.js';
 export type { ImplementOutputShape } from './types.js';
 
 export interface RunImplementInput {
-  runtime: AgentRuntime;
+  execution: ImplementExecution;
   runId: string;
   projectId: string;
   workItem: WorkItem;
@@ -32,6 +39,15 @@ export interface RunImplementInput {
   personaId: string;
   advisorFeedback?: string;
   revisionPass?: 0 | 1;
+}
+
+export interface ImplementExecution {
+  runtime: AgentRuntime;
+  projectConfig: Awaited<ReturnType<typeof getProjectBySlug>>;
+  budgets: ReturnType<typeof resolveBudgetsForProject>['budgets'];
+  modelOverride: string;
+  selectedTier: ModelTier;
+  selectionReason: string;
 }
 
 export interface AfterImplementInput {
@@ -52,7 +68,17 @@ export interface AfterImplementInput {
   orchestratorCommitFn: typeof orchestratorCommitAll;
 }
 
-export async function runImplement(input: RunImplementInput): Promise<ImplementOutputShape> {
+function forcedProviderFromRuntime(configRuntime: string | undefined): ModelProvider | null {
+  if (configRuntime === 'codex-cli') return 'codex';
+  if (configRuntime === 'claude-cli') return 'claude';
+  return null;
+}
+
+export async function resolveImplementExecution(input: {
+  projectId: string;
+  workItem: WorkItem;
+  injectedRuntime?: AgentRuntime;
+}): Promise<ImplementExecution> {
   const projectConfig = await getProjectBySlug(input.projectId);
   const { budgets, modelOverride: budgetModelOverride } = resolveBudgetsForProject(
     'implement',
@@ -72,8 +98,48 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
     modelRouterConfig: projectConfig?.agentConfig?.modelRouter,
     dbComplexityOverrides,
   });
-  const modelOverride =
-    routerResult != null ? defaultModelForTier(routerResult.tier) : budgetModelOverride;
+  const selectedTier = routerResult?.tier ?? tierOf(budgetModelOverride);
+
+  if (input.injectedRuntime != null) {
+    return {
+      runtime: input.injectedRuntime,
+      projectConfig,
+      budgets,
+      modelOverride:
+        routerResult != null
+          ? defaultModelForTierAndProvider(routerResult.tier, 'claude')
+          : budgetModelOverride,
+      selectedTier,
+      selectionReason: routerResult?.reason ?? 'budget-default',
+    };
+  }
+
+  const roleModel = resolveRoleModelForProject({
+    role: 'developer',
+    projectId: input.projectId,
+    configRoleModel: projectConfig?.agentConfig?.rolesModels?.developer,
+    allowHoldoutOverride: projectConfig?.agentConfig?.allowHoldoutOverride,
+    skill: 'implement',
+  });
+  const configRuntime = projectConfig?.agentConfig?.runtime ?? 'auto';
+  const provider =
+    forcedProviderFromRuntime(configRuntime) ??
+    (roleModel.source === 'db' || roleModel.source === 'config' ? roleModel.provider : 'claude');
+  const modelOverride = defaultModelForTierAndProvider(selectedTier, provider);
+  const runtime = selectRuntime({ configRuntime, model: modelOverride });
+
+  return {
+    runtime,
+    projectConfig,
+    budgets,
+    modelOverride,
+    selectedTier,
+    selectionReason: routerResult?.reason ?? 'budget-default',
+  };
+}
+
+export async function runImplement(input: RunImplementInput): Promise<ImplementOutputShape> {
+  const { execution } = input;
 
   eventStore.appendEvent({
     projectId: input.projectId,
@@ -83,18 +149,18 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
       runId: input.runId,
       skill: 'implement',
       role: 'developer',
-      selectedTier: routerResult?.tier ?? tierOf(budgetModelOverride),
-      reason: routerResult?.reason ?? 'budget-default',
+      selectedTier: execution.selectedTier,
+      reason: execution.selectionReason,
     },
     runId: input.runId,
   });
 
   const { output } = await runWithEscalation({
-    runtime: input.runtime,
+    runtime: execution.runtime,
     schema: ImplementSchema,
     projectId: input.projectId,
     workItemId: input.workItem.id,
-    projectBudgets: projectConfig?.budgets,
+    projectBudgets: execution.projectConfig?.budgets,
     spec: {
       runId: input.runId,
       role: 'developer',
@@ -128,8 +194,8 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
       freshContext: false,
       toolBundles: ['dev-tools'],
       toolExtras: [],
-      budgets,
-      modelOverride,
+      budgets: execution.budgets,
+      modelOverride: execution.modelOverride,
       personaId: input.personaId,
       outputJsonSchema: input.outputJsonSchema,
       appendSystemPrompt: input.appendSystemPrompt,

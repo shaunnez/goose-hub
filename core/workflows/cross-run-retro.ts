@@ -3,11 +3,10 @@ import {
   type CrossRunRetroOutput,
   CrossRunRetroOutputSchema,
 } from '../../skills/retrospective-cross-run/schema.js';
-import { ClaudeCliRuntime } from '../agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
 import { readPromptWithContext } from '../agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
-import { resolveBudgetsForProject } from '../agent-runtime/resolve-for-project.js';
+import { resolveProjectAgentExecution } from '../agent-runtime/resolve-runtime-for-project.js';
 import { toJsonSchema } from '../agent-runtime/schema-bridge.js';
 import { selectPersona } from '../agent-runtime/select-persona.js';
 import { db } from '../db/db.js';
@@ -268,7 +267,6 @@ export async function runCrossRunRetroWorkflow(
   const window = resolveWindow(input);
   const projectId = input.projectId;
   const runId = crypto.randomUUID();
-  const runtime = input.deps?.runtime ?? new ClaudeCliRuntime();
 
   const lifecycles = fetchLifecyclesInWindow({
     projectId,
@@ -291,6 +289,13 @@ export async function runCrossRunRetroWorkflow(
   const skillName = 'retrospective-cross-run';
   const prompt = readPromptWithContext(skillName, projectId);
   const projectConfig = await getProjectBySlug(projectId);
+  const { runtime, resolvedBudget } = resolveProjectAgentExecution({
+    skill: skillName,
+    role: 'retrospector',
+    projectId,
+    projectConfig,
+    injectedRuntime: input.deps?.runtime,
+  });
   const jsonSchema = toJsonSchema(CrossRunRetroOutputSchema);
   const { personaId } = selectPersona(projectId, 'retrospector');
 
@@ -333,7 +338,7 @@ export async function runCrossRunRetroWorkflow(
       freshContext: false,
       toolBundles: ['core'],
       toolExtras: [],
-      ...resolveBudgetsForProject(skillName, projectConfig?.budgets, projectId),
+      ...resolvedBudget,
       personaId,
       appendSystemPrompt: prompt,
       outputJsonSchema: jsonSchema,

@@ -1,6 +1,6 @@
 import type { ModelTier } from '../types.js';
 import type { AgentBudgets } from './interface.js';
-import { defaultModelForTier } from './models.js';
+import { defaultModelForTierAndProvider } from './models.js';
 
 export interface SkillBudget {
   maxTurns: number;
@@ -143,31 +143,31 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
   'scout-code-path': {
     maxTurns: 20,
     maxBudgetUsd: 0.5,
-    timeoutMs: 120_000,
+    timeoutMs: 240_000,
     modelTier: 'haiku',
   },
   'scout-pattern': {
     maxTurns: 20,
     maxBudgetUsd: 0.5,
-    timeoutMs: 120_000,
+    timeoutMs: 240_000,
     modelTier: 'haiku',
   },
   'scout-test-inventory': {
     maxTurns: 20,
     maxBudgetUsd: 0.5,
-    timeoutMs: 120_000,
+    timeoutMs: 240_000,
     modelTier: 'haiku',
   },
   'scout-dependency': {
     maxTurns: 20,
     maxBudgetUsd: 0.5,
-    timeoutMs: 120_000,
+    timeoutMs: 240_000,
     modelTier: 'haiku',
   },
   'scout-user-journey': {
     maxTurns: 20,
     maxBudgetUsd: 0.5,
-    timeoutMs: 120_000,
+    timeoutMs: 240_000,
     modelTier: 'haiku',
   },
   // M19.01 — Wave-2 deep agents. Synthesise paste-ready artefacts from
@@ -296,7 +296,7 @@ export function resolveBudgets(
 
   return {
     budgets: { maxTurns: merged.maxTurns, maxBudgetUsd, timeoutMs: merged.timeoutMs },
-    modelOverride: defaultModelForTier(merged.modelTier),
+    modelOverride: defaultModelForTierAndProvider(merged.modelTier, 'claude'),
   };
 }
 
@@ -346,6 +346,6 @@ export function resolveEscalatedBudgets(
 
   return {
     budgets: { maxTurns, maxBudgetUsd, timeoutMs },
-    modelOverride: defaultModelForTier(escalation.modelTier),
+    modelOverride: defaultModelForTierAndProvider(escalation.modelTier, 'claude'),
   };
 }
