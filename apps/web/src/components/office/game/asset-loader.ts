@@ -42,6 +42,17 @@ export function pngManifest(): AssetEntry[] {
     { key: TEXTURE_KEYS.wallFrostedBlue, url: `${ASSET_BASE}/wall-frosted-blue.png` },
     { key: TEXTURE_KEYS.wallFrostedGrey, url: `${ASSET_BASE}/wall-frosted-grey.png` },
     { key: TEXTURE_KEYS.scoutDesk, url: `${ASSET_BASE}/scout-desk.png` },
+    // 01 — Core Tiles / Walls
+    { key: 'office:wall_dark_02', url: `${ASSET_BASE}/wall_dark_02.png` },
+    { key: 'office:wall_corner_inner', url: `${ASSET_BASE}/wall_corner_inner.png` },
+    { key: 'office:wall_corner_outer', url: `${ASSET_BASE}/wall_corner_outer.png` },
+    { key: 'office:wall_trim_top', url: `${ASSET_BASE}/wall_trim_top.png` },
+    // 05 — Ticket Assets
+    { key: 'office:ticket_retry', url: `${ASSET_BASE}/ticket_retry.png` },
+    { key: 'office:ticket_queue_stack', url: `${ASSET_BASE}/ticket_queue_stack.png` },
+    { key: 'office:ticket_glow_overlay', url: `${ASSET_BASE}/ticket_glow_overlay.png` },
+    // 06 — HUD / UI / Speech
+    { key: 'office:speech_bubble_small', url: `${ASSET_BASE}/speech_bubble_small.png` },
   ];
 }
 

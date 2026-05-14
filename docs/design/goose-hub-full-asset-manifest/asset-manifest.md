@@ -141,16 +141,16 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 - [x] ticket_hero.png
 - [x] ticket_failed.png
 - [x] ticket_done.png
-- [ ] ticket_retry.png
-- [ ] ticket_queue_stack.png
-- [ ] ticket_glow_overlay.png
+- [x] ticket_retry.png
+- [x] ticket_queue_stack.png
+- [x] ticket_glow_overlay.png
 
 ---
 
 ## 06 — HUD / UI
 
 ### Speech / Thought
-- [ ] speech_bubble_small.png
+- [x] speech_bubble_small.png
 - [ ] thought_bubble_small.png
 - [ ] question_bubble_small.png
 
