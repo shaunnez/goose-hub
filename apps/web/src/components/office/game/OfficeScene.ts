@@ -14,9 +14,11 @@
 import Phaser from 'phaser';
 import type { PersonaPlacement, TicketPlacement } from '../lib/agent-positions';
 import type { Timeline } from '../lib/choreography';
+import { type HudState, hudStateFromPlacements } from '../lib/hud-state';
 import { FLOOR_PIXEL_WIDTH, floorCenterY, totalWorldHeight } from '../lib/layout';
 import { queueVerifiedPngAssets } from './asset-loader';
 import { ChoreographyPlayer } from './choreography/ChoreographyPlayer';
+import { HudLayer } from './layers/HudLayer';
 import { PersonaLayer } from './layers/PersonaLayer';
 import { RoomLayer } from './layers/RoomLayer';
 import { TicketLayer } from './layers/TicketLayer';
@@ -44,6 +46,8 @@ export class OfficeScene extends Phaser.Scene {
   private personaLayer!: PersonaLayer;
   private ticketLayer!: TicketLayer;
   private choreographyPlayer!: ChoreographyPlayer;
+  private hudLayer!: HudLayer;
+  private lastHudState: HudState | null = null;
 
   constructor() {
     super({ key: 'OfficeScene' });
@@ -96,6 +100,12 @@ export class OfficeScene extends Phaser.Scene {
       emitter: this.emitter,
     });
 
+    // HudLayer constructed last — sits at top of z-stack (z=60)
+    this.hudLayer = new HudLayer(this, this.emitter, (updated) => {
+      this.lastHudState = updated;
+      this.emitter.emit('hud-state-updated', updated);
+    });
+
     this.input.keyboard?.on('keydown-UP', () => {
       this.navigateFloor(-1);
     });
@@ -142,6 +152,40 @@ export class OfficeScene extends Phaser.Scene {
     this.personaLayer.applyPlacements(result.personas);
     this.ticketLayer.applyPlacements(result.tickets);
     this.roomLayer.refreshIdleDeskIndicators(this.personaLayer.occupiedDeskKeys());
+
+    // Derive and push HUD state on every placement diff
+    const hudState = hudStateFromPlacements(result.personas, result.tickets, this.lastHudState, {
+      retryIncremented: [],
+      mergedCelebrated: [],
+    });
+    this.applyHud(hudState);
+  }
+
+  /** Push a fully-computed HudState into all HUD consumers. */
+  applyHud(state: HudState): void {
+    this.lastHudState = state;
+    this.hudLayer.applyHud(state);
+    this.roomLayer.applyPressure(state.pressure);
+
+    // Update hero codename label with priority tint
+    if (state.hero?.personaId != null) {
+      this.personaLayer.setHeroCodename(
+        state.hero.personaId,
+        state.hero.ticketId,
+        state.hero.priority,
+      );
+    }
+
+    // Position blocked-persona spotlights
+    for (const { personaId } of state.blocked) {
+      const pos = this.personaLayer.getCarrierPosition(personaId);
+      if (pos != null) {
+        this.hudLayer.positionSpotlight(personaId, pos.x, pos.y);
+      }
+    }
+
+    // Emit HUD state to React (HudFeed subscribes via the emitter bridge)
+    this.emitter.emit('hud-state-updated', state);
   }
 
   /**
@@ -173,6 +217,16 @@ export class OfficeScene extends Phaser.Scene {
 
   applyChoreography(timelines: Timeline[]): void {
     this.choreographyPlayer.applyChoreography(timelines);
+  }
+
+  /** Called (e.g. by ChoreographyPlayer's cameraTo intent) when camera anchor changes. */
+  notifyCameraAnchor(anchor: 'floor-overview' | 'hero-ticket-follow', ticketId?: string): void {
+    if (this.hudLayer != null) {
+      this.hudLayer.applyCameraState(anchor, ticketId);
+    }
+    if (this.lastHudState != null) {
+      this.lastHudState = { ...this.lastHudState, camera: { anchor, ticketId } };
+    }
   }
 
   navigateFloor(delta: number): void {

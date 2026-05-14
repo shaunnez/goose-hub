@@ -18,6 +18,7 @@ import {
   ROOM_IDS,
   type RoomId,
   allClickZones,
+  pressureColorForCount,
   roomBounds,
   roomDeskAnchors,
   roomDoor,
@@ -79,6 +80,8 @@ export class RoomLayer {
   private wallTintEntries: Map<string, WallTintEntry> = new Map();
   /** One-shot effect objects keyed by effect id. */
   private effectEntries: Map<string, EffectEntry> = new Map();
+  /** Phase 6: per-room floor-pressure tint overlays keyed by "floorIndex:roomId". */
+  private pressureGraphics: Map<string, Phaser.GameObjects.Graphics> = new Map();
 
   constructor(scene: Phaser.Scene, callbacks: RoomLayerCallbacks) {
     this.scene = scene;
@@ -116,6 +119,39 @@ export class RoomLayer {
     }
   }
 
+  /**
+   * Phase 6: Apply per-room floor-pressure tint. Modulates room floor-tile
+   * group colour based on in-flight ticket count.
+   * This is the ONLY HUD-driven write into RoomLayer from the scene.
+   */
+  applyPressure(perRoom: Record<RoomId, number>): void {
+    for (let fi = 0; fi < this.projects.length; fi++) {
+      const oy = floorOriginY(fi);
+      for (const roomId of ROOM_IDS) {
+        const count = perRoom[roomId] ?? 0;
+        const color = pressureColorForCount(count);
+        const key = `${fi}:${roomId}`;
+        const bounds = roomBounds(roomId);
+        const x = bounds.x1;
+        const y = oy + bounds.y1;
+        const w = bounds.x2 - bounds.x1;
+        const h = bounds.y2 - bounds.y1;
+
+        let g = this.pressureGraphics.get(key);
+        if (g == null) {
+          g = this.scene.add.graphics();
+          g.setDepth(1); // just above floor tiles but below desks
+          this.pressureGraphics.set(key, g);
+        }
+        g.clear();
+        if (count > 0) {
+          g.fillStyle(color, 0.22);
+          g.fillRect(x, y, w, h);
+        }
+      }
+    }
+  }
+
   destroyAll(): void {
     for (const c of this.floorContainers) c.destroy();
     this.floorContainers = [];
@@ -134,6 +170,8 @@ export class RoomLayer {
     this.wallTintEntries.clear();
     for (const e of this.effectEntries.values()) e.cancel();
     this.effectEntries.clear();
+    for (const g of this.pressureGraphics.values()) g.destroy();
+    this.pressureGraphics.clear();
   }
 
   // ─── Phase 5 cinematic primitives ─────────────────────────────────────────

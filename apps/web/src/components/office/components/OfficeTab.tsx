@@ -9,14 +9,19 @@
 import { fetchIssues, fetchProjects } from '@/lib/api';
 import type { WorkItemDto } from '@/lib/types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type Phaser from 'phaser';
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DeskClickPayload, FloorChangePayload, OfficeProject } from '../game/OfficeScene';
 import { placementsFromItems } from '../lib/agent-positions';
 import type { OrchestrationEvent, Timeline } from '../lib/choreography';
 import { LANE_FOR_EVENT, timelinesForEvent } from '../lib/choreography';
+import type { RoomId } from '../lib/rooms';
 import { ROOM_IDS } from '../lib/rooms';
 import { DeskDetailPanel } from './DeskDetailPanel';
 import { FloorIndicator } from './FloorIndicator';
+import { HudFeed } from './HudFeed';
+import { QueuePanel, useQueueClickSubscription } from './QueuePanel';
+import type { QueueClickPayload } from './QueuePanel';
 
 // Lazy-load the Phaser-backed mount so Phaser (~1MB) ships in its own chunk
 // instead of bloating the initial bundle that every other tab pays for.
@@ -34,6 +39,8 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
   const [activeSlug, setActiveSlug] = useState<string | null>(initialProjectSlug ?? null);
   const [floorIndex, setFloorIndex] = useState(0);
   const [deskPayload, setDeskPayload] = useState<DeskClickPayload | null>(null);
+  const [queueRoom, setQueueRoom] = useState<RoomId | null>(null);
+  const [sceneEmitter, setSceneEmitter] = useState<Phaser.Events.EventEmitter | null>(null);
 
   // Hero ticket ID is tracked in a ref (not state) so SSE handlers read the
   // latest value without needing to be re-registered on every change.
@@ -179,6 +186,27 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
     setDeskPayload(payload);
   }, []);
 
+  const handleQueueClick = useCallback((payload: QueueClickPayload) => {
+    setQueueRoom(payload.roomId);
+  }, []);
+
+  // Wire queue-click events from the scene emitter
+  useQueueClickSubscription(sceneEmitter, handleQueueClick);
+
+  // Derive queued items for the open queue room
+  const queueItems = useMemo(() => {
+    if (queueRoom == null) return [];
+    const allTickets = placements.tickets;
+    return allTickets
+      .filter((t) => t.position === 'queue' && t.roomId === queueRoom)
+      .map((t) => ({
+        ticketId: t.ticketId,
+        externalId: t.externalId,
+        title: t.title,
+        priority: t.priority,
+      }));
+  }, [queueRoom, placements.tickets]);
+
   const handleHeroChanged = useCallback((ticketId: string | null) => {
     heroTicketIdRef.current = ticketId;
   }, []);
@@ -222,6 +250,7 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
           onFloorChange={handleFloorChange}
           choreographyRef={choreographyRef}
           onHeroChanged={handleHeroChanged}
+          onSceneEmitter={setSceneEmitter}
         />
       </Suspense>
       {projects.length > 0 && activeProject && (
@@ -239,6 +268,8 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
         </div>
       )}
       <DeskDetailPanel payload={deskPayload} onClose={() => setDeskPayload(null)} />
+      <HudFeed sceneEmitter={sceneEmitter} />
+      <QueuePanel roomId={queueRoom} items={queueItems} onClose={() => setQueueRoom(null)} />
     </div>
   );
 }
