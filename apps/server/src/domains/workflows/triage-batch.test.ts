@@ -386,13 +386,25 @@ describe('runTriageBatch', () => {
     const { runTriageBatch } = await import('./triage-batch.js');
     await runTriageBatch('goose-hub-self', source);
 
+    const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+    const failedEvent = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(
+        ([e]) =>
+          e.kind === 'agent.run-failed' &&
+          (e.payload as { skill?: string }).skill === 'triage' &&
+          (e.payload as { error?: string }).error === 'triage output validation failed',
+      );
+    expect(failedEvent).toBeDefined();
+    expect(source.forceState).toHaveBeenCalledWith('42', 'factory:needs-human');
+
     const calls = mockAccumulatePersonaStats.mock.calls.map(([arg]) => arg);
     expect(calls).toContainEqual(expect.objectContaining({ role: 'triager', outcome: 'failure' }));
     // researcher never ran since triage parse failed and continued
     expect(calls).not.toContainEqual(expect.objectContaining({ role: 'researcher' }));
   });
 
-  it('records researcher failure when repo-match output validation fails', async () => {
+  it('escalates to factory:needs-human when repo-match output validation fails', async () => {
     const item = makeWorkItem();
     const source = makeMockSource([item]);
 
@@ -410,6 +422,25 @@ describe('runTriageBatch', () => {
 
     const { runTriageBatch } = await import('./triage-batch.js');
     await runTriageBatch('goose-hub-self', source);
+
+    const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+    const failedEvent = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(
+        ([e]) =>
+          e.kind === 'agent.run-failed' &&
+          (e.payload as { skill?: string }).skill === 'repo-match' &&
+          (e.payload as { error?: string }).error === 'repo-match output validation failed',
+      );
+    expect(failedEvent).toBeDefined();
+    expect(source.forceState).toHaveBeenCalledWith('42', 'factory:needs-human');
+    expect(source.comment).not.toHaveBeenCalled();
+    expect(source.setLabelInGroup).not.toHaveBeenCalled();
+    expect(source.transitionState).not.toHaveBeenCalledWith(
+      '42',
+      'factory:triaging',
+      'factory:accepted',
+    );
 
     const calls = mockAccumulatePersonaStats.mock.calls.map(([arg]) => arg);
     expect(calls).toContainEqual(expect.objectContaining({ role: 'triager', outcome: 'success' }));

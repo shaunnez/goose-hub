@@ -54,6 +54,40 @@ function readReposContext(slug: string): string {
   }
 }
 
+async function escalateTriageFailure(
+  stateSource: StateSource,
+  itemExternalId: string,
+  projectId: string,
+  workItemId: string,
+  runId: string,
+  skill: 'triage' | 'repo-match',
+  personaName: string,
+  role: 'triager' | 'researcher',
+  error: string,
+): Promise<void> {
+  eventStore.appendEvent({
+    projectId,
+    workItemId,
+    kind: 'agent.run-failed',
+    payload: { skill, error },
+    runId,
+  });
+  accumulatePersonaStats({
+    personaName,
+    role,
+    outcome: 'failure',
+  });
+  await stateSource.forceState(itemExternalId, 'factory:needs-human');
+  emitStateTransitionEvent({
+    projectId,
+    workItemId,
+    from: 'factory:triaging',
+    to: 'factory:needs-human',
+    by: 'agent',
+    runId,
+  });
+}
+
 export async function runTriageBatch(slug: string, source?: StateSource): Promise<void> {
   logger.info('triage-batch started', { slug });
   if (!isValidSlug(slug)) {
@@ -156,18 +190,17 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
         workItemId,
         errors: triageParsed.error.issues,
       });
-      eventStore.appendEvent({
+      await escalateTriageFailure(
+        stateSource,
+        item.externalId,
         projectId,
         workItemId,
-        kind: 'agent.run-failed',
-        payload: { runId, error: 'triage output validation failed' },
         runId,
-      });
-      accumulatePersonaStats({
-        personaName: triagerPersonaId,
-        role: 'triager',
-        outcome: 'failure',
-      });
+        'triage',
+        triagerPersonaId,
+        'triager',
+        'triage output validation failed',
+      );
       continue;
     }
     accumulatePersonaStats({
@@ -246,34 +279,29 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
 
     const repoMatchParsed = RepoMatchOutputSchema.safeParse(repoMatchResult.output);
     if (!repoMatchParsed.success) {
-      logger.warn('triage-batch repo-match output invalid, using empty candidates', {
+      logger.error('triage-batch repo-match output invalid', {
         slug,
         workItemId,
       });
-      // Surface the parse failure as an event so the timeline records it
-      // (currently silent — #206).
-      eventStore.appendEvent({
+      await escalateTriageFailure(
+        stateSource,
+        item.externalId,
         projectId,
         workItemId,
-        kind: 'agent.run-failed',
-        payload: { runId: repoMatchRunId, error: 'repo-match output validation failed' },
-        runId: repoMatchRunId,
-      });
-      accumulatePersonaStats({
-        personaName: researcherPersonaId,
-        role: 'researcher',
-        outcome: 'failure',
-      });
-    } else {
-      accumulatePersonaStats({
-        personaName: researcherPersonaId,
-        role: 'researcher',
-        outcome: 'success',
-      });
+        repoMatchRunId,
+        'repo-match',
+        researcherPersonaId,
+        'researcher',
+        'repo-match output validation failed',
+      );
+      continue;
     }
-    const repoMatchOutput = repoMatchParsed.success
-      ? repoMatchParsed.data
-      : { candidates: [], decisionSummaries: [] };
+    accumulatePersonaStats({
+      personaName: researcherPersonaId,
+      role: 'researcher',
+      outcome: 'success',
+    });
+    const repoMatchOutput = repoMatchParsed.data;
     logger.info('triage-batch repo-match complete', {
       slug,
       workItemId,
