@@ -38,6 +38,9 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
   // Hero ticket ID is tracked in a ref (not state) so SSE handlers read the
   // latest value without needing to be re-registered on every change.
   const heroTicketIdRef = useRef<string | null>(null);
+  // floorIndex ref mirrors the state value so SSE handlers see the latest floor
+  // without needing to be re-registered on every floor change.
+  const floorIndexRef = useRef(0);
   // Choreography bridge: set by OfficeGameMount once the scene is ready.
   const choreographyRef = useRef<((timelines: Timeline[]) => void) | null>(null);
   // Reverse lookup: internal workItemId (UUID) → office scene { projectSlug, externalId }.
@@ -151,6 +154,7 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
         const timelines = timelinesForEvent(event, {
           hero: heroTicketIdRef.current,
           rooms: ROOM_IDS,
+          floorIndex: floorIndexRef.current,
         });
         if (timelines.length > 0) choreographyRef.current?.(timelines);
       };
@@ -181,6 +185,7 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
 
   const handleFloorChange = useCallback((payload: FloorChangePayload) => {
     setFloorIndex(payload.floorIndex);
+    floorIndexRef.current = payload.floorIndex;
     setActiveSlug(payload.projectSlug);
   }, []);
 

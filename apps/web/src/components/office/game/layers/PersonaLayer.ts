@@ -310,6 +310,32 @@ export class PersonaLayer {
     entry.indicator.setTexture(indicatorTextureKey(glyph ?? 'coffee'));
   }
 
+  /**
+   * Phase 5 primitive: pause a persona's walk tween and dim the sprite.
+   * Used by the ambient-suppression path to visually freeze personas
+   * while a critical cinematic runs.
+   */
+  freezePersona(personaId: string): void {
+    const entry = this.personas.get(personaId);
+    if (entry == null) return;
+    if (entry.walkTween) {
+      (entry.walkTween as Phaser.Tweens.Tween).pause?.();
+    }
+    entry.body.setAlpha(0.5);
+  }
+
+  /**
+   * Phase 5 primitive: resume a previously frozen persona.
+   */
+  unfreezePersona(personaId: string): void {
+    const entry = this.personas.get(personaId);
+    if (entry == null) return;
+    if (entry.walkTween) {
+      (entry.walkTween as Phaser.Tweens.Tween).resume?.();
+    }
+    entry.body.setAlpha(1);
+  }
+
   // ─── private ─────────────────────────────────────────────────────────────
 
   private floorIndexFor(slug: string): number {

@@ -8,6 +8,18 @@
 // ID counter used to give each timeline a unique id (ids are not part of
 // functional correctness — they are for diagnostics only).
 
+// Phase 5 cinematic factories (imported lazily via dynamic switch to avoid circular dep issues)
+import {
+  investigationWavePart1Timeline,
+  investigationWavePart2Timeline,
+  investigationWavePart3Timeline,
+} from '../game/choreography/cinematics/investigationWave';
+import {
+  mergeCelebrationAmbientTimeline,
+  mergeCelebrationTimeline,
+} from '../game/choreography/cinematics/mergeCelebration';
+import { qaFailedTimeline } from '../game/choreography/cinematics/qaFailed';
+import { reviewConvergedTimeline } from '../game/choreography/cinematics/reviewConverged';
 import type { ROOM_IDS } from './rooms';
 import { deskSlotForRoom, roomForState } from './state-to-room';
 
@@ -15,23 +27,53 @@ import { deskSlotForRoom, roomForState } from './state-to-room';
 
 export type LaneId = 'critical' | 'primary' | 'ambient';
 
-export type IntentName = 'walkToRoom' | 'attachToDesk' | 'swapIndicator';
+export type IntentName =
+  | 'walkToRoom'
+  | 'attachToDesk'
+  | 'swapIndicator'
+  // Phase 5 new intents:
+  | 'delay'
+  | 'cameraTo'
+  | 'swapWallTint'
+  | 'doorState'
+  | 'glowRing'
+  | 'particleBurst'
+  | 'corridorPulse'
+  | 'shelfLand'
+  | 'spawnVerdictScroll'
+  | 'spawnScoutEnvelope'
+  | 'slotTransit'
+  | 'parallel';
+
+export type IntentTargetKind =
+  | 'persona'
+  | 'ticket'
+  | 'room'
+  | 'door'
+  | 'camera'
+  | 'scene'
+  | 'slot'
+  | 'composite';
 
 export interface Intent {
   id: IntentName;
-  target: { kind: 'persona' | 'ticket' | 'room' | 'door' | 'camera'; id: string };
+  target: { kind: IntentTargetKind; id: string };
   params: Record<string, unknown>;
   lane: LaneId;
   ttlMs: number;
+  /** Sub-steps for 'parallel' composite intent. One level deep only. */
+  subSteps?: Intent[];
 }
 
 export interface Timeline {
   id: string;
   lane: LaneId;
-  /** Hero ticket id, if any (used by Phase 5 for camera follow). */
+  /** Hero ticket id, if any (used by Phase 5 for camera follow + hero promotion). */
   ticketId: string | null;
   steps: Intent[];
   onComplete?: () => void;
+  /** Invoked on TTL abort only; NOT on preemption. */
+  onAbort?: () => void;
   source: 'event' | 'placement' | 'click';
   startedAt?: number;
 }
@@ -62,6 +104,10 @@ export interface OrchestrationEvent {
 export interface ChoreographyContext {
   hero: string | null;
   rooms: typeof ROOM_IDS;
+  /** Floor index for the active project (0 for v1 single-project). */
+  floorIndex?: number;
+  /** Scene emitter — factories use it for choreo.* event emission in onComplete. */
+  emitter?: { emit: (event: string, payload?: unknown) => void };
 }
 
 // ─── TTL and timing constants ─────────────────────────────────────────────────
@@ -109,6 +155,9 @@ export function timelinesForEvent(
   if (!(kind in LANE_FOR_EVENT)) return [];
   if (LANE_FOR_EVENT[kind] === null) return [];
 
+  const floorIndex = context.floorIndex ?? 0;
+  const emitter = context.emitter ?? { emit: () => {} };
+
   switch (kind) {
     case 'state.transitioned':
       return intentsForStateTransitioned(event, context);
@@ -117,23 +166,21 @@ export function timelinesForEvent(
     case 'agent.run-completed':
       return intentsForAgentRunCompleted(event, context);
     case 'qa.functional-failed':
-      return intentsForQaFailed(event);
+      return intentsForQaFailed(event, floorIndex, emitter);
     case 'gate.awaiting-human':
       return intentsForGateAwaitingHuman(event);
     case 'swarm.wave-started':
+      return intentsForSwarmWaveStarted(event, floorIndex);
     case 'swarm.scout-completed':
-      // Phase 5 wires cinematics; phase 4: no-op timeline (logged by player).
-      return [makeTimeline('primary', event.ticketId ?? null, [])];
+      return intentsForSwarmScoutCompleted(event, floorIndex);
     case 'swarm.wave-completed':
-      return intentsForSwarmWaveCompleted(event);
+      return intentsForSwarmWaveCompleted(event, floorIndex);
     case 'review.converged':
-      // Phase 5 animates door; phase 4: no-op.
-      return [makeTimeline('primary', event.ticketId ?? null, [])];
+      return intentsForReviewConverged(event, floorIndex);
     case 'pr.merged':
-      // Phase 5 mergeCelebration; phase 4: no-op.
-      return [makeTimeline('primary', event.ticketId ?? null, [])];
+      return intentsForPrMerged(event, context, floorIndex, emitter);
     case 'audit.autonomy-gate-fired':
-      return []; // phase 5+; anchors reserved, phase 4 ignores
+      return [];
     default:
       return [];
   }
@@ -237,20 +284,14 @@ function intentsForAgentRunCompleted(
   ];
 }
 
-function intentsForQaFailed(event: OrchestrationEvent): Timeline[] {
+function intentsForQaFailed(
+  event: OrchestrationEvent,
+  floorIndex: number,
+  emitter: { emit: (event: string, payload?: unknown) => void },
+): Timeline[] {
   const ticketId = event.ticketId;
   if (!ticketId) return [];
-  return [
-    makeTimeline('critical', ticketId, [
-      {
-        id: 'swapIndicator',
-        target: { kind: 'ticket', id: ticketId },
-        params: { glyph: 'bang' },
-        lane: 'critical',
-        ttlMs: TTL_SWAP_MS,
-      },
-    ]),
-  ];
+  return [qaFailedTimeline(ticketId, floorIndex, emitter)];
 }
 
 function intentsForGateAwaitingHuman(event: OrchestrationEvent): Timeline[] {
@@ -268,18 +309,43 @@ function intentsForGateAwaitingHuman(event: OrchestrationEvent): Timeline[] {
   ];
 }
 
-function intentsForSwarmWaveCompleted(event: OrchestrationEvent): Timeline[] {
+function intentsForSwarmWaveStarted(event: OrchestrationEvent, floorIndex: number): Timeline[] {
+  const ticketId = event.ticketId;
+  const leadPersonaId = event.personaId;
+  if (!ticketId || !leadPersonaId) return [];
+  return [investigationWavePart1Timeline(ticketId, leadPersonaId, floorIndex)];
+}
+
+function intentsForSwarmScoutCompleted(event: OrchestrationEvent, floorIndex: number): Timeline[] {
+  const ticketId = event.ticketId;
+  if (!ticketId) return [];
+  const scoutIndex = typeof event.scoutIndex === 'number' ? event.scoutIndex : 0;
+  return [investigationWavePart2Timeline(ticketId, scoutIndex, floorIndex)];
+}
+
+function intentsForSwarmWaveCompleted(event: OrchestrationEvent, floorIndex: number): Timeline[] {
   const ticketId = event.ticketId ?? null;
-  if (!ticketId) return [makeTimeline('primary', null, [])];
-  return [
-    makeTimeline('primary', ticketId, [
-      {
-        id: 'swapIndicator',
-        target: { kind: 'ticket', id: ticketId },
-        params: { glyph: 'check' },
-        lane: 'primary',
-        ttlMs: TTL_SWAP_MS,
-      },
-    ]),
-  ];
+  if (!ticketId) return [];
+  return [investigationWavePart3Timeline(ticketId, floorIndex)];
+}
+
+function intentsForReviewConverged(event: OrchestrationEvent, floorIndex: number): Timeline[] {
+  const ticketId = event.ticketId;
+  if (!ticketId) return [];
+  return [reviewConvergedTimeline(ticketId, floorIndex)];
+}
+
+function intentsForPrMerged(
+  event: OrchestrationEvent,
+  context: ChoreographyContext,
+  floorIndex: number,
+  emitter: { emit: (event: string, payload?: unknown) => void },
+): Timeline[] {
+  const ticketId = event.ticketId;
+  if (!ticketId) return [];
+  const isHero = isHeroEvent(event, context);
+  if (isHero) {
+    return [mergeCelebrationTimeline(ticketId, floorIndex, emitter)];
+  }
+  return [mergeCelebrationAmbientTimeline(ticketId, floorIndex)];
 }

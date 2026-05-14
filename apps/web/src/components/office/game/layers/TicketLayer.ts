@@ -12,14 +12,16 @@
 
 import Phaser from 'phaser';
 import type { TicketPlacement } from '../../lib/agent-positions';
+import { DEFAULT_EASE } from '../../lib/cinematic-timings';
 import { floorOriginY } from '../../lib/layout';
+import type { Point } from '../../lib/rooms';
 import { roomDeskAnchors, roomQueueAnchor, roomSlotAnchors } from '../../lib/rooms';
 import type { RoomId } from '../../lib/rooms';
 import type { IndicatorKind } from '../../lib/state-indicators';
 import { ticketCarryOffset } from '../../lib/ticket-carry';
 import { TEXTURE_KEYS, indicatorTextureKey } from '../textures';
 import type { PersonaLayer } from './PersonaLayer';
-import type { DeskClickPayload } from './types';
+import type { DeskClickPayload, IntentResult } from './types';
 
 const TICKET_DEPTH = 40;
 const TICKET_HERO_DEPTH = 45;
@@ -50,6 +52,11 @@ interface QueueStack {
   badge?: Phaser.GameObjects.Text;
 }
 
+interface TempSprite {
+  container: Phaser.GameObjects.Container;
+  cancelFn?: () => void;
+}
+
 interface TicketLayerDeps {
   personaLayer: PersonaLayer;
   setHeroTicketCell: (text: string | null) => void;
@@ -64,6 +71,8 @@ export class TicketLayer {
   private queueStacks = new Map<string, QueueStack>();
   private heroTicketId: string | null = null;
   private heroTimer: Phaser.Time.TimerEvent | null = null;
+  /** Temporary scroll / envelope sprites keyed by a caller-supplied id. */
+  private tempSprites = new Map<string, TempSprite>();
 
   constructor(scene: Phaser.Scene, emitter: Phaser.Events.EventEmitter, deps: TicketLayerDeps) {
     this.scene = scene;
@@ -111,6 +120,11 @@ export class TicketLayer {
       qs.badge?.destroy();
     }
     this.queueStacks.clear();
+    for (const ts of this.tempSprites.values()) {
+      ts.cancelFn?.();
+      ts.container.destroy();
+    }
+    this.tempSprites.clear();
   }
 
   /**
@@ -220,6 +234,262 @@ export class TicketLayer {
       entry.indicator.setTexture(indicatorTextureKey(glyph));
       entry.indicator.setAlpha(1);
     }
+  }
+
+  // ─── Phase 5 cinematic primitives ─────────────────────────────────────────
+
+  /**
+   * Swaps the ticket's body texture to the given variant.
+   * 'card' is the default; 'scroll' and 'envelope' are cinematic variants.
+   */
+  setVariant(ticketId: string, variant: 'card' | 'scroll' | 'envelope'): void {
+    const entry = this.tickets.get(ticketId);
+    if (entry == null) return;
+    if (variant === 'scroll') {
+      entry.body.setTexture(TEXTURE_KEYS.ticketScroll);
+    } else if (variant === 'envelope') {
+      entry.body.setTexture(TEXTURE_KEYS.ticketEnvelope);
+    } else {
+      entry.body.setTexture(TEXTURE_KEYS.ticket);
+    }
+  }
+
+  /**
+   * Tweens the ticket through a list of world-space anchors in sequence.
+   * Used by `slotTransit` intent for 3-anchor slot traversal.
+   * Returns a promise resolving when the full sequence completes.
+   */
+  slotTransit(
+    ticketId: string,
+    worldAnchors: Point[],
+    durationMs: number,
+  ): { promise: Promise<IntentResult>; cancel: () => void } {
+    const entry = this.tickets.get(ticketId);
+    if (entry == null) {
+      return {
+        promise: Promise.resolve({ status: 'failed', reason: 'ticket-not-found' }),
+        cancel: () => {},
+      };
+    }
+
+    this.deparentFromPersona(entry);
+    const msPerAnchor = durationMs / Math.max(worldAnchors.length - 1, 1);
+    let settled = false;
+    let resolveFn!: (r: IntentResult) => void;
+    const promise = new Promise<IntentResult>((r) => {
+      resolveFn = r;
+    });
+
+    const runNext = (idx: number) => {
+      if (idx >= worldAnchors.length - 1) {
+        if (settled) return;
+        settled = true;
+        resolveFn({ status: 'completed' });
+        return;
+      }
+      const target = worldAnchors[idx + 1];
+      const tw = this.scene.tweens.add({
+        targets: entry.container,
+        x: target.x,
+        y: target.y,
+        duration: msPerAnchor,
+        ease: DEFAULT_EASE,
+        onComplete: () => {
+          if (!settled) runNext(idx + 1);
+        },
+      });
+      activeTween = tw;
+    };
+
+    let activeTween: Phaser.Tweens.Tween | null = null;
+    if (worldAnchors.length > 0) {
+      const first = worldAnchors[0];
+      entry.container.setPosition(first.x, first.y);
+      runNext(0);
+    } else {
+      settled = true;
+      resolveFn({ status: 'completed' });
+    }
+
+    const cancel = () => {
+      if (settled) return;
+      settled = true;
+      activeTween?.stop();
+      resolveFn({ status: 'cancelled' });
+    };
+
+    return { promise, cancel };
+  }
+
+  /**
+   * Tweens the ticket to a Done shelf slot. Existing tickets at occupied slots
+   * are shifted outward by 8px.
+   */
+  shelfLand(
+    ticketId: string,
+    slotIndex: number,
+    durationMs: number,
+  ): { promise: Promise<IntentResult>; cancel: () => void } {
+    const entry = this.tickets.get(ticketId);
+    if (entry == null) {
+      return {
+        promise: Promise.resolve({ status: 'failed', reason: 'ticket-not-found' }),
+        cancel: () => {},
+      };
+    }
+
+    const anchors = roomDeskAnchors('done');
+    const slot = anchors[slotIndex] ?? anchors[anchors.length - 1];
+    const floorIndex = this.deps.getFloorIndex(entry.projectSlug);
+    const oy = floorOriginY(floorIndex);
+    const targetX = slot.x;
+    const targetY = oy + slot.y - 4;
+
+    this.deparentFromPersona(entry);
+
+    // Shift neighbours outward
+    for (const [id, other] of this.tickets) {
+      if (id === ticketId || other.roomId !== 'done' || other.shelfSlot == null) continue;
+      if (other.shelfSlot >= slotIndex) {
+        this.scene.tweens.add({
+          targets: other.container,
+          x: other.container.x + 8,
+          duration: durationMs,
+          ease: DEFAULT_EASE,
+        });
+      }
+    }
+
+    let activeTween: Phaser.Tweens.Tween | null = null;
+    let settled = false;
+    let resolveFn!: (r: IntentResult) => void;
+    const promise = new Promise<IntentResult>((r) => {
+      resolveFn = r;
+    });
+
+    const tw = this.scene.tweens.add({
+      targets: entry.container,
+      x: targetX,
+      y: targetY,
+      duration: durationMs,
+      ease: DEFAULT_EASE,
+      onComplete: () => {
+        if (settled) return;
+        settled = true;
+        resolveFn({ status: 'completed' });
+      },
+    });
+    activeTween = tw;
+
+    const cancel = () => {
+      if (settled) return;
+      settled = true;
+      activeTween?.stop();
+      resolveFn({ status: 'cancelled' });
+    };
+
+    return { promise, cancel };
+  }
+
+  /**
+   * Creates a temporary scroll-variant sprite at (worldX, worldY) with given tint.
+   * Tracked by id; destroy with destroyTempSprite(id).
+   */
+  spawnTempSprite(
+    id: string,
+    textureKey: string,
+    worldX: number,
+    worldY: number,
+    tint?: number,
+  ): void {
+    this.destroyTempSprite(id); // clean up any existing
+    const container = this.scene.add.container(worldX, worldY);
+    container.setDepth(TICKET_HERO_DEPTH + 1);
+    const img = this.scene.add.image(0, 0, textureKey);
+    img.setOrigin(0.5, 0.5);
+    if (tint != null) img.setTint(tint);
+    container.add(img);
+    this.tempSprites.set(id, { container });
+  }
+
+  /** Destroys the temporary sprite created by spawnTempSprite. */
+  destroyTempSprite(id: string): void {
+    const entry = this.tempSprites.get(id);
+    if (!entry) return;
+    entry.cancelFn?.();
+    entry.container.destroy();
+    this.tempSprites.delete(id);
+  }
+
+  /** Returns the world position of a temp sprite (used by slotTransit for spawned scrolls). */
+  getTempSpritePosition(id: string): { x: number; y: number } | null {
+    const entry = this.tempSprites.get(id);
+    if (!entry) return null;
+    return { x: entry.container.x, y: entry.container.y };
+  }
+
+  /**
+   * Tweens a temp sprite through world-space anchors (same as slotTransit).
+   * Used by spawnScoutEnvelope to animate the envelope out of the library.
+   */
+  slotTransitTempSprite(
+    id: string,
+    worldAnchors: Point[],
+    durationMs: number,
+  ): { promise: Promise<IntentResult>; cancel: () => void } {
+    const entry = this.tempSprites.get(id);
+    if (entry == null) {
+      return {
+        promise: Promise.resolve({ status: 'failed', reason: 'temp-sprite-not-found' }),
+        cancel: () => {},
+      };
+    }
+    const msPerAnchor = durationMs / Math.max(worldAnchors.length - 1, 1);
+    let settled = false;
+    let resolveFn!: (r: IntentResult) => void;
+    const promise = new Promise<IntentResult>((r) => {
+      resolveFn = r;
+    });
+    let activeTween: Phaser.Tweens.Tween | null = null;
+
+    const runNext = (idx: number) => {
+      if (idx >= worldAnchors.length - 1) {
+        if (settled) return;
+        settled = true;
+        resolveFn({ status: 'completed' });
+        return;
+      }
+      const target = worldAnchors[idx + 1];
+      const tw = this.scene.tweens.add({
+        targets: entry.container,
+        x: target.x,
+        y: target.y,
+        duration: msPerAnchor,
+        ease: DEFAULT_EASE,
+        onComplete: () => {
+          if (!settled) runNext(idx + 1);
+        },
+      });
+      activeTween = tw;
+    };
+
+    if (worldAnchors.length > 0) {
+      const first = worldAnchors[0];
+      entry.container.setPosition(first.x, first.y);
+      runNext(0);
+    } else {
+      settled = true;
+      resolveFn({ status: 'completed' });
+    }
+
+    const cancel = () => {
+      if (settled) return;
+      settled = true;
+      activeTween?.stop();
+      resolveFn({ status: 'cancelled' });
+    };
+
+    return { promise, cancel };
   }
 
   private spawn(p: TicketPlacement, floorIndex: number): void {
