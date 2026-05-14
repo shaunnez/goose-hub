@@ -58,6 +58,8 @@ export type InvokeSkillInput = {
     runtimeOverride?: AgentRuntime;
     /** Pre-resolved project config. When provided, skips getProjectBySlug disk read. */
     projectConfigOverride?: Partial<ProjectConfig> | null;
+    /** Caller-supplied freshContext flag. When provided, overrides the skill config value. */
+    freshContextOverride?: boolean;
   };
 };
 
@@ -198,7 +200,7 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<AgentResult>
     skill: skillName,
     context: mergedContext,
     contextAllowlist: skillConfig.contextAllowlist,
-    freshContext: skillConfig.freshContext,
+    freshContext: overrides?.freshContextOverride ?? skillConfig.freshContext,
     toolBundles: skillConfig.toolBundles,
     toolExtras: [],
     budgets: resolved.budgets,
