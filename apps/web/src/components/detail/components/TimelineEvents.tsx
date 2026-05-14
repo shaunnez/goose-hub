@@ -39,6 +39,7 @@ import {
   GrillDecisionCrystallizedEvent,
   GrillQuestionPostedEvent,
 } from './timeline/GrillEvents';
+import { InvestigationPhaseWrapper } from './timeline/InvestigationPhaseWrapper';
 import { AgentLogEvent, AgentLogGroupEvent } from './timeline/LogEvents';
 import {
   AgentBudgetExceededEvent,
@@ -112,6 +113,21 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
         items={item.items}
         startedAt={item.startedAt}
         endedAt={item.endedAt}
+        context={context}
+        renderItem={renderTimelineItem}
+      />
+    );
+  }
+  if (item.kind === 'investigation-phase') {
+    return (
+      <InvestigationPhaseWrapper
+        key={`investigation-phase-${item.investigationRunId}`}
+        investigationRunId={item.investigationRunId}
+        items={item.items}
+        status={item.status}
+        startedAt={item.startedAt}
+        endedAt={item.endedAt}
+        lastEventAt={item.lastEventAt}
         context={context}
         renderItem={renderTimelineItem}
       />

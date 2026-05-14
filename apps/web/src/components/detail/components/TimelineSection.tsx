@@ -140,9 +140,13 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
   }
 
   const items = groupEvents(events);
-  const allRunItems = items.flatMap((item: RenderItem) =>
-    item.kind === 'phase-group' ? item.items : [item],
-  );
+  const flattenRunItems = (renderItems: RenderItem[]): RenderItem[] =>
+    renderItems.flatMap((item: RenderItem): RenderItem[] =>
+      item.kind === 'phase-group' || item.kind === 'investigation-phase'
+        ? flattenRunItems(item.items)
+        : [item],
+    );
+  const allRunItems = flattenRunItems(items);
   const hasRunGroups = allRunItems.some((item: RenderItem) => item.kind === 'run-group');
   const latestRunId =
     allRunItems.find((item: RenderItem) => item.kind === 'run-group')?.runId ?? null;

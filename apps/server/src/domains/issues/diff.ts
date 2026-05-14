@@ -7,6 +7,32 @@ import type { Result } from '#shared/middleware.js';
 import { getSourceForSlug, isValidSlug } from '#shared/source.js';
 import { getRepoRef } from './internal.js';
 
+const CODE_TAB_DIFF_EXCLUDES = ['.claude/', '.pnpm-store/', 'node_modules/'] as const;
+
+function isExcludedDiffPath(path: string): boolean {
+  const normalized = path.replaceAll('\\', '/');
+  return CODE_TAB_DIFF_EXCLUDES.some(
+    (prefix) => normalized === prefix.slice(0, -1) || normalized.startsWith(prefix),
+  );
+}
+
+export function filterCodeTabDiff(rawDiff: string): string {
+  const lines = rawDiff.split('\n');
+  const filtered: string[] = [];
+  let keepCurrentFile = true;
+
+  for (const line of lines) {
+    if (line.startsWith('diff --git ')) {
+      const match = line.match(/^diff --git a\/.+ b\/(.+)$/);
+      keepCurrentFile = match == null || !isExcludedDiffPath(match[1]);
+    }
+
+    if (keepCurrentFile) filtered.push(line);
+  }
+
+  return filtered.join('\n');
+}
+
 /**
  * Live diff for the Code tab (#185). Returns the unified diff of the
  * current worktree for the most recent in-flight run on this issue, or
@@ -79,11 +105,17 @@ export async function getIssueWorktreeDiff(
   }
 
   try {
-    const diff = execFileSync('git', ['diff', 'HEAD', '--', '.', ':(exclude).claude/'], {
-      cwd: worktreePath,
-      encoding: 'utf8',
-      maxBuffer: 4 * 1024 * 1024,
-    });
+    const diff = filterCodeTabDiff(
+      execFileSync(
+        'git',
+        ['diff', 'HEAD', '--', '.', ...CODE_TAB_DIFF_EXCLUDES.map((path) => `:(exclude)${path}`)],
+        {
+          cwd: worktreePath,
+          encoding: 'utf8',
+          maxBuffer: 4 * 1024 * 1024,
+        },
+      ),
+    );
     if (diff.length > 0) return { ok: true, data: { diff, runId } };
     // Worktree exists but all changes are committed (e.g. PR already opened).
     // Fall through to the GitHub PR diff.
@@ -135,7 +167,7 @@ async function tryGitHubPrDiff(
       },
     });
     if (!res.ok) return null;
-    const diff = await res.text();
+    const diff = filterCodeTabDiff(await res.text());
     return { diff, prRunId };
   } catch {
     return null;

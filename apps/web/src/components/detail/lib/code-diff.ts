@@ -18,6 +18,15 @@ export interface ParsedFile {
   hunks: ParsedHunk[];
 }
 
+const GENERATED_DIFF_PATH_PREFIXES = ['.pnpm-store/', 'node_modules/', '.claude/'] as const;
+
+function isGeneratedDiffPath(path: string): boolean {
+  const normalized = path.replaceAll('\\', '/');
+  return GENERATED_DIFF_PATH_PREFIXES.some(
+    (prefix) => normalized === prefix.slice(0, -1) || normalized.startsWith(prefix),
+  );
+}
+
 /**
  * Parses a unified diff string into a structured per-file list with hunks
  * carrying line-number metadata for left/right gutters.
@@ -34,7 +43,8 @@ export function parseDiff(raw: string): ParsedFile[] {
     if (line.startsWith('diff --git ')) {
       if (cur) files.push(cur);
       const m = line.match(/^diff --git a\/.+ b\/(.+)$/);
-      cur = { path: m ? m[1] : line.slice(11), status: 'mod', adds: 0, dels: 0, hunks: [] };
+      const path = m ? m[1] : line.slice(11);
+      cur = isGeneratedDiffPath(path) ? null : { path, status: 'mod', adds: 0, dels: 0, hunks: [] };
       curHunk = null;
       continue;
     }

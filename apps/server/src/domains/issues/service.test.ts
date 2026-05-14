@@ -410,6 +410,52 @@ describe('getIssueWorktreeDiff (#185)', () => {
     );
   });
 
+  it('filters generated package-store files from live worktree diffs', async () => {
+    const { getIssueWorktreeDiff } = await import('./service.js');
+    const events = await import('@goose-hub/core/event-stream/store.js');
+    vi.mocked(events.eventStore.replay).mockReturnValueOnce([
+      {
+        id: 1,
+        projectId: 'proj',
+        workItemId: 'github:owner/repo#1',
+        kind: 'agent.run-started',
+        runId: 'run-live-store',
+        payload: {},
+        createdAt: '2026-05-02T22:00:00Z',
+      },
+    ] as never);
+    vi.mocked(existsSync).mockImplementation((p) => String(p).includes('run-live-store'));
+    vi.mocked(execFileSync).mockReturnValueOnce(
+      [
+        'diff --git a/.pnpm-store/v10/files/aa/hash b/.pnpm-store/v10/files/aa/hash',
+        'new file mode 100644',
+        '--- /dev/null',
+        '+++ b/.pnpm-store/v10/files/aa/hash',
+        '@@ -0,0 +1 @@',
+        '+generated dependency cache',
+        'diff --git a/src/foo.ts b/src/foo.ts',
+        '--- a/src/foo.ts',
+        '+++ b/src/foo.ts',
+        '@@ -1 +1 @@',
+        '-old',
+        '+new',
+      ].join('\n') as never,
+    );
+
+    const result = await getIssueWorktreeDiff('proj', '1');
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.diff).not.toContain('.pnpm-store');
+      expect(result.data.diff).toContain('diff --git a/src/foo.ts b/src/foo.ts');
+    }
+    expect(vi.mocked(execFileSync)).toHaveBeenCalledWith(
+      'git',
+      expect.arrayContaining([':(exclude).pnpm-store/', ':(exclude)node_modules/']),
+      expect.any(Object),
+    );
+  });
+
   it('fetches diff from GitHub PR when worktree is gone and pr.opened event has prNumber', async () => {
     const { getIssueWorktreeDiff } = await import('./service.js');
     const events = await import('@goose-hub/core/event-stream/store.js');
@@ -443,6 +489,45 @@ describe('getIssueWorktreeDiff (#185)', () => {
         headers: expect.objectContaining({ Accept: 'application/vnd.github.v3.diff' }),
       }),
     );
+  });
+
+  it('filters generated package-store files from GitHub PR diffs', async () => {
+    const { getIssueWorktreeDiff } = await import('./service.js');
+    const events = await import('@goose-hub/core/event-stream/store.js');
+    process.env.GITHUB_TOKEN = 'ghp_test';
+    vi.mocked(events.eventStore.replay).mockReturnValueOnce([
+      {
+        id: 1,
+        projectId: 'proj',
+        workItemId: 'github:owner/repo#1',
+        kind: 'pr.opened',
+        runId: 'run-pr-gone-store',
+        payload: { prNumber: 42, prUrl: 'https://github.com/owner/repo/pull/42' },
+        createdAt: '2026-05-02T22:00:00Z',
+      },
+    ] as never);
+    const mockFetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      text: () =>
+        Promise.resolve(
+          [
+            'diff --git a/.pnpm-store/v10/files/aa/hash b/.pnpm-store/v10/files/aa/hash',
+            '+generated dependency cache',
+            'diff --git a/apps/server/src/foo.ts b/apps/server/src/foo.ts',
+            '+real change',
+          ].join('\n'),
+        ),
+    });
+
+    const result = await getIssueWorktreeDiff('proj', '1', {
+      fetchImpl: mockFetch as typeof fetch,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.diff).not.toContain('.pnpm-store');
+      expect(result.data.diff).toContain('apps/server/src/foo.ts');
+    }
   });
 });
 

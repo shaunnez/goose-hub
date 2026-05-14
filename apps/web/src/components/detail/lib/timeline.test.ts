@@ -27,7 +27,7 @@ function makeEvent(
 }
 
 describe('groupEvents — investigation runs', () => {
-  it('leaves investigation, scout, and wave runs as ordinary run-groups', () => {
+  it('wraps investigation, scout, and wave runs into an investigation phase', () => {
     const events: AgentEventDto[] = [
       makeEvent(1, 'agent.run-started', 'run-investigate:scout:pattern:0', {
         payload: { skill: 'scout-pattern' },
@@ -49,19 +49,29 @@ describe('groupEvents — investigation runs', () => {
     ];
 
     const items = groupEvents(events);
-    const runGroups = items.filter((item) => item.kind === 'run-group');
+    const phase = items.find((item) => item.kind === 'investigation-phase');
 
-    expect(runGroups.map((item) => item.runId)).toEqual([
-      'run-investigate',
-      'run-investigate:scout:wave2-risk-analyst:1',
-      'run-investigate:scout:pattern:0',
-    ]);
+    expect(phase).toBeDefined();
+    expect(phase?.kind).toBe('investigation-phase');
+    if (phase?.kind === 'investigation-phase') {
+      expect(phase.investigationRunId).toBe('run-investigate');
+      expect(phase.status).toBe('completed');
+      expect(
+        phase.items
+          .filter((item) => item.kind === 'run-group')
+          .map((item) => (item.kind === 'run-group' ? item.runId : null)),
+      ).toEqual([
+        'run-investigate',
+        'run-investigate:scout:wave2-risk-analyst:1',
+        'run-investigate:scout:pattern:0',
+      ]);
+    }
     expect(
       items.some((item) => item.kind === 'event' && item.event.kind === 'state.transitioned'),
     ).toBe(true);
   });
 
-  it('orders run-groups by latest activity, not start time', () => {
+  it('orders investigation phases by latest activity, not start time', () => {
     const events: AgentEventDto[] = [
       makeEvent(1, 'agent.run-started', 'run-investigate', {
         payload: { skill: 'investigate' },
@@ -74,12 +84,75 @@ describe('groupEvents — investigation runs', () => {
     ];
 
     const items = groupEvents(events);
-    const runGroups = items.filter((item) => item.kind === 'run-group');
+    const phase = items.find((item) => item.kind === 'investigation-phase');
 
-    expect(runGroups.map((item) => item.runId)).toEqual([
-      'run-investigate',
-      'run-investigate:scout:pattern:0',
+    expect(phase?.kind).toBe('investigation-phase');
+    if (phase?.kind === 'investigation-phase') {
+      expect(phase.investigationRunId).toBe('run-investigate');
+      expect(phase.lastEventAt).toBe(events[3].createdAt);
+    }
+  });
+
+  it('leaves orphan scout runs flat when no parent investigation run exists', () => {
+    const events: AgentEventDto[] = [
+      makeEvent(1, 'agent.run-started', 'run-missing:scout:pattern:0', {
+        payload: { skill: 'scout-pattern' },
+      }),
+      makeEvent(2, 'agent.run-completed', 'run-missing:scout:pattern:0'),
+    ];
+
+    const items = groupEvents(events);
+
+    expect(items.some((item) => item.kind === 'investigation-phase')).toBe(false);
+    expect(items[0]?.kind).toBe('run-group');
+  });
+
+  it('marks an investigation phase as started before child runs appear', () => {
+    const items = groupEvents([
+      makeEvent(1, 'agent.run-started', 'run-investigate', {
+        payload: { skill: 'investigate' },
+      }),
     ]);
+
+    const phase = items[0];
+    expect(phase?.kind).toBe('investigation-phase');
+    if (phase?.kind === 'investigation-phase') {
+      expect(phase.status).toBe('started');
+    }
+  });
+
+  it('marks an investigation phase as live when children are running', () => {
+    const items = groupEvents([
+      makeEvent(1, 'agent.run-started', 'run-investigate', {
+        payload: { skill: 'investigate' },
+      }),
+      makeEvent(2, 'agent.run-started', 'run-investigate:scout:pattern:0', {
+        payload: { skill: 'scout-pattern' },
+      }),
+    ]);
+
+    const phase = items[0];
+    expect(phase?.kind).toBe('investigation-phase');
+    if (phase?.kind === 'investigation-phase') {
+      expect(phase.status).toBe('live');
+    }
+  });
+
+  it('marks an investigation phase as failed on wave halt', () => {
+    const items = groupEvents([
+      makeEvent(1, 'agent.run-started', 'run-investigate', {
+        payload: { skill: 'investigate' },
+      }),
+      makeEvent(2, 'swarm.wave-halted', 'run-investigate', {
+        payload: { failedScouts: ['scout-schema'] },
+      }),
+    ]);
+
+    const phase = items[0];
+    expect(phase?.kind).toBe('investigation-phase');
+    if (phase?.kind === 'investigation-phase') {
+      expect(phase.status).toBe('failed');
+    }
   });
 
   it('uses start time and runId as stable tie-breakers for same-second activity', () => {
