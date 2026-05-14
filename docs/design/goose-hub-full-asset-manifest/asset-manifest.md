@@ -13,10 +13,10 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 ## 01 — Core Tiles
 
 ### Floors
-- [ ] floor_tile_01.png
-- [ ] floor_tile_02.png
-- [ ] corridor_tile_01.png
-- [ ] corridor_tile_02.png
+- [!] floor_tile_01.png
+- [!] floor_tile_02.png
+- [!] corridor_tile_01.png
+- [!] corridor_tile_02.png
 - [ ] floor_shadow_edge.png
 - [ ] carpet_trim_horizontal.png
 - [ ] carpet_trim_vertical.png
