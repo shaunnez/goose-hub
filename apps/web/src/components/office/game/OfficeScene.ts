@@ -91,6 +91,7 @@ export class OfficeScene extends Phaser.Scene {
     this.choreographyPlayer = new ChoreographyPlayer({
       personaLayer: this.personaLayer,
       ticketLayer: this.ticketLayer,
+      roomLayer: this.roomLayer,
       scene: this,
       emitter: this.emitter,
     });

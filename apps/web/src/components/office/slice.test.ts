@@ -8,6 +8,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ChoreographyPlayer } from './game/choreography/ChoreographyPlayer';
 import type { ChoreographyCtx } from './game/choreography/Timeline';
+import { Timeline as TL } from './game/choreography/Timeline';
 import { OFFICE_ROLES, busyRoles, idleIndicator, placementsFromItems } from './lib/agent-positions';
 import type { ChoreographyContext, OrchestrationEvent, Timeline } from './lib/choreography';
 import {
@@ -514,12 +515,15 @@ describe('timelinesForEvent', () => {
     expect(timelines[0].steps[1].params.delayMs).toBe(INDICATOR_CLEAR_DELAY_MS);
   });
 
-  it('qa.functional-failed → critical bang on ticket target', () => {
+  it('qa.functional-failed → critical cinematic starting with spawnVerdictScroll', () => {
     const timelines = timelinesForEvent({ kind: 'qa.functional-failed', ticketId: 'p:42' }, CTX);
     expect(timelines[0].lane).toBe('critical');
-    expect(timelines[0].steps[0].id).toBe('swapIndicator');
+    // Phase 5: qaFailed cinematic — first step is spawnVerdictScroll, not swapIndicator
+    expect(timelines[0].steps[0].id).toBe('spawnVerdictScroll');
     expect(timelines[0].steps[0].target.kind).toBe('ticket');
-    expect(timelines[0].steps[0].params.glyph).toBe('bang');
+    // bang indicator appears later in the cinematic sequence
+    const bangStep = timelines[0].steps.find((s) => s.id === 'swapIndicator');
+    expect(bangStep?.params.glyph).toBe('bang');
   });
 
   it('qa.functional-failed without ticketId → []', () => {
@@ -533,23 +537,41 @@ describe('timelinesForEvent', () => {
     expect(timelines[0].steps[0].target.kind).toBe('persona');
   });
 
-  it('swarm.wave-started → no-op primary (0 steps)', () => {
-    const timelines = timelinesForEvent({ kind: 'swarm.wave-started' }, CTX);
+  it('swarm.wave-started without ticketId/personaId → []', () => {
+    // Phase 5: requires both ticketId and personaId (lead investigator)
+    expect(timelinesForEvent({ kind: 'swarm.wave-started' }, CTX)).toHaveLength(0);
+  });
+
+  it('swarm.wave-started with ticketId+personaId → primary investigationWave part 1', () => {
+    const timelines = timelinesForEvent(
+      { kind: 'swarm.wave-started', ticketId: 'p:42', personaId: 'lead-1' },
+      CTX,
+    );
     expect(timelines[0].lane).toBe('primary');
-    expect(timelines[0].steps).toHaveLength(0);
+    // Part 1 starts with cameraTo
+    expect(timelines[0].steps[0].id).toBe('cameraTo');
   });
 
-  it('swarm.wave-completed with ticketId → primary check on ticket', () => {
+  it('swarm.wave-completed with ticketId → primary investigationWave part 3 (glowRing + check)', () => {
     const timelines = timelinesForEvent({ kind: 'swarm.wave-completed', ticketId: 'p:42' }, CTX);
-    expect(timelines[0].steps[0].id).toBe('swapIndicator');
-    expect(timelines[0].steps[0].target.kind).toBe('ticket');
-    expect(timelines[0].steps[0].params.glyph).toBe('check');
+    // Phase 5: part 3 starts with glowRing, then swapIndicator check
+    expect(timelines[0].steps[0].id).toBe('glowRing');
+    const checkStep = timelines[0].steps.find((s) => s.id === 'swapIndicator');
+    expect(checkStep?.params.glyph).toBe('check');
   });
 
-  it('pr.merged → no-op primary (0 steps)', () => {
+  it('pr.merged hero → primary mergeCelebration cinematic (slotTransit + shelfLand + parallel)', () => {
+    // CTX.hero = 'p:42' matches ticketId — hero path
     const timelines = timelinesForEvent({ kind: 'pr.merged', ticketId: 'p:42' }, CTX);
     expect(timelines[0].lane).toBe('primary');
-    expect(timelines[0].steps).toHaveLength(0);
+    expect(timelines[0].steps[0].id).toBe('slotTransit');
+    expect(timelines[0].steps[1].id).toBe('shelfLand');
+  });
+
+  it('pr.merged non-hero → ambient mergeCelebration cinematic', () => {
+    const timelines = timelinesForEvent({ kind: 'pr.merged', ticketId: 'p:99' }, CTX);
+    expect(timelines[0].lane).toBe('ambient');
+    expect(timelines[0].steps[0].id).toBe('shelfLand');
   });
 
   it('all returned timelines have source=event', () => {
@@ -715,6 +737,253 @@ describe('ChoreographyPlayer', () => {
     // critical swapIndicator ran, and primary walkToRoom was resumed (re-run)
     expect(intentNames).toContain('swapIndicator');
     expect(intentNames.filter((n) => n === 'walkToRoom').length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ─── Phase 5 tests ───────────────────────────────────────────────────────────
+
+describe('Timeline.parallel', () => {
+  it('returns a composite intent with id=parallel and max ttlMs', () => {
+    const sub1 = {
+      id: 'delay' as const,
+      target: { kind: 'scene' as const, id: 'a' },
+      params: { ms: 100 },
+      lane: 'primary' as const,
+      ttlMs: 300,
+    };
+    const sub2 = {
+      id: 'delay' as const,
+      target: { kind: 'scene' as const, id: 'b' },
+      params: { ms: 200 },
+      lane: 'primary' as const,
+      ttlMs: 700,
+    };
+    const intent = TL.parallel([sub1, sub2], 'primary');
+    expect(intent.id).toBe('parallel');
+    expect(intent.ttlMs).toBe(700);
+    expect(intent.subSteps).toHaveLength(2);
+  });
+});
+
+describe('timelinesForEvent Phase 5 cinematics', () => {
+  const CTX: ChoreographyContext = { hero: 'p:42', rooms: ROOM_IDS };
+
+  it('review.converged → primary timeline starting with doorState', () => {
+    const timelines = timelinesForEvent({ kind: 'review.converged', ticketId: 'p:42' }, CTX);
+    expect(timelines).toHaveLength(1);
+    expect(timelines[0].lane).toBe('primary');
+    expect(timelines[0].steps[0].id).toBe('doorState');
+  });
+
+  it('review.converged without ticketId → []', () => {
+    expect(timelinesForEvent({ kind: 'review.converged' }, CTX)).toHaveLength(0);
+  });
+
+  it('swarm.scout-completed → primary timeline with slotTransit', () => {
+    const timelines = timelinesForEvent(
+      { kind: 'swarm.scout-completed', ticketId: 'p:42', scoutIndex: 1 },
+      CTX,
+    );
+    expect(timelines).toHaveLength(1);
+    expect(timelines[0].steps[0].id).toBe('slotTransit');
+  });
+
+  it('swarm.scout-completed without ticketId → []', () => {
+    expect(timelinesForEvent({ kind: 'swarm.scout-completed' }, CTX)).toHaveLength(0);
+  });
+
+  it('qa.functional-failed cinematic has onComplete callback', () => {
+    const timelines = timelinesForEvent({ kind: 'qa.functional-failed', ticketId: 'p:42' }, CTX);
+    expect(timelines[0].onComplete).toBeTypeOf('function');
+  });
+
+  it('pr.merged hero cinematic has onComplete callback', () => {
+    const timelines = timelinesForEvent({ kind: 'pr.merged', ticketId: 'p:42' }, CTX);
+    expect(timelines[0].onComplete).toBeTypeOf('function');
+  });
+});
+
+describe('ChoreographyPlayer Phase 5 — criticalActive suppression and onAbort', () => {
+  function makeMockCtxPhase5() {
+    const emitLog: Array<{ event: string; payload: unknown }> = [];
+    const emitter = {
+      emit: (event: string, payload: unknown) => {
+        emitLog.push({ event, payload });
+      },
+    };
+    const personaLayer = {
+      walkToRoom: vi
+        .fn<() => Promise<{ status: string }>>()
+        .mockResolvedValue({ status: 'completed' }),
+      cancelWalk: vi.fn(),
+      seat: vi.fn<() => Promise<{ status: string }>>().mockResolvedValue({ status: 'completed' }),
+      setIndicator: vi.fn(),
+    };
+    const ticketLayer = {
+      setIndicator: vi.fn(),
+      promote: vi.fn(),
+      release: vi.fn(),
+    };
+    const roomLayer = {};
+    const pendingTimers: Array<{ ms: number; fn: () => void; removed: boolean }> = [];
+    const scene = {
+      time: {
+        delayedCall: (ms: number, fn: () => void) => {
+          if (ms === 0) {
+            fn();
+            return { remove: () => {} };
+          }
+          const entry = { ms, fn, removed: false };
+          pendingTimers.push(entry);
+          return {
+            remove: () => {
+              entry.removed = true;
+            },
+          };
+        },
+      },
+    };
+    const ctx = {
+      personaLayer,
+      ticketLayer,
+      roomLayer,
+      scene,
+      emitter,
+    } as unknown as ChoreographyCtx;
+    return { ctx, emitLog, pendingTimers, ticketLayer };
+  }
+
+  const flushPromises = () => new Promise<void>((r) => setTimeout(r, 0));
+
+  function makeSwapTl(
+    lane: Timeline['lane'],
+    targetId: string,
+    ticketId: string | null = null,
+  ): Timeline {
+    return {
+      id: `tl-${targetId}`,
+      lane,
+      ticketId,
+      source: 'event',
+      steps: [
+        {
+          id: 'swapIndicator',
+          target: { kind: 'persona', id: targetId },
+          params: { glyph: 'speech' },
+          lane,
+          ttlMs: TTL_SWAP_MS,
+        },
+      ],
+    };
+  }
+
+  it('ambient lane does not start while criticalActive=true', async () => {
+    const { ctx, emitLog } = makeMockCtxPhase5();
+    const player = new ChoreographyPlayer(ctx);
+
+    // critical timeline that never resolves
+    (ctx.personaLayer.walkToRoom as ReturnType<typeof vi.fn>).mockReturnValue(
+      new Promise(() => {}),
+    );
+    const critTl: Timeline = {
+      id: 'crit',
+      lane: 'critical',
+      ticketId: null,
+      source: 'event',
+      steps: [
+        {
+          id: 'walkToRoom',
+          target: { kind: 'persona', id: 'p-c' },
+          params: { destRoomId: 'dev', deskSlot: 0 },
+          lane: 'critical',
+          ttlMs: 999999,
+        },
+      ],
+    };
+    player.applyChoreography([critTl]);
+    await flushPromises();
+
+    // Now queue an ambient timeline
+    player.applyChoreography([makeSwapTl('ambient', 'p-a')]);
+    await flushPromises();
+
+    // Ambient intent should NOT have started (critical is active)
+    const startedNames = emitLog
+      .filter((e) => e.event === 'choreo.intent-started')
+      .map((e) => (e.payload as { target: { id: string } }).target.id);
+    expect(startedNames).not.toContain('p-a');
+  });
+
+  it('onAbort is called on TTL abort but NOT on preemption', async () => {
+    const { ctx, pendingTimers } = makeMockCtxPhase5();
+    const player = new ChoreographyPlayer(ctx);
+
+    const abortFn = vi.fn();
+    (ctx.personaLayer.walkToRoom as ReturnType<typeof vi.fn>).mockReturnValue(
+      new Promise(() => {}),
+    );
+
+    const tl: Timeline = {
+      id: 'tl-abort',
+      lane: 'primary',
+      ticketId: null,
+      source: 'event',
+      steps: [
+        {
+          id: 'walkToRoom',
+          target: { kind: 'persona', id: 'p1' },
+          params: { destRoomId: 'dev', deskSlot: 0 },
+          lane: 'primary',
+          ttlMs: TTL_WALK_MS,
+        },
+      ],
+      onAbort: abortFn,
+    };
+    player.applyChoreography([tl]);
+    await flushPromises();
+
+    // Fire the TTL
+    const ttl = pendingTimers.find((t) => t.ms === TTL_WALK_MS);
+    ttl?.fn();
+    await flushPromises();
+
+    expect(abortFn).toHaveBeenCalledOnce();
+  });
+
+  it('onAbort is NOT called when preempted by critical', async () => {
+    const { ctx } = makeMockCtxPhase5();
+    const player = new ChoreographyPlayer(ctx);
+
+    const abortFn = vi.fn();
+    (ctx.personaLayer.walkToRoom as ReturnType<typeof vi.fn>).mockReturnValue(
+      new Promise(() => {}),
+    );
+
+    const primTl: Timeline = {
+      id: 'prim',
+      lane: 'primary',
+      ticketId: null,
+      source: 'event',
+      steps: [
+        {
+          id: 'walkToRoom',
+          target: { kind: 'persona', id: 'p1' },
+          params: { destRoomId: 'dev', deskSlot: 0 },
+          lane: 'primary',
+          ttlMs: TTL_WALK_MS,
+        },
+      ],
+      onAbort: abortFn,
+    };
+    player.applyChoreography([primTl]);
+    await flushPromises();
+
+    // Preempt with critical
+    player.applyChoreography([makeSwapTl('critical', 'p-crit')]);
+    await flushPromises();
+    await flushPromises();
+
+    expect(abortFn).not.toHaveBeenCalled();
   });
 });
 

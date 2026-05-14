@@ -62,6 +62,9 @@ export const TEXTURE_KEYS = {
   queueStack3: 'office:queue-stack-3',
   queueStackMany: 'office:queue-stack-many',
   ticketGlow: 'office:ticket-glow',
+  // Phase-5 cinematic texture variants
+  ticketScroll: 'office:ticket-scroll',
+  ticketEnvelope: 'office:ticket-envelope',
 } as const;
 
 export function indicatorTextureKey(kind: IndicatorKind): string {
@@ -113,6 +116,8 @@ export function ensureOfficeTextures(scene: Phaser.Scene): void {
     generateSprite(scene, role, ROLE_COLOR[role]);
   }
   generateTicket(scene);
+  generateTicketScroll(scene);
+  generateTicketEnvelope(scene);
   generateQueueStacks(scene);
   generateTicketGlow(scene);
   generateSpeechBubble(scene);
@@ -354,6 +359,48 @@ function generateTicket(scene: Phaser.Scene): void {
   g.fillStyle(0x4a3a5e, 0.5);
   g.fillRect(2, 4, 8, 1);
   g.fillRect(2, 6, 6, 1);
+  g.generateTexture(key, 14, 10);
+  g.destroy();
+}
+
+function generateTicketScroll(scene: Phaser.Scene): void {
+  const key = TEXTURE_KEYS.ticketScroll;
+  if (scene.textures.exists(key)) return;
+  const g = scene.add.graphics({ x: 0, y: 0 });
+  // Scroll body — taller, parchment colour
+  g.fillStyle(0xf5e8c8, 1);
+  g.fillRoundedRect(0, 0, 10, 16, 1);
+  g.lineStyle(1, 0xb88a3a, 1);
+  g.strokeRoundedRect(0, 0, 10, 16, 1);
+  // Rolled-up ends (dark band)
+  g.fillStyle(0x8a6020, 0.8);
+  g.fillRect(0, 0, 10, 2);
+  g.fillRect(0, 14, 10, 2);
+  // Text lines
+  g.fillStyle(0x4a3020, 0.4);
+  g.fillRect(2, 4, 6, 1);
+  g.fillRect(2, 7, 5, 1);
+  g.fillRect(2, 10, 6, 1);
+  g.generateTexture(key, 10, 16);
+  g.destroy();
+}
+
+function generateTicketEnvelope(scene: Phaser.Scene): void {
+  const key = TEXTURE_KEYS.ticketEnvelope;
+  if (scene.textures.exists(key)) return;
+  const g = scene.add.graphics({ x: 0, y: 0 });
+  // Envelope body
+  g.fillStyle(0xf0eadc, 1);
+  g.fillRect(0, 0, 14, 10);
+  g.lineStyle(1, 0x8a7355, 1);
+  g.strokeRect(0, 0, 14, 10);
+  // V-flap line
+  g.lineStyle(1, 0x8a7355, 0.6);
+  g.lineBetween(0, 0, 7, 5);
+  g.lineBetween(14, 0, 7, 5);
+  // Seal dot
+  g.fillStyle(0x6b4a8e, 1);
+  g.fillCircle(7, 5, 2);
   g.generateTexture(key, 14, 10);
   g.destroy();
 }

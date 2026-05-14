@@ -8,23 +8,46 @@
 //   destroyAll()                         — tear down on scene shutdown
 
 import type Phaser from 'phaser';
+import { DEFAULT_EASE, PARTICLE_ALPHA_EASE } from '../../lib/cinematic-timings';
 import { FLOOR_PIXEL_WIDTH, TILE_SIZE, floorOriginY } from '../../lib/layout';
 import {
+  CORRIDOR_WALK_Y,
   FLOOR_WORLD,
   INTER_ROOM_WALL_X,
   LIBRARY_BOUNDS,
   ROOM_IDS,
   type RoomId,
   allClickZones,
+  roomBounds,
   roomDeskAnchors,
   roomDoor,
   roomQueueAnchor,
 } from '../../lib/rooms';
 import { TEXTURE_KEYS } from '../textures';
-import type { OfficeProject } from './types';
+import type { IntentResult, OfficeProject } from './types';
 
 interface RoomLayerCallbacks {
   navigateFloor: (delta: number) => void;
+}
+
+// Door gap is 2 tiles wide, centered on door.x; half-width used for rect.
+const DOOR_WIDTH = TILE_SIZE * 2;
+// Depth for effects (corridor pulse, glow, particles) — above tickets.
+const EFFECT_DEPTH = 55;
+
+interface DoorEntry {
+  graphics: Phaser.GameObjects.Graphics;
+  cancelFn?: () => void;
+}
+
+interface WallTintEntry {
+  graphics: Phaser.GameObjects.Graphics;
+  cancelFn?: () => void;
+}
+
+interface EffectEntry {
+  objects: Phaser.GameObjects.GameObject[];
+  cancel: () => void;
 }
 
 // Pixel rows relative to floor origin (ty × TILE_SIZE)
@@ -50,6 +73,12 @@ export class RoomLayer {
   private clickZones: Phaser.GameObjects.Zone[] = [];
   /** Banner R-cell texts, one per floor (hero ticket display). */
   private heroTicketTexts: Phaser.GameObjects.Text[] = [];
+  /** Door graphics per floor — keyed by floorIndex. */
+  private doorEntries: Map<number, DoorEntry> = new Map();
+  /** Wall tint overlays per (floorIndex, roomId). */
+  private wallTintEntries: Map<string, WallTintEntry> = new Map();
+  /** One-shot effect objects keyed by effect id. */
+  private effectEntries: Map<string, EffectEntry> = new Map();
 
   constructor(scene: Phaser.Scene, callbacks: RoomLayerCallbacks) {
     this.scene = scene;
@@ -93,6 +122,318 @@ export class RoomLayer {
     for (const z of this.clickZones) z.destroy();
     this.clickZones = [];
     this.heroTicketTexts = [];
+    for (const e of this.doorEntries.values()) {
+      e.cancelFn?.();
+      e.graphics.destroy();
+    }
+    this.doorEntries.clear();
+    for (const e of this.wallTintEntries.values()) {
+      e.cancelFn?.();
+      e.graphics.destroy();
+    }
+    this.wallTintEntries.clear();
+    for (const e of this.effectEntries.values()) e.cancel();
+    this.effectEntries.clear();
+  }
+
+  // ─── Phase 5 cinematic primitives ─────────────────────────────────────────
+
+  /**
+   * Animate the Review chamber door: 'open' fades it out, 'close' fades it in.
+   * Returns a promise that resolves when the animation completes.
+   * Calling cancel() on the returned object stops and resets the door.
+   */
+  animateDoor(
+    floorIndex: number,
+    targetState: 'open' | 'close',
+    durationMs: number,
+  ): { promise: Promise<IntentResult>; cancel: () => void } {
+    let doorEntry = this.doorEntries.get(floorIndex);
+    if (!doorEntry) {
+      doorEntry = this.buildDoorGraphics(floorIndex);
+    }
+    const entry: DoorEntry = doorEntry;
+    const targetAlpha = targetState === 'open' ? 0 : 1;
+    const g = entry.graphics;
+    let settled = false;
+    let resolve!: (r: IntentResult) => void;
+    const promise = new Promise<IntentResult>((r) => {
+      resolve = r;
+    });
+    const tween = this.scene.tweens.add({
+      targets: g,
+      alpha: targetAlpha,
+      duration: durationMs,
+      ease: DEFAULT_EASE,
+      onComplete: () => {
+        if (settled) return;
+        settled = true;
+        entry.cancelFn = undefined;
+        resolve({ status: 'completed' });
+      },
+    });
+    const cancel = () => {
+      if (settled) return;
+      settled = true;
+      tween.stop();
+      entry.cancelFn = undefined;
+      resolve({ status: 'cancelled' });
+    };
+    entry.cancelFn = cancel;
+    return { promise, cancel };
+  }
+
+  /** Restores the door to closed (alpha=1) without animation. */
+  resetDoor(floorIndex: number): void {
+    const entry = this.doorEntries.get(floorIndex);
+    if (!entry) return;
+    entry.cancelFn?.();
+    entry.graphics.setAlpha(1);
+  }
+
+  /**
+   * Sets a semi-transparent wall tint overlay on a room (alpha 0..1).
+   * Pass alpha=0 to clear. The overlay is created lazily.
+   */
+  setWallTint(floorIndex: number, roomId: RoomId, alpha: number): void {
+    const key = `${floorIndex}:${roomId}`;
+    let entry = this.wallTintEntries.get(key);
+    if (!entry) {
+      entry = this.buildWallTintGraphics(floorIndex, roomId);
+    }
+    entry.graphics.setAlpha(alpha);
+  }
+
+  /** Restores a wall tint to transparent (alpha=0). */
+  restoreWallTint(floorIndex: number, roomId: RoomId): void {
+    const key = `${floorIndex}:${roomId}`;
+    const entry = this.wallTintEntries.get(key);
+    if (entry) {
+      entry.cancelFn?.();
+      entry.graphics.setAlpha(0);
+    }
+  }
+
+  /**
+   * Sweeps a coloured horizontal pulse along the corridor (at corridorY in world coords).
+   * fromWorldX → toWorldX; direction is implied by sign of (to - from).
+   */
+  corridorPulse(
+    effectId: string,
+    fromWorldX: number,
+    toWorldX: number,
+    worldY: number,
+    durationMs: number,
+    color: number,
+  ): { promise: Promise<IntentResult>; cancel: () => void } {
+    const existing = this.effectEntries.get(effectId);
+    existing?.cancel();
+
+    const g = this.scene.add.graphics();
+    g.setDepth(EFFECT_DEPTH);
+    g.fillStyle(color, 0.7);
+    const barH = TILE_SIZE;
+    const barW = Math.abs(toWorldX - fromWorldX) * 0.08;
+    g.fillRect(0, -barH / 2, barW, barH);
+    g.setPosition(fromWorldX, worldY);
+
+    let settled = false;
+    let resolveFn!: (r: IntentResult) => void;
+    const promise = new Promise<IntentResult>((r) => {
+      resolveFn = r;
+    });
+
+    const tween = this.scene.tweens.add({
+      targets: g,
+      x: toWorldX,
+      alpha: { from: 0.9, to: 0 },
+      duration: durationMs,
+      ease: 'Linear',
+      onComplete: () => {
+        if (settled) return;
+        settled = true;
+        g.destroy();
+        this.effectEntries.delete(effectId);
+        resolveFn({ status: 'completed' });
+      },
+    });
+
+    const cancel = () => {
+      if (settled) return;
+      settled = true;
+      tween.stop();
+      g.destroy();
+      this.effectEntries.delete(effectId);
+      resolveFn({ status: 'cancelled' });
+    };
+
+    this.effectEntries.set(effectId, { objects: [g], cancel });
+    return { promise, cancel };
+  }
+
+  /**
+   * Radial glow ring at (worldX, worldY). Expands from 0 to maxRadius with alpha fade.
+   */
+  glowRingAt(
+    effectId: string,
+    worldX: number,
+    worldY: number,
+    durationMs: number,
+    color: number,
+  ): { promise: Promise<IntentResult>; cancel: () => void } {
+    const existing = this.effectEntries.get(effectId);
+    existing?.cancel();
+
+    const g = this.scene.add.graphics();
+    g.setDepth(EFFECT_DEPTH);
+    g.setPosition(worldX, worldY);
+
+    const proxyAlpha = { value: 0.8 };
+    const proxyRadius = { value: 2 };
+    let settled = false;
+    let resolveFn!: (r: IntentResult) => void;
+    const promise = new Promise<IntentResult>((r) => {
+      resolveFn = r;
+    });
+
+    const tween = this.scene.tweens.add({
+      targets: [proxyAlpha, proxyRadius],
+      value: [0, 24],
+      duration: durationMs,
+      ease: DEFAULT_EASE,
+      onUpdate: () => {
+        g.clear();
+        g.lineStyle(2, color, proxyAlpha.value);
+        g.strokeCircle(0, 0, proxyRadius.value);
+      },
+      onComplete: () => {
+        if (settled) return;
+        settled = true;
+        g.destroy();
+        this.effectEntries.delete(effectId);
+        resolveFn({ status: 'completed' });
+      },
+    });
+
+    const cancel = () => {
+      if (settled) return;
+      settled = true;
+      tween.stop();
+      g.destroy();
+      this.effectEntries.delete(effectId);
+      resolveFn({ status: 'cancelled' });
+    };
+
+    this.effectEntries.set(effectId, { objects: [g], cancel });
+    return { promise, cancel };
+  }
+
+  /**
+   * 8-particle burst at (worldX, worldY). Particles scatter outward and fade.
+   */
+  particleBurstAt(
+    effectId: string,
+    worldX: number,
+    worldY: number,
+    durationMs: number,
+    color: number,
+  ): { promise: Promise<IntentResult>; cancel: () => void } {
+    const existing = this.effectEntries.get(effectId);
+    existing?.cancel();
+
+    const PARTICLE_COUNT = 8;
+    const graphics: Phaser.GameObjects.Graphics[] = [];
+    const tweens: Phaser.Tweens.Tween[] = [];
+    let completed = 0;
+    let settled = false;
+    let resolveFn!: (r: IntentResult) => void;
+    const promise = new Promise<IntentResult>((r) => {
+      resolveFn = r;
+    });
+
+    const cleanup = () => {
+      for (const pg of graphics) pg.destroy();
+      this.effectEntries.delete(effectId);
+    };
+
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const angle = (i / PARTICLE_COUNT) * Math.PI * 2;
+      const dist = 16 + Math.random() * 8;
+      const tx = worldX + Math.cos(angle) * dist;
+      const ty = worldY + Math.sin(angle) * dist;
+
+      const pg = this.scene.add.graphics();
+      pg.fillStyle(color, 1);
+      pg.fillCircle(0, 0, 2);
+      pg.setPosition(worldX, worldY);
+      pg.setDepth(EFFECT_DEPTH);
+      graphics.push(pg);
+
+      const tween = this.scene.tweens.add({
+        targets: pg,
+        x: tx,
+        y: ty,
+        alpha: 0,
+        duration: durationMs,
+        ease: PARTICLE_ALPHA_EASE,
+        onComplete: () => {
+          if (settled) return;
+          completed++;
+          if (completed === PARTICLE_COUNT) {
+            settled = true;
+            cleanup();
+            resolveFn({ status: 'completed' });
+          }
+        },
+      });
+      tweens.push(tween);
+    }
+
+    const cancel = () => {
+      if (settled) return;
+      settled = true;
+      for (const t of tweens) t.stop();
+      cleanup();
+      resolveFn({ status: 'cancelled' });
+    };
+
+    this.effectEntries.set(effectId, { objects: graphics, cancel });
+    return { promise, cancel };
+  }
+
+  // ─── private helpers ───────────────────────────────────────────────────────
+
+  private buildDoorGraphics(floorIndex: number): DoorEntry {
+    const originY = floorOriginY(floorIndex);
+    const door = roomDoor('review');
+    if (!door) {
+      // Fallback: create an empty graphics
+      const g = this.scene.add.graphics();
+      const entry: DoorEntry = { graphics: g };
+      this.doorEntries.set(floorIndex, entry);
+      return entry;
+    }
+    const g = this.scene.add.graphics();
+    g.fillStyle(0x6a4a8e, 1);
+    g.fillRect(door.x - DOOR_WIDTH / 2, originY + door.y, DOOR_WIDTH, TILE_SIZE);
+    g.setDepth(35); // above room overlays
+    const entry: DoorEntry = { graphics: g };
+    this.doorEntries.set(floorIndex, entry);
+    return entry;
+  }
+
+  private buildWallTintGraphics(floorIndex: number, roomId: RoomId): WallTintEntry {
+    const originY = floorOriginY(floorIndex);
+    const bounds = roomBounds(roomId);
+    const g = this.scene.add.graphics();
+    g.fillStyle(0x000000, 1);
+    g.fillRect(bounds.x1, originY + bounds.y1, bounds.x2 - bounds.x1, bounds.y2 - bounds.y1);
+    g.setAlpha(0);
+    g.setDepth(52); // above standard overlays
+    const key = `${floorIndex}:${roomId}`;
+    const entry: WallTintEntry = { graphics: g };
+    this.wallTintEntries.set(key, entry);
+    return entry;
   }
 
   // ─── private ───────────────────────────────────────────────────────────────
