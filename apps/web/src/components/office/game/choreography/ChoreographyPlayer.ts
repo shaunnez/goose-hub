@@ -207,7 +207,7 @@ export class ChoreographyPlayer {
 
       if (result.status === 'failed') {
         this.emit('choreo.intent-cancelled', lane, step, 'failed');
-        this.abortTimeline(lane, entry);
+        this.failTimeline(lane, entry);
         return;
       }
 
@@ -250,6 +250,34 @@ export class ChoreographyPlayer {
   /** Full abort (TTL exceeded). Invokes onAbort callback; NOT called on preemption. */
   private abortTimeline(lane: LaneId, entry: ActiveEntry): void {
     entry.timeline.onAbort?.();
+    this.emitCinematicCompleted(lane, entry.timeline);
+
+    if ((lane === 'primary' || lane === 'critical') && entry.timeline.ticketId != null) {
+      this.ctx.ticketLayer.release();
+    }
+
+    this.active[lane] = null;
+
+    if (lane === 'critical') {
+      this.criticalActive = false;
+      if (this.savedPrimary != null) {
+        const { timeline, stepIndex } = this.savedPrimary;
+        this.savedPrimary = null;
+        const resumeTimeline: Timeline = {
+          ...timeline,
+          id: `${timeline.id}-resume`,
+          steps: timeline.steps.slice(stepIndex),
+          startedAt: Date.now(),
+        };
+        this.queues.primary.unshift(resumeTimeline);
+      }
+    }
+
+    this.process();
+  }
+
+  /** Execution failure (intent returned failed). Does NOT invoke onAbort — that is TTL-only. */
+  private failTimeline(lane: LaneId, entry: ActiveEntry): void {
     this.emitCinematicCompleted(lane, entry.timeline);
 
     if ((lane === 'primary' || lane === 'critical') && entry.timeline.ticketId != null) {
@@ -419,23 +447,36 @@ function dispatchParallel(step: Intent, ctx: ChoreographyCtx): Promise<IntentRes
     let settled = false;
 
     for (const sub of subSteps) {
-      dispatchRun(sub, ctx).then((result) => {
-        if (settled) return;
-        if (result.status === 'cancelled' || result.status === 'failed') {
-          settled = true;
-          // Cancel all remaining sub-steps
-          for (const other of subSteps) {
-            if (other !== sub) dispatchCancel(other, ctx);
+      dispatchRun(sub, ctx)
+        .then((result) => {
+          if (settled) return;
+          if (result.status === 'cancelled' || result.status === 'failed') {
+            settled = true;
+            for (const other of subSteps) {
+              if (other !== sub) dispatchCancel(other, ctx);
+            }
+            // Propagate the actual status so failed sub-steps trigger abortTimeline.
+            resolve({ status: result.status });
+            return;
           }
-          resolve({ status: 'cancelled' });
-          return;
-        }
-        remaining--;
-        if (remaining === 0) {
+          remaining--;
+          if (remaining === 0) {
+            settled = true;
+            resolve({ status: 'completed' });
+          }
+        })
+        .catch(() => {
+          if (settled) return;
           settled = true;
-          resolve({ status: 'completed' });
-        }
-      });
+          for (const other of subSteps) {
+            try {
+              dispatchCancel(other, ctx);
+            } catch {
+              /* ignore */
+            }
+          }
+          resolve({ status: 'failed', reason: 'sub-step-threw' });
+        });
     }
   });
 }
