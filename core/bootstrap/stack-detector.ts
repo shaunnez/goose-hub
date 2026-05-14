@@ -98,7 +98,8 @@ async function tryDetectNode(repoPath: string): Promise<NodeStackInfo | null> {
     if (scriptsRaw.test) scripts.test = scriptsRaw.test;
     if (scriptsRaw.lint) scripts.lint = scriptsRaw.lint;
     if (scriptsRaw.typecheck) scripts.typecheck = scriptsRaw.typecheck;
-    if (scriptsRaw.e2e) scripts.e2e = scriptsRaw.e2e;
+    const e2eScript = scriptsRaw.e2e ?? scriptsRaw['test:e2e'];
+    if (e2eScript) scripts.e2e = e2eScript;
   }
 
   // Detect package manager: packageManager field > lockfile presence

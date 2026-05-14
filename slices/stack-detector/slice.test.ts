@@ -30,6 +30,16 @@ describe('stack-detector slice', () => {
     });
   });
 
+  describe('Node/TypeScript stack with test:e2e script alias', () => {
+    const fixturePath = path.join(FIXTURES, 'node-test-e2e');
+
+    it('maps test:e2e onto the e2e script field', async () => {
+      const info = await detectStack(fixturePath);
+      if (info.type !== 'node') throw new Error('Expected node stack');
+      expect(info.scripts.e2e).toBe('playwright test');
+    });
+  });
+
   describe('Python stack (pyproject.toml with pytest + ruff)', () => {
     const fixturePath = path.join(FIXTURES, 'python');
 
