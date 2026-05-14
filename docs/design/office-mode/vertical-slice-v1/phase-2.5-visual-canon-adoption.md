@@ -1,23 +1,28 @@
 # Office Mode Vertical Slice v1 — Phase 2.5: Visual Canon Adoption
 
-**Status:** Specified. Inserted retroactively between Phase 2 (merged) and
-Phase 3 (in flight). Implementation may run in parallel with Phase 3
-because the two phases touch disjoint code: Phase 2.5 changes art
-assets + procedural palette; Phase 3 changes sprite-class structure.
+**Status:** Specified. Authored retroactively after Phases 1–6 all
+merged. Phase 2.5 is therefore not "between Phase 2 and Phase 3" — it
+is a **retrofit pass** against the complete v1 stack. The functional
+layer is done; this phase brings the rendered surface in line with
+Board 06.
 
 **Goal:** Bring the rendered office in line with Board 06's visual
 canon. Today the procedural textures in `game/textures.ts` use an
-ad-hoc palette, and the PixelLab manifest in
-`scripts/generate-office-assets.ts` covers only 11 small assets. The
-result: the runtime office looks nothing like the design pack.
+ad-hoc palette, the PixelLab manifest in
+`scripts/generate-office-assets.ts` covers only 11 small assets, **and
+Phases 3–6 each added their own hardcoded hex literals into layers,
+HUD, choreography intents, and DOM panels.** A grep across
+`apps/web/src/components/office/` currently returns ~72 distinct hex
+codes — almost none of which are Board 06 canonical. The result: the
+runtime office looks unrelated to the design pack.
 
 Phase 2.5 closes that gap **without** introducing atmospheric polish
 (lighting, mode tinting, ambient props — those remain post-v1).
 
 This is a **visual fidelity** phase, not a behaviour or geometry
 phase. Coordinates, layers, anchors, state mapping — all unchanged.
-The same scene now just **renders** with the canonical palette and a
-richer sprite catalogue.
+The same scene now just **renders** with the canonical palette across
+every surface Phases 1–6 ship.
 
 ---
 
@@ -28,20 +33,25 @@ richer sprite catalogue.
 - Replace the ad-hoc palette in `apps/web/src/components/office/game/textures.ts`
   with Board 06's canonical palette. Procedural textures regenerate
   to match.
+- **Sweep every hex literal under `apps/web/src/components/office/`**
+  and replace with imports from `textures.ts:PALETTE` /
+  `ROLE_TINTS` / `CINEMATIC_TINTS` (new) / `HUD_TINTS` (new). See
+  §6 for the file-by-file inventory of current drift.
 - Expand the PixelLab manifest in `scripts/generate-office-assets.ts`
-  to cover the v1 sprite catalogue (~30 entries). Bake Board 06 hex
-  codes into every prompt so PixelLab outputs land in the canonical
-  palette.
-- Extend `asset-loader.ts`'s probe manifest to cover every new key.
+  to mirror the actual `TEXTURE_KEYS` surface plus a small set of
+  new keys that the v1 scene actively needs (frosted walls, ticket
+  card variants, scout desk). Bake Board 06 hex codes into every
+  prompt so PixelLab outputs land in the canonical palette.
+- Extend `asset-loader.ts`'s probe manifest to mirror `TEXTURE_KEYS`
+  exactly (set equality test in `slice.test.ts`).
 - Regenerate the bundle (`pnpm gen:office-assets`), commit the PNGs
-  to `apps/web/public/office/`.
+  to `apps/web/public/office/`. (§9.1 sandbox exception preserved.)
 - Manual verification: dev-server office view matches Board 02 + Board
-  06 references at a glance.
+  06 references at a glance, including HUD chrome and cinematic
+  particles / pulses / glows.
 - Update `apps/web/src/components/office/README.md` to point at the
-  Board 06 palette as the source of truth for tints.
-- (Optional) Update Board 06's design-spec to add any palette
-  refinements discovered during regeneration. Not required for the
-  PR; if you do it, single ADR entry.
+  Board 06 palette as the source of truth for **all** tints, not just
+  per-role.
 
 ### Out of scope (post-v1)
 
@@ -51,16 +61,17 @@ richer sprite catalogue.
 - Animated states (sprite-sheet walk cycles, idle bobs, talking
   mouth, working hand). The slice continues to render single-frame
   sprites that slide.
-- Room-specific palette variants beyond what Board 02 calls out
-  (frosted-blue QA, frosted-grey Review). No per-room mood lighting.
+- Per-room mood lighting (Phase 2.5 keeps Board 02's frosted-blue QA
+  and frosted-grey Review tints; no other room-specific moods).
 - TDD-heartbeat glyphs.
 - Tool-call micro-animations.
-- HUD overlays (counters, dials, feed) — Phase 6.
-- Cinematic-specific particles / glow rings — generated during Phase 5
-  alongside the cinematic that uses them, so prompts can be tuned for
-  timing/feel.
 - New behaviour, new layers, new event flows. Phase 2.5 is render
   fidelity only.
+- New textures Phase 6 chose to render as `Phaser.GameObjects.Text`
+  or `Phaser.GameObjects.Graphics` rather than as a PNG (retry
+  counter, round counter, score dial, banner frame, done-day badge).
+  Phase 2.5 repalettes their text / fill colours but does not
+  introduce new PNG assets for them.
 
 If you find yourself touching anything in "out of scope," stop.
 
@@ -71,73 +82,101 @@ If you find yourself touching anything in "out of scope," stop.
 Phase 2 adopted Board 02's spatial canon (6 rooms on a 1280×384
 floor). That work was correct geometry but used whatever colours the
 procedural texture generator already produced. Board 06 — the visual
-system spec — was never enforced in code.
+system spec — was never enforced in code, and each subsequent phase
+added its own hardcoded literals.
 
-Specifically:
+Specifically (state of `claude/milestone-17-setup-BRII1` at time of
+authoring):
 
 - `textures.ts:PALETTE` uses values like `floor: 0x2a2333`, `wall:
   0x4a3a5e`. Board 06 specifies `Floor #3A3D5C`, `Wall #2B2D42`. No
   cross-reference.
 - The PixelLab manifest in `generate-office-assets.ts` is 11 entries:
-  floor tiles, wall, desk, stairs, 6 indicators. Missing: persona
-  body sprite, ticket card, scroll variant, envelope variant, door
-  frames, slot frames, frosted walls (QA / Review), shelf back,
-  scout desk, QualityScore dial frame, retry-counter frame,
-  banner / queue card tiers.
+  floor tiles, wall, desk, stairs, 6 indicators. `TEXTURE_KEYS` in
+  `textures.ts` has 17 entries; 6 keys (ticket / queueStackMany /
+  ticketGlow / ticketScroll / ticketEnvelope / spriteBase) fall
+  through to procedural with no PNG covering them.
 - Prompts in the manifest do not reference Board 06 hex codes, so
   even when assets are generated they drift from the canon.
+- Phase 3 (PersonaLayer + TicketLayer) and Phase 5 (cinematic
+  intents) added texture keys without extending the manifest.
+- Phase 5 cinematic intents hardcode particle / pulse / glow colours
+  (`0xff4444`, `0x00ff88`, `0x88aaff`, `0xff6666`, `0x88ffaa`) — none
+  Board 06 canonical.
+- Phase 6 (`HudLayer`, `HudFeed`, `QueuePanel`) hardcodes text and
+  background colours (`#ffd700`, `#c7b8ff`, `#1a162299`,
+  `#1a1622ee`, `#9ca3af`, `#2a2333`, `#4a3a5e`, `#ffffff`,
+  `#00000066`, `0xffffff`) — none Board 06 canonical.
 
-The result is a working scene that looks unrelated to the design pack
-the user is reviewing. Closing this gap before Phase 3 visual work
-lands means every later cinematic animates against canonical art.
+A grep across `apps/web/src/components/office/` for `0xRRGGBB` or
+`#RRGGBB(AA)?` patterns currently returns ~72 distinct hex codes.
+Phase 2.5 collapses that surface to the 25 enumerated palette
+entries in §4 + §5.3 + the new §6.
+
+Closing this gap means the running office finally reads as a Board 02
++ Board 06 implementation. Without it, every later visual work
+(Boards 09–12 atmospheric polish, future zoom modes) animates against
+a non-canonical baseline.
 
 ---
 
 ## 3. Target file structure (after Phase 2.5)
 
+The PNG set is determined by `TEXTURE_KEYS` in
+`apps/web/src/components/office/game/textures.ts`, not by speculation.
+Phase 2.5 adds **three** new keys (frosted walls + scout desk) to
+support Board 02's already-declared room semantics. Phase 6 chose to
+render counters / dials / badges as `Phaser.GameObjects.Text` /
+`Graphics` rather than as PNGs; Phase 2.5 honours that choice and does
+not add PNG assets for them.
+
 ```
 apps/web/
   public/office/                       # PNGs land here when pnpm gen runs
-    floor-tile.png                     # existing key set, regenerated with palette
-    floor-tile-alt.png
-    wall-tile.png
-    wall-frosted-blue.png              # NEW — QA wall variant
-    wall-frosted-grey.png              # NEW — Review wall variant
-    desk.png
-    desk-lamp-on.png                   # NEW — phase 4/5 desk lamp on state
-    desk-lamp-off.png                  # NEW — desk lamp off
-    door-closed.png                    # NEW — generic door frame, closed
-    door-open.png                      # NEW — generic door frame, open
-    slot-frame.png                     # NEW — slot opening frame
-    shelf-back.png                     # NEW — Done shelf back wall
-    scout-desk.png                     # NEW — Library scout desk
-    score-dial-frame.png               # NEW — QualityScore dial face
-    score-dial-needle.png              # NEW — dial needle (Phase 6+)
-    retry-counter-frame.png            # NEW — retry counter housing
-    banner-frame.png                   # NEW — banner cell border (optional; Text+rect ok)
-    stairs.png
-    persona-body-base.png              # NEW — goose body (tinted per role at runtime)
-    persona-head-base.png              # NEW — goose head (tinted per role)
-    ticket-card.png                    # NEW — default ticket sprite (replaces phase-3 procedural)
-    ticket-scroll.png                  # NEW — scroll variant (Phase 5 uses)
-    ticket-envelope.png                # NEW — envelope variant (Phase 5 uses)
-    queue-stack-1.png                  # NEW — depth tier 1
-    queue-stack-2.png                  # NEW — tier 2
-    queue-stack-3.png                  # NEW — tier 3
-    queue-stack-many.png               # NEW — tier 4
-    indicator-speech.png               # existing
-    indicator-thought.png              # existing
-    indicator-question.png             # existing
-    indicator-coffee.png               # existing
-    indicator-bang.png                 # existing
-    indicator-check.png                # existing
+    # — mirrors TEXTURE_KEYS exactly (set equality enforced by test) —
+    floor-tile.png                     # key: floorTile          (existing, regenerated)
+    floor-tile-alt.png                 # key: floorTileAlt       (existing, regenerated)
+    wall-tile.png                      # key: wallTile           (existing, regenerated)
+    desk.png                           # key: desk               (existing, regenerated)
+    stairs.png                         # key: stairs             (existing, regenerated)
+    sprite-base.png                    # key: spriteBase         (NEW — was procedural)
+    indicator-speech.png               # key: indicatorSpeech    (existing, regenerated)
+    indicator-thought.png              # key: indicatorThought   (existing, regenerated)
+    indicator-question.png             # key: indicatorQuestion  (existing, regenerated)
+    indicator-coffee.png               # key: indicatorCoffee    (existing, regenerated)
+    indicator-bang.png                 # key: indicatorBang      (existing, regenerated)
+    indicator-check.png                # key: indicatorCheck     (existing, regenerated)
+    ticket.png                         # key: ticket             (NEW — was procedural)
+    queue-stack-many.png               # key: queueStackMany     (NEW — was procedural)
+    ticket-glow.png                    # key: ticketGlow         (NEW — was procedural)
+    ticket-scroll.png                  # key: ticketScroll       (NEW — was procedural)
+    ticket-envelope.png                # key: ticketEnvelope     (NEW — was procedural)
+    # — three new keys added by Phase 2.5 (declared in TEXTURE_KEYS too) —
+    wall-frosted-blue.png              # key: wallFrostedBlue    (NEW key; QA chamber)
+    wall-frosted-grey.png              # key: wallFrostedGrey    (NEW key; Review chamber)
+    scout-desk.png                     # key: scoutDesk          (NEW key; Library)
   src/components/office/
-    README.md                           # ADJUSTED — point at Board 06 + this doc
+    README.md                           # ADJUSTED — Board 06 palette as source of truth
     game/
-      asset-loader.ts                   # ADJUSTED — probe manifest expanded to ~30 keys
-      textures.ts                       # ADJUSTED — PALETTE → Board 06 hex codes
+      textures.ts                       # ADJUSTED — PALETTE → Board 06 + new keys
+      asset-loader.ts                   # ADJUSTED — pngManifest() ≡ TEXTURE_KEYS
+      layers/
+        HudLayer.ts                     # ADJUSTED — text/fill colours from HUD_TINTS
+        RoomLayer.ts                    # ADJUSTED — frosted-wall tints from PALETTE
+        PersonaLayer.ts                 # ADJUSTED — tints via ROLE_TINTS
+      choreography/
+        cinematics/investigationWave.ts # ADJUSTED — scout glow from CINEMATIC_TINTS
+        cinematics/mergeCelebration.ts  # ADJUSTED — green pulse/particles from CINEMATIC_TINTS
+        cinematics/qaFailed.ts          # ADJUSTED — red pulse from CINEMATIC_TINTS
+        intents/corridorPulse.ts        # ADJUSTED — pulse colour from CINEMATIC_TINTS
+        intents/glowRing.ts             # ADJUSTED — default tint from CINEMATIC_TINTS
+        intents/particleBurst.ts        # ADJUSTED — default tint from CINEMATIC_TINTS
+        intents/spawnVerdictScroll.ts   # ADJUSTED — scroll tint from CINEMATIC_TINTS
+    components/
+      HudFeed.tsx                       # ADJUSTED — colours via HUD_TINTS
+      QueuePanel.tsx                    # ADJUSTED — colours via HUD_TINTS
 scripts/
-  generate-office-assets.ts             # ADJUSTED — MANIFEST expanded to ~30 specs;
+  generate-office-assets.ts             # ADJUSTED — MANIFEST mirrors TEXTURE_KEYS;
                                         # every prompt embeds Board 06 hex codes
 docs/design/office-mode/
   vertical-slice-v1/
@@ -145,9 +184,10 @@ docs/design/office-mode/
     phase-2.5-visual-canon-adoption.md  # this file
 ```
 
-No new modules. No code architecture change. Existing `asset-loader.ts`
-auto-prefers PNGs when present (per its current code path), so the
-runtime picks up new assets without scene changes.
+Total: 20 PNGs (17 mirroring existing `TEXTURE_KEYS` + 3 new keys).
+No new code modules. No new architecture. Existing `asset-loader.ts`
+auto-prefers PNGs when present, so the runtime picks up new assets on
+restart.
 
 ---
 
@@ -186,11 +226,19 @@ derivation to:
 | `wallTop` | `0x3B3D55`       | `wall + 12% L` from `#2B2D42`         | 1-px highlight along wall north edge |
 | `deskTop` | `0x85694F`       | `desk + 12% L` from `#6B4F3B`         | desk surface highlight           |
 
-Do **not** invent new base colours. Anything outside the 8 canonical
-entries (§4.0) + the 3 derived shades (§4.1) + the 2 derived blends
-(§4.2) + the 12 role tints (§5.3) is a palette drift bug. **Total
-allowable palette surface: 25 hex codes**, all enumerated in this
-document.
+Do **not** invent new base colours. The full allowable palette
+surface is enumerated across §4 + §5.3 + §5.4 + §5.5:
+
+> **25 opaque hex codes** = 8 canonical (§4.0) + 3 derived shades
+> (§4.1) + 2 derived blends (§4.2) + 12 role tints (§5.3) + 0 new
+> opaque in §5.4 (cinematic; all bindings reuse canonical) + 0 new
+> opaque in §5.5 (HUD; all bindings reuse canonical).
+>
+> Plus **3 allow-listed alpha overlays** (§5.5) for semi-transparent
+> DOM panel backgrounds.
+>
+> Total surface: **28 distinct codes**, all enumerated in this
+> document. Anything else is a palette drift bug.
 
 ### 4.2 Derived blends — frosted wall variants (2 entries)
 
@@ -207,7 +255,7 @@ rooms. They are derived (canonical-blends), not free-choice colours.
 
 ---
 
-## 5. PixelLab manifest expansion
+## 5. PixelLab manifest + palette catalogue extensions
 
 `scripts/generate-office-assets.ts:MANIFEST` grows from 11 to ~30
 entries. Each new entry follows the same pattern as existing ones —
@@ -228,48 +276,42 @@ pixel art, <size> px
 PixelLab respects palette anchors well in practice; without them the
 generator drifts.
 
-### 5.2 New manifest entries
+### 5.2 Manifest entries (mirrors `TEXTURE_KEYS`)
 
-Suggested set. Adjust naming to match `TEXTURE_KEYS` in `textures.ts`.
+Exactly one entry per `TEXTURE_KEYS` entry. 17 existing keys + 3 new
+(§3) = **20 entries**. File names must match `asset-loader.ts`'s
+probe URLs.
 
-| File                       | Size  | Prompt seed                                                                                  |
-| -------------------------- | ----- | -------------------------------------------------------------------------------------------- |
-| floor-tile.png             | 16    | "top-down dark navy office carpet tile, seamless, palette: floor #3A3D5C, pixel art, 16×16" |
-| floor-tile-alt.png         | 16    | "top-down dark navy office carpet tile, slightly lighter alt stripe, palette: #42466A, pixel art, 16×16" |
-| wall-tile.png              | 16    | "top-down purple wall tile with shadow at base, palette: wall #2B2D42, pixel art, 16×16"   |
-| wall-frosted-blue.png      | 16    | "top-down translucent frosted-blue wall tile, palette: #3F6B80 with cyan #6FE7FF inner glow, pixel art, 16×16" |
-| wall-frosted-grey.png      | 16    | "top-down translucent frosted purple-grey wall tile, palette: #473A55 with hint of purple #D68FD6, pixel art, 16×16" |
-| desk.png                   | 32    | "top-down brown wood office desk with cyan glowing monitor screen, palette: desk #6B4F3B, monitor #6FE7FF, pixel art, 32×24" |
-| desk-lamp-on.png           | 16    | "small amber desk lamp glowing warm light, palette: amber #F2CC8F over wood #6B4F3B, pixel art, 16×16" |
-| desk-lamp-off.png          | 16    | "small dim desk lamp, off, palette: muted wood #6B4F3B, pixel art, 16×16"                  |
-| door-closed.png            | 32    | "top-down doorframe in purple wall, closed door, palette: wall #2B2D42, accent #6FE7FF, pixel art, 32×16" |
-| door-open.png              | 32    | "top-down doorframe in purple wall, doorway open showing interior, palette: wall #2B2D42, floor #3A3D5C inside, pixel art, 32×16" |
-| slot-frame.png             | 32    | "top-down narrow rectangular wall slot opening for cards, palette: wall #2B2D42, cyan inner edge #6FE7FF, pixel art, 32×16" |
-| shelf-back.png             | 80    | "top-down wall-mounted wooden shelf back with 5 slots, palette: wood #6B4F3B over wall #2B2D42, pixel art, 80×16" |
-| scout-desk.png             | 24    | "small top-down library reading desk, modest pixel art, palette: wood #6B4F3B on floor #3A3D5C, 24×16" |
-| score-dial-frame.png       | 32    | "top-down circular gauge dial with tick marks, no needle, palette: brass over wall #2B2D42, fail red #FF6B6B → amber #F2CC8F → success green #8BD17C gradient ticks, pixel art, 32×32" |
-| score-dial-needle.png      | 32    | "small thin gauge needle pointing up, palette: cyan #6FE7FF over transparent background, pixel art, 32×32" |
-| retry-counter-frame.png    | 24    | "small rectangular numeric counter display housing, palette: wall #2B2D42 with fail red #FF6B6B border, pixel art, 24×16" |
-| banner-frame.png           | 64    | "horizontal banner sign frame, palette: wall #2B2D42 with cyan #6FE7FF edge, pixel art, 64×24" |
-| stairs.png                 | 32    | (existing — keep)                                                                            |
-| persona-body-base.png      | 16    | "top-down adorable cartoon goose body, white feathers, palette: cream + soft shadow on floor #3A3D5C, pixel art, 16×16, transparent background" |
-| persona-head-base.png      | 16    | "top-down adorable cartoon goose head with orange beak, palette: white feathers + amber #F2CC8F beak, pixel art, 16×16, transparent background" |
-| ticket-card.png            | 16    | "small folded paper ticket card with corner clip, palette: amber #F2CC8F card with cyan #6FE7FF accent, pixel art, 16×16, transparent background" |
-| ticket-scroll.png          | 16    | "small rolled scroll of paper, palette: fail red #FF6B6B with parchment, pixel art, 16×16, transparent background" |
-| ticket-envelope.png        | 16    | "small sealed envelope with wax seal, palette: cream paper with cyan #6FE7FF wax seal, pixel art, 16×16, transparent background" |
-| queue-stack-1.png          | 16    | "single small paper card lying on floor, palette: amber #F2CC8F, pixel art, 16×16, transparent" |
-| queue-stack-2.png          | 16    | "small stack of 2 paper cards, palette: amber #F2CC8F, pixel art, 16×16, transparent"     |
-| queue-stack-3.png          | 16    | "small stack of 3 paper cards, palette: amber #F2CC8F, pixel art, 16×16, transparent"     |
-| queue-stack-many.png       | 16    | "small stack of 4+ paper cards with subtle red overflow tint, palette: amber #F2CC8F + fail red #FF6B6B edge, pixel art, 16×16, transparent" |
-| indicator-speech.png       | 16    | (existing — keep, regenerate with palette anchor for consistency)                          |
-| indicator-thought.png      | 16    | (existing — keep, regenerate)                                                              |
-| indicator-question.png     | 16    | (existing — keep, regenerate)                                                              |
-| indicator-coffee.png       | 16    | (existing — keep, regenerate)                                                              |
-| indicator-bang.png         | 16    | (existing — keep, regenerate)                                                              |
-| indicator-check.png        | 16    | (existing — keep, regenerate)                                                              |
+| File                       | Size  | TEXTURE_KEYS key       | Prompt seed                                                                                                                              |
+| -------------------------- | ----- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| floor-tile.png             | 16    | `floorTile`            | "top-down dark navy office carpet tile, seamless, palette: floor #3A3D5C, pixel art, 16×16"                                              |
+| floor-tile-alt.png         | 16    | `floorTileAlt`         | "top-down dark navy office carpet tile, slightly lighter alt stripe, palette: floor #3A3D5C with subtle stripe #42466A, pixel art, 16×16" |
+| wall-tile.png              | 16    | `wallTile`             | "top-down purple wall tile with shadow at base, palette: wall #2B2D42, pixel art, 16×16"                                                 |
+| desk.png                   | 32    | `desk`                 | "top-down brown wood office desk with cyan glowing monitor screen, palette: desk #6B4F3B, monitor #6FE7FF, pixel art, 32×24"             |
+| stairs.png                 | 32    | `stairs`               | "top-down pixel art staircase with wooden steps, palette: wood #6B4F3B over wall #2B2D42, pixel art, 32×32"                              |
+| sprite-base.png            | 16    | `spriteBase`           | "top-down adorable cartoon goose, white feathers, orange beak, palette: cream + amber #F2CC8F beak + soft shadow on floor #3A3D5C, pixel art, 16×16, transparent background" |
+| indicator-speech.png       | 16    | `indicatorSpeech`      | "pixel art white speech bubble with three small black dots, palette: white over wall #2B2D42 outline, 14×16, transparent bg"             |
+| indicator-thought.png      | 16    | `indicatorThought`     | "pixel art white cloud thought bubble with trailing dot, palette: white over wall #2B2D42 outline, 14×16, transparent bg"                |
+| indicator-question.png     | 16    | `indicatorQuestion`    | "pixel art white speech bubble with bold black question mark, palette: white + wall #2B2D42 mark, 14×16, transparent bg"                 |
+| indicator-coffee.png       | 16    | `indicatorCoffee`      | "pixel art white coffee mug with steam wisps, palette: cream mug + amber #F2CC8F coffee + desk #6B4F3B base, 14×14, transparent bg"      |
+| indicator-bang.png         | 16    | `indicatorBang`        | "pixel art warning triangle with exclamation mark, palette: fail red #FF6B6B + white mark, 14×14, transparent bg"                        |
+| indicator-check.png        | 16    | `indicatorCheck`       | "pixel art circle with checkmark, palette: success green #8BD17C + white check, 14×14, transparent bg"                                   |
+| ticket.png                 | 16    | `ticket`               | "small folded paper ticket card with corner clip, palette: amber #F2CC8F card with cyan #6FE7FF accent, pixel art, 16×16, transparent bg" |
+| queue-stack-many.png       | 16    | `queueStackMany`       | "small stack of 4+ paper cards with subtle red overflow tint, palette: amber #F2CC8F + fail red #FF6B6B edge, pixel art, 16×16, transparent" |
+| ticket-glow.png            | 24    | `ticketGlow`           | "small soft glow ring effect, palette: monitor cyan #6FE7FF over transparent, pixel art, 24×24, transparent bg"                          |
+| ticket-scroll.png          | 16    | `ticketScroll`         | "small rolled scroll of paper, palette: fail red #FF6B6B with parchment cream, pixel art, 16×16, transparent bg"                         |
+| ticket-envelope.png        | 16    | `ticketEnvelope`       | "small sealed envelope with wax seal, palette: cream paper with cyan #6FE7FF wax seal, pixel art, 16×16, transparent bg"                 |
+| wall-frosted-blue.png      | 16    | `wallFrostedBlue` (NEW) | "top-down translucent frosted-blue wall tile, palette: wall #2B2D42 base with cyan #6FE7FF inner glow blended to #3F6B80, pixel art, 16×16" |
+| wall-frosted-grey.png      | 16    | `wallFrostedGrey` (NEW) | "top-down translucent frosted purple-grey wall tile, palette: wall #2B2D42 base with review purple #D68FD6 blend to #473A55, pixel art, 16×16" |
+| scout-desk.png             | 24    | `scoutDesk` (NEW)       | "small top-down library reading desk, modest pixel art, palette: desk #6B4F3B on floor #3A3D5C, 24×16"                                   |
 
-Total: ~30 assets. Hobby-tier PixelLab credit budget should be fine
-for a single run.
+Total: **20 assets**, one per declared `TEXTURE_KEYS` entry. Hobby-tier
+PixelLab credit budget should comfortably fit a single run.
+
+If a future slice (atmospheric polish, watchtower) declares more
+texture keys, that slice's spec extends both `TEXTURE_KEYS` and this
+manifest atomically. Phase 2.5 does not pre-allocate keys it doesn't
+intend to use.
 
 ### 5.3 Per-role persona tinting — enumerated extension (12 entries)
 
@@ -302,15 +344,107 @@ family, ±20° H, ±15% S, ±15% L). New hue families are forbidden.
 | retrospector     | `0xC084FC`    | neighbour of review purple            |
 | auditor          | `0xFBBF24`    | neighbour of amber (warmer)           |
 
-This table is the **only** carve-out from the canonical palette in
-Phase 2.5. Total allowable palette surface remains as stated in §4.1:
-8 canonical + 3 derived + 2 derived blends + 12 role tints = 25 hex
-codes, all enumerated in this document. Any per-role colour outside
-this table is a palette drift bug.
+This table is **one of three carve-outs** from the canonical palette in
+Phase 2.5. The other two (cinematic and HUD tints) are enumerated in
+§5.4 and §5.5. The full palette surface count is restated in §4.1
+once §5.4 and §5.5 are read.
 
 Codify in `textures.ts` as a single exported `ROLE_TINTS` constant.
 Replace any per-role colour usage in `textures.ts` or elsewhere with
 imports of this constant.
+
+### 5.4 Cinematic intent tints — enumerated extension (8 entries)
+
+Phase 5's intent modules (corridor pulse, particle burst, glow ring,
+verdict scroll, scout envelope) currently embed ad-hoc hex literals
+(`0x00ff88`, `0xff4444`, `0xff6666`, `0x88aaff`, `0x88ffaa`). These
+must move to a single exported `CINEMATIC_TINTS` constant in
+`textures.ts`, with every entry tied to a canonical hue or near
+neighbour (same constraint as §5.3).
+
+| Slot                         | Hex literal (TS) | Relationship to canonical             | Used by                                            |
+| ---------------------------- | ---------------- | ------------------------------------- | -------------------------------------------------- |
+| `pulseFail`                  | `0xFF6B6B`       | fail red (canonical, reused)          | `corridorPulse.ts`, `qaFailed.ts` red sweep        |
+| `pulseSuccess`               | `0x8BD17C`       | success green (canonical, reused)     | `mergeCelebration.ts` green pulse                  |
+| `glowRingDefault`            | `0x8BD17C`       | success green (canonical, reused)     | `glowRing.ts` default tint                         |
+| `glowRingFail`               | `0xFF6B6B`       | fail red (canonical, reused)          | `glowRing.ts` for qa-failed cinematic              |
+| `glowRingWave`               | `0x6FE7FF`       | monitor cyan (canonical, reused)      | `investigationWave.ts` convergence glow            |
+| `particleBurstDefault`       | `0x8BD17C`       | success green (canonical, reused)     | `particleBurst.ts` default tint (merge)            |
+| `verdictScrollFail`          | `0xFF6B6B`       | fail red (canonical, reused)          | `spawnVerdictScroll.ts` body                        |
+| `scoutEnvelopeSeal`          | `0x6FE7FF`       | monitor cyan (canonical, reused)      | `spawnScoutEnvelope.ts` wax seal                    |
+
+Every value is a verbatim canonical entry; the table is a **named
+binding**, not a colour extension. The point is to remove ad-hoc
+literals from intent code, not to introduce new hues. If a future
+cinematic needs a hue not in this table, extend `CINEMATIC_TINTS` by
+ADR — not by hardcoded literal.
+
+### 5.5 HUD tints — enumerated extension (5 entries)
+
+Phase 6's `HudLayer.ts`, `HudFeed.tsx`, and `QueuePanel.tsx` currently
+embed ad-hoc hex literals (`#ffd700`, `#c7b8ff`, `#1a162299`,
+`#1a1622ee`, `#9ca3af`, `#2a2333`, `#4a3a5e`, `#ffffff`, `#00000066`,
+`0xffffff`). Phase 2.5 collapses these to a single exported
+`HUD_TINTS` constant in `textures.ts` and one alpha overlay
+allow-list.
+
+| Slot                         | Hex literal (TS) / CSS string | Relationship to canonical            | Used by                                          |
+| ---------------------------- | ----------------------------- | ------------------------------------ | ------------------------------------------------ |
+| `hudBadgeText`               | `#F2CC8F`                     | amber (canonical, reused)            | retry / round / done-day badge text              |
+| `hudCounterText`             | `#D68FD6`                     | review purple (canonical, reused)    | round counter, score readout, queue badge        |
+| `hudCameraStateText`         | `#6FE7FF`                     | monitor cyan (canonical, reused)     | "FOLLOWING #N" camera-state text                 |
+| `hudSpotlight`               | `0x6FE7FF`                    | monitor cyan (canonical, reused)     | blocked-state spotlight arc                      |
+| `hudFeedLineText`            | `#F2CC8F`                     | amber (canonical, reused)            | event feed body text                             |
+
+**Alpha-overlay allow-list (background tints only — semi-transparent
+panels):**
+
+| Slot                | CSS string         | Notes                                                |
+| ------------------- | ------------------ | ---------------------------------------------------- |
+| `hudPanelBgDark`    | `#2B2D4299`        | wall canonical + `99` alpha (60%) — DOM panel bg     |
+| `hudPanelBgDarker`  | `#2B2D42EE`        | wall canonical + `EE` alpha (93%) — queue-panel bg   |
+| `hudShadowOverlay`  | `#00000066`        | pure black + `66` alpha (40%) — camera-text shadow   |
+
+Alpha overlays are limited to the three slots above. Anything else
+must be opaque and come from `PALETTE` / `ROLE_TINTS` /
+`CINEMATIC_TINTS` / `HUD_TINTS`. Total palette surface across this
+document:
+
+> **25 hex codes** = 8 canonical (§4.0) + 3 derived (§4.1) + 2
+> derived blends (§4.2) + 12 role tints (§5.3) + 0 new in §5.4 (all
+> bindings reuse canonical) + 0 new in §5.5 (all bindings reuse
+> canonical) + **3 alpha overlays** (above, allow-listed).
+
+Total = 25 opaque hex codes + 3 alpha overlays. Any other literal
+under `apps/web/src/components/office/` is a palette drift bug.
+
+### 5.6 Palette drift inventory (files to repaint)
+
+Concrete map of the current drift, file-by-file. Implementers should
+work through this list; the §10 grep test will fail until each is
+clean.
+
+| File                                                                                       | Drifting literals                                                                                  | Replace with                                                                                 |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `game/textures.ts`                                                                         | full `PALETTE` const + per-role `spriteXxx` keys                                                  | §4 + §5.3 rewrite                                                                            |
+| `game/layers/HudLayer.ts`                                                                  | `#ffd700`, `#c7b8ff`, `#1a162299`, `#ffffff`, `#00000066`, `0xffffff`                              | `HUD_TINTS.hudBadgeText / hudCounterText / hudCameraStateText / hudSpotlight`, `hudShadowOverlay`, `hudPanelBgDark` |
+| `components/HudFeed.tsx`                                                                   | `#c7b8ff`                                                                                          | `HUD_TINTS.hudFeedLineText` (`#F2CC8F`)                                                       |
+| `components/QueuePanel.tsx`                                                                | `#1a1622ee`, `#2a2333`, `#4a3a5e`, `#9ca3af`, `#c7b8ff`                                            | `HUD_TINTS.hudPanelBgDarker`, `PALETTE.wall`, `PALETTE.floor`, `HUD_TINTS.hudCounterText`     |
+| `game/choreography/cinematics/investigationWave.ts`                                         | `0x88aaff`                                                                                         | `CINEMATIC_TINTS.glowRingWave` (`0x6FE7FF`)                                                  |
+| `game/choreography/cinematics/mergeCelebration.ts`                                          | `0x00ff88`, `0x88ffaa`                                                                             | `CINEMATIC_TINTS.pulseSuccess` (`0x8BD17C`), `CINEMATIC_TINTS.particleBurstDefault`           |
+| `game/choreography/cinematics/qaFailed.ts`                                                  | `0xff4444`                                                                                         | `CINEMATIC_TINTS.pulseFail` (`0xFF6B6B`)                                                     |
+| `game/choreography/intents/corridorPulse.ts`                                                | `0xff4444`                                                                                         | `CINEMATIC_TINTS.pulseFail`                                                                  |
+| `game/choreography/intents/glowRing.ts`                                                     | `0x00ff88`                                                                                         | `CINEMATIC_TINTS.glowRingDefault`                                                            |
+| `game/choreography/intents/particleBurst.ts`                                                | `0x00ff88`                                                                                         | `CINEMATIC_TINTS.particleBurstDefault`                                                       |
+| `game/choreography/intents/spawnVerdictScroll.ts`                                           | `0xff6666`                                                                                         | `CINEMATIC_TINTS.verdictScrollFail`                                                          |
+| `game/layers/RoomLayer.ts`                                                                  | one-off literals for frosted-wall, banner backgrounds, etc. (audit during implementation)         | `PALETTE.qaWall`, `PALETTE.reviewWall`, `PALETTE.wall`, `PALETTE.bannerBg`                   |
+| `game/layers/PersonaLayer.ts`                                                               | any per-role / shadow literals not already going through `ROLE_TINTS`                              | `ROLE_TINTS[role]`                                                                            |
+
+The current full set of distinct hex literals under
+`apps/web/src/components/office/` (run `grep -rhoE '(0x[0-9a-fA-F]{6}|#[0-9a-fA-F]{6,8})' apps/web/src/components/office/ | sort -u`)
+is ~72. After Phase 2.5 it must be: the 25 enumerated opaque codes +
+the 3 allow-listed alpha overlays = 28 distinct, all imported from
+`textures.ts` or appearing only inside the four constant tables.
 
 ---
 
@@ -327,26 +461,32 @@ generated. Acceptance criteria assert exhaustive coverage (§9).
 
 ---
 
-## 7. `textures.ts` repalette
+## 7. `textures.ts` repalette + tint catalogue
 
-Three concrete edits:
+Five concrete edits:
 
-1. **Rewrite the `PALETTE` const** to the §4 hex values. Drop
-   per-role sprite colours from `PALETTE` into a separate
-   exported `ROLE_TINTS` const per §5.3.
-2. **Re-tune every procedural generator** to call the new palette
-   constants. Targets: floor tile, floor tile alt, wall tile, desk,
-   stairs, sprite base, six indicators, plus the Phase 3 ticket +
-   queue-stack textures already wired and the Phase 5 scroll /
-   envelope variants. Behaviour-preserving: same shape, same size,
-   new colours.
-3. **Add procedural fallbacks for new keys** introduced in §3 (door,
-   slot frame, frosted walls, shelf back, scout desk, dial frame,
-   etc.). Each fallback is a few `fillRect` calls — they need only
-   look "right enough" until the PixelLab PNG is dropped in. They
-   must not introduce non-palette colours.
+1. **Rewrite the `PALETTE` const** to the 13 entries enumerated in
+   §4 (8 canonical + 3 derived + 2 blends). Drop the per-role
+   `spriteXxx` keys.
+2. **Add `ROLE_TINTS`** as a separate exported const per §5.3 (12
+   entries).
+3. **Add `CINEMATIC_TINTS`** as a separate exported const per §5.4
+   (8 entries; all values reuse canonical hues).
+4. **Add `HUD_TINTS`** as a separate exported const per §5.5 (5
+   opaque entries + 3 allow-listed alpha-overlay CSS strings).
+5. **Re-tune every procedural generator** to call the new constants.
+   Targets: floor tile, floor tile alt, wall tile, desk, stairs,
+   sprite base, six indicators, ticket / queue-stack /
+   ticketGlow / ticketScroll / ticketEnvelope textures, plus
+   procedural fallbacks for the three new keys (`wallFrostedBlue`,
+   `wallFrostedGrey`, `scoutDesk`) added by Phase 2.5. Each fallback
+   uses palette constants exclusively. Behaviour-preserving: same
+   shape, same size, canonical colours.
 
-No new file, no new module. Single file rewrite.
+No new file, no new module. Single file rewrite — `textures.ts`.
+Every consumer of an old palette literal (HudLayer, HudFeed,
+QueuePanel, cinematic intents, etc.) imports the appropriate constant
+from this module per the §5.6 drift inventory.
 
 ---
 
@@ -355,26 +495,31 @@ No new file, no new module. Single file rewrite.
 Each step compiles independently if you stop after it. Run
 `pnpm test`, `pnpm typecheck`, `pnpm lint` after each.
 
-1. **Palette swap in `textures.ts`.** Replace the `PALETTE` const
-   with Board 06 hex values + 3 derived shades. Move per-role colours
-   to `ROLE_TINTS`. Update all generator call sites. Verify dev
-   server: existing scene re-renders in canonical palette; no key
-   missing.
-2. **Add procedural stubs for new texture keys** (doors, slot frames,
-   frosted walls, dial frame, shelf back, scout desk, etc.). Each is
-   a minimal `fillRect` placeholder using palette colours.
-3. **Expand `TEXTURE_KEYS`** in `textures.ts` to declare the new keys
-   (if not already there for phase-3/phase-5 use).
-4. **Expand `pngManifest()` in `asset-loader.ts`** to probe every new
-   key.
-5. **Expand `scripts/generate-office-assets.ts:MANIFEST`** to the ~30
+1. **Palette swap in `textures.ts`.** Replace `PALETTE` with the 13
+   entries from §4. Add `ROLE_TINTS` (§5.3), `CINEMATIC_TINTS` (§5.4),
+   `HUD_TINTS` (§5.5) as separate exported consts. Update all
+   existing procedural generator call sites to use the new constants.
+2. **Declare new `TEXTURE_KEYS`** entries for `wallFrostedBlue`,
+   `wallFrostedGrey`, `scoutDesk`. Add procedural fallbacks for them
+   in `textures.ts` using `PALETTE.qaWall`, `PALETTE.reviewWall`,
+   `PALETTE.desk` + `PALETTE.floor`.
+3. **Sweep drift inventory (§5.6).** Walk through each file listed
+   and replace each ad-hoc hex literal with the appropriate import.
+   Touch one file at a time; run tests after each. This is the
+   highest-leverage step — most of the visible "looks nothing like
+   the designs" problem is fixed here, before any PixelLab call.
+4. **Expand `pngManifest()` in `asset-loader.ts`** to mirror the
+   updated `TEXTURE_KEYS` (20 entries — see §5.2).
+5. **Expand `scripts/generate-office-assets.ts:MANIFEST`** to the 20
    specs in §5.2. Embed Board 06 hex codes in every prompt.
-6. **Run `pnpm gen:office-assets`** (requires `PIXELLAB_API_KEY`).
+6. **Run the grep acceptance test** locally (§9 sweep). It should
+   already pass at this point if step 3 was thorough.
+7. **Run `pnpm gen:office-assets`** (requires `PIXELLAB_API_KEY`).
    Sandbox / no-network sessions stop here; the work product is the
    updated manifest + procedural stubs.
-7. **Commit PNGs** to `apps/web/public/office/`. Each PNG is ≤ a few
+8. **Commit PNGs** to `apps/web/public/office/`. Each PNG is ≤ a few
    KB; the bundle is small.
-8. **Manual verification (§11).** Compare the running office to
+9. **Manual verification (§11).** Compare the running office to
    Board 02 + Board 06. If a generated asset is off-palette,
    regenerate the single asset with a tightened prompt — don't accept
    palette drift.
@@ -389,21 +534,35 @@ The PR is mergeable iff:
 - [ ] `pnpm typecheck` passes.
 - [ ] `pnpm lint` passes.
 - [ ] `office-click-through.spec.ts` passes in CI.
-- [ ] `textures.ts:PALETTE` contains exactly the 8 canonical hex codes
-      (§4.0) plus 3 derived shades (§4.1) plus 2 derived blends (§4.2).
-      No other base colours. (Role tints live separately in
-      `ROLE_TINTS` per §5.3.)
+- [ ] `textures.ts:PALETTE` contains exactly the 13 entries enumerated
+      in §4: 8 canonical (§4.0) + 3 derived shades (§4.1) + 2 derived
+      blends (§4.2).
 - [ ] `textures.ts:ROLE_TINTS` exists with exactly the 12 entries
-      enumerated in §5.3, and is the only source of per-role colour.
-      Grep returns no other per-role colour literals under
-      `apps/web/src/components/office/`.
-- [ ] `asset-loader.ts:pngManifest()` covers every key in
-      `TEXTURE_KEYS`. (Soft acceptance: a manifest-key/texture-key
-      diff test in `slice.test.ts`.)
-- [ ] `scripts/generate-office-assets.ts:MANIFEST` has ~30 entries
-      (range 25..35 acceptable as scope evolves).
-- [ ] Every PixelLab prompt embeds at least one Board 06 hex code.
-      (Soft acceptance: a unit test that scans the MANIFEST.)
+      enumerated in §5.3.
+- [ ] `textures.ts:CINEMATIC_TINTS` exists with exactly the 8 entries
+      enumerated in §5.4.
+- [ ] `textures.ts:HUD_TINTS` exists with exactly the 5 opaque entries
+      enumerated in §5.5, plus the 3 alpha-overlay entries declared in
+      the §5.5 allow-list table.
+- [ ] **Sweeping grep acceptance.** Running
+      `grep -rhoE '(0x[0-9a-fA-F]{6}|#[0-9a-fA-F]{6,8})' apps/web/src/components/office/ | sort -u`
+      returns **only** the 28 distinct codes enumerated across §4 +
+      §5.3–§5.5. No other hex literal appears anywhere under
+      `apps/web/src/components/office/`. **Soft acceptance: a unit
+      test in `slice.test.ts` runs this grep and asserts set equality
+      against the documented surface.**
+- [ ] Every file in the §5.6 drift inventory now imports its colours
+      from `textures.ts`. Spot-check: `HudLayer.ts`, `HudFeed.tsx`,
+      `QueuePanel.tsx`, `investigationWave.ts`,
+      `mergeCelebration.ts`, `qaFailed.ts`, `corridorPulse.ts`,
+      `glowRing.ts`, `particleBurst.ts`, `spawnVerdictScroll.ts`.
+- [ ] `asset-loader.ts:pngManifest()` keys ≡ `TEXTURE_KEYS` keys (set
+      equality test in `slice.test.ts`).
+- [ ] `scripts/generate-office-assets.ts:MANIFEST` has exactly one
+      entry per `TEXTURE_KEYS` entry (20 entries given §3 + 3 new
+      keys). Range 18..22 acceptable.
+- [ ] Every PixelLab prompt embeds at least one Board 06 hex code
+      (regex `#[0-9A-F]{6}`). Unit test in `slice.test.ts`.
 - [ ] **Conditional on §9.1 (no-network exception below).** All PNGs
       in `apps/web/public/office/` are committed and load without 404
       in the dev server (no console warnings about missing assets).
@@ -441,9 +600,18 @@ Surface this clearly in the PR body. Do not invent PNGs.
   asserts set equality against the §4 tables.
 - `ROLE_TINTS` covers every entry in `OFFICE_ROLES` (12 entries) and
   every value matches §5.3's enumerated table exactly.
+- `CINEMATIC_TINTS` contains exactly the 8 entries enumerated in §5.4.
+- `HUD_TINTS` contains exactly the 5 opaque + 3 alpha-overlay entries
+  enumerated in §5.5.
+- **Repo-wide hex sweep:** test runs the §9 grep and asserts the
+  result set equals the union of `PALETTE` ∪ `ROLE_TINTS` ∪
+  `CINEMATIC_TINTS` ∪ `HUD_TINTS`. 28 codes total. Test fails on any
+  new drift.
 - `pngManifest()` keys = `TEXTURE_KEYS` keys (set equality).
 - `generate-office-assets.ts:MANIFEST` entries each contain at least
   one Board 06 hex code in their prompt (regex over `#[0-9A-F]{6}`).
+- Every key in `TEXTURE_KEYS` appears as a MANIFEST entry's `file`
+  field (set equality across the two surfaces).
 
 ### E2E
 
@@ -474,8 +642,21 @@ Before opening the PR, in the dev server:
       depths.
 - [ ] Banner middle cell (mode badge) and right cell (hero ticket)
       remain readable on the new background.
+- [ ] **HUD overlays** (retry counter, round counter, score readout,
+      done-day badge, camera-state text, queue badges) render in
+      Board 06 palette — amber / review purple / cyan only, no
+      `#ffd700` or `#c7b8ff` drift.
+- [ ] **Choreography cinematics:** trigger qaFailed → corridor pulse
+      is `#FF6B6B` red, not `0xff4444`. Trigger mergeCelebration →
+      glow ring is `#8BD17C` green, not `0x00ff88`. Trigger
+      investigationWave → convergence glow is `#6FE7FF` cyan, not
+      `0x88aaff`.
+- [ ] **HudFeed and QueuePanel DOM panels** render with the §5.5
+      `HUD_TINTS` colours; backgrounds use the allow-listed alpha
+      overlays.
 - [ ] FloorIndicator + DeskDetailPanel still work; their existing CSS
-      colours are unchanged (DOM, not canvas).
+      colours are unchanged (DOM, not canvas, outside Phase 2.5's
+      sweep).
 
 If anything differs from the Board 02 reference image at a glance,
 regenerate or tighten the prompt — don't ratify drift in tests.
@@ -490,15 +671,20 @@ Stop and ask the human if any of the following occur:
   Surface the prompt; ask whether to tighten or to skip the asset
   (procedural fallback continues to render).
 - The PixelLab credit budget for the run is exceeded. The manifest is
-  ~30 entries; a single run should fit hobby tier. If multiple
+  ~20 entries; a single run should fit hobby tier. If multiple
   re-runs are needed, surface before continuing.
-- An asset visibly needs a new colour outside the 9+3 palette. That
-  is a Board 06 spec change; ADR + amend Board 06 first.
+- An asset visibly needs a new colour outside the 28-code surface
+  (§4 + §5.3 + §5.4 + §5.5). That is a Board 06 spec change; ADR +
+  amend Board 06 first, then revisit this doc.
+- A cinematic intent or HUD element visibly *needs* the ad-hoc colour
+  it currently uses (e.g. the existing yellow `#ffd700` reads better
+  than `HUD_TINTS.hudBadgeText` amber). Don't quietly re-introduce
+  drift; surface and adjust the binding in §5.4 / §5.5 with an ADR.
 - Animation / behaviour change feels necessary to make the new assets
   read correctly. It isn't. The slide-walks + single-frame sprites
   are deliberate. Surface.
-- The runtime starts hitting performance issues with ~30 loaded PNGs.
-  It won't (total bundle size is ~100 KB); if it does, that's a
+- The runtime starts hitting performance issues with ~20 loaded PNGs.
+  It won't (total bundle size is ~60 KB); if it does, that's a
   Phaser config issue, not a Phase 2.5 problem.
 
 ---
@@ -515,9 +701,13 @@ Restated:
   no idle bob, no talking mouth.
 - **No new behaviour or geometry.** Coordinates from `lib/rooms.ts`
   unchanged. State→room mapping unchanged. Event flows unchanged.
-- **No HUD overlays.** Phase 6.
-- **No cinematic-specific particles or glow rings** (those are
-  generated during Phase 5).
+  Lane / preemption / intent contracts unchanged.
+- **No new cinematic primitives or HUD elements.** Phase 2.5 only
+  repaints what Phases 3–6 already shipped.
+- **No new PNG assets for elements Phase 6 chose to render as
+  `Phaser.GameObjects.Text` / `Graphics`** — retry counter, round
+  counter, score dial, banner frame, done-day badge. Their *colours*
+  move to `HUD_TINTS`; their *renderable* stays Text/Graphics.
 - **No room-specific palette beyond the frosted variants** Board 02
   already requires.
 - **No new files or modules** beyond what §3 lists.
@@ -529,14 +719,25 @@ Restated:
 
 ## 14. What happens after Phase 2.5
 
-Phase 3 continues unchanged (it touches sprite *structure*, not
-sprite *appearance*; the new assets it spawns will already be in the
-canonical palette).
+Phases 1–6 are already merged. Phase 2.5 is the retrofit pass that
+makes the running office finally match the design pack. After it
+lands:
 
-Phases 4–6 unchanged.
+- The runtime office reads as a Board 02 + Board 06 implementation
+  at a glance. Every visible colour is one of 28 enumerated codes.
+- The 4 canonical cinematics (investigationWave, qaFailed,
+  reviewConverged, mergeCelebration) play out in canonical palette.
+- HUD overlays (queue badges, retry / round counters, score readout,
+  camera-state, done-day badge, event feed) read in canonical
+  palette.
+- Future visual slices (atmospheric polish from Boards 09–12, zoom
+  modes, watchtower, lobby, backstage corkboard) layer **on top** of
+  the canonical baseline rather than fighting drift.
+- The PixelLab manifest and the asset-loader probe agree on a single
+  authoritative key surface (`TEXTURE_KEYS`). New keys require
+  updating both atomically.
 
-Post-v1 atmospheric polish slice gets its own spec, consumes Boards
-09–12, and layers on top of the canonical palette this phase
-established.
+The slice's `README.md` exit criteria (§10) are met once Phase 2.5
+merges with all PNGs in place. **v1 is shippable at that point.**
 
 This plan only covers Phase 2.5.

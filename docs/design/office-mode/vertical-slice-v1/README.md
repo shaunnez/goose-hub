@@ -61,11 +61,12 @@ spec at `docs/design/office-mode/goose-hub-office-mode-design-pack/02-canonical-
 (Board 02). Phase 2 implementation landed in PR #770. Future phase docs
 should reference Board 02 for floor geometry rather than restating it.
 
-Phase 2.5 was inserted retroactively after Phases 1–2 merged. It closes
-the visual-fidelity gap that Board 02's geometry-only spec did not
-address: the runtime had been using an ad-hoc palette and an
-under-scoped PixelLab manifest. It may run in parallel with Phase 3
-because the two phases touch disjoint code.
+Phase 2.5 was authored retroactively after Phases 1–6 all merged. It
+closes the visual-fidelity gap that the geometry/runtime/HUD phases
+left open: every phase added its own ad-hoc hex literals, and Board
+06's palette was never enforced. Phase 2.5 sweeps the full
+`apps/web/src/components/office/` tree and collapses ~72 distinct
+hex codes down to 28 enumerated entries.
 
 Each phase doc is self-contained and consumable in isolation. They share
 the invariants listed in §6.
@@ -78,7 +79,7 @@ the invariants listed in §6.
 | ----- | -------------------------------- | -------------------------------------------------------- | ---------- |
 | 1     | Pure refactor                    | `FloorLayer`, `SpriteLayer` siblings; behaviour preserved | —          |
 | 2     | Rooms & anchors                  | `lib/rooms.ts`, 6-room single-floor geometry              | 1          |
-| 2.5   | Visual canon adoption            | Board 06 palette wired into `textures.ts`; PixelLab manifest expanded to ~30 sprites | 2 |
+| 2.5   | Visual canon adoption            | Board 06 palette enforced across all 13 office source files; new tint constants (CINEMATIC_TINTS, HUD_TINTS); PixelLab manifest mirrors TEXTURE_KEYS (20 sprites) | 1–6 merged |
 | 3     | Persona/ticket split             | `PersonaSprite`, `TicketSprite`, carry semantics          | 2          |
 | 4     | Event choreography               | `ChoreographyPlayer`, lanes, intent registry              | 3          |
 | 5     | Cinematics                       | 4 named cinematics: wave, qaFailed, reviewConverged, mergeCelebration | 4 |
@@ -89,11 +90,9 @@ land before phase 4 because it consumes the choreography player; phase 4
 cannot land before phase 3 because it dispatches intents to the persona /
 ticket sprite contracts.
 
-Phase 2.5 has no downstream dependency — Phases 3–6 animate against
-whatever assets exist, and the procedural fallback in `textures.ts`
-keeps everything renderable if Phase 2.5 hasn't landed. Running it
-before Phase 5 is strongly recommended so cinematic visuals match the
-canon out of the gate.
+Phase 2.5 is retroactive against the full v1 stack — Phases 1–6 all
+shipped before Phase 2.5 was authored. It is the final step before v1
+is shippable: see phase-2.5 doc §14.
 
 ---
 
