@@ -122,10 +122,10 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 ### Role Variants
 - [x] goose_triage.png
 - [x] goose_investigator.png
-- [ ] goose_dev.png
-- [ ] goose_qa.png
-- [ ] goose_reviewer.png
-- [ ] goose_scout.png
+- [x] goose_dev.png
+- [x] goose_qa.png
+- [x] goose_reviewer.png
+- [x] goose_scout.png
 - [ ] goose_ops.png
 
 ### Overlay Variants
