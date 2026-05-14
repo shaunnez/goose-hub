@@ -84,10 +84,10 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 ### QA
 - [x] qa_station.png
 - [x] retry_counter_frame.png
-- [ ] verdict_scroll_printer.png
-- [ ] qa_input_slot.png
-- [ ] qa_output_slot.png
-- [ ] qa_warning_light.png
+- [x] verdict_scroll_printer.png
+- [x] qa_input_slot.png
+- [x] qa_output_slot.png
+- [x] qa_warning_light.png
 
 ### Review
 - [ ] review_table.png
