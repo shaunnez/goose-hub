@@ -67,6 +67,36 @@ export const TEXTURE_KEYS = {
   ticketEnvelope: 'office:ticket-envelope',
 } as const;
 
+interface TextureDisplaySize {
+  width: number;
+  height: number;
+}
+
+const OFFICE_TEXTURE_DISPLAY_SIZES: Record<string, TextureDisplaySize> = {
+  [TEXTURE_KEYS.floorTile]: { width: 16, height: 16 },
+  [TEXTURE_KEYS.floorTileAlt]: { width: 16, height: 16 },
+  [TEXTURE_KEYS.wallTile]: { width: 16, height: 16 },
+  [TEXTURE_KEYS.desk]: { width: 32, height: 24 },
+  [TEXTURE_KEYS.stairs]: { width: 32, height: 32 },
+  [TEXTURE_KEYS.indicatorSpeech]: { width: 14, height: 16 },
+  [TEXTURE_KEYS.indicatorThought]: { width: 14, height: 16 },
+  [TEXTURE_KEYS.indicatorQuestion]: { width: 14, height: 16 },
+  [TEXTURE_KEYS.indicatorCoffee]: { width: 14, height: 14 },
+  [TEXTURE_KEYS.indicatorBang]: { width: 14, height: 14 },
+  [TEXTURE_KEYS.indicatorCheck]: { width: 14, height: 14 },
+};
+
+export function applyOfficeTextureDisplaySize(
+  image: Phaser.GameObjects.Image,
+  textureKey: string,
+): Phaser.GameObjects.Image {
+  const size = OFFICE_TEXTURE_DISPLAY_SIZES[textureKey];
+  if (size != null) {
+    image.setDisplaySize(size.width, size.height);
+  }
+  return image;
+}
+
 export function indicatorTextureKey(kind: IndicatorKind): string {
   switch (kind) {
     case 'speech':

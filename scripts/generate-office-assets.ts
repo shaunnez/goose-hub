@@ -36,8 +36,9 @@ interface AssetSpec {
   file: string;
   /** Pixel-flux text prompt. */
   prompt: string;
-  /** Square dimension in pixels. */
-  size: 16 | 24 | 32 | 48 | 64;
+  /** Intended in-game texture size. PixelLab requests are clamped to its 32x32 minimum. */
+  width: number;
+  height: number;
 }
 
 const MANIFEST: AssetSpec[] = [
@@ -45,63 +46,82 @@ const MANIFEST: AssetSpec[] = [
   {
     file: 'floor-tile.png',
     prompt: 'top-down dark purple office carpet tile, seamless, pixel art, 16x16',
-    size: 16,
+    width: 16,
+    height: 16,
   },
   {
     file: 'floor-tile-alt.png',
     prompt: 'top-down dark indigo office carpet tile, slightly lighter, seamless, pixel art, 16x16',
-    size: 16,
+    width: 16,
+    height: 16,
   },
   {
     file: 'wall-tile.png',
     prompt: 'top-down purple office wall tile with shadow at base, pixel art, 16x16',
-    size: 16,
+    width: 16,
+    height: 16,
   },
   // Furniture
   {
     file: 'desk.png',
     prompt: 'top-down pixel art office desk with monitor showing blue screen, brown wood, 32x24',
-    size: 32,
+    width: 32,
+    height: 24,
   },
   {
     file: 'stairs.png',
     prompt: 'top-down pixel art staircase with wooden steps and dark rail, isometric hint, 32x32',
-    size: 32,
+    width: 32,
+    height: 32,
   },
   // Indicators (speech / thought / question / coffee / bang / check)
   {
     file: 'indicator-speech.png',
     prompt: 'pixel art white speech bubble with three small black dots, 14x16, transparent bg',
-    size: 16,
+    width: 14,
+    height: 16,
   },
   {
     file: 'indicator-thought.png',
     prompt: 'pixel art white cloud thought bubble with trailing dot, 14x16, transparent bg',
-    size: 16,
+    width: 14,
+    height: 16,
   },
   {
     file: 'indicator-question.png',
     prompt: 'pixel art white speech bubble with bold black question mark, 14x16, transparent bg',
-    size: 16,
+    width: 14,
+    height: 16,
   },
   {
     file: 'indicator-coffee.png',
     prompt: 'pixel art white coffee mug with steam wisps, brown coffee inside, 14x14, transparent bg',
-    size: 16,
+    width: 14,
+    height: 14,
   },
   {
     file: 'indicator-bang.png',
     prompt: 'pixel art red warning triangle with white exclamation mark, 14x14, transparent bg',
-    size: 16,
+    width: 14,
+    height: 14,
   },
   {
     file: 'indicator-check.png',
     prompt: 'pixel art green circle with white checkmark, 14x14, transparent bg',
-    size: 16,
+    width: 14,
+    height: 14,
   },
 ];
 
+function pixellabImageSize(spec: AssetSpec): { width: number; height: number } {
+  return {
+    width: Math.max(spec.width, 32),
+    height: Math.max(spec.height, 32),
+  };
+}
+
 async function generate(spec: AssetSpec, apiKey: string): Promise<Uint8Array> {
+  const imageSize = pixellabImageSize(spec);
   // Pixflux endpoint per https://www.pixellab.ai/docs/tools/create-image-flux
   const res = await fetch(`${API_BASE}/generate-image-pixflux`, {
     method: 'POST',
@@ -111,7 +131,7 @@ async function generate(spec: AssetSpec, apiKey: string): Promise<Uint8Array> {
     },
     body: JSON.stringify({
       description: spec.prompt,
-      image_size: { width: spec.size, height: spec.size },
+      image_size: imageSize,
       no_background: true,
     }),
   });
