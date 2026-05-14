@@ -27,12 +27,12 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 - [x] wall_corner_inner.png
 - [x] wall_corner_outer.png
 - [x] wall_trim_top.png
-- [ ] wall_trim_bottom.png
+- [x] wall_trim_bottom.png
 
 ### Special Walls
-- [ ] frosted_glass_wall.png
-- [ ] frosted_glass_door_closed.png
-- [ ] frosted_glass_door_open.png
+- [x] frosted_glass_wall.png
+- [x] frosted_glass_door_closed.png
+- [x] frosted_glass_door_open.png
 - [ ] sealed_wall_blue.png
 - [ ] sealed_wall_green.png
 
