@@ -17,7 +17,10 @@ export function run(intent: Intent, ctx: ChoreographyCtx): Promise<IntentResult>
   const worldX = typeof intent.params.worldX === 'number' ? intent.params.worldX : 0;
   const worldY = typeof intent.params.worldY === 'number' ? intent.params.worldY : 0;
   const durationMs = typeof intent.params.durationMs === 'number' ? intent.params.durationMs : 800;
-  const color = typeof intent.params.color === 'number' ? intent.params.color : CINEMATIC_TINTS.particleBurstDefault;
+  const color =
+    typeof intent.params.color === 'number'
+      ? intent.params.color
+      : CINEMATIC_TINTS.particleBurstDefault;
   const effectId =
     typeof intent.params.effectId === 'string' ? intent.params.effectId : intent.target.id;
 

@@ -635,7 +635,11 @@ export class RoomLayer {
 
   private drawRoomLabels(container: Phaser.GameObjects.Container, originY: number): void {
     const labelY = originY + ROW_CEILING + TILE_SIZE * 2;
-    const style = { fontFamily: 'JetBrains Mono, monospace', fontSize: '8px', color: HUD_TINTS.hudCounterText };
+    const style = {
+      fontFamily: 'JetBrains Mono, monospace',
+      fontSize: '8px',
+      color: HUD_TINTS.hudCounterText,
+    };
     const labels = [
       { x: 96, text: 'TRIAGE' },
       { x: 312, text: 'INVESTIGATION' },

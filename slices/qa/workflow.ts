@@ -99,7 +99,7 @@ export async function runQaWorkflow(
   const { personaId } = selectPersona(projectSlug, 'qa');
   const prHints = findPrOpenedHints(workItem.id);
   const workspaceDir = prHints.worktreePath;
-  const prDiff = getPrDiff(workItem, workspaceDir);
+  const prDiff = getPrDiff(workItem, workspaceDir, prHints.baseBranch);
   const regressionPolicy: RegressionPolicy = projectConfig?.regressionPolicy ?? 'escalate';
 
   // Snapshot prior events BEFORE this run's outcome is appended.

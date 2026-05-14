@@ -21,8 +21,8 @@ import type { Intent, Timeline } from '../../../lib/choreography';
 import { TIMING } from '../../../lib/cinematic-timings';
 import { floorOriginY } from '../../../lib/layout';
 import { CORRIDOR_WALK_Y, roomSlotAnchors } from '../../../lib/rooms';
-import { Timeline as TL } from '../Timeline';
 import { CINEMATIC_TINTS } from '../../textures';
+import { Timeline as TL } from '../Timeline';
 
 let _seq = 0;
 function nextId(): string {

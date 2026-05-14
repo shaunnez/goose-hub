@@ -72,6 +72,19 @@ export function chooseScoutModelOverride(input: {
   return resolvedBudget.modelOverride;
 }
 
+export function choosePlaywrightReproModelOverride(input: {
+  resolvedBudget: ResolvedBudget;
+  investigatorRoleModel: SelectModelForRoleResult;
+  forcedRuntimeProvider: ModelProvider | null;
+}): string {
+  const provider =
+    input.forcedRuntimeProvider ??
+    (input.investigatorRoleModel.source === 'db' || input.investigatorRoleModel.source === 'config'
+      ? input.investigatorRoleModel.provider
+      : 'claude');
+  return defaultModelForTierAndProvider(tierOf(input.resolvedBudget.modelOverride), provider);
+}
+
 function buildSchemaScoutFocus(workItem: { title: string; body: string }): string {
   const text = `${workItem.title}\n${workItem.body}`.toLowerCase();
   const surfaces: string[] = [];
@@ -398,10 +411,11 @@ export async function runInvestigateWorkflow(
           projectConfig?.budgets,
           projectId,
         );
-        const playwrightModelOverride =
-          investigateRoleModel.source === 'db' || investigateRoleModel.source === 'config'
-            ? investigatorModelOverride
-            : playwrightBudget.modelOverride;
+        const playwrightModelOverride = choosePlaywrightReproModelOverride({
+          resolvedBudget: playwrightBudget,
+          investigatorRoleModel: investigateRoleModel,
+          forcedRuntimeProvider,
+        });
         const playwrightResult = await runtime.run({
           runId: playwrightRunId,
           role: 'investigator',

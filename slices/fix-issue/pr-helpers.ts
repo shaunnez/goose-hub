@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { findFreePort } from '@goose-hub/core/agent-runtime/find-free-port.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
-import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
+import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
@@ -13,7 +13,8 @@ export interface RunEvidencePostInput {
   workItem: WorkItem;
   projectId: string;
   runId: string;
-  runtime: AgentRuntime;
+  /** Test seam only. Production resolves evidence-post independently. */
+  evidenceRuntime?: AgentRuntime;
   appendSystemPrompt: string;
   outputJsonSchema: Record<string, unknown>;
   prNumber: number;
@@ -54,9 +55,16 @@ export async function runEvidencePost(input: RunEvidencePostInput): Promise<void
 
   const evidenceRunId = crypto.randomUUID();
   const projectConfig = await getProjectBySlug(input.projectId);
+  const { runtime, resolvedBudget } = resolveProjectAgentExecution({
+    skill: 'evidence-post',
+    role: 'developer',
+    projectId: input.projectId,
+    projectConfig,
+    injectedRuntime: input.evidenceRuntime,
+  });
   const webPort = await findFreePort();
   try {
-    const result = await input.runtime.run({
+    const result = await runtime.run({
       runId: evidenceRunId,
       role: 'developer',
       skill: 'evidence-post',
@@ -91,7 +99,7 @@ export async function runEvidencePost(input: RunEvidencePostInput): Promise<void
         CI: 'true',
         EVIDENCE_ONLY: 'true',
       },
-      ...resolveBudgetsForProject('evidence-post', projectConfig?.budgets, input.projectId),
+      ...resolvedBudget,
       personaId: selectPersona(input.projectId, 'developer').personaId,
       outputJsonSchema: input.outputJsonSchema,
       appendSystemPrompt: input.appendSystemPrompt,

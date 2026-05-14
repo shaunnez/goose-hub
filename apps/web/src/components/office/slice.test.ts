@@ -9,9 +9,11 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
+import { pngManifest } from './game/asset-loader';
 import { ChoreographyPlayer } from './game/choreography/ChoreographyPlayer';
 import type { ChoreographyCtx } from './game/choreography/Timeline';
 import { Timeline as TL } from './game/choreography/Timeline';
+import { CINEMATIC_TINTS, HUD_TINTS, PALETTE, ROLE_TINTS, TEXTURE_KEYS } from './game/textures';
 import { OFFICE_ROLES, busyRoles, idleIndicator, placementsFromItems } from './lib/agent-positions';
 import type { PersonaPlacement, TicketPlacement } from './lib/agent-positions';
 import type { ChoreographyContext, OrchestrationEvent, Timeline } from './lib/choreography';
@@ -62,14 +64,6 @@ import {
 import { IDLE_INDICATOR, indicatorForState } from './lib/state-indicators';
 import { deskForState, shouldWalk } from './lib/state-to-role';
 import { ticketAtDeskOffset, ticketCarryOffset } from './lib/ticket-carry';
-import { pngManifest } from './game/asset-loader';
-import {
-  CINEMATIC_TINTS,
-  HUD_TINTS,
-  PALETTE,
-  ROLE_TINTS,
-  TEXTURE_KEYS,
-} from './game/textures';
 
 describe('state → desk role mapping', () => {
   it('maps every lane state to a valid role', () => {
@@ -1395,9 +1389,19 @@ describe('hudStateFromPlacements', () => {
 
 describe('Phase 2.5 — visual canon', () => {
   const BOARD06_HEX = [
-    '#2B2D42', '#3A3D5C', '#6B4F3B', '#6FE7FF',
-    '#F2CC8F', '#FF6B6B', '#8BD17C', '#D68FD6',
-    '#42466A', '#3B3D55', '#85694F', '#3F6B80', '#473A55',
+    '#2B2D42',
+    '#3A3D5C',
+    '#6B4F3B',
+    '#6FE7FF',
+    '#F2CC8F',
+    '#FF6B6B',
+    '#8BD17C',
+    '#D68FD6',
+    '#42466A',
+    '#3B3D55',
+    '#85694F',
+    '#3F6B80',
+    '#473A55',
   ];
 
   it('PALETTE has exactly 13 entries', () => {
@@ -1440,15 +1444,17 @@ describe('Phase 2.5 — visual canon', () => {
     for (const spec of MANIFEST) {
       const found = spec.prompt.match(hexPattern) ?? [];
       const hasCanonical = found.some((h) => BOARD06_HEX.includes(h.toUpperCase()));
-      expect(hasCanonical, `Prompt for ${spec.file} has no Board 06 hex: "${spec.prompt}"`).toBe(true);
+      expect(hasCanonical, `Prompt for ${spec.file} has no Board 06 hex: "${spec.prompt}"`).toBe(
+        true,
+      );
     }
   });
 
   it('no non-canonical hex literals in game/ or components/', () => {
     const officeDir = join(process.cwd(), 'apps', 'web', 'src', 'components', 'office');
     const canonicalNums = new Set<number>([
-      ...Object.values(PALETTE) as number[],
-      ...Object.values(ROLE_TINTS) as number[],
+      ...(Object.values(PALETTE) as number[]),
+      ...(Object.values(ROLE_TINTS) as number[]),
       ...Object.values(CINEMATIC_TINTS).filter((v): v is number => typeof v === 'number'),
       ...Object.values(HUD_TINTS).filter((v): v is number => typeof v === 'number'),
     ]);
@@ -1478,17 +1484,20 @@ describe('Phase 2.5 — visual canon', () => {
     for (const file of allFiles) {
       if (file.endsWith('textures.ts')) continue;
       const src = readFileSync(file, 'utf8');
-      let m: RegExpExecArray | null;
-      while ((m = hexLiteralPattern.exec(src)) !== null) {
-        const val = parseInt(m[1], 16);
+      let m = hexLiteralPattern.exec(src);
+      while (m !== null) {
+        const val = Number.parseInt(m[1], 16);
         if (!canonicalNums.has(val)) {
-          const rel = file.replace(officeDir + '/', '');
+          const rel = file.replace(`${officeDir}/`, '');
           violations.push(`${rel}: 0x${m[1]}`);
         }
+        m = hexLiteralPattern.exec(src);
       }
       hexLiteralPattern.lastIndex = 0;
     }
 
-    expect(violations, `Non-canonical hex literals found:\n${violations.join('\n')}`).toHaveLength(0);
+    expect(violations, `Non-canonical hex literals found:\n${violations.join('\n')}`).toHaveLength(
+      0,
+    );
   });
 });

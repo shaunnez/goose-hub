@@ -229,7 +229,7 @@ describe('runFixIssueWorkflow — default deps (lines 68-73 ?? fallbacks)', () =
     // ClaudeCliRuntime was used (default runtime dep)
     expect(mockClaudeCliRun).toHaveBeenCalledTimes(1);
     // createWorktree was called (default worktree dep)
-    expect(mockCreateWorktree).toHaveBeenCalledWith('/repo', expect.any(String));
+    expect(mockCreateWorktree).toHaveBeenCalledWith('/repo', expect.any(String), 'origin/main');
     // openPR was called (default openPR dep)
     expect(mockOpenPR).toHaveBeenCalled();
     // worktree persists until merge — NOT cleaned up after PR open
@@ -443,7 +443,7 @@ describe('runFixIssueWorkflow (#183)', () => {
       resolveWorktreeHeadShaImpl,
     });
 
-    expect(createWorktreeImpl).toHaveBeenCalledWith('/repo', expect.any(String));
+    expect(createWorktreeImpl).toHaveBeenCalledWith('/repo', expect.any(String), 'origin/main');
     expect(source.transitionState).toHaveBeenNthCalledWith(
       1,
       '42',
@@ -473,6 +473,7 @@ describe('runFixIssueWorkflow (#183)', () => {
     const openedPayload = opened?.[0].payload as Record<string, unknown>;
     expect(openedPayload).toHaveProperty('worktreePath');
     expect(openedPayload).toHaveProperty('devRunId');
+    expect(openedPayload).toHaveProperty('baseBranch', 'main');
     expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
       personaName: 'proj/developer/0',
       role: 'developer',

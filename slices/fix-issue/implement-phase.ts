@@ -67,7 +67,7 @@ export interface AfterImplementInput {
   worktreePath: string;
   baseBranch: string;
   openPRFn: typeof openPR;
-  runtime: AgentRuntime;
+  evidenceRuntime?: AgentRuntime;
   evidencePostPrompt: string;
   evidencePostJsonSchema: Record<string, unknown>;
   resolveHeadShaFn: (worktreePath: string) => string;
@@ -365,6 +365,7 @@ export async function afterImplement(input: AfterImplementInput): Promise<void> 
       prNumber: prResult.prNumber,
       prUrl: prResult.prUrl,
       branch: prResult.branch,
+      baseBranch: prResult.base,
       worktreePath,
       devRunId: runId,
     },
@@ -400,7 +401,6 @@ export async function afterImplement(input: AfterImplementInput): Promise<void> 
     workItem,
     projectId,
     runId,
-    runtime: input.runtime,
     appendSystemPrompt: input.evidencePostPrompt,
     outputJsonSchema: input.evidencePostJsonSchema,
     prNumber: prResult.prNumber,
@@ -409,6 +409,7 @@ export async function afterImplement(input: AfterImplementInput): Promise<void> 
     evidenceSpecPath: implementOutput.evidenceSpecPath,
     beforeCommentUrl,
     worktreePath,
+    evidenceRuntime: input.evidenceRuntime,
   });
 
   // Step 7: M8 path — route through QA before approval (factory:in-progress → factory:needs-qa)

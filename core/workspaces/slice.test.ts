@@ -48,6 +48,16 @@ describe('createWorktree', () => {
     );
   });
 
+  it('uses an explicit base ref when provided', () => {
+    createWorktree('/repo/path', 'run-abc-123', 'origin/main');
+
+    expect(vi.mocked(execFileSync)).toHaveBeenCalledWith(
+      'git',
+      ['worktree', 'add', '--detach', WT('run-abc-123'), 'origin/main'],
+      expect.objectContaining({ cwd: '/repo/path' }),
+    );
+  });
+
   it('returns the worktree path', () => {
     const result = createWorktree('/repo/path', 'run-abc-123');
     expect(result).toBe(WT('run-abc-123'));

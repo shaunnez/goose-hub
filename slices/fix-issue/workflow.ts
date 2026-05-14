@@ -34,7 +34,10 @@ function isAdvisorGated(priority: string): priority is 'high' | 'critical' {
   return priority === 'high' || priority === 'critical';
 }
 
-function resolveBaseBranch(repoPath: string): string {
+function resolveBaseBranch(repoPath: string, configuredDefaultBranch?: string): string {
+  if (configuredDefaultBranch != null && configuredDefaultBranch.length > 0) {
+    return configuredDefaultBranch;
+  }
   try {
     return execFileSync('git', ['symbolic-ref', '--short', 'HEAD'], {
       cwd: repoPath,
@@ -48,6 +51,8 @@ function resolveBaseBranch(repoPath: string): string {
 export interface FixIssueDeps {
   /** Override the runtime (used by tests). Defaults to provider-aware runtime dispatch. */
   runtime?: AgentRuntime;
+  /** Override evidence-post runtime (used by tests). Production resolves it independently. */
+  evidenceRuntime?: AgentRuntime;
   /** Override openPR (used by tests). Defaults to the real connector. */
   openPRImpl?: typeof openPR;
   /** Override the advisor wrapper (used by tests). Defaults to adviseOnPlan. */
@@ -61,7 +66,7 @@ export interface FixIssueDeps {
   /** Override resolveWorktreeHeadSha (used by tests to avoid real git subprocess). */
   resolveWorktreeHeadShaImpl?: typeof resolveWorktreeHeadSha;
   /** Override resolveBaseBranch (used by tests to avoid real git subprocess). */
-  resolveBaseBranchImpl?: (repoPath: string) => string;
+  resolveBaseBranchImpl?: (repoPath: string, configuredDefaultBranch?: string) => string;
   /**
    * Override orchestratorCommitAll (used by tests). Orchestrator commits the
    * implement skill's output before opening the PR (ADR 0031 — builder no-commit rule).
@@ -112,15 +117,17 @@ export async function runFixIssueWorkflow(
   const evidencePostJsonSchema = toJsonSchema(EvidencePostSchema);
 
   const { personaId: implementPersonaId } = selectPersona(projectId, 'developer');
-  const baseBranch = resolveBaseBranchFn(targetRepo);
   const implementExecution = await resolveImplementExecution({
     projectId,
     workItem,
     injectedRuntime: deps.runtime,
   });
+  const baseBranch = resolveBaseBranchFn(
+    targetRepo,
+    implementExecution.projectConfig?.targetRepo?.defaultBranch,
+  );
   const investigation = latestInvestigationContext({ projectId, workItemId: workItem.id });
-  const runtime = implementExecution.runtime;
-  const worktreePath = createWtFn(targetRepo, runId);
+  const worktreePath = createWtFn(targetRepo, runId, `origin/${baseBranch}`);
 
   try {
     // Transition into in-progress as soon as the worktree exists.
@@ -223,7 +230,7 @@ export async function runFixIssueWorkflow(
           worktreePath,
           baseBranch,
           openPRFn,
-          runtime,
+          evidenceRuntime: deps.evidenceRuntime ?? deps.runtime,
           evidencePostPrompt,
           evidencePostJsonSchema,
           resolveHeadShaFn,
@@ -264,7 +271,7 @@ export async function runFixIssueWorkflow(
       worktreePath,
       baseBranch,
       openPRFn,
-      runtime,
+      evidenceRuntime: deps.evidenceRuntime ?? deps.runtime,
       evidencePostPrompt,
       evidencePostJsonSchema,
       resolveHeadShaFn,

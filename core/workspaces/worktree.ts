@@ -34,13 +34,18 @@ export function existingWorktreePath(runId: string): string | null {
  * @param runId - Canonical workflow isolation key (ULID/UUID).
  * @returns The absolute path to the created worktree.
  */
-export function createWorktree(repo: string, runId: string): string {
+export function createWorktree(repo: string, runId: string, baseRef?: string): string {
   const wtPath = worktreePath(runId);
 
   // Ensure the parent workspaces directory exists
   mkdirSync(WORKSPACES_DIR, { recursive: true });
 
-  execFileSync('git', ['worktree', 'add', '--detach', wtPath], {
+  const args = ['worktree', 'add', '--detach', wtPath];
+  if (baseRef != null && baseRef.length > 0) {
+    args.push(baseRef);
+  }
+
+  execFileSync('git', args, {
     cwd: repo,
     stdio: 'pipe',
     env: GIT_ENV,

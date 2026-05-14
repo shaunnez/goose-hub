@@ -244,6 +244,37 @@ beforeEach(() => {
 
 // ─── tests ────────────────────────────────────────────────────────────────────
 
+describe('qa helpers', () => {
+  it('caps oversized PR diffs before they are sent to the agent prompt', async () => {
+    const { QA_PR_DIFF_CHAR_LIMIT, capPrDiffForPrompt } = await import('./qa-helpers.js');
+    const largeDiff = `diff --git a/file b/file\n${'x'.repeat(QA_PR_DIFF_CHAR_LIMIT * 2)}`;
+
+    const capped = capPrDiffForPrompt(largeDiff, '/tmp/worktree');
+
+    expect(capped).toContain('QA diff truncated');
+    expect(capped.length).toBeLessThan(largeDiff.length);
+    expect(capped).toContain(`First ${QA_PR_DIFF_CHAR_LIMIT} characters`);
+  });
+
+  it('reads baseBranch from the latest pr.opened payload', async () => {
+    mockReplay.mockReturnValue([
+      {
+        id: 1,
+        kind: 'pr.opened',
+        payload: { worktreePath: '/wt/abc', baseBranch: 'develop' },
+        createdAt: '',
+      },
+    ]);
+
+    const { findPrOpenedHints } = await import('./qa-helpers.js');
+
+    expect(findPrOpenedHints('github:owner/repo#42')).toMatchObject({
+      worktreePath: '/wt/abc',
+      baseBranch: 'develop',
+    });
+  });
+});
+
 describe('runQaWorkflow', () => {
   describe('qa output validation failure', () => {
     it('transitions to needs-human when QA output schema validation fails', async () => {

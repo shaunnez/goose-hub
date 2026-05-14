@@ -19,7 +19,13 @@ import { roomDeskAnchors, roomQueueAnchor, roomSlotAnchors } from '../../lib/roo
 import type { RoomId } from '../../lib/rooms';
 import type { IndicatorKind } from '../../lib/state-indicators';
 import { ticketCarryOffset } from '../../lib/ticket-carry';
-import { HUD_TINTS, PALETTE, TEXTURE_KEYS, applyOfficeTextureDisplaySize, indicatorTextureKey } from '../textures';
+import {
+  HUD_TINTS,
+  PALETTE,
+  TEXTURE_KEYS,
+  applyOfficeTextureDisplaySize,
+  indicatorTextureKey,
+} from '../textures';
 import type { PersonaLayer } from './PersonaLayer';
 import type { DeskClickPayload, IntentResult } from './types';
 

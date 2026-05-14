@@ -5,8 +5,8 @@
 
 import type Phaser from 'phaser';
 import { useEffect, useRef, useState } from 'react';
-import { priorityTintColor } from '../lib/rooms';
 import { HUD_TINTS } from '../game/textures';
+import { priorityTintColor } from '../lib/rooms';
 
 interface FeedLine {
   id: number;

@@ -88,14 +88,7 @@ describe('resolveBudgets', () => {
   });
 
   it('haiku skills resolve to haiku model IDs', () => {
-    for (const skill of [
-      'triage',
-      'repo-match',
-      'implement',
-      'evidence-post',
-      'investigate',
-      'retrospective-light',
-    ]) {
+    for (const skill of ['triage', 'repo-match', 'implement', 'retrospective-light']) {
       const { modelOverride } = resolveBudgets(skill);
       expect(modelOverride, `${skill} should start on haiku`).toContain('haiku');
     }
@@ -109,7 +102,7 @@ describe('resolveBudgets', () => {
   });
 
   it('sonnet skills resolve to sonnet model IDs', () => {
-    for (const skill of ['qa', 'review', 'retrospective-deep']) {
+    for (const skill of ['evidence-post', 'investigate', 'qa', 'review', 'retrospective-deep']) {
       const { modelOverride } = resolveBudgets(skill);
       expect(modelOverride, `${skill} should use sonnet`).toContain('sonnet');
     }
