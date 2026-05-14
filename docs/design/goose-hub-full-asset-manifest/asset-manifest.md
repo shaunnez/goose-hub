@@ -106,22 +106,22 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 ### Goose Coffee
 - [x] goose_coffee_sign.png
 - [x] coffee_machine.png
-- [ ] coffee_mug.png
-- [ ] steam_small.png
+- [x] coffee_mug.png
+- [x] steam_small.png
 
 ---
 
 ## 04 — Goose Sprites
 
 ### Base
-- [ ] goose_idle.png
-- [ ] goose_walk_sheet.png
-- [ ] goose_sit.png
-- [ ] goose_think.png
+- [x] goose_idle.png
+- [x] goose_walk_sheet.png
+- [x] goose_sit.png
+- [x] goose_think.png
 
 ### Role Variants
-- [ ] goose_triage.png
-- [ ] goose_investigator.png
+- [x] goose_triage.png
+- [x] goose_investigator.png
 - [ ] goose_dev.png
 - [ ] goose_qa.png
 - [ ] goose_reviewer.png
