@@ -56,12 +56,12 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 - [x] desk_triage.png
 - [x] intake_board.png
 - [x] paperwork_stack.png
-- [ ] queue_stack_small.png
-- [ ] queue_stack_large.png
+- [x] queue_stack_small.png
+- [x] queue_stack_large.png
 
 ### Investigation
-- [ ] desk_investigation.png
-- [ ] investigation_monitor.png
+- [x] desk_investigation.png
+- [x] investigation_monitor.png
 - [ ] investigation_map_board.png
 - [ ] bookshelf_small.png
 - [ ] bookshelf_large.png
