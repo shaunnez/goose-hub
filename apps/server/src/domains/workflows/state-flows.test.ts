@@ -11,6 +11,7 @@ vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   readProjectSettings: vi.fn().mockReturnValue(null),
   readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
   getUseMultiAgentPipeline: vi.fn().mockReturnValue(false),
+  getUseInvestigationSwarm: vi.fn().mockReturnValue(false),
   setUseMultiAgentPipeline: vi.fn(),
   deriveUseMultiAgentPipeline: vi.fn().mockReturnValue(false),
 }));

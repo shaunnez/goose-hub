@@ -82,7 +82,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
-  vi.restoreAllMocks();
 });
 
 describe('CodexCliRuntime timeout handling', () => {
