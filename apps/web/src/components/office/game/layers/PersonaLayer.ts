@@ -14,7 +14,11 @@ import { TILE_SIZE, floorOriginY } from '../../lib/layout';
 import { facingFromMovement, pathLength, planWalk } from '../../lib/pathfinding';
 import { type Priority, priorityTintColor, roomDeskAnchors } from '../../lib/rooms';
 import type { IndicatorKind } from '../../lib/state-indicators';
-import { indicatorTextureKey, spriteTextureKeyForRole } from '../textures';
+import {
+  applyOfficeTextureDisplaySize,
+  indicatorTextureKey,
+  spriteTextureKeyForRole,
+} from '../textures';
 import type { DeskClickPayload, IntentResult, OfficeProject } from './types';
 
 const WALK_PIXELS_PER_MS = 0.35;
@@ -321,7 +325,9 @@ export class PersonaLayer {
   setIndicator(personaId: string, glyph: IndicatorKind | null): void {
     const entry = this.personas.get(personaId);
     if (entry == null) return;
-    entry.indicator.setTexture(indicatorTextureKey(glyph ?? 'coffee'));
+    const textureKey = indicatorTextureKey(glyph ?? 'coffee');
+    entry.indicator.setTexture(textureKey);
+    applyOfficeTextureDisplaySize(entry.indicator, textureKey);
   }
 
   /**
@@ -382,6 +388,7 @@ export class PersonaLayer {
 
     const indicator = this.scene.add.image(0, -TILE_SIZE - 4, indicatorTextureKey(p.indicator));
     indicator.setOrigin(0.5, 1);
+    applyOfficeTextureDisplaySize(indicator, indicatorTextureKey(p.indicator));
     container.add(indicator);
 
     container.setSize(TILE_SIZE, TILE_SIZE * 2);
@@ -429,7 +436,9 @@ export class PersonaLayer {
   }
 
   private updateIndicator(entry: PersonaEntry, p: PersonaPlacement): void {
-    entry.indicator.setTexture(indicatorTextureKey(p.indicator));
+    const textureKey = indicatorTextureKey(p.indicator);
+    entry.indicator.setTexture(textureKey);
+    applyOfficeTextureDisplaySize(entry.indicator, textureKey);
     entry.container.setData('workItemId', p.workItemId);
     entry.container.setData('externalId', p.externalId);
     entry.container.setData('title', p.title ?? '');

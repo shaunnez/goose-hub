@@ -24,7 +24,7 @@ import {
   roomDoor,
   roomQueueAnchor,
 } from '../../lib/rooms';
-import { TEXTURE_KEYS } from '../textures';
+import { TEXTURE_KEYS, applyOfficeTextureDisplaySize } from '../textures';
 import type { IntentResult, OfficeProject } from './types';
 
 interface RoomLayerCallbacks {
@@ -662,6 +662,7 @@ export class RoomLayer {
         const { x, y } = anchors[i];
         const img = this.scene.add.image(x, originY + y, TEXTURE_KEYS.desk);
         img.setOrigin(0.5, 1);
+        applyOfficeTextureDisplaySize(img, TEXTURE_KEYS.desk);
         container.add(img);
 
         const idle = this.scene.add.image(
@@ -670,6 +671,7 @@ export class RoomLayer {
           TEXTURE_KEYS.indicatorCoffee,
         );
         idle.setOrigin(0.5, 1);
+        applyOfficeTextureDisplaySize(idle, TEXTURE_KEYS.indicatorCoffee);
         idle.setData('kind', 'idle-indicator');
         idle.setData('floorIndex', floorIndex);
         idle.setData('deskKey', `${id}:${i}`);

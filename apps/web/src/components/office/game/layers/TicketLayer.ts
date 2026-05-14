@@ -19,7 +19,7 @@ import { roomDeskAnchors, roomQueueAnchor, roomSlotAnchors } from '../../lib/roo
 import type { RoomId } from '../../lib/rooms';
 import type { IndicatorKind } from '../../lib/state-indicators';
 import { ticketCarryOffset } from '../../lib/ticket-carry';
-import { TEXTURE_KEYS, indicatorTextureKey } from '../textures';
+import { TEXTURE_KEYS, applyOfficeTextureDisplaySize, indicatorTextureKey } from '../textures';
 import type { PersonaLayer } from './PersonaLayer';
 import type { DeskClickPayload, IntentResult } from './types';
 
@@ -231,7 +231,10 @@ export class TicketLayer {
     if (glyph == null) {
       entry.indicator.setAlpha(0);
     } else {
-      entry.indicator.setTexture(indicatorTextureKey(glyph));
+      const textureKey = indicatorTextureKey(glyph);
+      entry.indicator.setTexture(textureKey);
+      applyOfficeTextureDisplaySize(entry.indicator, textureKey);
+      entry.indicator.setScale(0.6);
       entry.indicator.setAlpha(1);
     }
   }
@@ -504,6 +507,7 @@ export class TicketLayer {
     // Small indicator badge above the ticket body; hidden by default.
     const indicator = this.scene.add.image(0, -9, TEXTURE_KEYS.indicatorCoffee);
     indicator.setOrigin(0.5, 1);
+    applyOfficeTextureDisplaySize(indicator, TEXTURE_KEYS.indicatorCoffee);
     indicator.setScale(0.6);
     indicator.setAlpha(0);
     container.add(indicator);
