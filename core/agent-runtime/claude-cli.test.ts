@@ -40,6 +40,7 @@ vi.mock('node:child_process', () => ({
   spawn: mockSpawn,
 }));
 
+import { costFromCliEnvelope } from '../cost/extract.js';
 import { ClaudeCliRuntime } from './claude-cli.js';
 
 function makeSpec(overrides: Record<string, unknown> = {}) {
@@ -93,6 +94,7 @@ function makeHangingChild(): FakeChild {
 beforeEach(() => {
   vi.clearAllMocks();
   mockExecFileSync.mockReturnValue('/usr/local/bin/claude\n');
+  vi.mocked(costFromCliEnvelope).mockReturnValue(null);
   mockDbInsert.mockImplementation(() => ({
     values: vi.fn().mockReturnValue({ run: vi.fn() }),
   }));
@@ -140,6 +142,31 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
     expect(row.workItemId).toBe('github:owner/repo#1');
   });
 
+  it('emits run-completed on an under-budget successful run', async () => {
+    vi.mocked(costFromCliEnvelope).mockReturnValue({
+      inputTokens: 20,
+      outputTokens: 10,
+      costUsd: 0.25,
+      costLabel: 'estimated',
+    });
+    const envelope = JSON.stringify({ is_error: false, result: '{"ok":true}' });
+    mockSpawn.mockReturnValue(makeChild(0, envelope));
+
+    const runtime = new ClaudeCliRuntime();
+    await runtime.run(makeSpec({ budgets: { maxTurns: 10, maxBudgetUsd: 1, timeoutMs: 5000 } }));
+
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-completed',
+        payload: expect.objectContaining({
+          runId: 'run-abc',
+          skill: 'fix-issue',
+          cost: expect.objectContaining({ usd: 0.25 }),
+        }),
+      }),
+    );
+  });
+
   it('uses top-level workItemId for events and costs when context omits it', async () => {
     const envelope = JSON.stringify({ is_error: false, result: '{"ok":true}' });
     mockSpawn.mockReturnValue(makeChild(0, envelope));
@@ -162,6 +189,56 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
       expect.objectContaining({
         workItemId: 'github:owner/repo#1',
       }),
+    );
+  });
+
+  it('records cost, emits budget-exceeded and run-failed, and rejects over-budget runs', async () => {
+    vi.mocked(costFromCliEnvelope).mockReturnValue({
+      inputTokens: 100,
+      outputTokens: 50,
+      costUsd: 1.25,
+      costLabel: 'estimated',
+    });
+    const envelope = JSON.stringify({ is_error: false, result: '{"ok":true}' });
+    mockSpawn.mockReturnValue(makeChild(0, envelope));
+
+    const runtime = new ClaudeCliRuntime();
+    await expect(
+      runtime.run(makeSpec({ budgets: { maxTurns: 10, maxBudgetUsd: 1, timeoutMs: 5000 } })),
+    ).rejects.toThrow('exceeded budget');
+
+    expect(mockRecordCost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-abc',
+        costUsd: 1.25,
+        inputTokens: 100,
+        outputTokens: 50,
+      }),
+    );
+
+    const calls = mockEventStore.appendEvent.mock.calls;
+    const budgetIndex = calls.findIndex(([e]) => e.kind === 'agent.budget-exceeded');
+    const budgetCall = calls[budgetIndex];
+    const failedCall = calls.find(([e]) => {
+      const payload = e.payload as { reason?: string };
+      return e.kind === 'agent.run-failed' && payload.reason === 'budget-exceeded';
+    });
+    expect(budgetCall?.[0].payload).toMatchObject({
+      runId: 'run-abc',
+      skill: 'fix-issue',
+      modelId: 'claude-sonnet-4-6',
+      costUsd: 1.25,
+      budgetUsd: 1,
+      inputTokens: 100,
+      outputTokens: 50,
+      overByUsd: 0.25,
+    });
+    expect(failedCall).toBeDefined();
+    expect(mockRecordCost.mock.invocationCallOrder[0]).toBeLessThan(
+      mockEventStore.appendEvent.mock.invocationCallOrder[budgetIndex],
+    );
+    expect(mockEventStore.appendEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent.run-completed' }),
     );
   });
 

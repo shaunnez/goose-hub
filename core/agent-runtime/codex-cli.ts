@@ -10,6 +10,7 @@ import { computeAllowlist } from '../tool-layer/allowlist.js';
 import { deployDecisionCaptureHook } from '../tool-layer/decision-capture-hook.js';
 import { deployHooks } from '../tool-layer/pre-tool-use-hook.js';
 import { writeWorkspaceSandbox } from '../tool-layer/sandbox.js';
+import { emitBudgetExceededIfNeeded } from './budget-guard.js';
 import {
   CodexBinaryNotFoundError,
   CodexNotAuthenticatedError,
@@ -152,6 +153,7 @@ export class CodexCliRuntime implements AgentRuntime {
       let stdoutLineBuffer = '';
       let truncated = false;
       let settled = false;
+      let toolCallCount = 0;
 
       const handleStdoutLine = (line: string) => {
         if (line.trim().length === 0) return;
@@ -160,6 +162,7 @@ export class CodexCliRuntime implements AgentRuntime {
           if (parsed == null || typeof parsed !== 'object') return;
           const toolCall = pickCodexToolCall(parsed as Record<string, unknown>);
           if (toolCall == null) return;
+          toolCallCount += 1;
           eventStore.appendEvent({
             projectId,
             workItemId,
@@ -173,6 +176,31 @@ export class CodexCliRuntime implements AgentRuntime {
             runId,
             personaId,
           });
+          if (toolCallCount > spec.budgets.maxTurns && !settled) {
+            settled = true;
+            clearTimeout(timeout);
+            killProcessGroupOrChild(child);
+            eventStore.appendEvent({
+              projectId,
+              workItemId,
+              kind: 'agent.run-failed',
+              payload: {
+                runId,
+                skill: spec.skill,
+                reason: 'tool-call-budget-exceeded',
+                error: `tool-call budget exceeded: ${toolCallCount} > ${spec.budgets.maxTurns}`,
+                toolCallsUsed: toolCallCount,
+                maxToolCalls: spec.budgets.maxTurns,
+              },
+              runId,
+              personaId,
+            });
+            reject(
+              new Error(
+                `Codex tool-call budget exceeded for run ${runId}: ${toolCallCount} > ${spec.budgets.maxTurns}`,
+              ),
+            );
+          }
         } catch {
           /* non-JSON stdout lines are handled by parseCodexEnvelope at close */
         }
@@ -187,7 +215,10 @@ export class CodexCliRuntime implements AgentRuntime {
         stdoutLineBuffer += text;
         const lines = stdoutLineBuffer.split(/\r?\n/);
         stdoutLineBuffer = lines.pop() ?? '';
-        for (const line of lines) handleStdoutLine(line);
+        for (const line of lines) {
+          handleStdoutLine(line);
+          if (settled) return;
+        }
 
         const remaining = STDOUT_CAP - stdout.length;
         if (remaining <= 0) {
@@ -294,6 +325,43 @@ export class CodexCliRuntime implements AgentRuntime {
           costLabel,
           personaId: personaId ?? null,
         });
+
+        const exceededBudget = emitBudgetExceededIfNeeded({
+          runId,
+          skill: spec.skill,
+          modelId: model,
+          costUsd,
+          maxBudgetUsd: spec.budgets.maxBudgetUsd,
+          inputTokens: usageInputTokens,
+          outputTokens: usageOutputTokens,
+          projectId,
+          workItemId,
+          personaId,
+        });
+
+        if (exceededBudget) {
+          eventStore.appendEvent({
+            projectId,
+            workItemId,
+            kind: 'agent.run-failed',
+            payload: {
+              runId,
+              skill: spec.skill,
+              reason: 'budget-exceeded',
+              error: `budget exceeded: $${costUsd} > $${spec.budgets.maxBudgetUsd}`,
+              costUsd,
+              budgetUsd: spec.budgets.maxBudgetUsd,
+            },
+            runId,
+            personaId,
+          });
+          reject(
+            new Error(
+              `Agent run ${runId} exceeded budget: $${costUsd} > $${spec.budgets.maxBudgetUsd}`,
+            ),
+          );
+          return;
+        }
 
         const stderrTrimmed = stderr.trim();
         if (stderrTrimmed.length > 0) {
