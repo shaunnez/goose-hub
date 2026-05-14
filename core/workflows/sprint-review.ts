@@ -1,10 +1,9 @@
 import { eq } from 'drizzle-orm';
 import { SprintReviewOutputSchema } from '../../skills/sprint-review/schema.js';
-import { ClaudeCliRuntime } from '../agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
 import { readPromptWithContext } from '../agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
-import { resolveBudgetsForProject } from '../agent-runtime/resolve-for-project.js';
+import { resolveProjectAgentExecution } from '../agent-runtime/resolve-runtime-for-project.js';
 import { toJsonSchema } from '../agent-runtime/schema-bridge.js';
 import { selectPersona } from '../agent-runtime/select-persona.js';
 import { db } from '../db/db.js';
@@ -26,10 +25,16 @@ export async function runSprintReviewWorkflow(input: RunSprintReviewInput): Prom
 }> {
   const { projectId, milestoneTitle, milestoneNumber, stateSource, deps = {} } = input;
   const runId = crypto.randomUUID();
-  const runtime = deps.runtime ?? new ClaudeCliRuntime();
   const skillName = 'sprint-review';
   const prompt = readPromptWithContext(skillName, projectId);
   const projectConfig = await getProjectBySlug(projectId);
+  const { runtime, resolvedBudget } = resolveProjectAgentExecution({
+    skill: skillName,
+    role: 'retrospector',
+    projectId,
+    projectConfig,
+    injectedRuntime: deps.runtime,
+  });
   const jsonSchema = toJsonSchema(SprintReviewOutputSchema);
   const { personaId } = selectPersona(projectId, 'retrospector');
 
@@ -92,19 +97,6 @@ export async function runSprintReviewWorkflow(input: RunSprintReviewInput): Prom
     suggestionText: row.suggestionText,
     confidence: 'medium' as const,
   }));
-
-  let resolvedBudget: {
-    budgets: { maxTurns: number; maxBudgetUsd: number; timeoutMs: number };
-    modelOverride: string;
-  };
-  try {
-    resolvedBudget = resolveBudgetsForProject(skillName, projectConfig?.budgets, projectId);
-  } catch {
-    resolvedBudget = {
-      budgets: { maxTurns: 25, maxBudgetUsd: 0.5, timeoutMs: 240_000 },
-      modelOverride: 'sonnet',
-    };
-  }
 
   try {
     const result = await runtime.run({

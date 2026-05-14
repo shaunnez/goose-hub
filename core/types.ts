@@ -181,6 +181,13 @@ export interface ProjectConfig {
    * See docs/adr/0032-regression-policy.md
    */
   regressionPolicy?: 'escalate' | 'ignore';
+  /**
+   * Investigation swarm toggle. Default true. When false, investigate skips
+   * Wave-1/Wave-2 scouts and runs the synthesis investigator directly.
+   */
+  investigationSwarm?: {
+    enabled: boolean;
+  };
   /** Feature flags for experimental capabilities. Opt-in per project. */
   experimental?: {
     /** M19.06 — ship record-decision MCP tool for A/B evaluation. Default false. */

@@ -351,6 +351,7 @@ export interface ProjectSettingsDto {
     perAdvisorMaxUsd: number | null;
     dailyTokens: number | null;
     maxParallelAgents: number | null;
+    maxScoutAgents: number | null;
     maxRetries: number | null;
     perBashCommandMaxSeconds: number | null;
     updatedAt: string;
@@ -442,6 +443,10 @@ export interface DevReviewSettingsDto {
 export interface PipelineSettingsDto {
   projectId: string;
   useMultiAgentPipeline: boolean;
+  useInvestigationSwarm: boolean;
+  configDefaults?: {
+    useInvestigationSwarm: boolean;
+  };
 }
 
 export type ReviewerSlotModel = 'claude' | 'codex';

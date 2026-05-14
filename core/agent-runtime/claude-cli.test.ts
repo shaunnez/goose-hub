@@ -18,6 +18,9 @@ vi.mock('../cost/repository.js', () => ({ recordCost: mockRecordCost }));
 vi.mock('../event-stream/store.js', () => ({ eventStore: mockEventStore }));
 vi.mock('../cost/extract.js', () => ({ costFromCliEnvelope: vi.fn().mockReturnValue(null) }));
 vi.mock('../cost/skill-stage.js', () => ({ stageForSkill: vi.fn().mockReturnValue('develop') }));
+vi.mock('../db/repositories/project-settings.js', () => ({
+  getRecordDecisionTool: vi.fn().mockReturnValue(false),
+}));
 vi.mock('../tool-layer/allowlist.js', () => ({ computeAllowlist: vi.fn().mockReturnValue([]) }));
 vi.mock('../tool-layer/pre-tool-use-hook.js', () => ({ deployHooks: vi.fn() }));
 vi.mock('../tool-layer/sandbox.js', () => ({ writeWorkspaceSandbox: vi.fn() }));
@@ -57,6 +60,7 @@ function makeSpec(overrides: Record<string, unknown> = {}) {
 }
 
 type FakeChild = EventEmitter & {
+  pid?: number;
   stdin: { end: ReturnType<typeof vi.fn> };
   stdout: EventEmitter;
   stderr: EventEmitter;
@@ -73,6 +77,16 @@ function makeChild(exitCode: number, stdout: string): FakeChild {
     child.stdout.emit('data', Buffer.from(stdout));
     child.emit('close', exitCode);
   }, 0);
+  return child;
+}
+
+function makeHangingChild(): FakeChild {
+  const child = new EventEmitter() as FakeChild;
+  child.pid = 1234;
+  child.stdin = { end: vi.fn() };
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.kill = vi.fn();
   return child;
 }
 
@@ -180,5 +194,43 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
     expect(mockDbInsert).toHaveBeenCalled();
     const row = values.mock.calls[0][0];
     expect(row.outcome).toBe('failure');
+  });
+
+  it('timeout emits failure events, kills the process group, rejects, and ignores late close', async () => {
+    vi.useFakeTimers();
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+    const processKill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+
+    const runtime = new ClaudeCliRuntime();
+    const run = runtime.run(
+      makeSpec({ budgets: { maxTurns: 10, maxBudgetUsd: 1, timeoutMs: 25 } }),
+    );
+    const rejection = expect(run).rejects.toThrow('timed out after 25ms');
+
+    await vi.advanceTimersByTimeAsync(25);
+    await rejection;
+
+    expect(processKill).toHaveBeenCalledWith(-1234, 'SIGKILL');
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'tool.timeout' }),
+    );
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-failed',
+        payload: expect.objectContaining({ error: 'timed out after 25ms', timeoutMs: 25 }),
+      }),
+    );
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(JSON.stringify({ is_error: false, result: '{"ok":true}' })),
+    );
+    child.emit('close', 0);
+
+    expect(mockEventStore.appendEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent.run-completed' }),
+    );
+    processKill.mockRestore();
   });
 });

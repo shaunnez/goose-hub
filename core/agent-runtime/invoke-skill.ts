@@ -5,7 +5,7 @@ import { getProjectBySlug } from '../projects/loader.js';
 import type { ProjectConfig } from '../types.js';
 import type { ResolvedBudget } from './budgets.js';
 import type { AgentResult, AgentRuntime, SkillConfig } from './interface.js';
-import { defaultModelForTier } from './models.js';
+import { defaultModelForTierAndProvider } from './models.js';
 import { readPromptWithContext } from './read-prompt.js';
 import {
   resolveBudgetsForProject,
@@ -63,7 +63,7 @@ export type InvokeSkillInput = {
 
 const FALLBACK_BUDGET: ResolvedBudget = {
   budgets: { maxTurns: 25, maxBudgetUsd: 1.0, timeoutMs: 120_000 },
-  modelOverride: defaultModelForTier('sonnet'),
+  modelOverride: defaultModelForTierAndProvider('sonnet', 'claude'),
 };
 
 /**
@@ -119,7 +119,10 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<AgentResult>
   } catch {
     resolved = {
       ...FALLBACK_BUDGET,
-      modelOverride: defaultModelForTier(skillConfig.modelPin),
+      modelOverride: defaultModelForTierAndProvider(
+        skillConfig.modelPin,
+        skillConfig.provider ?? 'claude',
+      ),
     };
   }
 

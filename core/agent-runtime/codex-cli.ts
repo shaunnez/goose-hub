@@ -22,11 +22,13 @@ import {
   extractResultJson,
   parseCodexEnvelope,
   pickCodexAgentMessageText,
+  pickCodexToolCall,
 } from './codex-parser.js';
 import { assembleSpawnContext } from './context-assembly.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { resolveMockOutput } from './mock-outputs.js';
 import { defaultModelForTierAndProvider, estimateCostUsd } from './models.js';
+import { killProcessGroupOrChild } from './process-kill.js';
 
 export { CodexBinaryNotFoundError, CodexNotAuthenticatedError } from './codex-config.js';
 export {
@@ -39,6 +41,7 @@ export {
   parseCodexEnvelope,
   extractResultJson,
   pickCodexAgentMessageText,
+  pickCodexToolCall,
 } from './codex-parser.js';
 
 const STDOUT_CAP = 4 * 1024 * 1024; // 4 MB
@@ -68,7 +71,7 @@ export class CodexCliRuntime implements AgentRuntime {
     }
     deployHooks();
     if (recordDecisionTool) deployDecisionCaptureHook();
-    const workItemId = (spec.context.workItemId as string) ?? null;
+    const workItemId = (spec.context.workItemId as string | undefined) ?? spec.workItemId ?? null;
     const { personaId } = spec;
 
     eventStore.appendEvent({
@@ -123,6 +126,7 @@ export class CodexCliRuntime implements AgentRuntime {
         FACTORY_RUN_ALLOWLIST: allowedTools.join(','),
         FACTORY_RUN_ID: runId,
         FACTORY_PROJECT_ID: projectId,
+        FACTORY_WORKSPACE_DIR: workspaceDir,
         FACTORY_SERVER_PORT: process.env.FACTORY_SERVER_PORT ?? '3001',
         FACTORY_ITERATION: String(spec.iteration ?? 0),
         FACTORY_PHASE: spec.phase ?? '',
@@ -138,19 +142,53 @@ export class CodexCliRuntime implements AgentRuntime {
       const child = spawn(binaryPath, argv, {
         env: minimalEnv,
         cwd: workspaceDir,
+        detached: !isWindows,
         shell: false,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 
       let stdout = '';
       let stderr = '';
+      let stdoutLineBuffer = '';
       let truncated = false;
+      let settled = false;
+
+      const handleStdoutLine = (line: string) => {
+        if (line.trim().length === 0) return;
+        try {
+          const parsed = JSON.parse(line) as unknown;
+          if (parsed == null || typeof parsed !== 'object') return;
+          const toolCall = pickCodexToolCall(parsed as Record<string, unknown>);
+          if (toolCall == null) return;
+          eventStore.appendEvent({
+            projectId,
+            workItemId,
+            kind: 'agent.tool-call',
+            payload: {
+              tool_name: toolCall.toolName,
+              run_id: runId,
+              tool_input: toolCall.toolInput,
+              skill: spec.skill,
+            },
+            runId,
+            personaId,
+          });
+        } catch {
+          /* non-JSON stdout lines are handled by parseCodexEnvelope at close */
+        }
+      };
 
       child.stderr?.on('data', (chunk: Buffer) => {
         stderr += chunk.toString();
       });
 
       child.stdout.on('data', (chunk: Buffer) => {
+        const text = chunk.toString();
+        stdoutLineBuffer += text;
+        const lines = stdoutLineBuffer.split(/\r?\n/);
+        stdoutLineBuffer = lines.pop() ?? '';
+        for (const line of lines) handleStdoutLine(line);
+
         const remaining = STDOUT_CAP - stdout.length;
         if (remaining <= 0) {
           if (!truncated) {
@@ -166,12 +204,14 @@ export class CodexCliRuntime implements AgentRuntime {
           }
           return;
         }
-        stdout += chunk.slice(0, remaining).toString();
+        stdout += text.slice(0, remaining);
       });
 
       const effectiveTimeoutMs = spec.budgets.timeoutMs ?? TIMEOUT_MS;
       const timeout = setTimeout(() => {
-        child.kill('SIGKILL');
+        if (settled) return;
+        settled = true;
+        killProcessGroupOrChild(child);
         eventStore.appendEvent({
           projectId,
           workItemId,
@@ -180,11 +220,28 @@ export class CodexCliRuntime implements AgentRuntime {
           runId,
           personaId,
         });
+        eventStore.appendEvent({
+          projectId,
+          workItemId,
+          kind: 'agent.run-failed',
+          payload: {
+            runId,
+            skill: spec.skill,
+            error: `timed out after ${effectiveTimeoutMs}ms`,
+            timeoutMs: effectiveTimeoutMs,
+          },
+          runId,
+          personaId,
+        });
         reject(new Error(`Agent run ${runId} timed out after ${effectiveTimeoutMs}ms`));
       }, effectiveTimeoutMs);
 
       child.on('close', (code) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timeout);
+        handleStdoutLine(stdoutLineBuffer);
+        stdoutLineBuffer = '';
 
         const envelope = parseCodexEnvelope(stdout);
 
@@ -289,6 +346,8 @@ export class CodexCliRuntime implements AgentRuntime {
       });
 
       child.on('error', (err) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timeout);
         reject(err);
       });

@@ -3,8 +3,7 @@ import type { ResolvedBudget, SkillBudgetOverride } from './budgets.js';
 import { assembleSpawnContext } from './context-assembly.js';
 import type { AgentResult, AgentRuntime, AgentSpec, DecisionSummary } from './interface.js';
 import { resolveBudgetsForProject } from './resolve-for-project.js';
-import { ScoutOutputSchema } from './scout-output.js';
-import { ScoutTimeoutError, runWithDeadline } from './swarm-utils.js';
+import { ScoutOutputSchema, normalizeScoutOutput } from './scout-output.js';
 
 /** Per-scout findings. Mirrors `ScoutOutputSchema` in each scout's schema.ts. */
 export interface ScoutFinding {
@@ -151,6 +150,7 @@ export async function runOneScout(
     modelOverride: resolvedBudget.modelOverride,
     appendSystemPrompt: skillAssets?.appendSystemPrompt,
     outputJsonSchema: skillAssets?.outputJsonSchema,
+    workspaceDir: ctx.worktreePath,
   };
 
   // Route through the centralized gateway so the holdout enforcement path
@@ -163,9 +163,9 @@ export async function runOneScout(
   let errorReason: string | undefined;
 
   try {
-    result = await runWithDeadline(ctx.runtime.run(spawnSpec), budgets.timeoutMs);
+    result = await ctx.runtime.run(spawnSpec);
   } catch (err) {
-    if (err instanceof ScoutTimeoutError) {
+    if (isTimeoutError(err, budgets.timeoutMs)) {
       timedOut = true;
     } else {
       errorReason = err instanceof Error ? err.message : String(err);
@@ -240,9 +240,10 @@ export async function runOneScout(
     };
   }
 
-  const findings = parsed.data.findings;
+  const scoutOutput = normalizeScoutOutput(parsed.data);
+  const findings = scoutOutput.findings;
   const decisionSummaries =
-    result.decisionSummaries.length > 0 ? result.decisionSummaries : parsed.data.decisionSummaries;
+    result.decisionSummaries.length > 0 ? result.decisionSummaries : scoutOutput.decisionSummaries;
 
   append({
     projectId: ctx.projectId,
@@ -264,4 +265,10 @@ export async function runOneScout(
     decisionSummaries,
     runId,
   };
+}
+
+function isTimeoutError(err: unknown, timeoutMs: number): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err.name === 'ScoutTimeoutError') return true;
+  return err.message.includes('timed out after') && err.message.includes(`${timeoutMs}ms`);
 }

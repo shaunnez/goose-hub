@@ -23,8 +23,10 @@ vi.mock('@goose-hub/core/agent-runtime/schema-bridge.js', () => ({
   toJsonSchema: vi.fn().mockReturnValue({}),
 }));
 
-const mockReadFileSync = vi.fn();
-const mockMkdirSync = vi.fn();
+const { mockReadFileSync, mockMkdirSync } = vi.hoisted(() => ({
+  mockReadFileSync: vi.fn(),
+  mockMkdirSync: vi.fn(),
+}));
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
   return {

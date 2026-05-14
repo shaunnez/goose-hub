@@ -99,6 +99,30 @@ describe('runWithEscalation — escalation', () => {
     expect(payload.reason).toBe('schema-validation-failed');
   });
 
+  it('preserves Codex provider when escalating haiku to sonnet', async () => {
+    appendEvent.mockClear();
+    const runFn = vi
+      .fn()
+      .mockResolvedValueOnce(makeResult({ wrong: 'shape' }))
+      .mockResolvedValueOnce(makeResult({ ok: true }));
+    const runtime = makeRuntime(runFn);
+
+    const out = await runWithEscalation({
+      runtime,
+      spec: makeSpec({ modelOverride: 'gpt-5.4-mini' }),
+      schema: Schema,
+      projectId: 'p',
+      workItemId: 'w',
+    });
+
+    expect(out.escalated).toBe(true);
+    const retrySpec = runFn.mock.calls[1][0] as AgentSpec;
+    expect(retrySpec.modelOverride).toBe('gpt-5.4');
+    const payload = appendEvent.mock.calls[0][0].payload as Record<string, unknown>;
+    expect(payload.fromModel).toBe('gpt-5.4-mini');
+    expect(payload.toModel).toBe('gpt-5.4');
+  });
+
   it('throws when sonnet retry also fails validation', async () => {
     appendEvent.mockClear();
     const runFn = vi

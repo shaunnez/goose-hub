@@ -1,9 +1,8 @@
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
-import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
-import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
+import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
@@ -79,7 +78,13 @@ export async function runReviewWorkflow(
 ): Promise<void> {
   const runId = crypto.randomUUID();
   const projectConfig = await getProjectBySlug(projectSlug);
-  const runtime = deps.runtime ?? new ClaudeCliRuntime();
+  const { runtime, resolvedBudget } = resolveProjectAgentExecution({
+    skill: 'review',
+    role: 'reviewer',
+    projectId: projectSlug,
+    projectConfig,
+    injectedRuntime: deps.runtime,
+  });
   const reviewPrompt = readPromptWithContext('review', projectSlug);
   const reviewJsonSchema = toJsonSchema(ReviewOutputSchema);
   const { personaId } = selectPersona(projectSlug, 'reviewer');
@@ -100,7 +105,7 @@ export async function runReviewWorkflow(
       personaId,
       reviewPrompt,
       reviewJsonSchema,
-      resolvedBudgets: resolveBudgetsForProject('review', projectConfig?.budgets, projectSlug),
+      resolvedBudgets: resolvedBudget,
     });
     const result = await runtime.run(spec);
 

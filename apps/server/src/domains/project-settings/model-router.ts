@@ -22,7 +22,9 @@ import {
   writeProjectReviewSettings,
 } from '@goose-hub/core/db/repositories/project-review-settings.js';
 import {
+  getUseInvestigationSwarm,
   getUseMultiAgentPipeline,
+  setUseInvestigationSwarm,
   setUseMultiAgentPipeline,
 } from '@goose-hub/core/db/repositories/project-settings.js';
 import { Hono } from 'hono';
@@ -413,22 +415,28 @@ router.patch('/:slug/settings/review', async (c) => {
 // ─── Multi-agent pipeline flag (M19.14) ──────────────────────────────────────
 
 const PipelinePatchSchema = z.object({
-  useMultiAgentPipeline: z.boolean(),
+  useMultiAgentPipeline: z.boolean().optional(),
+  useInvestigationSwarm: z.boolean().optional(),
 });
 
-/** GET /projects/:slug/settings/pipeline — current useMultiAgentPipeline flag value */
+/** GET /projects/:slug/settings/pipeline — current pipeline flags */
 router.get('/:slug/settings/pipeline', async (c) => {
   const slug = c.req.param('slug');
   const project = await getProject(slug);
   if (project == null) return c.json({ error: 'project not found' }, 404);
+  const investigationSwarmConfigDefault = project.investigationSwarm?.enabled ?? true;
 
   return c.json({
     projectId: project.id,
     useMultiAgentPipeline: getUseMultiAgentPipeline(project.id),
+    useInvestigationSwarm: getUseInvestigationSwarm(project.id, investigationSwarmConfigDefault),
+    configDefaults: {
+      useInvestigationSwarm: investigationSwarmConfigDefault,
+    },
   });
 });
 
-/** PATCH /projects/:slug/settings/pipeline — toggle useMultiAgentPipeline */
+/** PATCH /projects/:slug/settings/pipeline — toggle pipeline flags */
 router.patch('/:slug/settings/pipeline', async (c) => {
   const slug = c.req.param('slug');
   const project = await getProject(slug);
@@ -442,7 +450,12 @@ router.patch('/:slug/settings/pipeline', async (c) => {
     return c.json({ error: 'invalid body', details: parsed.error.issues }, 422);
   }
 
-  setUseMultiAgentPipeline(project.id, parsed.data.useMultiAgentPipeline, 'ui');
+  if (parsed.data.useMultiAgentPipeline != null) {
+    setUseMultiAgentPipeline(project.id, parsed.data.useMultiAgentPipeline, 'ui');
+  }
+  if (parsed.data.useInvestigationSwarm != null) {
+    setUseInvestigationSwarm(project.id, parsed.data.useInvestigationSwarm, 'ui');
+  }
   return c.json({ ok: true });
 });
 

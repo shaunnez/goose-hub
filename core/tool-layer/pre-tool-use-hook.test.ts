@@ -109,6 +109,20 @@ describe('deployHooks', () => {
     expect(scriptContent).toContain('FACTORY_SERVER_PORT');
   });
 
+  it('the written script enforces and audits workspace path boundaries', () => {
+    vi.mocked(existsSync).mockReturnValue(false);
+
+    deployHooks();
+
+    const scriptContent = vi.mocked(writeFileSync).mock.calls[0][1] as string;
+    expect(scriptContent).toContain('FACTORY_WORKSPACE_DIR');
+    expect(scriptContent).toContain('workspaceBoundaryDecision');
+    expect(scriptContent).toContain('path escapes workspace');
+    expect(scriptContent).toContain('Bash command references path outside workspace');
+    expect(scriptContent).toContain('blocked: true');
+    expect(scriptContent).toContain('block_reason');
+  });
+
   it('the written script references the fallback server port 3001', () => {
     vi.mocked(existsSync).mockReturnValue(false);
 

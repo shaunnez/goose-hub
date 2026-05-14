@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentEvent, AppendEventInput } from '../event-stream/store.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
-import { type ScoutSpec, dispatchWave } from './swarm.js';
+import { type ScoutSpec, dispatchWave, resolveScoutConcurrencyCap } from './swarm.js';
 
 function makeFakeAppendEvent(): {
   fn: (input: AppendEventInput) => AgentEvent;
@@ -49,12 +49,14 @@ function okResult(scoutName: string): AgentResult {
   };
 }
 
-function makeRuntime(impls: Record<string, () => Promise<AgentResult>>): AgentRuntime {
+function makeRuntime(
+  impls: Record<string, (spec: AgentSpec) => Promise<AgentResult>>,
+): AgentRuntime {
   return {
     async run(spec: AgentSpec): Promise<AgentResult> {
       const impl = impls[spec.skill];
       if (impl == null) throw new Error(`No fake runtime for skill ${spec.skill}`);
-      return impl();
+      return impl(spec);
     },
   };
 }
@@ -71,6 +73,23 @@ function testBudgetResolver(skill: string) {
 }
 
 describe('swarm.dispatchWave', () => {
+  describe('resolveScoutConcurrencyCap', () => {
+    it('defaults to the smaller of six and the scout count', () => {
+      expect(resolveScoutConcurrencyCap(8, undefined)).toBe(6);
+      expect(resolveScoutConcurrencyCap(3, undefined)).toBe(3);
+    });
+
+    it('keeps enabled swarms at one scout minimum for zero or invalid caps', () => {
+      expect(resolveScoutConcurrencyCap(6, 0)).toBe(1);
+      expect(resolveScoutConcurrencyCap(6, -2)).toBe(1);
+      expect(resolveScoutConcurrencyCap(6, Number.NaN)).toBe(6);
+    });
+
+    it('never exceeds the actual scout count', () => {
+      expect(resolveScoutConcurrencyCap(2, 10)).toBe(2);
+    });
+  });
+
   it('dispatches all scouts in parallel and returns ok status when all succeed', async () => {
     const { fn: appendEvent, events } = makeFakeAppendEvent();
     const runtime = makeRuntime({
@@ -209,11 +228,7 @@ describe('swarm.dispatchWave', () => {
       'scout-schema': () => Promise.resolve(okResult('scout-schema')),
       'scout-code-path': () => Promise.resolve(okResult('scout-code-path')),
       'scout-pattern': () => Promise.resolve(okResult('scout-pattern')),
-      // sleeps past timeout
-      'scout-slow': () =>
-        new Promise<AgentResult>((resolve) => {
-          setTimeout(() => resolve(okResult('scout-slow')), 200);
-        }),
+      'scout-slow': () => Promise.reject(new Error('Agent run scout-slow timed out after 30ms')),
     });
 
     const result = await dispatchWave({
@@ -243,6 +258,38 @@ describe('swarm.dispatchWave', () => {
     expect(result.status).toBe('ok');
     expect(events.some((e) => e.kind === 'swarm.scout-timeout')).toBe(true);
     expect(events.some((e) => e.kind === 'agent.cancelled')).toBe(true);
+  });
+
+  it('passes worktreePath as workspaceDir to every child scout runtime spec', async () => {
+    const { fn: appendEvent } = makeFakeAppendEvent();
+    const seenSpecs: AgentSpec[] = [];
+    const runtime: AgentRuntime = {
+      async run(spec: AgentSpec): Promise<AgentResult> {
+        seenSpecs.push(spec);
+        return okResult(spec.skill);
+      },
+    };
+
+    await dispatchWave({
+      parentRunId: 'parent-worktree',
+      scoutSpecs: [
+        makeScoutSpec('scout-schema'),
+        makeScoutSpec('scout-code-path'),
+        makeScoutSpec('scout-pattern'),
+      ],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/real-worktree',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 5_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+    });
+
+    expect(seenSpecs).toHaveLength(3);
+    expect(seenSpecs.every((spec) => spec.workspaceDir === '/tmp/real-worktree')).toBe(true);
   });
 
   it('halts and signals escalation when ≥2 scouts fail', async () => {

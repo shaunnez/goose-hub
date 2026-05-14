@@ -1,17 +1,26 @@
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
+import type { ResolvedBudget } from '@goose-hub/core/agent-runtime/budgets.js';
 import { crossValidate } from '@goose-hub/core/agent-runtime/cross-validate.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
+import {
+  type ModelProvider,
+  defaultModelForTierAndProvider,
+  tierOf,
+} from '@goose-hub/core/agent-runtime/models.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import {
   resolveBudgetsForProject,
+  resolveGlobalSettingsForProject,
   resolveRoleModelForProject,
 } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { ScoutOutputSchema } from '@goose-hub/core/agent-runtime/scout-output.js';
+import type { SelectModelForRoleResult } from '@goose-hub/core/agent-runtime/select-model-for-role.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
-import { dispatchWave } from '@goose-hub/core/agent-runtime/swarm.js';
+import { type ScoutBudgetResolver, dispatchWave } from '@goose-hub/core/agent-runtime/swarm.js';
+import { getUseInvestigationSwarm } from '@goose-hub/core/db/repositories/project-settings.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
@@ -30,6 +39,38 @@ import type { z } from 'zod';
 import { WAVE_1_SCOUTS, selectWave2Scouts } from './wave2-selection.js';
 
 type InvestigateOutput = z.infer<typeof InvestigateSchema>;
+
+export function chooseScoutModelOverride(input: {
+  skill: string;
+  resolvedBudget: ResolvedBudget;
+  investigatorRoleModel: SelectModelForRoleResult;
+  forcedRuntimeProvider: ModelProvider | null;
+}): string {
+  const { skill, resolvedBudget, investigatorRoleModel, forcedRuntimeProvider } = input;
+
+  if (skill.startsWith('scout-') || skill.startsWith('wave2-')) {
+    return defaultModelForTierAndProvider(
+      'haiku',
+      forcedRuntimeProvider ?? investigatorRoleModel.provider,
+    );
+  }
+
+  if (investigatorRoleModel.source === 'db' || investigatorRoleModel.source === 'config') {
+    return defaultModelForTierAndProvider(
+      investigatorRoleModel.tier,
+      forcedRuntimeProvider ?? investigatorRoleModel.provider,
+    );
+  }
+
+  if (forcedRuntimeProvider != null) {
+    return defaultModelForTierAndProvider(
+      tierOf(resolvedBudget.modelOverride),
+      forcedRuntimeProvider,
+    );
+  }
+
+  return resolvedBudget.modelOverride;
+}
 
 function buildSchemaScoutFocus(workItem: { title: string; body: string }): string {
   const text = `${workItem.title}\n${workItem.body}`.toLowerCase();
@@ -91,6 +132,12 @@ export async function runInvestigateWorkflow(
   const runId = crypto.randomUUID();
   const { personaId } = selectPersona(projectId, 'investigator');
   const projectConfig = await getProjectBySlug(projectId);
+  const settingsProjectId = projectConfig?.id ?? projectId;
+  const globalSettings = resolveGlobalSettingsForProject(settingsProjectId, projectConfig?.budgets);
+  const investigationSwarmEnabled = getUseInvestigationSwarm(
+    settingsProjectId,
+    projectConfig?.investigationSwarm?.enabled ?? true,
+  );
   const investigateBudget = resolveBudgetsForProject(
     'investigate',
     projectConfig?.budgets,
@@ -103,14 +150,24 @@ export async function runInvestigateWorkflow(
     allowHoldoutOverride: projectConfig?.agentConfig?.allowHoldoutOverride,
     skill: 'investigate',
   });
-  const investigatorModelOverride =
+  const configRuntime = projectConfig?.agentConfig?.runtime ?? 'auto';
+  const forcedRuntimeProvider: ModelProvider | null =
+    configRuntime === 'codex-cli' ? 'codex' : configRuntime === 'claude-cli' ? 'claude' : null;
+  const configuredInvestigatorModelOverride =
     investigateRoleModel.source === 'db' || investigateRoleModel.source === 'config'
       ? investigateRoleModel.modelId
       : investigateBudget.modelOverride;
+  const investigatorModelOverride =
+    forcedRuntimeProvider != null
+      ? defaultModelForTierAndProvider(
+          tierOf(configuredInvestigatorModelOverride),
+          forcedRuntimeProvider,
+        )
+      : configuredInvestigatorModelOverride;
   const runtime =
     deps.runtime ??
     selectRuntime({
-      configRuntime: projectConfig?.agentConfig?.runtime ?? 'auto',
+      configRuntime,
       model: investigatorModelOverride,
     });
   const worktreePath = createWtFn(targetRepo, runId);
@@ -134,6 +191,23 @@ export async function runInvestigateWorkflow(
     };
   }
 
+  const resolveInvestigateScoutBudget: ScoutBudgetResolver = (
+    skill,
+    projectBudgets,
+    currentProjectId,
+  ) => {
+    const resolved = resolveBudgetsForProject(skill, projectBudgets, currentProjectId);
+    return {
+      ...resolved,
+      modelOverride: chooseScoutModelOverride({
+        skill,
+        resolvedBudget: resolved,
+        investigatorRoleModel: investigateRoleModel,
+        forcedRuntimeProvider,
+      }),
+    };
+  };
+
   eventStore.appendEvent({
     projectId,
     workItemId: workItem.id,
@@ -144,134 +218,152 @@ export async function runInvestigateWorkflow(
   });
 
   try {
-    // Pre-fetch symbol index hints for scout-code-path (best-effort; empty if index absent).
-    // Pass worktreePath so hints are filtered to files that actually exist in the target repo,
-    // preventing Goose Hub-internal paths from leaking into non-goose-hub investigations.
-    const symbolIndexHints = lookupWorkItemSymbols(workItem.title, workItem.body, { worktreePath });
+    let allScoutReports: string | undefined;
 
-    const patternTokens = extractIdentifiers(`${workItem.title} ${workItem.body}`).slice(0, 4);
-    const patternFocus =
-      patternTokens.length > 0
-        ? `Find existing usages of: ${patternTokens.join(', ')} — patterns this fix must follow`
-        : 'Identify existing patterns the fix should follow';
+    if (investigationSwarmEnabled) {
+      // Pre-fetch symbol index hints for scout-code-path (best-effort; empty if index absent).
+      // Pass worktreePath so hints are filtered to files that actually exist in the target repo,
+      // preventing Goose Hub-internal paths from leaking into non-goose-hub investigations.
+      const symbolIndexHints = lookupWorkItemSymbols(workItem.title, workItem.body, {
+        worktreePath,
+      });
 
-    const wave1Scouts = WAVE_1_SCOUTS.map((spec) => {
-      if (spec.scoutName === 'scout-code-path' && symbolIndexHints.length > 0)
-        return { ...spec, extraContext: { symbolIndexHints } };
-      if (spec.scoutName === 'scout-pattern') return { ...spec, scoutFocus: patternFocus };
-      if (spec.scoutName === 'scout-schema')
-        return { ...spec, scoutFocus: buildSchemaScoutFocus(workItemCtx) };
-      return spec;
-    });
+      const patternTokens = extractIdentifiers(`${workItem.title} ${workItem.body}`).slice(0, 4);
+      const patternFocus =
+        patternTokens.length > 0
+          ? `Find existing usages of: ${patternTokens.join(', ')} — patterns this fix must follow`
+          : 'Identify existing patterns the fix should follow';
 
-    // Wave 1 — parallel fact-gathering
-    const wave1Result = await dispatchWave({
-      parentRunId: runId,
-      scoutSpecs: wave1Scouts,
-      workItem: workItemCtx,
-      worktreePath,
-      projectId,
-      workItemId: workItem.id,
-      runtime,
-      personaId,
-      projectBudgets: projectConfig?.budgets,
-      loadSkillAssets,
-    });
+      const wave1Scouts = WAVE_1_SCOUTS.map((spec) => {
+        if (spec.scoutName === 'scout-code-path' && symbolIndexHints.length > 0)
+          return { ...spec, extraContext: { symbolIndexHints } };
+        if (spec.scoutName === 'scout-pattern') return { ...spec, scoutFocus: patternFocus };
+        if (spec.scoutName === 'scout-schema')
+          return { ...spec, scoutFocus: buildSchemaScoutFocus(workItemCtx) };
+        return spec;
+      });
 
-    for (const report of wave1Result.reports) {
-      if (report.status === 'ok') {
-        persistScoutReport(projectId, workItem.id, runId, report.scoutName, {
-          findings: report.findings,
-          decisionSummaries: report.decisionSummaries,
-        });
-      }
-    }
-
-    if (wave1Result.shouldEscalate) {
-      eventStore.appendEvent({
+      // Wave 1 — parallel fact-gathering
+      const wave1Result = await dispatchWave({
+        parentRunId: runId,
+        scoutSpecs: wave1Scouts,
+        workItem: workItemCtx,
+        worktreePath,
         projectId,
         workItemId: workItem.id,
-        kind: 'agent.run-failed',
-        payload: {
-          skill: 'investigate',
-          runId,
-          error: `Wave halted — failed scouts: ${wave1Result.failedScouts.join(', ')}`,
-        },
-        runId,
+        runtime,
+        personaId,
+        maxScoutAgents: globalSettings.maxScoutAgents,
+        projectBudgets: projectConfig?.budgets,
+        resolveScoutBudget: resolveInvestigateScoutBudget,
+        loadSkillAssets,
       });
-      await stateSource.comment(
-        workItem.externalId,
-        buildAgentComment(
-          'Investigate',
-          'Escalated',
-          'Too many scouts failed — escalating to needs-human',
-          [`Failed scouts: ${wave1Result.failedScouts.join(', ')}`],
-        ),
-      );
-      await stateSource.transitionState(
-        workItem.externalId,
-        'factory:investigating',
-        'factory:needs-human',
-      );
-      return;
+
+      for (const report of wave1Result.reports) {
+        if (report.status === 'ok') {
+          persistScoutReport(projectId, workItem.id, runId, report.scoutName, {
+            findings: report.findings,
+            decisionSummaries: report.decisionSummaries,
+          });
+        }
+      }
+
+      if (wave1Result.shouldEscalate) {
+        eventStore.appendEvent({
+          projectId,
+          workItemId: workItem.id,
+          kind: 'agent.run-failed',
+          payload: {
+            skill: 'investigate',
+            runId,
+            error: `Wave halted — failed scouts: ${wave1Result.failedScouts.join(', ')}`,
+          },
+          runId,
+        });
+        await stateSource.comment(
+          workItem.externalId,
+          buildAgentComment(
+            'Investigate',
+            'Escalated',
+            'Too many scouts failed — escalating to needs-human',
+            [`Failed scouts: ${wave1Result.failedScouts.join(', ')}`],
+          ),
+        );
+        await stateSource.transitionState(
+          workItem.externalId,
+          'factory:investigating',
+          'factory:needs-human',
+        );
+        return;
+      }
+
+      // Cross-validate Wave 1 before dispatching Wave 2
+      const cvResult = crossValidate(wave1Result.reports);
+      const wave1Context = JSON.stringify({
+        wave1: wave1Result.reports,
+        contradictions: cvResult.contradictions,
+      });
+
+      const wave2Scouts = selectWave2Scouts({
+        workItem: workItemCtx,
+        reports: wave1Result.reports,
+        contradictions: cvResult.contradictions,
+        scoutReportsContext: wave1Context,
+      });
+
+      // Wave 2 — deep synthesis agents with cross-validated context
+      const wave2Result = await dispatchWave({
+        parentRunId: runId,
+        scoutSpecs: wave2Scouts,
+        workItem: workItemCtx,
+        worktreePath,
+        projectId,
+        workItemId: workItem.id,
+        runtime,
+        personaId,
+        maxScoutAgents: globalSettings.maxScoutAgents,
+        projectBudgets: projectConfig?.budgets,
+        minSuccessfulScouts: wave2Scouts.length,
+        resolveScoutBudget: resolveInvestigateScoutBudget,
+        loadSkillAssets,
+      });
+
+      for (const report of wave2Result.reports) {
+        if (report.status === 'ok') {
+          persistScoutReport(projectId, workItem.id, runId, report.scoutName, {
+            findings: report.findings,
+            decisionSummaries: report.decisionSummaries,
+          });
+        }
+      }
+
+      // Build full context for the synthesis investigator
+      allScoutReports = JSON.stringify({
+        wave1: wave1Result.reports,
+        wave2: wave2Result.reports,
+        contradictions: cvResult.contradictions,
+      });
     }
 
-    // Cross-validate Wave 1 before dispatching Wave 2
-    const cvResult = crossValidate(wave1Result.reports);
-    const wave1Context = JSON.stringify({
-      wave1: wave1Result.reports,
-      contradictions: cvResult.contradictions,
-    });
-
-    const wave2Scouts = selectWave2Scouts({
-      workItem: workItemCtx,
-      reports: wave1Result.reports,
-      contradictions: cvResult.contradictions,
-      scoutReportsContext: wave1Context,
-    });
-
-    // Wave 2 — deep synthesis agents with cross-validated context
-    const wave2Result = await dispatchWave({
-      parentRunId: runId,
-      scoutSpecs: wave2Scouts,
+    const investigateContext: {
+      workItem: typeof workItemCtx;
+      worktreePath: string;
+      scoutReports?: string;
+    } = {
       workItem: workItemCtx,
       worktreePath,
-      projectId,
-      workItemId: workItem.id,
-      runtime,
-      personaId,
-      projectBudgets: projectConfig?.budgets,
-      minSuccessfulScouts: wave2Scouts.length,
-      loadSkillAssets,
-    });
-
-    for (const report of wave2Result.reports) {
-      if (report.status === 'ok') {
-        persistScoutReport(projectId, workItem.id, runId, report.scoutName, {
-          findings: report.findings,
-          decisionSummaries: report.decisionSummaries,
-        });
-      }
+    };
+    if (allScoutReports != null) {
+      investigateContext.scoutReports = allScoutReports;
     }
 
-    // Build full context for the synthesis investigator
-    const allScoutReports = JSON.stringify({
-      wave1: wave1Result.reports,
-      wave2: wave2Result.reports,
-      contradictions: cvResult.contradictions,
-    });
-
-    // Synthesis — invoke investigate skill with scout evidence
+    // Synthesis — invoke investigate skill with scout evidence when swarm is enabled
     const synthResult = await invokeSkill({
       skillName: 'investigate',
       projectId,
       workItemId: workItem.id,
       runId,
-      context: {
-        workItem: workItemCtx,
-        worktreePath,
-        scoutReports: allScoutReports,
-      },
+      context: investigateContext,
       overrides: { runtimeOverride: runtime, modelOverride: investigatorModelOverride },
     });
 

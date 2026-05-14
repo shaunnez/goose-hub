@@ -1,6 +1,6 @@
 import type { ModelTier } from '../types.js';
 import type { AgentBudgets } from './interface.js';
-import { defaultModelForTier } from './models.js';
+import { defaultModelForTierAndProvider } from './models.js';
 
 export interface SkillBudget {
   maxTurns: number;
@@ -44,9 +44,9 @@ export type SkillBudgetOverride = Partial<SkillBudget>;
  *   retro-deep: 1.5min, <10 turns, $0.11
  */
 export const SKILL_BUDGETS: Record<string, SkillBudget> = {
-  triage: { maxTurns: 25, maxBudgetUsd: 0.05, timeoutMs: 120_000, modelTier: 'haiku' },
-  'repo-match': { maxTurns: 25, maxBudgetUsd: 0.05, timeoutMs: 60_000, modelTier: 'haiku' },
-  'bug-enhance': { maxTurns: 20, maxBudgetUsd: 0.3, timeoutMs: 120_000, modelTier: 'haiku' },
+  triage: { maxTurns: 25, maxBudgetUsd: 1, timeoutMs: 120_000, modelTier: 'haiku' },
+  'repo-match': { maxTurns: 25, maxBudgetUsd: 1, timeoutMs: 60_000, modelTier: 'haiku' },
+  'bug-enhance': { maxTurns: 20, maxBudgetUsd: 1, timeoutMs: 120_000, modelTier: 'haiku' },
   'evidence-post': { maxTurns: 60, maxBudgetUsd: 2.0, timeoutMs: 300_000, modelTier: 'haiku' },
   implement: {
     maxTurns: 150,
@@ -96,8 +96,8 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
   // M13 Discover Lane — one focused question per round, capped at 7 rounds.
   // Cheap per-round; the workflow is the loop, not the skill.
   'grill-me': {
-    maxTurns: 15,
-    maxBudgetUsd: 0.2,
+    maxTurns: 100,
+    maxBudgetUsd: 6,
     timeoutMs: 300_000,
     modelTier: 'sonnet',
   },
@@ -143,31 +143,31 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
   'scout-code-path': {
     maxTurns: 20,
     maxBudgetUsd: 0.5,
-    timeoutMs: 120_000,
+    timeoutMs: 240_000,
     modelTier: 'haiku',
   },
   'scout-pattern': {
     maxTurns: 20,
     maxBudgetUsd: 0.5,
-    timeoutMs: 120_000,
+    timeoutMs: 240_000,
     modelTier: 'haiku',
   },
   'scout-test-inventory': {
     maxTurns: 20,
     maxBudgetUsd: 0.5,
-    timeoutMs: 120_000,
+    timeoutMs: 240_000,
     modelTier: 'haiku',
   },
   'scout-dependency': {
     maxTurns: 20,
     maxBudgetUsd: 0.5,
-    timeoutMs: 120_000,
+    timeoutMs: 240_000,
     modelTier: 'haiku',
   },
   'scout-user-journey': {
     maxTurns: 20,
     maxBudgetUsd: 0.5,
-    timeoutMs: 120_000,
+    timeoutMs: 240_000,
     modelTier: 'haiku',
   },
   // M19.01 — Wave-2 deep agents. Synthesise paste-ready artefacts from
@@ -296,7 +296,7 @@ export function resolveBudgets(
 
   return {
     budgets: { maxTurns: merged.maxTurns, maxBudgetUsd, timeoutMs: merged.timeoutMs },
-    modelOverride: defaultModelForTier(merged.modelTier),
+    modelOverride: defaultModelForTierAndProvider(merged.modelTier, 'claude'),
   };
 }
 
@@ -346,6 +346,6 @@ export function resolveEscalatedBudgets(
 
   return {
     budgets: { maxTurns, maxBudgetUsd, timeoutMs },
-    modelOverride: defaultModelForTier(escalation.modelTier),
+    modelOverride: defaultModelForTierAndProvider(escalation.modelTier, 'claude'),
   };
 }

@@ -1,9 +1,8 @@
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
-import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
-import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
+import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { runWithEscalation } from '@goose-hub/core/agent-runtime/with-escalation.js';
@@ -149,8 +148,14 @@ export async function runFixFeedbackWorkflow(
   deps: FixFeedbackDeps = {},
 ): Promise<void> {
   const runId = crypto.randomUUID();
-  const runtime = deps.runtime ?? new ClaudeCliRuntime();
   const projectConfig = await getProjectBySlug(projectId);
+  const { runtime, resolvedBudget } = resolveProjectAgentExecution({
+    skill: 'implement',
+    role: 'developer',
+    projectId,
+    projectConfig,
+    injectedRuntime: deps.runtime,
+  });
 
   const worktreePath = findWorktreePath(workItem.id);
   if (worktreePath == null) {
@@ -249,7 +254,7 @@ export async function runFixFeedbackWorkflow(
         freshContext: false,
         toolBundles: ['dev-tools'],
         toolExtras: [],
-        ...resolveBudgetsForProject('implement', projectConfig?.budgets, projectId),
+        ...resolvedBudget,
         personaId,
         outputJsonSchema: implementJsonSchema,
         appendSystemPrompt: implementPrompt,

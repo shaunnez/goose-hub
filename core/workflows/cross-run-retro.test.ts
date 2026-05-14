@@ -26,6 +26,9 @@ vi.mock('../db/repositories/project-settings.js', () => ({
   readProjectSettings: vi.fn().mockReturnValue(null),
   readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
 }));
+vi.mock('../db/repositories/project-model-settings.js', () => ({
+  readProjectModelSettingsForRole: vi.fn().mockReturnValue(null),
+}));
 vi.mock('../db/schema.js', () => ({
   archivedLifecycles: { projectId: 'project_id', closedAt: 'closed_at' },
   decisionPatterns: { projectId: 'project_id' },

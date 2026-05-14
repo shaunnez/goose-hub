@@ -9,6 +9,7 @@ import {
   writeWpBuilderSandbox,
 } from './sandbox.js';
 import { redactSecrets } from './secret-redaction.js';
+import { evaluateWorkspaceBoundary } from './workspace-boundary.js';
 
 // ─── secret-redaction ────────────────────────────────────────────────────────
 
@@ -172,6 +173,53 @@ describe('computeAllowlist', () => {
   it('allows decision-record-only when no role specified', () => {
     const list = computeAllowlist({ toolBundles: ['decision-record-only'], toolExtras: [] });
     expect(list).toContain('record-decision');
+  });
+});
+
+// ─── workspace boundary guard ────────────────────────────────────────────────
+
+describe('evaluateWorkspaceBoundary', () => {
+  it('blocks Read paths outside workspaceDir', () => {
+    const decision = evaluateWorkspaceBoundary({
+      toolName: 'Read',
+      toolInput: { file_path: '/Users/shaunnesbitt/projects/goose-hub/core/types.ts' },
+      workspaceDir: '/tmp/factory-worktree',
+    });
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toContain('escapes workspace');
+  });
+
+  it('allows Read paths inside workspaceDir after normalization', () => {
+    const decision = evaluateWorkspaceBoundary({
+      toolName: 'Read',
+      toolInput: { file_path: 'core/types.ts' },
+      workspaceDir: '/tmp/factory-worktree',
+    });
+
+    expect(decision.allowed).toBe(true);
+  });
+
+  it('blocks Bash commands that reference obvious absolute repo escapes', () => {
+    const decision = evaluateWorkspaceBoundary({
+      toolName: 'Bash',
+      toolInput: { command: 'rg runOneScout /Users/shaunnesbitt/projects/goose-hub' },
+      workspaceDir: '/tmp/factory-worktree',
+    });
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toContain('outside workspace');
+  });
+
+  it('allows explicitly configured secondary workspaces', () => {
+    const decision = evaluateWorkspaceBoundary({
+      toolName: 'Read',
+      toolInput: { file_path: '/Users/shaunnesbitt/projects/goose-hub/evidence/out.png' },
+      workspaceDir: '/tmp/factory-worktree',
+      allowedSecondaryWorkspaces: ['/Users/shaunnesbitt/projects/goose-hub/evidence'],
+    });
+
+    expect(decision.allowed).toBe(true);
   });
 });
 

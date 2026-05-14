@@ -17,6 +17,7 @@ import { assembleSpawnContext } from './context-assembly.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { resolveMockOutput } from './mock-outputs.js';
 import { defaultModelForTier } from './models.js';
+import { killProcessGroupOrChild } from './process-kill.js';
 import type { JsonSchema } from './schema-bridge.js';
 
 const STDOUT_CAP = 4 * 1024 * 1024; // 4 MB
@@ -217,6 +218,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
         FACTORY_RUN_ALLOWLIST: allowedTools.join(','),
         FACTORY_RUN_ID: runId,
         FACTORY_PROJECT_ID: projectId,
+        FACTORY_WORKSPACE_DIR: workspaceDir,
         // Where the pre-tool-use-hook posts tool-call audit events (#209).
         // Falls back to 3001 if FACTORY_SERVER_PORT isn't set in the parent.
         FACTORY_SERVER_PORT: process.env.FACTORY_SERVER_PORT ?? '3001',
@@ -234,6 +236,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
       const child = spawn(binaryPath, argv, {
         env: minimalEnv,
         cwd: workspaceDir,
+        detached: !isWindows,
         shell: false, // Security rule: never shell: true
         stdio: ['pipe', 'pipe', 'pipe'],
       });
@@ -242,6 +245,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
       let stdout = '';
       let stderr = '';
       let truncated = false;
+      let settled = false;
 
       child.stderr?.on('data', (chunk: Buffer) => {
         stderr += chunk.toString();
@@ -268,7 +272,20 @@ export class ClaudeCliRuntime implements AgentRuntime {
 
       const effectiveTimeoutMs = spec.budgets.timeoutMs ?? TIMEOUT_MS;
       const timeout = setTimeout(() => {
-        child.kill('SIGKILL');
+        if (settled) return;
+        settled = true;
+        killProcessGroupOrChild(child);
+        db.insert(agentRuns)
+          .values({
+            runId,
+            personaId,
+            workItemId: spec.workItemId ?? workItemId ?? null,
+            projectId,
+            role: spec.role,
+            skill: spec.skill,
+            outcome: 'failure',
+          })
+          .run();
         eventStore.appendEvent({
           projectId,
           workItemId,
@@ -277,10 +294,25 @@ export class ClaudeCliRuntime implements AgentRuntime {
           runId,
           personaId,
         });
+        eventStore.appendEvent({
+          projectId,
+          workItemId,
+          kind: 'agent.run-failed',
+          payload: {
+            runId,
+            skill: spec.skill,
+            error: `timed out after ${effectiveTimeoutMs}ms`,
+            timeoutMs: effectiveTimeoutMs,
+          },
+          runId,
+          personaId,
+        });
         reject(new Error(`Agent run ${runId} timed out after ${effectiveTimeoutMs}ms`));
       }, effectiveTimeoutMs);
 
       child.on('close', (code) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timeout);
 
         // --output-format json produces a single JSON envelope:
@@ -437,6 +469,8 @@ export class ClaudeCliRuntime implements AgentRuntime {
       });
 
       child.on('error', (err) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timeout);
         reject(err);
       });

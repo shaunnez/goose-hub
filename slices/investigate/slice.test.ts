@@ -17,6 +17,9 @@ const mockInvokeSkill = vi.fn();
 const mockPersistScoutReport = vi.fn();
 const mockLookupWorkItemSymbols = vi.fn();
 const mockExtractIdentifiers = vi.fn();
+const mockGetUseInvestigationSwarm = vi.fn();
+const mockReadProjectSettings = vi.fn();
+const mockReadProjectSkillSettings = vi.fn();
 
 vi.mock('@goose-hub/core/agent-runtime/swarm.js', () => ({
   dispatchWave: (...args: unknown[]) => mockDispatchWave(...args),
@@ -37,6 +40,12 @@ vi.mock('@goose-hub/core/agent-runtime/invoke-skill.js', () => ({
 
 vi.mock('@goose-hub/core/scout-reports/repository.js', () => ({
   persistScoutReport: (...args: unknown[]) => mockPersistScoutReport(...args),
+}));
+
+vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
+  getUseInvestigationSwarm: (...args: unknown[]) => mockGetUseInvestigationSwarm(...args),
+  readProjectSettings: (...args: unknown[]) => mockReadProjectSettings(...args),
+  readProjectSkillSettings: (...args: unknown[]) => mockReadProjectSkillSettings(...args),
 }));
 
 // Single shared mock for ClaudeCliRuntime (playwright-repro step)
@@ -198,11 +207,17 @@ beforeEach(() => {
   mockCrossValidate.mockReset();
   mockInvokeSkill.mockReset();
   mockPersistScoutReport.mockReset();
+  mockGetUseInvestigationSwarm.mockReset();
+  mockReadProjectSettings.mockReset();
+  mockReadProjectSkillSettings.mockReset();
   mockRun.mockReset();
   vi.clearAllMocks();
   mockAccumulatePersonaStats.mockClear();
   mockLookupWorkItemSymbols.mockReturnValue([]);
   mockExtractIdentifiers.mockReturnValue([]);
+  mockGetUseInvestigationSwarm.mockReturnValue(true);
+  mockReadProjectSettings.mockReturnValue(null);
+  mockReadProjectSkillSettings.mockReturnValue(new Map());
 
   // Default happy path
   mockDispatchWave.mockResolvedValue(makeWaveResult());
@@ -217,12 +232,124 @@ beforeEach(() => {
 // ─── tests ────────────────────────────────────────────────────────────────────
 
 describe('runInvestigateWorkflow', () => {
+  describe('chooseScoutModelOverride', () => {
+    it('hard-pins scout child agents to haiku even when investigator has a DB role override', async () => {
+      const { chooseScoutModelOverride } = await import('./workflow.js');
+
+      const model = chooseScoutModelOverride({
+        skill: 'scout-schema',
+        resolvedBudget: {
+          budgets: { maxTurns: 20, maxBudgetUsd: 0.5, timeoutMs: 120_000 },
+          modelOverride: 'claude-haiku-4-5-20251001',
+        },
+        investigatorRoleModel: {
+          tier: 'sonnet',
+          provider: 'codex',
+          modelId: 'gpt-5.4',
+          source: 'db',
+        },
+        forcedRuntimeProvider: null,
+      });
+
+      expect(model).toBe('gpt-5.4-mini');
+    });
+
+    it('hard-pins wave2 child agents to haiku for the temporary scout rule', async () => {
+      const { chooseScoutModelOverride } = await import('./workflow.js');
+
+      const model = chooseScoutModelOverride({
+        skill: 'wave2-risk-analyst',
+        resolvedBudget: {
+          budgets: { maxTurns: 30, maxBudgetUsd: 1.0, timeoutMs: 240_000 },
+          modelOverride: 'claude-sonnet-4-6',
+        },
+        investigatorRoleModel: {
+          tier: 'sonnet',
+          provider: 'codex',
+          modelId: 'gpt-5.4',
+          source: 'db',
+        },
+        forcedRuntimeProvider: null,
+      });
+
+      expect(model).toBe('gpt-5.4-mini');
+    });
+
+    it('coerces per-skill budget tier to a forced Codex runtime when no role override exists', async () => {
+      const { chooseScoutModelOverride } = await import('./workflow.js');
+
+      const model = chooseScoutModelOverride({
+        skill: 'playwright-repro',
+        resolvedBudget: {
+          budgets: { maxTurns: 20, maxBudgetUsd: 0.5, timeoutMs: 120_000 },
+          modelOverride: 'claude-haiku-4-5-20251001',
+        },
+        investigatorRoleModel: {
+          tier: 'opus',
+          provider: 'claude',
+          modelId: 'claude-opus-4-7',
+          source: 'skill',
+        },
+        forcedRuntimeProvider: 'codex',
+      });
+
+      expect(model).toBe('gpt-5.4-mini');
+    });
+  });
+
   describe('swarm dispatch — acceptance criterion 1', () => {
     it('calls dispatchWave exactly twice (Wave 1 then Wave 2)', async () => {
       const { runInvestigateWorkflow } = await import('./workflow.js');
       await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
 
       expect(mockDispatchWave).toHaveBeenCalledTimes(2);
+    });
+
+    it('skips Wave 1 and Wave 2 when investigation swarm is disabled', async () => {
+      mockGetUseInvestigationSwarm.mockReturnValue(false);
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(mockDispatchWave).not.toHaveBeenCalled();
+      expect(mockCrossValidate).not.toHaveBeenCalled();
+      expect(mockPersistScoutReport).not.toHaveBeenCalled();
+      expect(mockInvokeSkill).toHaveBeenCalledWith(
+        expect.objectContaining({
+          skillName: 'investigate',
+          context: expect.not.objectContaining({ scoutReports: expect.anything() }),
+        }),
+      );
+    });
+
+    it('passes the effective maxScoutAgents cap into both waves', async () => {
+      mockReadProjectSettings.mockReturnValue({
+        projectId: 'goose-hub-self',
+        perWorkflowMaxUsd: null,
+        perAgentMaxUsd: null,
+        perAdvisorMaxUsd: null,
+        dailyTokens: null,
+        maxParallelAgents: null,
+        maxScoutAgents: 2,
+        maxRetries: null,
+        perBashCommandMaxSeconds: null,
+        useMultiAgentPipeline: null,
+        useInvestigationSwarm: null,
+        recordDecisionTool: null,
+        updatedAt: 'now',
+        updatedBy: null,
+      });
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(mockDispatchWave).toHaveBeenCalledTimes(2);
+      expect(mockDispatchWave.mock.calls[0][0]).toEqual(
+        expect.objectContaining({ maxScoutAgents: 2 }),
+      );
+      expect(mockDispatchWave.mock.calls[1][0]).toEqual(
+        expect.objectContaining({ maxScoutAgents: 2 }),
+      );
     });
 
     it('calls crossValidate exactly once with Wave 1 reports', async () => {

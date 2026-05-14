@@ -209,6 +209,32 @@ describe('runTriageBatch', () => {
     expect(source.setLabelInGroup).toHaveBeenCalledWith('42', 'priority', 'high');
   });
 
+  it('does not replace an existing type label', async () => {
+    const item = makeWorkItem({ type: 'feature' });
+    const source = makeMockSource([item]);
+    if (source.listLabels) {
+      vi.mocked(source.listLabels).mockResolvedValue(['factory:triaging', 'type:feature']);
+    }
+
+    mockRuntime.run
+      .mockResolvedValueOnce({
+        output: makeTriageOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeRepoMatchOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+    const { runTriageBatch } = await import('./triage-batch.js');
+    await runTriageBatch('goose-hub-self', source);
+
+    expect(source.setLabelInGroup).not.toHaveBeenCalledWith('42', 'type', 'bug');
+    expect(source.setLabelInGroup).toHaveBeenCalledWith('42', 'priority', 'high');
+  });
+
   it('maps p0→critical, p1→high, p2→medium, p3→low', async () => {
     const priorities: Array<[string, string]> = [
       ['p0', 'critical'],

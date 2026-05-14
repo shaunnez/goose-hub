@@ -21,6 +21,7 @@ import { type SelectModelForRoleResult, selectModelForRole } from './select-mode
 export interface EffectiveGlobalSettings {
   perWorkflowMaxUsd?: number;
   maxParallelAgents?: number;
+  maxScoutAgents?: number;
   dailyTokens?: number;
   maxRetries?: number;
   perAdvisorMaxUsd?: number;
@@ -38,6 +39,7 @@ export function resolveGlobalSettingsForProject(
   projectBudgets?: {
     perWorkflowMaxUsd?: number;
     maxParallelAgents?: number;
+    maxScoutAgents?: number;
     dailyTokens?: number;
     maxRetries?: number;
     perAdvisorMaxUsd?: number;
@@ -49,6 +51,7 @@ export function resolveGlobalSettingsForProject(
   return {
     perWorkflowMaxUsd: dbRow?.perWorkflowMaxUsd ?? projectBudgets?.perWorkflowMaxUsd,
     maxParallelAgents: dbRow?.maxParallelAgents ?? projectBudgets?.maxParallelAgents,
+    maxScoutAgents: dbRow?.maxScoutAgents ?? projectBudgets?.maxScoutAgents,
     dailyTokens: dbRow?.dailyTokens ?? projectBudgets?.dailyTokens,
     maxRetries: dbRow?.maxRetries ?? projectBudgets?.maxRetries,
     perAdvisorMaxUsd: dbRow?.perAdvisorMaxUsd ?? projectBudgets?.perAdvisorMaxUsd,

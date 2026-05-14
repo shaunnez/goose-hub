@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ScoutOutputSchema } from './scout-output.js';
+import { toJSONSchema } from 'zod';
+import { ScoutOutputSchema, normalizeScoutOutput } from './scout-output.js';
 
 describe('ScoutOutputSchema', () => {
   it('coerces an unknown decisionSummaries kind to UNKNOWN', () => {
@@ -53,8 +54,15 @@ describe('ScoutOutputSchema', () => {
     });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.findings[0]?.line).toBeUndefined();
-      expect(JSON.stringify(result.data.findings[0])).not.toContain('line');
+      const normalized = normalizeScoutOutput(result.data);
+      expect(normalized.findings[0]?.line).toBeUndefined();
+      expect(JSON.stringify(normalized.findings[0])).not.toContain('line');
     }
+  });
+
+  it('converts to JSON Schema for runtime structured-output steering', () => {
+    const jsonSchema = toJSONSchema(ScoutOutputSchema);
+    expect(jsonSchema).toHaveProperty('type', 'object');
+    expect(jsonSchema).toHaveProperty('properties');
   });
 });

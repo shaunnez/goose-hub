@@ -32,8 +32,8 @@ describe('SKILL_BUDGETS', () => {
     }
   });
 
-  it('keeps scout-schema cheap enough to force early exit instead of runtime tracing', () => {
-    expect(SKILL_BUDGETS['scout-schema']?.maxTurns).toBeLessThanOrEqual(10);
+  it('keeps scout-schema bounded enough to force early exit instead of runtime tracing', () => {
+    expect(SKILL_BUDGETS['scout-schema']?.maxTurns).toBeLessThanOrEqual(20);
   });
 });
 
@@ -54,7 +54,7 @@ describe('resolveBudgets', () => {
 
   it('does not cap when budget is within limit', () => {
     const result = resolveBudgets('triage', { perWorkflowMaxUsd: 10 });
-    expect(result.budgets.maxBudgetUsd).toBe(0.05);
+    expect(result.budgets.maxBudgetUsd).toBe(1);
   });
 
   it('applies per-project skill override', () => {
@@ -156,7 +156,7 @@ describe('perAgentMaxUsd cap', () => {
 
   it('does not clamp when budget is within perAgentMaxUsd', () => {
     const result = resolveBudgets('triage', { perAgentMaxUsd: 10 });
-    expect(result.budgets.maxBudgetUsd).toBe(0.05);
+    expect(result.budgets.maxBudgetUsd).toBe(1);
   });
 
   it('dbPerAgentMaxUsd wins over config perAgentMaxUsd', () => {

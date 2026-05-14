@@ -1,10 +1,9 @@
 import { DeepRetroSchema } from '../../skills/retrospective-deep/schema.js';
 import { LightRetroSchema } from '../../skills/retrospective-light/schema.js';
-import { ClaudeCliRuntime } from '../agent-runtime/claude-cli.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
 import { readPromptWithContext } from '../agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
-import { resolveBudgetsForProject } from '../agent-runtime/resolve-for-project.js';
+import { resolveProjectAgentExecution } from '../agent-runtime/resolve-runtime-for-project.js';
 import { toJsonSchema } from '../agent-runtime/schema-bridge.js';
 import { selectPersona } from '../agent-runtime/select-persona.js';
 import { runCodeQualityAudit } from '../audit/run-audit.js';
@@ -99,12 +98,18 @@ function selectTier(policy: RetrospectivePolicy, triggers: TriggerContext): 'lig
 export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Promise<void> {
   const { workItem, stateSource, projectId, policy, triggers = {}, deps = {} } = input;
   const runId = crypto.randomUUID();
-  const runtime = deps.runtime ?? new ClaudeCliRuntime();
   const tier = selectTier(policy, triggers);
   const skillName = tier === 'deep' ? 'retrospective-deep' : 'retrospective-light';
   const schema = tier === 'deep' ? DeepRetroSchema : LightRetroSchema;
   const prompt = readPromptWithContext(skillName, projectId);
   const projectConfig = await getProjectBySlug(projectId);
+  const { runtime, resolvedBudget } = resolveProjectAgentExecution({
+    skill: skillName,
+    role: 'retrospector',
+    projectId,
+    projectConfig,
+    injectedRuntime: deps.runtime,
+  });
   const jsonSchema = toJsonSchema(schema);
   const { personaId } = selectPersona(projectId, 'retrospector');
 
@@ -173,7 +178,7 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
       freshContext: false,
       toolBundles: ['core'],
       toolExtras: [],
-      ...resolveBudgetsForProject(skillName, projectConfig?.budgets, projectId),
+      ...resolvedBudget,
       personaId,
       appendSystemPrompt: prompt,
       outputJsonSchema: jsonSchema,

@@ -1,13 +1,12 @@
 // slices/review/convergent-review.ts
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
-import { ClaudeCliRuntime } from '@goose-hub/core/agent-runtime/claude-cli.js';
-import { CodexCliRuntime } from '@goose-hub/core/agent-runtime/codex-cli.js';
 import { assembleSpawnContext } from '@goose-hub/core/agent-runtime/context-assembly.js';
 import type { AgentResult, AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
+import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
 import type { ReviewerSlot } from '@goose-hub/core/db/repositories/project-review-settings.js';
 import {
   parseReviewerSlots,
@@ -184,7 +183,7 @@ export async function runConvergentReviewWorkflow(
   const runtimeForSlot = injectedRuntime
     ? () => injectedRuntime
     : (model: ReviewerSlot['model']) =>
-        model === 'codex' ? new CodexCliRuntime() : new ClaudeCliRuntime();
+        selectRuntime({ configRuntime: model === 'codex' ? 'codex-cli' : 'claude-cli' });
   const projectConfig = await getProjectBySlug(projectSlug);
   const maxReviewRounds = projectConfig?.maxReviewRounds ?? DEFAULT_MAX_REVIEW_ROUNDS;
 
