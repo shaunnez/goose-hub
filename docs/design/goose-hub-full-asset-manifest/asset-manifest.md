@@ -90,10 +90,10 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 - [x] qa_warning_light.png
 
 ### Review
-- [ ] review_table.png
-- [ ] review_chair.png
-- [ ] convergence_counter.png
-- [ ] quality_score_gauge.png
+- [x] review_table.png
+- [x] review_chair.png
+- [x] convergence_counter.png
+- [x] quality_score_gauge.png
 - [ ] review_glass_overlay.png
 
 ### Done / Archive
