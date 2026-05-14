@@ -10,6 +10,7 @@ import { ChoreographyPlayer } from './game/choreography/ChoreographyPlayer';
 import type { ChoreographyCtx } from './game/choreography/Timeline';
 import { Timeline as TL } from './game/choreography/Timeline';
 import { OFFICE_ROLES, busyRoles, idleIndicator, placementsFromItems } from './lib/agent-positions';
+import type { PersonaPlacement, TicketPlacement } from './lib/agent-positions';
 import type { ChoreographyContext, OrchestrationEvent, Timeline } from './lib/choreography';
 import {
   INDICATOR_CLEAR_DELAY_MS,
@@ -18,6 +19,7 @@ import {
   TTL_WALK_MS,
   timelinesForEvent,
 } from './lib/choreography';
+import { hudStateFromPlacements } from './lib/hud-state';
 import {
   FLOOR_GAP_PX,
   FLOOR_PIXEL_HEIGHT,
@@ -42,6 +44,9 @@ import {
   ROOM_IDS,
   allClickZones,
   cameraAnchor,
+  hudAnchor,
+  pressureColorForCount,
+  priorityTintColor,
   roomBounds,
   roomDeskAnchors,
   roomDoor,
@@ -358,6 +363,48 @@ describe('placementsFromItems', () => {
 
   it('idleIndicator returns coffee', () => {
     expect(idleIndicator()).toBe('coffee');
+  });
+
+  it('overflow items beyond desk capacity get position=queue with no persona', () => {
+    // dev has capacity 3; 4th item should be queued
+    const items = [1, 2, 3, 4].map((n) => ({
+      workItemId: `w${n}`,
+      externalId: `${n}`,
+      projectSlug: 'p',
+      state: 'factory:in-progress',
+    }));
+    const { personas, tickets } = placementsFromItems(items);
+    expect(personas).toHaveLength(3); // only 3 desk slots
+    const queued = tickets.filter((t) => t.position === 'queue');
+    const carried = tickets.filter((t) => t.position === 'carried');
+    expect(queued).toHaveLength(1);
+    expect(carried).toHaveLength(3);
+    expect(queued[0].carrierPersonaId).toBeNull();
+    expect(queued[0].roomId).toBe('dev');
+  });
+
+  it('triage overflow queues at capacity 1', () => {
+    const items = [1, 2].map((n) => ({
+      workItemId: `w${n}`,
+      externalId: `${n}`,
+      projectSlug: 'p',
+      state: 'factory:triaging',
+    }));
+    const { tickets } = placementsFromItems(items);
+    expect(tickets.filter((t) => t.position === 'carried')).toHaveLength(1);
+    expect(tickets.filter((t) => t.position === 'queue')).toHaveLength(1);
+  });
+
+  it('queue tickets have correct roomId for hudState queue depth derivation', () => {
+    const items = [1, 2].map((n) => ({
+      workItemId: `w${n}`,
+      externalId: `${n}`,
+      projectSlug: 'p',
+      state: 'factory:needs-qa',
+    }));
+    const { tickets } = placementsFromItems(items);
+    const queueTickets = tickets.filter((t) => t.position === 'queue');
+    expect(queueTickets.every((t) => t.roomId === 'qa')).toBe(true);
   });
 });
 
@@ -1074,5 +1121,243 @@ describe('rooms.ts — Board 02 canonical floor geometry', () => {
 
   it('investigation room has 4 desk anchors (3 scout + 1 lead)', () => {
     expect(roomDeskAnchors('investigation')).toHaveLength(4);
+  });
+});
+
+// ─── Phase 6: rooms.ts HUD additions ─────────────────────────────────────────
+
+describe('rooms.ts — Phase 6 HUD anchors', () => {
+  it('hudAnchor("retry-counter") returns Board 02 §4.4 position', () => {
+    expect(hudAnchor('retry-counter')).toEqual({ x: 784, y: 96 });
+  });
+
+  it('hudAnchor("round-counter") returns Board 02 §4.5 position', () => {
+    expect(hudAnchor('round-counter')).toEqual({ x: 1024, y: 96 });
+  });
+
+  it('hudAnchor("quality-score") returns Board 02 §4.5 dial position', () => {
+    expect(hudAnchor('quality-score')).toEqual({ x: 1064, y: 104 });
+  });
+
+  it('hudAnchor("done-day") returns Board 02 §4.6 position', () => {
+    expect(hudAnchor('done-day')).toEqual({ x: 1184, y: 296 });
+  });
+
+  it('hudAnchor("camera-state") returns top-left origin', () => {
+    expect(hudAnchor('camera-state')).toEqual({ x: 8, y: 8 });
+  });
+});
+
+describe('rooms.ts — priorityTintColor', () => {
+  it('critical returns red', () => {
+    expect(priorityTintColor('critical')).toBe('#ef4444');
+  });
+
+  it('high returns amber', () => {
+    expect(priorityTintColor('high')).toBe('#f59e0b');
+  });
+
+  it('normal returns cyan', () => {
+    expect(priorityTintColor('normal')).toBe('#22d3ee');
+  });
+
+  it('low returns grey', () => {
+    expect(priorityTintColor('low')).toBe('#9ca3af');
+  });
+});
+
+describe('rooms.ts — pressureColorForCount', () => {
+  it('returns neutral tint for 0 tickets', () => {
+    expect(pressureColorForCount(0)).toBe(0x2a3344);
+  });
+
+  it('returns neutral tint for 1..3 tickets', () => {
+    expect(pressureColorForCount(1)).toBe(0x2a3344);
+    expect(pressureColorForCount(3)).toBe(0x2a3344);
+  });
+
+  it('returns slight amber for 4..7 tickets', () => {
+    expect(pressureColorForCount(4)).toBe(0x3d3020);
+    expect(pressureColorForCount(7)).toBe(0x3d3020);
+  });
+
+  it('returns amber for 8..15 tickets', () => {
+    expect(pressureColorForCount(8)).toBe(0x4a3010);
+    expect(pressureColorForCount(15)).toBe(0x4a3010);
+  });
+
+  it('returns warm amber for 16+ tickets', () => {
+    expect(pressureColorForCount(16)).toBe(0x5c3800);
+    expect(pressureColorForCount(100)).toBe(0x5c3800);
+  });
+});
+
+// ─── Phase 6: hud-state.ts ────────────────────────────────────────────────────
+
+function makeTicket(overrides: Partial<TicketPlacement> = {}): TicketPlacement {
+  return {
+    ticketId: 'proj:1',
+    externalId: '1',
+    title: 'Test ticket',
+    priority: 'normal',
+    carrierPersonaId: 'proj:1',
+    position: 'carried',
+    roomId: 'dev',
+    slotId: null,
+    shelfSlot: null,
+    indicator: null,
+    projectSlug: 'proj',
+    workItemId: 'uuid-1',
+    ...overrides,
+  };
+}
+
+function makePersona(overrides: Partial<PersonaPlacement> = {}): PersonaPlacement {
+  return {
+    personaId: 'proj:1',
+    codename: 'ALPHA',
+    projectSlug: 'proj',
+    workItemId: 'uuid-1',
+    externalId: '1',
+    roomId: 'dev',
+    deskSlot: 0,
+    indicator: 'coffee',
+    ...overrides,
+  };
+}
+
+describe('hudStateFromPlacements', () => {
+  it('returns hero: null when no carried ticket exists', () => {
+    const state = hudStateFromPlacements([], [], null, {
+      retryIncremented: [],
+      mergedCelebrated: [],
+    });
+    expect(state.hero).toBeNull();
+  });
+
+  it('derives hero from first carried ticket', () => {
+    const ticket = makeTicket({ priority: 'critical', externalId: '42', title: 'Big bug' });
+    const persona = makePersona({ personaId: 'proj:42', externalId: '42' });
+    const state = hudStateFromPlacements(
+      [persona],
+      [{ ...ticket, ticketId: 'proj:42', carrierPersonaId: 'proj:42' }],
+      null,
+      { retryIncremented: [], mergedCelebrated: [] },
+    );
+    expect(state.hero).not.toBeNull();
+    expect(state.hero?.priority).toBe('critical');
+    expect(state.hero?.bannerLabel).toContain('#42');
+  });
+
+  it('truncates long title in bannerLabel', () => {
+    const longTitle = 'A'.repeat(50);
+    const ticket = makeTicket({ title: longTitle });
+    const state = hudStateFromPlacements([makePersona()], [ticket], null, {
+      retryIncremented: [],
+      mergedCelebrated: [],
+    });
+    expect(state.hero?.bannerLabel.length).toBeLessThan(60);
+    expect(state.hero?.bannerLabel).toContain('…');
+  });
+
+  it('accumulates retry counts from events', () => {
+    const ticket = makeTicket();
+    const state = hudStateFromPlacements([makePersona()], [ticket], null, {
+      retryIncremented: ['proj:1', 'proj:1'],
+      mergedCelebrated: [],
+    });
+    expect(state.retry['proj:1']).toBe(2);
+  });
+
+  it('carries forward retry counts from prev state', () => {
+    const ticket = makeTicket();
+    const prev = hudStateFromPlacements([makePersona()], [ticket], null, {
+      retryIncremented: ['proj:1'],
+      mergedCelebrated: [],
+    });
+    const next = hudStateFromPlacements([makePersona()], [ticket], prev, {
+      retryIncremented: ['proj:1'],
+      mergedCelebrated: [],
+    });
+    expect(next.retry['proj:1']).toBe(2);
+  });
+
+  it('increments doneToday for each merged event', () => {
+    const state = hudStateFromPlacements([], [], null, {
+      retryIncremented: [],
+      mergedCelebrated: ['proj:1', 'proj:2'],
+    });
+    expect(state.doneToday).toBe(2);
+  });
+
+  it('carries forward doneToday from prev', () => {
+    const prev = hudStateFromPlacements([], [], null, {
+      retryIncremented: [],
+      mergedCelebrated: ['proj:1'],
+    });
+    const next = hudStateFromPlacements([], [], prev, {
+      retryIncremented: [],
+      mergedCelebrated: ['proj:2'],
+    });
+    expect(next.doneToday).toBe(2);
+  });
+
+  it('derives blocked personas from frozen placements', () => {
+    const blockedPersona = makePersona({ roomId: null, indicator: 'bang' });
+    const state = hudStateFromPlacements([blockedPersona], [], null, {
+      retryIncremented: [],
+      mergedCelebrated: [],
+    });
+    expect(state.blocked).toHaveLength(1);
+    expect(state.blocked[0].personaId).toBe('proj:1');
+    expect(state.blocked[0].mode).toBe('gate-pending');
+  });
+
+  it('maps non-bang frozen persona to needs-human mode', () => {
+    const blockedPersona = makePersona({ roomId: null, indicator: 'question' });
+    const state = hudStateFromPlacements([blockedPersona], [], null, {
+      retryIncremented: [],
+      mergedCelebrated: [],
+    });
+    expect(state.blocked[0].mode).toBe('needs-human');
+  });
+
+  it('derives review round from prev when hero is in review', () => {
+    const ticket = makeTicket({ roomId: 'review' });
+    const prev = hudStateFromPlacements([makePersona({ roomId: 'review' })], [ticket], null, {
+      retryIncremented: [],
+      mergedCelebrated: [],
+    });
+    expect(prev.reviewRound).toBe(1);
+  });
+
+  it('returns reviewRound: null when hero is not in review', () => {
+    const ticket = makeTicket({ roomId: 'dev' });
+    const state = hudStateFromPlacements([makePersona()], [ticket], null, {
+      retryIncremented: [],
+      mergedCelebrated: [],
+    });
+    expect(state.reviewRound).toBeNull();
+  });
+
+  it('computes per-room pressure from in-flight tickets', () => {
+    const tickets = [
+      makeTicket({ roomId: 'dev', position: 'carried' }),
+      makeTicket({ ticketId: 'proj:2', externalId: '2', roomId: 'dev', position: 'desk' }),
+    ];
+    const state = hudStateFromPlacements([], tickets, null, {
+      retryIncremented: [],
+      mergedCelebrated: [],
+    });
+    expect(state.pressure.dev).toBe(2);
+  });
+
+  it('excludes shelf tickets from pressure', () => {
+    const ticket = makeTicket({ roomId: 'done', position: 'shelf' });
+    const state = hudStateFromPlacements([], [ticket], null, {
+      retryIncremented: [],
+      mergedCelebrated: [],
+    });
+    expect(state.pressure.done).toBe(0);
   });
 });

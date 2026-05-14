@@ -257,3 +257,49 @@ export const LIBRARY_RESERVED_SCOUT_ANCHORS: Point[] = [
 
 // Vertical walls between rooms at tile columns 11, 27, 45, 58, 69.
 export const INTER_ROOM_WALL_X = [176, 432, 720, 928, 1104] as const;
+
+// ─── Phase 6: HUD anchor points (Board 02 §4.4–§4.6 + §3.10) ─────────────────
+
+export type HudAnchorName =
+  | 'retry-counter'
+  | 'round-counter'
+  | 'quality-score'
+  | 'done-day'
+  | 'camera-state';
+
+const HUD_ANCHORS: Record<HudAnchorName, Point> = {
+  'retry-counter': { x: 784, y: 96 }, // Board 02 §4.4 — corridor side of QA chamber
+  'round-counter': { x: 1024, y: 96 }, // Board 02 §4.5 — corridor side of Review chamber
+  'quality-score': { x: 1064, y: 104 }, // Board 02 §4.5 — beside dial face on Review door frame
+  'done-day': { x: 1184, y: 296 }, // Board 02 §4.6 — below Done shelf
+  'camera-state': { x: 8, y: 8 }, // Board 02 §3.10 — top-left of canvas
+};
+
+export function hudAnchor(name: HudAnchorName): Point {
+  return HUD_ANCHORS[name];
+}
+
+// ─── Phase 6: Priority tint colours ──────────────────────────────────────────
+
+export type Priority = 'critical' | 'high' | 'normal' | 'low';
+
+const PRIORITY_TINT: Record<Priority, string> = {
+  critical: '#ef4444', // red
+  high: '#f59e0b', // amber
+  normal: '#22d3ee', // cyan
+  low: '#9ca3af', // grey
+};
+
+export function priorityTintColor(priority: Priority): string {
+  return PRIORITY_TINT[priority];
+}
+
+// ─── Phase 6: Room pressure colour (in-flight ticket count → tint) ──────────
+
+export function pressureColorForCount(n: number): number {
+  if (n <= 0) return 0x2a3344; // neutral cyan-tinted floor
+  if (n <= 3) return 0x2a3344; // neutral (1..3 looks the same as 0 at v1 scale)
+  if (n <= 7) return 0x3d3020; // slight amber
+  if (n <= 15) return 0x4a3010; // amber
+  return 0x5c3800; // warm amber
+}

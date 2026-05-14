@@ -12,7 +12,7 @@ import Phaser from 'phaser';
 import type { PersonaPlacement } from '../../lib/agent-positions';
 import { TILE_SIZE, floorOriginY } from '../../lib/layout';
 import { facingFromMovement, pathLength, planWalk } from '../../lib/pathfinding';
-import { roomDeskAnchors } from '../../lib/rooms';
+import { type Priority, priorityTintColor, roomDeskAnchors } from '../../lib/rooms';
 import type { IndicatorKind } from '../../lib/state-indicators';
 import {
   applyOfficeTextureDisplaySize,
@@ -143,20 +143,32 @@ export class PersonaLayer {
   }
 
   /** Adds a codename label above the persona. Called by TicketLayer on hero promotion. */
-  addCodenameLabel(personaId: string): void {
+  addCodenameLabel(personaId: string, priority?: Priority): void {
     const e = this.personas.get(personaId);
     if (e == null || e.label != null) return;
+    const color = priority != null ? priorityTintColor(priority) : '#ffd700';
     // Parented to the container so it follows walk tweens and restack moves.
     const label = this.scene.add.text(0, -28, e.codename, {
       fontFamily: 'JetBrains Mono, monospace',
       fontSize: '7px',
-      color: '#ffd700',
+      color,
       backgroundColor: '#1a162299',
       padding: { left: 3, right: 3, top: 1, bottom: 1 },
     });
     label.setOrigin(0.5, 1);
     e.container.add(label);
     e.label = label;
+  }
+
+  /** Updates codename label colour for priority tinting; does not change the codename text. */
+  setHeroCodename(personaId: string, priority: Priority): void {
+    const e = this.personas.get(personaId);
+    if (e == null) return;
+    if (e.label != null) {
+      e.label.setStyle({ color: priorityTintColor(priority) });
+    } else {
+      this.addCodenameLabel(personaId, priority);
+    }
   }
 
   /** Removes the codename label. Called by TicketLayer on hero release. */

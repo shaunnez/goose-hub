@@ -27,6 +27,8 @@ interface OfficeGameMountProps {
   onFloorChange: (payload: FloorChangePayload) => void;
   /** If provided, set to a function that pushes timelines into the scene. Set to null on unmount. */
   choreographyRef?: MutableRefObject<((timelines: Timeline[]) => void) | null>;
+  /** If provided, called with the scene emitter once ready, then null on unmount. */
+  onSceneEmitter?: (emitter: Phaser.Events.EventEmitter | null) => void;
   /** Called when the hero ticket changes (promoted or released). */
   onHeroChanged?: (ticketId: string | null) => void;
 }
@@ -39,6 +41,7 @@ export function OfficeGameMount({
   onFloorChange,
   choreographyRef,
   onHeroChanged,
+  onSceneEmitter,
 }: OfficeGameMountProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<import('phaser').Game | null>(null);
@@ -120,12 +123,14 @@ export function OfficeGameMount({
         if (choreographyRef != null) {
           choreographyRef.current = (timelines) => scene.applyChoreography(timelines);
         }
+        onSceneEmitter?.(scene.events_());
       });
       cleanup = () => {
         scene.events_().off('desk-click', onDesk);
         scene.events_().off('floor-change', onFloor);
         scene.events_().off('hero-changed', onHero);
         if (choreographyRef != null) choreographyRef.current = null;
+        onSceneEmitter?.(null);
         game.destroy(true);
         sceneRef.current = null;
         gameRef.current = null;

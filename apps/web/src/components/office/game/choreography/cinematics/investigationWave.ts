@@ -63,7 +63,7 @@ export function investigationWavePart1Timeline(
     {
       id: 'cameraTo',
       target: { kind: 'camera', id: 'hero-ticket-follow' },
-      params: { durationMs: TIMING.cameraEase },
+      params: { durationMs: TIMING.cameraEase, ticketId },
       lane: LANE,
       ttlMs: TIMING.cameraEase + 200,
     },
