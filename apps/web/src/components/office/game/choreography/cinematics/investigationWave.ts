@@ -20,6 +20,7 @@ import { TIMING } from '../../../lib/cinematic-timings';
 import { floorOriginY } from '../../../lib/layout';
 import { CORRIDOR_WALK_Y, roomDeskAnchors, roomSlotAnchors } from '../../../lib/rooms';
 import { Timeline as TL } from '../Timeline';
+import { CINEMATIC_TINTS } from '../../textures';
 
 let _seq = 0;
 function nextId(suffix: string): string {
@@ -176,7 +177,7 @@ export function investigationWavePart3Timeline(ticketId: string, floorIndex: num
         worldX: glowX,
         worldY: glowY,
         durationMs: TIMING.glowRingMs,
-        color: 0x88aaff,
+        color: CINEMATIC_TINTS.glowRingWave,
         effectId: `wave-glow-${ticketId}`,
       },
       lane: LANE,

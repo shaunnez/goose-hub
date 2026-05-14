@@ -5,6 +5,9 @@
 // (apps/web/e2e/m17-office-tab.spec.ts) — they need a real browser canvas and
 // won't run in jsdom.
 
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { ChoreographyPlayer } from './game/choreography/ChoreographyPlayer';
 import type { ChoreographyCtx } from './game/choreography/Timeline';
@@ -59,6 +62,14 @@ import {
 import { IDLE_INDICATOR, indicatorForState } from './lib/state-indicators';
 import { deskForState, shouldWalk } from './lib/state-to-role';
 import { ticketAtDeskOffset, ticketCarryOffset } from './lib/ticket-carry';
+import { pngManifest } from './game/asset-loader';
+import {
+  CINEMATIC_TINTS,
+  HUD_TINTS,
+  PALETTE,
+  ROLE_TINTS,
+  TEXTURE_KEYS,
+} from './game/textures';
 
 describe('state → desk role mapping', () => {
   it('maps every lane state to a valid role', () => {
@@ -1379,5 +1390,105 @@ describe('hudStateFromPlacements', () => {
       mergedCelebrated: [],
     });
     expect(state.pressure.done).toBe(0);
+  });
+});
+
+describe('Phase 2.5 — visual canon', () => {
+  const BOARD06_HEX = [
+    '#2B2D42', '#3A3D5C', '#6B4F3B', '#6FE7FF',
+    '#F2CC8F', '#FF6B6B', '#8BD17C', '#D68FD6',
+    '#42466A', '#3B3D55', '#85694F', '#3F6B80', '#473A55',
+  ];
+
+  it('PALETTE has exactly 13 entries', () => {
+    expect(Object.keys(PALETTE)).toHaveLength(13);
+  });
+
+  it('ROLE_TINTS covers every OFFICE_ROLES entry', () => {
+    for (const role of OFFICE_ROLES) {
+      expect(ROLE_TINTS).toHaveProperty(role);
+    }
+  });
+
+  it('CINEMATIC_TINTS has exactly 8 entries', () => {
+    expect(Object.keys(CINEMATIC_TINTS)).toHaveLength(8);
+  });
+
+  it('HUD_TINTS has exactly 8 entries', () => {
+    expect(Object.keys(HUD_TINTS)).toHaveLength(8);
+  });
+
+  it('TEXTURE_KEYS has exactly 20 entries', () => {
+    expect(Object.keys(TEXTURE_KEYS)).toHaveLength(20);
+  });
+
+  it('pngManifest keys match all TEXTURE_KEYS values', () => {
+    const manifestKeys = new Set(pngManifest().map((e) => e.key));
+    const textureValues = new Set(Object.values(TEXTURE_KEYS));
+    expect(manifestKeys).toEqual(textureValues);
+  });
+
+  it('MANIFEST has 20 entries matching TEXTURE_KEYS count', async () => {
+    const { MANIFEST } = await import('../../../../../scripts/generate-office-assets');
+    expect(MANIFEST).toHaveLength(20);
+    expect(MANIFEST.length).toBe(Object.keys(TEXTURE_KEYS).length);
+  });
+
+  it('every MANIFEST prompt contains at least one Board 06 hex code', async () => {
+    const { MANIFEST } = await import('../../../../../scripts/generate-office-assets');
+    const hexPattern = /#[0-9A-Fa-f]{6}/g;
+    for (const spec of MANIFEST) {
+      const found = spec.prompt.match(hexPattern) ?? [];
+      const hasCanonical = found.some((h) => BOARD06_HEX.includes(h.toUpperCase()));
+      expect(hasCanonical, `Prompt for ${spec.file} has no Board 06 hex: "${spec.prompt}"`).toBe(true);
+    }
+  });
+
+  it('no non-canonical hex literals in game/ or components/', () => {
+    const officeDir = join(process.cwd(), 'apps', 'web', 'src', 'components', 'office');
+    const canonicalNums = new Set<number>([
+      ...Object.values(PALETTE) as number[],
+      ...Object.values(ROLE_TINTS) as number[],
+      ...Object.values(CINEMATIC_TINTS).filter((v): v is number => typeof v === 'number'),
+      ...Object.values(HUD_TINTS).filter((v): v is number => typeof v === 'number'),
+    ]);
+
+    function collectFiles(dir: string): string[] {
+      const files: string[] = [];
+      for (const entry of readdirSync(dir)) {
+        const full = join(dir, entry);
+        if (statSync(full).isDirectory()) {
+          files.push(...collectFiles(full));
+        } else if (full.endsWith('.ts') || full.endsWith('.tsx')) {
+          files.push(full);
+        }
+      }
+      return files;
+    }
+
+    const dirsToScan = [join(officeDir, 'game'), join(officeDir, 'components')];
+    const allFiles: string[] = [];
+    for (const d of dirsToScan) {
+      allFiles.push(...collectFiles(d));
+    }
+
+    const hexLiteralPattern = /0x([0-9A-Fa-f]{6})\b/g;
+    const violations: string[] = [];
+
+    for (const file of allFiles) {
+      if (file.endsWith('textures.ts')) continue;
+      const src = readFileSync(file, 'utf8');
+      let m: RegExpExecArray | null;
+      while ((m = hexLiteralPattern.exec(src)) !== null) {
+        const val = parseInt(m[1], 16);
+        if (!canonicalNums.has(val)) {
+          const rel = file.replace(officeDir + '/', '');
+          violations.push(`${rel}: 0x${m[1]}`);
+        }
+      }
+      hexLiteralPattern.lastIndex = 0;
+    }
+
+    expect(violations, `Non-canonical hex literals found:\n${violations.join('\n')}`).toHaveLength(0);
   });
 });

@@ -12,7 +12,7 @@
 
 import type { Intent } from '../../../lib/choreography';
 import type { IntentResult } from '../../layers/types';
-import { TEXTURE_KEYS } from '../../textures';
+import { CINEMATIC_TINTS, TEXTURE_KEYS } from '../../textures';
 import type { ChoreographyCtx } from '../Timeline';
 
 export function run(intent: Intent, ctx: ChoreographyCtx): Promise<IntentResult> {
@@ -21,7 +21,7 @@ export function run(intent: Intent, ctx: ChoreographyCtx): Promise<IntentResult>
   const worldY = typeof intent.params.worldY === 'number' ? intent.params.worldY : 0;
   const spriteId =
     typeof intent.params.spriteId === 'string' ? intent.params.spriteId : `scroll-${ticketId}`;
-  const tint = 0xff6666; // red tint for failed verdict
+  const tint = CINEMATIC_TINTS.verdictScrollFail;
 
   ctx.ticketLayer.setVariant(ticketId, 'scroll');
   ctx.ticketLayer.spawnTempSprite(spriteId, TEXTURE_KEYS.ticketScroll, worldX, worldY, tint);

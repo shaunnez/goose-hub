@@ -20,6 +20,7 @@ import { TIMING } from '../../../lib/cinematic-timings';
 import { floorOriginY } from '../../../lib/layout';
 import { CORRIDOR_WALK_Y, roomDeskAnchors, roomDoor } from '../../../lib/rooms';
 import { Timeline as TL } from '../Timeline';
+import { CINEMATIC_TINTS } from '../../textures';
 
 let _seq = 0;
 function nextId(): string {
@@ -81,7 +82,7 @@ export function mergeCelebrationTimeline(
             worldX: shelfWorldX,
             worldY: shelfWorldY,
             durationMs: TIMING.glowRingMs,
-            color: 0x00ff88,
+            color: CINEMATIC_TINTS.pulseSuccess,
             effectId: `merge-glow-${ticketId}`,
           },
           lane: 'primary',
@@ -94,7 +95,7 @@ export function mergeCelebrationTimeline(
             worldX: shelfWorldX,
             worldY: shelfWorldY,
             durationMs: TIMING.particleBurstMs,
-            color: 0x00ff88,
+            color: CINEMATIC_TINTS.particleBurstDefault,
             effectId: `merge-burst-${ticketId}`,
           },
           lane: 'primary',
@@ -146,7 +147,7 @@ export function mergeCelebrationAmbientTimeline(ticketId: string, floorIndex: nu
         worldX: shelfWorldX,
         worldY: shelfWorldY,
         durationMs: TIMING.particleBurstMs,
-        color: 0x88ffaa,
+        color: CINEMATIC_TINTS.particleBurstDefault,
         effectId: `merge-burst-ambient-${ticketId}`,
       },
       lane: 'ambient',

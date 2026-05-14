@@ -50,27 +50,27 @@ export function QueuePanel({ roomId, items, onClose }: QueuePanelProps) {
       />
       <aside
         data-testid="queue-panel"
-        className="absolute top-4 right-4 z-50 w-64 rounded-md border border-[#4a3a5e] bg-[#1a1622ee] text-[#c7b8ff] shadow-xl"
+        className="absolute top-4 right-4 z-50 w-64 rounded-md border border-[#2B2D42] bg-[#2B2D42EE] text-[#D68FD6] shadow-xl"
         style={{ maxHeight: '50vh', overflowY: 'auto' }}
       >
-        <div className="flex items-center justify-between border-b border-[#4a3a5e] px-3 py-2">
+        <div className="flex items-center justify-between border-b border-[#2B2D42] px-3 py-2">
           <span className="text-[11px] font-mono font-semibold">Queued at {label}</span>
           <button
             type="button"
             onClick={onClose}
-            className="text-[#9ca3af] hover:text-white text-xs leading-none"
+            className="text-[#D68FD6] hover:text-white text-xs leading-none"
             aria-label="Close"
           >
             ×
           </button>
         </div>
         {items.length === 0 ? (
-          <p className="px-3 py-3 text-[10px] text-[#9ca3af]">Nothing queued.</p>
+          <p className="px-3 py-3 text-[10px] text-[#D68FD6]">Nothing queued.</p>
         ) : (
-          <ul className="divide-y divide-[#2a2333]">
+          <ul className="divide-y divide-[#3A3D5C]">
             {items.map((item) => (
               <li key={item.ticketId} className="px-3 py-2 text-[10px] font-mono">
-                <span className="text-[#9ca3af] mr-1">#{item.externalId}</span>
+                <span className="text-[#D68FD6] mr-1">#{item.externalId}</span>
                 <span className="truncate">{item.title || '(untitled)'}</span>
               </li>
             ))}

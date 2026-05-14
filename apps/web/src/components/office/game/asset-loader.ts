@@ -20,19 +20,28 @@ interface AssetEntry {
   url: string;
 }
 
-function pngManifest(): AssetEntry[] {
+export function pngManifest(): AssetEntry[] {
   return [
     { key: TEXTURE_KEYS.floorTile, url: `${ASSET_BASE}/floor-tile.png` },
     { key: TEXTURE_KEYS.floorTileAlt, url: `${ASSET_BASE}/floor-tile-alt.png` },
     { key: TEXTURE_KEYS.wallTile, url: `${ASSET_BASE}/wall-tile.png` },
     { key: TEXTURE_KEYS.desk, url: `${ASSET_BASE}/desk.png` },
     { key: TEXTURE_KEYS.stairs, url: `${ASSET_BASE}/stairs.png` },
+    { key: TEXTURE_KEYS.spriteBase, url: `${ASSET_BASE}/sprite.png` },
     { key: TEXTURE_KEYS.indicatorSpeech, url: `${ASSET_BASE}/indicator-speech.png` },
     { key: TEXTURE_KEYS.indicatorThought, url: `${ASSET_BASE}/indicator-thought.png` },
     { key: TEXTURE_KEYS.indicatorQuestion, url: `${ASSET_BASE}/indicator-question.png` },
     { key: TEXTURE_KEYS.indicatorCoffee, url: `${ASSET_BASE}/indicator-coffee.png` },
     { key: TEXTURE_KEYS.indicatorBang, url: `${ASSET_BASE}/indicator-bang.png` },
     { key: TEXTURE_KEYS.indicatorCheck, url: `${ASSET_BASE}/indicator-check.png` },
+    { key: TEXTURE_KEYS.ticket, url: `${ASSET_BASE}/ticket.png` },
+    { key: TEXTURE_KEYS.queueStackMany, url: `${ASSET_BASE}/queue-stack-many.png` },
+    { key: TEXTURE_KEYS.ticketGlow, url: `${ASSET_BASE}/ticket-glow.png` },
+    { key: TEXTURE_KEYS.ticketScroll, url: `${ASSET_BASE}/ticket-scroll.png` },
+    { key: TEXTURE_KEYS.ticketEnvelope, url: `${ASSET_BASE}/ticket-envelope.png` },
+    { key: TEXTURE_KEYS.wallFrostedBlue, url: `${ASSET_BASE}/wall-frosted-blue.png` },
+    { key: TEXTURE_KEYS.wallFrostedGrey, url: `${ASSET_BASE}/wall-frosted-grey.png` },
+    { key: TEXTURE_KEYS.scoutDesk, url: `${ASSET_BASE}/scout-desk.png` },
   ];
 }
 

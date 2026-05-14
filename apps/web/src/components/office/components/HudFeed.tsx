@@ -6,6 +6,7 @@
 import type Phaser from 'phaser';
 import { useEffect, useRef, useState } from 'react';
 import { priorityTintColor } from '../lib/rooms';
+import { HUD_TINTS } from '../game/textures';
 
 interface FeedLine {
   id: number;
@@ -77,7 +78,7 @@ export function HudFeed({ sceneEmitter }: HudFeedProps) {
             key={line.id}
             title={line.text}
             className="flex items-center gap-1 mb-0.5 text-[9px] font-mono"
-            style={{ opacity, transition: 'opacity 1s', color: '#c7b8ff' }}
+            style={{ opacity, transition: 'opacity 1s', color: HUD_TINTS.hudFeedLineText }}
           >
             <span
               className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0"

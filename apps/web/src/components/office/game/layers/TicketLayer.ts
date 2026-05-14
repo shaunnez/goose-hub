@@ -19,7 +19,7 @@ import { roomDeskAnchors, roomQueueAnchor, roomSlotAnchors } from '../../lib/roo
 import type { RoomId } from '../../lib/rooms';
 import type { IndicatorKind } from '../../lib/state-indicators';
 import { ticketCarryOffset } from '../../lib/ticket-carry';
-import { TEXTURE_KEYS, applyOfficeTextureDisplaySize, indicatorTextureKey } from '../textures';
+import { HUD_TINTS, PALETTE, TEXTURE_KEYS, applyOfficeTextureDisplaySize, indicatorTextureKey } from '../textures';
 import type { PersonaLayer } from './PersonaLayer';
 import type { DeskClickPayload, IntentResult } from './types';
 
@@ -182,6 +182,7 @@ export class TicketLayer {
     // Glow ring
     const glow = this.scene.add.image(0, 0, TEXTURE_KEYS.ticketGlow);
     glow.setOrigin(0.5, 0.5);
+    applyOfficeTextureDisplaySize(glow, TEXTURE_KEYS.ticketGlow);
     glow.setDepth(GLOW_DEPTH);
     entry.container.add(glow);
     entry.glow = glow;
@@ -250,10 +251,13 @@ export class TicketLayer {
     if (entry == null) return;
     if (variant === 'scroll') {
       entry.body.setTexture(TEXTURE_KEYS.ticketScroll);
+      applyOfficeTextureDisplaySize(entry.body, TEXTURE_KEYS.ticketScroll);
     } else if (variant === 'envelope') {
       entry.body.setTexture(TEXTURE_KEYS.ticketEnvelope);
+      applyOfficeTextureDisplaySize(entry.body, TEXTURE_KEYS.ticketEnvelope);
     } else {
       entry.body.setTexture(TEXTURE_KEYS.ticket);
+      applyOfficeTextureDisplaySize(entry.body, TEXTURE_KEYS.ticket);
     }
   }
 
@@ -410,6 +414,7 @@ export class TicketLayer {
     container.setDepth(TICKET_HERO_DEPTH + 1);
     const img = this.scene.add.image(0, 0, textureKey);
     img.setOrigin(0.5, 0.5);
+    applyOfficeTextureDisplaySize(img, textureKey);
     if (tint != null) img.setTint(tint);
     container.add(img);
     this.tempSprites.set(id, { container });
@@ -501,6 +506,7 @@ export class TicketLayer {
 
     const body = this.scene.add.image(0, 0, TEXTURE_KEYS.ticket);
     body.setOrigin(0.5, 0.5);
+    applyOfficeTextureDisplaySize(body, TEXTURE_KEYS.ticket);
     this.applyPriorityTint(body, p.priority);
     container.add(body);
 
@@ -640,12 +646,12 @@ export class TicketLayer {
 
   private applyPriorityTint(body: Phaser.GameObjects.Image, priority: string): void {
     const tints: Record<string, number> = {
-      critical: 0xff4444,
-      high: 0xff9900,
-      normal: 0xffffff,
-      low: 0x88bbff,
+      critical: PALETTE.fail,
+      high: PALETTE.amber,
+      normal: PALETTE.amber,
+      low: PALETTE.cyan,
     };
-    body.setTint(tints[priority] ?? 0xffffff);
+    body.setTint(tints[priority] ?? PALETTE.amber);
   }
 
   private updateQueueStacks(placements: readonly TicketPlacement[]): void {
@@ -694,8 +700,9 @@ export class TicketLayer {
       let qs = this.queueStacks.get(storeKey);
 
       if (qs == null) {
-        const sprite = this.scene.add.image(qa.x, oy + qa.y, TEXTURE_KEYS.queueStack1);
+        const sprite = this.scene.add.image(qa.x, oy + qa.y, TEXTURE_KEYS.queueStackMany);
         sprite.setOrigin(0.5, 0.5);
+        applyOfficeTextureDisplaySize(sprite, TEXTURE_KEYS.queueStackMany);
         sprite.setDepth(TICKET_DEPTH - 1);
         qs = { sprite };
         this.queueStacks.set(storeKey, qs);
@@ -704,23 +711,15 @@ export class TicketLayer {
       qs.sprite.setVisible(depth > 0);
       qs.sprite.setPosition(qa.x, oy + qa.y);
 
-      if (depth >= 4) {
-        qs.sprite.setTexture(TEXTURE_KEYS.queueStackMany);
-      } else if (depth >= 3) {
-        qs.sprite.setTexture(TEXTURE_KEYS.queueStack3);
-      } else if (depth >= 2) {
-        qs.sprite.setTexture(TEXTURE_KEYS.queueStack2);
-      } else {
-        qs.sprite.setTexture(TEXTURE_KEYS.queueStack1);
-      }
+      qs.sprite.setTexture(TEXTURE_KEYS.queueStackMany);
 
       if (depth >= 4) {
         if (qs.badge == null) {
           qs.badge = this.scene.add.text(qa.x + 6, oy + qa.y - 4, '', {
             fontFamily: 'JetBrains Mono, monospace',
             fontSize: '6px',
-            color: '#ffffff',
-            backgroundColor: '#6b4a8e',
+            color: HUD_TINTS.hudBadgeText,
+            backgroundColor: '#473A55',
             padding: { left: 1, right: 1, top: 0, bottom: 0 },
           });
           qs.badge.setOrigin(0.5, 1);
