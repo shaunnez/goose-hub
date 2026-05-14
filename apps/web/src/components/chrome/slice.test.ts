@@ -17,8 +17,9 @@ const DEFERRED_SURFACES = [
 describe('chrome slice — sidebar brand label', () => {
   const sidebarSource = readFileSync(join(import.meta.dirname, 'Sidebar.tsx'), 'utf-8');
 
-  it('sidebar header reads "Goose Hub"', () => {
-    expect(sidebarSource).toContain('Goose Hub');
+  it('sidebar header reads "GooseHUB"', () => {
+    expect(sidebarSource).toContain('GooseHUB');
+    expect(sidebarSource).not.toContain('Goose Hub');
   });
 
   it('sidebar header does not read "Agentic OS"', () => {
