@@ -65,7 +65,7 @@ Emit: `[decision] READ: Issue #<number> — <one-sentence summary of the bug>`
 - Use search tools to locate files relevant to the symptom area
 - Read directory structure to understand the code organisation
 
-**Wave-aware mode:** if `<scout_reports>` is present in your context, read the cross-validated Wave-1 reports first; treat them as primary evidence and only re-investigate gaps. If `crossValidate` has flagged contradictions across scouts, surface them in `openQuestions`. Wave-1 partial-failure rules (informational — the orchestrator enforces them before you see the reports):
+**Wave-aware mode:** if `<scout_reports>` is present in your context, read the cross-validated Wave-1 reports first; treat them as complete, primary evidence. **Do not perform general code exploration.** You may make at most 2 targeted tool calls total — only to verify a specific file:line citation from the reports where your confidence in that citation is low. If `crossValidate` has flagged contradictions across scouts, surface them in `openQuestions` rather than re-investigating. Wave-1 partial-failure rules (informational — the orchestrator enforces them before you see the reports):
 - ≥3 scouts succeeded AND ≤1 failed → wave advanced; reports are usable.
 - 2+ scouts failed → orchestrator halted the wave and escalated; you should not be running.
 
@@ -78,7 +78,7 @@ Emit: `[decision] READ: Identified entry points — <comma-separated file or dir
 - Follow imports and function calls related to the reported symptom
 - Look for validation logic, error handling, or data transformation that could cause the bug
 
-**Wave-aware mode:** if Wave-2 deep-agent outputs are also present (`wave2-interface-designer` artefacts, `wave2-risk-analyst` risks), read them as the synthesis layer; do not re-derive what they already produced. Use the worktree only to verify their citations.
+**Wave-aware mode:** if Wave-2 deep-agent outputs are also present (`wave2-interface-designer` artefacts, `wave2-risk-analyst` risks), read them as the synthesis layer; do not re-derive what they already produced. Use at most 1 tool call to verify a Wave-2 citation if confidence is low. Do not explore beyond cited locations.
 
 Emit: `[decision] READ: Traced code path through <key files> — <one-sentence hypothesis>`
 

@@ -357,14 +357,28 @@ export async function runInvestigateWorkflow(
       investigateContext.scoutReports = allScoutReports;
     }
 
-    // Synthesis — invoke investigate skill with scout evidence when swarm is enabled
+    // Synthesis — invoke investigate skill with scout evidence when swarm is enabled.
+    // In wave-aware mode scouts have gathered all facts; synthesis only reads a JSON
+    // blob and writes findings, so we use a lighter model and fresh context (no
+    // accumulated conversation history needed).
+    const synthModelOverride =
+      investigationSwarmEnabled && allScoutReports != null
+        ? defaultModelForTierAndProvider(
+            'sonnet',
+            forcedRuntimeProvider ?? investigateRoleModel.provider,
+          )
+        : investigatorModelOverride;
     const synthResult = await invokeSkill({
       skillName: 'investigate',
       projectId,
       workItemId: workItem.id,
       runId,
       context: investigateContext,
-      overrides: { runtimeOverride: runtime, modelOverride: investigatorModelOverride },
+      overrides: {
+        runtimeOverride: runtime,
+        modelOverride: synthModelOverride,
+        freshContextOverride: investigationSwarmEnabled && allScoutReports != null ? true : undefined,
+      },
     });
 
     const findings = synthResult.output as InvestigateOutput;
