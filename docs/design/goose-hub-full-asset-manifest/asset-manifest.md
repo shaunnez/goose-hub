@@ -42,10 +42,10 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 
 - [x] corridor_light_pool.png
 - [x] corridor_pulse_red.png
-- [ ] corridor_pulse_green.png
-- [ ] movement_trail_blue.png
-- [ ] movement_trail_red.png
-- [ ] movement_trail_green.png
+- [x] corridor_pulse_green.png
+- [x] movement_trail_blue.png
+- [x] movement_trail_red.png
+- [x] movement_trail_green.png
 - [ ] movement_trail_yellow.png
 
 ---
