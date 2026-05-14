@@ -68,10 +68,10 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 
 ### Sealed Library
 - [x] library_terminal.png
-- [ ] convergence_core.png
-- [ ] glowing_convergence_ring.png
-- [ ] scout_report_stack.png
-- [ ] sealed_slot_library.png
+- [x] convergence_core.png
+- [x] glowing_convergence_ring.png
+- [x] scout_report_stack.png
+- [x] sealed_slot_library.png
 
 ### Dev
 - [ ] desk_dev_single.png
