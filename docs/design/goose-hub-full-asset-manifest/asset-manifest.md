@@ -137,10 +137,10 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 
 ## 05 — Ticket Assets
 
-- [ ] ticket_normal.png
-- [ ] ticket_hero.png
-- [ ] ticket_failed.png
-- [ ] ticket_done.png
+- [x] ticket_normal.png
+- [x] ticket_hero.png
+- [x] ticket_failed.png
+- [x] ticket_done.png
 - [ ] ticket_retry.png
 - [ ] ticket_queue_stack.png
 - [ ] ticket_glow_overlay.png
