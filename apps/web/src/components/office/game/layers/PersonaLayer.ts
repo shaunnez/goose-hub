@@ -160,13 +160,11 @@ export class PersonaLayer {
     e.label = label;
   }
 
-  /** Updates codename label colour for priority tinting on existing label. */
-  setHeroCodename(personaId: string, codename: string, priority: Priority): void {
+  /** Updates codename label colour for priority tinting; does not change the codename text. */
+  setHeroCodename(personaId: string, priority: Priority): void {
     const e = this.personas.get(personaId);
     if (e == null) return;
-    e.codename = codename;
     if (e.label != null) {
-      e.label.setText(codename);
       e.label.setStyle({ color: priorityTintColor(priority) });
     } else {
       this.addCodenameLabel(personaId, priority);

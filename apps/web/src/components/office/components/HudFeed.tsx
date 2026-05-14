@@ -34,10 +34,10 @@ export function HudFeed({ sceneEmitter }: HudFeedProps) {
   useEffect(() => {
     if (sceneEmitter == null) return;
 
-    const handler = (payload: { cinematicName?: string; ticketId?: string; priority?: string }) => {
-      const name = payload?.cinematicName ?? 'unknown';
+    const handler = (payload: { timelineId?: string; ticketId?: string }) => {
+      const name = payload?.timelineId ?? 'unknown';
       const ticketId = payload?.ticketId;
-      const priority = (payload?.priority ?? 'normal') as FeedLine['priority'];
+      const priority: FeedLine['priority'] = 'normal';
       const verb = cinematicVerb(name);
       const text = ticketId != null ? `${verb} #${ticketId}` : verb;
       const line: FeedLine = { id: nextId++, text, priority, ts: Date.now() };

@@ -41,6 +41,8 @@ export interface ChoreographyCtx {
   roomLayer: RoomLayer;
   scene: Phaser.Scene;
   emitter: Phaser.Events.EventEmitter;
+  /** Called by cameraTo intent to keep HudLayer camera-state indicator in sync. */
+  notifyCameraAnchor: (anchor: 'floor-overview' | 'hero-ticket-follow', ticketId?: string) => void;
 }
 
 // ─── Observability event payload ──────────────────────────────────────────────

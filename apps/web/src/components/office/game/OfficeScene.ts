@@ -98,6 +98,7 @@ export class OfficeScene extends Phaser.Scene {
       roomLayer: this.roomLayer,
       scene: this,
       emitter: this.emitter,
+      notifyCameraAnchor: (anchor, ticketId) => this.notifyCameraAnchor(anchor, ticketId),
     });
 
     // HudLayer constructed last — sits at top of z-stack (z=60)
@@ -123,6 +124,7 @@ export class OfficeScene extends Phaser.Scene {
 
   shutdown(): void {
     this.scale.off('resize', this.handleResize, this);
+    this.hudLayer?.destroy();
     this.emitter.removeAllListeners();
     if (this.resizeListener) window.removeEventListener('resize', this.resizeListener);
   }
@@ -164,16 +166,13 @@ export class OfficeScene extends Phaser.Scene {
   /** Push a fully-computed HudState into all HUD consumers. */
   applyHud(state: HudState): void {
     this.lastHudState = state;
+    this.hudLayer.setFloorIndex(this.currentFloorIndex);
     this.hudLayer.applyHud(state);
     this.roomLayer.applyPressure(state.pressure);
 
-    // Update hero codename label with priority tint
+    // Update hero codename label with priority tint (preserve the persona's own codename text)
     if (state.hero?.personaId != null) {
-      this.personaLayer.setHeroCodename(
-        state.hero.personaId,
-        state.hero.ticketId,
-        state.hero.priority,
-      );
+      this.personaLayer.setHeroCodename(state.hero.personaId, state.hero.priority);
     }
 
     // Position blocked-persona spotlights

@@ -42,7 +42,7 @@ interface SpotlightEntry {
 export class HudLayer {
   private readonly scene: Phaser.Scene;
   private readonly emitter: Phaser.Events.EventEmitter;
-  private readonly floorIndex = 0;
+  private floorIndex = 0;
   private retryText!: Phaser.GameObjects.Text;
   private roundText!: Phaser.GameObjects.Text;
   private scoreText!: Phaser.GameObjects.Text;
@@ -99,6 +99,10 @@ export class HudLayer {
     return this.scene.add
       .text(pt.x, oy + pt.y, '', style as Phaser.Types.GameObjects.Text.TextStyle)
       .setDepth(HUD_DEPTH);
+  }
+
+  setFloorIndex(fi: number): void {
+    this.floorIndex = fi;
   }
 
   applyHud(state: HudState): void {

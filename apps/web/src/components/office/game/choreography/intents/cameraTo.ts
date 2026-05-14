@@ -20,6 +20,15 @@ export function run(intent: Intent, ctx: ChoreographyCtx): Promise<IntentResult>
   const durationMs = typeof intent.params.durationMs === 'number' ? intent.params.durationMs : 0;
   const anchor = cameraAnchor(anchorName);
 
+  // Notify HUD of camera mode change immediately (before pan completes).
+  if (anchorName === 'hero-ticket-follow') {
+    const ticketId =
+      typeof intent.params.ticketId === 'string' ? intent.params.ticketId : undefined;
+    ctx.notifyCameraAnchor('hero-ticket-follow', ticketId);
+  } else {
+    ctx.notifyCameraAnchor('floor-overview');
+  }
+
   if (!anchor || durationMs <= 0) {
     return Promise.resolve({ status: 'completed' });
   }

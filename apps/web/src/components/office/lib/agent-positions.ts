@@ -75,6 +75,17 @@ export interface TicketPlacement {
  *   - unknown states without a room mapping → dropped
  *   - done → ticket only (shelf), no persona
  */
+// Maximum active (carried) items per room before extras are queued.
+// investigation=1: only the lead desk (slot 3) is used by active placements;
+// scout desks (0-2) are populated by choreography, not by placementsFromItems.
+const ROOM_DESK_CAPACITY: Partial<Record<RoomId, number>> = {
+  triage: 1,
+  investigation: 1,
+  dev: 3,
+  qa: 3,
+  review: 2,
+};
+
 export function placementsFromItems(items: readonly AgentPlacementInput[]): {
   personas: PersonaPlacement[];
   tickets: TicketPlacement[];
@@ -82,6 +93,8 @@ export function placementsFromItems(items: readonly AgentPlacementInput[]): {
   const personas: PersonaPlacement[] = [];
   const tickets: TicketPlacement[] = [];
   const shelfIndices = new Map<string, number>();
+  // Tracks how many active (carried) items have been assigned to each room.
+  const roomCarriedCount = new Map<RoomId, number>();
 
   for (const item of items) {
     const { workItemId, externalId, projectSlug, state, priority = 'normal', title } = item;
@@ -148,6 +161,29 @@ export function placementsFromItems(items: readonly AgentPlacementInput[]): {
     const roomId = roomForState(state);
     if (roomId == null) continue; // unknown state — drop
 
+    const carried = roomCarriedCount.get(roomId) ?? 0;
+    const capacity = ROOM_DESK_CAPACITY[roomId] ?? 1;
+
+    if (carried >= capacity) {
+      // Room is at capacity — ticket waits in queue; no persona spawned.
+      tickets.push({
+        ticketId,
+        externalId,
+        title: title ?? '',
+        priority,
+        carrierPersonaId: null,
+        position: 'queue',
+        roomId,
+        slotId: null,
+        shelfSlot: null,
+        indicator,
+        projectSlug,
+        workItemId,
+      });
+      continue;
+    }
+
+    roomCarriedCount.set(roomId, carried + 1);
     const deskSlot = deskSlotForRoom(roomId, externalId);
 
     personas.push({

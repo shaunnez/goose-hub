@@ -364,6 +364,48 @@ describe('placementsFromItems', () => {
   it('idleIndicator returns coffee', () => {
     expect(idleIndicator()).toBe('coffee');
   });
+
+  it('overflow items beyond desk capacity get position=queue with no persona', () => {
+    // dev has capacity 3; 4th item should be queued
+    const items = [1, 2, 3, 4].map((n) => ({
+      workItemId: `w${n}`,
+      externalId: `${n}`,
+      projectSlug: 'p',
+      state: 'factory:in-progress',
+    }));
+    const { personas, tickets } = placementsFromItems(items);
+    expect(personas).toHaveLength(3); // only 3 desk slots
+    const queued = tickets.filter((t) => t.position === 'queue');
+    const carried = tickets.filter((t) => t.position === 'carried');
+    expect(queued).toHaveLength(1);
+    expect(carried).toHaveLength(3);
+    expect(queued[0].carrierPersonaId).toBeNull();
+    expect(queued[0].roomId).toBe('dev');
+  });
+
+  it('triage overflow queues at capacity 1', () => {
+    const items = [1, 2].map((n) => ({
+      workItemId: `w${n}`,
+      externalId: `${n}`,
+      projectSlug: 'p',
+      state: 'factory:triaging',
+    }));
+    const { tickets } = placementsFromItems(items);
+    expect(tickets.filter((t) => t.position === 'carried')).toHaveLength(1);
+    expect(tickets.filter((t) => t.position === 'queue')).toHaveLength(1);
+  });
+
+  it('queue tickets have correct roomId for hudState queue depth derivation', () => {
+    const items = [1, 2].map((n) => ({
+      workItemId: `w${n}`,
+      externalId: `${n}`,
+      projectSlug: 'p',
+      state: 'factory:needs-qa',
+    }));
+    const { tickets } = placementsFromItems(items);
+    const queueTickets = tickets.filter((t) => t.position === 'queue');
+    expect(queueTickets.every((t) => t.roomId === 'qa')).toBe(true);
+  });
 });
 
 describe('persona-codenames', () => {
