@@ -60,7 +60,7 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
   qa: { maxTurns: 100, maxBudgetUsd: 3.0, timeoutMs: 600_000, modelTier: 'sonnet' },
   review: { maxTurns: 25, maxBudgetUsd: 0.5, timeoutMs: 180_000, modelTier: 'sonnet' },
   'resolve-conflict': { maxTurns: 75, maxBudgetUsd: 4.0, timeoutMs: 600_000, modelTier: 'sonnet' },
-  investigate: { maxTurns: 18, maxBudgetUsd: 1.5, timeoutMs: 180_000, modelTier: 'haiku' },
+  investigate: { maxTurns: 50, maxBudgetUsd: 4.0, timeoutMs: 180_000, modelTier: 'sonnet' },
   'playwright-repro': { maxTurns: 60, maxBudgetUsd: 3.0, timeoutMs: 600_000, modelTier: 'sonnet' },
   'advise-on-plan': { maxTurns: 15, maxBudgetUsd: 1.5, timeoutMs: 180_000, modelTier: 'opus' },
   'spec-author': { maxTurns: 50, maxBudgetUsd: 2.0, timeoutMs: 900_000, modelTier: 'sonnet' },
@@ -127,7 +127,7 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
   // M13 — milestone-rollup writer (sprint review issue at milestone end).
   'sprint-review': {
     maxTurns: 25,
-    maxBudgetUsd: 0.5,
+    maxBudgetUsd: 1,
     timeoutMs: 240_000,
     modelTier: 'sonnet',
   },
@@ -136,37 +136,37 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
   // uncertainty; longer runs tend to duplicate code-path/runtime scouts.
   'scout-schema': {
     maxTurns: 20,
-    maxBudgetUsd: 0.5,
+    maxBudgetUsd: 1,
     timeoutMs: 120_000,
     modelTier: 'haiku',
   },
   'scout-code-path': {
     maxTurns: 20,
-    maxBudgetUsd: 0.5,
+    maxBudgetUsd: 1,
     timeoutMs: 240_000,
     modelTier: 'haiku',
   },
   'scout-pattern': {
     maxTurns: 20,
-    maxBudgetUsd: 0.5,
+    maxBudgetUsd: 1,
     timeoutMs: 240_000,
     modelTier: 'haiku',
   },
   'scout-test-inventory': {
     maxTurns: 20,
-    maxBudgetUsd: 0.5,
+    maxBudgetUsd: 1,
     timeoutMs: 240_000,
     modelTier: 'haiku',
   },
   'scout-dependency': {
     maxTurns: 20,
-    maxBudgetUsd: 0.5,
+    maxBudgetUsd: 1,
     timeoutMs: 240_000,
     modelTier: 'haiku',
   },
   'scout-user-journey': {
     maxTurns: 20,
-    maxBudgetUsd: 0.5,
+    maxBudgetUsd: 1,
     timeoutMs: 240_000,
     modelTier: 'haiku',
   },

@@ -81,6 +81,39 @@ vi.mock('@goose-hub/core/workspaces/orchestrator-git.js', () => ({
 
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 
+function resetEventStoreMocks(): void {
+  vi.mocked(eventStore.replay).mockReturnValue([]);
+}
+
+function makeInvestigationEvent(item: WorkItem, overrides: Record<string, unknown> = {}) {
+  return {
+    id: 99,
+    projectId: 'proj',
+    workItemId: item.id,
+    kind: 'agent.investigation-complete',
+    payload: {
+      investigate: {
+        findings: 'Failure handling is in triage-batch and fallback retry code.',
+        keyFiles: [
+          {
+            path: 'apps/server/src/domains/workflows/triage-batch.ts',
+            reason: 'owns failed triage state transitions',
+          },
+          {
+            path: 'core/agent-runtime/fallback.ts',
+            reason: 'owns maxAttempts handling',
+          },
+        ],
+        openQuestions: ['Should repo-match fail immediately or after two attempts?'],
+        ...overrides,
+      },
+      investigationRunId: 'investigation-run-1',
+    },
+    createdAt: new Date().toISOString(),
+    runId: 'investigation-run-1',
+  } as never;
+}
+
 function makeWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
   return {
     id: 'github:owner/repo#42',
@@ -170,6 +203,7 @@ function resetRuntimeRoutingMocks(): void {
 describe('runFixIssueWorkflow — default deps (lines 68-73 ?? fallbacks)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetEventStoreMocks();
     mockAccumulatePersonaStats.mockClear();
     resetRuntimeRoutingMocks();
     process.env.GITHUB_TOKEN = 'ghp_test';
@@ -206,6 +240,7 @@ describe('runFixIssueWorkflow — default deps (lines 68-73 ?? fallbacks)', () =
 describe('runFixIssueWorkflow — provider-aware runtime dispatch', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetEventStoreMocks();
     mockAccumulatePersonaStats.mockClear();
     resetRuntimeRoutingMocks();
     process.env.GITHUB_TOKEN = 'ghp_test';
@@ -363,6 +398,7 @@ describe('runFixIssueWorkflow — provider-aware runtime dispatch', () => {
 describe('runFixIssueWorkflow (#183)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetEventStoreMocks();
     mockAccumulatePersonaStats.mockClear();
     resetRuntimeRoutingMocks();
     process.env.GITHUB_TOKEN = 'ghp_test';
@@ -441,6 +477,188 @@ describe('runFixIssueWorkflow (#183)', () => {
       personaName: 'proj/developer/0',
       role: 'developer',
       outcome: 'success',
+    });
+  });
+
+  it('injects latest investigation findings into implement context and emits an audit event', async () => {
+    const item = makeWorkItem({ priority: 'medium', type: 'bug' });
+    const source = makeStateSource();
+    vi.mocked(eventStore.replay).mockReturnValue([makeInvestigationEvent(item)]);
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockResolvedValueOnce({
+        output: makeImplementOutput({
+          filesWritten: [
+            {
+              path: 'apps/server/src/domains/workflows/triage-batch.ts',
+              reason: 'stop failed triage loops',
+            },
+            {
+              path: 'apps/server/src/domains/workflows/triage-batch.test.ts',
+              reason: 'regression coverage',
+            },
+          ],
+          testsWritten: [
+            { path: 'apps/server/src/domains/workflows/triage-batch.test.ts', cases: 2 },
+          ],
+          testsRun: {
+            command: 'pnpm test --reporter=json',
+            paths: ['apps/server/src/domains/workflows/triage-batch.test.ts'],
+          },
+        }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult),
+    };
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl: vi.fn().mockResolvedValue({
+        prNumber: 100,
+        prUrl: 'https://github.com/owner/repo/pull/100',
+        branch: 'factory/abc',
+        base: 'main',
+      }),
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    const implementSpec = vi.mocked(runtime.run).mock.calls[0][0] as {
+      context: { investigation?: { findings?: string; keyFiles?: Array<{ path: string }> } };
+      contextAllowlist: string[];
+    };
+    expect(implementSpec.context.investigation?.findings).toContain('triage-batch');
+    expect(implementSpec.context.investigation?.keyFiles?.map((f) => f.path)).toContain(
+      'apps/server/src/domains/workflows/triage-batch.ts',
+    );
+    expect(implementSpec.contextAllowlist).toContain('investigation');
+
+    const injected = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'agent.investigation-context-injected');
+    expect(injected).toBeDefined();
+    expect(injected?.[0].payload).toMatchObject({
+      skill: 'implement',
+      investigationRunId: 'investigation-run-1',
+      keyFileCount: 2,
+      openQuestionCount: 1,
+    });
+  });
+
+  it('wrong-surface guard blocks PRs when implement output misses investigated files', async () => {
+    const item = makeWorkItem({ priority: 'medium', type: 'bug' });
+    const source = makeStateSource();
+    vi.mocked(eventStore.replay).mockReturnValue([makeInvestigationEvent(item)]);
+    const openPRImpl = vi.fn();
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockResolvedValueOnce({
+        output: makeImplementOutput({
+          filesWritten: [
+            { path: 'slices/parallel-implement/workflow.ts', reason: 'wrong surface' },
+          ],
+          testsWritten: [{ path: 'slices/parallel-implement/slice.test.ts', cases: 1 }],
+          testsRun: {
+            command: 'pnpm test --reporter=json',
+            paths: ['slices/parallel-implement/slice.test.ts'],
+          },
+        }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult),
+    };
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    expect(openPRImpl).not.toHaveBeenCalled();
+    const guard = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'agent.wrong-surface-guard');
+    expect(guard).toBeDefined();
+    expect(guard?.[0].payload).toMatchObject({
+      reason: 'implement-output-missed-investigation-surface',
+      expectedKeyFiles: [
+        'apps/server/src/domains/workflows/triage-batch.ts',
+        'core/agent-runtime/fallback.ts',
+      ],
+      touchedPaths: [
+        'slices/parallel-implement/workflow.ts',
+        'slices/parallel-implement/slice.test.ts',
+        'slices/parallel-implement/slice.test.ts',
+      ],
+    });
+    expect(source.transitionState).toHaveBeenLastCalledWith(
+      '42',
+      'factory:in-progress',
+      'factory:needs-human',
+    );
+  });
+
+  it('wrong-surface guard records failed runs whose tool calls never touched investigation files', async () => {
+    const item = makeWorkItem({ priority: 'medium', type: 'bug' });
+    const source = makeStateSource();
+    vi.mocked(eventStore.replay).mockImplementation((filter = {}) => {
+      if (filter?.kind === 'agent.investigation-complete') return [makeInvestigationEvent(item)];
+      if (filter?.runId != null) {
+        return [
+          {
+            id: 101,
+            projectId: 'proj',
+            workItemId: item.id,
+            kind: 'agent.tool-call',
+            payload: {
+              tool_name: 'Bash',
+              tool_input: { command: "sed -n '1,220p' slices/parallel-implement/workflow.ts" },
+            },
+            createdAt: new Date().toISOString(),
+            runId: filter.runId,
+          },
+        ] as never;
+      }
+      return [];
+    });
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockRejectedValueOnce(new Error('budget exceeded')),
+    };
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl: vi.fn(),
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    const guard = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'agent.wrong-surface-guard');
+    expect(guard).toBeDefined();
+    expect(guard?.[0].payload).toMatchObject({
+      reason: 'tool-calls-missed-investigation-surface',
+      expectedKeyFiles: [
+        'apps/server/src/domains/workflows/triage-batch.ts',
+        'core/agent-runtime/fallback.ts',
+      ],
     });
   });
 
@@ -684,6 +902,7 @@ describe('runFixIssueWorkflow (#183)', () => {
 describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetEventStoreMocks();
     mockAccumulatePersonaStats.mockClear();
     process.env.GITHUB_TOKEN = 'ghp_test';
   });
@@ -827,7 +1046,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
     };
 
     const beforeUrl = 'https://github.com/owner/repo/issues/42#issuecomment-1';
-    vi.mocked(eventStore.replay).mockReturnValueOnce([
+    vi.mocked(eventStore.replay).mockReturnValue([
       {
         id: 1,
         projectId: 'proj',

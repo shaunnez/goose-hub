@@ -25,6 +25,21 @@ export const ImplementWpContextSchema = z.object({
   }),
   /** Code snippets from the spec-author scout wave, narrowed to this WP's scope. */
   codeSnippets: z.array(z.string()).optional(),
+  investigation: z
+    .object({
+      findings: z.string().optional(),
+      keyFiles: z
+        .array(
+          z.object({
+            path: z.string(),
+            reason: z.string().optional(),
+          }),
+        )
+        .optional(),
+      openQuestions: z.array(z.string()).optional(),
+      investigationRunId: z.string().optional(),
+    })
+    .optional(),
   worktreePath: z.string().describe('Absolute path to the WP scratch worktree'),
   stack: z.object({
     testCommand: z.string(),
@@ -45,6 +60,7 @@ const config: SkillConfig = {
     'wp.changes',
     'wp.dependsOn',
     'codeSnippets',
+    'investigation',
     'worktreePath',
     'stack.testCommand',
     'stack.lintCommand',

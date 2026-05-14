@@ -25,6 +25,8 @@ export type EventKind =
   | 'agent.triage-complete'
   | 'agent.repo-override'
   | 'agent.investigation-complete'
+  | 'agent.investigation-context-injected'
+  | 'agent.wrong-surface-guard'
   // Three-tier verification framework (M19.05, issue #562)
   | 'qa.structural-passed'
   | 'qa.structural-failed'

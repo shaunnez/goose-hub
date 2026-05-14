@@ -4,6 +4,7 @@ import type {
   AgentRuntime,
   AgentSpec,
 } from '@goose-hub/core/agent-runtime/interface.js';
+import type { InvestigationContext } from '@goose-hub/core/agent-runtime/investigation-context.js';
 import { getRecordDecisionTool } from '@goose-hub/core/db/repositories/project-settings.js';
 import type { AgentEvent, AppendEventInput } from '@goose-hub/core/event-stream/store.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
@@ -46,6 +47,7 @@ export interface RunOneWpBuilderOptions {
   recordIterationFn: typeof recordWpIteration;
   implementWpPrompt: string;
   implementWpJsonSchema: Record<string, unknown>;
+  investigation?: InvestigationContext;
 }
 
 // ─── Single-WP builder runner ─────────────────────────────────────────────────
@@ -63,6 +65,24 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
     payload: { wpId: wp.id, iteration, wpRunId, scratchPath: opts.scratchWorktreePath },
     runId: wpRunId,
   });
+  if (opts.investigation != null) {
+    opts.appendEvent({
+      projectId,
+      workItemId: workItemId ?? null,
+      kind: 'agent.investigation-context-injected',
+      payload: {
+        runId: wpRunId,
+        skill: 'implement-wp',
+        wpId: wp.id,
+        investigationRunId: opts.investigation.investigationRunId ?? null,
+        keyFiles: opts.investigation.keyFiles.map((f) => f.path),
+        keyFileCount: opts.investigation.keyFiles.length,
+        findingsChars: opts.investigation.findings?.length ?? 0,
+        openQuestionCount: opts.investigation.openQuestions.length,
+      },
+      runId: wpRunId,
+    });
+  }
 
   const spawnSpec: AgentSpec = {
     runId: wpRunId,
@@ -84,6 +104,7 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
         changes: wp.changes,
         dependsOn: wp.dependsOn,
       },
+      investigation: opts.investigation,
       worktreePath: opts.scratchWorktreePath,
       stack: opts.stack,
     },
@@ -96,6 +117,7 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
       'wp.filesOwned',
       'wp.changes',
       'wp.dependsOn',
+      'investigation',
       'worktreePath',
       'stack.testCommand',
       'stack.lintCommand',

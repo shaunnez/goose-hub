@@ -45,6 +45,7 @@ The context contains a `<task>` block with:
   - `<changes>` — description of what this WP must implement (file:line citations encouraged)
   - `<depends_on>` — WP ids this WP depends on (already committed by orchestrator)
 - `<code_snippets>` (optional) — relevant code excerpts pre-loaded by the scout wave
+- `<investigation>` (optional) — original bug-investigation findings, key files, and open questions
 - `<worktree_path>` — absolute path to your scratch worktree (already checked out)
 - `<stack>` — test, lint, typecheck commands
 
@@ -53,6 +54,10 @@ The context contains a `<task>` block with:
 ### 1 — Read
 
 - Read the work item and your WP description carefully.
+- If `<investigation>` is present, use it to understand why this WP exists. Your
+  `filesOwned` remains authoritative, but if it appears unrelated to the
+  investigation key files, stop and return `confidence: low` with a `BLOCKER`
+  decision summary.
 - Read the files in `<files_owned>` to understand the current state.
 - Use `read` and `search` tools to load test files for the surfaces you will touch FIRST.
 - Emit: `[decision] READ: Loaded WP <id> context and N relevant files`

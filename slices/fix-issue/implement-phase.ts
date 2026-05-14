@@ -1,5 +1,11 @@
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
+import {
+  type InvestigationContext,
+  latestInvestigationContext,
+  pathsTouchInvestigationSurface,
+  toolCallsTouchInvestigationSurface,
+} from '@goose-hub/core/agent-runtime/investigation-context.js';
 import { selectModel } from '@goose-hub/core/agent-runtime/model-router.js';
 import {
   type ModelProvider,
@@ -38,6 +44,7 @@ export interface RunImplementInput {
   outputJsonSchema: Record<string, unknown>;
   personaId: string;
   advisorFeedback?: string;
+  investigation?: InvestigationContext;
   revisionPass?: 0 | 1;
 }
 
@@ -66,6 +73,55 @@ export interface AfterImplementInput {
   resolveHeadShaFn: (worktreePath: string) => string;
   /** Orchestrator commits before openPR (ADR 0031 — builder no-commit rule). */
   orchestratorCommitFn: typeof orchestratorCommitAll;
+}
+
+export { latestInvestigationContext };
+
+function appendWrongSurfaceGuardEvent(input: {
+  projectId: string;
+  workItemId: string;
+  runId: string;
+  personaId?: string;
+  investigation: InvestigationContext;
+  reason: string;
+  touchedPaths?: string[];
+}): void {
+  eventStore.appendEvent({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    kind: 'agent.wrong-surface-guard',
+    payload: {
+      runId: input.runId,
+      skill: 'implement',
+      reason: input.reason,
+      expectedKeyFiles: input.investigation.keyFiles.map((f) => f.path),
+      touchedPaths: input.touchedPaths ?? [],
+      investigationRunId: input.investigation.investigationRunId ?? null,
+    },
+    runId: input.runId,
+    personaId: input.personaId,
+  });
+}
+
+export function emitWrongSurfaceGuardForRun(input: {
+  projectId: string;
+  workItemId: string;
+  runId: string;
+  personaId?: string;
+  investigation?: InvestigationContext;
+}): void {
+  if (input.investigation == null) return;
+  const runEvents = eventStore.replay({ runId: input.runId });
+  if (
+    toolCallsTouchInvestigationSurface({ events: runEvents, investigation: input.investigation })
+  ) {
+    return;
+  }
+  appendWrongSurfaceGuardEvent({
+    ...input,
+    investigation: input.investigation,
+    reason: 'tool-calls-missed-investigation-surface',
+  });
 }
 
 function forcedProviderFromRuntime(configRuntime: string | undefined): ModelProvider | null {
@@ -154,6 +210,24 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
     },
     runId: input.runId,
   });
+  if (input.investigation != null) {
+    eventStore.appendEvent({
+      projectId: input.projectId,
+      workItemId: input.workItem.id,
+      kind: 'agent.investigation-context-injected',
+      payload: {
+        runId: input.runId,
+        skill: 'implement',
+        investigationRunId: input.investigation.investigationRunId ?? null,
+        keyFiles: input.investigation.keyFiles.map((f) => f.path),
+        keyFileCount: input.investigation.keyFiles.length,
+        findingsChars: input.investigation.findings?.length ?? 0,
+        openQuestionCount: input.investigation.openQuestions.length,
+      },
+      runId: input.runId,
+      personaId: input.personaId,
+    });
+  }
 
   const { output } = await runWithEscalation({
     runtime: execution.runtime,
@@ -176,6 +250,7 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
         },
         worktreePath: input.worktreePath,
         stack: input.stack,
+        investigation: input.investigation,
         advisorFeedback: input.advisorFeedback,
         revisionPass: input.revisionPass ?? 0,
       },
@@ -188,6 +263,7 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
         'stack.testCommand',
         'stack.lintCommand',
         'stack.typecheckCommand',
+        'investigation',
         'advisorFeedback',
         'revisionPass',
       ],
@@ -201,6 +277,27 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
       appendSystemPrompt: input.appendSystemPrompt,
     },
   });
+  const touchedPaths = [
+    ...output.filesWritten.map((f) => f.path),
+    ...output.testsWritten.map((t) => t.path),
+    ...output.testsRun.paths,
+  ];
+  if (!pathsTouchInvestigationSurface(touchedPaths, input.investigation)) {
+    appendWrongSurfaceGuardEvent({
+      projectId: input.projectId,
+      workItemId: input.workItem.id,
+      runId: input.runId,
+      personaId: input.personaId,
+      investigation: input.investigation as InvestigationContext,
+      reason: 'implement-output-missed-investigation-surface',
+      touchedPaths,
+    });
+    throw new Error(
+      `wrong surface guard: implement output did not touch investigated key files (${input.investigation?.keyFiles
+        .map((f) => f.path)
+        .join(', ')})`,
+    );
+  }
   return output;
 }
 

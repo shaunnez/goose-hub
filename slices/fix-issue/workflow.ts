@@ -18,7 +18,13 @@ import {
 } from '@goose-hub/core/workspaces/worktree.js';
 import { EvidencePostSchema } from '@goose-hub/skills/evidence-post/schema.js';
 import { ImplementSchema } from '@goose-hub/skills/implement/schema.js';
-import { afterImplement, resolveImplementExecution, runImplement } from './implement-phase.js';
+import {
+  afterImplement,
+  emitWrongSurfaceGuardForRun,
+  latestInvestigationContext,
+  resolveImplementExecution,
+  runImplement,
+} from './implement-phase.js';
 import { deriveStack, resolveWorktreeHeadSha } from './pr-helpers.js';
 
 // Re-export for test access (slice.test.ts imports resolveWorktreeHeadSha from workflow.js).
@@ -112,6 +118,7 @@ export async function runFixIssueWorkflow(
     workItem,
     injectedRuntime: deps.runtime,
   });
+  const investigation = latestInvestigationContext({ projectId, workItemId: workItem.id });
   const runtime = implementExecution.runtime;
   const worktreePath = createWtFn(targetRepo, runId);
 
@@ -155,6 +162,7 @@ export async function runFixIssueWorkflow(
         appendSystemPrompt: implementPrompt,
         outputJsonSchema: implementJsonSchema,
         personaId: implementPersonaId,
+        investigation,
         revisionPass: 0,
       });
 
@@ -241,6 +249,7 @@ export async function runFixIssueWorkflow(
       appendSystemPrompt: implementPrompt,
       outputJsonSchema: implementJsonSchema,
       personaId: implementPersonaId,
+      investigation,
       advisorFeedback,
       revisionPass,
     });
@@ -273,6 +282,15 @@ export async function runFixIssueWorkflow(
       outcome: 'failure',
     });
     const error = err instanceof Error ? err : new Error(String(err));
+    if (!error.message.startsWith('wrong surface guard:')) {
+      emitWrongSurfaceGuardForRun({
+        projectId,
+        workItemId: workItem.id,
+        runId,
+        personaId: implementPersonaId,
+        investigation,
+      });
+    }
     eventStore.appendEvent({
       projectId,
       workItemId: workItem.id,

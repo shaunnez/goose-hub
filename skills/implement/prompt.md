@@ -33,6 +33,7 @@ The context contains a `<task>` block with:
   - `<lint_command>` (optional) — e.g. `pnpm lint`
   - `<typecheck_command>` (optional) — e.g. `pnpm typecheck`
 - `<advisor_feedback>` (optional) — present when an advisor revise verdict re-spawned this run
+- `<investigation>` (optional) — prior bug-investigation findings, key files, and open questions
 - `<revision_pass>` (optional) — `0` (default) or `1`
 
 ## What you must do
@@ -41,6 +42,10 @@ The context contains a `<task>` block with:
 
 - Read the work_item carefully. Identify acceptance criteria.
 - If `<advisor_feedback>` is present, read it and let it shape the plan.
+- If `<investigation>` is present, treat it as the starting map. Read the listed
+  `keyFiles` before exploring adjacent surfaces. If you choose a different
+  implementation surface, explain the pivot in a `PLAN` decision summary with
+  concrete evidence.
 - Use the `read` and `search` tools to load the test files for the surfaces you'll touch FIRST. Existing tests are the strongest signal of intent.
 
 #### Discipline — applied before writing anything

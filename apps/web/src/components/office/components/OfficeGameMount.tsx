@@ -99,6 +99,16 @@ export function OfficeGameMount({
         banner: false,
       });
       gameRef.current = game;
+      const resizeObserver =
+        typeof ResizeObserver !== 'undefined'
+          ? new ResizeObserver(([entry]) => {
+              if (entry == null) return;
+              const width = Math.floor(entry.contentRect.width);
+              const height = Math.floor(entry.contentRect.height);
+              if (width > 0 && height > 0) game.scale.resize(width, height);
+            })
+          : null;
+      resizeObserver?.observe(container);
       // Dev-only debug hook so e2e screenshot tests + manual debugging can
       // push events into the scene without going through Phaser hit-testing.
       // Stripped at build time when import.meta.env.DEV is false.
@@ -131,6 +141,7 @@ export function OfficeGameMount({
         scene.events_().off('hero-changed', onHero);
         if (choreographyRef != null) choreographyRef.current = null;
         onSceneEmitter?.(null);
+        resizeObserver?.disconnect();
         game.destroy(true);
         sceneRef.current = null;
         gameRef.current = null;

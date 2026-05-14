@@ -23,9 +23,12 @@ import { hudStateFromPlacements } from './lib/hud-state';
 import {
   FLOOR_GAP_PX,
   FLOOR_PIXEL_HEIGHT,
+  FLOOR_PIXEL_WIDTH,
   deskPositions,
   floorCenterY,
   floorOriginY,
+  floorOverviewCameraLayout,
+  floorOverviewZoomForViewport,
   stairsPosition,
   totalWorldHeight,
 } from './lib/layout';
@@ -161,6 +164,23 @@ describe('floor and desk layout', () => {
     expect(totalWorldHeight(0)).toBe(0);
     expect(totalWorldHeight(1)).toBe(FLOOR_PIXEL_HEIGHT);
     expect(totalWorldHeight(3)).toBe(3 * FLOOR_PIXEL_HEIGHT + 2 * FLOOR_GAP_PX);
+  });
+
+  it('keeps the floor at 1:1 when the viewport is smaller than the world', () => {
+    expect(floorOverviewZoomForViewport(FLOOR_PIXEL_WIDTH - 200, FLOOR_PIXEL_HEIGHT)).toBe(1);
+  });
+
+  it('zooms the floor overview up for large viewports without cropping the focused floor', () => {
+    const zoom = floorOverviewZoomForViewport(FLOOR_PIXEL_WIDTH * 2, FLOOR_PIXEL_HEIGHT * 1.5);
+    expect(zoom).toBe(1.5);
+  });
+
+  it('pads camera bounds so a wide viewport centers the office floor', () => {
+    const layout = floorOverviewCameraLayout(FLOOR_PIXEL_WIDTH * 2, FLOOR_PIXEL_HEIGHT * 1.5, 1);
+    expect(layout.zoom).toBe(1.5);
+    expect(layout.bounds.x).toBeLessThan(0);
+    expect(layout.bounds.width).toBeGreaterThan(FLOOR_PIXEL_WIDTH);
+    expect(layout.bounds.y).toBe(0);
   });
 
   it('places one desk per office role with monotonically-increasing x', () => {

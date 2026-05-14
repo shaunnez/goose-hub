@@ -10,6 +10,10 @@ import {
   shouldRunDevReview,
 } from '@goose-hub/core/agent-runtime/dev-review-advisor.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
+import {
+  latestInvestigationContext,
+  pathsTouchInvestigationSurface,
+} from '@goose-hub/core/agent-runtime/investigation-context.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
@@ -133,6 +137,7 @@ export async function runParallelImplementWorkflow(
   const { personaId } = (deps.selectPersonaImpl ?? selectPersona)(projectId, 'developer');
   const implementWpPrompt = readPromptWithContext('implement-wp', projectId);
   const implementWpJsonSchema = toJsonSchema(ImplementWpSchema);
+  const investigation = latestInvestigationContext({ projectId, workItemId: workItem.id });
 
   const stack = projectConfig?.stack
     ? {
@@ -147,6 +152,35 @@ export async function runParallelImplementWorkflow(
   let issueWorktreePath: string | undefined;
 
   try {
+    const plannedWpFiles = spec.workPackages.flatMap((wp) => wp.filesOwned);
+    if (!pathsTouchInvestigationSurface(plannedWpFiles, investigation)) {
+      append({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'agent.wrong-surface-guard',
+        payload: {
+          runId,
+          skill: 'parallel-implement',
+          reason: 'engineering-spec-missed-investigation-surface',
+          expectedKeyFiles: investigation?.keyFiles.map((f) => f.path) ?? [],
+          touchedPaths: plannedWpFiles,
+          investigationRunId: investigation?.investigationRunId ?? null,
+        },
+        runId,
+      });
+      await stateSource.comment(
+        workItem.externalId,
+        buildAgentComment('Dev', 'Failed', 'Parallel implement blocked by wrong-surface guard', [
+          `Expected one of: ${investigation?.keyFiles.map((f) => f.path).join(', ')}`,
+        ]),
+      );
+      return {
+        status: 'failed',
+        devRunId: runId,
+        errorReason: 'engineering spec did not target investigated key files',
+      };
+    }
+
     // Create the integration worktree (all WP commits land here).
     issueWorktreePath = createIssueFn(targetRepo, runId);
 
@@ -205,6 +239,7 @@ export async function runParallelImplementWorkflow(
             recordIterationFn: recordFn,
             implementWpPrompt,
             implementWpJsonSchema,
+            investigation,
           }),
         );
 

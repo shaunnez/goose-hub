@@ -15,7 +15,7 @@ import Phaser from 'phaser';
 import type { PersonaPlacement, TicketPlacement } from '../lib/agent-positions';
 import type { Timeline } from '../lib/choreography';
 import { type HudState, hudStateFromPlacements } from '../lib/hud-state';
-import { FLOOR_PIXEL_WIDTH, floorCenterY, totalWorldHeight } from '../lib/layout';
+import { FLOOR_PIXEL_WIDTH, floorCenterY, floorOverviewCameraLayout } from '../lib/layout';
 import { queueVerifiedPngAssets } from './asset-loader';
 import { ChoreographyPlayer } from './choreography/ChoreographyPlayer';
 import { HudLayer } from './layers/HudLayer';
@@ -140,8 +140,7 @@ export class OfficeScene extends Phaser.Scene {
     this.personaLayer.dropAll();
     this.ticketLayer.dropAll();
 
-    const worldH = Math.max(totalWorldHeight(this.projects.length), this.scale.height);
-    this.cameras.main.setBounds(0, 0, FLOOR_PIXEL_WIDTH, worldH);
+    this.fitCameraToViewport();
     if (this.currentFloorIndex >= this.projects.length) this.currentFloorIndex = 0;
     this.snapCameraToFloor(this.currentFloorIndex);
   }
@@ -258,8 +257,20 @@ export class OfficeScene extends Phaser.Scene {
 
   private handleResize(gameSize: Phaser.Structs.Size): void {
     this.cameras.main.setSize(gameSize.width, gameSize.height);
+    this.fitCameraToViewport(gameSize.width, gameSize.height);
     if (this.projects.length > 0) {
       this.snapCameraToFloor(this.currentFloorIndex);
     }
+  }
+
+  private fitCameraToViewport(width = this.scale.width, height = this.scale.height): void {
+    const cameraLayout = floorOverviewCameraLayout(width, height, this.projects.length);
+    this.cameras.main.setZoom(cameraLayout.zoom);
+    this.cameras.main.setBounds(
+      cameraLayout.bounds.x,
+      cameraLayout.bounds.y,
+      cameraLayout.bounds.width,
+      cameraLayout.bounds.height,
+    );
   }
 }

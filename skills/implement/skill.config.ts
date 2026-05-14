@@ -39,7 +39,23 @@ export const ImplementContextSchema = z.object({
 });
 
 const config: SkillConfig = {
-  contextSchema: ImplementContextSchema,
+  contextSchema: ImplementContextSchema.extend({
+    investigation: z
+      .object({
+        findings: z.string().optional(),
+        keyFiles: z
+          .array(
+            z.object({
+              path: z.string(),
+              reason: z.string().optional(),
+            }),
+          )
+          .optional(),
+        openQuestions: z.array(z.string()).optional(),
+        investigationRunId: z.string().optional(),
+      })
+      .optional(),
+  }),
   contextAllowlist: [
     'workItem.title',
     'workItem.body',
@@ -49,6 +65,7 @@ const config: SkillConfig = {
     'stack.testCommand',
     'stack.lintCommand',
     'stack.typecheckCommand',
+    'investigation',
     'advisorFeedback',
     'revisionPass',
   ],
