@@ -377,7 +377,8 @@ export async function runInvestigateWorkflow(
       overrides: {
         runtimeOverride: runtime,
         modelOverride: synthModelOverride,
-        freshContextOverride: investigationSwarmEnabled && allScoutReports != null ? true : undefined,
+        freshContextOverride:
+          investigationSwarmEnabled && allScoutReports != null ? true : undefined,
       },
     });
 
