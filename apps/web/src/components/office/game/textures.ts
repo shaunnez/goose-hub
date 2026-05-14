@@ -110,6 +110,12 @@ const OFFICE_TEXTURE_DISPLAY_SIZES: Record<string, TextureDisplaySize> = {
   [TEXTURE_KEYS.indicatorCoffee]: { width: 14, height: 14 },
   [TEXTURE_KEYS.indicatorBang]: { width: 14, height: 14 },
   [TEXTURE_KEYS.indicatorCheck]: { width: 14, height: 14 },
+  [TEXTURE_KEYS.spriteBase]: { width: 12, height: 16 },
+  [TEXTURE_KEYS.ticket]: { width: 14, height: 10 },
+  [TEXTURE_KEYS.ticketScroll]: { width: 10, height: 16 },
+  [TEXTURE_KEYS.ticketEnvelope]: { width: 14, height: 10 },
+  [TEXTURE_KEYS.queueStackMany]: { width: 20, height: 16 },
+  [TEXTURE_KEYS.ticketGlow]: { width: 20, height: 16 },
 };
 
 export function applyOfficeTextureDisplaySize(

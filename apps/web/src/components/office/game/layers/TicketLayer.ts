@@ -182,6 +182,7 @@ export class TicketLayer {
     // Glow ring
     const glow = this.scene.add.image(0, 0, TEXTURE_KEYS.ticketGlow);
     glow.setOrigin(0.5, 0.5);
+    applyOfficeTextureDisplaySize(glow, TEXTURE_KEYS.ticketGlow);
     glow.setDepth(GLOW_DEPTH);
     entry.container.add(glow);
     entry.glow = glow;
@@ -250,10 +251,13 @@ export class TicketLayer {
     if (entry == null) return;
     if (variant === 'scroll') {
       entry.body.setTexture(TEXTURE_KEYS.ticketScroll);
+      applyOfficeTextureDisplaySize(entry.body, TEXTURE_KEYS.ticketScroll);
     } else if (variant === 'envelope') {
       entry.body.setTexture(TEXTURE_KEYS.ticketEnvelope);
+      applyOfficeTextureDisplaySize(entry.body, TEXTURE_KEYS.ticketEnvelope);
     } else {
       entry.body.setTexture(TEXTURE_KEYS.ticket);
+      applyOfficeTextureDisplaySize(entry.body, TEXTURE_KEYS.ticket);
     }
   }
 
@@ -410,6 +414,7 @@ export class TicketLayer {
     container.setDepth(TICKET_HERO_DEPTH + 1);
     const img = this.scene.add.image(0, 0, textureKey);
     img.setOrigin(0.5, 0.5);
+    applyOfficeTextureDisplaySize(img, textureKey);
     if (tint != null) img.setTint(tint);
     container.add(img);
     this.tempSprites.set(id, { container });
@@ -501,6 +506,7 @@ export class TicketLayer {
 
     const body = this.scene.add.image(0, 0, TEXTURE_KEYS.ticket);
     body.setOrigin(0.5, 0.5);
+    applyOfficeTextureDisplaySize(body, TEXTURE_KEYS.ticket);
     this.applyPriorityTint(body, p.priority);
     container.add(body);
 
@@ -696,6 +702,7 @@ export class TicketLayer {
       if (qs == null) {
         const sprite = this.scene.add.image(qa.x, oy + qa.y, TEXTURE_KEYS.queueStackMany);
         sprite.setOrigin(0.5, 0.5);
+        applyOfficeTextureDisplaySize(sprite, TEXTURE_KEYS.queueStackMany);
         sprite.setDepth(TICKET_DEPTH - 1);
         qs = { sprite };
         this.queueStacks.set(storeKey, qs);

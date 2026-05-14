@@ -395,6 +395,7 @@ export class PersonaLayer {
 
     const body = this.scene.add.image(0, 0, TEXTURE_KEYS.spriteBase);
     body.setOrigin(0.5, 1);
+    applyOfficeTextureDisplaySize(body, TEXTURE_KEYS.spriteBase);
     const role = p.roomId != null ? (ROOM_DEFAULT_ROLE[p.roomId] ?? 'developer') : 'developer';
     body.setTint(ROLE_TINTS[role] ?? PALETTE.amber);
     container.add(body);
@@ -512,6 +513,10 @@ export class PersonaLayer {
         entry.roomId = p.roomId;
         entry.deskSlot = p.deskSlot;
         entry.floorIndex = toFloorIndex;
+        if (p.roomId != null) {
+          const newRole = ROOM_DEFAULT_ROLE[p.roomId] ?? 'developer';
+          entry.body.setTint(ROLE_TINTS[newRole] ?? PALETTE.amber);
+        }
         this.updateIndicator(entry, p);
         this.restackAtSharedDesks();
       },
