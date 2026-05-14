@@ -23,10 +23,10 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 
 ### Walls
 - [!] wall_dark_01.png
-- [ ] wall_dark_02.png
-- [ ] wall_corner_inner.png
-- [ ] wall_corner_outer.png
-- [ ] wall_trim_top.png
+- [x] wall_dark_02.png
+- [x] wall_corner_inner.png
+- [x] wall_corner_outer.png
+- [x] wall_trim_top.png
 - [ ] wall_trim_bottom.png
 
 ### Special Walls
