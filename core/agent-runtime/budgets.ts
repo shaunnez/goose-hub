@@ -63,7 +63,7 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
   investigate: { maxTurns: 50, maxBudgetUsd: 4.0, timeoutMs: 180_000, modelTier: 'sonnet' },
   'playwright-repro': { maxTurns: 60, maxBudgetUsd: 3.0, timeoutMs: 600_000, modelTier: 'sonnet' },
   'advise-on-plan': { maxTurns: 15, maxBudgetUsd: 1.5, timeoutMs: 180_000, modelTier: 'opus' },
-  'spec-author': { maxTurns: 50, maxBudgetUsd: 2.0, timeoutMs: 900_000, modelTier: 'sonnet' },
+  'spec-author': { maxTurns: 50, maxBudgetUsd: 7, timeoutMs: 900_000, modelTier: 'sonnet' },
   'retrospective-light': {
     maxTurns: 25,
     maxBudgetUsd: 0.3,

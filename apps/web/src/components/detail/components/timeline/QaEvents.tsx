@@ -8,14 +8,75 @@ type TierResult = {
   command?: string | null;
 };
 
+type TierPayload = {
+  tier?: string | number;
+  evidence?: string[];
+  findingCount?: number;
+  findings?: { tier?: string; severity?: string; description?: string }[];
+  runId?: string;
+};
+
+function tierKeyFromKind(kind: string): string {
+  return kind.replace('qa.', '').replace('-failed', '').replace('-passed', '');
+}
+
+function formatTierLabel(tier: string | number | undefined, kind: string): string {
+  const key = tier ?? tierKeyFromKind(kind);
+  const normalized =
+    key === 1 || key === '1'
+      ? 'structural'
+      : key === 2 || key === '2'
+        ? 'functional'
+        : key === 3 || key === '3'
+          ? 'regression'
+          : String(key);
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+function TierEvidence({ evidence, findingCount }: { evidence: string[]; findingCount?: number }) {
+  if (evidence.length === 0 && findingCount == null) return null;
+  return (
+    <div className="mt-2 flex flex-col gap-1 text-[11.5px] text-fg-3">
+      {findingCount != null && (
+        <div>
+          {findingCount} finding{findingCount === 1 ? '' : 's'}
+        </div>
+      )}
+      {evidence.slice(0, 3).map((item) => (
+        <div key={item} className="font-mono text-[11px] text-fg-3 break-words">
+          {item}
+        </div>
+      ))}
+      {evidence.length > 3 && <div>{evidence.length - 3} more evidence item(s)</div>}
+    </div>
+  );
+}
+
+export function QaPassedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as TierPayload | null;
+  const tierLabel = formatTierLabel(p?.tier, event.kind);
+  const evidence = p?.evidence ?? [];
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-success bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <CheckCircle size={13} className="shrink-0 text-green-400" />
+        <span className="font-mono uppercase tracking-wider">QA {tierLabel} passed</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <TierEvidence evidence={evidence} findingCount={p?.findingCount} />
+    </li>
+  );
+}
+
 export function QaFailedEvent({ event }: { event: AgentEventDto }) {
-  const p = event.payload as {
-    tier?: string;
-    findings?: { tier?: string; severity?: string; description?: string }[];
-  } | null;
-  const tier = p?.tier ?? event.kind.replace('qa.', '').replace('-failed', '');
-  const tierLabel = tier.charAt(0).toUpperCase() + tier.slice(1);
+  const p = event.payload as TierPayload | null;
+  const tierLabel = formatTierLabel(p?.tier, event.kind);
   const findings = p?.findings ?? [];
+  const evidence = p?.evidence ?? [];
   return (
     <li
       data-event-kind={event.kind}
@@ -51,6 +112,7 @@ export function QaFailedEvent({ event }: { event: AgentEventDto }) {
           ))}
         </ul>
       )}
+      {findings.length === 0 && <TierEvidence evidence={evidence} findingCount={p?.findingCount} />}
     </li>
   );
 }

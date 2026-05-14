@@ -45,6 +45,8 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'agent.investigation-context-injected': 'Investigation context injected',
   'agent.wrong-surface-guard': 'Wrong surface guard',
   'agent.implement-complete': 'Implement complete',
+  'agent.fix-feedback-complete': 'Fix feedback complete',
+  'agent.retry-escalated': 'Retry escalated',
   'pr.opened': 'PR opened',
   'pr.merged': 'PR merged',
   'gate.approved': 'Gate approved',
@@ -55,8 +57,11 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'evidence.post-failed': 'Evidence post failed',
   'agent.verify-command': 'Verify command',
   'qa.completed': 'QA completed',
+  'qa.structural-passed': 'QA structural passed',
   'qa.structural-failed': 'QA structural failed',
+  'qa.functional-passed': 'QA functional passed',
   'qa.functional-failed': 'QA functional failed',
+  'qa.regression-passed': 'QA regression passed',
   'qa.regression-failed': 'QA regression failed',
   'retrospective.completed': 'Retrospective completed',
   'grill.question-posted': 'Grill question posted',
@@ -142,8 +147,10 @@ export type RenderItem =
       phase: 'dev';
       pipelineRunId: string;
       items: RenderItem[];
+      status: 'started' | 'live' | 'completed' | 'failed';
       startedAt: string | null;
       endedAt: string | null;
+      lastEventAt: string | null;
     };
 
 /**
@@ -206,6 +213,10 @@ export function groupByDevPhase(items: RenderItem[]): RenderItem[] {
           return pid;
         }
       }
+      for (const event of eventFromRenderItem(item)) {
+        const p = event.payload as { pipelineRunId?: string } | null;
+        if (p?.pipelineRunId != null && pipelines.has(p.pipelineRunId)) return p.pipelineRunId;
+      }
       return null;
     }
     if (item.kind === 'event') {
@@ -232,24 +243,14 @@ export function groupByDevPhase(items: RenderItem[]): RenderItem[] {
   const phaseGroups: RenderItem[] = [];
   for (const [pid, phaseItemList] of pipelineItems) {
     if (phaseItemList.length === 0) continue;
-    const timestamps: number[] = [];
-    for (const item of phaseItemList) {
-      if (item.kind === 'event') timestamps.push(new Date(item.event.createdAt).getTime());
-      else if (item.kind === 'run-group') {
-        if (item.startedAt) timestamps.push(new Date(item.startedAt).getTime());
-        if (item.endedAt) timestamps.push(new Date(item.endedAt).getTime());
-      }
-    }
-    const startedAt =
-      timestamps.length > 0 ? new Date(Math.min(...timestamps)).toISOString() : null;
-    const endedAt = timestamps.length > 0 ? new Date(Math.max(...timestamps)).toISOString() : null;
+    const times = extractPhaseTimes(phaseItemList);
     phaseGroups.push({
       kind: 'phase-group',
       phase: 'dev',
       pipelineRunId: pid,
       items: phaseItemList,
-      startedAt,
-      endedAt,
+      status: resolveDevPhaseStatus(pid, phaseItemList),
+      ...times,
     });
   }
 
@@ -451,6 +452,60 @@ function extractPhaseTimes(items: RenderItem[]): {
   }
 
   return { startedAt, endedAt, lastEventAt };
+}
+
+function hasLiveRunGroup(item: RenderItem): boolean {
+  if (item.kind !== 'run-group') return false;
+  return item.endedAt == null;
+}
+
+function resolveDevPhaseStatus(
+  pipelineRunId: string,
+  items: RenderItem[],
+): 'started' | 'live' | 'completed' | 'failed' {
+  const events = items.flatMap(eventFromRenderItem);
+  const hasFailure = events.some((event) => {
+    const payload = event.payload as {
+      pipelineRunId?: string;
+      to?: string;
+      toState?: string;
+    } | null;
+    return (
+      event.kind === 'parallel-implement.exhausted' ||
+      event.kind === 'parallel-implement.wp-failed' ||
+      event.kind === 'parallel-implement.wp-timeout' ||
+      event.kind === 'parallel-implement.wp-commit-failed' ||
+      event.kind === 'dev-review.failed' ||
+      event.kind === 'dev-review.error' ||
+      (event.kind === 'agent.run-failed' &&
+        (event.runId === pipelineRunId || payload?.pipelineRunId === pipelineRunId)) ||
+      (event.kind === 'state.transitioned' &&
+        (payload?.to === 'factory:needs-human' || payload?.toState === 'factory:needs-human'))
+    );
+  });
+  if (hasFailure) return 'failed';
+
+  const hasCompletion = events.some((event) => {
+    const payload = event.payload as {
+      pipelineRunId?: string;
+      to?: string;
+      toState?: string;
+    } | null;
+    return (
+      event.kind === 'pr.opened' ||
+      (event.kind === 'state.transitioned' &&
+        (payload?.to === 'factory:needs-qa' || payload?.toState === 'factory:needs-qa')) ||
+      event.kind === 'dev-review.completed'
+    );
+  });
+  if (hasCompletion) return 'completed';
+
+  if (items.some(hasLiveRunGroup)) return 'live';
+
+  const hasParallelActivity = events.some(
+    (event) => event.kind.startsWith('parallel-implement.') || event.kind.startsWith('dev-review.'),
+  );
+  return hasParallelActivity ? 'live' : 'started';
 }
 
 function resolveInvestigationStatus(

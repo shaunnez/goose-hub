@@ -29,6 +29,7 @@ import {
   EvidencePostFailedEvent,
   EvidencePostedEvent,
 } from './timeline/EvidenceEvents';
+import { AgentFixFeedbackCompleteEvent } from './timeline/FixFeedbackEvents';
 import {
   GateApprovedEvent,
   GateAwaitingHumanEvent,
@@ -71,8 +72,9 @@ import {
   PrdRejectedEvent,
   PrdRevisedEvent,
 } from './timeline/PrdEvents';
-import { QaCompletedEvent, QaFailedEvent } from './timeline/QaEvents';
+import { QaCompletedEvent, QaFailedEvent, QaPassedEvent } from './timeline/QaEvents';
 import { RetroCompletedEvent } from './timeline/RetroCompletedEvent';
+import { AgentRetryEscalatedEvent } from './timeline/RetryEvents';
 import { ReviewCompletedEvent } from './timeline/ReviewCompletedEvent';
 import { RunGroupWrapper } from './timeline/RunGroupWrapper';
 import {
@@ -111,8 +113,10 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
         key={`phase-group-${item.pipelineRunId}`}
         pipelineRunId={item.pipelineRunId}
         items={item.items}
+        status={item.status}
         startedAt={item.startedAt}
         endedAt={item.endedAt}
+        lastEventAt={item.lastEventAt}
         context={context}
         renderItem={renderTimelineItem}
       />
@@ -179,6 +183,10 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <ToolWarningEvent key={event.id} event={event} />;
     case 'qa.completed':
       return <QaCompletedEvent key={event.id} event={event} />;
+    case 'qa.structural-passed':
+    case 'qa.functional-passed':
+    case 'qa.regression-passed':
+      return <QaPassedEvent key={event.id} event={event} />;
     case 'qa.structural-failed':
     case 'qa.functional-failed':
     case 'qa.regression-failed':
@@ -201,6 +209,10 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <GateRejectedEvent key={event.id} event={event} />;
     case 'agent.implement-complete':
       return <AgentImplementCompleteEvent key={event.id} event={event} />;
+    case 'agent.fix-feedback-complete':
+      return <AgentFixFeedbackCompleteEvent key={event.id} event={event} />;
+    case 'agent.retry-escalated':
+      return <AgentRetryEscalatedEvent key={event.id} event={event} />;
     case 'grill.question-posted':
       return <GrillQuestionPostedEvent key={event.id} event={event} />;
     case 'grill.decision-crystallized':

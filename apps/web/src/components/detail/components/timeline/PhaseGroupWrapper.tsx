@@ -3,22 +3,36 @@ import { useEffect, useState } from 'react';
 import type { RenderItem, TimelineContext } from '../../lib/timeline';
 import { formatDuration } from '../../lib/timeline';
 
+const STALL_MS = 15 * 60 * 1000;
+
 export function PhaseGroupWrapper({
   pipelineRunId,
   items,
+  status,
   startedAt,
   endedAt,
+  lastEventAt,
   context,
   renderItem,
 }: {
   pipelineRunId: string;
   items: RenderItem[];
+  status: 'started' | 'live' | 'completed' | 'failed';
   startedAt: string | null;
   endedAt: string | null;
+  lastEventAt: string | null;
   context?: TimelineContext;
   renderItem: (item: RenderItem, idx: number, context?: TimelineContext) => React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  const isActive = status === 'started' || status === 'live';
+  useEffect(() => {
+    if (!isActive) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [isActive]);
 
   const expandTick = context?.expandSignal?.tick ?? 0;
   const expandOpen = context?.expandSignal?.open ?? true;
@@ -29,8 +43,54 @@ export function PhaseGroupWrapper({
 
   const startMs = startedAt != null ? new Date(startedAt).getTime() : null;
   const endMs = endedAt != null ? new Date(endedAt).getTime() : null;
-  const duration = startMs != null && endMs != null ? formatDuration(endMs - startMs) : null;
+  const lastMs = lastEventAt != null ? new Date(lastEventAt).getTime() : null;
+  const isStalled = isActive && lastMs != null && now - lastMs > STALL_MS;
+  const activeDuration = startMs != null ? formatDuration(now - startMs) : null;
+  const completeDuration =
+    startMs != null && endMs != null ? formatDuration((lastMs ?? endMs) - startMs) : null;
   const shortId = pipelineRunId.length > 8 ? pipelineRunId.slice(0, 8) : pipelineRunId;
+
+  const statusBadge = isStalled ? (
+    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+      <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+      Stalled
+    </span>
+  ) : status === 'failed' ? (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/10 text-[color:var(--danger)] border border-red-500/20">
+      Failed
+    </span>
+  ) : status === 'completed' ? (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-fg-5/10 text-fg-3 border border-line/50">
+      Complete
+    </span>
+  ) : status === 'started' ? (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[color:var(--accent)]/10 text-[color:var(--accent)] border border-[color:var(--accent)]/25">
+      Started
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/10 text-green-400 border border-green-500/20">
+      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+      Live
+    </span>
+  );
+
+  const metaLine = isStalled ? (
+    <span className="text-yellow-400/70 text-[10.5px]">
+      no activity for {lastMs != null ? formatDuration(now - lastMs) : '?'}
+    </span>
+  ) : isActive ? (
+    activeDuration != null ? (
+      <span className="text-fg-5 text-[10.5px]">running for {activeDuration}</span>
+    ) : null
+  ) : (
+    <span className="text-fg-5 text-[10.5px]">
+      {completeDuration != null && <>Ran for {completeDuration}</>}
+      {startedAt != null && <> &middot; Started {new Date(startedAt).toLocaleTimeString()}</>}
+      {endedAt != null && (
+        <> &middot; Ended {new Date(lastEventAt ?? endedAt).toLocaleTimeString()}</>
+      )}
+    </span>
+  );
 
   return (
     <li
@@ -53,20 +113,9 @@ export function PhaseGroupWrapper({
           </span>
           <span aria-hidden className="w-[3px] h-[3px] shrink-0 rounded-full bg-fg-4" />
           <span className="font-mono text-fg-5 text-[10.5px]">pipeline {shortId}</span>
-          {duration != null && (
-            <>
-              <span aria-hidden className="w-[3px] h-[3px] shrink-0 rounded-full bg-fg-4" />
-              <span className="text-fg-5 text-[10.5px]">{duration}</span>
-            </>
-          )}
-          {startedAt != null && (
-            <>
-              <span aria-hidden className="w-[3px] h-[3px] shrink-0 rounded-full bg-fg-4" />
-              <span className="text-fg-5 text-[10.5px]">
-                Started {new Date(startedAt).toLocaleTimeString()}
-              </span>
-            </>
-          )}
+          <span aria-hidden className="w-[3px] h-[3px] shrink-0 rounded-full bg-fg-4" />
+          <span className="w-[72px] shrink-0 flex justify-start">{statusBadge}</span>
+          <span className="flex-1 min-w-0 truncate">{metaLine}</span>
           <span className="ml-auto shrink-0 text-fg-5">{items.length} events</span>
         </summary>
         <ol className="flex flex-col gap-2 px-3 pb-3">

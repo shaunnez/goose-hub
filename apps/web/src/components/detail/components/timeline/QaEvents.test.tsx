@@ -1,0 +1,92 @@
+import type { AgentEventDto } from '@/lib/types';
+/** @vitest-environment jsdom */
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
+import { renderTimelineItem } from '../TimelineEvents';
+
+afterEach(cleanup);
+
+function makeEvent(kind: string, payload: unknown): AgentEventDto {
+  return {
+    id: 1,
+    kind,
+    payload,
+    runId: '72c46751-dc12-4c73-baba-c46e9933787b',
+    createdAt: '2026-05-14T04:46:39Z',
+    workItemId: 'github:shaunnez/goose-hub#783',
+    projectId: 'goose-hub-self',
+  } as AgentEventDto;
+}
+
+describe('QA timeline events', () => {
+  it('renders numeric tier pass payloads as named QA tiers', () => {
+    const event = makeEvent('qa.functional-passed', {
+      tier: 2,
+      evidence: ['no-verification-tooling-declared'],
+      findingCount: 0,
+      runId: '0eca3ecb-034d-4467-8573-7c691ec8b6e2',
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('QA Functional passed')).toBeTruthy();
+    expect(screen.getByText('0 findings')).toBeTruthy();
+    expect(screen.getByText('no-verification-tooling-declared')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('"tier"');
+  });
+
+  it('renders numeric tier failed payloads as named QA tiers', () => {
+    const event = makeEvent('qa.regression-failed', {
+      tier: 3,
+      evidence: ['carry-forward-ok-wps: WP1'],
+      findingCount: 1,
+      runId: '0eca3ecb-034d-4467-8573-7c691ec8b6e2',
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('QA Regression failed')).toBeTruthy();
+    expect(screen.getByText('1 finding')).toBeTruthy();
+    expect(screen.getByText('carry-forward-ok-wps: WP1')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('"tier"');
+  });
+
+  it('renders fix-feedback completion payloads without raw JSON', () => {
+    const event = makeEvent('agent.fix-feedback-complete', {
+      filesWritten: 3,
+      testsWritten: 2,
+      confidence: 'low',
+      testsRun: {
+        command: 'pnpm test --reporter=json src/components/chrome/slice.test.ts',
+        paths: ['src/components/chrome/slice.test.ts'],
+      },
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('Fix feedback complete')).toBeTruthy();
+    expect(screen.getByText('3 files written')).toBeTruthy();
+    expect(screen.getByText('2 tests written')).toBeTruthy();
+    expect(screen.getByText('low confidence')).toBeTruthy();
+    expect(
+      screen.getByText('pnpm test --reporter=json src/components/chrome/slice.test.ts'),
+    ).toBeTruthy();
+    expect(document.body.textContent).not.toContain('"filesWritten"');
+  });
+
+  it('renders retry escalation payloads without raw JSON', () => {
+    const event = makeEvent('agent.retry-escalated', {
+      stage: 'qa',
+      maxRetries: 2,
+      runId: '7684da8c-b792-4318-94a5-10dfb2218bf4',
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('Retry cap reached')).toBeTruthy();
+    expect(screen.getByText('Stage qa')).toBeTruthy();
+    expect(screen.getByText('Max retries 2')).toBeTruthy();
+    expect(screen.getByText('run 7684da8c')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('"maxRetries"');
+  });
+});
