@@ -100,12 +100,12 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 - [x] done_shelf.png
 - [x] archive_shelf.png
 - [x] archive_drawer.png
-- [ ] merge_trophy_small.png
-- [ ] merge_trophy_large.png
+- [x] merge_trophy_small.png
+- [x] merge_trophy_large.png
 
 ### Goose Coffee
-- [ ] goose_coffee_sign.png
-- [ ] coffee_machine.png
+- [x] goose_coffee_sign.png
+- [x] coffee_machine.png
 - [ ] coffee_mug.png
 - [ ] steam_small.png
 
