@@ -46,16 +46,16 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 - [x] movement_trail_blue.png
 - [x] movement_trail_red.png
 - [x] movement_trail_green.png
-- [ ] movement_trail_yellow.png
+- [x] movement_trail_yellow.png
 
 ---
 
 ## 03 — Room Props
 
 ### Triage
-- [ ] desk_triage.png
-- [ ] intake_board.png
-- [ ] paperwork_stack.png
+- [x] desk_triage.png
+- [x] intake_board.png
+- [x] paperwork_stack.png
 - [ ] queue_stack_small.png
 - [ ] queue_stack_large.png
 
