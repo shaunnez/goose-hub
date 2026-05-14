@@ -62,12 +62,12 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 ### Investigation
 - [x] desk_investigation.png
 - [x] investigation_monitor.png
-- [ ] investigation_map_board.png
-- [ ] bookshelf_small.png
-- [ ] bookshelf_large.png
+- [x] investigation_map_board.png
+- [x] bookshelf_small.png
+- [x] bookshelf_large.png
 
 ### Sealed Library
-- [ ] library_terminal.png
+- [x] library_terminal.png
 - [ ] convergence_core.png
 - [ ] glowing_convergence_ring.png
 - [ ] scout_report_stack.png
