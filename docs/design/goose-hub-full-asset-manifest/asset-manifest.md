@@ -126,12 +126,12 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 - [x] goose_qa.png
 - [x] goose_reviewer.png
 - [x] goose_scout.png
-- [ ] goose_ops.png
+- [x] goose_ops.png
 
 ### Overlay Variants
-- [ ] goose_spotlight.png
-- [ ] goose_blocked.png
-- [ ] goose_hero.png
+- [x] goose_spotlight.png
+- [x] goose_blocked.png
+- [x] goose_hero.png
 
 ---
 
