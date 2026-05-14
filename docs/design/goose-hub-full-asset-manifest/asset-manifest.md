@@ -17,12 +17,12 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 - [!] floor_tile_02.png
 - [!] corridor_tile_01.png
 - [!] corridor_tile_02.png
-- [ ] floor_shadow_edge.png
-- [ ] carpet_trim_horizontal.png
-- [ ] carpet_trim_vertical.png
+- [!] floor_shadow_edge.png
+- [!] carpet_trim_horizontal.png
+- [!] carpet_trim_vertical.png
 
 ### Walls
-- [ ] wall_dark_01.png
+- [!] wall_dark_01.png
 - [ ] wall_dark_02.png
 - [ ] wall_corner_inner.png
 - [ ] wall_corner_outer.png
