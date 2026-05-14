@@ -5,6 +5,9 @@ type FixFeedbackPayload = {
   filesWritten?: number;
   testsWritten?: number;
   confidence?: string;
+  repairMode?: string;
+  repairCycle?: number;
+  affectedWpIds?: string[];
   testsRun?: {
     command?: string;
     paths?: string[];
@@ -19,6 +22,10 @@ export function AgentFixFeedbackCompleteEvent({ event }: { event: AgentEventDto 
   const p = event.payload as FixFeedbackPayload | null;
   const command = p?.testsRun?.command;
   const paths = p?.testsRun?.paths ?? [];
+  const title =
+    p?.repairMode === 'legacy-implement' && p.repairCycle != null
+      ? `Legacy Repair Cycle ${p.repairCycle}`
+      : 'Fix feedback complete';
   return (
     <li
       data-event-kind={event.kind}
@@ -26,11 +33,12 @@ export function AgentFixFeedbackCompleteEvent({ event }: { event: AgentEventDto 
     >
       <div className="flex flex-wrap items-center gap-2 mb-1 text-[11px] text-fg-3">
         <ClipboardCheck size={13} className="shrink-0 text-green-400" />
-        <span className="font-mono uppercase tracking-wider">Fix feedback complete</span>
+        <span className="font-mono uppercase tracking-wider">{title}</span>
         <TimelineDot />
         <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-fg-3">
+        {p?.repairMode === 'legacy-implement' && <span>legacy implement repair</span>}
         {p?.filesWritten != null && (
           <span>
             {p.filesWritten} file{p.filesWritten === 1 ? '' : 's'} written
@@ -42,6 +50,9 @@ export function AgentFixFeedbackCompleteEvent({ event }: { event: AgentEventDto 
           </span>
         )}
         {p?.confidence != null && <span>{p.confidence} confidence</span>}
+        {p?.affectedWpIds != null && p.affectedWpIds.length > 0 && (
+          <span>{p.affectedWpIds.join(', ')}</span>
+        )}
       </div>
       {command != null && (
         <div className="mt-2 flex items-start gap-2 text-[11.5px] text-fg-3">

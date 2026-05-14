@@ -91,6 +91,39 @@ describe('QA timeline events', () => {
     expect(document.body.textContent).not.toContain('"filesWritten"');
   });
 
+  it('labels legacy implement repair cycles without claiming WP repair', () => {
+    const event = makeEvent('agent.fix-feedback-complete', {
+      repairMode: 'legacy-implement',
+      repairCycle: 1,
+      pipelineRunId: 'pipe-123',
+      sourceFailureKind: 'qa',
+      sourceFailureRunId: 'qa-run-1',
+      filesWritten: 1,
+      testsWritten: 0,
+      confidence: 'medium',
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('Legacy Repair Cycle 1')).toBeTruthy();
+    expect(screen.getByText('legacy implement repair')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('WP Repair');
+    expect(document.body.textContent).not.toContain('"repairMode"');
+  });
+
+  it('only names affected WPs when affectedWpIds exists', () => {
+    const event = makeEvent('agent.fix-feedback-complete', {
+      repairMode: 'legacy-implement',
+      repairCycle: 2,
+      affectedWpIds: ['WP2'],
+      filesWritten: 1,
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('WP2')).toBeTruthy();
+  });
+
   it('renders retry escalation payloads without raw JSON', () => {
     const event = makeEvent('agent.retry-escalated', {
       stage: 'qa',

@@ -8,6 +8,7 @@ export interface EmitStateTransitionEventInput {
   to: StateName;
   by: string;
   runId?: string;
+  extraPayload?: Record<string, unknown>;
 }
 
 export function emitStateTransitionEvent(input: EmitStateTransitionEventInput): void {
@@ -15,7 +16,7 @@ export function emitStateTransitionEvent(input: EmitStateTransitionEventInput): 
     projectId: input.projectId,
     workItemId: input.workItemId,
     kind: 'state.transitioned',
-    payload: { from: input.from, to: input.to, by: input.by },
+    payload: { ...input.extraPayload, from: input.from, to: input.to, by: input.by },
     ...(input.runId != null ? { runId: input.runId } : {}),
   });
 }

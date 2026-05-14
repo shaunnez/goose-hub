@@ -419,6 +419,78 @@ describe('groupByDevPhase', () => {
     expect(phaseEventKinds).toContain('dev-review.started');
     expect(phaseEventKinds).toContain('dev-review.completed');
   });
+
+  it('groups legacy fix-feedback repair cycles with matching pipelineRunId into the dev phase', () => {
+    const PID = 'pipe-repair-123';
+    const REPAIR_RUN = 'repair-run-1';
+    const events: AgentEventDto[] = [
+      makeEvent(1, 'agent.run-started', PID, { payload: { skill: 'spec-author' } }),
+      makeEvent(2, 'spec.completed', PID, { payload: { pipelineRunId: PID } }),
+      makeEvent(3, 'agent.run-completed', PID),
+      makeEvent(4, 'parallel-implement.wp-started', `${PID}:wp:WP1:iter:1`, {
+        payload: { pipelineRunId: PID, wpId: 'WP1' },
+      }),
+      makeEvent(5, 'agent.run-started', REPAIR_RUN, { payload: { skill: 'implement' } }),
+      makeEvent(6, 'agent.fix-feedback-complete', REPAIR_RUN, {
+        payload: {
+          pipelineRunId: PID,
+          repairMode: 'legacy-implement',
+          repairCycle: 1,
+          sourceFailureKind: 'qa',
+          sourceFailureRunId: 'qa-run-1',
+          worktreePath: '/work/wt',
+        },
+      }),
+      makeEvent(7, 'agent.run-completed', REPAIR_RUN),
+    ];
+
+    const result = groupEvents(events);
+    const pg = result.find((item) => item.kind === 'phase-group') as Extract<
+      (typeof result)[0],
+      { kind: 'phase-group' }
+    >;
+
+    expect(pg).toBeDefined();
+    expect(pg.items.some((item) => item.kind === 'run-group' && item.runId === REPAIR_RUN)).toBe(
+      true,
+    );
+    expect(result.some((item) => item.kind === 'run-group' && item.runId === REPAIR_RUN)).toBe(
+      false,
+    );
+  });
+
+  it('leaves fix-feedback repair events ungrouped when pipelineRunId is missing', () => {
+    const PID = 'pipe-repair-missing-pid';
+    const REPAIR_RUN = 'repair-run-missing-pid';
+    const events: AgentEventDto[] = [
+      makeEvent(1, 'agent.run-started', PID, { payload: { skill: 'spec-author' } }),
+      makeEvent(2, 'spec.completed', PID, { payload: { pipelineRunId: PID } }),
+      makeEvent(3, 'agent.run-completed', PID),
+      makeEvent(4, 'agent.run-started', REPAIR_RUN, { payload: { skill: 'implement' } }),
+      makeEvent(5, 'agent.fix-feedback-complete', REPAIR_RUN, {
+        payload: {
+          repairMode: 'legacy-implement',
+          repairCycle: 1,
+          worktreePath: '/work/wt',
+        },
+      }),
+      makeEvent(6, 'agent.run-completed', REPAIR_RUN),
+    ];
+
+    const result = groupEvents(events);
+    const pg = result.find((item) => item.kind === 'phase-group') as Extract<
+      (typeof result)[0],
+      { kind: 'phase-group' }
+    >;
+
+    expect(pg).toBeDefined();
+    expect(pg.items.some((item) => item.kind === 'run-group' && item.runId === REPAIR_RUN)).toBe(
+      false,
+    );
+    expect(result.some((item) => item.kind === 'run-group' && item.runId === REPAIR_RUN)).toBe(
+      true,
+    );
+  });
 });
 
 describe('EVENT_KIND_LABEL — dev-review kinds', () => {
