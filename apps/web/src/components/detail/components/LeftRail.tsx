@@ -41,7 +41,7 @@ interface LeftRailProps {
 function getNotApplicableReason(
   key: string,
   itemType: string | undefined,
-  prdParent: string | undefined,
+  _prdParent: string | undefined,
 ): string | undefined {
   // const isRawFeature = itemType === 'feature' && prdParent == null;
   // const isFromPrd = prdParent != null;
