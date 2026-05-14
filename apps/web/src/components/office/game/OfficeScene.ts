@@ -98,6 +98,7 @@ export class OfficeScene extends Phaser.Scene {
       roomLayer: this.roomLayer,
       scene: this,
       emitter: this.emitter,
+      notifyCameraAnchor: (anchor, ticketId) => this.notifyCameraAnchor(anchor, ticketId),
     });
 
     // HudLayer constructed last — sits at top of z-stack (z=60)
