@@ -27,15 +27,15 @@ Your context contains:
 - `workItem` — the original GitHub issue
   - `title`, `body`, `number`, `priority`
   - The body contains the acceptance criteria as `- [ ]` checkboxes
-- `prDiff` — either the complete git diff of the developer's change, or a compact large-diff summary with an `ArtifactRef`
+- `prDiff` — a deterministic PR diff digest first. Small diffs also include the complete git diff inline; large diffs include an `ArtifactRef` for the full diff and require targeted worktree reads.
 - `sliceTests` _(optional)_ — paths to slice test files included in the change
 - `projectCommands` _(optional)_ — `testCommand`, `lintCommand`, `typecheckCommand` for reproduction hints
 
 ## Step 1 — Read the issue and the diff
 
-Read `workItem.body` and extract the acceptance criteria (checkbox items). Then read `prDiff` end to end when it contains the full diff.
+Read `workItem.body` and extract the acceptance criteria (checkbox items). Then read the `PR diff digest` first. When `prDiff` includes an inline full diff, read it end to end.
 
-If `prDiff` says the large diff was stored as an artifact, the full diff is intentionally absent from prompt context. Use the provided summary, changed-file list, and targeted reads of files in the worktree to verify concrete concerns. In this mode:
+If `prDiff` says the full diff was stored as an artifact, the full diff is intentionally absent from prompt context. Use the digest, changed-file list, and targeted reads of files in the worktree to verify concrete concerns. In this mode:
 
 - Prefer `inconclusive` when the summary and targeted reads are insufficient to judge the change.
 - Do not invent hunk-level or line-specific findings from the summary alone.

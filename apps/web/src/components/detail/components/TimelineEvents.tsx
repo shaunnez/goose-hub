@@ -44,6 +44,7 @@ import { InvestigationPhaseWrapper } from './timeline/InvestigationPhaseWrapper'
 import { AgentLogEvent, AgentLogGroupEvent } from './timeline/LogEvents';
 import {
   AgentBudgetExceededEvent,
+  AgentDisclosureEvent,
   AgentModelSelectedEvent,
   FallbackEvent,
   InvestigationContextInjectedEvent,
@@ -154,6 +155,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <AgentDecisionSummaryEvent key={event.id} event={event} />;
     case 'agent.decision-summary-live':
       return <AgentDecisionSummaryLiveEvent key={event.id} event={event} />;
+    case 'agent.disclosure':
+      return <AgentDisclosureEvent key={event.id} event={event} />;
     case 'agent.log':
       return <AgentLogEvent key={event.id} event={event} />;
     case 'agent.terminated':

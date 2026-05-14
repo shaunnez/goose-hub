@@ -442,6 +442,7 @@ describe('EVENT_KIND_LABEL — dev-review kinds', () => {
 
 describe('EVENT_KIND_LABEL — QA and fix-feedback kinds', () => {
   const KINDS = [
+    'agent.disclosure',
     'agent.fix-feedback-complete',
     'agent.retry-escalated',
     'qa.structural-passed',

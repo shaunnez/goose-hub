@@ -1,6 +1,6 @@
 import type { AgentEventDto } from '@/lib/types';
 import { formatCost, formatTokens } from '@/lib/utils';
-import { AlertTriangle, ArrowRight, Cpu, Info, Target, User } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Cpu, FileStack, Info, Target, User } from 'lucide-react';
 import { EVENT_KIND_LABEL, getPayloadStr } from '../../lib/timeline';
 
 type BudgetExceededPayload = {
@@ -32,9 +32,24 @@ type WrongSurfaceGuardPayload = {
   investigationRunId?: string | null;
 };
 
+type DisclosurePayload = {
+  kind?: string;
+  skill?: string;
+  phase?: string;
+  bytesSaved?: number;
+  rawBytes?: number;
+  contextBytes?: number;
+  artifactKeys?: string[];
+};
+
 function formatShortId(value: string | undefined): string | null {
   if (value == null || value.length === 0) return null;
   return value.length <= 12 ? value : value.slice(0, 8);
+}
+
+function formatByteCount(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  return `${(bytes / 1024).toFixed(1)} KB`;
 }
 
 export function ManualActionEvent({ event }: { event: AgentEventDto }) {
@@ -186,6 +201,39 @@ export function AgentBudgetExceededEvent({ event }: { event: AgentEventDto }) {
         {p?.skill != null && <span>{p.skill}</span>}
         {shortRunId != null && <span className="font-mono text-fg-4">run {shortRunId}</span>}
       </div>
+    </li>
+  );
+}
+
+export function AgentDisclosureEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as DisclosurePayload | null;
+  const artifactKeys = p?.artifactKeys ?? [];
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-info bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <FileStack size={13} className="shrink-0 text-[color:var(--accent)]" />
+        <span className="font-mono uppercase tracking-wider">Input summarized</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-fg-2">
+        {p?.kind != null && <span className="font-mono">{p.kind}</span>}
+        {p?.skill != null && <span>{p.skill}</span>}
+        {p?.phase != null && <span>{p.phase}</span>}
+        {typeof p?.bytesSaved === 'number' && <span>{formatByteCount(p.bytesSaved)} saved</span>}
+      </div>
+      {artifactKeys.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {artifactKeys.slice(0, 4).map((key) => (
+            <span key={key} className="font-mono text-[11px] text-fg-3">
+              {key}
+            </span>
+          ))}
+        </div>
+      )}
     </li>
   );
 }

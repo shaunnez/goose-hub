@@ -19,6 +19,7 @@ import { getProjectBySlug } from '../projects/loader.js';
 import type { WorkItem } from '../state-source/interface.js';
 import type { AgentConfig } from '../types.js';
 import { GIT_ENV } from '../workspaces/git-env.js';
+import { type DiffDigest, buildDiffDigest, formatDiffDigestSummary } from './diff-digest.js';
 import type { AgentRuntime } from './interface.js';
 import { readPromptWithContext } from './read-prompt.js';
 import { reconcileDecisionSummaries } from './reconcile-decisions.js';
@@ -61,30 +62,8 @@ export function getDiffForDevReview(worktreePath: string, baseBranch = 'main'): 
   return result.stdout ?? '';
 }
 
-function extractChangedFiles(prDiff: string): string[] {
-  const files = new Set<string>();
-  for (const line of prDiff.split('\n')) {
-    const match = /^diff --git a\/(.+) b\/(.+)$/.exec(line);
-    if (match != null) files.add(match[2]);
-  }
-  return [...files];
-}
-
 function summarizePrDiff(prDiff: string): string {
-  const changedFiles = extractChangedFiles(prDiff);
-  const additions = prDiff
-    .split('\n')
-    .filter((line) => line.startsWith('+') && !line.startsWith('+++')).length;
-  const deletions = prDiff
-    .split('\n')
-    .filter((line) => line.startsWith('-') && !line.startsWith('---')).length;
-  const fileText =
-    changedFiles.length === 0
-      ? 'no changed files detected'
-      : `${changedFiles.length} changed files: ${changedFiles.slice(0, 12).join(', ')}${
-          changedFiles.length > 12 ? ', ...' : ''
-        }`;
-  return `${fileText}; +${additions}/-${deletions}`;
+  return formatDiffDigestSummary(buildDiffDigest(prDiff));
 }
 
 function diffArtifactKey(
@@ -106,9 +85,21 @@ export function preparePrDiffContext(input: {
   runId: string;
   prDiff: string;
   thresholdBytes?: number;
-}): { prDiffContext: string; artifactRef?: ArtifactRef; summary: string; changedFiles: string[] } {
+}): {
+  prDiffContext: string;
+  artifactRef?: ArtifactRef;
+  summary: string;
+  changedFiles: string[];
+  digest: DiffDigest;
+  disclosure?: {
+    kind: 'diff_summarized';
+    rawBytes: number;
+    contextBytes: number;
+    bytesSaved: number;
+    artifactKeys: string[];
+  };
+} {
   const summary = summarizePrDiff(input.prDiff);
-  const changedFiles = extractChangedFiles(input.prDiff);
   const maybeStored = maybeStoreLargePayload({
     projectId: input.projectId,
     workItemId: input.workItemId,
@@ -120,21 +111,48 @@ export function preparePrDiffContext(input: {
     artifactKey: diffArtifactKey(input.projectId, input.workItemId, input.runId, input.prDiff),
   });
 
+  const rawBytes = Buffer.byteLength(input.prDiff, 'utf8');
+
   if (maybeStored.stored === false) {
-    return { prDiffContext: maybeStored.payload, summary, changedFiles };
+    const digest = buildDiffDigest(maybeStored.payload);
+    return {
+      prDiffContext: [
+        'PR diff digest:',
+        JSON.stringify(digest, null, 2),
+        '',
+        'Full PR diff kept inline because it is below the artifact threshold:',
+        maybeStored.payload,
+      ].join('\n'),
+      summary: formatDiffDigestSummary(digest),
+      changedFiles: digest.changedFiles.map((file) => file.path),
+      digest,
+    };
   }
 
+  const digest = buildDiffDigest(input.prDiff, maybeStored);
+  const prDiffContext = [
+    'PR diff digest:',
+    JSON.stringify(digest, null, 2),
+    '',
+    'Full PR diff omitted from prompt context and stored as an agent artifact.',
+    `ArtifactRef: ${JSON.stringify(maybeStored)}`,
+    'Review from this digest plus targeted file reads in the worktree. Do not fabricate line-specific findings unless verified from provided context or a file read.',
+  ].join('\n');
+  const contextBytes = Buffer.byteLength(prDiffContext, 'utf8');
+
   return {
-    prDiffContext: [
-      'Large PR diff omitted from prompt context and stored as an agent artifact.',
-      `Summary: ${summary}`,
-      `ArtifactRef: ${JSON.stringify(maybeStored)}`,
-      `Changed files: ${changedFiles.length > 0 ? changedFiles.join(', ') : '(none detected)'}`,
-      'Review from this summary plus targeted file reads in the worktree. Do not fabricate line-specific findings unless verified from provided context or a file read.',
-    ].join('\n'),
+    prDiffContext,
     artifactRef: maybeStored,
-    summary,
-    changedFiles,
+    summary: formatDiffDigestSummary(digest),
+    changedFiles: digest.changedFiles.map((file) => file.path),
+    digest,
+    disclosure: {
+      kind: 'diff_summarized',
+      rawBytes,
+      contextBytes,
+      bytesSaved: Math.max(0, rawBytes - contextBytes),
+      artifactKeys: [maybeStored.artifactKey],
+    },
   };
 }
 
@@ -225,6 +243,19 @@ export async function runDevReview(input: RunDevReviewInput): Promise<DevReviewO
     prDiff,
   });
 
+  if (preparedDiff.disclosure != null) {
+    input.appendEvent({
+      projectId: input.projectId,
+      workItemId: input.workItemId,
+      kind: 'agent.disclosure',
+      payload: {
+        ...preparedDiff.disclosure,
+        skill: 'dev-review',
+      },
+      runId: devReviewRunId,
+    });
+  }
+
   input.appendEvent({
     projectId: input.projectId,
     workItemId: input.workItemId,
@@ -234,6 +265,7 @@ export async function runDevReview(input: RunDevReviewInput): Promise<DevReviewO
       worktreePath: input.worktreePath,
       diffSummary: preparedDiff.summary,
       diffArtifactRef: preparedDiff.artifactRef,
+      diffDigest: preparedDiff.digest,
     },
     runId: devReviewRunId,
   });
@@ -334,6 +366,19 @@ export async function runDevReviewResponse(
     prDiff: input.prDiff,
   });
 
+  if (preparedDiff.disclosure != null) {
+    input.appendEvent({
+      projectId: input.projectId,
+      workItemId: input.workItemId,
+      kind: 'agent.disclosure',
+      payload: {
+        ...preparedDiff.disclosure,
+        skill: 'dev-review-response',
+      },
+      runId: responseRunId,
+    });
+  }
+
   input.appendEvent({
     projectId: input.projectId,
     workItemId: input.workItemId,
@@ -343,6 +388,7 @@ export async function runDevReviewResponse(
       findingCount: input.devReviewFindings.length,
       diffSummary: preparedDiff.summary,
       diffArtifactRef: preparedDiff.artifactRef,
+      diffDigest: preparedDiff.digest,
     },
     runId: responseRunId,
   });

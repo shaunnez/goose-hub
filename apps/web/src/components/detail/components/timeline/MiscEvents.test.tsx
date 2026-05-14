@@ -84,4 +84,21 @@ describe('Misc timeline events', () => {
     expect(rendered).toContain('slices/parallel-implement/workflow.ts');
     expect(rendered).not.toContain('"expectedKeyFiles"');
   });
+
+  it('renders agent.disclosure as summarized input metadata', () => {
+    const event = makeEvent('agent.disclosure', {
+      kind: 'diff_summarized',
+      skill: 'dev-review',
+      bytesSaved: 4096,
+      artifactKeys: ['pr-diff:abc'],
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('Input summarized')).toBeTruthy();
+    expect(screen.getByText('diff_summarized')).toBeTruthy();
+    expect(screen.getByText('dev-review')).toBeTruthy();
+    expect(screen.getByText('pr-diff:abc')).toBeTruthy();
+    expect(screen.getByText('4.0 KB saved')).toBeTruthy();
+  });
 });

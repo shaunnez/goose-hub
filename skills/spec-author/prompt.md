@@ -13,8 +13,8 @@ The `<task>` block contains:
 - `<worktree_path>` — absolute path to the checked-out worktree to consult
 - `<prd>` (optional) — copied from PRD issue (#313 lineage). Use as the source of `userJourneys` and `functionalRequirements`. When absent and `issueType: feature`, derive minimal journeys from the work item.
 - `<investigation_synthesis>` (optional) — JSON-stringified `InvestigateOutput` (`findings`, `keyFiles`, `confidence`, `openQuestions`) produced by the synthesis step of the investigate workflow. **Read this first.** It is the distilled signal: use `findings` to understand the root cause or intent, `keyFiles` to orient your architecture section, and `openQuestions` to flag risks. When present, treat it as authoritative; use scout reports only for file:line citations.
-- `<scout_reports>` (optional) — JSON-stringified Wave-1 scout report handoff metadata (M19.01). Small reports may include full findings; large reports include summaries, previews, and `artifactRef` metadata instead of the full payload.
-- `<wave2_reports>` (optional) — JSON-stringified Wave-2 deep-agent report handoff metadata (interface-designer artefacts, risk-analyst register). Large reports may be summarized with `artifactRef`.
+- `<scout_reports>` (optional) — JSON-stringified Wave-1 scout report digest metadata (M19.01). This is `scout-report-digest-v1`, not the raw scout report JSON. It includes top findings, high-confidence facts, files referenced, risks, contradictions, and artifact keys for full reports when they were offloaded.
+- `<wave2_reports>` (optional) — JSON-stringified Wave-2 deep-agent report digest metadata (interface-designer artefacts, risk-analyst register). This is also digest-first and may include artifact keys for full reports.
 - `<repair_feedback>` (optional) — validator errors from a prior attempt. When present, return a complete corrected JSON object and address every listed error.
 
 **Fallback rule.** If `<scout_reports>` is absent (the swarm is not yet wired or not dispatched for this run), fall back to manual investigation: read the worktree directly via the read bundle. The spec format does not require the swarm to be implementable.
@@ -127,7 +127,7 @@ Emit: `[decision] READ: Issue #<n> — <one-sentence summary>`
 
 ### Step 2 — Read evidence (synthesis → scouts → manual)
 
-If `<investigation_synthesis>` is present, read it first — it contains the pre-processed root cause (`findings`), relevant files (`keyFiles`), and unresolved gaps (`openQuestions`). Then use `<scout_reports>` / `<wave2_reports>` for specific file:line citations when full findings are present. If a report only has summary/preview plus `artifactRef`, treat the summary as orientation metadata and verify exact citations with targeted reads before relying on them. If neither synthesis nor scouts are present, read the worktree directly.
+If `<investigation_synthesis>` is present, read it first — it contains the pre-processed root cause (`findings`), relevant files (`keyFiles`), and unresolved gaps (`openQuestions`). Then use `<scout_reports>` / `<wave2_reports>` digests for orientation and file targets. Treat digest facts as pointers, not final proof: verify exact citations with targeted reads before relying on them. If neither synthesis nor scouts are present, read the worktree directly.
 
 Emit: `[decision] READ: <synthesis + scouts | scouts only | manual> evidence — <one-sentence summary>`
 

@@ -62,6 +62,32 @@ describe('DevReviewEvents', () => {
     expect(screen.getByText(/4\.0 KB/)).toBeTruthy();
   });
 
+  it('renders dev-review.started diff digest summary', () => {
+    render(
+      <ul>
+        <DevReviewStartedEvent
+          event={makeEvent('dev-review.started', {
+            diffSummary: '2 changed files: core/a.ts, core/a.test.ts; 2 hunks; +4/-1; small',
+            diffDigest: {
+              changedFiles: [
+                { path: 'core/a.ts', hunkCount: 1, additions: 2, deletions: 1 },
+                { path: 'core/a.test.ts', hunkCount: 1, additions: 2, deletions: 0 },
+              ],
+              hunkCount: 2,
+              additions: 4,
+              deletions: 1,
+              roughChangeSize: 'small',
+              testFilesTouched: ['core/a.test.ts'],
+              riskyAreas: [],
+            },
+          })}
+        />
+      </ul>,
+    );
+
+    expect(screen.getByText(/2 changed files/)).toBeTruthy();
+  });
+
   it('renders dev-review.completed with verdict', () => {
     render(
       <ul>

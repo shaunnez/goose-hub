@@ -518,7 +518,7 @@ describe('runSpecAuthorWorkflow', () => {
       });
     });
 
-    it('passes scout report summaries and refs to spec-author without rehydrating full blobs', async () => {
+    it('passes scout report digests and refs to spec-author without raw report JSON', async () => {
       const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
       const scoutRepo = await import('@goose-hub/core/scout-reports/repository.js');
       vi.mocked(eventStore.replay).mockReturnValue([
@@ -543,6 +543,14 @@ describe('runSpecAuthorWorkflow', () => {
             summary: 'scout-code-path: 1 findings, 1 decision summaries',
             findingCount: 1,
             decisionSummaryCount: 1,
+            findingsPreview: [
+              {
+                file: 'core/scout-reports/repository.ts',
+                line: 12,
+                fact: 'large full finding body'.repeat(80),
+                confidence: 'high',
+              },
+            ],
             artifactRef: {
               artifactKey: 'scout-report:abc',
               kind: 'scout-report',
@@ -561,11 +569,22 @@ describe('runSpecAuthorWorkflow', () => {
       const invokeOpts = mockInvokeSkill.mock.calls[0][0] as {
         context: { scoutReports?: string };
       };
+      expect(invokeOpts.context.scoutReports).toContain('scout-report-digest-v1');
       expect(invokeOpts.context.scoutReports).toContain('scout-report:abc');
       expect(invokeOpts.context.scoutReports).toContain(
         'scout-code-path: 1 findings, 1 decision summaries',
       );
-      expect(invokeOpts.context.scoutReports).not.toContain('large full finding body');
+      expect(invokeOpts.context.scoutReports).not.toContain('large full finding body'.repeat(40));
+
+      const disclosureCall = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'agent.disclosure');
+      expect(disclosureCall?.[0].payload).toMatchObject({
+        kind: 'scout_reports_summarized',
+        skill: 'spec-author',
+        phase: 'wave1',
+        artifactKeys: ['scout-report:abc'],
+      });
     });
   });
 
