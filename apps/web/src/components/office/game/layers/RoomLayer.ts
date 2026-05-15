@@ -33,7 +33,13 @@ import {
   roomDoor,
   roomQueueAnchor,
 } from '../../lib/rooms';
-import { HUD_TINTS, PALETTE, TEXTURE_KEYS, applyOfficeTextureDisplaySize } from '../textures';
+import {
+  HUD_TINTS,
+  PALETTE,
+  TEXTURE_KEYS,
+  applyOfficeTextureDisplaySize,
+  roomDeskTextureKey,
+} from '../textures';
 import type { IntentResult, OfficeProject } from './types';
 
 interface RoomLayerCallbacks {
@@ -765,11 +771,12 @@ export class RoomLayer {
   ): void {
     for (const id of ROOM_IDS) {
       const anchors = roomDeskAnchors(id as RoomId);
+      const deskKey = roomDeskTextureKey(id, this.scene);
       for (let i = 0; i < anchors.length; i++) {
         const { x, y } = anchors[i];
-        const img = this.scene.add.image(x, originY + y, TEXTURE_KEYS.desk);
+        const img = this.scene.add.image(x, originY + y, deskKey);
         img.setOrigin(0.5, 1);
-        applyOfficeTextureDisplaySize(img, TEXTURE_KEYS.desk);
+        applyOfficeTextureDisplaySize(img, deskKey);
         container.add(img);
 
         const idle = this.scene.add.image(

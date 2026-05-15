@@ -107,6 +107,17 @@ const OFFICE_TEXTURE_DISPLAY_SIZES: Record<string, TextureDisplaySize> = {
   [TEXTURE_KEYS.corridorWarm]: { width: 64, height: 64 },
   [TEXTURE_KEYS.wallTile]: { width: 16, height: 16 },
   [TEXTURE_KEYS.desk]: { width: 32, height: 24 },
+  // Per-room desk PNGs — all displayed at 32x24 for uniform desk-row scale.
+  'office:desk_dev_dual': { width: 32, height: 24 },
+  'office:desk_dev_single': { width: 32, height: 24 },
+  'office:qa_station': { width: 32, height: 24 },
+  'office:review_table': { width: 32, height: 24 },
+  'office:done_shelf': { width: 32, height: 24 },
+  'office:archive_shelf': { width: 32, height: 24 },
+  'office:desk_triage': { width: 32, height: 24 },
+  'office:desk_investigation': { width: 32, height: 24 },
+  'office:library_terminal': { width: 32, height: 24 },
+  'office:coffee_machine': { width: 32, height: 24 },
   [TEXTURE_KEYS.stairs]: { width: 32, height: 32 },
   [TEXTURE_KEYS.indicatorSpeech]: { width: 14, height: 16 },
   [TEXTURE_KEYS.indicatorThought]: { width: 14, height: 16 },
@@ -159,6 +170,30 @@ export function indicatorTextureKey(kind: IndicatorKind): string {
     case 'check':
       return TEXTURE_KEYS.indicatorCheck;
   }
+}
+
+// Per-room desk PNG mapping. drawDesks uses this to pick a thematic
+// PNG (e.g. dev → dual builder desk, qa → QA station, library → terminal)
+// instead of the generic procedural desk. All entries display at 32x24
+// regardless of source PNG dimensions so the desk row stays uniform.
+export const ROOM_DESK_KEYS: Record<string, string> = {
+  dev: 'office:desk_dev_dual',
+  qa: 'office:qa_station',
+  review: 'office:review_table',
+  retro: 'office:desk_dev_single', // no dedicated retro asset
+  done: 'office:done_shelf',
+  archive: 'office:archive_shelf',
+  backlog: 'office:desk_triage', // backlog reuses triage desk
+  triage: 'office:desk_triage',
+  investigation: 'office:desk_investigation',
+  library: 'office:library_terminal',
+  coffee: 'office:coffee_machine',
+};
+
+export function roomDeskTextureKey(roomId: string, scene?: Phaser.Scene): string {
+  const candidate = ROOM_DESK_KEYS[roomId];
+  if (candidate != null && scene?.textures.exists(candidate)) return candidate;
+  return TEXTURE_KEYS.desk;
 }
 
 // Per-role goose PNG mapping. Roles without a matching PNG fall back to
