@@ -62,6 +62,11 @@ export function pngManifest(): AssetEntry[] {
     { key: 'office:queue_badge', url: `${ASSET_BASE}/queue_badge.png` },
     { key: 'office:hero_badge', url: `${ASSET_BASE}/hero_badge.png` },
     { key: 'office:merge_check', url: `${ASSET_BASE}/merge_check.png` },
+    // 06 — HUD / UI / Panels
+    { key: 'office:hero_ticket_popup', url: `${ASSET_BASE}/hero_ticket_popup.png` },
+    { key: 'office:queue_counter_panel', url: `${ASSET_BASE}/queue_counter_panel.png` },
+    { key: 'office:retry_counter_panel', url: `${ASSET_BASE}/retry_counter_panel.png` },
+    { key: 'office:convergence_panel', url: `${ASSET_BASE}/convergence_panel.png` },
   ];
 }
 
