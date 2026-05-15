@@ -128,6 +128,7 @@ const OFFICE_TEXTURE_DISPLAY_SIZES: Record<string, TextureDisplaySize> = {
   // Ambient — pendant lamps
   'office:lamp_glow_warm': { width: 24, height: 24 },
   'office:lamp_glow_soft': { width: 24, height: 24 },
+  'office:glow_soft': { width: 48, height: 48 },
   // Wall textures
   'office:wall_dark_01': { width: 16, height: 16 },
   'office:wall_dark_02': { width: 16, height: 16 },

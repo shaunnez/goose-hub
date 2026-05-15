@@ -821,9 +821,20 @@ export class RoomLayer {
       // One lamp per ~96 px of room width, min 1 max 3
       const count = Math.max(1, Math.min(3, Math.round(width / 96)));
       const lampY = b.y1 + 12;
+      const haloKey = 'office:glow_soft';
+      const haloLoaded = this.scene.textures.exists(haloKey);
       for (let i = 0; i < count; i++) {
         const t = (i + 1) / (count + 1); // 0.25/0.5/0.75 spacing
         const x = b.x1 + width * t;
+        // Soft halo below the lamp — diffuse orange light pool
+        if (haloLoaded) {
+          const halo = this.scene.add.image(x, originY + lampY + 20, haloKey);
+          halo.setOrigin(0.5, 0.5);
+          applyOfficeTextureDisplaySize(halo, haloKey);
+          halo.setAlpha(0.75);
+          halo.setBlendMode(Phaser.BlendModes.ADD);
+          container.add(halo);
+        }
         const lamp = this.scene.add.image(x, originY + lampY, lampKey);
         lamp.setOrigin(0.5, 0);
         applyOfficeTextureDisplaySize(lamp, lampKey);
