@@ -111,6 +111,17 @@ const OFFICE_TEXTURE_DISPLAY_SIZES: Record<string, TextureDisplaySize> = {
   [TEXTURE_KEYS.indicatorBang]: { width: 14, height: 14 },
   [TEXTURE_KEYS.indicatorCheck]: { width: 14, height: 14 },
   [TEXTURE_KEYS.spriteBase]: { width: 12, height: 16 },
+  // Goose sprite PNGs render at native 32x32 — twice the world tile size,
+  // 2x area vs the procedural spriteBase, crispest pixel art (no scaling).
+  // Earlier 24x24 still read as "tiny" at default camera zoom.
+  'office:goose_idle': { width: 32, height: 32 },
+  'office:goose_triage': { width: 32, height: 32 },
+  'office:goose_investigator': { width: 32, height: 32 },
+  'office:goose_dev': { width: 32, height: 32 },
+  'office:goose_qa': { width: 32, height: 32 },
+  'office:goose_reviewer': { width: 32, height: 32 },
+  'office:goose_scout': { width: 32, height: 32 },
+  'office:goose_ops': { width: 32, height: 32 },
   [TEXTURE_KEYS.ticket]: { width: 14, height: 10 },
   [TEXTURE_KEYS.ticketScroll]: { width: 10, height: 16 },
   [TEXTURE_KEYS.ticketEnvelope]: { width: 14, height: 10 },
@@ -146,9 +157,39 @@ export function indicatorTextureKey(kind: IndicatorKind): string {
   }
 }
 
-/** Returns the base sprite texture key. Role tint is applied at runtime via setTint(ROLE_TINTS[role]). */
-export function spriteTextureKeyForRole(_role: string): string {
+// Per-role goose PNG mapping. Roles without a matching PNG fall back to
+// goose_idle (white goose). Callers should SKIP setTint() when the returned
+// key starts with 'office:goose_' — the PNGs are pre-coloured.
+const ROLE_GOOSE_KEYS: Record<string, string> = {
+  triager: 'office:goose_triage',
+  griller: 'office:goose_idle',
+  'prd-writer': 'office:goose_idle',
+  decomposer: 'office:goose_idle',
+  researcher: 'office:goose_scout',
+  investigator: 'office:goose_investigator',
+  developer: 'office:goose_dev',
+  'dev-reviewer': 'office:goose_dev',
+  qa: 'office:goose_qa',
+  reviewer: 'office:goose_reviewer',
+  retrospector: 'office:goose_idle',
+  auditor: 'office:goose_ops',
+};
+
+/**
+ * Returns the sprite texture key for a given role. Prefers a goose PNG when
+ * one is loaded; falls back to the procedural spriteBase. Role tint is only
+ * applied when the returned key is the procedural sprite — goose PNGs are
+ * pre-coloured.
+ */
+export function spriteTextureKeyForRole(role: string, scene?: Phaser.Scene): string {
+  const candidate = ROLE_GOOSE_KEYS[role] ?? 'office:goose_idle';
+  if (scene?.textures.exists(candidate)) return candidate;
   return TEXTURE_KEYS.spriteBase;
+}
+
+/** True when the texture key refers to a pre-coloured goose PNG (skip tint). */
+export function isGooseTextureKey(key: string): boolean {
+  return key.startsWith('office:goose_');
 }
 
 /**
