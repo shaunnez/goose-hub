@@ -44,6 +44,13 @@ export const QaContextSchema = z.object({
     lintCommand: z.string().optional(),
     e2eCommand: z.string().optional(),
   }),
+  e2eDecision: z
+    .object({
+      mode: z.enum(['off', 'ui-changed', 'always']),
+      command: z.string().optional(),
+      reason: z.string(),
+    })
+    .optional(),
   /** Paths to slice-level test files for targeted test runs */
   sliceTests: z.array(z.string()).optional(),
   /** Permalink to the evidence-post comment (screenshots + GIF) on the GitHub issue; absent for backend-only changes or when evidence capture failed */
@@ -108,6 +115,7 @@ const config: SkillConfig = {
     'workItem',
     'prDiff',
     'projectCommands',
+    'e2eDecision',
     'sliceTests',
     'evidenceCommentUrl',
     'verifyCommands',

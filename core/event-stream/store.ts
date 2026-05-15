@@ -41,6 +41,9 @@ export type EventKind =
   | 'evidence.posted'
   | 'evidence.post-failed'
   | 'evidence.no-spec-declared'
+  | 'evidence.playwright-ran'
+  | 'evidence.playwright-repro-skipped'
+  | 'evidence.post-skipped'
   // M7 approval gate (#186)
   | 'gate.approved'
   | 'gate.rejected'

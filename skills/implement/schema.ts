@@ -88,14 +88,17 @@ export const ImplementSchema = z
     const touchesWeb = val.filesWritten.some((f) => f.path.startsWith('apps/web/'));
     const hasEvidenceBlockerSummary = val.decisionSummaries.some(
       (summary) =>
-        (summary.kind === 'TOOL_FAILURE' || summary.kind === 'UNCERTAINTY') &&
-        /\b(e2e|evidence|playwright)\b/i.test(summary.summary),
+        (summary.kind === 'TOOL_FAILURE' ||
+          summary.kind === 'UNCERTAINTY' ||
+          summary.kind === 'SKIP_GATE') &&
+        /\b(e2e|evidence|playwright)\b/i.test(summary.summary) &&
+        /\b(block\w*|fail\w*|unclear|disabled|setting|skip\w*)\b/i.test(summary.summary),
     );
     if (touchesWeb && val.evidenceSpecPath === null && !hasEvidenceBlockerSummary) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message:
-          'evidenceSpecPath is required when filesWritten includes apps/web/ files unless a TOOL_FAILURE or UNCERTAINTY decision summary explains the e2e/evidence blockage',
+          'evidenceSpecPath is required when filesWritten includes apps/web/ files unless a TOOL_FAILURE, UNCERTAINTY, or SKIP_GATE decision summary explains the e2e/evidence blockage or disabled setting',
         path: ['evidenceSpecPath'],
       });
     }

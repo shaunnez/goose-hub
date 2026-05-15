@@ -274,6 +274,9 @@ export const projectSettings = sqliteTable('project_settings', {
   perBashCommandMaxSeconds: integer('per_bash_command_max_seconds'),
   useMultiAgentPipeline: integer('use_multi_agent_pipeline'),
   useInvestigationSwarm: integer('use_investigation_swarm'),
+  qaE2eMode: text('qa_e2e_mode'),
+  playwrightReproEnabled: integer('playwright_repro_enabled'),
+  evidencePostEnabled: integer('evidence_post_enabled'),
   /** experimental.recordDecisionTool — gates decision-capture hook installation. Default false (0). */
   recordDecisionTool: integer('record_decision_tool'),
   updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),

@@ -47,6 +47,9 @@ End-to-end workflows live in `slices/<name>/workflow.ts` and are dispatched by w
 - **`triage-batch`** (M5) — picks up `factory:triaging` issues, runs the triage + repo-match skills, applies type/priority labels, transitions to `factory:accepted`.
 - **`investigate`** (M6) — picks up `factory:investigating` issues, runs the investigate skill (with playwright-repro for `type:bug`), records findings, transitions to `factory:investigation-complete`.
 - **`fix-issue`** (M7) — picks up `factory:dev-ready` issues, creates a worktree, runs the advisor for `priority:high|critical`, runs the implement skill (TDD-first), opens a PR via the GitHub connector, runs `evidence-post` (best-effort), transitions to `factory:needs-qa` to hand off to the QA holdout. _(M7 originally transitioned straight to `factory:approved`; M8 inserted QA + Review before the human gate.)_
+
+QA uses `pnpm test:e2e:pipeline` as the canonical e2e regression suite. The old
+live GitHub smoke flow is available only via `test:e2e:legacy-ui-smoke`.
 - **`qa`** (M8) — picks up `factory:needs-qa` issues, runs the QA holdout skill (lint + tests + Playwright via the project's `lintCommand` / `testCommand` / `e2eCommand`), transitions to `factory:needs-review` on pass or `factory:qa-failed` on fail (escalates to `factory:needs-human` after `maxRetries`).
 - **`review`** (M8) — picks up `factory:needs-review` issues, runs the Review holdout skill (diff vs. original issue, criteria checks), transitions to `factory:approved`, `factory:needs-fix`, or `factory:needs-human`.
 - **`retro`** (M9) — picks up `factory:retrospecting` issues (set automatically when a PR is approved), runs `retrospective-light` or `retrospective-deep` based on `retrospectivePolicy` and trigger signals (`qaFailed`, etc.), transitions to `factory:done`.

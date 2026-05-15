@@ -24,6 +24,9 @@ const GlobalBudgetPatchSchema = z.object({
   maxScoutAgents: z.number().int().min(1).max(50).nullable().optional(),
   maxRetries: z.number().int().min(0).max(20).nullable().optional(),
   perBashCommandMaxSeconds: z.number().int().min(0).max(3600).nullable().optional(),
+  qaE2eMode: z.enum(['off', 'ui-changed', 'always']).nullable().optional(),
+  playwrightReproEnabled: z.number().int().min(0).max(1).nullable().optional(),
+  evidencePostEnabled: z.number().int().min(0).max(1).nullable().optional(),
 });
 
 const SkillBudgetPatchSchema = z.object({
@@ -139,6 +142,9 @@ router.get('/:slug/settings', async (c) => {
       globalRow.maxScoutAgents,
       globalRow.maxRetries,
       globalRow.perBashCommandMaxSeconds,
+      globalRow.qaE2eMode,
+      globalRow.playwrightReproEnabled,
+      globalRow.evidencePostEnabled,
     ].some((value) => value != null)
       ? {
           perWorkflowMaxUsd: globalRow.perWorkflowMaxUsd,
@@ -149,6 +155,9 @@ router.get('/:slug/settings', async (c) => {
           maxScoutAgents: globalRow.maxScoutAgents,
           maxRetries: globalRow.maxRetries,
           perBashCommandMaxSeconds: globalRow.perBashCommandMaxSeconds,
+          qaE2eMode: globalRow.qaE2eMode,
+          playwrightReproEnabled: globalRow.playwrightReproEnabled,
+          evidencePostEnabled: globalRow.evidencePostEnabled,
           updatedAt: globalRow.updatedAt,
           updatedBy: globalRow.updatedBy,
         }

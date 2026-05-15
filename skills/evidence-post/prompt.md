@@ -40,7 +40,7 @@ The strategy: stage all artefacts under `/tmp/evidence-staging-<N>/`, then creat
 1. **Capture.** Run the spec at `<specPath>` with video recording enabled (`{ video: 'on' }` in the spec's project config or via `PLAYWRIGHT_VIDEO=on`). Never use raw `npx`.
    ```bash
    mkdir -p /tmp/evidence-staging-<N>
-   pnpm --filter @goose-hub/web exec playwright test <specPath> --reporter=json > /tmp/evidence-staging-<N>/pw-results.json 2>/tmp/evidence-staging-<N>/pw-stderr.txt
+   pnpm --filter @goose-hub/web exec playwright test <specPath> --config playwright-evidence.config.ts --reporter=json > /tmp/evidence-staging-<N>/pw-results.json 2>/tmp/evidence-staging-<N>/pw-stderr.txt
    ```
    If the spec uses `waitForLoadState('networkidle')`, the run will hang — the app holds a persistent SSE connection that prevents networkidle from firing. Specs must use `{ waitUntil: 'domcontentloaded' }` on every `page.goto()` call.
 
@@ -55,7 +55,7 @@ The strategy: stage all artefacts under `/tmp/evidence-staging-<N>/`, then creat
    ```bash
    pnpm tsx scripts/collect-playwright-evidence.ts --issue <N> --slug evidence-issue-<N> --phase after --results /tmp/evidence-staging-<N>/pw-results.json --evidence-dir /tmp/evidence-staging-<N>
    ```
-   The collector is the only place that parses Playwright JSON, finds the video attachment, and runs ffmpeg. If the WebM does not exist or `ffmpeg` fails, set `gifPath: null` and continue — do not abort.
+   The collector is the only place that parses Playwright JSON, finds screenshot paths, discovers the video attachment, and runs ffmpeg. If the WebM does not exist or `ffmpeg` fails, set `gifPath: null` and continue — do not abort.
 
    If the collector returns `classification: "setup_failed"`, fix the setup problem and retry Playwright once, then run the collector once more. If it returns `classification: "validation_failed"`, stop immediately and return the failure JSON. If it returns `classification: "passed"`, continue.
 
@@ -124,7 +124,7 @@ Every URL into the repo must use the evidence-branch commit SHA, not the branch 
 
 ## When the spec fails
 
-If the spec fails on its second run, **stop immediately** and emit this exact JSON shape — no more tool calls, no more Playwright runs:
+If the spec fails on its second run, **stop immediately** and emit this exact JSON shape — no more tool calls, no more Playwright runs. Use the collector output and `apps/web/test-results/**/error-context.md` when present for the summary:
 
 ```json
 {

@@ -3,6 +3,7 @@ import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interfa
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
+  getEvidencePostEnabled: vi.fn((_projectId: string, configDefault = true) => configDefault),
   readProjectSettings: vi.fn().mockReturnValue(null),
   readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
 }));

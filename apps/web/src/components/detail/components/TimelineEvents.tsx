@@ -29,6 +29,7 @@ import {
   EvidencePlaywrightRanEvent,
   EvidencePostFailedEvent,
   EvidencePostedEvent,
+  EvidenceSkippedEvent,
 } from './timeline/EvidenceEvents';
 import { AgentFixFeedbackCompleteEvent } from './timeline/FixFeedbackEvents';
 import {
@@ -227,6 +228,9 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <GrillCompletedEvent key={event.id} event={event} />;
     case 'evidence.no-spec-declared':
       return <EvidenceNoSpecEvent key={event.id} event={event} />;
+    case 'evidence.playwright-repro-skipped':
+    case 'evidence.post-skipped':
+      return <EvidenceSkippedEvent key={event.id} event={event} />;
     case 'evidence.playwright-ran':
       return <EvidencePlaywrightRanEvent key={event.id} event={event} />;
     case 'evidence.posted':

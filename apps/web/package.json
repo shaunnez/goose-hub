@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test:e2e": "playwright test",
+    "test:e2e:legacy-ui-smoke": "playwright test --config playwright.config.ts",
     "test:e2e:pipeline": "playwright test --config playwright-e2e-pipeline.config.ts"
   },
   "dependencies": {

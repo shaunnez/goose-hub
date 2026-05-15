@@ -253,6 +253,7 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
         investigation: input.investigation,
         advisorFeedback: input.advisorFeedback,
         revisionPass: input.revisionPass ?? 0,
+        evidencePostEnabled: execution.projectConfig?.evidencePostEnabled ?? true,
       },
       contextAllowlist: [
         'workItem.title',
@@ -266,6 +267,7 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
         'investigation',
         'advisorFeedback',
         'revisionPass',
+        'evidencePostEnabled',
       ],
       freshContext: false,
       toolBundles: ['dev-tools'],

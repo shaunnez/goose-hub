@@ -100,7 +100,7 @@ If a dynamic import does not match one of these, refactor it to static.
 | Util functions | `lib/utils.test.ts` | `pnpm test` |
 | Constants completeness | `lib/constants.test.ts` | `pnpm test` |
 | Component rendering | `feature/components/*.test.tsx` | `pnpm test` |
-| Golden path (active milestone) | `e2e/happy-path.spec.ts` | `pnpm test:e2e` |
+| Golden path (active milestone) | `e2e/pipeline/*.spec.ts` | `pnpm test:e2e:pipeline` |
 
 Component test files use `/** @vitest-environment jsdom */` at the top — no global config needed.
 

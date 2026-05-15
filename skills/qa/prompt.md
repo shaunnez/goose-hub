@@ -35,7 +35,8 @@ Your context contains:
 - `projectCommands` — shell commands to run
   - `testCommand` — command to run unit and integration tests
   - `lintCommand` — command to run lint and type-check (optional)
-  - `e2eCommand` — command to run Playwright end-to-end tests (optional)
+  - `e2eCommand` — command to run Playwright end-to-end tests (optional; only present when the orchestrator decided e2e should run)
+- `e2eDecision` — orchestrator decision for e2e policy: `{ mode, command?, reason }`
 - `sliceTests` — array of paths to slice-level test files (optional)
 - `evidenceCommentUrl` — permalink to the evidence-post comment on the GitHub issue, containing SHA-pinned screenshots and a walkthrough GIF (optional; absent for backend-only changes or when evidence capture did not run)
 - `testRun` — structured test results pre-run by the workflow before you started (optional; `null` if the run failed to produce a report). When present:
@@ -94,14 +95,9 @@ Record tier result with:
 Purpose: Catch UX regressions that only appear in end-to-end flows.
 
 Steps:
-1. If `e2eCommand` is provided, run it and record results.
+1. If `e2eDecision.command` or `projectCommands.e2eCommand` is provided, run that command and record results. Do not invent or run an e2e command when no command is provided.
 2. Read the diff and identify any UI surface changes (component changes, route changes, API changes visible to the frontend).
-3. **If `e2eCommand` is absent:** scan `prDiff` for changed files with a `.tsx` extension or paths under `apps/web/src/components/` or `apps/web/src/pages/`. If ANY such file appears in the diff:
-   - Set this tier's `passed` to **`false`**
-   - Record exactly one `warning`-severity finding: `"UI changes detected but no e2eCommand provided — e2e verification skipped"`
-   - **Do NOT assign any `disposition` to this finding.** A dispositioned warning does not trigger partial; this one must remain active.
-   - The final `verdict` MUST be `partial`. Do not return `pass` under these conditions regardless of scores, other tier results, or AC satisfaction.
-   If no `.tsx` or frontend component files appear in `prDiff`, mark the tier passed and record an `info`-severity finding: `"e2eCommand absent — no UI changes detected, e2e skipped."`
+3. **If no e2e command is provided:** treat the orchestrator's `e2eDecision.reason` as authoritative. Mark the tier passed with one `info`-severity finding such as `"e2e skipped by policy: <reason>"`. Do not return `partial` or `fail` solely because e2e was intentionally skipped.
 4. Check that any new UI paths introduced by the PR are reachable and render correctly (if e2e tests cover them).
 5. If `evidenceCommentUrl` is present, fetch the comment and review the screenshots and walkthrough GIF for visual AC verification. Note any visible regressions or UI acceptance criteria that are not met in the captured state.
 
