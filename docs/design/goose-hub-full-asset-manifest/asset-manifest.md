@@ -178,10 +178,10 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 
 - [x] monitor_glow_overlay.png
 - [x] room_heat_overlay_low.png
-- [ ] room_heat_overlay_high.png
-- [ ] merge_particle.png
-- [ ] qa_failure_flash.png
-- [ ] glow_soft.png
+- [x] room_heat_overlay_high.png
+- [x] merge_particle.png
+- [x] qa_failure_flash.png
+- [x] glow_soft.png
 - [ ] spotlight_overlay.png
 
 ---

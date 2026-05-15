@@ -73,6 +73,10 @@ export function pngManifest(): AssetEntry[] {
     // 07 — Effects / Overlays
     { key: 'office:monitor_glow_overlay', url: `${ASSET_BASE}/monitor_glow_overlay.png` },
     { key: 'office:room_heat_overlay_low', url: `${ASSET_BASE}/room_heat_overlay_low.png` },
+    { key: 'office:room_heat_overlay_high', url: `${ASSET_BASE}/room_heat_overlay_high.png` },
+    { key: 'office:merge_particle', url: `${ASSET_BASE}/merge_particle.png` },
+    { key: 'office:qa_failure_flash', url: `${ASSET_BASE}/qa_failure_flash.png` },
+    { key: 'office:glow_soft', url: `${ASSET_BASE}/glow_soft.png` },
   ];
 }
 
