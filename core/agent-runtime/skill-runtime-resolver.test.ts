@@ -1,0 +1,65 @@
+import { describe, expect, it } from 'vitest';
+import { higherTier, lowerTier, resolveSkillRuntime } from './skill-runtime-resolver.js';
+
+describe('resolveSkillRuntime', () => {
+  it('lets a per-skill DB tier/provider override win over defaults', () => {
+    const resolved = resolveSkillRuntime({
+      skill: 'repo-match',
+      dbOverride: { modelTier: 'sonnet', modelProvider: 'codex' },
+    });
+
+    expect(resolved.source).toBe('db');
+    expect(resolved.tier).toBe('sonnet');
+    expect(resolved.provider).toBe('codex');
+    expect(resolved.modelOverride).toBe('gpt-5.4');
+  });
+
+  it('uses project config skillBudgetOverrides before SKILL_BUDGETS', () => {
+    const resolved = resolveSkillRuntime({
+      skill: 'bug-enhance',
+      projectBudgets: { skillBudgetOverrides: { 'bug-enhance': { modelTier: 'opus' } } },
+    });
+
+    expect(resolved.source).toBe('config');
+    expect(resolved.modelOverride).toBe('claude-opus-4-7');
+  });
+
+  it('coerces provider when the project runtime is forced', () => {
+    const resolved = resolveSkillRuntime({
+      skill: 'repo-match',
+      dbOverride: { modelTier: 'sonnet', modelProvider: 'claude' },
+      configRuntime: 'codex-cli',
+    });
+
+    expect(resolved.provider).toBe('codex');
+    expect(resolved.modelOverride).toBe('gpt-5.4');
+  });
+
+  it('keeps a caller concrete model override above forced runtime provider', () => {
+    const resolved = resolveSkillRuntime({
+      skill: 'repo-match',
+      callerModelOverride: 'claude-opus-4-7',
+      configRuntime: 'codex-cli',
+    });
+
+    expect(resolved.source).toBe('caller');
+    expect(resolved.provider).toBe('claude');
+    expect(resolved.modelOverride).toBe('claude-opus-4-7');
+  });
+
+  it('does not derive fallback/advisor models for holdouts', () => {
+    const resolved = resolveSkillRuntime({ skill: 'implement', role: 'qa' });
+
+    expect(resolved.resolvedFallback).toBeNull();
+    expect(resolved.resolvedAdvisor).toBeNull();
+  });
+});
+
+describe('tier helpers', () => {
+  it('floors lowerTier at haiku and caps higherTier at opus', () => {
+    expect(lowerTier('haiku')).toBe('haiku');
+    expect(lowerTier('sonnet')).toBe('haiku');
+    expect(higherTier('sonnet')).toBe('opus');
+    expect(higherTier('opus')).toBe('opus');
+  });
+});

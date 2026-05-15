@@ -363,12 +363,34 @@ export interface ProjectSettingsDto {
       maxTurns: number | null;
       maxBudgetUsd: number | null;
       timeoutMs: number | null;
+      modelTier: ModelTier | null;
+      provider: ModelProvider | null;
       updatedAt: string;
     }
   >;
   registeredSkills: string[];
   /** SKILL_BUDGETS defaults — UX-3 hint surfaced under each per-skill input. */
-  skillDefaults: Record<string, { maxTurns: number; maxBudgetUsd: number; timeoutMs: number }>;
+  skillDefaults: Record<
+    string,
+    {
+      maxTurns: number;
+      maxBudgetUsd: number;
+      timeoutMs: number;
+      modelTier: ModelTier;
+      modelProvider: ModelProvider;
+    }
+  >;
+  resolvedSkillRuntimes?: Record<
+    string,
+    {
+      source: string;
+      effectiveTier: ModelTier;
+      effectiveProvider: ModelProvider;
+      resolvedPrimary: { tier: ModelTier; provider: ModelProvider; modelId: string } | null;
+      resolvedFallback: { tier: ModelTier; provider: ModelProvider; modelId: string } | null;
+      resolvedAdvisor: { tier: ModelTier; provider: ModelProvider; modelId: string } | null;
+    }
+  >;
 }
 
 export type ModelTier = 'haiku' | 'sonnet' | 'opus';

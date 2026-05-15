@@ -2,20 +2,17 @@ import {
   parseComplexityOverrides,
   readProjectModelSettingsForRole,
 } from '../db/repositories/project-model-settings.js';
-import {
-  readProjectSettings,
-  readProjectSkillSettings,
-} from '../db/repositories/project-settings.js';
+import { readProjectSettings } from '../db/repositories/project-settings.js';
 import type { ModelTier, Role, RoleModel } from '../types.js';
 import {
   type ResolvedBudget,
   type SkillBudgetOverride,
-  resolveBudgets,
   resolveEscalatedBudgets,
 } from './budgets.js';
 import type { ModelProvider } from './models.js';
 import { HOLDOUT_ROLES } from './roles.js';
 import { type SelectModelForRoleResult, selectModelForRole } from './select-model-for-role.js';
+import { resolveSkillRuntimeForProject } from './skill-runtime-resolver.js';
 
 /** Merged global settings: DB row wins over projectConfig value when non-null. */
 export interface EffectiveGlobalSettings {
@@ -80,15 +77,11 @@ export function resolveBudgetsForProject(
     | undefined,
   projectId: string,
 ): ResolvedBudget {
-  const skillRows = readProjectSkillSettings(projectId);
-  const globalRow = readProjectSettings(projectId);
-  return resolveBudgets(
+  return resolveSkillRuntimeForProject({
     skill,
     projectBudgets,
-    skillRows.get(skill),
-    globalRow?.perWorkflowMaxUsd,
-    globalRow?.perAgentMaxUsd,
-  );
+    projectId,
+  });
 }
 
 /**
