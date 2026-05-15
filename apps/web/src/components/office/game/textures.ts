@@ -118,6 +118,13 @@ const OFFICE_TEXTURE_DISPLAY_SIZES: Record<string, TextureDisplaySize> = {
   'office:desk_investigation': { width: 32, height: 24 },
   'office:library_terminal': { width: 32, height: 24 },
   'office:coffee_machine': { width: 32, height: 24 },
+  // Ticket variant PNGs — same display size as the procedural ticket so
+  // ticket positions remain pixel-equivalent regardless of variant.
+  'office:ticket_normal': { width: 14, height: 10 },
+  'office:ticket_hero': { width: 14, height: 10 },
+  'office:ticket_failed': { width: 14, height: 10 },
+  'office:ticket_done': { width: 14, height: 10 },
+  'office:ticket_retry': { width: 14, height: 10 },
   // Ambient — pendant lamps
   'office:lamp_glow_warm': { width: 24, height: 24 },
   'office:lamp_glow_soft': { width: 24, height: 24 },
@@ -179,6 +186,23 @@ export function indicatorTextureKey(kind: IndicatorKind): string {
     case 'check':
       return TEXTURE_KEYS.indicatorCheck;
   }
+}
+
+/** Returns the ticket PNG texture key for a given placement, or null if no
+ * suitable PNG is loaded (caller falls back to the procedural ticket). */
+export function ticketTextureKeyFor(
+  position: string,
+  priority: string,
+  scene?: Phaser.Scene,
+): string | null {
+  const candidates: string[] = [];
+  if (position === 'shelf') candidates.push('office:ticket_done');
+  if (priority === 'critical' || priority === 'high') candidates.push('office:ticket_hero');
+  candidates.push('office:ticket_normal');
+  for (const key of candidates) {
+    if (scene?.textures.exists(key)) return key;
+  }
+  return null;
 }
 
 // Per-room desk PNG mapping. drawDesks uses this to pick a thematic
