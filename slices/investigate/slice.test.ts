@@ -43,6 +43,7 @@ vi.mock('@goose-hub/core/scout-reports/repository.js', () => ({
 }));
 
 vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
+  getPlaywrightReproEnabled: vi.fn((_projectId: string, configDefault = true) => configDefault),
   getUseInvestigationSwarm: (...args: unknown[]) => mockGetUseInvestigationSwarm(...args),
   readProjectSettings: (...args: unknown[]) => mockReadProjectSettings(...args),
   readProjectSkillSettings: (...args: unknown[]) => mockReadProjectSkillSettings(...args),

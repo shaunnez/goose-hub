@@ -16,7 +16,10 @@ import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
 import { resolveSkillRuntimeForProject } from '@goose-hub/core/agent-runtime/skill-runtime-resolver.js';
 import { type ScoutBudgetResolver, dispatchWave } from '@goose-hub/core/agent-runtime/swarm.js';
-import { getUseInvestigationSwarm } from '@goose-hub/core/db/repositories/project-settings.js';
+import {
+  getPlaywrightReproEnabled,
+  getUseInvestigationSwarm,
+} from '@goose-hub/core/db/repositories/project-settings.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
@@ -112,6 +115,10 @@ export async function runInvestigateWorkflow(
   const runId = crypto.randomUUID();
   const { personaId } = selectPersona(projectId, 'investigator');
   const projectConfig = await getProjectBySlug(projectId);
+  const playwrightReproEnabled = getPlaywrightReproEnabled(
+    projectId,
+    projectConfig?.playwrightReproEnabled ?? true,
+  );
   const settingsProjectId = projectConfig?.id ?? projectId;
   const globalSettings = resolveGlobalSettingsForProject(settingsProjectId, projectConfig?.budgets);
   const investigationSwarmEnabled = getUseInvestigationSwarm(
@@ -382,7 +389,20 @@ export async function runInvestigateWorkflow(
     let reproOutput: unknown | undefined;
     const playwrightReproPrompt = readPromptWithContext('playwright-repro', projectId);
     const playwrightReproJsonSchema = toJsonSchema(PlaywrightReproSchema);
-    if (workItem.type === 'bug' && findings.requiresBrowserRepro) {
+    if (workItem.type === 'bug' && findings.requiresBrowserRepro && !playwrightReproEnabled) {
+      eventStore.appendEvent({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'evidence.playwright-repro-skipped',
+        payload: {
+          runId,
+          reason: 'playwrightReproEnabled=false',
+          requiresBrowserRepro: findings.requiresBrowserRepro,
+        },
+        runId,
+      });
+    }
+    if (workItem.type === 'bug' && findings.requiresBrowserRepro && playwrightReproEnabled) {
       const { personaId: playwrightPersonaId } = selectPersona(projectId, 'investigator');
       const playwrightRunId = crypto.randomUUID();
 

@@ -31,7 +31,9 @@ export const TOOL_BUNDLES = {
    */
   shell: [
     'Bash(pnpm test*)',
+    'Bash(pnpm test:e2e:pipeline*)',
     'Bash(pnpm --filter*)',
+    'Bash(pnpm --filter @goose-hub/web test:e2e:pipeline*)',
     'Bash(pnpm biome*)',
     'Bash(pnpm typecheck*)',
     'Bash(pnpm lint*)',
@@ -49,7 +51,9 @@ export const TOOL_BUNDLES = {
     'Glob',
     'Grep',
     'Bash(pnpm test*)',
+    'Bash(pnpm test:e2e:pipeline*)',
     'Bash(pnpm --filter*)',
+    'Bash(pnpm --filter @goose-hub/web test:e2e:pipeline*)',
     'Bash(pnpm biome*)',
     'Bash(pnpm typecheck*)',
     'Bash(pnpm lint*)',
@@ -67,6 +71,7 @@ export const TOOL_BUNDLES = {
     'Grep',
     'Bash(pnpm test:e2e*)',
     'Bash(pnpm --filter @goose-hub/web test:e2e*)',
+    'Bash(pnpm --filter @goose-hub/web exec playwright test * --config playwright-evidence.config.ts*)',
     'Bash(pnpm --filter @goose-hub/web exec playwright*)',
     'Bash(pnpm tsx scripts/collect-playwright-evidence.ts*)',
     'Bash(npx playwright*)',

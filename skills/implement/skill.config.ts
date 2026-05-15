@@ -36,6 +36,7 @@ export const ImplementContextSchema = z.object({
   }),
   advisorFeedback: z.string().optional(),
   revisionPass: z.union([z.literal(0), z.literal(1)]).optional(),
+  evidencePostEnabled: z.boolean().optional(),
 });
 
 const config: SkillConfig = {
@@ -68,6 +69,7 @@ const config: SkillConfig = {
     'investigation',
     'advisorFeedback',
     'revisionPass',
+    'evidencePostEnabled',
   ],
   /**
    * `dev-tools` bundle — read, search, work-item-read, write, bash, test

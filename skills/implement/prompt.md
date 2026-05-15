@@ -79,6 +79,11 @@ increase confidence in an already-confirmed investigation.
 
 #### Bounded frontend evidence rule
 
+If `<evidencePostEnabled>` is `false`, evidence capture is disabled by project
+setting. Do not create `apps/web/e2e/issue-<N>.spec.ts` just for evidence.
+Return `evidenceSpecPath: null` and include a `SKIP_GATE` decision summary that
+mentions `evidence disabled by project setting`.
+
 For `apps/web/` changes, default to the simplest evidence spec at
 `apps/web/e2e/issue-<number>.spec.ts`: navigate to the affected route, assert
 the visible change, and take the required screenshot.
@@ -111,7 +116,7 @@ generation was blocked. Do not spend more discovery budget on e2e plumbing.
 - Stay within the slice. Do not refactor surrounding code, do not add features beyond the acceptance criteria.
 - Emit: `[decision] PLAN: <one-sentence summary of the change>`
 
-**Frontend gate — check before writing your plan:** Does this change touch any file under `apps/web/`? If yes, your plan MUST include a step to write `apps/web/e2e/issue-<N>.spec.ts` (step 4 below). A plan that omits this step is incomplete — schema validation will reject the output if `evidenceSpecPath` is null while `filesWritten` includes `apps/web/` paths.
+**Frontend gate — check before writing your plan:** Does this change touch any file under `apps/web/`? If yes and `<evidencePostEnabled>` is not `false`, your plan MUST include a step to write `apps/web/e2e/issue-<N>.spec.ts` (step 4 below). A plan that omits this step is incomplete — schema validation will reject the output if `evidenceSpecPath` is null while `filesWritten` includes `apps/web/` paths.
 
 ### 3 — Red — failing tests first
 
@@ -123,7 +128,7 @@ generation was blocked. Do not spend more discovery budget on e2e plumbing.
 
 - Write the implementation using the `write` tool. Workspace-bound paths only — no absolute paths, no `..` traversal.
 - Re-run the **targeted** test command (same file paths as in Red). Iterate until all targeted tests pass.
-- **Frontend changes (required when possible):** If any file written is under `apps/web/`, write a Playwright spec at `apps/web/e2e/issue-<number>.spec.ts` now, before proceeding to step 5. The spec must navigate to the affected UI, assert the visible change, and call `page.screenshot({ path: 'evidence/issue-<number>/step-1.png' })`. Use plain `page.goto('/...')` — never `waitForLoadState('networkidle')` (the app's persistent SSE connection prevents it from firing; use `waitForSelector` or time-bounded assertions instead). This spec ships in the same commit as your implementation so the evidence-post skill can run it post-PR. If evidence spec generation is blocked after the bounded frontend evidence rule above, do not block the implementation; return `evidenceSpecPath: null` and include a `TOOL_FAILURE` or `UNCERTAINTY` decision summary that explicitly mentions the e2e/evidence/Playwright blockage.
+- **Frontend changes (required when possible):** If any file written is under `apps/web/` and `<evidencePostEnabled>` is not `false`, write a Playwright spec at `apps/web/e2e/issue-<number>.spec.ts` now, before proceeding to step 5. The spec must navigate to the affected UI, assert the visible change, and call `page.screenshot({ path: 'evidence/issue-<number>/step-1.png' })`. Use plain `page.goto('/...')` — never `waitForLoadState('networkidle')` (the app's persistent SSE connection prevents it from firing; use `waitForSelector` or time-bounded assertions instead). This spec ships in the same commit as your implementation so the evidence-post skill can run it post-PR. If evidence is disabled by project setting, return `evidenceSpecPath: null` with a `SKIP_GATE` summary. If evidence spec generation is blocked after the bounded frontend evidence rule above, do not block the implementation; return `evidenceSpecPath: null` and include a `TOOL_FAILURE` or `UNCERTAINTY` decision summary that explicitly mentions the e2e/evidence/Playwright blockage.
 - Emit: `[decision] GREEN: Implementation passes all targeted tests including N new cases`
 
 ### 5 — Refactor (optional, only if necessary)
@@ -197,6 +202,7 @@ and then calls `openPR`.
 ### 8 — Declare the evidence spec path
 
 - If the slice touched any `apps/web/` file and evidence spec generation was possible, you wrote a spec in step 4. Set `evidenceSpecPath` to `apps/web/e2e/issue-<number>.spec.ts`. The orchestrator passes this to the `evidence-post` skill to generate visual evidence.
+- If the slice touched an `apps/web/` file but evidence is disabled by project setting, set `evidenceSpecPath: null` and include a `SKIP_GATE` decision summary that explicitly says evidence is disabled by project setting.
 - If the slice touched an `apps/web/` file but evidence spec generation was blocked after the bounded frontend evidence rule, set `evidenceSpecPath: null` and include a `TOOL_FAILURE` or `UNCERTAINTY` decision summary that explicitly mentions the e2e/evidence/Playwright blockage.
 - If the slice touched **no** `apps/web/` files (backend-only change, chore, schema migration), set `evidenceSpecPath: null`. The orchestrator logs `evidence.no-spec-declared` and skips evidence posting.
 - **Do not return null silently for a frontend change.** The schema only permits this when a `TOOL_FAILURE` or `UNCERTAINTY` decision summary explains the evidence blockage.
@@ -257,7 +263,7 @@ Return a JSON object conforming to `ImplementSchema`. The orchestrator opens the
 }
 ```
 
-`evidenceSpecPath` must be set for any slice touching `apps/web/` unless evidence generation is explicitly blocked and recorded with a `TOOL_FAILURE` or `UNCERTAINTY` decision summary. `testsWritten` may be `[]` for chore PRs that change no behaviour (rare). `testsRun.paths` should list every test file you actually passed to the test command — empty `paths` means you ran nothing (only valid for chore PRs that touch no executable code). `decisionSummaries` must have at least one entry.
+`evidenceSpecPath` must be set for any slice touching `apps/web/` unless evidence generation is disabled by project setting and recorded with `SKIP_GATE`, or explicitly blocked and recorded with a `TOOL_FAILURE` or `UNCERTAINTY` decision summary. `testsWritten` may be `[]` for chore PRs that change no behaviour (rare). `testsRun.paths` should list every test file you actually passed to the test command — empty `paths` means you ran nothing (only valid for chore PRs that touch no executable code). `decisionSummaries` must have at least one entry.
 
 [decision] VERDICT: Shipped slice with TDD loop and returned structured implement output
 

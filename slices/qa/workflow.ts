@@ -6,6 +6,7 @@ import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconc
 import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
+import { getQaE2eMode } from '@goose-hub/core/db/repositories/project-settings.js';
 import { getEngineeringSpec as defaultGetEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
@@ -27,7 +28,13 @@ import {
   toAgentTierResults,
 } from './deterministic-tiers.js';
 export type { VerifyCommand } from './deterministic-tiers.js';
-import { findDevTestsRun, findPrOpenedHints, getPrDiff } from './qa-helpers.js';
+import {
+  classifyUiChanges,
+  findDevTestsRun,
+  findPrOpenedHints,
+  getChangedFilePaths,
+  getPrDiff,
+} from './qa-helpers.js';
 import { buildSyntheticQaOutput } from './synthetic-output.js';
 
 export interface QaWorkflowDeps {
@@ -101,6 +108,7 @@ export async function runQaWorkflow(
   const workspaceDir = prHints.worktreePath;
   const prDiff = getPrDiff(workItem, workspaceDir, prHints.baseBranch);
   const regressionPolicy: RegressionPolicy = projectConfig?.regressionPolicy ?? 'escalate';
+  const qaE2eMode = getQaE2eMode(projectSlug, projectConfig?.qaE2eMode ?? 'off');
 
   // Snapshot prior events BEFORE this run's outcome is appended.
   // shouldEscalateQa uses this count to decide: Nth failure = N-1 priors.
@@ -232,6 +240,29 @@ export async function runQaWorkflow(
     const testRun = workspaceDir != null ? await runTests(workspaceDir, testCommand) : null;
     const [webPort, apiPort] =
       workspaceDir != null ? await Promise.all([findFreePort(), findFreePort()]) : [null, null];
+    const changedFiles = getChangedFilePaths(workspaceDir, prHints.baseBranch);
+    const uiClassification = classifyUiChanges(changedFiles);
+    const configuredE2eCommand = projectConfig?.stack?.e2eCommand;
+    const e2eDecision =
+      qaE2eMode === 'off'
+        ? { mode: qaE2eMode, reason: 'qa e2e disabled by project setting' }
+        : qaE2eMode === 'always'
+          ? configuredE2eCommand != null
+            ? { mode: qaE2eMode, command: configuredE2eCommand, reason: 'qa e2e mode is always' }
+            : { mode: qaE2eMode, reason: 'qa e2e mode is always but no command is configured' }
+          : uiClassification.hasSignificantUiChange && configuredE2eCommand != null
+            ? {
+                mode: qaE2eMode,
+                command: configuredE2eCommand,
+                reason: uiClassification.reason,
+              }
+            : {
+                mode: qaE2eMode,
+                reason:
+                  configuredE2eCommand == null
+                    ? 'qa e2e mode is ui-changed but no command is configured'
+                    : uiClassification.reason,
+              };
 
     const deterministicTierResults = deterministic
       ? toAgentTierResults(deterministic.tierResults)
@@ -253,10 +284,9 @@ export async function runQaWorkflow(
         projectCommands: {
           testCommand,
           lintCommand: 'pnpm biome check .',
-          ...(projectConfig?.stack?.e2eCommand != null
-            ? { e2eCommand: projectConfig.stack.e2eCommand }
-            : {}),
+          ...(e2eDecision.command != null ? { e2eCommand: e2eDecision.command } : {}),
         },
+        e2eDecision,
         ...(verifyCommands != null && verifyCommands.length > 0 ? { verifyCommands } : {}),
         testRun,
         ...(evidenceCommentUrl != null ? { evidenceCommentUrl } : {}),
@@ -267,6 +297,7 @@ export async function runQaWorkflow(
         'workItem',
         'prDiff',
         'projectCommands',
+        'e2eDecision',
         'testRun',
         'verifyCommands',
         ...(evidenceCommentUrl != null ? ['evidenceCommentUrl'] : []),
@@ -283,6 +314,7 @@ export async function runQaWorkflow(
               WEB_PORT: String(webPort),
               CI: 'true',
               API_PORT: String(apiPort),
+              MOCK_SERVER_PORT: String(apiPort),
               SERVER_PORT: String(apiPort),
             },
           }

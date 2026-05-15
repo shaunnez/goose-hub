@@ -9,7 +9,7 @@ const API_PORT = Number(process.env.API_PORT ?? 3001);
 
 export default defineConfig({
   testDir: './e2e',
-  testIgnore: ['**/pipeline/**', '**/issue-*.spec.ts', '**/repro-*.spec.ts'],
+  testIgnore: ['**/pipeline/**'],
   timeout: 30_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
@@ -24,7 +24,6 @@ export default defineConfig({
     ...(!process.env.EVIDENCE_ONLY
       ? [
           {
-            // Apps/server boots first — vite proxies /api and /events to it.
             command: 'pnpm --filter @goose-hub/server start',
             port: API_PORT,
             reuseExistingServer: !process.env.CI,

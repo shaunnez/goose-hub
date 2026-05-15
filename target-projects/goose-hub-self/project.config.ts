@@ -21,7 +21,7 @@ const config: ProjectConfig = {
     testCommand: 'pnpm test --reporter=json',
     lintCommand: 'pnpm lint',
     typecheckCommand: 'pnpm typecheck',
-    e2eCommand: 'pnpm test:e2e',
+    e2eCommand: 'pnpm test:e2e:pipeline',
     detectedAt: '2026-04-30T00:00:00Z',
   },
   mode: 'supervised',
@@ -117,6 +117,9 @@ const config: ProjectConfig = {
   machineScope: undefined,
   colorStripe: '#7c3aed',
   activeMilestone: 'M19: Multi-Agent Orchestration',
+  qaE2eMode: 'ui-changed',
+  playwrightReproEnabled: true,
+  evidencePostEnabled: true,
 };
 
 export default config;

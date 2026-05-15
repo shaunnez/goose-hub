@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // ─── module mocks ─────────────────────────────────────────────────────────────
 
 vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
+  getQaE2eMode: vi.fn((_projectId: string, configDefault = 'off') => configDefault),
   readProjectSettings: vi.fn().mockReturnValue(null),
   readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
 }));
@@ -272,6 +273,18 @@ describe('qa helpers', () => {
       worktreePath: '/wt/abc',
       baseBranch: 'develop',
     });
+  });
+
+  it('classifies significant UI changes from changed file paths', async () => {
+    const { classifyUiChanges } = await import('./qa-helpers.js');
+
+    expect(
+      classifyUiChanges(['apps/web/src/components/detail/TimelineEvents.tsx'])
+        .hasSignificantUiChange,
+    ).toBe(true);
+    expect(
+      classifyUiChanges(['docs/readme.md', 'apps/web/e2e/issue-42.spec.ts']).hasSignificantUiChange,
+    ).toBe(false);
   });
 });
 

@@ -58,6 +58,75 @@ export function getPrDiff(_workItem: WorkItem, workspaceDir?: string, baseBranch
   }
 }
 
+export function getChangedFilePaths(workspaceDir?: string, baseBranch = 'main'): string[] {
+  if (workspaceDir == null) return [];
+  try {
+    const baseRef = diffBaseRef(baseBranch);
+    return runGit(workspaceDir, ['diff', '--name-only', `${baseRef}...HEAD`])
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+export type UiChangeClassification = {
+  hasSignificantUiChange: boolean;
+  significantPaths: string[];
+  ignoredPaths: string[];
+  reason: string;
+};
+
+function isIgnoredForE2e(path: string): boolean {
+  return (
+    path.startsWith('docs/') ||
+    path.startsWith('evidence/') ||
+    path.startsWith('apps/web/test-results/') ||
+    path.startsWith('apps/web/playwright-report/') ||
+    /^apps\/web\/e2e\/issue-[^/]+\.spec\.ts$/.test(path) ||
+    /\.(png|jpe?g|gif|webm|mp4)$/.test(path)
+  );
+}
+
+function isTestOnly(path: string): boolean {
+  return (
+    /\.test\.[cm]?[jt]sx?$/.test(path) ||
+    /\.spec\.[cm]?[jt]sx?$/.test(path) ||
+    path.includes('/__tests__/')
+  );
+}
+
+function isSignificantUiPath(path: string): boolean {
+  if (isIgnoredForE2e(path) || isTestOnly(path)) return false;
+  if (path.startsWith('apps/web/src/')) return true;
+  if (path.startsWith('apps/web/routes/') || path.startsWith('apps/web/components/')) return true;
+  if (/\.(css|scss|sass|less)$/.test(path)) return true;
+  if (/api-client|client-api|frontend-api|timeline|event-stream|events|routes/.test(path)) {
+    return true;
+  }
+  return false;
+}
+
+export function classifyUiChanges(paths: string[]): UiChangeClassification {
+  const significantPaths = paths.filter(isSignificantUiPath);
+  const ignoredPaths = paths.filter((path) => !isSignificantUiPath(path));
+  if (significantPaths.length > 0) {
+    return {
+      hasSignificantUiChange: true,
+      significantPaths,
+      ignoredPaths,
+      reason: `significant UI/API paths changed: ${significantPaths.slice(0, 5).join(', ')}`,
+    };
+  }
+  return {
+    hasSignificantUiChange: false,
+    significantPaths,
+    ignoredPaths,
+    reason: paths.length === 0 ? 'no changed files detected' : 'no significant UI changes detected',
+  };
+}
+
 export interface PrOpenedHints {
   worktreePath?: string;
   devRunId?: string;
