@@ -610,6 +610,51 @@ export class RoomLayer {
     }
 
     container.add(walls);
+
+    // Overlay brick texture on the outer walls and top-band ceiling (no door
+    // gaps in these rows). Doored walls (band south/north) and vertical
+    // inter-room walls remain flat for now.
+    this.drawBrickWalls(container, originY);
+  }
+
+  /** Layers wall_dark_01 brick texture over the full-width horizontal
+   * walls without door cuts. */
+  private drawBrickWalls(container: Phaser.GameObjects.Container, originY: number): void {
+    const brickKey = 'office:wall_dark_01';
+    if (!this.scene.textures.exists(brickKey)) return;
+    const W = FLOOR_WORLD.width;
+    const rows = [ROW_TOP_WALL, ROW_TOP_BAND_CEILING, ROW_BOTTOM_WALL];
+    for (const row of rows) {
+      const brick = this.scene.add.tileSprite(0, originY + row, W, TILE_SIZE, brickKey);
+      brick.setOrigin(0, 0);
+      container.add(brick);
+    }
+
+    // Vertical inter-room walls — both bands.
+    const topWallH = ROW_TOP_BAND_SOUTH_WALL + TILE_SIZE - ROW_TOP_BAND_CEILING;
+    for (const wallX of TOP_INTER_ROOM_WALL_X) {
+      const brick = this.scene.add.tileSprite(
+        wallX,
+        originY + ROW_TOP_BAND_CEILING,
+        TILE_SIZE,
+        topWallH,
+        brickKey,
+      );
+      brick.setOrigin(0, 0);
+      container.add(brick);
+    }
+    const bottomWallH = ROW_BOTTOM_WALL + TILE_SIZE - ROW_BOTTOM_BAND_NORTH_WALL;
+    for (const wallX of BOTTOM_INTER_ROOM_WALL_X) {
+      const brick = this.scene.add.tileSprite(
+        wallX,
+        originY + ROW_BOTTOM_BAND_NORTH_WALL,
+        TILE_SIZE,
+        bottomWallH,
+        brickKey,
+      );
+      brick.setOrigin(0, 0);
+      container.add(brick);
+    }
   }
 
   /** Top-band door x-positions. Slots (qa.input/output, library envelope)
