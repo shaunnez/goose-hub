@@ -492,15 +492,43 @@ export class RoomLayer {
   }
 
   private drawBase(container: Phaser.GameObjects.Container, originY: number): void {
+    // Palette-color fallback under the tiled PNGs so any pixel uncovered
+    // during texture load stays in-palette and tests don't see drift.
     const bg = this.scene.add.graphics();
     bg.fillStyle(PALETTE.floor, 1);
     bg.fillRect(0, originY, FLOOR_WORLD.width, FLOOR_WORLD.height);
     container.add(bg);
 
+    if (this.scene.textures.exists('office:floor_tile_02')) {
+      const floorTiles = this.scene.add.tileSprite(
+        0,
+        originY,
+        FLOOR_WORLD.width,
+        FLOOR_WORLD.height,
+        'office:floor_tile_02',
+      );
+      floorTiles.setOrigin(0, 0);
+      container.add(floorTiles);
+    }
+
+    const corridorY = originY + ROW_CORRIDOR_TOP;
+    const corridorH = TILE_SIZE * 3;
     const corridor = this.scene.add.graphics();
     corridor.fillStyle(PALETTE.floorAlt, 1);
-    corridor.fillRect(0, originY + ROW_CORRIDOR_TOP, FLOOR_WORLD.width, TILE_SIZE * 3);
+    corridor.fillRect(0, corridorY, FLOOR_WORLD.width, corridorH);
     container.add(corridor);
+
+    if (this.scene.textures.exists('office:corridor_tile_02')) {
+      const corridorTiles = this.scene.add.tileSprite(
+        0,
+        corridorY,
+        FLOOR_WORLD.width,
+        corridorH,
+        'office:corridor_tile_02',
+      );
+      corridorTiles.setOrigin(0, 0);
+      container.add(corridorTiles);
+    }
 
     const bannerBg = this.scene.add.graphics();
     bannerBg.fillStyle(PALETTE.wall, 1);
