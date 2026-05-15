@@ -81,9 +81,13 @@ export function totalWorldHeight(floorCount: number): number {
 }
 
 /**
- * Phaser's RESIZE scale mode resizes the canvas, not the world. Keep the
- * canonical 1280x384 floor geometry, then zoom the camera up to the largest
- * size that still keeps a focused floor visible.
+ * Phaser's RESIZE scale mode resizes the canvas, not the world. We want one
+ * floor to occupy the full viewport vertically; horizontal panning reveals
+ * the rest of the floor's rooms.
+ *
+ * Zoom = viewport_height / FLOOR_PIXEL_HEIGHT (floor 384 fills viewport
+ * height). At zoom > 1 the focused floor reads at character-readable size
+ * and adjacent floors fall out of view.
  */
 export function floorOverviewZoomForViewport(
   viewportWidth: number,
@@ -91,7 +95,12 @@ export function floorOverviewZoomForViewport(
 ): number {
   const width = Math.max(1, viewportWidth);
   const height = Math.max(1, viewportHeight);
-  return Math.max(1, Math.min(width / FLOOR_PIXEL_WIDTH, height / FLOOR_PIXEL_HEIGHT));
+  // Fit-height: a single floor fills the viewport vertically. Pan horizontally
+  // to see other rooms. Width is used only as a sanity clamp so tiny viewports
+  // don't zoom in so far the floor exceeds the visible width by more than ~2x.
+  const heightFit = height / FLOOR_PIXEL_HEIGHT;
+  const widthCap = (width / FLOOR_PIXEL_WIDTH) * 2;
+  return Math.max(1, Math.min(heightFit, widthCap));
 }
 
 /**
