@@ -9,16 +9,12 @@ import {
   tierOf,
 } from '@goose-hub/core/agent-runtime/models.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
-import {
-  resolveBudgetsForProject,
-  resolveGlobalSettingsForProject,
-  resolveRoleModelForProject,
-} from '@goose-hub/core/agent-runtime/resolve-for-project.js';
+import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { ScoutOutputSchema } from '@goose-hub/core/agent-runtime/scout-output.js';
-import type { SelectModelForRoleResult } from '@goose-hub/core/agent-runtime/select-model-for-role.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
+import { resolveSkillRuntimeForProject } from '@goose-hub/core/agent-runtime/skill-runtime-resolver.js';
 import { type ScoutBudgetResolver, dispatchWave } from '@goose-hub/core/agent-runtime/swarm.js';
 import { getUseInvestigationSwarm } from '@goose-hub/core/db/repositories/project-settings.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
@@ -41,26 +37,10 @@ import { WAVE_1_SCOUTS, selectWave2Scouts } from './wave2-selection.js';
 type InvestigateOutput = z.infer<typeof InvestigateSchema>;
 
 export function chooseScoutModelOverride(input: {
-  skill: string;
   resolvedBudget: ResolvedBudget;
-  investigatorRoleModel: SelectModelForRoleResult;
   forcedRuntimeProvider: ModelProvider | null;
 }): string {
-  const { skill, resolvedBudget, investigatorRoleModel, forcedRuntimeProvider } = input;
-
-  if (skill.startsWith('scout-') || skill.startsWith('wave2-')) {
-    return defaultModelForTierAndProvider(
-      'haiku',
-      forcedRuntimeProvider ?? investigatorRoleModel.provider,
-    );
-  }
-
-  if (investigatorRoleModel.source === 'db' || investigatorRoleModel.source === 'config') {
-    return defaultModelForTierAndProvider(
-      investigatorRoleModel.tier,
-      forcedRuntimeProvider ?? investigatorRoleModel.provider,
-    );
-  }
+  const { resolvedBudget, forcedRuntimeProvider } = input;
 
   if (forcedRuntimeProvider != null) {
     return defaultModelForTierAndProvider(
@@ -70,19 +50,6 @@ export function chooseScoutModelOverride(input: {
   }
 
   return resolvedBudget.modelOverride;
-}
-
-export function choosePlaywrightReproModelOverride(input: {
-  resolvedBudget: ResolvedBudget;
-  investigatorRoleModel: SelectModelForRoleResult;
-  forcedRuntimeProvider: ModelProvider | null;
-}): string {
-  const provider =
-    input.forcedRuntimeProvider ??
-    (input.investigatorRoleModel.source === 'db' || input.investigatorRoleModel.source === 'config'
-      ? input.investigatorRoleModel.provider
-      : 'claude');
-  return defaultModelForTierAndProvider(tierOf(input.resolvedBudget.modelOverride), provider);
 }
 
 function buildSchemaScoutFocus(workItem: { title: string; body: string }): string {
@@ -151,37 +118,23 @@ export async function runInvestigateWorkflow(
     settingsProjectId,
     projectConfig?.investigationSwarm?.enabled ?? true,
   );
-  const investigateBudget = resolveBudgetsForProject(
-    'investigate',
-    projectConfig?.budgets,
-    projectId,
-  );
-  const investigateRoleModel = resolveRoleModelForProject({
-    role: 'investigator',
-    projectId,
-    configRoleModel: projectConfig?.agentConfig?.rolesModels?.investigator,
-    allowHoldoutOverride: projectConfig?.agentConfig?.allowHoldoutOverride,
-    skill: 'investigate',
-  });
   const configRuntime = projectConfig?.agentConfig?.runtime ?? 'auto';
   const forcedRuntimeProvider: ModelProvider | null =
     configRuntime === 'codex-cli' ? 'codex' : configRuntime === 'claude-cli' ? 'claude' : null;
-  const configuredInvestigatorModelOverride =
-    investigateRoleModel.source === 'db' || investigateRoleModel.source === 'config'
-      ? investigateRoleModel.modelId
-      : investigateBudget.modelOverride;
-  const investigatorModelOverride =
-    forcedRuntimeProvider != null
-      ? defaultModelForTierAndProvider(
-          tierOf(configuredInvestigatorModelOverride),
-          forcedRuntimeProvider,
-        )
-      : configuredInvestigatorModelOverride;
+  const investigateBudget = resolveSkillRuntimeForProject({
+    skill: 'investigate',
+    projectBudgets: projectConfig?.budgets,
+    projectId,
+    configRuntime,
+    role: 'investigator',
+  });
+  const investigatorModelOverride = investigateBudget.modelOverride;
   const runtime =
     deps.runtime ??
     selectRuntime({
       configRuntime,
       model: investigatorModelOverride,
+      skillProvider: forcedRuntimeProvider ?? investigateBudget.provider,
     });
   const worktreePath = createWtFn(targetRepo, runId);
 
@@ -209,13 +162,17 @@ export async function runInvestigateWorkflow(
     projectBudgets,
     currentProjectId,
   ) => {
-    const resolved = resolveBudgetsForProject(skill, projectBudgets, currentProjectId);
+    const resolved = resolveSkillRuntimeForProject({
+      skill,
+      projectBudgets,
+      projectId: currentProjectId,
+      configRuntime,
+      role: 'investigator',
+    });
     return {
       ...resolved,
       modelOverride: chooseScoutModelOverride({
-        skill,
         resolvedBudget: resolved,
-        investigatorRoleModel: investigateRoleModel,
         forcedRuntimeProvider,
       }),
     };
@@ -394,7 +351,7 @@ export async function runInvestigateWorkflow(
       investigationSwarmEnabled && allScoutReports != null
         ? defaultModelForTierAndProvider(
             'sonnet',
-            forcedRuntimeProvider ?? investigateRoleModel.provider,
+            forcedRuntimeProvider ?? investigateBudget.provider,
           )
         : investigatorModelOverride;
     const synthResult = await invokeSkill({
@@ -422,16 +379,14 @@ export async function runInvestigateWorkflow(
       const playwrightRunId = crypto.randomUUID();
 
       try {
-        const playwrightBudget = resolveBudgetsForProject(
-          'playwright-repro',
-          projectConfig?.budgets,
+        const playwrightBudget = resolveSkillRuntimeForProject({
+          skill: 'playwright-repro',
+          projectBudgets: projectConfig?.budgets,
           projectId,
-        );
-        const playwrightModelOverride = choosePlaywrightReproModelOverride({
-          resolvedBudget: playwrightBudget,
-          investigatorRoleModel: investigateRoleModel,
-          forcedRuntimeProvider,
+          configRuntime,
+          role: 'investigator',
         });
+        const playwrightModelOverride = playwrightBudget.modelOverride;
         const playwrightResult = await runtime.run({
           runId: playwrightRunId,
           role: 'investigator',
