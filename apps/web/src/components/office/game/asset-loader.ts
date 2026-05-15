@@ -42,6 +42,11 @@ export function pngManifest(): AssetEntry[] {
     { key: TEXTURE_KEYS.wallFrostedBlue, url: `${ASSET_BASE}/wall-frosted-blue.png` },
     { key: TEXTURE_KEYS.wallFrostedGrey, url: `${ASSET_BASE}/wall-frosted-grey.png` },
     { key: TEXTURE_KEYS.scoutDesk, url: `${ASSET_BASE}/scout-desk.png` },
+    // 01 — Core Tiles / Floors
+    { key: 'office:floor_tile_01', url: `${ASSET_BASE}/floor_tile_01.png` },
+    { key: 'office:floor_tile_02', url: `${ASSET_BASE}/floor_tile_02.png` },
+    { key: 'office:corridor_tile_01', url: `${ASSET_BASE}/corridor_tile_01.png` },
+    { key: 'office:corridor_tile_02', url: `${ASSET_BASE}/corridor_tile_02.png` },
     // 01 — Core Tiles / Walls
     { key: 'office:wall_dark_02', url: `${ASSET_BASE}/wall_dark_02.png` },
     { key: 'office:wall_corner_inner', url: `${ASSET_BASE}/wall_corner_inner.png` },
