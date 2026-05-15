@@ -82,6 +82,11 @@ export function pngManifest(): AssetEntry[] {
     { key: 'office:rain_window_overlay', url: `${ASSET_BASE}/rain_window_overlay.png` },
     { key: 'office:rain_streak_overlay', url: `${ASSET_BASE}/rain_streak_overlay.png` },
     { key: 'office:ambient_shadow_soft', url: `${ASSET_BASE}/ambient_shadow_soft.png` },
+    { key: 'office:lamp_glow_soft', url: `${ASSET_BASE}/lamp_glow_soft.png` },
+    { key: 'office:lamp_glow_warm', url: `${ASSET_BASE}/lamp_glow_warm.png` },
+    // 09 — Typography / Labels
+    { key: 'office:room_label_triage', url: `${ASSET_BASE}/room_label_triage.png` },
+    { key: 'office:room_label_investigation', url: `${ASSET_BASE}/room_label_investigation.png` },
   ];
 }
 

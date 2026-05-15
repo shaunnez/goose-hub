@@ -191,15 +191,15 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 - [x] rain_window_overlay.png
 - [x] rain_streak_overlay.png
 - [x] ambient_shadow_soft.png
-- [ ] lamp_glow_soft.png
-- [ ] lamp_glow_warm.png
+- [x] lamp_glow_soft.png
+- [x] lamp_glow_warm.png
 
 ---
 
 ## 09 — Typography / Labels
 
-- [ ] room_label_triage.png
-- [ ] room_label_investigation.png
+- [x] room_label_triage.png
+- [x] room_label_investigation.png
 - [ ] room_label_library.png
 - [ ] room_label_dev.png
 - [ ] room_label_qa.png
