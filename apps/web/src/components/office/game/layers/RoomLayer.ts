@@ -508,6 +508,10 @@ export class RoomLayer {
         'office:floor_tile_02',
       );
       floorTiles.setOrigin(0, 0);
+      // 2x tile scale halves the brick-face density to match the target
+      // image's coarser floor pattern (target shows ~2-3 features per tile;
+      // raw 32x32 PNG packs ~8-12 features per tile).
+      floorTiles.setTileScale(2, 2);
       container.add(floorTiles);
     }
 
@@ -527,6 +531,7 @@ export class RoomLayer {
         'office:corridor_tile_02',
       );
       corridorTiles.setOrigin(0, 0);
+      // Corridor PNG is not seamless at 2x; keep native tile size.
       container.add(corridorTiles);
     }
 
