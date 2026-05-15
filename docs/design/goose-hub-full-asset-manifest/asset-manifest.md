@@ -151,12 +151,12 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 
 ### Speech / Thought
 - [x] speech_bubble_small.png
-- [ ] thought_bubble_small.png
-- [ ] question_bubble_small.png
+- [x] thought_bubble_small.png
+- [x] question_bubble_small.png
 
 ### Indicators
-- [ ] blocked_icon.png
-- [ ] convergence_icon.png
+- [x] blocked_icon.png
+- [x] convergence_icon.png
 - [ ] retry_badge.png
 - [ ] queue_badge.png
 - [ ] hero_badge.png

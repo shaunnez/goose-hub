@@ -53,6 +53,11 @@ export function pngManifest(): AssetEntry[] {
     { key: 'office:ticket_glow_overlay', url: `${ASSET_BASE}/ticket_glow_overlay.png` },
     // 06 — HUD / UI / Speech
     { key: 'office:speech_bubble_small', url: `${ASSET_BASE}/speech_bubble_small.png` },
+    { key: 'office:thought_bubble_small', url: `${ASSET_BASE}/thought_bubble_small.png` },
+    { key: 'office:question_bubble_small', url: `${ASSET_BASE}/question_bubble_small.png` },
+    // 06 — HUD / UI / Indicators
+    { key: 'office:blocked_icon', url: `${ASSET_BASE}/blocked_icon.png` },
+    { key: 'office:convergence_icon', url: `${ASSET_BASE}/convergence_icon.png` },
   ];
 }
 
