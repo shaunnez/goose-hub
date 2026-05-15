@@ -116,6 +116,7 @@ router.get('/:slug/settings', async (c) => {
       projectBudgets: project.budgets,
       configRuntime: project.agentConfig.runtime,
       role: roleForSkill(skill),
+      allowHoldoutOverride: project.agentConfig.allowHoldoutOverride,
     });
     resolvedSkillRuntimes[skill] = {
       source: resolved.source,

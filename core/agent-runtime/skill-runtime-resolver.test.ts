@@ -53,6 +53,33 @@ describe('resolveSkillRuntime', () => {
     expect(resolved.resolvedFallback).toBeNull();
     expect(resolved.resolvedAdvisor).toBeNull();
   });
+
+  it('ignores per-skill model overrides for holdouts unless explicitly allowed', () => {
+    const resolved = resolveSkillRuntime({
+      skill: 'qa',
+      role: 'qa',
+      dbOverride: { modelTier: 'haiku', modelProvider: 'codex' },
+      projectBudgets: { skillBudgetOverrides: { qa: { modelTier: 'haiku' } } },
+    });
+
+    expect(resolved.source).toBe('skill-default');
+    expect(resolved.tier).toBe('sonnet');
+    expect(resolved.provider).toBe('claude');
+    expect(resolved.modelOverride).toBe('claude-sonnet-4-6');
+  });
+
+  it('can ignore provider overrides for injected runtimes while keeping the tier', () => {
+    const resolved = resolveSkillRuntime({
+      skill: 'repo-match',
+      dbOverride: { modelTier: 'sonnet', modelProvider: 'codex' },
+      configRuntime: 'codex-cli',
+      ignoreProviderOverride: true,
+    });
+
+    expect(resolved.tier).toBe('sonnet');
+    expect(resolved.provider).toBe('claude');
+    expect(resolved.modelOverride).toBe('claude-sonnet-4-6');
+  });
 });
 
 describe('tier helpers', () => {

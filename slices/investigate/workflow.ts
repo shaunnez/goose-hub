@@ -222,6 +222,10 @@ export async function runInvestigateWorkflow(
         projectId,
         workItemId: workItem.id,
         runtime,
+        resolveScoutRuntime:
+          deps.runtime != null
+            ? undefined
+            : (resolved) => selectRuntime({ configRuntime, model: resolved.modelOverride }),
         personaId,
         maxScoutAgents: globalSettings.maxScoutAgents,
         projectBudgets: projectConfig?.budgets,
@@ -290,6 +294,10 @@ export async function runInvestigateWorkflow(
         projectId,
         workItemId: workItem.id,
         runtime,
+        resolveScoutRuntime:
+          deps.runtime != null
+            ? undefined
+            : (resolved) => selectRuntime({ configRuntime, model: resolved.modelOverride }),
         personaId,
         maxScoutAgents: globalSettings.maxScoutAgents,
         projectBudgets: projectConfig?.budgets,
@@ -371,7 +379,14 @@ export async function runInvestigateWorkflow(
           role: 'investigator',
         });
         const playwrightModelOverride = playwrightBudget.modelOverride;
-        const playwrightResult = await runtime.run({
+        const playwrightRuntime =
+          deps.runtime ??
+          selectRuntime({
+            configRuntime,
+            model: playwrightModelOverride,
+            skillProvider: forcedRuntimeProvider ?? playwrightBudget.provider,
+          });
+        const playwrightResult = await playwrightRuntime.run({
           runId: playwrightRunId,
           role: 'investigator',
           skill: 'playwright-repro',
