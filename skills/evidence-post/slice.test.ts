@@ -1,7 +1,12 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
 import { EvidencePostSchema } from './schema.js';
 import config, { EvidencePostContextSchema } from './skill.config.js';
+
+const PROMPT = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'prompt.md'), 'utf8');
 
 describe('evidence-post schema', () => {
   it('accepts a fully-populated valid output', () => {
@@ -169,6 +174,24 @@ describe('evidence-post skill config', () => {
     expect(config.contextAllowlist).toContain('prNumber');
     expect(config.contextAllowlist).toContain('prHeadSha');
     expect(config.contextAllowlist).toContain('specPath');
+  });
+});
+
+describe('evidence-post prompt discipline', () => {
+  it('uses the Playwright evidence collector in after mode', () => {
+    expect(PROMPT).toContain('scripts/collect-playwright-evidence.ts');
+    expect(PROMPT).toContain('--phase after');
+  });
+
+  it('prohibits ad hoc parsing and third Playwright runs', () => {
+    expect(PROMPT).toContain('Do not pipe, grep, `jq`, use inline Python/Node');
+    expect(PROMPT).toContain('Do not run Playwright a third time');
+  });
+
+  it('treats after-state assertion failure as validation failure', () => {
+    expect(PROMPT).toContain('classification: "validation_failed"');
+    expect(PROMPT).toContain('return the failure JSON immediately with no `commentUrl`');
+    expect(PROMPT).toContain('Do not copy `pw-results.json` or `pw-stderr.txt`');
   });
 });
 

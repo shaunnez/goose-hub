@@ -68,6 +68,7 @@ export const TOOL_BUNDLES = {
     'Bash(pnpm test:e2e*)',
     'Bash(pnpm --filter @goose-hub/web test:e2e*)',
     'Bash(pnpm --filter @goose-hub/web exec playwright*)',
+    'Bash(pnpm tsx scripts/collect-playwright-evidence.ts*)',
     'Bash(npx playwright*)',
     'Bash(ffmpeg*)',
     'Bash(mkdir -p evidence/*)',

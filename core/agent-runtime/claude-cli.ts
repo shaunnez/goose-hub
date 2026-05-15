@@ -136,19 +136,27 @@ export class ClaudeCliRuntime implements AgentRuntime {
     deployHooks(); // always — writes to ~/.factory/hooks/, not workspace-specific
     if (recordDecisionTool) deployDecisionCaptureHook();
 
+    const model = spec.modelOverride ?? defaultModelForTier('sonnet');
+
     // Emit run-started
     eventStore.appendEvent({
       projectId,
       workItemId,
       kind: 'agent.run-started',
-      payload: { skill: spec.skill, runId, personaId: spec.personaId, ...spec.extraEventPayload },
+      payload: {
+        skill: spec.skill,
+        runId,
+        personaId: spec.personaId,
+        modelId: model,
+        runtime: 'claude-cli',
+        ...spec.extraEventPayload,
+      },
       runId,
       personaId: spec.personaId,
     });
 
     const { contextXml } = assembleSpawnContext(spec);
     const allowedTools = computeAllowlist(spec);
-    const model = spec.modelOverride ?? defaultModelForTier('sonnet');
     const mcpConfigPath =
       spec.mcpConfigPath ?? resolveMcpConfigPath(workspaceDir, spec.toolBundles);
 

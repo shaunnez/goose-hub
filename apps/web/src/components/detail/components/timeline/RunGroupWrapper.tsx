@@ -22,6 +22,8 @@ export function RunGroupWrapper({
   endedAt,
   lastEventAt,
   personaId,
+  modelId,
+  runtime,
   context,
   renderItem,
 }: {
@@ -33,6 +35,8 @@ export function RunGroupWrapper({
   endedAt: string | null;
   lastEventAt: string | null;
   personaId: string | null;
+  modelId: string | null;
+  runtime: string | null;
   context?: TimelineContext;
   renderItem: (item: RenderItem, idx: number, context?: TimelineContext) => React.ReactNode;
 }) {
@@ -109,6 +113,8 @@ export function RunGroupWrapper({
 
   const costRow = context?.runCosts?.get(runId);
   const runTokens = costRow ? costRow.inputTokens + costRow.outputTokens : 0;
+  const displayModelId = costRow?.modelId ?? modelId;
+  const displayRuntime = runtime ?? costRow?.provider ?? null;
 
   const handleResume = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -145,11 +151,15 @@ export function RunGroupWrapper({
   const metaLine =
     isLive && !isStalled ? (
       liveDuration != null ? (
-        <span className="text-fg-5 text-[10.5px]">running for {liveDuration}</span>
+        <span className="text-fg-5 text-[10.5px]">
+          {startedAt != null && <>Started {new Date(startedAt).toLocaleTimeString()} &middot; </>}
+          Running for {liveDuration}
+        </span>
       ) : null
     ) : isStalled ? (
       <span className="text-yellow-400/70 text-[10.5px]">
-        no activity for {lastMs != null ? formatDuration(now - lastMs) : '?'}
+        {startedAt != null && <>Started {new Date(startedAt).toLocaleTimeString()} &middot; </>}
+        No activity for {lastMs != null ? formatDuration(now - lastMs) : '?'}
       </span>
     ) : (
       <span className="text-fg-5 text-[10.5px]">
@@ -199,9 +209,14 @@ export function RunGroupWrapper({
               />
             </span>
           )}
-          {costRow?.modelId && (
+          {displayRuntime && (
+            <span className="shrink-0 w-[62px] truncate px-1.5 py-0.5 rounded text-[10px] font-mono bg-fg-5/10 text-fg-4 border border-line/40">
+              {displayRuntime}
+            </span>
+          )}
+          {displayModelId && (
             <span className="shrink-0 w-[80px] truncate px-1.5 py-0.5 rounded text-[10px] font-mono bg-fg-5/10 text-fg-4 border border-line/40">
-              {costRow.modelId.replace(/^claude-/, '')}
+              {displayModelId.replace(/^claude-/, '')}
             </span>
           )}
           <span className="flex-1 min-w-0 truncate">{metaLine}</span>

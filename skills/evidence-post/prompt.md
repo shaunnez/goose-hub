@@ -12,9 +12,9 @@ Developer (post-implementation evidence). You are NOT a holdout — you run afte
 
 - **Verify spec path before running.** Before executing Playwright, confirm `<specPath>` exists using a file read. If the path does not exist, record a decision summary (`spec path <path> not found — skipping Playwright run`) and return early without posting a comment.
 - **Fresh servers from worktree.** `WEB_PORT`, `API_PORT`, `SERVER_PORT` (all dynamically allocated free ports), and `CI=true` are injected by the orchestrator. Playwright starts its own isolated servers from the worktree — it does NOT connect to the user's running dev server. Never prefix a Playwright command with `WEB_PORT=`, `CI=`, `API_PORT=`, `PLAYWRIGHT_VIDEO=`, or any other env var assignment — the environment is already correctly configured and inline prefixes cannot override process-level env vars anyway.
-- **Full Playwright output.** Run Playwright with full output. Do not pipe or grep the result. Read any failure messages completely before deciding how to proceed.
-- **Diagnose before retry — hard stop after one retry.** If the test fails: (1) read `apps/web/test-results/<test-dir>/error-context.md`, (2) retry once. If it fails again: **STOP. Do not run Playwright a third time under any circumstances.** Emit the failure JSON immediately (see "When the spec fails" below) and return. There is no recovery path — the workflow handles evidence failure gracefully.
-- **Artifact lookup via predictable path.** After a successful run, find artifacts at `apps/web/test-results/` — use `ls apps/web/test-results/` not a recursive `find`. Screenshots the spec writes go to the path the spec declares; the WebM lands under `apps/web/test-results/<test-dir>/`.
+- **Collector-owned result parsing.** Run Playwright with the JSON reporter into `/tmp/evidence-staging-<N>/pw-results.json`, then run `scripts/collect-playwright-evidence.ts`. Do not pipe, grep, `jq`, use inline Python/Node, or manually inspect Playwright JSON.
+- **Diagnose before retry — hard stop after one retry.** If the collector returns `classification: "setup_failed"`: (1) read `apps/web/test-results/<test-dir>/error-context.md` when present, (2) retry once. If it fails again: **STOP. Do not run Playwright a third time under any circumstances.** Emit the failure JSON immediately (see "When the spec fails" below) and return. There is no recovery path — the workflow handles evidence failure gracefully.
+- **Validation failure is terminal.** In AFTER-state evidence, a Playwright assertion failure means the fix did not validate. If the collector returns `classification: "validation_failed"`, return the failure JSON immediately with no `commentUrl`; the workflow emits `evidence.post-failed`.
 
 ## Input
 
@@ -37,22 +37,27 @@ The strategy: stage all artefacts under `/tmp/evidence-staging-<N>/`, then creat
 
 **Substitute `<N>` with the literal issue number** (e.g. `42`) in every command below. Do not use shell variables; the tool allowlist matches on the literal command text.
 
-1. **Capture.** Run the spec at `<specPath>` with video recording enabled (`{ video: 'on' }` in the spec's project config or via `PLAYWRIGHT_VIDEO=on`). Use `pnpm --filter @goose-hub/web exec playwright test <specPath>` — never raw `npx`. Screenshots go where the spec writes them; the WebM video lands under `test-results/`. If the spec uses `waitForLoadState('networkidle')`, the run will hang — the app holds a persistent SSE connection that prevents networkidle from firing. Specs must use `{ waitUntil: 'domcontentloaded' }` on every `page.goto()` call.
-
-2. **Stage artefacts in `/tmp`.**
+1. **Capture.** Run the spec at `<specPath>` with video recording enabled (`{ video: 'on' }` in the spec's project config or via `PLAYWRIGHT_VIDEO=on`). Never use raw `npx`.
    ```bash
    mkdir -p /tmp/evidence-staging-<N>
-   cp <screenshot-paths> /tmp/evidence-staging-<N>/    # name them step-1.png, step-2.png, …
+   pnpm --filter @goose-hub/web exec playwright test <specPath> --reporter=json > /tmp/evidence-staging-<N>/pw-results.json 2>/tmp/evidence-staging-<N>/pw-stderr.txt
    ```
-   These are the AFTER screenshots. Never name them `before-step-*.png` — that prefix belongs to the BEFORE state already on the evidence branch.
+   If the spec uses `waitForLoadState('networkidle')`, the run will hang — the app holds a persistent SSE connection that prevents networkidle from firing. Specs must use `{ waitUntil: 'domcontentloaded' }` on every `page.goto()` call.
 
-3. **Convert WebM to GIF into staging.**
+2. **Stage screenshots in `/tmp`.**
    ```bash
-   ffmpeg -i <path-to-video.webm> \
-     -vf "fps=8,scale=900:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" \
-     /tmp/evidence-staging-<N>/walkthrough.gif
+   mkdir -p /tmp/evidence-staging-<N>
+   cp evidence/issue-<N>/step-*.png /tmp/evidence-staging-<N>/
    ```
-   If the WebM does not exist or `ffmpeg` fails, set `gifPath: null` and continue — do not abort.
+   These are the AFTER screenshots. Never name them `before-step-*.png` — that prefix belongs to the BEFORE state already on the evidence branch. If no screenshots exist, do not diagnose yet; still run the collector so it can classify the Playwright result.
+
+3. **Run the collector.**
+   ```bash
+   pnpm tsx scripts/collect-playwright-evidence.ts --issue <N> --slug evidence-issue-<N> --phase after --results /tmp/evidence-staging-<N>/pw-results.json --evidence-dir /tmp/evidence-staging-<N>
+   ```
+   The collector is the only place that parses Playwright JSON, finds the video attachment, and runs ffmpeg. If the WebM does not exist or `ffmpeg` fails, set `gifPath: null` and continue — do not abort.
+
+   If the collector returns `classification: "setup_failed"`, fix the setup problem and retry Playwright once, then run the collector once more. If it returns `classification: "validation_failed"`, stop immediately and return the failure JSON. If it returns `classification: "passed"`, continue.
 
 4. **Set up the evidence worktree.**
    ```bash
@@ -71,13 +76,15 @@ The strategy: stage all artefacts under `/tmp/evidence-staging-<N>/`, then creat
 5. **Move staged artefacts into the evidence worktree, commit, push.**
    ```bash
    mkdir -p /tmp/evidence-issue-<N>/evidence/issue-<N>
-   cp /tmp/evidence-staging-<N>/* /tmp/evidence-issue-<N>/evidence/issue-<N>/
+   cp /tmp/evidence-staging-<N>/step-*.png /tmp/evidence-issue-<N>/evidence/issue-<N>/
+   cp /tmp/evidence-staging-<N>/walkthrough.gif /tmp/evidence-issue-<N>/evidence/issue-<N>/
 
    git -C /tmp/evidence-issue-<N> add evidence/issue-<N>/
    git -C /tmp/evidence-issue-<N> commit -m "evidence: after-state for issue #<N>"
    git -C /tmp/evidence-issue-<N> push origin evidence/issue-<N>
    git -C /tmp/evidence-issue-<N> rev-parse HEAD    # this SHA pins the AFTER raw URLs
    ```
+   Copy `walkthrough.gif` only when the collector returned a non-null `gifPath`. Do not copy `pw-results.json` or `pw-stderr.txt` to the evidence branch.
    Use the resulting SHA for `commitSha` and for every raw URL in the comment. The PR's `prHeadSha` is recorded separately in the comment trailer for traceability.
 
 6. **Tear down the helper worktree.**

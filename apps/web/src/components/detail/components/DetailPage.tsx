@@ -1,5 +1,7 @@
+import { ProjectBudgetBanner } from '@/components/ui/ProjectBudgetBanner';
 import { fetchIssue, fetchIssues, startFakeRun } from '@/lib/api';
 import { LANES, laneForState, sortLaneItems } from '@/lib/lanes.config';
+import { useProjectBudgetStatus } from '@/lib/project-budget';
 import { useActiveMilestone } from '@/state/active-milestone';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react';
@@ -110,6 +112,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
 
   const [fakeRunInProgress, setFakeRunInProgress] = useState(false);
   const hasOpenDep = useHasOpenDep(item, slug);
+  const { data: budgetStatus } = useProjectBudgetStatus(slug);
 
   const onFakeRun = useCallback(() => {
     if (fakeRunInProgress) return;
@@ -223,6 +226,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
         </div>
 
         <TaskHeader item={item} projectSlug={slug} hasOpenDep={hasOpenDep} />
+        <ProjectBudgetBanner status={budgetStatus} />
 
         <GatePendingBanner
           state={item?.state}

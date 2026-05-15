@@ -1,3 +1,4 @@
+import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { Hono } from 'hono';
 import { getProject } from '#shared/projects.js';
 import { getCostSummary, getCostsForWorkItem } from './service.js';
@@ -10,7 +11,10 @@ router.get('/:slug/costs/summary', async (c) => {
   const cfg = await getProject(slug);
   if (cfg == null) return c.json({ error: 'project not found' }, 404);
 
-  const result = await getCostSummary(slug);
+  const globalSettings = resolveGlobalSettingsForProject(slug, cfg.budgets);
+  const result = await getCostSummary(slug, {
+    dailyTokensLimit: globalSettings.dailyTokens ?? 0,
+  });
   return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 400);
 });
 

@@ -517,6 +517,7 @@ describe('EVENT_KIND_LABEL — QA and fix-feedback kinds', () => {
     'agent.disclosure',
     'agent.fix-feedback-complete',
     'agent.retry-escalated',
+    'evidence.playwright-ran',
     'qa.structural-passed',
     'qa.functional-passed',
     'qa.regression-passed',

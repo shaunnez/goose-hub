@@ -1,7 +1,41 @@
 import { describe, expect, it } from 'vitest';
-import { extractResultJson, parseCodexEnvelope, pickCodexAgentMessageText } from './codex-cli.js';
+import {
+  buildCodexArgv,
+  extractResultJson,
+  parseCodexEnvelope,
+  pickCodexAgentMessageText,
+} from './codex-cli.js';
 
 const RUN_ID = 'test-run-id';
+
+// ─── buildCodexArgv ──────────────────────────────────────────────────────────
+
+describe('buildCodexArgv', () => {
+  it('places global approval policy before exec and sandbox mode after exec', () => {
+    const argv = buildCodexArgv({
+      model: 'gpt-5.4',
+      workspaceDir: '/tmp/worktree',
+      prompt: '<task></task>',
+      commandSandbox: 'danger-full-access',
+      approvalPolicy: 'never',
+    });
+
+    expect(argv).toEqual([
+      '--ask-for-approval',
+      'never',
+      'exec',
+      '--json',
+      '--skip-git-repo-check',
+      '--cd',
+      '/tmp/worktree',
+      '--model',
+      'gpt-5.4',
+      '--sandbox',
+      'danger-full-access',
+      '<task></task>',
+    ]);
+  });
+});
 
 // ─── parseCodexEnvelope ───────────────────────────────────────────────────────
 

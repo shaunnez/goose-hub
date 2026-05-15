@@ -41,6 +41,7 @@ vi.mock('node:child_process', () => ({
 }));
 
 import { CodexCliRuntime } from './codex-cli.js';
+import { buildCodexArgv } from './codex-config.js';
 
 function makeSpec(overrides: Record<string, unknown> = {}) {
   return {
@@ -85,6 +86,78 @@ afterEach(() => {
 });
 
 describe('CodexCliRuntime timeout handling', () => {
+  async function runSuccessfulCodexSpec(overrides: Record<string, unknown> = {}) {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec(overrides));
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        JSON.stringify({
+          type: 'item.completed',
+          item: { type: 'agent_message', text: '{"ok":true}' },
+        }),
+      ),
+    );
+    child.emit('close', 0);
+
+    await expect(run).resolves.toMatchObject({ output: { ok: true } });
+  }
+
+  it('uses danger-full-access and never-approval for evidence validate runs', async () => {
+    await runSuccessfulCodexSpec({ skill: 'playwright-repro', toolBundles: ['validate'] });
+
+    expect(buildCodexArgv).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commandSandbox: 'danger-full-access',
+        approvalPolicy: 'never',
+      }),
+    );
+  });
+
+  it('does not use danger-full-access for QA even though QA includes validate', async () => {
+    await runSuccessfulCodexSpec({
+      skill: 'qa',
+      role: 'qa',
+      toolBundles: ['read', 'shell', 'validate'],
+    });
+
+    const call = vi.mocked(buildCodexArgv).mock.calls[0]?.[0];
+    expect(call).toEqual(
+      expect.objectContaining({ commandSandbox: undefined, approvalPolicy: undefined }),
+    );
+  });
+
+  it('does not use danger-full-access for review even though review includes validate', async () => {
+    await runSuccessfulCodexSpec({
+      skill: 'review',
+      role: 'reviewer',
+      toolBundles: ['read', 'validate'],
+    });
+
+    const call = vi.mocked(buildCodexArgv).mock.calls[0]?.[0];
+    expect(call).toEqual(
+      expect.objectContaining({ commandSandbox: undefined, approvalPolicy: undefined }),
+    );
+  });
+
+  it('emits model and runtime metadata when the run starts', async () => {
+    await runSuccessfulCodexSpec({ modelOverride: 'gpt-5.4-mini' });
+
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-started',
+        payload: expect.objectContaining({
+          modelId: 'gpt-5.4-mini',
+          runtime: 'codex-cli',
+        }),
+      }),
+    );
+  });
+
   it('emits timeout and failed events, kills the process group, rejects, and ignores late close', async () => {
     vi.useFakeTimers();
     const child = makeHangingChild();

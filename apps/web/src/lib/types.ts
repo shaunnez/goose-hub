@@ -202,6 +202,12 @@ export interface CostStageTotal extends CostWindowTotals {
 
 export interface CostSummaryDto {
   projectId: string;
+  dailyTokensUsed: number;
+  dailyTokensLimit: number;
+  dailyCostUsd: number;
+  dailyBudgetExceeded: boolean;
+  resetsAtUtc: string;
+  lastExceededAt: string | null;
   windows: { week: CostWindowTotals; month: CostWindowTotals };
   byStage: CostStageTotal[];
   byProvider: {

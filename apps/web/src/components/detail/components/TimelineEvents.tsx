@@ -26,6 +26,7 @@ import {
 } from './timeline/DevReviewEvents';
 import {
   EvidenceNoSpecEvent,
+  EvidencePlaywrightRanEvent,
   EvidencePostFailedEvent,
   EvidencePostedEvent,
 } from './timeline/EvidenceEvents';
@@ -103,6 +104,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
         endedAt={item.endedAt}
         lastEventAt={item.lastEventAt}
         personaId={item.personaId}
+        modelId={item.modelId}
+        runtime={item.runtime}
         context={context}
         renderItem={renderTimelineItem}
       />
@@ -224,6 +227,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <GrillCompletedEvent key={event.id} event={event} />;
     case 'evidence.no-spec-declared':
       return <EvidenceNoSpecEvent key={event.id} event={event} />;
+    case 'evidence.playwright-ran':
+      return <EvidencePlaywrightRanEvent key={event.id} event={event} />;
     case 'evidence.posted':
       return <EvidencePostedEvent key={event.id} event={event} />;
     case 'evidence.post-failed':

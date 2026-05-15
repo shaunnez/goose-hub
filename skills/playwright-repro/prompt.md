@@ -76,6 +76,7 @@ The spec must:
 - Execute each repro step in order
 - Call `page.screenshot({ path: '...' })` after each significant step
 - Use `expect.soft()` for assertions so all steps run even when one fails
+- Add a `REPRO_EXPECTED_BUG` message to assertions that represent the reported bug so the collector can distinguish expected broken behaviour from setup failure
 - Log console errors at the end via `console.log('REPRO_CONSOLE', JSON.stringify(consoleErrors))`
 
 **NEVER use `waitForLoadState('networkidle')`** — the app holds a persistent SSE connection (`/api/events`) so networkidle never fires. Use `{ waitUntil: 'domcontentloaded' }` on every `page.goto()` call. If you need to wait for a specific element, use `page.waitForSelector(...)` with an explicit timeout instead.
@@ -105,7 +106,9 @@ test('repro: <bug title>', async ({ page }) => {
   await page.screenshot({ path: `${EVIDENCE_DIR}/step-2.png` });
 
   // Soft assertions capture broken state without aborting remaining steps
-  await expect.soft(page.locator('[data-testid="expected-element"]')).toBeVisible();
+  await expect
+    .soft(page.locator('[data-testid="expected-element"]'), 'REPRO_EXPECTED_BUG: expected element missing')
+    .toBeVisible();
 
   console.log('REPRO_CONSOLE', JSON.stringify(consoleErrors));
 });
@@ -113,39 +116,49 @@ test('repro: <bug title>', async ({ page }) => {
 
 Emit: `[decision] PLAN: Wrote repro spec targeting <route> — <N> steps, asserting on <selector>`
 
-### 4. Run
+### 4. Run Playwright once, then run the collector
 
 ```bash
+mkdir -p /tmp/repro-<slug>
 pnpm --filter @goose-hub/web exec playwright test e2e/repro-<slug>.spec.ts --reporter=json > /tmp/repro-<slug>/pw-results.json 2>/tmp/repro-<slug>/pw-stderr.txt
 ```
 
-The test may fail — expected if the bug is reproduced.
+The test may fail — expected if the bug is reproduced. A Playwright assertion failure can be successful BEFORE-state evidence when it proves the reported broken behaviour.
 
-From `/tmp/repro-<slug>/pw-results.json`:
-- Find video path in `suites[0].specs[0].tests[0].results[0].attachments` where `name === 'video'`
-- Check `status` in the same results object (`'failed'` confirms the bug manifested)
+Immediately run the collector:
+
+```bash
+pnpm tsx scripts/collect-playwright-evidence.ts --issue <N> --slug repro-<slug> --phase before --results /tmp/repro-<slug>/pw-results.json --evidence-dir /tmp/repro-<slug>
+```
+
+The collector is the only place that parses Playwright JSON, finds screenshots/video, and runs ffmpeg. Do not use inline Python, inline Node, `jq`, `grep`, or repeated manual JSON inspection. Do not run ffmpeg manually unless the collector output says to.
 
 Emit: `[decision] INSIGHT: Test <passed|failed> on attempt <N> — <one sentence on what the result showed>`
 
-### 5. Iterate on setup failures
+### 5. Iterate once only on setup failures
 
-If the test errors because a selector was not found or navigation failed (not the bug itself), fix the spec and rerun. Limit to 3 iterations.
+If the collector returns `classification: "setup_failed"` because a selector was not found, navigation failed, or the server was unavailable, fix the spec and rerun Playwright once. Then run the collector once more.
 
-On each retry, emit: `[decision] RETRY: Setup failure on attempt <N> — <selector or route that failed>; adjusting spec`
+Hard limits:
+- No third Playwright run.
+- No repeated JSON inspection.
+- After the final collector command, immediately continue to evidence branch staging if artifacts exist, or return the final schema JSON if they do not. No more diagnostic tool calls.
 
-### 6. Convert WebM to GIF
+On the single retry, emit: `[decision] RETRY: Setup failure on attempt <N> — <selector or route that failed>; adjusting spec`
 
-GitHub embeds GIFs inline in issue comments; WebM only links. Convert the WebM recording to a GIF for inline rendering:
+### 6. Use collector artifacts
 
-```bash
-ffmpeg -i <path-to-video.webm> \
-  -vf "fps=8,scale=900:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" \
-  /tmp/repro-<slug>/walkthrough.gif
-```
+Use the collector JSON as the source of truth for:
+- `classification`
+- screenshot paths
+- video path
+- `gifPath`
+- stdout / console lines
+- errors
 
-If the WebM does not exist or `ffmpeg` fails, set `gifPath: null` in the output and continue — do not abort.
+If the collector returns `classification: "passed"`, the bug did not reproduce; return `reproduced: false` in the final schema. If it returns `classification: "reproduced"`, continue with evidence branch staging.
 
-Emit: `[decision] INSIGHT: GIF conversion <succeeded — walkthrough.gif at /tmp/repro-<slug>/walkthrough.gif | failed — gifPath: null>`
+Emit: `[decision] INSIGHT: Collector classified BEFORE run as <classification> — <one sentence from collector notes>`
 
 ### 7. Push artefacts to the evidence branch
 

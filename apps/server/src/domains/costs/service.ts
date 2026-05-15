@@ -1,5 +1,6 @@
 import { tryProviderOf } from '@goose-hub/core/agent-runtime/models.js';
 import type { CostLabel, Stage } from '@goose-hub/core/cost/types.js';
+import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import type { Result } from '#shared/middleware.js';
 import {
   type CostRow,
@@ -11,6 +12,12 @@ import {
 
 export interface CostSummaryDto {
   projectId: string;
+  dailyTokensUsed: number;
+  dailyTokensLimit: number;
+  dailyCostUsd: number;
+  dailyBudgetExceeded: boolean;
+  resetsAtUtc: string;
+  lastExceededAt: string | null;
   windows: {
     week: { totalUsd: number; totalRuns: number; hasEstimated: boolean };
     month: { totalUsd: number; totalRuns: number; hasEstimated: boolean };
@@ -54,6 +61,15 @@ function isoDaysAgo(days: number, now: Date = new Date()): string {
   return d.toISOString();
 }
 
+function utcDayWindow(now: Date): { start: string; end: string } {
+  const startMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const endMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+  return {
+    start: new Date(startMs).toISOString(),
+    end: new Date(endMs).toISOString(),
+  };
+}
+
 function toProviderTotals(rows: CostRow[]): {
   totalUsd: number;
   totalRuns: number;
@@ -68,19 +84,31 @@ function toProviderTotals(rows: CostRow[]): {
 
 export async function getCostSummary(
   projectId: string,
-  now: Date = new Date(),
+  opts: { now?: Date; dailyTokensLimit?: number } = {},
 ): Promise<Result<CostSummaryDto>> {
   if (!projectId.trim()) {
     return { ok: false, error: 'projectId is required', status: 400 };
   }
+  const now = opts.now ?? new Date();
+  const dailyTokensLimit = opts.dailyTokensLimit ?? 0;
   const weekSince = isoDaysAgo(7, now);
   const monthSince = isoDaysAgo(30, now);
+  const today = utcDayWindow(now);
 
   const week = totalsForProjectSince(projectId, weekSince);
   const month = totalsForProjectSince(projectId, monthSince);
   const byStage = totalsByStageForProjectSince(projectId, monthSince);
 
   const monthRows = listCostsForProjectSince(projectId, monthSince);
+  const dailyRows = monthRows.filter((r) => r.createdAt >= today.start && r.createdAt < today.end);
+  const dailyTokensUsed = dailyRows.reduce((s, r) => s + r.inputTokens + r.outputTokens, 0);
+  const dailyCostUsd = dailyRows.reduce((s, r) => s + r.costUsd, 0);
+  const lastBudgetExceeded = eventStore.replay({
+    projectId,
+    kind: 'project.budget-exceeded',
+    limit: 1,
+    order: 'desc',
+  })[0];
   const claudeRows = monthRows.filter((r) => tryProviderOf(r.modelId) === 'claude');
   const codexRows = monthRows.filter((r) => tryProviderOf(r.modelId) === 'codex');
 
@@ -88,6 +116,12 @@ export async function getCostSummary(
     ok: true,
     data: {
       projectId,
+      dailyTokensUsed,
+      dailyTokensLimit,
+      dailyCostUsd,
+      dailyBudgetExceeded: dailyTokensLimit > 0 && dailyTokensUsed >= dailyTokensLimit,
+      resetsAtUtc: today.end,
+      lastExceededAt: lastBudgetExceeded?.createdAt ?? null,
       windows: { week, month },
       byStage,
       byProvider: {

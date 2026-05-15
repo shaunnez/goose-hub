@@ -80,8 +80,16 @@ export function buildCodexArgv(input: {
   systemPrompt?: string;
   /** Reserved for future use; Codex `exec --json` does not currently accept turn caps. */
   maxTurns?: number;
+  /** Optional Codex CLI sandbox mode for model-generated shell commands. */
+  commandSandbox?: 'read-only' | 'workspace-write' | 'danger-full-access';
+  /** Optional global approval policy. Must be placed before the `exec` subcommand. */
+  approvalPolicy?: 'never';
 }): string[] {
-  const argv: string[] = [
+  const argv: string[] = [];
+  if (input.approvalPolicy != null) {
+    argv.push('--ask-for-approval', input.approvalPolicy);
+  }
+  argv.push(
     'exec',
     '--json',
     '--skip-git-repo-check',
@@ -89,7 +97,10 @@ export function buildCodexArgv(input: {
     input.workspaceDir,
     '--model',
     input.model,
-  ];
+  );
+  if (input.commandSandbox != null) {
+    argv.push('--sandbox', input.commandSandbox);
+  }
   if (input.systemPrompt != null) {
     // `-c` is Codex's per-invocation override for `instructions`. We use a
     // TOML multi-line basic string (triple-quoted) so prompts can carry raw

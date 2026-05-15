@@ -192,6 +192,24 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
     );
   });
 
+  it('emits model and runtime metadata when the run starts', async () => {
+    const envelope = JSON.stringify({ is_error: false, result: '{"ok":true}' });
+    mockSpawn.mockReturnValue(makeChild(0, envelope));
+
+    const runtime = new ClaudeCliRuntime();
+    await runtime.run(makeSpec({ modelOverride: 'claude-haiku-4-5-20251001' }));
+
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-started',
+        payload: expect.objectContaining({
+          modelId: 'claude-haiku-4-5-20251001',
+          runtime: 'claude-cli',
+        }),
+      }),
+    );
+  });
+
   it('records cost, emits budget-exceeded and run-failed, and rejects over-budget runs', async () => {
     vi.mocked(costFromCliEnvelope).mockReturnValue({
       inputTokens: 100,

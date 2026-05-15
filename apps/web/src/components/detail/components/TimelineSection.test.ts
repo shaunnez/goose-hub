@@ -211,6 +211,28 @@ describe('groupEvents — run-group metadata', () => {
     }
   });
 
+  it('extracts model and runtime from agent.run-started payload before cost rows exist', () => {
+    const events: AgentEventDto[] = [
+      {
+        ...makeRunEvent(1, 'run-abc', 'agent.run-started', 'implement'),
+        payload: {
+          skill: 'implement',
+          modelId: 'gpt-5.4',
+          runtime: 'codex-cli',
+        },
+      },
+      makeRunEvent(2, 'run-abc', 'agent.tool-call'),
+    ];
+    const result = groupEvents(events);
+    expect(result).toHaveLength(1);
+    if (result[0].kind === 'run-group') {
+      expect(result[0].modelId).toBe('gpt-5.4');
+      expect(result[0].runtime).toBe('codex-cli');
+      expect(result[0].startedAt).toBe(events[0].createdAt);
+      expect(result[0].endedAt).toBeNull();
+    }
+  });
+
   it('falls back to agent.spawned skill when run-started has no skill', () => {
     const events: AgentEventDto[] = [
       makeRunEvent(1, 'run-abc', 'agent.run-started'),

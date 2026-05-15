@@ -48,6 +48,48 @@ The context contains a `<task>` block with:
   concrete evidence.
 - Use the `read` and `search` tools to load the test files for the surfaces you'll touch FIRST. Existing tests are the strongest signal of intent.
 
+#### Investigation handoff fast path
+
+Most implement runs follow an investigation run. When `<investigation>` is
+present, has at least one `keyFiles` entry, and `openQuestions` is empty, treat
+it as the implementation handoff contract, not as optional background.
+
+In that case:
+
+- Read the work item, required project/app README, and the investigation
+  `keyFiles`.
+- Patch the files identified by the investigation.
+- Update the directly related test file when one is identified or already
+  exists beside the touched surface.
+- Run targeted tests for only the touched surface.
+- Do not continue broad discovery after the key files confirm the finding.
+
+Only explore adjacent files when one of these is true:
+
+- A key file no longer exists.
+- The key file contradicts the investigation.
+- The targeted test cannot be identified from the key files or nearby existing
+  tests.
+- The first patch or targeted test fails and the failure points outside the
+  investigated surface.
+
+If you pivot away from the investigated surface, emit a `PLAN` decision summary
+with the exact contradictory evidence. Do not continue broad discovery just to
+increase confidence in an already-confirmed investigation.
+
+#### Bounded frontend evidence rule
+
+For `apps/web/` changes, default to the simplest evidence spec at
+`apps/web/e2e/issue-<number>.spec.ts`: navigate to the affected route, assert
+the visible change, and take the required screenshot.
+
+Do not inspect old e2e specs, Playwright config, or screenshot conventions
+before writing the implementation when the investigation already identifies the
+UI surface. If the e2e directory or obvious app route is missing or unclear
+after one bounded check, ship the implementation plus targeted tests and record
+a `TOOL_FAILURE` or `UNCERTAINTY` decision summary explaining why evidence spec
+generation was blocked. Do not spend more discovery budget on e2e plumbing.
+
 #### Discipline — applied before writing anything
 
 1. **Read before write.** Use the `read` tool on the target component/module before writing any test for it. No exceptions. A test written without reading the component will mock the wrong things.
@@ -81,7 +123,7 @@ The context contains a `<task>` block with:
 
 - Write the implementation using the `write` tool. Workspace-bound paths only — no absolute paths, no `..` traversal.
 - Re-run the **targeted** test command (same file paths as in Red). Iterate until all targeted tests pass.
-- **Frontend changes (required):** If any file written is under `apps/web/`, write a Playwright spec at `apps/web/e2e/issue-<number>.spec.ts` now, before proceeding to step 5. The spec must navigate to the affected UI, assert the visible change, and call `page.screenshot({ path: 'evidence/issue-<number>/step-1.png' })`. Use plain `page.goto('/...')` — never `waitForLoadState('networkidle')` (the app's persistent SSE connection prevents it from firing; use `waitForSelector` or time-bounded assertions instead). This spec ships in the same commit as your implementation so the evidence-post skill can run it post-PR.
+- **Frontend changes (required when possible):** If any file written is under `apps/web/`, write a Playwright spec at `apps/web/e2e/issue-<number>.spec.ts` now, before proceeding to step 5. The spec must navigate to the affected UI, assert the visible change, and call `page.screenshot({ path: 'evidence/issue-<number>/step-1.png' })`. Use plain `page.goto('/...')` — never `waitForLoadState('networkidle')` (the app's persistent SSE connection prevents it from firing; use `waitForSelector` or time-bounded assertions instead). This spec ships in the same commit as your implementation so the evidence-post skill can run it post-PR. If evidence spec generation is blocked after the bounded frontend evidence rule above, do not block the implementation; return `evidenceSpecPath: null` and include a `TOOL_FAILURE` or `UNCERTAINTY` decision summary that explicitly mentions the e2e/evidence/Playwright blockage.
 - Emit: `[decision] GREEN: Implementation passes all targeted tests including N new cases`
 
 ### 5 — Refactor (optional, only if necessary)
@@ -154,9 +196,10 @@ and then calls `openPR`.
 
 ### 8 — Declare the evidence spec path
 
-- If the slice touched any `apps/web/` file, you wrote a spec in step 4. Set `evidenceSpecPath` to `apps/web/e2e/issue-<number>.spec.ts`. The orchestrator passes this to the `evidence-post` skill to generate visual evidence.
+- If the slice touched any `apps/web/` file and evidence spec generation was possible, you wrote a spec in step 4. Set `evidenceSpecPath` to `apps/web/e2e/issue-<number>.spec.ts`. The orchestrator passes this to the `evidence-post` skill to generate visual evidence.
+- If the slice touched an `apps/web/` file but evidence spec generation was blocked after the bounded frontend evidence rule, set `evidenceSpecPath: null` and include a `TOOL_FAILURE` or `UNCERTAINTY` decision summary that explicitly mentions the e2e/evidence/Playwright blockage.
 - If the slice touched **no** `apps/web/` files (backend-only change, chore, schema migration), set `evidenceSpecPath: null`. The orchestrator logs `evidence.no-spec-declared` and skips evidence posting.
-- **Do not return null for a frontend change.** The schema enforces this — a null `evidenceSpecPath` alongside `apps/web/` files in `filesWritten` is a validation failure.
+- **Do not return null silently for a frontend change.** The schema only permits this when a `TOOL_FAILURE` or `UNCERTAINTY` decision summary explains the evidence blockage.
 
 ### 9 — Return
 
@@ -214,7 +257,7 @@ Return a JSON object conforming to `ImplementSchema`. The orchestrator opens the
 }
 ```
 
-`evidenceSpecPath` must be set for any slice touching `apps/web/`; null is only valid for backend-only or chore PRs. `testsWritten` may be `[]` for chore PRs that change no behaviour (rare). `testsRun.paths` should list every test file you actually passed to the test command — empty `paths` means you ran nothing (only valid for chore PRs that touch no executable code). `decisionSummaries` must have at least one entry.
+`evidenceSpecPath` must be set for any slice touching `apps/web/` unless evidence generation is explicitly blocked and recorded with a `TOOL_FAILURE` or `UNCERTAINTY` decision summary. `testsWritten` may be `[]` for chore PRs that change no behaviour (rare). `testsRun.paths` should list every test file you actually passed to the test command — empty `paths` means you ran nothing (only valid for chore PRs that touch no executable code). `decisionSummaries` must have at least one entry.
 
 [decision] VERDICT: Shipped slice with TDD loop and returned structured implement output
 

@@ -54,6 +54,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'gate.rejected': 'Gate rejected',
   'review.completed': 'Review completed',
   'evidence.no-spec-declared': 'Evidence — no spec declared',
+  'evidence.playwright-ran': 'Playwright evidence ran',
   'evidence.posted': 'Evidence posted',
   'evidence.post-failed': 'Evidence post failed',
   'agent.verify-command': 'Verify command',
@@ -133,6 +134,8 @@ export type RenderItem =
       endedAt: string | null;
       lastEventAt: string | null;
       personaId: string | null;
+      modelId: string | null;
+      runtime: string | null;
     }
   | {
       kind: 'investigation-phase';
@@ -304,11 +307,15 @@ function extractRunMeta(items: RenderItem[]): {
   endedAt: string | null;
   lastEventAt: string | null;
   personaId: string | null;
+  modelId: string | null;
+  runtime: string | null;
 } {
   let skill: string | null = null;
   let startedAt: string | null = null;
   let endedAt: string | null = null;
   let personaId: string | null = null;
+  let modelId: string | null = null;
+  let runtime: string | null = null;
   let earliestMs = Number.POSITIVE_INFINITY;
   let earliestIso: string | null = null;
   let latestMs = Number.NEGATIVE_INFINITY;
@@ -317,7 +324,7 @@ function extractRunMeta(items: RenderItem[]): {
   for (const item of items) {
     if (item.kind !== 'event') continue;
     const ev = item.event;
-    const p = ev.payload as { skill?: string } | null;
+    const p = ev.payload as { modelId?: string; runtime?: string; skill?: string } | null;
 
     const ms = new Date(ev.createdAt).getTime();
     if (ms < earliestMs) {
@@ -332,6 +339,8 @@ function extractRunMeta(items: RenderItem[]): {
     if (personaId == null && ev.personaId != null) personaId = ev.personaId;
 
     if (skill == null && p?.skill != null) skill = p.skill as string;
+    if (modelId == null && p?.modelId != null) modelId = p.modelId;
+    if (runtime == null && p?.runtime != null) runtime = p.runtime;
 
     if (ev.kind === 'agent.run-started') {
       if (startedAt == null) startedAt = ev.createdAt;
@@ -354,7 +363,15 @@ function extractRunMeta(items: RenderItem[]): {
     }
   }
 
-  return { skill, startedAt: startedAt ?? earliestIso, endedAt, lastEventAt: latestIso, personaId };
+  return {
+    skill,
+    startedAt: startedAt ?? earliestIso,
+    endedAt,
+    lastEventAt: latestIso,
+    personaId,
+    modelId,
+    runtime,
+  };
 }
 
 function groupByRunId(items: RenderItem[]): RenderItem[] {

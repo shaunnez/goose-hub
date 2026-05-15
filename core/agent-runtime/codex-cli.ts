@@ -49,6 +49,7 @@ const STDOUT_CAP = 4 * 1024 * 1024; // 4 MB
 const TIMEOUT_MS = 30_000; // 30 seconds — FACTORY_RULES rule 32
 const WORKSPACES_DIR = join(homedir(), '.factory', 'workspaces');
 const MCP_CONFIG_PATH = join(homedir(), '.factory', 'mcp-config.json');
+const BROWSER_PROCESS_ACCESS_SKILLS = new Set(['playwright-repro', 'evidence-post']);
 
 export class CodexCliRuntime implements AgentRuntime {
   async run(spec: AgentSpec): Promise<AgentResult> {
@@ -74,6 +75,7 @@ export class CodexCliRuntime implements AgentRuntime {
     if (recordDecisionTool) deployDecisionCaptureHook();
     const workItemId = (spec.context.workItemId as string | undefined) ?? spec.workItemId ?? null;
     const { personaId } = spec;
+    const model = spec.modelOverride ?? defaultModelForTierAndProvider('sonnet', 'codex');
 
     eventStore.appendEvent({
       projectId,
@@ -83,6 +85,7 @@ export class CodexCliRuntime implements AgentRuntime {
         skill: spec.skill,
         runId,
         personaId,
+        modelId: model,
         runtime: 'codex-cli',
         ...spec.extraEventPayload,
       },
@@ -92,7 +95,8 @@ export class CodexCliRuntime implements AgentRuntime {
 
     const { contextXml } = assembleSpawnContext(spec);
     const allowedTools = computeAllowlist(spec);
-    const model = spec.modelOverride ?? defaultModelForTierAndProvider('sonnet', 'codex');
+    const needsBrowserProcessAccess =
+      spec.toolBundles.includes('validate') && BROWSER_PROCESS_ACCESS_SKILLS.has(spec.skill);
 
     const argv = buildCodexArgv({
       model,
@@ -100,6 +104,8 @@ export class CodexCliRuntime implements AgentRuntime {
       prompt: contextXml,
       systemPrompt: spec.appendSystemPrompt,
       maxTurns: spec.budgets.maxTurns,
+      commandSandbox: needsBrowserProcessAccess ? 'danger-full-access' : undefined,
+      approvalPolicy: needsBrowserProcessAccess ? 'never' : undefined,
     });
 
     return new Promise((resolve, reject) => {

@@ -86,10 +86,16 @@ export const ImplementSchema = z
   })
   .superRefine((val, ctx) => {
     const touchesWeb = val.filesWritten.some((f) => f.path.startsWith('apps/web/'));
-    if (touchesWeb && val.evidenceSpecPath === null) {
+    const hasEvidenceBlockerSummary = val.decisionSummaries.some(
+      (summary) =>
+        (summary.kind === 'TOOL_FAILURE' || summary.kind === 'UNCERTAINTY') &&
+        /\b(e2e|evidence|playwright)\b/i.test(summary.summary),
+    );
+    if (touchesWeb && val.evidenceSpecPath === null && !hasEvidenceBlockerSummary) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'evidenceSpecPath is required when filesWritten includes apps/web/ files',
+        message:
+          'evidenceSpecPath is required when filesWritten includes apps/web/ files unless a TOOL_FAILURE or UNCERTAINTY decision summary explains the e2e/evidence blockage',
         path: ['evidenceSpecPath'],
       });
     }

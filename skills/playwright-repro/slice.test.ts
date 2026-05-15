@@ -1,7 +1,12 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
 import { PlaywrightReproSchema } from './schema.js';
 import config, { PlaywrightReproContextSchema } from './skill.config.js';
+
+const PROMPT = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'prompt.md'), 'utf8');
 
 describe('playwright-repro schema', () => {
   it('accepts valid output with bug reproduced', () => {
@@ -313,5 +318,19 @@ describe('playwright-repro skill config', () => {
   it('contextSchema rejects missing workItem entirely', () => {
     const invalid = PlaywrightReproContextSchema.safeParse({});
     expect(invalid.success).toBe(false);
+  });
+});
+
+describe('playwright-repro prompt discipline', () => {
+  it('uses the Playwright evidence collector', () => {
+    expect(PROMPT).toContain('scripts/collect-playwright-evidence.ts');
+    expect(PROMPT).toContain('--phase before');
+  });
+
+  it('prohibits ad hoc parsing and retry loops', () => {
+    expect(PROMPT).toContain('Do not use inline Python');
+    expect(PROMPT).toContain('No third Playwright run');
+    expect(PROMPT).toContain('No repeated JSON inspection');
+    expect(PROMPT).toContain('REPRO_EXPECTED_BUG');
   });
 });

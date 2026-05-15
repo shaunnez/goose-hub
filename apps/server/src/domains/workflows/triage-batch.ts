@@ -204,9 +204,9 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       projectId,
     );
     const repoMatchRoleModel = resolveRoleModelForProject({
-      role: 'researcher',
+      role: 'triager',
       projectId,
-      configRoleModel: projectConfig?.agentConfig?.rolesModels?.researcher,
+      configRoleModel: projectConfig?.agentConfig?.rolesModels?.triager,
       allowHoldoutOverride: projectConfig?.agentConfig?.allowHoldoutOverride,
       skill: 'repo-match',
     });

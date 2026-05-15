@@ -96,6 +96,9 @@ describe('TOOL_BUNDLES', () => {
     expect(TOOL_BUNDLES.validate).toContain('Read');
     expect(TOOL_BUNDLES.validate).toContain('Write');
     expect(TOOL_BUNDLES.validate).toContain('Bash(pnpm test:e2e*)');
+    expect(TOOL_BUNDLES.validate).toContain(
+      'Bash(pnpm tsx scripts/collect-playwright-evidence.ts*)',
+    );
     expect(TOOL_BUNDLES.validate).toContain('Bash(git push*)');
   });
 
