@@ -74,6 +74,7 @@ export const TEXTURE_KEYS = {
   floorTile: 'office:floor-tile',
   floorTileAlt: 'office:floor-tile-alt',
   floorRoomWarm: 'office:floor-room-warm',
+  corridorWarm: 'office:corridor-warm',
   wallTile: 'office:wall-tile',
   desk: 'office:desk',
   stairs: 'office:stairs',
@@ -103,6 +104,7 @@ const OFFICE_TEXTURE_DISPLAY_SIZES: Record<string, TextureDisplaySize> = {
   [TEXTURE_KEYS.floorTile]: { width: 16, height: 16 },
   [TEXTURE_KEYS.floorTileAlt]: { width: 16, height: 16 },
   [TEXTURE_KEYS.floorRoomWarm]: { width: 32, height: 32 },
+  [TEXTURE_KEYS.corridorWarm]: { width: 64, height: 64 },
   [TEXTURE_KEYS.wallTile]: { width: 16, height: 16 },
   [TEXTURE_KEYS.desk]: { width: 32, height: 24 },
   [TEXTURE_KEYS.stairs]: { width: 32, height: 32 },
@@ -203,6 +205,7 @@ export function ensureOfficeTextures(scene: Phaser.Scene): void {
   generateFloorTile(scene, TEXTURE_KEYS.floorTile, PALETTE.floor);
   generateFloorTile(scene, TEXTURE_KEYS.floorTileAlt, PALETTE.floorAlt);
   generateWarmRoomFloor(scene);
+  generateCorridorTile(scene);
   generateWallTile(scene);
   generateDesk(scene);
   generateStairs(scene);
@@ -232,6 +235,28 @@ function generateFloorTile(scene: Phaser.Scene, key: string, color: number): voi
   g.fillRect(0, 0, 1, 1);
   g.fillRect(15, 15, 1, 1);
   g.generateTexture(key, 16, 16);
+  g.destroy();
+}
+
+/** 64x64 corridor tile — dark navy floor with a yellow dashed centerline
+ * (one dash visible per tile, breaks on the seam to read as a long dash
+ * pattern when tiled). Matches the canonical target image's corridor. */
+function generateCorridorTile(scene: Phaser.Scene): void {
+  const key = TEXTURE_KEYS.corridorWarm;
+  if (scene.textures.exists(key)) return;
+  const baseDark = 0x1f2233;
+  const baseLight = 0x252a3e;
+  const dashYellow = 0xf2cc8f;
+  const g = scene.add.graphics({ x: 0, y: 0 });
+  // Base dark navy with subtle horizontal noise band
+  g.fillStyle(baseDark, 1);
+  g.fillRect(0, 0, 64, 64);
+  g.fillStyle(baseLight, 1);
+  g.fillRect(0, 28, 64, 8);
+  // Yellow dashed centerline: 32px dash centered, 32px gap to next tile
+  g.fillStyle(dashYellow, 1);
+  g.fillRect(16, 30, 32, 4);
+  g.generateTexture(key, 64, 64);
   g.destroy();
 }
 

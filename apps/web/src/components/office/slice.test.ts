@@ -1464,10 +1464,13 @@ describe('Phase 2.5 — visual canon', () => {
 
   // Procedural-only TEXTURE_KEYS that don't have a PNG asset on disk.
   // Generated entirely in textures.ts via ensureOfficeTextures().
-  const PROCEDURAL_ONLY_TEXTURE_KEYS = new Set<string>([TEXTURE_KEYS.floorRoomWarm]);
+  const PROCEDURAL_ONLY_TEXTURE_KEYS = new Set<string>([
+    TEXTURE_KEYS.floorRoomWarm,
+    TEXTURE_KEYS.corridorWarm,
+  ]);
 
-  it('TEXTURE_KEYS has 21 entries (20 PNG-backed + 1 procedural-only)', () => {
-    expect(Object.keys(TEXTURE_KEYS)).toHaveLength(21);
+  it('TEXTURE_KEYS has 22 entries (20 PNG-backed + 2 procedural-only)', () => {
+    expect(Object.keys(TEXTURE_KEYS)).toHaveLength(22);
   });
 
   it('pngManifest covers every PNG-backed TEXTURE_KEYS value', () => {

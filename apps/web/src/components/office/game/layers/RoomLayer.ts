@@ -542,13 +542,14 @@ export class RoomLayer {
     corridor.fillRect(0, corridorY, FLOOR_WORLD.width, corridorH);
     container.add(corridor);
 
-    if (this.scene.textures.exists('office:corridor_tile_02')) {
+    const corridorKey = TEXTURE_KEYS.corridorWarm;
+    if (this.scene.textures.exists(corridorKey)) {
       const corridorTiles = this.scene.add.tileSprite(
         0,
         corridorY,
         FLOOR_WORLD.width,
         corridorH,
-        'office:corridor_tile_02',
+        corridorKey,
       );
       corridorTiles.setOrigin(0, 0);
       container.add(corridorTiles);
@@ -660,7 +661,7 @@ export class RoomLayer {
     overlays.fillRect(review.x1, originY + review.y1, review.x2 - review.x1, review.y2 - review.y1);
 
     // Sealed Library (bottom band) — sealed-green-tinted opaque overlay + outline
-    overlays.fillStyle(PALETTE.wall, 0.55);
+    overlays.fillStyle(PALETTE.wall, 0.3);
     overlays.fillRect(
       LIBRARY_BOUNDS.x1,
       originY + LIBRARY_BOUNDS.y1,
@@ -737,6 +738,8 @@ export class RoomLayer {
       fontFamily: 'JetBrains Mono, monospace',
       fontSize: '8px',
       color: HUD_TINTS.hudCounterText,
+      backgroundColor: '#2B2D42',
+      padding: { left: 4, right: 4, top: 1, bottom: 1 },
     };
     // Top-band labels: positioned just inside the top of each top-band room.
     const topLabelY = originY + TOP_BAND_Y.y1 + 8;
