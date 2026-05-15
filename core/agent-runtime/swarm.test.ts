@@ -603,6 +603,49 @@ describe('swarm.dispatchWave', () => {
     expect(codePathSpec?.modelOverride).toBe('resolved-scout-code-path');
   });
 
+  it('can route child scout spawns through a runtime chosen from each resolved model', async () => {
+    const { fn: appendEvent } = makeFakeAppendEvent();
+    const defaultSpecs: AgentSpec[] = [];
+    const perScoutSpecs: AgentSpec[] = [];
+    const runtime: AgentRuntime = {
+      async run(spec: AgentSpec): Promise<AgentResult> {
+        defaultSpecs.push(spec);
+        return okResult(spec.skill);
+      },
+    };
+    const perScoutRuntime: AgentRuntime = {
+      async run(spec: AgentSpec): Promise<AgentResult> {
+        perScoutSpecs.push(spec);
+        return okResult(spec.skill);
+      },
+    };
+
+    await dispatchWave({
+      parentRunId: 'parent-runtime',
+      scoutSpecs: [makeScoutSpec('scout-schema')],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: () => ({
+        budgets: { maxTurns: 20, maxBudgetUsd: 0.5, timeoutMs: 120_000 },
+        modelOverride: 'gpt-5.4-mini',
+      }),
+      resolveScoutRuntime: (resolvedBudget, scoutName) => {
+        expect(scoutName).toBe('scout-schema');
+        expect(resolvedBudget.modelOverride).toBe('gpt-5.4-mini');
+        return perScoutRuntime;
+      },
+    });
+
+    expect(defaultSpecs).toHaveLength(0);
+    expect(perScoutSpecs).toHaveLength(1);
+    expect(perScoutSpecs[0].modelOverride).toBe('gpt-5.4-mini');
+  });
+
   it('routes each child spawn through assembleSpawnContext (freshContext: true per scout)', async () => {
     const { fn: appendEvent } = makeFakeAppendEvent();
     const seenSpecs: AgentSpec[] = [];

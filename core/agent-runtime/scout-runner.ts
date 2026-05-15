@@ -73,6 +73,7 @@ export interface RunOneScoutContext {
   projectId: string;
   workItemId?: string;
   runtime: AgentRuntime;
+  resolveScoutRuntime?: (resolvedBudget: ResolvedBudget, scoutName: string) => AgentRuntime;
   personaId: string;
   projectBudgets?: ScoutProjectBudgets;
   scoutTimeoutMs?: number;
@@ -163,7 +164,8 @@ export async function runOneScout(
   let errorReason: string | undefined;
 
   try {
-    result = await ctx.runtime.run(spawnSpec);
+    const runtime = ctx.resolveScoutRuntime?.(resolvedBudget, spec.scoutName) ?? ctx.runtime;
+    result = await runtime.run(spawnSpec);
   } catch (err) {
     if (isTimeoutError(err, budgets.timeoutMs)) {
       timedOut = true;

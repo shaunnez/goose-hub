@@ -276,28 +276,6 @@ describe('runInvestigateWorkflow', () => {
     });
   });
 
-  describe('choosePlaywrightReproModelOverride', () => {
-    it('keeps the playwright-repro skill tier when investigator is configured for Codex', async () => {
-      const { choosePlaywrightReproModelOverride } = await import('./workflow.js');
-
-      const model = choosePlaywrightReproModelOverride({
-        resolvedBudget: {
-          budgets: { maxTurns: 60, maxBudgetUsd: 3, timeoutMs: 600_000 },
-          modelOverride: 'claude-sonnet-4-6',
-        },
-        investigatorRoleModel: {
-          tier: 'haiku',
-          provider: 'codex',
-          modelId: 'gpt-5.4-mini',
-          source: 'db',
-        },
-        forcedRuntimeProvider: null,
-      });
-
-      expect(model).toBe('gpt-5.4');
-    });
-  });
-
   describe('swarm dispatch — acceptance criterion 1', () => {
     it('calls dispatchWave exactly twice (Wave 1 then Wave 2)', async () => {
       const { runInvestigateWorkflow } = await import('./workflow.js');

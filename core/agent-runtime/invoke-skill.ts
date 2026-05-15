@@ -115,6 +115,8 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<AgentResult>
     fallbackProvider: skillConfig.provider,
     callerModelOverride: overrides?.modelOverride,
     role,
+    allowHoldoutOverride: projectConfig?.agentConfig?.allowHoldoutOverride,
+    ignoreProviderOverride: overrides?.runtimeOverride != null && overrides?.modelOverride == null,
   });
   const modelOverride = resolved.modelOverride;
 

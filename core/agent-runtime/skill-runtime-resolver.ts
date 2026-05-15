@@ -103,6 +103,18 @@ function resolveTier(input: {
   return { tier: input.fallbackTier ?? 'sonnet', source: 'fallback' };
 }
 
+function withoutConfigModelTier(
+  projectBudgets: Parameters<typeof resolveSkillRuntime>[0]['projectBudgets'],
+): Parameters<typeof resolveSkillRuntime>[0]['projectBudgets'] {
+  if (projectBudgets?.skillBudgetOverrides == null) return projectBudgets;
+  const skillBudgetOverrides: Record<string, SkillBudgetOverride> = {};
+  for (const [skill, override] of Object.entries(projectBudgets.skillBudgetOverrides)) {
+    const { modelTier: _modelTier, ...rest } = override;
+    skillBudgetOverrides[skill] = rest;
+  }
+  return { ...projectBudgets, skillBudgetOverrides };
+}
+
 export function resolveSkillRuntime(input: {
   skill: string;
   projectBudgets?: {
@@ -119,23 +131,36 @@ export function resolveSkillRuntime(input: {
   fallbackProvider?: ModelProvider;
   callerModelOverride?: string;
   role?: string;
+  allowHoldoutOverride?: boolean;
+  ignoreProviderOverride?: boolean;
 }): ResolvedSkillRuntime {
   const configRuntime = input.configRuntime ?? 'auto';
+  const isHoldout = input.role === 'qa' || input.role === 'reviewer';
+  const honourModelOverrides = !isHoldout || input.allowHoldoutOverride === true;
+  const dbOverride = honourModelOverrides
+    ? input.dbOverride
+    : input.dbOverride == null
+      ? input.dbOverride
+      : { ...input.dbOverride, modelTier: null, modelProvider: null };
+  const modelProjectBudgets = honourModelOverrides
+    ? input.projectBudgets
+    : withoutConfigModelTier(input.projectBudgets);
+  const providerConfigRuntime = input.ignoreProviderOverride ? 'auto' : configRuntime;
   let resolvedBudget: ResolvedBudget;
   try {
     resolvedBudget = resolveBudgets(
       input.skill,
       input.projectBudgets,
-      input.dbOverride ?? undefined,
+      dbOverride ?? undefined,
       input.dbPerWorkflowMaxUsd,
       input.dbPerAgentMaxUsd,
     );
   } catch {
     resolvedBudget = fallbackBudget(
       input.fallbackTier ?? 'sonnet',
-      forcedProviderFromRuntime(configRuntime) ??
-        (isModelProvider(input.dbOverride?.modelProvider)
-          ? input.dbOverride.modelProvider
+      forcedProviderFromRuntime(providerConfigRuntime) ??
+        (!input.ignoreProviderOverride && isModelProvider(dbOverride?.modelProvider)
+          ? dbOverride.modelProvider
           : (input.skillProvider ?? input.fallbackProvider ?? 'claude')),
     );
   }
@@ -157,17 +182,16 @@ export function resolveSkillRuntime(input: {
 
   const tierResult = resolveTier({
     skill: input.skill,
-    projectBudgets: input.projectBudgets,
-    dbOverride: input.dbOverride,
+    projectBudgets: modelProjectBudgets,
+    dbOverride,
     fallbackTier: input.fallbackTier,
   });
   const provider =
-    forcedProviderFromRuntime(configRuntime) ??
-    (isModelProvider(input.dbOverride?.modelProvider)
-      ? input.dbOverride.modelProvider
+    forcedProviderFromRuntime(providerConfigRuntime) ??
+    (!input.ignoreProviderOverride && isModelProvider(dbOverride?.modelProvider)
+      ? dbOverride.modelProvider
       : (input.skillProvider ?? input.fallbackProvider ?? 'claude'));
   const modelOverride = defaultModelForTierAndProvider(tierResult.tier, provider);
-  const isHoldout = input.role === 'qa' || input.role === 'reviewer';
   const supportsFallback = SKILL_BUDGETS[input.skill]?.escalation != null;
   const supportsAdvisor = input.skill === 'implement' || input.skill === 'write-prd';
 
@@ -176,7 +200,7 @@ export function resolveSkillRuntime(input: {
     modelOverride,
     tier: tierResult.tier,
     provider,
-    source: isModelProvider(input.dbOverride?.modelProvider) ? 'db' : tierResult.source,
+    source: isModelProvider(dbOverride?.modelProvider) ? 'db' : tierResult.source,
     resolvedPrimary: displayModel(tierResult.tier, provider),
     resolvedFallback:
       !isHoldout && supportsFallback ? displayModel(lowerTier(tierResult.tier), provider) : null,
@@ -199,6 +223,8 @@ export function resolveSkillRuntimeForProject(input: {
   fallbackProvider?: ModelProvider;
   callerModelOverride?: string;
   role?: string;
+  allowHoldoutOverride?: boolean;
+  ignoreProviderOverride?: boolean;
 }): ResolvedSkillRuntime {
   const skillRows = readProjectSkillSettings(input.projectId);
   const globalRow = readProjectSettings(input.projectId);
@@ -216,6 +242,7 @@ export function deriveSkillRuntimeResponse(input: {
   projectBudgets?: BudgetConfig;
   configRuntime?: ConfigRuntime;
   role?: string;
+  allowHoldoutOverride?: boolean;
 }): ResolvedSkillRuntime {
   return resolveSkillRuntime({
     skill: input.skill,
@@ -223,5 +250,6 @@ export function deriveSkillRuntimeResponse(input: {
     dbOverride: input.row,
     configRuntime: input.configRuntime,
     role: input.role,
+    allowHoldoutOverride: input.allowHoldoutOverride,
   });
 }
