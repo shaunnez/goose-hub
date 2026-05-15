@@ -169,15 +169,15 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 - [x] convergence_panel.png
 
 ### Event Feed
-- [ ] event_feed_bg.png
-- [ ] event_feed_row.png
+- [x] event_feed_bg.png
+- [x] event_feed_row.png
 
 ---
 
 ## 07 — Effects / Overlays
 
-- [ ] monitor_glow_overlay.png
-- [ ] room_heat_overlay_low.png
+- [x] monitor_glow_overlay.png
+- [x] room_heat_overlay_low.png
 - [ ] room_heat_overlay_high.png
 - [ ] merge_particle.png
 - [ ] qa_failure_flash.png

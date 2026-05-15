@@ -67,6 +67,12 @@ export function pngManifest(): AssetEntry[] {
     { key: 'office:queue_counter_panel', url: `${ASSET_BASE}/queue_counter_panel.png` },
     { key: 'office:retry_counter_panel', url: `${ASSET_BASE}/retry_counter_panel.png` },
     { key: 'office:convergence_panel', url: `${ASSET_BASE}/convergence_panel.png` },
+    // 06 — HUD / UI / Event Feed
+    { key: 'office:event_feed_bg', url: `${ASSET_BASE}/event_feed_bg.png` },
+    { key: 'office:event_feed_row', url: `${ASSET_BASE}/event_feed_row.png` },
+    // 07 — Effects / Overlays
+    { key: 'office:monitor_glow_overlay', url: `${ASSET_BASE}/monitor_glow_overlay.png` },
+    { key: 'office:room_heat_overlay_low', url: `${ASSET_BASE}/room_heat_overlay_low.png` },
   ];
 }
 
