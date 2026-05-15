@@ -115,11 +115,11 @@ export async function runInvestigateWorkflow(
   const runId = crypto.randomUUID();
   const { personaId } = selectPersona(projectId, 'investigator');
   const projectConfig = await getProjectBySlug(projectId);
+  const settingsProjectId = projectConfig?.id ?? projectId;
   const playwrightReproEnabled = getPlaywrightReproEnabled(
-    projectId,
+    settingsProjectId,
     projectConfig?.playwrightReproEnabled ?? true,
   );
-  const settingsProjectId = projectConfig?.id ?? projectId;
   const globalSettings = resolveGlobalSettingsForProject(settingsProjectId, projectConfig?.budgets);
   const investigationSwarmEnabled = getUseInvestigationSwarm(
     settingsProjectId,

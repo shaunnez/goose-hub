@@ -44,8 +44,9 @@ export interface RunEvidencePostInput {
  */
 export async function runEvidencePost(input: RunEvidencePostInput): Promise<void> {
   const projectConfig = await getProjectBySlug(input.projectId);
+  const settingsProjectId = projectConfig?.id ?? input.projectId;
   const evidencePostEnabled = getEvidencePostEnabled(
-    input.projectId,
+    settingsProjectId,
     projectConfig?.evidencePostEnabled ?? true,
   );
   if (!evidencePostEnabled) {
