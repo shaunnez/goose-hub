@@ -77,6 +77,11 @@ export function pngManifest(): AssetEntry[] {
     { key: 'office:merge_particle', url: `${ASSET_BASE}/merge_particle.png` },
     { key: 'office:qa_failure_flash', url: `${ASSET_BASE}/qa_failure_flash.png` },
     { key: 'office:glow_soft', url: `${ASSET_BASE}/glow_soft.png` },
+    { key: 'office:spotlight_overlay', url: `${ASSET_BASE}/spotlight_overlay.png` },
+    // 08 — Ambient
+    { key: 'office:rain_window_overlay', url: `${ASSET_BASE}/rain_window_overlay.png` },
+    { key: 'office:rain_streak_overlay', url: `${ASSET_BASE}/rain_streak_overlay.png` },
+    { key: 'office:ambient_shadow_soft', url: `${ASSET_BASE}/ambient_shadow_soft.png` },
   ];
 }
 

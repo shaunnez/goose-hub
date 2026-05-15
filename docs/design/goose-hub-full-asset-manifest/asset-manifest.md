@@ -182,15 +182,15 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 - [x] merge_particle.png
 - [x] qa_failure_flash.png
 - [x] glow_soft.png
-- [ ] spotlight_overlay.png
+- [x] spotlight_overlay.png
 
 ---
 
 ## 08 — Ambient
 
-- [ ] rain_window_overlay.png
-- [ ] rain_streak_overlay.png
-- [ ] ambient_shadow_soft.png
+- [x] rain_window_overlay.png
+- [x] rain_streak_overlay.png
+- [x] ambient_shadow_soft.png
 - [ ] lamp_glow_soft.png
 - [ ] lamp_glow_warm.png
 
