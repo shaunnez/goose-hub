@@ -1,4 +1,4 @@
-import type { ModelTier } from '../types.js';
+import type { ModelProvider, ModelTier } from '../types.js';
 import type { AgentBudgets } from './interface.js';
 import { defaultModelForTierAndProvider } from './models.js';
 
@@ -7,6 +7,8 @@ export interface SkillBudget {
   maxBudgetUsd: number;
   timeoutMs: number;
   modelTier: ModelTier;
+  /** Default provider for this skill. Omit for Claude (the default). */
+  provider?: ModelProvider;
   /**
    * Escalation policy for schema-validation failures. When present,
    * `runWithEscalation` may retry once at the escalated tier with the
@@ -194,6 +196,7 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     maxBudgetUsd: 2.0,
     timeoutMs: 180_000,
     modelTier: 'sonnet',
+    provider: 'codex',
   },
   // M19.12 — Developer response to dev-review findings. One revision turn
   // in the integration worktree; sonnet-tier matches dev-review.
@@ -220,6 +223,8 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     timeoutMs: 480_000,
     modelTier: 'opus',
   },
+  // Test / eval harness skill — not used in production workflows.
+  'echo-test': { maxTurns: 5, maxBudgetUsd: 0.1, timeoutMs: 30_000, modelTier: 'sonnet' },
 };
 
 export interface ResolvedBudget {

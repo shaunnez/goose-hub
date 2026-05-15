@@ -97,7 +97,7 @@ router.get('/:slug/settings', async (c) => {
       maxBudgetUsd: budget.maxBudgetUsd,
       timeoutMs: budget.timeoutMs,
       modelTier: budget.modelTier,
-      modelProvider: 'claude',
+      modelProvider: budget.provider ?? 'claude',
     };
   }
 
@@ -120,6 +120,7 @@ router.get('/:slug/settings', async (c) => {
       configRuntime: project.agentConfig.runtime,
       role: roleForSkill(skill),
       allowHoldoutOverride: project.agentConfig.allowHoldoutOverride,
+      skillProvider: SKILL_BUDGETS[skill]?.provider,
     });
     resolvedSkillRuntimes[skill] = {
       source: resolved.source,
