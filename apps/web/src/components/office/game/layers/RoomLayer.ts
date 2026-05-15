@@ -507,18 +507,19 @@ export class RoomLayer {
     bg.fillRect(0, originY, FLOOR_WORLD.width, FLOOR_WORLD.height);
     container.add(bg);
 
-    // Top band floor (room area only — banner + ceiling drawn separately).
-    if (this.scene.textures.exists('office:floor_tile_02')) {
+    // Warm-tone procedural room floor (matches canonical target's office
+    // tone). PixelLab's floor_tile_02 was cool cyan brick — wrong palette.
+    const warmFloorKey = TEXTURE_KEYS.floorRoomWarm;
+    if (this.scene.textures.exists(warmFloorKey)) {
       const topBandH = TOP_BAND_Y.y2 - TOP_BAND_Y.y1 + 1;
       const topTiles = this.scene.add.tileSprite(
         0,
         originY + TOP_BAND_Y.y1,
         FLOOR_WORLD.width,
         topBandH,
-        'office:floor_tile_02',
+        warmFloorKey,
       );
       topTiles.setOrigin(0, 0);
-      topTiles.setTileScale(2, 2);
       container.add(topTiles);
 
       const bottomBandH = BOTTOM_BAND_Y.y2 - BOTTOM_BAND_Y.y1 + 1;
@@ -527,10 +528,9 @@ export class RoomLayer {
         originY + BOTTOM_BAND_Y.y1,
         FLOOR_WORLD.width,
         bottomBandH,
-        'office:floor_tile_02',
+        warmFloorKey,
       );
       bottomTiles.setOrigin(0, 0);
-      bottomTiles.setTileScale(2, 2);
       container.add(bottomTiles);
     }
 
@@ -604,15 +604,14 @@ export class RoomLayer {
     container.add(walls);
   }
 
-  /** Top-band door x-positions, including QA slot gaps. */
+  /** Top-band door x-positions. Slots (qa.input/output, library envelope)
+   * are functional anchors only — they do NOT cut wall gaps. */
   private topBandDoorXs(): number[] {
     const xs: number[] = [];
     for (const id of TOP_BAND_ROOMS) {
       const door = roomDoor(id);
       if (door) xs.push(door.x);
     }
-    // QA input/output slots (corridor-facing on top band south wall)
-    xs.push(312, 424);
     return xs.sort((a, b) => a - b);
   }
 

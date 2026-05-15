@@ -87,13 +87,16 @@ export const BOTTOM_BAND_Y = { y1: 352, y2: 527 } as const;
 // ─── Room pixel bounds (interior, walls excluded) ─────────────────────────────
 
 const ROOM_BOUNDS: Record<RoomId, PixelRect> = {
-  // Top band — 6 rooms, widths sum to 1168 + 5 inter-walls (80) + 2 outer (32) = 1280
-  dev: { x1: 16, y1: TOP_BAND_Y.y1, x2: 255, y2: TOP_BAND_Y.y2 },
-  qa: { x1: 272, y1: TOP_BAND_Y.y1, x2: 463, y2: TOP_BAND_Y.y2 },
-  review: { x1: 480, y1: TOP_BAND_Y.y1, x2: 671, y2: TOP_BAND_Y.y2 },
-  retro: { x1: 688, y1: TOP_BAND_Y.y1, x2: 863, y2: TOP_BAND_Y.y2 },
-  done: { x1: 880, y1: TOP_BAND_Y.y1, x2: 1055, y2: TOP_BAND_Y.y2 },
-  archive: { x1: 1072, y1: TOP_BAND_Y.y1, x2: 1263, y2: TOP_BAND_Y.y2 },
+  // Top band — 6 rooms. DEV is the widest (most-active room); DONE/ARCHIVE
+  // are narrow shelf rooms. Widths: 304 + 224 + 224 + 192 + 112 + 128 = 1184.
+  // Inter-walls: 5 × 16 = 80. Outer walls: 16 left + 0 right (archive ends
+  // flush). Sum: 1184 + 80 + 16 = 1280.
+  dev: { x1: 16, y1: TOP_BAND_Y.y1, x2: 319, y2: TOP_BAND_Y.y2 }, // 304 wide
+  qa: { x1: 336, y1: TOP_BAND_Y.y1, x2: 559, y2: TOP_BAND_Y.y2 }, // 224 wide
+  review: { x1: 576, y1: TOP_BAND_Y.y1, x2: 799, y2: TOP_BAND_Y.y2 }, // 224 wide
+  retro: { x1: 816, y1: TOP_BAND_Y.y1, x2: 1007, y2: TOP_BAND_Y.y2 }, // 192 wide
+  done: { x1: 1024, y1: TOP_BAND_Y.y1, x2: 1135, y2: TOP_BAND_Y.y2 }, // 112 wide (small shelf room)
+  archive: { x1: 1152, y1: TOP_BAND_Y.y1, x2: 1279, y2: TOP_BAND_Y.y2 }, // 128 wide
   // Bottom band — 5 rooms, widths sum to 1184 + 4 inter-walls (64) + 2 outer (32) = 1280
   backlog: { x1: 16, y1: BOTTOM_BAND_Y.y1, x2: 271, y2: BOTTOM_BAND_Y.y2 },
   triage: { x1: 288, y1: BOTTOM_BAND_Y.y1, x2: 511, y2: BOTTOM_BAND_Y.y2 },
@@ -118,12 +121,12 @@ const TOP_DOOR_Y = TOP_BAND_Y.y2 + 1; // y=256: south wall row
 const BOTTOM_DOOR_Y = BOTTOM_BAND_Y.y1 - 16; // y=336: north wall row
 
 const ROOM_DOORS: Partial<Record<RoomId, Point>> = {
-  dev: { x: 136, y: TOP_DOOR_Y },
-  qa: { x: 368, y: TOP_DOOR_Y },
-  review: { x: 576, y: TOP_DOOR_Y },
-  retro: { x: 776, y: TOP_DOOR_Y },
-  done: { x: 968, y: TOP_DOOR_Y },
-  archive: { x: 1168, y: TOP_DOOR_Y },
+  dev: { x: 168, y: TOP_DOOR_Y },
+  qa: { x: 448, y: TOP_DOOR_Y },
+  review: { x: 688, y: TOP_DOOR_Y },
+  retro: { x: 912, y: TOP_DOOR_Y },
+  done: { x: 1080, y: TOP_DOOR_Y },
+  archive: { x: 1216, y: TOP_DOOR_Y },
   backlog: { x: 144, y: BOTTOM_DOOR_Y },
   triage: { x: 400, y: BOTTOM_DOOR_Y },
   investigation: { x: 656, y: BOTTOM_DOOR_Y },
@@ -137,42 +140,43 @@ export function roomDoor(id: RoomId): Point | null {
 
 // ─── Desk / station / shelf anchors ──────────────────────────────────────────
 
-// Top band rooms have desks in the top half of the band; bottom band rooms
-// in the upper half of THEIR band. All anchors are world-y (origin floor).
-const TOP_DESK_Y = TOP_BAND_Y.y1 + 96; // y=176 — about middle of top band interior
-const BOTTOM_DESK_Y = BOTTOM_BAND_Y.y1 + 96; // y=448 — about middle of bottom band interior
+// Desk Y — place desks ~3/4 down each band so geese have headroom and
+// don't appear glued to the ceiling. Top band interior is y=80..255 (176
+// tall); placing desks at y=208 puts the goose body around y=192 with feet
+// on the desk at y=208.
+const TOP_DESK_Y = TOP_BAND_Y.y1 + 128; // y=208
+const BOTTOM_DESK_Y = BOTTOM_BAND_Y.y1 + 128; // y=480
 
 const ROOM_DESK_ANCHORS: Record<RoomId, Point[]> = {
   // Top band
   dev: [
-    { x: 64, y: TOP_DESK_Y },
-    { x: 136, y: TOP_DESK_Y },
-    { x: 208, y: TOP_DESK_Y },
+    { x: 80, y: TOP_DESK_Y },
+    { x: 168, y: TOP_DESK_Y },
+    { x: 256, y: TOP_DESK_Y },
   ],
   qa: [
-    { x: 312, y: TOP_DESK_Y },
-    { x: 368, y: TOP_DESK_Y },
-    { x: 424, y: TOP_DESK_Y },
+    { x: 384, y: TOP_DESK_Y },
+    { x: 448, y: TOP_DESK_Y },
+    { x: 512, y: TOP_DESK_Y },
   ],
   review: [
-    { x: 528, y: TOP_DESK_Y },
     { x: 624, y: TOP_DESK_Y },
+    { x: 752, y: TOP_DESK_Y },
   ],
   retro: [
-    { x: 720, y: TOP_DESK_Y },
-    { x: 776, y: TOP_DESK_Y },
-    { x: 832, y: TOP_DESK_Y },
+    { x: 856, y: TOP_DESK_Y },
+    { x: 912, y: TOP_DESK_Y },
+    { x: 968, y: TOP_DESK_Y },
   ],
   done: [
-    { x: 904, y: TOP_DESK_Y },
-    { x: 944, y: TOP_DESK_Y },
-    { x: 984, y: TOP_DESK_Y },
-    { x: 1024, y: TOP_DESK_Y },
+    { x: 1040, y: TOP_DESK_Y },
+    { x: 1080, y: TOP_DESK_Y },
+    { x: 1120, y: TOP_DESK_Y },
   ],
   archive: [
-    { x: 1104, y: TOP_DESK_Y },
     { x: 1168, y: TOP_DESK_Y },
-    { x: 1232, y: TOP_DESK_Y },
+    { x: 1216, y: TOP_DESK_Y },
+    { x: 1264, y: TOP_DESK_Y },
   ],
   // Bottom band
   backlog: [
@@ -221,25 +225,27 @@ const LIBRARY_SLOTS: SlotSpec[] = [
   },
 ];
 
+// QA slots are functional anchors (ticket conveyor in/out) — they do NOT
+// create wall door gaps. QA's south wall has only its main door.
 const QA_SLOTS: SlotSpec[] = [
   {
     id: 'qa.input',
     side: 'south',
-    tileRange: [19, 20],
+    tileRange: [24, 25],
     direction: 'inbound',
-    queueAnchor: { x: 312, y: CORRIDOR_WALK_Y },
-    exteriorAnchor: { x: 312, y: TOP_BAND_Y.y2 + 8 },
-    interiorAnchor: { x: 312, y: TOP_BAND_Y.y2 - 32 },
+    queueAnchor: { x: 384, y: CORRIDOR_WALK_Y },
+    exteriorAnchor: { x: 384, y: TOP_BAND_Y.y2 + 8 },
+    interiorAnchor: { x: 384, y: TOP_BAND_Y.y2 - 32 },
     tint: 'frosted',
   },
   {
     id: 'qa.output',
     side: 'south',
-    tileRange: [27, 28],
+    tileRange: [32, 33],
     direction: 'outbound',
-    queueAnchor: { x: 424, y: CORRIDOR_WALK_Y },
-    exteriorAnchor: { x: 424, y: TOP_BAND_Y.y2 + 8 },
-    interiorAnchor: { x: 424, y: TOP_BAND_Y.y2 - 32 },
+    queueAnchor: { x: 512, y: CORRIDOR_WALK_Y },
+    exteriorAnchor: { x: 512, y: TOP_BAND_Y.y2 + 8 },
+    interiorAnchor: { x: 512, y: TOP_BAND_Y.y2 - 32 },
     tint: 'frosted',
   },
 ];
@@ -348,12 +354,12 @@ export function allClickZones(): ClickZone[] {
 const CAMERA_ANCHORS: Record<string, CameraAnchor> = {
   'floor-overview': { center: { x: 640, y: 272 }, zoom: 1.0 },
   'hero-ticket-follow': { center: { x: 640, y: 272 }, zoom: 1.0 },
-  'room-dev': { center: { x: 136, y: TOP_DESK_Y }, zoom: 1.0 },
-  'room-qa': { center: { x: 368, y: TOP_DESK_Y }, zoom: 1.0 },
-  'room-review': { center: { x: 576, y: TOP_DESK_Y }, zoom: 1.0 },
-  'room-retro': { center: { x: 776, y: TOP_DESK_Y }, zoom: 1.0 },
-  'room-done': { center: { x: 968, y: TOP_DESK_Y }, zoom: 1.0 },
-  'room-archive': { center: { x: 1168, y: TOP_DESK_Y }, zoom: 1.0 },
+  'room-dev': { center: { x: 168, y: TOP_DESK_Y }, zoom: 1.0 },
+  'room-qa': { center: { x: 448, y: TOP_DESK_Y }, zoom: 1.0 },
+  'room-review': { center: { x: 688, y: TOP_DESK_Y }, zoom: 1.0 },
+  'room-retro': { center: { x: 912, y: TOP_DESK_Y }, zoom: 1.0 },
+  'room-done': { center: { x: 1080, y: TOP_DESK_Y }, zoom: 1.0 },
+  'room-archive': { center: { x: 1216, y: TOP_DESK_Y }, zoom: 1.0 },
   'room-backlog': { center: { x: 144, y: BOTTOM_DESK_Y }, zoom: 1.0 },
   'room-triage': { center: { x: 400, y: BOTTOM_DESK_Y }, zoom: 1.0 },
   'room-investigation': { center: { x: 656, y: BOTTOM_DESK_Y }, zoom: 1.0 },
@@ -379,7 +385,7 @@ export const LIBRARY_RESERVED_SCOUT_ANCHORS: Point[] = [
 // ─── Inter-room wall column x-positions (px = tx * TILE_SIZE) ────────────────
 
 // Top band: 5 inter-room walls between 6 rooms.
-export const TOP_INTER_ROOM_WALL_X = [256, 464, 672, 864, 1056] as const;
+export const TOP_INTER_ROOM_WALL_X = [320, 560, 800, 1008, 1136] as const;
 // Bottom band: 4 inter-room walls between 5 rooms.
 export const BOTTOM_INTER_ROOM_WALL_X = [272, 512, 784, 992] as const;
 // Combined for backwards compat with code that doesn't distinguish bands.

@@ -1179,7 +1179,7 @@ describe('rooms.ts — v2 two-band canonical floor geometry', () => {
   });
 
   it('done room has shelf slot anchors', () => {
-    expect(roomDeskAnchors('done').length).toBeGreaterThanOrEqual(4);
+    expect(roomDeskAnchors('done').length).toBeGreaterThanOrEqual(3);
   });
 
   it('investigation room has desk anchors', () => {
@@ -1462,25 +1462,28 @@ describe('Phase 2.5 — visual canon', () => {
     expect(Object.keys(HUD_TINTS)).toHaveLength(8);
   });
 
-  it('TEXTURE_KEYS has exactly 20 entries', () => {
-    expect(Object.keys(TEXTURE_KEYS)).toHaveLength(20);
+  // Procedural-only TEXTURE_KEYS that don't have a PNG asset on disk.
+  // Generated entirely in textures.ts via ensureOfficeTextures().
+  const PROCEDURAL_ONLY_TEXTURE_KEYS = new Set<string>([TEXTURE_KEYS.floorRoomWarm]);
+
+  it('TEXTURE_KEYS has 21 entries (20 PNG-backed + 1 procedural-only)', () => {
+    expect(Object.keys(TEXTURE_KEYS)).toHaveLength(21);
   });
 
-  it('pngManifest covers every TEXTURE_KEYS value', () => {
-    // Loop-generated assets (from docs/design/goose-hub-full-asset-manifest)
-    // append additional `office:<filename>` keys directly to pngManifest()
-    // without going through TEXTURE_KEYS — they don't yet have scene
-    // composition. So this is a superset check, not equality.
+  it('pngManifest covers every PNG-backed TEXTURE_KEYS value', () => {
     const manifestKeys = new Set(pngManifest().map((e) => e.key));
     for (const v of Object.values(TEXTURE_KEYS)) {
+      if (PROCEDURAL_ONLY_TEXTURE_KEYS.has(v)) continue;
       expect(manifestKeys.has(v), `pngManifest is missing TEXTURE_KEYS value "${v}"`).toBe(true);
     }
   });
 
-  it('MANIFEST has 20 entries matching TEXTURE_KEYS count', async () => {
+  it('MANIFEST has 20 entries matching PNG-backed TEXTURE_KEYS count', async () => {
     const { MANIFEST } = await import('../../../../../scripts/generate-office-assets');
     expect(MANIFEST).toHaveLength(20);
-    expect(MANIFEST.length).toBe(Object.keys(TEXTURE_KEYS).length);
+    expect(MANIFEST.length).toBe(
+      Object.values(TEXTURE_KEYS).filter((k) => !PROCEDURAL_ONLY_TEXTURE_KEYS.has(k)).length,
+    );
   });
 
   it('every MANIFEST prompt contains at least one Board 06 hex code', async () => {

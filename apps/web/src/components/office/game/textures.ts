@@ -73,6 +73,7 @@ export const HUD_TINTS = {
 export const TEXTURE_KEYS = {
   floorTile: 'office:floor-tile',
   floorTileAlt: 'office:floor-tile-alt',
+  floorRoomWarm: 'office:floor-room-warm',
   wallTile: 'office:wall-tile',
   desk: 'office:desk',
   stairs: 'office:stairs',
@@ -101,6 +102,7 @@ interface TextureDisplaySize {
 const OFFICE_TEXTURE_DISPLAY_SIZES: Record<string, TextureDisplaySize> = {
   [TEXTURE_KEYS.floorTile]: { width: 16, height: 16 },
   [TEXTURE_KEYS.floorTileAlt]: { width: 16, height: 16 },
+  [TEXTURE_KEYS.floorRoomWarm]: { width: 32, height: 32 },
   [TEXTURE_KEYS.wallTile]: { width: 16, height: 16 },
   [TEXTURE_KEYS.desk]: { width: 32, height: 24 },
   [TEXTURE_KEYS.stairs]: { width: 32, height: 32 },
@@ -200,6 +202,7 @@ export function isGooseTextureKey(key: string): boolean {
 export function ensureOfficeTextures(scene: Phaser.Scene): void {
   generateFloorTile(scene, TEXTURE_KEYS.floorTile, PALETTE.floor);
   generateFloorTile(scene, TEXTURE_KEYS.floorTileAlt, PALETTE.floorAlt);
+  generateWarmRoomFloor(scene);
   generateWallTile(scene);
   generateDesk(scene);
   generateStairs(scene);
@@ -229,6 +232,37 @@ function generateFloorTile(scene: Phaser.Scene, key: string, color: number): voi
   g.fillRect(0, 0, 1, 1);
   g.fillRect(15, 15, 1, 1);
   g.generateTexture(key, 16, 16);
+  g.destroy();
+}
+
+/** 32x32 warm-tone tileable room floor — light tan parquet pattern that
+ * matches the canonical target image's office floor better than the cool
+ * cyan brick PixelLab tile. Procedural so we don't depend on regeneration. */
+function generateWarmRoomFloor(scene: Phaser.Scene): void {
+  const key = TEXTURE_KEYS.floorRoomWarm;
+  if (scene.textures.exists(key)) return;
+  const base = 0x8a6b4f; // warm tan
+  const lighter = 0x9a7c5e;
+  const darker = 0x6f5340;
+  const accent = 0x3a2d22;
+  const g = scene.add.graphics({ x: 0, y: 0 });
+  g.fillStyle(base, 1);
+  g.fillRect(0, 0, 32, 32);
+  // Two 16x16 plank cells with offset grain — gives a subtle parquet feel
+  g.fillStyle(lighter, 1);
+  g.fillRect(0, 0, 16, 16);
+  g.fillRect(16, 16, 16, 16);
+  g.fillStyle(darker, 1);
+  g.fillRect(16, 0, 16, 16);
+  g.fillRect(0, 16, 16, 16);
+  // Subtle plank seams (1px lines) — accent colour keeps the texture readable
+  // without dominating the visual.
+  g.fillStyle(accent, 0.4);
+  g.fillRect(0, 15, 32, 1);
+  g.fillRect(0, 31, 32, 1);
+  g.fillRect(15, 0, 1, 32);
+  g.fillRect(31, 0, 1, 32);
+  g.generateTexture(key, 32, 32);
   g.destroy();
 }
 
