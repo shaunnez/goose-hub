@@ -91,6 +91,8 @@ export function pngManifest(): AssetEntry[] {
     { key: 'office:room_label_dev', url: `${ASSET_BASE}/room_label_dev.png` },
     { key: 'office:room_label_qa', url: `${ASSET_BASE}/room_label_qa.png` },
     { key: 'office:room_label_review', url: `${ASSET_BASE}/room_label_review.png` },
+    { key: 'office:room_label_done', url: `${ASSET_BASE}/room_label_done.png` },
+    { key: 'office:room_label_archive', url: `${ASSET_BASE}/room_label_archive.png` },
   ];
 }
 

@@ -204,8 +204,8 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 - [x] room_label_dev.png
 - [x] room_label_qa.png
 - [x] room_label_review.png
-- [ ] room_label_done.png
-- [ ] room_label_archive.png
+- [x] room_label_done.png
+- [x] room_label_archive.png
 
 ---
 
