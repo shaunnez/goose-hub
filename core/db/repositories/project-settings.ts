@@ -24,6 +24,8 @@ export type SkillBudgetPatch = {
   maxTurns?: number | null;
   maxBudgetUsd?: number | null;
   timeoutMs?: number | null;
+  modelTier?: string | null;
+  modelProvider?: string | null;
 };
 
 export function readProjectSettings(projectId: string): ProjectSettingsRow | null {

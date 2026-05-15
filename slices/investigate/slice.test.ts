@@ -233,89 +233,46 @@ beforeEach(() => {
 
 describe('runInvestigateWorkflow', () => {
   describe('chooseScoutModelOverride', () => {
-    it('hard-pins scout child agents to haiku even when investigator has a DB role override', async () => {
+    it('uses the per-skill scout model instead of investigator role rows', async () => {
       const { chooseScoutModelOverride } = await import('./workflow.js');
 
       const model = chooseScoutModelOverride({
-        skill: 'scout-schema',
         resolvedBudget: {
           budgets: { maxTurns: 20, maxBudgetUsd: 0.5, timeoutMs: 120_000 },
           modelOverride: 'claude-haiku-4-5-20251001',
         },
-        investigatorRoleModel: {
-          tier: 'sonnet',
-          provider: 'codex',
-          modelId: 'gpt-5.4',
-          source: 'db',
-        },
         forcedRuntimeProvider: null,
       });
 
-      expect(model).toBe('gpt-5.4-mini');
+      expect(model).toBe('claude-haiku-4-5-20251001');
     });
 
-    it('hard-pins wave2 child agents to haiku for the temporary scout rule', async () => {
+    it('uses the per-skill wave2 default instead of investigator role rows', async () => {
       const { chooseScoutModelOverride } = await import('./workflow.js');
 
       const model = chooseScoutModelOverride({
-        skill: 'wave2-risk-analyst',
         resolvedBudget: {
           budgets: { maxTurns: 30, maxBudgetUsd: 1.0, timeoutMs: 240_000 },
           modelOverride: 'claude-sonnet-4-6',
         },
-        investigatorRoleModel: {
-          tier: 'sonnet',
-          provider: 'codex',
-          modelId: 'gpt-5.4',
-          source: 'db',
-        },
         forcedRuntimeProvider: null,
       });
 
-      expect(model).toBe('gpt-5.4-mini');
+      expect(model).toBe('claude-sonnet-4-6');
     });
 
     it('coerces per-skill budget tier to a forced Codex runtime when no role override exists', async () => {
       const { chooseScoutModelOverride } = await import('./workflow.js');
 
       const model = chooseScoutModelOverride({
-        skill: 'playwright-repro',
         resolvedBudget: {
           budgets: { maxTurns: 20, maxBudgetUsd: 0.5, timeoutMs: 120_000 },
           modelOverride: 'claude-haiku-4-5-20251001',
-        },
-        investigatorRoleModel: {
-          tier: 'opus',
-          provider: 'claude',
-          modelId: 'claude-opus-4-7',
-          source: 'skill',
         },
         forcedRuntimeProvider: 'codex',
       });
 
       expect(model).toBe('gpt-5.4-mini');
-    });
-  });
-
-  describe('choosePlaywrightReproModelOverride', () => {
-    it('keeps the playwright-repro skill tier when investigator is configured for Codex', async () => {
-      const { choosePlaywrightReproModelOverride } = await import('./workflow.js');
-
-      const model = choosePlaywrightReproModelOverride({
-        resolvedBudget: {
-          budgets: { maxTurns: 60, maxBudgetUsd: 3, timeoutMs: 600_000 },
-          modelOverride: 'claude-sonnet-4-6',
-        },
-        investigatorRoleModel: {
-          tier: 'haiku',
-          provider: 'codex',
-          modelId: 'gpt-5.4-mini',
-          source: 'db',
-        },
-        forcedRuntimeProvider: null,
-      });
-
-      expect(model).toBe('gpt-5.4');
     });
   });
 

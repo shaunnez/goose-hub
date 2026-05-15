@@ -233,6 +233,8 @@ export interface DbSkillOverride {
   maxTurns?: number | null;
   maxBudgetUsd?: number | null;
   timeoutMs?: number | null;
+  modelTier?: ModelTier | string | null;
+  modelProvider?: string | null;
 }
 
 /**

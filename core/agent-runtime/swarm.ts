@@ -69,6 +69,11 @@ export interface DispatchWaveOptions {
   heartbeatIntervalMs?: number;
   /** Runtime — production: ClaudeCliRuntime; tests: stub. */
   runtime: AgentRuntime;
+  /** Optional runtime resolver for per-skill scout providers. */
+  resolveScoutRuntime?: (
+    resolvedBudget: ReturnType<ScoutBudgetResolver>,
+    scoutName: string,
+  ) => AgentRuntime;
   /** Persona attribution for scouts; reuses parent persona by convention. */
   personaId: string;
   /** Optional override (tests). Defaults to the real event store. */

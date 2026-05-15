@@ -1,4 +1,5 @@
 import { SKILL_BUDGETS } from '@goose-hub/core/agent-runtime/budgets.js';
+import { deriveSkillRuntimeResponse } from '@goose-hub/core/agent-runtime/skill-runtime-resolver.js';
 import {
   deleteProjectSkillSetting,
   readProjectSettings,
@@ -29,7 +30,19 @@ const SkillBudgetPatchSchema = z.object({
   maxTurns: z.number().int().min(1).max(500).nullable().optional(),
   maxBudgetUsd: z.number().min(0).max(100).nullable().optional(),
   timeoutMs: z.number().int().min(5_000).max(3_600_000).nullable().optional(),
+  modelTier: z.enum(['haiku', 'sonnet', 'opus']).nullable().optional(),
+  provider: z.enum(['claude', 'codex']).nullable().optional(),
 });
+
+function roleForSkill(skill: string): string | undefined {
+  if (skill === 'qa') return 'qa';
+  if (skill === 'review') return 'reviewer';
+  if (skill === 'implement' || skill === 'implement-wp') return 'developer';
+  if (skill === 'investigate' || skill === 'playwright-repro') return 'investigator';
+  if (skill.startsWith('scout-') || skill.startsWith('wave2-')) return 'investigator';
+  if (skill === 'repo-match' || skill === 'triage' || skill === 'bug-enhance') return 'triager';
+  return undefined;
+}
 
 /** GET /projects/:slug/settings — merged view of config + DB overrides */
 router.get('/:slug/settings', async (c) => {
@@ -46,6 +59,8 @@ router.get('/:slug/settings', async (c) => {
       maxTurns: number | null;
       maxBudgetUsd: number | null;
       timeoutMs: number | null;
+      modelTier: string | null;
+      provider: string | null;
       updatedAt: string | null;
     }
   > = {};
@@ -54,6 +69,8 @@ router.get('/:slug/settings', async (c) => {
       maxTurns: row.maxTurns ?? null,
       maxBudgetUsd: row.maxBudgetUsd ?? null,
       timeoutMs: row.timeoutMs ?? null,
+      modelTier: row.modelTier ?? null,
+      provider: row.modelProvider ?? null,
       updatedAt: row.updatedAt,
     };
   }
@@ -63,13 +80,51 @@ router.get('/:slug/settings', async (c) => {
   // "default" as placeholder text.
   const skillDefaults: Record<
     string,
-    { maxTurns: number; maxBudgetUsd: number; timeoutMs: number }
+    {
+      maxTurns: number;
+      maxBudgetUsd: number;
+      timeoutMs: number;
+      modelTier: string;
+      modelProvider: string;
+    }
   > = {};
   for (const [skill, budget] of Object.entries(SKILL_BUDGETS)) {
     skillDefaults[skill] = {
       maxTurns: budget.maxTurns,
       maxBudgetUsd: budget.maxBudgetUsd,
       timeoutMs: budget.timeoutMs,
+      modelTier: budget.modelTier,
+      modelProvider: 'claude',
+    };
+  }
+
+  const resolvedSkillRuntimes: Record<
+    string,
+    {
+      source: string;
+      effectiveTier: string;
+      effectiveProvider: string;
+      resolvedPrimary: unknown;
+      resolvedFallback: unknown;
+      resolvedAdvisor: unknown;
+    }
+  > = {};
+  for (const skill of Object.keys(SKILL_BUDGETS)) {
+    const resolved = deriveSkillRuntimeResponse({
+      skill,
+      row: skillRows.get(skill),
+      projectBudgets: project.budgets,
+      configRuntime: project.agentConfig.runtime,
+      role: roleForSkill(skill),
+      allowHoldoutOverride: project.agentConfig.allowHoldoutOverride,
+    });
+    resolvedSkillRuntimes[skill] = {
+      source: resolved.source,
+      effectiveTier: resolved.tier,
+      effectiveProvider: resolved.provider,
+      resolvedPrimary: resolved.resolvedPrimary,
+      resolvedFallback: resolved.resolvedFallback,
+      resolvedAdvisor: resolved.resolvedAdvisor,
     };
   }
 
@@ -106,6 +161,7 @@ router.get('/:slug/settings', async (c) => {
     dbSkillOverrides: skillSettings,
     registeredSkills: Object.keys(SKILL_BUDGETS),
     skillDefaults,
+    resolvedSkillRuntimes,
   });
 });
 
@@ -157,7 +213,13 @@ router.patch('/:slug/settings/skills/:skill', async (c) => {
     return c.json({ error: 'invalid body', details: parsed.error.issues }, 422);
   }
 
-  writeProjectSkillSetting(project.id, skill, parsed.data, 'ui');
+  const { provider, ...patch } = parsed.data;
+  writeProjectSkillSetting(
+    project.id,
+    skill,
+    { ...patch, ...(provider !== undefined ? { modelProvider: provider } : {}) },
+    'ui',
+  );
   return c.json({ ok: true });
 });
 

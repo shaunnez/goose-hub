@@ -190,6 +190,13 @@
       "when": 1778737181566,
       "tag": "0026_furry_umar",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1778817600000,
+      "tag": "0027_project_skill_settings_model",
+      "breakpoints": true
     }
   ]
 }
