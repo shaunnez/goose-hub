@@ -47,7 +47,11 @@ export function pngManifest(): AssetEntry[] {
     { key: 'office:floor_tile_02', url: `${ASSET_BASE}/floor_tile_02.png` },
     { key: 'office:corridor_tile_01', url: `${ASSET_BASE}/corridor_tile_01.png` },
     { key: 'office:corridor_tile_02', url: `${ASSET_BASE}/corridor_tile_02.png` },
+    { key: 'office:floor_shadow_edge', url: `${ASSET_BASE}/floor_shadow_edge.png` },
+    { key: 'office:carpet_trim_horizontal', url: `${ASSET_BASE}/carpet_trim_horizontal.png` },
+    { key: 'office:carpet_trim_vertical', url: `${ASSET_BASE}/carpet_trim_vertical.png` },
     // 01 — Core Tiles / Walls
+    { key: 'office:wall_dark_01', url: `${ASSET_BASE}/wall_dark_01.png` },
     { key: 'office:wall_dark_02', url: `${ASSET_BASE}/wall_dark_02.png` },
     { key: 'office:wall_corner_inner', url: `${ASSET_BASE}/wall_corner_inner.png` },
     { key: 'office:wall_corner_outer', url: `${ASSET_BASE}/wall_corner_outer.png` },
