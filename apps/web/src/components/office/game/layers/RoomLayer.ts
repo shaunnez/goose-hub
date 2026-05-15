@@ -503,6 +503,7 @@ export class RoomLayer {
     this.drawBanner(container, originY, project, floorIndex);
     this.drawRoomLabels(container, originY);
     this.drawDesks(container, originY, floorIndex);
+    this.drawRoomLamps(container, originY);
     this.registerClickZones(container, originY, floorIndex);
   }
 
@@ -761,6 +762,28 @@ export class RoomLayer {
       const t = this.scene.add.text(x, y, text, style);
       t.setOrigin(0.5, 0);
       container.add(t);
+    }
+  }
+
+  /** Pendant lamp(s) hung from each room's ceiling. Wide rooms get
+   * multiple lamps so the glow distribution looks even. */
+  private drawRoomLamps(container: Phaser.GameObjects.Container, originY: number): void {
+    const lampKey = 'office:lamp_glow_warm';
+    if (!this.scene.textures.exists(lampKey)) return;
+    for (const id of ROOM_IDS) {
+      const b = roomBounds(id);
+      const width = b.x2 - b.x1;
+      // One lamp per ~96 px of room width, min 1 max 3
+      const count = Math.max(1, Math.min(3, Math.round(width / 96)));
+      const lampY = b.y1 + 12;
+      for (let i = 0; i < count; i++) {
+        const t = (i + 1) / (count + 1); // 0.25/0.5/0.75 spacing
+        const x = b.x1 + width * t;
+        const lamp = this.scene.add.image(x, originY + lampY, lampKey);
+        lamp.setOrigin(0.5, 0);
+        applyOfficeTextureDisplaySize(lamp, lampKey);
+        container.add(lamp);
+      }
     }
   }
 

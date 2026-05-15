@@ -118,6 +118,9 @@ const OFFICE_TEXTURE_DISPLAY_SIZES: Record<string, TextureDisplaySize> = {
   'office:desk_investigation': { width: 32, height: 24 },
   'office:library_terminal': { width: 32, height: 24 },
   'office:coffee_machine': { width: 32, height: 24 },
+  // Ambient — pendant lamps
+  'office:lamp_glow_warm': { width: 24, height: 24 },
+  'office:lamp_glow_soft': { width: 24, height: 24 },
   [TEXTURE_KEYS.stairs]: { width: 32, height: 32 },
   [TEXTURE_KEYS.indicatorSpeech]: { width: 14, height: 16 },
   [TEXTURE_KEYS.indicatorThought]: { width: 14, height: 16 },
