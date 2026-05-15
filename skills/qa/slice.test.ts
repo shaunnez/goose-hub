@@ -549,8 +549,8 @@ describe('qa skill config', () => {
     expect(config.freshContext).toBe(true);
   });
 
-  it('has shell toolBundle for running commands', () => {
-    expect(config.toolBundles).toContain('shell');
+  it('uses the read + qa-tools bundles', () => {
+    expect(config.toolBundles).toEqual(['read', 'qa-tools']);
   });
 
   it('contextAllowlist contains workItem', () => {

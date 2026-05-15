@@ -19,6 +19,7 @@ import { z } from 'zod';
  *     </stack>
  *     <advisor_feedback>...</advisor_feedback>             <!-- optional, when revising -->
  *     <revision_pass>0 | 1</revision_pass>                 <!-- optional, default 0 -->
+ *     <evidence_post_enabled>true | false</evidence_post_enabled>
  *   </task>
  */
 export const ImplementContextSchema = z.object({
@@ -36,6 +37,7 @@ export const ImplementContextSchema = z.object({
   }),
   advisorFeedback: z.string().optional(),
   revisionPass: z.union([z.literal(0), z.literal(1)]).optional(),
+  evidencePostEnabled: z.boolean().optional(),
 });
 
 const config: SkillConfig = {
@@ -51,6 +53,7 @@ const config: SkillConfig = {
     'stack.typecheckCommand',
     'advisorFeedback',
     'revisionPass',
+    'evidencePostEnabled',
   ],
   /**
    * `dev-tools` bundle — read, search, work-item-read, write, bash, test

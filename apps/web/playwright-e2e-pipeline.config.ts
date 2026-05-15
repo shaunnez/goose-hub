@@ -5,7 +5,7 @@ import { config } from 'dotenv';
 config({ path: resolve(import.meta.dirname, '../../.env') });
 
 const PORT = Number(process.env.WEB_PORT ?? 5299);
-const MOCK_SERVER_PORT = 3099;
+const MOCK_SERVER_PORT = Number(process.env.MOCK_SERVER_PORT ?? 3099);
 
 // Tell test workers where to reach the mock server directly
 process.env.SERVER_URL = `http://localhost:${MOCK_SERVER_PORT}`;

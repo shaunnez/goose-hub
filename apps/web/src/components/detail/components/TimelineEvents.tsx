@@ -28,6 +28,7 @@ import {
   EvidenceNoSpecEvent,
   EvidencePostFailedEvent,
   EvidencePostedEvent,
+  EvidenceSkippedEvent,
 } from './timeline/EvidenceEvents';
 import {
   GateApprovedEvent,
@@ -184,6 +185,9 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <GrillCompletedEvent key={event.id} event={event} />;
     case 'evidence.no-spec-declared':
       return <EvidenceNoSpecEvent key={event.id} event={event} />;
+    case 'evidence.playwright-repro-skipped':
+    case 'evidence.post-skipped':
+      return <EvidenceSkippedEvent key={event.id} event={event} />;
     case 'evidence.posted':
       return <EvidencePostedEvent key={event.id} event={event} />;
     case 'evidence.post-failed':

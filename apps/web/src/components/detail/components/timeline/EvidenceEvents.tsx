@@ -58,3 +58,23 @@ export function EvidencePostFailedEvent({ event }: { event: AgentEventDto }) {
     </li>
   );
 }
+
+export function EvidenceSkippedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as { reason?: string } | null;
+  const label =
+    event.kind === 'evidence.playwright-repro-skipped'
+      ? 'Playwright repro skipped'
+      : 'Evidence post skipped';
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line/50 bg-bg/40 px-4 py-2"
+    >
+      <div className="flex items-center gap-2 text-[11px] text-fg-3">
+        <Info size={13} className="shrink-0" />
+        <span className="font-mono uppercase tracking-wider">{label}</span>
+        {p?.reason != null && <span className="text-fg-3">: {p.reason}</span>}
+      </div>
+    </li>
+  );
+}

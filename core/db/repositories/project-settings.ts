@@ -17,6 +17,9 @@ export type GlobalBudgetPatch = {
   perBashCommandMaxSeconds?: number | null;
   useMultiAgentPipeline?: number | null;
   useInvestigationSwarm?: number | null;
+  qaE2eMode?: 'off' | 'ui-changed' | 'always' | null;
+  playwrightReproEnabled?: number | null;
+  evidencePostEnabled?: number | null;
   recordDecisionTool?: number | null;
 };
 
@@ -93,6 +96,62 @@ export function getRecordDecisionTool(projectId: string): boolean {
       error: String(err),
     });
     return false;
+  }
+}
+
+export type QaE2eMode = 'off' | 'ui-changed' | 'always';
+
+export function deriveQaE2eMode(
+  row: ProjectSettingsRow | null,
+  configDefault: QaE2eMode = 'off',
+): QaE2eMode {
+  return row?.qaE2eMode ?? configDefault;
+}
+
+export function getQaE2eMode(projectId: string, configDefault: QaE2eMode = 'off'): QaE2eMode {
+  try {
+    return deriveQaE2eMode(readProjectSettings(projectId), configDefault);
+  } catch (err) {
+    logger.warn('getQaE2eMode: read failed, defaulting to config value', {
+      projectId,
+      configDefault,
+      error: String(err),
+    });
+    return configDefault;
+  }
+}
+
+export function derivePlaywrightReproEnabled(row: ProjectSettingsRow | null): boolean {
+  return row?.playwrightReproEnabled !== 0;
+}
+
+export function getPlaywrightReproEnabled(projectId: string, configDefault = true): boolean {
+  try {
+    return derivePlaywrightReproEnabled(readProjectSettings(projectId)) && configDefault;
+  } catch (err) {
+    logger.warn('getPlaywrightReproEnabled: read failed, defaulting to config value', {
+      projectId,
+      configDefault,
+      error: String(err),
+    });
+    return configDefault;
+  }
+}
+
+export function deriveEvidencePostEnabled(row: ProjectSettingsRow | null): boolean {
+  return row?.evidencePostEnabled !== 0;
+}
+
+export function getEvidencePostEnabled(projectId: string, configDefault = true): boolean {
+  try {
+    return deriveEvidencePostEnabled(readProjectSettings(projectId)) && configDefault;
+  } catch (err) {
+    logger.warn('getEvidencePostEnabled: read failed, defaulting to config value', {
+      projectId,
+      configDefault,
+      error: String(err),
+    });
+    return configDefault;
   }
 }
 

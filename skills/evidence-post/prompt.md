@@ -1,6 +1,6 @@
 # evidence-post skill
 
-Version: 3
+Version: 4
 
 You are a developer agent producing post-implementation visual evidence. Your job is to run the Playwright spec authored for the slice, capture screenshots and a continuous walkthrough video to `evidence/issue-<N>/`, convert the WebM recording to a GIF for inline rendering, push the artefacts to the dedicated `evidence/issue-<N>` branch, and post a comment on the linked issue with the screenshots embedded inline via `raw.githubusercontent.com` URLs **pinned to the evidence-branch commit SHA** (NEVER the branch — branch URLs break on merge).
 
@@ -37,14 +37,14 @@ The strategy: stage all artefacts under `/tmp/evidence-staging-<N>/`, then creat
 
 **Substitute `<N>` with the literal issue number** (e.g. `42`) in every command below. Do not use shell variables; the tool allowlist matches on the literal command text.
 
-1. **Capture.** Run the spec at `<specPath>` with video recording enabled (`{ video: 'on' }` in the spec's project config or via `PLAYWRIGHT_VIDEO=on`). Use `pnpm --filter @goose-hub/web exec playwright test <specPath>` — never raw `npx`. Screenshots go where the spec writes them; the WebM video lands under `test-results/`. If the spec uses `waitForLoadState('networkidle')`, the run will hang — the app holds a persistent SSE connection that prevents networkidle from firing. Specs must use `{ waitUntil: 'domcontentloaded' }` on every `page.goto()` call.
+1. **Capture.** Run the spec at `<specPath>` with video recording enabled (`{ video: 'on' }` in the spec). Use `pnpm --filter @goose-hub/web exec playwright test <specPath> --config playwright-evidence.config.ts` — never raw `npx`. Screenshots go where the spec writes them; the WebM video lands under `apps/web/test-results/`. If the spec uses `waitForLoadState('networkidle')`, the run will hang — the app holds a persistent SSE connection that prevents networkidle from firing. Specs must use `{ waitUntil: 'domcontentloaded' }` on every `page.goto()` call.
 
 2. **Stage artefacts in `/tmp`.**
    ```bash
    mkdir -p /tmp/evidence-staging-<N>
-   cp <screenshot-paths> /tmp/evidence-staging-<N>/    # name them step-1.png, step-2.png, …
+   pnpm tsx scripts/collect-playwright-evidence.ts --issue <N> --spec <specPath> --output /tmp/evidence-staging-<N>
    ```
-   These are the AFTER screenshots. Never name them `before-step-*.png` — that prefix belongs to the BEFORE state already on the evidence branch.
+   The collector scopes artifacts to the latest Playwright result directory matching `<specPath>`, then copies AFTER screenshots from that run as `step-1.png`, `step-2.png`, and so on. Never name them `before-step-*.png` — that prefix belongs to the BEFORE state already on the evidence branch. The collector output includes screenshot paths, the optional WebM path, and an optional `gifPath`; use those exact paths in your schema.
 
 3. **Convert WebM to GIF into staging.**
    ```bash
@@ -52,7 +52,7 @@ The strategy: stage all artefacts under `/tmp/evidence-staging-<N>/`, then creat
      -vf "fps=8,scale=900:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" \
      /tmp/evidence-staging-<N>/walkthrough.gif
    ```
-   If the WebM does not exist or `ffmpeg` fails, set `gifPath: null` and continue — do not abort.
+   If the collector reports no WebM or `ffmpeg` fails, set `gifPath: null` and continue — do not abort.
 
 4. **Set up the evidence worktree.**
    ```bash

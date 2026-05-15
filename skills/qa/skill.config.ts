@@ -24,6 +24,7 @@ import { z } from 'zod';
  *       <lint_command>...</lint_command>
  *       <e2e_command>...</e2e_command>
  *     </project_commands>
+ *     <e2e_decision>{ "mode": "ui-changed", "command": "...", "reason": "..." }</e2e_decision>
  *     <slice_tests>
  *       <path>...</path>
  *     </slice_tests>
@@ -44,6 +45,14 @@ export const QaContextSchema = z.object({
     lintCommand: z.string().optional(),
     e2eCommand: z.string().optional(),
   }),
+  e2eDecision: z
+    .object({
+      mode: z.enum(['off', 'ui-changed', 'always']),
+      command: z.string().optional(),
+      reason: z.string(),
+      changedPaths: z.array(z.string()).optional(),
+    })
+    .optional(),
   /** Paths to slice-level test files for targeted test runs */
   sliceTests: z.array(z.string()).optional(),
   /** Permalink to the evidence-post comment (screenshots + GIF) on the GitHub issue; absent for backend-only changes or when evidence capture failed */
@@ -82,10 +91,9 @@ const config: SkillConfig = {
   /**
    * Tool bundles:
    * - 'read'     — read source files to understand what changed
-   * - 'shell'    — run lint, tests, and e2e commands
-   * - 'validate' — validate JSON output against the skill schema
+   * - 'qa-tools' — run scoped lint, tests, and e2e commands
    */
-  toolBundles: ['read', 'shell', 'validate'],
+  toolBundles: ['read', 'qa-tools'],
   /**
    * Model pin: QA uses sonnet-tier.
    * Verification is structured and repeatable — doesn't require opus-level reasoning.
@@ -108,6 +116,7 @@ const config: SkillConfig = {
     'workItem',
     'prDiff',
     'projectCommands',
+    'e2eDecision',
     'sliceTests',
     'evidenceCommentUrl',
     'verifyCommands',

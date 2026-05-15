@@ -116,12 +116,12 @@ Emit: `[decision] PLAN: Wrote repro spec targeting <route> — <N> steps, assert
 ### 4. Run
 
 ```bash
-pnpm --filter @goose-hub/web exec playwright test e2e/repro-<slug>.spec.ts --reporter=json > /tmp/repro-<slug>/pw-results.json 2>/tmp/repro-<slug>/pw-stderr.txt
+pnpm --filter @goose-hub/web exec playwright test e2e/repro-<slug>.spec.ts --config playwright-evidence.config.ts --reporter=json
 ```
 
 The test may fail — expected if the bug is reproduced.
 
-From `/tmp/repro-<slug>/pw-results.json`:
+From the JSON printed by the Playwright command:
 - Find video path in `suites[0].specs[0].tests[0].results[0].attachments` where `name === 'video'`
 - Check `status` in the same results object (`'failed'` confirms the bug manifested)
 

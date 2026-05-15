@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   readProjectSettings: vi.fn().mockReturnValue(null),
   readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
+  deriveEvidencePostEnabled: vi.fn(() => true),
+  getEvidencePostEnabled: vi.fn((_projectId, configDefault = true) => configDefault),
 }));
 let mockProjectModelSettingsRow: Record<string, unknown> | null = null;
 vi.mock('@goose-hub/core/db/repositories/project-model-settings.js', () => ({

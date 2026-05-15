@@ -16,6 +16,7 @@ import {
 import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
 import { runWithEscalation } from '@goose-hub/core/agent-runtime/with-escalation.js';
 import type { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
+import { getEvidencePostEnabled } from '@goose-hub/core/db/repositories/project-settings.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
@@ -48,6 +49,7 @@ export interface ImplementExecution {
   modelOverride: string;
   selectedTier: ModelTier;
   selectionReason: string;
+  evidencePostEnabled: boolean;
 }
 
 export interface AfterImplementInput {
@@ -80,6 +82,11 @@ export async function resolveImplementExecution(input: {
   injectedRuntime?: AgentRuntime;
 }): Promise<ImplementExecution> {
   const projectConfig = await getProjectBySlug(input.projectId);
+  const settingsProjectId = projectConfig?.id ?? input.projectId;
+  const evidencePostEnabled = getEvidencePostEnabled(
+    settingsProjectId,
+    projectConfig?.evidencePostEnabled !== false,
+  );
   const { budgets, modelOverride: budgetModelOverride } = resolveBudgetsForProject(
     'implement',
     projectConfig?.budgets,
@@ -111,6 +118,7 @@ export async function resolveImplementExecution(input: {
           : budgetModelOverride,
       selectedTier,
       selectionReason: routerResult?.reason ?? 'budget-default',
+      evidencePostEnabled,
     };
   }
 
@@ -135,6 +143,7 @@ export async function resolveImplementExecution(input: {
     modelOverride,
     selectedTier,
     selectionReason: routerResult?.reason ?? 'budget-default',
+    evidencePostEnabled,
   };
 }
 
@@ -178,6 +187,7 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
         stack: input.stack,
         advisorFeedback: input.advisorFeedback,
         revisionPass: input.revisionPass ?? 0,
+        evidencePostEnabled: execution.evidencePostEnabled,
       },
       contextAllowlist: [
         'workItem.title',
@@ -190,6 +200,7 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
         'stack.typecheckCommand',
         'advisorFeedback',
         'revisionPass',
+        'evidencePostEnabled',
       ],
       freshContext: false,
       toolBundles: ['dev-tools'],

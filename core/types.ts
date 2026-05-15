@@ -182,6 +182,14 @@ export interface ProjectConfig {
    */
   regressionPolicy?: 'escalate' | 'ignore';
   /**
+   * QA e2e cost policy. The orchestrator decides whether QA receives an
+   * e2eCommand; the QA agent only runs one when provided.
+   */
+  qaE2eMode?: 'off' | 'ui-changed' | 'always';
+  /** Browser evidence toggles. Default true when omitted. */
+  playwrightReproEnabled?: boolean;
+  evidencePostEnabled?: boolean;
+  /**
    * Investigation swarm toggle. Default true. When false, investigate skips
    * Wave-1/Wave-2 scouts and runs the synthesis investigator directly.
    */

@@ -68,6 +68,10 @@ export const ImplementSchema = z
       .describe(
         'Workspace-relative spec path; required for any slice touching apps/web/, null otherwise',
       ),
+    evidenceDisabledByProjectSetting: z
+      .boolean()
+      .optional()
+      .describe('true when project settings disable evidence-post for this run'),
     confidence: ConfidenceSchema,
     decisionSummaries: z.array(DecisionSummarySchema).min(1),
     selfQualityScore: QualityScoresSchema.optional().describe(
@@ -86,10 +90,15 @@ export const ImplementSchema = z
   })
   .superRefine((val, ctx) => {
     const touchesWeb = val.filesWritten.some((f) => f.path.startsWith('apps/web/'));
-    if (touchesWeb && val.evidenceSpecPath === null) {
+    if (
+      touchesWeb &&
+      val.evidenceSpecPath === null &&
+      val.evidenceDisabledByProjectSetting !== true
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'evidenceSpecPath is required when filesWritten includes apps/web/ files',
+        message:
+          'evidenceSpecPath is required when filesWritten includes apps/web/ files unless evidence is disabled by project setting',
         path: ['evidenceSpecPath'],
       });
     }

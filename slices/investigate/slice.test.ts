@@ -46,6 +46,8 @@ vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   getUseInvestigationSwarm: (...args: unknown[]) => mockGetUseInvestigationSwarm(...args),
   readProjectSettings: (...args: unknown[]) => mockReadProjectSettings(...args),
   readProjectSkillSettings: (...args: unknown[]) => mockReadProjectSkillSettings(...args),
+  derivePlaywrightReproEnabled: vi.fn(() => true),
+  getPlaywrightReproEnabled: vi.fn((_projectId, configDefault = true) => configDefault),
 }));
 
 // Single shared mock for ClaudeCliRuntime (playwright-repro step)

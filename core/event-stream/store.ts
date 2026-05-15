@@ -37,7 +37,9 @@ export type EventKind =
   | 'pr.opened'
   | 'evidence.posted'
   | 'evidence.post-failed'
+  | 'evidence.post-skipped'
   | 'evidence.no-spec-declared'
+  | 'evidence.playwright-repro-skipped'
   // M7 approval gate (#186)
   | 'gate.approved'
   | 'gate.rejected'

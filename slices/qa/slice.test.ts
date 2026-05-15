@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   readProjectSettings: vi.fn().mockReturnValue(null),
   readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
+  deriveQaE2eMode: vi.fn((_row, configDefault = 'off') => configDefault),
+  getQaE2eMode: vi.fn((_projectId, configDefault = 'off') => configDefault),
 }));
 
 const mockGetEngineeringSpec = vi.fn().mockReturnValue(null);
@@ -243,6 +245,76 @@ beforeEach(() => {
 });
 
 // ─── tests ────────────────────────────────────────────────────────────────────
+
+describe('QA e2e decision helpers', () => {
+  it('runs e2e in ui-changed mode when UI-facing paths changed', async () => {
+    const { decideQaE2e } = await import('./qa-helpers.js');
+
+    expect(
+      decideQaE2e({
+        mode: 'ui-changed',
+        configuredCommand: 'pnpm test:e2e:pipeline',
+        changedPaths: [
+          'frontend/components/Button.tsx',
+          'public/index.html',
+          'assets/theme.module.scss',
+        ],
+      }),
+    ).toEqual({
+      mode: 'ui-changed',
+      command: 'pnpm test:e2e:pipeline',
+      reason: 'UI-facing changes detected',
+      changedPaths: [
+        'frontend/components/Button.tsx',
+        'public/index.html',
+        'assets/theme.module.scss',
+      ],
+    });
+  });
+
+  it('skips e2e in ui-changed mode for docs, tests, and issue evidence specs only', async () => {
+    const { decideQaE2e } = await import('./qa-helpers.js');
+
+    expect(
+      decideQaE2e({
+        mode: 'ui-changed',
+        configuredCommand: 'pnpm test:e2e:pipeline',
+        changedPaths: [
+          'docs/plan.md',
+          'apps/web/src/components/detail/TimelineEvents.test.tsx',
+          'apps/web/e2e/issue-123.spec.ts',
+        ],
+      }),
+    ).toEqual({
+      mode: 'ui-changed',
+      reason: 'No UI-facing changes detected',
+      changedPaths: [
+        'docs/plan.md',
+        'apps/web/src/components/detail/TimelineEvents.test.tsx',
+        'apps/web/e2e/issue-123.spec.ts',
+      ],
+    });
+  });
+
+  it('runs e2e in always mode and skips in off mode', async () => {
+    const { decideQaE2e } = await import('./qa-helpers.js');
+
+    expect(
+      decideQaE2e({
+        mode: 'always',
+        configuredCommand: 'pnpm test:e2e:pipeline',
+        changedPaths: [],
+      }).command,
+    ).toBe('pnpm test:e2e:pipeline');
+    expect(
+      decideQaE2e({
+        mode: 'off',
+        configuredCommand: 'pnpm test:e2e:pipeline',
+        changedPaths: ['apps/web/src/App.tsx'],
+      }),
+    ).toEqual({ mode: 'off', reason: 'qaE2eMode=off' });
+  });
+});
 
 describe('runQaWorkflow', () => {
   describe('qa output validation failure', () => {

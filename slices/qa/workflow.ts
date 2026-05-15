@@ -6,6 +6,7 @@ import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconc
 import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
+import { getQaE2eMode } from '@goose-hub/core/db/repositories/project-settings.js';
 import { getEngineeringSpec as defaultGetEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
@@ -27,7 +28,13 @@ import {
   toAgentTierResults,
 } from './deterministic-tiers.js';
 export type { VerifyCommand } from './deterministic-tiers.js';
-import { findDevTestsRun, findPrOpenedHints, getPrDiff } from './qa-helpers.js';
+import {
+  decideQaE2e,
+  findDevTestsRun,
+  findPrOpenedHints,
+  getChangedPaths,
+  getPrDiff,
+} from './qa-helpers.js';
 import { buildSyntheticQaOutput } from './synthetic-output.js';
 
 export interface QaWorkflowDeps {
@@ -88,6 +95,8 @@ export async function runQaWorkflow(
   const runTier = deps.runTierImpl ?? defaultRunTier;
   const qaPrompt = readPromptWithContext('qa', projectSlug);
   const projectConfig = await getProjectBySlug(projectSlug);
+  const settingsProjectId = projectConfig?.id ?? projectSlug;
+  const qaE2eMode = getQaE2eMode(settingsProjectId, projectConfig?.qaE2eMode ?? 'off');
   const { runtime, resolvedBudget } = resolveProjectAgentExecution({
     skill: 'qa',
     role: 'qa',
@@ -230,8 +239,15 @@ export async function runQaWorkflow(
     // here are non-fatal — the agent still runs without testRun.
     const testCommand = DEFAULT_TEST_COMMAND;
     const testRun = workspaceDir != null ? await runTests(workspaceDir, testCommand) : null;
+    const e2eDecision = decideQaE2e({
+      mode: qaE2eMode,
+      configuredCommand: projectConfig?.stack?.e2eCommand,
+      changedPaths: getChangedPaths(workspaceDir, projectConfig?.targetRepo?.defaultBranch),
+    });
     const [webPort, apiPort] =
-      workspaceDir != null ? await Promise.all([findFreePort(), findFreePort()]) : [null, null];
+      workspaceDir != null && e2eDecision.command != null
+        ? await Promise.all([findFreePort(), findFreePort()])
+        : [null, null];
 
     const deterministicTierResults = deterministic
       ? toAgentTierResults(deterministic.tierResults)
@@ -253,10 +269,9 @@ export async function runQaWorkflow(
         projectCommands: {
           testCommand,
           lintCommand: 'pnpm biome check .',
-          ...(projectConfig?.stack?.e2eCommand != null
-            ? { e2eCommand: projectConfig.stack.e2eCommand }
-            : {}),
+          ...(e2eDecision.command != null ? { e2eCommand: e2eDecision.command } : {}),
         },
+        e2eDecision,
         ...(verifyCommands != null && verifyCommands.length > 0 ? { verifyCommands } : {}),
         testRun,
         ...(evidenceCommentUrl != null ? { evidenceCommentUrl } : {}),
@@ -267,6 +282,7 @@ export async function runQaWorkflow(
         'workItem',
         'prDiff',
         'projectCommands',
+        'e2eDecision',
         'testRun',
         'verifyCommands',
         ...(evidenceCommentUrl != null ? ['evidenceCommentUrl'] : []),
@@ -281,6 +297,7 @@ export async function runQaWorkflow(
         ? {
             env: {
               WEB_PORT: String(webPort),
+              MOCK_SERVER_PORT: String(apiPort),
               CI: 'true',
               API_PORT: String(apiPort),
               SERVER_PORT: String(apiPort),

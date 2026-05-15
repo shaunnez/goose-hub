@@ -64,7 +64,7 @@ The context contains a `<task>` block with:
 - Stay within the slice. Do not refactor surrounding code, do not add features beyond the acceptance criteria.
 - Emit: `[decision] PLAN: <one-sentence summary of the change>`
 
-**Frontend gate — check before writing your plan:** Does this change touch any file under `apps/web/`? If yes, your plan MUST include a step to write `apps/web/e2e/issue-<N>.spec.ts` (step 4 below). A plan that omits this step is incomplete — schema validation will reject the output if `evidenceSpecPath` is null while `filesWritten` includes `apps/web/` paths.
+**Frontend gate — check before writing your plan:** Does this change touch any file under `apps/web/`? If yes and `evidencePostEnabled` is not `false`, your plan MUST include a step to write `apps/web/e2e/issue-<N>.spec.ts` (step 4 below). If `evidencePostEnabled` is `false`, evidence is disabled by project setting; do not create a fake evidence spec just to satisfy the gate.
 
 ### 3 — Red — failing tests first
 
@@ -76,7 +76,7 @@ The context contains a `<task>` block with:
 
 - Write the implementation using the `write` tool. Workspace-bound paths only — no absolute paths, no `..` traversal.
 - Re-run the **targeted** test command (same file paths as in Red). Iterate until all targeted tests pass.
-- **Frontend changes (required):** If any file written is under `apps/web/`, write a Playwright spec at `apps/web/e2e/issue-<number>.spec.ts` now, before proceeding to step 5. The spec must navigate to the affected UI, assert the visible change, and call `page.screenshot({ path: 'evidence/issue-<number>/step-1.png' })`. Use plain `page.goto('/...')` — never `waitForLoadState('networkidle')` (the app's persistent SSE connection prevents it from firing; use `waitForSelector` or time-bounded assertions instead). This spec ships in the same commit as your implementation so the evidence-post skill can run it post-PR.
+- **Frontend changes (required when evidence is enabled):** If any file written is under `apps/web/` and `evidencePostEnabled` is not `false`, write a Playwright spec at `apps/web/e2e/issue-<number>.spec.ts` now, before proceeding to step 5. The spec must navigate to the affected UI, assert the visible change, and call `page.screenshot({ path: 'evidence/issue-<number>/step-1.png' })`. Use plain `page.goto('/...')` — never `waitForLoadState('networkidle')` (the app's persistent SSE connection prevents it from firing; use `waitForSelector` or time-bounded assertions instead). This spec ships in the same commit as your implementation so the evidence-post skill can run it post-PR. If `evidencePostEnabled` is `false`, emit a decision summary that evidence was skipped by project setting and set `evidenceDisabledByProjectSetting: true`.
 - Emit: `[decision] GREEN: Implementation passes all targeted tests including N new cases`
 
 ### 5 — Refactor (optional, only if necessary)
@@ -149,9 +149,10 @@ and then calls `openPR`.
 
 ### 8 — Declare the evidence spec path
 
-- If the slice touched any `apps/web/` file, you wrote a spec in step 4. Set `evidenceSpecPath` to `apps/web/e2e/issue-<number>.spec.ts`. The orchestrator passes this to the `evidence-post` skill to generate visual evidence.
+- If the slice touched any `apps/web/` file and `evidencePostEnabled` is not `false`, you wrote a spec in step 4. Set `evidenceSpecPath` to `apps/web/e2e/issue-<number>.spec.ts`. The orchestrator passes this to the `evidence-post` skill to generate visual evidence.
+- If `evidencePostEnabled` is `false`, set `evidenceSpecPath: null` and `evidenceDisabledByProjectSetting: true`. This is a first-class policy skip, not a TOOL_FAILURE.
 - If the slice touched **no** `apps/web/` files (backend-only change, chore, schema migration), set `evidenceSpecPath: null`. The orchestrator logs `evidence.no-spec-declared` and skips evidence posting.
-- **Do not return null for a frontend change.** The schema enforces this — a null `evidenceSpecPath` alongside `apps/web/` files in `filesWritten` is a validation failure.
+- **Do not return null for a frontend change while evidence is enabled.** The schema enforces this — a null `evidenceSpecPath` alongside `apps/web/` files in `filesWritten` is a validation failure unless `evidenceDisabledByProjectSetting` is true.
 
 ### 9 — Return
 

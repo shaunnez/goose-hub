@@ -3,6 +3,7 @@ import { findFreePort } from '@goose-hub/core/agent-runtime/find-free-port.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
+import { getEvidencePostEnabled } from '@goose-hub/core/db/repositories/project-settings.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
@@ -34,6 +35,14 @@ export interface RunEvidencePostInput {
   worktreePath: string;
 }
 
+async function findEvidencePort(): Promise<number> {
+  try {
+    return await findFreePort();
+  } catch {
+    return 5173;
+  }
+}
+
 /**
  * #234 wiring. Best-effort: failures emit `evidence.post-failed` and are
  * swallowed so the workflow can still transition to factory:approved.
@@ -41,6 +50,28 @@ export interface RunEvidencePostInput {
  * `evidence.no-spec-declared` and skip.
  */
 export async function runEvidencePost(input: RunEvidencePostInput): Promise<void> {
+  const projectConfig = await getProjectBySlug(input.projectId);
+  const settingsProjectId = projectConfig?.id ?? input.projectId;
+  const evidencePostEnabled = getEvidencePostEnabled(
+    settingsProjectId,
+    projectConfig?.evidencePostEnabled !== false,
+  );
+
+  if (!evidencePostEnabled) {
+    eventStore.appendEvent({
+      projectId: input.projectId,
+      workItemId: input.workItem.id,
+      kind: 'evidence.post-skipped',
+      payload: {
+        runId: input.runId,
+        reason: 'evidencePostEnabled=false',
+        evidenceDisabledByProjectSetting: true,
+      },
+      runId: input.runId,
+    });
+    return;
+  }
+
   if (input.evidenceSpecPath == null) {
     eventStore.appendEvent({
       projectId: input.projectId,
@@ -53,9 +84,8 @@ export async function runEvidencePost(input: RunEvidencePostInput): Promise<void
   }
 
   const evidenceRunId = crypto.randomUUID();
-  const projectConfig = await getProjectBySlug(input.projectId);
-  const webPort = await findFreePort();
   try {
+    const webPort = await findEvidencePort();
     const result = await input.runtime.run({
       runId: evidenceRunId,
       role: 'developer',
@@ -102,7 +132,7 @@ export async function runEvidencePost(input: RunEvidencePostInput): Promise<void
       throw new Error('evidence-post output validation failed');
     }
     if (!parsed.data.commentUrl) {
-      throw new Error('evidence-post returned no commentUrl — playwright run likely failed');
+      throw new Error('evidence-post returned no commentUrl — evidence comment was not posted');
     }
     eventStore.appendEvent({
       projectId: input.projectId,
