@@ -157,10 +157,10 @@ Section 10 ("Optional Later Assets — DEFERRED") is intentionally NOT checkboxe
 ### Indicators
 - [x] blocked_icon.png
 - [x] convergence_icon.png
-- [ ] retry_badge.png
-- [ ] queue_badge.png
-- [ ] hero_badge.png
-- [ ] merge_check.png
+- [x] retry_badge.png
+- [x] queue_badge.png
+- [x] hero_badge.png
+- [x] merge_check.png
 
 ### Panels
 - [ ] hero_ticket_popup.png

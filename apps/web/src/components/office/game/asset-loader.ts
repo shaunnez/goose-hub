@@ -58,6 +58,10 @@ export function pngManifest(): AssetEntry[] {
     // 06 — HUD / UI / Indicators
     { key: 'office:blocked_icon', url: `${ASSET_BASE}/blocked_icon.png` },
     { key: 'office:convergence_icon', url: `${ASSET_BASE}/convergence_icon.png` },
+    { key: 'office:retry_badge', url: `${ASSET_BASE}/retry_badge.png` },
+    { key: 'office:queue_badge', url: `${ASSET_BASE}/queue_badge.png` },
+    { key: 'office:hero_badge', url: `${ASSET_BASE}/hero_badge.png` },
+    { key: 'office:merge_check', url: `${ASSET_BASE}/merge_check.png` },
   ];
 }
 
