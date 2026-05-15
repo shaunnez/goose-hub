@@ -5,9 +5,9 @@ import { OFFICE_ROLES, type OfficeRole } from './state-to-role';
 
 export const TILE_SIZE = 16;
 export const FLOOR_TILES_WIDE = 80; // v1 canonical floor: 80 tiles × 16 px = 1280 px
-export const FLOOR_TILES_TALL = 24; // v1 canonical floor: 24 tiles × 16 px = 384 px
+export const FLOOR_TILES_TALL = 34; // v2 canonical floor: 34 tiles × 16 px = 544 px
 export const FLOOR_PIXEL_WIDTH = TILE_SIZE * FLOOR_TILES_WIDE; // 1280
-export const FLOOR_PIXEL_HEIGHT = TILE_SIZE * FLOOR_TILES_TALL; // 384
+export const FLOOR_PIXEL_HEIGHT = TILE_SIZE * FLOOR_TILES_TALL; // 544
 export const FLOOR_GAP_PX = TILE_SIZE * 2;
 
 export interface CameraBounds {

@@ -1,5 +1,7 @@
-// Room geometry owner: renders the six canonical v1 project floor rooms.
-// All coordinates are imported from lib/rooms.ts — no literals here.
+// Room geometry owner: renders the 11 canonical v2 project floor rooms
+// arranged in two bands (top: 6 rooms, bottom: 5 rooms) with a middle
+// corridor band. All coordinates are imported from lib/rooms.ts — no
+// literals here.
 //
 // Public contract:
 //   applyProjects(projects)              — full rebuild of all floor blocks
@@ -11,14 +13,21 @@ import type Phaser from 'phaser';
 import { DEFAULT_EASE, PARTICLE_ALPHA_EASE } from '../../lib/cinematic-timings';
 import { FLOOR_PIXEL_WIDTH, TILE_SIZE, floorOriginY } from '../../lib/layout';
 import {
+  BOTTOM_BAND_ROOMS,
+  BOTTOM_BAND_Y,
+  BOTTOM_INTER_ROOM_WALL_X,
   CORRIDOR_WALK_Y,
+  CORRIDOR_Y,
   FLOOR_WORLD,
-  INTER_ROOM_WALL_X,
   LIBRARY_BOUNDS,
   ROOM_IDS,
   type RoomId,
+  TOP_BAND_ROOMS,
+  TOP_BAND_Y,
+  TOP_INTER_ROOM_WALL_X,
   allClickZones,
   pressureColorForCount,
+  roomBand,
   roomBounds,
   roomDeskAnchors,
   roomDoor,
@@ -51,14 +60,14 @@ interface EffectEntry {
   cancel: () => void;
 }
 
-// Pixel rows relative to floor origin (ty × TILE_SIZE)
-const ROW_TOP_WALL = 0;
-const ROW_BANNER_TOP = TILE_SIZE;
-const ROW_CORRIDOR_TOP = TILE_SIZE * 4; // ty=4, py=64
-const ROW_CEILING = TILE_SIZE * 7; // ty=7, py=112
-const ROW_ROOM_TOP = TILE_SIZE * 8; // ty=8, py=128
-const ROW_ROOM_BOTTOM = TILE_SIZE * 22; // ty=22, py=352
-const ROW_BOTTOM_WALL = TILE_SIZE * 23; // ty=23, py=368
+// Pixel rows relative to floor origin (ty × TILE_SIZE) for the v2 layout.
+const ROW_TOP_WALL = 0; // y=0..15  outer top wall
+const ROW_BANNER_TOP = TILE_SIZE; // y=16..63 project banner
+const ROW_TOP_BAND_CEILING = TILE_SIZE * 4; // y=64..79 top band ceiling
+const ROW_TOP_BAND_SOUTH_WALL = TOP_BAND_Y.y2 + 1; // y=256
+const ROW_BOTTOM_BAND_NORTH_WALL = CORRIDOR_Y.y2 + 1; // y=336
+const ROW_BOTTOM_BAND_SOUTH_WALL = BOTTOM_BAND_Y.y2 + 1; // y=528 = ROW_BOTTOM_WALL
+const ROW_BOTTOM_WALL = ROW_BOTTOM_BAND_SOUTH_WALL;
 
 // Each door gap is 2 tiles wide; half-width for centering
 const DOOR_HALF_WIDTH = TILE_SIZE;
@@ -492,31 +501,42 @@ export class RoomLayer {
   }
 
   private drawBase(container: Phaser.GameObjects.Container, originY: number): void {
-    // Palette-color fallback under the tiled PNGs so any pixel uncovered
-    // during texture load stays in-palette and tests don't see drift.
+    // Full-floor palette fallback under the tiled PNGs.
     const bg = this.scene.add.graphics();
     bg.fillStyle(PALETTE.floor, 1);
     bg.fillRect(0, originY, FLOOR_WORLD.width, FLOOR_WORLD.height);
     container.add(bg);
 
+    // Top band floor (room area only — banner + ceiling drawn separately).
     if (this.scene.textures.exists('office:floor_tile_02')) {
-      const floorTiles = this.scene.add.tileSprite(
+      const topBandH = TOP_BAND_Y.y2 - TOP_BAND_Y.y1 + 1;
+      const topTiles = this.scene.add.tileSprite(
         0,
-        originY,
+        originY + TOP_BAND_Y.y1,
         FLOOR_WORLD.width,
-        FLOOR_WORLD.height,
+        topBandH,
         'office:floor_tile_02',
       );
-      floorTiles.setOrigin(0, 0);
-      // 2x tile scale halves the brick-face density to match the target
-      // image's coarser floor pattern (target shows ~2-3 features per tile;
-      // raw 32x32 PNG packs ~8-12 features per tile).
-      floorTiles.setTileScale(2, 2);
-      container.add(floorTiles);
+      topTiles.setOrigin(0, 0);
+      topTiles.setTileScale(2, 2);
+      container.add(topTiles);
+
+      const bottomBandH = BOTTOM_BAND_Y.y2 - BOTTOM_BAND_Y.y1 + 1;
+      const bottomTiles = this.scene.add.tileSprite(
+        0,
+        originY + BOTTOM_BAND_Y.y1,
+        FLOOR_WORLD.width,
+        bottomBandH,
+        'office:floor_tile_02',
+      );
+      bottomTiles.setOrigin(0, 0);
+      bottomTiles.setTileScale(2, 2);
+      container.add(bottomTiles);
     }
 
-    const corridorY = originY + ROW_CORRIDOR_TOP;
-    const corridorH = TILE_SIZE * 3;
+    // Middle corridor (between top band south wall and bottom band north wall).
+    const corridorY = originY + CORRIDOR_Y.y1;
+    const corridorH = CORRIDOR_Y.y2 - CORRIDOR_Y.y1 + 1;
     const corridor = this.scene.add.graphics();
     corridor.fillStyle(PALETTE.floorAlt, 1);
     corridor.fillRect(0, corridorY, FLOOR_WORLD.width, corridorH);
@@ -531,10 +551,10 @@ export class RoomLayer {
         'office:corridor_tile_02',
       );
       corridorTiles.setOrigin(0, 0);
-      // Corridor PNG is not seamless at 2x; keep native tile size.
       container.add(corridorTiles);
     }
 
+    // Project banner (top of floor).
     const bannerBg = this.scene.add.graphics();
     bannerBg.fillStyle(PALETTE.wall, 1);
     bannerBg.fillRect(0, originY + ROW_BANNER_TOP, FLOOR_WORLD.width, TILE_SIZE * 3);
@@ -546,56 +566,101 @@ export class RoomLayer {
     const walls = this.scene.add.graphics();
     walls.fillStyle(PALETTE.wall, 1);
 
+    // Outer top + bottom horizontal walls.
     walls.fillRect(0, originY + ROW_TOP_WALL, W, TILE_SIZE);
     walls.fillRect(0, originY + ROW_BOTTOM_WALL, W, TILE_SIZE);
-    this.drawCeilingRow(walls, originY + ROW_CEILING, W);
 
-    const wallH = ROW_BOTTOM_WALL - ROW_CEILING;
-    for (const wallX of INTER_ROOM_WALL_X) {
-      walls.fillRect(wallX, originY + ROW_CEILING, TILE_SIZE, wallH);
+    // Top band ceiling (between banner and top band interior).
+    walls.fillRect(0, originY + ROW_TOP_BAND_CEILING, W, TILE_SIZE);
+
+    // Top band south wall — has door gaps facing the corridor.
+    this.drawHorizontalWallWithDoors(
+      walls,
+      originY + ROW_TOP_BAND_SOUTH_WALL,
+      W,
+      this.topBandDoorXs(),
+    );
+
+    // Bottom band north wall — has door gaps facing the corridor.
+    this.drawHorizontalWallWithDoors(
+      walls,
+      originY + ROW_BOTTOM_BAND_NORTH_WALL,
+      W,
+      this.bottomBandDoorXs(),
+    );
+
+    // Vertical inter-room walls — top band: y=ROW_TOP_BAND_CEILING..ROW_TOP_BAND_SOUTH_WALL+TILE_SIZE
+    const topWallH = ROW_TOP_BAND_SOUTH_WALL + TILE_SIZE - ROW_TOP_BAND_CEILING;
+    for (const wallX of TOP_INTER_ROOM_WALL_X) {
+      walls.fillRect(wallX, originY + ROW_TOP_BAND_CEILING, TILE_SIZE, topWallH);
+    }
+
+    // Vertical inter-room walls — bottom band: y=ROW_BOTTOM_BAND_NORTH_WALL..ROW_BOTTOM_WALL+TILE_SIZE
+    const bottomWallH = ROW_BOTTOM_WALL + TILE_SIZE - ROW_BOTTOM_BAND_NORTH_WALL;
+    for (const wallX of BOTTOM_INTER_ROOM_WALL_X) {
+      walls.fillRect(wallX, originY + ROW_BOTTOM_BAND_NORTH_WALL, TILE_SIZE, bottomWallH);
     }
 
     container.add(walls);
   }
 
-  private drawCeilingRow(
-    g: Phaser.GameObjects.Graphics,
-    ceilingY: number,
-    totalWidth: number,
-  ): void {
-    const gapCenters: number[] = [];
-    for (const id of ROOM_IDS) {
-      const door = roomDoor(id as RoomId);
-      if (door) gapCenters.push(door.x);
+  /** Top-band door x-positions, including QA slot gaps. */
+  private topBandDoorXs(): number[] {
+    const xs: number[] = [];
+    for (const id of TOP_BAND_ROOMS) {
+      const door = roomDoor(id);
+      if (door) xs.push(door.x);
     }
-    gapCenters.push(792); // qa.input slot
-    gapCenters.push(856); // qa.output slot
+    // QA input/output slots (corridor-facing on top band south wall)
+    xs.push(312, 424);
+    return xs.sort((a, b) => a - b);
+  }
 
-    gapCenters.sort((a, b) => a - b);
+  /** Bottom-band door x-positions. */
+  private bottomBandDoorXs(): number[] {
+    const xs: number[] = [];
+    for (const id of BOTTOM_BAND_ROOMS) {
+      const door = roomDoor(id);
+      if (door) xs.push(door.x);
+    }
+    return xs.sort((a, b) => a - b);
+  }
+
+  /** Paint a horizontal wall row with 2-tile-wide gaps at each gapCenter. */
+  private drawHorizontalWallWithDoors(
+    g: Phaser.GameObjects.Graphics,
+    wallY: number,
+    totalWidth: number,
+    gapCenters: number[],
+  ): void {
     let cursor = 0;
     for (const cx of gapCenters) {
       const gapStart = cx - DOOR_HALF_WIDTH;
       const gapEnd = cx + DOOR_HALF_WIDTH;
       if (cursor < gapStart) {
-        g.fillRect(cursor, ceilingY, gapStart - cursor, TILE_SIZE);
+        g.fillRect(cursor, wallY, gapStart - cursor, TILE_SIZE);
       }
       cursor = gapEnd;
     }
     if (cursor < totalWidth) {
-      g.fillRect(cursor, ceilingY, totalWidth - cursor, TILE_SIZE);
+      g.fillRect(cursor, wallY, totalWidth - cursor, TILE_SIZE);
     }
   }
 
   private drawRoomOverlays(container: Phaser.GameObjects.Container, originY: number): void {
-    const roomH = ROW_ROOM_BOTTOM - ROW_ROOM_TOP;
     const overlays = this.scene.add.graphics();
 
+    // QA chamber (top band) — frosted-cyan tint
+    const qa = roomBounds('qa');
     overlays.fillStyle(PALETTE.qaWall, 0.45);
-    overlays.fillRect(736, originY + ROW_ROOM_TOP, 192, roomH);
+    overlays.fillRect(qa.x1, originY + qa.y1, qa.x2 - qa.x1, qa.y2 - qa.y1);
 
+    // Review chamber (top band) — darker purple tint
+    const review = roomBounds('review');
     overlays.fillStyle(PALETTE.reviewWall, 0.35);
-    overlays.fillRect(944, originY + ROW_ROOM_TOP, 160, roomH);
+    overlays.fillRect(review.x1, originY + review.y1, review.x2 - review.x1, review.y2 - review.y1);
 
+    // Sealed Library (bottom band) — sealed-green-tinted opaque overlay + outline
     overlays.fillStyle(PALETTE.wall, 0.55);
     overlays.fillRect(
       LIBRARY_BOUNDS.x1,
@@ -603,7 +668,6 @@ export class RoomLayer {
       LIBRARY_BOUNDS.x2 - LIBRARY_BOUNDS.x1,
       LIBRARY_BOUNDS.y2 - LIBRARY_BOUNDS.y1,
     );
-
     overlays.lineStyle(1, PALETTE.reviewWall, 1);
     overlays.strokeRect(
       LIBRARY_BOUNDS.x1,
@@ -616,11 +680,14 @@ export class RoomLayer {
   }
 
   private drawDoneShelf(container: Phaser.GameObjects.Container, originY: number): void {
+    const done = roomBounds('done');
+    const shelfY = done.y1 + 32;
+    const shelfW = done.x2 - done.x1;
     const shelf = this.scene.add.graphics();
     shelf.fillStyle(PALETTE.desk, 1);
-    shelf.fillRect(1120, originY + 160, 143, 8);
+    shelf.fillRect(done.x1, originY + shelfY, shelfW, 8);
     shelf.fillStyle(PALETTE.deskTop, 1);
-    shelf.fillRect(1120, originY + 160, 143, 2);
+    shelf.fillRect(done.x1, originY + shelfY, shelfW, 2);
     container.add(shelf);
   }
 
@@ -667,22 +734,23 @@ export class RoomLayer {
   }
 
   private drawRoomLabels(container: Phaser.GameObjects.Container, originY: number): void {
-    const labelY = originY + ROW_CEILING + TILE_SIZE * 2;
     const style = {
       fontFamily: 'JetBrains Mono, monospace',
       fontSize: '8px',
       color: HUD_TINTS.hudCounterText,
     };
-    const labels = [
-      { x: 96, text: 'TRIAGE' },
-      { x: 312, text: 'INVESTIGATION' },
-      { x: 584, text: 'DEV' },
-      { x: 832, text: 'QA' },
-      { x: 1024, text: 'REVIEW' },
-      { x: 1192, text: 'DONE' },
-    ] as const;
-    for (const { x, text } of labels) {
-      const t = this.scene.add.text(x, labelY, text, style);
+    // Top-band labels: positioned just inside the top of each top-band room.
+    const topLabelY = originY + TOP_BAND_Y.y1 + 8;
+    const bottomLabelY = originY + BOTTOM_BAND_Y.y1 + 8;
+    const labels: { x: number; y: number; text: string }[] = [];
+    for (const id of ROOM_IDS) {
+      const b = roomBounds(id);
+      const cx = (b.x1 + b.x2) / 2;
+      const y = roomBand(id) === 'top' ? topLabelY : bottomLabelY;
+      labels.push({ x: cx, y, text: id.toUpperCase() });
+    }
+    for (const { x, y, text } of labels) {
+      const t = this.scene.add.text(x, y, text, style);
       t.setOrigin(0.5, 0);
       container.add(t);
     }
