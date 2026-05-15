@@ -87,6 +87,10 @@ export function pngManifest(): AssetEntry[] {
     // 09 — Typography / Labels
     { key: 'office:room_label_triage', url: `${ASSET_BASE}/room_label_triage.png` },
     { key: 'office:room_label_investigation', url: `${ASSET_BASE}/room_label_investigation.png` },
+    { key: 'office:room_label_library', url: `${ASSET_BASE}/room_label_library.png` },
+    { key: 'office:room_label_dev', url: `${ASSET_BASE}/room_label_dev.png` },
+    { key: 'office:room_label_qa', url: `${ASSET_BASE}/room_label_qa.png` },
+    { key: 'office:room_label_review', url: `${ASSET_BASE}/room_label_review.png` },
   ];
 }
 
