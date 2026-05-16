@@ -655,6 +655,100 @@ export class RoomLayer {
       brick.setOrigin(0, 0);
       container.add(brick);
     }
+
+    // Top-band south wall and bottom-band north wall — segmented brick
+    // TileSprites between door gaps.
+    this.drawSegmentedBrickRow(
+      container,
+      brickKey,
+      originY + ROW_TOP_BAND_SOUTH_WALL,
+      this.topBandDoorXs(),
+    );
+    this.drawSegmentedBrickRow(
+      container,
+      brickKey,
+      originY + ROW_BOTTOM_BAND_NORTH_WALL,
+      this.bottomBandDoorXs(),
+    );
+
+    // Special wall textures — QA chamber gets frosted glass on its two
+    // vertical walls; Sealed Library gets sealed-green.
+    this.drawSpecialVerticalWall(
+      container,
+      'office:frosted_glass_wall',
+      320, // wall left of QA
+      originY + ROW_TOP_BAND_CEILING,
+      topWallH,
+    );
+    this.drawSpecialVerticalWall(
+      container,
+      'office:frosted_glass_wall',
+      560, // wall right of QA
+      originY + ROW_TOP_BAND_CEILING,
+      topWallH,
+    );
+    this.drawSpecialVerticalWall(
+      container,
+      'office:sealed_wall_green',
+      784, // wall left of Library
+      originY + ROW_BOTTOM_BAND_NORTH_WALL,
+      bottomWallH,
+    );
+    this.drawSpecialVerticalWall(
+      container,
+      'office:sealed_wall_green',
+      992, // wall right of Library
+      originY + ROW_BOTTOM_BAND_NORTH_WALL,
+      bottomWallH,
+    );
+  }
+
+  /** Stamp a special vertical wall PNG (frosted/sealed) over a brick
+   * wall position. No-op if the texture isn't loaded. */
+  private drawSpecialVerticalWall(
+    container: Phaser.GameObjects.Container,
+    textureKey: string,
+    wallX: number,
+    wallWorldY: number,
+    wallHeight: number,
+  ): void {
+    if (!this.scene.textures.exists(textureKey)) return;
+    const special = this.scene.add.tileSprite(wallX, wallWorldY, TILE_SIZE, wallHeight, textureKey);
+    special.setOrigin(0, 0);
+    container.add(special);
+  }
+
+  /** Paint brick TileSprites along a wall row, skipping 2-tile-wide door
+   * gaps at each gapCenter. */
+  private drawSegmentedBrickRow(
+    container: Phaser.GameObjects.Container,
+    brickKey: string,
+    wallWorldY: number,
+    gapCenters: number[],
+  ): void {
+    const W = FLOOR_WORLD.width;
+    let cursor = 0;
+    for (const cx of gapCenters) {
+      const gapStart = cx - DOOR_HALF_WIDTH;
+      const gapEnd = cx + DOOR_HALF_WIDTH;
+      if (cursor < gapStart) {
+        const seg = this.scene.add.tileSprite(
+          cursor,
+          wallWorldY,
+          gapStart - cursor,
+          TILE_SIZE,
+          brickKey,
+        );
+        seg.setOrigin(0, 0);
+        container.add(seg);
+      }
+      cursor = gapEnd;
+    }
+    if (cursor < W) {
+      const seg = this.scene.add.tileSprite(cursor, wallWorldY, W - cursor, TILE_SIZE, brickKey);
+      seg.setOrigin(0, 0);
+      container.add(seg);
+    }
   }
 
   /** Top-band door x-positions. Slots (qa.input/output, library envelope)
