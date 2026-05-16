@@ -68,9 +68,8 @@ interface EffectEntry {
 }
 
 // Pixel rows relative to floor origin (ty × TILE_SIZE) for the v2 layout.
-const ROW_TOP_WALL = 0; // y=0..15  outer top wall
-const ROW_BANNER_TOP = TILE_SIZE; // y=16..63 project banner
-const ROW_TOP_BAND_CEILING = TILE_SIZE * 4; // y=64..79 top band ceiling
+// Phase 9: outer top wall + banner + top-band ceiling rows were removed
+// (the new DOM TopHudBar covers that area). Remaining row constants:
 const ROW_TOP_BAND_SOUTH_WALL = TOP_BAND_Y.y2 + 1; // y=256
 const ROW_BOTTOM_BAND_NORTH_WALL = CORRIDOR_Y.y2 + 1; // y=336
 const ROW_BOTTOM_BAND_SOUTH_WALL = BOTTOM_BAND_Y.y2 + 1; // y=528 = ROW_BOTTOM_WALL
@@ -567,11 +566,8 @@ export class RoomLayer {
       container.add(corridorTiles);
     }
 
-    // Project banner (top of floor).
-    const bannerBg = this.scene.add.graphics();
-    bannerBg.fillStyle(PALETTE.wall, 1);
-    bannerBg.fillRect(0, originY + ROW_BANNER_TOP, FLOOR_WORLD.width, TILE_SIZE * 3);
-    container.add(bannerBg);
+    // Phase 9: project banner removed from canvas. Name lives in the
+    // DOM TopHudBar; banner area is left blank for the HUD to overlay.
   }
 
   private drawWalls(container: Phaser.GameObjects.Container, originY: number): void {
@@ -947,19 +943,16 @@ export class RoomLayer {
     // function is retained only to register the per-floor hero-ticket
     // text (used as a Phaser-side fallback when the DOM HUD is hidden).
 
-    // R-cell: Active Hero Ticket (initially hidden)
-    const heroText = this.scene.add.text(
-      BANNER_HERO_X,
-      originY + ROW_BANNER_TOP + TILE_SIZE * 1.5,
-      '',
-      {
-        fontFamily: 'JetBrains Mono, monospace',
-        fontSize: '9px',
-        color: HUD_TINTS.hudBadgeText,
-        backgroundColor: '#2B2D42',
-        padding: { left: 4, right: 4, top: 2, bottom: 2 },
-      },
-    );
+    // R-cell: Active Hero Ticket (initially hidden). Sits at the top of
+    // the floor since the banner background was removed — Phaser-side
+    // fallback only; the real hero card lives in the DOM BottomHudBar.
+    const heroText = this.scene.add.text(BANNER_HERO_X, originY + TILE_SIZE * 2.5, '', {
+      fontFamily: 'JetBrains Mono, monospace',
+      fontSize: '9px',
+      color: HUD_TINTS.hudBadgeText,
+      backgroundColor: '#2B2D42',
+      padding: { left: 4, right: 4, top: 2, bottom: 2 },
+    });
     heroText.setOrigin(1, 0.5);
     heroText.setVisible(false);
     heroText.setDepth(60); // canvas-hud layer
@@ -1083,11 +1076,7 @@ export class RoomLayer {
         container.add(chain);
         // Warm halo on the wall behind the bulb
         if (haloLoaded) {
-          const halo = this.scene.add.image(
-            x,
-            originY + b.y1 + lampTopOffset + 24,
-            haloKey,
-          );
+          const halo = this.scene.add.image(x, originY + b.y1 + lampTopOffset + 24, haloKey);
           halo.setOrigin(0.5, 0.5);
           applyOfficeTextureDisplaySize(halo, haloKey);
           halo.setAlpha(0.28);
