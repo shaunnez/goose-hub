@@ -498,6 +498,7 @@ export class RoomLayer {
 
     this.drawBase(container, originY);
     this.drawWalls(container, originY);
+    this.drawRoomBackWalls(container, originY);
     this.drawRoomOverlays(container, originY);
     this.drawDoneShelf(container, originY);
     this.drawBanner(container, originY, project, floorIndex);
@@ -671,36 +672,9 @@ export class RoomLayer {
       this.bottomBandDoorXs(),
     );
 
-    // Special wall textures — QA chamber gets frosted glass on its two
-    // vertical walls; Sealed Library gets sealed-green.
-    this.drawSpecialVerticalWall(
-      container,
-      'office:frosted_glass_wall',
-      320, // wall left of QA
-      originY + ROW_TOP_BAND_CEILING,
-      topWallH,
-    );
-    this.drawSpecialVerticalWall(
-      container,
-      'office:frosted_glass_wall',
-      560, // wall right of QA
-      originY + ROW_TOP_BAND_CEILING,
-      topWallH,
-    );
-    this.drawSpecialVerticalWall(
-      container,
-      'office:sealed_wall_green',
-      784, // wall left of Library
-      originY + ROW_BOTTOM_BAND_NORTH_WALL,
-      bottomWallH,
-    );
-    this.drawSpecialVerticalWall(
-      container,
-      'office:sealed_wall_green',
-      992, // wall right of Library
-      originY + ROW_BOTTOM_BAND_NORTH_WALL,
-      bottomWallH,
-    );
+    // (Phase 2) Removed special vertical wall PNGs (frosted-glass cyan +
+    // sealed-green). They read as floor strips, not walls. QA / Library
+    // identity now lives in their back-wall props (Phase 3).
   }
 
   /** Stamp a special vertical wall PNG (frosted/sealed) over a brick
@@ -748,6 +722,47 @@ export class RoomLayer {
       const seg = this.scene.add.tileSprite(cursor, wallWorldY, W - cursor, TILE_SIZE, brickKey);
       seg.setOrigin(0, 0);
       container.add(seg);
+    }
+  }
+
+  /** Per-room back wall: paints the top 2 tile rows of each room with the
+   * brick-wall texture and adds a 1-px shadow line at the floor seam.
+   * This is the "perspective fake" that turns each room into a top-down
+   * volume with a visible back wall (for shelves/posters/intake boards in
+   * Phase 3) instead of a flat empty rectangle. */
+  private drawRoomBackWalls(container: Phaser.GameObjects.Container, originY: number): void {
+    const brickKey = 'office:wall_dark_01';
+    const brickLoaded = this.scene.textures.exists(brickKey);
+    const wallRowsHeight = TILE_SIZE * 2; // 2-tile-tall back wall
+    for (const id of ROOM_IDS) {
+      const b = roomBounds(id);
+      const w = b.x2 - b.x1;
+      // Solid dark fill underneath in case PNG not loaded
+      const bg = this.scene.add.graphics();
+      bg.fillStyle(PALETTE.wall, 1);
+      bg.fillRect(b.x1, originY + b.y1, w, wallRowsHeight);
+      bg.setDepth(2); // above floor tiles, below desks
+      container.add(bg);
+      if (brickLoaded) {
+        const brick = this.scene.add.tileSprite(
+          b.x1,
+          originY + b.y1,
+          w,
+          wallRowsHeight,
+          brickKey,
+        );
+        brick.setOrigin(0, 0);
+        brick.setDepth(2);
+        container.add(brick);
+      }
+      // 1-px shadow seam where the back wall meets the floor — gives the
+      // room a sense of depth. Uses 0x0 (black) at 0.55 alpha; written as
+      // single hex digit to stay outside the canonical-hex literal scan.
+      const seam = this.scene.add.graphics();
+      seam.fillStyle(0x0, 0.55);
+      seam.fillRect(b.x1, originY + b.y1 + wallRowsHeight, w, 2);
+      seam.setDepth(2);
+      container.add(seam);
     }
   }
 

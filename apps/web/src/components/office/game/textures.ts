@@ -103,7 +103,7 @@ interface TextureDisplaySize {
 const OFFICE_TEXTURE_DISPLAY_SIZES: Record<string, TextureDisplaySize> = {
   [TEXTURE_KEYS.floorTile]: { width: 16, height: 16 },
   [TEXTURE_KEYS.floorTileAlt]: { width: 16, height: 16 },
-  [TEXTURE_KEYS.floorRoomWarm]: { width: 32, height: 32 },
+  [TEXTURE_KEYS.floorRoomWarm]: { width: 16, height: 16 },
   [TEXTURE_KEYS.corridorWarm]: { width: 64, height: 64 },
   [TEXTURE_KEYS.wallTile]: { width: 16, height: 16 },
   [TEXTURE_KEYS.desk]: { width: 32, height: 24 },
@@ -329,34 +329,41 @@ function generateCorridorTile(scene: Phaser.Scene): void {
   g.destroy();
 }
 
-/** 32x32 warm-tone tileable room floor — light tan parquet pattern that
- * matches the canonical target image's office floor better than the cool
- * cyan brick PixelLab tile. Procedural so we don't depend on regeneration. */
+/** 16x16 dark-brick room floor — simple repeating horizontal brick pattern
+ * with running-bond offset. Replaces the warm-tan parquet (which fought
+ * the brick walls). Charcoal base reads as a dim ops bunker. */
 function generateWarmRoomFloor(scene: Phaser.Scene): void {
   const key = TEXTURE_KEYS.floorRoomWarm;
   if (scene.textures.exists(key)) return;
-  const base = 0x8a6b4f; // warm tan
-  const lighter = 0x9a7c5e;
-  const darker = 0x6f5340;
-  const accent = 0x3a2d22;
+  const base = 0x1c1828; // dark slate
+  const brickFace = 0x231e30; // slight lift on brick face
+  const brickHi = 0x2a2438; // top-edge highlight
+  const mortar = 0x0e0c14; // near-black mortar
   const g = scene.add.graphics({ x: 0, y: 0 });
-  g.fillStyle(base, 1);
-  g.fillRect(0, 0, 32, 32);
-  // Two 16x16 plank cells with offset grain — gives a subtle parquet feel
-  g.fillStyle(lighter, 1);
+  // Mortar background
+  g.fillStyle(mortar, 1);
   g.fillRect(0, 0, 16, 16);
-  g.fillRect(16, 16, 16, 16);
-  g.fillStyle(darker, 1);
-  g.fillRect(16, 0, 16, 16);
-  g.fillRect(0, 16, 16, 16);
-  // Subtle plank seams (1px lines) — accent colour keeps the texture readable
-  // without dominating the visual.
-  g.fillStyle(accent, 0.4);
-  g.fillRect(0, 15, 32, 1);
-  g.fillRect(0, 31, 32, 1);
-  g.fillRect(15, 0, 1, 32);
-  g.fillRect(31, 0, 1, 32);
-  g.generateTexture(key, 32, 32);
+  // Row 0 (top half): two 8-wide bricks flush
+  g.fillStyle(brickFace, 1);
+  g.fillRect(0, 1, 7, 6);
+  g.fillRect(8, 1, 7, 6);
+  g.fillStyle(brickHi, 1);
+  g.fillRect(0, 1, 7, 1);
+  g.fillRect(8, 1, 7, 1);
+  // Row 1 (bottom half): three bricks offset by 4 so the seams stagger
+  g.fillStyle(brickFace, 1);
+  g.fillRect(0, 9, 3, 6);
+  g.fillRect(4, 9, 7, 6);
+  g.fillRect(12, 9, 4, 6);
+  g.fillStyle(brickHi, 1);
+  g.fillRect(0, 9, 3, 1);
+  g.fillRect(4, 9, 7, 1);
+  g.fillRect(12, 9, 4, 1);
+  // Anti-flat hint of base where mortar meets bricks
+  g.fillStyle(base, 0.3);
+  g.fillRect(0, 7, 16, 1);
+  g.fillRect(0, 15, 16, 1);
+  g.generateTexture(key, 16, 16);
   g.destroy();
 }
 
