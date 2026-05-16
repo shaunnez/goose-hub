@@ -18,6 +18,7 @@ import { type HudState, hudStateFromPlacements } from '../lib/hud-state';
 import { FLOOR_PIXEL_WIDTH, floorCenterY, floorOverviewCameraLayout } from '../lib/layout';
 import { queueVerifiedPngAssets } from './asset-loader';
 import { ChoreographyPlayer } from './choreography/ChoreographyPlayer';
+import { AmbientLayer } from './layers/AmbientLayer';
 import { HudLayer } from './layers/HudLayer';
 import { PersonaLayer } from './layers/PersonaLayer';
 import { RoomLayer } from './layers/RoomLayer';
@@ -45,6 +46,7 @@ export class OfficeScene extends Phaser.Scene {
   private roomLayer!: RoomLayer;
   private personaLayer!: PersonaLayer;
   private ticketLayer!: TicketLayer;
+  private ambientLayer!: AmbientLayer;
   private choreographyPlayer!: ChoreographyPlayer;
   private hudLayer!: HudLayer;
   private lastHudState: HudState | null = null;
@@ -92,6 +94,10 @@ export class OfficeScene extends Phaser.Scene {
       getFloorIndex: (slug) => this.floorIndexFor(slug),
     });
 
+    // Ambient/decorative geese (Phase 5 — coffee loop). Independent of
+    // work-driven personas; spawn / wander / return purely for atmosphere.
+    this.ambientLayer = new AmbientLayer(this);
+
     this.choreographyPlayer = new ChoreographyPlayer({
       personaLayer: this.personaLayer,
       ticketLayer: this.ticketLayer,
@@ -125,6 +131,7 @@ export class OfficeScene extends Phaser.Scene {
   shutdown(): void {
     this.scale.off('resize', this.handleResize, this);
     this.hudLayer?.destroy();
+    this.ambientLayer?.destroyAll();
     this.emitter.removeAllListeners();
     if (this.resizeListener) window.removeEventListener('resize', this.resizeListener);
   }
@@ -140,6 +147,7 @@ export class OfficeScene extends Phaser.Scene {
     this.roomLayer.applyProjects(this.projects);
     this.personaLayer.dropAll();
     this.ticketLayer.dropAll();
+    this.ambientLayer?.applyProjects(this.projects);
 
     this.fitCameraToViewport();
     if (this.currentFloorIndex >= this.projects.length) this.currentFloorIndex = 0;
