@@ -728,19 +728,20 @@ export class RoomLayer {
     }
   }
 
-  /** Per-room back wall — gives each room top-down depth. Stack from top:
-   *   row 0 (16px): ceiling pipes (brass pipe + drip valve)
-   *   row 1 (16px): stone-block "lintel" — the single brick layer
-   *   rows 2..3 (32px): smooth dark wall — surface where signs/lamps/props mount
-   *   bottom: 2-px shadow seam where the wall meets the floor
-   * Total back-wall height: 4 tiles (64 px). This eats ~36% of the room's
-   * 11-tile vertical extent, leaving 7 tiles of usable floor. */
+  /** Per-room back wall — top-down depth. Stack from top to floor seam:
+   *   row 0  (16px): ceiling pipes (brass pipe + drip valve)
+   *   row 1  (16px): stone-block "lintel" — the single brick layer
+   *   rows 2-5 (64px): warm-charcoal dark wall — sign / lamp / props mount here
+   *   bottom: 2-px shadow seam at the floor join
+   * Total: 6 tiles (96 px). Eats ~55% of the room's 11-tile vertical
+   * extent; floor is 5 tiles. Desk anchors in rooms.ts pushed down 16 px
+   * to keep the desk top clear of the new floor seam. */
   private drawRoomBackWalls(container: Phaser.GameObjects.Container, originY: number): void {
     const ROW_PIPES = 0;
     const ROW_LINTEL = TILE_SIZE;
     const ROW_DARK_WALL_TOP = TILE_SIZE * 2;
-    const DARK_WALL_HEIGHT = TILE_SIZE * 2;
-    const TOTAL_WALL_HEIGHT = TILE_SIZE * 4;
+    const DARK_WALL_HEIGHT = TILE_SIZE * 4;
+    const TOTAL_WALL_HEIGHT = TILE_SIZE * 6;
 
     const pipesKey = TEXTURE_KEYS.ceilingPipes;
     const lintelKey = TEXTURE_KEYS.stoneWall;
@@ -776,7 +777,7 @@ export class RoomLayer {
         lintel.setDepth(2);
         container.add(lintel);
       }
-      // Rows 2-3: smooth dark wall
+      // Rows 2-5: smooth dark wall (4 tiles of charcoal stone surface)
       if (darkLoaded) {
         const dark = this.scene.add.tileSprite(
           x,
@@ -789,17 +790,27 @@ export class RoomLayer {
         dark.setDepth(2);
         container.add(dark);
       }
-      // Subtle gradient — slight darkening at the top of the dark wall to
-      // imply the lintel casts a shadow downward.
-      const grad = this.scene.add.graphics();
-      grad.fillStyle(0x0, 0.25);
-      grad.fillRect(x, y0 + ROW_DARK_WALL_TOP, w, 4);
-      grad.setDepth(2);
-      container.add(grad);
+      // Lintel cast shadow — slight darkening just below the lintel.
+      const lintelShadow = this.scene.add.graphics();
+      lintelShadow.fillStyle(0x0, 0.3);
+      lintelShadow.fillRect(x, y0 + ROW_DARK_WALL_TOP, w, 5);
+      lintelShadow.setDepth(2);
+      container.add(lintelShadow);
 
-      // 2-px shadow seam where the back wall meets the floor.
+      // Wall-bottom darkening — a subtle gradient that pools shadow at
+      // the wall/floor seam, giving the back wall a sense of recession.
+      const bottomShadow = this.scene.add.graphics();
+      for (let i = 0; i < 12; i++) {
+        const alpha = 0.05 + (i / 12) * 0.25;
+        bottomShadow.fillStyle(0x0, alpha);
+        bottomShadow.fillRect(x, y0 + TOTAL_WALL_HEIGHT - 12 + i, w, 1);
+      }
+      bottomShadow.setDepth(2);
+      container.add(bottomShadow);
+
+      // 2-px shadow seam at the wall-floor join.
       const seam = this.scene.add.graphics();
-      seam.fillStyle(0x0, 0.6);
+      seam.fillStyle(0x0, 0.7);
       seam.fillRect(x, y0 + TOTAL_WALL_HEIGHT, w, 2);
       seam.setDepth(2);
       container.add(seam);
@@ -848,9 +859,9 @@ export class RoomLayer {
       ],
       coffee: [{ key: 'office:goose_coffee_sign', nx: 0.5 }],
     };
-    // Props anchor at the floor seam (back wall is now 4 tiles tall —
+    // Props anchor at the floor seam (back wall is now 6 tiles tall —
     // see drawRoomBackWalls) and extend upward into the wall.
-    const wallRowsHeight = TILE_SIZE * 4;
+    const wallRowsHeight = TILE_SIZE * 6;
     for (const id of ROOM_IDS) {
       const list = props[id];
       if (list.length === 0) continue;
@@ -1002,9 +1013,9 @@ export class RoomLayer {
     for (const id of ROOM_IDS) {
       const b = roomBounds(id);
       const cx = (b.x1 + b.x2) / 2;
-      // Sign sits in the upper portion of the dark-wall band (just below
-      // the lintel + ceiling pipes — visually "high on the wall").
-      const signY = originY + b.y1 + TILE_SIZE * 2 + 8;
+      // Sign sits in the upper portion of the (now 6-tile-tall) dark wall,
+      // just below the lintel — "high on the wall" like real signage.
+      const signY = originY + b.y1 + TILE_SIZE * 2 + 12;
       const text = id.toUpperCase();
 
       // Text first so we can size the plate to it
@@ -1058,41 +1069,52 @@ export class RoomLayer {
     }
   }
 
-  /** Pendant lamp(s) hung against each room's back wall. Chain anchors
-   * at the ceiling-pipe row (top of back wall), the brass hood + bulb
-   * dangles into the dark-wall area — visible against the wall surface,
-   * not protruding into the floor. */
+  /** Pendant lamp(s) hung against each room's back wall. A 2-px brass
+   * chain runs from the ceiling-pipes row down into the wall; the
+   * pendant lamp sprite sits at the chain's bottom, lit by a warm halo
+   * pooled around the bulb. Wall is 6 tiles tall (96 px) so chains are
+   * long — the bulb hangs ~2/3 down the wall. */
   private drawRoomLamps(container: Phaser.GameObjects.Container, originY: number): void {
     const lampKey = TEXTURE_KEYS.pendantLamp;
     if (!this.scene.textures.exists(lampKey)) return;
     const haloKey = 'office:glow_soft';
     const haloLoaded = this.scene.textures.exists(haloKey);
+    // Chain anchor: just below the ceiling-pipe band (so chain visually
+    // hangs from the pipe). Lamp top: lower into the wall (3 tile rows
+    // below the lintel).
+    const chainTopOffset = TILE_SIZE; // y1 + 16
+    const lampTopOffset = TILE_SIZE * 3 + 4; // y1 + 52 — bulb ends near y1+80
     for (const id of ROOM_IDS) {
       const b = roomBounds(id);
       const width = b.x2 - b.x1;
-      // One lamp per ~96 px of room width, min 1 max 3
       const count = Math.max(1, Math.min(3, Math.round(width / 96)));
-      // Chain anchored at the bottom of the ceiling-pipes row (y1 + TILE_SIZE).
-      // Lamp sprite is 28 px tall; bulb sits at y1 + TILE_SIZE + 28 = y1 + 44
-      // — within the back-wall area (which ends at y1 + 64).
-      const lampTopY = b.y1 + TILE_SIZE - 4;
       for (let i = 0; i < count; i++) {
         const t = (i + 1) / (count + 1);
         const x = b.x1 + width * t;
-        // Halo lights the wall behind/below the bulb
+        // Brass chain rectangle from ceiling pipes to lamp top
+        const chain = this.scene.add.graphics();
+        chain.fillStyle(BRASS_TINTS.brassDark, 1);
+        chain.fillRect(x - 1, originY + b.y1 + chainTopOffset, 2, lampTopOffset - chainTopOffset);
+        chain.setDepth(3);
+        container.add(chain);
+        // Warm halo on the wall behind the bulb
         if (haloLoaded) {
-          const halo = this.scene.add.image(x, originY + lampTopY + 24, haloKey);
+          const halo = this.scene.add.image(
+            x,
+            originY + b.y1 + lampTopOffset + 24,
+            haloKey,
+          );
           halo.setOrigin(0.5, 0.5);
           applyOfficeTextureDisplaySize(halo, haloKey);
-          halo.setAlpha(0.22);
+          halo.setAlpha(0.28);
           halo.setBlendMode(Phaser.BlendModes.NORMAL);
-          halo.setDepth(3); // above wall, below lamp
+          halo.setDepth(3);
           container.add(halo);
         }
-        const lamp = this.scene.add.image(x, originY + lampTopY, lampKey);
+        const lamp = this.scene.add.image(x, originY + b.y1 + lampTopOffset, lampKey);
         lamp.setOrigin(0.5, 0);
         applyOfficeTextureDisplaySize(lamp, lampKey);
-        lamp.setDepth(4); // above wall, halo and props
+        lamp.setDepth(4);
         container.add(lamp);
       }
     }

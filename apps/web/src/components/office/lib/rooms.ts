@@ -144,8 +144,10 @@ export function roomDoor(id: RoomId): Point | null {
 // don't appear glued to the ceiling. Top band interior is y=80..255 (176
 // tall); placing desks at y=208 puts the goose body around y=192 with feet
 // on the desk at y=208.
-const TOP_DESK_Y = TOP_BAND_Y.y1 + 128; // y=208
-const BOTTOM_DESK_Y = BOTTOM_BAND_Y.y1 + 128; // y=480
+// Phase 8: back wall extended to 6 tiles tall (96 px). Desk anchors
+// pushed down 16 px so the desk top stays clear of the new floor seam.
+const TOP_DESK_Y = TOP_BAND_Y.y1 + 144; // y=224 (was 208)
+const BOTTOM_DESK_Y = BOTTOM_BAND_Y.y1 + 144; // y=496 (was 480)
 
 // Per-room desk counts reflect each room's purpose and the canonical mockup:
 // Dev is the busy floor (4 stations); QA is the booth grid (4); Review has

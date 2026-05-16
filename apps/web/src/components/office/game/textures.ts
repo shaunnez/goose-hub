@@ -463,26 +463,39 @@ function generateStoneWallTile(scene: Phaser.Scene): void {
   g.destroy();
 }
 
-/** Smooth dark stone wall — used as the back-wall fill behind the
- * single brick "lintel" row. No visible per-block seams: just a uniform
- * dark stone surface for mounting signs/lamps/props against. */
+/** Warm charcoal back-wall tile — large 8×8 stone squares with thin
+ * dark grout, subtle highlight on top edge of each block, slight
+ * variation between the four blocks in a tile. Reads as a stone
+ * surface (not bricks) at fit-width zoom. */
 function generateDarkWallTile(scene: Phaser.Scene): void {
   const key = TEXTURE_KEYS.darkWall;
   if (scene.textures.exists(key)) return;
-  const base = 0x1f1d24;
-  const grain = 0x26242c;
-  const shadow = 0x141218;
+  // Warmer charcoal — leans brown-grey rather than blue-grey
+  const baseA = 0x2a2620;
+  const baseB = 0x322d26;
+  const baseC = 0x252118;
+  const baseD = 0x2e2922;
+  const highlight = 0x4a4136;
+  const grout = 0x100e0a;
   const g = scene.add.graphics({ x: 0, y: 0 });
-  g.fillStyle(base, 1);
+  // Grout background
+  g.fillStyle(grout, 1);
   g.fillRect(0, 0, 16, 16);
-  // Subtle vertical grain — single 1-px stripes at irregular intervals
-  g.fillStyle(grain, 1);
-  g.fillRect(3, 0, 1, 16);
-  g.fillRect(11, 0, 1, 16);
-  // Faint horizontal grout (very subtle so it doesn't read as bricks)
-  g.fillStyle(shadow, 1);
-  g.fillRect(0, 7, 16, 1);
-  g.fillRect(0, 15, 16, 1);
+  // 4 stone squares (each 7×7 inset by 1 px grout)
+  g.fillStyle(baseA, 1);
+  g.fillRect(1, 1, 7, 7);
+  g.fillStyle(baseB, 1);
+  g.fillRect(8, 1, 7, 7);
+  g.fillStyle(baseC, 1);
+  g.fillRect(1, 8, 7, 7);
+  g.fillStyle(baseD, 1);
+  g.fillRect(8, 8, 7, 7);
+  // Thin highlight on the top edge of each block (lit-from-above)
+  g.fillStyle(highlight, 0.55);
+  g.fillRect(1, 1, 7, 1);
+  g.fillRect(8, 1, 7, 1);
+  g.fillRect(1, 8, 7, 1);
+  g.fillRect(8, 8, 7, 1);
   g.generateTexture(key, 16, 16);
   g.destroy();
 }
