@@ -745,13 +745,7 @@ export class RoomLayer {
       bg.setDepth(2); // above floor tiles, below desks
       container.add(bg);
       if (brickLoaded) {
-        const brick = this.scene.add.tileSprite(
-          b.x1,
-          originY + b.y1,
-          w,
-          wallRowsHeight,
-          brickKey,
-        );
+        const brick = this.scene.add.tileSprite(b.x1, originY + b.y1, w, wallRowsHeight, brickKey);
         brick.setOrigin(0, 0);
         brick.setDepth(2);
         container.add(brick);
@@ -772,10 +766,7 @@ export class RoomLayer {
    * room's width. Props anchor at (0.5, 1) so they sit *on* the floor
    * seam, hanging "down" from the back wall band. No-ops when a PNG is
    * not loaded. */
-  private drawRoomBackWallProps(
-    container: Phaser.GameObjects.Container,
-    originY: number,
-  ): void {
+  private drawRoomBackWallProps(container: Phaser.GameObjects.Container, originY: number): void {
     const props: Record<RoomId, Array<{ key: string; nx: number }>> = {
       dev: [
         { key: 'office:dev_monitor_dual', nx: 0.18 },
@@ -877,7 +868,7 @@ export class RoomLayer {
 
     // QA chamber (top band) — subtle frosted-cyan tint
     const qa = roomBounds('qa');
-    overlays.fillStyle(PALETTE.qaWall, 0.10);
+    overlays.fillStyle(PALETTE.qaWall, 0.1);
     overlays.fillRect(qa.x1, originY + qa.y1, qa.x2 - qa.x1, qa.y2 - qa.y1);
 
     // Review chamber (top band) — subtle purple tint

@@ -10,15 +10,63 @@ interface FeedItem {
 }
 
 const PLACEHOLDER_FEED: FeedItem[] = [
-  { ts: '14:32', icon: '⚠', iconClass: 'text-red-400', title: 'QA failed', subtitle: 'GH-2471 · Retry 1/3' },
-  { ts: '14:31', icon: '◯', iconClass: 'text-amber-400', title: 'Awaiting Review', subtitle: 'GH-2468' },
-  { ts: '14:29', icon: '✓', iconClass: 'text-emerald-400', title: 'Tests passed', subtitle: 'GH-2467' },
-  { ts: '14:28', icon: '⚙', iconClass: 'text-cyan-400', title: 'Code merged', subtitle: 'GH-2466 → main' },
+  {
+    ts: '14:32',
+    icon: '⚠',
+    iconClass: 'text-red-400',
+    title: 'QA failed',
+    subtitle: 'GH-2471 · Retry 1/3',
+  },
+  {
+    ts: '14:31',
+    icon: '◯',
+    iconClass: 'text-amber-400',
+    title: 'Awaiting Review',
+    subtitle: 'GH-2468',
+  },
+  {
+    ts: '14:29',
+    icon: '✓',
+    iconClass: 'text-emerald-400',
+    title: 'Tests passed',
+    subtitle: 'GH-2467',
+  },
+  {
+    ts: '14:28',
+    icon: '⚙',
+    iconClass: 'text-cyan-400',
+    title: 'Code merged',
+    subtitle: 'GH-2466 → main',
+  },
   { ts: '14:27', icon: '↑', iconClass: 'text-fg-2', title: 'Commit pushed', subtitle: 'GH-2466' },
-  { ts: '14:25', icon: '✓', iconClass: 'text-purple-400', title: 'Investigation done', subtitle: 'GH-2465' },
-  { ts: '14:23', icon: '+', iconClass: 'text-fg-2', title: 'New ticket', subtitle: 'GH-2472 Refactor auth' },
-  { ts: '14:21', icon: '✓', iconClass: 'text-emerald-400', title: 'Tests passed', subtitle: 'GH-2464' },
-  { ts: '14:19', icon: '★', iconClass: 'text-purple-400', title: 'Retro complete', subtitle: 'GH-2463' },
+  {
+    ts: '14:25',
+    icon: '✓',
+    iconClass: 'text-purple-400',
+    title: 'Investigation done',
+    subtitle: 'GH-2465',
+  },
+  {
+    ts: '14:23',
+    icon: '+',
+    iconClass: 'text-fg-2',
+    title: 'New ticket',
+    subtitle: 'GH-2472 Refactor auth',
+  },
+  {
+    ts: '14:21',
+    icon: '✓',
+    iconClass: 'text-emerald-400',
+    title: 'Tests passed',
+    subtitle: 'GH-2464',
+  },
+  {
+    ts: '14:19',
+    icon: '★',
+    iconClass: 'text-purple-400',
+    title: 'Retro complete',
+    subtitle: 'GH-2463',
+  },
 ];
 
 export function EventFeedSidebar() {

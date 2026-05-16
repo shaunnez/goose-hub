@@ -139,7 +139,6 @@ const OFFICE_TEXTURE_DISPLAY_SIZES: Record<string, TextureDisplaySize> = {
   'office:bookshelf_small': { width: 28, height: 28 },
   'office:qa_warning_light': { width: 14, height: 18 },
   'office:archive_drawer': { width: 36, height: 28 },
-  'office:done_shelf': { width: 48, height: 36 },
   'office:merge_trophy_small': { width: 18, height: 22 },
   'office:paperwork_stack': { width: 22, height: 20 },
   'office:goose_coffee_sign': { width: 56, height: 28 },

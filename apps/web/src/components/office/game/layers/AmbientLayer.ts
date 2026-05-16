@@ -6,13 +6,9 @@
 // Independent of PersonaLayer. Spawned per-floor when applyProjects fires.
 // Pure visual layer — no events emitted, no clicks handled.
 
-import Phaser from 'phaser';
+import type Phaser from 'phaser';
 import { TILE_SIZE, floorOriginY } from '../../lib/layout';
-import {
-  ROOM_IDS,
-  type RoomId,
-  roomDeskAnchors,
-} from '../../lib/rooms';
+import { ROOM_IDS, type RoomId, roomDeskAnchors } from '../../lib/rooms';
 import { TEXTURE_KEYS, applyOfficeTextureDisplaySize } from '../textures';
 import type { OfficeProject } from './types';
 
