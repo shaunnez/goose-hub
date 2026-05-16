@@ -499,6 +499,7 @@ export class RoomLayer {
     this.drawBase(container, originY);
     this.drawWalls(container, originY);
     this.drawRoomBackWalls(container, originY);
+    this.drawRoomBackWallProps(container, originY);
     this.drawRoomOverlays(container, originY);
     this.drawDoneShelf(container, originY);
     this.drawBanner(container, originY, project, floorIndex);
@@ -763,6 +764,69 @@ export class RoomLayer {
       seam.fillRect(b.x1, originY + b.y1 + wallRowsHeight, w, 2);
       seam.setDepth(2);
       container.add(seam);
+    }
+  }
+
+  /** Mounts thematic prop PNGs onto each room's back wall. Each entry is
+   * (textureKey, normalizedX) pairs where normalizedX 0..1 spans the
+   * room's width. Props anchor at (0.5, 1) so they sit *on* the floor
+   * seam, hanging "down" from the back wall band. No-ops when a PNG is
+   * not loaded. */
+  private drawRoomBackWallProps(
+    container: Phaser.GameObjects.Container,
+    originY: number,
+  ): void {
+    const props: Record<RoomId, Array<{ key: string; nx: number }>> = {
+      dev: [
+        { key: 'office:dev_monitor_dual', nx: 0.18 },
+        { key: 'office:dev_monitor_dual', nx: 0.45 },
+        { key: 'office:dev_monitor_dual', nx: 0.72 },
+      ],
+      qa: [
+        { key: 'office:qa_warning_light', nx: 0.18 },
+        { key: 'office:qa_warning_light', nx: 0.4 },
+        { key: 'office:qa_warning_light', nx: 0.62 },
+        { key: 'office:qa_warning_light', nx: 0.84 },
+      ],
+      review: [{ key: 'office:quality_score_gauge', nx: 0.5 }],
+      retro: [],
+      done: [
+        { key: 'office:merge_trophy_small', nx: 0.3 },
+        { key: 'office:merge_trophy_small', nx: 0.7 },
+      ],
+      archive: [
+        { key: 'office:archive_drawer', nx: 0.3 },
+        { key: 'office:archive_drawer', nx: 0.7 },
+      ],
+      backlog: [
+        { key: 'office:paperwork_stack', nx: 0.2 },
+        { key: 'office:paperwork_stack', nx: 0.5 },
+        { key: 'office:paperwork_stack', nx: 0.8 },
+      ],
+      triage: [{ key: 'office:intake_board', nx: 0.5 }],
+      investigation: [{ key: 'office:investigation_map_board', nx: 0.5 }],
+      library: [
+        { key: 'office:bookshelf_small', nx: 0.2 },
+        { key: 'office:bookshelf_large', nx: 0.5 },
+        { key: 'office:bookshelf_small', nx: 0.8 },
+      ],
+      coffee: [{ key: 'office:goose_coffee_sign', nx: 0.5 }],
+    };
+    const wallRowsHeight = TILE_SIZE * 2;
+    for (const id of ROOM_IDS) {
+      const list = props[id];
+      if (list.length === 0) continue;
+      const b = roomBounds(id);
+      const w = b.x2 - b.x1;
+      const seamY = originY + b.y1 + wallRowsHeight;
+      for (const { key, nx } of list) {
+        if (!this.scene.textures.exists(key)) continue;
+        const img = this.scene.add.image(b.x1 + Math.round(w * nx), seamY, key);
+        img.setOrigin(0.5, 1);
+        applyOfficeTextureDisplaySize(img, key);
+        img.setDepth(3); // above back wall, below desks
+        container.add(img);
+      }
     }
   }
 

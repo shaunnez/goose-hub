@@ -106,18 +106,19 @@ const OFFICE_TEXTURE_DISPLAY_SIZES: Record<string, TextureDisplaySize> = {
   [TEXTURE_KEYS.floorRoomWarm]: { width: 16, height: 16 },
   [TEXTURE_KEYS.corridorWarm]: { width: 64, height: 64 },
   [TEXTURE_KEYS.wallTile]: { width: 16, height: 16 },
-  [TEXTURE_KEYS.desk]: { width: 32, height: 24 },
-  // Per-room desk PNGs — all displayed at 32x24 for uniform desk-row scale.
-  'office:desk_dev_dual': { width: 32, height: 24 },
-  'office:desk_dev_single': { width: 32, height: 24 },
-  'office:qa_station': { width: 32, height: 24 },
-  'office:review_table': { width: 32, height: 24 },
-  'office:done_shelf': { width: 32, height: 24 },
-  'office:archive_shelf': { width: 32, height: 24 },
-  'office:desk_triage': { width: 32, height: 24 },
-  'office:desk_investigation': { width: 32, height: 24 },
-  'office:library_terminal': { width: 32, height: 24 },
-  'office:coffee_machine': { width: 32, height: 24 },
+  [TEXTURE_KEYS.desk]: { width: 48, height: 36 },
+  // Per-room desk PNGs — uniform 48×36 (was 32×24) so desks read at the
+  // fit-width camera zoom without disappearing into the floor.
+  'office:desk_dev_dual': { width: 48, height: 36 },
+  'office:desk_dev_single': { width: 48, height: 36 },
+  'office:qa_station': { width: 48, height: 36 },
+  'office:review_table': { width: 64, height: 40 },
+  'office:done_shelf': { width: 48, height: 36 },
+  'office:archive_shelf': { width: 48, height: 36 },
+  'office:desk_triage': { width: 48, height: 36 },
+  'office:desk_investigation': { width: 48, height: 36 },
+  'office:library_terminal': { width: 48, height: 36 },
+  'office:coffee_machine': { width: 48, height: 40 },
   // Ticket variant PNGs — same display size as the procedural ticket so
   // ticket positions remain pixel-equivalent regardless of variant.
   'office:ticket_normal': { width: 14, height: 10 },
@@ -129,6 +130,21 @@ const OFFICE_TEXTURE_DISPLAY_SIZES: Record<string, TextureDisplaySize> = {
   'office:lamp_glow_warm': { width: 24, height: 24 },
   'office:lamp_glow_soft': { width: 24, height: 24 },
   'office:glow_soft': { width: 48, height: 48 },
+  // Back-wall props — mounted on the top 2 tile rows of each room.
+  // Display sizes picked to read at fit-width camera zoom while staying
+  // within the 32-px-tall back-wall band.
+  'office:intake_board': { width: 36, height: 28 },
+  'office:investigation_map_board': { width: 56, height: 28 },
+  'office:bookshelf_large': { width: 64, height: 28 },
+  'office:bookshelf_small': { width: 28, height: 28 },
+  'office:qa_warning_light': { width: 14, height: 18 },
+  'office:archive_drawer': { width: 36, height: 28 },
+  'office:done_shelf': { width: 48, height: 36 },
+  'office:merge_trophy_small': { width: 18, height: 22 },
+  'office:paperwork_stack': { width: 22, height: 20 },
+  'office:goose_coffee_sign': { width: 56, height: 28 },
+  'office:quality_score_gauge': { width: 32, height: 28 },
+  'office:dev_monitor_dual': { width: 36, height: 24 },
   // Wall textures
   'office:wall_dark_01': { width: 16, height: 16 },
   'office:wall_dark_02': { width: 16, height: 16 },
@@ -143,17 +159,16 @@ const OFFICE_TEXTURE_DISPLAY_SIZES: Record<string, TextureDisplaySize> = {
   [TEXTURE_KEYS.indicatorBang]: { width: 14, height: 14 },
   [TEXTURE_KEYS.indicatorCheck]: { width: 14, height: 14 },
   [TEXTURE_KEYS.spriteBase]: { width: 12, height: 16 },
-  // Goose sprite PNGs render at native 32x32 — twice the world tile size,
-  // 2x area vs the procedural spriteBase, crispest pixel art (no scaling).
-  // Earlier 24x24 still read as "tiny" at default camera zoom.
-  'office:goose_idle': { width: 32, height: 32 },
-  'office:goose_triage': { width: 32, height: 32 },
-  'office:goose_investigator': { width: 32, height: 32 },
-  'office:goose_dev': { width: 32, height: 32 },
-  'office:goose_qa': { width: 32, height: 32 },
-  'office:goose_reviewer': { width: 32, height: 32 },
-  'office:goose_scout': { width: 32, height: 32 },
-  'office:goose_ops': { width: 32, height: 32 },
+  // Goose sprite PNGs at 40×40 — slight upscale from 32 native so they
+  // remain readable next to the new larger desks under fit-width camera.
+  'office:goose_idle': { width: 40, height: 40 },
+  'office:goose_triage': { width: 40, height: 40 },
+  'office:goose_investigator': { width: 40, height: 40 },
+  'office:goose_dev': { width: 40, height: 40 },
+  'office:goose_qa': { width: 40, height: 40 },
+  'office:goose_reviewer': { width: 40, height: 40 },
+  'office:goose_scout': { width: 40, height: 40 },
+  'office:goose_ops': { width: 40, height: 40 },
   [TEXTURE_KEYS.ticket]: { width: 14, height: 10 },
   [TEXTURE_KEYS.ticketScroll]: { width: 10, height: 16 },
   [TEXTURE_KEYS.ticketEnvelope]: { width: 14, height: 10 },

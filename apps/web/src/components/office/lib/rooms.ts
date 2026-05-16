@@ -147,62 +147,51 @@ export function roomDoor(id: RoomId): Point | null {
 const TOP_DESK_Y = TOP_BAND_Y.y1 + 128; // y=208
 const BOTTOM_DESK_Y = BOTTOM_BAND_Y.y1 + 128; // y=480
 
+// Per-room desk counts reflect each room's purpose and the canonical mockup:
+// Dev is the busy floor (4 stations); QA is the booth grid (4); Review has
+// 2 big tables; Retro is 1 round table; storage rooms (Done/Archive/Backlog)
+// show 1 token desk so persona placements still resolve, but their identity
+// lives in the back-wall props (Phase 3 drawRoomBackWallProps).
 const ROOM_DESK_ANCHORS: Record<RoomId, Point[]> = {
   // Top band
   dev: [
-    { x: 80, y: TOP_DESK_Y },
-    { x: 168, y: TOP_DESK_Y },
-    { x: 256, y: TOP_DESK_Y },
+    { x: 64, y: TOP_DESK_Y },
+    { x: 144, y: TOP_DESK_Y },
+    { x: 224, y: TOP_DESK_Y },
+    { x: 296, y: TOP_DESK_Y },
   ],
   qa: [
-    { x: 384, y: TOP_DESK_Y },
-    { x: 448, y: TOP_DESK_Y },
-    { x: 512, y: TOP_DESK_Y },
+    { x: 368, y: TOP_DESK_Y },
+    { x: 421, y: TOP_DESK_Y },
+    { x: 474, y: TOP_DESK_Y },
+    { x: 527, y: TOP_DESK_Y },
   ],
   review: [
-    { x: 624, y: TOP_DESK_Y },
-    { x: 752, y: TOP_DESK_Y },
+    { x: 632, y: TOP_DESK_Y },
+    { x: 743, y: TOP_DESK_Y },
   ],
-  retro: [
-    { x: 856, y: TOP_DESK_Y },
-    { x: 912, y: TOP_DESK_Y },
-    { x: 968, y: TOP_DESK_Y },
-  ],
-  done: [
-    { x: 1040, y: TOP_DESK_Y },
-    { x: 1080, y: TOP_DESK_Y },
-    { x: 1120, y: TOP_DESK_Y },
-  ],
-  archive: [
-    { x: 1168, y: TOP_DESK_Y },
-    { x: 1216, y: TOP_DESK_Y },
-    { x: 1264, y: TOP_DESK_Y },
-  ],
+  retro: [{ x: 911, y: TOP_DESK_Y }],
+  done: [{ x: 1079, y: TOP_DESK_Y }],
+  archive: [{ x: 1215, y: TOP_DESK_Y }],
   // Bottom band
   backlog: [
-    { x: 64, y: BOTTOM_DESK_Y },
-    { x: 144, y: BOTTOM_DESK_Y },
-    { x: 224, y: BOTTOM_DESK_Y },
+    { x: 80, y: BOTTOM_DESK_Y },
+    { x: 207, y: BOTTOM_DESK_Y },
   ],
-  triage: [
-    { x: 344, y: BOTTOM_DESK_Y },
-    { x: 400, y: BOTTOM_DESK_Y },
-    { x: 456, y: BOTTOM_DESK_Y },
-  ],
+  triage: [{ x: 399, y: BOTTOM_DESK_Y }],
   investigation: [
-    { x: 576, y: BOTTOM_DESK_Y },
-    { x: 656, y: BOTTOM_DESK_Y },
-    { x: 736, y: BOTTOM_DESK_Y },
+    { x: 592, y: BOTTOM_DESK_Y },
+    { x: 719, y: BOTTOM_DESK_Y },
   ],
   library: [
-    { x: 840, y: BOTTOM_DESK_Y },
-    { x: 896, y: BOTTOM_DESK_Y },
-    { x: 952, y: BOTTOM_DESK_Y },
+    { x: 832, y: BOTTOM_DESK_Y },
+    { x: 895, y: BOTTOM_DESK_Y },
+    { x: 958, y: BOTTOM_DESK_Y },
   ],
   coffee: [
-    { x: 1056, y: BOTTOM_DESK_Y },
-    { x: 1136, y: BOTTOM_DESK_Y },
-    { x: 1216, y: BOTTOM_DESK_Y },
+    { x: 1040, y: BOTTOM_DESK_Y },
+    { x: 1135, y: BOTTOM_DESK_Y },
+    { x: 1230, y: BOTTOM_DESK_Y },
   ],
 };
 

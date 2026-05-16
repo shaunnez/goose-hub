@@ -1177,16 +1177,18 @@ describe('rooms.ts — v2 two-band canonical floor geometry', () => {
     expect(allClickZones()).toHaveLength(20);
   });
 
-  it('dev room has 3 desk anchors', () => {
-    expect(roomDeskAnchors('dev')).toHaveLength(3);
+  it('dev room has 4 desk anchors (Phase 3 — busy floor)', () => {
+    expect(roomDeskAnchors('dev')).toHaveLength(4);
   });
 
-  it('done room has shelf slot anchors', () => {
-    expect(roomDeskAnchors('done').length).toBeGreaterThanOrEqual(3);
+  it('done room has at least 1 shelf slot anchor', () => {
+    // Phase 3: storage rooms (done/archive/backlog) keep 1 token desk for
+    // persona placement; their identity lives in back-wall props.
+    expect(roomDeskAnchors('done').length).toBeGreaterThanOrEqual(1);
   });
 
   it('investigation room has desk anchors', () => {
-    expect(roomDeskAnchors('investigation').length).toBeGreaterThanOrEqual(3);
+    expect(roomDeskAnchors('investigation').length).toBeGreaterThanOrEqual(2);
   });
 });
 
