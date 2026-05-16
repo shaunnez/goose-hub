@@ -267,27 +267,33 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
 
   return (
     <div className="relative h-full w-full" data-testid="office-tab">
-      <Suspense
-        fallback={
-          <div
-            data-testid="office-canvas-loading"
-            className="absolute inset-0 flex items-center justify-center text-fg-2 text-[12px] bg-[#0d0a13]"
-          >
-            Loading office…
-          </div>
-        }
-      >
-        <OfficeGameMount
-          projects={officeProjects}
-          placements={placements}
-          activeProjectSlug={activeSlug}
-          onDeskClick={handleDeskClick}
-          onFloorChange={handleFloorChange}
-          choreographyRef={choreographyRef}
-          onHeroChanged={handleHeroChanged}
-          onSceneEmitter={setSceneEmitter}
-        />
-      </Suspense>
+      {/* Canvas is inset from the right by the EventFeedSidebar width
+          (w-44 = 176 px) so the rightmost rooms (Archive, Coffee) aren't
+          drawn under the sidebar. Top + bottom HUDs overlay; canvas
+          extends behind them. */}
+      <div className="absolute inset-y-0 left-0 right-44">
+        <Suspense
+          fallback={
+            <div
+              data-testid="office-canvas-loading"
+              className="absolute inset-0 flex items-center justify-center text-fg-2 text-[12px] bg-[#0d0a13]"
+            >
+              Loading office…
+            </div>
+          }
+        >
+          <OfficeGameMount
+            projects={officeProjects}
+            placements={placements}
+            activeProjectSlug={activeSlug}
+            onDeskClick={handleDeskClick}
+            onFloorChange={handleFloorChange}
+            choreographyRef={choreographyRef}
+            onHeroChanged={handleHeroChanged}
+            onSceneEmitter={setSceneEmitter}
+          />
+        </Suspense>
+      </div>
       {projects.length > 0 && activeProject && (
         <FloorIndicator
           floorIndex={floorIndex}

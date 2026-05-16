@@ -102,6 +102,7 @@ export const TEXTURE_KEYS = {
   ceilingPipes: 'office:ceiling-pipes',
   pendantLamp: 'office:pendant-lamp',
   doorFrame: 'office:door-frame',
+  flatDoor: 'office:flat-door',
   desk: 'office:desk',
   stairs: 'office:stairs',
   spriteBase: 'office:sprite',
@@ -137,6 +138,7 @@ const OFFICE_TEXTURE_DISPLAY_SIZES: Record<string, TextureDisplaySize> = {
   [TEXTURE_KEYS.ceilingPipes]: { width: 16, height: 16 },
   [TEXTURE_KEYS.pendantLamp]: { width: 18, height: 28 },
   [TEXTURE_KEYS.doorFrame]: { width: 36, height: 32 },
+  [TEXTURE_KEYS.flatDoor]: { width: 32, height: 16 },
   [TEXTURE_KEYS.desk]: { width: 48, height: 36 },
   // Per-room desk PNGs — uniform 48×36 (was 32×24) so desks read at the
   // fit-width camera zoom without disappearing into the floor.
@@ -326,6 +328,7 @@ export function ensureOfficeTextures(scene: Phaser.Scene): void {
   generateCeilingPipesTile(scene);
   generatePendantLamp(scene);
   generateDoorFrame(scene);
+  generateFlatDoor(scene);
   generateDesk(scene);
   generateStairs(scene);
   generateSprite(scene);
@@ -627,6 +630,41 @@ function generateDesk(scene: Phaser.Scene): void {
   g.fillStyle(PALETTE.desk, 1);
   g.fillRect(14, 13, 4, 2);
   g.generateTexture(key, 32, 24);
+  g.destroy();
+}
+
+/** Flat door for bottom-band rooms — fills the door gap (2 tiles wide,
+ * 1 tile tall) without protruding architecturally like the top-band
+ * doorFrame. Brass border, wood panel inset, small handle. */
+function generateFlatDoor(scene: Phaser.Scene): void {
+  const key = TEXTURE_KEYS.flatDoor;
+  if (scene.textures.exists(key)) return;
+  const { wood, woodLight, woodDark, brass, brassLight } = BRASS_TINTS;
+  const handle = BRASS_TINTS.bulbCore;
+  const g = scene.add.graphics({ x: 0, y: 0 });
+  // Brass frame
+  g.fillStyle(brass, 1);
+  g.fillRect(0, 0, 32, 16);
+  // Wood panel inset
+  g.fillStyle(woodDark, 1);
+  g.fillRect(2, 2, 28, 12);
+  g.fillStyle(wood, 1);
+  g.fillRect(3, 3, 26, 10);
+  // Centre raised panel
+  g.fillStyle(woodLight, 1);
+  g.fillRect(5, 5, 22, 6);
+  g.fillStyle(woodDark, 1);
+  g.fillRect(5, 5, 22, 1);
+  g.fillRect(5, 5, 1, 6);
+  // Handle
+  g.fillStyle(brassLight, 1);
+  g.fillRect(22, 9, 3, 2);
+  g.fillStyle(handle, 1);
+  g.fillRect(23, 9, 1, 1);
+  // Frame top highlight
+  g.fillStyle(brassLight, 1);
+  g.fillRect(0, 0, 32, 1);
+  g.generateTexture(key, 32, 16);
   g.destroy();
 }
 

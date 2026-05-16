@@ -1484,10 +1484,11 @@ describe('Phase 2.5 — visual canon', () => {
     TEXTURE_KEYS.ceilingPipes,
     TEXTURE_KEYS.pendantLamp,
     TEXTURE_KEYS.doorFrame,
+    TEXTURE_KEYS.flatDoor,
   ]);
 
-  it('TEXTURE_KEYS has 27 entries (20 PNG-backed + 7 procedural-only)', () => {
-    expect(Object.keys(TEXTURE_KEYS)).toHaveLength(27);
+  it('TEXTURE_KEYS has 28 entries (20 PNG-backed + 8 procedural-only)', () => {
+    expect(Object.keys(TEXTURE_KEYS)).toHaveLength(28);
   });
 
   it('pngManifest covers every PNG-backed TEXTURE_KEYS value', () => {

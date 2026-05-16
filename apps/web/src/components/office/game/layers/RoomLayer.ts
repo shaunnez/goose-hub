@@ -508,6 +508,7 @@ export class RoomLayer {
     this.drawDesks(container, originY, floorIndex);
     this.drawRoomLamps(container, originY);
     this.drawTopBandDoors(container, originY);
+    this.drawBottomBandDoors(container, originY);
     this.registerClickZones(container, originY, floorIndex);
   }
 
@@ -578,12 +579,14 @@ export class RoomLayer {
     const walls = this.scene.add.graphics();
     walls.fillStyle(PALETTE.wall, 1);
 
-    // Outer top + bottom horizontal walls.
-    walls.fillRect(0, originY + ROW_TOP_WALL, W, TILE_SIZE);
+    // Outer bottom horizontal wall (top wall removed in Phase 9 — the new
+    // top HUD covers that area cleanly).
     walls.fillRect(0, originY + ROW_BOTTOM_WALL, W, TILE_SIZE);
 
-    // Top band ceiling (between banner and top band interior).
-    walls.fillRect(0, originY + ROW_TOP_BAND_CEILING, W, TILE_SIZE);
+    // Left exterior wall column — spans both bands. Phase 9: added so the
+    // leftmost rooms (Dev, Backlog) read as enclosed instead of running
+    // off-frame.
+    walls.fillRect(0, originY + TOP_BAND_Y.y1, TILE_SIZE, BOTTOM_BAND_Y.y2 - TOP_BAND_Y.y1 + 1);
 
     // Top band south wall — has door gaps facing the corridor.
     this.drawHorizontalWallWithDoors(
@@ -601,13 +604,13 @@ export class RoomLayer {
       this.bottomBandDoorXs(),
     );
 
-    // Vertical inter-room walls — top band: y=ROW_TOP_BAND_CEILING..ROW_TOP_BAND_SOUTH_WALL+TILE_SIZE
-    const topWallH = ROW_TOP_BAND_SOUTH_WALL + TILE_SIZE - ROW_TOP_BAND_CEILING;
+    // Vertical inter-room walls — top band
+    const topWallH = ROW_TOP_BAND_SOUTH_WALL + TILE_SIZE - TOP_BAND_Y.y1;
     for (const wallX of TOP_INTER_ROOM_WALL_X) {
-      walls.fillRect(wallX, originY + ROW_TOP_BAND_CEILING, TILE_SIZE, topWallH);
+      walls.fillRect(wallX, originY + TOP_BAND_Y.y1, TILE_SIZE, topWallH);
     }
 
-    // Vertical inter-room walls — bottom band: y=ROW_BOTTOM_BAND_NORTH_WALL..ROW_BOTTOM_WALL+TILE_SIZE
+    // Vertical inter-room walls — bottom band
     const bottomWallH = ROW_BOTTOM_WALL + TILE_SIZE - ROW_BOTTOM_BAND_NORTH_WALL;
     for (const wallX of BOTTOM_INTER_ROOM_WALL_X) {
       walls.fillRect(wallX, originY + ROW_BOTTOM_BAND_NORTH_WALL, TILE_SIZE, bottomWallH);
@@ -615,31 +618,46 @@ export class RoomLayer {
 
     container.add(walls);
 
-    // Overlay brick texture on the outer walls and top-band ceiling (no door
-    // gaps in these rows). Doored walls (band south/north) and vertical
-    // inter-room walls remain flat for now.
+    // Stone texture overlay on the bottom outer wall, vertical inter-room
+    // walls, the new left exterior wall, and the doored band walls.
     this.drawBrickWalls(container, originY);
   }
 
-  /** Layers wall_dark_01 brick texture over the full-width horizontal
-   * walls without door cuts. */
+  /** Stone-block texture overlay on every wall surface. Phase 9 dropped
+   * the outer top wall + top-band ceiling rows (the new HUD covers that
+   * area). Adds the new left exterior wall column. */
   private drawBrickWalls(container: Phaser.GameObjects.Container, originY: number): void {
     const brickKey = TEXTURE_KEYS.stoneWall;
     if (!this.scene.textures.exists(brickKey)) return;
     const W = FLOOR_WORLD.width;
-    const rows = [ROW_TOP_WALL, ROW_TOP_BAND_CEILING, ROW_BOTTOM_WALL];
-    for (const row of rows) {
-      const brick = this.scene.add.tileSprite(0, originY + row, W, TILE_SIZE, brickKey);
-      brick.setOrigin(0, 0);
-      container.add(brick);
-    }
+    // Outer bottom horizontal wall only (top + ceiling removed in Phase 9)
+    const bottomBrick = this.scene.add.tileSprite(
+      0,
+      originY + ROW_BOTTOM_WALL,
+      W,
+      TILE_SIZE,
+      brickKey,
+    );
+    bottomBrick.setOrigin(0, 0);
+    container.add(bottomBrick);
+
+    // Left exterior wall column (full height of both bands)
+    const leftBrick = this.scene.add.tileSprite(
+      0,
+      originY + TOP_BAND_Y.y1,
+      TILE_SIZE,
+      BOTTOM_BAND_Y.y2 - TOP_BAND_Y.y1 + 1,
+      brickKey,
+    );
+    leftBrick.setOrigin(0, 0);
+    container.add(leftBrick);
 
     // Vertical inter-room walls — both bands.
-    const topWallH = ROW_TOP_BAND_SOUTH_WALL + TILE_SIZE - ROW_TOP_BAND_CEILING;
+    const topWallH = ROW_TOP_BAND_SOUTH_WALL + TILE_SIZE - TOP_BAND_Y.y1;
     for (const wallX of TOP_INTER_ROOM_WALL_X) {
       const brick = this.scene.add.tileSprite(
         wallX,
-        originY + ROW_TOP_BAND_CEILING,
+        originY + TOP_BAND_Y.y1,
         TILE_SIZE,
         topWallH,
         brickKey,
@@ -728,26 +746,14 @@ export class RoomLayer {
     }
   }
 
-  /** Per-room back wall — top-down depth. Stack from top to floor seam:
-   *   row 0  (16px): ceiling pipes (brass pipe + drip valve)
-   *   row 1  (16px): stone-block "lintel" — the single brick layer
-   *   rows 2-5 (64px): warm-charcoal dark wall — sign / lamp / props mount here
-   *   bottom: 2-px shadow seam at the floor join
-   * Total: 6 tiles (96 px). Eats ~55% of the room's 11-tile vertical
-   * extent; floor is 5 tiles. Desk anchors in rooms.ts pushed down 16 px
-   * to keep the desk top clear of the new floor seam. */
+  /** Per-room back wall — full 6 tiles (96 px) of warm-charcoal dark
+   * stone. Phase 9 removed the ceiling-pipe row and the brick lintel
+   * row; the wall is now a single uniform surface where the lamp, sign
+   * and props mount. Recession shadow at the floor seam keeps the
+   * depth read. */
   private drawRoomBackWalls(container: Phaser.GameObjects.Container, originY: number): void {
-    const ROW_PIPES = 0;
-    const ROW_LINTEL = TILE_SIZE;
-    const ROW_DARK_WALL_TOP = TILE_SIZE * 2;
-    const DARK_WALL_HEIGHT = TILE_SIZE * 4;
     const TOTAL_WALL_HEIGHT = TILE_SIZE * 6;
-
-    const pipesKey = TEXTURE_KEYS.ceilingPipes;
-    const lintelKey = TEXTURE_KEYS.stoneWall;
     const darkKey = TEXTURE_KEYS.darkWall;
-    const pipesLoaded = this.scene.textures.exists(pipesKey);
-    const lintelLoaded = this.scene.textures.exists(lintelKey);
     const darkLoaded = this.scene.textures.exists(darkKey);
 
     for (const id of ROOM_IDS) {
@@ -756,61 +762,34 @@ export class RoomLayer {
       const x = b.x1;
       const y0 = originY + b.y1;
 
-      // Solid dark base behind everything in case textures don't load
+      // Solid dark base in case the dark-wall texture doesn't load
       const bg = this.scene.add.graphics();
       bg.fillStyle(PALETTE.wall, 1);
       bg.fillRect(x, y0, w, TOTAL_WALL_HEIGHT);
       bg.setDepth(2);
       container.add(bg);
 
-      // Row 0: ceiling pipes
-      if (pipesLoaded) {
-        const pipes = this.scene.add.tileSprite(x, y0 + ROW_PIPES, w, TILE_SIZE, pipesKey);
-        pipes.setOrigin(0, 0);
-        pipes.setDepth(2);
-        container.add(pipes);
-      }
-      // Row 1: stone-block lintel — the single brick layer
-      if (lintelLoaded) {
-        const lintel = this.scene.add.tileSprite(x, y0 + ROW_LINTEL, w, TILE_SIZE, lintelKey);
-        lintel.setOrigin(0, 0);
-        lintel.setDepth(2);
-        container.add(lintel);
-      }
-      // Rows 2-5: smooth dark wall (4 tiles of charcoal stone surface)
       if (darkLoaded) {
-        const dark = this.scene.add.tileSprite(
-          x,
-          y0 + ROW_DARK_WALL_TOP,
-          w,
-          DARK_WALL_HEIGHT,
-          darkKey,
-        );
+        const dark = this.scene.add.tileSprite(x, y0, w, TOTAL_WALL_HEIGHT, darkKey);
         dark.setOrigin(0, 0);
         dark.setDepth(2);
         container.add(dark);
       }
-      // Lintel cast shadow — slight darkening just below the lintel.
-      const lintelShadow = this.scene.add.graphics();
-      lintelShadow.fillStyle(0x0, 0.3);
-      lintelShadow.fillRect(x, y0 + ROW_DARK_WALL_TOP, w, 5);
-      lintelShadow.setDepth(2);
-      container.add(lintelShadow);
 
-      // Wall-bottom darkening — a subtle gradient that pools shadow at
-      // the wall/floor seam, giving the back wall a sense of recession.
+      // Wall-bottom darkening — pools shadow at the wall/floor seam,
+      // giving the back wall a sense of recession.
       const bottomShadow = this.scene.add.graphics();
-      for (let i = 0; i < 12; i++) {
-        const alpha = 0.05 + (i / 12) * 0.25;
+      for (let i = 0; i < 14; i++) {
+        const alpha = 0.05 + (i / 14) * 0.3;
         bottomShadow.fillStyle(0x0, alpha);
-        bottomShadow.fillRect(x, y0 + TOTAL_WALL_HEIGHT - 12 + i, w, 1);
+        bottomShadow.fillRect(x, y0 + TOTAL_WALL_HEIGHT - 14 + i, w, 1);
       }
       bottomShadow.setDepth(2);
       container.add(bottomShadow);
 
       // 2-px shadow seam at the wall-floor join.
       const seam = this.scene.add.graphics();
-      seam.fillStyle(0x0, 0.7);
+      seam.fillStyle(0x0, 0.75);
       seam.fillRect(x, y0 + TOTAL_WALL_HEIGHT, w, 2);
       seam.setDepth(2);
       container.add(seam);
@@ -961,24 +940,12 @@ export class RoomLayer {
   private drawBanner(
     container: Phaser.GameObjects.Container,
     originY: number,
-    project: OfficeProject,
+    _project: OfficeProject,
     floorIndex: number,
   ): void {
-    // L-cell: Project Name
-    const nameText = this.scene.add.text(
-      FLOOR_PIXEL_WIDTH / 2,
-      originY + ROW_BANNER_TOP + TILE_SIZE * 1.5,
-      project.name,
-      {
-        fontFamily: 'JetBrains Mono, monospace',
-        fontSize: '10px',
-        color: HUD_TINTS.hudCounterText,
-        backgroundColor: '#2B2D42',
-        padding: { left: 6, right: 6, top: 2, bottom: 2 },
-      },
-    );
-    nameText.setOrigin(0.5, 0.5);
-    container.add(nameText);
+    // Project name now lives in the DOM TopHudBar (Phase 9). The banner
+    // function is retained only to register the per-floor hero-ticket
+    // text (used as a Phaser-side fallback when the DOM HUD is hidden).
 
     // R-cell: Active Hero Ticket (initially hidden)
     const heroText = this.scene.add.text(
@@ -1069,6 +1036,24 @@ export class RoomLayer {
     }
   }
 
+  /** Flat doors at each bottom-band room's north-wall door gap. Unlike
+   * the top-band doorFrame which protrudes, the flatDoor sits flush
+   * inside the door gap (32 wide × 16 tall). Origin (0.5, 0) — anchored
+   * at the top of the door row. */
+  private drawBottomBandDoors(container: Phaser.GameObjects.Container, originY: number): void {
+    const doorKey = TEXTURE_KEYS.flatDoor;
+    if (!this.scene.textures.exists(doorKey)) return;
+    for (const id of BOTTOM_BAND_ROOMS) {
+      const door = roomDoor(id);
+      if (!door) continue;
+      const img = this.scene.add.image(door.x, originY + door.y, doorKey);
+      img.setOrigin(0.5, 0);
+      applyOfficeTextureDisplaySize(img, doorKey);
+      img.setDepth(4);
+      container.add(img);
+    }
+  }
+
   /** Pendant lamp(s) hung against each room's back wall. A 2-px brass
    * chain runs from the ceiling-pipes row down into the wall; the
    * pendant lamp sprite sits at the chain's bottom, lit by a warm halo
@@ -1079,10 +1064,9 @@ export class RoomLayer {
     if (!this.scene.textures.exists(lampKey)) return;
     const haloKey = 'office:glow_soft';
     const haloLoaded = this.scene.textures.exists(haloKey);
-    // Chain anchor: just below the ceiling-pipe band (so chain visually
-    // hangs from the pipe). Lamp top: lower into the wall (3 tile rows
-    // below the lintel).
-    const chainTopOffset = TILE_SIZE; // y1 + 16
+    // Phase 9: ceiling pipes / lintel removed — chain hangs from the very
+    // top of the back wall down to the lamp top in the lower-middle area.
+    const chainTopOffset = 0;
     const lampTopOffset = TILE_SIZE * 3 + 4; // y1 + 52 — bulb ends near y1+80
     for (const id of ROOM_IDS) {
       const b = roomBounds(id);
