@@ -314,6 +314,11 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
         projectName={activeProject?.name ?? '—'}
         ticketCount={ticketCount}
         systemLoadPct={64}
+        alert={{
+          title: 'QA FAILURE DETECTED',
+          detail: 'Ticket GH-2471 failed tests (Integration)',
+          breadcrumb: 'Dev Floor › QA Chamber › Retry 1 of 3',
+        }}
       />
       <EventFeedSidebar />
       <BottomHudBar hero={null} team={team} />
