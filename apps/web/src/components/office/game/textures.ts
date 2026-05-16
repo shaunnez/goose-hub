@@ -58,6 +58,27 @@ export const CINEMATIC_TINTS = {
   scoutEnvelopeSeal: 0x6fe7ff,
 } as const;
 
+// §5.6 Brass + warm-light family — used by the Phase 6 stone-wall, pendant
+// lamp, brass-frame sign, and ornate door visuals. Exposed so consumers
+// (RoomLayer) can import these instead of inlining hex literals.
+export const BRASS_TINTS = {
+  brass: 0x9c6e2a,
+  brassLight: 0xd29a3a,
+  brassDark: 0x5e3f15,
+  brassEdge: 0xc59a4c,
+  brassPlateBg: 0x1a140a,
+  bulbCore: 0xfde58a,
+  bulbHot: 0xfff4c2,
+  wood: 0x4a3622,
+  woodLight: 0x6b4f30,
+  woodDark: 0x2a1d12,
+  stoneLight: 0xb0a89a,
+  stoneMid: 0x8a8378,
+  stoneShade: 0x5a544c,
+  mortar: 0x231f1a,
+  chain: 0x3a3530,
+} as const;
+
 // §5.5 Named bindings for HUD elements (5 opaque CSS + 1 Phaser number + 2 alpha CSS = 8)
 export const HUD_TINTS = {
   hudBadgeText: '#F2CC8F',
@@ -76,6 +97,9 @@ export const TEXTURE_KEYS = {
   floorRoomWarm: 'office:floor-room-warm',
   corridorWarm: 'office:corridor-warm',
   wallTile: 'office:wall-tile',
+  stoneWall: 'office:stone-wall',
+  pendantLamp: 'office:pendant-lamp',
+  doorFrame: 'office:door-frame',
   desk: 'office:desk',
   stairs: 'office:stairs',
   spriteBase: 'office:sprite',
@@ -106,6 +130,9 @@ const OFFICE_TEXTURE_DISPLAY_SIZES: Record<string, TextureDisplaySize> = {
   [TEXTURE_KEYS.floorRoomWarm]: { width: 16, height: 16 },
   [TEXTURE_KEYS.corridorWarm]: { width: 64, height: 64 },
   [TEXTURE_KEYS.wallTile]: { width: 16, height: 16 },
+  [TEXTURE_KEYS.stoneWall]: { width: 16, height: 16 },
+  [TEXTURE_KEYS.pendantLamp]: { width: 18, height: 28 },
+  [TEXTURE_KEYS.doorFrame]: { width: 36, height: 32 },
   [TEXTURE_KEYS.desk]: { width: 48, height: 36 },
   // Per-room desk PNGs — uniform 48×36 (was 32×24) so desks read at the
   // fit-width camera zoom without disappearing into the floor.
@@ -290,6 +317,9 @@ export function ensureOfficeTextures(scene: Phaser.Scene): void {
   generateWarmRoomFloor(scene);
   generateCorridorTile(scene);
   generateWallTile(scene);
+  generateStoneWallTile(scene);
+  generatePendantLamp(scene);
+  generateDoorFrame(scene);
   generateDesk(scene);
   generateStairs(scene);
   generateSprite(scene);
@@ -390,6 +420,124 @@ function generateWallTile(scene: Phaser.Scene): void {
   g.fillStyle(PALETTE.wall, 0.5);
   g.fillRect(0, 14, 16, 2);
   g.generateTexture(key, 16, 16);
+  g.destroy();
+}
+
+/** 16x16 stone-block wall tile — light grey blocks with brass-amber edge
+ * highlight on the top and a dark mortar line. Replaces the cool dark
+ * brick that read as "blue and odd" against the dim floor. */
+function generateStoneWallTile(scene: Phaser.Scene): void {
+  const key = TEXTURE_KEYS.stoneWall;
+  if (scene.textures.exists(key)) return;
+  const { stoneLight, stoneMid, stoneShade, mortar, brassEdge } = BRASS_TINTS;
+  const g = scene.add.graphics({ x: 0, y: 0 });
+  // Mortar bg
+  g.fillStyle(mortar, 1);
+  g.fillRect(0, 0, 16, 16);
+  // Two side-by-side blocks per row, two rows. Inset 1px on each side
+  // for the mortar gap.
+  const drawBlock = (x: number, y: number, w: number, h: number) => {
+    g.fillStyle(stoneMid, 1);
+    g.fillRect(x, y, w, h);
+    g.fillStyle(stoneLight, 1);
+    g.fillRect(x, y, w, Math.max(1, Math.floor(h * 0.55)));
+    g.fillStyle(stoneShade, 1);
+    g.fillRect(x, y + h - 1, w, 1);
+    g.fillStyle(brassEdge, 0.8);
+    g.fillRect(x, y, w, 1);
+  };
+  // Row 0: two flush blocks
+  drawBlock(1, 1, 6, 6);
+  drawBlock(9, 1, 6, 6);
+  // Row 1: offset (running bond) — half block at each end + one center
+  drawBlock(1, 9, 2, 6);
+  drawBlock(5, 9, 6, 6);
+  drawBlock(13, 9, 2, 6);
+  g.generateTexture(key, 16, 16);
+  g.destroy();
+}
+
+/** Pendant lamp sprite — chain from ceiling, brass hood, glowing bulb at
+ * bottom. 18x28 so it reads at fit-width zoom (the old PNG was a tiny
+ * indistinct blob). Origin (0.5, 0) — anchor at top of chain. */
+function generatePendantLamp(scene: Phaser.Scene): void {
+  const key = TEXTURE_KEYS.pendantLamp;
+  if (scene.textures.exists(key)) return;
+  const { chain, brass, brassLight, brassDark, bulbCore, bulbHot } = BRASS_TINTS;
+  const g = scene.add.graphics({ x: 0, y: 0 });
+  // Chain (8 px tall, 2 px wide centred)
+  g.fillStyle(chain, 1);
+  g.fillRect(8, 0, 2, 8);
+  // Brass cap atop the hood
+  g.fillStyle(brassDark, 1);
+  g.fillRect(7, 8, 4, 2);
+  g.fillStyle(brass, 1);
+  g.fillRect(6, 10, 6, 2);
+  g.fillStyle(brassLight, 1);
+  g.fillRect(7, 10, 4, 1);
+  // Hood (trapezoid-ish, 5 rows tapering wider)
+  g.fillStyle(brassDark, 1);
+  g.fillRect(5, 12, 8, 2);
+  g.fillStyle(brass, 1);
+  g.fillRect(4, 14, 10, 2);
+  g.fillStyle(brassDark, 1);
+  g.fillRect(3, 16, 12, 2);
+  g.fillStyle(brass, 1);
+  g.fillRect(3, 18, 12, 2);
+  // Hood lower lip
+  g.fillStyle(brassLight, 1);
+  g.fillRect(3, 19, 12, 1);
+  // Glowing bulb (rounded rectangle at bottom)
+  g.fillStyle(bulbCore, 1);
+  g.fillRect(5, 21, 8, 5);
+  g.fillStyle(bulbHot, 1);
+  g.fillRect(6, 22, 6, 3);
+  // Tiny bottom highlight
+  g.fillStyle(bulbCore, 0.7);
+  g.fillRect(7, 26, 4, 1);
+  g.generateTexture(key, 18, 28);
+  g.destroy();
+}
+
+/** Door frame sprite — ornate brass-trimmed door for top-band rooms,
+ * sits in the door gap on the south wall. 36x32. Origin (0.5, 1) — feet
+ * planted on the corridor edge. */
+function generateDoorFrame(scene: Phaser.Scene): void {
+  const key = TEXTURE_KEYS.doorFrame;
+  if (scene.textures.exists(key)) return;
+  const { wood, woodLight, woodDark, brass, brassLight } = BRASS_TINTS;
+  const handle = BRASS_TINTS.bulbCore;
+  const g = scene.add.graphics({ x: 0, y: 0 });
+  // Outer brass frame
+  g.fillStyle(brass, 1);
+  g.fillRect(0, 0, 36, 32);
+  // Inner door cavity (inset by 3 px)
+  g.fillStyle(woodDark, 1);
+  g.fillRect(3, 3, 30, 29);
+  // Door panel
+  g.fillStyle(wood, 1);
+  g.fillRect(5, 5, 26, 27);
+  // Top decorative panel
+  g.fillStyle(woodLight, 1);
+  g.fillRect(7, 7, 22, 5);
+  g.fillStyle(woodDark, 1);
+  g.fillRect(7, 7, 22, 1);
+  // Centre raised panel
+  g.fillStyle(woodLight, 1);
+  g.fillRect(9, 14, 18, 14);
+  g.fillStyle(woodDark, 1);
+  g.fillRect(9, 14, 18, 1);
+  g.fillRect(9, 14, 1, 14);
+  // Door handle
+  g.fillStyle(brassLight, 1);
+  g.fillRect(24, 21, 3, 2);
+  g.fillStyle(handle, 1);
+  g.fillRect(25, 21, 1, 1);
+  // Brass frame highlights (top + left)
+  g.fillStyle(brassLight, 1);
+  g.fillRect(0, 0, 36, 1);
+  g.fillRect(0, 0, 1, 32);
+  g.generateTexture(key, 36, 32);
   g.destroy();
 }
 

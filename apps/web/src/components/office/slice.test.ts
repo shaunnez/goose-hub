@@ -13,7 +13,14 @@ import { pngManifest } from './game/asset-loader';
 import { ChoreographyPlayer } from './game/choreography/ChoreographyPlayer';
 import type { ChoreographyCtx } from './game/choreography/Timeline';
 import { Timeline as TL } from './game/choreography/Timeline';
-import { CINEMATIC_TINTS, HUD_TINTS, PALETTE, ROLE_TINTS, TEXTURE_KEYS } from './game/textures';
+import {
+  BRASS_TINTS,
+  CINEMATIC_TINTS,
+  HUD_TINTS,
+  PALETTE,
+  ROLE_TINTS,
+  TEXTURE_KEYS,
+} from './game/textures';
 import { OFFICE_ROLES, busyRoles, idleIndicator, placementsFromItems } from './lib/agent-positions';
 import type { PersonaPlacement, TicketPlacement } from './lib/agent-positions';
 import type { ChoreographyContext, OrchestrationEvent, Timeline } from './lib/choreography';
@@ -1472,10 +1479,13 @@ describe('Phase 2.5 — visual canon', () => {
   const PROCEDURAL_ONLY_TEXTURE_KEYS = new Set<string>([
     TEXTURE_KEYS.floorRoomWarm,
     TEXTURE_KEYS.corridorWarm,
+    TEXTURE_KEYS.stoneWall,
+    TEXTURE_KEYS.pendantLamp,
+    TEXTURE_KEYS.doorFrame,
   ]);
 
-  it('TEXTURE_KEYS has 22 entries (20 PNG-backed + 2 procedural-only)', () => {
-    expect(Object.keys(TEXTURE_KEYS)).toHaveLength(22);
+  it('TEXTURE_KEYS has 25 entries (20 PNG-backed + 5 procedural-only)', () => {
+    expect(Object.keys(TEXTURE_KEYS)).toHaveLength(25);
   });
 
   it('pngManifest covers every PNG-backed TEXTURE_KEYS value', () => {
@@ -1513,6 +1523,7 @@ describe('Phase 2.5 — visual canon', () => {
       ...(Object.values(ROLE_TINTS) as number[]),
       ...Object.values(CINEMATIC_TINTS).filter((v): v is number => typeof v === 'number'),
       ...Object.values(HUD_TINTS).filter((v): v is number => typeof v === 'number'),
+      ...(Object.values(BRASS_TINTS) as number[]),
     ]);
 
     function collectFiles(dir: string): string[] {

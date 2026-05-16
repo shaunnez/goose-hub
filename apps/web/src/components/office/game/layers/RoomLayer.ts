@@ -34,6 +34,7 @@ import {
   roomQueueAnchor,
 } from '../../lib/rooms';
 import {
+  BRASS_TINTS,
   HUD_TINTS,
   PALETTE,
   TEXTURE_KEYS,
@@ -506,6 +507,7 @@ export class RoomLayer {
     this.drawRoomLabels(container, originY);
     this.drawDesks(container, originY, floorIndex);
     this.drawRoomLamps(container, originY);
+    this.drawTopBandDoors(container, originY);
     this.registerClickZones(container, originY, floorIndex);
   }
 
@@ -622,7 +624,7 @@ export class RoomLayer {
   /** Layers wall_dark_01 brick texture over the full-width horizontal
    * walls without door cuts. */
   private drawBrickWalls(container: Phaser.GameObjects.Container, originY: number): void {
-    const brickKey = 'office:wall_dark_01';
+    const brickKey = TEXTURE_KEYS.stoneWall;
     if (!this.scene.textures.exists(brickKey)) return;
     const W = FLOOR_WORLD.width;
     const rows = [ROW_TOP_WALL, ROW_TOP_BAND_CEILING, ROW_BOTTOM_WALL];
@@ -732,7 +734,7 @@ export class RoomLayer {
    * volume with a visible back wall (for shelves/posters/intake boards in
    * Phase 3) instead of a flat empty rectangle. */
   private drawRoomBackWalls(container: Phaser.GameObjects.Container, originY: number): void {
-    const brickKey = 'office:wall_dark_01';
+    const brickKey = TEXTURE_KEYS.stoneWall;
     const brickLoaded = this.scene.textures.exists(brickKey);
     const wallRowsHeight = TILE_SIZE * 2; // 2-tile-tall back wall
     for (const id of ROOM_IDS) {
@@ -942,60 +944,107 @@ export class RoomLayer {
     this.heroTicketTexts[floorIndex] = heroText;
   }
 
+  /** Brass-framed room name plates. Sit centered on each room's back
+   * wall band, framed by a darker rounded rectangle with a 1-px brass
+   * border so they read as etched signage rather than a console label. */
   private drawRoomLabels(container: Phaser.GameObjects.Container, originY: number): void {
-    const style = {
-      fontFamily: 'JetBrains Mono, monospace',
-      fontSize: '8px',
-      color: HUD_TINTS.hudCounterText,
-      backgroundColor: '#2B2D42',
-      padding: { left: 4, right: 4, top: 1, bottom: 1 },
-    };
-    // Top-band labels: positioned just inside the top of each top-band room.
-    const topLabelY = originY + TOP_BAND_Y.y1 + 8;
-    const bottomLabelY = originY + BOTTOM_BAND_Y.y1 + 8;
-    const labels: { x: number; y: number; text: string }[] = [];
+    const PLATE_BG = BRASS_TINTS.brassPlateBg;
+    const PLATE_BORDER_BRASS = BRASS_TINTS.brassEdge;
+    const PLATE_BORDER_DARK = BRASS_TINTS.brassDark;
+    const TEXT_FILL = '#fde58a';
+    const TEXT_STROKE = '#3a2410';
+
     for (const id of ROOM_IDS) {
       const b = roomBounds(id);
       const cx = (b.x1 + b.x2) / 2;
-      const y = roomBand(id) === 'top' ? topLabelY : bottomLabelY;
-      labels.push({ x: cx, y, text: id.toUpperCase() });
-    }
-    for (const { x, y, text } of labels) {
-      const t = this.scene.add.text(x, y, text, style);
-      t.setOrigin(0.5, 0);
+      // Sign sits on the back wall band (centred vertically in y1..y1+32)
+      const signY = originY + b.y1 + TILE_SIZE;
+      const text = id.toUpperCase();
+
+      // Text first so we can size the plate to it
+      const t = this.scene.add.text(cx, signY, text, {
+        fontFamily: 'JetBrains Mono, monospace',
+        fontSize: '9px',
+        color: TEXT_FILL,
+        stroke: TEXT_STROKE,
+        strokeThickness: 2,
+      });
+      t.setOrigin(0.5, 0.5);
+      t.setDepth(5);
+
+      // Brass plate frame sized to the text + 6 px padding
+      const padX = 8;
+      const padY = 3;
+      const plateW = Math.round(t.width) + padX * 2;
+      const plateH = Math.round(t.height) + padY * 2;
+      const plateX = cx - plateW / 2;
+      const plateY = signY - plateH / 2;
+      const plate = this.scene.add.graphics();
+      plate.setDepth(4);
+      // Outer brass border
+      plate.fillStyle(PLATE_BORDER_BRASS, 1);
+      plate.fillRect(plateX, plateY, plateW, plateH);
+      // Dark inset
+      plate.fillStyle(PLATE_BORDER_DARK, 1);
+      plate.fillRect(plateX + 1, plateY + 1, plateW - 2, plateH - 2);
+      // Plate face
+      plate.fillStyle(PLATE_BG, 1);
+      plate.fillRect(plateX + 2, plateY + 2, plateW - 4, plateH - 4);
+      container.add(plate);
       container.add(t);
     }
   }
 
-  /** Pendant lamp(s) hung from each room's ceiling. Wide rooms get
-   * multiple lamps so the glow distribution looks even. */
+  /** Door frames at each top-band room's south-wall door gap. Anchors at
+   * (door.x, top-band south-wall row), origin (0.5, 1) so the door's foot
+   * sits on the corridor edge. */
+  private drawTopBandDoors(container: Phaser.GameObjects.Container, originY: number): void {
+    const doorKey = TEXTURE_KEYS.doorFrame;
+    if (!this.scene.textures.exists(doorKey)) return;
+    for (const id of TOP_BAND_ROOMS) {
+      const door = roomDoor(id);
+      if (!door) continue;
+      const img = this.scene.add.image(door.x, originY + door.y + TILE_SIZE, doorKey);
+      img.setOrigin(0.5, 1);
+      applyOfficeTextureDisplaySize(img, doorKey);
+      img.setDepth(4);
+      container.add(img);
+    }
+  }
+
+  /** Pendant lamp(s) hung from each room's back wall. Wide rooms get
+   * multiple lamps so the glow distribution looks even. Uses the procedural
+   * pendant lamp (chain + brass hood + glowing bulb) — readable at fit-width
+   * camera zoom unlike the older tiny PNG. */
   private drawRoomLamps(container: Phaser.GameObjects.Container, originY: number): void {
-    const lampKey = 'office:lamp_glow_warm';
+    const lampKey = TEXTURE_KEYS.pendantLamp;
     if (!this.scene.textures.exists(lampKey)) return;
+    const haloKey = 'office:glow_soft';
+    const haloLoaded = this.scene.textures.exists(haloKey);
     for (const id of ROOM_IDS) {
       const b = roomBounds(id);
       const width = b.x2 - b.x1;
       // One lamp per ~96 px of room width, min 1 max 3
       const count = Math.max(1, Math.min(3, Math.round(width / 96)));
-      const lampY = b.y1 + 12;
-      const haloKey = 'office:glow_soft';
-      const haloLoaded = this.scene.textures.exists(haloKey);
+      // Lamp hangs from the back wall — chain anchored at room ceiling
+      // (b.y1), bulb dangles 28 px below into the floor area.
+      const lampTopY = b.y1 + TILE_SIZE * 2 + 2; // just below back wall band
       for (let i = 0; i < count; i++) {
-        const t = (i + 1) / (count + 1); // 0.25/0.5/0.75 spacing
+        const t = (i + 1) / (count + 1);
         const x = b.x1 + width * t;
-        // Soft halo below the lamp — diffuse warm pool. Subtle so dark
-        // rooms read as dim, not glow-bombed.
+        // Subtle warm halo under the bulb
         if (haloLoaded) {
-          const halo = this.scene.add.image(x, originY + lampY + 20, haloKey);
+          const halo = this.scene.add.image(x, originY + lampTopY + 32, haloKey);
           halo.setOrigin(0.5, 0.5);
           applyOfficeTextureDisplaySize(halo, haloKey);
-          halo.setAlpha(0.22);
+          halo.setAlpha(0.18);
           halo.setBlendMode(Phaser.BlendModes.NORMAL);
           container.add(halo);
         }
-        const lamp = this.scene.add.image(x, originY + lampY, lampKey);
+        const lamp = this.scene.add.image(x, originY + lampTopY, lampKey);
         lamp.setOrigin(0.5, 0);
         applyOfficeTextureDisplaySize(lamp, lampKey);
+        lamp.setDepth(4); // above props, below desks
         container.add(lamp);
       }
     }
