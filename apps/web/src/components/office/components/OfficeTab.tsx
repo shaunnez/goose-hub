@@ -17,11 +17,13 @@ import type { OrchestrationEvent, Timeline } from '../lib/choreography';
 import { LANE_FOR_EVENT, timelinesForEvent } from '../lib/choreography';
 import type { RoomId } from '../lib/rooms';
 import { ROOM_IDS } from '../lib/rooms';
+import { BottomHudBar, type TeamCounts } from './BottomHudBar';
 import { DeskDetailPanel } from './DeskDetailPanel';
+import { EventFeedSidebar } from './EventFeedSidebar';
 import { FloorIndicator } from './FloorIndicator';
-import { HudFeed } from './HudFeed';
 import { QueuePanel, useQueueClickSubscription } from './QueuePanel';
 import type { QueueClickPayload } from './QueuePanel';
+import { TopHudBar } from './TopHudBar';
 
 // Lazy-load the Phaser-backed mount so Phaser (~1MB) ships in its own chunk
 // instead of bloating the initial bundle that every other tab pays for.
@@ -230,6 +232,39 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
 
   const activeProject = projects[floorIndex] ?? projects[0];
 
+  // Phase 4 HUD derivations — team counters by role bucket. Mapping from
+  // roomId → role bucket is intentionally loose (placeholder); a future
+  // phase will use stateToRole for exact role attribution.
+  const team = useMemo<TeamCounts>(() => {
+    const t: TeamCounts = { scout: 0, dev: 0, qa: 0, reviewer: 0, ops: 0 };
+    for (const p of placements.personas) {
+      switch (p.roomId) {
+        case 'investigation':
+        case 'library':
+          t.scout++;
+          break;
+        case 'dev':
+        case 'triage':
+        case 'backlog':
+          t.dev++;
+          break;
+        case 'qa':
+          t.qa++;
+          break;
+        case 'review':
+        case 'retro':
+          t.reviewer++;
+          break;
+        default:
+          t.ops++;
+      }
+    }
+    return t;
+  }, [placements.personas]);
+
+  // Total in-flight tickets for the top-bar counter.
+  const ticketCount = placements.tickets.length;
+
   return (
     <div className="relative h-full w-full" data-testid="office-tab">
       <Suspense
@@ -268,8 +303,14 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
         </div>
       )}
       <DeskDetailPanel payload={deskPayload} onClose={() => setDeskPayload(null)} />
-      <HudFeed sceneEmitter={sceneEmitter} />
       <QueuePanel roomId={queueRoom} items={queueItems} onClose={() => setQueueRoom(null)} />
+      <TopHudBar
+        projectName={activeProject?.name ?? '—'}
+        ticketCount={ticketCount}
+        systemLoadPct={64}
+      />
+      <EventFeedSidebar />
+      <BottomHudBar hero={null} team={team} />
     </div>
   );
 }
