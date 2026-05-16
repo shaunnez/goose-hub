@@ -12,6 +12,7 @@
 // feeding into Phaser tweens.
 
 import { TILE_SIZE, floorOriginY, stairsPosition } from './layout';
+import { CORRIDOR_WALK_Y } from './rooms';
 
 export interface Point {
   x: number;
@@ -25,12 +26,11 @@ export interface PathSegment {
 }
 
 /**
- * Y coordinate of the corridor walking lane on a given floor (py=88 for floor 0).
- * Returns the center of the corridor band (ty=4..6): floorOriginY + TILE_SIZE*5 + TILE_SIZE/2.
- * Matches CORRIDOR_WALK_Y in lib/rooms.ts.
+ * Y coordinate of the corridor walking lane on a given floor. v2 layout puts
+ * the corridor in the middle band; returns floorOriginY + CORRIDOR_WALK_Y.
  */
 export function corridorY(floorIndex: number): number {
-  return floorOriginY(floorIndex) + TILE_SIZE * 5 + TILE_SIZE / 2;
+  return floorOriginY(floorIndex) + CORRIDOR_WALK_Y;
 }
 
 /**

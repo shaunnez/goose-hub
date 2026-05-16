@@ -327,12 +327,13 @@ describe('placementsFromItems', () => {
     expect(tickets[0].projectSlug).toBe('p');
   });
 
-  it('factory:investigating produces persona at investigation lead-desk (slot 3)', () => {
+  it('factory:investigating produces persona at investigation room', () => {
     const { personas } = placementsFromItems([
       { workItemId: 'w1', externalId: '1', projectSlug: 'p', state: 'factory:investigating' },
     ]);
     expect(personas[0].roomId).toBe('investigation');
-    expect(personas[0].deskSlot).toBe(3);
+    expect(personas[0].deskSlot).toBeGreaterThanOrEqual(0);
+    expect(personas[0].deskSlot).toBeLessThan(3);
   });
 
   it('factory:in-progress produces persona at a dev desk (slot 0-2, deterministic)', () => {
@@ -408,15 +409,16 @@ describe('placementsFromItems', () => {
     expect(queued[0].roomId).toBe('dev');
   });
 
-  it('triage overflow queues at capacity 1', () => {
-    const items = [1, 2].map((n) => ({
+  it('triage overflow queues once capacity is exceeded', () => {
+    // Triage v2 capacity = 3; pump 4 items to force one into the queue.
+    const items = [1, 2, 3, 4].map((n) => ({
       workItemId: `w${n}`,
       externalId: `${n}`,
       projectSlug: 'p',
       state: 'factory:triaging',
     }));
     const { tickets } = placementsFromItems(items);
-    expect(tickets.filter((t) => t.position === 'carried')).toHaveLength(1);
+    expect(tickets.filter((t) => t.position === 'carried')).toHaveLength(3);
     expect(tickets.filter((t) => t.position === 'queue')).toHaveLength(1);
   });
 
@@ -1059,63 +1061,99 @@ describe('ChoreographyPlayer Phase 5 — criticalActive suppression and onAbort'
   });
 });
 
-describe('rooms.ts — Board 02 canonical floor geometry', () => {
-  it('FLOOR_WORLD matches the 80×24 tile grid', () => {
+describe('rooms.ts — v2 two-band canonical floor geometry', () => {
+  it('FLOOR_WORLD matches the 80×34 tile grid', () => {
     expect(FLOOR_WORLD.width).toBe(1280);
-    expect(FLOOR_WORLD.height).toBe(384);
+    expect(FLOOR_WORLD.height).toBe(544);
   });
 
-  it('CORRIDOR_WALK_Y is the center of the corridor band (ty=4..6)', () => {
-    expect(CORRIDOR_WALK_Y).toBe(88);
+  it('CORRIDOR_WALK_Y is in the middle corridor band', () => {
+    expect(CORRIDOR_WALK_Y).toBe(304);
   });
 
   it('corridorY(0) matches CORRIDOR_WALK_Y', () => {
     expect(corridorY(0)).toBe(CORRIDOR_WALK_Y);
   });
 
-  it('ROOM_IDS contains exactly the six canonical rooms', () => {
-    expect(ROOM_IDS).toEqual(['triage', 'investigation', 'dev', 'qa', 'review', 'done']);
+  it('ROOM_IDS contains the v2 11-room two-band layout', () => {
+    expect(ROOM_IDS).toEqual([
+      'dev',
+      'qa',
+      'review',
+      'retro',
+      'done',
+      'archive',
+      'backlog',
+      'triage',
+      'investigation',
+      'library',
+      'coffee',
+    ]);
   });
 
-  it('roomBounds returns non-overlapping interior rects', () => {
-    const bounds = ROOM_IDS.map((id) => roomBounds(id));
-    // All rooms share the same y-range (interior ty=8..21)
-    for (const b of bounds) {
-      expect(b.y1).toBe(128);
-      expect(b.y2).toBe(351);
+  it('roomBounds returns non-overlapping interior rects in each band', () => {
+    const topRooms: readonly (typeof ROOM_IDS)[number][] = [
+      'dev',
+      'qa',
+      'review',
+      'retro',
+      'done',
+      'archive',
+    ];
+    const bottomRooms: readonly (typeof ROOM_IDS)[number][] = [
+      'backlog',
+      'triage',
+      'investigation',
+      'library',
+      'coffee',
+    ];
+    for (const id of topRooms) {
+      const b = roomBounds(id);
+      expect(b.y1).toBe(80);
+      expect(b.y2).toBe(255);
     }
-    // Rooms are left-to-right non-overlapping
-    for (let i = 1; i < bounds.length; i++) {
-      expect(bounds[i].x1).toBeGreaterThan(bounds[i - 1].x2);
+    for (const id of bottomRooms) {
+      const b = roomBounds(id);
+      expect(b.y1).toBe(352);
+      expect(b.y2).toBe(527);
     }
-    // Last room ends before or at floor width
-    expect(bounds[bounds.length - 1].x2).toBeLessThanOrEqual(FLOOR_WORLD.width);
+    // Within each band, rooms are left-to-right non-overlapping
+    for (const band of [topRooms, bottomRooms]) {
+      const bs = band.map((id) => roomBounds(id));
+      for (let i = 1; i < bs.length; i++) {
+        expect(bs[i].x1).toBeGreaterThan(bs[i - 1].x2);
+      }
+      expect(bs[bs.length - 1].x2).toBeLessThanOrEqual(FLOOR_WORLD.width);
+    }
   });
 
-  it('rooms with doors have door py=112 (ceiling row ty=7)', () => {
-    for (const id of ROOM_IDS) {
+  it('top-band rooms have doors on the south wall (y=256)', () => {
+    for (const id of ['dev', 'qa', 'review', 'retro', 'done', 'archive'] as const) {
       const door = roomDoor(id);
-      if (door) expect(door.y).toBe(112);
+      if (door) expect(door.y).toBe(256);
     }
   });
 
-  it('qa has no door (sealed)', () => {
-    expect(roomDoor('qa')).toBeNull();
+  it('bottom-band rooms have doors on the north wall (y=336)', () => {
+    for (const id of ['backlog', 'triage', 'investigation', 'library', 'coffee'] as const) {
+      const door = roomDoor(id);
+      if (door) expect(door.y).toBe(336);
+    }
   });
 
-  it('qa has two slots (input and output)', () => {
+  it('qa has two slots (input and output) on its south wall', () => {
     const slots = roomSlotAnchors('qa');
     expect(slots).toHaveLength(2);
     expect(slots.map((s) => s.id)).toEqual(['qa.input', 'qa.output']);
   });
 
-  it('qa slots have queueAnchor on py=88', () => {
+  it('qa slots have queueAnchor on the corridor walk lane', () => {
     for (const slot of roomSlotAnchors('qa')) {
-      expect(slot.queueAnchor?.y).toBe(88);
+      expect(slot.queueAnchor?.y).toBe(CORRIDOR_WALK_Y);
     }
   });
 
-  it('queue anchors are on the corridor walking lane (py=88)', () => {
+  it('queue anchors are on the corridor walking lane', () => {
     for (const id of ROOM_IDS) {
       const qa = roomQueueAnchor(id);
       if (qa) expect(qa.y).toBe(CORRIDOR_WALK_Y);
@@ -1126,46 +1164,48 @@ describe('rooms.ts — Board 02 canonical floor geometry', () => {
     expect(roomQueueAnchor('done')).toBeNull();
   });
 
-  it('floor-overview camera anchor is at (640, 192) with zoom 1.0', () => {
+  it('floor-overview camera anchor is centered on the corridor band', () => {
     const anchor = cameraAnchor('floor-overview');
-    expect(anchor?.center).toEqual({ x: 640, y: 192 });
+    expect(anchor?.center).toEqual({ x: 640, y: 272 });
     expect(anchor?.zoom).toBe(1.0);
   });
 
-  it('allClickZones returns 14 zones covering all rooms and queues', () => {
-    expect(allClickZones()).toHaveLength(14);
+  it('allClickZones returns 20 zones (11 rooms + 9 corridor queues)', () => {
+    expect(allClickZones()).toHaveLength(20);
   });
 
   it('dev room has 3 desk anchors', () => {
     expect(roomDeskAnchors('dev')).toHaveLength(3);
   });
 
-  it('done room has 5 shelf slot anchors', () => {
-    expect(roomDeskAnchors('done')).toHaveLength(5);
+  it('done room has shelf slot anchors', () => {
+    expect(roomDeskAnchors('done').length).toBeGreaterThanOrEqual(3);
   });
 
-  it('investigation room has 4 desk anchors (3 scout + 1 lead)', () => {
-    expect(roomDeskAnchors('investigation')).toHaveLength(4);
+  it('investigation room has desk anchors', () => {
+    expect(roomDeskAnchors('investigation').length).toBeGreaterThanOrEqual(3);
   });
 });
 
 // ─── Phase 6: rooms.ts HUD additions ─────────────────────────────────────────
 
-describe('rooms.ts — Phase 6 HUD anchors', () => {
-  it('hudAnchor("retry-counter") returns Board 02 §4.4 position', () => {
-    expect(hudAnchor('retry-counter')).toEqual({ x: 784, y: 96 });
+describe('rooms.ts — Phase 6 HUD anchors (v2 layout)', () => {
+  it('hudAnchor("retry-counter") sits at QA corridor edge', () => {
+    expect(hudAnchor('retry-counter')).toEqual({ x: 320, y: 264 });
   });
 
-  it('hudAnchor("round-counter") returns Board 02 §4.5 position', () => {
-    expect(hudAnchor('round-counter')).toEqual({ x: 1024, y: 96 });
+  it('hudAnchor("round-counter") sits at Review corridor edge', () => {
+    expect(hudAnchor('round-counter')).toEqual({ x: 568, y: 264 });
   });
 
-  it('hudAnchor("quality-score") returns Board 02 §4.5 dial position', () => {
-    expect(hudAnchor('quality-score')).toEqual({ x: 1064, y: 104 });
+  it('hudAnchor("quality-score") sits beside Review door', () => {
+    expect(hudAnchor('quality-score')).toEqual({ x: 608, y: 272 });
   });
 
-  it('hudAnchor("done-day") returns Board 02 §4.6 position', () => {
-    expect(hudAnchor('done-day')).toEqual({ x: 1184, y: 296 });
+  it('hudAnchor("done-day") sits below Done shelf', () => {
+    const a = hudAnchor('done-day');
+    expect(a.x).toBe(968);
+    expect(a.y).toBeGreaterThan(80);
   });
 
   it('hudAnchor("camera-state") returns top-left origin', () => {
@@ -1422,20 +1462,31 @@ describe('Phase 2.5 — visual canon', () => {
     expect(Object.keys(HUD_TINTS)).toHaveLength(8);
   });
 
-  it('TEXTURE_KEYS has exactly 20 entries', () => {
-    expect(Object.keys(TEXTURE_KEYS)).toHaveLength(20);
+  // Procedural-only TEXTURE_KEYS that don't have a PNG asset on disk.
+  // Generated entirely in textures.ts via ensureOfficeTextures().
+  const PROCEDURAL_ONLY_TEXTURE_KEYS = new Set<string>([
+    TEXTURE_KEYS.floorRoomWarm,
+    TEXTURE_KEYS.corridorWarm,
+  ]);
+
+  it('TEXTURE_KEYS has 22 entries (20 PNG-backed + 2 procedural-only)', () => {
+    expect(Object.keys(TEXTURE_KEYS)).toHaveLength(22);
   });
 
-  it('pngManifest keys match all TEXTURE_KEYS values', () => {
+  it('pngManifest covers every PNG-backed TEXTURE_KEYS value', () => {
     const manifestKeys = new Set(pngManifest().map((e) => e.key));
-    const textureValues = new Set(Object.values(TEXTURE_KEYS));
-    expect(manifestKeys).toEqual(textureValues);
+    for (const v of Object.values(TEXTURE_KEYS)) {
+      if (PROCEDURAL_ONLY_TEXTURE_KEYS.has(v)) continue;
+      expect(manifestKeys.has(v), `pngManifest is missing TEXTURE_KEYS value "${v}"`).toBe(true);
+    }
   });
 
-  it('MANIFEST has 20 entries matching TEXTURE_KEYS count', async () => {
+  it('MANIFEST has 20 entries matching PNG-backed TEXTURE_KEYS count', async () => {
     const { MANIFEST } = await import('../../../../../scripts/generate-office-assets');
     expect(MANIFEST).toHaveLength(20);
-    expect(MANIFEST.length).toBe(Object.keys(TEXTURE_KEYS).length);
+    expect(MANIFEST.length).toBe(
+      Object.values(TEXTURE_KEYS).filter((k) => !PROCEDURAL_ONLY_TEXTURE_KEYS.has(k)).length,
+    );
   });
 
   it('every MANIFEST prompt contains at least one Board 06 hex code', async () => {

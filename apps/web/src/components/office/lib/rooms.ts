@@ -1,19 +1,46 @@
-// Authoritative spatial constants for the Office Mode v1 project floor.
+// Authoritative spatial constants for the Office Mode v2 project floor.
 // ALL room coordinates, desk anchors, slot anchors, queue anchors, click zones,
 // and camera anchors live here. Scene and layer code MUST import from this file;
 // no coordinate literal may appear in game/ or components/ that is not defined here.
-// Source: Board 02 canonical project floor design-spec.md §3–§8, §10, §14.
+//
+// v2 geometry: two-band layout matching the canonical gameplay target image.
+//   Top band (y=80..255): dev, qa, review, retro, done, archive (6 rooms).
+//   Middle corridor (y=272..335): walk-lane at y=304.
+//   Bottom band (y=352..527): backlog, triage, investigation, library, coffee (5 rooms).
 
 export const TILE_SIZE = 16;
 
-export const FLOOR_WORLD = { width: 1280, height: 384 } as const;
+export const FLOOR_WORLD = { width: 1280, height: 544 } as const;
 
-// Canonical walking-lane y-coordinate inside the corridor band (ty=4..6).
+// Canonical walking-lane y-coordinate inside the middle corridor band.
 // Personas and queue stacks travel along this line.
-export const CORRIDOR_WALK_Y = 88;
+export const CORRIDOR_WALK_Y = 304;
 
-export const ROOM_IDS = ['triage', 'investigation', 'dev', 'qa', 'review', 'done'] as const;
+// Top band: left → right, west wing to east wing.
+// Bottom band: left → right, mirror of top.
+export const ROOM_IDS = [
+  'dev',
+  'qa',
+  'review',
+  'retro',
+  'done',
+  'archive',
+  'backlog',
+  'triage',
+  'investigation',
+  'library',
+  'coffee',
+] as const;
 export type RoomId = (typeof ROOM_IDS)[number];
+
+export const TOP_BAND_ROOMS = ['dev', 'qa', 'review', 'retro', 'done', 'archive'] as const;
+export const BOTTOM_BAND_ROOMS = [
+  'backlog',
+  'triage',
+  'investigation',
+  'library',
+  'coffee',
+] as const;
 
 export interface Point {
   x: number;
@@ -48,30 +75,63 @@ export interface CameraAnchor {
   zoom: number;
 }
 
+// ─── Floor band y-extents ─────────────────────────────────────────────────────
+
+// Top band interior (between top-band ceiling and top-band south wall).
+export const TOP_BAND_Y = { y1: 80, y2: 255 } as const;
+// Middle corridor interior (between top-band south wall and bottom-band north wall).
+export const CORRIDOR_Y = { y1: 272, y2: 335 } as const;
+// Bottom band interior (between bottom-band north wall and bottom-band south wall).
+export const BOTTOM_BAND_Y = { y1: 352, y2: 527 } as const;
+
 // ─── Room pixel bounds (interior, walls excluded) ─────────────────────────────
 
 const ROOM_BOUNDS: Record<RoomId, PixelRect> = {
-  triage: { x1: 16, y1: 128, x2: 175, y2: 351 },
-  investigation: { x1: 192, y1: 128, x2: 431, y2: 351 },
-  dev: { x1: 448, y1: 128, x2: 719, y2: 351 },
-  qa: { x1: 736, y1: 128, x2: 927, y2: 351 },
-  review: { x1: 944, y1: 128, x2: 1103, y2: 351 },
-  done: { x1: 1120, y1: 128, x2: 1263, y2: 351 },
+  // Top band — 6 rooms. DEV is the widest (most-active room); DONE/ARCHIVE
+  // are narrow shelf rooms. Widths: 304 + 224 + 224 + 192 + 112 + 128 = 1184.
+  // Inter-walls: 5 × 16 = 80. Outer walls: 16 left + 0 right (archive ends
+  // flush). Sum: 1184 + 80 + 16 = 1280.
+  dev: { x1: 16, y1: TOP_BAND_Y.y1, x2: 319, y2: TOP_BAND_Y.y2 }, // 304 wide
+  qa: { x1: 336, y1: TOP_BAND_Y.y1, x2: 559, y2: TOP_BAND_Y.y2 }, // 224 wide
+  review: { x1: 576, y1: TOP_BAND_Y.y1, x2: 799, y2: TOP_BAND_Y.y2 }, // 224 wide
+  retro: { x1: 816, y1: TOP_BAND_Y.y1, x2: 1007, y2: TOP_BAND_Y.y2 }, // 192 wide
+  done: { x1: 1024, y1: TOP_BAND_Y.y1, x2: 1135, y2: TOP_BAND_Y.y2 }, // 112 wide (small shelf room)
+  archive: { x1: 1152, y1: TOP_BAND_Y.y1, x2: 1279, y2: TOP_BAND_Y.y2 }, // 128 wide
+  // Bottom band — 5 rooms, widths sum to 1184 + 4 inter-walls (64) + 2 outer (32) = 1280
+  backlog: { x1: 16, y1: BOTTOM_BAND_Y.y1, x2: 271, y2: BOTTOM_BAND_Y.y2 },
+  triage: { x1: 288, y1: BOTTOM_BAND_Y.y1, x2: 511, y2: BOTTOM_BAND_Y.y2 },
+  investigation: { x1: 528, y1: BOTTOM_BAND_Y.y1, x2: 783, y2: BOTTOM_BAND_Y.y2 },
+  library: { x1: 800, y1: BOTTOM_BAND_Y.y1, x2: 991, y2: BOTTOM_BAND_Y.y2 },
+  coffee: { x1: 1008, y1: BOTTOM_BAND_Y.y1, x2: 1263, y2: BOTTOM_BAND_Y.y2 },
 };
 
 export function roomBounds(id: RoomId): PixelRect {
   return ROOM_BOUNDS[id];
 }
 
-// ─── Room doors (pixel center at ceiling row ty=7, py=112) ───────────────────
+export function roomBand(id: RoomId): 'top' | 'bottom' {
+  return (TOP_BAND_ROOMS as readonly string[]).includes(id) ? 'top' : 'bottom';
+}
+
+// ─── Room doors (pixel center on the corridor-facing wall) ───────────────────
+
+// Top-band doors face south (the corridor is below); door y = top band south wall.
+const TOP_DOOR_Y = TOP_BAND_Y.y2 + 1; // y=256: south wall row
+// Bottom-band doors face north (the corridor is above); door y = bottom band north wall.
+const BOTTOM_DOOR_Y = BOTTOM_BAND_Y.y1 - 16; // y=336: north wall row
 
 const ROOM_DOORS: Partial<Record<RoomId, Point>> = {
-  triage: { x: 80, y: 112 },
-  investigation: { x: 392, y: 112 },
-  dev: { x: 568, y: 112 },
-  // qa: no door; has input/output slots only
-  review: { x: 1016, y: 112 },
-  done: { x: 1192, y: 112 },
+  dev: { x: 168, y: TOP_DOOR_Y },
+  qa: { x: 448, y: TOP_DOOR_Y },
+  review: { x: 688, y: TOP_DOOR_Y },
+  retro: { x: 912, y: TOP_DOOR_Y },
+  done: { x: 1080, y: TOP_DOOR_Y },
+  archive: { x: 1216, y: TOP_DOOR_Y },
+  backlog: { x: 144, y: BOTTOM_DOOR_Y },
+  triage: { x: 400, y: BOTTOM_DOOR_Y },
+  investigation: { x: 656, y: BOTTOM_DOOR_Y },
+  library: { x: 896, y: BOTTOM_DOOR_Y },
+  coffee: { x: 1136, y: BOTTOM_DOOR_Y },
 };
 
 export function roomDoor(id: RoomId): Point | null {
@@ -80,36 +140,69 @@ export function roomDoor(id: RoomId): Point | null {
 
 // ─── Desk / station / shelf anchors ──────────────────────────────────────────
 
+// Desk Y — place desks ~3/4 down each band so geese have headroom and
+// don't appear glued to the ceiling. Top band interior is y=80..255 (176
+// tall); placing desks at y=208 puts the goose body around y=192 with feet
+// on the desk at y=208.
+const TOP_DESK_Y = TOP_BAND_Y.y1 + 128; // y=208
+const BOTTOM_DESK_Y = BOTTOM_BAND_Y.y1 + 128; // y=480
+
 const ROOM_DESK_ANCHORS: Record<RoomId, Point[]> = {
-  triage: [
-    { x: 56, y: 200 }, // triager desk
-  ],
-  investigation: [
-    { x: 232, y: 168 }, // scout desk 1
-    { x: 280, y: 168 }, // scout desk 2
-    { x: 328, y: 168 }, // scout desk 3
-    { x: 280, y: 280 }, // lead investigator desk
-  ],
+  // Top band
   dev: [
-    { x: 512, y: 232 }, // builder desk 1
-    { x: 576, y: 232 }, // builder desk 2
-    { x: 640, y: 232 }, // builder desk 3
+    { x: 80, y: TOP_DESK_Y },
+    { x: 168, y: TOP_DESK_Y },
+    { x: 256, y: TOP_DESK_Y },
   ],
   qa: [
-    { x: 768, y: 232 }, // QA station 1 (silhouette)
-    { x: 832, y: 232 }, // QA station 2 (silhouette)
-    { x: 896, y: 232 }, // QA station 3 (silhouette)
+    { x: 384, y: TOP_DESK_Y },
+    { x: 448, y: TOP_DESK_Y },
+    { x: 512, y: TOP_DESK_Y },
   ],
   review: [
-    { x: 976, y: 232 }, // reviewer silhouette 1
-    { x: 1056, y: 232 }, // reviewer silhouette 2
+    { x: 624, y: TOP_DESK_Y },
+    { x: 752, y: TOP_DESK_Y },
+  ],
+  retro: [
+    { x: 856, y: TOP_DESK_Y },
+    { x: 912, y: TOP_DESK_Y },
+    { x: 968, y: TOP_DESK_Y },
   ],
   done: [
-    { x: 1144, y: 168 }, // shelf slot 1
-    { x: 1168, y: 168 }, // shelf slot 2
-    { x: 1192, y: 168 }, // shelf slot 3 (most recent merge)
-    { x: 1216, y: 168 }, // shelf slot 4
-    { x: 1240, y: 168 }, // shelf slot 5
+    { x: 1040, y: TOP_DESK_Y },
+    { x: 1080, y: TOP_DESK_Y },
+    { x: 1120, y: TOP_DESK_Y },
+  ],
+  archive: [
+    { x: 1168, y: TOP_DESK_Y },
+    { x: 1216, y: TOP_DESK_Y },
+    { x: 1264, y: TOP_DESK_Y },
+  ],
+  // Bottom band
+  backlog: [
+    { x: 64, y: BOTTOM_DESK_Y },
+    { x: 144, y: BOTTOM_DESK_Y },
+    { x: 224, y: BOTTOM_DESK_Y },
+  ],
+  triage: [
+    { x: 344, y: BOTTOM_DESK_Y },
+    { x: 400, y: BOTTOM_DESK_Y },
+    { x: 456, y: BOTTOM_DESK_Y },
+  ],
+  investigation: [
+    { x: 576, y: BOTTOM_DESK_Y },
+    { x: 656, y: BOTTOM_DESK_Y },
+    { x: 736, y: BOTTOM_DESK_Y },
+  ],
+  library: [
+    { x: 840, y: BOTTOM_DESK_Y },
+    { x: 896, y: BOTTOM_DESK_Y },
+    { x: 952, y: BOTTOM_DESK_Y },
+  ],
+  coffee: [
+    { x: 1056, y: BOTTOM_DESK_Y },
+    { x: 1136, y: BOTTOM_DESK_Y },
+    { x: 1216, y: BOTTOM_DESK_Y },
   ],
 };
 
@@ -121,36 +214,38 @@ export function roomDeskAnchors(id: RoomId): Point[] {
 
 const LIBRARY_SLOTS: SlotSpec[] = [
   {
-    id: 'library.envelope-out',
-    side: 'south',
-    tileRange: [17, 18],
-    direction: 'outbound',
-    queueAnchor: null, // opens south into Investigation Lab, not corridor
-    exteriorAnchor: { x: 288, y: 200 },
-    interiorAnchor: { x: 288, y: 224 },
+    id: 'library.envelope-in',
+    side: 'north',
+    tileRange: [51, 52],
+    direction: 'inbound',
+    queueAnchor: { x: 880, y: CORRIDOR_WALK_Y },
+    exteriorAnchor: { x: 880, y: BOTTOM_BAND_Y.y1 - 8 },
+    interiorAnchor: { x: 880, y: BOTTOM_BAND_Y.y1 + 32 },
     tint: 'opaque',
   },
 ];
 
+// QA slots are functional anchors (ticket conveyor in/out) — they do NOT
+// create wall door gaps. QA's south wall has only its main door.
 const QA_SLOTS: SlotSpec[] = [
   {
     id: 'qa.input',
-    side: 'north',
-    tileRange: [49, 50],
+    side: 'south',
+    tileRange: [24, 25],
     direction: 'inbound',
-    queueAnchor: { x: 792, y: 88 },
-    exteriorAnchor: { x: 792, y: 96 },
-    interiorAnchor: { x: 792, y: 136 },
+    queueAnchor: { x: 384, y: CORRIDOR_WALK_Y },
+    exteriorAnchor: { x: 384, y: TOP_BAND_Y.y2 + 8 },
+    interiorAnchor: { x: 384, y: TOP_BAND_Y.y2 - 32 },
     tint: 'frosted',
   },
   {
     id: 'qa.output',
-    side: 'north',
-    tileRange: [53, 54],
+    side: 'south',
+    tileRange: [32, 33],
     direction: 'outbound',
-    queueAnchor: { x: 856, y: 88 },
-    exteriorAnchor: { x: 856, y: 96 },
-    interiorAnchor: { x: 856, y: 136 },
+    queueAnchor: { x: 512, y: CORRIDOR_WALK_Y },
+    exteriorAnchor: { x: 512, y: TOP_BAND_Y.y2 + 8 },
+    interiorAnchor: { x: 512, y: TOP_BAND_Y.y2 - 32 },
     tint: 'frosted',
   },
 ];
@@ -158,18 +253,18 @@ const QA_SLOTS: SlotSpec[] = [
 const REVIEW_SLOTS: SlotSpec[] = [
   {
     id: 'review.door',
-    side: 'north',
-    tileRange: [63, 64],
+    side: 'south',
+    tileRange: [35, 36],
     direction: 'bidirectional',
-    queueAnchor: { x: 1016, y: 88 },
-    exteriorAnchor: { x: 1016, y: 96 },
-    interiorAnchor: { x: 1016, y: 136 },
+    queueAnchor: { x: 576, y: CORRIDOR_WALK_Y },
+    exteriorAnchor: { x: 576, y: TOP_BAND_Y.y2 + 8 },
+    interiorAnchor: { x: 576, y: TOP_BAND_Y.y2 - 32 },
     tint: 'frosted',
   },
 ];
 
 const ROOM_SLOTS: Partial<Record<RoomId, SlotSpec[]>> = {
-  investigation: LIBRARY_SLOTS,
+  library: LIBRARY_SLOTS,
   qa: QA_SLOTS,
   review: REVIEW_SLOTS,
 };
@@ -178,15 +273,19 @@ export function roomSlotAnchors(id: RoomId): SlotSpec[] {
   return ROOM_SLOTS[id] ?? [];
 }
 
-// ─── Queue anchors (corridor-side, py=88) ────────────────────────────────────
+// ─── Queue anchors (corridor-side, y=CORRIDOR_WALK_Y) ────────────────────────
 
 const ROOM_QUEUE_ANCHORS: Partial<Record<RoomId, Point>> = {
-  triage: { x: 72, y: 88 },
-  investigation: { x: 392, y: 88 },
-  dev: { x: 568, y: 88 },
-  qa: { x: 792, y: 88 },
-  review: { x: 1016, y: 88 },
-  // done: no queue — tickets arrive via mergeCelebration directly
+  dev: { x: 136, y: CORRIDOR_WALK_Y },
+  qa: { x: 368, y: CORRIDOR_WALK_Y },
+  review: { x: 576, y: CORRIDOR_WALK_Y },
+  retro: { x: 776, y: CORRIDOR_WALK_Y },
+  backlog: { x: 144, y: CORRIDOR_WALK_Y },
+  triage: { x: 400, y: CORRIDOR_WALK_Y },
+  investigation: { x: 656, y: CORRIDOR_WALK_Y },
+  library: { x: 896, y: CORRIDOR_WALK_Y },
+  coffee: { x: 1136, y: CORRIDOR_WALK_Y },
+  // done, archive: no queue — tickets arrive directly
 };
 
 export function roomQueueAnchor(id: RoomId): Point | null {
@@ -196,20 +295,50 @@ export function roomQueueAnchor(id: RoomId): Point | null {
 // ─── Click zones ──────────────────────────────────────────────────────────────
 
 const ALL_CLICK_ZONES: ClickZone[] = [
-  { id: 'zone.triage.desk', rect: { x1: 16, y1: 176, x2: 175, y2: 239 } },
-  { id: 'zone.investigation.library', rect: { x1: 208, y1: 144, x2: 367, y2: 207 } },
-  { id: 'zone.investigation.lead', rect: { x1: 256, y1: 256, x2: 319, y2: 319 } },
-  { id: 'zone.dev.desk.0', rect: { x1: 480, y1: 208, x2: 559, y2: 271 } },
-  { id: 'zone.dev.desk.1', rect: { x1: 544, y1: 208, x2: 623, y2: 271 } },
-  { id: 'zone.dev.desk.2', rect: { x1: 608, y1: 208, x2: 687, y2: 271 } },
-  { id: 'zone.qa.face', rect: { x1: 736, y1: 112, x2: 927, y2: 159 } },
-  { id: 'zone.review.face', rect: { x1: 944, y1: 112, x2: 1103, y2: 175 } },
-  { id: 'zone.done.shelf', rect: { x1: 1120, y1: 160, x2: 1263, y2: 223 } },
-  { id: 'zone.queue.triage', rect: { x1: 48, y1: 64, x2: 111, y2: 111 } },
-  { id: 'zone.queue.investigation', rect: { x1: 368, y1: 64, x2: 431, y2: 111 } },
-  { id: 'zone.queue.dev', rect: { x1: 544, y1: 64, x2: 607, y2: 111 } },
-  { id: 'zone.queue.qa', rect: { x1: 768, y1: 64, x2: 831, y2: 111 } },
-  { id: 'zone.queue.review', rect: { x1: 992, y1: 64, x2: 1055, y2: 111 } },
+  // Top band — desk-face click zones
+  { id: 'zone.dev.face', rect: { x1: 16, y1: TOP_DESK_Y - 24, x2: 255, y2: TOP_DESK_Y + 24 } },
+  { id: 'zone.qa.face', rect: { x1: 272, y1: TOP_DESK_Y - 24, x2: 463, y2: TOP_DESK_Y + 24 } },
+  {
+    id: 'zone.review.face',
+    rect: { x1: 480, y1: TOP_DESK_Y - 24, x2: 671, y2: TOP_DESK_Y + 24 },
+  },
+  { id: 'zone.retro.face', rect: { x1: 688, y1: TOP_DESK_Y - 24, x2: 863, y2: TOP_DESK_Y + 24 } },
+  { id: 'zone.done.shelf', rect: { x1: 880, y1: TOP_DESK_Y - 24, x2: 1055, y2: TOP_DESK_Y + 24 } },
+  {
+    id: 'zone.archive.face',
+    rect: { x1: 1072, y1: TOP_DESK_Y - 24, x2: 1263, y2: TOP_DESK_Y + 24 },
+  },
+  // Bottom band — desk-face click zones
+  {
+    id: 'zone.backlog.face',
+    rect: { x1: 16, y1: BOTTOM_DESK_Y - 24, x2: 271, y2: BOTTOM_DESK_Y + 24 },
+  },
+  {
+    id: 'zone.triage.face',
+    rect: { x1: 288, y1: BOTTOM_DESK_Y - 24, x2: 511, y2: BOTTOM_DESK_Y + 24 },
+  },
+  {
+    id: 'zone.investigation.face',
+    rect: { x1: 528, y1: BOTTOM_DESK_Y - 24, x2: 783, y2: BOTTOM_DESK_Y + 24 },
+  },
+  {
+    id: 'zone.library.face',
+    rect: { x1: 800, y1: BOTTOM_DESK_Y - 24, x2: 991, y2: BOTTOM_DESK_Y + 24 },
+  },
+  {
+    id: 'zone.coffee.face',
+    rect: { x1: 1008, y1: BOTTOM_DESK_Y - 24, x2: 1263, y2: BOTTOM_DESK_Y + 24 },
+  },
+  // Queue zones along the corridor walk-line
+  { id: 'zone.queue.dev', rect: { x1: 104, y1: 280, x2: 168, y2: 320 } },
+  { id: 'zone.queue.qa', rect: { x1: 336, y1: 280, x2: 400, y2: 320 } },
+  { id: 'zone.queue.review', rect: { x1: 544, y1: 280, x2: 608, y2: 320 } },
+  { id: 'zone.queue.retro', rect: { x1: 744, y1: 280, x2: 808, y2: 320 } },
+  { id: 'zone.queue.backlog', rect: { x1: 112, y1: 280, x2: 176, y2: 320 } },
+  { id: 'zone.queue.triage', rect: { x1: 368, y1: 280, x2: 432, y2: 320 } },
+  { id: 'zone.queue.investigation', rect: { x1: 624, y1: 280, x2: 688, y2: 320 } },
+  { id: 'zone.queue.library', rect: { x1: 864, y1: 280, x2: 928, y2: 320 } },
+  { id: 'zone.queue.coffee', rect: { x1: 1104, y1: 280, x2: 1168, y2: 320 } },
 ];
 
 export function roomClickZones(id: RoomId): ClickZone[] {
@@ -223,42 +352,46 @@ export function allClickZones(): ClickZone[] {
 // ─── Camera anchors ───────────────────────────────────────────────────────────
 
 const CAMERA_ANCHORS: Record<string, CameraAnchor> = {
-  'floor-overview': { center: { x: 640, y: 192 }, zoom: 1.0 },
-  'hero-ticket-follow': { center: { x: 640, y: 192 }, zoom: 1.0 }, // dynamic; center is placeholder
-  'room-triage': { center: { x: 96, y: 200 }, zoom: 1.0 },
-  'room-investigation': { center: { x: 312, y: 200 }, zoom: 1.0 },
-  'room-dev': { center: { x: 584, y: 200 }, zoom: 1.0 },
-  'room-qa': { center: { x: 832, y: 200 }, zoom: 1.0 },
-  'room-review': { center: { x: 1024, y: 200 }, zoom: 1.0 },
-  'room-done': { center: { x: 1192, y: 200 }, zoom: 1.0 },
-  'library-zoom': { center: { x: 288, y: 168 }, zoom: 1.0 },
+  'floor-overview': { center: { x: 640, y: 272 }, zoom: 1.0 },
+  'hero-ticket-follow': { center: { x: 640, y: 272 }, zoom: 1.0 },
+  'room-dev': { center: { x: 168, y: TOP_DESK_Y }, zoom: 1.0 },
+  'room-qa': { center: { x: 448, y: TOP_DESK_Y }, zoom: 1.0 },
+  'room-review': { center: { x: 688, y: TOP_DESK_Y }, zoom: 1.0 },
+  'room-retro': { center: { x: 912, y: TOP_DESK_Y }, zoom: 1.0 },
+  'room-done': { center: { x: 1080, y: TOP_DESK_Y }, zoom: 1.0 },
+  'room-archive': { center: { x: 1216, y: TOP_DESK_Y }, zoom: 1.0 },
+  'room-backlog': { center: { x: 144, y: BOTTOM_DESK_Y }, zoom: 1.0 },
+  'room-triage': { center: { x: 400, y: BOTTOM_DESK_Y }, zoom: 1.0 },
+  'room-investigation': { center: { x: 656, y: BOTTOM_DESK_Y }, zoom: 1.0 },
+  'room-library': { center: { x: 896, y: BOTTOM_DESK_Y }, zoom: 1.0 },
+  'room-coffee': { center: { x: 1136, y: BOTTOM_DESK_Y }, zoom: 1.0 },
+  'library-zoom': { center: { x: 896, y: BOTTOM_DESK_Y }, zoom: 1.0 },
 };
 
 export function cameraAnchor(name: string): CameraAnchor | null {
   return CAMERA_ANCHORS[name] ?? null;
 }
 
-// ─── Library sub-room constants ───────────────────────────────────────────────
+// ─── Library sub-room constants (now a top-level room) ────────────────────────
 
-// Interior bounds (inside outer Investigation room)
-export const LIBRARY_BOUNDS: PixelRect = { x1: 208, y1: 144, x2: 367, y2: 207 };
-
-// Center of the envelope slot opening on the Library south wall
-export const LIBRARY_ENVELOPE_SLOT_CENTER: Point = { x: 288, y: 216 };
-
-// Reserved scout desk anchors (slots 4–6, not instantiated in v1)
+export const LIBRARY_BOUNDS: PixelRect = ROOM_BOUNDS.library;
+export const LIBRARY_ENVELOPE_SLOT_CENTER: Point = { x: 880, y: BOTTOM_BAND_Y.y1 + 16 };
 export const LIBRARY_RESERVED_SCOUT_ANCHORS: Point[] = [
-  { x: 240, y: 184 },
-  { x: 304, y: 184 },
-  { x: 352, y: 184 },
+  { x: 840, y: BOTTOM_DESK_Y + 32 },
+  { x: 896, y: BOTTOM_DESK_Y + 32 },
+  { x: 952, y: BOTTOM_DESK_Y + 32 },
 ];
 
 // ─── Inter-room wall column x-positions (px = tx * TILE_SIZE) ────────────────
 
-// Vertical walls between rooms at tile columns 11, 27, 45, 58, 69.
-export const INTER_ROOM_WALL_X = [176, 432, 720, 928, 1104] as const;
+// Top band: 5 inter-room walls between 6 rooms.
+export const TOP_INTER_ROOM_WALL_X = [320, 560, 800, 1008, 1136] as const;
+// Bottom band: 4 inter-room walls between 5 rooms.
+export const BOTTOM_INTER_ROOM_WALL_X = [272, 512, 784, 992] as const;
+// Combined for backwards compat with code that doesn't distinguish bands.
+export const INTER_ROOM_WALL_X = [...TOP_INTER_ROOM_WALL_X, ...BOTTOM_INTER_ROOM_WALL_X] as const;
 
-// ─── Phase 6: HUD anchor points (Board 02 §4.4–§4.6 + §3.10) ─────────────────
+// ─── Phase 6: HUD anchor points ──────────────────────────────────────────────
 
 export type HudAnchorName =
   | 'retry-counter'
@@ -268,11 +401,11 @@ export type HudAnchorName =
   | 'camera-state';
 
 const HUD_ANCHORS: Record<HudAnchorName, Point> = {
-  'retry-counter': { x: 784, y: 96 }, // Board 02 §4.4 — corridor side of QA chamber
-  'round-counter': { x: 1024, y: 96 }, // Board 02 §4.5 — corridor side of Review chamber
-  'quality-score': { x: 1064, y: 104 }, // Board 02 §4.5 — beside dial face on Review door frame
-  'done-day': { x: 1184, y: 296 }, // Board 02 §4.6 — below Done shelf
-  'camera-state': { x: 8, y: 8 }, // Board 02 §3.10 — top-left of canvas
+  'retry-counter': { x: 320, y: 264 }, // corridor side of QA chamber
+  'round-counter': { x: 568, y: 264 }, // corridor side of Review chamber
+  'quality-score': { x: 608, y: 272 }, // beside Review door frame
+  'done-day': { x: 968, y: TOP_DESK_Y + 64 }, // below Done shelf
+  'camera-state': { x: 8, y: 8 },
 };
 
 export function hudAnchor(name: HudAnchorName): Point {
@@ -284,10 +417,10 @@ export function hudAnchor(name: HudAnchorName): Point {
 export type Priority = 'critical' | 'high' | 'normal' | 'low';
 
 const PRIORITY_TINT: Record<Priority, string> = {
-  critical: '#ef4444', // red
-  high: '#f59e0b', // amber
-  normal: '#22d3ee', // cyan
-  low: '#9ca3af', // grey
+  critical: '#ef4444',
+  high: '#f59e0b',
+  normal: '#22d3ee',
+  low: '#9ca3af',
 };
 
 export function priorityTintColor(priority: Priority): string {
@@ -297,9 +430,9 @@ export function priorityTintColor(priority: Priority): string {
 // ─── Phase 6: Room pressure colour (in-flight ticket count → tint) ──────────
 
 export function pressureColorForCount(n: number): number {
-  if (n <= 0) return 0x2a3344; // neutral cyan-tinted floor
-  if (n <= 3) return 0x2a3344; // neutral (1..3 looks the same as 0 at v1 scale)
-  if (n <= 7) return 0x3d3020; // slight amber
-  if (n <= 15) return 0x4a3010; // amber
-  return 0x5c3800; // warm amber
+  if (n <= 0) return 0x2a3344;
+  if (n <= 3) return 0x2a3344;
+  if (n <= 7) return 0x3d3020;
+  if (n <= 15) return 0x4a3010;
+  return 0x5c3800;
 }

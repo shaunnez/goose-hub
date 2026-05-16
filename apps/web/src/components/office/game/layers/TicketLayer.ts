@@ -25,6 +25,7 @@ import {
   TEXTURE_KEYS,
   applyOfficeTextureDisplaySize,
   indicatorTextureKey,
+  ticketTextureKeyFor,
 } from '../textures';
 import type { PersonaLayer } from './PersonaLayer';
 import type { DeskClickPayload, IntentResult } from './types';
@@ -510,10 +511,17 @@ export class TicketLayer {
     const container = this.scene.add.container(0, 0);
     container.setDepth(TICKET_DEPTH);
 
-    const body = this.scene.add.image(0, 0, TEXTURE_KEYS.ticket);
+    // Pick a thematic ticket PNG when available; fall back to the
+    // procedural ticket. PNG variants are pre-coloured, so skip the
+    // priority tint for them.
+    const variantKey = ticketTextureKeyFor(p.position, p.priority, this.scene);
+    const ticketKey = variantKey ?? TEXTURE_KEYS.ticket;
+    const body = this.scene.add.image(0, 0, ticketKey);
     body.setOrigin(0.5, 0.5);
-    applyOfficeTextureDisplaySize(body, TEXTURE_KEYS.ticket);
-    this.applyPriorityTint(body, p.priority);
+    applyOfficeTextureDisplaySize(body, ticketKey);
+    if (variantKey == null) {
+      this.applyPriorityTint(body, p.priority);
+    }
     container.add(body);
 
     // Small indicator badge above the ticket body; hidden by default.

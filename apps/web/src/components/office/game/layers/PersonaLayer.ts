@@ -21,16 +21,25 @@ import {
   TEXTURE_KEYS,
   applyOfficeTextureDisplaySize,
   indicatorTextureKey,
+  isGooseTextureKey,
+  spriteTextureKeyForRole,
 } from '../textures';
 
-// Derive default role tint from room for spriteBase colouring
+// Derive default role tint / goose-key from room. One entry per room.
 const ROOM_DEFAULT_ROLE: Record<string, string> = {
-  triage: 'triager',
-  investigation: 'investigator',
+  // Top band
   dev: 'developer',
   qa: 'qa',
   review: 'reviewer',
+  retro: 'retrospector',
   done: 'retrospector',
+  archive: 'auditor',
+  // Bottom band
+  backlog: 'decomposer',
+  triage: 'triager',
+  investigation: 'investigator',
+  library: 'researcher',
+  coffee: 'developer',
 };
 import type { DeskClickPayload, IntentResult, OfficeProject } from './types';
 
@@ -393,11 +402,14 @@ export class PersonaLayer {
     const container = this.scene.add.container(pos.x, pos.y - TILE_SIZE);
     container.setDepth(PERSONA_DEPTH);
 
-    const body = this.scene.add.image(0, 0, TEXTURE_KEYS.spriteBase);
-    body.setOrigin(0.5, 1);
-    applyOfficeTextureDisplaySize(body, TEXTURE_KEYS.spriteBase);
     const role = p.roomId != null ? (ROOM_DEFAULT_ROLE[p.roomId] ?? 'developer') : 'developer';
-    body.setTint(ROLE_TINTS[role] ?? PALETTE.amber);
+    const bodyKey = spriteTextureKeyForRole(role, this.scene);
+    const body = this.scene.add.image(0, 0, bodyKey);
+    body.setOrigin(0.5, 1);
+    applyOfficeTextureDisplaySize(body, bodyKey);
+    if (!isGooseTextureKey(bodyKey)) {
+      body.setTint(ROLE_TINTS[role] ?? PALETTE.amber);
+    }
     container.add(body);
 
     const indicator = this.scene.add.image(0, -TILE_SIZE - 4, indicatorTextureKey(p.indicator));

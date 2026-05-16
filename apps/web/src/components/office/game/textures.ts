@@ -73,6 +73,8 @@ export const HUD_TINTS = {
 export const TEXTURE_KEYS = {
   floorTile: 'office:floor-tile',
   floorTileAlt: 'office:floor-tile-alt',
+  floorRoomWarm: 'office:floor-room-warm',
+  corridorWarm: 'office:corridor-warm',
   wallTile: 'office:wall-tile',
   desk: 'office:desk',
   stairs: 'office:stairs',
@@ -101,8 +103,38 @@ interface TextureDisplaySize {
 const OFFICE_TEXTURE_DISPLAY_SIZES: Record<string, TextureDisplaySize> = {
   [TEXTURE_KEYS.floorTile]: { width: 16, height: 16 },
   [TEXTURE_KEYS.floorTileAlt]: { width: 16, height: 16 },
+  [TEXTURE_KEYS.floorRoomWarm]: { width: 32, height: 32 },
+  [TEXTURE_KEYS.corridorWarm]: { width: 64, height: 64 },
   [TEXTURE_KEYS.wallTile]: { width: 16, height: 16 },
   [TEXTURE_KEYS.desk]: { width: 32, height: 24 },
+  // Per-room desk PNGs — all displayed at 32x24 for uniform desk-row scale.
+  'office:desk_dev_dual': { width: 32, height: 24 },
+  'office:desk_dev_single': { width: 32, height: 24 },
+  'office:qa_station': { width: 32, height: 24 },
+  'office:review_table': { width: 32, height: 24 },
+  'office:done_shelf': { width: 32, height: 24 },
+  'office:archive_shelf': { width: 32, height: 24 },
+  'office:desk_triage': { width: 32, height: 24 },
+  'office:desk_investigation': { width: 32, height: 24 },
+  'office:library_terminal': { width: 32, height: 24 },
+  'office:coffee_machine': { width: 32, height: 24 },
+  // Ticket variant PNGs — same display size as the procedural ticket so
+  // ticket positions remain pixel-equivalent regardless of variant.
+  'office:ticket_normal': { width: 14, height: 10 },
+  'office:ticket_hero': { width: 14, height: 10 },
+  'office:ticket_failed': { width: 14, height: 10 },
+  'office:ticket_done': { width: 14, height: 10 },
+  'office:ticket_retry': { width: 14, height: 10 },
+  // Ambient — pendant lamps
+  'office:lamp_glow_warm': { width: 24, height: 24 },
+  'office:lamp_glow_soft': { width: 24, height: 24 },
+  'office:glow_soft': { width: 48, height: 48 },
+  // Wall textures
+  'office:wall_dark_01': { width: 16, height: 16 },
+  'office:wall_dark_02': { width: 16, height: 16 },
+  'office:frosted_glass_wall': { width: 16, height: 16 },
+  'office:sealed_wall_green': { width: 16, height: 16 },
+  'office:sealed_wall_blue': { width: 16, height: 16 },
   [TEXTURE_KEYS.stairs]: { width: 32, height: 32 },
   [TEXTURE_KEYS.indicatorSpeech]: { width: 14, height: 16 },
   [TEXTURE_KEYS.indicatorThought]: { width: 14, height: 16 },
@@ -111,6 +143,17 @@ const OFFICE_TEXTURE_DISPLAY_SIZES: Record<string, TextureDisplaySize> = {
   [TEXTURE_KEYS.indicatorBang]: { width: 14, height: 14 },
   [TEXTURE_KEYS.indicatorCheck]: { width: 14, height: 14 },
   [TEXTURE_KEYS.spriteBase]: { width: 12, height: 16 },
+  // Goose sprite PNGs render at native 32x32 — twice the world tile size,
+  // 2x area vs the procedural spriteBase, crispest pixel art (no scaling).
+  // Earlier 24x24 still read as "tiny" at default camera zoom.
+  'office:goose_idle': { width: 32, height: 32 },
+  'office:goose_triage': { width: 32, height: 32 },
+  'office:goose_investigator': { width: 32, height: 32 },
+  'office:goose_dev': { width: 32, height: 32 },
+  'office:goose_qa': { width: 32, height: 32 },
+  'office:goose_reviewer': { width: 32, height: 32 },
+  'office:goose_scout': { width: 32, height: 32 },
+  'office:goose_ops': { width: 32, height: 32 },
   [TEXTURE_KEYS.ticket]: { width: 14, height: 10 },
   [TEXTURE_KEYS.ticketScroll]: { width: 10, height: 16 },
   [TEXTURE_KEYS.ticketEnvelope]: { width: 14, height: 10 },
@@ -146,9 +189,80 @@ export function indicatorTextureKey(kind: IndicatorKind): string {
   }
 }
 
-/** Returns the base sprite texture key. Role tint is applied at runtime via setTint(ROLE_TINTS[role]). */
-export function spriteTextureKeyForRole(_role: string): string {
+/** Returns the ticket PNG texture key for a given placement, or null if no
+ * suitable PNG is loaded (caller falls back to the procedural ticket). */
+export function ticketTextureKeyFor(
+  position: string,
+  priority: string,
+  scene?: Phaser.Scene,
+): string | null {
+  const candidates: string[] = [];
+  if (position === 'shelf') candidates.push('office:ticket_done');
+  if (priority === 'critical' || priority === 'high') candidates.push('office:ticket_hero');
+  candidates.push('office:ticket_normal');
+  for (const key of candidates) {
+    if (scene?.textures.exists(key)) return key;
+  }
+  return null;
+}
+
+// Per-room desk PNG mapping. drawDesks uses this to pick a thematic
+// PNG (e.g. dev → dual builder desk, qa → QA station, library → terminal)
+// instead of the generic procedural desk. All entries display at 32x24
+// regardless of source PNG dimensions so the desk row stays uniform.
+export const ROOM_DESK_KEYS: Record<string, string> = {
+  dev: 'office:desk_dev_dual',
+  qa: 'office:qa_station',
+  review: 'office:review_table',
+  retro: 'office:desk_dev_single', // no dedicated retro asset
+  done: 'office:done_shelf',
+  archive: 'office:archive_shelf',
+  backlog: 'office:desk_triage', // backlog reuses triage desk
+  triage: 'office:desk_triage',
+  investigation: 'office:desk_investigation',
+  library: 'office:library_terminal',
+  coffee: 'office:coffee_machine',
+};
+
+export function roomDeskTextureKey(roomId: string, scene?: Phaser.Scene): string {
+  const candidate = ROOM_DESK_KEYS[roomId];
+  if (candidate != null && scene?.textures.exists(candidate)) return candidate;
+  return TEXTURE_KEYS.desk;
+}
+
+// Per-role goose PNG mapping. Roles without a matching PNG fall back to
+// goose_idle (white goose). Callers should SKIP setTint() when the returned
+// key starts with 'office:goose_' — the PNGs are pre-coloured.
+const ROLE_GOOSE_KEYS: Record<string, string> = {
+  triager: 'office:goose_triage',
+  griller: 'office:goose_idle',
+  'prd-writer': 'office:goose_idle',
+  decomposer: 'office:goose_idle',
+  researcher: 'office:goose_scout',
+  investigator: 'office:goose_investigator',
+  developer: 'office:goose_dev',
+  'dev-reviewer': 'office:goose_dev',
+  qa: 'office:goose_qa',
+  reviewer: 'office:goose_reviewer',
+  retrospector: 'office:goose_idle',
+  auditor: 'office:goose_ops',
+};
+
+/**
+ * Returns the sprite texture key for a given role. Prefers a goose PNG when
+ * one is loaded; falls back to the procedural spriteBase. Role tint is only
+ * applied when the returned key is the procedural sprite — goose PNGs are
+ * pre-coloured.
+ */
+export function spriteTextureKeyForRole(role: string, scene?: Phaser.Scene): string {
+  const candidate = ROLE_GOOSE_KEYS[role] ?? 'office:goose_idle';
+  if (scene?.textures.exists(candidate)) return candidate;
   return TEXTURE_KEYS.spriteBase;
+}
+
+/** True when the texture key refers to a pre-coloured goose PNG (skip tint). */
+export function isGooseTextureKey(key: string): boolean {
+  return key.startsWith('office:goose_');
 }
 
 /**
@@ -159,6 +273,8 @@ export function spriteTextureKeyForRole(_role: string): string {
 export function ensureOfficeTextures(scene: Phaser.Scene): void {
   generateFloorTile(scene, TEXTURE_KEYS.floorTile, PALETTE.floor);
   generateFloorTile(scene, TEXTURE_KEYS.floorTileAlt, PALETTE.floorAlt);
+  generateWarmRoomFloor(scene);
+  generateCorridorTile(scene);
   generateWallTile(scene);
   generateDesk(scene);
   generateStairs(scene);
@@ -188,6 +304,59 @@ function generateFloorTile(scene: Phaser.Scene, key: string, color: number): voi
   g.fillRect(0, 0, 1, 1);
   g.fillRect(15, 15, 1, 1);
   g.generateTexture(key, 16, 16);
+  g.destroy();
+}
+
+/** 64x64 corridor tile — dark navy floor with a yellow dashed centerline
+ * (one dash visible per tile, breaks on the seam to read as a long dash
+ * pattern when tiled). Matches the canonical target image's corridor. */
+function generateCorridorTile(scene: Phaser.Scene): void {
+  const key = TEXTURE_KEYS.corridorWarm;
+  if (scene.textures.exists(key)) return;
+  const baseDark = 0x1f2233;
+  const baseLight = 0x252a3e;
+  const dashYellow = 0xf2cc8f;
+  const g = scene.add.graphics({ x: 0, y: 0 });
+  // Base dark navy with subtle horizontal noise band
+  g.fillStyle(baseDark, 1);
+  g.fillRect(0, 0, 64, 64);
+  g.fillStyle(baseLight, 1);
+  g.fillRect(0, 28, 64, 8);
+  // Yellow dashed centerline: 32px dash centered, 32px gap to next tile
+  g.fillStyle(dashYellow, 1);
+  g.fillRect(16, 30, 32, 4);
+  g.generateTexture(key, 64, 64);
+  g.destroy();
+}
+
+/** 32x32 warm-tone tileable room floor — light tan parquet pattern that
+ * matches the canonical target image's office floor better than the cool
+ * cyan brick PixelLab tile. Procedural so we don't depend on regeneration. */
+function generateWarmRoomFloor(scene: Phaser.Scene): void {
+  const key = TEXTURE_KEYS.floorRoomWarm;
+  if (scene.textures.exists(key)) return;
+  const base = 0x8a6b4f; // warm tan
+  const lighter = 0x9a7c5e;
+  const darker = 0x6f5340;
+  const accent = 0x3a2d22;
+  const g = scene.add.graphics({ x: 0, y: 0 });
+  g.fillStyle(base, 1);
+  g.fillRect(0, 0, 32, 32);
+  // Two 16x16 plank cells with offset grain — gives a subtle parquet feel
+  g.fillStyle(lighter, 1);
+  g.fillRect(0, 0, 16, 16);
+  g.fillRect(16, 16, 16, 16);
+  g.fillStyle(darker, 1);
+  g.fillRect(16, 0, 16, 16);
+  g.fillRect(0, 16, 16, 16);
+  // Subtle plank seams (1px lines) — accent colour keeps the texture readable
+  // without dominating the visual.
+  g.fillStyle(accent, 0.4);
+  g.fillRect(0, 15, 32, 1);
+  g.fillRect(0, 31, 32, 1);
+  g.fillRect(15, 0, 1, 32);
+  g.fillRect(31, 0, 1, 32);
+  g.generateTexture(key, 32, 32);
   g.destroy();
 }
 

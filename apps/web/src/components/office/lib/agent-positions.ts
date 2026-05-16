@@ -79,11 +79,18 @@ export interface TicketPlacement {
 // investigation=1: only the lead desk (slot 3) is used by active placements;
 // scout desks (0-2) are populated by choreography, not by placementsFromItems.
 const ROOM_DESK_CAPACITY: Partial<Record<RoomId, number>> = {
-  triage: 1,
-  investigation: 1,
+  // Top band
   dev: 3,
   qa: 3,
   review: 2,
+  retro: 3,
+  // (done / archive are shelf rooms — no carried capacity)
+  // Bottom band
+  backlog: 3,
+  triage: 3,
+  investigation: 3,
+  library: 3,
+  coffee: 3,
 };
 
 export function placementsFromItems(items: readonly AgentPlacementInput[]): {
@@ -219,11 +226,17 @@ export function placementsFromItems(items: readonly AgentPlacementInput[]): {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const ROOM_REPRESENTATIVE_ROLE: Partial<Record<RoomId, OfficeRole>> = {
-  triage: 'triager',
-  investigation: 'investigator',
+  // Top band
   dev: 'developer',
   qa: 'qa',
   review: 'reviewer',
+  retro: 'retrospector',
+  // Bottom band
+  backlog: 'decomposer',
+  triage: 'triager',
+  investigation: 'investigator',
+  library: 'researcher',
+  // (coffee, done, archive: no representative role)
 };
 
 /**

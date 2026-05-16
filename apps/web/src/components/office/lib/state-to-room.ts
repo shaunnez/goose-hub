@@ -11,27 +11,35 @@
 import type { RoomId } from './rooms';
 
 const STATE_TO_ROOM: Readonly<Record<string, RoomId | null>> = {
+  // Triage cluster — intake + early reasoning lives in triage
   'factory:triaging': 'triage',
   'factory:accepted': 'triage',
   'factory:grilling': 'triage',
   'factory:prd-drafting': 'triage',
   'factory:prd-review': 'triage',
-  'factory:decomposing': 'triage',
-  'factory:issues-created': 'triage',
-  'factory:research-pending': 'triage',
-  'factory:research-complete': 'triage',
-  'factory:retrospecting': 'triage',
+  // Decomposition produces backlog items — natural home
+  'factory:decomposing': 'backlog',
+  'factory:issues-created': 'backlog',
+  // Research happens in the library
+  'factory:research-pending': 'library',
+  'factory:research-complete': 'library',
+  // Investigation lab
   'factory:investigating': 'investigation',
   'factory:investigation-complete': 'investigation',
+  // Dev floor
   'factory:dev-ready': 'dev',
   'factory:spec-ready': 'dev',
   'factory:in-progress': 'dev',
   'factory:needs-fix': 'dev',
   'factory:qa-failed': 'dev',
+  // QA chamber
   'factory:needs-qa': 'qa',
+  // Review chamber
   'factory:needs-review': 'review',
   'factory:approved': 'review',
   'factory:merge-conflict': 'review',
+  // Retro room
+  'factory:retrospecting': 'retro',
   // Stay-put states — handled by caller; persona freezes in place
   'factory:needs-human': null,
   'factory:gate-pending': null,
@@ -49,39 +57,42 @@ export const STAY_PUT_STATES = new Set<string>(['factory:needs-human', 'factory:
 export const DONE_STATES = new Set<string>(['factory:done']);
 export const TERMINAL_STATES = new Set<string>(['factory:archived', 'factory:rejected']);
 
+function hashExternalId(externalId: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < externalId.length; i++) {
+    h ^= externalId.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h;
+}
+
 /**
  * Returns the 0-based desk slot index within roomDeskAnchors(room) for the
  * given room and externalId. The externalId is hashed deterministically so
  * the same issue always picks the same desk within a session.
  *
  * Slot assignments per room:
- *   triage:       always 0 (one triager desk)
- *   investigation: always 3 (lead investigator desk)
- *   dev:          hash(externalId) % 3 (three builder desks)
- *   qa:           always 0 (first QA station)
- *   review:       always 0 (first reviewer spot)
- *   done:         caller handles shelf slot separately
+ *   triage / qa / review / retro:     hash → first 3 desks
+ *   investigation / library / backlog: hash → 3 desks
+ *   dev:           hash → 3 builder desks
+ *   done / archive: caller handles shelf slot separately (returns 0)
+ *   coffee:        hash → 3 coffee benches
  */
 export function deskSlotForRoom(room: RoomId, externalId: string): number {
+  const h = hashExternalId(externalId);
   switch (room) {
-    case 'triage':
-      return 0;
-    case 'investigation':
-      return 3; // lead investigator desk
-    case 'dev': {
-      // Deterministic hash of externalId → desk 0, 1, or 2
-      let h = 2166136261;
-      for (let i = 0; i < externalId.length; i++) {
-        h ^= externalId.charCodeAt(i);
-        h = Math.imul(h, 16777619) >>> 0;
-      }
-      return h % 3;
-    }
+    case 'dev':
     case 'qa':
-      return 0;
     case 'review':
-      return 0;
+    case 'retro':
+    case 'backlog':
+    case 'triage':
+    case 'investigation':
+    case 'library':
+    case 'coffee':
+      return h % 3;
     case 'done':
+    case 'archive':
       return 0; // shelf slot assigned separately per ticket index
   }
 }
