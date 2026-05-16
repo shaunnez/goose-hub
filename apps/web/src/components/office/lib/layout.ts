@@ -95,12 +95,14 @@ export function floorOverviewZoomForViewport(
 ): number {
   const width = Math.max(1, viewportWidth);
   const height = Math.max(1, viewportHeight);
-  // Fit-height: a single floor fills the viewport vertically. Pan horizontally
-  // to see other rooms. Width is used only as a sanity clamp so tiny viewports
-  // don't zoom in so far the floor exceeds the visible width by more than ~2x.
-  const heightFit = height / FLOOR_PIXEL_HEIGHT;
-  const widthCap = (width / FLOOR_PIXEL_WIDTH) * 2;
-  return Math.max(1, Math.min(heightFit, widthCap));
+  // Fit-width: the full floor (1280 px) is visible horizontally — no
+  // off-screen rooms. Vertical headroom appears above/below the floor; pan
+  // vertically only to see additional floors. Height-cap protects very
+  // short viewports from zooming so far in that the floor exceeds visible
+  // height by more than ~1.5x.
+  const widthFit = width / FLOOR_PIXEL_WIDTH;
+  const heightCap = (height / FLOOR_PIXEL_HEIGHT) * 1.5;
+  return Math.max(1, Math.min(widthFit, heightCap));
 }
 
 /**

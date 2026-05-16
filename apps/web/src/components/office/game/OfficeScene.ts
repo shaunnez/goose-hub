@@ -72,7 +72,7 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.cameras.main.setBackgroundColor('#0d0a13');
+    this.cameras.main.setBackgroundColor('#050309');
     ensureOfficeTextures(this);
 
     // Construction order: RoomLayer → PersonaLayer → TicketLayer (ascending z).
@@ -136,6 +136,7 @@ export class OfficeScene extends Phaser.Scene {
    */
   applyProjects(projects: readonly OfficeProject[]): void {
     this.projects = projects.slice();
+    if (this.roomLayer == null || this.personaLayer == null || this.ticketLayer == null) return;
     this.roomLayer.applyProjects(this.projects);
     this.personaLayer.dropAll();
     this.ticketLayer.dropAll();
@@ -148,8 +149,13 @@ export class OfficeScene extends Phaser.Scene {
   /**
    * Drop / add / move personas and tickets to match the new placement data.
    * Personas must settle before tickets so tickets can read persona positions.
+   *
+   * Guard: callable from React effects that may fire before Phaser has run
+   * `create()` and built the layers. Silently no-op until layers exist; the
+   * boot path replays initial data via the `'ready'` callback.
    */
   applyPlacements(result: { personas: PersonaPlacement[]; tickets: TicketPlacement[] }): void {
+    if (this.personaLayer == null || this.ticketLayer == null || this.roomLayer == null) return;
     this.personaLayer.applyPlacements(result.personas);
     this.ticketLayer.applyPlacements(result.tickets);
     this.roomLayer.refreshIdleDeskIndicators(this.personaLayer.occupiedDeskKeys());

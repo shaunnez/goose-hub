@@ -175,17 +175,20 @@ describe('floor and desk layout', () => {
     expect(floorOverviewZoomForViewport(FLOOR_PIXEL_WIDTH - 200, FLOOR_PIXEL_HEIGHT)).toBe(1);
   });
 
-  it('zooms the floor overview up for large viewports without cropping the focused floor', () => {
+  it('zooms the floor overview to fit width — full floor visible horizontally', () => {
     const zoom = floorOverviewZoomForViewport(FLOOR_PIXEL_WIDTH * 2, FLOOR_PIXEL_HEIGHT * 1.5);
-    expect(zoom).toBe(1.5);
+    expect(zoom).toBe(2);
   });
 
-  it('pads camera bounds so a wide viewport centers the office floor', () => {
-    const layout = floorOverviewCameraLayout(FLOOR_PIXEL_WIDTH * 2, FLOOR_PIXEL_HEIGHT * 1.5, 1);
-    expect(layout.zoom).toBe(1.5);
-    expect(layout.bounds.x).toBeLessThan(0);
-    expect(layout.bounds.width).toBeGreaterThan(FLOOR_PIXEL_WIDTH);
-    expect(layout.bounds.y).toBe(0);
+  it('pads camera bounds vertically so a tall viewport centers the office floor', () => {
+    // Tall viewport: visible world height (1632/1 = 1632) > floor height (544),
+    // so vertical padding kicks in. No horizontal padding because fit-width
+    // gives a perfect horizontal fit.
+    const layout = floorOverviewCameraLayout(FLOOR_PIXEL_WIDTH, FLOOR_PIXEL_HEIGHT * 3, 1);
+    expect(layout.zoom).toBe(1);
+    expect(layout.bounds.x).toBe(0);
+    expect(layout.bounds.y).toBeLessThan(0);
+    expect(layout.bounds.height).toBeGreaterThan(FLOOR_PIXEL_HEIGHT);
   });
 
   it('places one desk per office role with monotonically-increasing x', () => {

@@ -9,7 +9,7 @@
 //   setHeroTicketCell(text)              — update banner R-cell hero ticket label
 //   destroyAll()                         — tear down on scene shutdown
 
-import type Phaser from 'phaser';
+import Phaser from 'phaser';
 import { DEFAULT_EASE, PARTICLE_ALPHA_EASE } from '../../lib/cinematic-timings';
 import { FLOOR_PIXEL_WIDTH, TILE_SIZE, floorOriginY } from '../../lib/layout';
 import {
@@ -796,26 +796,19 @@ export class RoomLayer {
   private drawRoomOverlays(container: Phaser.GameObjects.Container, originY: number): void {
     const overlays = this.scene.add.graphics();
 
-    // QA chamber (top band) — frosted-cyan tint
+    // QA chamber (top band) — subtle frosted-cyan tint
     const qa = roomBounds('qa');
-    overlays.fillStyle(PALETTE.qaWall, 0.45);
+    overlays.fillStyle(PALETTE.qaWall, 0.10);
     overlays.fillRect(qa.x1, originY + qa.y1, qa.x2 - qa.x1, qa.y2 - qa.y1);
 
-    // Review chamber (top band) — darker purple tint
+    // Review chamber (top band) — subtle purple tint
     const review = roomBounds('review');
-    overlays.fillStyle(PALETTE.reviewWall, 0.35);
+    overlays.fillStyle(PALETTE.reviewWall, 0.08);
     overlays.fillRect(review.x1, originY + review.y1, review.x2 - review.x1, review.y2 - review.y1);
 
-    // Sealed Library (bottom band) — sealed-green-tinted opaque overlay + outline
-    overlays.fillStyle(PALETTE.wall, 0.3);
+    // Sealed Library (bottom band) — subtle tint, no outline
+    overlays.fillStyle(PALETTE.reviewWall, 0.08);
     overlays.fillRect(
-      LIBRARY_BOUNDS.x1,
-      originY + LIBRARY_BOUNDS.y1,
-      LIBRARY_BOUNDS.x2 - LIBRARY_BOUNDS.x1,
-      LIBRARY_BOUNDS.y2 - LIBRARY_BOUNDS.y1,
-    );
-    overlays.lineStyle(1, PALETTE.reviewWall, 1);
-    overlays.strokeRect(
       LIBRARY_BOUNDS.x1,
       originY + LIBRARY_BOUNDS.y1,
       LIBRARY_BOUNDS.x2 - LIBRARY_BOUNDS.x1,
@@ -920,13 +913,14 @@ export class RoomLayer {
       for (let i = 0; i < count; i++) {
         const t = (i + 1) / (count + 1); // 0.25/0.5/0.75 spacing
         const x = b.x1 + width * t;
-        // Soft halo below the lamp — diffuse orange light pool
+        // Soft halo below the lamp — diffuse warm pool. Subtle so dark
+        // rooms read as dim, not glow-bombed.
         if (haloLoaded) {
           const halo = this.scene.add.image(x, originY + lampY + 20, haloKey);
           halo.setOrigin(0.5, 0.5);
           applyOfficeTextureDisplaySize(halo, haloKey);
-          halo.setAlpha(0.75);
-          halo.setBlendMode(Phaser.BlendModes.ADD);
+          halo.setAlpha(0.22);
+          halo.setBlendMode(Phaser.BlendModes.NORMAL);
           container.add(halo);
         }
         const lamp = this.scene.add.image(x, originY + lampY, lampKey);
@@ -952,6 +946,8 @@ export class RoomLayer {
         applyOfficeTextureDisplaySize(img, deskKey);
         container.add(img);
 
+        // Idle indicator (coffee mug) is hidden by default — Phase 5 will
+        // surface it dynamically as part of the goose coffee-loop behaviour.
         const idle = this.scene.add.image(
           x,
           originY + y - TILE_SIZE * 2.5,
@@ -962,6 +958,7 @@ export class RoomLayer {
         idle.setData('kind', 'idle-indicator');
         idle.setData('floorIndex', floorIndex);
         idle.setData('deskKey', `${id}:${i}`);
+        idle.setVisible(false);
         container.add(idle);
       }
     }
