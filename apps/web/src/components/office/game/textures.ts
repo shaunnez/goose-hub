@@ -98,6 +98,8 @@ export const TEXTURE_KEYS = {
   corridorWarm: 'office:corridor-warm',
   wallTile: 'office:wall-tile',
   stoneWall: 'office:stone-wall',
+  darkWall: 'office:dark-wall',
+  ceilingPipes: 'office:ceiling-pipes',
   pendantLamp: 'office:pendant-lamp',
   doorFrame: 'office:door-frame',
   desk: 'office:desk',
@@ -131,6 +133,8 @@ const OFFICE_TEXTURE_DISPLAY_SIZES: Record<string, TextureDisplaySize> = {
   [TEXTURE_KEYS.corridorWarm]: { width: 64, height: 64 },
   [TEXTURE_KEYS.wallTile]: { width: 16, height: 16 },
   [TEXTURE_KEYS.stoneWall]: { width: 16, height: 16 },
+  [TEXTURE_KEYS.darkWall]: { width: 16, height: 16 },
+  [TEXTURE_KEYS.ceilingPipes]: { width: 16, height: 16 },
   [TEXTURE_KEYS.pendantLamp]: { width: 18, height: 28 },
   [TEXTURE_KEYS.doorFrame]: { width: 36, height: 32 },
   [TEXTURE_KEYS.desk]: { width: 48, height: 36 },
@@ -318,6 +322,8 @@ export function ensureOfficeTextures(scene: Phaser.Scene): void {
   generateCorridorTile(scene);
   generateWallTile(scene);
   generateStoneWallTile(scene);
+  generateDarkWallTile(scene);
+  generateCeilingPipesTile(scene);
   generatePendantLamp(scene);
   generateDoorFrame(scene);
   generateDesk(scene);
@@ -453,6 +459,58 @@ function generateStoneWallTile(scene: Phaser.Scene): void {
   drawBlock(1, 9, 2, 6);
   drawBlock(5, 9, 6, 6);
   drawBlock(13, 9, 2, 6);
+  g.generateTexture(key, 16, 16);
+  g.destroy();
+}
+
+/** Smooth dark stone wall — used as the back-wall fill behind the
+ * single brick "lintel" row. No visible per-block seams: just a uniform
+ * dark stone surface for mounting signs/lamps/props against. */
+function generateDarkWallTile(scene: Phaser.Scene): void {
+  const key = TEXTURE_KEYS.darkWall;
+  if (scene.textures.exists(key)) return;
+  const base = 0x1f1d24;
+  const grain = 0x26242c;
+  const shadow = 0x141218;
+  const g = scene.add.graphics({ x: 0, y: 0 });
+  g.fillStyle(base, 1);
+  g.fillRect(0, 0, 16, 16);
+  // Subtle vertical grain — single 1-px stripes at irregular intervals
+  g.fillStyle(grain, 1);
+  g.fillRect(3, 0, 1, 16);
+  g.fillRect(11, 0, 1, 16);
+  // Faint horizontal grout (very subtle so it doesn't read as bricks)
+  g.fillStyle(shadow, 1);
+  g.fillRect(0, 7, 16, 1);
+  g.fillRect(0, 15, 16, 1);
+  g.generateTexture(key, 16, 16);
+  g.destroy();
+}
+
+/** 16x16 ceiling-pipe tile — the architectural detail that runs along
+ * the very top of each room's back wall (under the brick lintel).
+ * Brass horizontal pipe + small junction box every other tile. */
+function generateCeilingPipesTile(scene: Phaser.Scene): void {
+  const key = TEXTURE_KEYS.ceilingPipes;
+  if (scene.textures.exists(key)) return;
+  const base = 0x1a1820;
+  const { brass, brassDark, brassLight } = BRASS_TINTS;
+  const g = scene.add.graphics({ x: 0, y: 0 });
+  // Dark base
+  g.fillStyle(base, 1);
+  g.fillRect(0, 0, 16, 16);
+  // Horizontal pipe — 3 px tall band running the full width
+  g.fillStyle(brassDark, 1);
+  g.fillRect(0, 6, 16, 4);
+  g.fillStyle(brass, 1);
+  g.fillRect(0, 7, 16, 2);
+  g.fillStyle(brassLight, 1);
+  g.fillRect(0, 7, 16, 1);
+  // Small drop / drip valve every tile
+  g.fillStyle(brassDark, 1);
+  g.fillRect(7, 10, 2, 2);
+  g.fillStyle(brass, 1);
+  g.fillRect(7, 10, 2, 1);
   g.generateTexture(key, 16, 16);
   g.destroy();
 }
