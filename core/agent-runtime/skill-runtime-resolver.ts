@@ -64,13 +64,6 @@ function displayModel(tier: ModelTier, provider: ModelProvider): ResolvedDisplay
   return { tier, provider, modelId: defaultModelForTierAndProvider(tier, provider) };
 }
 
-function fallbackBudget(tier: ModelTier, provider: ModelProvider): ResolvedBudget {
-  return {
-    budgets: { maxTurns: 25, maxBudgetUsd: 1, timeoutMs: 120_000 },
-    modelOverride: defaultModelForTierAndProvider(tier, provider),
-  };
-}
-
 function sourceForSkill(
   skill: string,
   dbOverride?: SkillRuntimeDbOverride | null,
@@ -146,24 +139,13 @@ export function resolveSkillRuntime(input: {
     ? input.projectBudgets
     : withoutConfigModelTier(input.projectBudgets);
   const providerConfigRuntime = input.ignoreProviderOverride ? 'auto' : configRuntime;
-  let resolvedBudget: ResolvedBudget;
-  try {
-    resolvedBudget = resolveBudgets(
-      input.skill,
-      input.projectBudgets,
-      dbOverride ?? undefined,
-      input.dbPerWorkflowMaxUsd,
-      input.dbPerAgentMaxUsd,
-    );
-  } catch {
-    resolvedBudget = fallbackBudget(
-      input.fallbackTier ?? 'sonnet',
-      forcedProviderFromRuntime(providerConfigRuntime) ??
-        (!input.ignoreProviderOverride && isModelProvider(dbOverride?.modelProvider)
-          ? dbOverride.modelProvider
-          : (input.skillProvider ?? input.fallbackProvider ?? 'claude')),
-    );
-  }
+  const resolvedBudget: ResolvedBudget = resolveBudgets(
+    input.skill,
+    input.projectBudgets,
+    dbOverride ?? undefined,
+    input.dbPerWorkflowMaxUsd,
+    input.dbPerAgentMaxUsd,
+  );
 
   if (input.callerModelOverride != null) {
     const tier = tierOf(input.callerModelOverride);
@@ -243,6 +225,7 @@ export function deriveSkillRuntimeResponse(input: {
   configRuntime?: ConfigRuntime;
   role?: string;
   allowHoldoutOverride?: boolean;
+  skillProvider?: ModelProvider;
 }): ResolvedSkillRuntime {
   return resolveSkillRuntime({
     skill: input.skill,
@@ -251,5 +234,6 @@ export function deriveSkillRuntimeResponse(input: {
     configRuntime: input.configRuntime,
     role: input.role,
     allowHoldoutOverride: input.allowHoldoutOverride,
+    skillProvider: input.skillProvider,
   });
 }

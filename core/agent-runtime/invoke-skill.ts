@@ -6,6 +6,7 @@ import type { ProjectConfig } from '../types.js';
 import type { ResolvedBudget } from './budgets.js';
 import type { AgentResult, AgentRuntime, SkillConfig } from './interface.js';
 import { readPromptWithContext } from './read-prompt.js';
+import { resolveRoleBudgetOverrideForProject } from './resolve-for-project.js';
 import { toJsonSchema } from './schema-bridge.js';
 import { selectPersona } from './select-persona.js';
 import { selectRuntime } from './select-runtime.js';
@@ -120,6 +121,19 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<AgentResult>
   });
   const modelOverride = resolved.modelOverride;
 
+  // 5c. Apply per-role budget overrides (maxTurns / timeoutMs) from DB on top of
+  //     the per-skill runtime resolution. null means "no override — keep skill default".
+  const roleBudgetOverride = resolveRoleBudgetOverrideForProject(
+    projectId,
+    role,
+    projectConfig?.agentConfig?.allowHoldoutOverride,
+  );
+  const effectiveBudgets = {
+    ...resolved.budgets,
+    ...(roleBudgetOverride.maxTurns != null && { maxTurns: roleBudgetOverride.maxTurns }),
+    ...(roleBudgetOverride.timeoutMs != null && { timeoutMs: roleBudgetOverride.timeoutMs }),
+  };
+
   // 7. Select runtime — runtimeOverride short-circuits for tests and bespoke callers
   const runtime =
     overrides?.runtimeOverride ??
@@ -152,7 +166,7 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<AgentResult>
     freshContext: overrides?.freshContextOverride ?? skillConfig.freshContext,
     toolBundles: skillConfig.toolBundles,
     toolExtras: [],
-    budgets: resolved.budgets,
+    budgets: effectiveBudgets,
     personaId,
     workItemId,
     modelOverride,
