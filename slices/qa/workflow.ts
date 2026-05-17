@@ -6,7 +6,10 @@ import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconc
 import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
-import { getQaE2eMode } from '@goose-hub/core/db/repositories/project-settings.js';
+import {
+  getQaE2eMode,
+  type QaE2eMode,
+} from '@goose-hub/core/db/repositories/project-settings.js';
 import { getEngineeringSpec as defaultGetEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
@@ -108,7 +111,10 @@ export async function runQaWorkflow(
   const workspaceDir = prHints.worktreePath;
   const prDiff = getPrDiff(workItem, workspaceDir, prHints.baseBranch);
   const regressionPolicy: RegressionPolicy = projectConfig?.regressionPolicy ?? 'escalate';
-  const qaE2eMode = getQaE2eMode(projectSlug, projectConfig?.qaE2eMode ?? 'off');
+  const settingsProjectId = projectConfig?.id ?? projectSlug;
+  const e2eConfigDefault: QaE2eMode =
+    projectConfig?.qaE2eMode ?? (projectConfig?.stack?.e2eCommand != null ? 'ui-changed' : 'off');
+  const qaE2eMode = getQaE2eMode(settingsProjectId, e2eConfigDefault);
 
   // Snapshot prior events BEFORE this run's outcome is appended.
   // shouldEscalateQa uses this count to decide: Nth failure = N-1 priors.

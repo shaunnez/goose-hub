@@ -363,6 +363,11 @@ export interface ProjectSettingsDto {
     updatedAt: string;
     updatedBy: string | null;
   } | null;
+  dbPipelineFlags: {
+    qaE2eMode: string | null;
+    playwrightReproEnabled: number | null;
+    evidencePostEnabled: number | null;
+  } | null;
   dbSkillOverrides: Record<
     string,
     {

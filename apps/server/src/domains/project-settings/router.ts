@@ -97,7 +97,7 @@ router.get('/:slug/settings', async (c) => {
       maxBudgetUsd: budget.maxBudgetUsd,
       timeoutMs: budget.timeoutMs,
       modelTier: budget.modelTier,
-      modelProvider: 'claude',
+      modelProvider: budget.provider ?? 'claude',
     };
   }
 
@@ -120,6 +120,7 @@ router.get('/:slug/settings', async (c) => {
       configRuntime: project.agentConfig.runtime,
       role: roleForSkill(skill),
       allowHoldoutOverride: project.agentConfig.allowHoldoutOverride,
+      skillProvider: SKILL_BUDGETS[skill]?.provider,
     });
     resolvedSkillRuntimes[skill] = {
       source: resolved.source,
@@ -142,9 +143,6 @@ router.get('/:slug/settings', async (c) => {
       globalRow.maxScoutAgents,
       globalRow.maxRetries,
       globalRow.perBashCommandMaxSeconds,
-      globalRow.qaE2eMode,
-      globalRow.playwrightReproEnabled,
-      globalRow.evidencePostEnabled,
     ].some((value) => value != null)
       ? {
           perWorkflowMaxUsd: globalRow.perWorkflowMaxUsd,
@@ -155,11 +153,17 @@ router.get('/:slug/settings', async (c) => {
           maxScoutAgents: globalRow.maxScoutAgents,
           maxRetries: globalRow.maxRetries,
           perBashCommandMaxSeconds: globalRow.perBashCommandMaxSeconds,
-          qaE2eMode: globalRow.qaE2eMode,
-          playwrightReproEnabled: globalRow.playwrightReproEnabled,
-          evidencePostEnabled: globalRow.evidencePostEnabled,
           updatedAt: globalRow.updatedAt,
           updatedBy: globalRow.updatedBy,
+        }
+      : null;
+
+  const dbPipelineFlags =
+    globalRow != null
+      ? {
+          qaE2eMode: globalRow.qaE2eMode ?? null,
+          playwrightReproEnabled: globalRow.playwrightReproEnabled ?? null,
+          evidencePostEnabled: globalRow.evidencePostEnabled ?? null,
         }
       : null;
 
@@ -167,6 +171,7 @@ router.get('/:slug/settings', async (c) => {
     projectId: project.id,
     configBudgets: project.budgets,
     dbGlobalOverrides,
+    dbPipelineFlags,
     dbSkillOverrides: skillSettings,
     registeredSkills: Object.keys(SKILL_BUDGETS),
     skillDefaults,
