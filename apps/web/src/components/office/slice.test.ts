@@ -187,14 +187,14 @@ describe('floor and desk layout', () => {
     expect(zoom).toBe(2);
   });
 
-  it('pads camera bounds vertically so a tall viewport centers the office floor', () => {
-    // Tall viewport: visible world height (1632/1 = 1632) > floor height (544),
-    // so vertical padding kicks in. No horizontal padding because fit-width
-    // gives a perfect horizontal fit.
+  it('pads camera bounds below the floor (top-anchored)', () => {
+    // Phase 10: vertical slack is added BELOW the floor (bounds.height
+    // grows) instead of above (bounds.y stays at 0). This keeps the
+    // top of the office content flush with the top of the viewport.
     const layout = floorOverviewCameraLayout(FLOOR_PIXEL_WIDTH, FLOOR_PIXEL_HEIGHT * 3, 1);
     expect(layout.zoom).toBe(1);
     expect(layout.bounds.x).toBe(0);
-    expect(layout.bounds.y).toBeLessThan(0);
+    expect(layout.bounds.y).toBe(0);
     expect(layout.bounds.height).toBeGreaterThan(FLOOR_PIXEL_HEIGHT);
   });
 

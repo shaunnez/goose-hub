@@ -35,7 +35,7 @@ interface Point {
 interface AmbientEntry {
   id: string;
   floorIndex: number;
-  body: Phaser.GameObjects.Image;
+  body: Phaser.GameObjects.Sprite;
   mug: Phaser.GameObjects.Image | null;
   bobTween?: Phaser.Tweens.Tween;
   walkBobTween?: Phaser.Tweens.Tween;
@@ -89,7 +89,7 @@ export class AmbientLayer {
       const anchor = coffeeAnchors[i];
       const wx = anchor.x;
       const wy = oy + anchor.y - TILE_SIZE;
-      const body = this.scene.add.image(wx, wy, gooseKey);
+      const body = this.scene.add.sprite(wx, wy, gooseKey);
       body.setOrigin(0.5, 1);
       applyOfficeTextureDisplaySize(body, gooseKey);
       body.setDepth(AMBIENT_DEPTH);
@@ -254,17 +254,32 @@ export class AmbientLayer {
 
   /** Sequence tweens through each waypoint pair. Each segment animates
    * body x/y; mug rides along. Body horizontally flips based on dx.
-   * Step-bob runs across the whole walk. */
+   * Step-bob + walk-spritesheet animation runs across the whole walk. */
   private walkAlong(entry: AmbientEntry, waypoints: Point[], onDone: () => void): void {
     if (waypoints.length === 0) {
       onDone();
       return;
     }
     this.startWalkBob(entry);
+    // Switch to walking spritesheet + play looped 2-frame walk.
+    if (this.scene.anims.exists('goose-walk')) {
+      entry.body.play('goose-walk', true);
+      applyOfficeTextureDisplaySize(
+        entry.body as unknown as Phaser.GameObjects.Image,
+        'office:goose-walk',
+      );
+    }
+    const gooseKey = this.scene.textures.exists('office:goose_idle')
+      ? 'office:goose_idle'
+      : TEXTURE_KEYS.spriteBase;
     let idx = 0;
     const next = () => {
       if (idx >= waypoints.length) {
         this.stopWalkBob(entry);
+        // Stop walk anim, return to idle texture.
+        entry.body.stop();
+        entry.body.setTexture(gooseKey);
+        applyOfficeTextureDisplaySize(entry.body as unknown as Phaser.GameObjects.Image, gooseKey);
         onDone();
         return;
       }
@@ -277,9 +292,12 @@ export class AmbientLayer {
         next();
         return;
       }
+      // Default sprite faces RIGHT — flip when walking LEFT.
+      // Phase 10: inverted from prior (was making the goose face the
+      // wrong way relative to motion).
       const facing = facingFromMovement({ x: entry.body.x, y: entry.body.y }, target);
-      if (facing === 'left') entry.body.setFlipX(true);
-      else if (facing === 'right') entry.body.setFlipX(false);
+      if (facing === 'left') entry.body.setFlipX(false);
+      else if (facing === 'right') entry.body.setFlipX(true);
       const duration = Math.max(220, dist / WALK_PIXELS_PER_MS);
       const mugOffsetX = entry.mug != null ? entry.mug.x - entry.body.x : 0;
       const mugOffsetY = entry.mug != null ? entry.mug.y - entry.body.y : 0;

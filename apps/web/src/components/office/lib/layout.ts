@@ -119,16 +119,20 @@ export function floorOverviewCameraLayout(
   const visibleWorldWidth = Math.max(1, viewportWidth) / zoom;
   const visibleWorldHeight = Math.max(1, viewportHeight) / zoom;
   const horizontalPad = Math.max(0, (visibleWorldWidth - FLOOR_PIXEL_WIDTH) / 2);
-  const verticalPad = Math.max(0, (visibleWorldHeight - FLOOR_PIXEL_HEIGHT) / 2);
+  const verticalSlack = Math.max(0, visibleWorldHeight - FLOOR_PIXEL_HEIGHT);
   const worldHeight = totalWorldHeight(floorCount);
 
+  // Phase 10: top-anchor the camera — any vertical slack between the
+  // viewport and the floor goes BELOW the content, never above. This
+  // removes the "dead space" gap between the top HUD and the first
+  // row of rooms when the viewport is taller than the floor.
   return {
     zoom,
     bounds: {
       x: horizontalPad > 0 ? -horizontalPad : 0,
-      y: verticalPad > 0 ? -verticalPad : 0,
+      y: 0,
       width: FLOOR_PIXEL_WIDTH + horizontalPad * 2,
-      height: worldHeight + verticalPad * 2,
+      height: worldHeight + verticalSlack,
     },
   };
 }

@@ -71,11 +71,29 @@ export class OfficeScene extends Phaser.Scene {
 
   preload(): void {
     queueVerifiedPngAssets(this, this.verifiedAssets);
+    // Phase 10: load the goose walking spritesheet under a dedicated key
+    // (the PNG is 64×32 — 2 frames at 32×32).
+    this.load.spritesheet('office:goose-walk', '/office/goose_walk_sheet.png', {
+      frameWidth: 32,
+      frameHeight: 32,
+    });
   }
 
   create(): void {
     this.cameras.main.setBackgroundColor('#050309');
     ensureOfficeTextures(this);
+
+    // Phase 10: register the goose walking animation (used by AmbientLayer
+    // and any future walking persona). No-op if the spritesheet didn't
+    // load (then geese fall back to the static idle texture).
+    if (this.textures.exists('office:goose-walk') && !this.anims.exists('goose-walk')) {
+      this.anims.create({
+        key: 'goose-walk',
+        frames: this.anims.generateFrameNumbers('office:goose-walk', { start: 0, end: 1 }),
+        frameRate: 6,
+        repeat: -1,
+      });
+    }
 
     // Construction order: RoomLayer → PersonaLayer → TicketLayer (ascending z).
     // All layers are constructed before the first 'ready' emit so click handlers

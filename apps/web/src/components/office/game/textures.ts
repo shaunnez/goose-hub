@@ -194,6 +194,9 @@ const OFFICE_TEXTURE_DISPLAY_SIZES: Record<string, TextureDisplaySize> = {
   // Goose sprite PNGs at 40×40 — slight upscale from 32 native so they
   // remain readable next to the new larger desks under fit-width camera.
   'office:goose_idle': { width: 40, height: 40 },
+  // Walking animation spritesheet (loaded separately in OfficeScene.preload).
+  // 2 frames at 32×32 native, displayed at the same 40×40 as goose_idle.
+  'office:goose-walk': { width: 40, height: 40 },
   'office:goose_triage': { width: 40, height: 40 },
   'office:goose_investigator': { width: 40, height: 40 },
   'office:goose_dev': { width: 40, height: 40 },
