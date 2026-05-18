@@ -23,7 +23,7 @@ vi.mock('@goose-hub/core/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { parseLimit, parseMilestone, parseType, search } from './service.js';
+import { parseIncludeClosed, parseLimit, parseMilestone, parseType, search } from './service.js';
 
 const now = new Date('2026-05-18T00:00:00Z');
 
@@ -48,11 +48,12 @@ function item(overrides: Partial<WorkItem> = {}): WorkItem {
   };
 }
 
-function mockSource(items: WorkItem[]) {
+function mockSource(items: WorkItem[], closed: WorkItem[] = []) {
   return {
     projectId: 'p',
     repoRef: 'r',
     listOpenWork: vi.fn().mockResolvedValue(items),
+    listClosedWorkByMilestone: vi.fn().mockResolvedValue(closed),
   };
 }
 
@@ -237,6 +238,50 @@ describe('search — filters', () => {
     expect(mockResolveActiveMilestone).not.toHaveBeenCalled();
     expect(source.listOpenWork).toHaveBeenCalledWith(undefined);
   });
+
+  it('includeClosed:true with an active milestone also pulls closed items', async () => {
+    mockListProjects.mockResolvedValue([{ slug: 'p' }]);
+    const source = mockSource(
+      [item({ externalId: '1', title: 'cache open' })],
+      [item({ externalId: '99', title: 'cache closed', state: 'factory:done' })],
+    );
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockResolveActiveMilestone.mockResolvedValue({
+      milestoneNumber: 19,
+      source: 'project_state',
+    });
+    const result = await search({ q: 'cache', milestone: 'active', includeClosed: true }, { now });
+    if (!result.ok) throw new Error('expected ok');
+    expect(source.listClosedWorkByMilestone).toHaveBeenCalledWith(19);
+    expect(result.data.items.map((h) => h.externalId).sort()).toEqual(['1', '99']);
+  });
+
+  it('includeClosed:true without an active milestone skips closed iteration', async () => {
+    mockListProjects.mockResolvedValue([{ slug: 'p' }]);
+    const source = mockSource([item({ externalId: '1', title: 'cache' })]);
+    mockGetSourceForSlug.mockResolvedValue(source);
+    // resolveActiveMilestone returns null (the beforeEach default), so
+    // milestoneNumber is undefined and the closed branch is skipped.
+    const result = await search({ q: 'cache', milestone: 'active', includeClosed: true }, { now });
+    if (!result.ok) throw new Error('expected ok');
+    expect(source.listClosedWorkByMilestone).not.toHaveBeenCalled();
+    expect(result.data.items.map((h) => h.externalId)).toEqual(['1']);
+  });
+
+  it('includeClosed:false is the default — closed items are not fetched', async () => {
+    mockListProjects.mockResolvedValue([{ slug: 'p' }]);
+    const source = mockSource(
+      [item({ externalId: '1', title: 'cache' })],
+      [item({ externalId: '99', title: 'cache closed' })],
+    );
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockResolveActiveMilestone.mockResolvedValue({
+      milestoneNumber: 19,
+      source: 'project_state',
+    });
+    await search({ q: 'cache' }, { now });
+    expect(source.listClosedWorkByMilestone).not.toHaveBeenCalled();
+  });
 });
 
 describe('parseType / parseMilestone', () => {
@@ -261,5 +306,14 @@ describe('parseType / parseMilestone', () => {
   it('parseMilestone accepts "active" and "all"', () => {
     expect(parseMilestone('active')).toBe('active');
     expect(parseMilestone('all')).toBe('all');
+  });
+
+  it('parseIncludeClosed treats only "true" / "1" as true', () => {
+    expect(parseIncludeClosed('true')).toBe(true);
+    expect(parseIncludeClosed('1')).toBe(true);
+    expect(parseIncludeClosed('false')).toBe(false);
+    expect(parseIncludeClosed('yes')).toBe(false);
+    expect(parseIncludeClosed(undefined)).toBe(false);
+    expect(parseIncludeClosed('')).toBe(false);
   });
 });

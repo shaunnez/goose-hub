@@ -8,6 +8,7 @@ export interface SearchClientFilters {
   projectSlug?: string;
   type?: SearchTypeFilter;
   milestone?: SearchMilestoneFilter;
+  includeClosed?: boolean;
 }
 
 export async function fetchSearch(
@@ -19,5 +20,6 @@ export async function fetchSearch(
   if (opts?.projectSlug != null) params.set('projectSlug', opts.projectSlug);
   if (opts?.type != null) params.set('type', opts.type);
   if (opts?.milestone != null) params.set('milestone', opts.milestone);
+  if (opts?.includeClosed === true) params.set('includeClosed', 'true');
   return getJson<SearchResultDto>(`/search?${params}`, opts?.signal);
 }

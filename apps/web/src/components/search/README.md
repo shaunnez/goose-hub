@@ -20,7 +20,7 @@ Tracking issue: [#834](https://github.com/shaunnez/goose-hub/issues/834).
 - **Scope** — toggle between the current project (when one is in the URL) and all projects.
 - **Milestone** — toggle between the project's active milestone and all milestones.
 - **Type** — cycle through `Any type` → feature → bug → chore → research.
-- **Open only** — disabled stub; include-closed needs a different source path and lands later.
+- **Open only / Include closed** — toggles closed items into the result set. Only available while the **Milestone** filter is "Active milestone": the server includes closed items via `listClosedWorkByMilestone(activeMilestoneNumber)`. Disabled (with tooltip) while Milestone is "All milestones" because that would require iterating every milestone per project.
 
 ## Surfaces touched
 
@@ -31,7 +31,7 @@ Tracking issue: [#834](https://github.com/shaunnez/goose-hub/issues/834).
 
 ## Still out of scope
 
-- Include-closed / archived items toggle.
 - Searchable surfaces beyond work items (inbox, milestones, projects, comments, events).
+- `Include closed` while Milestone is `all` (needs per-project milestone iteration).
 - `search.performed` telemetry event.
 - SQLite FTS5 index — revisit if the in-memory ranker doesn't scale.

@@ -89,6 +89,26 @@ describe('SearchModal', () => {
     expect(screen.getByTestId('search-filter-scope')).toBeTruthy();
     expect(screen.getByTestId('search-filter-milestone')).toBeTruthy();
     expect(screen.getByTestId('search-filter-type')).toBeTruthy();
+    expect(screen.getByTestId('search-filter-include-closed')).toBeTruthy();
+  });
+
+  it('include-closed chip is disabled while milestone is "all"', () => {
+    renderModal(true);
+    const milestoneChip = screen.getByTestId('search-filter-milestone');
+    fireEvent.click(milestoneChip); // active → all
+    const closedChip = screen.getByTestId('search-filter-include-closed') as HTMLButtonElement;
+    expect(closedChip.disabled).toBe(true);
+    expect(closedChip.textContent).toBe('Open only');
+  });
+
+  it('include-closed chip toggles between "Open only" and "Include closed" when active milestone is selected', () => {
+    renderModal(true);
+    const closedChip = screen.getByTestId('search-filter-include-closed');
+    expect(closedChip.textContent).toBe('Open only');
+    fireEvent.click(closedChip);
+    expect(closedChip.textContent).toBe('Include closed');
+    fireEvent.click(closedChip);
+    expect(closedChip.textContent).toBe('Open only');
   });
 
   it('scope chip is disabled when there is no active project slug', () => {

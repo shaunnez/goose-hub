@@ -16,6 +16,7 @@ Every feature in the server MUST be placed into one of the domain folders under 
 | `webhooks/` | `/webhooks/**` | No |
 | `workflows/` | `/projects/:slug/tick` | No |
 | `costs/` | `/projects/:slug/costs/**`, `/projects/:slug/issues/:id/costs` | Reads only (writes from `core/cost`) |
+| `search/` | `/search` | No (iterates registered projects) |
 
 Each domain folder contains:
 

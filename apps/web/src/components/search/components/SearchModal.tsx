@@ -26,12 +26,14 @@ interface FilterState {
   scope: 'this' | 'all';
   milestone: 'active' | 'all';
   type: SearchTypeFilter | undefined;
+  includeClosed: boolean;
 }
 
 const DEFAULT_FILTERS: FilterState = {
   scope: 'this',
   milestone: 'active',
   type: undefined,
+  includeClosed: false,
 };
 
 export function SearchModal({ open, onClose }: SearchModalProps) {
@@ -81,8 +83,14 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
     }
     if (filters.milestone === 'all') out.milestone = 'all';
     if (filters.type != null) out.type = filters.type;
+    if (filters.includeClosed) out.includeClosed = true;
     return out;
   }, [filters, currentSlug]);
+
+  // Server only iterates closed items when scoped to a milestone. If the
+  // user picks "All milestones" while "Include closed" is on, downgrade
+  // the chip silently — surfaced via the tooltip on the chip itself.
+  const closedDisabledByMilestone = filters.milestone === 'all';
 
   function handleSelect(hit: SearchHitDto) {
     pushRecentSearch(query);
@@ -183,14 +191,27 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
               })
             }
           />
-          <button
-            type="button"
-            disabled
-            title="Open / closed toggle lands in a follow-up PR"
-            className="h-6 px-2 rounded-md text-[11.5px] text-fg-3 border border-line bg-bg cursor-not-allowed"
-          >
-            Open only
-          </button>
+          <FilterChip
+            testid="search-filter-include-closed"
+            active={filters.includeClosed && !closedDisabledByMilestone}
+            disabled={closedDisabledByMilestone}
+            label={
+              closedDisabledByMilestone
+                ? 'Open only'
+                : filters.includeClosed
+                  ? 'Include closed'
+                  : 'Open only'
+            }
+            title={
+              closedDisabledByMilestone
+                ? 'Pick an active milestone to include closed items'
+                : 'Toggle whether closed items are included'
+            }
+            onClick={() => {
+              if (closedDisabledByMilestone) return;
+              setFilters((f) => ({ ...f, includeClosed: !f.includeClosed }));
+            }}
+          />
         </div>
 
         <SearchResults

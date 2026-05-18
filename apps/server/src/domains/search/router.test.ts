@@ -56,6 +56,7 @@ describe('GET /search', () => {
       projectSlug: undefined,
       type: undefined,
       milestone: 'active',
+      includeClosed: false,
     });
   });
 
@@ -71,21 +72,25 @@ describe('GET /search', () => {
       projectSlug: undefined,
       type: undefined,
       milestone: 'active',
+      includeClosed: false,
     });
   });
 
-  it('forwards projectSlug, type, and milestone filters', async () => {
+  it('forwards projectSlug, type, milestone, and includeClosed filters', async () => {
     mockSearch.mockResolvedValue({
       ok: true,
       data: { items: [], total: 0, hasMore: false },
     });
-    await makeApp().request('/search?q=cache&projectSlug=goose-hub-self&type=bug&milestone=all');
+    await makeApp().request(
+      '/search?q=cache&projectSlug=goose-hub-self&type=bug&milestone=all&includeClosed=true',
+    );
     expect(mockSearch).toHaveBeenCalledWith({
       q: 'cache',
       limit: 50,
       projectSlug: 'goose-hub-self',
       type: 'bug',
       milestone: 'all',
+      includeClosed: true,
     });
   });
 
@@ -101,6 +106,7 @@ describe('GET /search', () => {
       projectSlug: undefined,
       type: undefined,
       milestone: 'active',
+      includeClosed: false,
     });
   });
 

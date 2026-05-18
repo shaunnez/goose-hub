@@ -33,6 +33,7 @@ export interface SearchParams {
   projectSlug?: string;
   type?: WorkItemTypeFilter;
   milestone?: MilestoneFilter;
+  includeClosed?: boolean;
 }
 
 const DEFAULT_LIMIT = 50;
@@ -49,6 +50,10 @@ export function parseType(raw: string | undefined): WorkItemTypeFilter | undefin
 export function parseMilestone(raw: string | undefined): MilestoneFilter {
   if (raw != null && VALID_MILESTONES.has(raw)) return raw as MilestoneFilter;
   return 'active';
+}
+
+export function parseIncludeClosed(raw: string | undefined): boolean {
+  return raw === 'true' || raw === '1';
 }
 
 export function parseLimit(raw: string | undefined): number {
@@ -111,6 +116,25 @@ export async function search(
         slug: project.slug,
         error: String(err),
       });
+    }
+
+    // Include-closed: only enabled when we have a milestone number to scope
+    // the query (active milestone path). For milestone:'all' we would need
+    // to iterate every milestone per project — deferred. Surfaced as a
+    // logged note so the UI can still toggle the chip without surprise.
+    if (params.includeClosed === true && milestoneNumber != null) {
+      try {
+        const closed = await source.listClosedWorkByMilestone(milestoneNumber);
+        for (const item of closed) {
+          if (params.type != null && item.type !== params.type) continue;
+          collected.push({ item, projectSlug: project.slug });
+        }
+      } catch (err) {
+        logger.warn('search: listClosedWorkByMilestone failed', {
+          slug: project.slug,
+          error: String(err),
+        });
+      }
     }
   }
 
