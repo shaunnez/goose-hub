@@ -287,13 +287,13 @@ Set `verdict` based on the following rules, in order:
 
 ## Decision-summary pattern
 
-After each major step, emit a line in your text turn:
+Emit sparse live markers in your text turn before major read/verification pivots, after important findings, and when uncertainty changes the QA path:
 
 ```
 [decision] KIND: <one sentence summary>
 ```
 
-`KIND` is an uppercase value from the shared decision-kind enum (see `core/agent-runtime/decision-types.ts`). The orchestrator parses these lines and stores them as `agent.decision-summary` events. Keep each to a single sentence. Do not include raw output, credentials, or implementation reasoning.
+`KIND` is an uppercase value from the shared decision-kind enum (see `core/agent-runtime/decision-types.ts`). The runtime parses these lines and stores them as `agent.decision-summary-live` events. Keep each to a single sentence. Do not emit before every command. Do not include raw output, credentials, implementation reasoning, secrets, or file dumps.
 
 Standard kinds for QA:
 

@@ -23,9 +23,12 @@ import {
   extractResultJson,
   parseCodexEnvelope,
   pickCodexAgentMessageText,
+  pickCodexAssistantMessage,
   pickCodexToolCall,
 } from './codex-parser.js';
 import { assembleSpawnContext } from './context-assembly.js';
+import { parseDecisionMarkersAfter } from './decision-markers.js';
+import { isDecisionKind } from './decision-types.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { resolveMockOutput } from './mock-outputs.js';
 import { defaultModelForTierAndProvider, estimateCostUsd } from './models.js';
@@ -41,6 +44,7 @@ export {
 export {
   parseCodexEnvelope,
   extractResultJson,
+  pickCodexAssistantMessage,
   pickCodexAgentMessageText,
   pickCodexToolCall,
 } from './codex-parser.js';
@@ -160,13 +164,48 @@ export class CodexCliRuntime implements AgentRuntime {
       let truncated = false;
       let settled = false;
       let toolCallCount = 0;
+      const assistantMarkerOffsets = new Map<string, number>();
 
       const handleStdoutLine = (line: string) => {
         if (line.trim().length === 0) return;
         try {
           const parsed = JSON.parse(line) as unknown;
           if (parsed == null || typeof parsed !== 'object') return;
-          const toolCall = pickCodexToolCall(parsed as Record<string, unknown>);
+          const event = parsed as Record<string, unknown>;
+          const assistantMessage = pickCodexAssistantMessage(event);
+          if (assistantMessage != null) {
+            const key = assistantMessage.id ?? '__default_assistant_message__';
+            const previousOffset = assistantMarkerOffsets.get(key) ?? 0;
+            const scanText = assistantMessage.terminal
+              ? assistantMessage.text
+              : completeLinePrefix(assistantMessage.text);
+            const safePreviousOffset =
+              scanText.length < previousOffset || assistantMessage.text.length < previousOffset
+                ? 0
+                : previousOffset;
+            const markers = parseDecisionMarkersAfter(scanText, safePreviousOffset);
+            assistantMarkerOffsets.set(key, Math.max(safePreviousOffset, scanText.length));
+            for (const marker of markers) {
+              const kind = isDecisionKind(marker.kind) ? marker.kind : 'UNKNOWN';
+              eventStore.appendEvent({
+                projectId,
+                workItemId,
+                kind: 'agent.decision-summary-live',
+                payload: {
+                  run_id: runId,
+                  kind,
+                  summary: marker.summary,
+                  timestamp: new Date().toISOString(),
+                  skill: spec.skill,
+                  personaId,
+                },
+                runId,
+                personaId,
+              });
+            }
+          }
+
+          const toolCall = pickCodexToolCall(event);
           if (toolCall == null) return;
           toolCallCount += 1;
           eventStore.appendEvent({
@@ -427,4 +466,9 @@ export class CodexCliRuntime implements AgentRuntime {
       });
     });
   }
+}
+
+function completeLinePrefix(text: string): string {
+  const lastNewline = Math.max(text.lastIndexOf('\n'), text.lastIndexOf('\r'));
+  return lastNewline === -1 ? '' : text.slice(0, lastNewline + 1);
 }

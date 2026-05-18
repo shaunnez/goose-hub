@@ -269,4 +269,6 @@ Return a JSON object conforming to `ImplementSchema`. The orchestrator opens the
 
 Use uppercase enum values both in the JSON `kind` field and in the live `[decision] KIND: …` marker line. Free-text `step` strings are no longer accepted — schema validation rejects them.
 
-Live marker format: `[decision] KIND: what — why` where ` — ` (space, em-dash, space) separates the decision from its rationale. Example: `[decision] PLAN: Add helper in core/foo/bar.ts — mirrors existing baz pattern, avoids new abstraction`.
+Live markers are short progress/rationale markers, not raw thinking. Emit them before major search/read pivots, after important findings or test transitions, and on uncertainty/pivots. Do not emit before every command. Keep each marker to one sentence with no secrets, hidden reasoning, raw output, or file dumps.
+
+Live marker format: `[decision] KIND: <one sentence>`. Example: `[decision] PLAN: Adding helper in core/foo/bar.ts to mirror the existing baz pattern`.

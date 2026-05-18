@@ -142,20 +142,20 @@ Return a JSON object with this exact structure:
 
 ## Decision-summary pattern
 
-After each major investigation step, emit a line in your text turn:
+Emit sparse live markers in your text turn before major search/read pivots, after important findings, and when uncertainty changes the investigation path:
 
 ```
-[decision] KIND: what — why
+[decision] KIND: <one sentence>
 ```
 
 `KIND` is an uppercase value from the shared decision-kind enum (see `core/agent-runtime/decision-types.ts`). The investigator most commonly emits `READ` (issue/code reads), `INSIGHT` (root-cause hypothesis, open questions), and `UNCERTAINTY` (when evidence is thin).
 
-The ` — ` (space, em-dash, space) separates the decision (`what`) from its rationale (`why`). Both parts are required. These marker lines are parsed by the orchestrator and stored as `agent.decision-summary` events. They are NOT forwarded to QA or Reviewer agents. Keep each summary to a single sentence. Do not include credentials, file dumps, or raw chain-of-thought.
+These marker lines are parsed by the runtime and stored as `agent.decision-summary-live` events. They are short progress/rationale markers, not raw thinking. Do not emit before every command. Keep each summary to a single sentence. Do not include credentials, file dumps, secrets, PII, or hidden reasoning.
 
 Examples of good decision summaries:
-- `[decision] READ: Traced entry points to apps/server/src/routes/auth.ts — login endpoint reached via POST /auth/login`
-- `[decision] INSIGHT: Root cause in normaliseEmail() — URL-decode step strips plus signs before DB lookup`
-- `[decision] UNCERTAINTY: Cannot confirm fix without running integration tests — static analysis inconclusive`
+- `[decision] READ: Searching app shell components to find the rendered header owner`
+- `[decision] INSIGHT: Sidebar.tsx owns the brand string`
+- `[decision] UNCERTAINTY: Test target unclear, searching for chrome coverage`
 
 Bad decision summaries:
 - More than one sentence

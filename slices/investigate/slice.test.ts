@@ -21,6 +21,7 @@ const mockGetUseInvestigationSwarm = vi.fn();
 const mockReadProjectSettings = vi.fn();
 const mockReadProjectSkillSettings = vi.fn();
 const mockReadProjectModelSettingsForRole = vi.fn();
+const mockReconcileDecisionSummaries = vi.fn();
 
 vi.mock('@goose-hub/core/agent-runtime/swarm.js', () => ({
   dispatchWave: (...args: unknown[]) => mockDispatchWave(...args),
@@ -37,6 +38,10 @@ vi.mock('@goose-hub/core/agent-runtime/cross-validate.js', () => ({
 
 vi.mock('@goose-hub/core/agent-runtime/invoke-skill.js', () => ({
   invokeSkill: (...args: unknown[]) => mockInvokeSkill(...args),
+}));
+
+vi.mock('@goose-hub/core/agent-runtime/reconcile-decisions.js', () => ({
+  reconcileDecisionSummaries: (...args: unknown[]) => mockReconcileDecisionSummaries(...args),
 }));
 
 vi.mock('@goose-hub/core/scout-reports/repository.js', () => ({
@@ -881,6 +886,26 @@ describe('runInvestigateWorkflow', () => {
         .mock.calls.find(([e]) => e.kind === 'agent.investigation-complete');
       const payload = call?.[0].payload as { investigate: unknown };
       expect(payload.investigate).toBeDefined();
+    });
+
+    it('reconciles terminal decision summaries before completing the investigation', async () => {
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const completeCallIndex = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.findIndex(([e]) => e.kind === 'agent.investigation-complete');
+      expect(mockReconcileDecisionSummaries).toHaveBeenCalledWith(
+        expect.any(String),
+        'goose-hub-self',
+        'github:shaunnez/goose-hub#42',
+        'investigate',
+        makeInvestigateOutput().decisionSummaries,
+      );
+      expect(mockReconcileDecisionSummaries.mock.invocationCallOrder[0]).toBeLessThan(
+        vi.mocked(eventStore.appendEvent).mock.invocationCallOrder[completeCallIndex],
+      );
     });
 
     it('transitions to factory:investigation-complete on success', async () => {
