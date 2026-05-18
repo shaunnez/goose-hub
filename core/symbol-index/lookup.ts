@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
 import { defaultDbPath, openIndexDb } from './db.js';
-import { findCallers, findSymbol, listExportsOf } from './query.js';
+import { findCallers, findCallersOfExport, findSymbol, listExportsOf } from './query.js';
 
 export interface SymbolHint {
   name: string;
@@ -282,12 +282,11 @@ export function lookupChangedExportImpact(
 
     for (const filePath of changedFiles) {
       if (!/\.(ts|tsx)$/.test(filePath)) continue;
-      if (!symbolExistsInWorktree(filePath, options?.worktreePath)) continue;
       for (const sym of listExportsOf(db, filePath)) {
         const key = `${sym.filePath}:${sym.name}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        const importers = findCallers(db, sym.name)
+        const importers = findCallersOfExport(db, sym.filePath, sym.name)
           .filter((importer) => importer !== sym.filePath)
           .filter((importer) => symbolExistsInWorktree(importer, options?.worktreePath))
           .slice(0, MAX_IMPORTERS_PER_IMPACT);

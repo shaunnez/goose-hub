@@ -355,4 +355,70 @@ describe('lookupWorkItemSymbols', () => {
       },
     ]);
   });
+
+  it('includes deleted changed files in changed-export impact', () => {
+    writeFile(tmp, 'core/deleted.ts', 'export function DeletedService() {}');
+    writeFile(
+      tmp,
+      'slices/investigate/workflow.ts',
+      `import { DeletedService } from '../../core/deleted.js';`,
+    );
+    buildIndex({ repoRoot: tmp, db, includeDirs: ['core', 'slices'] });
+    db.close();
+    fs.rmSync(path.join(tmp, 'core/deleted.ts'));
+
+    const impact = lookupChangedExportImpact(['core/deleted.ts'], {
+      dbPath,
+      worktreePath: tmp,
+    });
+
+    expect(impact).toEqual([
+      {
+        changedExport: 'DeletedService',
+        definedIn: 'core/deleted.ts',
+        importers: ['slices/investigate/workflow.ts'],
+      },
+    ]);
+  });
+
+  it('scopes changed-export impact to importers of the defining module', () => {
+    writeFile(tmp, 'core/a/config.ts', 'export function Config() {}');
+    writeFile(tmp, 'core/b/config.ts', 'export function Config() {}');
+    writeFile(tmp, 'slices/a/workflow.ts', `import { Config } from '../../core/a/config.js';`);
+    writeFile(tmp, 'slices/b/workflow.ts', `import { Config } from '../../core/b/config.js';`);
+    buildIndex({ repoRoot: tmp, db, includeDirs: ['core', 'slices'] });
+    db.close();
+
+    const impact = lookupChangedExportImpact(['core/a/config.ts'], {
+      dbPath,
+      worktreePath: tmp,
+    });
+
+    expect(impact).toEqual([
+      {
+        changedExport: 'Config',
+        definedIn: 'core/a/config.ts',
+        importers: ['slices/a/workflow.ts'],
+      },
+    ]);
+  });
+
+  it('filters changed-export importers that are absent from the worktree', () => {
+    writeFile(tmp, 'core/swarm.ts', 'export function dispatchWave() {}');
+    writeFile(
+      tmp,
+      'slices/investigate/workflow.ts',
+      `import { dispatchWave } from '../../core/swarm.js';`,
+    );
+    buildIndex({ repoRoot: tmp, db, includeDirs: ['core', 'slices'] });
+    db.close();
+    fs.rmSync(path.join(tmp, 'slices/investigate/workflow.ts'));
+
+    const impact = lookupChangedExportImpact(['core/swarm.ts'], {
+      dbPath,
+      worktreePath: tmp,
+    });
+
+    expect(impact).toEqual([]);
+  });
 });

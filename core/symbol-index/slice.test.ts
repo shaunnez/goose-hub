@@ -6,7 +6,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildIndex } from './builder.js';
 import { openIndexDb } from './db.js';
 import { assessSymbolIndexFreshness, ensureSymbolIndexFresh } from './freshness.js';
-import { findCallers, findSymbol, listExportsOf, listImports } from './query.js';
+import {
+  findCallers,
+  findCallersOfExport,
+  findSymbol,
+  listExportsOf,
+  listImports,
+} from './query.js';
 
 function writeFile(root: string, rel: string, content: string): void {
   const abs = path.join(root, rel);
@@ -82,6 +88,30 @@ fetchUser();`,
 
     const callers = findCallers(db, 'fetchUser');
     expect(callers).toContain('apps/web/src/page.ts');
+  });
+
+  it('resolves callers for a specific exported module', () => {
+    writeFile(tmp, 'core/a/config.ts', 'export function Config() {}');
+    writeFile(tmp, 'core/b/config.ts', 'export function Config() {}');
+    writeFile(
+      tmp,
+      'apps/server/src/from-a.ts',
+      `import { Config } from '@goose-hub/core/a/config.js';`,
+    );
+    writeFile(
+      tmp,
+      'apps/server/src/from-b.ts',
+      `import { Config } from '@goose-hub/core/b/config.js';`,
+    );
+
+    buildIndex({ repoRoot: tmp, db, includeDirs: ['apps', 'core'] });
+
+    expect(findCallersOfExport(db, 'core/a/config.ts', 'Config')).toEqual([
+      'apps/server/src/from-a.ts',
+    ]);
+    expect(findCallersOfExport(db, 'core/b/config.ts', 'Config')).toEqual([
+      'apps/server/src/from-b.ts',
+    ]);
   });
 
   it('captures default and namespace imports', () => {

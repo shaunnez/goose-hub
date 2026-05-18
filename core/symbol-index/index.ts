@@ -8,6 +8,12 @@ export type {
   SymbolIndexFreshness,
   SymbolIndexFreshnessOptions,
 } from './freshness.js';
-export { findCallers, findSymbol, listExportsOf, listImports } from './query.js';
+export {
+  findCallers,
+  findCallersOfExport,
+  findSymbol,
+  listExportsOf,
+  listImports,
+} from './query.js';
 export { extractIdentifiers, lookupWorkItemSymbols } from './lookup.js';
 export type { LookupOptions, SymbolHint } from './lookup.js';
