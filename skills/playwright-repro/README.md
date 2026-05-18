@@ -37,10 +37,12 @@ Called AFTER the investigate skill (M6.03) for `type:bug` issues only.
 | `screenshots[].step` | `number` | Repro step number this screenshot corresponds to |
 | `screenshots[].githubUrl` | `string` (optional) | SHA-pinned `raw.githubusercontent.com` URL once pushed to the evidence branch |
 | `gifPath` | `string \| null` | Workspace-relative path to walkthrough GIF, or `null` if not captured |
-| `consoleErrors` | `ConsoleEntry[]` | Browser console errors/warnings/info captured during the session |
+| `consoleErrors` | `ConsoleEntry[]` | Browser console errors/warnings/info captured from `REPRO_CONSOLE` |
 | `consoleErrors[].message` | `string` | Console message text |
 | `consoleErrors[].type` | `"error" \| "warning" \| "info"` | Console entry type |
 | `consoleErrors[].url` | `string` (optional) | Source URL of the console entry |
+| `testErrors` | `string[]` | Playwright assertion failures from the repro spec, including `REPRO_EXPECTED_BUG` |
+| `runnerErrors` | `string[]` | Playwright runner/setup failures, such as missing specs or webServer startup errors |
 | `reproSteps` | `string[]` | The steps actually executed (may differ from issue if steps were clarified) |
 | `reproduced` | `boolean` | Whether the bug was successfully reproduced |
 | `notes` | `string` (optional) | Additional context, observations, or explanation if not reproduced |

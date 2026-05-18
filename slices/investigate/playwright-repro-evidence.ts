@@ -186,7 +186,9 @@ export function assemblePlaywrightReproPayload(params: {
   return {
     screenshots,
     gifPath,
-    consoleErrors: params.evidence.errors.map((message) => ({ message, type: 'error' as const })),
+    consoleErrors: params.evidence.consoleErrors,
+    testErrors: params.evidence.testErrors,
+    runnerErrors: params.evidence.runnerErrors,
     reproSteps: params.plan.reproSteps,
     reproduced: params.evidence.classification === 'reproduced',
     notes: params.evidence.notes,

@@ -56,6 +56,14 @@ export const PlaywrightReproSchema = z.object({
       url: z.string().optional(),
     }),
   ),
+  testErrors: z
+    .array(z.string())
+    .default([])
+    .describe('Playwright assertion failures from the repro spec'),
+  runnerErrors: z
+    .array(z.string())
+    .default([])
+    .describe('Playwright runner, setup, or configuration failures'),
   reproSteps: z.array(z.string()).describe('Steps actually executed to reproduce the bug'),
   reproduced: z.boolean().describe('Whether the bug was successfully reproduced'),
   notes: z.string().optional().describe('Additional context or observations'),

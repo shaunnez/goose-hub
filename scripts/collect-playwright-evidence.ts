@@ -25,6 +25,9 @@ export interface PlaywrightEvidence {
   reproduced: boolean;
   passed: boolean;
   status: string | null;
+  consoleErrors: Array<{ message: string; type: 'error' | 'warning' | 'info'; url?: string }>;
+  testErrors: string[];
+  runnerErrors: string[];
   errors: string[];
   stdout: string[];
   screenshots: string[];
@@ -134,6 +137,52 @@ function resultStdout(result: PlaywrightResult): string[] {
   return stdout.map(textOf).filter((entry): entry is string => entry != null);
 }
 
+function normalizeConsoleType(value: unknown): 'error' | 'warning' | 'info' {
+  if (value === 'error') return 'error';
+  if (value === 'warning' || value === 'warn') return 'warning';
+  return 'info';
+}
+
+function collectConsoleErrors(stdout: string[]): PlaywrightEvidence['consoleErrors'] {
+  const entries: PlaywrightEvidence['consoleErrors'] = [];
+  for (const line of stdout) {
+    const markerIndex = line.indexOf('REPRO_CONSOLE');
+    if (markerIndex < 0) continue;
+    const jsonText = line.slice(markerIndex + 'REPRO_CONSOLE'.length);
+    let parsed: unknown;
+    try {
+      parsed = extractFirstJsonValue(jsonText);
+    } catch {
+      continue;
+    }
+    if (!Array.isArray(parsed)) continue;
+    for (const entry of parsed) {
+      const obj = asRecord(entry);
+      if (obj == null || typeof obj.message !== 'string') continue;
+      const url = typeof obj.url === 'string' && obj.url.length > 0 ? obj.url : undefined;
+      entries.push({
+        message: obj.message,
+        type: normalizeConsoleType(obj.type),
+        ...(url != null ? { url } : {}),
+      });
+    }
+  }
+  return entries;
+}
+
+function splitPlaywrightErrors(errors: string[]): { testErrors: string[]; runnerErrors: string[] } {
+  const testErrors: string[] = [];
+  const runnerErrors: string[] = [];
+  for (const error of errors) {
+    if (isAssertionFailure(error)) {
+      testErrors.push(error);
+    } else {
+      runnerErrors.push(error);
+    }
+  }
+  return { testErrors, runnerErrors };
+}
+
 function findVideoAttachment(results: PlaywrightResult[]): string | null {
   for (const result of results) {
     const attachments = Array.isArray(result.attachments) ? result.attachments : [];
@@ -223,6 +272,8 @@ export function collectPlaywrightEvidence(args: CollectorArgs): PlaywrightEviden
   const results = collectResults(parsed);
   const errors = [...collectTopLevelErrors(parsed), ...results.flatMap(resultErrors)];
   const stdout = results.flatMap(resultStdout);
+  const consoleErrors = collectConsoleErrors(stdout);
+  const { testErrors, runnerErrors } = splitPlaywrightErrors(errors);
   const status =
     results.find((result) => typeof result.status === 'string')?.status?.toString() ?? null;
   const classification = classifyPlaywrightResult({ phase: args.phase, status, errors });
@@ -238,13 +289,19 @@ export function collectPlaywrightEvidence(args: CollectorArgs): PlaywrightEviden
     reproduced: classification === 'reproduced',
     passed: classification === 'passed',
     status,
+    consoleErrors,
+    testErrors,
+    runnerErrors,
     errors,
     stdout,
     screenshots,
     videoPath,
     gifPath,
     ffmpegError,
-    notes: errors[0] ?? (classification === 'passed' ? 'Playwright passed' : 'No error detail found'),
+    notes:
+      testErrors[0] ??
+      runnerErrors[0] ??
+      (classification === 'passed' ? 'Playwright passed' : 'No error detail found'),
   };
 }
 

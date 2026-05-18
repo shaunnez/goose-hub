@@ -170,6 +170,8 @@ const FULL_REPRO = {
   screenshots: [{ path: 'evidence/issue-42/step-1.png', caption: 'Login page', step: 1 }],
   gifPath: 'evidence/issue-42/walkthrough.gif',
   consoleErrors: [{ message: 'TypeError: x is undefined', type: 'error' as const }],
+  testErrors: ['REPRO_EXPECTED_BUG: error banner missing'],
+  runnerErrors: ['Error: No tests found.'],
   reproSteps: ['Navigate to /login', 'Click submit'],
   reproduced: true,
 };
@@ -199,6 +201,8 @@ describe('extractPlaywrightRepro', () => {
     expect(result?.reproSteps).toEqual(['Navigate to /login', 'Click submit']);
     expect(result?.screenshots).toHaveLength(1);
     expect(result?.consoleErrors).toHaveLength(1);
+    expect(result?.testErrors).toEqual(['REPRO_EXPECTED_BUG: error banner missing']);
+    expect(result?.runnerErrors).toEqual(['Error: No tests found.']);
     expect(result?.gifPath).toBe('evidence/issue-42/walkthrough.gif');
   });
 

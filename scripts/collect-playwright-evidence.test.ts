@@ -105,6 +105,11 @@ describe('collect-playwright-evidence', () => {
 
       expect(evidence.classification).toBe('reproduced');
       expect(evidence.reproduced).toBe(true);
+      expect(evidence.testErrors).toEqual([
+        'Error: REPRO_EXPECTED_BUG expect.soft(locator).toBeVisible() failed for broken header',
+      ]);
+      expect(evidence.consoleErrors).toEqual([]);
+      expect(evidence.runnerErrors).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -140,6 +145,56 @@ describe('collect-playwright-evidence', () => {
       const evidence = collect({ resultsPath, evidenceDir: dir });
 
       expect(evidence.classification).toBe('setup_failed');
+      expect(evidence.runnerErrors).toEqual([
+        'webServer failed to start: ECONNREFUSED 127.0.0.1:5173',
+      ]);
+      expect(evidence.testErrors).toEqual([]);
+      expect(evidence.consoleErrors).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('parses REPRO_CONSOLE stdout into browser console errors', () => {
+    const dir = makeTmpDir();
+    try {
+      const resultsPath = writeResults(
+        dir,
+        resultJson({
+          stdout: [
+            {
+              text: 'REPRO_CONSOLE [{"message":"TypeError: boom","type":"error","url":"http://localhost:5173/settings"},{"message":"deprecated","type":"warning"}]',
+            },
+          ],
+        }),
+      );
+
+      const evidence = collect({ resultsPath, evidenceDir: dir });
+
+      expect(evidence.consoleErrors).toEqual([
+        { message: 'TypeError: boom', type: 'error', url: 'http://localhost:5173/settings' },
+        { message: 'deprecated', type: 'warning' },
+      ]);
+      expect(evidence.testErrors).toEqual([]);
+      expect(evidence.runnerErrors).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('routes no-tests-found failures into runnerErrors only', () => {
+    const dir = makeTmpDir();
+    try {
+      const resultsPath = writeResults(dir, {
+        errors: [{ message: 'Error: No tests found.\nMake sure that arguments are regular expressions matching test files.' }],
+      });
+
+      const evidence = collect({ resultsPath, evidenceDir: dir });
+
+      expect(evidence.classification).toBe('setup_failed');
+      expect(evidence.runnerErrors[0]).toContain('No tests found');
+      expect(evidence.testErrors).toEqual([]);
+      expect(evidence.consoleErrors).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
