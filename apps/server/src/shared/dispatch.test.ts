@@ -258,21 +258,43 @@ describe('dispatchInvestigate', () => {
     expect(mockLoggerWarn).not.toHaveBeenCalled();
   });
 
-  it('does not chain investigation-complete routing in production webhook mode', async () => {
-    const item = { id: 'github:shaunnez/goose-hub#42', externalId: '42' };
+  it('keeps a post-lock investigation-complete fallback when production webhook dispatch is dropped', async () => {
+    const item = {
+      id: 'github:shaunnez/goose-hub#42',
+      externalId: '42',
+      state: 'factory:investigation-complete',
+    };
     const source = {
       repoRef: 'shaunnez/goose-hub',
       getItem: vi.fn().mockResolvedValue(item),
       transitionState: vi.fn().mockResolvedValue(undefined),
     };
     mockGetSourceForSlug.mockResolvedValue(source);
+    mockEventStoreReplay.mockReturnValue([
+      {
+        kind: 'agent.investigation-complete',
+        payload: { investigate: { confidence: 'high' } },
+      },
+    ]);
 
-    const { dispatchInvestigate } = await import('./dispatch.js');
+    const { dispatchInvestigate, dispatchInvestigationComplete } = await import('./dispatch.js');
+    mockRunInvestigateWorkflow.mockImplementationOnce(async () => {
+      await dispatchInvestigationComplete('goose-hub-self', 42);
+    });
+
     await dispatchInvestigate('goose-hub-self', 42);
 
     expect(mockRunInvestigateWorkflow).toHaveBeenCalledOnce();
-    expect(source.transitionState).not.toHaveBeenCalled();
-    expect(mockEventStoreAppendEvent).not.toHaveBeenCalledWith(
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      'dispatchInvestigationComplete: duplicate in-flight, dropping',
+      expect.objectContaining({ slug: 'goose-hub-self', issueNumber: 42 }),
+    );
+    expect(source.transitionState).toHaveBeenCalledWith(
+      'github:shaunnez/goose-hub#42',
+      'factory:investigation-complete',
+      'factory:dev-ready',
+    );
+    expect(mockEventStoreAppendEvent).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'state.transitioned' }),
     );
   });
@@ -349,6 +371,49 @@ describe('dispatchInvestigationComplete', () => {
 
     expect(source.transitionState).not.toHaveBeenCalled();
     expect(mockEventStoreAppendEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'state.transitioned' }),
+    );
+  });
+
+  it('does not treat a prior investigation cycle transition as a duplicate', async () => {
+    const source = investigationCompleteSource();
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockEventStoreReplay.mockReturnValue([
+      {
+        kind: 'agent.investigation-complete',
+        payload: { investigate: { confidence: 'high' } },
+      },
+      {
+        kind: 'state.transitioned',
+        payload: {
+          from: 'factory:investigation-complete',
+          to: 'factory:dev-ready',
+          by: 'orchestrator',
+        },
+      },
+      {
+        kind: 'state.transitioned',
+        payload: {
+          from: 'factory:dev-ready',
+          to: 'factory:investigating',
+          by: 'resume',
+        },
+      },
+      {
+        kind: 'agent.investigation-complete',
+        payload: { investigate: { confidence: 'high' } },
+      },
+    ]);
+
+    const { dispatchInvestigationComplete } = await import('./dispatch.js');
+    await dispatchInvestigationComplete('goose-hub-self', 42);
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      'github:shaunnez/goose-hub#42',
+      'factory:investigation-complete',
+      'factory:dev-ready',
+    );
+    expect(mockEventStoreAppendEvent).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'state.transitioned' }),
     );
   });

@@ -19,15 +19,20 @@ import { getSourceForSlug } from './source.js';
 
 type InvCompletePayload = { investigate?: InvestigateOutput; investigationRunId?: string };
 
-function shouldChainInvestigationCompleteDirectly(): boolean {
-  return process.env.MOCK_SOURCE === 'true';
-}
-
 function hasEquivalentInvestigationCompleteTransition(
   events: Array<{ kind: string; payload: unknown }>,
   targetState: 'factory:gate-pending' | 'factory:dev-ready',
 ): boolean {
-  return events.some((event) => {
+  let latestInvestigationIndex = -1;
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    if (events[i]?.kind === 'agent.investigation-complete') {
+      latestInvestigationIndex = i;
+      break;
+    }
+  }
+  if (latestInvestigationIndex === -1) return false;
+
+  return events.slice(latestInvestigationIndex + 1).some((event) => {
     if (event.kind !== 'state.transitioned') return false;
     const payload = event.payload as { from?: unknown; to?: unknown; by?: unknown } | null;
     return (
@@ -98,11 +103,11 @@ export async function dispatchInvestigate(slug: string, issueNumber: number): Pr
           : undefined;
       await runInvestigateWorkflow(item, source, slug, REPO_ROOT, mockInvestigateDeps);
 
-      // In production the GitHub label-change webhook owns the next dispatch.
-      // MOCK_SOURCE has no webhook delivery, so local runs chain explicitly.
-      if (shouldChainInvestigationCompleteDirectly()) {
-        return () => dispatchInvestigationComplete(slug, issueNumber);
-      }
+      // Production normally advances via the GitHub label-change webhook, but
+      // that webhook can arrive before this lock is released and be dropped as
+      // a duplicate. The post-lock fallback is harmless when the webhook wins:
+      // dispatchInvestigationComplete re-reads current state and no-ops.
+      return () => dispatchInvestigationComplete(slug, issueNumber);
     },
   );
 }
