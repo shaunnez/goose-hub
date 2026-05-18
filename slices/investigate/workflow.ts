@@ -9,6 +9,7 @@ import {
   tierOf,
 } from '@goose-hub/core/agent-runtime/models.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
+import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { ScoutOutputSchema } from '@goose-hub/core/agent-runtime/scout-output.js';
@@ -424,6 +425,13 @@ export async function runInvestigateWorkflow(
     });
 
     const findings = synthResult.output as InvestigateOutput;
+    reconcileDecisionSummaries(
+      runId,
+      projectId,
+      workItem.id,
+      'investigate',
+      findings.decisionSummaries,
+    );
 
     // Playwright repro for browser-manifesting bugs
     let reproOutput: PlaywrightReproOutput | undefined;

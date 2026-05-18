@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { DECISION_MARKER_RE_SOURCE } from '../agent-runtime/decision-markers.js';
 
 const HOOKS_DIR = join(homedir(), '.factory', 'hooks');
 
@@ -60,7 +61,7 @@ async function main() {
   // colon doesn't silently drop the marker. KIND is uppercase A-Z and
   // underscores; the server validates it against the canonical enum and
   // coerces unknown values to UNKNOWN.
-  const DECISION_RE = /^\\[decision\\]\\s+(?:([A-Z_]+):\\s*(.+)|(.+))$/gm;
+  const DECISION_RE = new RegExp(${JSON.stringify(DECISION_MARKER_RE_SOURCE)}, 'gm');
 
   const markers = [];
   let m;

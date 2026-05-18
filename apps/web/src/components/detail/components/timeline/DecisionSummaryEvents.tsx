@@ -1,5 +1,5 @@
 import type { AgentEventDto } from '@/lib/types';
-import { ChevronRight, Sparkles } from 'lucide-react';
+import { Radio, Sparkles } from 'lucide-react';
 import { getPayloadStr } from '../../lib/timeline';
 
 export function AgentDecisionSummaryEvent({ event }: { event: AgentEventDto }) {
@@ -45,28 +45,27 @@ export function AgentDecisionSummaryLiveEvent({ event }: { event: AgentEventDto 
   return (
     <li
       data-event-kind={event.kind}
-      className="rounded-md border border-line/50 bg-bg/40 px-4 py-2"
+      className="rounded-md border border-line/50 bg-bg/40 px-3 py-2"
     >
-      <details>
-        <summary className="flex items-center gap-1 cursor-pointer list-none font-mono text-[11.5px] select-none">
-          <ChevronRight size={12} />
-          <span className="text-[color:var(--accent)] shrink-0" title="Live decision marker">
-            💭
-          </span>
-          {kind != null && (
-            <span
-              data-testid="decision-kind-chip-live"
-              className="font-mono text-[9.5px] tracking-wider px-1 py-[1px] rounded bg-bg-elev-2 text-[color:var(--accent)] shrink-0"
-            >
-              {kind}
-            </span>
-          )}
-          <span className="truncate max-w-[460px]">{summary}</span>
-        </summary>
-        <div className="mt-1.5 text-[11px] text-fg-2 font-mono tnum pl-4">
-          {new Date(event.createdAt).toLocaleString()}
+      <div className="flex items-start gap-2">
+        <Radio size={12} className="mt-[2px] shrink-0 text-[color:var(--accent)]" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10.5px] text-fg-3">
+            <span className="uppercase tracking-wider">Live decision</span>
+            {kind != null && (
+              <span
+                data-testid="decision-kind-chip-live"
+                className="shrink-0 rounded bg-bg-elev-2 px-1.5 py-[1px] font-mono text-[9.5px] tracking-wider text-[color:var(--accent)]"
+              >
+                {kind}
+              </span>
+            )}
+            <span aria-hidden className="h-[3px] w-[3px] rounded-full bg-fg-4" />
+            <span className="tnum">{new Date(event.createdAt).toLocaleTimeString()}</span>
+          </div>
+          <div className="mt-1 text-[12px] leading-snug text-fg-2">{summary}</div>
         </div>
-      </details>
+      </div>
     </li>
   );
 }

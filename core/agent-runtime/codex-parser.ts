@@ -13,6 +13,11 @@ export interface CodexToolCall {
   toolInput: Record<string, unknown>;
 }
 
+export interface CodexAssistantMessage {
+  id: string | null;
+  text: string;
+}
+
 /**
  * If `obj` is a Codex transport event of the form
  * `{"type":"item.completed","item":{"type":"agent_message","text":"..."}}`,
@@ -20,13 +25,20 @@ export interface CodexToolCall {
  * Exported for unit testing.
  */
 export function pickCodexAgentMessageText(obj: Record<string, unknown>): string | null {
-  if (obj.type === 'item.completed' && typeof obj.item === 'object' && obj.item !== null) {
-    const item = obj.item as Record<string, unknown>;
-    if (item.type === 'agent_message' && typeof item.text === 'string') {
-      return item.text;
-    }
+  return pickCodexAssistantMessage(obj)?.text ?? null;
+}
+
+export function pickCodexAssistantMessage(
+  obj: Record<string, unknown>,
+): CodexAssistantMessage | null {
+  if (!isCodexItemEvent(obj.type) || typeof obj.item !== 'object' || obj.item === null) {
+    return null;
   }
-  return null;
+  const item = obj.item as Record<string, unknown>;
+  if (!isAssistantItem(item)) return null;
+  const text = pickAssistantText(item);
+  if (text == null || text.length === 0) return null;
+  return { id: typeof item.id === 'string' ? item.id : null, text };
 }
 
 /**
@@ -164,6 +176,39 @@ function pickString(obj: Record<string, unknown>, keys: string[]): string | null
   for (const k of keys) {
     const v = obj[k];
     if (typeof v === 'string') return v;
+  }
+  return null;
+}
+
+function isCodexItemEvent(type: unknown): boolean {
+  return (
+    type === 'item.started' ||
+    type === 'item.updated' ||
+    type === 'item.delta' ||
+    type === 'item.completed'
+  );
+}
+
+function isAssistantItem(item: Record<string, unknown>): boolean {
+  if (item.type === 'agent_message' || item.type === 'assistant_message') return true;
+  return item.type === 'message' && item.role === 'assistant';
+}
+
+function pickAssistantText(item: Record<string, unknown>): string | null {
+  const direct = pickString(item, ['text', 'content', 'message', 'delta']);
+  if (direct != null) return direct;
+  if (Array.isArray(item.content)) {
+    const parts = item.content
+      .map((part) => {
+        if (typeof part === 'string') return part;
+        if (part != null && typeof part === 'object') {
+          const obj = part as Record<string, unknown>;
+          return pickString(obj, ['text', 'content']);
+        }
+        return null;
+      })
+      .filter((part): part is string => part != null);
+    if (parts.length > 0) return parts.join('');
   }
   return null;
 }

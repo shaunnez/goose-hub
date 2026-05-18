@@ -158,6 +158,158 @@ describe('CodexCliRuntime timeout handling', () => {
     );
   });
 
+  it('emits one live decision event from a streamed agent_message marker', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec({ skill: 'investigate' }));
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        `${JSON.stringify({
+          type: 'item.completed',
+          item: {
+            id: 'msg_1',
+            type: 'agent_message',
+            text: '[decision] READ: Searching app shell components\n{"ok":true}',
+          },
+        })}\n`,
+      ),
+    );
+
+    const decisionCalls = mockEventStore.appendEvent.mock.calls.filter(
+      ([e]) => e.kind === 'agent.decision-summary-live',
+    );
+    expect(decisionCalls).toHaveLength(1);
+    expect(decisionCalls[0][0]).toMatchObject({
+      projectId: 'test-project',
+      workItemId: 'github:owner/repo#1',
+      runId: 'run-codex',
+      personaId: 'test-project/developer/0',
+      payload: {
+        run_id: 'run-codex',
+        kind: 'READ',
+        summary: 'Searching app shell components',
+        skill: 'investigate',
+        personaId: 'test-project/developer/0',
+      },
+    });
+
+    child.emit('close', 0);
+    await expect(run).resolves.toMatchObject({ output: { ok: true } });
+  });
+
+  it('preserves live decision marker order from a single agent_message', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec());
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        `${JSON.stringify({
+          type: 'item.completed',
+          item: {
+            id: 'msg_1',
+            type: 'agent_message',
+            text: [
+              '[decision] READ: Searching chrome coverage',
+              '[decision] UNCERTAINTY: Test target unclear',
+              '{"ok":true}',
+            ].join('\n'),
+          },
+        })}\n`,
+      ),
+    );
+    child.emit('close', 0);
+    await run;
+
+    const summaries = mockEventStore.appendEvent.mock.calls
+      .filter(([e]) => e.kind === 'agent.decision-summary-live')
+      .map(([e]) => (e.payload as { summary?: string }).summary);
+    expect(summaries).toEqual(['Searching chrome coverage', 'Test target unclear']);
+  });
+
+  it('does not double-emit markers when Codex replays cumulative assistant text', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec());
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        [
+          JSON.stringify({
+            type: 'item.updated',
+            item: {
+              id: 'msg_1',
+              type: 'agent_message',
+              text: '[decision] READ: Searching files',
+            },
+          }),
+          JSON.stringify({
+            type: 'item.updated',
+            item: {
+              id: 'msg_1',
+              type: 'agent_message',
+              text: '[decision] READ: Searching files\n[decision] INSIGHT: Found owner',
+            },
+          }),
+          JSON.stringify({
+            type: 'item.completed',
+            item: { id: 'msg_2', type: 'agent_message', text: '{"ok":true}' },
+          }),
+          '',
+        ].join('\n'),
+      ),
+    );
+    child.emit('close', 0);
+    await run;
+
+    const summaries = mockEventStore.appendEvent.mock.calls
+      .filter(([e]) => e.kind === 'agent.decision-summary-live')
+      .map(([e]) => (e.payload as { summary?: string }).summary);
+    expect(summaries).toEqual(['Searching files', 'Found owner']);
+  });
+
+  it('normalizes invalid live decision marker kinds to UNKNOWN', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec());
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        `${JSON.stringify({
+          type: 'item.completed',
+          item: {
+            id: 'msg_1',
+            type: 'agent_message',
+            text: '[decision] NOT_A_KIND: Still surface this progress\n{"ok":true}',
+          },
+        })}\n`,
+      ),
+    );
+    child.emit('close', 0);
+    await run;
+
+    const decisionCall = mockEventStore.appendEvent.mock.calls.find(
+      ([e]) => e.kind === 'agent.decision-summary-live',
+    );
+    expect(decisionCall?.[0].payload).toMatchObject({
+      kind: 'UNKNOWN',
+      summary: 'Still surface this progress',
+    });
+  });
+
   it('emits timeout and failed events, kills the process group, rejects, and ignores late close', async () => {
     vi.useFakeTimers();
     const child = makeHangingChild();
