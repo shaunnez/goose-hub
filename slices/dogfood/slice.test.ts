@@ -1,9 +1,13 @@
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { applySeed, restoreSeed, statusAll } from './runner.js';
 import { getSeed, listSeeds } from './seeds/index.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const ORIGINAL_LOGGER_SRC = `type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -128,4 +132,108 @@ describe('dogfood slice', () => {
     expect(seed.issue.body).not.toContain('logger.test.ts');
     expect(seed.issue.body).not.toContain('apps/web/src/lib/logger.ts');
   });
+});
+
+// ---------------------------------------------------------------------------
+// Cross-seed invariants — every registered seed must satisfy these properties.
+// Cheaper than duplicating apply/restore tests per seed; catches regressions
+// when a new seed is registered without proper hygiene.
+// ---------------------------------------------------------------------------
+
+describe('every registered seed', () => {
+  for (const seed of listSeeds()) {
+    describe(seed.id, () => {
+      it('has a factory:triaging label so dispatch fires when the issue is filed', () => {
+        expect(seed.issue.labels).toContain('factory:triaging');
+      });
+
+      it('has a type:bug or type:chore or type:feature label', () => {
+        const typeLabels = seed.issue.labels.filter((l) => l.startsWith('type:'));
+        expect(typeLabels.length).toBeGreaterThan(0);
+      });
+
+      it('has a priority label', () => {
+        const priorityLabels = seed.issue.labels.filter((l) => l.startsWith('priority:'));
+        expect(priorityLabels.length).toBe(1);
+      });
+
+      it('issue body does not name the truth-signal test file', () => {
+        const testFileBasename = seed.truthSignal.testFile.split('/').pop() ?? '';
+        expect(seed.issue.body).not.toContain(testFileBasename);
+        expect(seed.issue.body).not.toContain(seed.truthSignal.testFile);
+      });
+
+      it('issue body does not contain `.test.` or `.spec.` (test-file leak signal)', () => {
+        expect(seed.issue.body).not.toMatch(/\.test\./);
+        expect(seed.issue.body).not.toMatch(/\.spec\./);
+      });
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Apply/restore round-trip against the real source files in this repo.
+// Resilient to source drift: copies the real file into a tmpdir, exercises the
+// seed there, and asserts the file returns byte-identical after restore. If
+// the ORIGINAL_BLOCK no longer matches the real file, the seed's own drift
+// detection fires here — exactly the signal we want before a dogfood run.
+// ---------------------------------------------------------------------------
+
+describe('apply/restore round-trip against real source files', () => {
+  const repoRoot = path.resolve(__dirname, '..', '..');
+  let tmpRoot: string;
+
+  beforeEach(async () => {
+    tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'dogfood-real-src-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpRoot, { recursive: true, force: true });
+  });
+
+  for (const seed of listSeeds()) {
+    it(`${seed.id}: apply → mutate → restore returns the file byte-identical`, async () => {
+      // Identify the source file the seed targets by parsing the error from a
+      // would-be-apply against an empty tmpdir. Simpler: rely on truthSignal
+      // pointing at the test file, and infer the matching source file by
+      // convention is brittle, so instead each seed throws a drift error that
+      // names the target — we just exercise apply() which reads from disk.
+      // Copy the seed's target path (a known repo-relative path) by trying to
+      // apply; if the target is missing in tmpdir, the seed reports drift.
+      // We approximate by mirroring known source paths from seed metadata.
+
+      // Convention: seeds target source files; copy by walking known targets.
+      // For this round-trip test we just copy the parent dir of the target.
+      // Resolve via a small helper that knows each seed's target.
+      const targetByID: Record<string, string> = {
+        'logger-001-drop-meta': 'apps/web/src/lib/logger.ts',
+        'frontend-002-truncate-boundary': 'apps/web/src/lib/utils.ts',
+        'backend-001-budget-threshold': 'apps/server/src/shared/budget.ts',
+      };
+      const targetRel = targetByID[seed.id];
+      if (!targetRel) {
+        throw new Error(
+          `Round-trip test does not know the target file for seed ${seed.id}. Update targetByID.`,
+        );
+      }
+
+      const srcAbs = path.join(repoRoot, targetRel);
+      const dstAbs = path.join(tmpRoot, targetRel);
+      await fs.mkdir(path.dirname(dstAbs), { recursive: true });
+      const originalContents = await fs.readFile(srcAbs, 'utf8');
+      await fs.writeFile(dstAbs, originalContents, 'utf8');
+
+      expect(await seed.isApplied(tmpRoot)).toBe(false);
+
+      await seed.apply(tmpRoot);
+      const mutated = await fs.readFile(dstAbs, 'utf8');
+      expect(mutated).not.toBe(originalContents);
+      expect(await seed.isApplied(tmpRoot)).toBe(true);
+
+      await seed.restore(tmpRoot);
+      const restored = await fs.readFile(dstAbs, 'utf8');
+      expect(restored).toBe(originalContents);
+      expect(await seed.isApplied(tmpRoot)).toBe(false);
+    });
+  }
 });
