@@ -414,6 +414,43 @@ export interface ProjectSettingsDto {
 
 export type WorkflowKind = 'bug' | 'feature' | 'chore' | 'research';
 export type WorkflowEdgeKind = 'primary' | 'optional' | 'retry' | 'summary';
+export type WorkflowGroup =
+  | 'triage'
+  | 'discovery'
+  | 'investigation'
+  | 'delivery'
+  | 'dev-review'
+  | 'qa'
+  | 'review'
+  | 'retro'
+  | 'research'
+  | 'terminal';
+export type WorkflowMode =
+  | 'always'
+  | 'legacy'
+  | 'multi-agent'
+  | 'single-investigation'
+  | 'swarm'
+  | 'dev-review'
+  | 'single-review'
+  | 'convergent-review'
+  | 'conditional';
+export type WorkflowActivationSetting =
+  | 'useInvestigationSwarm'
+  | 'useMultiAgentPipeline'
+  | 'devReview.enabled'
+  | 'review.convergent'
+  | 'workItem.simpleBug'
+  | 'priority.highCritical'
+  | 'playwrightRepro.enabled'
+  | 'evidencePost.enabled';
+export type WorkflowVisual = 'state' | 'skill' | 'gate' | 'fanout' | 'loop' | 'terminal';
+
+export interface WorkflowActivationDto {
+  setting: WorkflowActivationSetting;
+  value?: boolean | string;
+  label: string;
+}
 
 export interface WorkflowNodeDto {
   id: string;
@@ -422,6 +459,10 @@ export interface WorkflowNodeDto {
   skill?: string;
   role?: string;
   notes?: string;
+  group?: WorkflowGroup;
+  mode?: WorkflowMode;
+  activation?: WorkflowActivationDto;
+  visual?: WorkflowVisual;
 }
 
 export interface WorkflowEdgeDto {
@@ -433,6 +474,34 @@ export interface WorkflowEdgeDto {
   virtual?: boolean;
 }
 
+export interface WorkflowVariantDto {
+  id: string;
+  title: string;
+  description?: string;
+  mode: WorkflowMode;
+  activation?: WorkflowActivationDto;
+  nodes: string[];
+}
+
+export interface WorkflowBranchDto {
+  id: string;
+  title: string;
+  description?: string;
+  kind: 'conditional' | 'retry' | 'failure';
+  nodes: string[];
+  activation?: WorkflowActivationDto;
+}
+
+export interface WorkflowStageDto {
+  id: string;
+  title: string;
+  description?: string;
+  group: WorkflowGroup;
+  nodes: string[];
+  variants?: WorkflowVariantDto[];
+  branches?: WorkflowBranchDto[];
+}
+
 export interface WorkflowCatalogEntryDto {
   kind: WorkflowKind;
   title: string;
@@ -440,6 +509,7 @@ export interface WorkflowCatalogEntryDto {
   nodes: WorkflowNodeDto[];
   edges: WorkflowEdgeDto[];
   normalPath: string[];
+  stages: WorkflowStageDto[];
 }
 
 export interface WorkflowCatalogDto {

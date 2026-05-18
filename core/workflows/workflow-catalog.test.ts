@@ -3,10 +3,24 @@ import { SKILL_BUDGETS } from '../agent-runtime/budgets.js';
 import { STATES } from '../state-machine/states.js';
 import { isLegalTransition } from '../state-machine/transitions.js';
 import { targetStateForTriage } from './triage-routing.js';
-import { WORKFLOW_CATALOG, type WorkflowCatalogEntry } from './workflow-catalog.js';
+import {
+  WORKFLOW_CATALOG,
+  type WorkflowActivationSetting,
+  type WorkflowCatalogEntry,
+} from './workflow-catalog.js';
 
 const stateSet = new Set<string>(STATES);
 const registeredSkillSet = new Set<string>(Object.keys(SKILL_BUDGETS));
+const knownActivationSettings = new Set<WorkflowActivationSetting>([
+  'useInvestigationSwarm',
+  'useMultiAgentPipeline',
+  'devReview.enabled',
+  'review.convergent',
+  'workItem.simpleBug',
+  'priority.highCritical',
+  'playwrightRepro.enabled',
+  'evidencePost.enabled',
+]);
 
 function byKind(kind: WorkflowCatalogEntry['kind']): WorkflowCatalogEntry {
   const entry = WORKFLOW_CATALOG.find((candidate) => candidate.kind === kind);
@@ -85,12 +99,70 @@ describe('workflow catalog', () => {
     }
   });
 
+  it('shows the full bug investigation swarm', () => {
+    const bug = byKind('bug');
+    const swarm = bug.stages
+      .find((stage) => stage.id === 'investigation')
+      ?.variants?.find((variant) => variant.id === 'swarm-investigation');
+    const nodesById = new Map(bug.nodes.map((node) => [node.id, node]));
+
+    expect(swarm?.nodes.map((nodeId) => nodesById.get(nodeId)?.skill).filter(Boolean)).toEqual([
+      'scout-code-path',
+      'scout-dependency',
+      'scout-pattern',
+      'scout-schema',
+      'scout-test-inventory',
+      'scout-user-journey',
+      'wave2-interface-designer',
+      'wave2-risk-analyst',
+      'investigate',
+    ]);
+  });
+
   it('keeps node ids and normal paths internally consistent', () => {
     for (const entry of WORKFLOW_CATALOG) {
       const ids = entry.nodes.map((node) => node.id);
       expect(new Set(ids).size, `${entry.kind} duplicate node ids`).toBe(ids.length);
       for (const id of entry.normalPath) {
         expect(ids.includes(id), `${entry.kind}:${id} normal path`).toBe(true);
+      }
+    }
+  });
+
+  it('keeps vertical stages pointed at known nodes and settings', () => {
+    for (const entry of WORKFLOW_CATALOG) {
+      const ids = new Set(entry.nodes.map((node) => node.id));
+      const stageIds = entry.stages.map((stage) => stage.id);
+      expect(new Set(stageIds).size, `${entry.kind} duplicate stage ids`).toBe(stageIds.length);
+
+      for (const stage of entry.stages) {
+        for (const nodeId of stage.nodes) {
+          expect(ids.has(nodeId), `${entry.kind}:${stage.id}:${nodeId}`).toBe(true);
+        }
+
+        for (const variant of stage.variants ?? []) {
+          for (const nodeId of variant.nodes) {
+            expect(ids.has(nodeId), `${entry.kind}:${stage.id}:${variant.id}:${nodeId}`).toBe(true);
+          }
+          if (variant.activation != null) {
+            expect(
+              knownActivationSettings.has(variant.activation.setting),
+              `${entry.kind}:${variant.id}:${variant.activation.setting}`,
+            ).toBe(true);
+          }
+        }
+
+        for (const branch of stage.branches ?? []) {
+          for (const nodeId of branch.nodes) {
+            expect(ids.has(nodeId), `${entry.kind}:${stage.id}:${branch.id}:${nodeId}`).toBe(true);
+          }
+          if (branch.activation != null) {
+            expect(
+              knownActivationSettings.has(branch.activation.setting),
+              `${entry.kind}:${branch.id}:${branch.activation.setting}`,
+            ).toBe(true);
+          }
+        }
       }
     }
   });
