@@ -17,6 +17,8 @@ export interface PlaywrightReproPayload {
   screenshots: ScreenshotCapture[];
   gifPath: string | null;
   consoleErrors: ConsoleError[];
+  testErrors?: string[];
+  runnerErrors?: string[];
   reproSteps: string[];
   reproduced: boolean;
   notes?: string;

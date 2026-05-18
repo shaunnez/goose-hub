@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { ProjectConfig } from '../types.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { ContextValidationError, OutputValidationError, invokeSkill } from './invoke-skill.js';
 
@@ -201,5 +202,32 @@ describe('invokeSkill', () => {
     });
     expect(runtime.calls[0].modelOverride).not.toMatch(/codex/i);
     expect(runtime.calls[0].modelOverride).toMatch(/sonnet/i);
+  });
+
+  it('ignores role-model config for normal skill dispatch', async () => {
+    const runtime = mockRuntime();
+    const projectId = uid();
+
+    await invokeSkill({
+      skillName: 'echo-test',
+      projectId,
+      runId: uid(),
+      context: VALID_ECHO_CTX,
+      overrides: {
+        runtimeOverride: runtime,
+        projectConfigOverride: {
+          agentConfig: {
+            runtime: 'auto',
+            allowHoldoutOverride: false,
+            rolesModels: {
+              developer: { primary: 'haiku', primaryProvider: 'codex' },
+            },
+          } as ProjectConfig['agentConfig'],
+        },
+      },
+    });
+
+    expect(runtime.calls[0].modelOverride).toMatch(/sonnet/i);
+    expect(runtime.calls[0].modelOverride).not.toMatch(/^gpt-/);
   });
 });

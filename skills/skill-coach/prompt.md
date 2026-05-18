@@ -8,12 +8,11 @@ Output is always a candidate — never auto-applied. The human reviews and appli
 
 The context contains:
 
-- `<project_id>` — the project slug
-- `<target_skill_name>` — the skill you are analysing
-- `<skill_source_files.skill_md>` — the skill's current `prompt.md` contents
-- `<skill_source_files.schema_ts_excerpt>` — the skill's current `schema.ts` contents
-- `<evidence_patterns>` — convergent decision patterns from cross-run analysis. Each carries `patternId`, `pattern`, `occurrenceCount`, `consistencyScore`, optional `role`/`kind`.
-- `<evidence_lifecycles>` — archived lifecycles whose decision summaries and learning entries motivated this coaching run (may be empty)
+- `<projectId>` — the project slug
+- `<targetSkillName>` — the skill you are analysing
+- `<skillSourceFiles>` — JSON payload containing `skillMd` with current `prompt.md` contents and `schemaTsExcerpt` with current `schema.ts` contents
+- `<evidencePatterns>` — convergent decision patterns from cross-run analysis. Each carries `patternId`, `pattern`, `occurrenceCount`, `consistencyScore`, optional `role`/`kind`.
+- `<evidenceLifecycles>` — archived lifecycles whose decision summaries and learning entries motivated this coaching run (may be empty)
 
 ## Process
 

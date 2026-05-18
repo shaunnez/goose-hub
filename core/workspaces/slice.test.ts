@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanupWorktree, createWorktree } from './worktree.js';
+import { cleanupWorktree, createWorktree, resolveWorkflowBase } from './worktree.js';
 
 const WT = (runId: string) => join('/mock-home', '.factory', 'workspaces', runId);
 const WORKSPACES_DIR = join('/mock-home', '.factory', 'workspaces');
@@ -68,6 +68,62 @@ describe('createWorktree', () => {
       throw new Error('git worktree add failed');
     });
     expect(() => createWorktree('/repo/path', 'run-abc-123')).toThrow('git worktree add failed');
+  });
+});
+
+describe('resolveWorkflowBase', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('prefers the currently checked-out branch', () => {
+    vi.mocked(execFileSync).mockReturnValue('feature/current\n');
+
+    expect(resolveWorkflowBase('/repo/path', 'main')).toEqual({
+      branch: 'feature/current',
+      ref: 'feature/current',
+      source: 'current-branch',
+    });
+  });
+
+  it('falls back to the configured default branch as a remote ref', () => {
+    vi.mocked(execFileSync).mockImplementation(() => {
+      throw new Error('detached');
+    });
+
+    expect(resolveWorkflowBase('/repo/path', 'develop')).toEqual({
+      branch: 'develop',
+      ref: 'origin/develop',
+      source: 'configured-default',
+    });
+  });
+
+  it('normalizes origin-prefixed configured default branches for PR metadata', () => {
+    vi.mocked(execFileSync).mockImplementation(() => {
+      throw new Error('detached');
+    });
+
+    expect(resolveWorkflowBase('/repo/path', 'origin/release')).toEqual({
+      branch: 'release',
+      ref: 'origin/release',
+      source: 'configured-default',
+    });
+  });
+
+  it('falls back to origin/main when no branch can be resolved', () => {
+    vi.mocked(execFileSync).mockImplementation(() => {
+      throw new Error('detached');
+    });
+
+    expect(resolveWorkflowBase('/repo/path')).toEqual({
+      branch: 'main',
+      ref: 'origin/main',
+      source: 'fallback-main',
+    });
   });
 });
 

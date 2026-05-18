@@ -22,14 +22,13 @@ If something in your context references developer reasoning, treat it as a leak 
 
 ## Input
 
-Your context contains:
+The context contains a `<task>` block with:
 
-- `workItem` — the original GitHub issue
-  - `title`, `body`, `number`, `priority`
-  - The body contains the acceptance criteria as `- [ ]` checkboxes
-- `prDiff` — a deterministic PR diff digest first. Small diffs also include the complete git diff inline; large diffs include an `ArtifactRef` for the full diff and require targeted worktree reads.
-- `sliceTests` _(optional)_ — paths to slice test files included in the change
-- `projectCommands` _(optional)_ — `testCommand`, `lintCommand`, `typecheckCommand` for reproduction hints
+- `<workItem>` — JSON payload for the original GitHub issue, with `title`, `body`, `number`, and `priority`
+- `<prDiff>` — deterministic PR diff digest first. Small diffs also include the complete git diff inline; large diffs include an `ArtifactRef` for the full diff and require targeted worktree reads.
+- `<sliceTests>` (optional) — JSON array of paths to slice test files included in the change
+- `<projectCommands>` (optional) — JSON payload with `testCommand`, optional `lintCommand`, and optional `typecheckCommand`
+- `<symbolImpact>` (optional) — capped static-import hints for exports changed by the diff. Treat these as likely consumers to inspect, not affected behavior. The index is a starting point, not authority. Read files before reporting.
 
 ## Step 1 — Read the issue and the diff
 

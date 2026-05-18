@@ -7,8 +7,10 @@ import {
   type ModelProvider,
   defaultModelForTierAndProvider,
   tierOf,
+  tryProviderOf,
 } from '@goose-hub/core/agent-runtime/models.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
+import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { ScoutOutputSchema } from '@goose-hub/core/agent-runtime/scout-output.js';
@@ -26,18 +28,67 @@ import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { persistScoutReport } from '@goose-hub/core/scout-reports/repository.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
-import { extractIdentifiers, lookupWorkItemSymbols } from '@goose-hub/core/symbol-index/lookup.js';
+import { ensureSymbolIndexFresh } from '@goose-hub/core/symbol-index/freshness.js';
+import {
+  type SymbolIndexHintsUsedConsumerSkill,
+  emitSymbolIndexHintsUsedEvent,
+  offeredHintsFromScoutSymbolIndexHints,
+} from '@goose-hub/core/symbol-index/hints-used.js';
+import {
+  extractIdentifiers,
+  lookupWorkItemSymbols,
+  shapeSymbolIndexHintsForScout,
+} from '@goose-hub/core/symbol-index/lookup.js';
 import {
   cleanupWorktree,
   createWorktree,
   prewarmWorktree,
+  resolveWorkflowBase,
 } from '@goose-hub/core/workspaces/worktree.js';
 import type { InvestigateSchema } from '@goose-hub/skills/investigate/schema.js';
-import { PlaywrightReproSchema } from '@goose-hub/skills/playwright-repro/schema.js';
+import {
+  type InvestigationReproPacket,
+  InvestigationReproPacketSchema,
+  type PlaywrightReproOutput,
+  PlaywrightReproSchema,
+  PlaywrightReproSpecSchema,
+} from '@goose-hub/skills/playwright-repro/schema.js';
 import type { z } from 'zod';
+import { runPlaywrightReproPlan, shouldSkipBeforeEvidence } from './playwright-repro-evidence.js';
 import { WAVE_1_SCOUTS, selectWave2Scouts } from './wave2-selection.js';
 
 type InvestigateOutput = z.infer<typeof InvestigateSchema>;
+
+function emitScoutSymbolHintUsage(input: {
+  parentRunId: string;
+  projectId: string;
+  workItemId: string;
+  worktreePath: string;
+  personaId: string;
+  scoutSpecs: Array<{ scoutName: string; extraContext?: Record<string, unknown> }>;
+  reports: Array<{ scoutName: string; runId: string }>;
+}): void {
+  for (const report of input.reports) {
+    const spec = input.scoutSpecs.find((candidate) => candidate.scoutName === report.scoutName);
+    const offeredHints = offeredHintsFromScoutSymbolIndexHints(
+      spec?.extraContext?.symbolIndexHints,
+    );
+    if (offeredHints.length === 0) continue;
+
+    emitSymbolIndexHintsUsedEvent({
+      projectId: input.projectId,
+      workItemId: input.workItemId,
+      consumerSkill: report.scoutName as SymbolIndexHintsUsedConsumerSkill,
+      runId: report.runId,
+      parentRunId: input.parentRunId,
+      personaId: input.personaId,
+      offeredHints,
+      toolEvents: eventStore.replay({ runId: report.runId, kind: 'agent.tool-call' }),
+      worktreePath: input.worktreePath,
+      appendEvent: (event) => eventStore.appendEvent(event),
+    });
+  }
+}
 
 export function chooseScoutModelOverride(input: {
   resolvedBudget: ResolvedBudget;
@@ -77,6 +128,10 @@ function buildSchemaScoutFocus(workItem: { title: string; body: string }): strin
   return `Schema/type contracts only for ${target}. Do not trace runtime, retry, scheduler, or workflow control flow; return UNCERTAINTY if no schema surface exists after the first targeted reads.`;
 }
 
+function runtimeNameForModel(modelId: string): 'codex-cli' | 'claude-cli' {
+  return tryProviderOf(modelId) === 'codex' ? 'codex-cli' : 'claude-cli';
+}
+
 /**
  * Runs the investigate workflow for a work item in `factory:investigating` state.
  *
@@ -99,7 +154,37 @@ function buildSchemaScoutFocus(workItem: { title: string; body: string }): strin
 export interface InvestigateWorkflowDeps {
   createWorktreeImpl?: typeof createWorktree;
   prewarmWorktreeImpl?: typeof prewarmWorktree;
+  resolveWorkflowBaseImpl?: typeof resolveWorkflowBase;
   runtime?: AgentRuntime;
+  playwrightEvidenceRunner?: typeof runPlaywrightReproPlan;
+}
+
+function buildInvestigationReproPacket(findings: InvestigateOutput): InvestigationReproPacket {
+  const candidate = findings as InvestigateOutput & {
+    reproPacket?: unknown;
+    route?: unknown;
+    selectors?: unknown;
+    expectedAssertion?: unknown;
+    setupRequired?: unknown;
+    skipBeforeEvidenceEligible?: unknown;
+  };
+  const parsed = InvestigationReproPacketSchema.safeParse(candidate.reproPacket);
+  if (parsed.success) return parsed.data;
+
+  return {
+    route: typeof candidate.route === 'string' ? candidate.route : null,
+    selectors: Array.isArray(candidate.selectors)
+      ? candidate.selectors.filter((selector): selector is string => typeof selector === 'string')
+      : [],
+    expectedAssertion:
+      typeof candidate.expectedAssertion === 'string' ? candidate.expectedAssertion : null,
+    setupRequired: Array.isArray(candidate.setupRequired)
+      ? candidate.setupRequired.filter((setup): setup is string => typeof setup === 'string')
+      : [],
+    keyFiles: findings.keyFiles,
+    confidence: findings.confidence,
+    skipBeforeEvidenceEligible: candidate.skipBeforeEvidenceEligible === true,
+  };
 }
 
 export async function runInvestigateWorkflow(
@@ -111,6 +196,7 @@ export async function runInvestigateWorkflow(
 ): Promise<void> {
   const createWtFn = deps.createWorktreeImpl ?? createWorktree;
   const prewarmWtFn = deps.prewarmWorktreeImpl ?? prewarmWorktree;
+  const resolveWorkflowBaseFn = deps.resolveWorkflowBaseImpl ?? resolveWorkflowBase;
 
   const runId = crypto.randomUUID();
   const { personaId } = selectPersona(projectId, 'investigator');
@@ -143,7 +229,8 @@ export async function runInvestigateWorkflow(
       model: investigatorModelOverride,
       skillProvider: forcedRuntimeProvider ?? investigateBudget.provider,
     });
-  const worktreePath = createWtFn(targetRepo, runId);
+  const workflowBase = resolveWorkflowBaseFn(targetRepo, projectConfig?.targetRepo?.defaultBranch);
+  const worktreePath = createWtFn(targetRepo, runId, workflowBase.ref);
 
   if (workItem.type === 'bug') {
     prewarmWtFn(worktreePath, '@goose-hub/web');
@@ -189,7 +276,14 @@ export async function runInvestigateWorkflow(
     projectId,
     workItemId: workItem.id,
     kind: 'agent.run-started',
-    payload: { skill: 'investigate', runId, personaId },
+    payload: {
+      skill: 'investigate',
+      runId,
+      personaId,
+      baseBranch: workflowBase.branch,
+      modelId: investigatorModelOverride,
+      runtime: runtimeNameForModel(investigatorModelOverride),
+    },
     runId,
     personaId,
   });
@@ -198,26 +292,92 @@ export async function runInvestigateWorkflow(
     let allScoutReports: string | undefined;
 
     if (investigationSwarmEnabled) {
-      // Pre-fetch symbol index hints for scout-code-path (best-effort; empty if index absent).
+      // Pre-fetch symbol index hints for scout-code-path. Freshness and lookup are best-effort:
+      // a missing, stale, or corrupt index must never block investigation.
+      const symbolIndexFreshness = ensureSymbolIndexFresh({ repoRoot: process.cwd() });
+      const symbolIdentifiers = extractIdentifiers(`${workItem.title} ${workItem.body}`);
+
+      if (symbolIndexFreshness.error != null) {
+        eventStore.appendEvent({
+          projectId,
+          workItemId: workItem.id,
+          kind: 'agent.log',
+          payload: {
+            level: 'warn',
+            message: 'symbol-index: freshness check failed; continuing without blocking',
+            error: symbolIndexFreshness.error,
+          },
+          runId,
+          personaId,
+        });
+      }
+
       // Pass worktreePath so hints are filtered to files that actually exist in the target repo,
       // preventing Goose Hub-internal paths from leaking into non-goose-hub investigations.
       const symbolIndexHints = lookupWorkItemSymbols(workItem.title, workItem.body, {
         worktreePath,
       });
 
-      const patternTokens = extractIdentifiers(`${workItem.title} ${workItem.body}`).slice(0, 4);
+      const symbolIndexHintsByScout = {
+        'scout-code-path': shapeSymbolIndexHintsForScout(symbolIndexHints, 'scout-code-path'),
+        'scout-dependency': shapeSymbolIndexHintsForScout(symbolIndexHints, 'scout-dependency'),
+        'scout-schema': shapeSymbolIndexHintsForScout(symbolIndexHints, 'scout-schema'),
+        'scout-test-inventory': shapeSymbolIndexHintsForScout(
+          symbolIndexHints,
+          'scout-test-inventory',
+          { worktreePath },
+        ),
+      };
+
+      eventStore.appendEvent({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'symbol-index.lookup',
+        payload: {
+          consumerSkill: 'scout-code-path',
+          identifierCount: symbolIdentifiers.length,
+          hintCount: symbolIndexHintsByScout['scout-code-path'].length,
+          rawHintCount: symbolIndexHints.length,
+          consumerHintCounts: Object.fromEntries(
+            Object.entries(symbolIndexHintsByScout).map(([skill, hints]) => [skill, hints.length]),
+          ),
+          dbAgeMs: symbolIndexFreshness.dbAgeMs,
+          stale: symbolIndexFreshness.stale,
+        },
+        runId,
+        personaId,
+      });
+
+      const patternTokens = symbolIdentifiers.slice(0, 4);
       const patternFocus =
         patternTokens.length > 0
           ? `Find existing usages of: ${patternTokens.join(', ')} — patterns this fix must follow`
           : 'Identify existing patterns the fix should follow';
 
       const wave1Scouts = WAVE_1_SCOUTS.map((spec) => {
-        if (spec.scoutName === 'scout-code-path' && symbolIndexHints.length > 0)
-          return { ...spec, extraContext: { symbolIndexHints } };
-        if (spec.scoutName === 'scout-pattern') return { ...spec, scoutFocus: patternFocus };
+        const shapedHints =
+          spec.scoutName === 'scout-code-path' ||
+          spec.scoutName === 'scout-dependency' ||
+          spec.scoutName === 'scout-schema' ||
+          spec.scoutName === 'scout-test-inventory'
+            ? symbolIndexHintsByScout[spec.scoutName]
+            : [];
+        const specWithHints =
+          shapedHints.length > 0
+            ? { ...spec, extraContext: { symbolIndexHints: shapedHints } }
+            : spec;
+        if (
+          spec.scoutName === 'scout-code-path' ||
+          spec.scoutName === 'scout-dependency' ||
+          spec.scoutName === 'scout-test-inventory'
+        ) {
+          return specWithHints;
+        }
+        if (spec.scoutName === 'scout-pattern')
+          return { ...specWithHints, scoutFocus: patternFocus };
         if (spec.scoutName === 'scout-schema')
-          return { ...spec, scoutFocus: buildSchemaScoutFocus(workItemCtx) };
-        return spec;
+          return { ...specWithHints, scoutFocus: buildSchemaScoutFocus(workItemCtx) };
+        return specWithHints;
       });
 
       // Wave 1 — parallel fact-gathering
@@ -238,6 +398,15 @@ export async function runInvestigateWorkflow(
         projectBudgets: projectConfig?.budgets,
         resolveScoutBudget: resolveInvestigateScoutBudget,
         loadSkillAssets,
+      });
+      emitScoutSymbolHintUsage({
+        parentRunId: runId,
+        projectId,
+        workItemId: workItem.id,
+        worktreePath,
+        personaId,
+        scoutSpecs: wave1Scouts,
+        reports: wave1Result.reports,
       });
 
       const wave1HandoffReports: unknown[] = [];
@@ -320,6 +489,15 @@ export async function runInvestigateWorkflow(
         resolveScoutBudget: resolveInvestigateScoutBudget,
         loadSkillAssets,
       });
+      emitScoutSymbolHintUsage({
+        parentRunId: runId,
+        projectId,
+        workItemId: workItem.id,
+        worktreePath,
+        personaId,
+        scoutSpecs: wave2Scouts,
+        reports: wave2Result.reports,
+      });
 
       const wave2HandoffReports: unknown[] = [];
       for (const report of wave2Result.reports) {
@@ -378,17 +556,26 @@ export async function runInvestigateWorkflow(
       overrides: {
         runtimeOverride: runtime,
         modelOverride: synthModelOverride,
+        suppressRunStarted: true,
         freshContextOverride:
           investigationSwarmEnabled && allScoutReports != null ? true : undefined,
       },
     });
 
     const findings = synthResult.output as InvestigateOutput;
+    reconcileDecisionSummaries(
+      runId,
+      projectId,
+      workItem.id,
+      'investigate',
+      findings.decisionSummaries,
+    );
 
     // Playwright repro for browser-manifesting bugs
-    let reproOutput: unknown | undefined;
+    let reproOutput: PlaywrightReproOutput | undefined;
     const playwrightReproPrompt = readPromptWithContext('playwright-repro', projectId);
-    const playwrightReproJsonSchema = toJsonSchema(PlaywrightReproSchema);
+    const playwrightReproJsonSchema = toJsonSchema(PlaywrightReproSpecSchema);
+    const reproPacket = buildInvestigationReproPacket(findings);
     if (workItem.type === 'bug' && findings.requiresBrowserRepro && !playwrightReproEnabled) {
       eventStore.appendEvent({
         projectId,
@@ -402,90 +589,123 @@ export async function runInvestigateWorkflow(
         runId,
       });
     }
+    if (
+      workItem.type === 'bug' &&
+      findings.requiresBrowserRepro &&
+      playwrightReproEnabled &&
+      shouldSkipBeforeEvidence(reproPacket)
+    ) {
+      eventStore.appendEvent({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'evidence.playwright-repro-skipped',
+        payload: {
+          runId,
+          reason: 'high-confidence-static-ui-bug',
+          reproPacket,
+        },
+        runId,
+      });
+    }
     if (workItem.type === 'bug' && findings.requiresBrowserRepro && playwrightReproEnabled) {
-      const { personaId: playwrightPersonaId } = selectPersona(projectId, 'investigator');
-      const playwrightRunId = crypto.randomUUID();
+      if (shouldSkipBeforeEvidence(reproPacket)) {
+        // Explicit BEFORE-skip policy: investigation already narrowed this to a
+        // high-confidence static UI copy/style/layout bug with known route/selectors.
+      } else {
+        const { personaId: playwrightPersonaId } = selectPersona(projectId, 'investigator');
+        const playwrightRunId = crypto.randomUUID();
 
-      try {
-        const playwrightBudget = resolveSkillRuntimeForProject({
-          skill: 'playwright-repro',
-          projectBudgets: projectConfig?.budgets,
-          projectId,
-          configRuntime,
-          role: 'investigator',
-        });
-        const playwrightModelOverride = playwrightBudget.modelOverride;
-        const playwrightRuntime =
-          deps.runtime ??
-          selectRuntime({
-            configRuntime,
-            model: playwrightModelOverride,
-            skillProvider: forcedRuntimeProvider ?? playwrightBudget.provider,
-          });
-        const playwrightResult = await playwrightRuntime.run({
-          runId: playwrightRunId,
-          role: 'investigator',
-          skill: 'playwright-repro',
-          workspaceDir: worktreePath,
-          context: {
+        try {
+          const playwrightBudget = resolveSkillRuntimeForProject({
+            skill: 'playwright-repro',
+            projectBudgets: projectConfig?.budgets,
             projectId,
-            workItemId: workItem.id,
-            workItem: {
-              title: workItem.title,
-              body: workItem.body,
-              reproSteps: workItem.body,
-              number: Number(workItem.externalId),
-              repo: workItem.repoRef,
+            configRuntime,
+            role: 'investigator',
+          });
+          const playwrightModelOverride = playwrightBudget.modelOverride;
+          const playwrightRuntime =
+            deps.runtime ??
+            selectRuntime({
+              configRuntime,
+              model: playwrightModelOverride,
+              skillProvider: forcedRuntimeProvider ?? playwrightBudget.provider,
+            });
+          const playwrightResult = await playwrightRuntime.run({
+            runId: playwrightRunId,
+            role: 'investigator',
+            skill: 'playwright-repro',
+            workspaceDir: worktreePath,
+            context: {
+              projectId,
+              workItemId: workItem.id,
+              workItem: {
+                title: workItem.title,
+                body: workItem.body,
+                reproSteps: workItem.body,
+                number: Number(workItem.externalId),
+                repo: workItem.repoRef,
+              },
+              investigation: {
+                findings: findings.findings,
+                keyFiles: findings.keyFiles,
+                confidence: findings.confidence,
+              },
+              reproPacket,
+              appUrl: 'http://localhost:5173',
             },
-            investigation: {
-              findings: findings.findings,
-              keyFiles: findings.keyFiles,
-              confidence: findings.confidence,
-            },
-            appUrl: 'http://localhost:5173',
-          },
-          contextAllowlist: ['workItem', 'investigation', 'appUrl'],
-          freshContext: false,
-          toolBundles: ['validate'],
-          toolExtras: [],
-          env: { SKIP_WEBSERVER: '1' },
-          ...playwrightBudget,
-          modelOverride: playwrightModelOverride,
-          personaId: playwrightPersonaId,
-          outputJsonSchema: playwrightReproJsonSchema,
-          appendSystemPrompt: playwrightReproPrompt,
-        });
+            contextAllowlist: ['workItem', 'investigation', 'reproPacket', 'appUrl'],
+            freshContext: false,
+            toolBundles: ['validate'],
+            toolExtras: [],
+            env: { SKIP_WEBSERVER: '1' },
+            ...playwrightBudget,
+            modelOverride: playwrightModelOverride,
+            personaId: playwrightPersonaId,
+            outputJsonSchema: playwrightReproJsonSchema,
+            appendSystemPrompt: playwrightReproPrompt,
+          });
 
-        const reproparsed = PlaywrightReproSchema.safeParse(playwrightResult.output);
-        if (reproparsed.success) {
-          reproOutput = reproparsed.data;
-        } else {
-          const preview =
-            typeof playwrightResult.output === 'string'
-              ? playwrightResult.output.slice(0, 800)
-              : JSON.stringify(playwrightResult.output).slice(0, 800);
+          const planParsed = PlaywrightReproSpecSchema.safeParse(playwrightResult.output);
+          const finalParsed = PlaywrightReproSchema.safeParse(playwrightResult.output);
+          if (planParsed.success) {
+            reproOutput = (deps.playwrightEvidenceRunner ?? runPlaywrightReproPlan)({
+              plan: planParsed.data,
+              workspaceDir: worktreePath,
+              issueNumber: Number(workItem.externalId),
+              repo: workItem.repoRef,
+            });
+          } else if (finalParsed.success) {
+            // Backward-compatible while older agents still return the final payload.
+            reproOutput = finalParsed.data;
+          } else {
+            const preview =
+              typeof playwrightResult.output === 'string'
+                ? playwrightResult.output.slice(0, 800)
+                : JSON.stringify(playwrightResult.output).slice(0, 800);
+            eventStore.appendEvent({
+              projectId,
+              workItemId: workItem.id,
+              kind: 'agent.run-failed',
+              payload: {
+                runId: playwrightRunId,
+                skill: 'playwright-repro',
+                error: `Output validation failed: ${JSON.stringify(planParsed.error.issues)}`,
+                outputPreview: preview,
+              },
+              runId: playwrightRunId,
+            });
+          }
+        } catch (err) {
+          const error = err instanceof Error ? err : new Error(String(err));
           eventStore.appendEvent({
             projectId,
             workItemId: workItem.id,
             kind: 'agent.run-failed',
-            payload: {
-              runId: playwrightRunId,
-              skill: 'playwright-repro',
-              error: `Output validation failed: ${JSON.stringify(reproparsed.error.issues)}`,
-              outputPreview: preview,
-            },
+            payload: { runId: playwrightRunId, skill: 'playwright-repro', error: error.message },
             runId: playwrightRunId,
           });
         }
-      } catch (err) {
-        const error = err instanceof Error ? err : new Error(String(err));
-        eventStore.appendEvent({
-          projectId,
-          workItemId: workItem.id,
-          kind: 'agent.run-failed',
-          payload: { runId: playwrightRunId, skill: 'playwright-repro', error: error.message },
-          runId: playwrightRunId,
-        });
       }
     }
 
@@ -497,6 +717,7 @@ export async function runInvestigateWorkflow(
         investigate: findings,
         playwrightRepro: reproOutput,
         investigationRunId: runId,
+        baseBranch: workflowBase.branch,
       },
       runId,
     });

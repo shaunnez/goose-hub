@@ -13,13 +13,14 @@ import { EngineeringSpecSchema } from './schema.js';
  * Context (rendered as XML in the user prompt):
  *
  *   <task>
- *     <work_item><title>...</title><body>...</body><number>...</number></work_item>
- *     <issue_type>feature|bug</issue_type>
- *     <worktree_path>/abs/path/to/worktree</worktree_path>
+ *     <workItem>{"title":"...","body":"...","number":123}</workItem>
+ *     <issueType>feature|bug</issueType>
+ *     <worktreePath>/abs/path/to/worktree</worktreePath>
  *     <prd>...</prd>?                      <!-- when type:feature, copied from #313 -->
- *     <scout_reports>[json]</scout_reports>?   <!-- M19.01 Wave-1 reports when present -->
- *     <wave2_reports>[json]</wave2_reports>?   <!-- M19.01 Wave-2 reports when present -->
- *     <repair_feedback>...</repair_feedback>?   <!-- one-shot validator feedback on retry -->
+ *     <scoutReports>[json]</scoutReports>?      <!-- M19.01 Wave-1 reports when present -->
+ *     <wave2Reports>[json]</wave2Reports>?      <!-- M19.01 Wave-2 reports when present -->
+ *     <investigationSynthesis>[json]</investigationSynthesis>?  <!-- investigate synthesis -->
+ *     <repairFeedback>...</repairFeedback>?      <!-- one-shot validator feedback on retry -->
  *   </task>
  */
 export const SpecAuthorContextSchema = z.object({

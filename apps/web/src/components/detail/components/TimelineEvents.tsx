@@ -75,7 +75,12 @@ import {
   PrdRejectedEvent,
   PrdRevisedEvent,
 } from './timeline/PrdEvents';
-import { QaCompletedEvent, QaFailedEvent, QaPassedEvent } from './timeline/QaEvents';
+import {
+  QaCompletedEvent,
+  QaFailedEvent,
+  QaPassedEvent,
+  QaVerificationSummaryBuiltEvent,
+} from './timeline/QaEvents';
 import { RetroCompletedEvent } from './timeline/RetroCompletedEvent';
 import { AgentRetryEscalatedEvent } from './timeline/RetryEvents';
 import { ReviewCompletedEvent } from './timeline/ReviewCompletedEvent';
@@ -87,6 +92,7 @@ import {
   SwarmScoutTimeoutEvent,
   SwarmWaveEvent,
 } from './timeline/SwarmEvents';
+import { SymbolIndexHintsUsedEvent } from './timeline/SymbolIndexEvents';
 import { AgentVerifyCommandEvent, ToolWarningEvent } from './timeline/VerifyToolEvents';
 
 export function renderTimelineItem(item: RenderItem, idx: number, context?: TimelineContext) {
@@ -153,6 +159,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <InvestigationContextInjectedEvent key={event.id} event={event} />;
     case 'agent.wrong-surface-guard':
       return <WrongSurfaceGuardEvent key={event.id} event={event} />;
+    case 'symbol-index.hints-used':
+      return <SymbolIndexHintsUsedEvent key={event.id} event={event} />;
     case 'agent.spawned':
       return <AgentSpawnedEvent key={event.id} event={event} />;
     case 'agent.decision-summary':
@@ -190,6 +198,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <ToolWarningEvent key={event.id} event={event} />;
     case 'qa.completed':
       return <QaCompletedEvent key={event.id} event={event} />;
+    case 'qa.verification-summary-built':
+      return <QaVerificationSummaryBuiltEvent key={event.id} event={event} />;
     case 'qa.structural-passed':
     case 'qa.functional-passed':
     case 'qa.regression-passed':

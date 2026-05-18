@@ -25,7 +25,7 @@ const config: SkillConfig = {
   provider: 'codex',
   freshContext: true,
   role: 'dev-reviewer',
-  contextAllowlist: ['workItem', 'prDiff', 'sliceTests', 'projectCommands'],
+  contextAllowlist: ['workItem', 'prDiff', 'sliceTests', 'projectCommands', 'symbolImpact'],
 };
 
 export default config;

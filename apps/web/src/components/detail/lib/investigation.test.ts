@@ -10,6 +10,7 @@ import {
   countToolCalls,
   decisionLabel,
   extractInvestigationPayload,
+  latestInvestigationEvent,
 } from './investigation';
 
 function event(partial: Partial<AgentEventDto>): AgentEventDto {
@@ -91,6 +92,80 @@ describe('countToolCalls', () => {
       event({ kind: 'agent.tool-call', payload: null }),
     ];
     expect(countToolCalls(events, READ_TOOLS)).toBe(0);
+  });
+
+  it('counts Codex Bash file-reading commands as reads', () => {
+    const events: AgentEventDto[] = [
+      event({
+        payload: {
+          tool_name: 'Bash',
+          tool_input: { command: '/bin/zsh -lc "nl -ba src/App.tsx | sed -n \'1,80p\'"' },
+        },
+      }),
+      event({
+        payload: {
+          tool_name: 'Bash',
+          tool_input: { command: 'cat apps/web/src/components/chrome/Sidebar.tsx' },
+        },
+      }),
+    ];
+
+    expect(countToolCalls(events, READ_TOOLS)).toBe(2);
+    expect(countToolCalls(events, SEARCH_TOOLS)).toBe(0);
+  });
+
+  it('counts Codex Bash search commands as searches', () => {
+    const events: AgentEventDto[] = [
+      event({
+        payload: {
+          tool_name: 'Bash',
+          tool_input: { command: 'rg -n "GOOSEHUB|Goose Hub" apps/web/src' },
+        },
+      }),
+      event({
+        payload: {
+          tool_name: 'Bash',
+          tool_input: { command: 'find apps/web/src/components -maxdepth 2 -type f' },
+        },
+      }),
+    ];
+
+    expect(countToolCalls(events, READ_TOOLS)).toBe(0);
+    expect(countToolCalls(events, SEARCH_TOOLS)).toBe(2);
+  });
+
+  it('does not count arbitrary Bash commands as reads or searches', () => {
+    const events: AgentEventDto[] = [
+      event({ payload: { tool_name: 'Bash', tool_input: { command: 'pnpm test' } } }),
+      event({ payload: { tool_name: 'Bash', tool_input: { command: 'git status --short' } } }),
+    ];
+
+    expect(countToolCalls(events, READ_TOOLS)).toBe(0);
+    expect(countToolCalls(events, SEARCH_TOOLS)).toBe(0);
+  });
+});
+
+describe('latestInvestigationEvent', () => {
+  it('returns null when no investigation events exist', () => {
+    expect(latestInvestigationEvent([event({ kind: 'agent.tool-call' })])).toBeNull();
+  });
+
+  it('selects the newest investigation by id regardless of input order', () => {
+    const older = event({
+      id: 10,
+      kind: 'agent.investigation-complete',
+      runId: 'older-run',
+      createdAt: '2026-05-18T01:00:00Z',
+    });
+    const newer = event({
+      id: 20,
+      kind: 'agent.investigation-complete',
+      runId: 'newer-run',
+      createdAt: '2026-05-18T02:00:00Z',
+    });
+
+    expect(latestInvestigationEvent([newer, older])).toBe(newer);
+    expect(latestInvestigationEvent([older, newer])).toBe(newer);
   });
 });
 

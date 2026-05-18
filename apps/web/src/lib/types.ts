@@ -200,6 +200,19 @@ export interface CostStageTotal extends CostWindowTotals {
   stage: CostStage;
 }
 
+export interface SymbolIndexLookupReportDto {
+  lookupCount: number;
+  averageIdentifiersPerLookup: number;
+  averageHintsPerLookup: number;
+  staleRate: number;
+  hintsUsedEventCount: number;
+  usedHintCount: number;
+  hintsByConsumerSkill: Record<
+    string,
+    { lookupCount: number; averageHints: number; totalHints: number }
+  >;
+}
+
 export interface CostSummaryDto {
   projectId: string;
   dailyTokensUsed: number;
@@ -214,6 +227,7 @@ export interface CostSummaryDto {
     claude: CostWindowTotals;
     codex: CostWindowTotals;
   };
+  symbolIndex: SymbolIndexLookupReportDto;
 }
 
 export interface WorkItemCostsDto {
@@ -380,6 +394,14 @@ export interface ProjectSettingsDto {
     }
   >;
   registeredSkills: string[];
+  skillMetadata?: Record<
+    string,
+    {
+      description: string | null;
+      dependencies: string[];
+      callers: string[];
+    }
+  >;
   /** SKILL_BUDGETS defaults — UX-3 hint surfaced under each per-skill input. */
   skillDefaults: Record<
     string,
@@ -404,44 +426,112 @@ export interface ProjectSettingsDto {
   >;
 }
 
+export type WorkflowKind = 'bug' | 'feature' | 'chore' | 'research';
+export type WorkflowEdgeKind = 'primary' | 'optional' | 'retry' | 'summary';
+export type WorkflowGroup =
+  | 'triage'
+  | 'discovery'
+  | 'investigation'
+  | 'delivery'
+  | 'dev-review'
+  | 'qa'
+  | 'review'
+  | 'retro'
+  | 'research'
+  | 'terminal';
+export type WorkflowMode =
+  | 'always'
+  | 'legacy'
+  | 'multi-agent'
+  | 'single-investigation'
+  | 'swarm'
+  | 'dev-review'
+  | 'single-review'
+  | 'convergent-review'
+  | 'conditional';
+export type WorkflowActivationSetting =
+  | 'useInvestigationSwarm'
+  | 'useMultiAgentPipeline'
+  | 'devReview.enabled'
+  | 'review.convergent'
+  | 'workItem.simpleBug'
+  | 'priority.highCritical'
+  | 'playwrightRepro.enabled'
+  | 'evidencePost.enabled';
+export type WorkflowVisual = 'state' | 'skill' | 'gate' | 'fanout' | 'loop' | 'terminal';
+
+export interface WorkflowActivationDto {
+  setting: WorkflowActivationSetting;
+  value?: boolean | string;
+  label: string;
+}
+
+export interface WorkflowNodeDto {
+  id: string;
+  label: string;
+  state?: string;
+  skill?: string;
+  role?: string;
+  notes?: string;
+  group?: WorkflowGroup;
+  mode?: WorkflowMode;
+  activation?: WorkflowActivationDto;
+  visual?: WorkflowVisual;
+}
+
+export interface WorkflowEdgeDto {
+  from: string;
+  to: string;
+  label?: string;
+  condition?: string;
+  kind?: WorkflowEdgeKind;
+  virtual?: boolean;
+}
+
+export interface WorkflowVariantDto {
+  id: string;
+  title: string;
+  description?: string;
+  mode: WorkflowMode;
+  activation?: WorkflowActivationDto;
+  nodes: string[];
+}
+
+export interface WorkflowBranchDto {
+  id: string;
+  title: string;
+  description?: string;
+  kind: 'conditional' | 'retry' | 'failure';
+  nodes: string[];
+  activation?: WorkflowActivationDto;
+}
+
+export interface WorkflowStageDto {
+  id: string;
+  title: string;
+  description?: string;
+  group: WorkflowGroup;
+  nodes: string[];
+  variants?: WorkflowVariantDto[];
+  branches?: WorkflowBranchDto[];
+}
+
+export interface WorkflowCatalogEntryDto {
+  kind: WorkflowKind;
+  title: string;
+  description: string;
+  nodes: WorkflowNodeDto[];
+  edges: WorkflowEdgeDto[];
+  normalPath: string[];
+  stages: WorkflowStageDto[];
+}
+
+export interface WorkflowCatalogDto {
+  catalog: WorkflowCatalogEntryDto[];
+}
+
 export type ModelTier = 'haiku' | 'sonnet' | 'opus';
 export type ModelProvider = 'claude' | 'codex';
-
-export interface RoleModelDto {
-  configRoleModel: {
-    primary: string;
-    fallback: string | null;
-    advisor: string | null;
-    primaryProvider: ModelProvider | null;
-    fallbackProvider: ModelProvider | null;
-    advisorProvider: ModelProvider | null;
-  } | null;
-  dbRoleModel: {
-    primaryModel: ModelTier | null;
-    fallbackModel: ModelTier | null;
-    advisorModel: ModelTier | null;
-    primaryProvider: ModelProvider | null;
-    fallbackProvider: ModelProvider | null;
-    advisorProvider: ModelProvider | null;
-    maxTurns: number | null;
-    timeoutMs: number | null;
-    updatedAt: string | null;
-  } | null;
-  dbComplexityOverrides: Record<string, ModelTier>;
-  /** Concrete model ID that will be dispatched for the primary slot right now,
-   *  resolved from DB → config → skill default → role default. UX-3 hint. */
-  resolvedPrimary: string | null;
-  /** The role's hardcoded default tier (claude). Used as a placeholder hint. */
-  roleDefaultTier: ModelTier;
-  /** ROLE_DEFAULTS budgets — used by the UI as "default: N" hints under each input. */
-  roleDefaultBudgets: { maxTurns: number; timeoutMs: number };
-}
-
-export interface ProjectModelSettingsDto {
-  projectId: string;
-  allowHoldoutOverride: boolean;
-  roles: Record<string, RoleModelDto>;
-}
 
 export interface CodexAuthStatusDto {
   status: 'connected' | 'missing';

@@ -1,6 +1,10 @@
 import { tryProviderOf } from '@goose-hub/core/agent-runtime/models.js';
 import type { CostLabel, Stage } from '@goose-hub/core/cost/types.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import {
+  type SymbolIndexLookupReport,
+  buildSymbolIndexLookupReport,
+} from '@goose-hub/core/symbol-index/report.js';
 import type { Result } from '#shared/middleware.js';
 import {
   type CostRow,
@@ -32,6 +36,7 @@ export interface CostSummaryDto {
     claude: { totalUsd: number; totalRuns: number; hasEstimated: boolean };
     codex: { totalUsd: number; totalRuns: number; hasEstimated: boolean };
   };
+  symbolIndex: SymbolIndexLookupReport;
 }
 
 export interface CostRowDto {
@@ -111,6 +116,7 @@ export async function getCostSummary(
   })[0];
   const claudeRows = monthRows.filter((r) => tryProviderOf(r.modelId) === 'claude');
   const codexRows = monthRows.filter((r) => tryProviderOf(r.modelId) === 'codex');
+  const symbolIndex = buildSymbolIndexLookupReport(eventStore.replay({ projectId }));
 
   return {
     ok: true,
@@ -128,6 +134,7 @@ export async function getCostSummary(
         claude: toProviderTotals(claudeRows),
         codex: toProviderTotals(codexRows),
       },
+      symbolIndex,
     },
   };
 }

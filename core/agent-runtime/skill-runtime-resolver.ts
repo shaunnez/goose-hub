@@ -3,7 +3,7 @@ import {
   readProjectSettings,
   readProjectSkillSettings,
 } from '../db/repositories/project-settings.js';
-import type { BudgetConfig, ModelProvider, ModelTier } from '../types.js';
+import type { BudgetConfig, ModelProvider, ModelTier, Role } from '../types.js';
 import type { ResolvedBudget, SkillBudgetOverride } from './budgets.js';
 import { SKILL_BUDGETS, resolveBudgets } from './budgets.js';
 import { defaultModelForTierAndProvider, providerOf, tierOf } from './models.js';
@@ -123,7 +123,7 @@ export function resolveSkillRuntime(input: {
   fallbackTier?: ModelTier;
   fallbackProvider?: ModelProvider;
   callerModelOverride?: string;
-  role?: string;
+  role?: Role;
   allowHoldoutOverride?: boolean;
   ignoreProviderOverride?: boolean;
 }): ResolvedSkillRuntime {
@@ -168,26 +168,31 @@ export function resolveSkillRuntime(input: {
     dbOverride,
     fallbackTier: input.fallbackTier,
   });
+  const tier = tierResult.tier;
   const provider =
     forcedProviderFromRuntime(providerConfigRuntime) ??
     (!input.ignoreProviderOverride && isModelProvider(dbOverride?.modelProvider)
       ? dbOverride.modelProvider
-      : (input.skillProvider ?? input.fallbackProvider ?? 'claude'));
-  const modelOverride = defaultModelForTierAndProvider(tierResult.tier, provider);
+      : (input.skillProvider ??
+        SKILL_BUDGETS[input.skill]?.provider ??
+        input.fallbackProvider ??
+        'claude'));
+  const modelOverride = defaultModelForTierAndProvider(tier, provider);
   const supportsFallback = SKILL_BUDGETS[input.skill]?.escalation != null;
   const supportsAdvisor = input.skill === 'implement' || input.skill === 'write-prd';
+  const source = isModelProvider(dbOverride?.modelProvider) ? 'db' : tierResult.source;
 
   return {
     ...resolvedBudget,
     modelOverride,
-    tier: tierResult.tier,
+    tier,
     provider,
-    source: isModelProvider(dbOverride?.modelProvider) ? 'db' : tierResult.source,
-    resolvedPrimary: displayModel(tierResult.tier, provider),
+    source,
+    resolvedPrimary: displayModel(tier, provider),
     resolvedFallback:
-      !isHoldout && supportsFallback ? displayModel(lowerTier(tierResult.tier), provider) : null,
+      !isHoldout && supportsFallback ? displayModel(lowerTier(tier), provider) : null,
     resolvedAdvisor:
-      !isHoldout && supportsAdvisor ? displayModel(higherTier(tierResult.tier), provider) : null,
+      !isHoldout && supportsAdvisor ? displayModel(higherTier(tier), provider) : null,
   };
 }
 
@@ -204,7 +209,7 @@ export function resolveSkillRuntimeForProject(input: {
   fallbackTier?: ModelTier;
   fallbackProvider?: ModelProvider;
   callerModelOverride?: string;
-  role?: string;
+  role?: Role;
   allowHoldoutOverride?: boolean;
   ignoreProviderOverride?: boolean;
 }): ResolvedSkillRuntime {
@@ -223,9 +228,11 @@ export function deriveSkillRuntimeResponse(input: {
   row?: ProjectSkillSettingsRow | null;
   projectBudgets?: BudgetConfig;
   configRuntime?: ConfigRuntime;
-  role?: string;
+  role?: Role;
   allowHoldoutOverride?: boolean;
   skillProvider?: ModelProvider;
+  fallbackTier?: ModelTier;
+  fallbackProvider?: ModelProvider;
 }): ResolvedSkillRuntime {
   return resolveSkillRuntime({
     skill: input.skill,
@@ -235,5 +242,7 @@ export function deriveSkillRuntimeResponse(input: {
     role: input.role,
     allowHoldoutOverride: input.allowHoldoutOverride,
     skillProvider: input.skillProvider,
+    fallbackTier: input.fallbackTier,
+    fallbackProvider: input.fallbackProvider,
   });
 }

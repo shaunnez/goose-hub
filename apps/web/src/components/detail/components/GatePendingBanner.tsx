@@ -20,11 +20,6 @@ const GATE_ACTIONS: Record<
   }
 > = {
   'factory:prd-review': { approve: 'factory:decomposing' },
-  'factory:needs-review': {
-    approve: 'factory:approved',
-    reject: 'factory:rejected',
-    requestChanges: 'factory:needs-fix',
-  },
   'factory:approved': { approve: 'factory:retrospecting' },
   'factory:needs-human': {
     sendToTriage: 'factory:triaging',

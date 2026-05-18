@@ -4,6 +4,10 @@ vi.mock('../../shared/source.js', () => ({
   getSourceForSlug: vi.fn(),
 }));
 
+vi.mock('../../shared/dispatch.js', () => ({
+  dispatchTriageBatch: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('./repository.js', () => ({
   insertInboxItem: vi.fn(),
   listInboxItems: vi.fn().mockResolvedValue([]),
@@ -17,6 +21,7 @@ vi.mock('@goose-hub/core/db/db.js', () => ({
   },
 }));
 
+import { dispatchTriageBatch } from '#shared/dispatch.js';
 import { getSourceForSlug } from '#shared/source.js';
 import { deleteInboxItem, getInboxItem, insertInboxItem, listInboxItems } from './repository.js';
 import {
@@ -84,6 +89,7 @@ describe('promoteInboxItem', () => {
     vi.mocked(getSourceForSlug).mockResolvedValueOnce(null);
     const result = await promoteInboxItem(1, 'unknown');
     expect(result).toEqual({ ok: false, error: 'project not found', status: 404 });
+    expect(dispatchTriageBatch).not.toHaveBeenCalled();
   });
 
   it('creates github issue and deletes inbox item on success', async () => {
@@ -94,6 +100,16 @@ describe('promoteInboxItem', () => {
       expect.objectContaining({ title: 'Fix bug' }),
     );
     expect(deleteInboxItem).toHaveBeenCalledWith(1);
+    expect(dispatchTriageBatch).toHaveBeenCalledWith('my-proj');
+  });
+
+  it('does not delete inbox item or dispatch triage when createIssue fails', async () => {
+    vi.mocked(getInboxItem).mockResolvedValueOnce(mockItem);
+    mockSource.createIssue.mockRejectedValueOnce(new Error('github unavailable'));
+
+    await expect(promoteInboxItem(1, 'my-proj')).rejects.toThrow('github unavailable');
+    expect(deleteInboxItem).not.toHaveBeenCalled();
+    expect(dispatchTriageBatch).not.toHaveBeenCalled();
   });
 
   it('still returns ok:true when deleteInboxItem throws (GitHub issue was created)', async () => {

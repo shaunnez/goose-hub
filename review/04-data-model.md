@@ -70,7 +70,7 @@ erDiagram
 | `scout_reports` | Wave-1 scout JSON outputs | `(project_id, work_item_id, run_id)` | uniq + 1 |
 | `governance_audit` | Per-PR governance check verdicts | by `pr_url` | PK only |
 | `inbox_items` | Raw notes pending promotion to an issue | by id | PK |
-| `project_settings`, `project_skill_settings`, `project_model_settings`, `project_dev_review_settings`, `project_review_settings` | Per-project override layers | by project | PKs |
+| `project_settings`, `project_skill_settings`, `project_dev_review_settings`, `project_review_settings` | Per-project settings; `project_skill_settings` owns normal skill runtime | by project | PKs |
 
 ## Two-place state split
 
@@ -88,16 +88,18 @@ This is rule 7: the orchestrator is stateless across ticks. The DB never
 When `invokeSkill()` resolves a model and budget for a run:
 
 1. **Caller override** (e.g. test seam, advisor wrapping) — wins.
-2. **DB row override** in `project_model_settings` / `project_skill_settings`.
-3. **`project.config.ts`** declared overrides.
-4. **`SKILL_BUDGETS` defaults** in `core/agent-runtime/budgets.ts`.
-5. **Skill `modelPin`** as the final fallback.
+2. **Forced runtime provider** from `agentConfig.runtime` (`codex-cli` / `claude-cli`) coerces provider.
+3. **DB per-skill override** in `project_skill_settings`.
+4. **`project.config.ts`** `budgets.skillBudgetOverrides[skill]`.
+5. **`SKILL_BUDGETS` defaults** in `core/agent-runtime/budgets.ts`.
 
-Code: `core/agent-runtime/resolve-for-project.ts`.
+Normal dispatch reads per-skill runtime settings, not role-model rows.
 
-Holdout protection: if `allowHoldoutOverride !== true`, any override
-attempt against `qa` / `reviewer` is **silently dropped** (not errored).
-That keeps QA/Reviewer at the project's declared tier.
+Code: `core/agent-runtime/skill-runtime-resolver.ts`.
+
+Holdout protection: if `allowHoldoutOverride !== true`, any model/provider override
+attempt against `qa` / `reviewer` is **silently dropped** (not errored), and
+fallback/advisor models are not derived for holdouts.
 
 ## Migration story
 

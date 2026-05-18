@@ -6,12 +6,9 @@ import { InvestigateSchema } from './schema.js';
  * Context keys expected by the investigator agent, formatted as structured XML:
  *
  *   <task>
- *     <work_item>
- *       <title>...</title>
- *       <body>...</body>
- *       <number>...</number>
- *     </work_item>
- *     <worktree_path>...</worktree_path>
+ *     <workItem>{"title":"...","body":"...","number":123}</workItem>
+ *     <worktreePath>...</worktreePath>
+ *     <scoutReports>...</scoutReports>
  *   </task>
  *
  * - workItem.title   — the issue title (used as starting investigation signal)

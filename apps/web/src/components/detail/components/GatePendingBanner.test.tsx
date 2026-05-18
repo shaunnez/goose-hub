@@ -33,6 +33,11 @@ describe('GatePendingBanner — factory:needs-human', () => {
     expect(screen.queryByTestId('gate-pending-banner')).toBeNull();
   });
 
+  it('renders nothing for factory:needs-review because automated review is not a human gate', () => {
+    render_(<GatePendingBanner state="factory:needs-review" projectSlug="proj" id="42" />);
+    expect(screen.queryByTestId('gate-pending-banner')).toBeNull();
+  });
+
   it('renders all 4 recovery buttons', async () => {
     vi.mocked(fetchEvents).mockResolvedValueOnce([DECISION_SUMMARY_EVENT]);
     render_(<GatePendingBanner state="factory:needs-human" projectSlug="proj" id="42" />);

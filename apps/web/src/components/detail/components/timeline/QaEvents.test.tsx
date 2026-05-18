@@ -68,6 +68,32 @@ describe('QA timeline events', () => {
     expect(document.body.textContent).not.toContain('"tier"');
   });
 
+  it('renders verification summary telemetry as status rows instead of raw JSON', () => {
+    const event = makeEvent('qa.verification-summary-built', {
+      changedFileCount: 2,
+      diffCharCount: 2319,
+      contextByteSizeEstimate: 1478,
+      lintStatus: 'passed',
+      typecheckStatus: 'passed',
+      testStatus: 'failed',
+      e2eStatus: 'skipped',
+      evidenceStatus: 'skipped',
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('QA verification summary built')).toBeTruthy();
+    expect(screen.getByText('2 files changed')).toBeTruthy();
+    expect(screen.getByText('2.3k diff chars')).toBeTruthy();
+    expect(screen.getByText('1.4 KB context')).toBeTruthy();
+    expect(screen.getByText('Lint')).toBeTruthy();
+    expect(screen.getByText('Typecheck')).toBeTruthy();
+    expect(screen.getByText('Tests')).toBeTruthy();
+    expect(screen.getByText('failed')).toBeTruthy();
+    expect(screen.getAllByText('skipped')).toHaveLength(2);
+    expect(document.body.textContent).not.toContain('"changedFileCount"');
+  });
+
   it('renders fix-feedback completion payloads without raw JSON', () => {
     const event = makeEvent('agent.fix-feedback-complete', {
       filesWritten: 3,

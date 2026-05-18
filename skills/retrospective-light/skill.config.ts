@@ -14,6 +14,17 @@ export const LightRetroContextSchema = z.object({
     outcome: z.enum(['success', 'failure', 'partial']),
     decisionSummaries: z.array(DecisionSummarySchema),
   }),
+  activePersonas: z.array(z.string()).optional(),
+  roleTrends: z
+    .array(
+      z.object({
+        role: z.string(),
+        sampleCount: z.number().int().min(0),
+        delta: z.number(),
+        trend: z.enum(['improving', 'stable', 'declining']),
+      }),
+    )
+    .optional(),
 });
 
 const config: SkillConfig = {
@@ -27,6 +38,7 @@ const config: SkillConfig = {
     'runSummary.outcome',
     'runSummary.decisionSummaries',
     'activePersonas',
+    'roleTrends',
   ],
   toolBundles: ['core'],
   modelPin: 'sonnet',

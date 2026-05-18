@@ -139,21 +139,23 @@ export class ClaudeCliRuntime implements AgentRuntime {
     const model = spec.modelOverride ?? defaultModelForTier('sonnet');
 
     // Emit run-started
-    eventStore.appendEvent({
-      projectId,
-      workItemId,
-      kind: 'agent.run-started',
-      payload: {
-        skill: spec.skill,
+    if (spec.suppressRunStarted !== true) {
+      eventStore.appendEvent({
+        projectId,
+        workItemId,
+        kind: 'agent.run-started',
+        payload: {
+          skill: spec.skill,
+          runId,
+          personaId: spec.personaId,
+          modelId: model,
+          runtime: 'claude-cli',
+          ...spec.extraEventPayload,
+        },
         runId,
         personaId: spec.personaId,
-        modelId: model,
-        runtime: 'claude-cli',
-        ...spec.extraEventPayload,
-      },
-      runId,
-      personaId: spec.personaId,
-    });
+      });
+    }
 
     const { contextXml } = assembleSpawnContext(spec);
     const allowedTools = computeAllowlist(spec);

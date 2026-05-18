@@ -3,10 +3,15 @@ import { invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
 import { persistEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { buildScoutReportDigestBundle } from '@goose-hub/core/scout-reports/digest.js';
 import { listScoutReportsForInvestigation } from '@goose-hub/core/scout-reports/repository.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
-import { cleanupWorktree, createWorktree } from '@goose-hub/core/workspaces/worktree.js';
+import {
+  cleanupWorktree,
+  createWorktree,
+  resolveWorkflowBase,
+} from '@goose-hub/core/workspaces/worktree.js';
 import {
   type EngineeringSpec,
   EngineeringSpecSchema,
@@ -18,6 +23,7 @@ import {
 
 export interface SpecAuthorWorkflowDeps {
   createWorktreeImpl?: typeof createWorktree;
+  resolveWorkflowBaseImpl?: typeof resolveWorkflowBase;
 }
 
 type OutputValidationIssue = {
@@ -162,9 +168,12 @@ export async function runSpecAuthorWorkflow(
   deps: SpecAuthorWorkflowDeps = {},
 ): Promise<void> {
   const createWtFn = deps.createWorktreeImpl ?? createWorktree;
+  const resolveWorkflowBaseFn = deps.resolveWorkflowBaseImpl ?? resolveWorkflowBase;
 
   const pipelineRunId = crypto.randomUUID();
-  const worktreePath = createWtFn(targetRepo, pipelineRunId);
+  const projectConfig = await getProjectBySlug(projectId);
+  const workflowBase = resolveWorkflowBaseFn(targetRepo, projectConfig?.targetRepo?.defaultBranch);
+  const worktreePath = createWtFn(targetRepo, pipelineRunId, workflowBase.ref);
 
   try {
     // Load scout reports from the most recent investigation for this work item.

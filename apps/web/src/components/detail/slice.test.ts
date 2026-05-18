@@ -72,10 +72,8 @@ describe('GatePendingBanner — gate state map', () => {
     expect(GATE_STATES['factory:approved']).toBeUndefined();
   });
 
-  it('returns banner text for needs-review gate state', () => {
-    expect(GATE_STATES['factory:needs-review']).toBe(
-      'Code Review pending — human approval required',
-    );
+  it('does not include needs-review because automated review is not a human gate', () => {
+    expect(GATE_STATES['factory:needs-review']).toBeUndefined();
   });
 
   it('returns banner text for needs-human gate state', () => {
@@ -97,11 +95,8 @@ describe('gate actions — GATE_ACTIONS mapping', () => {
     expect(actions.requestChanges).toBeUndefined();
   });
 
-  it('needs-review has all three actions', () => {
-    const actions = GATE_ACTIONS['factory:needs-review'];
-    expect(actions.approve).toBe('factory:approved');
-    expect(actions.reject).toBe('factory:rejected');
-    expect(actions.requestChanges).toBe('factory:needs-fix');
+  it('needs-review has no gate actions because automated review owns the state', () => {
+    expect(GATE_ACTIONS['factory:needs-review']).toBeUndefined();
   });
 
   it('approved has only approve → retrospecting', () => {
@@ -121,7 +116,7 @@ describe('gate actions — GATE_ACTIONS mapping', () => {
     expect(actions.reject).toBe('factory:rejected');
   });
 
-  it('reject and requestChanges are absent for non-needs-review, non-needs-human gate states', () => {
+  it('reject and requestChanges are absent for non-needs-human gate states', () => {
     const gates = ['factory:prd-review', 'factory:approved'];
     for (const gate of gates) {
       const actions = GATE_ACTIONS[gate];
@@ -170,6 +165,8 @@ const FULL_REPRO = {
   screenshots: [{ path: 'evidence/issue-42/step-1.png', caption: 'Login page', step: 1 }],
   gifPath: 'evidence/issue-42/walkthrough.gif',
   consoleErrors: [{ message: 'TypeError: x is undefined', type: 'error' as const }],
+  testErrors: ['REPRO_EXPECTED_BUG: error banner missing'],
+  runnerErrors: ['Error: No tests found.'],
   reproSteps: ['Navigate to /login', 'Click submit'],
   reproduced: true,
 };
@@ -199,6 +196,8 @@ describe('extractPlaywrightRepro', () => {
     expect(result?.reproSteps).toEqual(['Navigate to /login', 'Click submit']);
     expect(result?.screenshots).toHaveLength(1);
     expect(result?.consoleErrors).toHaveLength(1);
+    expect(result?.testErrors).toEqual(['REPRO_EXPECTED_BUG: error banner missing']);
+    expect(result?.runnerErrors).toEqual(['Error: No tests found.']);
     expect(result?.gifPath).toBe('evidence/issue-42/walkthrough.gif');
   });
 

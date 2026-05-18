@@ -17,6 +17,11 @@ import type { AgentEvent, AppendEventInput } from '../event-stream/store.js';
 import { eventStore } from '../event-stream/store.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import type { WorkItem } from '../state-source/interface.js';
+import {
+  emitSymbolIndexHintsUsedEvent,
+  offeredHintsFromSymbolImpact,
+} from '../symbol-index/hints-used.js';
+import { lookupChangedExportImpact } from '../symbol-index/lookup.js';
 import type { AgentConfig } from '../types.js';
 import { GIT_ENV } from '../workspaces/git-env.js';
 import { type DiffDigest, buildDiffDigest, formatDiffDigestSummary } from './diff-digest.js';
@@ -242,6 +247,9 @@ export async function runDevReview(input: RunDevReviewInput): Promise<DevReviewO
     runId: input.runId,
     prDiff,
   });
+  const symbolImpact = lookupChangedExportImpact(preparedDiff.changedFiles, {
+    worktreePath: input.worktreePath,
+  });
 
   if (preparedDiff.disclosure != null) {
     input.appendEvent({
@@ -280,6 +288,7 @@ export async function runDevReview(input: RunDevReviewInput): Promise<DevReviewO
       workItem: input.workItem,
       prDiff: preparedDiff.prDiffContext,
       projectCommands: input.stack,
+      ...(symbolImpact.length > 0 ? { symbolImpact } : {}),
     },
     contextAllowlist: devReviewConfig.contextAllowlist ?? [],
     freshContext: devReviewConfig.freshContext as true,
@@ -289,6 +298,18 @@ export async function runDevReview(input: RunDevReviewInput): Promise<DevReviewO
     personaId,
     outputJsonSchema,
     appendSystemPrompt: prompt,
+  });
+  emitSymbolIndexHintsUsedEvent({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    consumerSkill: 'dev-review',
+    runId: devReviewRunId,
+    parentRunId: input.runId,
+    personaId,
+    offeredHints: offeredHintsFromSymbolImpact(symbolImpact),
+    toolEvents: eventStore.replay({ runId: devReviewRunId, kind: 'agent.tool-call' }),
+    worktreePath: input.worktreePath,
+    appendEvent: input.appendEvent,
   });
 
   const parsed = DevReviewOutputSchema.safeParse(result.output);

@@ -4,6 +4,7 @@ import {
   extractResultJson,
   parseCodexEnvelope,
   pickCodexAgentMessageText,
+  pickCodexAssistantMessage,
 } from './codex-cli.js';
 
 const RUN_ID = 'test-run-id';
@@ -119,6 +120,16 @@ describe('parseCodexEnvelope', () => {
     expect(envelope?.result).toBeNull();
   });
 
+  it('does not synthesize final output from non-terminal assistant updates', () => {
+    const stdout = JSON.stringify({
+      type: 'item.updated',
+      item: { id: 'item_0', type: 'agent_message', text: '{"partial":true}' },
+    });
+    const envelope = parseCodexEnvelope(stdout);
+    expect(envelope).not.toBeNull();
+    expect(envelope?.result).toBeNull();
+  });
+
   it('leaves costUsd as null when no cost field is present in the envelope', () => {
     const stdout = [
       JSON.stringify({
@@ -151,6 +162,15 @@ describe('pickCodexAgentMessageText', () => {
     expect(pickCodexAgentMessageText({ type: 'thread.started', thread_id: 'abc' })).toBeNull();
   });
 
+  it('returns null for non-terminal item.updated assistant text', () => {
+    expect(
+      pickCodexAgentMessageText({
+        type: 'item.updated',
+        item: { type: 'agent_message', text: '{"partial":true}' },
+      }),
+    ).toBeNull();
+  });
+
   it('returns null for item.completed with non-agent_message item type', () => {
     const obj = { type: 'item.completed', item: { type: 'tool_call', text: '...' } };
     expect(pickCodexAgentMessageText(obj)).toBeNull();
@@ -165,6 +185,41 @@ describe('pickCodexAgentMessageText', () => {
       decisionSummaries: [],
     };
     expect(pickCodexAgentMessageText(obj)).toBeNull();
+  });
+});
+
+// ─── pickCodexAssistantMessage ───────────────────────────────────────────────
+
+describe('pickCodexAssistantMessage', () => {
+  it('extracts reconstructed assistant text from item.updated for live parsing', () => {
+    expect(
+      pickCodexAssistantMessage({
+        type: 'item.updated',
+        item: { id: 'item_0', type: 'agent_message', text: '[decision] READ: Searching files' },
+      }),
+    ).toEqual({
+      id: 'item_0',
+      text: '[decision] READ: Searching files',
+      terminal: false,
+    });
+  });
+
+  it('ignores raw item.delta chunks', () => {
+    expect(
+      pickCodexAssistantMessage({
+        type: 'item.delta',
+        item: { id: 'item_0', type: 'agent_message', delta: '[decision] READ: partial' },
+      }),
+    ).toBeNull();
+  });
+
+  it('marks item.completed assistant text as terminal', () => {
+    expect(
+      pickCodexAssistantMessage({
+        type: 'item.completed',
+        item: { id: 'item_0', type: 'agent_message', text: '{"ok":true}' },
+      }),
+    ).toEqual({ id: 'item_0', text: '{"ok":true}', terminal: true });
   });
 });
 

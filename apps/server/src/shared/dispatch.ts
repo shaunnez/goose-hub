@@ -1,6 +1,7 @@
 export { dispatchTriageBatch } from './dispatch-triage.js';
 export {
   dispatchInvestigate,
+  dispatchInvestigationComplete,
   dispatchSpecAuthor,
   dispatchFixIssue,
   dispatchParallelImplement,

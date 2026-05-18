@@ -25,6 +25,10 @@ vi.mock('@goose-hub/core/engineering-specs/repository.js', () => ({
   persistEngineeringSpec: (...args: unknown[]) => mockPersistEngineeringSpec(...args),
 }));
 
+vi.mock('@goose-hub/core/projects/loader.js', () => ({
+  getProjectBySlug: vi.fn().mockReturnValue({ targetRepo: { defaultBranch: 'main' } }),
+}));
+
 vi.mock('@goose-hub/core/scout-reports/repository.js', () => ({
   listScoutReportsForInvestigation: vi.fn().mockReturnValue([]),
 }));
@@ -41,6 +45,11 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
 vi.mock('@goose-hub/core/workspaces/worktree.js', () => ({
   createWorktree: vi.fn().mockReturnValue('/tmp/test-spec-worktree'),
   cleanupWorktree: vi.fn(),
+  resolveWorkflowBase: vi.fn().mockReturnValue({
+    branch: 'main',
+    ref: 'origin/main',
+    source: 'configured-default',
+  }),
 }));
 
 vi.mock('node:fs', async (importOriginal) => {
@@ -334,7 +343,7 @@ describe('runSpecAuthorWorkflow', () => {
       const { runSpecAuthorWorkflow } = await import('./workflow.js');
       await runSpecAuthorWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
 
-      expect(createWorktree).toHaveBeenCalledWith('/repo', expect.any(String));
+      expect(createWorktree).toHaveBeenCalledWith('/repo', expect.any(String), 'origin/main');
       expect(cleanupWorktree).toHaveBeenCalledOnce();
     });
   });

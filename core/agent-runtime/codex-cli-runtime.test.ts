@@ -131,6 +131,55 @@ describe('CodexCliRuntime timeout handling', () => {
     );
   });
 
+  it('fails fast when a streamed Bash command references a /Users path outside the workspace', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+    const processKill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec({ workspaceDir: '/Users/shaunnesbitt/project/worktree' }));
+    const rejection = expect(run).rejects.toThrow('outside workspace');
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        `${JSON.stringify({
+          type: 'item.started',
+          item: {
+            type: 'command_execution',
+            command:
+              '/bin/zsh -lc "nl -ba /Users/shaunnesbitt/.codex/memories/MEMORY.md | sed -n \'1,20p\'"',
+          },
+        })}\n`,
+      ),
+    );
+
+    await rejection;
+
+    expect(processKill).toHaveBeenCalledWith(-4321, 'SIGKILL');
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.tool-call',
+        payload: expect.objectContaining({
+          blocked: true,
+          block_reason: expect.stringContaining('/Users/shaunnesbitt/.codex/memories/MEMORY.md'),
+        }),
+      }),
+    );
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-failed',
+        payload: expect.objectContaining({ reason: 'workspace-boundary-violation' }),
+      }),
+    );
+
+    child.emit('close', 0);
+    expect(mockEventStore.appendEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent.run-completed' }),
+    );
+    processKill.mockRestore();
+  });
+
   it('does not use danger-full-access for review even though review includes validate', async () => {
     await runSuccessfulCodexSpec({
       skill: 'review',
@@ -156,6 +205,255 @@ describe('CodexCliRuntime timeout handling', () => {
         }),
       }),
     );
+  });
+
+  it('emits one live decision event from a streamed agent_message marker', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec({ skill: 'investigate' }));
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        `${JSON.stringify({
+          type: 'item.completed',
+          item: {
+            id: 'msg_1',
+            type: 'agent_message',
+            text: '[decision] READ: Searching app shell components\n{"ok":true}',
+          },
+        })}\n`,
+      ),
+    );
+
+    const decisionCalls = mockEventStore.appendEvent.mock.calls.filter(
+      ([e]) => e.kind === 'agent.decision-summary-live',
+    );
+    expect(decisionCalls).toHaveLength(1);
+    expect(decisionCalls[0][0]).toMatchObject({
+      projectId: 'test-project',
+      workItemId: 'github:owner/repo#1',
+      runId: 'run-codex',
+      personaId: 'test-project/developer/0',
+      payload: {
+        run_id: 'run-codex',
+        kind: 'READ',
+        summary: 'Searching app shell components',
+        skill: 'investigate',
+        personaId: 'test-project/developer/0',
+      },
+    });
+
+    child.emit('close', 0);
+    await expect(run).resolves.toMatchObject({ output: { ok: true } });
+  });
+
+  it('preserves live decision marker order from a single agent_message', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec());
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        `${JSON.stringify({
+          type: 'item.completed',
+          item: {
+            id: 'msg_1',
+            type: 'agent_message',
+            text: [
+              '[decision] READ: Searching chrome coverage',
+              '[decision] UNCERTAINTY: Test target unclear',
+              '{"ok":true}',
+            ].join('\n'),
+          },
+        })}\n`,
+      ),
+    );
+    child.emit('close', 0);
+    await run;
+
+    const summaries = mockEventStore.appendEvent.mock.calls
+      .filter(([e]) => e.kind === 'agent.decision-summary-live')
+      .map(([e]) => (e.payload as { summary?: string }).summary);
+    expect(summaries).toEqual(['Searching chrome coverage', 'Test target unclear']);
+  });
+
+  it('does not double-emit markers when Codex replays cumulative assistant text', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec());
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        [
+          JSON.stringify({
+            type: 'item.updated',
+            item: {
+              id: 'msg_1',
+              type: 'agent_message',
+              text: '[decision] READ: Searching files',
+            },
+          }),
+          JSON.stringify({
+            type: 'item.updated',
+            item: {
+              id: 'msg_1',
+              type: 'agent_message',
+              text: '[decision] READ: Searching files\n[decision] INSIGHT: Found owner\n',
+            },
+          }),
+          JSON.stringify({
+            type: 'item.completed',
+            item: {
+              id: 'msg_1',
+              type: 'agent_message',
+              text: '[decision] READ: Searching files\n[decision] INSIGHT: Found owner\n{"ok":true}',
+            },
+          }),
+          '',
+        ].join('\n'),
+      ),
+    );
+    child.emit('close', 0);
+    await run;
+
+    const summaries = mockEventStore.appendEvent.mock.calls
+      .filter(([e]) => e.kind === 'agent.decision-summary-live')
+      .map(([e]) => (e.payload as { summary?: string }).summary);
+    expect(summaries).toEqual(['Searching files', 'Found owner']);
+  });
+
+  it('does not emit partial updates or re-emit a marker whose line is later extended', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec());
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        [
+          JSON.stringify({
+            type: 'item.updated',
+            item: {
+              id: 'msg_1',
+              type: 'agent_message',
+              text: '[decision] READ: Searching',
+            },
+          }),
+          JSON.stringify({
+            type: 'item.updated',
+            item: {
+              id: 'msg_1',
+              type: 'agent_message',
+              text: '[decision] READ: Searching files\n',
+            },
+          }),
+          JSON.stringify({
+            type: 'item.updated',
+            item: {
+              id: 'msg_1',
+              type: 'agent_message',
+              text: '[decision] READ: Searching files and confirming ownership\n',
+            },
+          }),
+          JSON.stringify({
+            type: 'item.completed',
+            item: {
+              id: 'msg_1',
+              type: 'agent_message',
+              text: '[decision] READ: Searching files and confirming ownership\n{"ok":true}',
+            },
+          }),
+          '',
+        ].join('\n'),
+      ),
+    );
+    child.emit('close', 0);
+    await run;
+
+    const summaries = mockEventStore.appendEvent.mock.calls
+      .filter(([e]) => e.kind === 'agent.decision-summary-live')
+      .map(([e]) => (e.payload as { summary?: string }).summary);
+    expect(summaries).toEqual(['Searching files']);
+  });
+
+  it('ignores raw delta chunks for live decision parsing', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec());
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        [
+          JSON.stringify({
+            type: 'item.delta',
+            item: {
+              id: 'msg_1',
+              type: 'agent_message',
+              delta: '[decision] READ: partial chunk',
+            },
+          }),
+          JSON.stringify({
+            type: 'item.completed',
+            item: { id: 'msg_1', type: 'agent_message', text: '{"ok":true}' },
+          }),
+          '',
+        ].join('\n'),
+      ),
+    );
+    child.emit('close', 0);
+    await run;
+
+    expect(
+      mockEventStore.appendEvent.mock.calls.filter(
+        ([e]) => e.kind === 'agent.decision-summary-live',
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('normalizes invalid live decision marker kinds to UNKNOWN', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec());
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        `${JSON.stringify({
+          type: 'item.completed',
+          item: {
+            id: 'msg_1',
+            type: 'agent_message',
+            text: '[decision] NOT_A_KIND: Still surface this progress\n{"ok":true}',
+          },
+        })}\n`,
+      ),
+    );
+    child.emit('close', 0);
+    await run;
+
+    const decisionCall = mockEventStore.appendEvent.mock.calls.find(
+      ([e]) => e.kind === 'agent.decision-summary-live',
+    );
+    expect(decisionCall?.[0].payload).toMatchObject({
+      kind: 'UNKNOWN',
+      summary: 'Still surface this progress',
+    });
   });
 
   it('emits timeout and failed events, kills the process group, rejects, and ignores late close', async () => {

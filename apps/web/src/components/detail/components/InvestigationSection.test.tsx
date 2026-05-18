@@ -52,6 +52,31 @@ const INVESTIGATION_EVENT: AgentEventDto = {
   createdAt: new Date().toISOString(),
 };
 
+function investigationEvent(partial: Partial<AgentEventDto> = {}): AgentEventDto {
+  return {
+    ...INVESTIGATION_EVENT,
+    payload: {
+      investigate: {
+        ...(INVESTIGATION_EVENT.payload as { investigate: Record<string, unknown> }).investigate,
+      },
+    },
+    ...partial,
+  };
+}
+
+function toolCallEvent(partial: Partial<AgentEventDto> = {}): AgentEventDto {
+  return {
+    id: 100,
+    projectId: 'goose-hub-self',
+    workItemId: 'github:shaunnez/goose-hub#42',
+    kind: 'agent.tool-call',
+    payload: {},
+    runId: 'run-1',
+    createdAt: new Date().toISOString(),
+    ...partial,
+  };
+}
+
 function renderSection(events: AgentEventDto[] = []) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(['events', 'test-proj', '42'], events);
@@ -157,5 +182,55 @@ describe('InvestigationSection', () => {
     };
     renderSection([noQuestionsEvent]);
     expect(screen.queryByTestId('open-questions-list')).toBeNull();
+  });
+
+  it('renders the newest investigation event regardless of event order', () => {
+    const older = investigationEvent({
+      id: 10,
+      runId: 'old-run',
+      payload: {
+        investigate: {
+          ...(INVESTIGATION_EVENT.payload as { investigate: Record<string, unknown> }).investigate,
+          findings: 'Old finding',
+        },
+      },
+    });
+    const newer = investigationEvent({
+      id: 20,
+      runId: 'new-run',
+      payload: {
+        investigate: {
+          ...(INVESTIGATION_EVENT.payload as { investigate: Record<string, unknown> }).investigate,
+          findings: 'New finding',
+        },
+      },
+    });
+
+    renderSection([newer, older]);
+
+    expect(screen.getByText('New finding')).toBeTruthy();
+    expect(screen.queryByText('Old finding')).toBeNull();
+  });
+
+  it('counts tool calls only from the displayed investigation run', () => {
+    const older = investigationEvent({ id: 10, runId: 'old-run' });
+    const newer = investigationEvent({ id: 20, runId: 'new-run' });
+    const oldRunRead = toolCallEvent({
+      id: 11,
+      runId: 'old-run',
+      payload: { tool_name: 'Read', tool_input: { file_path: 'old.ts' } },
+    });
+    const newRunSearch = toolCallEvent({
+      id: 21,
+      runId: 'new-run',
+      payload: {
+        tool_name: 'Bash',
+        tool_input: { command: 'rg -n "GOOSEHUB|Goose Hub" apps/web/src' },
+      },
+    });
+
+    renderSection([newer, newRunSearch, older, oldRunRead]);
+
+    expect(screen.getByText('0 file reads · 1 search')).toBeTruthy();
   });
 });

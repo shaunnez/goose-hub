@@ -2,6 +2,27 @@
 
 Orchestration workflows that compose skills, persist results, and transition work-item state.
 
+## workflow-catalog.ts
+
+Maintained catalog for the Settings Workflow map. This is the canonical visual
+map source for normal bug, feature, chore, and research paths. Older ASCII or
+Mermaid-style diagrams in slice docs are historical notes, not the source of
+truth for the current cross-workflow map.
+
+The catalog is operational, not just illustrative:
+
+- `nodes` and `edges` stay aligned with state-machine states, legal transitions,
+  and registered skill names through drift tests.
+- `stages` describe the vertical map rendered in Settings.
+- `variants` describe mode-dependent substitutions such as legacy implement vs
+  `spec-author`/`parallel-implement`, single investigation vs swarm, and single
+  review vs convergent review.
+- `activation` records the setting or runtime condition that makes a path active.
+
+The UI renders the effective project-specific path from this catalog plus
+project settings. Generated Mermaid or slice-local diagrams should point back
+here rather than becoming a second source of truth.
+
 ## retrospective.ts
 
 Runs after every successful merge. Selects the retrospective tier (light or deep) and calls the appropriate skill.

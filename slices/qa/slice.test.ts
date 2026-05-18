@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { AgentResult } from '@goose-hub/core/agent-runtime/interface.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -17,6 +21,11 @@ vi.mock('@goose-hub/core/engineering-specs/repository.js', () => ({
 const mockAccumulatePersonaStats = vi.fn();
 vi.mock('@goose-hub/core/persona/accumulate.js', () => ({
   accumulatePersonaStats: (...args: unknown[]) => mockAccumulatePersonaStats(...args),
+}));
+
+const mockGetProjectBySlug = vi.fn().mockReturnValue(null);
+vi.mock('@goose-hub/core/projects/loader.js', () => ({
+  getProjectBySlug: (...args: unknown[]) => mockGetProjectBySlug(...args),
 }));
 
 const mockRun = vi.fn();
@@ -100,6 +109,29 @@ function makePassResult(): AgentResult {
     },
     decisionSummaries: [],
     events: [],
+  };
+}
+
+function makeSampleTestRun() {
+  return {
+    wallTimeMs: 7700,
+    total: 39,
+    passed: 38,
+    failed: 1,
+    skipped: 0,
+    success: false,
+    suites: [
+      {
+        name: 'cart.test.ts',
+        filePath: 'core/cart.test.ts',
+        total: 18,
+        passed: 17,
+        failed: 1,
+        skipped: 0,
+        durationMs: 412,
+        status: 'failed' as const,
+      },
+    ],
   };
 }
 
@@ -240,6 +272,8 @@ beforeEach(() => {
   mockAccumulatePersonaStats.mockClear();
   mockGetEngineeringSpec.mockReset();
   mockGetEngineeringSpec.mockReturnValue(null);
+  mockGetProjectBySlug.mockReset();
+  mockGetProjectBySlug.mockReturnValue(null);
   vi.clearAllMocks();
 });
 
@@ -285,6 +319,240 @@ describe('qa helpers', () => {
     expect(
       classifyUiChanges(['docs/readme.md', 'apps/web/e2e/issue-42.spec.ts']).hasSignificantUiChange,
     ).toBe(false);
+  });
+});
+
+describe('verification summary harness', () => {
+  function makeGitFixture(): string {
+    const dir = mkdtempSync(join(tmpdir(), 'qa-summary-'));
+    execFileSync('git', ['init'], { cwd: dir });
+    mkdirSync(join(dir, 'apps/web/src'), { recursive: true });
+    writeFileSync(join(dir, 'apps/web/src/foo.ts'), 'export const foo = 1;\n');
+    execFileSync('git', ['add', '.'], { cwd: dir });
+    execFileSync(
+      'git',
+      ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-m', 'base'],
+      { cwd: dir },
+    );
+    execFileSync('git', ['update-ref', 'refs/remotes/origin/main', 'HEAD'], { cwd: dir });
+    writeFileSync(join(dir, 'apps/web/src/foo.ts'), 'export const foo = 2;\n');
+    execFileSync('git', ['add', '.'], { cwd: dir });
+    execFileSync(
+      'git',
+      ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-m', 'change'],
+      { cwd: dir },
+    );
+    return dir;
+  }
+
+  it('builds changed-file, diff-stat, command, test, e2e, evidence, and dev-test metadata', async () => {
+    const dir = makeGitFixture();
+    try {
+      const { buildVerificationSummary } = await import('./verification-summary.js');
+      const sampleTestRun = makeSampleTestRun();
+      const runCommand = vi.fn(async (_cwd: string, command: string) => ({
+        command,
+        status: 'passed' as const,
+      }));
+
+      const result = await buildVerificationSummary({
+        workspaceDir: dir,
+        prHints: { baseBranch: 'main', prNumber: 99, prHeadSha: 'abc1234' },
+        prDiff: 'diff --git a/apps/web/src/foo.ts b/apps/web/src/foo.ts\n+export const foo = 2;\n',
+        qaE2eMode: 'ui-changed',
+        configuredE2eCommand: 'pnpm test:e2e:pipeline',
+        commands: {
+          lintCommand: 'pnpm lint',
+          typecheckCommand: 'pnpm typecheck',
+          testCommand: 'pnpm test --reporter=json',
+        },
+        priorEvents: [
+          {
+            id: 1,
+            projectId: 'test-project',
+            workItemId: 'github:owner/repo#42',
+            kind: 'evidence.posted',
+            payload: { commentUrl: 'https://github.com/owner/repo/issues/42#issuecomment-1' },
+            createdAt: '',
+          },
+        ],
+        devTestsRun: { command: 'pnpm vitest src/foo.test.ts', paths: ['src/foo.test.ts'] },
+        runTests: vi.fn().mockResolvedValue(sampleTestRun),
+        runCommand,
+      });
+
+      expect(result.verificationSummary.changedFiles.paths).toEqual(['apps/web/src/foo.ts']);
+      expect(result.verificationSummary.changedFiles.count).toBe(1);
+      expect(result.verificationSummary.changedFiles.diffCharCount).toBeGreaterThan(0);
+      expect(result.verificationSummary.changedFiles.diffStat).toContain('apps/web/src/foo.ts');
+      expect(result.verificationSummary.pr).toEqual({
+        number: 99,
+        baseBranch: 'main',
+        headSha: 'abc1234',
+      });
+      expect(result.verificationSummary.commands.lint?.status).toBe('passed');
+      expect(result.verificationSummary.commands.typecheck?.status).toBe('passed');
+      expect(result.verificationSummary.testRun?.failed).toBe(1);
+      expect(result.verificationSummary.testRun?.failingSuites).toEqual(['core/cart.test.ts']);
+      expect(result.verificationSummary.e2e.command).toBe('pnpm test:e2e:pipeline');
+      expect(result.verificationSummary.evidence.status).toBe('posted');
+      expect(result.verificationSummary.devTestsRun?.paths).toEqual(['src/foo.test.ts']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('omits compact testRun and marks test command skipped when capture returns null', async () => {
+    const dir = makeGitFixture();
+    try {
+      const { buildVerificationSummary } = await import('./verification-summary.js');
+      const runTests = vi.fn().mockResolvedValue(null);
+
+      const result = await buildVerificationSummary({
+        workspaceDir: dir,
+        prHints: { baseBranch: 'main' },
+        prDiff: '',
+        qaE2eMode: 'off',
+        commands: { testCommand: 'pnpm test --reporter=json' },
+        priorEvents: [],
+        runTests,
+      });
+
+      expect(runTests).toHaveBeenCalledWith(dir, 'pnpm test --reporter=json');
+      expect(result.testRun).toBeNull();
+      expect(result.verificationSummary.commands.test).toMatchObject({
+        command: 'pnpm test --reporter=json',
+        status: 'skipped',
+        error: 'test command did not produce structured output',
+      });
+      expect(result.verificationSummary.testRun).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('degrades thrown test capture errors to skipped command metadata', async () => {
+    const dir = makeGitFixture();
+    try {
+      const { buildVerificationSummary } = await import('./verification-summary.js');
+
+      const result = await buildVerificationSummary({
+        workspaceDir: dir,
+        prHints: { baseBranch: 'main' },
+        prDiff: '',
+        qaE2eMode: 'off',
+        commands: { testCommand: 'pnpm test --reporter=json' },
+        priorEvents: [],
+        runTests: vi.fn().mockRejectedValue(new Error('report file missing\nat runner.ts:1')),
+      });
+
+      expect(result.testRun).toBeNull();
+      expect(result.verificationSummary.commands.test).toMatchObject({
+        status: 'skipped',
+        error: 'report file missing at runner.ts:1',
+      });
+      expect(result.verificationSummary.testRun).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('skips incompatible structured test capture without invoking the test runner', async () => {
+    const dir = makeGitFixture();
+    try {
+      const { buildVerificationSummary } = await import('./verification-summary.js');
+      const runTests = vi.fn();
+
+      const result = await buildVerificationSummary({
+        workspaceDir: dir,
+        prHints: { baseBranch: 'main' },
+        prDiff: '',
+        qaE2eMode: 'off',
+        commands: { testCommand: 'go test ./...' },
+        priorEvents: [],
+        testCapture: {
+          enabled: false,
+          reason: 'structured test capture requires a Vitest-compatible Node command',
+        },
+        runTests,
+      });
+
+      expect(runTests).not.toHaveBeenCalled();
+      expect(result.verificationSummary.commands.test).toMatchObject({
+        command: 'go test ./...',
+        status: 'skipped',
+        error: 'structured test capture requires a Vitest-compatible Node command',
+      });
+      expect(result.verificationSummary.testRun).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('passes configured timeout to compact lint and typecheck commands', async () => {
+    const dir = makeGitFixture();
+    try {
+      const { buildVerificationSummary } = await import('./verification-summary.js');
+      const runCommand = vi.fn(async (_cwd: string, command: string) => ({
+        command,
+        status: 'passed' as const,
+      }));
+
+      await buildVerificationSummary({
+        workspaceDir: dir,
+        prHints: { baseBranch: 'main' },
+        prDiff: '',
+        qaE2eMode: 'off',
+        commandTimeoutMs: 420_000,
+        commands: {
+          lintCommand: 'pnpm lint',
+          typecheckCommand: 'pnpm typecheck',
+          testCommand: 'pnpm test --reporter=json',
+        },
+        priorEvents: [],
+        runTests: vi.fn().mockResolvedValue(makeSampleTestRun()),
+        runCommand,
+      });
+
+      expect(runCommand).toHaveBeenNthCalledWith(1, dir, 'pnpm lint', { timeoutMs: 420_000 });
+      expect(runCommand).toHaveBeenNthCalledWith(2, dir, 'pnpm typecheck', {
+        timeoutMs: 420_000,
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('summarizes failed evidence without copying non-operational payload fields', async () => {
+    const { buildVerificationSummary } = await import('./verification-summary.js');
+
+    const result = await buildVerificationSummary({
+      prHints: {},
+      prDiff: '',
+      qaE2eMode: 'off',
+      commands: { testCommand: 'pnpm test --reporter=json' },
+      priorEvents: [
+        {
+          id: 1,
+          projectId: 'test-project',
+          workItemId: 'github:owner/repo#42',
+          kind: 'evidence.post-failed',
+          payload: {
+            error: 'spawn failed\nat internal/path.ts:1',
+            developerReasoning: 'root cause analysis should not leak',
+          },
+          createdAt: '',
+        },
+      ],
+      runTests: vi.fn(),
+      runCommand: vi.fn(),
+    });
+
+    expect(result.verificationSummary.evidence).toEqual({
+      status: 'failed',
+      error: 'spawn failed at internal/path.ts:1',
+    });
+    expect(JSON.stringify(result.verificationSummary)).not.toContain('root cause analysis');
   });
 });
 
@@ -554,6 +822,103 @@ describe('runQaWorkflow', () => {
       expect(specUsed.contextAllowlist).toContain('prDiff');
       expect(specUsed.contextAllowlist).not.toContain('devDecisionSummaries');
     });
+
+    it('passes verificationSummary into QA context and allowlist', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: {
+            prNumber: 99,
+            worktreePath: '/wt/abc',
+            baseBranch: 'develop',
+            prHeadSha: 'abc1234',
+          },
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn().mockResolvedValue(makeSampleTestRun()),
+        runCommand: vi.fn(async (_cwd, command) => ({ command, status: 'passed' as const })),
+      });
+
+      const spec = mockRun.mock.calls[0][0] as {
+        context: Record<string, unknown>;
+        contextAllowlist: string[];
+      };
+      expect(spec.context.verificationSummary).toMatchObject({
+        pr: { number: 99, baseBranch: 'develop', headSha: 'abc1234' },
+        commands: {
+          lint: { command: 'pnpm biome check .', status: 'passed' },
+          test: { command: 'pnpm test --reporter=json', status: 'failed' },
+        },
+        testRun: {
+          failed: 1,
+          failingSuites: ['core/cart.test.ts'],
+        },
+      });
+      expect(spec.contextAllowlist).toContain('verificationSummary');
+    });
+
+    it('does not include forbidden holdout keys in QA context or allowlist', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const spec = mockRun.mock.calls[0][0] as {
+        context: Record<string, unknown>;
+        contextAllowlist: string[];
+      };
+      expect(spec.context.devDecisionSummaries).toBeUndefined();
+      expect(spec.context.investigationFindings).toBeUndefined();
+      expect(spec.contextAllowlist).not.toContain('devDecisionSummaries');
+      expect(spec.contextAllowlist).not.toContain('investigationFindings');
+    });
+
+    it('emits qa.verification-summary-built telemetry with compact statuses', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        { id: 1, kind: 'pr.opened', payload: { worktreePath: '/wt/abc' }, createdAt: '' },
+        {
+          id: 2,
+          kind: 'evidence.post-failed',
+          payload: { error: 'post failed' },
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn().mockResolvedValue(makeSampleTestRun()),
+        runCommand: vi.fn(async (_cwd, command) => ({ command, status: 'passed' as const })),
+      });
+
+      const summaryEvent = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'qa.verification-summary-built');
+      expect(summaryEvent).toBeDefined();
+      expect(summaryEvent?.[0].payload).toMatchObject({
+        lintStatus: 'passed',
+        typecheckStatus: 'skipped',
+        testStatus: 'failed',
+        e2eStatus: 'skipped',
+        evidenceStatus: 'failed',
+      });
+      expect(
+        (summaryEvent?.[0].payload as { contextByteSizeEstimate?: number }).contextByteSizeEstimate,
+      ).toBeGreaterThan(0);
+    });
   });
 
   describe('test-run propagation', () => {
@@ -626,6 +991,53 @@ describe('runQaWorkflow', () => {
       expect(runTests).toHaveBeenCalledWith('/wt/parallel-abc', expect.any(String));
       const spec = mockRun.mock.calls[0][0] as { workspaceDir?: string };
       expect(spec.workspaceDir).toBe('/wt/parallel-abc');
+    });
+
+    it('does not feed non-node stack test commands through the Vitest JSON runner', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockGetProjectBySlug.mockReturnValue({
+        id: 'test-project',
+        stack: {
+          runtime: 'go',
+          packageManager: 'go-modules',
+          testCommand: 'go test ./...',
+          detectedAt: '',
+        },
+      });
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: { worktreePath: '/wt/abc' },
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+      const runTests = vi.fn();
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', { runTests });
+
+      expect(runTests).not.toHaveBeenCalled();
+      const spec = mockRun.mock.calls[0][0] as {
+        context: {
+          projectCommands: Record<string, unknown>;
+          verificationSummary: {
+            commands: { test: { command?: string; status?: string; error?: string } };
+            testRun?: unknown;
+          };
+        };
+      };
+      expect(spec.context.projectCommands.testCommand).toBe('go test ./...');
+      expect(spec.context.verificationSummary.commands.test).toMatchObject({
+        command: 'go test ./...',
+        status: 'skipped',
+      });
+      expect(spec.context.verificationSummary.commands.test.error).toContain(
+        'structured test capture requires a Vitest-compatible Node command',
+      );
+      expect(spec.context.verificationSummary.testRun).toBeUndefined();
     });
 
     it('passes testRun into the agent context and allowlists it', async () => {

@@ -22,6 +22,7 @@ import {
   countToolCalls,
   decisionLabel,
   extractInvestigationPayload,
+  latestInvestigationEvent,
 } from '../lib/investigation';
 import { ConfidenceBadge } from './ConfidenceBadge';
 import { CostBadge } from './CostBadge';
@@ -108,8 +109,7 @@ export function InvestigationSection({
 
   if (isLoading) return null;
 
-  const investigationEvents = events.filter((e) => e.kind === 'agent.investigation-complete');
-  const latest = investigationEvents.at(-1);
+  const latest = latestInvestigationEvent(events);
 
   if (latest == null) {
     return (
@@ -140,11 +140,8 @@ export function InvestigationSection({
   const personaLabel = getPersonaLabel(personaMap, personaId);
 
   // Stats sourced from the events stream for this work item.
-  const investigationEventIds = new Set(investigationEvents.map((e) => e.runId).filter(Boolean));
   const runScopedEvents =
-    investigationEventIds.size > 0
-      ? events.filter((e) => e.runId != null && investigationEventIds.has(e.runId))
-      : events;
+    latest.runId != null ? events.filter((e) => e.runId === latest.runId) : events;
   const reads = countToolCalls(runScopedEvents, READ_TOOLS);
   const searches = countToolCalls(runScopedEvents, SEARCH_TOOLS);
 

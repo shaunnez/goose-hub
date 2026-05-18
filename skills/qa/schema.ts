@@ -88,6 +88,66 @@ export const TestRunSchema = z.object({
   suites: z.array(SuiteResultSchema),
 });
 
+const VerificationCommandStatusSchema = z.enum(['passed', 'failed', 'skipped']);
+
+export const VerificationCommandSummarySchema = z.object({
+  command: z.string(),
+  status: VerificationCommandStatusSchema,
+  exitCode: z.number().int().optional(),
+  durationMs: z.number().int().min(0).optional(),
+  error: z.string().optional(),
+});
+
+export const VerificationSummarySchema = z.object({
+  changedFiles: z.object({
+    paths: z.array(z.string()),
+    count: z.number().int().min(0),
+    diffCharCount: z.number().int().min(0),
+    diffStat: z.string().optional(),
+  }),
+  pr: z.object({
+    number: z.number().int().positive().optional(),
+    baseBranch: z.string().optional(),
+    headSha: z.string().optional(),
+  }),
+  commands: z.object({
+    lint: VerificationCommandSummarySchema.optional(),
+    typecheck: VerificationCommandSummarySchema.optional(),
+    test: VerificationCommandSummarySchema,
+    e2e: VerificationCommandSummarySchema.optional(),
+  }),
+  testRun: z
+    .object({
+      command: z.string(),
+      status: VerificationCommandStatusSchema,
+      wallTimeMs: z.number().int().min(0).optional(),
+      total: z.number().int().min(0),
+      passed: z.number().int().min(0),
+      failed: z.number().int().min(0),
+      skipped: z.number().int().min(0),
+      failingSuites: z.array(z.string()),
+    })
+    .optional(),
+  e2e: z.object({
+    mode: z.enum(['off', 'ui-changed', 'always']),
+    command: z.string().optional(),
+    status: z.enum(['ran', 'skipped', 'failed']),
+    reason: z.string(),
+  }),
+  evidence: z.object({
+    status: z.enum(['posted', 'skipped', 'failed', 'absent']),
+    url: z.string().url().optional(),
+    error: z.string().optional(),
+    reason: z.string().optional(),
+  }),
+  devTestsRun: z
+    .object({
+      command: z.string(),
+      paths: z.array(z.string()),
+    })
+    .optional(),
+});
+
 export const QualityScoresSchema = z.object({
   /** Open/Closed principle adherence — 0–20 pts */
   openClosed: z.number().int().min(0).max(20),
@@ -158,6 +218,8 @@ export type TierResult = z.infer<typeof TierResultSchema>;
 export type QualityScores = z.infer<typeof QualityScoresSchema>;
 export type SuiteResult = z.infer<typeof SuiteResultSchema>;
 export type TestRun = z.infer<typeof TestRunSchema>;
+export type VerificationCommandSummary = z.infer<typeof VerificationCommandSummarySchema>;
+export type VerificationSummary = z.infer<typeof VerificationSummarySchema>;
 export type CriteriaResult = z.infer<typeof CriteriaResultSchema>;
 export type QaOutput = z.infer<typeof QaOutputSchema>;
 

@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 /**
  * Wave-2 interface-designer agent. Consumes the cross-validated Wave-1
- * scout reports (passed in via `<scout_reports>` in the user prompt) and
+ * scout reports (passed in via `<scoutReports>` in the user prompt) and
  * emits paste-ready Zod schemas, function signatures, and DDL.
  *
  * Read-only — the designer does not write files; the implementer (M19.03)

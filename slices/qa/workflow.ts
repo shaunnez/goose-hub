@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { findFreePort } from '@goose-hub/core/agent-runtime/find-free-port.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
@@ -6,10 +8,7 @@ import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconc
 import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
-import {
-  getQaE2eMode,
-  type QaE2eMode,
-} from '@goose-hub/core/db/repositories/project-settings.js';
+import { type QaE2eMode, getQaE2eMode } from '@goose-hub/core/db/repositories/project-settings.js';
 import { getEngineeringSpec as defaultGetEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
@@ -31,14 +30,13 @@ import {
   toAgentTierResults,
 } from './deterministic-tiers.js';
 export type { VerifyCommand } from './deterministic-tiers.js';
-import {
-  classifyUiChanges,
-  findDevTestsRun,
-  findPrOpenedHints,
-  getChangedFilePaths,
-  getPrDiff,
-} from './qa-helpers.js';
+import { findDevTestsRun, findPrOpenedHints, getPrDiff } from './qa-helpers.js';
 import { buildSyntheticQaOutput } from './synthetic-output.js';
+import {
+  type RunQaCommand,
+  buildVerificationSummary,
+  estimateVerificationSummaryBytes,
+} from './verification-summary.js';
 
 export interface QaWorkflowDeps {
   runtime?: AgentRuntime;
@@ -49,6 +47,8 @@ export interface QaWorkflowDeps {
    * QA agent still runs, just without real suite numbers in its context.
    */
   runTests?: (cwd: string, command: string) => Promise<TestRun | null>;
+  /** Inject for tests — run compact lint/typecheck command summaries. */
+  runCommand?: RunQaCommand;
   /** Per-AC verify commands extracted from the issue body before QA spawn. */
   verifyCommands?: VerifyCommand[];
   /** Inject for tests — return the spec for this work item, or null. */
@@ -93,6 +93,7 @@ export async function runQaWorkflow(
 ): Promise<void> {
   const runId = crypto.randomUUID();
   const runTests = deps.runTests ?? defaultRunTests;
+  const runCommand = deps.runCommand;
   const verifyCommands = deps.verifyCommands;
   const getSpec = deps.getEngineeringSpecImpl ?? defaultGetEngineeringSpec;
   const runTier = deps.runTierImpl ?? defaultRunTier;
@@ -242,33 +243,53 @@ export async function runQaWorkflow(
     // Run tests deterministically before invoking the QA agent so the agent
     // grades against real numbers instead of re-running the suite. Failures
     // here are non-fatal — the agent still runs without testRun.
-    const testCommand = DEFAULT_TEST_COMMAND;
-    const testRun = workspaceDir != null ? await runTests(workspaceDir, testCommand) : null;
+    const testCommand = projectConfig?.stack?.testCommand ?? DEFAULT_TEST_COMMAND;
+    const lintCommand = projectConfig?.stack?.lintCommand ?? 'pnpm biome check .';
+    const typecheckCommand = projectConfig?.stack?.typecheckCommand;
+    const configuredE2eCommand = projectConfig?.stack?.e2eCommand;
+    const testCapture = resolveVitestJsonCapture({
+      workspaceDir,
+      runtime: projectConfig?.stack?.runtime,
+      testCommand,
+    });
+    const { verificationSummary, testRun, e2eDecision } = await buildVerificationSummary({
+      workspaceDir,
+      prHints,
+      prDiff,
+      qaE2eMode,
+      configuredE2eCommand,
+      commands: {
+        testCommand,
+        lintCommand,
+        ...(typecheckCommand != null ? { typecheckCommand } : {}),
+      },
+      priorEvents,
+      devTestsRun,
+      testCapture,
+      commandTimeoutMs: resolvedBudget.budgets.timeoutMs,
+      runTests,
+      ...(runCommand != null ? { runCommand } : {}),
+    });
+
+    eventStore.appendEvent({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      kind: 'qa.verification-summary-built',
+      payload: {
+        changedFileCount: verificationSummary.changedFiles.count,
+        diffCharCount: verificationSummary.changedFiles.diffCharCount,
+        contextByteSizeEstimate: estimateVerificationSummaryBytes(verificationSummary),
+        lintStatus: verificationSummary.commands.lint?.status ?? 'skipped',
+        typecheckStatus: verificationSummary.commands.typecheck?.status ?? 'skipped',
+        testStatus: verificationSummary.commands.test.status,
+        e2eStatus: verificationSummary.e2e.status,
+        evidenceStatus: verificationSummary.evidence.status,
+      },
+      runId,
+    });
+
     const [webPort, apiPort] =
       workspaceDir != null ? await Promise.all([findFreePort(), findFreePort()]) : [null, null];
-    const changedFiles = getChangedFilePaths(workspaceDir, prHints.baseBranch);
-    const uiClassification = classifyUiChanges(changedFiles);
-    const configuredE2eCommand = projectConfig?.stack?.e2eCommand;
-    const e2eDecision =
-      qaE2eMode === 'off'
-        ? { mode: qaE2eMode, reason: 'qa e2e disabled by project setting' }
-        : qaE2eMode === 'always'
-          ? configuredE2eCommand != null
-            ? { mode: qaE2eMode, command: configuredE2eCommand, reason: 'qa e2e mode is always' }
-            : { mode: qaE2eMode, reason: 'qa e2e mode is always but no command is configured' }
-          : uiClassification.hasSignificantUiChange && configuredE2eCommand != null
-            ? {
-                mode: qaE2eMode,
-                command: configuredE2eCommand,
-                reason: uiClassification.reason,
-              }
-            : {
-                mode: qaE2eMode,
-                reason:
-                  configuredE2eCommand == null
-                    ? 'qa e2e mode is ui-changed but no command is configured'
-                    : uiClassification.reason,
-              };
 
     const deterministicTierResults = deterministic
       ? toAgentTierResults(deterministic.tierResults)
@@ -289,9 +310,10 @@ export async function runQaWorkflow(
         prDiff,
         projectCommands: {
           testCommand,
-          lintCommand: 'pnpm biome check .',
+          lintCommand,
           ...(e2eDecision.command != null ? { e2eCommand: e2eDecision.command } : {}),
         },
+        verificationSummary,
         e2eDecision,
         ...(verifyCommands != null && verifyCommands.length > 0 ? { verifyCommands } : {}),
         testRun,
@@ -303,6 +325,7 @@ export async function runQaWorkflow(
         'workItem',
         'prDiff',
         'projectCommands',
+        'verificationSummary',
         'e2eDecision',
         'testRun',
         'verifyCommands',
@@ -491,4 +514,56 @@ export async function runQaWorkflow(
       runId,
     });
   }
+}
+
+function resolveVitestJsonCapture(input: {
+  workspaceDir?: string;
+  runtime?: string;
+  testCommand: string;
+}): { enabled: boolean; reason?: string } {
+  if (input.workspaceDir == null) return { enabled: true };
+  if (input.runtime != null && input.runtime !== 'node') {
+    return {
+      enabled: false,
+      reason: `structured test capture requires a Vitest-compatible Node command; ${input.runtime} test command should be run by QA directly`,
+    };
+  }
+  if (
+    input.runtime === 'node' &&
+    !isVitestCompatibleCommand(input.workspaceDir, input.testCommand)
+  ) {
+    return {
+      enabled: false,
+      reason: 'structured test capture requires a Vitest-compatible test command',
+    };
+  }
+  return { enabled: true };
+}
+
+function isVitestCompatibleCommand(workspaceDir: string, command: string): boolean {
+  if (/\bvitest\b/.test(command) || /--reporter(?:=|\s+)json\b/.test(command)) return true;
+  const scriptName = packageScriptNameFromCommand(command);
+  if (scriptName == null) return false;
+
+  const packageJsonPath = join(workspaceDir, 'package.json');
+  if (!existsSync(packageJsonPath)) return false;
+  try {
+    const parsed = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
+      scripts?: Record<string, unknown>;
+    };
+    const script = parsed.scripts?.[scriptName];
+    return typeof script === 'string' && /\bvitest\b/.test(script);
+  } catch {
+    return false;
+  }
+}
+
+function packageScriptNameFromCommand(command: string): string | null {
+  const parts = command.trim().split(/\s+/);
+  const [tool, maybeRun, maybeScript] = parts;
+  if (tool === 'pnpm' || tool === 'npm' || tool === 'yarn') {
+    return maybeRun === 'run' ? (maybeScript ?? null) : (maybeRun ?? null);
+  }
+  if (tool === 'bun' && maybeRun === 'run') return maybeScript ?? null;
+  return null;
 }

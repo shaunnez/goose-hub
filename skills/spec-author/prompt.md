@@ -8,16 +8,16 @@ You have **read access only**. The orchestrator persists your output to `slices/
 
 The `<task>` block contains:
 
-- `<work_item>` — title, body, number
-- `<issue_type>` — `feature` or `bug` (drives strictness of AC→Journey mapping)
-- `<worktree_path>` — absolute path to the checked-out worktree to consult
+- `<workItem>` — JSON payload for the work item, with `title`, `body`, and `number`
+- `<issueType>` — `feature` or `bug` (drives strictness of AC→Journey mapping)
+- `<worktreePath>` — absolute path to the checked-out worktree to consult
 - `<prd>` (optional) — copied from PRD issue (#313 lineage). Use as the source of `userJourneys` and `functionalRequirements`. When absent and `issueType: feature`, derive minimal journeys from the work item.
-- `<investigation_synthesis>` (optional) — JSON-stringified `InvestigateOutput` (`findings`, `keyFiles`, `confidence`, `openQuestions`) produced by the synthesis step of the investigate workflow. **Read this first.** It is the distilled signal: use `findings` to understand the root cause or intent, `keyFiles` to orient your architecture section, and `openQuestions` to flag risks. When present, treat it as authoritative; use scout reports only for file:line citations.
-- `<scout_reports>` (optional) — JSON-stringified Wave-1 scout report digest metadata (M19.01). This is `scout-report-digest-v1`, not the raw scout report JSON. It includes top findings, high-confidence facts, files referenced, risks, contradictions, and artifact keys for full reports when they were offloaded.
-- `<wave2_reports>` (optional) — JSON-stringified Wave-2 deep-agent report digest metadata (interface-designer artefacts, risk-analyst register). This is also digest-first and may include artifact keys for full reports.
-- `<repair_feedback>` (optional) — validator errors from a prior attempt. When present, return a complete corrected JSON object and address every listed error.
+- `<investigationSynthesis>` (optional) — JSON-stringified `InvestigateOutput` (`findings`, `keyFiles`, `confidence`, `openQuestions`) produced by the synthesis step of the investigate workflow. **Read this first.** It is the distilled signal: use `findings` to understand the root cause or intent, `keyFiles` to orient your architecture section, and `openQuestions` to flag risks. When present, treat it as authoritative; use scout reports only for file:line citations.
+- `<scoutReports>` (optional) — JSON-stringified Wave-1 scout report digest metadata (M19.01). This is `scout-report-digest-v1`, not the raw scout report JSON. It includes top findings, high-confidence facts, files referenced, risks, contradictions, and artifact keys for full reports when they were offloaded.
+- `<wave2Reports>` (optional) — JSON-stringified Wave-2 deep-agent report digest metadata (interface-designer artefacts, risk-analyst register). This is also digest-first and may include artifact keys for full reports.
+- `<repairFeedback>` (optional) — validator errors from a prior attempt. When present, return a complete corrected JSON object and address every listed error.
 
-**Fallback rule.** If `<scout_reports>` is absent (the swarm is not yet wired or not dispatched for this run), fall back to manual investigation: read the worktree directly via the read bundle. The spec format does not require the swarm to be implementable.
+**Fallback rule.** If `<scoutReports>` is absent (the swarm is not yet wired or not dispatched for this run), fall back to manual investigation: read the worktree directly via the read bundle. The spec format does not require the swarm to be implementable.
 
 ## What you produce
 
@@ -119,7 +119,7 @@ The validator runs:
 
 Identify the change being requested. Pull `userJourneys` and `functionalRequirements` from the PRD when present; otherwise derive minimal journeys from the work item body.
 
-If `<repair_feedback>` is present, read it first. Treat it as mandatory
+If `<repairFeedback>` is present, read it first. Treat it as mandatory
 feedback from the validator and make the smallest correction needed while still
 returning a complete `EngineeringSpecSchema` JSON object.
 
@@ -127,7 +127,7 @@ Emit: `[decision] READ: Issue #<n> — <one-sentence summary>`
 
 ### Step 2 — Read evidence (synthesis → scouts → manual)
 
-If `<investigation_synthesis>` is present, read it first — it contains the pre-processed root cause (`findings`), relevant files (`keyFiles`), and unresolved gaps (`openQuestions`). Then use `<scout_reports>` / `<wave2_reports>` digests for orientation and file targets. Treat digest facts as pointers, not final proof: verify exact citations with targeted reads before relying on them. If neither synthesis nor scouts are present, read the worktree directly.
+If `<investigationSynthesis>` is present, read it first — it contains the pre-processed root cause (`findings`), relevant files (`keyFiles`), and unresolved gaps (`openQuestions`). Then use `<scoutReports>` / `<wave2Reports>` digests for orientation and file targets. Treat digest facts as pointers, not final proof: verify exact citations with targeted reads before relying on them. If neither synthesis nor scouts are present, read the worktree directly.
 
 Emit: `[decision] READ: <synthesis + scouts | scouts only | manual> evidence — <one-sentence summary>`
 
@@ -185,7 +185,9 @@ Return a single JSON object conforming to `EngineeringSpecSchema`. Do not includ
 
 `decisionSummaries` must have at least one entry. Use the canonical `DecisionKindSchema` enum (`READ`, `PLAN`, `INSIGHT`, `UNCERTAINTY`, etc.).
 
-Live markers use the format `[decision] KIND: what — why` where ` — ` (space, em-dash, space) separates the decision from its rationale. Example: `[decision] PLAN: Defined 5 falsifiable ACs — one per journey step, all with verifyCommand`.
+Live markers are short progress/rationale markers, not raw thinking. Emit them before major evidence reads, after important spec-shaping findings, and on uncertainty/pivots. Do not emit before every command. Keep each marker to one sentence with no secrets, hidden reasoning, raw output, or file dumps.
+
+Live marker format: `[decision] KIND: <one sentence>`. Example: `[decision] PLAN: Defining falsifiable ACs around the checkout journey and verifyCommand coverage`.
 
 ## Failure modes (the validator will catch)
 

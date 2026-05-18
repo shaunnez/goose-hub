@@ -35,6 +35,7 @@ export type EventKind =
   | 'qa.functional-failed'
   | 'qa.regression-passed'
   | 'qa.regression-failed'
+  | 'qa.verification-summary-built'
   // M7 fix-issue workflow lifecycle (#183) + evidence-post wiring (#234)
   | 'agent.implement-complete'
   | 'pr.opened'
@@ -139,6 +140,9 @@ export type EventKind =
   // ImprovementCandidates, and the autonomous-mode escalation gate.
   | 'audit.completed'
   | 'audit.failed'
+  // Symbol index utility telemetry — lets us measure whether hints save work.
+  | 'symbol-index.lookup'
+  | 'symbol-index.hints-used'
   | 'audit.autonomy-gate-fired';
 
 export interface AgentEvent {

@@ -14,6 +14,26 @@ describe('resolveSkillRuntime', () => {
     expect(resolved.modelOverride).toBe('gpt-5.4');
   });
 
+  it('resolves playwright-repro to Codex haiku from a per-skill DB override', () => {
+    const resolved = resolveSkillRuntime({
+      skill: 'playwright-repro',
+      role: 'investigator',
+      dbOverride: {
+        modelTier: 'haiku',
+        modelProvider: 'codex',
+        maxTurns: 20,
+        maxBudgetUsd: 1,
+      },
+    });
+
+    expect(resolved.source).toBe('db');
+    expect(resolved.tier).toBe('haiku');
+    expect(resolved.provider).toBe('codex');
+    expect(resolved.modelOverride).toBe('gpt-5.4-mini');
+    expect(resolved.budgets.maxTurns).toBe(20);
+    expect(resolved.budgets.maxBudgetUsd).toBe(1);
+  });
+
   it('uses project config skillBudgetOverrides before SKILL_BUDGETS', () => {
     const resolved = resolveSkillRuntime({
       skill: 'bug-enhance',
@@ -22,6 +42,32 @@ describe('resolveSkillRuntime', () => {
 
     expect(resolved.source).toBe('config');
     expect(resolved.modelOverride).toBe('claude-opus-4-7');
+  });
+
+  it('lets per-skill DB model/provider override skill defaults', () => {
+    const resolved = resolveSkillRuntime({
+      skill: 'investigate',
+      role: 'investigator',
+      dbOverride: { modelTier: 'opus', modelProvider: 'claude' },
+    });
+
+    expect(resolved.source).toBe('db');
+    expect(resolved.tier).toBe('opus');
+    expect(resolved.provider).toBe('claude');
+    expect(resolved.modelOverride).toBe('claude-opus-4-7');
+  });
+
+  it('uses the skill provider hint for provider-pinned defaults like dev-review', () => {
+    const resolved = resolveSkillRuntime({
+      skill: 'dev-review',
+      role: 'dev-reviewer',
+      skillProvider: 'codex',
+    });
+
+    expect(resolved.source).toBe('skill-default');
+    expect(resolved.tier).toBe('sonnet');
+    expect(resolved.provider).toBe('codex');
+    expect(resolved.modelOverride).toBe('gpt-5.4');
   });
 
   it('coerces provider when the project runtime is forced', () => {

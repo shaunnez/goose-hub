@@ -62,9 +62,9 @@ that motivates it.
     eliminate the mirror by importing the core function from the web
     build.
 
-15. **Pull subcomponents out of `ProjectModelPanel.tsx`.** (F-22)
-    No behaviour change; just file hygiene. Ditto `BootstrapWizard.tsx`
-    (F-23) and `grill-and-prd.ts` (F-24).
+15. **Split the remaining large UI/workflow files.** `ProjectModelPanel.tsx`
+    was removed with the Advanced roles surface. `BootstrapWizard.tsx`
+    (F-23) and `grill-and-prd.ts` (F-24) remain file-hygiene candidates.
 
 16. **`agent.json-parse-failed` event + better error.** (F-6) Plumb the
     runId-scoped event so `OutputValidationError` can include the
