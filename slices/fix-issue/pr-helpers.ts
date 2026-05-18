@@ -7,7 +7,11 @@ import { getEvidencePostEnabled } from '@goose-hub/core/db/repositories/project-
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
-import { EvidencePostSchema } from '@goose-hub/skills/evidence-post/schema.js';
+import {
+  EvidencePostPlanSchema,
+  EvidencePostSchema,
+} from '@goose-hub/skills/evidence-post/schema.js';
+import { runEvidencePostPlan } from './evidence-post-workflow.js';
 import type { ImplementOutputShape } from './types.js';
 
 export interface RunEvidencePostInput {
@@ -80,6 +84,13 @@ export async function runEvidencePost(input: RunEvidencePostInput): Promise<void
     injectedRuntime: input.evidenceRuntime,
   });
   const [webPort, apiPort] = await Promise.all([findFreePort(), findFreePort()]);
+  const evidenceEnv = {
+    WEB_PORT: String(webPort),
+    API_PORT: String(apiPort),
+    SERVER_PORT: String(apiPort),
+    CI: 'true',
+    EVIDENCE_ONLY: 'true',
+  };
   try {
     const result = await runtime.run({
       runId: evidenceRunId,
@@ -111,20 +122,31 @@ export async function runEvidencePost(input: RunEvidencePostInput): Promise<void
       freshContext: false,
       toolBundles: ['validate'],
       toolExtras: [],
-      env: {
-        WEB_PORT: String(webPort),
-        API_PORT: String(apiPort),
-        SERVER_PORT: String(apiPort),
-        CI: 'true',
-        EVIDENCE_ONLY: 'true',
-      },
+      env: evidenceEnv,
       ...resolvedBudget,
       personaId: selectPersona(input.projectId, 'developer').personaId,
       outputJsonSchema: input.outputJsonSchema,
       appendSystemPrompt: input.appendSystemPrompt,
     });
 
-    const parsed = EvidencePostSchema.safeParse(result.output);
+    const planParsed = EvidencePostPlanSchema.safeParse(result.output);
+    const finalParsed = EvidencePostSchema.safeParse(result.output);
+    const output = planParsed.success
+      ? runEvidencePostPlan({
+          plan: planParsed.data,
+          workspaceDir: input.worktreePath,
+          issueNumber: Number(input.workItem.externalId),
+          repo: input.repoRef,
+          prNumber: input.prNumber,
+          prHeadSha: input.prHeadSha,
+          beforeCommentUrl: input.beforeCommentUrl,
+          env: evidenceEnv,
+        })
+      : finalParsed.success
+        ? finalParsed.data
+        : null;
+
+    const parsed = EvidencePostSchema.safeParse(output);
     if (!parsed.success) {
       throw new Error('evidence-post output validation failed');
     }

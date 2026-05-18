@@ -89,6 +89,11 @@ vi.mock('@goose-hub/core/workspaces/worktree.js', () => ({
   createWorktree: vi.fn().mockReturnValue('/tmp/test-worktree'),
   cleanupWorktree: vi.fn(),
   prewarmWorktree: vi.fn(),
+  resolveWorkflowBase: vi.fn().mockReturnValue({
+    branch: 'main',
+    ref: 'origin/main',
+    source: 'configured-default',
+  }),
 }));
 
 vi.mock('node:fs', async (importOriginal) => {
@@ -476,7 +481,7 @@ describe('runInvestigateWorkflow', () => {
       const { runInvestigateWorkflow } = await import('./workflow.js');
       await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
 
-      expect(createWorktree).toHaveBeenCalledWith('/repo', expect.any(String));
+      expect(createWorktree).toHaveBeenCalledWith('/repo', expect.any(String), 'origin/main');
       expect(cleanupWorktree).toHaveBeenCalledOnce();
     });
   });
@@ -940,6 +945,76 @@ describe('runInvestigateWorkflow', () => {
       );
 
       expect(mockRun).not.toHaveBeenCalled();
+    });
+
+    it('emits skipped event for high-confidence static UI bugs', async () => {
+      mockInvokeSkill.mockResolvedValueOnce({
+        output: makeInvestigateOutput({
+          requiresBrowserRepro: true,
+          reproPacket: {
+            route: '/settings',
+            selectors: ['[data-testid="settings-title"]'],
+            expectedAssertion: 'Settings title copy is wrong',
+            setupRequired: [],
+            keyFiles: [{ path: 'apps/web/src/Settings.tsx', reason: 'renders static title' }],
+            confidence: 'high',
+            skipBeforeEvidenceEligible: true,
+          },
+        }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runInvestigateWorkflow(
+        makeWorkItem({ type: 'bug' }),
+        makeMockSource(),
+        'goose-hub-self',
+        '/repo',
+      );
+
+      expect(mockRun).not.toHaveBeenCalled();
+      expect(vi.mocked(eventStore.appendEvent)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'evidence.playwright-repro-skipped',
+          payload: expect.objectContaining({ reason: 'high-confidence-static-ui-bug' }),
+        }),
+      );
+    });
+
+    it('still invokes playwright-repro for non-static browser bugs', async () => {
+      mockInvokeSkill.mockResolvedValueOnce({
+        output: makeInvestigateOutput({
+          requiresBrowserRepro: true,
+          reproPacket: {
+            route: '/login',
+            selectors: ['[data-testid="submit"]'],
+            expectedAssertion: 'Error appears after submit',
+            setupRequired: ['submit form'],
+            keyFiles: [{ path: 'apps/web/src/Login.tsx', reason: 'handles submit' }],
+            confidence: 'high',
+            skipBeforeEvidenceEligible: false,
+          },
+        }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+      mockRun.mockResolvedValueOnce({
+        output: makePlaywrightReproOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(
+        makeWorkItem({ type: 'bug' }),
+        makeMockSource(),
+        'goose-hub-self',
+        '/repo',
+      );
+
+      expect(mockRun).toHaveBeenCalledWith(expect.objectContaining({ skill: 'playwright-repro' }));
     });
 
     it('persists playwrightRepro in investigation-complete event', async () => {

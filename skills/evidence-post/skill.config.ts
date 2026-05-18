@@ -46,10 +46,10 @@ const config: SkillConfig = {
     'specPath',
   ],
   /**
-   * `validate` bundle — Playwright invocation, evidence I/O, git push of
-   * artefacts, and SHA resolution. The skill posts the issue comment via
-   * a separate workflow-layer GitHub call (NOT a tool the agent invokes
-   * directly), so no GitHub MCP/CLI access is needed in the bundle.
+   * `validate` bundle is retained for compatibility with the runtime tool
+   * profile, but the prompt keeps this skill in planning/verification mode.
+   * The workflow owns Playwright, collector parsing, git publishing, and
+   * issue comments.
    */
   toolBundles: ['validate'],
   modelPin: 'sonnet',

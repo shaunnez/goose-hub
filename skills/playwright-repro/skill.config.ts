@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { InvestigationReproPacketSchema } from './schema.js';
 
 export const PlaywrightReproContextSchema = z.object({
   workItem: z.object({
@@ -21,6 +22,9 @@ export const PlaywrightReproContextSchema = z.object({
     })
     .optional()
     .describe('Output from the preceding investigate skill run, when available'),
+  reproPacket: InvestigationReproPacketSchema.optional().describe(
+    'Narrow workflow-derived repro packet. Prefer this over broad repo discovery.',
+  ),
 });
 
 const config: SkillConfig = {
@@ -36,6 +40,7 @@ const config: SkillConfig = {
     'investigation.findings',
     'investigation.keyFiles',
     'investigation.confidence',
+    'reproPacket',
   ],
   toolBundles: ['validate'],
   modelPin: 'sonnet',

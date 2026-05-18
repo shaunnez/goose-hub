@@ -6,6 +6,16 @@ import { GIT_ENV } from './git-env.js';
 
 const WORKSPACES_DIR = join(homedir(), '.factory', 'workspaces');
 
+export type WorkflowBaseSource = 'current-branch' | 'configured-default' | 'fallback-main';
+
+export type WorkflowBase = {
+  /** Branch name used for PR base/diff metadata, without an `origin/` prefix. */
+  branch: string;
+  /** Git ref used when creating detached worktrees. */
+  ref: string;
+  source: WorkflowBaseSource;
+};
+
 /**
  * Resolves the worktree path for a given runId.
  * Pattern: ~/.factory/workspaces/<runId>/
@@ -22,6 +32,46 @@ function worktreePath(runId: string): string {
 export function existingWorktreePath(runId: string): string | null {
   const wtPath = worktreePath(runId);
   return existsSync(wtPath) ? wtPath : null;
+}
+
+function currentBranch(repo: string): string | null {
+  try {
+    const branch = execFileSync('git', ['symbolic-ref', '--short', 'HEAD'], {
+      cwd: repo,
+      encoding: 'utf8',
+      env: GIT_ENV,
+    }).trim();
+    return branch.length > 0 ? branch : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolves the branch/ref all workflow-created worktrees should use.
+ *
+ * The running checkout branch wins so local milestone work runs against the
+ * same code the operator is looking at. Config/default fallback still uses the
+ * remote ref to preserve the previous fresh-from-origin behavior when the
+ * server checkout is detached.
+ */
+export function resolveWorkflowBase(repo: string, configuredDefaultBranch?: string): WorkflowBase {
+  const branch = currentBranch(repo);
+  if (branch != null) return { branch, ref: branch, source: 'current-branch' };
+
+  const configured = configuredDefaultBranch?.trim();
+  if (configured != null && configured.length > 0) {
+    const branchName = configured.startsWith('origin/')
+      ? configured.slice('origin/'.length)
+      : configured;
+    return {
+      branch: branchName,
+      ref: configured.startsWith('origin/') ? configured : `origin/${configured}`,
+      source: 'configured-default',
+    };
+  }
+
+  return { branch: 'main', ref: 'origin/main', source: 'fallback-main' };
 }
 
 /**

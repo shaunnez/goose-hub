@@ -34,6 +34,26 @@ describe('resolveSkillRuntime', () => {
     expect(resolved.modelOverride).toBe('gpt-5.4');
   });
 
+  it('resolves playwright-repro to Codex haiku from a per-skill DB override', () => {
+    const resolved = resolveSkillRuntime({
+      skill: 'playwright-repro',
+      role: 'investigator',
+      dbOverride: {
+        modelTier: 'haiku',
+        modelProvider: 'codex',
+        maxTurns: 20,
+        maxBudgetUsd: 1,
+      },
+    });
+
+    expect(resolved.source).toBe('db');
+    expect(resolved.tier).toBe('haiku');
+    expect(resolved.provider).toBe('codex');
+    expect(resolved.modelOverride).toBe('gpt-5.4-mini');
+    expect(resolved.budgets.maxTurns).toBe(20);
+    expect(resolved.budgets.maxBudgetUsd).toBe(1);
+  });
+
   it('uses project config skillBudgetOverrides before SKILL_BUDGETS', () => {
     const resolved = resolveSkillRuntime({
       skill: 'bug-enhance',

@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { adviseOnPlan } from '@goose-hub/core/agent-runtime/advisor.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
@@ -15,8 +14,9 @@ import {
   cleanupWorktree,
   createWorktree,
   prewarmWorktree,
+  resolveWorkflowBase,
 } from '@goose-hub/core/workspaces/worktree.js';
-import { EvidencePostSchema } from '@goose-hub/skills/evidence-post/schema.js';
+import { EvidencePostPlanSchema } from '@goose-hub/skills/evidence-post/schema.js';
 import { ImplementSchema } from '@goose-hub/skills/implement/schema.js';
 import {
   afterImplement,
@@ -32,20 +32,6 @@ export { resolveWorktreeHeadSha } from './pr-helpers.js';
 
 function isAdvisorGated(priority: string): priority is 'high' | 'critical' {
   return priority === 'high' || priority === 'critical';
-}
-
-function resolveBaseBranch(repoPath: string, configuredDefaultBranch?: string): string {
-  if (configuredDefaultBranch != null && configuredDefaultBranch.length > 0) {
-    return configuredDefaultBranch;
-  }
-  try {
-    return execFileSync('git', ['symbolic-ref', '--short', 'HEAD'], {
-      cwd: repoPath,
-      encoding: 'utf8',
-    }).trim();
-  } catch {
-    return 'main';
-  }
 }
 
 export interface FixIssueDeps {
@@ -65,8 +51,8 @@ export interface FixIssueDeps {
   prewarmWorktreeImpl?: typeof prewarmWorktree;
   /** Override resolveWorktreeHeadSha (used by tests to avoid real git subprocess). */
   resolveWorktreeHeadShaImpl?: typeof resolveWorktreeHeadSha;
-  /** Override resolveBaseBranch (used by tests to avoid real git subprocess). */
-  resolveBaseBranchImpl?: (repoPath: string, configuredDefaultBranch?: string) => string;
+  /** Override resolveWorkflowBase (used by tests to avoid real git subprocess). */
+  resolveWorkflowBaseImpl?: typeof resolveWorkflowBase;
   /**
    * Override orchestratorCommitAll (used by tests). Orchestrator commits the
    * implement skill's output before opening the PR (ADR 0031 — builder no-commit rule).
@@ -108,13 +94,13 @@ export async function runFixIssueWorkflow(
   const cleanupWtFn = deps.cleanupWorktreeImpl ?? cleanupWorktree;
   const prewarmWtFn = deps.prewarmWorktreeImpl ?? prewarmWorktree;
   const resolveHeadShaFn = deps.resolveWorktreeHeadShaImpl ?? resolveWorktreeHeadSha;
-  const resolveBaseBranchFn = deps.resolveBaseBranchImpl ?? resolveBaseBranch;
+  const resolveWorkflowBaseFn = deps.resolveWorkflowBaseImpl ?? resolveWorkflowBase;
   const orchestratorCommitFn = deps.orchestratorCommitAllImpl ?? orchestratorCommitAll;
 
   const implementPrompt = readPromptWithContext('implement', projectId);
   const implementJsonSchema = toJsonSchema(ImplementSchema);
   const evidencePostPrompt = readPromptWithContext('evidence-post', projectId);
-  const evidencePostJsonSchema = toJsonSchema(EvidencePostSchema);
+  const evidencePostJsonSchema = toJsonSchema(EvidencePostPlanSchema);
 
   const { personaId: implementPersonaId } = selectPersona(projectId, 'developer');
   const implementExecution = await resolveImplementExecution({
@@ -122,12 +108,13 @@ export async function runFixIssueWorkflow(
     workItem,
     injectedRuntime: deps.runtime,
   });
-  const baseBranch = resolveBaseBranchFn(
+  const workflowBase = resolveWorkflowBaseFn(
     targetRepo,
     implementExecution.projectConfig?.targetRepo?.defaultBranch,
   );
+  const baseBranch = workflowBase.branch;
   const investigation = latestInvestigationContext({ projectId, workItemId: workItem.id });
-  const worktreePath = createWtFn(targetRepo, runId, `origin/${baseBranch}`);
+  const worktreePath = createWtFn(targetRepo, runId, workflowBase.ref);
 
   try {
     // Transition into in-progress as soon as the worktree exists.

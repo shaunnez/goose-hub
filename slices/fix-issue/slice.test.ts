@@ -71,10 +71,16 @@ vi.mock('@goose-hub/core/agent-runtime/advisor.js', () => ({
 const mockCreateWorktree = vi.fn().mockReturnValue('/work/wt');
 const mockCleanupWorktree = vi.fn();
 const mockPrewarmWorktree = vi.fn();
+const mockResolveWorkflowBase = vi.fn().mockReturnValue({
+  branch: 'main',
+  ref: 'origin/main',
+  source: 'configured-default',
+});
 vi.mock('@goose-hub/core/workspaces/worktree.js', () => ({
   createWorktree: (...args: unknown[]) => mockCreateWorktree(...args),
   cleanupWorktree: (...args: unknown[]) => mockCleanupWorktree(...args),
   prewarmWorktree: (...args: unknown[]) => mockPrewarmWorktree(...args),
+  resolveWorkflowBase: (...args: unknown[]) => mockResolveWorkflowBase(...args),
 }));
 vi.mock('@goose-hub/core/workspaces/orchestrator-git.js', () => ({
   orchestratorCommitAll: vi.fn().mockReturnValue('fake-sha'),
