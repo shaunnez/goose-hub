@@ -24,6 +24,11 @@ vi.mock('#shared/source.js', () => ({
   }),
 }));
 
+const mockSearchPrsOrLog = vi.fn();
+vi.mock('#shared/github-pr-search.js', () => ({
+  searchPrsOrLog: (repoRef: string, query: string) => mockSearchPrsOrLog(repoRef, query),
+}));
+
 vi.mock('#shared/inbox-bridge.js', () => ({
   addInboxNote: vi.fn(async (_input: { title: string }) => ({ id: 42 })),
 }));
@@ -231,12 +236,50 @@ describe('chat-tools — comment_on_issue', () => {
 });
 
 describe('chat-tools — find_pr', () => {
-  it('scopes the event-stream replay to the requested project', async () => {
+  beforeEach(() => {
+    mockSearchPrsOrLog.mockReset();
+  });
+
+  it('uses the GitHub search path and returns source=github when a slug is given', async () => {
+    mockSearchPrsOrLog.mockResolvedValueOnce([
+      {
+        prNumber: 123,
+        url: 'https://github.com/shaunnez/goose-hub-self/pull/123',
+        title: 'Fix bug',
+        state: 'open',
+        merged: false,
+        authorLogin: 'octocat',
+        createdAt: '2026-05-01T00:00:00Z',
+        updatedAt: '2026-05-02T00:00:00Z',
+      },
+    ]);
+    const result = (await CHAT_TOOL_IMPLEMENTATIONS.find_pr(
+      { query: '123', projectSlug: 'goose-hub-self' },
+      ctx,
+    )) as { matches: Array<{ prNumber: number }>; source: string };
+    expect(result.source).toBe('github');
+    expect(result.matches[0].prNumber).toBe(123);
+    expect(mockSearchPrsOrLog).toHaveBeenCalledWith('shaunnez/goose-hub-self', '123');
+  });
+
+  it('falls back to the event-stream scan when GitHub search returns null', async () => {
+    mockSearchPrsOrLog.mockResolvedValueOnce(null);
     vi.mocked(eventStore.replay).mockReturnValueOnce([]);
-    await CHAT_TOOL_IMPLEMENTATIONS.find_pr({ query: '123', projectSlug: 'goose-hub-self' }, ctx);
-    expect(eventStore.replay).toHaveBeenLastCalledWith(
-      expect.objectContaining({ projectId: 'goose-hub-self' }),
-    );
+    const result = (await CHAT_TOOL_IMPLEMENTATIONS.find_pr(
+      { query: '123', projectSlug: 'goose-hub-self' },
+      ctx,
+    )) as { source: string };
+    expect(result.source).toBe('event-stream');
+    expect(eventStore.replay).toHaveBeenCalled();
+  });
+
+  it('uses the event-stream scan when no projectSlug is supplied (global query)', async () => {
+    vi.mocked(eventStore.replay).mockReturnValueOnce([]);
+    const result = (await CHAT_TOOL_IMPLEMENTATIONS.find_pr({ query: '123' }, ctx)) as {
+      source: string;
+    };
+    expect(result.source).toBe('event-stream');
+    expect(mockSearchPrsOrLog).not.toHaveBeenCalled();
   });
 });
 
