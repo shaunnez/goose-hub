@@ -412,6 +412,40 @@ export interface ProjectSettingsDto {
   >;
 }
 
+export type WorkflowKind = 'bug' | 'feature' | 'chore' | 'research';
+export type WorkflowEdgeKind = 'primary' | 'optional' | 'retry' | 'summary';
+
+export interface WorkflowNodeDto {
+  id: string;
+  label: string;
+  state?: string;
+  skill?: string;
+  role?: string;
+  notes?: string;
+}
+
+export interface WorkflowEdgeDto {
+  from: string;
+  to: string;
+  label?: string;
+  condition?: string;
+  kind?: WorkflowEdgeKind;
+  virtual?: boolean;
+}
+
+export interface WorkflowCatalogEntryDto {
+  kind: WorkflowKind;
+  title: string;
+  description: string;
+  nodes: WorkflowNodeDto[];
+  edges: WorkflowEdgeDto[];
+  normalPath: string[];
+}
+
+export interface WorkflowCatalogDto {
+  catalog: WorkflowCatalogEntryDto[];
+}
+
 export type ModelTier = 'haiku' | 'sonnet' | 'opus';
 export type ModelProvider = 'claude' | 'codex';
 

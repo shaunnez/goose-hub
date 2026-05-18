@@ -1,3 +1,4 @@
+import { WORKFLOW_CATALOG } from '@goose-hub/core/workflows/workflow-catalog.js';
 import { Hono } from 'hono';
 import { listProjectConfigsService, listProjectsService } from './service.js';
 
@@ -13,6 +14,10 @@ router.get('/projects', async (c) => {
 router.get('/projects/configs', async (c) => {
   const result = await listProjectConfigsService();
   return c.json(result);
+});
+
+router.get('/workflow-catalog', (c) => {
+  return c.json({ catalog: WORKFLOW_CATALOG });
 });
 
 export { router as projectsRouter };

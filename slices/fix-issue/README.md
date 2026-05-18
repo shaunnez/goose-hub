@@ -2,6 +2,10 @@
 
 The M7 supervised dev workflow. Picks up a `factory:dev-ready` issue, creates a worktree, optionally runs the advisor (high/critical priority), runs the implement skill (TDD), opens a PR, posts evidence, and transitions the issue to `factory:approved`.
 
+Current cross-workflow maps are catalog-backed in
+`core/workflows/workflow-catalog.ts` and rendered in Settings. The diagram below
+is a historical slice note for the legacy single-issue implementation path.
+
 ## State machine
 
 ```
