@@ -7,13 +7,7 @@ export type ProjectModelSettingsRow = typeof projectModelSettings.$inferSelect;
 
 export type RoleModelPatch = {
   primaryModel?: ModelTier | null;
-  fallbackModel?: ModelTier | null;
-  advisorModel?: ModelTier | null;
   primaryProvider?: ModelProvider | null;
-  fallbackProvider?: ModelProvider | null;
-  advisorProvider?: ModelProvider | null;
-  maxTurns?: number | null;
-  timeoutMs?: number | null;
 };
 
 /** Complexity overrides for a single role: keys are "type:<T>", "priority:<P>", or "default". */
@@ -30,18 +24,6 @@ export function readProjectModelSettings(projectId: string): Map<string, Project
     map.set(row.role, row);
   }
   return map;
-}
-
-export function readProjectModelSettingsForRole(
-  projectId: string,
-  role: string,
-): ProjectModelSettingsRow | null {
-  const rows = db
-    .select()
-    .from(projectModelSettings)
-    .where(and(eq(projectModelSettings.projectId, projectId), eq(projectModelSettings.role, role)))
-    .all();
-  return rows[0] ?? null;
 }
 
 export function writeRoleModelSetting(
@@ -107,9 +89,8 @@ export function deleteAllRoleModelSettings(projectId: string): void {
 
 /**
  * Sets the same (tier, provider) for `primaryModel` + `primaryProvider` across
- * many roles in one call. Used by the "All → Codex" / "All → Claude" bulk
- * switch in the Models settings UI. Existing fallback/advisor/complexity values
- * on each row are preserved.
+ * many roles in one call. Used by the advanced role compatibility UI. Existing
+ * fallback/advisor/complexity values on each row are preserved for historical rows.
  */
 export function writeBulkRoleModelPrimary(
   projectId: string,
@@ -120,14 +101,5 @@ export function writeBulkRoleModelPrimary(
 ): void {
   for (const role of roles) {
     writeRoleModelSetting(projectId, role, { primaryModel: tier, primaryProvider: provider }, by);
-  }
-}
-
-export function parseComplexityOverrides(row: ProjectModelSettingsRow): ComplexityOverrides {
-  if (!row.complexityOverridesJson) return {};
-  try {
-    return JSON.parse(row.complexityOverridesJson) as ComplexityOverrides;
-  } catch {
-    return {};
   }
 }

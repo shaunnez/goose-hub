@@ -99,4 +99,122 @@ describe('project settings router', () => {
       'ui',
     );
   });
+
+  it('resolves per-skill DB tier/provider above project config and skill defaults', async () => {
+    mockGetProject.mockResolvedValue({
+      ...project(),
+      budgets: {
+        skillBudgetOverrides: {
+          'repo-match': { modelTier: 'opus' },
+        },
+      },
+    });
+    mockReadProjectSkillSettings.mockReturnValue(
+      new Map([
+        [
+          'repo-match',
+          {
+            projectId: 'goose-hub-self',
+            skillName: 'repo-match',
+            modelTier: 'sonnet',
+            modelProvider: 'codex',
+            updatedAt: '2026-05-18T00:00:00Z',
+          },
+        ],
+      ]),
+    );
+
+    const app = makeApp();
+    const res = await app.request('/projects/goose-hub-self/settings');
+    const body = (await res.json()) as {
+      resolvedSkillRuntimes: Record<
+        string,
+        {
+          source: string;
+          effectiveTier: string;
+          effectiveProvider: string;
+          resolvedPrimary: { modelId: string };
+        }
+      >;
+    };
+
+    expect(body.resolvedSkillRuntimes['repo-match']).toMatchObject({
+      source: 'db',
+      effectiveTier: 'sonnet',
+      effectiveProvider: 'codex',
+      resolvedPrimary: { modelId: 'gpt-5.4' },
+    });
+  });
+
+  it('coerces per-skill provider when project runtime is forced', async () => {
+    mockGetProject.mockResolvedValue({
+      ...project(),
+      agentConfig: {
+        ...project().agentConfig,
+        runtime: 'codex-cli',
+      },
+    });
+    mockReadProjectSkillSettings.mockReturnValue(
+      new Map([
+        [
+          'repo-match',
+          {
+            projectId: 'goose-hub-self',
+            skillName: 'repo-match',
+            modelTier: 'sonnet',
+            modelProvider: 'claude',
+            updatedAt: '2026-05-18T00:00:00Z',
+          },
+        ],
+      ]),
+    );
+
+    const app = makeApp();
+    const res = await app.request('/projects/goose-hub-self/settings');
+    const body = (await res.json()) as {
+      resolvedSkillRuntimes: Record<
+        string,
+        { effectiveProvider: string; resolvedPrimary: { modelId: string } }
+      >;
+    };
+
+    expect(body.resolvedSkillRuntimes['repo-match'].effectiveProvider).toBe('codex');
+    expect(body.resolvedSkillRuntimes['repo-match'].resolvedPrimary.modelId).toBe('gpt-5.4');
+  });
+
+  it('does not expose fallback or advisor models for holdout skills', async () => {
+    mockReadProjectSkillSettings.mockReturnValue(
+      new Map([
+        [
+          'qa',
+          {
+            projectId: 'goose-hub-self',
+            skillName: 'qa',
+            modelTier: 'haiku',
+            modelProvider: 'codex',
+            updatedAt: '2026-05-18T00:00:00Z',
+          },
+        ],
+      ]),
+    );
+
+    const app = makeApp();
+    const res = await app.request('/projects/goose-hub-self/settings');
+    const body = (await res.json()) as {
+      resolvedSkillRuntimes: Record<
+        string,
+        {
+          effectiveTier: string;
+          effectiveProvider: string;
+          resolvedFallback: unknown;
+          resolvedAdvisor: unknown;
+        }
+      >;
+    };
+
+    expect(body.resolvedSkillRuntimes.qa.effectiveTier).toBe('sonnet');
+    expect(body.resolvedSkillRuntimes.qa.effectiveProvider).toBe('claude');
+    expect(body.resolvedSkillRuntimes.qa.resolvedFallback).toBeNull();
+    expect(body.resolvedSkillRuntimes.qa.resolvedAdvisor).toBeNull();
+  });
 });

@@ -41,13 +41,7 @@ const ProviderSchema = z.enum(VALID_PROVIDERS).nullable().optional();
 
 const RoleModelPatchSchema = z.object({
   primaryModel: TierSchema,
-  fallbackModel: TierSchema,
-  advisorModel: TierSchema,
   primaryProvider: ProviderSchema,
-  fallbackProvider: ProviderSchema,
-  advisorProvider: ProviderSchema,
-  maxTurns: z.number().int().min(1).max(500).nullable().optional(),
-  timeoutMs: z.number().int().min(5_000).max(3_600_000).nullable().optional(),
 });
 
 const BulkRoleModelSchema = z.object({
@@ -97,32 +91,20 @@ router.get('/:slug/settings/models', async (c) => {
     {
       configRoleModel: {
         primary: string;
-        fallback: string | null;
-        advisor: string | null;
         primaryProvider: Provider | null;
-        fallbackProvider: Provider | null;
-        advisorProvider: Provider | null;
       } | null;
       dbRoleModel: {
         primaryModel: string | null;
-        fallbackModel: string | null;
-        advisorModel: string | null;
         primaryProvider: Provider | null;
-        fallbackProvider: Provider | null;
-        advisorProvider: Provider | null;
-        maxTurns: number | null;
-        timeoutMs: number | null;
         updatedAt: string | null;
       } | null;
       dbComplexityOverrides: Record<string, string>;
-      /** Concrete model ID the dispatcher will use right now for the primary
-       *  slot, after merging DB → config → skill default → role default. The
-       *  UI renders this as a subtitle under the primary tier select. */
+      /** Concrete role-primary model ID for compatibility/internal state. Normal skill
+       *  dispatch ignores project_model_settings and resolves through
+       *  project_skill_settings instead. */
       resolvedPrimary: string | null;
       /** Skill-default tier for the role — what the placeholder text means. */
       roleDefaultTier: Tier;
-      /** ROLE_DEFAULTS budgets for this role — used by the UI as "default: N" hints. */
-      roleDefaultBudgets: { maxTurns: number; timeoutMs: number };
     }
   > = {};
 
@@ -160,33 +142,19 @@ router.get('/:slug/settings/models', async (c) => {
       configRoleModel: configEntry
         ? {
             primary: configEntry.primary,
-            fallback: configEntry.fallback,
-            advisor: configEntry.advisor,
             primaryProvider: (configEntry.primaryProvider as Provider | undefined) ?? null,
-            fallbackProvider: (configEntry.fallbackProvider as Provider | undefined) ?? null,
-            advisorProvider: (configEntry.advisorProvider as Provider | undefined) ?? null,
           }
         : null,
       dbRoleModel: dbRow
         ? {
             primaryModel: dbRow.primaryModel ?? null,
-            fallbackModel: dbRow.fallbackModel ?? null,
-            advisorModel: dbRow.advisorModel ?? null,
             primaryProvider: (dbRow.primaryProvider as Provider | null) ?? null,
-            fallbackProvider: (dbRow.fallbackProvider as Provider | null) ?? null,
-            advisorProvider: (dbRow.advisorProvider as Provider | null) ?? null,
-            maxTurns: dbRow.maxTurns ?? null,
-            timeoutMs: dbRow.timeoutMs ?? null,
             updatedAt: dbRow.updatedAt,
           }
         : null,
       dbComplexityOverrides: complexityOverrides,
       resolvedPrimary: resolveModelId(effectiveTier, effectiveProvider),
       roleDefaultTier: ROLE_DEFAULTS[role].modelTier as Tier,
-      roleDefaultBudgets: {
-        maxTurns: ROLE_DEFAULTS[role].budgets.maxTurns,
-        timeoutMs: ROLE_DEFAULTS[role].budgets.timeoutMs,
-      },
     };
   }
 

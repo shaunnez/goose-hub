@@ -12,10 +12,8 @@ export interface SelectModelInput {
   /** Project-level model router config from agentConfig.modelRouter */
   modelRouterConfig?: { overrides?: Record<string, ModelTier> };
   /**
-   * DB-sourced complexity overrides for this role (from project_model_settings).
-   * Keys are "type:<T>", "priority:<P>", or "default". These win over
-   * modelRouterConfig.overrides when present.
-   * Use resolveComplexityOverridesForProject() to build this map.
+   * Optional compatibility-only complexity overrides for this role.
+   * Normal skill dispatch does not read project_model_settings.
    */
   dbComplexityOverrides?: Record<string, ModelTier>;
 }

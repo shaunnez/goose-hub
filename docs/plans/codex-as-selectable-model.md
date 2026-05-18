@@ -1,11 +1,15 @@
 # Plan: Codex as a selectable model in role/tier settings
 
+Superseded by ADR 0042 for normal dispatch. Codex provider selection now belongs
+to per-skill Skill runtime settings, while the old role model surface is
+advanced/internal compatibility state only.
+
 Branch: `claude/add-codex-model-settings-fFUe5`
 Status: draft (pre-issue). Promote to a milestone issue before implementation.
 
 ## Goal
 
-Make Codex (`gpt-5-codex`, `gpt-5-codex-mini`) a first-class selectable provider in **Settings → Models**, alongside Claude. Per-role, per-slot (primary / fallback / advisor). Today the UI only exposes tier (`haiku|sonnet|opus`) and tier→model resolution hardcodes Claude.
+Original goal: make Codex (`gpt-5-codex`, `gpt-5-codex-mini`) selectable in the old role/tier settings surface, alongside Claude. This is historical; normal dispatch now uses per-skill provider settings.
 
 ## Current state (confirmed by investigation)
 
@@ -56,7 +60,7 @@ Server side: a new endpoint `PATCH /projects/:slug/settings/models/bulk` accepti
 
 **Budgets tab** — `ProjectBudgetPanel.tsx` `NumericInput` (line 55): the global rows already show the config value as `placeholder` (line 159), but the per-skill rows just say `"default"` (lines 202, 209, 217). Resolve the actual `SKILL_BUDGETS[skill]` values server-side and include them in the GET response as a `skillDefaults: Record<string, {maxTurns, maxBudgetUsd, timeoutMs}>` field. Render as `<p className="text-[10px] text-fg-3">default: {val}</p>` below each input.
 
-**Models tab** — `ProjectModelPanel.tsx` `TierSelect` (line 43): below each select, add `<p className="text-[10px] text-fg-3">{resolvedModelId}</p>` showing the concrete model ID that will be used (e.g. `claude-sonnet-4-6` or `gpt-5-codex`). Derive from the effective tier + provider: if neither DB nor config override is set, fall back to skill default. This requires the GET response to include the resolved model ID per slot (add `resolvedPrimary`, `resolvedFallback`, `resolvedAdvisor` string fields alongside the existing tier fields).
+**Historical role tab** — `ProjectModelPanel.tsx` originally showed role-level resolved model IDs. ADR 0042 moved normal resolved primary/fallback/advisor display to Skill runtime settings.
 
 ### UX-4. Max turns + timeout configurable per-role — readability assessment
 
@@ -149,4 +153,4 @@ Each step lists the files to touch and an acceptance signal. Steps within a grou
 - [x] UX-1: "Reset all to defaults" clears all budget overrides in one action.
 - [x] UX-2: "All → Codex" and "All → Claude" bulk-set primary provider/tier for all non-holdout roles.
 - [x] UX-3: Resolved model IDs and skill budget defaults are visible beneath each input in small text.
-- [x] UX-4: Max turns + timeout editable per-role in the expanded row, below complexity rules. DB columns added (migration 0024), `resolveRoleBudgetOverrideForProject` wired in `invoke-skill.ts` with holdout gating, `roleDefaultBudgets` hints rendered below each input.
+- [x] UX-4: Historical role max-turn/timeout controls were removed from normal settings by ADR 0042. Runtime max turns and timeout are configured per skill.

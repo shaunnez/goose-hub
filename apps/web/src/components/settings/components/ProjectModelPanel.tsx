@@ -19,7 +19,7 @@ import type {
 } from '@/lib/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, Copy, Plus, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 interface Props {
   slug: string;
@@ -234,13 +234,7 @@ function RoleRow({
   const patchRole = useMutation({
     mutationFn: (patch: {
       primaryModel?: ModelTier | null;
-      fallbackModel?: ModelTier | null;
-      advisorModel?: ModelTier | null;
       primaryProvider?: ModelProvider | null;
-      fallbackProvider?: ModelProvider | null;
-      advisorProvider?: ModelProvider | null;
-      maxTurns?: number | null;
-      timeoutMs?: number | null;
     }) => patchRoleModelSetting(slug, role, patch),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['project-model-settings', slug] }),
   });
@@ -251,23 +245,8 @@ function RoleRow({
   });
 
   const db = data.dbRoleModel;
-  const hasDbOverride =
-    db != null && (db.primaryModel != null || db.maxTurns != null || db.timeoutMs != null);
+  const hasDbOverride = db != null && db.primaryModel != null;
   const hasComplexity = Object.keys(data.dbComplexityOverrides).length > 0;
-
-  // Local state for budget inputs — PATCH on blur, not on every keystroke.
-  // This avoids sending invalid intermediate values (e.g. "1", "12", "120"
-  // while the user is typing "120000") that would be rejected with 422.
-  const [localMaxTurns, setLocalMaxTurns] = useState(db?.maxTurns?.toString() ?? '');
-  const [localTimeoutMs, setLocalTimeoutMs] = useState(db?.timeoutMs?.toString() ?? '');
-
-  useEffect(() => {
-    setLocalMaxTurns(db?.maxTurns?.toString() ?? '');
-  }, [db?.maxTurns]);
-
-  useEffect(() => {
-    setLocalTimeoutMs(db?.timeoutMs?.toString() ?? '');
-  }, [db?.timeoutMs]);
 
   const configPrimary = (data.configRoleModel?.primary as ModelTier) ?? null;
   return (
@@ -334,61 +313,6 @@ function RoleRow({
                   overrides={data.dbComplexityOverrides}
                   onSave={() => setExpanded(true)}
                 />
-                <div className="mt-3 ml-4 border-l-2 border-line pl-4 space-y-2">
-                  <p className="text-[11px] text-fg-3">
-                    Per-role budget overrides. Leave blank to use the skill budget default.
-                  </p>
-                  <div className="flex items-center gap-4">
-                    <div className="flex flex-col gap-0.5">
-                      <label htmlFor={`${role}-max-turns`} className="text-[11px] text-fg-2">
-                        Max turns
-                      </label>
-                      <input
-                        id={`${role}-max-turns`}
-                        type="number"
-                        min={1}
-                        max={500}
-                        step={1}
-                        placeholder="default"
-                        value={localMaxTurns}
-                        onChange={(e) => setLocalMaxTurns(e.target.value)}
-                        onBlur={() =>
-                          patchRole.mutate({
-                            maxTurns: localMaxTurns === '' ? null : Number(localMaxTurns),
-                          })
-                        }
-                        className="w-20 rounded border border-line px-2 py-0.5 text-[12px] bg-bg text-fg"
-                      />
-                      <span className="text-[10px] text-fg-3">
-                        default: {data.roleDefaultBudgets.maxTurns}
-                      </span>
-                    </div>
-                    <div className="flex flex-col gap-0.5">
-                      <label htmlFor={`${role}-timeout-ms`} className="text-[11px] text-fg-2">
-                        Timeout (ms)
-                      </label>
-                      <input
-                        id={`${role}-timeout-ms`}
-                        type="number"
-                        min={5000}
-                        max={3_600_000}
-                        step={5000}
-                        placeholder="default"
-                        value={localTimeoutMs}
-                        onChange={(e) => setLocalTimeoutMs(e.target.value)}
-                        onBlur={() =>
-                          patchRole.mutate({
-                            timeoutMs: localTimeoutMs === '' ? null : Number(localTimeoutMs),
-                          })
-                        }
-                        className="w-28 rounded border border-line px-2 py-0.5 text-[12px] bg-bg text-fg"
-                      />
-                      <span className="text-[10px] text-fg-3">
-                        default: {data.roleDefaultBudgets.timeoutMs}
-                      </span>
-                    </div>
-                  </div>
-                </div>
               </>
             )}
           </td>
@@ -676,8 +600,8 @@ export function ProjectModelPanel({ slug }: Props) {
         </div>
         <p className="text-[11px] text-fg-3 mb-4">
           Compatibility controls for role-level persona and internal policy experiments. Normal
-          skill dispatch uses Skill runtime settings; role rows are not a fallback/advisor control
-          surface for ordinary runs.
+          skill dispatch ignores these rows and uses Skill runtime settings. Role rows do not set
+          per-skill fallback, advisor, max-turn, or timeout behavior.
         </p>
         <table className="w-full text-[12px]">
           <thead>

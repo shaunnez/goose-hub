@@ -303,11 +303,10 @@ export const projectSkillSettings = sqliteTable(
   }),
 );
 
-// Per-project per-role model overrides (M19.09). One row per (project_id, role).
-// primary_model / fallback_model / advisor_model win over project.config.ts rolesModels
-// and skill modelPin defaults. complexity_overrides_json stores a JSON object whose keys
-// are "type:<T>", "priority:<P>", or "default" and whose values are ModelTier strings;
-// these win over agentConfig.modelRouter.overrides for complexity-based tier selection.
+// Per-project per-role compatibility state (M19.09). One row per (project_id, role).
+// Normal skill dispatch ignores this table and resolves model/provider through
+// project_skill_settings. Keep these columns for advanced/internal policy state and
+// historical compatibility UI only.
 export const projectModelSettings = sqliteTable(
   'project_model_settings',
   {

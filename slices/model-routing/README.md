@@ -2,41 +2,43 @@
 
 M19.09 — provider-aware model routing with UI-configurable role and complexity overrides.
 
+Superseded for normal dispatch by ADR 0042. Role model rows now exist only as
+advanced/internal compatibility state; users configure model tier/provider per
+skill through Skill runtime settings.
+
 ## What this slice covers
 
-- `selectModelForRole()` — wires the previously-orphaned `rolesModels` in project config.
-- `selectModel()` extension — DB complexity overrides as highest-priority layer.
-- `ProjectModelPanel` — Settings → Models tab for live UI editing.
+- `ProjectModelPanel` — Settings → Advanced roles compatibility UI.
+- `project_model_settings` CRUD retained for historical/internal state.
 
 ## Resolution order
 
-### Static role assignment (`selectModelForRole`)
+### Normal skill runtime selection
 
-1. DB `project_model_settings.primary_model` (UI-editable)
-2. `agentConfig.rolesModels[role]` (project config)
-3. `skill.config.ts` `modelPin`
-4. `ROLE_DEFAULTS[role].modelTier`
+Normal dispatch uses `resolveSkillRuntimeForProject()` and ignores
+`project_model_settings`. Precedence is caller model override, forced runtime
+provider, DB per-skill tier/provider, config `skillBudgetOverrides`, then
+`SKILL_BUDGETS`.
 
-### Complexity-based tier selection (`selectModel`)
+### Compatibility role state
 
-1. DB `project_model_settings.complexity_overrides_json` (UI-editable)
-2. `agentConfig.modelRouter.overrides` (project config)
-3. Decision pattern history (`decision_patterns` with `consistencyScore > 0.7`)
-4. Static policy (priority → type → AC count)
+`project_model_settings.primary_model` and `complexity_overrides_json` remain
+available to the advanced role API/UI, but they are not normal skill runtime
+inputs.
 
 ## Holdout gating
 
-`qa` and `reviewer` overrides are silently dropped unless
-`agentConfig.allowHoldoutOverride: true` is set on the project config. The
-Settings UI renders holdout rows as read-only when the flag is absent.
+`qa` and `reviewer` are holdouts. Per-skill model overrides are ignored unless
+`agentConfig.allowHoldoutOverride: true` is set, and fallback/advisor models are
+not exposed for holdout skill runtime rows.
 
 ## Key files
 
 | File | Purpose |
 |---|---|
-| `core/agent-runtime/select-model-for-role.ts` | Pure resolver |
-| `core/agent-runtime/resolve-for-project.ts` | DB-reading wrappers |
-| `core/agent-runtime/model-router.ts` | Extended with `dbComplexityOverrides` |
+| `core/agent-runtime/skill-runtime-resolver.ts` | Normal per-skill runtime resolver |
+| `core/agent-runtime/resolve-for-project.ts` | Global and per-skill budget wrappers |
+| `core/agent-runtime/model-router.ts` | Legacy complexity selector |
 | `core/db/repositories/project-model-settings.ts` | CRUD |
 | `core/db/migrations/0010_project_model_settings.sql` | Schema |
 | `apps/server/src/domains/project-settings/model-router.ts` | API routes |
@@ -44,4 +46,5 @@ Settings UI renders holdout rows as read-only when the flag is absent.
 
 ## ADR
 
-`docs/adr/0034-provider-aware-model-routing.md`
+`docs/adr/0034-provider-aware-model-routing.md` and
+`docs/adr/0042-per-skill-runtime-settings.md`

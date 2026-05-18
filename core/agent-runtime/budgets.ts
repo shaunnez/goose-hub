@@ -252,7 +252,8 @@ export interface DbSkillOverride {
  *
  * perWorkflowMaxUsd cap: dbPerWorkflowMaxUsd wins over the config value.
  *
- * Throws if the skill is not registered and no override exists at any layer.
+ * Throws if the skill is not registered. Per-skill DB rows are overrides for
+ * known skills, not a fallback registration mechanism.
  */
 export function resolveBudgets(
   skill: string,
@@ -268,7 +269,7 @@ export function resolveBudgets(
   const base = SKILL_BUDGETS[skill];
   const configOverride = projectBudgets?.skillBudgetOverrides?.[skill];
 
-  if (base == null && configOverride == null && dbOverride == null) {
+  if (base == null && configOverride == null) {
     throw new Error(
       `resolveBudgets: no budget registered for skill '${skill}'. Add it to SKILL_BUDGETS in core/agent-runtime/budgets.ts or add a skillBudgetOverrides entry in the project config.`,
     );
