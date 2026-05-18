@@ -135,6 +135,27 @@ const SetActiveMilestoneInput = z.object({
   rationale: z.string().min(1),
 });
 
+const BootstrapProjectInput = z.object({
+  repoUrl: z
+    .string()
+    .min(1)
+    .describe(
+      'GitHub repo URL or owner/repo ref (e.g. https://github.com/octo/widgets, git@github.com:octo/widgets.git, octo/widgets).',
+    ),
+  slug: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Optional slug override; defaults to a sanitised repo name.'),
+  mode: z
+    .enum(['interactive', 'supervised', 'autonomous'])
+    .optional()
+    .describe(
+      "Requested initial mode for the project. Recorded in the result and surfaced to reviewers; the bootstrap workflow does not yet flip the rendered config's mode automatically.",
+    ),
+  rationale: z.string().min(1),
+});
+
 export const CHAT_TOOL_REGISTRY: ChatToolManifestEntry[] = [
   // ── Read-only ────────────────────────────────────────────────────────────
   {
@@ -264,6 +285,13 @@ export const CHAT_TOOL_REGISTRY: ChatToolManifestEntry[] = [
       "Flip the active milestone for a project. Pass null to clear the project_state override and fall back to the project config's milestone.",
     mutating: true,
     inputSchema: SetActiveMilestoneInput,
+  },
+  {
+    name: 'bootstrap_project',
+    description:
+      'Bootstrap a new target project by running the M12 onboarding workflow (detect stack, audit CLAUDE.md, install factory labels, open a registration PR against shaunnez/goose-hub). Opus-tier expensive; approval is critical.',
+    mutating: true,
+    inputSchema: BootstrapProjectInput,
   },
 ];
 

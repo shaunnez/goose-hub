@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock all upstream dependencies before importing tools.ts so the module-time
 // imports resolve cleanly.
@@ -26,6 +26,33 @@ vi.mock('#shared/source.js', () => ({
 
 vi.mock('#shared/inbox-bridge.js', () => ({
   addInboxNote: vi.fn(async (_input: { title: string }) => ({ id: 42 })),
+}));
+
+interface BootstrapBridgeResult {
+  ok: boolean;
+  slug?: string;
+  status?: 'created' | 'idempotent-skip';
+  registrationPrUrl?: string | null;
+  stackSummary?: string;
+  auditAction?: string;
+  labelCounts?: { created: number; updated: number; skipped: number };
+  error?: string;
+  errorStatus?: number;
+}
+const mockRunBootstrapViaBridge: ReturnType<typeof vi.fn> = vi.fn(
+  async (): Promise<BootstrapBridgeResult> => ({
+    ok: true,
+    slug: 'widgets',
+    status: 'created',
+    registrationPrUrl: 'https://github.com/shaunnez/goose-hub/pull/999',
+    stackSummary: 'Node + pnpm',
+    auditAction: 'ok',
+    labelCounts: { created: 10, updated: 0, skipped: 0 },
+  }),
+);
+vi.mock('#shared/bootstrap-bridge.js', () => ({
+  runBootstrapViaBridge: (repoRef: string, slug?: string) =>
+    mockRunBootstrapViaBridge(repoRef, slug),
 }));
 
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
@@ -517,5 +544,128 @@ describe('chat-tools — set_active_milestone', () => {
     )) as { ok: boolean; milestoneNumber: number | null; cleared: boolean };
     expect(result.milestoneNumber).toBeNull();
     expect(result.cleared).toBe(true);
+  });
+});
+
+describe('chat-tools — bootstrap_project', () => {
+  beforeEach(() => {
+    mockRunBootstrapViaBridge.mockReset();
+  });
+
+  it('runs the bootstrap workflow via the shared bridge and returns the registration PR url', async () => {
+    mockRunBootstrapViaBridge.mockResolvedValueOnce({
+      ok: true,
+      slug: 'widgets',
+      status: 'created',
+      registrationPrUrl: 'https://github.com/shaunnez/goose-hub/pull/999',
+      stackSummary: 'Node + pnpm',
+      auditAction: 'create',
+      labelCounts: { created: 10, updated: 0, skipped: 0 },
+    });
+    const result = (await CHAT_TOOL_IMPLEMENTATIONS.bootstrap_project(
+      {
+        repoUrl: 'https://github.com/octo/widgets',
+        slug: 'widgets',
+        mode: 'supervised',
+        rationale: 'onboard widgets',
+      },
+      ctx,
+    )) as {
+      ok: boolean;
+      slug: string;
+      registrationPrUrl: string | null;
+      path: string;
+      requestedMode: string | null;
+    };
+    expect(result.ok).toBe(true);
+    expect(result.slug).toBe('widgets');
+    expect(result.registrationPrUrl).toBe('https://github.com/shaunnez/goose-hub/pull/999');
+    expect(result.path).toBe('/projects/widgets');
+    expect(result.requestedMode).toBe('supervised');
+    expect(mockRunBootstrapViaBridge).toHaveBeenCalledWith('octo/widgets', 'widgets');
+  });
+
+  it('accepts an owner/repo shorthand and a git@ SSH URL', async () => {
+    mockRunBootstrapViaBridge.mockResolvedValue({
+      ok: true,
+      slug: 'a',
+      status: 'created',
+      registrationPrUrl: null,
+      stackSummary: 's',
+      auditAction: 'ok',
+    });
+    await CHAT_TOOL_IMPLEMENTATIONS.bootstrap_project(
+      { repoUrl: 'octo/alpha', rationale: 'a' },
+      ctx,
+    );
+    expect(mockRunBootstrapViaBridge).toHaveBeenLastCalledWith('octo/alpha', undefined);
+
+    await CHAT_TOOL_IMPLEMENTATIONS.bootstrap_project(
+      { repoUrl: 'git@github.com:octo/beta.git', rationale: 'b' },
+      ctx,
+    );
+    expect(mockRunBootstrapViaBridge).toHaveBeenLastCalledWith('octo/beta', undefined);
+  });
+
+  it('rejects an unparseable repoUrl with a 400 ToolExecutionError', async () => {
+    await expect(
+      CHAT_TOOL_IMPLEMENTATIONS.bootstrap_project({ repoUrl: 'not a url', rationale: 'x' }, ctx),
+    ).rejects.toMatchObject({ name: 'ToolExecutionError', status: 400 });
+    expect(mockRunBootstrapViaBridge).not.toHaveBeenCalled();
+  });
+
+  it('rejects a URL hosted somewhere other than github.com', async () => {
+    await expect(
+      CHAT_TOOL_IMPLEMENTATIONS.bootstrap_project(
+        { repoUrl: 'https://evil.example/github.com/octo/widgets', rationale: 'attack' },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ name: 'ToolExecutionError', status: 400 });
+    expect(mockRunBootstrapViaBridge).not.toHaveBeenCalled();
+  });
+
+  it('rejects api.github.com URLs even though they share the company suffix', async () => {
+    await expect(
+      CHAT_TOOL_IMPLEMENTATIONS.bootstrap_project(
+        { repoUrl: 'https://api.github.com/repos/octo/widgets', rationale: 'attack' },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ name: 'ToolExecutionError', status: 400 });
+    expect(mockRunBootstrapViaBridge).not.toHaveBeenCalled();
+  });
+
+  it('rejects HTTPS URLs that carry extra path segments', async () => {
+    await expect(
+      CHAT_TOOL_IMPLEMENTATIONS.bootstrap_project(
+        { repoUrl: 'https://github.com/octo/widgets/issues/42', rationale: 'wrong path' },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ name: 'ToolExecutionError', status: 400 });
+    expect(mockRunBootstrapViaBridge).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid slug before calling the workflow', async () => {
+    await expect(
+      CHAT_TOOL_IMPLEMENTATIONS.bootstrap_project(
+        {
+          repoUrl: 'octo/widgets',
+          slug: 'Bad Slug!',
+          rationale: 'bad',
+        },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ name: 'ToolExecutionError', status: 400 });
+    expect(mockRunBootstrapViaBridge).not.toHaveBeenCalled();
+  });
+
+  it('surfaces bridge errors with their original status code', async () => {
+    mockRunBootstrapViaBridge.mockResolvedValueOnce({
+      ok: false,
+      error: 'server is missing GITHUB_TOKEN',
+      errorStatus: 500,
+    });
+    await expect(
+      CHAT_TOOL_IMPLEMENTATIONS.bootstrap_project({ repoUrl: 'octo/widgets', rationale: 'x' }, ctx),
+    ).rejects.toMatchObject({ name: 'ToolExecutionError', status: 500 });
   });
 });
