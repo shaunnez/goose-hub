@@ -19,6 +19,9 @@ export const PlaywrightReproSpecSchema = z.object({
     .describe(
       'Workspace-relative Playwright spec path, usually apps/web/e2e/repro-issue-N.spec.ts',
     ),
+  specSource: z
+    .string()
+    .describe('Complete TypeScript source for the Playwright repro spec at specPath'),
   slug: z.string().describe('Filesystem-safe slug used for /tmp/repro-<slug>'),
   route: z.string().describe('Route the spec navigates to'),
   expectedAssertion: z.string().describe('Assertion proving the reported bug or its absence'),

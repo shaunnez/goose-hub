@@ -6,14 +6,17 @@ import { runPlaywrightReproPlan, shouldSkipBeforeEvidence } from './playwright-r
 const slug = 'unit-playwright';
 const tmpReproDir = `/tmp/repro-${slug}`;
 const tmpEvidenceWorktree = '/tmp/evidence-issue-42';
+const tmpWorkspaceDir = '/tmp/repro-unit-workspace';
 
 afterEach(() => {
   fs.rmSync(tmpReproDir, { recursive: true, force: true });
   fs.rmSync(tmpEvidenceWorktree, { recursive: true, force: true });
+  fs.rmSync(tmpWorkspaceDir, { recursive: true, force: true });
 });
 
 describe('playwright repro evidence workflow helper', () => {
   it('publishes deterministic evidence after collector output', () => {
+    fs.mkdirSync(tmpWorkspaceDir, { recursive: true });
     fs.mkdirSync(tmpReproDir, { recursive: true });
     const screenshot = path.join(tmpReproDir, 'step-1.png');
     const gif = path.join(tmpReproDir, 'walkthrough.gif');
@@ -48,11 +51,13 @@ describe('playwright repro evidence workflow helper', () => {
     }));
 
     const output = runPlaywrightReproPlan({
-      workspaceDir: '/repo',
+      workspaceDir: tmpWorkspaceDir,
       issueNumber: 42,
       repo: 'shaunnez/goose-hub',
       plan: {
         specPath: 'apps/web/e2e/repro-unit-playwright.spec.ts',
+        specSource:
+          "import { expect, test } from '@playwright/test';\n\ntest('repro', async ({ page }) => {\n  await page.goto('/login', { waitUntil: 'domcontentloaded' });\n  await expect.soft(page.getByText('Error'), 'REPRO_EXPECTED_BUG: error visible').toBeVisible();\n});\n",
         slug,
         route: '/login',
         expectedAssertion: 'Error banner remains visible',
@@ -65,8 +70,14 @@ describe('playwright repro evidence workflow helper', () => {
     expect(spawnSync).toHaveBeenCalledWith(
       'pnpm',
       expect.arrayContaining(['playwright', 'test', 'e2e/repro-unit-playwright.spec.ts']),
-      expect.objectContaining({ cwd: '/repo' }),
+      expect.objectContaining({ cwd: tmpWorkspaceDir }),
     );
+    expect(
+      fs.readFileSync(
+        path.join(tmpWorkspaceDir, 'apps/web/e2e/repro-unit-playwright.spec.ts'),
+        'utf8',
+      ),
+    ).toContain('REPRO_EXPECTED_BUG');
     expect(commands).toContain('git -C /tmp/evidence-issue-42 push origin evidence/issue-42');
     expect(commands.some((command) => command.startsWith('gh issue comment 42'))).toBe(true);
     expect(output.screenshots[0]?.githubUrl).toBe(
@@ -75,6 +86,30 @@ describe('playwright repro evidence workflow helper', () => {
     expect(output.commentUrl).toBe(
       'https://github.com/shaunnez/goose-hub/issues/42#issuecomment-1',
     );
+  });
+
+  it('rejects unsafe spec paths before spawning Playwright', () => {
+    fs.mkdirSync(tmpWorkspaceDir, { recursive: true });
+    const spawnSync = vi.fn(() => ({ status: 1 }));
+
+    expect(() =>
+      runPlaywrightReproPlan({
+        workspaceDir: tmpWorkspaceDir,
+        issueNumber: 42,
+        repo: 'shaunnez/goose-hub',
+        plan: {
+          specPath: '../outside.spec.ts',
+          specSource: "import { test } from '@playwright/test';\n\ntest('bad', async () => {});\n",
+          slug,
+          route: '/login',
+          expectedAssertion: 'Error banner remains visible',
+          reproSteps: ['Navigate to /login'],
+          evidenceIntent: 'Capture the BEFORE login error.',
+        },
+        publisher: { spawnSync: spawnSync as never },
+      }),
+    ).toThrow('Invalid playwright repro specPath');
+    expect(spawnSync).not.toHaveBeenCalled();
   });
 
   it('skips only high-confidence static packets with known route and selectors', () => {

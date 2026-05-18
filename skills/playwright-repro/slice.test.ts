@@ -12,6 +12,8 @@ describe('playwright-repro schema', () => {
   it('accepts valid spec-plan output', () => {
     const result = PlaywrightReproSpecSchema.safeParse({
       specPath: 'apps/web/e2e/repro-login-error.spec.ts',
+      specSource:
+        "import { expect, test } from '@playwright/test';\n\ntest('repro', async ({ page }) => {\n  await page.goto('/login', { waitUntil: 'domcontentloaded' });\n  await expect.soft(page.getByText('Error'), 'REPRO_EXPECTED_BUG: error visible').toBeVisible();\n});\n",
       slug: 'login-error',
       route: '/login',
       expectedAssertion: 'Login error remains visible after submit',
@@ -342,11 +344,12 @@ describe('playwright-repro skill config', () => {
 describe('playwright-repro prompt discipline', () => {
   it('leaves collector execution to the workflow', () => {
     expect(PROMPT).toContain('scripts/collect-playwright-evidence.ts');
-    expect(PROMPT).toContain('workflow can run Playwright');
+    expect(PROMPT).toContain('workflow can write the spec, run Playwright');
   });
 
   it('keeps the agent bounded to spec authoring', () => {
-    expect(PROMPT).toContain('Your job stops at the spec plan');
+    expect(PROMPT).toContain('Your job stops at returning the spec plan');
+    expect(PROMPT).toContain('specSource');
     expect(PROMPT).toContain('run it at most once');
     expect(PROMPT).toContain('REPRO_EXPECTED_BUG');
   });

@@ -37,6 +37,22 @@ function webSpecPath(specPath: string): string {
   return specPath.startsWith('apps/web/') ? specPath.slice('apps/web/'.length) : specPath;
 }
 
+function materializeSpec(workspaceDir: string, plan: PlaywrightReproSpecOutput): void {
+  const webRelativePath = webSpecPath(plan.specPath);
+  const normalizedWebPath = path.normalize(webRelativePath);
+  if (
+    path.isAbsolute(plan.specPath) ||
+    normalizedWebPath.startsWith('..') ||
+    !normalizedWebPath.startsWith(`e2e${path.sep}`)
+  ) {
+    throw new Error(`Invalid playwright repro specPath: ${plan.specPath}`);
+  }
+
+  const specPath = path.join(workspaceDir, 'apps', 'web', normalizedWebPath);
+  fs.mkdirSync(path.dirname(specPath), { recursive: true });
+  fs.writeFileSync(specPath, plan.specSource);
+}
+
 function evidencePath(issueNumber: number, filePath: string): string {
   return `evidence/issue-${issueNumber}/${path.basename(filePath)}`;
 }
@@ -186,6 +202,7 @@ export function runPlaywrightReproPlan(input: RunPlaywrightReproPlanInput): Play
   const resultsPath = path.join(evidenceDir, 'pw-results.json');
   const stderrPath = path.join(evidenceDir, 'pw-stderr.txt');
   fs.mkdirSync(evidenceDir, { recursive: true });
+  materializeSpec(input.workspaceDir, input.plan);
 
   const stdout = fs.openSync(resultsPath, 'w');
   const stderr = fs.openSync(stderrPath, 'w');
