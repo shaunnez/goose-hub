@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { findFreePort } from '@goose-hub/core/agent-runtime/find-free-port.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
@@ -245,6 +247,11 @@ export async function runQaWorkflow(
     const lintCommand = projectConfig?.stack?.lintCommand ?? 'pnpm biome check .';
     const typecheckCommand = projectConfig?.stack?.typecheckCommand;
     const configuredE2eCommand = projectConfig?.stack?.e2eCommand;
+    const testCapture = resolveVitestJsonCapture({
+      workspaceDir,
+      runtime: projectConfig?.stack?.runtime,
+      testCommand,
+    });
     const { verificationSummary, testRun, e2eDecision } = await buildVerificationSummary({
       workspaceDir,
       prHints,
@@ -258,6 +265,8 @@ export async function runQaWorkflow(
       },
       priorEvents,
       devTestsRun,
+      testCapture,
+      commandTimeoutMs: resolvedBudget.budgets.timeoutMs,
       runTests,
       ...(runCommand != null ? { runCommand } : {}),
     });
@@ -505,4 +514,56 @@ export async function runQaWorkflow(
       runId,
     });
   }
+}
+
+function resolveVitestJsonCapture(input: {
+  workspaceDir?: string;
+  runtime?: string;
+  testCommand: string;
+}): { enabled: boolean; reason?: string } {
+  if (input.workspaceDir == null) return { enabled: true };
+  if (input.runtime != null && input.runtime !== 'node') {
+    return {
+      enabled: false,
+      reason: `structured test capture requires a Vitest-compatible Node command; ${input.runtime} test command should be run by QA directly`,
+    };
+  }
+  if (
+    input.runtime === 'node' &&
+    !isVitestCompatibleCommand(input.workspaceDir, input.testCommand)
+  ) {
+    return {
+      enabled: false,
+      reason: 'structured test capture requires a Vitest-compatible test command',
+    };
+  }
+  return { enabled: true };
+}
+
+function isVitestCompatibleCommand(workspaceDir: string, command: string): boolean {
+  if (/\bvitest\b/.test(command) || /--reporter(?:=|\s+)json\b/.test(command)) return true;
+  const scriptName = packageScriptNameFromCommand(command);
+  if (scriptName == null) return false;
+
+  const packageJsonPath = join(workspaceDir, 'package.json');
+  if (!existsSync(packageJsonPath)) return false;
+  try {
+    const parsed = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
+      scripts?: Record<string, unknown>;
+    };
+    const script = parsed.scripts?.[scriptName];
+    return typeof script === 'string' && /\bvitest\b/.test(script);
+  } catch {
+    return false;
+  }
+}
+
+function packageScriptNameFromCommand(command: string): string | null {
+  const parts = command.trim().split(/\s+/);
+  const [tool, maybeRun, maybeScript] = parts;
+  if (tool === 'pnpm' || tool === 'npm' || tool === 'yarn') {
+    return maybeRun === 'run' ? (maybeScript ?? null) : (maybeRun ?? null);
+  }
+  if (tool === 'bun' && maybeRun === 'run') return maybeScript ?? null;
+  return null;
 }

@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { killProcessGroupOrChild } from '@goose-hub/core/agent-runtime/process-kill.js';
 import type { QaE2eMode } from '@goose-hub/core/db/repositories/project-settings.js';
 import type { AgentEvent } from '@goose-hub/core/event-stream/store.js';
 import type {
@@ -13,7 +14,15 @@ import {
   getPrDiffStat,
 } from './qa-helpers.js';
 
-export type RunQaCommand = (cwd: string, command: string) => Promise<VerificationCommandSummary>;
+export interface RunQaCommandOptions {
+  timeoutMs?: number;
+}
+
+export type RunQaCommand = (
+  cwd: string,
+  command: string,
+  options?: RunQaCommandOptions,
+) => Promise<VerificationCommandSummary>;
 
 export interface VerificationSummaryInput {
   workspaceDir?: string;
@@ -28,6 +37,8 @@ export interface VerificationSummaryInput {
   };
   priorEvents: AgentEvent[];
   devTestsRun?: { command: string; paths: string[] };
+  testCapture?: { enabled: boolean; reason?: string };
+  commandTimeoutMs?: number;
   runTests: (cwd: string, command: string) => Promise<TestRun | null>;
   runCommand?: RunQaCommand;
 }
@@ -38,17 +49,19 @@ export interface VerificationSummaryResult {
   e2eDecision: { mode: QaE2eMode; command?: string; reason: string };
 }
 
-const COMMAND_TIMEOUT_MS = 120_000;
+const DEFAULT_COMMAND_TIMEOUT_MS = 600_000;
 
 export async function defaultRunCommand(
   cwd: string,
   command: string,
+  options: RunQaCommandOptions = {},
 ): Promise<VerificationCommandSummary> {
   const trimmed = command.trim();
   if (trimmed.length === 0) {
     return { command, status: 'skipped', error: 'empty command' };
   }
 
+  const timeoutMs = options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
   const started = Date.now();
   return await new Promise((resolve) => {
     let settled = false;
@@ -60,17 +73,18 @@ export async function defaultRunCommand(
       resolve({ ...summary, durationMs: Date.now() - started });
     };
     const timeout = setTimeout(() => {
-      child?.kill('SIGTERM');
+      if (child != null) killProcessGroupOrChild(child);
       finish({
         command,
         status: 'failed',
-        error: `command timed out after ${COMMAND_TIMEOUT_MS}ms`,
+        error: `command timed out after ${timeoutMs}ms`,
       });
-    }, COMMAND_TIMEOUT_MS);
+    }, timeoutMs);
 
     try {
       child = spawn('sh', ['-c', trimmed], {
         cwd,
+        detached: process.platform !== 'win32',
         env: { ...process.env, CI: 'true' },
         stdio: ['ignore', 'ignore', 'ignore'],
       });
@@ -105,19 +119,43 @@ export async function buildVerificationSummary(
     changedFilePaths,
   });
 
-  const lint = await runOptionalCommand(input.workspaceDir, input.commands.lintCommand, runCommand);
+  const lint = await runOptionalCommand(
+    input.workspaceDir,
+    input.commands.lintCommand,
+    runCommand,
+    input.commandTimeoutMs,
+  );
   const typecheck = await runOptionalCommand(
     input.workspaceDir,
     input.commands.typecheckCommand,
     runCommand,
+    input.commandTimeoutMs,
   );
 
-  const testRun =
-    input.workspaceDir != null
-      ? await input.runTests(input.workspaceDir, input.commands.testCommand)
-      : null;
+  let testRun: TestRun | null = null;
+  let testCaptureError: string | undefined;
+  if (input.workspaceDir != null && input.testCapture?.enabled !== false) {
+    try {
+      testRun = await input.runTests(input.workspaceDir, input.commands.testCommand);
+    } catch (err) {
+      testCaptureError = sanitizeOperationalMessage(err instanceof Error ? err.message : err);
+    }
+  }
   const testStatus: VerificationCommandSummary['status'] =
-    input.workspaceDir == null ? 'skipped' : testRun?.success === true ? 'passed' : 'failed';
+    input.workspaceDir == null || input.testCapture?.enabled === false || testRun == null
+      ? 'skipped'
+      : testRun.success
+        ? 'passed'
+        : 'failed';
+  const testError =
+    input.workspaceDir == null
+      ? 'no worktree available'
+      : input.testCapture?.enabled === false
+        ? input.testCapture.reason
+        : testRun == null
+          ? (testCaptureError ?? 'test command did not produce structured output')
+          : undefined;
+  const compactedTestRun = compactTestRun(input.commands.testCommand, testStatus, testRun);
 
   const verificationSummary: VerificationSummary = {
     changedFiles: {
@@ -138,12 +176,13 @@ export async function buildVerificationSummary(
         command: input.commands.testCommand,
         status: testStatus,
         ...(testRun != null ? { durationMs: testRun.wallTimeMs } : {}),
+        ...(testError != null ? { error: testError } : {}),
       },
       ...(e2eDecision.command != null
         ? { e2e: { command: e2eDecision.command, status: 'skipped' as const } }
         : {}),
     },
-    testRun: compactTestRun(input.commands.testCommand, testStatus, testRun),
+    ...(compactedTestRun != null ? { testRun: compactedTestRun } : {}),
     e2e: {
       mode: e2eDecision.mode,
       ...(e2eDecision.command != null ? { command: e2eDecision.command } : {}),
@@ -198,12 +237,13 @@ function runOptionalCommand(
   workspaceDir: string | undefined,
   command: string | undefined,
   runCommand: RunQaCommand,
+  timeoutMs?: number,
 ): Promise<VerificationCommandSummary | null> {
   if (command == null || command.trim().length === 0) return Promise.resolve(null);
   if (workspaceDir == null) {
     return Promise.resolve({ command, status: 'skipped', error: 'no worktree available' });
   }
-  return runCommand(workspaceDir, command);
+  return runCommand(workspaceDir, command, timeoutMs != null ? { timeoutMs } : undefined);
 }
 
 function compactTestRun(
@@ -212,15 +252,7 @@ function compactTestRun(
   testRun: TestRun | null,
 ): VerificationSummary['testRun'] {
   if (testRun == null) {
-    return {
-      command,
-      status,
-      total: 0,
-      passed: 0,
-      failed: 0,
-      skipped: 0,
-      failingSuites: [],
-    };
+    return undefined;
   }
 
   return {
