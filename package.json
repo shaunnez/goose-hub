@@ -27,6 +27,7 @@
     "db:migrate": "drizzle-kit migrate --config=drizzle.config.ts",
     "cleanup-worktrees": "bash scripts/cleanup-worktrees.sh",
     "backfill:persona-names": "tsx scripts/backfill-persona-names.ts",
+    "dogfood": "tsx slices/dogfood/cli.ts",
     "e2e:visual": "cd apps/web && npx playwright test --config playwright-e2e-pipeline.config.ts --ui",
     "e2e:headed": "cd apps/web && npx playwright test --config playwright-e2e-pipeline.config.ts --headed",
     "e2e:debug": "cd apps/web && npx playwright test --config playwright-e2e-pipeline.config.ts --debug"
