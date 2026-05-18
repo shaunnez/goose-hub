@@ -40,7 +40,7 @@ function withResult(over: Partial<SearchResultDto> = {}): SearchResultDto {
 }
 
 describe('SearchResults', () => {
-  it('renders the idle hint when the query is empty', () => {
+  it('renders the idle hint when the query is empty and there are no recents', () => {
     render(
       <Providers>
         <SearchResults query="" onSelect={() => {}} />
@@ -48,6 +48,59 @@ describe('SearchResults', () => {
     );
     expect(screen.getByTestId('search-body').textContent).toContain('Start typing');
     expect(mockFetchSearch).not.toHaveBeenCalled();
+  });
+
+  it('renders the recents list when query is empty and recents are provided', () => {
+    const onPick = vi.fn();
+    render(
+      <Providers>
+        <SearchResults
+          query=""
+          recents={['cache layer', 'tier-2 results']}
+          onPickRecent={onPick}
+          onSelect={() => {}}
+        />
+      </Providers>,
+    );
+    const rows = screen.getAllByTestId('search-recent-row');
+    expect(rows).toHaveLength(2);
+    fireEvent.click(rows[0]);
+    expect(onPick).toHaveBeenCalledWith('cache layer');
+  });
+
+  it('renders a Show more button when hasMore and bumps the page size on click', async () => {
+    mockFetchSearch.mockImplementation((_q: string, opts: { limit?: number }) =>
+      Promise.resolve(
+        withResult({
+          items: Array.from({ length: opts?.limit ?? 0 }, (_, i) => ({
+            projectSlug: 'p',
+            externalId: String(i + 1),
+            title: `cache hit ${i + 1}`,
+            state: 'factory:triaging',
+            type: 'feature',
+            priority: 'medium',
+            milestoneTitle: null,
+            repoRef: 'r',
+            confidence: 100 - i,
+          })),
+          total: 80,
+          hasMore: (opts?.limit ?? 0) < 80,
+        }),
+      ),
+    );
+    render(
+      <Providers>
+        <SearchResults query="cache" onSelect={() => {}} />
+      </Providers>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('search-show-more')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId('search-show-more'));
+    await waitFor(() => {
+      const rows = screen.getAllByTestId('search-result-row');
+      expect(rows.length).toBe(50);
+    });
   });
 
   it('renders skeleton rows while loading', () => {

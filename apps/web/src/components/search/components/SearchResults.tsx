@@ -1,32 +1,39 @@
 import { type SearchClientFilters, fetchSearch } from '@/lib/api';
 import type { SearchHitDto, SearchResultDto } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 
 interface SearchResultsProps {
   query: string;
   filters?: SearchClientFilters;
   onSelect: (hit: SearchHitDto) => void;
+  recents?: string[];
+  onPickRecent?: (q: string) => void;
 }
 
-export function SearchResults({ query, filters, onSelect }: SearchResultsProps) {
+const PAGE_SIZES = [20, 50, 100] as const;
+
+export function SearchResults({
+  query,
+  filters,
+  onSelect,
+  recents,
+  onPickRecent,
+}: SearchResultsProps) {
   const trimmed = query.trim();
   const enabled = trimmed.length > 0;
+  const [limitIdx, setLimitIdx] = useState(0);
+  const limit = PAGE_SIZES[limitIdx];
 
   const { data, isLoading, isError, refetch } = useQuery<SearchResultDto>({
-    queryKey: ['search', trimmed, filters ?? {}],
-    queryFn: ({ signal }) => fetchSearch(trimmed, { ...filters, signal }),
+    queryKey: ['search', trimmed, filters ?? {}, limit],
+    queryFn: ({ signal }) => fetchSearch(trimmed, { ...filters, limit, signal }),
     enabled,
     staleTime: 30_000,
   });
 
   if (!enabled) {
-    return (
-      <div data-testid="search-body" className="px-4 py-10 min-h-[200px]">
-        <p className="text-[12.5px] text-fg-3 text-center">
-          Start typing to search work items across all projects.
-        </p>
-      </div>
-    );
+    return <IdleBody recents={recents ?? []} onPickRecent={onPickRecent ?? (() => {})} />;
   }
 
   if (isLoading) {
@@ -78,6 +85,8 @@ export function SearchResults({ query, filters, onSelect }: SearchResultsProps) 
     );
   }
 
+  const hasMore = (data?.hasMore ?? false) && limitIdx < PAGE_SIZES.length - 1;
+
   return (
     <div data-testid="search-body" className="min-h-[200px] max-h-[55vh] overflow-y-auto">
       <div className="px-4 pt-3 pb-1.5 text-[10.5px] uppercase tracking-wider text-fg-3">
@@ -103,6 +112,58 @@ export function SearchResults({ query, filters, onSelect }: SearchResultsProps) 
                 </span>
               </span>
               <ConfidencePill value={hit.confidence} />
+            </button>
+          </li>
+        ))}
+      </ul>
+      {hasMore ? (
+        <div className="px-4 py-2 border-t border-line/60">
+          <button
+            type="button"
+            data-testid="search-show-more"
+            onClick={() => setLimitIdx((i) => Math.min(i + 1, PAGE_SIZES.length - 1))}
+            className="w-full h-7 rounded-md text-[12px] text-fg-2 border border-line bg-bg hover:bg-bg-elev cursor-pointer"
+          >
+            Show {PAGE_SIZES[limitIdx + 1] - items.length} more
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function IdleBody({
+  recents,
+  onPickRecent,
+}: {
+  recents: string[];
+  onPickRecent: (q: string) => void;
+}) {
+  if (recents.length === 0) {
+    return (
+      <div data-testid="search-body" className="px-4 py-10 min-h-[200px]">
+        <p className="text-[12.5px] text-fg-3 text-center">
+          Start typing to search work items across all projects.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div data-testid="search-body" className="min-h-[200px]">
+      <div className="px-4 pt-3 pb-1.5 text-[10.5px] uppercase tracking-wider text-fg-3">
+        Recent
+      </div>
+      <ul data-testid="search-recents" className="flex flex-col">
+        {recents.map((q) => (
+          <li key={q}>
+            <button
+              type="button"
+              data-testid="search-recent-row"
+              onClick={() => onPickRecent(q)}
+              className="w-full flex items-center gap-2 px-4 py-1.5 text-left hover:bg-bg-hover focus:bg-bg-hover focus:outline-none cursor-pointer text-[12.5px] text-fg-2"
+            >
+              <span className="text-fg-3">↻</span>
+              <span className="truncate">{q}</span>
             </button>
           </li>
         ))}

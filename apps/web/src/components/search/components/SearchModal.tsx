@@ -3,6 +3,7 @@ import type { SearchHitDto } from '@/lib/types';
 import { Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { loadRecentSearches, pushRecentSearch } from '../lib/recentSearches';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { SearchResults } from './SearchResults';
 
@@ -36,11 +37,18 @@ const DEFAULT_FILTERS: FilterState = {
 export function SearchModal({ open, onClose }: SearchModalProps) {
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  const [recents, setRecents] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
   const params = useParams<{ slug?: string }>();
   const currentSlug = params.slug;
   const debounced = useDebouncedValue(query, DEBOUNCE_MS);
+
+  // Refresh recents whenever the modal opens — covers the case where the
+  // user picked a result, the modal closed, and is then reopened.
+  useEffect(() => {
+    if (open) setRecents(loadRecentSearches());
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -77,8 +85,14 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
   }, [filters, currentSlug]);
 
   function handleSelect(hit: SearchHitDto) {
+    pushRecentSearch(query);
     navigate(`/projects/${hit.projectSlug}/items/${hit.externalId}`);
     onClose();
+  }
+
+  function handlePickRecent(q: string) {
+    setQuery(q);
+    inputRef.current?.focus();
   }
 
   if (!open) return null;
@@ -179,7 +193,13 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
           </button>
         </div>
 
-        <SearchResults query={debounced} filters={clientFilters} onSelect={handleSelect} />
+        <SearchResults
+          query={debounced}
+          filters={clientFilters}
+          recents={recents}
+          onPickRecent={handlePickRecent}
+          onSelect={handleSelect}
+        />
 
         <div className="flex items-center justify-between px-4 h-9 border-t border-line bg-bg/40 text-[11px] text-fg-3">
           <span>
