@@ -143,7 +143,19 @@ export type EventKind =
   // Symbol index utility telemetry — lets us measure whether hints save work.
   | 'symbol-index.lookup'
   | 'symbol-index.hints-used'
-  | 'audit.autonomy-gate-fired';
+  | 'audit.autonomy-gate-fired'
+  // M20 — Hub Chat: assistant-style chat in the web UI. Events carry
+  // `payload.conversationId` so SSE consumers can filter client-side.
+  | 'chat.user-message'
+  | 'chat.agent-message'
+  | 'chat.agent-thinking'
+  | 'chat.tool-proposed'
+  | 'chat.tool-approved'
+  | 'chat.tool-rejected'
+  | 'chat.tool-running'
+  | 'chat.tool-completed'
+  | 'chat.tool-failed'
+  | 'chat.run-failed';
 
 export interface AgentEvent {
   id: number;

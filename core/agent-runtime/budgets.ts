@@ -225,6 +225,14 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
   },
   // Test / eval harness skill — not used in production workflows.
   'echo-test': { maxTurns: 5, maxBudgetUsd: 0.1, timeoutMs: 30_000, modelTier: 'sonnet' },
+  // M20 — Hub Chat. One round per call; cheap and snappy. Sonnet is the
+  // baseline so chat replies feel coherent without the latency tax of opus.
+  'hub-chat': {
+    maxTurns: 12,
+    maxBudgetUsd: 0.4,
+    timeoutMs: 90_000,
+    modelTier: 'sonnet',
+  },
 };
 
 export interface ResolvedBudget {
