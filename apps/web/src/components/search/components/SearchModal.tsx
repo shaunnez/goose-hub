@@ -42,7 +42,9 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
     <div
       data-testid="search-modal"
       className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xl flex items-start justify-center pt-[12vh] px-4"
-      onClick={onClose}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
       onKeyDown={(e) => {
         if (e.key === 'Escape') onClose();
       }}
@@ -50,8 +52,6 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
     >
       <div
         className="w-full max-w-2xl bg-bg-elev border border-line rounded-lg shadow-lg overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
         aria-label="Search"
       >
         <div className="flex items-center gap-2 px-4 h-12 border-b border-line">

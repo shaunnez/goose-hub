@@ -26,11 +26,19 @@ describe('SearchModal', () => {
     expect(document.activeElement).toBe(screen.getByTestId('search-input'));
   });
 
-  it('calls onClose when Escape is pressed', () => {
+  it('calls onClose when Escape is pressed at the document level', () => {
     const onClose = vi.fn();
     render(<SearchModal open={true} onClose={onClose} />);
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls onClose when Escape is pressed inside the focused input', () => {
+    const onClose = vi.fn();
+    render(<SearchModal open={true} onClose={onClose} />);
+    const input = screen.getByTestId('search-input');
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalled();
   });
 
   it('calls onClose when the backdrop is clicked', () => {
