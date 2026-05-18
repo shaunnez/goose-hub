@@ -1,23 +1,30 @@
+import type { SearchHitDto } from '@/lib/types';
 import { Search, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useDebouncedValue } from '../lib/useDebouncedValue';
+import { SearchResults } from './SearchResults';
 
 interface SearchModalProps {
   open: boolean;
   onClose: () => void;
 }
 
-// PR-1 scope: skeleton only. Filter chips render but do not yet filter;
-// results are wired in a follow-up PR. Live search lands with #834 PR-3.
+// Filter chips remain disabled stubs until PR-4 of #834.
 const FILTER_CHIPS: ReadonlyArray<{ key: string; label: string }> = [
-  { key: 'scope', label: 'This project' },
-  { key: 'milestone', label: 'Active milestone' },
+  { key: 'scope', label: 'All projects' },
+  { key: 'milestone', label: 'All milestones' },
   { key: 'type', label: 'Any type' },
   { key: 'includeClosed', label: 'Open only' },
 ];
 
+const DEBOUNCE_MS = 200;
+
 export function SearchModal({ open, onClose }: SearchModalProps) {
   const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const navigate = useNavigate();
+  const debounced = useDebouncedValue(query, DEBOUNCE_MS);
 
   useEffect(() => {
     if (!open) return;
@@ -35,6 +42,17 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [open, onClose]);
+
+  // Reset the query each time the modal opens so prior input doesn't bleed
+  // into a fresh session.
+  useEffect(() => {
+    if (!open) setQuery('');
+  }, [open]);
+
+  function handleSelect(hit: SearchHitDto) {
+    navigate(`/projects/${hit.projectSlug}/items/${hit.externalId}`);
+    onClose();
+  }
 
   if (!open) return null;
 
@@ -93,11 +111,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
           ))}
         </div>
 
-        <div data-testid="search-body" className="px-4 py-10 min-h-[200px]">
-          <p className="text-[12.5px] text-fg-3 text-center">
-            Start typing to search work items across all projects.
-          </p>
-        </div>
+        <SearchResults query={debounced} onSelect={handleSelect} />
 
         <div className="flex items-center justify-between px-4 h-9 border-t border-line bg-bg/40 text-[11px] text-fg-3">
           <span>

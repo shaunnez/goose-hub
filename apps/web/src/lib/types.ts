@@ -586,3 +586,21 @@ export interface ReviewSettingsDto {
   updatedAt: string | null;
   updatedBy: string | null;
 }
+
+export interface SearchHitDto {
+  projectSlug: string;
+  externalId: string;
+  title: string;
+  state: string;
+  type: string;
+  priority: string;
+  milestoneTitle: string | null;
+  repoRef: string;
+  confidence: number;
+}
+
+export interface SearchResultDto {
+  items: SearchHitDto[];
+  total: number;
+  hasMore: boolean;
+}

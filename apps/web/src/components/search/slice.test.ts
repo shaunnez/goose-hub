@@ -2,9 +2,11 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// The search slice contract for PR-1: modal exists, TopBar wires it,
-// and the disabled placeholder is gone. Behavioural coverage lives in
-// SearchModal.test.tsx. Backend wiring lands in PR-2 (#834).
+// The search slice contract: modal exists, TopBar wires it, the disabled
+// placeholder is gone, and the modal consumes /api/search via React Query.
+// Behavioural coverage lives in SearchModal.test.tsx and
+// SearchResults.test.tsx; backend coverage lives in
+// apps/server/src/domains/search/*.test.ts.
 
 describe('search slice — public surface', () => {
   it('SearchModal is exported from components/SearchModal.tsx', () => {
@@ -34,5 +36,18 @@ describe('search slice — TopBar integration', () => {
   it('TopBar binds the ⌘K / Ctrl+K keyboard shortcut', () => {
     expect(topBarSource).toContain('metaKey');
     expect(topBarSource).toContain('ctrlKey');
+  });
+});
+
+describe('search slice — client wiring', () => {
+  it('fetchSearch is exported from lib/api', () => {
+    const source = readFileSync(join(import.meta.dirname, '../../lib/api/search.ts'), 'utf-8');
+    expect(source).toContain('export async function fetchSearch');
+  });
+
+  it('SearchResults uses React Query with a 30s staleTime', () => {
+    const source = readFileSync(join(import.meta.dirname, 'components/SearchResults.tsx'), 'utf-8');
+    expect(source).toContain('useQuery');
+    expect(source).toContain('30_000');
   });
 });
