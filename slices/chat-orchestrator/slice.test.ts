@@ -156,4 +156,27 @@ describe('chat-orchestrator slice', () => {
       'skill-invoked',
     ]);
   });
+
+  it('emits chat.run-failed when the skill throws so the thinking indicator clears', async () => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    vi.mocked(invokeSkill).mockRejectedValueOnce(new Error('subprocess died'));
+    await runChatOrchestratorTurn({
+      conversation: stubConversation,
+      history: [],
+      runId: 'chat_test_run_failed_event',
+    });
+    const failedCalls = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.map((c) => c[0])
+      .filter((e) => e.kind === 'chat.run-failed');
+    expect(failedCalls).toHaveLength(1);
+    const payload = failedCalls[0].payload as {
+      conversationId?: string;
+      runId?: string;
+      error?: string;
+    };
+    expect(payload.conversationId).toBe('conv_test');
+    expect(payload.runId).toBe('chat_test_run_failed_event');
+    expect(payload.error).toMatch(/subprocess died/);
+  });
 });

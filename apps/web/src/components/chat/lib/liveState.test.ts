@@ -118,4 +118,46 @@ describe('mergeToolStatusFromEvents', () => {
     ]);
     expect(merged[0].status).toBe('completed');
   });
+
+  it('does not flip completed to failed when a stale chat.tool-failed arrives', () => {
+    const base = [invocation('tool_a', 'completed')];
+    const merged = mergeToolStatusFromEvents(base, [
+      event(1, 'chat.tool-failed', { invocationId: 'tool_a', error: 'stale' }),
+    ]);
+    expect(merged[0].status).toBe('completed');
+    expect(merged[0].errorMessage).toBeNull();
+  });
+
+  it('does not flip failed to completed when a stale chat.tool-completed arrives', () => {
+    const base = [invocation('tool_a', 'failed')];
+    const merged = mergeToolStatusFromEvents(base, [
+      event(1, 'chat.tool-completed', { invocationId: 'tool_a', result: { stale: true } }),
+    ]);
+    expect(merged[0].status).toBe('failed');
+    expect(merged[0].result).toBeNull();
+  });
+
+  it('flips a proposed invocation to approved on chat.tool-approved', () => {
+    const base = [invocation('tool_a', 'proposed')];
+    const merged = mergeToolStatusFromEvents(base, [
+      event(1, 'chat.tool-approved', { invocationId: 'tool_a' }),
+    ]);
+    expect(merged[0].status).toBe('approved');
+  });
+
+  it('flips a proposed invocation to rejected on chat.tool-rejected', () => {
+    const base = [invocation('tool_a', 'proposed')];
+    const merged = mergeToolStatusFromEvents(base, [
+      event(1, 'chat.tool-rejected', { invocationId: 'tool_a' }),
+    ]);
+    expect(merged[0].status).toBe('rejected');
+  });
+
+  it('ignores chat.tool-approved when the invocation is no longer proposed', () => {
+    const base = [invocation('tool_a', 'running')];
+    const merged = mergeToolStatusFromEvents(base, [
+      event(1, 'chat.tool-approved', { invocationId: 'tool_a' }),
+    ]);
+    expect(merged[0].status).toBe('running');
+  });
 });

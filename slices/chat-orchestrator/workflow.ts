@@ -224,6 +224,17 @@ export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<Cha
     };
   } catch (err) {
     logger.error('chat orchestrator invokeSkill threw', { runId, err: String(err) });
+    // Clear the thinking indicator the UI is now showing. The dispatch
+    // wrapper only emits `chat.run-failed` from its own try/catch — we
+    // swallow the throw and return `{reply: null}`, so without this emit
+    // the in-flight indicator would never go away for this conversation.
+    eventStore.appendEvent({
+      projectId: conversation.projectId ?? 'goose-hub-self',
+      workItemId: conversation.workItemId,
+      kind: 'chat.run-failed',
+      payload: { conversationId: conversation.id, runId, error: String(err) },
+      runId,
+    });
     return { reply: null };
   }
 }

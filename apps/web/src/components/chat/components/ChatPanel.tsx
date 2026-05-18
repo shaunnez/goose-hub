@@ -89,18 +89,36 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
       if (conversation == null) return;
       setBusy(true);
       setError(null);
+      // Optimistic user bubble. `postUserMessage` on the server runs the
+      // whole orchestrator turn before responding, which can be several
+      // seconds; without this the user's message would not render until
+      // the agent reply lands. The authoritative refetch below replaces
+      // the optimistic row with the persisted one.
+      const optimisticId = -Date.now();
+      const optimistic: ChatMessageDto = {
+        id: optimisticId,
+        conversationId: conversation.id,
+        role: 'user',
+        content,
+        runId: null,
+        meta: null,
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, optimistic]);
       try {
         await postMessage(conversation.id, content);
         // Authoritative reconciliation — refetch once after the POST settles.
-        // The SSE handler may also refresh during the turn, but both paths
-        // converge through fetchConversation, which is the single source of
-        // truth. Appending the POST response inline would double messages
-        // if the SSE refresh fired first (Codex P2 finding).
+        // The fetchConversation result is the single source of truth and
+        // already includes the persisted user message, so this replaces the
+        // optimistic row cleanly.
         const full = await fetchConversation(conversation.id);
         setMessages(full.messages);
         setInvocations(full.invocations);
       } catch (err) {
         setError(`Send failed: ${String(err)}`);
+        // Roll back the optimistic row on failure so we don't leave a
+        // phantom bubble the server doesn't know about.
+        setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       } finally {
         setBusy(false);
       }
