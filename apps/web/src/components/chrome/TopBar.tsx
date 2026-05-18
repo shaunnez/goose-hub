@@ -1,6 +1,7 @@
+import { SearchModal } from '@/components/search/components/SearchModal';
 import { CaptureModal } from '@/components/ui/CaptureModal';
 import { Plus, ScrollText, Search } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChangelogModal } from './ChangelogModal';
 
 interface TopBarProps {
@@ -10,6 +11,18 @@ interface TopBarProps {
 export function TopBar({ breadcrumb }: TopBarProps) {
   const [showCapture, setShowCapture] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setShowSearch((prev) => !prev);
+      }
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   return (
     <>
@@ -41,16 +54,21 @@ export function TopBar({ breadcrumb }: TopBarProps) {
         </button>
         <button
           type="button"
-          disabled
-          title="Search — available later"
-          className="flex items-center gap-2 h-7 px-2.5 rounded-md text-[12px] text-fg-2 border border-line bg-bg cursor-not-allowed"
+          data-testid="search-button"
+          onClick={() => setShowSearch(true)}
+          title="Search work items (⌘K)"
+          className="flex items-center gap-2 h-7 px-2.5 rounded-md text-[12px] text-fg-2 border border-line bg-bg hover:bg-bg-elev cursor-pointer"
         >
           <Search size={13} />
           <span>Search</span>
+          <kbd className="ml-1 px-1 py-0.5 rounded border border-line text-[10px] text-fg-3 bg-bg">
+            ⌘K
+          </kbd>
         </button>
       </header>
       <CaptureModal open={showCapture} onClose={() => setShowCapture(false)} />
       <ChangelogModal open={showChangelog} onClose={() => setShowChangelog(false)} />
+      <SearchModal open={showSearch} onClose={() => setShowSearch(false)} />
     </>
   );
 }
