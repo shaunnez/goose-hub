@@ -12,6 +12,7 @@ import { logger } from '@goose-hub/core/logger.js';
 import { loadProjects } from '@goose-hub/core/projects/loader.js';
 import { skillsRoot } from '@goose-hub/skills';
 import { runBootstrapViaBridge } from '#shared/bootstrap-bridge.js';
+import { searchPrsOrLog } from '#shared/github-pr-search.js';
 import { addInboxNote } from '#shared/inbox-bridge.js';
 import { setActiveMilestoneViaBridge } from '#shared/milestone-bridge.js';
 import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
@@ -260,16 +261,42 @@ function extractSummary(kind: string, payload: unknown): string {
 }
 
 async function findPr(input: { query: string; projectSlug?: string }): Promise<unknown> {
-  // Without the github SDK wired up for PR search we fall back to scanning
-  // recent `pr.opened` / `pr.merged` events for matches. Good enough for v1;
-  // a richer search is a follow-up issue.
-  let projectId: string | undefined;
+  // When a `projectSlug` is supplied we can scope the search to that repo's
+  // PR catalog on github.com — covers PRs older than the event-stream window
+  // (~200 events) and PRs opened outside Factory itself (M20.16).
   if (input.projectSlug) {
     assertValidSlug(input.projectSlug);
     const source = await getSourceForSlug(input.projectSlug);
-    if (source == null)
+    if (source == null) {
       throw new ToolExecutionError(`project not found: ${input.projectSlug}`, 404);
-    projectId = source.projectId;
+    }
+    const githubMatches = await searchPrsOrLog(source.repoRef, input.query);
+    if (githubMatches != null) {
+      return {
+        matches: githubMatches.map((m) => ({
+          kind: m.merged ? 'pr.merged' : m.state === 'closed' ? 'pr.closed' : 'pr.opened',
+          prNumber: m.prNumber,
+          url: m.url,
+          title: m.title,
+          state: m.state,
+          merged: m.merged,
+          author: m.authorLogin,
+          createdAt: m.createdAt,
+          updatedAt: m.updatedAt,
+        })),
+        source: 'github' as const,
+      };
+    }
+    // GitHub failed (missing token, rate-limited, etc.) — fall through to the
+    // event-stream scan rather than bubbling the error. The chat user still
+    // gets a best-effort answer for PRs Factory has seen recently.
+  }
+
+  // Global (no projectSlug) or fallback path: scan recent pr.* events.
+  let projectId: string | undefined;
+  if (input.projectSlug) {
+    const source = await getSourceForSlug(input.projectSlug);
+    projectId = source?.projectId;
   }
   const events = eventStore.replay({ projectId, order: 'desc', limit: 200 });
   const q = input.query.toLowerCase().trim();
