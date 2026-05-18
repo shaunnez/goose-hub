@@ -1,6 +1,6 @@
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { describe, expect, it } from 'vitest';
-import { normalizeConfidence, parseQuery, scoreItem } from './score.js';
+import { normalizeConfidence, parseQuery, scoreEventText, scoreItem } from './score.js';
 
 function item(overrides: Partial<WorkItem> = {}): WorkItem {
   return {
@@ -99,6 +99,38 @@ describe('scoreItem', () => {
 
   it('returns 0 when no tokens match anywhere', () => {
     expect(scoreItem(item({ title: 'foo', body: 'bar' }), parseQuery('zzz'), now)).toBe(0);
+  });
+});
+
+describe('scoreEventText', () => {
+  const now = new Date('2026-05-18T00:00:00Z');
+
+  it('returns 0 for queries with no tokens', () => {
+    expect(scoreEventText('anything', parseQuery('  '), new Date(), now)).toBe(0);
+  });
+
+  it('matches case-insensitively', () => {
+    expect(scoreEventText('Cache Decision', parseQuery('cache'), now, now)).toBeGreaterThan(0);
+  });
+
+  it('returns 0 when no tokens hit the text', () => {
+    expect(scoreEventText('foo bar', parseQuery('zzz'), now, now)).toBe(0);
+  });
+
+  it('applies a recency boost inside the 30-day window', () => {
+    const fresh = scoreEventText(
+      'cache decision',
+      parseQuery('cache'),
+      new Date('2026-05-17T00:00:00Z'),
+      now,
+    );
+    const stale = scoreEventText(
+      'cache decision',
+      parseQuery('cache'),
+      new Date('2025-01-01T00:00:00Z'),
+      now,
+    );
+    expect(fresh).toBeGreaterThan(stale);
   });
 });
 

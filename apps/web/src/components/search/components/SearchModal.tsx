@@ -1,10 +1,11 @@
 import type { SearchClientFilters, SearchTypeFilter } from '@/lib/api';
-import type { SearchHitDto } from '@/lib/types';
+import type { EventHitDto, SearchHitDto } from '@/lib/types';
 import { Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { loadRecentSearches, pushRecentSearch } from '../lib/recentSearches';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
+import { useFocusTrap } from '../lib/useFocusTrap';
 import { SearchResults } from './SearchResults';
 
 interface SearchModalProps {
@@ -41,6 +42,8 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [recents, setRecents] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  useFocusTrap(cardRef, open);
   const navigate = useNavigate();
   const params = useParams<{ slug?: string }>();
   const currentSlug = params.slug;
@@ -92,9 +95,30 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
   // the chip silently — surfaced via the tooltip on the chip itself.
   const closedDisabledByMilestone = filters.milestone === 'all';
 
-  function handleSelect(hit: SearchHitDto) {
+  function handleSelect(hit: SearchHitDto, opts?: { newTab?: boolean }) {
     pushRecentSearch(query);
-    navigate(`/projects/${hit.projectSlug}/items/${hit.externalId}`);
+    const url = `/projects/${hit.projectSlug}/items/${hit.externalId}`;
+    if (opts?.newTab) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    navigate(url);
+    onClose();
+  }
+
+  function handleSelectEvent(ev: EventHitDto, opts?: { newTab?: boolean }) {
+    pushRecentSearch(query);
+    // Decisions live on the issue timeline. If the event is detached
+    // from a work item, fall back to the project Kanban.
+    const url =
+      ev.workItemExternalId != null
+        ? `/projects/${ev.projectSlug}/items/${ev.workItemExternalId}/timeline`
+        : `/projects/${ev.projectSlug}`;
+    if (opts?.newTab) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    navigate(url);
     onClose();
   }
 
@@ -118,6 +142,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
       role="presentation"
     >
       <div
+        ref={cardRef}
         className="w-full max-w-2xl bg-bg-elev border border-line rounded-lg shadow-lg overflow-hidden"
         aria-label="Search"
       >
@@ -220,6 +245,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
           recents={recents}
           onPickRecent={handlePickRecent}
           onSelect={handleSelect}
+          onSelectEvent={handleSelectEvent}
         />
 
         <div className="flex items-center justify-between px-4 h-9 border-t border-line bg-bg/40 text-[11px] text-fg-3">
@@ -230,6 +256,10 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
               ↵
             </kbd>
             open
+            <kbd className="px-1 py-0.5 mx-1 ml-3 rounded border border-line bg-bg text-fg-3">
+              ⌘↵
+            </kbd>
+            new tab
           </span>
           <span>
             <kbd className="px-1 py-0.5 rounded border border-line bg-bg text-fg-3">Esc</kbd>

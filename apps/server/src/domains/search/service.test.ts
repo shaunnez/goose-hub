@@ -1,11 +1,13 @@
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockListProjects, mockGetSourceForSlug, mockResolveActiveMilestone } = vi.hoisted(() => ({
-  mockListProjects: vi.fn(),
-  mockGetSourceForSlug: vi.fn(),
-  mockResolveActiveMilestone: vi.fn(),
-}));
+const { mockListProjects, mockGetSourceForSlug, mockResolveActiveMilestone, mockEventReplay } =
+  vi.hoisted(() => ({
+    mockListProjects: vi.fn(),
+    mockGetSourceForSlug: vi.fn(),
+    mockResolveActiveMilestone: vi.fn(),
+    mockEventReplay: vi.fn(),
+  }));
 
 vi.mock('#shared/projects.js', () => ({
   listProjects: mockListProjects,
@@ -17,6 +19,10 @@ vi.mock('#shared/source.js', () => ({
 
 vi.mock('#shared/resolve-milestone.js', () => ({
   resolveActiveMilestone: mockResolveActiveMilestone,
+}));
+
+vi.mock('@goose-hub/core/event-stream/store.js', () => ({
+  eventStore: { replay: mockEventReplay },
 }));
 
 vi.mock('@goose-hub/core/logger.js', () => ({
@@ -57,7 +63,7 @@ function mockSource(items: WorkItem[], closed: WorkItem[] = []) {
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
   // Default to "no active milestone configured" so existing tests that
   // pass milestone:'all' (or rely on the default) get the full item set.
@@ -65,6 +71,12 @@ beforeEach(() => {
     milestoneNumber: null,
     source: 'project_state',
   });
+  // Most tests don't care about events; default to no rows.
+  mockEventReplay.mockReturnValue([]);
+  // Cached project fan-out persists across tests in the same module —
+  // reset between cases so loaders fire as the tests expect.
+  const { _resetSearchCache } = await import('./cache.js');
+  _resetSearchCache();
 });
 
 describe('parseLimit', () => {
@@ -281,6 +293,119 @@ describe('search — filters', () => {
     });
     await search({ q: 'cache' }, { now });
     expect(source.listClosedWorkByMilestone).not.toHaveBeenCalled();
+  });
+});
+
+describe('search — events', () => {
+  it('returns matching decision-summary events alongside work items', async () => {
+    mockListProjects.mockResolvedValue([{ slug: 'p' }]);
+    mockGetSourceForSlug.mockResolvedValue(mockSource([]));
+    mockEventReplay.mockImplementation(({ projectId, kind }) => {
+      if (projectId !== 'p' || kind !== 'agent.decision-summary') return [];
+      return [
+        {
+          id: 9001,
+          projectId: 'p',
+          workItemId: 'github:o/r#42',
+          kind: 'agent.decision-summary',
+          payload: { summary: 'Selected payments-api as primary repo', kind: 'PLAN' },
+          createdAt: '2026-05-17T10:00:00Z',
+        },
+        {
+          id: 9002,
+          projectId: 'p',
+          workItemId: 'github:o/r#99',
+          kind: 'agent.decision-summary',
+          payload: { summary: 'Pivoted to cache tier-2 lookups', kind: 'QUERY_PIVOT' },
+          createdAt: '2026-05-16T10:00:00Z',
+        },
+        {
+          id: 9003,
+          projectId: 'p',
+          workItemId: null,
+          kind: 'agent.decision-summary',
+          payload: { summary: 'Unrelated triage decision', kind: 'PLAN' },
+          createdAt: '2026-05-16T10:00:00Z',
+        },
+      ];
+    });
+    const result = await search({ q: 'cache' }, { now });
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.events.map((e) => e.eventId)).toEqual([9002]);
+    expect(result.data.events[0].workItemExternalId).toBe('99');
+    expect(result.data.events[0].decisionKind).toBe('QUERY_PIVOT');
+    expect(result.data.events[0].confidence).toBe(100);
+    expect(result.data.totalEvents).toBe(1);
+  });
+
+  it('event hits are independent of work-item confidence normalisation', async () => {
+    mockListProjects.mockResolvedValue([{ slug: 'p' }]);
+    mockGetSourceForSlug.mockResolvedValue(
+      mockSource([item({ externalId: '1', title: 'cache layer for tier-2 results' })]),
+    );
+    mockEventReplay.mockReturnValue([
+      {
+        id: 9001,
+        projectId: 'p',
+        workItemId: null,
+        kind: 'agent.decision-summary',
+        payload: { summary: 'cache hit', kind: 'PLAN' },
+        createdAt: '2026-05-17T10:00:00Z',
+      },
+    ]);
+    const result = await search({ q: 'cache' }, { now });
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.items[0].confidence).toBe(100);
+    expect(result.data.events[0].confidence).toBe(100);
+  });
+
+  it('skips events whose payload has no summary string', async () => {
+    mockListProjects.mockResolvedValue([{ slug: 'p' }]);
+    mockGetSourceForSlug.mockResolvedValue(mockSource([]));
+    mockEventReplay.mockReturnValue([
+      {
+        id: 9001,
+        projectId: 'p',
+        workItemId: null,
+        kind: 'agent.decision-summary',
+        payload: {},
+        createdAt: '2026-05-17T10:00:00Z',
+      },
+      {
+        id: 9002,
+        projectId: 'p',
+        workItemId: null,
+        kind: 'agent.decision-summary',
+        payload: { summary: '   ' },
+        createdAt: '2026-05-17T10:00:00Z',
+      },
+    ]);
+    const result = await search({ q: 'cache' }, { now });
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.events).toEqual([]);
+  });
+
+  it('survives a project whose event replay throws', async () => {
+    mockListProjects.mockResolvedValue([{ slug: 'broken' }, { slug: 'ok' }]);
+    mockGetSourceForSlug.mockImplementation(() =>
+      Promise.resolve(mockSource([item({ externalId: '7', title: 'cache hit' })])),
+    );
+    mockEventReplay.mockImplementation(({ projectId }) => {
+      if (projectId === 'broken') throw new Error('boom');
+      return [
+        {
+          id: 9009,
+          projectId: 'ok',
+          workItemId: 'github:o/r#7',
+          kind: 'agent.decision-summary',
+          payload: { summary: 'cache decision' },
+          createdAt: '2026-05-17T10:00:00Z',
+        },
+      ];
+    });
+    const result = await search({ q: 'cache' }, { now });
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.events.map((e) => e.eventId)).toEqual([9009]);
   });
 });
 

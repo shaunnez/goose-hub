@@ -84,3 +84,26 @@ export function normalizeConfidence(score: number, topScore: number): number {
   if (topScore <= 0) return 0;
   return Math.round((score / topScore) * 100);
 }
+
+// Event search scores against a single text field (typically a decision
+// summary). No title/body distinction, but the same recency boost shape.
+const EVENT_TOKEN_WEIGHT = 30;
+
+export function scoreEventText(
+  text: string,
+  query: ParsedQuery,
+  createdAt: Date,
+  now: Date,
+): number {
+  if (query.tokens.length === 0) return 0;
+  const lower = text.toLowerCase();
+  let raw = 0;
+  for (const t of query.tokens) {
+    if (lower.includes(t)) raw += EVENT_TOKEN_WEIGHT;
+  }
+  if (raw === 0) return 0;
+  const ageDays = Math.max(0, (now.getTime() - createdAt.getTime()) / (24 * 60 * 60 * 1000));
+  const recencyBoost =
+    ageDays < RECENCY_WINDOW_DAYS ? (1 - ageDays / RECENCY_WINDOW_DAYS) * RECENCY_MAX_BOOST : 0;
+  return raw * (1 + recencyBoost);
+}

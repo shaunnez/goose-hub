@@ -599,8 +599,21 @@ export interface SearchHitDto {
   confidence: number;
 }
 
+export interface EventHitDto {
+  eventId: number;
+  projectSlug: string;
+  workItemExternalId: string | null;
+  eventKind: string;
+  summary: string;
+  decisionKind: string | null;
+  createdAt: string;
+  confidence: number;
+}
+
 export interface SearchResultDto {
   items: SearchHitDto[];
+  events: EventHitDto[];
   total: number;
+  totalEvents: number;
   hasMore: boolean;
 }

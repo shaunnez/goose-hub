@@ -33,7 +33,9 @@ function Providers({ children }: { children: ReactNode }) {
 function withResult(over: Partial<SearchResultDto> = {}): SearchResultDto {
   return {
     items: [],
+    events: [],
     total: 0,
+    totalEvents: 0,
     hasMore: false,
     ...over,
   };
@@ -189,7 +191,10 @@ describe('SearchResults', () => {
     });
 
     fireEvent.keyDown(document, { key: 'Enter' });
-    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ externalId: '2' }));
+    expect(onSelect).toHaveBeenCalledWith(
+      expect.objectContaining({ externalId: '2' }),
+      expect.objectContaining({ newTab: false }),
+    );
   });
 
   it('renders a row per hit, with confidence pill, and calls onSelect on click', async () => {
@@ -242,6 +247,74 @@ describe('SearchResults', () => {
     fireEvent.click(rows[0]);
     expect(onSelect).toHaveBeenCalledWith(
       expect.objectContaining({ projectSlug: 'goose-hub-self', externalId: '42' }),
+      expect.objectContaining({ newTab: false }),
     );
+  });
+
+  it('renders the events section when the server returns matching decisions', async () => {
+    mockFetchSearch.mockResolvedValue(
+      withResult({
+        events: [
+          {
+            eventId: 9001,
+            projectSlug: 'goose-hub-self',
+            workItemExternalId: '42',
+            eventKind: 'agent.decision-summary',
+            decisionKind: 'QUERY_PIVOT',
+            summary: 'Pivoted to caching tier-2 lookups',
+            createdAt: '2026-05-17T10:00:00Z',
+            confidence: 100,
+          },
+        ],
+        totalEvents: 1,
+      }),
+    );
+    const onSelectEvent = vi.fn();
+    render(
+      <Providers>
+        <SearchResults query="cache" onSelect={() => {}} onSelectEvent={onSelectEvent} />
+      </Providers>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('search-event-results')).toBeTruthy();
+    });
+    const eventRow = screen.getByTestId('search-event-row');
+    expect(eventRow.textContent).toContain('Pivoted to caching tier-2 lookups');
+    expect(eventRow.textContent).toContain('QUERY_PIVOT');
+    fireEvent.click(eventRow);
+    expect(onSelectEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ eventId: 9001, workItemExternalId: '42' }),
+      expect.any(Object),
+    );
+  });
+
+  it('shows only the events section when work items are empty but events match', async () => {
+    mockFetchSearch.mockResolvedValue(
+      withResult({
+        events: [
+          {
+            eventId: 9002,
+            projectSlug: 'goose-hub-self',
+            workItemExternalId: null,
+            eventKind: 'agent.decision-summary',
+            decisionKind: 'PLAN',
+            summary: 'Orphan decision summary',
+            createdAt: '2026-05-17T10:00:00Z',
+            confidence: 100,
+          },
+        ],
+        totalEvents: 1,
+      }),
+    );
+    render(
+      <Providers>
+        <SearchResults query="orphan" onSelect={() => {}} />
+      </Providers>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('search-event-results')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('search-results')).toBeNull();
+    expect(screen.queryByTestId('search-empty')).toBeNull();
   });
 });

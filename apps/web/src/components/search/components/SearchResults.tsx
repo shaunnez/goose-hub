@@ -1,5 +1,5 @@
 import { type SearchClientFilters, fetchSearch } from '@/lib/api';
-import type { SearchHitDto, SearchResultDto } from '@/lib/types';
+import type { EventHitDto, SearchHitDto, SearchResultDto } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { highlight, tokenize } from '../lib/highlight';
@@ -7,7 +7,8 @@ import { highlight, tokenize } from '../lib/highlight';
 interface SearchResultsProps {
   query: string;
   filters?: SearchClientFilters;
-  onSelect: (hit: SearchHitDto) => void;
+  onSelect: (hit: SearchHitDto, opts?: { newTab?: boolean }) => void;
+  onSelectEvent?: (hit: EventHitDto, opts?: { newTab?: boolean }) => void;
   recents?: string[];
   onPickRecent?: (q: string) => void;
 }
@@ -18,6 +19,7 @@ export function SearchResults({
   query,
   filters,
   onSelect,
+  onSelectEvent,
   recents,
   onPickRecent,
 }: SearchResultsProps) {
@@ -66,7 +68,7 @@ export function SearchResults({
         const hit = items[selectedIdx];
         if (hit != null) {
           e.preventDefault();
-          onSelect(hit);
+          onSelect(hit, { newTab: e.metaKey || e.ctrlKey });
         }
       }
     }
@@ -127,7 +129,9 @@ export function SearchResults({
     );
   }
 
-  if (items.length === 0) {
+  const events = data?.events ?? [];
+
+  if (items.length === 0 && events.length === 0) {
     return (
       <div data-testid="search-body" className="px-4 py-10 min-h-[200px]">
         <p data-testid="search-empty" className="text-[12.5px] text-fg-3 text-center">
@@ -141,53 +145,92 @@ export function SearchResults({
 
   return (
     <div data-testid="search-body" className="min-h-[200px] max-h-[55vh] overflow-y-auto">
-      <div className="px-4 pt-3 pb-1.5 text-[10.5px] uppercase tracking-wider text-fg-3">
-        Work items · {data?.total ?? items.length}
-      </div>
-      <ul ref={listRef} data-testid="search-results" className="flex flex-col">
-        {items.map((hit, idx) => {
-          const selected = idx === selectedIdx;
-          return (
-            <li key={`${hit.projectSlug}#${hit.externalId}`}>
+      {items.length > 0 ? (
+        <>
+          <div className="px-4 pt-3 pb-1.5 text-[10.5px] uppercase tracking-wider text-fg-3">
+            Work items · {data?.total ?? items.length}
+          </div>
+          <ul ref={listRef} data-testid="search-results" className="flex flex-col">
+            {items.map((hit, idx) => {
+              const selected = idx === selectedIdx;
+              return (
+                <li key={`${hit.projectSlug}#${hit.externalId}`}>
+                  <button
+                    type="button"
+                    data-testid="search-result-row"
+                    data-selected={selected ? 'true' : 'false'}
+                    onClick={(e) => onSelect(hit, { newTab: e.metaKey || e.ctrlKey })}
+                    onMouseEnter={() => setSelectedIdx(idx)}
+                    className={`w-full flex items-center gap-3 px-4 py-2 text-left focus:outline-none cursor-pointer ${
+                      selected ? 'bg-bg-hover' : 'hover:bg-bg-hover'
+                    }`}
+                  >
+                    <span className="font-mono text-[11.5px] text-fg-3 w-12 shrink-0">
+                      #{hit.externalId}
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block truncate text-[13px] text-fg">
+                        {highlight(hit.title, tokens)}
+                      </span>
+                      <span className="block truncate text-[11px] text-fg-3">
+                        {hit.state} · {hit.type}
+                        {hit.milestoneTitle != null ? ` · ${hit.milestoneTitle}` : ''} ·{' '}
+                        {hit.repoRef}
+                      </span>
+                    </span>
+                    <ConfidencePill value={hit.confidence} />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          {hasMore ? (
+            <div className="px-4 py-2 border-t border-line/60">
               <button
                 type="button"
-                data-testid="search-result-row"
-                data-selected={selected ? 'true' : 'false'}
-                onClick={() => onSelect(hit)}
-                onMouseEnter={() => setSelectedIdx(idx)}
-                className={`w-full flex items-center gap-3 px-4 py-2 text-left focus:outline-none cursor-pointer ${
-                  selected ? 'bg-bg-hover' : 'hover:bg-bg-hover'
-                }`}
+                data-testid="search-show-more"
+                onClick={() => setLimitIdx((i) => Math.min(i + 1, PAGE_SIZES.length - 1))}
+                className="w-full h-7 rounded-md text-[12px] text-fg-2 border border-line bg-bg hover:bg-bg-elev cursor-pointer"
               >
-                <span className="font-mono text-[11.5px] text-fg-3 w-12 shrink-0">
-                  #{hit.externalId}
-                </span>
-                <span className="flex-1 min-w-0">
-                  <span className="block truncate text-[13px] text-fg">
-                    {highlight(hit.title, tokens)}
-                  </span>
-                  <span className="block truncate text-[11px] text-fg-3">
-                    {hit.state} · {hit.type}
-                    {hit.milestoneTitle != null ? ` · ${hit.milestoneTitle}` : ''} · {hit.repoRef}
-                  </span>
-                </span>
-                <ConfidencePill value={hit.confidence} />
+                Show {PAGE_SIZES[limitIdx + 1] - items.length} more
               </button>
-            </li>
-          );
-        })}
-      </ul>
-      {hasMore ? (
-        <div className="px-4 py-2 border-t border-line/60">
-          <button
-            type="button"
-            data-testid="search-show-more"
-            onClick={() => setLimitIdx((i) => Math.min(i + 1, PAGE_SIZES.length - 1))}
-            className="w-full h-7 rounded-md text-[12px] text-fg-2 border border-line bg-bg hover:bg-bg-elev cursor-pointer"
-          >
-            Show {PAGE_SIZES[limitIdx + 1] - items.length} more
-          </button>
-        </div>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+
+      {events.length > 0 ? (
+        <>
+          <div className="px-4 pt-3 pb-1.5 text-[10.5px] uppercase tracking-wider text-fg-3 border-t border-line/60">
+            Decisions · {data?.totalEvents ?? events.length}
+          </div>
+          <ul data-testid="search-event-results" className="flex flex-col">
+            {events.map((ev) => (
+              <li key={ev.eventId}>
+                <button
+                  type="button"
+                  data-testid="search-event-row"
+                  onClick={(e) => onSelectEvent?.(ev, { newTab: e.metaKey || e.ctrlKey })}
+                  className="w-full flex items-center gap-3 px-4 py-2 text-left hover:bg-bg-hover focus:bg-bg-hover focus:outline-none cursor-pointer"
+                >
+                  <span className="font-mono text-[10.5px] text-fg-3 w-16 shrink-0 truncate">
+                    {ev.decisionKind ?? 'DECISION'}
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block truncate text-[13px] text-fg">
+                      {highlight(ev.summary, tokens)}
+                    </span>
+                    <span className="block truncate text-[11px] text-fg-3">
+                      {ev.workItemExternalId != null ? `#${ev.workItemExternalId} · ` : ''}
+                      {ev.projectSlug}
+                    </span>
+                  </span>
+                  <ConfidencePill value={ev.confidence} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
       ) : null}
     </div>
   );
