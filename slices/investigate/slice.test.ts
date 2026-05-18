@@ -325,6 +325,26 @@ describe('runInvestigateWorkflow', () => {
       expect(mockDispatchWave).toHaveBeenCalledTimes(2);
     });
 
+    it('mock investigate run keeps workflow prompts and context away from assistant memory paths', async () => {
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const invokeSpec = mockInvokeSkill.mock.calls[0]?.[0] as {
+        context: { worktreePath?: string };
+      };
+      expect(invokeSpec.context.worktreePath).toBe('/tmp/test-worktree');
+
+      const renderedRunInputs = JSON.stringify({
+        wave1: mockDispatchWave.mock.calls[0]?.[0],
+        wave2: mockDispatchWave.mock.calls[1]?.[0],
+        synth: invokeSpec,
+      });
+      expect(renderedRunInputs).not.toContain('/.codex/memories');
+      expect(renderedRunInputs).not.toContain('/.agents');
+      expect(renderedRunInputs).not.toContain('/.claude');
+      expect(renderedRunInputs).not.toContain('sibling repos');
+    });
+
     it('skips Wave 1 and Wave 2 when investigation swarm is disabled', async () => {
       mockGetUseInvestigationSwarm.mockReturnValue(false);
 

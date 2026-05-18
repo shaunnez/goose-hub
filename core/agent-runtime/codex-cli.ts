@@ -33,6 +33,7 @@ import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { resolveMockOutput } from './mock-outputs.js';
 import { defaultModelForTierAndProvider, estimateCostUsd } from './models.js';
 import { killProcessGroupOrChild } from './process-kill.js';
+import { withFactoryRuntimeInstructions } from './runtime-instructions.js';
 
 export { CodexBinaryNotFoundError, CodexNotAuthenticatedError } from './codex-config.js';
 export {
@@ -139,7 +140,7 @@ export class CodexCliRuntime implements AgentRuntime {
       model,
       workspaceDir,
       prompt: contextXml,
-      systemPrompt: spec.appendSystemPrompt,
+      systemPrompt: withFactoryRuntimeInstructions(spec.appendSystemPrompt),
       maxTurns: spec.budgets.maxTurns,
       commandSandbox: needsBrowserProcessAccess ? 'danger-full-access' : undefined,
       approvalPolicy: needsBrowserProcessAccess ? 'never' : undefined,

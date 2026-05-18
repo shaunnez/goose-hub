@@ -1,7 +1,10 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
 import { InvestigateSchema } from './schema.js';
 import config, { InvestigateContextSchema } from './skill.config.js';
+
+const PROMPT = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
 
 describe('investigate schema', () => {
   it('accepts valid output with all required fields', () => {
@@ -215,5 +218,19 @@ describe('investigate skill config', () => {
       worktreePath: '/tmp/worktrees/1',
     });
     expect(invalid.success).toBe(false);
+  });
+});
+
+describe('investigate prompt workspace boundary', () => {
+  it('forbids memory quick passes and requires exploration under worktreePath', () => {
+    expect(PROMPT).toContain('No memory quick pass');
+    expect(PROMPT).toContain('Do not perform memory quick passes');
+    expect(PROMPT).toContain(
+      'All list, read, and search operations must stay inside the provided `<worktreePath>`',
+    );
+    expect(PROMPT).toContain('Do not inspect sibling repos');
+    expect(PROMPT).toContain('~/.codex');
+    expect(PROMPT).toContain('~/.agents');
+    expect(PROMPT).toContain('~/.claude');
   });
 });

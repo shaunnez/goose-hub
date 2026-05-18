@@ -118,6 +118,24 @@ describe('CodexCliRuntime timeout handling', () => {
     );
   });
 
+  it('includes the Factory workspace-only instruction in Codex system instructions', async () => {
+    await runSuccessfulCodexSpec({ appendSystemPrompt: 'skill prompt body' });
+
+    const call = vi.mocked(buildCodexArgv).mock.calls[0]?.[0];
+    expect(call).toEqual(
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining('Factory agents must not read ~/.codex'),
+      }),
+    );
+    expect(call?.systemPrompt).toContain(
+      'All repo exploration must stay under workspaceDir / <worktreePath>.',
+    );
+    expect(call?.systemPrompt).toContain(
+      'If prior context is needed, use only context provided by Factory.',
+    );
+    expect(call?.systemPrompt).toContain('skill prompt body');
+  });
+
   it('does not use danger-full-access for QA even though QA includes validate', async () => {
     await runSuccessfulCodexSpec({
       skill: 'qa',
