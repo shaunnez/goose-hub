@@ -57,6 +57,14 @@ export type InvokeSkillInput = {
     freshContextOverride?: boolean;
     /** Skip runtime-owned agent.run-started when caller already emitted the parent marker. */
     suppressRunStarted?: boolean;
+    /**
+     * Fired immediately after `selectPersona()` resolves a persona but before
+     * the spawn. Callers that need to record `persona_stats` on a throw can
+     * stash this and write `outcome: 'failure'` from their catch block — the
+     * augmented `InvokeSkillResult` only returns on successful resolve, so
+     * persona attribution would otherwise be lost on every error path.
+     */
+    onPersonaSelected?: (info: { personaId: string; role: string }) => void;
   };
 };
 
@@ -112,6 +120,7 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<InvokeSkillR
   // 4. Select persona (round-robin within projectId + role)
   const role = skillConfig.role ?? 'developer';
   const { personaId } = selectPersona(projectId, role);
+  overrides?.onPersonaSelected?.({ personaId, role });
 
   // 5. Resolve budgets — fall back for skills not yet in SKILL_BUDGETS
   const projectConfig =

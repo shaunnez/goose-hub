@@ -181,18 +181,45 @@ export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<Cha
 
   emitThinking(conversation, runId, 'skill-invoked');
 
-  let invokeResult: Awaited<ReturnType<typeof invokeSkill>> | null = null;
+  // Captured the moment `selectPersona()` resolves inside `invokeSkill`, so we
+  // can still attribute persona stats on a post-spawn throw (the resolved
+  // result is never returned in that path).
+  let selectedPersona: { personaId: string; role: string } | null = null;
+
+  // Telemetry write — never let a SQLite hiccup turn a successful chat reply
+  // into a user-visible failure. Persona attribution is best-effort.
+  const tryAccumulate = (outcome: 'success' | 'failure') => {
+    if (selectedPersona == null) return;
+    try {
+      accumulatePersonaStats({
+        personaName: selectedPersona.personaId,
+        role: selectedPersona.role,
+        outcome,
+      });
+    } catch (statsErr) {
+      logger.warn('chat orchestrator: persona stats write failed', {
+        runId,
+        err: String(statsErr),
+      });
+    }
+  };
+
   try {
-    invokeResult = await invokeSkill({
+    const result = await invokeSkill({
       skillName: 'hub-chat',
       projectId: conversation.projectId ?? 'goose-hub-self',
       workItemId: conversation.workItemId ?? undefined,
       runId,
       context,
-      overrides: { modelOverride },
+      overrides: {
+        modelOverride,
+        onPersonaSelected: (info) => {
+          selectedPersona = info;
+        },
+      },
     });
     emitThinking(conversation, runId, 'structured-output-received');
-    const parsed = HubChatOutputSchema.safeParse(invokeResult.output);
+    const parsed = HubChatOutputSchema.safeParse(result.output);
     if (!parsed.success) {
       logger.warn('hub-chat: output validation failed', {
         runId,
@@ -201,11 +228,7 @@ export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<Cha
       // M20.14: count this turn as a failure for the picked persona so the
       // round-robin router can deprioritise personas that keep emitting
       // unparseable output.
-      accumulatePersonaStats({
-        personaName: invokeResult.personaId,
-        role: invokeResult.role,
-        outcome: 'failure',
-      });
+      tryAccumulate('failure');
       return {
         reply: {
           say: 'I tried to reply but the structured output failed validation. Please try again.',
@@ -226,11 +249,7 @@ export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<Cha
     const validProposals = parsed.data.proposals.filter((p: HubChatProposal) =>
       manifestHas(p.toolName),
     );
-    accumulatePersonaStats({
-      personaName: invokeResult.personaId,
-      role: invokeResult.role,
-      outcome: 'success',
-    });
+    tryAccumulate('success');
     return {
       reply: {
         ...parsed.data,
@@ -250,16 +269,11 @@ export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<Cha
       payload: { conversationId: conversation.id, runId, error: String(err) },
       runId,
     });
-    // Persona-stats failure path only when invokeSkill made it past
-    // selectPersona — pre-spawn ContextValidationError throws before any
-    // persona is picked, so `invokeResult` will still be null and we skip.
-    if (invokeResult != null) {
-      accumulatePersonaStats({
-        personaName: invokeResult.personaId,
-        role: invokeResult.role,
-        outcome: 'failure',
-      });
-    }
+    // `selectedPersona` is non-null when the throw happened after
+    // `selectPersona()` ran (OutputValidationError or any runtime throw).
+    // Pre-spawn ContextValidationError throws before the callback fires,
+    // so we skip in that case — there's no persona to penalise.
+    tryAccumulate('failure');
     return { reply: null };
   }
 }

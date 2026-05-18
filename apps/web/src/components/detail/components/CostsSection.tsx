@@ -21,6 +21,7 @@ const STAGE_LABEL: Record<CostRowDto['stage'], string> = {
   qa: 'QA',
   review: 'Review',
   retrospective: 'Retrospective',
+  chat: 'Chat',
   other: 'Other',
 };
 
