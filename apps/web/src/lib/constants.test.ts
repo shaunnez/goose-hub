@@ -97,8 +97,8 @@ describe('CODE_ACTIVE_STATES', () => {
 });
 
 describe('GATE_STATES', () => {
-  it('covers exactly two human gate states', () => {
-    expect(Object.keys(GATE_STATES)).toHaveLength(2);
+  it('covers exactly three human-gated states', () => {
+    expect(Object.keys(GATE_STATES)).toHaveLength(3);
   });
 
   it('does not include non-gate states', () => {
@@ -111,5 +111,6 @@ describe('GATE_STATES', () => {
   it('includes known human gate states', () => {
     expect(GATE_STATES['factory:prd-review']).toBeTruthy();
     expect(GATE_STATES['factory:needs-human']).toBeTruthy();
+    expect(GATE_STATES['factory:gate-pending']).toBeTruthy();
   });
 });
