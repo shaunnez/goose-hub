@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { promises as fs, accessSync } from 'node:fs';
 import path from 'node:path';
 import { getSeed, listSeeds } from './seeds/index.js';
-import type { Seed, VerifyResult } from './seeds/types.js';
+import type { Seed, SeedState, VerifyResult } from './seeds/types.js';
 
 export interface RunnerOptions {
   repoRoot: string;
@@ -10,16 +10,32 @@ export interface RunnerOptions {
 
 export interface SeedStatus {
   id: string;
-  applied: boolean;
+  state: SeedState;
   description: string;
   area: string;
+  error?: string;
 }
 
 export async function statusAll(opts: RunnerOptions): Promise<SeedStatus[]> {
   const out: SeedStatus[] = [];
   for (const s of listSeeds()) {
-    const applied = await s.isApplied(opts.repoRoot).catch(() => false);
-    out.push({ id: s.id, applied, description: s.description, area: s.area });
+    try {
+      const applied = await s.isApplied(opts.repoRoot);
+      out.push({
+        id: s.id,
+        state: applied ? 'applied' : 'clean',
+        description: s.description,
+        area: s.area,
+      });
+    } catch (err) {
+      out.push({
+        id: s.id,
+        state: 'unknown',
+        description: s.description,
+        area: s.area,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
   return out;
 }
@@ -127,8 +143,10 @@ export async function verifyRed(seedId: string, opts: RunnerOptions): Promise<Ve
       .trim();
   const needle = normalize(seed.truthSignal.testName);
   const truthSignalRed = failing.some((n) => normalize(n).includes(needle));
+  const unexpectedFailures = failing.filter((n) => !normalize(n).includes(needle));
   return {
     truthSignalRed,
+    unexpectedFailures,
     failingTests: failing,
     passingTests: passing,
     raw: json,

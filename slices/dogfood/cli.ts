@@ -49,9 +49,18 @@ async function main(): Promise<void> {
         console.log('No seeds registered.');
         return;
       }
+      let anyUnknown = false;
       for (const r of rows) {
-        const mark = r.applied ? '[applied]' : '[clean]  ';
+        const mark =
+          r.state === 'applied' ? '[applied]' : r.state === 'clean' ? '[clean]  ' : '[unknown]';
         console.log(`${mark} ${r.id.padEnd(28)} ${r.description}`);
+        if (r.state === 'unknown') {
+          anyUnknown = true;
+          console.log(`           reason: ${r.error ?? '(no error message captured)'}`);
+        }
+      }
+      if (anyUnknown) {
+        process.exitCode = 1;
       }
       return;
     }
@@ -85,14 +94,22 @@ async function main(): Promise<void> {
       console.log(`Passing tests (${result.passingTests.length}):`);
       for (const n of result.passingTests) console.log(`  - ${n}`);
       console.log('');
-      if (result.truthSignalRed) {
-        console.log('OK: truth-signal test is red as expected.');
-      } else {
+      if (!result.truthSignalRed) {
         console.log(
           'FAIL: truth-signal test is NOT red. Either the seed did not apply, or the test does not exercise the mutated code path.',
         );
         process.exitCode = 1;
+        return;
       }
+      if (result.unexpectedFailures.length > 0) {
+        console.log(
+          `FAIL: truth-signal is red, but ${result.unexpectedFailures.length} other test(s) in the file are also red. The seed must break exactly one test — additional reds invalidate the controlled-mutation guarantee.`,
+        );
+        for (const n of result.unexpectedFailures) console.log(`  - ${n}`);
+        process.exitCode = 1;
+        return;
+      }
+      console.log('OK: truth-signal test is red, no other tests in the file are failing.');
       return;
     }
     case 'issue': {

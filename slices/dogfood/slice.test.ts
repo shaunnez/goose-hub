@@ -99,11 +99,33 @@ describe('dogfood slice', () => {
 
   it('statusAll reports applied vs clean accurately', async () => {
     const before = await statusAll({ repoRoot: tmpRoot });
-    expect(before.find((r) => r.id === 'logger-001-drop-meta')?.applied).toBe(false);
+    expect(before.find((r) => r.id === 'logger-001-drop-meta')?.state).toBe('clean');
 
     await applySeed('logger-001-drop-meta', { repoRoot: tmpRoot });
 
     const after = await statusAll({ repoRoot: tmpRoot });
-    expect(after.find((r) => r.id === 'logger-001-drop-meta')?.applied).toBe(true);
+    expect(after.find((r) => r.id === 'logger-001-drop-meta')?.state).toBe('applied');
+  });
+
+  it('statusAll surfaces isApplied errors as `unknown` instead of swallowing them', async () => {
+    await fs.rm(path.join(tmpRoot, 'apps/web/src/lib/logger.ts'));
+
+    const rows = await statusAll({ repoRoot: tmpRoot });
+    const row = rows.find((r) => r.id === 'logger-001-drop-meta');
+    expect(row?.state).toBe('unknown');
+    expect(row?.error).toBeDefined();
+    expect(row?.error).toMatch(/ENOENT|no such file/i);
+  });
+
+  it('seed labels include factory:triaging so the workflow entrypoint fires', () => {
+    const seed = getSeed('logger-001-drop-meta');
+    expect(seed.issue.labels).toContain('factory:triaging');
+    expect(seed.issue.labels).toContain('type:bug');
+  });
+
+  it('seed issue body does not leak the failing test file or source path', () => {
+    const seed = getSeed('logger-001-drop-meta');
+    expect(seed.issue.body).not.toContain('logger.test.ts');
+    expect(seed.issue.body).not.toContain('apps/web/src/lib/logger.ts');
   });
 });

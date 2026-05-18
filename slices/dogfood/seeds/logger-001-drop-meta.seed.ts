@@ -40,10 +40,8 @@ This makes debugging painful because structured context (error codes, request ID
 
 **Expected:** the meta object should appear alongside the prefix and message in console output, for all four log levels (\`debug\`, \`info\`, \`warn\`, \`error\`).
 
-**Actual:** only the prefix and message reach the console. The meta object is dropped.
-
-Affects \`apps/web/src/lib/logger.ts\`. A unit test in \`apps/web/src/lib/logger.test.ts\` covers the meta-forwarding behaviour and is currently failing.`,
-    labels: ['type:bug', 'priority:medium'],
+**Actual:** only the prefix and message reach the console. The meta object is dropped.`,
+    labels: ['type:bug', 'priority:medium', 'factory:triaging'],
   },
   async apply(root) {
     const { full, src } = await readTarget(root);

@@ -29,7 +29,10 @@ export interface ApplyResult {
 
 export interface VerifyResult {
   truthSignalRed: boolean;
+  unexpectedFailures: string[];
   failingTests: string[];
   passingTests: string[];
   raw?: unknown;
 }
+
+export type SeedState = 'applied' | 'clean' | 'unknown';
