@@ -5,6 +5,7 @@ import type Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildIndex } from './builder.js';
 import { openIndexDb } from './db.js';
+import { assessSymbolIndexFreshness, ensureSymbolIndexFresh } from './freshness.js';
 import { findCallers, findSymbol, listExportsOf, listImports } from './query.js';
 
 function writeFile(root: string, rel: string, content: string): void {
@@ -158,5 +159,51 @@ export const X = 1;`,
     expect(result.filesIndexed).toBe(2);
     expect(result.symbolsIndexed).toBeGreaterThanOrEqual(2);
     expect(result.importsIndexed).toBe(1);
+  });
+
+  it('reports a missing on-disk index as stale with rebuild instructions available to callers', () => {
+    writeFile(tmp, 'core/freshness/a.ts', 'export const FreshnessA = 1;');
+    const dbPath = path.join(tmp, 'missing.db');
+
+    const freshness = assessSymbolIndexFreshness({ repoRoot: tmp, dbPath, includeDirs: ['core'] });
+
+    expect(freshness.missing).toBe(true);
+    expect(freshness.stale).toBe(true);
+    expect(freshness.dbAgeMs).toBe(-1);
+  });
+
+  it('marks the index stale when an indexed source file is newer than the DB', () => {
+    writeFile(tmp, 'core/freshness/a.ts', 'export const FreshnessA = 1;');
+    const dbPath = path.join(tmp, 'freshness.db');
+    buildIndex({ repoRoot: tmp, dbPath, includeDirs: ['core'] });
+
+    const dbMtime = new Date(Date.now() - 10_000);
+    fs.utimesSync(dbPath, dbMtime, dbMtime);
+
+    const sourceMtime = new Date();
+    fs.utimesSync(path.join(tmp, 'core/freshness/a.ts'), sourceMtime, sourceMtime);
+
+    const freshness = assessSymbolIndexFreshness({ repoRoot: tmp, dbPath, includeDirs: ['core'] });
+
+    expect(freshness.missing).toBe(false);
+    expect(freshness.stale).toBe(true);
+  });
+
+  it('best-effort rebuilds a missing index', () => {
+    writeFile(tmp, 'core/freshness/a.ts', 'export const FreshnessA = 1;');
+    const dbPath = path.join(tmp, 'freshness.db');
+
+    const result = ensureSymbolIndexFresh({ repoRoot: tmp, dbPath, includeDirs: ['core'] });
+
+    expect(result.rebuilt).toBe(true);
+    expect(result.missing).toBe(false);
+    expect(result.stale).toBe(false);
+
+    const rebuilt = openIndexDb(dbPath);
+    try {
+      expect(findSymbol(rebuilt, 'FreshnessA')).toHaveLength(1);
+    } finally {
+      rebuilt.close();
+    }
   });
 });

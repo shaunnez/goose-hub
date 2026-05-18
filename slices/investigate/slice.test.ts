@@ -17,6 +17,7 @@ const mockInvokeSkill = vi.fn();
 const mockPersistScoutReport = vi.fn();
 const mockLookupWorkItemSymbols = vi.fn();
 const mockExtractIdentifiers = vi.fn();
+const mockEnsureSymbolIndexFresh = vi.fn();
 const mockGetUseInvestigationSwarm = vi.fn();
 const mockReadProjectSettings = vi.fn();
 const mockReadProjectSkillSettings = vi.fn();
@@ -30,6 +31,10 @@ vi.mock('@goose-hub/core/agent-runtime/swarm.js', () => ({
 vi.mock('@goose-hub/core/symbol-index/lookup.js', () => ({
   lookupWorkItemSymbols: (...args: unknown[]) => mockLookupWorkItemSymbols(...args),
   extractIdentifiers: (...args: unknown[]) => mockExtractIdentifiers(...args),
+}));
+
+vi.mock('@goose-hub/core/symbol-index/freshness.js', () => ({
+  ensureSymbolIndexFresh: (...args: unknown[]) => mockEnsureSymbolIndexFresh(...args),
 }));
 
 vi.mock('@goose-hub/core/agent-runtime/cross-validate.js', () => ({
@@ -224,6 +229,7 @@ beforeEach(() => {
   mockCrossValidate.mockReset();
   mockInvokeSkill.mockReset();
   mockPersistScoutReport.mockReset();
+  mockEnsureSymbolIndexFresh.mockReset();
   mockGetUseInvestigationSwarm.mockReset();
   mockReadProjectSettings.mockReset();
   mockReadProjectSkillSettings.mockReset();
@@ -233,6 +239,15 @@ beforeEach(() => {
   mockAccumulatePersonaStats.mockClear();
   mockLookupWorkItemSymbols.mockReturnValue([]);
   mockExtractIdentifiers.mockReturnValue([]);
+  mockEnsureSymbolIndexFresh.mockReturnValue({
+    dbPath: '/tmp/symbol-index.db',
+    dbAgeMs: 10,
+    stale: false,
+    missing: false,
+    corrupt: false,
+    newestSourceMtimeMs: Date.now(),
+    rebuilt: false,
+  });
   mockGetUseInvestigationSwarm.mockReturnValue(true);
   mockReadProjectSettings.mockReturnValue(null);
   mockReadProjectSkillSettings.mockReturnValue(new Map());
@@ -1178,6 +1193,61 @@ describe('runInvestigateWorkflow', () => {
         'Fix AuthService',
         'Crashes on login',
         expect.objectContaining({ worktreePath: '/tmp/test-worktree' }),
+      );
+    });
+
+    it('ensures symbol index freshness before lookup without blocking investigation', async () => {
+      mockEnsureSymbolIndexFresh.mockReturnValue({
+        dbPath: '/tmp/symbol-index.db',
+        dbAgeMs: -1,
+        stale: true,
+        missing: true,
+        corrupt: false,
+        newestSourceMtimeMs: null,
+        rebuilt: false,
+        error: 'build failed',
+      });
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(mockEnsureSymbolIndexFresh).toHaveBeenCalledWith(
+        expect.objectContaining({ repoRoot: expect.any(String) }),
+      );
+      expect(mockDispatchWave).toHaveBeenCalled();
+    });
+
+    it('emits symbol-index.lookup telemetry with counts and freshness', async () => {
+      const hints = [
+        { name: 'AuthService', definedIn: 'core/auth.ts', line: 10, kind: 'function', callers: [] },
+      ];
+      mockLookupWorkItemSymbols.mockReturnValue(hints);
+      mockExtractIdentifiers.mockReturnValue(['AuthService', 'SessionStore']);
+      mockEnsureSymbolIndexFresh.mockReturnValue({
+        dbPath: '/tmp/symbol-index.db',
+        dbAgeMs: 123,
+        stale: true,
+        missing: false,
+        corrupt: false,
+        newestSourceMtimeMs: Date.now(),
+        rebuilt: true,
+      });
+
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(eventStore.appendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'symbol-index.lookup',
+          payload: {
+            consumerSkill: 'scout-code-path',
+            identifierCount: 2,
+            hintCount: 1,
+            dbAgeMs: 123,
+            stale: true,
+          },
+        }),
       );
     });
   });

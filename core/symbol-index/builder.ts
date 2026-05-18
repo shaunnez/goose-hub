@@ -22,7 +22,7 @@ export interface BuildResult {
   importsIndexed: number;
 }
 
-const DEFAULT_INCLUDE_DIRS = ['apps', 'core', 'slices', 'skills'];
+export const DEFAULT_INCLUDE_DIRS = ['apps', 'core', 'slices', 'skills'];
 const SKIP_DIR_NAMES = new Set([
   'node_modules',
   'dist',
@@ -33,7 +33,7 @@ const SKIP_DIR_NAMES = new Set([
   '.claude',
 ]);
 
-function walkTsFiles(absRoot: string): string[] {
+export function walkTsFiles(absRoot: string): string[] {
   const out: string[] = [];
   const visit = (dir: string): void => {
     let entries: fs.Dirent[];
