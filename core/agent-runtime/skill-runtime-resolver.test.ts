@@ -1,25 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ProjectModelSettingsRow } from '../db/repositories/project-model-settings.js';
 import { higherTier, lowerTier, resolveSkillRuntime } from './skill-runtime-resolver.js';
-
-function roleRow(overrides: Partial<ProjectModelSettingsRow>): ProjectModelSettingsRow {
-  return {
-    projectId: 'project',
-    role: 'role',
-    primaryModel: null,
-    fallbackModel: null,
-    advisorModel: null,
-    complexityOverridesJson: null,
-    updatedAt: 'now',
-    updatedBy: null,
-    primaryProvider: null,
-    fallbackProvider: null,
-    advisorProvider: null,
-    maxTurns: null,
-    timeoutMs: null,
-    ...overrides,
-  };
-}
 
 describe('resolveSkillRuntime', () => {
   it('lets a per-skill DB tier/provider override win over defaults', () => {
@@ -64,31 +44,11 @@ describe('resolveSkillRuntime', () => {
     expect(resolved.modelOverride).toBe('claude-opus-4-7');
   });
 
-  it('uses role-level DB model/provider before skill defaults', () => {
-    const resolved = resolveSkillRuntime({
-      skill: 'investigate',
-      role: 'investigator',
-      dbRoleModel: roleRow({
-        primaryModel: 'sonnet',
-        primaryProvider: 'codex',
-      }),
-    });
-
-    expect(resolved.source).toBe('db');
-    expect(resolved.tier).toBe('sonnet');
-    expect(resolved.provider).toBe('codex');
-    expect(resolved.modelOverride).toBe('gpt-5.4');
-  });
-
-  it('lets per-skill DB model/provider override role-level settings', () => {
+  it('lets per-skill DB model/provider override skill defaults', () => {
     const resolved = resolveSkillRuntime({
       skill: 'investigate',
       role: 'investigator',
       dbOverride: { modelTier: 'opus', modelProvider: 'claude' },
-      dbRoleModel: roleRow({
-        primaryModel: 'sonnet',
-        primaryProvider: 'codex',
-      }),
     });
 
     expect(resolved.source).toBe('db');
@@ -97,19 +57,14 @@ describe('resolveSkillRuntime', () => {
     expect(resolved.modelOverride).toBe('claude-opus-4-7');
   });
 
-  it('uses role-level project config before skill defaults when no DB role row exists', () => {
+  it('uses the skill provider hint for provider-pinned defaults like dev-review', () => {
     const resolved = resolveSkillRuntime({
-      skill: 'investigate',
-      role: 'investigator',
-      configRoleModel: {
-        primary: 'sonnet',
-        primaryProvider: 'codex',
-        fallback: null,
-        advisor: null,
-      },
+      skill: 'dev-review',
+      role: 'dev-reviewer',
+      skillProvider: 'codex',
     });
 
-    expect(resolved.source).toBe('config');
+    expect(resolved.source).toBe('skill-default');
     expect(resolved.tier).toBe('sonnet');
     expect(resolved.provider).toBe('codex');
     expect(resolved.modelOverride).toBe('gpt-5.4');

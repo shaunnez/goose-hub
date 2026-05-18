@@ -1,15 +1,12 @@
-import type { ProjectModelSettingsRow } from '../db/repositories/project-model-settings.js';
-import { readProjectModelSettingsForRole } from '../db/repositories/project-model-settings.js';
 import type { ProjectSkillSettingsRow } from '../db/repositories/project-settings.js';
 import {
   readProjectSettings,
   readProjectSkillSettings,
 } from '../db/repositories/project-settings.js';
-import type { BudgetConfig, ModelProvider, ModelTier, Role, RoleModel } from '../types.js';
+import type { BudgetConfig, ModelProvider, ModelTier, Role } from '../types.js';
 import type { ResolvedBudget, SkillBudgetOverride } from './budgets.js';
 import { SKILL_BUDGETS, resolveBudgets } from './budgets.js';
 import { defaultModelForTierAndProvider, providerOf, tierOf } from './models.js';
-import { selectModelForRole } from './select-model-for-role.js';
 import type { ConfigRuntime } from './select-runtime.js';
 
 export type SkillRuntimeSource = 'caller' | 'db' | 'config' | 'skill-default' | 'fallback';
@@ -127,8 +124,6 @@ export function resolveSkillRuntime(input: {
   fallbackProvider?: ModelProvider;
   callerModelOverride?: string;
   role?: Role;
-  configRoleModel?: RoleModel;
-  dbRoleModel?: ProjectModelSettingsRow | null;
   allowHoldoutOverride?: boolean;
   ignoreProviderOverride?: boolean;
 }): ResolvedSkillRuntime {
@@ -173,39 +168,19 @@ export function resolveSkillRuntime(input: {
     dbOverride,
     fallbackTier: input.fallbackTier,
   });
-  const roleModel =
-    input.role != null
-      ? selectModelForRole({
-          role: input.role,
-          configRoleModel: input.configRoleModel,
-          allowHoldoutOverride: input.allowHoldoutOverride,
-          dbRow: input.dbRoleModel,
-          skill: input.skill,
-          skillProvider: input.skillProvider,
-        })
-      : null;
-  const roleModelWins =
-    tierResult.source !== 'db' &&
-    tierResult.source !== 'config' &&
-    (roleModel?.source === 'db' || roleModel?.source === 'config');
-  const roleOverrideSource: SkillRuntimeSource | null =
-    roleModelWins && roleModel != null ? (roleModel.source === 'db' ? 'db' : 'config') : null;
-  const tier = roleModelWins ? roleModel.tier : tierResult.tier;
+  const tier = tierResult.tier;
   const provider =
     forcedProviderFromRuntime(providerConfigRuntime) ??
     (!input.ignoreProviderOverride && isModelProvider(dbOverride?.modelProvider)
       ? dbOverride.modelProvider
-      : roleModelWins
-        ? roleModel.provider
-        : (input.skillProvider ?? input.fallbackProvider ?? 'claude'));
+      : (input.skillProvider ??
+        SKILL_BUDGETS[input.skill]?.provider ??
+        input.fallbackProvider ??
+        'claude'));
   const modelOverride = defaultModelForTierAndProvider(tier, provider);
   const supportsFallback = SKILL_BUDGETS[input.skill]?.escalation != null;
   const supportsAdvisor = input.skill === 'implement' || input.skill === 'write-prd';
-  const source = isModelProvider(dbOverride?.modelProvider)
-    ? 'db'
-    : roleOverrideSource != null
-      ? roleOverrideSource
-      : tierResult.source;
+  const source = isModelProvider(dbOverride?.modelProvider) ? 'db' : tierResult.source;
 
   return {
     ...resolvedBudget,
@@ -231,7 +206,6 @@ export function resolveSkillRuntimeForProject(input: {
   projectId: string;
   configRuntime?: ConfigRuntime;
   skillProvider?: ModelProvider;
-  configRoleModel?: RoleModel;
   fallbackTier?: ModelTier;
   fallbackProvider?: ModelProvider;
   callerModelOverride?: string;
@@ -240,13 +214,10 @@ export function resolveSkillRuntimeForProject(input: {
   ignoreProviderOverride?: boolean;
 }): ResolvedSkillRuntime {
   const skillRows = readProjectSkillSettings(input.projectId);
-  const roleRow =
-    input.role != null ? readProjectModelSettingsForRole(input.projectId, input.role) : null;
   const globalRow = readProjectSettings(input.projectId);
   return resolveSkillRuntime({
     ...input,
     dbOverride: skillRows.get(input.skill),
-    dbRoleModel: roleRow,
     dbPerWorkflowMaxUsd: globalRow?.perWorkflowMaxUsd,
     dbPerAgentMaxUsd: globalRow?.perAgentMaxUsd,
   });
@@ -260,18 +231,18 @@ export function deriveSkillRuntimeResponse(input: {
   role?: Role;
   allowHoldoutOverride?: boolean;
   skillProvider?: ModelProvider;
-  configRoleModel?: RoleModel;
-  dbRoleModel?: ProjectModelSettingsRow | null;
+  fallbackTier?: ModelTier;
+  fallbackProvider?: ModelProvider;
 }): ResolvedSkillRuntime {
   return resolveSkillRuntime({
     skill: input.skill,
     projectBudgets: input.projectBudgets,
     dbOverride: input.row,
-    configRoleModel: input.configRoleModel,
-    dbRoleModel: input.dbRoleModel,
     configRuntime: input.configRuntime,
     role: input.role,
     allowHoldoutOverride: input.allowHoldoutOverride,
     skillProvider: input.skillProvider,
+    fallbackTier: input.fallbackTier,
+    fallbackProvider: input.fallbackProvider,
   });
 }

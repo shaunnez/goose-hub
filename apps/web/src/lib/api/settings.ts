@@ -28,7 +28,13 @@ export async function patchGlobalBudgetSettings(
 export async function patchSkillBudgetSetting(
   slug: string,
   skill: string,
-  patch: Record<string, number | null>,
+  patch: Partial<{
+    maxTurns: number | null;
+    maxBudgetUsd: number | null;
+    timeoutMs: number | null;
+    modelTier: ModelTier | null;
+    provider: ModelProvider | null;
+  }>,
 ): Promise<void> {
   await patchJson(`/projects/${slug}/settings/skills/${encodeURIComponent(skill)}`, patch);
 }

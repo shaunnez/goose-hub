@@ -1,9 +1,8 @@
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { SKILL_BUDGETS } from '@goose-hub/core/agent-runtime/budgets.js';
+import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { deriveSkillRuntimeResponse } from '@goose-hub/core/agent-runtime/skill-runtime-resolver.js';
-import {
-  type ProjectModelSettingsRow,
-  readProjectModelSettings,
-} from '@goose-hub/core/db/repositories/project-model-settings.js';
 import {
   deleteProjectSkillSetting,
   readProjectSettings,
@@ -12,7 +11,8 @@ import {
   writeProjectSettings,
   writeProjectSkillSetting,
 } from '@goose-hub/core/db/repositories/project-settings.js';
-import type { Role } from '@goose-hub/core/types.js';
+import type { ModelProvider, ModelTier, Role } from '@goose-hub/core/types.js';
+import { skillsRoot } from '@goose-hub/skills';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { parseBody } from '#shared/middleware.js';
@@ -76,6 +76,27 @@ function roleForSkill(skill: string): Role | undefined {
   return undefined;
 }
 
+async function loadSkillRuntimeHint(skill: string): Promise<{
+  role?: Role;
+  modelTier?: ModelTier;
+  provider?: ModelProvider;
+}> {
+  try {
+    const configPath = join(skillsRoot, skill, 'skill.config.ts');
+    // Cross-package boundary at runtime path: skill configs live in @goose-hub/skills.
+    const mod = (await import(pathToFileURL(configPath).href)) as { default?: unknown };
+    if (mod.default == null || typeof mod.default !== 'object') return {};
+    const config = mod.default as Partial<SkillConfig>;
+    return {
+      role: config.role,
+      modelTier: config.modelPin,
+      provider: config.provider,
+    };
+  } catch {
+    return {};
+  }
+}
+
 /** GET /projects/:slug/settings — merged view of config + DB overrides */
 router.get('/:slug/settings', async (c) => {
   const slug = c.req.param('slug');
@@ -84,7 +105,10 @@ router.get('/:slug/settings', async (c) => {
 
   const globalRow = readProjectSettings(project.id);
   const skillRows = readProjectSkillSettings(project.id);
-  const roleRows = readProjectModelSettings(project.id);
+  const skillRuntimeHints = new Map<string, Awaited<ReturnType<typeof loadSkillRuntimeHint>>>();
+  for (const skill of Object.keys(SKILL_BUDGETS)) {
+    skillRuntimeHints.set(skill, await loadSkillRuntimeHint(skill));
+  }
 
   const skillSettings: Record<
     string,
@@ -122,12 +146,13 @@ router.get('/:slug/settings', async (c) => {
     }
   > = {};
   for (const [skill, budget] of Object.entries(SKILL_BUDGETS)) {
+    const hint = skillRuntimeHints.get(skill);
     skillDefaults[skill] = {
       maxTurns: budget.maxTurns,
       maxBudgetUsd: budget.maxBudgetUsd,
       timeoutMs: budget.timeoutMs,
       modelTier: budget.modelTier,
-      modelProvider: budget.provider ?? 'claude',
+      modelProvider: hint?.provider ?? budget.provider ?? 'claude',
     };
   }
 
@@ -143,17 +168,18 @@ router.get('/:slug/settings', async (c) => {
     }
   > = {};
   for (const skill of Object.keys(SKILL_BUDGETS)) {
-    const role = roleForSkill(skill);
+    const hint = skillRuntimeHints.get(skill);
+    const role = hint?.role ?? roleForSkill(skill);
     const resolved = deriveSkillRuntimeResponse({
       skill,
       row: skillRows.get(skill),
       projectBudgets: project.budgets,
       configRuntime: project.agentConfig.runtime,
       role,
-      configRoleModel: role != null ? project.agentConfig.rolesModels?.[role] : undefined,
-      dbRoleModel: role != null ? (roleRows.get(role) as ProjectModelSettingsRow | null) : null,
       allowHoldoutOverride: project.agentConfig.allowHoldoutOverride,
-      skillProvider: SKILL_BUDGETS[skill]?.provider,
+      skillProvider: hint?.provider ?? SKILL_BUDGETS[skill]?.provider,
+      fallbackTier: hint?.modelTier,
+      fallbackProvider: hint?.provider,
     });
     resolvedSkillRuntimes[skill] = {
       source: resolved.source,
