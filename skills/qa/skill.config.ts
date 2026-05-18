@@ -1,6 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
-import { TestRunSchema } from './schema.js';
+import { TestRunSchema, VerificationSummarySchema } from './schema.js';
 
 /**
  * Context keys provided to the QA holdout agent, formatted as structured XML.
@@ -17,6 +17,7 @@ import { TestRunSchema } from './schema.js';
  *     <workItem>{"title":"...","body":"...","number":123}</workItem>
  *     <prDiff>...</prDiff>
  *     <projectCommands>{"testCommand":"...","lintCommand":"...","e2eCommand":"..."}</projectCommands>
+ *     <verificationSummary>{"changedFiles":...,"commands":...,"testRun":...}</verificationSummary>
  *     <sliceTests>["path/to/test.ts"]</sliceTests>
  *   </task>
  */
@@ -75,6 +76,11 @@ export const QaContextSchema = z.object({
     .optional(),
   /** Structured test results captured by the workflow before the QA agent starts. */
   testRun: TestRunSchema.nullable().optional(),
+  /**
+   * Compact workflow-owned verification packet. Contains deterministic command
+   * statuses and evidence metadata only, never implementation reasoning.
+   */
+  verificationSummary: VerificationSummarySchema.optional(),
 });
 
 const config: SkillConfig = {
@@ -114,6 +120,7 @@ const config: SkillConfig = {
     'verifyCommands',
     'devTestsRun',
     'testRun',
+    'verificationSummary',
   ],
 };
 

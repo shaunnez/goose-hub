@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
 import {
@@ -6,6 +7,7 @@ import {
   QaOutputSchema,
   QualityScoresSchema,
   TierResultSchema,
+  VerificationSummarySchema,
   computeOverallScore,
 } from './schema.js';
 import config, { QaContextSchema } from './skill.config.js';
@@ -660,6 +662,52 @@ describe('qa skill config', () => {
     expect(config.contextAllowlist).toContain('devTestsRun');
   });
 
+  it('contextAllowlist contains verificationSummary', () => {
+    expect(config.contextAllowlist).toContain('verificationSummary');
+  });
+
+  it('contextSchema accepts compact verificationSummary', () => {
+    const verificationSummary = {
+      changedFiles: {
+        paths: ['slices/qa/workflow.ts'],
+        count: 1,
+        diffCharCount: 1024,
+        diffStat: 'slices/qa/workflow.ts | 10 +++++-----',
+      },
+      pr: { number: 813, baseBranch: 'main', headSha: 'abc1234' },
+      commands: {
+        lint: { command: 'pnpm lint', status: 'passed' },
+        typecheck: { command: 'pnpm typecheck', status: 'passed' },
+        test: { command: 'pnpm test --reporter=json', status: 'passed', durationMs: 1000 },
+      },
+      testRun: {
+        command: 'pnpm test --reporter=json',
+        status: 'passed',
+        wallTimeMs: 1000,
+        total: 10,
+        passed: 10,
+        failed: 0,
+        skipped: 0,
+        failingSuites: [],
+      },
+      e2e: { mode: 'ui-changed', status: 'skipped', reason: 'no significant UI changes detected' },
+      evidence: { status: 'absent' },
+      devTestsRun: {
+        command: 'pnpm vitest slices/qa/slice.test.ts',
+        paths: ['slices/qa/slice.test.ts'],
+      },
+    };
+
+    expect(VerificationSummarySchema.safeParse(verificationSummary).success).toBe(true);
+    const valid = QaContextSchema.safeParse({
+      workItem: { title: 't', body: 'b', number: 1 },
+      prDiff: 'diff',
+      projectCommands: { testCommand: 'pnpm test ' },
+      verificationSummary,
+    });
+    expect(valid.success).toBe(true);
+  });
+
   it('contextSchema accepts devTestsRun with command and paths (#467)', () => {
     const valid = QaContextSchema.safeParse({
       workItem: { title: 't', body: 'b', number: 1 },
@@ -671,6 +719,18 @@ describe('qa skill config', () => {
       },
     });
     expect(valid.success).toBe(true);
+  });
+});
+
+describe('qa prompt verificationSummary guidance', () => {
+  it('tells QA not to rerun the full suite when structured test results are present', () => {
+    const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+
+    expect(prompt).toContain('Start from `verificationSummary`');
+    expect(prompt).toContain(
+      'Do not re-run `testCommand` when structured test results are present',
+    );
+    expect(prompt).toContain('Inspect changed files first');
   });
 });
 
