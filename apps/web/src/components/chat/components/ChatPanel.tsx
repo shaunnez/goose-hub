@@ -14,6 +14,7 @@ import type {
 import { Bot, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { deriveThinkingFromEvents, mergeToolStatusFromEvents } from '../lib/liveState';
 import { resolveScopeFromPath } from '../lib/scope';
 import { useChatEvents } from '../lib/useChatEvents';
 import { ChatInput } from './ChatInput';
@@ -65,28 +66,23 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
     };
   }, [open, resolved.scope, resolved.projectSlug, resolved.workItemId, runtime]);
 
-  // Subscribe to chat.* events for this conversation. We use them to refresh
-  // the invocations list whenever a tool transitions state.
+  // Subscribe to chat.* events for this conversation. The events drive two
+  // render-only behaviours that don't need a network round-trip:
+  //   - the "thinking…" indicator between user message and agent reply
+  //   - live `running` → `completed`/`failed` status badge updates on tool
+  //     cards we already know about
+  //
+  // We deliberately do NOT refetch the conversation on every event tick.
+  // Authoritative reconciliation happens via `postMessage` (after a turn)
+  // and `resolveInvocation` (after an approve/reject). New invocations the
+  // base state hasn't seen yet are still rendered after the next refresh —
+  // tool events for unknown ids are ignored by the merge helper.
   const events = useChatEvents(conversation?.id ?? null);
-
-  useEffect(() => {
-    if (events.length === 0 || conversation == null) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const full = await fetchConversation(conversation.id);
-        if (!cancelled) {
-          setMessages(full.messages);
-          setInvocations(full.invocations);
-        }
-      } catch {
-        // best-effort refresh; ignore
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [events.length, conversation]);
+  const isThinking = useMemo(() => deriveThinkingFromEvents(events), [events]);
+  const liveInvocations = useMemo(
+    () => mergeToolStatusFromEvents(invocations, events),
+    [invocations, events],
+  );
 
   const sendMessage = useCallback(
     async (content: string) => {
@@ -216,8 +212,9 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
 
       <ChatThread
         messages={messages}
-        invocations={invocations}
+        invocations={liveInvocations}
         pendingDecision={pendingDecision}
+        thinking={isThinking}
         onApprove={handleApprove}
         onReject={handleReject}
         onNavigate={handleNavigate}

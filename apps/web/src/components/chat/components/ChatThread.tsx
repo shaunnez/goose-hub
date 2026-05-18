@@ -1,4 +1,5 @@
 import type { ChatMessageDto, ChatToolInvocationDto } from '@/lib/types';
+import { Loader2 } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { MessageBubble } from './MessageBubble';
 import { ToolProposalCard } from './ToolProposalCard';
@@ -7,6 +8,7 @@ interface ChatThreadProps {
   messages: ChatMessageDto[];
   invocations: ChatToolInvocationDto[];
   pendingDecision: string | null;
+  thinking?: boolean;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
   onNavigate?: (path: string) => void;
@@ -22,6 +24,7 @@ export function ChatThread({
   messages,
   invocations,
   pendingDecision,
+  thinking = false,
   onApprove,
   onReject,
   onNavigate,
@@ -31,7 +34,7 @@ export function ChatThread({
   // biome-ignore lint/correctness/useExhaustiveDependencies: only scroll on length change
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages.length, invocations.length]);
+  }, [messages.length, invocations.length, thinking]);
 
   return (
     <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
@@ -72,6 +75,16 @@ export function ChatThread({
             onNavigate={onNavigate}
           />
         ))}
+      {thinking && (
+        <output
+          data-testid="chat-thinking-indicator"
+          className="my-2 inline-flex items-center gap-1.5 text-[11.5px] text-fg-2"
+          aria-live="polite"
+        >
+          <Loader2 size={12} className="animate-spin" />
+          <span>thinking…</span>
+        </output>
+      )}
     </div>
   );
 }

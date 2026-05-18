@@ -178,6 +178,8 @@ export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<Cha
   const provider = conversation.runtime === 'codex' ? 'codex' : 'claude';
   const modelOverride = defaultModelForTierAndProvider('sonnet', provider);
 
+  emitThinking(conversation, runId, 'skill-invoked');
+
   try {
     const result = await invokeSkill({
       skillName: 'hub-chat',
@@ -187,6 +189,7 @@ export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<Cha
       context,
       overrides: { modelOverride },
     });
+    emitThinking(conversation, runId, 'structured-output-received');
     const parsed = HubChatOutputSchema.safeParse(result.output);
     if (!parsed.success) {
       logger.warn('hub-chat: output validation failed', {
@@ -227,4 +230,16 @@ export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<Cha
 
 function manifestHas(name: string): boolean {
   return listToolManifests().some((t) => t.name === name);
+}
+
+type ThinkingCheckpoint = 'skill-invoked' | 'structured-output-received';
+
+function emitThinking(conversation: Conversation, runId: string, checkpoint: ThinkingCheckpoint) {
+  eventStore.appendEvent({
+    projectId: conversation.projectId ?? 'goose-hub-self',
+    workItemId: conversation.workItemId,
+    kind: 'chat.agent-thinking',
+    payload: { conversationId: conversation.id, runId, checkpoint },
+    runId,
+  });
 }
