@@ -45,17 +45,70 @@ function copyIfPresent(source: string | null, targetDir: string): string | null 
   return target;
 }
 
+const DISCOVERY_EXCLUDED_DIRS = new Set([
+  '.git',
+  'node_modules',
+  'dist',
+  'build',
+  '.cache',
+  'playwright-report',
+  'test-results',
+]);
+
+function isEvidenceArtifact(name: string): boolean {
+  return /\.(png|jpe?g|gif)$/i.test(name);
+}
+
+function discoverIssueEvidenceArtifacts(params: {
+  workspaceDir: string;
+  issueNumber: number;
+}): string[] {
+  const issueDir = `issue-${params.issueNumber}`;
+  const matches: string[] = [];
+
+  function visit(dir: string): void {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (DISCOVERY_EXCLUDED_DIRS.has(entry.name)) continue;
+        visit(fullPath);
+        continue;
+      }
+
+      if (!entry.isFile() || !isEvidenceArtifact(entry.name)) continue;
+      const parent = path.basename(dir);
+      const grandparent = path.basename(path.dirname(dir));
+      if (parent === issueDir && grandparent === 'evidence') {
+        matches.push(fullPath);
+      }
+    }
+  }
+
+  visit(params.workspaceDir);
+  return matches.sort((a, b) => a.localeCompare(b));
+}
+
 function stageScreenshotsFromWorktree(params: {
   workspaceDir: string;
   issueNumber: number;
   stagingDir: string;
 }): void {
-  const sourceDir = path.join(params.workspaceDir, 'evidence', `issue-${params.issueNumber}`);
-  if (!fs.existsSync(sourceDir)) return;
+  const artifacts = discoverIssueEvidenceArtifacts({
+    workspaceDir: params.workspaceDir,
+    issueNumber: params.issueNumber,
+  });
+  if (artifacts.length === 0) return;
+
   fs.mkdirSync(params.stagingDir, { recursive: true });
-  for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
-    if (!entry.isFile() || !/^step-.*\.(png|jpe?g)$/i.test(entry.name)) continue;
-    fs.copyFileSync(path.join(sourceDir, entry.name), path.join(params.stagingDir, entry.name));
+  for (const artifact of artifacts) {
+    fs.copyFileSync(artifact, path.join(params.stagingDir, path.basename(artifact)));
   }
 }
 

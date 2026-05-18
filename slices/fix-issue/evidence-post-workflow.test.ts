@@ -12,6 +12,8 @@ afterEach(() => {
   fs.rmSync(workspaceDir, { recursive: true, force: true });
   fs.rmSync(stagingDir, { recursive: true, force: true });
   fs.rmSync(helperWorktree, { recursive: true, force: true });
+  fs.rmSync('/tmp/evidence-staging-813', { recursive: true, force: true });
+  fs.rmSync('/tmp/evidence-issue-813', { recursive: true, force: true });
 });
 
 function plan() {
@@ -24,6 +26,66 @@ function plan() {
 }
 
 describe('evidence-post workflow helper', () => {
+  it('stages package-local issue evidence artifacts from the implementation worktree', () => {
+    const issue813 = 813;
+    const staging813 = `/tmp/evidence-staging-${issue813}`;
+    const packageEvidenceDir = path.join(workspaceDir, 'apps/web/evidence/issue-813');
+    const ignoredEvidenceDir = path.join(workspaceDir, 'node_modules/pkg/evidence/issue-813');
+    fs.mkdirSync(packageEvidenceDir, { recursive: true });
+    fs.mkdirSync(ignoredEvidenceDir, { recursive: true });
+    fs.mkdirSync(path.join(workspaceDir, 'apps/web/e2e'), { recursive: true });
+    fs.writeFileSync(path.join(workspaceDir, 'apps/web/e2e/issue-813.spec.ts'), 'spec');
+    fs.writeFileSync(path.join(packageEvidenceDir, 'step-1.png'), 'png');
+    fs.writeFileSync(path.join(packageEvidenceDir, 'step-2.jpeg'), 'jpeg');
+    fs.writeFileSync(path.join(packageEvidenceDir, 'walkthrough.gif'), 'gif');
+    fs.writeFileSync(path.join(ignoredEvidenceDir, 'junk.png'), 'png');
+
+    const spawnSync = vi.fn(() => ({ status: 0 }));
+    const collect = vi.fn(() => ({
+      issue: issue813,
+      slug: 'evidence-issue-813',
+      phase: 'after' as const,
+      classification: 'validation_failed' as const,
+      reproduced: false,
+      passed: false,
+      status: 'failed',
+      errors: ['Expected button to be visible'],
+      stdout: [],
+      screenshots: [],
+      videoPath: null,
+      gifPath: null,
+      ffmpegError: null,
+      notes: 'Expected button to be visible',
+    }));
+
+    runEvidencePostPlan({
+      plan: {
+        specPath: 'apps/web/e2e/issue-813.spec.ts',
+        slug: 'evidence-issue-813',
+        validationIntent: 'Validate issue 813 after-state.',
+        expectedAssertions: ['Issue 813 evidence captured'],
+      },
+      workspaceDir,
+      issueNumber: issue813,
+      repo: 'owner/repo',
+      prNumber: 20,
+      prHeadSha: 'def5678',
+      publisher: { spawnSync: spawnSync as never, collect },
+    });
+
+    expect(fs.existsSync(path.join(staging813, 'step-1.png'))).toBe(true);
+    expect(fs.existsSync(path.join(staging813, 'step-2.jpeg'))).toBe(true);
+    expect(fs.existsSync(path.join(staging813, 'walkthrough.gif'))).toBe(true);
+    expect(fs.existsSync(path.join(staging813, 'junk.png'))).toBe(false);
+    expect(collect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue: issue813,
+        evidenceDir: staging813,
+        resultsPath: path.join(staging813, 'pw-results.json'),
+      }),
+    );
+  });
+
   it('publishes evidence only after collector classifies the AFTER run as passed', () => {
     const screenshotDir = path.join(workspaceDir, 'evidence', `issue-${issueNumber}`);
     fs.mkdirSync(screenshotDir, { recursive: true });
