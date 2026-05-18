@@ -204,6 +204,13 @@
       "when": 1778817600001,
       "tag": "0028_project_evidence_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1778817600002,
+      "tag": "0029_drop_project_model_settings",
+      "breakpoints": true
     }
   ]
 }

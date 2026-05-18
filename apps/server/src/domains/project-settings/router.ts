@@ -1,14 +1,29 @@
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { SKILL_BUDGETS } from '@goose-hub/core/agent-runtime/budgets.js';
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { deriveSkillRuntimeResponse } from '@goose-hub/core/agent-runtime/skill-runtime-resolver.js';
 import {
+  readProjectDevReviewSettings,
+  writeProjectDevReviewSettings,
+} from '@goose-hub/core/db/repositories/project-dev-review-settings.js';
+import {
+  parseReviewerSlots,
+  readProjectReviewSettings,
+  writeProjectReviewSettings,
+} from '@goose-hub/core/db/repositories/project-review-settings.js';
+import {
   deleteProjectSkillSetting,
+  getUseInvestigationSwarm,
+  getUseMultiAgentPipeline,
   readProjectSettings,
   readProjectSkillSettings,
   resetAllProjectBudgets,
+  setUseInvestigationSwarm,
+  setUseMultiAgentPipeline,
   writeProjectSettings,
   writeProjectSkillSetting,
 } from '@goose-hub/core/db/repositories/project-settings.js';
@@ -41,6 +56,31 @@ const SkillBudgetPatchSchema = z.object({
   timeoutMs: z.number().int().min(5_000).max(3_600_000).nullable().optional(),
   modelTier: z.enum(['haiku', 'sonnet', 'opus']).nullable().optional(),
   provider: z.enum(['claude', 'codex']).nullable().optional(),
+});
+
+const DevReviewPatchSchema = z.object({
+  enabled: z.boolean().nullable().optional(),
+  triggerOn: z
+    .enum(['all', 'priority:medium+', 'priority:high+', 'priority:critical'])
+    .nullable()
+    .optional(),
+  maxRevisionTurns: z.number().int().min(1).max(5).nullable().optional(),
+  perCycleMaxUsd: z.number().min(0).max(50).nullable().optional(),
+  timeoutMs: z.number().int().min(30_000).max(1_800_000).nullable().optional(),
+});
+
+const ReviewerSlotSchema = z.object({
+  model: z.enum(['claude', 'codex']),
+  prompt: z.enum(['default', 'unconstrained']),
+});
+
+const ReviewPatchSchema = z.object({
+  reviewerSlots: z.array(ReviewerSlotSchema).min(1).max(2).nullable(),
+});
+
+const PipelinePatchSchema = z.object({
+  useMultiAgentPipeline: z.boolean().optional(),
+  useInvestigationSwarm: z.boolean().optional(),
 });
 
 const SKILL_CALLERS: Record<string, string[]> = {
@@ -412,6 +452,142 @@ router.delete('/:slug/settings/skills/:skill', async (c) => {
   if (project == null) return c.json({ error: 'project not found' }, 404);
 
   deleteProjectSkillSetting(project.id, skill);
+  return c.json({ ok: true });
+});
+
+/**
+ * GET /projects/:slug/settings/codex-auth — read-only Codex CLI auth presence check.
+ * Status is per-machine, but it lives beside skill runtime settings because Codex is
+ * selected per skill through the provider field.
+ */
+router.get('/:slug/settings/codex-auth', async (c) => {
+  const slug = c.req.param('slug');
+  const project = await getProject(slug);
+  if (project == null) return c.json({ error: 'project not found' }, 404);
+
+  const authPath = join(homedir(), '.codex', 'auth.json');
+  const status = existsSync(authPath) ? 'connected' : 'missing';
+  return c.json({
+    status,
+    authPath,
+    loginCommand: 'codex login',
+  });
+});
+
+/** GET /projects/:slug/settings/dev-review — merged view of config + DB override */
+router.get('/:slug/settings/dev-review', async (c) => {
+  const slug = c.req.param('slug');
+  const project = await getProject(slug);
+  if (project == null) return c.json({ error: 'project not found' }, 404);
+
+  const dbRow = readProjectDevReviewSettings(project.id);
+  const configDevReview = project.agentConfig?.devReview ?? null;
+
+  return c.json({
+    projectId: project.id,
+    config: configDevReview,
+    dbOverride: dbRow
+      ? {
+          enabled: dbRow.enabled ?? null,
+          triggerOn: dbRow.triggerOn ?? null,
+          maxRevisionTurns: dbRow.maxRevisionTurns ?? null,
+          perCycleMaxUsd: dbRow.perCycleMaxUsd ?? null,
+          timeoutMs: dbRow.timeoutMs ?? null,
+          updatedAt: dbRow.updatedAt,
+          updatedBy: dbRow.updatedBy ?? null,
+        }
+      : null,
+  });
+});
+
+/** PATCH /projects/:slug/settings/dev-review — upsert dev-review config override */
+router.patch('/:slug/settings/dev-review', async (c) => {
+  const slug = c.req.param('slug');
+  const project = await getProject(slug);
+  if (project == null) return c.json({ error: 'project not found' }, 404);
+
+  const body = await parseBody<unknown>(c);
+  if (!body.ok) return body.error;
+
+  const parsed = DevReviewPatchSchema.safeParse(body.data);
+  if (!parsed.success) {
+    return c.json({ error: 'invalid body', details: parsed.error.issues }, 422);
+  }
+
+  writeProjectDevReviewSettings(project.id, parsed.data, 'ui');
+  return c.json({ ok: true });
+});
+
+/** GET /projects/:slug/settings/review — current reviewer slot configuration */
+router.get('/:slug/settings/review', async (c) => {
+  const slug = c.req.param('slug');
+  const project = await getProject(slug);
+  if (project == null) return c.json({ error: 'project not found' }, 404);
+
+  const dbRow = readProjectReviewSettings(project.id);
+  return c.json({
+    projectId: project.id,
+    reviewerSlots: parseReviewerSlots(dbRow) ?? null,
+    updatedAt: dbRow?.updatedAt ?? null,
+    updatedBy: dbRow?.updatedBy ?? null,
+  });
+});
+
+/** PATCH /projects/:slug/settings/review — upsert reviewer slot configuration */
+router.patch('/:slug/settings/review', async (c) => {
+  const slug = c.req.param('slug');
+  const project = await getProject(slug);
+  if (project == null) return c.json({ error: 'project not found' }, 404);
+
+  const body = await parseBody<unknown>(c);
+  if (!body.ok) return body.error;
+
+  const parsed = ReviewPatchSchema.safeParse(body.data);
+  if (!parsed.success) {
+    return c.json({ error: 'invalid body', details: parsed.error.issues }, 422);
+  }
+
+  writeProjectReviewSettings(project.id, { reviewerSlots: parsed.data.reviewerSlots }, 'ui');
+  return c.json({ ok: true });
+});
+
+/** GET /projects/:slug/settings/pipeline — current pipeline flags */
+router.get('/:slug/settings/pipeline', async (c) => {
+  const slug = c.req.param('slug');
+  const project = await getProject(slug);
+  if (project == null) return c.json({ error: 'project not found' }, 404);
+  const investigationSwarmConfigDefault = project.investigationSwarm?.enabled ?? true;
+
+  return c.json({
+    projectId: project.id,
+    useMultiAgentPipeline: getUseMultiAgentPipeline(project.id),
+    useInvestigationSwarm: getUseInvestigationSwarm(project.id, investigationSwarmConfigDefault),
+    configDefaults: {
+      useInvestigationSwarm: investigationSwarmConfigDefault,
+    },
+  });
+});
+
+/** PATCH /projects/:slug/settings/pipeline — toggle pipeline flags */
+router.patch('/:slug/settings/pipeline', async (c) => {
+  const slug = c.req.param('slug');
+  const project = await getProject(slug);
+  if (project == null) return c.json({ error: 'project not found' }, 404);
+
+  const body = await parseBody<unknown>(c);
+  if (!body.ok) return body.error;
+
+  const parsed = PipelinePatchSchema.safeParse(body.data);
+  if (!parsed.success) {
+    return c.json({ error: 'invalid body', details: parsed.error.issues }, 422);
+  }
+
+  if (parsed.data.useMultiAgentPipeline != null) {
+    setUseMultiAgentPipeline(project.id, parsed.data.useMultiAgentPipeline, 'ui');
+  }
+  if (parsed.data.useInvestigationSwarm != null) {
+    setUseInvestigationSwarm(project.id, parsed.data.useInvestigationSwarm, 'ui');
+  }
   return c.json({ ok: true });
 });
 

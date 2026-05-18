@@ -1,12 +1,12 @@
 # ADR 0034 — Provider-aware model routing and UI-configurable role/complexity overrides
 
-**Status:** Superseded by ADR 0042 for normal skill dispatch  
+**Status:** Fully superseded by ADR 0042  
 **Date:** 2026-05-08  
 **Issue:** #593 (M19.09)
 
 ## Supersession Note
 
-ADR 0042 makes per-skill runtime settings the normal user-facing model/tier/provider surface. The role model routing described here is retained only as advanced/internal compatibility state. Normal skill dispatch must not read `project_model_settings`.
+ADR 0042 makes per-skill runtime settings the only user-facing model, tier, provider, budget, and timeout surface. The role settings UI, `/settings/models` API, role settings repository, and current `project_model_settings` schema have been removed. Historical migrations remain only as migration history.
 
 ## Context
 

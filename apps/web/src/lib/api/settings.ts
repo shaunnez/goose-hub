@@ -4,7 +4,6 @@ import type {
   ModelProvider,
   ModelTier,
   PipelineSettingsDto,
-  ProjectModelSettingsDto,
   ProjectSettingsDto,
   ReviewSettingsDto,
   ReviewerSlot,
@@ -44,54 +43,9 @@ export async function deleteSkillBudgetSetting(slug: string, skill: string): Pro
   await deleteRequest(`/projects/${slug}/settings/skills/${encodeURIComponent(skill)}`);
 }
 
-export async function fetchProjectModelSettings(
-  slug: string,
-  signal?: AbortSignal,
-): Promise<ProjectModelSettingsDto> {
-  return getJson<ProjectModelSettingsDto>(`/projects/${slug}/settings/models`, signal);
-}
-
-export async function patchRoleModelSetting(
-  slug: string,
-  role: string,
-  patch: {
-    primaryModel?: ModelTier | null;
-    primaryProvider?: ModelProvider | null;
-  },
-): Promise<void> {
-  await patchJson(`/projects/${slug}/settings/models/${encodeURIComponent(role)}`, patch);
-}
-
-/** UX-2: bulk-set primary (tier, provider) for every eligible role. */
-export async function patchBulkRoleModel(
-  slug: string,
-  body: { tier: ModelTier; provider: ModelProvider },
-): Promise<{ ok: true; rolesUpdated: number }> {
-  return patchJson(`/projects/${slug}/settings/models/bulk`, body);
-}
-
 /** UX-1: reset ALL budget overrides (global + per-skill) for a project. */
 export async function resetAllProjectBudgets(slug: string): Promise<void> {
   await deleteRequest(`/projects/${slug}/settings/budgets`);
-}
-
-export async function patchComplexityOverrides(
-  slug: string,
-  role: string,
-  overrides: Record<string, ModelTier>,
-): Promise<void> {
-  await patchJson(
-    `/projects/${slug}/settings/models/${encodeURIComponent(role)}/complexity`,
-    overrides,
-  );
-}
-
-export async function deleteRoleModelSetting(slug: string, role: string): Promise<void> {
-  await deleteRequest(`/projects/${slug}/settings/models/${encodeURIComponent(role)}`);
-}
-
-export async function deleteAllRoleModelSettings(slug: string): Promise<void> {
-  await deleteRequest(`/projects/${slug}/settings/models`);
 }
 
 export async function fetchCodexAuthStatus(

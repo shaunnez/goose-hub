@@ -449,29 +449,6 @@ export interface WorkflowCatalogDto {
 export type ModelTier = 'haiku' | 'sonnet' | 'opus';
 export type ModelProvider = 'claude' | 'codex';
 
-export interface RoleModelDto {
-  configRoleModel: {
-    primary: string;
-    primaryProvider: ModelProvider | null;
-  } | null;
-  dbRoleModel: {
-    primaryModel: ModelTier | null;
-    primaryProvider: ModelProvider | null;
-    updatedAt: string | null;
-  } | null;
-  dbComplexityOverrides: Record<string, ModelTier>;
-  /** Compatibility-only role primary model ID. Normal skill dispatch ignores role rows. */
-  resolvedPrimary: string | null;
-  /** The role's hardcoded default tier (claude). Used as a placeholder hint. */
-  roleDefaultTier: ModelTier;
-}
-
-export interface ProjectModelSettingsDto {
-  projectId: string;
-  allowHoldoutOverride: boolean;
-  roles: Record<string, RoleModelDto>;
-}
-
 export interface CodexAuthStatusDto {
   status: 'connected' | 'missing';
   authPath: string;

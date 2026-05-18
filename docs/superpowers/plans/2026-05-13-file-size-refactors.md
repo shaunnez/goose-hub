@@ -99,13 +99,11 @@ import type { MilestoneDto } from '../types.js';
 ```typescript
 // apps/web/src/lib/api/settings.ts
 import { getJson, postJson, patchJson, deleteRequest } from './client.js';
-import type { ProjectConfigDto, ProjectSettingsDto, ProjectModelSettingsDto } from '../types.js';
+import type { ProjectConfigDto, ProjectSettingsDto } from '../types.js';
 
 // Functions to move:
 // fetchProjectSettings, patchGlobalBudgetSettings, patchSkillBudgetSetting,
-// deleteSkillBudgetSetting, fetchProjectModelSettings, patchRoleModelSetting,
-// patchBulkRoleModel, resetAllProjectBudgets, patchComplexityOverrides,
-// deleteRoleModelSetting, deleteAllRoleModelSettings,
+// deleteSkillBudgetSetting, resetAllProjectBudgets,
 // fetchCodexAuthStatus, fetchDevReviewSettings, patchDevReviewSettings,
 // fetchPipelineSettings, patchPipelineSettings, fetchReviewSettings, patchReviewSettings
 ```

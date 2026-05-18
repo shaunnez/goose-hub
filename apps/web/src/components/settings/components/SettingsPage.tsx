@@ -8,24 +8,15 @@ import { DevReviewPanel } from './DevReviewPanel';
 import { PipelinePanel } from './PipelinePanel';
 import { ProjectBudgetPanel } from './ProjectBudgetPanel';
 import { ProjectConfigPanel } from './ProjectConfigPanel';
-import { ProjectModelPanel } from './ProjectModelPanel';
 import { ReviewPanel } from './ReviewPanel';
 import { WorkflowMapPanel } from './WorkflowMapPanel';
 
-type Tab =
-  | 'config'
-  | 'runtime'
-  | 'workflow-map'
-  | 'advanced-roles'
-  | 'pipeline'
-  | 'review'
-  | 'dev-review';
+type Tab = 'config' | 'runtime' | 'workflow-map' | 'pipeline' | 'review' | 'dev-review';
 
 const TAB_LABELS: Record<Tab, string> = {
   config: 'Config',
   runtime: 'Skill runtime',
   'workflow-map': 'Workflow map',
-  'advanced-roles': 'Advanced roles',
   pipeline: 'Pipeline',
   review: 'Review',
   'dev-review': 'Dev-review',
@@ -110,31 +101,23 @@ export function SettingsPage() {
 
         {/* Tab bar */}
         <div className="flex flex-wrap gap-1 mb-6 border-b border-line">
-          {(
-            [
-              'config',
-              'runtime',
-              'workflow-map',
-              'advanced-roles',
-              'pipeline',
-              'review',
-              'dev-review',
-            ] as Tab[]
-          ).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              className={[
-                'px-3 py-1.5 text-[12px] capitalize -mb-px border-b-2 transition-colors',
-                tab === t
-                  ? 'border-accent text-fg font-medium'
-                  : 'border-transparent text-fg-2 hover:text-fg',
-              ].join(' ')}
-            >
-              {TAB_LABELS[t]}
-            </button>
-          ))}
+          {(['config', 'runtime', 'workflow-map', 'pipeline', 'review', 'dev-review'] as Tab[]).map(
+            (t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTab(t)}
+                className={[
+                  'px-3 py-1.5 text-[12px] capitalize -mb-px border-b-2 transition-colors',
+                  tab === t
+                    ? 'border-accent text-fg font-medium'
+                    : 'border-transparent text-fg-2 hover:text-fg',
+                ].join(' ')}
+              >
+                {TAB_LABELS[t]}
+              </button>
+            ),
+          )}
         </div>
 
         {tab === 'config' && selectedConfig != null && (
@@ -145,9 +128,6 @@ export function SettingsPage() {
         )}
         {tab === 'workflow-map' && selectedConfig != null && (
           <WorkflowMapPanel slug={selectedConfig.slug} />
-        )}
-        {tab === 'advanced-roles' && selectedConfig != null && (
-          <ProjectModelPanel slug={selectedConfig.slug} />
         )}
         {tab === 'pipeline' && selectedConfig != null && (
           <PipelinePanel slug={selectedConfig.slug} />

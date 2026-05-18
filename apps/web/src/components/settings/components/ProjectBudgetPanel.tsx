@@ -1,13 +1,14 @@
 import {
   deleteSkillBudgetSetting,
+  fetchCodexAuthStatus,
   fetchProjectSettings,
   patchGlobalBudgetSettings,
   patchSkillBudgetSetting,
   resetAllProjectBudgets,
 } from '@/lib/api';
-import type { ModelProvider, ModelTier, ProjectSettingsDto } from '@/lib/types';
+import type { CodexAuthStatusDto, ModelProvider, ModelTier, ProjectSettingsDto } from '@/lib/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { RotateCcw, Trash2 } from 'lucide-react';
+import { Copy, RotateCcw, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 
@@ -214,6 +215,69 @@ function SkillMetadataLine({ label, values }: { label: string; values: string[] 
   );
 }
 
+function CodexAuthSection({ slug }: { slug: string }) {
+  const { data, isLoading } = useQuery<CodexAuthStatusDto>({
+    queryKey: ['codex-auth-status', slug],
+    queryFn: ({ signal }) => fetchCodexAuthStatus(slug, signal),
+    staleTime: 30_000,
+  });
+  const [copied, setCopied] = useState(false);
+
+  const command = data?.loginCommand ?? 'codex login';
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
+
+  return (
+    <div className="mb-4 rounded border border-line/70 bg-bg-2/40 px-3 py-2">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h4 className="text-[11px] font-semibold uppercase tracking-wider text-fg-2">
+            Codex CLI auth
+          </h4>
+          <p className="mt-0.5 text-[11px] text-fg-3">
+            Required for skill rows that select provider <code>codex</code>. Machine-scoped.
+          </p>
+        </div>
+        {isLoading ? (
+          <span className="text-[12px] text-fg-3">Checking…</span>
+        ) : data?.status === 'connected' ? (
+          <div className="flex min-w-0 items-center gap-2 text-[12px]">
+            <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-success" />
+            <span className="shrink-0 text-fg">Connected</span>
+            <code className="min-w-0 break-all text-[11px] text-fg-3">{data.authPath}</code>
+          </div>
+        ) : (
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 text-[12px]">
+              <span className="inline-block h-2 w-2 rounded-full bg-danger" />
+              <span>Not connected</span>
+            </div>
+            <code className="rounded border border-line bg-bg px-2 py-1 text-[12px]">
+              {command}
+            </code>
+            <button
+              type="button"
+              onClick={copy}
+              className="flex items-center gap-1 rounded border border-line px-2 py-1 text-[11px] text-fg-3 hover:text-fg"
+              title="Copy to clipboard"
+            >
+              <Copy className="h-3 w-3" />
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function ProjectBudgetPanel({ slug }: Props) {
   const queryClient = useQueryClient();
   const { data, isLoading, error } = useQuery<ProjectSettingsDto>({
@@ -326,6 +390,7 @@ export function ProjectBudgetPanel({ slug }: Props) {
           Leave fields blank to inherit from config or skill defaults. Changes take effect on the
           next agent dispatch. Primary, fallback, and advisor are derived read-only values.
         </p>
+        <CodexAuthSection slug={slug} />
         <div className="text-[12px] border-y border-line">
           {data.registeredSkills.map((skill) => {
             const row = data.dbSkillOverrides[skill] ?? null;

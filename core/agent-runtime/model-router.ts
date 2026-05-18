@@ -11,11 +11,6 @@ export interface SelectModelInput {
   projectId: string;
   /** Project-level model router config from agentConfig.modelRouter */
   modelRouterConfig?: { overrides?: Record<string, ModelTier> };
-  /**
-   * Optional compatibility-only complexity overrides for this role.
-   * Normal skill dispatch does not read project_model_settings.
-   */
-  dbComplexityOverrides?: Record<string, ModelTier>;
 }
 
 export interface SelectModelResult {
@@ -81,22 +76,6 @@ function queryPatternTier(projectId: string, role: string): ModelTier | null {
 }
 
 /**
- * Resolves a complexity override tier from a bare-key map (keys are "type:<T>",
- * "priority:<P>", or "default" — no role prefix).
- */
-function resolveBareOverride(
-  overrides: Record<string, ModelTier>,
-  workItem: WorkItem,
-): ModelTier | null {
-  return (
-    overrides[`type:${workItem.type}`] ??
-    overrides[`priority:${workItem.priority}`] ??
-    overrides.default ??
-    null
-  );
-}
-
-/**
  * Predictively selects the initial model tier for an agent run based on
  * issue-complexity signals (type, priority, AC count, body length) plus
  * mined MODEL_SELECTION_OUTCOME patterns when available.
@@ -105,23 +84,14 @@ function resolveBareOverride(
  * their skill-configured tier.
  *
  * Resolution order (highest precedence first):
- *   1. DB complexity overrides for this role (dbComplexityOverrides) — UI-editable
- *   2. Project-level override (agentConfig.modelRouter.overrides)
- *   3. Pattern-informed (decision_patterns with consistencyScore > 0.7)
- *   4. Static policy table
+ *   1. Project-level override (agentConfig.modelRouter.overrides)
+ *   2. Pattern-informed (decision_patterns with consistencyScore > 0.7)
+ *   3. Static policy table
  */
 export function selectModel(input: SelectModelInput): SelectModelResult | null {
-  const { workItem, role, projectId, modelRouterConfig, dbComplexityOverrides } = input;
+  const { workItem, role, projectId, modelRouterConfig } = input;
 
   if (HOLDOUT_ROLES.has(role)) return null;
-
-  // DB complexity overrides — highest precedence, UI-editable
-  if (dbComplexityOverrides != null && Object.keys(dbComplexityOverrides).length > 0) {
-    const dbTier = resolveBareOverride(dbComplexityOverrides, workItem);
-    if (dbTier != null) {
-      return { tier: dbTier, reason: 'db-complexity-override' };
-    }
-  }
 
   // Project-level override
   if (modelRouterConfig?.overrides != null) {

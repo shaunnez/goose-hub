@@ -212,7 +212,7 @@ Both honour the same security envelope (FACTORY_RULES rule 29 `shell: false`, ru
 
 **Dispatcher:** `core/agent-runtime/select-runtime.ts` exports `selectRuntime({ configRuntime, model?, skillProvider? })`. `'auto'` picks on `model.provider` (via `providerOf()`), falling back to `skillProvider`, then to claude. Existing call sites that hard-code `new ClaudeCliRuntime()` are unchanged — the dispatcher is opt-in for new code paths (M19.11/12 dev-review, future migrations). See ADR 0036.
 
-**Auth status UI:** `GET /projects/:slug/settings/codex-auth` returns `{ status: 'connected' | 'missing', authPath, loginCommand }`. Surfaced in the Settings → Models tab via `ProjectModelPanel`'s `CodexAuthSection`. Read-only; no interactive OAuth from the web (same constraint as Claude).
+**Auth status UI:** `GET /projects/:slug/settings/codex-auth` returns `{ status: 'connected' | 'missing', authPath, loginCommand }`. Surfaced in Settings → Skill runtime next to the per-skill provider controls. Read-only; no interactive OAuth from the web (same constraint as Claude).
 
 ## Scheduler — Work Item Eligibility Pipeline
 

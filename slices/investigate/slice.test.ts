@@ -1,9 +1,5 @@
 import type { AgentResult, AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import type { ScoutReport, WaveResult } from '@goose-hub/core/agent-runtime/swarm.js';
-import {
-  deleteRoleModelSetting,
-  writeRoleModelSetting,
-} from '@goose-hub/core/db/repositories/project-model-settings.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -343,31 +339,6 @@ describe('runInvestigateWorkflow', () => {
           context: expect.not.objectContaining({ scoutReports: expect.anything() }),
         }),
       );
-    });
-
-    it('ignores investigator role provider rows for synthesis model routing', async () => {
-      writeRoleModelSetting(
-        'goose-hub-self',
-        'investigator',
-        { primaryModel: 'sonnet', primaryProvider: 'codex' },
-        'test',
-      );
-
-      try {
-        const { runInvestigateWorkflow } = await import('./workflow.js');
-        await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
-
-        expect(mockInvokeSkill).toHaveBeenCalledWith(
-          expect.objectContaining({
-            skillName: 'investigate',
-            overrides: expect.objectContaining({
-              modelOverride: 'claude-sonnet-4-6',
-            }),
-          }),
-        );
-      } finally {
-        deleteRoleModelSetting('goose-hub-self', 'investigator');
-      }
     });
 
     it('passes the effective maxScoutAgents cap into both waves', async () => {
