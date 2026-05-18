@@ -20,6 +20,11 @@ describe('settings slice', () => {
     expect(typeof mod.PipelinePanel).toBe('function');
   });
 
+  it('exports ProjectBudgetPanel', async () => {
+    const mod = await import('./components/ProjectBudgetPanel');
+    expect(typeof mod.ProjectBudgetPanel).toBe('function');
+  });
+
   it('exports DevReviewPanel', async () => {
     const mod = await import('./components/DevReviewPanel');
     expect(typeof mod.DevReviewPanel).toBe('function');

@@ -5,7 +5,7 @@ import {
   patchSkillBudgetSetting,
   resetAllProjectBudgets,
 } from '@/lib/api';
-import type { ProjectSettingsDto } from '@/lib/types';
+import type { ModelProvider, ModelTier, ProjectSettingsDto } from '@/lib/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { RotateCcw, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -53,6 +53,9 @@ const GLOBAL_FIELDS: Array<{
     notYetEnforced: true,
   },
 ];
+
+const TIERS: ModelTier[] = ['haiku', 'sonnet', 'opus'];
+const PROVIDERS: ModelProvider[] = ['claude', 'codex'];
 
 function NumericInput({
   value,
@@ -109,6 +112,62 @@ function NumericInput({
   );
 }
 
+function RuntimeSelect({
+  value,
+  options,
+  defaultValue,
+  overridden,
+  onCommit,
+}: {
+  value: string | null;
+  options: string[];
+  defaultValue?: string;
+  overridden: boolean;
+  onCommit: (val: string | null) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <div className="flex items-center gap-1">
+        <select
+          value={value ?? ''}
+          onChange={(event) => onCommit(event.target.value === '' ? null : event.target.value)}
+          className={[
+            'w-24 rounded border px-2 py-0.5 text-[12px] bg-bg text-fg',
+            overridden ? 'border-accent' : 'border-line',
+          ].join(' ')}
+        >
+          <option value="">{defaultValue ?? 'default'}</option>
+          {options.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+        {overridden && <span className="text-[10px] text-accent font-medium">override</span>}
+      </div>
+      {defaultValue != null && (
+        <span className="text-[10px] text-fg-3 font-mono">default: {defaultValue}</span>
+      )}
+    </div>
+  );
+}
+
+function RuntimeModelCell({
+  value,
+}: {
+  value: { tier: ModelTier; provider: ModelProvider; modelId: string } | null | undefined;
+}) {
+  if (value == null) return <span className="text-fg-3">—</span>;
+  return (
+    <div className="flex flex-col gap-0.5 min-w-32">
+      <span className="font-mono text-fg">{value.modelId}</span>
+      <span className="text-[10px] text-fg-3 font-mono">
+        {value.provider}:{value.tier}
+      </span>
+    </div>
+  );
+}
+
 export function ProjectBudgetPanel({ slug }: Props) {
   const queryClient = useQueryClient();
   const { data, isLoading, error } = useQuery<ProjectSettingsDto>({
@@ -123,8 +182,13 @@ export function ProjectBudgetPanel({ slug }: Props) {
   });
 
   const patchSkill = useMutation({
-    mutationFn: ({ skill, patch }: { skill: string; patch: Record<string, number | null> }) =>
-      patchSkillBudgetSetting(slug, skill, patch),
+    mutationFn: ({
+      skill,
+      patch,
+    }: {
+      skill: string;
+      patch: Parameters<typeof patchSkillBudgetSetting>[2];
+    }) => patchSkillBudgetSetting(slug, skill, patch),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['project-settings', slug] }),
   });
 
@@ -150,7 +214,7 @@ export function ProjectBudgetPanel({ slug }: Props) {
   function confirmReset() {
     if (!hasAnyOverride) return;
     const ok = window.confirm(
-      'Reset all budget overrides for this project? Global caps and every per-skill override will be cleared. The project will fall back to config and SKILL_BUDGETS defaults.',
+      'Reset all skill runtime overrides for this project? Global caps and every per-skill override will be cleared. The project will fall back to config and skill defaults.',
     );
     if (ok) resetAll.mutate();
   }
@@ -161,7 +225,7 @@ export function ProjectBudgetPanel({ slug }: Props) {
       <section>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-[12px] font-semibold uppercase tracking-wider text-fg-2">
-            Global budget caps
+            Global runtime caps
           </h3>
           {hasAnyOverride && (
             <button
@@ -169,7 +233,7 @@ export function ProjectBudgetPanel({ slug }: Props) {
               onClick={confirmReset}
               disabled={resetAll.isPending}
               className="flex items-center gap-1 text-[11px] text-fg-3 hover:text-danger border border-line/60 rounded-full px-2.5 py-0.5 transition-colors disabled:opacity-40"
-              title="Clear ALL budget overrides (global + per-skill)"
+              title="Clear all skill runtime overrides"
             >
               <RotateCcw size={11} />
               Reset all to defaults
@@ -210,19 +274,24 @@ export function ProjectBudgetPanel({ slug }: Props) {
       {/* Per-skill overrides */}
       <section>
         <h3 className="text-[12px] font-semibold uppercase tracking-wider text-fg-2 mb-3">
-          Per-skill budget overrides
+          Skill runtime settings
         </h3>
         <p className="text-[11px] text-fg-3 mb-4">
-          Leave fields blank to inherit from config or SKILL_BUDGETS defaults. Changes take effect
-          on the next agent dispatch.
+          Leave fields blank to inherit from config or skill defaults. Changes take effect on the
+          next agent dispatch. Primary, fallback, and advisor are derived read-only values.
         </p>
         <table className="w-full text-[12px]">
           <thead>
             <tr className="text-fg-3 text-left border-b border-line">
               <th className="pb-2 font-medium">Skill</th>
               <th className="pb-2 font-medium px-2">Max turns</th>
-              <th className="pb-2 font-medium px-2">Max budget (USD)</th>
-              <th className="pb-2 font-medium px-2">Timeout (ms)</th>
+              <th className="pb-2 font-medium px-2">Max budget</th>
+              <th className="pb-2 font-medium px-2">Timeout</th>
+              <th className="pb-2 font-medium px-2">Tier</th>
+              <th className="pb-2 font-medium px-2">Provider</th>
+              <th className="pb-2 font-medium px-2">Primary</th>
+              <th className="pb-2 font-medium px-2">Fallback</th>
+              <th className="pb-2 font-medium px-2">Advisor</th>
               <th className="pb-2 w-6" />
             </tr>
           </thead>
@@ -230,12 +299,17 @@ export function ProjectBudgetPanel({ slug }: Props) {
             {data.registeredSkills.map((skill) => {
               const row = data.dbSkillOverrides[skill] ?? null;
               const defaults = skillDefaults[skill];
+              const resolved = data.resolvedSkillRuntimes?.[skill];
               const hasAny =
                 row != null &&
-                (row.maxTurns != null || row.maxBudgetUsd != null || row.timeoutMs != null);
+                (row.maxTurns != null ||
+                  row.maxBudgetUsd != null ||
+                  row.timeoutMs != null ||
+                  row.modelTier != null ||
+                  row.provider != null);
               return (
                 <tr key={skill} className="border-b border-line/50 hover:bg-bg-hover align-top">
-                  <td className="py-1.5 font-mono text-fg">{skill}</td>
+                  <td className="py-1.5 font-mono text-fg whitespace-nowrap">{skill}</td>
                   <td className="py-1.5 px-2">
                     <NumericInput
                       value={row?.maxTurns ?? null}
@@ -265,6 +339,40 @@ export function ProjectBudgetPanel({ slug }: Props) {
                       subtitle={defaults != null ? `default: ${defaults.timeoutMs} ms` : null}
                       onCommit={(val) => patchSkill.mutate({ skill, patch: { timeoutMs: val } })}
                     />
+                  </td>
+                  <td className="py-1.5 px-2">
+                    <RuntimeSelect
+                      value={row?.modelTier ?? null}
+                      options={TIERS}
+                      defaultValue={defaults?.modelTier}
+                      overridden={row?.modelTier != null}
+                      onCommit={(val) =>
+                        patchSkill.mutate({ skill, patch: { modelTier: val as ModelTier | null } })
+                      }
+                    />
+                  </td>
+                  <td className="py-1.5 px-2">
+                    <RuntimeSelect
+                      value={row?.provider ?? null}
+                      options={PROVIDERS}
+                      defaultValue={defaults?.modelProvider}
+                      overridden={row?.provider != null}
+                      onCommit={(val) =>
+                        patchSkill.mutate({
+                          skill,
+                          patch: { provider: val as ModelProvider | null },
+                        })
+                      }
+                    />
+                  </td>
+                  <td className="py-1.5 px-2">
+                    <RuntimeModelCell value={resolved?.resolvedPrimary} />
+                  </td>
+                  <td className="py-1.5 px-2">
+                    <RuntimeModelCell value={resolved?.resolvedFallback} />
+                  </td>
+                  <td className="py-1.5 px-2">
+                    <RuntimeModelCell value={resolved?.resolvedAdvisor} />
                   </td>
                   <td className="py-1.5 pl-1">
                     {hasAny && (
