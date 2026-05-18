@@ -14,7 +14,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `server` | yes | API + SSE host for the Goose Hub web UI. Stands up the server process the UI talks to. Closes M2.01 (#26). |
 | `web` | yes | Vite + React 19 + Tailwind 4 + React Router v6. Closes M2.02 (#27). |
 
-## core/ (28 entries, 1 missing README)
+## core/ (30 entries, 1 missing README)
 
 | Name | README | Summary |
 |---|---|---|
@@ -49,7 +49,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `workflows` | yes | Orchestration workflows that compose skills, persist results, and transition work-item state. |
 | `workspaces` | yes | Git worktree lifecycle management for Factory investigation runs. |
 
-## slices/ (37 entries, 0 missing README)
+## slices/ (38 entries, 0 missing README)
 
 | Name | README | Summary |
 |---|---|---|
