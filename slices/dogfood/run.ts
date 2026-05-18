@@ -1,0 +1,215 @@
+import {
+  type AgentEventDto,
+  type ChecklistProgress,
+  TERMINAL_STATES,
+  type WorkflowKind,
+  newProgress,
+  observeEvent,
+  renderChecklist,
+} from './checklist.js';
+import { tailEvents } from './event-tail.js';
+import { GhClient } from './gh-issue.js';
+import { type Completion, newRun } from './outcome.js';
+import { applySeed, restoreSeed, verifyRed } from './runner.js';
+import { RunsStore } from './runs-store.js';
+import { getSeed } from './seeds/index.js';
+import type { Seed } from './seeds/types.js';
+
+export interface RunOrchestratorOptions {
+  seedId: string;
+  /** Repo root used for apply/restore/verify. */
+  repoRoot: string;
+  /** Workflow kind. Currently every seed runs `bug`; future seeds may pick others. */
+  workflow?: WorkflowKind;
+  /** Server URL hosting the SSE endpoint. */
+  serverUrl?: string;
+  /** GitHub repo to file the issue on. */
+  repo?: string;
+  /** Project slug used by the orchestrator. */
+  projectSlug?: string;
+  /** Cap on event-tail wall-clock time. */
+  timeoutMs?: number;
+  /** Restore the seed when finished, regardless of outcome. */
+  restoreOnFinish?: boolean;
+  /** Skip the local verify-red sanity check (use in CI dry-runs). */
+  skipVerifyRed?: boolean;
+  /** Injected GhClient (for tests). */
+  gh?: GhClient;
+  /** Injected RunsStore (for tests). */
+  store?: RunsStore;
+  /** Injected event-tail (for tests). */
+  tail?: typeof tailEvents;
+  /** Console-like sink. */
+  logger?: Pick<Console, 'log' | 'warn' | 'error'>;
+}
+
+export interface RunOrchestratorResult {
+  runId: string;
+  seed: Seed;
+  issue: { repo: string; number: number; url: string };
+  completion: Completion;
+  progress: ChecklistProgress;
+  reason: 'callback-stopped' | 'timeout' | 'aborted' | 'server-closed';
+}
+
+const DEFAULTS = {
+  serverUrl: 'http://localhost:3001',
+  repo: 'shaunnez/goose-hub',
+  projectSlug: 'goose-hub-self',
+  workflow: 'bug' as WorkflowKind,
+  timeoutMs: 30 * 60 * 1000, // 30 minutes
+};
+
+/**
+ * End-to-end dogfood orchestrator:
+ * 1. Apply seed locally + verify-red sanity check
+ * 2. File the GitHub issue via gh
+ * 3. Record a pending run row pointing at the issue
+ * 4. Tail the SSE event stream, ticking off the workflow's expected
+ *    state-transitions and stopping when terminal or a node fails
+ * 5. Record outcome (completion at minimum; truth-pass left for follow-up)
+ *
+ * Intended to be run on the user's local machine where the server is
+ * up + agents are authenticated. Each phase is dependency-injected so
+ * unit tests can exercise the orchestration without real network/gh.
+ */
+export async function runDogfood(opts: RunOrchestratorOptions): Promise<RunOrchestratorResult> {
+  const cfg = {
+    serverUrl: opts.serverUrl ?? DEFAULTS.serverUrl,
+    repo: opts.repo ?? DEFAULTS.repo,
+    projectSlug: opts.projectSlug ?? DEFAULTS.projectSlug,
+    workflow: opts.workflow ?? DEFAULTS.workflow,
+    timeoutMs: opts.timeoutMs ?? DEFAULTS.timeoutMs,
+  };
+  const log = opts.logger ?? console;
+  const gh = opts.gh ?? new GhClient();
+  const store = opts.store ?? new RunsStore();
+  const tail = opts.tail ?? tailEvents;
+  const seed = getSeed(opts.seedId);
+
+  log.log('[1/5] pre-flight — gh auth + seed');
+  await gh.assertReady();
+
+  log.log(`[2/5] apply seed: ${seed.id}`);
+  await applySeed(seed.id, { repoRoot: opts.repoRoot });
+  if (!opts.skipVerifyRed) {
+    const result = await verifyRed(seed.id, { repoRoot: opts.repoRoot });
+    if (!result.truthSignalRed) {
+      throw new Error(
+        `verify-red failed: truth-signal "${seed.truthSignal.testName}" was NOT red after applying ${seed.id}. Seed likely needs an update.`,
+      );
+    }
+    if (result.unexpectedFailures.length > 0) {
+      throw new Error(
+        `verify-red failed: ${result.unexpectedFailures.length} unrelated tests failed in ${seed.truthSignal.testFile}. Fix those before running.`,
+      );
+    }
+    log.log(`      truth-signal red, ${result.passingTests.length} siblings green`);
+  }
+
+  log.log(`[3/5] file GitHub issue on ${cfg.repo}`);
+  let issue: { number: number; url: string };
+  try {
+    issue = await gh.createIssue({
+      repo: cfg.repo,
+      title: seed.issue.title,
+      body: seed.issue.body,
+      labels: seed.issue.labels,
+    });
+  } catch (err) {
+    if (opts.restoreOnFinish !== false) {
+      await restoreSeed(seed.id, { repoRoot: opts.repoRoot }).catch(() => {});
+    }
+    throw err;
+  }
+  log.log(`      issue #${issue.number}: ${issue.url}`);
+
+  const run = newRun(seed.id, cfg.workflow);
+  run.issue = { repo: cfg.repo, number: issue.number, url: issue.url };
+  await store.append(run);
+  log.log(`      runId: ${run.runId}`);
+
+  log.log(`[4/5] tailing event stream (timeout ${cfg.timeoutMs}ms)`);
+  const progress = newProgress(cfg.workflow);
+  printChecklist(log, progress);
+
+  const tailResult = await tail(
+    {
+      serverUrl: cfg.serverUrl,
+      projectId: cfg.projectSlug,
+      workItemId: issue.number,
+      timeoutMs: cfg.timeoutMs,
+    },
+    (event: AgentEventDto) => {
+      const advanced = observeEvent(progress, event);
+      if (advanced) {
+        log.log('');
+        printChecklist(log, progress);
+        if (progress.failedNode) log.log(`      [!] agent failure at node: ${progress.failedNode}`);
+      }
+      if (progress.terminalReached) return true;
+      if (progress.failedNode) return true;
+      return false;
+    },
+  );
+
+  log.log(`[5/5] tail ended (${tailResult.reason}); recording outcome`);
+  const completion = computeCompletion(progress, tailResult.reason);
+  await store.update(run.runId, {
+    completion,
+    endedAt: new Date().toISOString(),
+  });
+
+  if (opts.restoreOnFinish !== false) {
+    log.log('      restoring seed locally');
+    await restoreSeed(seed.id, { repoRoot: opts.repoRoot }).catch((err) => {
+      log.warn(`      restore failed: ${err instanceof Error ? err.message : String(err)}`);
+    });
+  }
+
+  log.log('');
+  log.log('Summary:');
+  log.log(`  runId:      ${run.runId}`);
+  log.log(`  issue:      ${issue.url}`);
+  log.log(
+    `  completion: ${typeof completion === 'string' ? completion : `failed:${completion.failed.node}`}`,
+  );
+  log.log(`  events:     ${tailResult.events.length}`);
+  log.log('');
+  log.log('Once you know the real outcome, record the remaining signals:');
+  log.log(
+    `  pnpm dogfood record ${run.runId} --truth-pass=<true|false> --qa-correct=<true|false> --hygiene-clean=<true|false>`,
+  );
+
+  return {
+    runId: run.runId,
+    seed,
+    issue: run.issue,
+    completion,
+    progress,
+    reason: tailResult.reason,
+  };
+}
+
+function printChecklist(
+  log: Pick<Console, 'log' | 'warn' | 'error'>,
+  progress: ChecklistProgress,
+): void {
+  log.log(`  workflow=${progress.workflow}`);
+  log.log(renderChecklist(progress));
+}
+
+export function computeCompletion(
+  progress: ChecklistProgress,
+  reason: 'callback-stopped' | 'timeout' | 'aborted' | 'server-closed',
+): Completion {
+  if (progress.failedNode) {
+    return { failed: { node: progress.failedNode, reason: reason } };
+  }
+  if (progress.terminalReached) return 'reached-terminal';
+  if (reason === 'timeout') return 'stalled';
+  if (reason === 'aborted') return 'aborted-by-human';
+  return 'stalled';
+}
+
+export const __test_only = { DEFAULTS, computeCompletion, TERMINAL_STATES };

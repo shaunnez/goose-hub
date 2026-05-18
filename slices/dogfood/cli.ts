@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type Completion, describeCompletion, newRun } from './outcome.js';
+import { runDogfood } from './run.js';
 import { applySeed, restoreSeed, statusAll, verifyRed } from './runner.js';
 import { RunsStore, aggregate } from './runs-store.js';
 import { getSeed, listSeeds } from './seeds/index.js';
@@ -25,6 +26,12 @@ Seed mechanics:
   verify-red <seed-id>          Run the seed's truth-signal test, expect it to fail
   issue <seed-id>               Print the GitHub issue title + body for a seed
 
+End-to-end orchestrator:
+  run <seed-id> [flags]         Apply seed → file issue → tail event stream → record outcome.
+                                Flags: --server-url=, --repo=, --project-slug=, --timeout-ms=,
+                                --no-restore (leave the seed applied on finish),
+                                --skip-verify-red (skip the local truth-signal check)
+
 Outcome tracking:
   file-issue <seed-id>          Print the gh-issue-create command and record a pending run
   record <run-id> --key=value   Record outcome fields on a run (--completion, --truth-pass,
@@ -35,7 +42,7 @@ Outcome tracking:
 Examples:
   pnpm dogfood apply logger-001-drop-meta
   pnpm dogfood verify-red logger-001-drop-meta
-  pnpm dogfood file-issue logger-001-drop-meta
+  pnpm dogfood run logger-001-drop-meta
   pnpm dogfood record dogfood-abc-xyz --completion=reached-terminal --truth-pass=true
   pnpm dogfood runs:summary
 `);
@@ -171,6 +178,22 @@ async function main(): Promise<void> {
       console.log(`LABELS: ${seed.issue.labels.join(', ')}`);
       console.log('---');
       console.log(seed.issue.body);
+      return;
+    }
+    case 'run': {
+      const seedId = rest[0];
+      if (!seedId) throw new Error('run requires <seed-id>');
+      const flags = parseFlags(rest.slice(1));
+      await runDogfood({
+        seedId,
+        repoRoot,
+        serverUrl: flags['server-url'],
+        repo: flags.repo,
+        projectSlug: flags['project-slug'],
+        timeoutMs: flags['timeout-ms'] ? Number(flags['timeout-ms']) : undefined,
+        restoreOnFinish: flags['no-restore'] !== 'true',
+        skipVerifyRed: flags['skip-verify-red'] === 'true',
+      });
       return;
     }
     case 'file-issue': {

@@ -26,6 +26,21 @@ The agent's job is to investigate from the user-language issue, fix the bug, and
 
 ## CLI
 
+**End-to-end orchestrator (the one-command path):**
+
+```
+pnpm dogfood run <seed-id> [--server-url=…] [--repo=…] [--project-slug=…] [--timeout-ms=…]
+                           [--no-restore] [--skip-verify-red]
+```
+
+What it does:
+
+1. Pre-flight: verifies `gh` is installed + authenticated.
+2. Applies the seed to your working tree and runs the truth-signal test locally; aborts if the test isn't red or unrelated tests are also failing.
+3. Calls `gh issue create` with the seed's user-language title + body + labels (including `factory:triaging`). Records a pending run row.
+4. Opens an SSE connection to your local server and prints a workflow-specific checklist that ticks off as `state.transitioned` events arrive. Stops when the workflow reaches a terminal state or any agent run fails.
+5. Records the completion (reached-terminal / stalled / failed:<node>) and restores the seed locally. Prints the `pnpm dogfood record` invocation you should run once you've eyeballed truth-pass / qa-correct / hygiene-clean.
+
 **Seed mechanics:**
 
 ```

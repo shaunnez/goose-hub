@@ -2,8 +2,25 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  type AgentEventDto,
+  CHECKLISTS,
+  TERMINAL_STATES,
+  newProgress,
+  observeEvent,
+  renderChecklist,
+} from './checklist.js';
+import { parseSseBlock, tailEvents } from './event-tail.js';
+import {
+  type ExecFileFn,
+  GhClient,
+  GhNotAuthenticatedError,
+  GhNotInstalledError,
+  parseIssueCreateOutput,
+} from './gh-issue.js';
 import { describeCompletion, newRun, newRunId } from './outcome.js';
+import { computeCompletion, runDogfood } from './run.js';
 import { applySeed, restoreSeed, statusAll } from './runner.js';
 import { RunsStore, aggregate } from './runs-store.js';
 import { getSeed, listSeeds } from './seeds/index.js';
@@ -348,5 +365,359 @@ describe('runs store', () => {
     expect(stats.bySeed['seed-a'].total).toBe(2);
     expect(stats.bySeed['seed-a'].reachedTerminal).toBe(1);
     expect(stats.bySeed['seed-a'].truthPassCount).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// gh-issue — wrapper around `gh issue create`.
+// ---------------------------------------------------------------------------
+
+describe('parseIssueCreateOutput', () => {
+  it('extracts the issue URL from a single-line gh stdout', () => {
+    const out = parseIssueCreateOutput('https://github.com/shaunnez/goose-hub/issues/123\n', '');
+    expect(out.url).toBe('https://github.com/shaunnez/goose-hub/issues/123');
+    expect(out.number).toBe(123);
+  });
+
+  it('extracts the URL even when other lines precede it', () => {
+    const out = parseIssueCreateOutput(
+      'Creating issue in shaunnez/goose-hub\nhttps://github.com/shaunnez/goose-hub/issues/42\n',
+      '',
+    );
+    expect(out.number).toBe(42);
+  });
+
+  it('throws on output with no URL', () => {
+    expect(() => parseIssueCreateOutput('something went wrong\n', '')).toThrowError(
+      /Could not find/,
+    );
+  });
+});
+
+describe('GhClient', () => {
+  it('assertReady throws GhNotInstalledError when gh is missing', async () => {
+    const exec: ExecFileFn = async () => {
+      const err = new Error('not found') as NodeJS.ErrnoException;
+      err.code = 'ENOENT';
+      throw err;
+    };
+    const gh = new GhClient({ exec });
+    await expect(gh.assertReady()).rejects.toBeInstanceOf(GhNotInstalledError);
+  });
+
+  it('assertReady throws GhNotAuthenticatedError when gh auth status fails', async () => {
+    const exec: ExecFileFn = vi
+      .fn()
+      .mockResolvedValueOnce({ stdout: 'gh version 2.x', stderr: '' })
+      .mockRejectedValueOnce(
+        Object.assign(new Error('auth fail'), { stderr: 'You are not logged in' }),
+      );
+    const gh = new GhClient({ exec });
+    await expect(gh.assertReady()).rejects.toBeInstanceOf(GhNotAuthenticatedError);
+  });
+
+  it('createIssue passes labels as separate --label args', async () => {
+    const calls: Array<{ file: string; args: string[] }> = [];
+    const exec: ExecFileFn = async (file, args) => {
+      calls.push({ file, args });
+      return {
+        stdout: 'https://github.com/shaunnez/goose-hub/issues/77\n',
+        stderr: '',
+      };
+    };
+    const gh = new GhClient({ exec });
+    const issue = await gh.createIssue({
+      repo: 'shaunnez/goose-hub',
+      title: 'T',
+      body: 'B',
+      labels: ['type:bug', 'priority:medium', 'factory:triaging'],
+    });
+    expect(issue.number).toBe(77);
+    expect(calls[0].args).toContain('--label');
+    expect(calls[0].args.filter((a) => a === '--label')).toHaveLength(3);
+    expect(calls[0].args).toContain('factory:triaging');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// checklist — observeEvent / renderChecklist / terminal detection.
+// ---------------------------------------------------------------------------
+
+describe('checklist', () => {
+  it('CHECKLISTS.bug ends at factory:done', () => {
+    const last = CHECKLISTS.bug.at(-1);
+    expect(last?.state).toBe('factory:done');
+  });
+
+  it('observeEvent ticks an item when a state-transition arrives', () => {
+    const p = newProgress('bug');
+    const advanced = observeEvent(p, {
+      kind: 'state.transitioned',
+      payload: { to: 'factory:investigating' },
+    });
+    expect(advanced).toBe(true);
+    expect(p.ticked.has('factory:investigating')).toBe(true);
+  });
+
+  it('observeEvent records failed node on agent.run-failed', () => {
+    const p = newProgress('bug');
+    observeEvent(p, { kind: 'agent.run-failed', payload: { skill: 'qa' } });
+    expect(p.failedNode).toBe('qa');
+  });
+
+  it('observeEvent marks terminalReached when transitioning to a terminal state', () => {
+    const p = newProgress('bug');
+    observeEvent(p, { kind: 'state.transitioned', payload: { to: 'factory:done' } });
+    expect(p.terminalReached).toBe(true);
+  });
+
+  it('observeEvent ignores transitions not in the checklist', () => {
+    const p = newProgress('bug');
+    const advanced = observeEvent(p, {
+      kind: 'state.transitioned',
+      payload: { to: 'factory:not-a-real-state' },
+    });
+    expect(advanced).toBe(false);
+    expect(p.ticked.size).toBe(0);
+  });
+
+  it('renderChecklist marks ticked items with [x]', () => {
+    const p = newProgress('bug');
+    observeEvent(p, { kind: 'state.transitioned', payload: { to: 'factory:investigating' } });
+    const text = renderChecklist(p);
+    expect(text).toContain('[x] Issue triaged');
+    expect(text).toContain('[ ] Investigation complete');
+  });
+
+  it('TERMINAL_STATES contains factory:done and factory:needs-human', () => {
+    expect(TERMINAL_STATES.has('factory:done')).toBe(true);
+    expect(TERMINAL_STATES.has('factory:needs-human')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// event-tail — parseSseBlock + tailEvents with mock fetch.
+// ---------------------------------------------------------------------------
+
+describe('parseSseBlock', () => {
+  it('parses a well-formed SSE block', () => {
+    const block = 'id: 7\ndata: {"kind":"state.transitioned","payload":{"to":"factory:done"}}';
+    const ev = parseSseBlock(block);
+    expect(ev?.kind).toBe('state.transitioned');
+    expect((ev?.payload as { to?: string }).to).toBe('factory:done');
+  });
+
+  it('returns undefined when no data line is present', () => {
+    expect(parseSseBlock('id: 7')).toBeUndefined();
+  });
+
+  it('returns undefined when data is not JSON', () => {
+    expect(parseSseBlock('data: not json')).toBeUndefined();
+  });
+});
+
+function mockSseFetch(events: AgentEventDto[]): typeof fetch {
+  return async () => {
+    const body = events.map((e, i) => `id: ${i + 1}\ndata: ${JSON.stringify(e)}\n\n`).join('');
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(body));
+        controller.close();
+      },
+    });
+    return new Response(stream, {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream' },
+    }) as unknown as Response;
+  };
+}
+
+describe('tailEvents', () => {
+  it('streams events until the server closes and returns them in order', async () => {
+    const fakeEvents: AgentEventDto[] = [
+      { kind: 'state.transitioned', payload: { to: 'factory:investigating' } },
+      { kind: 'state.transitioned', payload: { to: 'factory:dev-ready' } },
+    ];
+    const collected: AgentEventDto[] = [];
+    const result = await tailEvents(
+      {
+        serverUrl: 'http://example/',
+        projectId: 'p',
+        workItemId: 1,
+        fetchImpl: mockSseFetch(fakeEvents),
+      },
+      (e) => {
+        collected.push(e);
+        return false;
+      },
+    );
+    expect(result.reason).toBe('server-closed');
+    expect(collected.map((e) => (e.payload as { to: string }).to)).toEqual([
+      'factory:investigating',
+      'factory:dev-ready',
+    ]);
+  });
+
+  it('stops early when the callback returns true', async () => {
+    const fakeEvents: AgentEventDto[] = [
+      { kind: 'state.transitioned', payload: { to: 'factory:investigating' } },
+      { kind: 'state.transitioned', payload: { to: 'factory:dev-ready' } },
+      { kind: 'state.transitioned', payload: { to: 'factory:done' } },
+    ];
+    let seen = 0;
+    const result = await tailEvents(
+      {
+        serverUrl: 'http://example/',
+        projectId: 'p',
+        workItemId: 1,
+        fetchImpl: mockSseFetch(fakeEvents),
+      },
+      (e) => {
+        seen += 1;
+        return (e.payload as { to?: string }).to === 'factory:dev-ready';
+      },
+    );
+    expect(result.reason).toBe('callback-stopped');
+    expect(seen).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// run — orchestrator integration, all deps injected.
+// ---------------------------------------------------------------------------
+
+describe('runDogfood orchestrator', () => {
+  let storeDir: string;
+  let store: RunsStore;
+  let tmpRepoRoot: string;
+
+  beforeEach(async () => {
+    storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dogfood-orch-store-'));
+    store = new RunsStore({ dir: storeDir });
+
+    tmpRepoRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'dogfood-orch-repo-'));
+    const loggerDir = path.join(tmpRepoRoot, 'apps', 'web', 'src', 'lib');
+    await fs.mkdir(loggerDir, { recursive: true });
+    // Copy the real source so the seed's ORIGINAL_BLOCK matches.
+    const realSrc = await fs.readFile(
+      path.resolve(__dirname, '../../apps/web/src/lib/logger.ts'),
+      'utf8',
+    );
+    await fs.writeFile(path.join(loggerDir, 'logger.ts'), realSrc, 'utf8');
+  });
+
+  afterEach(async () => {
+    await fs.rm(storeDir, { recursive: true, force: true });
+    await fs.rm(tmpRepoRoot, { recursive: true, force: true });
+  });
+
+  function makeGh(): GhClient {
+    const exec: ExecFileFn = async (_file, args) => {
+      if (args[0] === '--version') return { stdout: 'gh 2.x', stderr: '' };
+      if (args[0] === 'auth' && args[1] === 'status') return { stdout: '', stderr: '' };
+      if (args[0] === 'issue' && args[1] === 'create') {
+        return { stdout: 'https://github.com/shaunnez/goose-hub/issues/4242\n', stderr: '' };
+      }
+      throw new Error(`Unexpected args: ${args.join(' ')}`);
+    };
+    return new GhClient({ exec });
+  }
+
+  function makeTail(events: AgentEventDto[]): typeof tailEvents {
+    return async (_opts, onEvent) => {
+      const collected: AgentEventDto[] = [];
+      for (const e of events) {
+        collected.push(e);
+        const stop = await onEvent(e);
+        if (stop === true) return { events: collected, reason: 'callback-stopped' as const };
+      }
+      return { events: collected, reason: 'server-closed' as const };
+    };
+  }
+
+  it('happy-path: applies seed, files issue, tails to terminal, records reached-terminal', async () => {
+    const events: AgentEventDto[] = [
+      { kind: 'state.transitioned', payload: { to: 'factory:investigating' } },
+      { kind: 'state.transitioned', payload: { to: 'factory:dev-ready' } },
+      { kind: 'state.transitioned', payload: { to: 'factory:needs-qa' } },
+      { kind: 'state.transitioned', payload: { to: 'factory:needs-review' } },
+      { kind: 'state.transitioned', payload: { to: 'factory:approved' } },
+      { kind: 'state.transitioned', payload: { to: 'factory:done' } },
+    ];
+    const silent = { log: () => {}, warn: () => {}, error: () => {} } as Console;
+    const result = await runDogfood({
+      seedId: 'logger-001-drop-meta',
+      repoRoot: tmpRepoRoot,
+      gh: makeGh(),
+      store,
+      tail: makeTail(events),
+      logger: silent,
+      skipVerifyRed: true,
+    });
+
+    expect(result.issue.number).toBe(4242);
+    expect(result.completion).toBe('reached-terminal');
+    expect(result.progress.terminalReached).toBe(true);
+
+    const rows = await store.list();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].completion).toBe('reached-terminal');
+    expect(rows[0].issue?.number).toBe(4242);
+    expect(rows[0].endedAt).toBeDefined();
+  });
+
+  it('failure path: records `failed:<node>` when an agent.run-failed arrives', async () => {
+    const events: AgentEventDto[] = [
+      { kind: 'state.transitioned', payload: { to: 'factory:investigating' } },
+      { kind: 'agent.run-failed', payload: { skill: 'qa', reason: 'timeout' } },
+    ];
+    const silent = { log: () => {}, warn: () => {}, error: () => {} } as Console;
+    const result = await runDogfood({
+      seedId: 'logger-001-drop-meta',
+      repoRoot: tmpRepoRoot,
+      gh: makeGh(),
+      store,
+      tail: makeTail(events),
+      logger: silent,
+      skipVerifyRed: true,
+    });
+    expect(typeof result.completion).toBe('object');
+    if (typeof result.completion !== 'object') throw new Error('expected failed-object');
+    expect(result.completion.failed.node).toBe('qa');
+  });
+
+  it('restores the seed locally after a run by default', async () => {
+    const events: AgentEventDto[] = [
+      { kind: 'state.transitioned', payload: { to: 'factory:done' } },
+    ];
+    const silent = { log: () => {}, warn: () => {}, error: () => {} } as Console;
+    const targetPath = path.join(tmpRepoRoot, 'apps/web/src/lib/logger.ts');
+    const before = await fs.readFile(targetPath, 'utf8');
+    await runDogfood({
+      seedId: 'logger-001-drop-meta',
+      repoRoot: tmpRepoRoot,
+      gh: makeGh(),
+      store,
+      tail: makeTail(events),
+      logger: silent,
+      skipVerifyRed: true,
+    });
+    const after = await fs.readFile(targetPath, 'utf8');
+    expect(after).toBe(before);
+  });
+
+  it('computeCompletion translates timeout + no terminal into `stalled`', () => {
+    const p = newProgress('bug');
+    expect(computeCompletion(p, 'timeout')).toBe('stalled');
+    expect(computeCompletion(p, 'server-closed')).toBe('stalled');
+  });
+
+  it('computeCompletion preserves a recorded failedNode over reason', () => {
+    const p = newProgress('bug');
+    p.failedNode = 'qa';
+    const c = computeCompletion(p, 'callback-stopped');
+    expect(typeof c).toBe('object');
+    if (typeof c !== 'object') throw new Error('expected object');
+    expect(c.failed.node).toBe('qa');
   });
 });
