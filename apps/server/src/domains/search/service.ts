@@ -2,6 +2,7 @@ import { logger } from '@goose-hub/core/logger.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
 import type { Result } from '#shared/middleware.js';
 import { listProjects } from '#shared/projects.js';
+import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
 import { getSourceForSlug } from '#shared/source.js';
 import { normalizeConfidence, parseQuery, scoreItem } from './score.js';
 
@@ -23,13 +24,32 @@ export interface SearchResult {
   hasMore: boolean;
 }
 
+export type MilestoneFilter = 'active' | 'all';
+export type WorkItemTypeFilter = 'feature' | 'bug' | 'chore' | 'research';
+
 export interface SearchParams {
   q: string;
   limit?: number;
+  projectSlug?: string;
+  type?: WorkItemTypeFilter;
+  milestone?: MilestoneFilter;
 }
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
+
+const VALID_TYPES: ReadonlySet<string> = new Set(['feature', 'bug', 'chore', 'research']);
+const VALID_MILESTONES: ReadonlySet<string> = new Set(['active', 'all']);
+
+export function parseType(raw: string | undefined): WorkItemTypeFilter | undefined {
+  if (raw == null || raw === '') return undefined;
+  return VALID_TYPES.has(raw) ? (raw as WorkItemTypeFilter) : undefined;
+}
+
+export function parseMilestone(raw: string | undefined): MilestoneFilter {
+  if (raw != null && VALID_MILESTONES.has(raw)) return raw as MilestoneFilter;
+  return 'active';
+}
 
 export function parseLimit(raw: string | undefined): number {
   if (raw == null || raw === '') return DEFAULT_LIMIT;
@@ -47,12 +67,18 @@ export async function search(
   const now = opts?.now ?? new Date();
   const query = parseQuery(params.q);
   const limit = params.limit ?? DEFAULT_LIMIT;
+  const milestoneFilter: MilestoneFilter = params.milestone ?? 'active';
 
   if (query.tokens.length === 0 && query.externalId == null) {
     return { ok: true, data: { items: [], total: 0, hasMore: false } };
   }
 
-  const projects = await listProjects();
+  const allProjects = await listProjects();
+  const projects =
+    params.projectSlug != null
+      ? allProjects.filter((p) => p.slug === params.projectSlug)
+      : allProjects;
+
   const collected: Array<{ item: WorkItem; projectSlug: string }> = [];
 
   for (const project of projects) {
@@ -64,9 +90,22 @@ export async function search(
       return null;
     });
     if (source == null) continue;
+
+    // Active-milestone narrowing: pass the resolved milestone number to
+    // listOpenWork so the underlying state source can scope the query
+    // (GitHub filters server-side; in-memory just narrows the slice).
+    let milestoneNumber: number | undefined;
+    if (milestoneFilter === 'active') {
+      const resolved = await resolveActiveMilestone(project.slug).catch(() => null);
+      milestoneNumber = resolved?.milestoneNumber ?? undefined;
+    }
+
     try {
-      const items = await source.listOpenWork();
-      for (const item of items) collected.push({ item, projectSlug: project.slug });
+      const items = await source.listOpenWork(milestoneNumber);
+      for (const item of items) {
+        if (params.type != null && item.type !== params.type) continue;
+        collected.push({ item, projectSlug: project.slug });
+      }
     } catch (err) {
       logger.warn('search: listOpenWork failed', {
         slug: project.slug,

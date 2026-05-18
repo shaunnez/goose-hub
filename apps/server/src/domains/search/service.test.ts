@@ -1,9 +1,10 @@
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockListProjects, mockGetSourceForSlug } = vi.hoisted(() => ({
+const { mockListProjects, mockGetSourceForSlug, mockResolveActiveMilestone } = vi.hoisted(() => ({
   mockListProjects: vi.fn(),
   mockGetSourceForSlug: vi.fn(),
+  mockResolveActiveMilestone: vi.fn(),
 }));
 
 vi.mock('#shared/projects.js', () => ({
@@ -14,11 +15,15 @@ vi.mock('#shared/source.js', () => ({
   getSourceForSlug: mockGetSourceForSlug,
 }));
 
+vi.mock('#shared/resolve-milestone.js', () => ({
+  resolveActiveMilestone: mockResolveActiveMilestone,
+}));
+
 vi.mock('@goose-hub/core/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { parseLimit, search } from './service.js';
+import { parseLimit, parseMilestone, parseType, search } from './service.js';
 
 const now = new Date('2026-05-18T00:00:00Z');
 
@@ -53,6 +58,12 @@ function mockSource(items: WorkItem[]) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default to "no active milestone configured" so existing tests that
+  // pass milestone:'all' (or rely on the default) get the full item set.
+  mockResolveActiveMilestone.mockResolvedValue({
+    milestoneNumber: null,
+    source: 'project_state',
+  });
 });
 
 describe('parseLimit', () => {
@@ -175,5 +186,80 @@ describe('search', () => {
     if (!result.ok) throw new Error('expected ok');
     expect(result.data.items[0].externalId).toBe('42');
     expect(result.data.items[0].confidence).toBe(100);
+  });
+});
+
+describe('search — filters', () => {
+  it('projectSlug narrows iteration to a single project', async () => {
+    mockListProjects.mockResolvedValue([{ slug: 'a' }, { slug: 'b' }]);
+    const sourceA = mockSource([item({ externalId: '1', title: 'cache from a' })]);
+    const sourceB = mockSource([item({ externalId: '2', title: 'cache from b' })]);
+    mockGetSourceForSlug.mockImplementation((slug: string) =>
+      Promise.resolve(slug === 'a' ? sourceA : sourceB),
+    );
+
+    const result = await search({ q: 'cache', projectSlug: 'a' }, { now });
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.items.map((h) => h.externalId)).toEqual(['1']);
+    expect(sourceB.listOpenWork).not.toHaveBeenCalled();
+  });
+
+  it('type filter excludes work items of other types', async () => {
+    mockListProjects.mockResolvedValue([{ slug: 'p' }]);
+    mockGetSourceForSlug.mockResolvedValue(
+      mockSource([
+        item({ externalId: '1', title: 'cache feature', type: 'feature' }),
+        item({ externalId: '2', title: 'cache bug', type: 'bug' }),
+      ]),
+    );
+    const result = await search({ q: 'cache', type: 'bug' }, { now });
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.items.map((h) => h.externalId)).toEqual(['2']);
+  });
+
+  it('milestone:active passes the resolved milestone number to listOpenWork', async () => {
+    mockListProjects.mockResolvedValue([{ slug: 'p' }]);
+    const source = mockSource([item({ externalId: '1', title: 'cache' })]);
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockResolveActiveMilestone.mockResolvedValue({
+      milestoneNumber: 19,
+      source: 'project_state',
+    });
+    await search({ q: 'cache', milestone: 'active' }, { now });
+    expect(source.listOpenWork).toHaveBeenCalledWith(19);
+  });
+
+  it('milestone:all does not consult the active-milestone resolver', async () => {
+    mockListProjects.mockResolvedValue([{ slug: 'p' }]);
+    const source = mockSource([item({ externalId: '1', title: 'cache' })]);
+    mockGetSourceForSlug.mockResolvedValue(source);
+    await search({ q: 'cache', milestone: 'all' }, { now });
+    expect(mockResolveActiveMilestone).not.toHaveBeenCalled();
+    expect(source.listOpenWork).toHaveBeenCalledWith(undefined);
+  });
+});
+
+describe('parseType / parseMilestone', () => {
+  it('parseType returns undefined for missing/invalid/empty', () => {
+    expect(parseType(undefined)).toBeUndefined();
+    expect(parseType('')).toBeUndefined();
+    expect(parseType('garbage')).toBeUndefined();
+  });
+
+  it('parseType accepts the four valid types', () => {
+    for (const t of ['feature', 'bug', 'chore', 'research']) {
+      expect(parseType(t)).toBe(t);
+    }
+  });
+
+  it('parseMilestone defaults to "active"', () => {
+    expect(parseMilestone(undefined)).toBe('active');
+    expect(parseMilestone('')).toBe('active');
+    expect(parseMilestone('garbage')).toBe('active');
+  });
+
+  it('parseMilestone accepts "active" and "all"', () => {
+    expect(parseMilestone('active')).toBe('active');
+    expect(parseMilestone('all')).toBe('all');
   });
 });

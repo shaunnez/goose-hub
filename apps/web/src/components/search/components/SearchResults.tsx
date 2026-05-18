@@ -1,19 +1,20 @@
-import { fetchSearch } from '@/lib/api';
+import { type SearchClientFilters, fetchSearch } from '@/lib/api';
 import type { SearchHitDto, SearchResultDto } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
 
 interface SearchResultsProps {
   query: string;
+  filters?: SearchClientFilters;
   onSelect: (hit: SearchHitDto) => void;
 }
 
-export function SearchResults({ query, onSelect }: SearchResultsProps) {
+export function SearchResults({ query, filters, onSelect }: SearchResultsProps) {
   const trimmed = query.trim();
   const enabled = trimmed.length > 0;
 
   const { data, isLoading, isError, refetch } = useQuery<SearchResultDto>({
-    queryKey: ['search', trimmed],
-    queryFn: ({ signal }) => fetchSearch(trimmed, { signal }),
+    queryKey: ['search', trimmed, filters ?? {}],
+    queryFn: ({ signal }) => fetchSearch(trimmed, { ...filters, signal }),
     enabled,
     staleTime: 30_000,
   });

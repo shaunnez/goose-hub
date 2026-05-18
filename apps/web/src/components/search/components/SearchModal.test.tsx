@@ -84,13 +84,42 @@ describe('SearchModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('filter chips are disabled placeholders for v0', () => {
+  it('renders the four filter chips', () => {
     renderModal(true);
-    const filters = screen.getByTestId('search-filters');
-    const buttons = filters.querySelectorAll('button');
-    expect(buttons.length).toBeGreaterThan(0);
-    for (const btn of buttons) {
-      expect(btn.hasAttribute('disabled')).toBe(true);
-    }
+    expect(screen.getByTestId('search-filter-scope')).toBeTruthy();
+    expect(screen.getByTestId('search-filter-milestone')).toBeTruthy();
+    expect(screen.getByTestId('search-filter-type')).toBeTruthy();
+  });
+
+  it('scope chip is disabled when there is no active project slug', () => {
+    renderModal(true);
+    const chip = screen.getByTestId('search-filter-scope') as HTMLButtonElement;
+    expect(chip.disabled).toBe(true);
+  });
+
+  it('milestone chip toggles between "Active milestone" and "All milestones"', () => {
+    renderModal(true);
+    const chip = screen.getByTestId('search-filter-milestone');
+    expect(chip.textContent).toBe('Active milestone');
+    fireEvent.click(chip);
+    expect(chip.textContent).toBe('All milestones');
+    fireEvent.click(chip);
+    expect(chip.textContent).toBe('Active milestone');
+  });
+
+  it('type chip cycles through any → feature → bug → chore → research → any', () => {
+    renderModal(true);
+    const chip = screen.getByTestId('search-filter-type');
+    expect(chip.textContent).toBe('Any type');
+    fireEvent.click(chip);
+    expect(chip.textContent).toBe('feature');
+    fireEvent.click(chip);
+    expect(chip.textContent).toBe('bug');
+    fireEvent.click(chip);
+    expect(chip.textContent).toBe('chore');
+    fireEvent.click(chip);
+    expect(chip.textContent).toBe('research');
+    fireEvent.click(chip);
+    expect(chip.textContent).toBe('Any type');
   });
 });

@@ -1,7 +1,8 @@
+import type { SearchClientFilters, SearchTypeFilter } from '@/lib/api';
 import type { SearchHitDto } from '@/lib/types';
 import { Search, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { SearchResults } from './SearchResults';
 
@@ -10,20 +11,35 @@ interface SearchModalProps {
   onClose: () => void;
 }
 
-// Filter chips remain disabled stubs until PR-4 of #834.
-const FILTER_CHIPS: ReadonlyArray<{ key: string; label: string }> = [
-  { key: 'scope', label: 'All projects' },
-  { key: 'milestone', label: 'All milestones' },
-  { key: 'type', label: 'Any type' },
-  { key: 'includeClosed', label: 'Open only' },
+const DEBOUNCE_MS = 200;
+
+const TYPE_CYCLE: ReadonlyArray<SearchTypeFilter | undefined> = [
+  undefined,
+  'feature',
+  'bug',
+  'chore',
+  'research',
 ];
 
-const DEBOUNCE_MS = 200;
+interface FilterState {
+  scope: 'this' | 'all';
+  milestone: 'active' | 'all';
+  type: SearchTypeFilter | undefined;
+}
+
+const DEFAULT_FILTERS: FilterState = {
+  scope: 'this',
+  milestone: 'active',
+  type: undefined,
+};
 
 export function SearchModal({ open, onClose }: SearchModalProps) {
   const [query, setQuery] = useState('');
+  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
+  const params = useParams<{ slug?: string }>();
+  const currentSlug = params.slug;
   const debounced = useDebouncedValue(query, DEBOUNCE_MS);
 
   useEffect(() => {
@@ -43,11 +59,22 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
     return () => document.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
-  // Reset the query each time the modal opens so prior input doesn't bleed
-  // into a fresh session.
   useEffect(() => {
-    if (!open) setQuery('');
+    if (!open) {
+      setQuery('');
+      setFilters(DEFAULT_FILTERS);
+    }
   }, [open]);
+
+  const clientFilters: SearchClientFilters = useMemo(() => {
+    const out: SearchClientFilters = {};
+    if (filters.scope === 'this' && currentSlug != null) {
+      out.projectSlug = currentSlug;
+    }
+    if (filters.milestone === 'all') out.milestone = 'all';
+    if (filters.type != null) out.type = filters.type;
+    return out;
+  }, [filters, currentSlug]);
 
   function handleSelect(hit: SearchHitDto) {
     navigate(`/projects/${hit.projectSlug}/items/${hit.externalId}`);
@@ -98,20 +125,61 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
           data-testid="search-filters"
           className="flex flex-wrap items-center gap-1.5 px-4 py-2.5 border-b border-line bg-bg/40"
         >
-          {FILTER_CHIPS.map((chip) => (
-            <button
-              key={chip.key}
-              type="button"
-              disabled
-              title="Filters land in a follow-up PR"
-              className="h-6 px-2 rounded-md text-[11.5px] text-fg-3 border border-line bg-bg cursor-not-allowed"
-            >
-              {chip.label}
-            </button>
-          ))}
+          <FilterChip
+            testid="search-filter-scope"
+            active={filters.scope === 'this' && currentSlug != null}
+            disabled={currentSlug == null}
+            title={
+              currentSlug == null
+                ? 'Open a project to enable "This project"'
+                : 'Toggle between this project and all projects'
+            }
+            label={
+              currentSlug != null && filters.scope === 'this'
+                ? `In: ${currentSlug}`
+                : 'All projects'
+            }
+            onClick={() => {
+              if (currentSlug == null) return;
+              setFilters((f) => ({ ...f, scope: f.scope === 'this' ? 'all' : 'this' }));
+            }}
+          />
+          <FilterChip
+            testid="search-filter-milestone"
+            active={filters.milestone === 'active'}
+            label={filters.milestone === 'active' ? 'Active milestone' : 'All milestones'}
+            title="Toggle between active milestone and all milestones"
+            onClick={() =>
+              setFilters((f) => ({
+                ...f,
+                milestone: f.milestone === 'active' ? 'all' : 'active',
+              }))
+            }
+          />
+          <FilterChip
+            testid="search-filter-type"
+            active={filters.type != null}
+            label={filters.type ?? 'Any type'}
+            title="Cycle through work-item types"
+            onClick={() =>
+              setFilters((f) => {
+                const idx = TYPE_CYCLE.indexOf(f.type);
+                const next = TYPE_CYCLE[(idx + 1) % TYPE_CYCLE.length];
+                return { ...f, type: next };
+              })
+            }
+          />
+          <button
+            type="button"
+            disabled
+            title="Open / closed toggle lands in a follow-up PR"
+            className="h-6 px-2 rounded-md text-[11.5px] text-fg-3 border border-line bg-bg cursor-not-allowed"
+          >
+            Open only
+          </button>
         </div>
 
-        <SearchResults query={debounced} onSelect={handleSelect} />
+        <SearchResults query={debounced} filters={clientFilters} onSelect={handleSelect} />
 
         <div className="flex items-center justify-between px-4 h-9 border-t border-line bg-bg/40 text-[11px] text-fg-3">
           <span>
@@ -129,5 +197,36 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
         </div>
       </div>
     </div>
+  );
+}
+
+interface FilterChipProps {
+  label: string;
+  active: boolean;
+  testid: string;
+  title: string;
+  onClick: () => void;
+  disabled?: boolean;
+}
+
+function FilterChip({ label, active, testid, title, onClick, disabled }: FilterChipProps) {
+  const base = 'h-6 px-2 rounded-md text-[11.5px] border';
+  const tone = disabled
+    ? 'text-fg-3 border-line bg-bg cursor-not-allowed'
+    : active
+      ? 'text-fg border-accent-line bg-accent-soft cursor-pointer'
+      : 'text-fg-2 border-line bg-bg hover:bg-bg-elev cursor-pointer';
+  return (
+    <button
+      type="button"
+      data-testid={testid}
+      data-active={active ? 'true' : 'false'}
+      disabled={disabled}
+      title={title}
+      onClick={onClick}
+      className={`${base} ${tone}`}
+    >
+      {label}
+    </button>
   );
 }

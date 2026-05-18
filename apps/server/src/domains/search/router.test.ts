@@ -50,7 +50,13 @@ describe('GET /search', () => {
     const body = (await res.json()) as { items: unknown[]; total: number; hasMore: boolean };
     expect(body.total).toBe(1);
     expect(body.items).toHaveLength(1);
-    expect(mockSearch).toHaveBeenCalledWith({ q: 'cache', limit: 50 });
+    expect(mockSearch).toHaveBeenCalledWith({
+      q: 'cache',
+      limit: 50,
+      projectSlug: undefined,
+      type: undefined,
+      milestone: 'active',
+    });
   });
 
   it('passes through the limit query param when present', async () => {
@@ -59,7 +65,28 @@ describe('GET /search', () => {
       data: { items: [], total: 0, hasMore: false },
     });
     await makeApp().request('/search?q=foo&limit=5');
-    expect(mockSearch).toHaveBeenCalledWith({ q: 'foo', limit: 5 });
+    expect(mockSearch).toHaveBeenCalledWith({
+      q: 'foo',
+      limit: 5,
+      projectSlug: undefined,
+      type: undefined,
+      milestone: 'active',
+    });
+  });
+
+  it('forwards projectSlug, type, and milestone filters', async () => {
+    mockSearch.mockResolvedValue({
+      ok: true,
+      data: { items: [], total: 0, hasMore: false },
+    });
+    await makeApp().request('/search?q=cache&projectSlug=goose-hub-self&type=bug&milestone=all');
+    expect(mockSearch).toHaveBeenCalledWith({
+      q: 'cache',
+      limit: 50,
+      projectSlug: 'goose-hub-self',
+      type: 'bug',
+      milestone: 'all',
+    });
   });
 
   it('defaults q to empty string when omitted', async () => {
@@ -68,7 +95,13 @@ describe('GET /search', () => {
       data: { items: [], total: 0, hasMore: false },
     });
     await makeApp().request('/search');
-    expect(mockSearch).toHaveBeenCalledWith({ q: '', limit: 50 });
+    expect(mockSearch).toHaveBeenCalledWith({
+      q: '',
+      limit: 50,
+      projectSlug: undefined,
+      type: undefined,
+      milestone: 'active',
+    });
   });
 
   it('returns 500 when the service surfaces an error', async () => {
