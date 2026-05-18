@@ -50,7 +50,7 @@ read the real files before reporting findings.
 - **Node** — a single async function inside a workflow.
 - **Lane** — a UI column on the Kanban. Visual grouping of states. Pure display; never drives behaviour.
 - **Agent Run** — one invocation of an AI agent with role, prompt, tool allowlist, budget, output schema.
-- **Role** — Triager, Griller, PRD-Writer, Decomposer, Researcher, Investigator, Developer, Dev-Reviewer, QA, Reviewer, Retrospector, Auditor. Canonical source is the `Role` union in `core/types.ts`; this list mirrors it. (Note: "Advisor" is a model-tier *concept*, not a role — see the entry below.)
+- **Role** — Triager, Griller, PRD-Writer, Decomposer, Researcher, Investigator, Developer, Dev-Reviewer, QA, Reviewer, Retrospector, Auditor, Assistant. Canonical source is the `Role` union in `core/types.ts`; this list mirrors it. (Note: "Advisor" is a model-tier *concept*, not a role — see the entry below. Note: "Assistant" is the Hub Chat conversational role added in M20.17; non-holdout, broad read, sonnet baseline.)
 - **Persona** — a named instance of a role with personality, history, performance metrics. Project-scoped.
 - **Skill** — a packaged capability: prompt + role + tool bundle list + model config + JSON output schema. Versioned markdown plus a TypeScript schema file.
 - **Tool Bundle** — a named set of related tools. Roles compose allowlists from bundles plus per-role extras.
