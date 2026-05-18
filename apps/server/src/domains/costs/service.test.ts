@@ -96,6 +96,44 @@ describe('getCostSummary', () => {
       totalRuns: 1,
       hasEstimated: false,
     });
+    expect(r.data.symbolIndex).toMatchObject({
+      lookupCount: 0,
+      averageIdentifiersPerLookup: 0,
+    });
+  });
+
+  it('includes symbol-index lookup and usage metrics', async () => {
+    mockTotalsForProject
+      .mockReturnValueOnce({ totalUsd: 0, totalRuns: 0, hasEstimated: false })
+      .mockReturnValueOnce({ totalUsd: 0, totalRuns: 0, hasEstimated: false });
+    mockTotalsByStage.mockReturnValue([]);
+    mockListCostsForProjectSince.mockReturnValue([]);
+    mockEventReplay.mockImplementation((filter = {}) => {
+      if (filter.kind === 'project.budget-exceeded') return [];
+      return [
+        {
+          kind: 'symbol-index.lookup',
+          payload: {
+            identifierCount: 4,
+            hintCount: 2,
+            consumerHintCounts: { 'scout-code-path': 2 },
+          },
+        },
+        {
+          kind: 'symbol-index.hints-used',
+          payload: { usedHintCount: 1 },
+        },
+      ];
+    });
+
+    const r = await getCostSummary('goose-hub-self');
+
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.symbolIndex.lookupCount).toBe(1);
+    expect(r.data.symbolIndex.averageIdentifiersPerLookup).toBe(4);
+    expect(r.data.symbolIndex.hintsUsedEventCount).toBe(1);
+    expect(r.data.symbolIndex.usedHintCount).toBe(1);
   });
 
   it('returns daily budget status for the current UTC day', async () => {

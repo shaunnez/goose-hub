@@ -16,6 +16,11 @@ import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-tra
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
+import {
+  emitSymbolIndexHintsUsedEvent,
+  offeredHintsFromSymbolKeyFiles,
+} from '@goose-hub/core/symbol-index/hints-used.js';
+import type { SymbolKeyFileHint } from '@goose-hub/core/symbol-index/lookup.js';
 import type { orchestratorCommitAll } from '@goose-hub/core/workspaces/orchestrator-git.js';
 import { ImplementSchema } from '@goose-hub/skills/implement/schema.js';
 import { buildPrBody, runEvidencePost } from './pr-helpers.js';
@@ -36,6 +41,7 @@ export interface RunImplementInput {
   advisorFeedback?: string;
   investigation?: InvestigationContext;
   surfaceGuardInvestigation?: InvestigationContext;
+  symbolIndexKeyFiles?: SymbolKeyFileHint[];
   revisionPass?: 0 | 1;
 }
 
@@ -242,6 +248,17 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
       outputJsonSchema: input.outputJsonSchema,
       appendSystemPrompt: input.appendSystemPrompt,
     },
+  });
+  emitSymbolIndexHintsUsedEvent({
+    projectId: input.projectId,
+    workItemId: input.workItem.id,
+    consumerSkill: 'implement',
+    runId: input.runId,
+    personaId: input.personaId,
+    offeredHints: offeredHintsFromSymbolKeyFiles(input.symbolIndexKeyFiles ?? []),
+    toolEvents: eventStore.replay({ runId: input.runId, kind: 'agent.tool-call' }),
+    worktreePath: input.worktreePath,
+    appendEvent: (event) => eventStore.appendEvent(event),
   });
   const touchedPaths = [
     ...output.filesWritten.map((f) => f.path),

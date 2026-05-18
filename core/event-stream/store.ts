@@ -142,6 +142,7 @@ export type EventKind =
   | 'audit.failed'
   // Symbol index utility telemetry — lets us measure whether hints save work.
   | 'symbol-index.lookup'
+  | 'symbol-index.hints-used'
   | 'audit.autonomy-gate-fired';
 
 export interface AgentEvent {

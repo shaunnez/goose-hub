@@ -87,6 +87,7 @@ import {
   SwarmScoutTimeoutEvent,
   SwarmWaveEvent,
 } from './timeline/SwarmEvents';
+import { SymbolIndexHintsUsedEvent } from './timeline/SymbolIndexEvents';
 import { AgentVerifyCommandEvent, ToolWarningEvent } from './timeline/VerifyToolEvents';
 
 export function renderTimelineItem(item: RenderItem, idx: number, context?: TimelineContext) {
@@ -153,6 +154,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <InvestigationContextInjectedEvent key={event.id} event={event} />;
     case 'agent.wrong-surface-guard':
       return <WrongSurfaceGuardEvent key={event.id} event={event} />;
+    case 'symbol-index.hints-used':
+      return <SymbolIndexHintsUsedEvent key={event.id} event={event} />;
     case 'agent.spawned':
       return <AgentSpawnedEvent key={event.id} event={event} />;
     case 'agent.decision-summary':

@@ -29,6 +29,11 @@ import { persistScoutReport } from '@goose-hub/core/scout-reports/repository.js'
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { ensureSymbolIndexFresh } from '@goose-hub/core/symbol-index/freshness.js';
 import {
+  type SymbolIndexHintsUsedConsumerSkill,
+  emitSymbolIndexHintsUsedEvent,
+  offeredHintsFromScoutSymbolIndexHints,
+} from '@goose-hub/core/symbol-index/hints-used.js';
+import {
   extractIdentifiers,
   lookupWorkItemSymbols,
   shapeSymbolIndexHintsForScout,
@@ -52,6 +57,37 @@ import { runPlaywrightReproPlan, shouldSkipBeforeEvidence } from './playwright-r
 import { WAVE_1_SCOUTS, selectWave2Scouts } from './wave2-selection.js';
 
 type InvestigateOutput = z.infer<typeof InvestigateSchema>;
+
+function emitScoutSymbolHintUsage(input: {
+  parentRunId: string;
+  projectId: string;
+  workItemId: string;
+  worktreePath: string;
+  personaId: string;
+  scoutSpecs: Array<{ scoutName: string; extraContext?: Record<string, unknown> }>;
+  reports: Array<{ scoutName: string; runId: string }>;
+}): void {
+  for (const report of input.reports) {
+    const spec = input.scoutSpecs.find((candidate) => candidate.scoutName === report.scoutName);
+    const offeredHints = offeredHintsFromScoutSymbolIndexHints(
+      spec?.extraContext?.symbolIndexHints,
+    );
+    if (offeredHints.length === 0) continue;
+
+    emitSymbolIndexHintsUsedEvent({
+      projectId: input.projectId,
+      workItemId: input.workItemId,
+      consumerSkill: report.scoutName as SymbolIndexHintsUsedConsumerSkill,
+      runId: report.runId,
+      parentRunId: input.parentRunId,
+      personaId: input.personaId,
+      offeredHints,
+      toolEvents: eventStore.replay({ runId: report.runId, kind: 'agent.tool-call' }),
+      worktreePath: input.worktreePath,
+      appendEvent: (event) => eventStore.appendEvent(event),
+    });
+  }
+}
 
 export function chooseScoutModelOverride(input: {
   resolvedBudget: ResolvedBudget;
@@ -351,6 +387,15 @@ export async function runInvestigateWorkflow(
         resolveScoutBudget: resolveInvestigateScoutBudget,
         loadSkillAssets,
       });
+      emitScoutSymbolHintUsage({
+        parentRunId: runId,
+        projectId,
+        workItemId: workItem.id,
+        worktreePath,
+        personaId,
+        scoutSpecs: wave1Scouts,
+        reports: wave1Result.reports,
+      });
 
       const wave1HandoffReports: unknown[] = [];
       for (const report of wave1Result.reports) {
@@ -431,6 +476,15 @@ export async function runInvestigateWorkflow(
         minSuccessfulScouts: wave2Scouts.length,
         resolveScoutBudget: resolveInvestigateScoutBudget,
         loadSkillAssets,
+      });
+      emitScoutSymbolHintUsage({
+        parentRunId: runId,
+        projectId,
+        workItemId: workItem.id,
+        worktreePath,
+        personaId,
+        scoutSpecs: wave2Scouts,
+        reports: wave2Result.reports,
       });
 
       const wave2HandoffReports: unknown[] = [];
