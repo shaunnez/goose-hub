@@ -13,6 +13,7 @@ import { playbooksRouter } from './domains/playbooks/router.js';
 import { projectSettingsRouter } from './domains/project-settings/router.js';
 import { projectsRouter } from './domains/projects/router.js';
 import { rosterRouter } from './domains/roster/router.js';
+import { searchRouter } from './domains/search/router.js';
 import { webhooksRouter } from './domains/webhooks/router.js';
 import { workflowsRouter } from './domains/workflows/router.js';
 
@@ -43,5 +44,6 @@ app.route('/events', eventsRouter); // GET /events
 app.route('/webhooks', webhooksRouter); // POST /webhooks/github
 app.route('/api/decisions', decisionsRouter); // POST /api/decisions (M19.23)
 app.route('/api/changelog', changelogRouter); // GET /api/changelog?days=7 (M14.XX)
+app.route('/api/search', searchRouter); // GET /api/search?q=&limit= (#834 PR-2)
 
 export { app };
