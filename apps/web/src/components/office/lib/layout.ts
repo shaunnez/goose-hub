@@ -81,9 +81,9 @@ export function totalWorldHeight(floorCount: number): number {
 }
 
 /**
- * Phaser's RESIZE scale mode resizes the canvas, not the world. We want one
- * floor to occupy the full viewport vertically; horizontal panning reveals
- * the rest of the floor's rooms.
+ * Phaser's RESIZE scale mode resizes the canvas, not the world. The office
+ * must fit the horizontal space left by the app chrome and HUD rails, then use
+ * vertical slack for breathing room.
  *
  * Zoom = viewport_height / FLOOR_PIXEL_HEIGHT (floor 384 fills viewport
  * height). At zoom > 1 the focused floor reads at character-readable size
@@ -95,14 +95,13 @@ export function floorOverviewZoomForViewport(
 ): number {
   const width = Math.max(1, viewportWidth);
   const height = Math.max(1, viewportHeight);
-  // Fit-width: the full floor (1280 px) is visible horizontally — no
-  // off-screen rooms. Vertical headroom appears above/below the floor; pan
-  // vertically only to see additional floors. Height-cap protects very
-  // short viewports from zooming so far in that the floor exceeds visible
-  // height by more than ~1.5x.
+  // Fit-width: the full floor (1280 px) remains visible horizontally even when
+  // the left app sidebar or right Office rail reduces canvas width. Height-cap
+  // protects very short viewports from zooming in so far that the floor exceeds
+  // visible height by more than ~1.5x.
   const widthFit = width / FLOOR_PIXEL_WIDTH;
   const heightCap = (height / FLOOR_PIXEL_HEIGHT) * 1.5;
-  return Math.max(1, Math.min(widthFit, heightCap));
+  return Math.min(widthFit, heightCap);
 }
 
 /**

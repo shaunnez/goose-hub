@@ -6,15 +6,35 @@
 interface TopHudBarProps {
   projectName: string;
   ticketCount: number;
-  systemLoadPct: number;
+  activeCount: number;
+  blockedCount: number;
   alert?: {
+    tone: 'danger' | 'warning';
     title: string;
     detail: string;
     breadcrumb?: string;
   } | null;
 }
 
-export function TopHudBar({ projectName, ticketCount, systemLoadPct, alert }: TopHudBarProps) {
+export function TopHudBar({
+  projectName,
+  ticketCount,
+  activeCount,
+  blockedCount,
+  alert,
+}: TopHudBarProps) {
+  const alertClass =
+    alert == null
+      ? 'bg-[#05030acc] border-amber-500/30'
+      : alert.tone === 'warning'
+        ? 'bg-[#1a1206cc] border-amber-500/50'
+        : 'bg-[#1a0606cc] border-red-500/50';
+  const alertIconClass =
+    alert?.tone === 'warning'
+      ? 'bg-amber-900/60 border-amber-500/60 text-amber-200'
+      : 'bg-red-900/60 border-red-500/60 text-red-200';
+  const alertTitleClass = alert?.tone === 'warning' ? 'text-amber-300' : 'text-red-300';
+
   return (
     <div
       data-testid="office-top-hud"
@@ -31,20 +51,24 @@ export function TopHudBar({ projectName, ticketCount, systemLoadPct, alert }: To
             PROJECT: <span className="text-fg-2">{projectName}</span>
           </div>
           <div className="text-[10px] text-fg-3">
-            STATUS: <span className="text-emerald-400">In Progress</span>
+            STATE: <span className="text-emerald-400">{activeCount} active</span>
           </div>
         </div>
       </div>
 
       {/* Centre card — alert / status banner */}
-      <div className="flex-1 flex items-center px-4 py-2 bg-[#1a0606cc] border border-red-500/50 rounded-sm min-w-0">
+      <div className={`flex-1 flex items-center px-4 py-2 border rounded-sm min-w-0 ${alertClass}`}>
         {alert != null ? (
           <>
-            <div className="w-8 h-8 rounded-sm bg-red-900/60 border border-red-500/60 flex items-center justify-center text-lg flex-shrink-0">
+            <div
+              className={`w-8 h-8 rounded-sm border flex items-center justify-center text-lg flex-shrink-0 ${alertIconClass}`}
+            >
               ⚠
             </div>
             <div className="ml-3 flex flex-col leading-tight min-w-0">
-              <div className="text-red-300 font-bold text-[13px] tracking-wider">{alert.title}</div>
+              <div className={`${alertTitleClass} font-bold text-[13px] tracking-wider`}>
+                {alert.title}
+              </div>
               <div className="text-[11px] text-fg-2 truncate">{alert.detail}</div>
               {alert.breadcrumb != null && (
                 <div className="text-[10px] text-cyan-400 truncate">{alert.breadcrumb}</div>
@@ -59,26 +83,15 @@ export function TopHudBar({ projectName, ticketCount, systemLoadPct, alert }: To
           </>
         ) : (
           <div className="flex-1 text-center text-fg-3 text-[11px] italic">
-            All systems nominal · no active alerts
+            Live office view · no blocked or failed work items
           </div>
         )}
       </div>
 
       {/* Right card — metrics */}
       <div className="flex items-center gap-6 px-4 py-2 bg-[#05030acc] border border-amber-500/30 rounded-sm min-w-[260px]">
-        <Metric label="TICKETS IN SYSTEM" value={String(ticketCount)} icon="📋" />
-        <Metric
-          label="SYSTEM LOAD"
-          value={`${systemLoadPct}%`}
-          rightAdornment={
-            <span className="inline-block w-20 h-2 ml-2 bg-fg-3/20 rounded align-middle overflow-hidden">
-              <span
-                className="block h-full bg-emerald-400/80"
-                style={{ width: `${Math.min(100, Math.max(0, systemLoadPct))}%` }}
-              />
-            </span>
-          }
-        />
+        <Metric label="VISIBLE WORK" value={String(ticketCount)} icon="📋" />
+        <Metric label="BLOCKED" value={String(blockedCount)} />
       </div>
     </div>
   );

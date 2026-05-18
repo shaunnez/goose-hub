@@ -266,11 +266,17 @@ export function groupByDevPhase(items: RenderItem[]): RenderItem[] {
 }
 
 export function groupEvents(events: AgentEventDto[]): RenderItem[] {
-  const collapsed = collapseLogRuns(events);
+  const collapsed = collapseLogRuns(events.filter((event) => !isNoisyCodexStderrLog(event)));
   const grouped = groupByRunId(collapsed);
   const withInvestigationPhases = groupByInvestigationPhase([...grouped].sort(compareRenderItems));
   const withDevPhases = groupByDevPhase([...withInvestigationPhases].sort(compareRenderItems));
   return withDevPhases;
+}
+
+function isNoisyCodexStderrLog(event: AgentEventDto): boolean {
+  if (event.kind !== 'agent.log') return false;
+  const payload = event.payload as { stream?: string; text?: string } | null;
+  return payload?.stream === 'stderr' && payload.text === 'Reading additional input from stdin...';
 }
 
 function collapseLogRuns(events: AgentEventDto[]): RenderItem[] {

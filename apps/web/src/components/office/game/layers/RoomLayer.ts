@@ -989,31 +989,31 @@ export class RoomLayer {
     const PLATE_BG = BRASS_TINTS.brassPlateBg;
     const PLATE_BORDER_BRASS = BRASS_TINTS.brassEdge;
     const PLATE_BORDER_DARK = BRASS_TINTS.brassDark;
-    const TEXT_FILL = '#fde58a';
-    const TEXT_STROKE = '#3a2410';
+    const TEXT_FILL = '#fff4c2';
+    const TEXT_STROKE = '#1a0f05';
 
     for (const id of ROOM_IDS) {
       const b = roomBounds(id);
       const cx = (b.x1 + b.x2) / 2;
       // Sign sits in the upper portion of the (now 6-tile-tall) dark wall,
       // just below the lintel — "high on the wall" like real signage.
-      const signY = originY + b.y1 + TILE_SIZE * 2 + 12;
+      const signY = originY + b.y1 + TILE_SIZE * 2 + 6;
       const text = id.toUpperCase();
 
       // Text first so we can size the plate to it
       const t = this.scene.add.text(cx, signY, text, {
         fontFamily: 'JetBrains Mono, monospace',
-        fontSize: '9px',
+        fontSize: '14px',
         color: TEXT_FILL,
         stroke: TEXT_STROKE,
-        strokeThickness: 2,
+        strokeThickness: 3,
       });
       t.setOrigin(0.5, 0.5);
       t.setDepth(5);
 
       // Brass plate frame sized to the text + 6 px padding
-      const padX = 8;
-      const padY = 3;
+      const padX = 10;
+      const padY = 4;
       const plateW = Math.round(t.width) + padX * 2;
       const plateH = Math.round(t.height) + padY * 2;
       const plateX = cx - plateW / 2;
@@ -1072,8 +1072,8 @@ export class RoomLayer {
   /** Pendant lamp(s) hung against each room's back wall. A 2-px brass
    * chain runs from the ceiling-pipes row down into the wall; the
    * pendant lamp sprite sits at the chain's bottom, lit by a warm halo
-   * pooled around the bulb. Wall is 6 tiles tall (96 px) so chains are
-   * long — the bulb hangs ~2/3 down the wall. */
+   * pooled around the bulb. Keep the bulb in the upper wall band so signage
+   * and desk activity stay readable. */
   private drawRoomLamps(container: Phaser.GameObjects.Container, originY: number): void {
     const lampKey = TEXTURE_KEYS.pendantLamp;
     if (!this.scene.textures.exists(lampKey)) return;
@@ -1082,7 +1082,7 @@ export class RoomLayer {
     // Phase 9: ceiling pipes / lintel removed — chain hangs from the very
     // top of the back wall down to the lamp top in the lower-middle area.
     const chainTopOffset = 0;
-    const lampTopOffset = TILE_SIZE * 3 + 4; // y1 + 52 — bulb ends near y1+80
+    const lampTopOffset = 4; // y1 + 4 — bulb ends near y1+32
     for (const id of ROOM_IDS) {
       const b = roomBounds(id);
       const width = b.x2 - b.x1;
@@ -1098,7 +1098,7 @@ export class RoomLayer {
         container.add(chain);
         // Warm halo on the wall behind the bulb
         if (haloLoaded) {
-          const halo = this.scene.add.image(x, originY + b.y1 + lampTopOffset + 24, haloKey);
+          const halo = this.scene.add.image(x, originY + b.y1 + lampTopOffset + 14, haloKey);
           halo.setOrigin(0.5, 0.5);
           applyOfficeTextureDisplaySize(halo, haloKey);
           halo.setAlpha(0.28);

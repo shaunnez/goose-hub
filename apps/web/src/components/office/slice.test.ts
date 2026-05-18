@@ -178,8 +178,11 @@ describe('floor and desk layout', () => {
     expect(totalWorldHeight(3)).toBe(3 * FLOOR_PIXEL_HEIGHT + 2 * FLOOR_GAP_PX);
   });
 
-  it('keeps the floor at 1:1 when the viewport is smaller than the world', () => {
-    expect(floorOverviewZoomForViewport(FLOOR_PIXEL_WIDTH - 200, FLOOR_PIXEL_HEIGHT)).toBe(1);
+  it('zooms out when chrome leaves less width than the floor needs', () => {
+    expect(floorOverviewZoomForViewport(FLOOR_PIXEL_WIDTH - 200, FLOOR_PIXEL_HEIGHT)).toBeCloseTo(
+      (FLOOR_PIXEL_WIDTH - 200) / FLOOR_PIXEL_WIDTH,
+      5,
+    );
   });
 
   it('zooms the floor overview to fit width — full floor visible horizontally', () => {
@@ -1524,8 +1527,8 @@ describe('Phase 2.5 — visual canon', () => {
     const canonicalNums = new Set<number>([
       ...(Object.values(PALETTE) as number[]),
       ...(Object.values(ROLE_TINTS) as number[]),
-      ...Object.values(CINEMATIC_TINTS).filter((v): v is number => typeof v === 'number'),
-      ...Object.values(HUD_TINTS).filter((v): v is number => typeof v === 'number'),
+      ...(Object.values(CINEMATIC_TINTS) as number[]),
+      ...(Object.values(HUD_TINTS).filter((v) => typeof v === 'number') as number[]),
       ...(Object.values(BRASS_TINTS) as number[]),
     ]);
 

@@ -261,17 +261,14 @@ export class AmbientLayer {
       return;
     }
     this.startWalkBob(entry);
-    // Switch to walking spritesheet + play looped 2-frame walk.
-    if (this.scene.anims.exists('goose-walk')) {
-      entry.body.play('goose-walk', true);
-      applyOfficeTextureDisplaySize(
-        entry.body as unknown as Phaser.GameObjects.Image,
-        'office:goose-walk',
-      );
-    }
+    // Keep the same white goose asset while moving. The current walk sheet is
+    // blue and reads as a different character when animated.
     const gooseKey = this.scene.textures.exists('office:goose_idle')
       ? 'office:goose_idle'
       : TEXTURE_KEYS.spriteBase;
+    entry.body.stop();
+    entry.body.setTexture(gooseKey);
+    applyOfficeTextureDisplaySize(entry.body as unknown as Phaser.GameObjects.Image, gooseKey);
     let idx = 0;
     const next = () => {
       if (idx >= waypoints.length) {

@@ -2,7 +2,7 @@
 // No Phaser imports, no DOM access, no side effects.
 
 import type { PersonaPlacement, TicketPlacement } from './agent-positions';
-import type { RoomId } from './rooms';
+import { ROOM_IDS, type RoomId } from './rooms';
 
 export interface HudState {
   hero: {
@@ -26,10 +26,8 @@ export interface HudEvents {
   mergedCelebrated: string[]; // ticketIds that merged this batch
 }
 
-const ROOM_IDS_LIST = ['triage', 'investigation', 'dev', 'qa', 'review', 'done'] as const;
-
 function emptyRoomRecord(): Record<RoomId, number> {
-  return { triage: 0, investigation: 0, dev: 0, qa: 0, review: 0, done: 0 };
+  return Object.fromEntries(ROOM_IDS.map((roomId) => [roomId, 0])) as Record<RoomId, number>;
 }
 
 function truncateTitle(title: string, len = 36): string {
@@ -141,7 +139,3 @@ export function incrementReviewRound(state: HudState): HudState {
   const round = state.reviewRound ?? 1;
   return { ...state, reviewRound: round + 1 };
 }
-
-// Suppress unused import warning
-const _roomIds = ROOM_IDS_LIST;
-void _roomIds;

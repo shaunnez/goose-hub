@@ -24,7 +24,7 @@ export function FloorIndicator({
   return (
     <div
       data-testid="office-floor-indicator"
-      className="absolute right-3 top-3 z-10 flex flex-col items-stretch rounded-md border border-line bg-bg-elev/95 backdrop-blur shadow-lg overflow-hidden"
+      className="absolute right-[calc(11rem+0.75rem)] top-28 z-20 flex flex-col items-stretch rounded-md border border-line bg-bg-elev/95 backdrop-blur shadow-lg overflow-hidden"
     >
       <button
         type="button"

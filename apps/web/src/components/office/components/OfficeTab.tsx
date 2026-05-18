@@ -7,6 +7,7 @@
 // in tests in isolation.
 
 import { fetchIssues, fetchProjects } from '@/lib/api';
+import { STATE_LABEL } from '@/lib/constants';
 import type { WorkItemDto } from '@/lib/types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type Phaser from 'phaser';
@@ -106,10 +107,25 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
         externalId: it.externalId,
         projectSlug: p.slug,
         state: it.state,
+        priority: normalizePriority(it.priority),
         title: it.title,
       }));
     });
     return placementsFromItems(flat);
+  }, [projects, itemsByProject]);
+
+  const activeItems = useMemo(() => {
+    return projects
+      .flatMap((p) =>
+        (itemsByProject[p.slug] ?? []).map((it) => ({
+          ...it,
+          projectSlug: p.slug,
+          projectName: p.name,
+          priority: normalizePriority(it.priority),
+        })),
+      )
+      .filter((it) => it.state !== 'factory:archived' && it.state !== 'factory:rejected')
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   }, [projects, itemsByProject]);
 
   // Keep workItemLookupRef current whenever the issue cache refreshes.
@@ -264,14 +280,42 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
 
   // Total in-flight tickets for the top-bar counter.
   const ticketCount = placements.tickets.length;
+  const blockedCount = activeItems.filter((it) =>
+    ['factory:needs-human', 'factory:gate-pending', 'factory:merge-conflict'].includes(it.state),
+  ).length;
+  const qaAttention = activeItems.find((it) =>
+    ['factory:qa-failed', 'factory:needs-fix'].includes(it.state),
+  );
+  const blockedItem = activeItems.find((it) =>
+    ['factory:needs-human', 'factory:gate-pending', 'factory:merge-conflict'].includes(it.state),
+  );
+  const topAlert =
+    qaAttention != null
+      ? {
+          tone: 'danger' as const,
+          title: 'QA attention',
+          detail: `#${qaAttention.externalId} ${qaAttention.title}`,
+          breadcrumb: `${qaAttention.projectName} / ${labelForState(qaAttention.state)}`,
+        }
+      : blockedItem != null
+        ? {
+            tone: 'warning' as const,
+            title: 'Human input needed',
+            detail: `#${blockedItem.externalId} ${blockedItem.title}`,
+            breadcrumb: `${blockedItem.projectName} / ${labelForState(blockedItem.state)}`,
+          }
+        : null;
+  const heroItem =
+    activeItems.find((it) => it.priority === 'critical') ??
+    activeItems.find((it) => it.priority === 'high') ??
+    activeItems[0] ??
+    null;
 
   return (
     <div className="relative h-full w-full" data-testid="office-tab">
-      {/* Canvas is inset from the right by the EventFeedSidebar width
-          (w-44 = 176 px) so the rightmost rooms (Archive, Coffee) aren't
-          drawn under the sidebar. Top + bottom HUDs overlay; canvas
-          extends behind them. */}
-      <div className="absolute inset-y-0 left-0 right-44">
+      {/* Canvas is inset by the DOM HUD chrome so Phaser receives the real
+          gameplay viewport instead of drawing under fixed overlays. */}
+      <div className="absolute top-24 bottom-20 left-0 right-44">
         <Suspense
           fallback={
             <div
@@ -313,15 +357,33 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
       <TopHudBar
         projectName={activeProject?.name ?? '—'}
         ticketCount={ticketCount}
-        systemLoadPct={64}
-        alert={{
-          title: 'QA FAILURE DETECTED',
-          detail: 'Ticket GH-2471 failed tests (Integration)',
-          breadcrumb: 'Dev Floor › QA Chamber › Retry 1 of 3',
-        }}
+        activeCount={activeItems.length}
+        blockedCount={blockedCount}
+        alert={topAlert}
       />
-      <EventFeedSidebar />
-      <BottomHudBar hero={null} team={team} />
+      <EventFeedSidebar items={activeItems.slice(0, 12)} />
+      <BottomHudBar
+        hero={
+          heroItem == null
+            ? null
+            : {
+                externalId: heroItem.externalId,
+                title: heroItem.title,
+                fromRoom: heroItem.priority.toUpperCase(),
+                toRoom: labelForState(heroItem.state),
+              }
+        }
+        team={team}
+      />
     </div>
   );
+}
+
+function normalizePriority(value: string): 'critical' | 'high' | 'normal' | 'low' {
+  if (value === 'critical' || value === 'high' || value === 'low') return value;
+  return 'normal';
+}
+
+function labelForState(state: string): string {
+  return STATE_LABEL[state] ?? state.replace(/^factory:/, '');
 }

@@ -1,6 +1,8 @@
 # Compare chore, bug
 Compare chore, bug, feature on siple task
 
+# Decline PR ??
+
 # Investigation group
 needs to sum up costs and tokens
 

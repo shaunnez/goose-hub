@@ -385,20 +385,17 @@ export class PersonaLayer {
 
   // ─── private ─────────────────────────────────────────────────────────────
 
-  /** Swap the body to the goose-walk spritesheet and play the looped walk
-   *  animation. Safe to call on every walk start — no-ops if the spritesheet
-   *  failed to load (geese then walk with the static role texture). */
+  /** Keep movement on the same white goose texture used at rest. The generated
+   * walk sheet currently has a different blue character design, which makes
+   * a moving persona visually change species mid-route. */
   private startWalkAnimation(entry: PersonaEntry): void {
-    if (!this.scene.anims.exists('goose-walk')) return;
-    if (!this.scene.textures.exists('office:goose-walk')) return;
-    // Clear any role tint — the walk sheet is pre-coloured and tinting it
-    // would mask the animation pixels.
-    entry.body.clearTint();
-    entry.body.play('goose-walk', true);
-    applyOfficeTextureDisplaySize(
-      entry.body as unknown as Phaser.GameObjects.Image,
-      'office:goose-walk',
-    );
+    entry.body.stop();
+    const bodyKey = spriteTextureKeyForRole(entry.bodyRole, this.scene);
+    entry.body.setTexture(bodyKey);
+    applyOfficeTextureDisplaySize(entry.body as unknown as Phaser.GameObjects.Image, bodyKey);
+    if (!isGooseTextureKey(bodyKey)) {
+      entry.body.setTint(ROLE_TINTS[entry.bodyRole] ?? PALETTE.amber);
+    }
   }
 
   /** Stop the walk animation, restore the role-specific goose texture, and
