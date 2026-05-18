@@ -54,6 +54,37 @@ const TIMEOUT_MS = 30_000; // 30 seconds — FACTORY_RULES rule 32
 const WORKSPACES_DIR = join(homedir(), '.factory', 'workspaces');
 const MCP_CONFIG_PATH = join(homedir(), '.factory', 'mcp-config.json');
 const BROWSER_PROCESS_ACCESS_SKILLS = new Set(['playwright-repro', 'evidence-post']);
+const ABSOLUTE_USER_PATH_RE = /\/Users\/[^\s'"`]+/g;
+
+function isPathUnderRoot(path: string, root: string): boolean {
+  const normalizedRoot = join(root, '.');
+  const normalizedPath = join(path, '.');
+  return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}/`);
+}
+
+function workspaceBoundaryViolation(input: {
+  toolCall: { toolName: string; toolInput: Record<string, unknown> };
+  workspaceDir: string;
+  allowedSecondaryWorkspaces?: string;
+}): string | null {
+  if (input.toolCall.toolName !== 'Bash') return null;
+  const command = input.toolCall.toolInput.command;
+  if (typeof command !== 'string') return null;
+
+  const allowedRoots = [
+    input.workspaceDir,
+    ...(input.allowedSecondaryWorkspaces ?? '')
+      .split(',')
+      .map((path) => path.trim())
+      .filter(Boolean),
+  ];
+  for (const absolutePath of command.match(ABSOLUTE_USER_PATH_RE) ?? []) {
+    if (!allowedRoots.some((root) => isPathUnderRoot(absolutePath, root))) {
+      return `Bash command references path outside workspace: ${absolutePath}`;
+    }
+  }
+  return null;
+}
 
 export class CodexCliRuntime implements AgentRuntime {
   async run(spec: AgentSpec): Promise<AgentResult> {
@@ -81,21 +112,23 @@ export class CodexCliRuntime implements AgentRuntime {
     const { personaId } = spec;
     const model = spec.modelOverride ?? defaultModelForTierAndProvider('sonnet', 'codex');
 
-    eventStore.appendEvent({
-      projectId,
-      workItemId,
-      kind: 'agent.run-started',
-      payload: {
-        skill: spec.skill,
+    if (spec.suppressRunStarted !== true) {
+      eventStore.appendEvent({
+        projectId,
+        workItemId,
+        kind: 'agent.run-started',
+        payload: {
+          skill: spec.skill,
+          runId,
+          personaId,
+          modelId: model,
+          runtime: 'codex-cli',
+          ...spec.extraEventPayload,
+        },
         runId,
         personaId,
-        modelId: model,
-        runtime: 'codex-cli',
-        ...spec.extraEventPayload,
-      },
-      runId,
-      personaId,
-    });
+      });
+    }
 
     const { contextXml } = assembleSpawnContext(spec);
     const allowedTools = computeAllowlist(spec);
@@ -208,6 +241,46 @@ export class CodexCliRuntime implements AgentRuntime {
           const toolCall = pickCodexToolCall(event);
           if (toolCall == null) return;
           toolCallCount += 1;
+          const boundaryReason = workspaceBoundaryViolation({
+            toolCall,
+            workspaceDir,
+            allowedSecondaryWorkspaces: spec.env?.FACTORY_ALLOWED_SECONDARY_WORKSPACES,
+          });
+          if (boundaryReason != null && !settled) {
+            settled = true;
+            clearTimeout(timeout);
+            eventStore.appendEvent({
+              projectId,
+              workItemId,
+              kind: 'agent.tool-call',
+              payload: {
+                tool_name: toolCall.toolName,
+                run_id: runId,
+                tool_input: toolCall.toolInput,
+                skill: spec.skill,
+                blocked: true,
+                block_reason: boundaryReason,
+              },
+              runId,
+              personaId,
+            });
+            killProcessGroupOrChild(child);
+            eventStore.appendEvent({
+              projectId,
+              workItemId,
+              kind: 'agent.run-failed',
+              payload: {
+                runId,
+                skill: spec.skill,
+                reason: 'workspace-boundary-violation',
+                error: boundaryReason,
+              },
+              runId,
+              personaId,
+            });
+            reject(new Error(boundaryReason));
+            return;
+          }
           eventStore.appendEvent({
             projectId,
             workItemId,

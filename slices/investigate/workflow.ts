@@ -7,6 +7,7 @@ import {
   type ModelProvider,
   defaultModelForTierAndProvider,
   tierOf,
+  tryProviderOf,
 } from '@goose-hub/core/agent-runtime/models.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
@@ -89,6 +90,10 @@ function buildSchemaScoutFocus(workItem: { title: string; body: string }): strin
       : 'DB schemas, Zod schemas, event payload types, state enums, and API contracts relevant to this work item';
 
   return `Schema/type contracts only for ${target}. Do not trace runtime, retry, scheduler, or workflow control flow; return UNCERTAINTY if no schema surface exists after the first targeted reads.`;
+}
+
+function runtimeNameForModel(modelId: string): 'codex-cli' | 'claude-cli' {
+  return tryProviderOf(modelId) === 'codex' ? 'codex-cli' : 'claude-cli';
 }
 
 /**
@@ -235,7 +240,14 @@ export async function runInvestigateWorkflow(
     projectId,
     workItemId: workItem.id,
     kind: 'agent.run-started',
-    payload: { skill: 'investigate', runId, personaId, baseBranch: workflowBase.branch },
+    payload: {
+      skill: 'investigate',
+      runId,
+      personaId,
+      baseBranch: workflowBase.branch,
+      modelId: investigatorModelOverride,
+      runtime: runtimeNameForModel(investigatorModelOverride),
+    },
     runId,
     personaId,
   });
@@ -490,6 +502,7 @@ export async function runInvestigateWorkflow(
       overrides: {
         runtimeOverride: runtime,
         modelOverride: synthModelOverride,
+        suppressRunStarted: true,
         freshContextOverride:
           investigationSwarmEnabled && allScoutReports != null ? true : undefined,
       },

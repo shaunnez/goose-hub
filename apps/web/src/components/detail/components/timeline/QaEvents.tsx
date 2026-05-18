@@ -17,6 +17,19 @@ type TierPayload = {
   runId?: string;
 };
 
+type VerificationStatus = 'passed' | 'failed' | 'skipped' | 'unknown';
+
+type VerificationSummaryPayload = {
+  changedFileCount?: number;
+  diffCharCount?: number;
+  contextByteSizeEstimate?: number;
+  lintStatus?: VerificationStatus;
+  typecheckStatus?: VerificationStatus;
+  testStatus?: VerificationStatus;
+  e2eStatus?: VerificationStatus;
+  evidenceStatus?: VerificationStatus;
+};
+
 function tierKeyFromKind(kind: string): string {
   return kind.replace('qa.', '').replace('-failed', '').replace('-passed', '');
 }
@@ -49,6 +62,53 @@ function TierEvidence({ evidence, findingCount }: { evidence: string[]; findingC
         </div>
       ))}
       {evidence.length > 3 && <div>{evidence.length - 3} more evidence item(s)</div>}
+    </div>
+  );
+}
+
+function formatCount(value: number | undefined, singular: string, plural: string): string {
+  const count = value ?? 0;
+  return `${count.toLocaleString()} ${count === 1 ? singular : plural}`;
+}
+
+function formatCompactChars(value: number | undefined): string {
+  const count = value ?? 0;
+  if (count < 1000) return String(count);
+  return `${(count / 1000).toFixed(1)}k`;
+}
+
+function formatBytes(value: number | undefined): string {
+  const bytes = value ?? 0;
+  if (bytes < 1024) return `${bytes} B`;
+  return `${(bytes / 1024).toFixed(1)} KB`;
+}
+
+function statusTone(status: VerificationStatus | undefined): string {
+  if (status === 'passed') return 'border-green-500/20 bg-green-500/10 text-green-400';
+  if (status === 'failed') return 'border-red-500/20 bg-red-500/10 text-[color:var(--danger)]';
+  if (status === 'skipped') return 'border-fg-5/20 bg-fg-5/10 text-fg-3';
+  return 'border-yellow-500/20 bg-yellow-500/10 text-yellow-400';
+}
+
+function StatusRow({
+  label,
+  status,
+}: {
+  label: string;
+  status: VerificationStatus | undefined;
+}) {
+  const normalized = status ?? 'unknown';
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-3 rounded border border-line bg-bg/40 px-2.5 py-2">
+      <span className="min-w-0 truncate font-mono text-[11px] text-fg-3">{label}</span>
+      <span
+        className={cn(
+          'shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase',
+          statusTone(normalized),
+        )}
+      >
+        {normalized}
+      </span>
     </div>
   );
 }
@@ -114,6 +174,49 @@ export function QaFailedEvent({ event }: { event: AgentEventDto }) {
         </ul>
       )}
       {findings.length === 0 && <TierEvidence evidence={evidence} findingCount={p?.findingCount} />}
+    </li>
+  );
+}
+
+export function QaVerificationSummaryBuiltEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as VerificationSummaryPayload | null;
+  const rows: Array<{ label: string; status: VerificationStatus | undefined }> = [
+    { label: 'Lint', status: p?.lintStatus },
+    { label: 'Typecheck', status: p?.typecheckStatus },
+    { label: 'Tests', status: p?.testStatus },
+    { label: 'E2E', status: p?.e2eStatus },
+    { label: 'Evidence', status: p?.evidenceStatus },
+  ];
+
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-fg-3">
+        <Circle size={13} className="shrink-0 text-[color:var(--accent)]" />
+        <span className="font-mono uppercase tracking-wider">QA verification summary built</span>
+        <span aria-hidden className="h-[3px] w-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+
+      <div className="mb-3 flex flex-wrap gap-2 text-[11.5px] text-fg-3">
+        <span>{formatCount(p?.changedFileCount, 'file changed', 'files changed')}</span>
+        <span aria-hidden className="text-fg-5">
+          /
+        </span>
+        <span>{formatCompactChars(p?.diffCharCount)} diff chars</span>
+        <span aria-hidden className="text-fg-5">
+          /
+        </span>
+        <span>{formatBytes(p?.contextByteSizeEstimate)} context</span>
+      </div>
+
+      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+        {rows.map((row) => (
+          <StatusRow key={row.label} label={row.label} status={row.status} />
+        ))}
+      </div>
     </li>
   );
 }

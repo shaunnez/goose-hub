@@ -131,6 +131,55 @@ describe('CodexCliRuntime timeout handling', () => {
     );
   });
 
+  it('fails fast when a streamed Bash command references a /Users path outside the workspace', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+    const processKill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec({ workspaceDir: '/Users/shaunnesbitt/project/worktree' }));
+    const rejection = expect(run).rejects.toThrow('outside workspace');
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        `${JSON.stringify({
+          type: 'item.started',
+          item: {
+            type: 'command_execution',
+            command:
+              '/bin/zsh -lc "nl -ba /Users/shaunnesbitt/.codex/memories/MEMORY.md | sed -n \'1,20p\'"',
+          },
+        })}\n`,
+      ),
+    );
+
+    await rejection;
+
+    expect(processKill).toHaveBeenCalledWith(-4321, 'SIGKILL');
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.tool-call',
+        payload: expect.objectContaining({
+          blocked: true,
+          block_reason: expect.stringContaining('/Users/shaunnesbitt/.codex/memories/MEMORY.md'),
+        }),
+      }),
+    );
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-failed',
+        payload: expect.objectContaining({ reason: 'workspace-boundary-violation' }),
+      }),
+    );
+
+    child.emit('close', 0);
+    expect(mockEventStore.appendEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent.run-completed' }),
+    );
+    processKill.mockRestore();
+  });
+
   it('does not use danger-full-access for review even though review includes validate', async () => {
     await runSuccessfulCodexSpec({
       skill: 'review',

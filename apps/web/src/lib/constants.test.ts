@@ -97,19 +97,19 @@ describe('CODE_ACTIVE_STATES', () => {
 });
 
 describe('GATE_STATES', () => {
-  it('covers exactly three blocking states', () => {
-    expect(Object.keys(GATE_STATES)).toHaveLength(3);
+  it('covers exactly two human gate states', () => {
+    expect(Object.keys(GATE_STATES)).toHaveLength(2);
   });
 
   it('does not include non-gate states', () => {
     expect(GATE_STATES['factory:in-progress']).toBeUndefined();
     expect(GATE_STATES['factory:triaging']).toBeUndefined();
     expect(GATE_STATES['factory:done']).toBeUndefined();
+    expect(GATE_STATES['factory:needs-review']).toBeUndefined();
   });
 
-  it('includes all three known gate states', () => {
+  it('includes known human gate states', () => {
     expect(GATE_STATES['factory:prd-review']).toBeTruthy();
-    expect(GATE_STATES['factory:needs-review']).toBeTruthy();
     expect(GATE_STATES['factory:needs-human']).toBeTruthy();
   });
 });

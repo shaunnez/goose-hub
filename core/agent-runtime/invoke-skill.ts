@@ -55,6 +55,8 @@ export type InvokeSkillInput = {
     projectConfigOverride?: Partial<ProjectConfig> | null;
     /** Caller-supplied freshContext flag. When provided, overrides the skill config value. */
     freshContextOverride?: boolean;
+    /** Skip runtime-owned agent.run-started when caller already emitted the parent marker. */
+    suppressRunStarted?: boolean;
   };
 };
 
@@ -160,6 +162,7 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<AgentResult>
     appendSystemPrompt,
     workspaceDir: overrides?.workspaceDir,
     extraEventPayload: overrides?.extraEventPayload,
+    suppressRunStarted: overrides?.suppressRunStarted,
   });
 
   // 11. Validate output when skill declares an outputSchema

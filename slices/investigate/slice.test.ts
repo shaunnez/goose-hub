@@ -485,6 +485,29 @@ describe('runInvestigateWorkflow', () => {
       expect(createWorktree).toHaveBeenCalledWith('/repo', expect.any(String), 'origin/main');
       expect(cleanupWorktree).toHaveBeenCalledOnce();
     });
+
+    it('emits only one parent run-started event and suppresses the synthesis duplicate', async () => {
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const startedEvents = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.filter(([event]) => event.kind === 'agent.run-started');
+      expect(startedEvents).toHaveLength(1);
+      expect(startedEvents[0][0].payload).toEqual(
+        expect.objectContaining({
+          skill: 'investigate',
+          baseBranch: 'main',
+        }),
+      );
+      expect(mockInvokeSkill).toHaveBeenCalledWith(
+        expect.objectContaining({
+          overrides: expect.objectContaining({ suppressRunStarted: true }),
+        }),
+      );
+    });
   });
 
   describe('scout report persistence — acceptance criterion 2', () => {

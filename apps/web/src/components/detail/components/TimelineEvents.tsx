@@ -75,7 +75,12 @@ import {
   PrdRejectedEvent,
   PrdRevisedEvent,
 } from './timeline/PrdEvents';
-import { QaCompletedEvent, QaFailedEvent, QaPassedEvent } from './timeline/QaEvents';
+import {
+  QaCompletedEvent,
+  QaFailedEvent,
+  QaPassedEvent,
+  QaVerificationSummaryBuiltEvent,
+} from './timeline/QaEvents';
 import { RetroCompletedEvent } from './timeline/RetroCompletedEvent';
 import { AgentRetryEscalatedEvent } from './timeline/RetryEvents';
 import { ReviewCompletedEvent } from './timeline/ReviewCompletedEvent';
@@ -190,6 +195,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <ToolWarningEvent key={event.id} event={event} />;
     case 'qa.completed':
       return <QaCompletedEvent key={event.id} event={event} />;
+    case 'qa.verification-summary-built':
+      return <QaVerificationSummaryBuiltEvent key={event.id} event={event} />;
     case 'qa.structural-passed':
     case 'qa.functional-passed':
     case 'qa.regression-passed':
