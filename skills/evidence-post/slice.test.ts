@@ -1,9 +1,25 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
-import { EvidencePostSchema } from './schema.js';
+import { EvidencePostPlanSchema, EvidencePostSchema } from './schema.js';
 import config, { EvidencePostContextSchema } from './skill.config.js';
 
+const PROMPT = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'prompt.md'), 'utf8');
+
 describe('evidence-post schema', () => {
+  it('accepts a valid evidence plan output', () => {
+    const result = EvidencePostPlanSchema.safeParse({
+      specPath: 'apps/web/e2e/issue-233.spec.ts',
+      slug: 'evidence-issue-233',
+      validationIntent: 'Validate the shipped evidence panel.',
+      expectedAssertions: ['Evidence panel is visible'],
+      notes: 'Spec writes evidence/issue-233/step-1.png.',
+    });
+    expect(result.success).toBe(true);
+  });
+
   it('accepts a fully-populated valid output', () => {
     const result = EvidencePostSchema.safeParse({
       screenshots: [
@@ -169,6 +185,26 @@ describe('evidence-post skill config', () => {
     expect(config.contextAllowlist).toContain('prNumber');
     expect(config.contextAllowlist).toContain('prHeadSha');
     expect(config.contextAllowlist).toContain('specPath');
+  });
+});
+
+describe('evidence-post prompt discipline', () => {
+  it('leaves Playwright and collector execution to the workflow', () => {
+    expect(PROMPT).toContain('scripts/collect-playwright-evidence.ts');
+    expect(PROMPT).toContain('--phase after');
+    expect(PROMPT).toContain('workflow owns Playwright execution');
+  });
+
+  it('keeps the agent out of execution and publishing', () => {
+    expect(PROMPT).toContain('Do not run Playwright');
+    expect(PROMPT).toContain('Do not create or push');
+    expect(PROMPT).toContain('Do not post GitHub comments');
+    expect(PROMPT).not.toMatch(/gh issue comment|git push|git worktree/i);
+  });
+
+  it('treats after-state assertion failure as validation failure', () => {
+    expect(PROMPT).toContain('classification: "validation_failed"');
+    expect(PROMPT).toContain('assertion failure means the fix did not validate');
   });
 });
 

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
 import { computeOverallScore } from '../qa/schema.js';
@@ -32,6 +33,33 @@ describe('implement output schema', () => {
 
   it('accepts evidenceSpecPath as null (no spec authored)', () => {
     expect(ImplementSchema.safeParse({ ...baseValid, evidenceSpecPath: null }).success).toBe(true);
+  });
+
+  it('accepts web changes without evidenceSpecPath when an evidence blocker is recorded', () => {
+    expect(
+      ImplementSchema.safeParse({
+        ...baseValid,
+        filesWritten: [{ path: 'apps/web/src/components/Foo.tsx', reason: 'copy fix' }],
+        evidenceSpecPath: null,
+        decisionSummaries: [
+          { kind: 'PLAN', summary: 'Update the investigated web copy surface' },
+          {
+            kind: 'UNCERTAINTY',
+            summary: 'Playwright evidence spec generation blocked because no e2e harness exists',
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects web changes without evidenceSpecPath when no evidence blocker is recorded', () => {
+    expect(
+      ImplementSchema.safeParse({
+        ...baseValid,
+        filesWritten: [{ path: 'apps/web/src/components/Foo.tsx', reason: 'copy fix' }],
+        evidenceSpecPath: null,
+      }).success,
+    ).toBe(false);
   });
 
   it('accepts empty testsWritten (chore PRs may not add tests)', () => {
@@ -365,5 +393,23 @@ describe('implement context schema', () => {
     expect(
       ImplementContextSchema.safeParse({ ...baseContext, revisionPass: 2 as unknown as 0 }).success,
     ).toBe(false);
+  });
+});
+
+describe('implement prompt', () => {
+  const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+
+  it('treats high-confidence investigation context as the implementation handoff', () => {
+    expect(prompt).toContain('Investigation handoff fast path');
+    expect(prompt).toMatch(/treat\s+it as the implementation handoff contract/);
+    expect(prompt).toContain('Do not continue broad discovery');
+  });
+
+  it('bounds frontend evidence discovery when e2e support is missing or unclear', () => {
+    expect(prompt).toContain('Bounded frontend evidence rule');
+    expect(prompt).toContain(
+      'Do not inspect old e2e specs, Playwright config, or screenshot conventions',
+    );
+    expect(prompt).toContain('ship the implementation plus targeted tests');
   });
 });

@@ -80,13 +80,57 @@ The rubric is sourced from `docs/steves-training-materials-analysis.md` (`07-cod
 
 ## Event schema
 
-Three new event kinds are reserved for tier-specific failures. They extend `EventKind` in `core/event-stream/store.ts`:
+Tier-specific verifier events extend `EventKind` in `core/event-stream/store.ts`:
 
-- `qa.structural-failed` — payload includes `{ tool, output, exitCode }` (e.g. tsc output)
-- `qa.functional-failed` — payload includes `{ suite, failingTests: string[], output }`
-- `qa.regression-failed` — payload includes `{ specPath, failingSteps: string[], evidencePaths: string[] }`
+- `qa.structural-passed` / `qa.structural-failed`
+- `qa.functional-passed` / `qa.functional-failed`
+- `qa.regression-passed` / `qa.regression-failed`
 
-Generic `qa.passed` and `qa.failed` events remain for aggregate transitions; the tier-specific kinds are additive and let downstream consumers (the UI, the retro skill) distinguish which tier short-circuited.
+Their stable public payload is:
+
+```ts
+{
+  tier: 'structural' | 'functional' | 'regression';
+  tierNumber: 1 | 2 | 3;
+  evidence: string[];
+  findingCount: number;
+  runId: string;
+}
+```
+
+Examples:
+
+```ts
+{
+  tier: 'structural',
+  tierNumber: 1,
+  evidence: ['file-exists: src/index.ts (WP WP1)'],
+  findingCount: 0,
+  runId: '...'
+}
+```
+
+```ts
+{
+  tier: 'functional',
+  tierNumber: 2,
+  evidence: ['tool-passed: import-smoke'],
+  findingCount: 0,
+  runId: '...'
+}
+```
+
+```ts
+{
+  tier: 'regression',
+  tierNumber: 3,
+  evidence: ['carry-forward-ok-wps: WP1'],
+  findingCount: 1,
+  runId: '...'
+}
+```
+
+`tier` is the consumer-facing value. `tierNumber` preserves ordinal/debug meaning for humans and diagnostics. `qa.completed.payload.tierResults` remains unchanged and continues to use named tier keys.
 
 ## How this contract binds existing M7 skills
 

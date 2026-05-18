@@ -1,3 +1,125 @@
+# Compare chore, bug
+Compare chore, bug, feature on siple task
+
+# Decline PR ??
+
+# Investigation group
+needs to sum up costs and tokens
+
+# Parallel repair
+Plan
+
+  1. Add repair mode config
+     Add repairMode: "legacy" | "native" | "auto" behind project pipeline settings.
+
+     Default: legacy.
+
+     Semantics:
+      - legacy: current fix-feedback path.
+      - native: targeted WP repair only; ambiguous mapping escalates to needs-human.
+      - auto: targeted WP repair when confident; otherwise fall back to legacy.
+  2. Refactor shared repair context
+     Extract the existing fix-feedback helpers that already find:
+      - latest pr.opened
+      - pipelineRunId
+      - worktreePath
+      - devRunId
+      - latest failing qa.completed or review.completed
+
+     Put this in a shared core/helper module so both fix-feedback and parallel-repair use the same source-of-
+     truth.
+  3. Build the WP mapper first
+     New module: slices/parallel-repair/wp-mapper.ts.
+
+     Inputs:
+      - Engineering spec
+      - latest failure payload
+      - current PR lifecycle
+      - event stream
+
+     Mapping rules:
+      - finding file intersects exactly one wp.filesOwned: high confidence
+      - failed QA criteriaResults[].ac maps to an AC whose verify command or statement references one WP-owned
+        path: medium/high confidence
+      - review finding criterion maps to an AC, then to one WP: medium confidence
+      - finding touches interfaceContracts[].file: include owning WP and direct dependents
+      - multiple unrelated WPs or no concrete path/AC anchor: ambiguous
+
+     Output:
+
+     {
+       confidence: "high" | "medium" | "ambiguous";
+       wpIds: string[];
+       reasons: Array<{ wpId: string; evidence: string }>;
+     }
+
+  4. Create slices/parallel-repair
+     Do not call runParallelImplementWorkflow() as-is. It creates a fresh integration worktree and opens a new
+     PR, which is wrong for repair.
+
+     Instead, extract/reuse the lower-level WP execution pieces:
+      - run selected implement-wp builders
+      - create scratch worktrees from the current PR worktree HEAD
+      - copy owned files back into the existing PR worktree
+      - commit only selected WP files
+      - push the existing PR branch
+      - never open a new PR
+      - preserve the original pipelineRunId
+
+     Also add repairFeedback to the implement-wp context/schema/prompt so the WP builder knows the exact QA/
+     review findings it is repairing.
+  5. Wire dispatcher routing
+     Update dispatchNeedsFix:
+
+     if (
+       useMultiAgentPipeline &&
+       latestPr.pipelineRunId &&
+       repairMode !== "legacy"
+     ) {
+       runParallelRepairWorkflow(...)
+     } else {
+       runFixFeedbackWorkflow(...)
+     }
+
+     For native, ambiguous means needs-human.
+     For auto, ambiguous means legacy fallback.
+
+  6. Events
+     Add event kinds to core/event-stream/store.ts and timeline labels:
+      - parallel-repair.planned
+      - parallel-repair.wp-started
+      - parallel-repair.wp-committed
+      - parallel-repair.wp-failed
+      - parallel-repair.completed
+      - parallel-repair.exhausted
+
+     Required payload on all workflow-level events:
+
+     {
+       "pipelineRunId": "...",
+       "attemptId": "...",
+       "sourceFailureKind": "qa|review",
+       "sourceFailureRunId": "...",
+       "mappingConfidence": "high|medium|ambiguous",
+       "repairMode": "wp-targeted"
+     }
+
+  7. Tests
+     Minimum focused tests:
+      - mapper: QA finding in WP2-owned file maps only WP2
+      - mapper: review finding in WP1-owned file maps only WP1
+      - mapper: interface contract finding includes dependent WP
+      - mapper: no file/AC anchor returns ambiguous
+      - dispatcher: legacy still calls fix-feedback
+      - dispatcher: native calls parallel-repair only for multi-agent PR with pipelineRunId
+      - workflow: same pipelineRunId, same PR branch, same worktreePath, no new PR
+      - workflow: ambiguous native repair escalates or emits exhausted without pretending to be targeted
+      - timeline: repair events group under the existing pipeline phase
+
+
+# Need to change banner that shows triage/dev/qa
+Should be "view error" -> takes to timeline.
+
 # Skill enhancement
 review claude-code-skills-training-deck.md
 

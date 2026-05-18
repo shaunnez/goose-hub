@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import {
   HOLDOUT_FORBIDDEN_KEYS,
   assembleSpawnContext,
@@ -57,6 +58,35 @@ describe('skills/dev-review skill.config', () => {
         prDiff: 'diff --git a/x b/x',
       }),
     ).not.toThrow();
+  });
+
+  it('contextSchema accepts capped symbol impact hints', () => {
+    expect(() =>
+      DevReviewContextSchema.parse({
+        workItem: { title: 't', body: 'b', number: 1, priority: 'medium' },
+        prDiff: 'diff --git a/x b/x',
+        symbolImpact: [
+          {
+            changedExport: 'dispatchWave',
+            definedIn: 'core/agent-runtime/swarm.ts',
+            importers: ['slices/investigate/workflow.ts'],
+          },
+        ],
+      }),
+    ).not.toThrow();
+    expect(devReviewConfig.contextAllowlist).toContain('symbolImpact');
+  });
+
+  it('prompt tells reviewer how to handle summarized artifact diffs', () => {
+    const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+    expect(prompt).toContain('ArtifactRef');
+    expect(prompt).toContain('Do not invent hunk-level or line-specific findings');
+  });
+
+  it('prompt frames symbol impact as neutral file targets', () => {
+    const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+    expect(prompt).toContain('likely consumers to inspect');
+    expect(prompt).toContain('The index is a starting point, not authority');
   });
 });
 

@@ -9,7 +9,7 @@ Tier-1 (keyword) and tier-2 (code search) matching have already run and produced
 ## Input
 
 The context contains:
-- `<work_item>` with `<title>` and `<body>` fields
+- `<workItem>` — JSON payload with `title` and `body`
 - `<repos>` listing the allowlisted repositories with their descriptions
 
 ## Instructions

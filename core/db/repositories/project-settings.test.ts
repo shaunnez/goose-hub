@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   type ProjectSettingsRow,
+  deriveQaE2eMode,
   deriveUseInvestigationSwarm,
   deriveUseMultiAgentPipeline,
 } from './project-settings.js';
@@ -18,6 +19,9 @@ function makeProjectSettingsRow(overrides: Partial<ProjectSettingsRow> = {}): Pr
     perBashCommandMaxSeconds: null,
     useMultiAgentPipeline: null,
     useInvestigationSwarm: null,
+    qaE2eMode: null,
+    playwrightReproEnabled: null,
+    evidencePostEnabled: null,
     recordDecisionTool: null,
     updatedAt: 'now',
     updatedBy: null,
@@ -44,6 +48,17 @@ describe('deriveUseMultiAgentPipeline', () => {
     expect(deriveUseMultiAgentPipeline(makeProjectSettingsRow({ useMultiAgentPipeline: 1 }))).toBe(
       true,
     );
+  });
+});
+
+describe('deriveQaE2eMode', () => {
+  it('returns the config default when row is null or unset', () => {
+    expect(deriveQaE2eMode(null, 'ui-changed')).toBe('ui-changed');
+    expect(deriveQaE2eMode(makeProjectSettingsRow(), 'always')).toBe('always');
+  });
+
+  it('returns a valid DB override', () => {
+    expect(deriveQaE2eMode(makeProjectSettingsRow({ qaE2eMode: 'off' }), 'always')).toBe('off');
   });
 });
 

@@ -1,9 +1,28 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
-import { PlaywrightReproSchema } from './schema.js';
+import { PlaywrightReproSchema, PlaywrightReproSpecSchema } from './schema.js';
 import config, { PlaywrightReproContextSchema } from './skill.config.js';
 
+const PROMPT = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'prompt.md'), 'utf8');
+
 describe('playwright-repro schema', () => {
+  it('accepts valid spec-plan output', () => {
+    const result = PlaywrightReproSpecSchema.safeParse({
+      specPath: 'apps/web/e2e/repro-login-error.spec.ts',
+      specSource:
+        "import { expect, test } from '@playwright/test';\n\ntest('repro', async ({ page }) => {\n  await page.goto('/login', { waitUntil: 'domcontentloaded' });\n  await expect.soft(page.getByText('Error'), 'REPRO_EXPECTED_BUG: error visible').toBeVisible();\n});\n",
+      slug: 'login-error',
+      route: '/login',
+      expectedAssertion: 'Login error remains visible after submit',
+      reproSteps: ['Navigate to /login', 'Submit credentials'],
+      evidenceIntent: 'Capture the login error before the fix.',
+    });
+    expect(result.success).toBe(true);
+  });
+
   it('accepts valid output with bug reproduced', () => {
     const result = PlaywrightReproSchema.safeParse({
       screenshots: [
@@ -223,8 +242,13 @@ describe('playwright-repro skill config', () => {
     expect(config.contextAllowlist).toContain('workItem.repo');
   });
 
+  it('contextAllowlist includes the narrow repro packet', () => {
+    expect(config.contextAllowlist).toContain('reproPacket');
+  });
+
   it('contextSchema validates required workItem fields', () => {
     const valid = PlaywrightReproContextSchema.safeParse({
+      appUrl: 'http://localhost:5173',
       workItem: {
         title: 'Login page crashes on submit',
         body: 'When I click submit the page crashes.',
@@ -238,6 +262,7 @@ describe('playwright-repro skill config', () => {
 
   it('contextSchema accepts optional url', () => {
     const valid = PlaywrightReproContextSchema.safeParse({
+      appUrl: 'http://localhost:5173',
       workItem: {
         title: 'Dashboard broken',
         body: 'Dashboard shows nothing.',
@@ -313,5 +338,23 @@ describe('playwright-repro skill config', () => {
   it('contextSchema rejects missing workItem entirely', () => {
     const invalid = PlaywrightReproContextSchema.safeParse({});
     expect(invalid.success).toBe(false);
+  });
+});
+
+describe('playwright-repro prompt discipline', () => {
+  it('leaves collector execution to the workflow', () => {
+    expect(PROMPT).toContain('scripts/collect-playwright-evidence.ts');
+    expect(PROMPT).toContain('workflow can write the spec, run Playwright');
+  });
+
+  it('keeps the agent bounded to spec authoring', () => {
+    expect(PROMPT).toContain('Your job stops at returning the spec plan');
+    expect(PROMPT).toContain('specSource');
+    expect(PROMPT).toContain('run it at most once');
+    expect(PROMPT).toContain('REPRO_EXPECTED_BUG');
+  });
+
+  it('does not instruct the agent to publish evidence or comment on GitHub', () => {
+    expect(PROMPT).not.toMatch(/gh issue comment|git push|evidence\/issue-<N>|git worktree/i);
   });
 });

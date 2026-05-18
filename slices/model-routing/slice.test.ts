@@ -28,50 +28,26 @@ describe('selectModel', () => {
     expect(selectModel({ workItem: baseWorkItem, role: 'reviewer', projectId: 'p1' })).toBeNull();
   });
 
-  it('DB complexity override wins over config override', () => {
+  it('config override wins over static policy', () => {
     const result = selectModel({
       workItem: { ...baseWorkItem, type: 'bug' },
       role: 'developer',
       projectId: 'p1',
       modelRouterConfig: { overrides: { 'developer+type:bug': 'sonnet' } },
-      dbComplexityOverrides: { 'type:bug': 'haiku' },
-    });
-    expect(result?.tier).toBe('haiku');
-    expect(result?.reason).toBe('db-complexity-override');
-  });
-
-  it('config override used when no DB override matches', () => {
-    const result = selectModel({
-      workItem: { ...baseWorkItem, type: 'bug' },
-      role: 'developer',
-      projectId: 'p1',
-      modelRouterConfig: { overrides: { 'developer+type:bug': 'sonnet' } },
-      dbComplexityOverrides: { 'type:chore': 'haiku' },
     });
     expect(result?.tier).toBe('sonnet');
     expect(result?.reason).toBe('project-override');
   });
 
-  it('DB default key applies when no type/priority key matches', () => {
+  it('role-level config override applies when no type/priority key matches', () => {
     const result = selectModel({
       workItem: { ...baseWorkItem, type: 'feature', priority: 'low' },
       role: 'developer',
       projectId: 'p1',
-      dbComplexityOverrides: { default: 'opus' },
+      modelRouterConfig: { overrides: { developer: 'opus' } },
     });
     expect(result?.tier).toBe('opus');
-    expect(result?.reason).toBe('db-complexity-override');
-  });
-
-  it('DB priority override wins over static policy', () => {
-    const result = selectModel({
-      workItem: { ...baseWorkItem, priority: 'high' },
-      role: 'developer',
-      projectId: 'p1',
-      dbComplexityOverrides: { 'priority:high': 'haiku' },
-    });
-    expect(result?.tier).toBe('haiku');
-    expect(result?.reason).toBe('db-complexity-override');
+    expect(result?.reason).toBe('project-override');
   });
 
   it('falls through to static policy when no overrides match', () => {
@@ -79,7 +55,6 @@ describe('selectModel', () => {
       workItem: { ...baseWorkItem, type: 'bug', priority: 'low' },
       role: 'developer',
       projectId: 'p1',
-      dbComplexityOverrides: {},
     });
     expect(result?.tier).toBe('haiku');
     expect(result?.reason).toBe('type-bug');

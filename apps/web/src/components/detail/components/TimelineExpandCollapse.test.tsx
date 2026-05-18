@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,14 +8,41 @@ afterEach(cleanup);
 // ─── Minimal EventSource mock ─────────────────────────────────────────────────
 
 class MockEventSource {
-  addEventListener = vi.fn();
-  removeEventListener = vi.fn();
+  static instances: MockEventSource[] = [];
+
+  listeners = new Map<string, EventListener[]>();
+
+  constructor() {
+    MockEventSource.instances.push(this);
+  }
+
+  addEventListener = vi.fn((kind: string, listener: EventListener) => {
+    const listeners = this.listeners.get(kind) ?? [];
+    listeners.push(listener);
+    this.listeners.set(kind, listeners);
+  });
+  removeEventListener = vi.fn((kind: string, listener: EventListener) => {
+    const listeners = this.listeners.get(kind) ?? [];
+    this.listeners.set(
+      kind,
+      listeners.filter((existing) => existing !== listener),
+    );
+  });
   close = vi.fn();
-  onmessage = null;
-  onerror = null;
+  onmessage: ((event: MessageEvent<string>) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+
+  emit(event: AgentEventDto) {
+    const message = new MessageEvent(event.kind, { data: JSON.stringify(event) });
+    for (const listener of this.listeners.get(event.kind) ?? []) {
+      listener(message);
+    }
+    this.onmessage?.(message);
+  }
 }
 
 beforeEach(() => {
+  MockEventSource.instances = [];
   vi.stubGlobal('EventSource', MockEventSource);
 });
 
@@ -39,13 +67,22 @@ vi.mock('@/lib/usePersonaMap', () => ({
 
 import type { AgentEventDto } from '@/lib/types';
 
-function makeRunEvent(id: number, runId: string, kind = 'agent.run-started'): AgentEventDto {
+function renderTimeline(ui: React.ReactElement, queryClient = new QueryClient()) {
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+}
+
+function makeRunEvent(
+  id: number,
+  runId: string,
+  kind = 'agent.run-started',
+  payload: AgentEventDto['payload'] = {},
+): AgentEventDto {
   return {
     id,
     projectId: 'proj',
     workItemId: 'wi-1',
     kind,
-    payload: {},
+    payload,
     runId,
     createdAt: new Date(Date.now() + id * 1000).toISOString(),
   };
@@ -66,7 +103,7 @@ describe('TimelineSection — expand/collapse all', () => {
     vi.mocked(fetchEventsPage).mockResolvedValue({ events: [...RUN_GROUP_EVENTS], hasMore: false });
 
     const { TimelineSection } = await import('./TimelineSection');
-    render(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
+    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
 
     // Wait for events to load and run-groups to appear
     await screen.findByTestId('timeline-expand-all');
@@ -126,12 +163,56 @@ describe('TimelineSection — expand/collapse all', () => {
     });
 
     const { TimelineSection } = await import('./TimelineSection');
-    render(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
+    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
 
     // Wait for loading to complete (section container appears) then assert no expand button.
     await screen.findByTestId('timeline-section');
     await waitFor(() => {
       expect(screen.queryByTestId('timeline-expand-all')).toBeNull();
+    });
+  });
+
+  it('shows model and runtime for a live run before cost rows exist', async () => {
+    const { fetchEventsPage } = await import('@/lib/api');
+    vi.mocked(fetchEventsPage).mockResolvedValue({
+      events: [
+        makeRunEvent(1, 'run-live', 'agent.run-started', {
+          skill: 'implement',
+          modelId: 'gpt-5.4-mini',
+          runtime: 'codex-cli',
+        }),
+        makeRunEvent(2, 'run-live', 'agent.tool-call'),
+      ],
+      hasMore: false,
+    });
+
+    const { TimelineSection } = await import('./TimelineSection');
+    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
+
+    expect(await screen.findByText('gpt-5.4-mini')).toBeTruthy();
+    expect(screen.getByText('codex-cli')).toBeTruthy();
+    expect(screen.getByText(/Started .* Running for/)).toBeTruthy();
+  });
+
+  it('invalidates issue costs when a run terminal event arrives over SSE', async () => {
+    const { fetchEventsPage } = await import('@/lib/api');
+    vi.mocked(fetchEventsPage).mockResolvedValue({
+      events: [makeRunEvent(1, 'run-live', 'agent.run-started')],
+      hasMore: false,
+    });
+
+    const queryClient = new QueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    const { TimelineSection } = await import('./TimelineSection');
+    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />, queryClient);
+
+    await screen.findByTestId('timeline-section');
+    await waitFor(() => expect(MockEventSource.instances.length).toBeGreaterThan(0));
+
+    MockEventSource.instances[0].emit(makeRunEvent(2, 'run-live', 'agent.run-completed'));
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issue-costs', 'p', '1'] });
     });
   });
 });

@@ -1,5 +1,6 @@
 import { fetchEventsPage } from '@/lib/api';
 import type { AgentEventDto } from '@/lib/types';
+import { useQueryClient } from '@tanstack/react-query';
 import { Clock } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIssueCostsBreakdown } from '../lib/costs';
@@ -28,6 +29,7 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
   // Set to max event id after initial REST fetch; triggers SSE open with lastEventId.
   const [sseReadyAfter, setSseReadyAfter] = useState<number | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const queryClient = useQueryClient();
   const { byRun: runCosts } = useIssueCostsBreakdown(projectSlug, id);
   const [expandSignal, setExpandSignal] = useState<{ tick: number; open: boolean }>({
     tick: 0,
@@ -95,6 +97,9 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
           if (prev.find((e) => e.id === parsed.id) != null) return prev;
           return [parsed, ...prev];
         });
+        if (parsed.kind === 'agent.run-completed' || parsed.kind === 'agent.run-failed') {
+          void queryClient.invalidateQueries({ queryKey: ['issue-costs', projectSlug, id] });
+        }
       } catch {
         // ignore
       }
@@ -112,7 +117,7 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
       es.close();
       eventSourceRef.current = null;
     };
-  }, [projectSlug, workItemId, sseReadyAfter]);
+  }, [projectSlug, workItemId, sseReadyAfter, queryClient, id]);
 
   if (loading) {
     return <div className="px-8 py-6 text-fg-3">Loading timeline…</div>;
@@ -140,9 +145,13 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
   }
 
   const items = groupEvents(events);
-  const allRunItems = items.flatMap((item: RenderItem) =>
-    item.kind === 'phase-group' ? item.items : [item],
-  );
+  const flattenRunItems = (renderItems: RenderItem[]): RenderItem[] =>
+    renderItems.flatMap((item: RenderItem): RenderItem[] =>
+      item.kind === 'phase-group' || item.kind === 'investigation-phase'
+        ? flattenRunItems(item.items)
+        : [item],
+    );
+  const allRunItems = flattenRunItems(items);
   const hasRunGroups = allRunItems.some((item: RenderItem) => item.kind === 'run-group');
   const latestRunId =
     allRunItems.find((item: RenderItem) => item.kind === 'run-group')?.runId ?? null;

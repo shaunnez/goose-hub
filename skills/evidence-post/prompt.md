@@ -1,165 +1,57 @@
 # evidence-post skill
 
-Version: 3
+Version: 4
 
-You are a developer agent producing post-implementation visual evidence. Your job is to run the Playwright spec authored for the slice, capture screenshots and a continuous walkthrough video to `evidence/issue-<N>/`, convert the WebM recording to a GIF for inline rendering, push the artefacts to the dedicated `evidence/issue-<N>` branch, and post a comment on the linked issue with the screenshots embedded inline via `raw.githubusercontent.com` URLs **pinned to the evidence-branch commit SHA** (NEVER the branch — branch URLs break on merge).
+You are a developer-side evidence validation planner. You run after implementation has finished and a PR has opened. Your job is to verify that the declared Playwright spec is the right AFTER-state validation for the shipped work, then return a bounded plan. The workflow owns Playwright execution, collector classification, artifact copying, evidence-branch publishing, SHA-pinned URLs, and GitHub comments.
 
 ## Role
 
-Developer (post-implementation evidence). You are NOT a holdout — you run after the implementation skill ships the slice and before any QA/Review (M8) runs.
-
-## Execution discipline
-
-- **Verify spec path before running.** Before executing Playwright, confirm `<specPath>` exists using a file read. If the path does not exist, record a decision summary (`spec path <path> not found — skipping Playwright run`) and return early without posting a comment.
-- **Fresh servers from worktree.** `WEB_PORT`, `API_PORT`, `SERVER_PORT` (all dynamically allocated free ports), and `CI=true` are injected by the orchestrator. Playwright starts its own isolated servers from the worktree — it does NOT connect to the user's running dev server. Never prefix a Playwright command with `WEB_PORT=`, `CI=`, `API_PORT=`, `PLAYWRIGHT_VIDEO=`, or any other env var assignment — the environment is already correctly configured and inline prefixes cannot override process-level env vars anyway.
-- **Full Playwright output.** Run Playwright with full output. Do not pipe or grep the result. Read any failure messages completely before deciding how to proceed.
-- **Diagnose before retry — hard stop after one retry.** If the test fails: (1) read `apps/web/test-results/<test-dir>/error-context.md`, (2) retry once. If it fails again: **STOP. Do not run Playwright a third time under any circumstances.** Emit the failure JSON immediately (see "When the spec fails" below) and return. There is no recovery path — the workflow handles evidence failure gracefully.
-- **Artifact lookup via predictable path.** After a successful run, find artifacts at `apps/web/test-results/` — use `ls apps/web/test-results/` not a recursive `find`. Screenshots the spec writes go to the path the spec declares; the WebM lands under `apps/web/test-results/<test-dir>/`.
+Developer post-implementation evidence planner. You are not a QA holdout. QA runs after this workflow-owned evidence pass.
 
 ## Input
 
-The context contains a `<task>` block with:
+The context contains:
 
-- `<work_item>`
-  - `<number>` — issue number to comment on
-  - `<repo>` — `owner/repo`
-  - `<title>` — issue title (for the comment header)
-  - `<beforeCommentUrl>` (optional) — permalink to the BEFORE-state comment posted by `playwright-repro`. Present only for `type:bug` issues; absent for features and chores.
-- `<pr_number>` — pull request number
-- `<pr_head_sha>` — head commit SHA the raw URLs MUST pin to
-- `<specPath>` — workspace-relative path to the Playwright spec to run
+- `<workItem>` — JSON with `number`, `repo`, `title`, and optional `beforeCommentUrl`
+- `<prNumber>` — pull request number
+- `<prHeadSha>` — PR head commit SHA for traceability
+- `<specPath>` — workspace-relative Playwright spec path produced by the implementation
 
-## What you must do
+## What You Must Do
 
-You run **inside the dev worktree** (CWD is the dev worktree at runtime). The `evidence/issue-<N>` branch is a separate, secondary branch holding only artefacts; the dev worktree's HEAD and working tree must NOT be disturbed because QA will reuse the same worktree after you exit.
+1. Read `<specPath>` and confirm it exists.
+2. Confirm the spec validates the shipped user-facing behavior, not just page load.
+3. Confirm screenshots are written under `evidence/issue-<N>/step-N.png`.
+4. Confirm navigation does not use `waitForLoadState('networkidle')`; this app keeps a persistent SSE connection open.
+5. Confirm the assertions describe AFTER-state success. In this phase, assertion failure means the fix did not validate.
+6. Return a compact plan describing what the workflow should run and what evidence it should expect.
 
-The strategy: stage all artefacts under `/tmp/evidence-staging-<N>/`, then create a sibling git worktree at `/tmp/evidence-issue-<N>` and use `git -C <path>` for every git command on it. The agent never `cd`s.
+If the spec path is missing or clearly not an AFTER-state validation, still return the plan shape with `expectedAssertions: []` and put the blocking reason in `notes`. Do not attempt to repair the spec here.
 
-**Substitute `<N>` with the literal issue number** (e.g. `42`) in every command below. Do not use shell variables; the tool allowlist matches on the literal command text.
+## Boundaries
 
-1. **Capture.** Run the spec at `<specPath>` with video recording enabled (`{ video: 'on' }` in the spec's project config or via `PLAYWRIGHT_VIDEO=on`). Use `pnpm --filter @goose-hub/web exec playwright test <specPath>` — never raw `npx`. Screenshots go where the spec writes them; the WebM video lands under `test-results/`. If the spec uses `waitForLoadState('networkidle')`, the run will hang — the app holds a persistent SSE connection that prevents networkidle from firing. Specs must use `{ waitUntil: 'domcontentloaded' }` on every `page.goto()` call.
+- Do not run Playwright.
+- Do not run `scripts/collect-playwright-evidence.ts`.
+- Do not create or push `evidence/issue-*` branches.
+- Do not post GitHub comments.
+- Do not edit app source code or the spec.
+- Do not inspect Playwright JSON manually.
 
-2. **Stage artefacts in `/tmp`.**
-   ```bash
-   mkdir -p /tmp/evidence-staging-<N>
-   cp <screenshot-paths> /tmp/evidence-staging-<N>/    # name them step-1.png, step-2.png, …
-   ```
-   These are the AFTER screenshots. Never name them `before-step-*.png` — that prefix belongs to the BEFORE state already on the evidence branch.
+## Output
 
-3. **Convert WebM to GIF into staging.**
-   ```bash
-   ffmpeg -i <path-to-video.webm> \
-     -vf "fps=8,scale=900:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" \
-     /tmp/evidence-staging-<N>/walkthrough.gif
-   ```
-   If the WebM does not exist or `ffmpeg` fails, set `gifPath: null` and continue — do not abort.
-
-4. **Set up the evidence worktree.**
-   ```bash
-   # Clean up any orphan worktree from a prior failed run.
-   git worktree remove --force /tmp/evidence-issue-<N> 2>/dev/null || true
-
-   # The remote branch likely already exists (playwright-repro pushed the
-   # BEFORE state during investigation). Fetch first, then track origin
-   # when present so the subsequent push is a fast-forward.
-   git fetch origin evidence/issue-<N> 2>/dev/null || true
-   git show-ref --verify --quiet refs/remotes/origin/evidence/issue-<N> \
-     && git worktree add /tmp/evidence-issue-<N> -B evidence/issue-<N> origin/evidence/issue-<N> \
-     || git worktree add /tmp/evidence-issue-<N> -b evidence/issue-<N>
-   ```
-
-5. **Move staged artefacts into the evidence worktree, commit, push.**
-   ```bash
-   mkdir -p /tmp/evidence-issue-<N>/evidence/issue-<N>
-   cp /tmp/evidence-staging-<N>/* /tmp/evidence-issue-<N>/evidence/issue-<N>/
-
-   git -C /tmp/evidence-issue-<N> add evidence/issue-<N>/
-   git -C /tmp/evidence-issue-<N> commit -m "evidence: after-state for issue #<N>"
-   git -C /tmp/evidence-issue-<N> push origin evidence/issue-<N>
-   git -C /tmp/evidence-issue-<N> rev-parse HEAD    # this SHA pins the AFTER raw URLs
-   ```
-   Use the resulting SHA for `commitSha` and for every raw URL in the comment. The PR's `prHeadSha` is recorded separately in the comment trailer for traceability.
-
-6. **Tear down the helper worktree.**
-   ```bash
-   git worktree remove /tmp/evidence-issue-<N>
-   ```
-   The dev worktree is untouched throughout — `git -C` keeps every git operation scoped to the helper, and you never `cd`.
-
-7. **Build the comment.** Compose markdown using the format below. When `<beforeCommentUrl>` is present, include a BEFORE section that links back to it; the BEFORE images on the evidence branch use the prefix `before-step-N.png`. The AFTER images use `step-N.png`.
-   ```markdown
-   ## Evidence for issue #<N>: <title>
-
-   ### Before (investigation)
-   > See full capture: <beforeCommentUrl>
-
-   ![Step 1 before](https://raw.githubusercontent.com/<repo>/<commitSha>/evidence/issue-<N>/before-step-1.png)
-
-   ### After (fix shipped — PR #<prNumber>)
-
-   ![Step 1 after](https://raw.githubusercontent.com/<repo>/<commitSha>/evidence/issue-<N>/step-1.png)
-
-   ![walkthrough](https://raw.githubusercontent.com/<repo>/<commitSha>/evidence/issue-<N>/walkthrough.gif)
-
-   _Pinned to `<commitSha>` · PR #<prNumber>_
-   ```
-   When `<beforeCommentUrl>` is absent (feature/chore), drop the **Before** section and start with **After** only.
-
-8. **Post the comment.** Post to issue #<N> in <repo>. Capture the returned comment URL.
-
-## Isolated server assumption
-
-Playwright starts both the API server and the web server from the worktree before running the spec, each on a dynamically allocated free port. Both servers run the worktree's code — not the user's running dev environment. If the fix involved server-side changes, those changes ARE reflected in the running server. If a server fails to start within the timeout, Playwright will report an error; record this in `decisionSummaries` and return early.
-
-## Critical: pin URLs to the SHA
-
-Every URL into the repo must use the evidence-branch commit SHA, not the branch name. Branch-pinned URLs break the moment the PR merges and the branch is deleted. SHA-pinned URLs are immutable.
-
-## When the spec fails
-
-If the spec fails on its second run, **stop immediately** and emit this exact JSON shape — no more tool calls, no more Playwright runs:
+Return only JSON conforming to the evidence plan schema:
 
 ```json
 {
-  "screenshots": [],
-  "gifPath": null,
-  "decisionSummaries": [
-    { "kind": "VERDICT", "summary": "<one sentence describing the failure from error-context.md>" }
-  ]
-}
-```
-
-Do NOT post a placeholder comment. Do NOT set `commitSha` or `commentUrl` when no artefacts were pushed. The workflow treats evidence as best-effort — a missing `commentUrl` emits `evidence.post-failed` and the pipeline continues without blocking.
-
-## Output format
-
-Return a JSON object conforming to `EvidencePostSchema`:
-
-```json
-{
-  "screenshots": [
-    {
-      "path": "evidence/issue-233/step-1.png",
-      "caption": "Project overview before evidence panel",
-      "step": 1,
-      "githubUrl": "https://raw.githubusercontent.com/shaunnez/goose-hub/abc1234/evidence/issue-233/step-1.png"
-    },
-    {
-      "path": "evidence/issue-233/step-2.png",
-      "caption": "Evidence panel expanded with inline screenshot",
-      "step": 2
-    }
+  "specPath": "apps/web/e2e/issue-233.spec.ts",
+  "slug": "evidence-issue-233",
+  "validationIntent": "Validate that PR #999 renders the evidence panel and captures the expected screenshots.",
+  "expectedAssertions": [
+    "Evidence panel is visible",
+    "Expanded evidence screenshot renders inline"
   ],
-  "gifPath": "evidence/issue-233/walkthrough.gif",
-  "commentUrl": "https://github.com/shaunnez/goose-hub/issues/233#issuecomment-9876543210",
-  "commitSha": "abc1234def5678901234567890abcdef12345678",
-  "decisionSummaries": [
-    { "kind": "PLAN", "summary": "Ran apps/web/e2e/issue-233.spec.ts; captured 2 screenshots and a GIF walkthrough" },
-    { "kind": "COMMIT", "summary": "Posted comment on issue #233 with SHA-pinned image URLs and GIF" }
-  ]
+  "notes": "Spec uses domcontentloaded navigation and writes evidence/issue-233/step-1.png."
 }
 ```
 
-Paths in the schema are workspace-relative. URLs in the rendered comment are absolute and SHA-pinned.
-
-[decision] VERDICT: Captured Playwright evidence for slice and posted SHA-pinned comment to linked issue
+The workflow will run the spec with isolated worktree servers, collect AFTER evidence with `scripts/collect-playwright-evidence.ts --phase after`, treat collector `classification: "validation_failed"` as a failed validation, publish only collector `passed` evidence, and emit `evidence.posted` only when a SHA-pinned comment URL exists.

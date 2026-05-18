@@ -14,3 +14,5 @@ coverage/
 AGENTS.md
 .e2e-pipeline.db-shm
 .e2e-pipeline.db-wal
+.worktrees
+.playwright-mcp

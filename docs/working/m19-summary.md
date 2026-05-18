@@ -67,10 +67,10 @@
    see quality trends.
   
   M19.09 — Provider-aware model routing (rolesModels)
-  - Code: core/agent-runtime/select-model-for-role.ts
-  - UI: Settings → Project → Model Routing (ProjectModelPanel.tsx) — configure
-  per-role/complexity model overrides. DB overrides win over project config.
-  - Check: open Settings for a project, look for the model panel.
+  - Status: fully superseded by per-skill runtime settings.
+  - Code: core/agent-runtime/model-router.ts still handles config/pattern complexity selection.
+  - UI: removed. Configure model tier/provider in Settings → Skill runtime.
+  - Check: open Settings for a project, use the Skill runtime tab.
   
   M19.10 — Codex CLI runtime
   - Code: core/agent-runtime/codex-cli.ts (CodexCliRuntime class, resolveCodexBinary())

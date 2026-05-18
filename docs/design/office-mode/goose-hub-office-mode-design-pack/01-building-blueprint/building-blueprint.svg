@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1800" viewBox="0 0 1400 1800">
+  <defs>
+    <style>
+      .bg { fill: #171923; }
+      .wall { fill: #2B2D42; stroke: #6FE7FF; stroke-width: 3; }
+      .floor { fill: #3A3D5C; stroke: #6FE7FF; stroke-width: 2; }
+      .room { fill: #4A3A5E; stroke: #F2CC8F; stroke-width: 2; }
+      .sealed { fill: #3B4252; stroke: #FF6B6B; stroke-width: 3; stroke-dasharray: 10 6; }
+      .label { fill: #F8F5E4; font-family: monospace; font-size: 28px; font-weight: 700; }
+      .small { fill: #F8F5E4; font-family: monospace; font-size: 19px; }
+      .tiny { fill: #F8F5E4; font-family: monospace; font-size: 15px; }
+      .accent { fill: #6FE7FF; }
+      .amber { fill: #F2CC8F; }
+      .red { fill: #FF6B6B; }
+      .green { fill: #8BD17C; }
+      .pink { fill: #D68FD6; }
+      .line { stroke: #F8F5E4; stroke-width: 2; fill: none; opacity: .55; }
+      .elevator { fill: #202536; stroke: #6FE7FF; stroke-width: 4; }
+      .card { fill: #F2CC8F; stroke: #171923; stroke-width: 2; }
+    </style>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1400" height="1800"/>
+
+  <text class="label" x="60" y="70">GOOSE HUB OFFICE MODE — BOARD 01: BUILDING BLUEPRINT</text>
+  <text class="small" x="60" y="105">Spatial contract: Building = Goose Hub, floors = projects, rooms = workflow phases, geese = personas, tickets = work items.</text>
+
+  <!-- Watchtower -->
+  <rect class="wall" x="460" y="150" width="440" height="170" rx="12"/>
+  <text class="label" x="500" y="200">WATCHTOWER</text>
+  <text class="small" x="500" y="232">auditor / autonomy gate</text>
+  <circle class="red" cx="845" cy="195" r="22"/>
+  <polygon class="red" points="845,220 775,320 915,320" opacity=".25"/>
+  <text class="tiny" x="500" y="275">audit.autonomy-gate-fired</text>
+
+  <!-- Elevator -->
+  <rect class="elevator" x="1125" y="360" width="145" height="1120" rx="10"/>
+  <text class="label" x="1140" y="420" transform="rotate(90 1140,420)">ELEVATOR</text>
+  <text class="tiny" x="1145" y="1435">project navigation</text>
+  <text class="tiny" x="1145" y="1460">task routing</text>
+
+  <!-- Project floors -->
+  <g>
+    <rect class="floor" x="120" y="360" width="960" height="250" rx="8"/>
+    <rect class="amber" x="120" y="360" width="960" height="34"/>
+    <text class="label" x="145" y="388">PROJECT FLOOR 3 — ambient project rollup</text>
+    <rect class="room" x="155" y="425" width="170" height="135" rx="6"/>
+    <text class="tiny" x="172" y="455">Triage</text>
+    <rect class="room" x="350" y="425" width="210" height="135" rx="6"/>
+    <text class="tiny" x="367" y="455">Discovery</text>
+    <rect class="sealed" x="585" y="425" width="210" height="135" rx="6"/>
+    <text class="tiny" x="602" y="455">Library</text>
+    <rect class="room" x="820" y="425" width="220" height="135" rx="6"/>
+    <text class="tiny" x="837" y="455">Dev / QA / Review</text>
+    <circle class="green" cx="240" cy="520" r="12"/>
+    <circle class="accent" cx="455" cy="520" r="12"/>
+    <circle class="pink" cx="690" cy="520" r="12"/>
+    <circle class="amber" cx="930" cy="520" r="12"/>
+    <text class="tiny" x="147" y="585">Building view: no individual geese, only activity glow + queue badges.</text>
+  </g>
+
+  <g>
+    <rect class="floor" x="120" y="650" width="960" height="250" rx="8"/>
+    <rect class="accent" x="120" y="650" width="960" height="34"/>
+    <text class="label" x="145" y="678">PROJECT FLOOR 2 — active project</text>
+    <rect class="room" x="145" y="712" width="145" height="130" rx="6"/>
+    <text class="tiny" x="160" y="742">Triage</text>
+    <rect class="room" x="310" y="712" width="180" height="130" rx="6"/>
+    <text class="tiny" x="325" y="742">Discovery</text>
+    <rect class="room" x="510" y="712" width="180" height="130" rx="6"/>
+    <text class="tiny" x="525" y="742">Investigation</text>
+    <rect class="sealed" x="705" y="712" width="145" height="130" rx="6"/>
+    <text class="tiny" x="720" y="742">Sealed</text>
+    <text class="tiny" x="720" y="762">Library</text>
+    <rect class="room" x="870" y="712" width="170" height="130" rx="6"/>
+    <text class="tiny" x="885" y="742">Spec board</text>
+    <rect class="card" x="170" y="795" width="28" height="38"/>
+    <rect class="card" x="177" y="788" width="28" height="38"/>
+    <text class="tiny" x="145" y="875">Queues sit at room doors. Hero tasks get labels only at floor/room zoom.</text>
+  </g>
+
+  <g>
+    <rect class="floor" x="120" y="940" width="960" height="250" rx="8"/>
+    <rect class="green" x="120" y="940" width="960" height="34"/>
+    <text class="label" x="145" y="968">PROJECT FLOOR 1 — canonical floor detail target</text>
+    <rect class="room" x="145" y="1002" width="155" height="130" rx="6"/>
+    <text class="tiny" x="160" y="1032">Dev floor</text>
+    <rect class="room" x="320" y="1002" width="135" height="130" rx="6"/>
+    <text class="tiny" x="335" y="1032">Dev-review</text>
+    <rect class="sealed" x="475" y="1002" width="150" height="130" rx="6"/>
+    <text class="tiny" x="490" y="1032">QA chamber</text>
+    <rect class="sealed" x="645" y="1002" width="175" height="130" rx="6"/>
+    <text class="tiny" x="660" y="1032">Review chamber</text>
+    <rect class="room" x="840" y="1002" width="105" height="130" rx="6"/>
+    <text class="tiny" x="853" y="1032">Retro</text>
+    <rect class="room" x="965" y="1002" width="75" height="130" rx="6"/>
+    <text class="tiny" x="975" y="1032">Done</text>
+    <path class="line" d="M220 1080 C300 1080, 370 1080, 550 1080 S780 1080, 1000 1080"/>
+    <text class="tiny" x="145" y="1163">State transitions become walking paths. Sealed rooms show holdout boundaries.</text>
+  </g>
+
+  <!-- Lobby -->
+  <rect class="floor" x="120" y="1230" width="960" height="250" rx="8"/>
+  <rect class="pink" x="120" y="1230" width="960" height="34"/>
+  <text class="label" x="145" y="1258">LOBBY — inbox / budget / human gates</text>
+  <rect class="room" x="150" y="1300" width="170" height="120" rx="6"/>
+  <text class="tiny" x="168" y="1330">Inbox drop box</text>
+  <rect class="room" x="350" y="1300" width="170" height="120" rx="6"/>
+  <text class="tiny" x="368" y="1330">Courier desk</text>
+  <rect class="room" x="550" y="1300" width="220" height="120" rx="6"/>
+  <text class="tiny" x="568" y="1330">Budget board</text>
+  <rect class="room" x="805" y="1300" width="220" height="120" rx="6"/>
+  <text class="tiny" x="823" y="1330">Human gate bell</text>
+  <circle class="red" cx="965" cy="1365" r="22"/>
+  <text class="tiny" x="145" y="1454">External work enters here, then courier geese route items to the right project floor.</text>
+
+  <!-- Backstage -->
+  <rect class="floor" x="120" y="1520" width="960" height="210" rx="8"/>
+  <rect class="red" x="120" y="1520" width="960" height="34"/>
+  <text class="label" x="145" y="1548">BACKSTAGE — learning loop / improvement candidates</text>
+  <rect class="room" x="155" y="1588" width="250" height="95" rx="6"/>
+  <text class="tiny" x="175" y="1620">Coach office</text>
+  <rect class="room" x="445" y="1588" width="300" height="95" rx="6"/>
+  <text class="tiny" x="465" y="1620">Improvement corkboard</text>
+  <rect class="room" x="785" y="1588" width="250" height="95" rx="6"/>
+  <text class="tiny" x="805" y="1620">Skill prompt shelves</text>
+
+  <!-- Legend -->
+  <rect class="wall" x="60" y="150" width="330" height="170" rx="8"/>
+  <text class="label" x="85" y="195">LEGEND</text>
+  <text class="tiny" x="85" y="230">Floor = project</text>
+  <text class="tiny" x="85" y="255">Room = workflow phase</text>
+  <text class="tiny" x="85" y="280">Card = WorkItem</text>
+  <text class="tiny" x="85" y="305">Sealed room = holdout</text>
+
+  <rect class="wall" x="950" y="150" width="390" height="170" rx="8"/>
+  <text class="label" x="975" y="195">CAMERA MODES</text>
+  <text class="tiny" x="975" y="230">Building → activity rollup</text>
+  <text class="tiny" x="975" y="255">Floor → rooms + hero tasks</text>
+  <text class="tiny" x="975" y="280">Room → all geese visible</text>
+  <text class="tiny" x="975" y="305">Persona → timeline panel</text>
+</svg>

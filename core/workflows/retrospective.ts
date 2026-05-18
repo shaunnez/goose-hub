@@ -144,6 +144,9 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
     role,
     ...computeTrend({ projectId, role }),
   }));
+  const triggerReasons = Object.entries(triggers)
+    .filter(([, enabled]) => enabled)
+    .map(([key]) => key);
 
   try {
     const result = await runtime.run({
@@ -164,6 +167,7 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
           outcome: 'success',
           decisionSummaries: priorDecisionSummaries,
         },
+        triggerReasons,
         activePersonas,
         roleTrends,
       },
@@ -172,6 +176,7 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
         'workItem.body',
         'workItem.number',
         'runSummary',
+        ...(tier === 'deep' ? ['triggerReasons'] : []),
         'activePersonas',
         'roleTrends',
       ],

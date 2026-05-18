@@ -56,6 +56,12 @@ export type AgentSpec<R extends RoleSpec = RoleSpec> = {
   /** Extra fields merged into the agent.run-started event payload. Use for workflow-specific metadata (roundNumber, tier, etc.) that the runtime layer doesn't know about. */
   extraEventPayload?: Record<string, unknown>;
   /**
+   * Suppresses the runtime-owned agent.run-started lifecycle event when a
+   * workflow has already emitted a parent start marker for this runId. Use
+   * sparingly; normal AgentRuntime.run() calls should emit their own start.
+   */
+  suppressRunStarted?: boolean;
+  /**
    * Explicit MCP config path to pass via --mcp-config. Bypasses the bundle-based
    * resolution in resolveMcpConfigPath. Used when the MCP server must run from a
    * directory other than the workspace (e.g. playwright-repro needs the actual

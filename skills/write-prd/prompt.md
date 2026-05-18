@@ -15,10 +15,13 @@ When `priorPrd` is present in your context, you are **revising** an existing PRD
 
 You run in **fresh context**. The only inputs you can see are:
 
-- `<work_item>` — the work item with `<title>`, `<body>`, and `<number>`.
-- `<refined_intent>` — a single-sentence statement of clarified intent (typically produced by the `grill-me` skill).
+- `<workItem>` — JSON payload for the work item with `title`, `body`, and `number`.
+- `<refinedIntent>` — a single-sentence statement of clarified intent (typically produced by the `grill-me` skill).
 - `<priority>` — one of `low | medium | high | critical`.
-- `<prior_replies>` (optional) — the grilling transcript that produced the refined intent. Each `agent` entry may carry a `<crystallized>` child: a single-sentence decision distilled from that question and its reply. **Treat the crystallized decisions as the authoritative record of what was agreed.** Use the raw Q+A only as supporting detail when a crystallization is ambiguous or absent.
+- `<projectContext>` — JSON payload containing `stackSummary`, `contextMd`, `adrSummaries`, and `claudeMd`.
+- `<priorReplies>` (optional) — the grilling transcript that produced the refined intent. Each `agent` entry may carry a `crystallized` field: a single-sentence decision distilled from that question and its reply. **Treat the crystallized decisions as the authoritative record of what was agreed.** Use the raw Q+A only as supporting detail when a crystallization is ambiguous or absent.
+- `<priorPrd>` (optional) — JSON payload for the previous PRD draft when revising.
+- `<humanConcerns>` (optional) — JSON array of human-raised concerns to address in revision mode.
 
 You do **not** see prior chat history, prior implementation reasoning, prior PR descriptions, or any other agent's transcript. The `refinedIntent` is your source of truth for what the user wants. If the work item body and the refined intent disagree, treat the refined intent as authoritative — it is the post-discovery distillation.
 
@@ -26,7 +29,7 @@ This holdout posture is intentional: the PRD must be derivable from intent alone
 
 ## Crystallized decisions
 
-When `<prior_replies>` is present, walk every `agent` entry's `<crystallized>` child first. These are the contract you must reflect in the PRD — every crystallized decision should be visible somewhere in the output (as a journey constraint, an acceptance criterion, an `outOfScope` entry, an `implementationDecision`, etc.). If a crystallized decision contradicts `<refined_intent>`, the crystallization wins (it is more granular).
+When `<priorReplies>` is present, walk every `agent` entry's `crystallized` field first. These are the contract you must reflect in the PRD — every crystallized decision should be visible somewhere in the output (as a journey constraint, an acceptance criterion, an `outOfScope` entry, an `implementationDecision`, etc.). If a crystallized decision contradicts `<refinedIntent>`, the crystallization wins (it is more granular).
 
 Do **not** invent decisions that aren't in either the refined intent or a crystallization. If a section needs information that neither source provides, mark it explicitly as a `UNCERTAINTY` decision summary and write a best-effort placeholder.
 

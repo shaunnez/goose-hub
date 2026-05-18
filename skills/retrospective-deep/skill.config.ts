@@ -13,10 +13,21 @@ export const DeepRetroContextSchema = z.object({
     role: z.string(),
     outcome: z.enum(['success', 'failure', 'partial']),
     decisionSummaries: z.array(DecisionSummarySchema),
-    retryCount: z.number().int().min(0),
-    qaFailed: z.boolean(),
+    retryCount: z.number().int().min(0).optional(),
+    qaFailed: z.boolean().optional(),
   }),
   triggerReasons: z.array(z.string()).describe('Why deep tier was selected'),
+  activePersonas: z.array(z.string()).optional(),
+  roleTrends: z
+    .array(
+      z.object({
+        role: z.string(),
+        sampleCount: z.number().int().min(0),
+        delta: z.number(),
+        trend: z.enum(['improving', 'stable', 'declining']),
+      }),
+    )
+    .optional(),
 });
 
 const config: SkillConfig = {
@@ -32,6 +43,8 @@ const config: SkillConfig = {
     'runSummary.retryCount',
     'runSummary.qaFailed',
     'triggerReasons',
+    'activePersonas',
+    'roleTrends',
   ],
   toolBundles: ['core'],
   modelPin: 'sonnet',

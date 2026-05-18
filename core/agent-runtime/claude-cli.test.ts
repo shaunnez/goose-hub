@@ -120,6 +120,27 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
     expect(child.stdin.end).toHaveBeenCalledWith('<task></task>');
   });
 
+  it('includes the Factory workspace-only instruction in Claude system prompt', async () => {
+    const envelope = JSON.stringify({ is_error: false, result: '{"ok":true}' });
+    mockSpawn.mockReturnValue(makeChild(0, envelope));
+
+    const runtime = new ClaudeCliRuntime();
+    await runtime.run(makeSpec({ appendSystemPrompt: 'skill prompt body' }));
+
+    const argv = mockSpawn.mock.calls[0][1] as string[];
+    const promptIndex = argv.indexOf('--system-prompt');
+    expect(promptIndex).toBeGreaterThanOrEqual(0);
+    const systemPrompt = argv[promptIndex + 1];
+    expect(systemPrompt).toContain('Factory agents must not read ~/.codex');
+    expect(systemPrompt).toContain(
+      'All repo exploration must stay under workspaceDir / <worktreePath>.',
+    );
+    expect(systemPrompt).toContain(
+      'If prior context is needed, use only context provided by Factory.',
+    );
+    expect(systemPrompt).toContain('skill prompt body');
+  });
+
   it('inserts a success row when CLI exits with valid envelope', async () => {
     const valuesRun = vi.fn();
     const values = vi.fn().mockReturnValue({ run: valuesRun });
@@ -188,6 +209,24 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
     expect(mockRecordCost).toHaveBeenCalledWith(
       expect.objectContaining({
         workItemId: 'github:owner/repo#1',
+      }),
+    );
+  });
+
+  it('emits model and runtime metadata when the run starts', async () => {
+    const envelope = JSON.stringify({ is_error: false, result: '{"ok":true}' });
+    mockSpawn.mockReturnValue(makeChild(0, envelope));
+
+    const runtime = new ClaudeCliRuntime();
+    await runtime.run(makeSpec({ modelOverride: 'claude-haiku-4-5-20251001' }));
+
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-started',
+        payload: expect.objectContaining({
+          modelId: 'claude-haiku-4-5-20251001',
+          runtime: 'claude-cli',
+        }),
       }),
     );
   });

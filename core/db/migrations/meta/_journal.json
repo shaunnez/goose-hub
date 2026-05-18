@@ -183,6 +183,41 @@
       "when": 1778713026343,
       "tag": "0025_solid_daredevil",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1778737181566,
+      "tag": "0026_furry_umar",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1778817600000,
+      "tag": "0027_project_skill_settings_model",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1778817600001,
+      "tag": "0028_project_evidence_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1778817600002,
+      "tag": "0029_drop_project_model_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1779089834325,
+      "tag": "0030_wild_slyde",
+      "breakpoints": true
     }
   ]
 }

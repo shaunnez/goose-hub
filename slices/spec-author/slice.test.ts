@@ -25,6 +25,10 @@ vi.mock('@goose-hub/core/engineering-specs/repository.js', () => ({
   persistEngineeringSpec: (...args: unknown[]) => mockPersistEngineeringSpec(...args),
 }));
 
+vi.mock('@goose-hub/core/projects/loader.js', () => ({
+  getProjectBySlug: vi.fn().mockReturnValue({ targetRepo: { defaultBranch: 'main' } }),
+}));
+
 vi.mock('@goose-hub/core/scout-reports/repository.js', () => ({
   listScoutReportsForInvestigation: vi.fn().mockReturnValue([]),
 }));
@@ -41,6 +45,11 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
 vi.mock('@goose-hub/core/workspaces/worktree.js', () => ({
   createWorktree: vi.fn().mockReturnValue('/tmp/test-spec-worktree'),
   cleanupWorktree: vi.fn(),
+  resolveWorkflowBase: vi.fn().mockReturnValue({
+    branch: 'main',
+    ref: 'origin/main',
+    source: 'configured-default',
+  }),
 }));
 
 vi.mock('node:fs', async (importOriginal) => {
@@ -334,7 +343,7 @@ describe('runSpecAuthorWorkflow', () => {
       const { runSpecAuthorWorkflow } = await import('./workflow.js');
       await runSpecAuthorWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
 
-      expect(createWorktree).toHaveBeenCalledWith('/repo', expect.any(String));
+      expect(createWorktree).toHaveBeenCalledWith('/repo', expect.any(String), 'origin/main');
       expect(cleanupWorktree).toHaveBeenCalledOnce();
     });
   });
@@ -515,6 +524,75 @@ describe('runSpecAuthorWorkflow', () => {
           to: 'factory:spec-ready',
           by: 'spec-author',
         },
+      });
+    });
+
+    it('passes scout report digests and refs to spec-author without raw report JSON', async () => {
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      const scoutRepo = await import('@goose-hub/core/scout-reports/repository.js');
+      vi.mocked(eventStore.replay).mockReturnValue([
+        {
+          id: 1,
+          projectId: 'goose-hub-self',
+          workItemId: 'github:shaunnez/goose-hub#55',
+          kind: 'agent.investigation-complete',
+          payload: { investigationRunId: 'investigation-run' },
+          runId: 'investigation-run',
+          createdAt: '2026-05-14T00:00:00Z',
+        },
+      ] as never);
+      vi.mocked(scoutRepo.listScoutReportsForInvestigation).mockReturnValue([
+        {
+          id: 1,
+          projectId: 'goose-hub-self',
+          workItemId: 'github:shaunnez/goose-hub#55',
+          investigationRunId: 'investigation-run',
+          scoutSkill: 'scout-code-path',
+          report: {
+            summary: 'scout-code-path: 1 findings, 1 decision summaries',
+            findingCount: 1,
+            decisionSummaryCount: 1,
+            findingsPreview: [
+              {
+                file: 'core/scout-reports/repository.ts',
+                line: 12,
+                fact: 'large full finding body'.repeat(80),
+                confidence: 'high',
+              },
+            ],
+            artifactRef: {
+              artifactKey: 'scout-report:abc',
+              kind: 'scout-report',
+              summary: 'scout-code-path: 1 findings, 1 decision summaries',
+              bytes: 40_000,
+              stored: true,
+            },
+          },
+          createdAt: '2026-05-14T00:00:00Z',
+        },
+      ]);
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const invokeOpts = mockInvokeSkill.mock.calls[0][0] as {
+        context: { scoutReports?: string };
+      };
+      expect(invokeOpts.context.scoutReports).toContain('scout-report-digest-v1');
+      expect(invokeOpts.context.scoutReports).toContain('scout-report:abc');
+      expect(invokeOpts.context.scoutReports).toContain(
+        'scout-code-path: 1 findings, 1 decision summaries',
+      );
+      expect(invokeOpts.context.scoutReports).not.toContain('large full finding body'.repeat(40));
+
+      const disclosureCall = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'agent.disclosure');
+      expect(disclosureCall?.[0].payload).toMatchObject({
+        kind: 'scout_reports_summarized',
+        skill: 'spec-author',
+        phase: 'wave1',
+        artifactKeys: ['scout-report:abc'],
       });
     });
   });

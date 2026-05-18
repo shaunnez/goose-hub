@@ -1,11 +1,11 @@
 # apps/web/e2e
 
-Playwright happy-path test for M2. Closes M2.11 (#36).
+Playwright suites for Goose Hub.
 
 ## Run
 
 ```sh
-GITHUB_TOKEN=ghp_… pnpm --filter @goose-hub/web test:e2e
+GITHUB_TOKEN=ghp_… pnpm --filter @goose-hub/web test:e2e:legacy-ui-smoke
 ```
 
 The test skips gracefully when `GITHUB_TOKEN` is empty, per #36's acceptance criterion.
@@ -30,6 +30,9 @@ The full state-transition round-trip (POST → GitHub label updated → SSE even
 ## Pipeline E2E (`e2e/pipeline/`)
 
 `pnpm --filter @goose-hub/web test:e2e:pipeline` — runs against MOCK_AGENTS + MOCK_SOURCE + MOCK_OPEN_PR, no real GitHub token required.
+
+This is the canonical QA regression suite. The legacy UI smoke script is kept
+only for explicit manual checks against a real GitHub token.
 
 Specs:
 - `full-lifecycle.spec.ts` — chore: triaging → done (triage + fix + QA + review + approve)

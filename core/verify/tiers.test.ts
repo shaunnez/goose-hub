@@ -257,7 +257,49 @@ describe('runTier — event emission', () => {
     );
 
     expect(result.passed).toBe(true);
-    expect(events.find((e) => (e.kind as string) === 'qa.structural-passed')).toBeDefined();
+    const event = events.find((e) => (e.kind as string) === 'qa.structural-passed');
+    expect(event).toBeDefined();
+    expect(event?.payload).toMatchObject({
+      tier: 'structural',
+      tierNumber: 1,
+      evidence: expect.any(Array),
+      findingCount: 0,
+      runId: 'r1',
+    });
+    expect(result.tier).toBe(1);
+  });
+
+  it('emits named public tier payloads for Tier-2 and Tier-3 success', async () => {
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const spec = makeSpec({ workPackages: [makeWp('WP1', ['src/a.ts'])] });
+    const artifacts = { runId: 'r1', projectId: 'p1', worktreePath: worktree };
+
+    const functional = await runTier(2, spec, artifacts, { appendEvent });
+    const regression = await runTier(3, spec, artifacts, {
+      appendEvent,
+      runRegressionTestsImpl: async () => ({ passed: true, failedTests: [] }),
+    });
+
+    expect(functional.tier).toBe(2);
+    expect(regression.tier).toBe(3);
+    expect(
+      events.find((e) => (e.kind as string) === 'qa.functional-passed')?.payload,
+    ).toMatchObject({
+      tier: 'functional',
+      tierNumber: 2,
+      evidence: expect.any(Array),
+      findingCount: 0,
+      runId: 'r1',
+    });
+    expect(
+      events.find((e) => (e.kind as string) === 'qa.regression-passed')?.payload,
+    ).toMatchObject({
+      tier: 'regression',
+      tierNumber: 3,
+      evidence: expect.any(Array),
+      findingCount: 0,
+      runId: 'r1',
+    });
   });
 
   it('emits qa.structural-failed on Tier-1 failure', async () => {
@@ -281,6 +323,15 @@ describe('runTier — event emission', () => {
     );
 
     expect(result.passed).toBe(false);
-    expect(events.find((e) => (e.kind as string) === 'qa.structural-failed')).toBeDefined();
+    const event = events.find((e) => (e.kind as string) === 'qa.structural-failed');
+    expect(event).toBeDefined();
+    expect(event?.payload).toMatchObject({
+      tier: 'structural',
+      tierNumber: 1,
+      evidence: expect.any(Array),
+      findingCount: 1,
+      runId: 'r1',
+    });
+    expect(result.tier).toBe(1);
   });
 });

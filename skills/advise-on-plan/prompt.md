@@ -16,18 +16,14 @@ Only when the orchestrator gates you in: priorities `high` or `critical`. The sk
 
 The context contains a `<task>` block with:
 
-- `<work_item>`
-  - `<title>` — issue title
-  - `<body>` — issue body (acceptance criteria)
-  - `<number>` — issue number
-  - `<priority>` — `high` or `critical`
+- `<workItem>` — JSON payload for the work item with `title`, `body`, `number`, and `priority`.
 - `<plan>` — the developer's written plan (verbatim)
-- `<revision_pass>` (optional) — `0` for the first invocation, `1` if you are reviewing a revised plan
-- `<previous_advisor_feedback>` (only when `revision_pass === 1`) — your own pass-0 output
+- `<revisionPass>` (optional) — `0` for the first invocation, `1` if you are reviewing a revised plan
+- `<previousAdvisorFeedback>` (only when `revisionPass === 1`) — your own pass-0 output
 
 ## What you must do
 
-1. Read the work_item and the plan.
+1. Read the `workItem` JSON payload and the plan.
 2. Use the `read` and `search` tools to spot-check the plan against the actual codebase: do the named files exist? do the proposed APIs already have callers that conflict? does the plan miss a pattern the codebase consistently uses elsewhere?
 
    #### Verification discipline

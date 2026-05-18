@@ -15,6 +15,33 @@ const CONSOLE_ERROR_BADGE: Record<string, string> = {
   info: 'bg-blue-500/15 text-blue-400',
 };
 
+function ErrorList({
+  testId,
+  title,
+  errors,
+}: {
+  testId: string;
+  title: string;
+  errors: string[] | undefined;
+}) {
+  if (errors == null || errors.length === 0) return null;
+  return (
+    <div data-testid={testId}>
+      <h3 className="text-[12px] font-semibold text-fg-3 uppercase tracking-wide mb-3">{title}</h3>
+      <div className="space-y-1.5">
+        {errors.map((error) => (
+          <div
+            key={error}
+            className="rounded-md border border-line bg-bg-elev px-3 py-2 text-[12px] text-fg-2 font-mono break-words"
+          >
+            {error}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function PlaywrightCaptureSection({
   projectSlug,
   id,
@@ -53,6 +80,8 @@ export function PlaywrightCaptureSection({
       </div>
     );
   }
+
+  const consoleErrors = repro.consoleErrors ?? [];
 
   return (
     <div data-testid="playwright-capture-section" className="px-8 py-6 space-y-6">
@@ -160,13 +189,13 @@ export function PlaywrightCaptureSection({
         </div>
       )}
 
-      {repro.consoleErrors.length > 0 && (
+      {consoleErrors.length > 0 && (
         <div data-testid="playwright-capture-console-errors">
           <h3 className="text-[12px] font-semibold text-fg-3 uppercase tracking-wide mb-3">
             Console Errors
           </h3>
           <div className="space-y-1.5">
-            {repro.consoleErrors.map((err, i) => (
+            {consoleErrors.map((err, i) => (
               <div
                 key={`${err.type}-${i}`}
                 className="flex items-start gap-2 rounded-md border border-line bg-bg-elev px-3 py-2"
@@ -189,6 +218,18 @@ export function PlaywrightCaptureSection({
           </div>
         </div>
       )}
+
+      <ErrorList
+        testId="playwright-capture-test-errors"
+        title="Repro Assertion"
+        errors={repro.testErrors}
+      />
+
+      <ErrorList
+        testId="playwright-capture-runner-errors"
+        title="Runner Error"
+        errors={repro.runnerErrors}
+      />
     </div>
   );
 }

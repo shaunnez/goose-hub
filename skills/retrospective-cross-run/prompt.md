@@ -8,14 +8,14 @@ This is the **analytical-path** counterpart to the per-merge `retrospective-deep
 
 The context contains:
 
-- `<project_id>` — the project slug
-- `<window_start_at>`, `<window_end_at>` — ISO8601 bounds of the analysis window
-- `<lifecycle_count>` — total archived lifecycles in the window
-- `<archived_lifecycles>` — array of `{ workItemId, closedAt, decisionSummaries[], learningEntries[], qualityScores[], costsUsd }`
-- `<mined_patterns>` — pre-mined decision patterns. Each carries a `patternId`, `pattern` description, `occurrenceCount`, `consistencyScore`, optional `role` / `kind`, and `exampleWorkItemIds[]`
-- `<precomputed_gate_thresholds>` — numerical thresholds for gates `qa` and `review` (mean/min/max/stdDev). **Echo verbatim.**
-- `<precomputed_cost_baselines>` — numerical baselines per `(role, skill)` (mean/p50/p95). **Echo verbatim.**
-- `<prior_aggregated_learnings>` — learnings carried from earlier playbooks in the same project (may be empty)
+- `<projectId>` — the project slug
+- `<windowStartAt>`, `<windowEndAt>` — ISO8601 bounds of the analysis window
+- `<lifecycleCount>` — total archived lifecycles in the window
+- `<archivedLifecycles>` — JSON array of `{ workItemId, closedAt, decisionSummaries[], learningEntries[], qualityScores[], costsUsd }`
+- `<minedPatterns>` — pre-mined decision patterns. Each carries a `patternId`, `pattern` description, `occurrenceCount`, `consistencyScore`, optional `role` / `kind`, and `exampleWorkItemIds[]`
+- `<precomputedGateThresholds>` — numerical thresholds for gates `qa` and `review` (mean/min/max/stdDev). **Echo verbatim.**
+- `<precomputedCostBaselines>` — numerical baselines per `(role, skill)` (mean/p50/p95). **Echo verbatim.**
+- `<priorAggregatedLearnings>` — learnings carried from earlier playbooks in the same project (may be empty)
 
 ## Process
 
@@ -49,7 +49,7 @@ Only keep learnings that recur across ≥2 lifecycles. Single-lifecycle learning
 
 ### Step 4 — Top patterns
 
-Select up to 10 highest-signal patterns from `<mined_patterns>`. For each, populate:
+Select up to 10 highest-signal patterns from `<minedPatterns>`. For each, populate:
 
 - `patternId` — copied verbatim
 - `pattern` — copied verbatim
@@ -62,11 +62,11 @@ Rank by `consistencyScore × log(1 + occurrenceCount)`.
 
 ### Step 5 — Gate thresholds (echo)
 
-Echo `<precomputed_gate_thresholds>` verbatim into `gateThresholds[]`. Do **not** invent or reshape numbers — these are computed by the workflow. If absent or empty, emit `[]`.
+Echo `<precomputedGateThresholds>` verbatim into `gateThresholds[]`. Do **not** invent or reshape numbers — these are computed by the workflow. If absent or empty, emit `[]`.
 
 ### Step 6 — Cost baselines (echo)
 
-Echo `<precomputed_cost_baselines>` verbatim into `costBaselines[]`. Same rule as gate thresholds — do not recompute.
+Echo `<precomputedCostBaselines>` verbatim into `costBaselines[]`. Same rule as gate thresholds — do not recompute.
 
 ### Step 7 — Improvement candidates
 

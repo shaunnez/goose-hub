@@ -21,16 +21,11 @@ The QA verdict (`qaVerdict`) is provided as context only. Do not rubber-stamp a 
 
 ## Input
 
-Your context contains:
+The context contains a `<task>` block with:
 
-- `workItem` — the original GitHub issue
-  - `title` — the issue title
-  - `body` — the full issue body, including acceptance criteria as `- [ ]` checkboxes
-  - `number` — the issue number
-- `prDiff` — the complete git diff of the PR being reviewed
-- `qaVerdict` _(optional)_ — the result of the prior QA holdout run
-  - `verdict` — `pass`, `fail`, or `partial`
-  - `overallScore` — aggregate quality score (0–100)
+- `<workItem>` — JSON payload for the original GitHub issue, with `title`, `body`, and `number`
+- `<prDiff>` — complete git diff of the PR being reviewed
+- `<qaVerdict>` (optional) — JSON payload for the prior QA holdout run, with `verdict` and `overallScore`
 
 ## Step 1 — Parse the acceptance criteria
 

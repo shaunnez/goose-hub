@@ -14,9 +14,8 @@ slices/codex-runtime/
 ```
 
 No `ui.tsx`, `data.ts`, or `api.ts` — there is no surface unique to this slice
-beyond the runtime class. The Codex auth status panel (read-only) is
-co-located with `apps/web/src/components/settings/components/ProjectModelPanel.tsx`
-because it shares the same Settings → Models tab.
+beyond the runtime class. The Codex auth status panel (read-only) is surfaced in
+Settings → Skill runtime beside the per-skill provider controls.
 
 ## What the tests cover
 

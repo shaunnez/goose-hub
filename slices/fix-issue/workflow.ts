@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { adviseOnPlan } from '@goose-hub/core/agent-runtime/advisor.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
@@ -10,15 +9,26 @@ import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-tra
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
+import {
+  lookupWorkItemSymbols,
+  symbolHintsToKeyFiles,
+} from '@goose-hub/core/symbol-index/lookup.js';
 import { orchestratorCommitAll } from '@goose-hub/core/workspaces/orchestrator-git.js';
 import {
   cleanupWorktree,
   createWorktree,
   prewarmWorktree,
+  resolveWorkflowBase,
 } from '@goose-hub/core/workspaces/worktree.js';
-import { EvidencePostSchema } from '@goose-hub/skills/evidence-post/schema.js';
+import { EvidencePostPlanSchema } from '@goose-hub/skills/evidence-post/schema.js';
 import { ImplementSchema } from '@goose-hub/skills/implement/schema.js';
-import { afterImplement, resolveImplementExecution, runImplement } from './implement-phase.js';
+import {
+  afterImplement,
+  emitWrongSurfaceGuardForRun,
+  latestInvestigationContext,
+  resolveImplementExecution,
+  runImplement,
+} from './implement-phase.js';
 import { deriveStack, resolveWorktreeHeadSha } from './pr-helpers.js';
 
 // Re-export for test access (slice.test.ts imports resolveWorktreeHeadSha from workflow.js).
@@ -28,20 +38,11 @@ function isAdvisorGated(priority: string): priority is 'high' | 'critical' {
   return priority === 'high' || priority === 'critical';
 }
 
-function resolveBaseBranch(repoPath: string): string {
-  try {
-    return execFileSync('git', ['symbolic-ref', '--short', 'HEAD'], {
-      cwd: repoPath,
-      encoding: 'utf8',
-    }).trim();
-  } catch {
-    return 'main';
-  }
-}
-
 export interface FixIssueDeps {
   /** Override the runtime (used by tests). Defaults to provider-aware runtime dispatch. */
   runtime?: AgentRuntime;
+  /** Override evidence-post runtime (used by tests). Production resolves it independently. */
+  evidenceRuntime?: AgentRuntime;
   /** Override openPR (used by tests). Defaults to the real connector. */
   openPRImpl?: typeof openPR;
   /** Override the advisor wrapper (used by tests). Defaults to adviseOnPlan. */
@@ -54,8 +55,8 @@ export interface FixIssueDeps {
   prewarmWorktreeImpl?: typeof prewarmWorktree;
   /** Override resolveWorktreeHeadSha (used by tests to avoid real git subprocess). */
   resolveWorktreeHeadShaImpl?: typeof resolveWorktreeHeadSha;
-  /** Override resolveBaseBranch (used by tests to avoid real git subprocess). */
-  resolveBaseBranchImpl?: (repoPath: string) => string;
+  /** Override resolveWorkflowBase (used by tests to avoid real git subprocess). */
+  resolveWorkflowBaseImpl?: typeof resolveWorkflowBase;
   /**
    * Override orchestratorCommitAll (used by tests). Orchestrator commits the
    * implement skill's output before opening the PR (ADR 0031 — builder no-commit rule).
@@ -97,23 +98,41 @@ export async function runFixIssueWorkflow(
   const cleanupWtFn = deps.cleanupWorktreeImpl ?? cleanupWorktree;
   const prewarmWtFn = deps.prewarmWorktreeImpl ?? prewarmWorktree;
   const resolveHeadShaFn = deps.resolveWorktreeHeadShaImpl ?? resolveWorktreeHeadSha;
-  const resolveBaseBranchFn = deps.resolveBaseBranchImpl ?? resolveBaseBranch;
+  const resolveWorkflowBaseFn = deps.resolveWorkflowBaseImpl ?? resolveWorkflowBase;
   const orchestratorCommitFn = deps.orchestratorCommitAllImpl ?? orchestratorCommitAll;
 
   const implementPrompt = readPromptWithContext('implement', projectId);
   const implementJsonSchema = toJsonSchema(ImplementSchema);
   const evidencePostPrompt = readPromptWithContext('evidence-post', projectId);
-  const evidencePostJsonSchema = toJsonSchema(EvidencePostSchema);
+  const evidencePostJsonSchema = toJsonSchema(EvidencePostPlanSchema);
 
   const { personaId: implementPersonaId } = selectPersona(projectId, 'developer');
-  const baseBranch = resolveBaseBranchFn(targetRepo);
   const implementExecution = await resolveImplementExecution({
     projectId,
     workItem,
     injectedRuntime: deps.runtime,
   });
-  const runtime = implementExecution.runtime;
-  const worktreePath = createWtFn(targetRepo, runId);
+  const workflowBase = resolveWorkflowBaseFn(
+    targetRepo,
+    implementExecution.projectConfig?.targetRepo?.defaultBranch,
+  );
+  const baseBranch = workflowBase.branch;
+  const investigation = latestInvestigationContext({ projectId, workItemId: workItem.id });
+  const worktreePath = createWtFn(targetRepo, runId, workflowBase.ref);
+  const symbolKeyFiles =
+    investigation == null
+      ? []
+      : symbolHintsToKeyFiles(
+          lookupWorkItemSymbols(workItem.title, workItem.body, { worktreePath }),
+          { existingPaths: investigation.keyFiles.map((file) => file.path), maxFiles: 8 },
+        );
+  const implementInvestigation =
+    investigation == null || symbolKeyFiles.length === 0
+      ? investigation
+      : {
+          ...investigation,
+          keyFiles: [...investigation.keyFiles, ...symbolKeyFiles],
+        };
 
   try {
     // Transition into in-progress as soon as the worktree exists.
@@ -155,6 +174,9 @@ export async function runFixIssueWorkflow(
         appendSystemPrompt: implementPrompt,
         outputJsonSchema: implementJsonSchema,
         personaId: implementPersonaId,
+        investigation: implementInvestigation,
+        surfaceGuardInvestigation: investigation,
+        symbolIndexKeyFiles: symbolKeyFiles,
         revisionPass: 0,
       });
 
@@ -215,7 +237,7 @@ export async function runFixIssueWorkflow(
           worktreePath,
           baseBranch,
           openPRFn,
-          runtime,
+          evidenceRuntime: deps.evidenceRuntime ?? deps.runtime,
           evidencePostPrompt,
           evidencePostJsonSchema,
           resolveHeadShaFn,
@@ -241,6 +263,9 @@ export async function runFixIssueWorkflow(
       appendSystemPrompt: implementPrompt,
       outputJsonSchema: implementJsonSchema,
       personaId: implementPersonaId,
+      investigation: implementInvestigation,
+      surfaceGuardInvestigation: investigation,
+      symbolIndexKeyFiles: symbolKeyFiles,
       advisorFeedback,
       revisionPass,
     });
@@ -255,7 +280,7 @@ export async function runFixIssueWorkflow(
       worktreePath,
       baseBranch,
       openPRFn,
-      runtime,
+      evidenceRuntime: deps.evidenceRuntime ?? deps.runtime,
       evidencePostPrompt,
       evidencePostJsonSchema,
       resolveHeadShaFn,
@@ -273,6 +298,15 @@ export async function runFixIssueWorkflow(
       outcome: 'failure',
     });
     const error = err instanceof Error ? err : new Error(String(err));
+    if (!error.message.startsWith('wrong surface guard:')) {
+      emitWrongSurfaceGuardForRun({
+        projectId,
+        workItemId: workItem.id,
+        runId,
+        personaId: implementPersonaId,
+        investigation,
+      });
+    }
     eventStore.appendEvent({
       projectId,
       workItemId: workItem.id,

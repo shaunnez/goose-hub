@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   type DevReviewResponseOutput,
   DevReviewResponseOutputSchema,
@@ -9,13 +10,21 @@ import {
   DevReviewOutputSchema,
 } from '@goose-hub/skills/dev-review/schema.js';
 import devReviewConfig from '@goose-hub/skills/dev-review/skill.config.js';
+import { maybeStoreLargePayload } from '../agent-artifacts/repository.js';
+import type { ArtifactRef } from '../agent-artifacts/types.js';
 import { readProjectDevReviewSettings } from '../db/repositories/project-dev-review-settings.js';
 import type { AgentEvent, AppendEventInput } from '../event-stream/store.js';
 import { eventStore } from '../event-stream/store.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import type { WorkItem } from '../state-source/interface.js';
+import {
+  emitSymbolIndexHintsUsedEvent,
+  offeredHintsFromSymbolImpact,
+} from '../symbol-index/hints-used.js';
+import { lookupChangedExportImpact } from '../symbol-index/lookup.js';
 import type { AgentConfig } from '../types.js';
 import { GIT_ENV } from '../workspaces/git-env.js';
+import { type DiffDigest, buildDiffDigest, formatDiffDigestSummary } from './diff-digest.js';
 import type { AgentRuntime } from './interface.js';
 import { readPromptWithContext } from './read-prompt.js';
 import { reconcileDecisionSummaries } from './reconcile-decisions.js';
@@ -45,17 +54,111 @@ export function shouldRunDevReview(triggerOn: string, priority: string): boolean
 /**
  * Returns the unified diff of the integration worktree vs base branch.
  * Pure git diff — no shell interpolation (FACTORY_RULES rule 29).
- * Truncated at 200 KB to avoid blowing Codex's context.
+ * The prompt handoff stores large diffs as artifacts before spawning Codex.
  */
 export function getDiffForDevReview(worktreePath: string, baseBranch = 'main'): string {
   const result = spawnSync('git', ['diff', `${baseBranch}...HEAD`], {
     cwd: worktreePath,
     encoding: 'utf8',
-    maxBuffer: 200 * 1024,
+    maxBuffer: 5 * 1024 * 1024,
     env: GIT_ENV,
   });
   if (result.error) throw result.error;
   return result.stdout ?? '';
+}
+
+function summarizePrDiff(prDiff: string): string {
+  return formatDiffDigestSummary(buildDiffDigest(prDiff));
+}
+
+function diffArtifactKey(
+  projectId: string,
+  workItemId: string,
+  runId: string,
+  prDiff: string,
+): string {
+  const hash = createHash('sha256')
+    .update(JSON.stringify({ projectId, workItemId, runId, prDiff }))
+    .digest('hex')
+    .slice(0, 24);
+  return `pr-diff:${hash}`;
+}
+
+export function preparePrDiffContext(input: {
+  projectId: string;
+  workItemId: string;
+  runId: string;
+  prDiff: string;
+  thresholdBytes?: number;
+}): {
+  prDiffContext: string;
+  artifactRef?: ArtifactRef;
+  summary: string;
+  changedFiles: string[];
+  digest: DiffDigest;
+  disclosure?: {
+    kind: 'diff_summarized';
+    rawBytes: number;
+    contextBytes: number;
+    bytesSaved: number;
+    artifactKeys: string[];
+  };
+} {
+  const summary = summarizePrDiff(input.prDiff);
+  const maybeStored = maybeStoreLargePayload({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    runId: input.runId,
+    kind: 'pr-diff',
+    payload: input.prDiff,
+    summary,
+    thresholdBytes: input.thresholdBytes,
+    artifactKey: diffArtifactKey(input.projectId, input.workItemId, input.runId, input.prDiff),
+  });
+
+  const rawBytes = Buffer.byteLength(input.prDiff, 'utf8');
+
+  if (maybeStored.stored === false) {
+    const digest = buildDiffDigest(maybeStored.payload);
+    return {
+      prDiffContext: [
+        'PR diff digest:',
+        JSON.stringify(digest, null, 2),
+        '',
+        'Full PR diff kept inline because it is below the artifact threshold:',
+        maybeStored.payload,
+      ].join('\n'),
+      summary: formatDiffDigestSummary(digest),
+      changedFiles: digest.changedFiles.map((file) => file.path),
+      digest,
+    };
+  }
+
+  const digest = buildDiffDigest(input.prDiff, maybeStored);
+  const prDiffContext = [
+    'PR diff digest:',
+    JSON.stringify(digest, null, 2),
+    '',
+    'Full PR diff omitted from prompt context and stored as an agent artifact.',
+    `ArtifactRef: ${JSON.stringify(maybeStored)}`,
+    'Review from this digest plus targeted file reads in the worktree. Do not fabricate line-specific findings unless verified from provided context or a file read.',
+  ].join('\n');
+  const contextBytes = Buffer.byteLength(prDiffContext, 'utf8');
+
+  return {
+    prDiffContext,
+    artifactRef: maybeStored,
+    summary: formatDiffDigestSummary(digest),
+    changedFiles: digest.changedFiles.map((file) => file.path),
+    digest,
+    disclosure: {
+      kind: 'diff_summarized',
+      rawBytes,
+      contextBytes,
+      bytesSaved: Math.max(0, rawBytes - contextBytes),
+      artifactKeys: [maybeStored.artifactKey],
+    },
+  };
 }
 
 // ─── Effective config ─────────────────────────────────────────────────────────
@@ -138,12 +241,40 @@ export async function runDevReview(input: RunDevReviewInput): Promise<DevReviewO
 
   const prDiff = getDiffForDevReview(input.worktreePath, input.baseBranch ?? 'main');
   const devReviewRunId = `${input.runId}:dev-review`;
+  const preparedDiff = preparePrDiffContext({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    runId: input.runId,
+    prDiff,
+  });
+  const symbolImpact = lookupChangedExportImpact(preparedDiff.changedFiles, {
+    worktreePath: input.worktreePath,
+  });
+
+  if (preparedDiff.disclosure != null) {
+    input.appendEvent({
+      projectId: input.projectId,
+      workItemId: input.workItemId,
+      kind: 'agent.disclosure',
+      payload: {
+        ...preparedDiff.disclosure,
+        skill: 'dev-review',
+      },
+      runId: devReviewRunId,
+    });
+  }
 
   input.appendEvent({
     projectId: input.projectId,
     workItemId: input.workItemId,
     kind: 'dev-review.started',
-    payload: { runId: devReviewRunId, worktreePath: input.worktreePath },
+    payload: {
+      runId: devReviewRunId,
+      worktreePath: input.worktreePath,
+      diffSummary: preparedDiff.summary,
+      diffArtifactRef: preparedDiff.artifactRef,
+      diffDigest: preparedDiff.digest,
+    },
     runId: devReviewRunId,
   });
 
@@ -155,8 +286,9 @@ export async function runDevReview(input: RunDevReviewInput): Promise<DevReviewO
       projectId: input.projectId,
       workItemId: input.workItemId,
       workItem: input.workItem,
-      prDiff,
+      prDiff: preparedDiff.prDiffContext,
       projectCommands: input.stack,
+      ...(symbolImpact.length > 0 ? { symbolImpact } : {}),
     },
     contextAllowlist: devReviewConfig.contextAllowlist ?? [],
     freshContext: devReviewConfig.freshContext as true,
@@ -166,6 +298,18 @@ export async function runDevReview(input: RunDevReviewInput): Promise<DevReviewO
     personaId,
     outputJsonSchema,
     appendSystemPrompt: prompt,
+  });
+  emitSymbolIndexHintsUsedEvent({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    consumerSkill: 'dev-review',
+    runId: devReviewRunId,
+    parentRunId: input.runId,
+    personaId,
+    offeredHints: offeredHintsFromSymbolImpact(symbolImpact),
+    toolEvents: eventStore.replay({ runId: devReviewRunId, kind: 'agent.tool-call' }),
+    worktreePath: input.worktreePath,
+    appendEvent: input.appendEvent,
   });
 
   const parsed = DevReviewOutputSchema.safeParse(result.output);
@@ -236,12 +380,37 @@ export async function runDevReviewResponse(
   );
 
   const responseRunId = `${input.runId}:dev-review-response`;
+  const preparedDiff = preparePrDiffContext({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    runId: input.runId,
+    prDiff: input.prDiff,
+  });
+
+  if (preparedDiff.disclosure != null) {
+    input.appendEvent({
+      projectId: input.projectId,
+      workItemId: input.workItemId,
+      kind: 'agent.disclosure',
+      payload: {
+        ...preparedDiff.disclosure,
+        skill: 'dev-review-response',
+      },
+      runId: responseRunId,
+    });
+  }
 
   input.appendEvent({
     projectId: input.projectId,
     workItemId: input.workItemId,
     kind: 'dev-review.response-started',
-    payload: { runId: responseRunId, findingCount: input.devReviewFindings.length },
+    payload: {
+      runId: responseRunId,
+      findingCount: input.devReviewFindings.length,
+      diffSummary: preparedDiff.summary,
+      diffArtifactRef: preparedDiff.artifactRef,
+      diffDigest: preparedDiff.digest,
+    },
     runId: responseRunId,
   });
 
@@ -253,7 +422,7 @@ export async function runDevReviewResponse(
       projectId: input.projectId,
       workItemId: input.workItemId,
       workItem: input.workItem,
-      prDiff: input.prDiff,
+      prDiff: preparedDiff.prDiffContext,
       devReviewFindings: input.devReviewFindings,
       worktreePath: input.worktreePath,
       stack: input.stack,

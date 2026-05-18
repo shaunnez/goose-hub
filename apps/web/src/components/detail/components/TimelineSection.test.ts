@@ -13,6 +13,18 @@ function makeLogEvent(id: number): AgentEventDto {
   };
 }
 
+function makeCodexStdinNoiseLog(id: number): AgentEventDto {
+  return {
+    id,
+    projectId: 'proj',
+    workItemId: 'wi-1',
+    kind: 'agent.log',
+    payload: { stream: 'stderr', text: 'Reading additional input from stdin...' },
+    runId: 'run-codex',
+    createdAt: new Date().toISOString(),
+  };
+}
+
 function makeEvent(id: number, kind: string): AgentEventDto {
   return {
     id,
@@ -87,6 +99,44 @@ describe('groupEvents — agent.log collapsing', () => {
     expect(result).toHaveLength(5);
     for (const item of result) {
       expect(item.kind).not.toBe('log-group');
+    }
+  });
+
+  it('filters the Codex stdin stderr banner before grouping', () => {
+    const result = groupEvents([
+      makeRunEvent(1, 'run-codex', 'agent.run-started', 'implement'),
+      makeCodexStdinNoiseLog(2),
+      makeRunEvent(3, 'run-codex', 'agent.run-completed', 'implement'),
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].kind).toBe('run-group');
+    if (result[0].kind === 'run-group') {
+      expect(result[0].items).toHaveLength(2);
+      expect(
+        result[0].items.some(
+          (item) =>
+            item.kind === 'event' &&
+            item.event.kind === 'agent.log' &&
+            (item.event.payload as { text?: string } | null)?.text ===
+              'Reading additional input from stdin...',
+        ),
+      ).toBe(false);
+    }
+  });
+
+  it('keeps other stderr logs visible', () => {
+    const stderrLog: AgentEventDto = {
+      ...makeCodexStdinNoiseLog(1),
+      payload: { stream: 'stderr', text: 'real warning' },
+    };
+
+    const result = groupEvents([stderrLog]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].kind).toBe('event');
+    if (result[0].kind === 'event') {
+      expect(result[0].event).toBe(stderrLog);
     }
   });
 });
@@ -191,6 +241,33 @@ describe('groupEvents — run-group by runId', () => {
       expect(result[0].event.kind).toBe('agent.tool-call');
     }
   });
+
+  it('keeps live decision summaries inside the same run group as tool calls', () => {
+    const events: AgentEventDto[] = [
+      makeRunEvent(1, 'run-live', 'agent.run-started', 'implement'),
+      makeRunEvent(2, 'run-live', 'agent.tool-call'),
+      {
+        ...makeRunEvent(3, 'run-live', 'agent.decision-summary-live'),
+        payload: { kind: 'READ', summary: 'Searching app shell components', skill: 'implement' },
+      },
+      makeRunEvent(4, 'run-live', 'agent.tool-call'),
+    ];
+
+    const result = groupEvents(events);
+    expect(result).toHaveLength(1);
+    expect(result[0].kind).toBe('run-group');
+    if (result[0].kind === 'run-group') {
+      expect(result[0].runId).toBe('run-live');
+      expect(
+        result[0].items.map((item) => (item.kind === 'event' ? item.event.kind : item.kind)),
+      ).toEqual([
+        'agent.run-started',
+        'agent.tool-call',
+        'agent.decision-summary-live',
+        'agent.tool-call',
+      ]);
+    }
+  });
 });
 
 // ─── run-group metadata ───────────────────────────────────────────────────────
@@ -208,6 +285,28 @@ describe('groupEvents — run-group metadata', () => {
       expect(result[0].skill).toBe('implement');
       expect(result[0].startedAt).toBe(events[0].createdAt);
       expect(result[0].endedAt).toBe(events[2].createdAt);
+    }
+  });
+
+  it('extracts model and runtime from agent.run-started payload before cost rows exist', () => {
+    const events: AgentEventDto[] = [
+      {
+        ...makeRunEvent(1, 'run-abc', 'agent.run-started', 'implement'),
+        payload: {
+          skill: 'implement',
+          modelId: 'gpt-5.4',
+          runtime: 'codex-cli',
+        },
+      },
+      makeRunEvent(2, 'run-abc', 'agent.tool-call'),
+    ];
+    const result = groupEvents(events);
+    expect(result).toHaveLength(1);
+    if (result[0].kind === 'run-group') {
+      expect(result[0].modelId).toBe('gpt-5.4');
+      expect(result[0].runtime).toBe('codex-cli');
+      expect(result[0].startedAt).toBe(events[0].createdAt);
+      expect(result[0].endedAt).toBeNull();
     }
   });
 

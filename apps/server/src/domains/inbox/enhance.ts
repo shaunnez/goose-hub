@@ -1,11 +1,8 @@
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
-import {
-  resolveBudgetsForProject,
-  resolveRoleModelForProject,
-} from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
+import { resolveSkillRuntimeForProject } from '@goose-hub/core/agent-runtime/skill-runtime-resolver.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { BugEnhanceOutputSchema } from '@goose-hub/skills/bug-enhance/schema.js';
@@ -26,21 +23,18 @@ export async function runBugEnhance(
   body: string,
 ): Promise<string | null> {
   const projectConfig = await getProjectBySlug(projectId);
-  const bugEnhanceBudget = resolveBudgetsForProject('bug-enhance', undefined, projectId);
-  const bugEnhanceRoleModel = resolveRoleModelForProject({
-    role: 'triager',
-    projectId,
-    configRoleModel: projectConfig?.agentConfig?.rolesModels?.triager,
-    allowHoldoutOverride: projectConfig?.agentConfig?.allowHoldoutOverride,
+  const bugEnhanceRuntime = resolveSkillRuntimeForProject({
     skill: 'bug-enhance',
+    projectBudgets: projectConfig?.budgets,
+    projectId,
+    configRuntime: projectConfig?.agentConfig?.runtime ?? 'auto',
+    role: 'triager',
+    allowHoldoutOverride: projectConfig?.agentConfig?.allowHoldoutOverride,
   });
-  const bugEnhanceModelOverride =
-    bugEnhanceRoleModel.source === 'db' || bugEnhanceRoleModel.source === 'config'
-      ? bugEnhanceRoleModel.modelId
-      : bugEnhanceBudget.modelOverride;
   const runtime = selectRuntime({
     configRuntime: projectConfig?.agentConfig?.runtime ?? 'auto',
-    model: bugEnhanceModelOverride,
+    model: bugEnhanceRuntime.modelOverride,
+    skillProvider: bugEnhanceRuntime.provider,
   });
   const runId = crypto.randomUUID();
   const { personaId } = selectPersona(projectId, 'triager');
@@ -64,8 +58,8 @@ export async function runBugEnhance(
       freshContext: false,
       toolBundles: [],
       toolExtras: [],
-      ...bugEnhanceBudget,
-      modelOverride: bugEnhanceModelOverride,
+      budgets: bugEnhanceRuntime.budgets,
+      modelOverride: bugEnhanceRuntime.modelOverride,
       personaId,
       outputJsonSchema: jsonSchema,
       appendSystemPrompt: prompt,

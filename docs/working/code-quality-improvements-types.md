@@ -64,7 +64,7 @@ Phase 1 — Pure duplications (trivial, no behavior change)
 
   1a. HOLDOUT_ROLES (7 files → 1 export)
   Add export const HOLDOUT_ROLES = new Set<Role>(['qa', 'reviewer'] as const) to core/agent-runtime/roles.ts. Delete inline definitions in:
-  - context-assembly.ts:19, fallback.ts:11, holdout-validator.ts:4, model-router.ts:7, with-escalation.ts:10, allowlist.ts:13, ProjectModelPanel.tsx:26
+  - context-assembly.ts:19, fallback.ts:11, holdout-validator.ts:4, model-router.ts:7, with-escalation.ts:10, allowlist.ts:13
   - **Update**: grep also finds sandbox.ts and swarm.ts — sweep includes those too.
 
   1b. TERMINAL_STATES (2 files → 1 export)

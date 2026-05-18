@@ -13,6 +13,7 @@ import type {
   AgentRuntime,
   AgentSpec,
 } from '@goose-hub/core/agent-runtime/interface.js';
+import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import type { AgentEvent, AppendEventInput } from '@goose-hub/core/event-stream/store.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
 import type { DevReviewResponseOutput } from '@goose-hub/skills/dev-review-response/schema.js';
@@ -76,6 +77,30 @@ function makeSpec(workPackages: WorkPackage[]): EngineeringSpec {
     riskRegister: [],
     decisionSummaries: [{ kind: 'PLAN', summary: 'Test spec' }],
   };
+}
+
+function makeInvestigationEvent(workItem: WorkItem) {
+  return {
+    id: 99,
+    projectId: 'goose-hub-self',
+    workItemId: workItem.id,
+    kind: 'agent.investigation-complete',
+    payload: {
+      investigate: {
+        findings: 'Failure handling lives in triage-batch.',
+        keyFiles: [
+          {
+            path: 'apps/server/src/domains/workflows/triage-batch.ts',
+            reason: 'owns failed triage state transitions',
+          },
+        ],
+        openQuestions: ['Should repo-match fail immediately?'],
+      },
+      investigationRunId: 'investigation-run-1',
+    },
+    createdAt: new Date().toISOString(),
+    runId: 'investigation-run-1',
+  } as never;
 }
 
 function makeOkResult(wpId: string): AgentResult {
@@ -343,6 +368,139 @@ describe('parallel-implement workflow contract: dispatcher owns state transition
 
     expect(result.status).toBe('success');
     expect(source.transitionState).not.toHaveBeenCalled();
+  });
+});
+
+describe('parallel-implement investigation context', () => {
+  it('injects investigation findings into implement-wp context and emits an audit event', async () => {
+    const workItem = makeWorkItem();
+    const wp1 = makeWp('WP1', ['apps/server/src/domains/workflows/triage-batch.ts']);
+    const spec = makeSpec([wp1]);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const specs: AgentSpec[] = [];
+    const iterations: Array<{ wpId: string; status: string }> = [];
+    const replaySpy = vi
+      .spyOn(eventStore, 'replay')
+      .mockReturnValue([makeInvestigationEvent(workItem)]);
+
+    try {
+      const result = await runParallelImplementWorkflow(
+        workItem,
+        spec,
+        'pipeline-run-investigation',
+        makeStateSource(),
+        'goose-hub-self',
+        '/tmp/repo',
+        {
+          runtime: {
+            run: async (agentSpec) => {
+              specs.push(agentSpec);
+              return makeOkResult('WP1');
+            },
+          },
+          createIssueWorktreeImpl: () => '/tmp/issue-wt',
+          createWpWorktreeImpl: (_repo, _runId, wpId) => `/tmp/wp-${wpId}`,
+          cleanupWpWorktreesImpl: () => undefined,
+          cleanupIssueWorktreeImpl: () => undefined,
+          orchestratorCommitWpImpl: () => 'abc123',
+          revertWpChangesImpl: () => undefined,
+          recordIterationImpl: (_runId, wpId, _iteration, status) => {
+            iterations.push({ wpId, status });
+          },
+          getLastStatusImpl: (_runId, wpId) => {
+            const last = [...iterations].reverse().find((i) => i.wpId === wpId);
+            return (last?.status as 'ok' | 'failed' | 'in-progress' | null) ?? null;
+          },
+          openPRImpl: async () => ({
+            prNumber: 1,
+            prUrl: 'https://gh/pr/1',
+            branch: 'b',
+            base: 'main',
+          }),
+          appendEvent,
+        },
+      );
+
+      expect(result.status).toBe('success');
+      expect(specs[0]?.context).toMatchObject({
+        investigation: {
+          findings: expect.stringContaining('triage-batch'),
+          investigationRunId: 'investigation-run-1',
+        },
+      });
+      expect(specs[0]?.contextAllowlist).toContain('investigation');
+      const injected = events.find((e) => e.kind === 'agent.investigation-context-injected');
+      expect(injected?.payload).toMatchObject({
+        skill: 'implement-wp',
+        wpId: 'WP1',
+        investigationRunId: 'investigation-run-1',
+        keyFileCount: 1,
+        openQuestionCount: 1,
+      });
+    } finally {
+      replaySpy.mockRestore();
+    }
+  });
+
+  it('blocks parallel implement when planned work packages miss investigated files', async () => {
+    const workItem = makeWorkItem();
+    const wp1 = makeWp('WP1', ['slices/parallel-implement/workflow.ts']);
+    const spec = makeSpec([wp1]);
+    const stateSource = makeStateSource();
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const runtime = { run: vi.fn() } satisfies AgentRuntime;
+    const replaySpy = vi
+      .spyOn(eventStore, 'replay')
+      .mockReturnValue([makeInvestigationEvent(workItem)]);
+
+    try {
+      const result = await runParallelImplementWorkflow(
+        workItem,
+        spec,
+        'pipeline-run-wrong-surface',
+        stateSource,
+        'goose-hub-self',
+        '/tmp/repo',
+        {
+          runtime,
+          createIssueWorktreeImpl: () => '/tmp/issue-wt',
+          createWpWorktreeImpl: (_repo, _runId, wpId) => `/tmp/wp-${wpId}`,
+          cleanupWpWorktreesImpl: () => undefined,
+          cleanupIssueWorktreeImpl: () => undefined,
+          orchestratorCommitWpImpl: () => 'abc123',
+          revertWpChangesImpl: () => undefined,
+          recordIterationImpl: () => undefined,
+          getLastStatusImpl: () => null,
+          openPRImpl: async () => ({
+            prNumber: 1,
+            prUrl: 'https://gh/pr/1',
+            branch: 'b',
+            base: 'main',
+          }),
+          appendEvent,
+        },
+      );
+
+      expect(result).toMatchObject({
+        status: 'failed',
+        errorReason: 'engineering spec did not target investigated key files',
+      });
+      expect(runtime.run).not.toHaveBeenCalled();
+      expect(stateSource.comment).toHaveBeenCalledWith(
+        workItem.externalId,
+        expect.stringContaining('Parallel implement blocked by wrong-surface guard'),
+      );
+      const guard = events.find((e) => e.kind === 'agent.wrong-surface-guard');
+      expect(guard?.payload).toMatchObject({
+        skill: 'parallel-implement',
+        reason: 'engineering-spec-missed-investigation-surface',
+        expectedKeyFiles: ['apps/server/src/domains/workflows/triage-batch.ts'],
+        touchedPaths: ['slices/parallel-implement/workflow.ts'],
+        investigationRunId: 'investigation-run-1',
+      });
+    } finally {
+      replaySpy.mockRestore();
+    }
   });
 });
 

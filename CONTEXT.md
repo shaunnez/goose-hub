@@ -76,6 +76,14 @@ A self-contained, end-to-end feature folder. Includes only the surfaces it genui
 
 **Holdout context filtering:** `contextAllowlist: ContextKey[]` in `AgentSpec` specifies which context keys the orchestrator is permitted to inject. QA allowlist includes `workItem`, `prDiff`, `sliceTests`, `projectCommands` — excludes `investigationFindings`, `devDecisionSummaries`. Orchestrator filters the context Record before rendering; excluded keys are never present in the XML block.
 
+### Runtime Skill Contract Rules (Migration Baseline, 2026-05-15)
+
+- Canonical context tag style is `camelCase` and must match `contextAllowlist` exactly (example: `<workItem>`, not `<work_item>`).
+- `contextAllowlist` dotted keys still render as JSON payloads inside a top-level tag; do not assume nested XML.
+- Prompt output JSON examples must mirror `skills/<name>/schema.ts` field names exactly.
+- Workflow consumers parse object fields from validated output; contract renames are hard migrations (prompt + schema + consumers + mocks/tests in the same family batch).
+- `scripts/audit-skill-contracts.ts` is the baseline advisory auditor; strict enforcement is enabled family-by-family after cleanup.
+
 ## Agent Runtime — Resolved Decisions
 
 **`runId`:** canonical workflow isolation key. Generated once per `AgentRuntime.run()` call (ULID or UUID v4). Declared as `runId: string` on `AgentSpec`. Passed to all subprocess calls, workspace dir paths (`~/.factory/workspaces/<runId>/`), event emission, and hook scripts (via env var). All downstream components — tool layer, event store, hooks — use `runId` as the traceability key. Resolved at M4.01.
@@ -204,7 +212,7 @@ Both honour the same security envelope (FACTORY_RULES rule 29 `shell: false`, ru
 
 **Dispatcher:** `core/agent-runtime/select-runtime.ts` exports `selectRuntime({ configRuntime, model?, skillProvider? })`. `'auto'` picks on `model.provider` (via `providerOf()`), falling back to `skillProvider`, then to claude. Existing call sites that hard-code `new ClaudeCliRuntime()` are unchanged — the dispatcher is opt-in for new code paths (M19.11/12 dev-review, future migrations). See ADR 0036.
 
-**Auth status UI:** `GET /projects/:slug/settings/codex-auth` returns `{ status: 'connected' | 'missing', authPath, loginCommand }`. Surfaced in the Settings → Models tab via `ProjectModelPanel`'s `CodexAuthSection`. Read-only; no interactive OAuth from the web (same constraint as Claude).
+**Auth status UI:** `GET /projects/:slug/settings/codex-auth` returns `{ status: 'connected' | 'missing', authPath, loginCommand }`. Surfaced in Settings → Skill runtime next to the per-skill provider controls. Read-only; no interactive OAuth from the web (same constraint as Claude).
 
 ## Scheduler — Work Item Eligibility Pipeline
 

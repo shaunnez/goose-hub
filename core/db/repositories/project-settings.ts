@@ -18,12 +18,17 @@ export type GlobalBudgetPatch = {
   useMultiAgentPipeline?: number | null;
   useInvestigationSwarm?: number | null;
   recordDecisionTool?: number | null;
+  qaE2eMode?: 'off' | 'ui-changed' | 'always' | null;
+  playwrightReproEnabled?: number | null;
+  evidencePostEnabled?: number | null;
 };
 
 export type SkillBudgetPatch = {
   maxTurns?: number | null;
   maxBudgetUsd?: number | null;
   timeoutMs?: number | null;
+  modelTier?: string | null;
+  modelProvider?: string | null;
 };
 
 export function readProjectSettings(projectId: string): ProjectSettingsRow | null {
@@ -93,6 +98,62 @@ export function getRecordDecisionTool(projectId: string): boolean {
       error: String(err),
     });
     return false;
+  }
+}
+
+export type QaE2eMode = 'off' | 'ui-changed' | 'always';
+
+export function deriveQaE2eMode(
+  row: ProjectSettingsRow | null,
+  configDefault: QaE2eMode = 'off',
+): QaE2eMode {
+  if (row?.qaE2eMode === 'off' || row?.qaE2eMode === 'ui-changed' || row?.qaE2eMode === 'always') {
+    return row.qaE2eMode;
+  }
+  return configDefault;
+}
+
+export function getQaE2eMode(projectId: string, configDefault: QaE2eMode = 'off'): QaE2eMode {
+  try {
+    return deriveQaE2eMode(readProjectSettings(projectId), configDefault);
+  } catch (err) {
+    logger.warn('getQaE2eMode: read failed, defaulting to config value', {
+      projectId,
+      configDefault,
+      error: String(err),
+    });
+    return configDefault;
+  }
+}
+
+function deriveEnabledFlag(value: number | null | undefined, configDefault: boolean): boolean {
+  if (value == null) return configDefault;
+  return value === 1;
+}
+
+export function getPlaywrightReproEnabled(projectId: string, configDefault = true): boolean {
+  try {
+    return deriveEnabledFlag(readProjectSettings(projectId)?.playwrightReproEnabled, configDefault);
+  } catch (err) {
+    logger.warn('getPlaywrightReproEnabled: read failed, defaulting to config value', {
+      projectId,
+      configDefault,
+      error: String(err),
+    });
+    return configDefault;
+  }
+}
+
+export function getEvidencePostEnabled(projectId: string, configDefault = true): boolean {
+  try {
+    return deriveEnabledFlag(readProjectSettings(projectId)?.evidencePostEnabled, configDefault);
+  } catch (err) {
+    logger.warn('getEvidencePostEnabled: read failed, defaulting to config value', {
+      projectId,
+      configDefault,
+      error: String(err),
+    });
+    return configDefault;
   }
 }
 

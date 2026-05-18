@@ -6,6 +6,16 @@ import { GIT_ENV } from './git-env.js';
 
 const WORKSPACES_DIR = join(homedir(), '.factory', 'workspaces');
 
+export type WorkflowBaseSource = 'current-branch' | 'configured-default' | 'fallback-main';
+
+export type WorkflowBase = {
+  /** Branch name used for PR base/diff metadata, without an `origin/` prefix. */
+  branch: string;
+  /** Git ref used when creating detached worktrees. */
+  ref: string;
+  source: WorkflowBaseSource;
+};
+
 /**
  * Resolves the worktree path for a given runId.
  * Pattern: ~/.factory/workspaces/<runId>/
@@ -24,6 +34,46 @@ export function existingWorktreePath(runId: string): string | null {
   return existsSync(wtPath) ? wtPath : null;
 }
 
+function currentBranch(repo: string): string | null {
+  try {
+    const branch = execFileSync('git', ['symbolic-ref', '--short', 'HEAD'], {
+      cwd: repo,
+      encoding: 'utf8',
+      env: GIT_ENV,
+    }).trim();
+    return branch.length > 0 ? branch : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolves the branch/ref all workflow-created worktrees should use.
+ *
+ * The running checkout branch wins so local milestone work runs against the
+ * same code the operator is looking at. Config/default fallback still uses the
+ * remote ref to preserve the previous fresh-from-origin behavior when the
+ * server checkout is detached.
+ */
+export function resolveWorkflowBase(repo: string, configuredDefaultBranch?: string): WorkflowBase {
+  const branch = currentBranch(repo);
+  if (branch != null) return { branch, ref: branch, source: 'current-branch' };
+
+  const configured = configuredDefaultBranch?.trim();
+  if (configured != null && configured.length > 0) {
+    const branchName = configured.startsWith('origin/')
+      ? configured.slice('origin/'.length)
+      : configured;
+    return {
+      branch: branchName,
+      ref: configured.startsWith('origin/') ? configured : `origin/${configured}`,
+      source: 'configured-default',
+    };
+  }
+
+  return { branch: 'main', ref: 'origin/main', source: 'fallback-main' };
+}
+
 /**
  * Creates a git worktree for the given repo at ~/.factory/workspaces/<runId>/.
  *
@@ -34,13 +84,18 @@ export function existingWorktreePath(runId: string): string | null {
  * @param runId - Canonical workflow isolation key (ULID/UUID).
  * @returns The absolute path to the created worktree.
  */
-export function createWorktree(repo: string, runId: string): string {
+export function createWorktree(repo: string, runId: string, baseRef?: string): string {
   const wtPath = worktreePath(runId);
 
   // Ensure the parent workspaces directory exists
   mkdirSync(WORKSPACES_DIR, { recursive: true });
 
-  execFileSync('git', ['worktree', 'add', '--detach', wtPath], {
+  const args = ['worktree', 'add', '--detach', wtPath];
+  if (baseRef != null && baseRef.length > 0) {
+    args.push(baseRef);
+  }
+
+  execFileSync('git', args, {
     cwd: repo,
     stdio: 'pipe',
     env: GIT_ENV,

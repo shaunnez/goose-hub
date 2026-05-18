@@ -274,6 +274,9 @@ export const projectSettings = sqliteTable('project_settings', {
   perBashCommandMaxSeconds: integer('per_bash_command_max_seconds'),
   useMultiAgentPipeline: integer('use_multi_agent_pipeline'),
   useInvestigationSwarm: integer('use_investigation_swarm'),
+  qaE2eMode: text('qa_e2e_mode'),
+  playwrightReproEnabled: integer('playwright_repro_enabled'),
+  evidencePostEnabled: integer('evidence_post_enabled'),
   /** experimental.recordDecisionTool — gates decision-capture hook installation. Default false (0). */
   recordDecisionTool: integer('record_decision_tool'),
   updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
@@ -290,38 +293,13 @@ export const projectSkillSettings = sqliteTable(
     maxTurns: integer('max_turns'),
     maxBudgetUsd: real('max_budget_usd'),
     timeoutMs: integer('timeout_ms'),
+    modelTier: text('model_tier'),
+    modelProvider: text('model_provider'),
     updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
     updatedBy: text('updated_by'),
   },
   (table) => ({
     pk: primaryKey({ columns: [table.projectId, table.skillName] }),
-  }),
-);
-
-// Per-project per-role model overrides (M19.09). One row per (project_id, role).
-// primary_model / fallback_model / advisor_model win over project.config.ts rolesModels
-// and skill modelPin defaults. complexity_overrides_json stores a JSON object whose keys
-// are "type:<T>", "priority:<P>", or "default" and whose values are ModelTier strings;
-// these win over agentConfig.modelRouter.overrides for complexity-based tier selection.
-export const projectModelSettings = sqliteTable(
-  'project_model_settings',
-  {
-    projectId: text('project_id').notNull(),
-    role: text('role').notNull(),
-    primaryModel: text('primary_model'),
-    fallbackModel: text('fallback_model'),
-    advisorModel: text('advisor_model'),
-    primaryProvider: text('primary_provider'),
-    fallbackProvider: text('fallback_provider'),
-    advisorProvider: text('advisor_provider'),
-    complexityOverridesJson: text('complexity_overrides_json'),
-    maxTurns: integer('max_turns'),
-    timeoutMs: integer('timeout_ms'),
-    updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
-    updatedBy: text('updated_by'),
-  },
-  (table) => ({
-    pk: primaryKey({ columns: [table.projectId, table.role] }),
   }),
 );
 
@@ -418,6 +396,37 @@ export const scoutReports = sqliteTable(
       t.projectId,
       t.workItemId,
       t.investigationRunId,
+    ),
+  }),
+);
+
+export const agentArtifacts = sqliteTable(
+  'agent_artifacts',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    artifactKey: text('artifact_key').notNull(),
+    projectId: text('project_id').notNull(),
+    workItemId: text('work_item_id'),
+    runId: text('run_id').notNull(),
+    kind: text('kind').notNull(),
+    summary: text('summary').notNull(),
+    payloadJson: text('payload_json').notNull(),
+    bytes: integer('bytes').notNull(),
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+    expiresAt: text('expires_at'),
+  },
+  (t) => ({
+    artifactKeyUniq: uniqueIndex('agent_artifacts_artifact_key_uniq').on(t.artifactKey),
+    projectWorkItemIdx: index('agent_artifacts_project_work_item_idx').on(
+      t.projectId,
+      t.workItemId,
+    ),
+    runIdIdx: index('agent_artifacts_run_id_idx').on(t.runId),
+    projectWorkItemRunKindIdx: index('agent_artifacts_project_work_item_run_kind_idx').on(
+      t.projectId,
+      t.workItemId,
+      t.runId,
+      t.kind,
     ),
   }),
 );

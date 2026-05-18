@@ -1,4 +1,4 @@
-import type { ModelTier } from '../types.js';
+import type { ModelProvider, ModelTier } from '../types.js';
 import type { AgentBudgets } from './interface.js';
 import { defaultModelForTierAndProvider } from './models.js';
 
@@ -7,6 +7,8 @@ export interface SkillBudget {
   maxBudgetUsd: number;
   timeoutMs: number;
   modelTier: ModelTier;
+  /** Default provider for this skill. Omit for Claude (the default). */
+  provider?: ModelProvider;
   /**
    * Escalation policy for schema-validation failures. When present,
    * `runWithEscalation` may retry once at the escalated tier with the
@@ -60,10 +62,10 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
   qa: { maxTurns: 100, maxBudgetUsd: 3.0, timeoutMs: 600_000, modelTier: 'sonnet' },
   review: { maxTurns: 25, maxBudgetUsd: 0.5, timeoutMs: 180_000, modelTier: 'sonnet' },
   'resolve-conflict': { maxTurns: 75, maxBudgetUsd: 4.0, timeoutMs: 600_000, modelTier: 'sonnet' },
-  investigate: { maxTurns: 18, maxBudgetUsd: 1.5, timeoutMs: 180_000, modelTier: 'haiku' },
+  investigate: { maxTurns: 50, maxBudgetUsd: 4.0, timeoutMs: 180_000, modelTier: 'sonnet' },
   'playwright-repro': { maxTurns: 60, maxBudgetUsd: 3.0, timeoutMs: 600_000, modelTier: 'sonnet' },
   'advise-on-plan': { maxTurns: 15, maxBudgetUsd: 1.5, timeoutMs: 180_000, modelTier: 'opus' },
-  'spec-author': { maxTurns: 50, maxBudgetUsd: 2.0, timeoutMs: 900_000, modelTier: 'sonnet' },
+  'spec-author': { maxTurns: 50, maxBudgetUsd: 7, timeoutMs: 900_000, modelTier: 'sonnet' },
   'retrospective-light': {
     maxTurns: 25,
     maxBudgetUsd: 0.3,
@@ -127,7 +129,7 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
   // M13 — milestone-rollup writer (sprint review issue at milestone end).
   'sprint-review': {
     maxTurns: 25,
-    maxBudgetUsd: 0.5,
+    maxBudgetUsd: 1,
     timeoutMs: 240_000,
     modelTier: 'sonnet',
   },
@@ -136,37 +138,37 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
   // uncertainty; longer runs tend to duplicate code-path/runtime scouts.
   'scout-schema': {
     maxTurns: 20,
-    maxBudgetUsd: 0.5,
+    maxBudgetUsd: 1,
     timeoutMs: 120_000,
     modelTier: 'haiku',
   },
   'scout-code-path': {
     maxTurns: 20,
-    maxBudgetUsd: 0.5,
+    maxBudgetUsd: 1,
     timeoutMs: 240_000,
     modelTier: 'haiku',
   },
   'scout-pattern': {
     maxTurns: 20,
-    maxBudgetUsd: 0.5,
+    maxBudgetUsd: 1,
     timeoutMs: 240_000,
     modelTier: 'haiku',
   },
   'scout-test-inventory': {
     maxTurns: 20,
-    maxBudgetUsd: 0.5,
+    maxBudgetUsd: 1,
     timeoutMs: 240_000,
     modelTier: 'haiku',
   },
   'scout-dependency': {
     maxTurns: 20,
-    maxBudgetUsd: 0.5,
+    maxBudgetUsd: 1,
     timeoutMs: 240_000,
     modelTier: 'haiku',
   },
   'scout-user-journey': {
     maxTurns: 20,
-    maxBudgetUsd: 0.5,
+    maxBudgetUsd: 1,
     timeoutMs: 240_000,
     modelTier: 'haiku',
   },
@@ -194,6 +196,7 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     maxBudgetUsd: 2.0,
     timeoutMs: 180_000,
     modelTier: 'sonnet',
+    provider: 'codex',
   },
   // M19.12 — Developer response to dev-review findings. One revision turn
   // in the integration worktree; sonnet-tier matches dev-review.
@@ -220,6 +223,8 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     timeoutMs: 480_000,
     modelTier: 'opus',
   },
+  // Test / eval harness skill — not used in production workflows.
+  'echo-test': { maxTurns: 5, maxBudgetUsd: 0.1, timeoutMs: 30_000, modelTier: 'sonnet' },
 };
 
 export interface ResolvedBudget {
@@ -233,6 +238,8 @@ export interface DbSkillOverride {
   maxTurns?: number | null;
   maxBudgetUsd?: number | null;
   timeoutMs?: number | null;
+  modelTier?: ModelTier | string | null;
+  modelProvider?: string | null;
 }
 
 /**
@@ -245,7 +252,8 @@ export interface DbSkillOverride {
  *
  * perWorkflowMaxUsd cap: dbPerWorkflowMaxUsd wins over the config value.
  *
- * Throws if the skill is not registered and no override exists at any layer.
+ * Throws if the skill is not registered. Per-skill DB rows are overrides for
+ * known skills, not a fallback registration mechanism.
  */
 export function resolveBudgets(
   skill: string,
@@ -261,7 +269,7 @@ export function resolveBudgets(
   const base = SKILL_BUDGETS[skill];
   const configOverride = projectBudgets?.skillBudgetOverrides?.[skill];
 
-  if (base == null && configOverride == null && dbOverride == null) {
+  if (base == null && configOverride == null) {
     throw new Error(
       `resolveBudgets: no budget registered for skill '${skill}'. Add it to SKILL_BUDGETS in core/agent-runtime/budgets.ts or add a skillBudgetOverrides entry in the project config.`,
     );

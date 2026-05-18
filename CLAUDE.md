@@ -18,7 +18,24 @@ You execute one narrow GitHub issue at a time. The issue is your build spec.
 
 `pnpm audit-docs` checks for drift between this file (CLAUDE.md), `core/types.ts`, the skills directory, and other governance-adjacent surfaces. Run it before opening a PR that touches `core/types.ts`, the skill catalogue, or governance docs.
 
-`~/.factory/symbol-index.db` is a local SQLite cache of every exported symbol and import in the repo. Use it to answer "where is X defined?" / "who imports X?" via `core/symbol-index/query.ts` (`findSymbol`, `findCallers`, `listExportsOf`, `listImports`) instead of grepping or spawning a scout. Regenerate with `pnpm symbol-index` at the start of any investigation-heavy session or after large refactors. The index is gitignored and regenerable — a missing or stale index is not an error, just run the script. See ADR 0040 for rationale.
+`~/.factory/symbol-index.db` is a local SQLite cache of exported symbols and imports in this repo. Use it
+for exact symbol discovery before grepping or spawning a scout.
+
+Build or refresh it with:
+
+`pnpm symbol-index`
+`pnpm symbol refresh`
+
+Query it with:
+
+`pnpm symbol find <identifier>` — exact symbol lookup, prints `file:line kind name exported=<true|
+false>`.
+`pnpm symbol callers <identifier>` — static importers only, not true runtime callers.
+`pnpm symbol exports <file>` — exported symbols from a file.
+`pnpm symbol imports <file>` — imports declared by a file.
+
+If the DB is missing or stale, run `pnpm symbol-index`. The index is a regenerable cache, not authority;
+read the real files before reporting findings.
 
 ## Domain vocabulary
 

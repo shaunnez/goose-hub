@@ -1,0 +1,8 @@
+# Generated pixel-art assets land here.
+#
+# Run `pnpm gen:office-assets` (requires PIXELLAB_API_KEY) to populate this
+# directory with PNGs. The Phaser scene uses procedural fallbacks if files
+# are missing, so the Office tab works either way.
+#
+# This .gitkeep file is the only thing committed; generated PNGs are
+# intentionally NOT in git (regenerable, and would bloat the repo).

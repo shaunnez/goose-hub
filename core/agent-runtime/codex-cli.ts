@@ -23,13 +23,17 @@ import {
   extractResultJson,
   parseCodexEnvelope,
   pickCodexAgentMessageText,
+  pickCodexAssistantMessage,
   pickCodexToolCall,
 } from './codex-parser.js';
 import { assembleSpawnContext } from './context-assembly.js';
+import { parseDecisionMarkersAfter } from './decision-markers.js';
+import { isDecisionKind } from './decision-types.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { resolveMockOutput } from './mock-outputs.js';
 import { defaultModelForTierAndProvider, estimateCostUsd } from './models.js';
 import { killProcessGroupOrChild } from './process-kill.js';
+import { withFactoryRuntimeInstructions } from './runtime-instructions.js';
 
 export { CodexBinaryNotFoundError, CodexNotAuthenticatedError } from './codex-config.js';
 export {
@@ -41,6 +45,7 @@ export {
 export {
   parseCodexEnvelope,
   extractResultJson,
+  pickCodexAssistantMessage,
   pickCodexAgentMessageText,
   pickCodexToolCall,
 } from './codex-parser.js';
@@ -49,6 +54,38 @@ const STDOUT_CAP = 4 * 1024 * 1024; // 4 MB
 const TIMEOUT_MS = 30_000; // 30 seconds — FACTORY_RULES rule 32
 const WORKSPACES_DIR = join(homedir(), '.factory', 'workspaces');
 const MCP_CONFIG_PATH = join(homedir(), '.factory', 'mcp-config.json');
+const BROWSER_PROCESS_ACCESS_SKILLS = new Set(['playwright-repro', 'evidence-post']);
+const ABSOLUTE_USER_PATH_RE = /\/Users\/[^\s'"`]+/g;
+
+function isPathUnderRoot(path: string, root: string): boolean {
+  const normalizedRoot = join(root, '.');
+  const normalizedPath = join(path, '.');
+  return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}/`);
+}
+
+function workspaceBoundaryViolation(input: {
+  toolCall: { toolName: string; toolInput: Record<string, unknown> };
+  workspaceDir: string;
+  allowedSecondaryWorkspaces?: string;
+}): string | null {
+  if (input.toolCall.toolName !== 'Bash') return null;
+  const command = input.toolCall.toolInput.command;
+  if (typeof command !== 'string') return null;
+
+  const allowedRoots = [
+    input.workspaceDir,
+    ...(input.allowedSecondaryWorkspaces ?? '')
+      .split(',')
+      .map((path) => path.trim())
+      .filter(Boolean),
+  ];
+  for (const absolutePath of command.match(ABSOLUTE_USER_PATH_RE) ?? []) {
+    if (!allowedRoots.some((root) => isPathUnderRoot(absolutePath, root))) {
+      return `Bash command references path outside workspace: ${absolutePath}`;
+    }
+  }
+  return null;
+}
 
 export class CodexCliRuntime implements AgentRuntime {
   async run(spec: AgentSpec): Promise<AgentResult> {
@@ -74,32 +111,39 @@ export class CodexCliRuntime implements AgentRuntime {
     if (recordDecisionTool) deployDecisionCaptureHook();
     const workItemId = (spec.context.workItemId as string | undefined) ?? spec.workItemId ?? null;
     const { personaId } = spec;
+    const model = spec.modelOverride ?? defaultModelForTierAndProvider('sonnet', 'codex');
 
-    eventStore.appendEvent({
-      projectId,
-      workItemId,
-      kind: 'agent.run-started',
-      payload: {
-        skill: spec.skill,
+    if (spec.suppressRunStarted !== true) {
+      eventStore.appendEvent({
+        projectId,
+        workItemId,
+        kind: 'agent.run-started',
+        payload: {
+          skill: spec.skill,
+          runId,
+          personaId,
+          modelId: model,
+          runtime: 'codex-cli',
+          ...spec.extraEventPayload,
+        },
         runId,
         personaId,
-        runtime: 'codex-cli',
-        ...spec.extraEventPayload,
-      },
-      runId,
-      personaId,
-    });
+      });
+    }
 
     const { contextXml } = assembleSpawnContext(spec);
     const allowedTools = computeAllowlist(spec);
-    const model = spec.modelOverride ?? defaultModelForTierAndProvider('sonnet', 'codex');
+    const needsBrowserProcessAccess =
+      spec.toolBundles.includes('validate') && BROWSER_PROCESS_ACCESS_SKILLS.has(spec.skill);
 
     const argv = buildCodexArgv({
       model,
       workspaceDir,
       prompt: contextXml,
-      systemPrompt: spec.appendSystemPrompt,
+      systemPrompt: withFactoryRuntimeInstructions(spec.appendSystemPrompt),
       maxTurns: spec.budgets.maxTurns,
+      commandSandbox: needsBrowserProcessAccess ? 'danger-full-access' : undefined,
+      approvalPolicy: needsBrowserProcessAccess ? 'never' : undefined,
     });
 
     return new Promise((resolve, reject) => {
@@ -154,15 +198,90 @@ export class CodexCliRuntime implements AgentRuntime {
       let truncated = false;
       let settled = false;
       let toolCallCount = 0;
+      const assistantMarkerOffsets = new Map<string, number>();
 
       const handleStdoutLine = (line: string) => {
         if (line.trim().length === 0) return;
         try {
           const parsed = JSON.parse(line) as unknown;
           if (parsed == null || typeof parsed !== 'object') return;
-          const toolCall = pickCodexToolCall(parsed as Record<string, unknown>);
+          const event = parsed as Record<string, unknown>;
+          const assistantMessage = pickCodexAssistantMessage(event);
+          if (assistantMessage != null) {
+            const key = assistantMessage.id ?? '__default_assistant_message__';
+            const previousOffset = assistantMarkerOffsets.get(key) ?? 0;
+            const scanText = assistantMessage.terminal
+              ? assistantMessage.text
+              : completeLinePrefix(assistantMessage.text);
+            const safePreviousOffset =
+              scanText.length < previousOffset || assistantMessage.text.length < previousOffset
+                ? 0
+                : previousOffset;
+            const markers = parseDecisionMarkersAfter(scanText, safePreviousOffset);
+            assistantMarkerOffsets.set(key, Math.max(safePreviousOffset, scanText.length));
+            for (const marker of markers) {
+              const kind = isDecisionKind(marker.kind) ? marker.kind : 'UNKNOWN';
+              eventStore.appendEvent({
+                projectId,
+                workItemId,
+                kind: 'agent.decision-summary-live',
+                payload: {
+                  run_id: runId,
+                  kind,
+                  summary: marker.summary,
+                  timestamp: new Date().toISOString(),
+                  skill: spec.skill,
+                  personaId,
+                },
+                runId,
+                personaId,
+              });
+            }
+          }
+
+          const toolCall = pickCodexToolCall(event);
           if (toolCall == null) return;
           toolCallCount += 1;
+          const boundaryReason = workspaceBoundaryViolation({
+            toolCall,
+            workspaceDir,
+            allowedSecondaryWorkspaces: spec.env?.FACTORY_ALLOWED_SECONDARY_WORKSPACES,
+          });
+          if (boundaryReason != null && !settled) {
+            settled = true;
+            clearTimeout(timeout);
+            eventStore.appendEvent({
+              projectId,
+              workItemId,
+              kind: 'agent.tool-call',
+              payload: {
+                tool_name: toolCall.toolName,
+                run_id: runId,
+                tool_input: toolCall.toolInput,
+                skill: spec.skill,
+                blocked: true,
+                block_reason: boundaryReason,
+              },
+              runId,
+              personaId,
+            });
+            killProcessGroupOrChild(child);
+            eventStore.appendEvent({
+              projectId,
+              workItemId,
+              kind: 'agent.run-failed',
+              payload: {
+                runId,
+                skill: spec.skill,
+                reason: 'workspace-boundary-violation',
+                error: boundaryReason,
+              },
+              runId,
+              personaId,
+            });
+            reject(new Error(boundaryReason));
+            return;
+          }
           eventStore.appendEvent({
             projectId,
             workItemId,
@@ -421,4 +540,9 @@ export class CodexCliRuntime implements AgentRuntime {
       });
     });
   }
+}
+
+function completeLinePrefix(text: string): string {
+  const lastNewline = Math.max(text.lastIndexOf('\n'), text.lastIndexOf('\r'));
+  return lastNewline === -1 ? '' : text.slice(0, lastNewline + 1);
 }

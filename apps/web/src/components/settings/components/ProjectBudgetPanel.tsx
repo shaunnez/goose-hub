@@ -1,13 +1,15 @@
 import {
   deleteSkillBudgetSetting,
+  fetchCodexAuthStatus,
   fetchProjectSettings,
   patchGlobalBudgetSettings,
   patchSkillBudgetSetting,
   resetAllProjectBudgets,
 } from '@/lib/api';
-import type { ProjectSettingsDto } from '@/lib/types';
+import type { CodexAuthStatusDto, ModelProvider, ModelTier, ProjectSettingsDto } from '@/lib/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { RotateCcw, Trash2 } from 'lucide-react';
+import { Copy, RotateCcw, Trash2 } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 
 interface Props {
@@ -54,6 +56,9 @@ const GLOBAL_FIELDS: Array<{
   },
 ];
 
+const TIERS: ModelTier[] = ['haiku', 'sonnet', 'opus'];
+const PROVIDERS: ModelProvider[] = ['claude', 'codex'];
+
 function NumericInput({
   value,
   placeholder,
@@ -86,8 +91,8 @@ function NumericInput({
   }
 
   return (
-    <div className="flex flex-col gap-0.5">
-      <div className="flex items-center gap-1">
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <div className="flex min-w-0 flex-wrap items-center gap-1">
         <input
           type="number"
           step={isFloat ? '0.01' : '1'}
@@ -96,15 +101,179 @@ function NumericInput({
           onChange={(e) => setDraft(e.target.value)}
           onBlur={handleBlur}
           className={[
-            'w-28 rounded border px-2 py-0.5 text-[12px] font-mono bg-bg text-fg',
+            'w-full max-w-28 min-w-0 rounded border px-2 py-0.5 text-[12px] font-mono bg-bg text-fg',
             overridden ? 'border-accent' : 'border-line',
           ].join(' ')}
         />
-        {overridden && <span className="text-[10px] text-accent font-medium">override</span>}
+        {overridden && (
+          <span className="shrink-0 text-[10px] text-accent font-medium">override</span>
+        )}
       </div>
       {subtitle != null && subtitle !== '' && (
-        <span className="text-[10px] text-fg-3 font-mono">{subtitle}</span>
+        <span className="text-[10px] text-fg-3 font-mono break-words">{subtitle}</span>
       )}
+    </div>
+  );
+}
+
+function RuntimeSelect({
+  value,
+  options,
+  defaultValue,
+  overridden,
+  onCommit,
+}: {
+  value: string | null;
+  options: string[];
+  defaultValue?: string;
+  overridden: boolean;
+  onCommit: (val: string | null) => void;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <div className="flex min-w-0 flex-wrap items-center gap-1">
+        <select
+          value={value ?? ''}
+          onChange={(event) => onCommit(event.target.value === '' ? null : event.target.value)}
+          className={[
+            'w-full max-w-24 min-w-0 rounded border px-2 py-0.5 text-[12px] bg-bg text-fg',
+            overridden ? 'border-accent' : 'border-line',
+          ].join(' ')}
+        >
+          <option value="">{defaultValue ?? 'default'}</option>
+          {options.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+        {overridden && (
+          <span className="shrink-0 text-[10px] text-accent font-medium">override</span>
+        )}
+      </div>
+      {defaultValue != null && (
+        <span className="text-[10px] text-fg-3 font-mono break-words">default: {defaultValue}</span>
+      )}
+    </div>
+  );
+}
+
+function RuntimeModelCell({
+  value,
+}: {
+  value: { tier: ModelTier; provider: ModelProvider; modelId: string } | null | undefined;
+}) {
+  if (value == null) return <span className="text-fg-3">—</span>;
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <span className="font-mono text-fg break-all leading-snug">{value.modelId}</span>
+      <span className="text-[10px] text-fg-3 font-mono break-all">
+        {value.provider}:{value.tier}
+      </span>
+    </div>
+  );
+}
+
+function SkillRuntimeField({
+  label,
+  children,
+  wide,
+}: {
+  label: string;
+  children: ReactNode;
+  wide?: boolean;
+}) {
+  return (
+    <div
+      className={[
+        'min-w-0 flex flex-col gap-1',
+        wide ? 'flex-[1_1_11rem]' : 'flex-[1_1_8rem]',
+      ].join(' ')}
+    >
+      <span className="text-[10px] font-medium uppercase tracking-wider text-fg-3">{label}</span>
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+function SkillMetadataLine({ label, values }: { label: string; values: string[] }) {
+  if (values.length === 0) return null;
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+      <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-fg-3 min-w-16">
+        {label}
+      </span>
+      {values.map((value) => (
+        <span
+          key={value}
+          className="min-w-0 break-all rounded border border-line/60 px-1.5 py-0.5 text-[10px] font-mono text-fg-3"
+        >
+          {value}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function CodexAuthSection({ slug }: { slug: string }) {
+  const { data, isLoading } = useQuery<CodexAuthStatusDto>({
+    queryKey: ['codex-auth-status', slug],
+    queryFn: ({ signal }) => fetchCodexAuthStatus(slug, signal),
+    staleTime: 30_000,
+  });
+  const [copied, setCopied] = useState(false);
+
+  const command = data?.loginCommand ?? 'codex login';
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
+
+  return (
+    <div className="mb-4 rounded border border-line/70 bg-bg-2/40 px-3 py-2">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h4 className="text-[11px] font-semibold uppercase tracking-wider text-fg-2">
+            Codex CLI auth
+          </h4>
+          <p className="mt-0.5 text-[11px] text-fg-3">
+            Required for skill rows that select provider <code>codex</code>. Machine-scoped.
+          </p>
+        </div>
+        {isLoading ? (
+          <span className="text-[12px] text-fg-3">Checking…</span>
+        ) : data?.status === 'connected' ? (
+          <div className="flex min-w-0 items-center gap-2 text-[12px]">
+            <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-success" />
+            <span className="shrink-0 text-fg">Connected</span>
+            <code className="min-w-0 break-all text-[11px] text-fg-3">{data.authPath}</code>
+          </div>
+        ) : (
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 text-[12px]">
+              <span className="inline-block h-2 w-2 rounded-full bg-danger" />
+              <span>Not connected</span>
+            </div>
+            <code className="rounded border border-line bg-bg px-2 py-1 text-[12px]">
+              {command}
+            </code>
+            <button
+              type="button"
+              onClick={copy}
+              className="flex items-center gap-1 rounded border border-line px-2 py-1 text-[11px] text-fg-3 hover:text-fg"
+              title="Copy to clipboard"
+            >
+              <Copy className="h-3 w-3" />
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -123,8 +292,13 @@ export function ProjectBudgetPanel({ slug }: Props) {
   });
 
   const patchSkill = useMutation({
-    mutationFn: ({ skill, patch }: { skill: string; patch: Record<string, number | null> }) =>
-      patchSkillBudgetSetting(slug, skill, patch),
+    mutationFn: ({
+      skill,
+      patch,
+    }: {
+      skill: string;
+      patch: Parameters<typeof patchSkillBudgetSetting>[2];
+    }) => patchSkillBudgetSetting(slug, skill, patch),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['project-settings', slug] }),
   });
 
@@ -150,7 +324,7 @@ export function ProjectBudgetPanel({ slug }: Props) {
   function confirmReset() {
     if (!hasAnyOverride) return;
     const ok = window.confirm(
-      'Reset all budget overrides for this project? Global caps and every per-skill override will be cleared. The project will fall back to config and SKILL_BUDGETS defaults.',
+      'Reset all skill runtime overrides for this project? Global caps and every per-skill override will be cleared. The project will fall back to config and skill defaults.',
     );
     if (ok) resetAll.mutate();
   }
@@ -161,7 +335,7 @@ export function ProjectBudgetPanel({ slug }: Props) {
       <section>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-[12px] font-semibold uppercase tracking-wider text-fg-2">
-            Global budget caps
+            Global runtime caps
           </h3>
           {hasAnyOverride && (
             <button
@@ -169,7 +343,7 @@ export function ProjectBudgetPanel({ slug }: Props) {
               onClick={confirmReset}
               disabled={resetAll.isPending}
               className="flex items-center gap-1 text-[11px] text-fg-3 hover:text-danger border border-line/60 rounded-full px-2.5 py-0.5 transition-colors disabled:opacity-40"
-              title="Clear ALL budget overrides (global + per-skill)"
+              title="Clear all skill runtime overrides"
             >
               <RotateCcw size={11} />
               Reset all to defaults
@@ -210,63 +384,47 @@ export function ProjectBudgetPanel({ slug }: Props) {
       {/* Per-skill overrides */}
       <section>
         <h3 className="text-[12px] font-semibold uppercase tracking-wider text-fg-2 mb-3">
-          Per-skill budget overrides
+          Skill runtime settings
         </h3>
         <p className="text-[11px] text-fg-3 mb-4">
-          Leave fields blank to inherit from config or SKILL_BUDGETS defaults. Changes take effect
-          on the next agent dispatch.
+          Leave fields blank to inherit from config or skill defaults. Changes take effect on the
+          next agent dispatch. Primary, fallback, and advisor are derived read-only values.
         </p>
-        <table className="w-full text-[12px]">
-          <thead>
-            <tr className="text-fg-3 text-left border-b border-line">
-              <th className="pb-2 font-medium">Skill</th>
-              <th className="pb-2 font-medium px-2">Max turns</th>
-              <th className="pb-2 font-medium px-2">Max budget (USD)</th>
-              <th className="pb-2 font-medium px-2">Timeout (ms)</th>
-              <th className="pb-2 w-6" />
-            </tr>
-          </thead>
-          <tbody>
-            {data.registeredSkills.map((skill) => {
-              const row = data.dbSkillOverrides[skill] ?? null;
-              const defaults = skillDefaults[skill];
-              const hasAny =
-                row != null &&
-                (row.maxTurns != null || row.maxBudgetUsd != null || row.timeoutMs != null);
-              return (
-                <tr key={skill} className="border-b border-line/50 hover:bg-bg-hover align-top">
-                  <td className="py-1.5 font-mono text-fg">{skill}</td>
-                  <td className="py-1.5 px-2">
-                    <NumericInput
-                      value={row?.maxTurns ?? null}
-                      placeholder={defaults != null ? String(defaults.maxTurns) : 'default'}
-                      overridden={row?.maxTurns != null}
-                      subtitle={defaults != null ? `default: ${defaults.maxTurns}` : null}
-                      onCommit={(val) => patchSkill.mutate({ skill, patch: { maxTurns: val } })}
-                    />
-                  </td>
-                  <td className="py-1.5 px-2">
-                    <NumericInput
-                      value={row?.maxBudgetUsd ?? null}
-                      placeholder={defaults != null ? defaults.maxBudgetUsd.toFixed(2) : 'default'}
-                      isFloat
-                      overridden={row?.maxBudgetUsd != null}
-                      subtitle={
-                        defaults != null ? `default: $${defaults.maxBudgetUsd.toFixed(2)}` : null
-                      }
-                      onCommit={(val) => patchSkill.mutate({ skill, patch: { maxBudgetUsd: val } })}
-                    />
-                  </td>
-                  <td className="py-1.5 px-2">
-                    <NumericInput
-                      value={row?.timeoutMs ?? null}
-                      placeholder={defaults != null ? String(defaults.timeoutMs) : 'default'}
-                      overridden={row?.timeoutMs != null}
-                      subtitle={defaults != null ? `default: ${defaults.timeoutMs} ms` : null}
-                      onCommit={(val) => patchSkill.mutate({ skill, patch: { timeoutMs: val } })}
-                    />
-                  </td>
-                  <td className="py-1.5 pl-1">
+        <CodexAuthSection slug={slug} />
+        <div className="text-[12px] border-y border-line">
+          {data.registeredSkills.map((skill) => {
+            const row = data.dbSkillOverrides[skill] ?? null;
+            const defaults = skillDefaults[skill];
+            const metadata = data.skillMetadata?.[skill];
+            const resolved = data.resolvedSkillRuntimes?.[skill];
+            const hasAny =
+              row != null &&
+              (row.maxTurns != null ||
+                row.maxBudgetUsd != null ||
+                row.timeoutMs != null ||
+                row.modelTier != null ||
+                row.provider != null);
+            return (
+              <div
+                key={skill}
+                className="min-w-0 border-b border-line/50 px-3 py-3 last:border-b-0 hover:bg-bg-hover/60"
+              >
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <span className="block font-mono text-[12px] text-fg break-all leading-snug">
+                      {skill}
+                    </span>
+                    {metadata?.description != null && metadata.description !== '' && (
+                      <p className="mt-1 max-w-4xl text-[11px] leading-snug text-fg-2">
+                        {metadata.description}
+                      </p>
+                    )}
+                    <div className="mt-2 flex min-w-0 flex-col gap-1">
+                      <SkillMetadataLine label="Depends" values={metadata?.dependencies ?? []} />
+                      <SkillMetadataLine label="Called on" values={metadata?.callers ?? []} />
+                    </div>
+                  </div>
+                  <div className="flex min-w-6 shrink-0 justify-end">
                     {hasAny && (
                       <button
                         type="button"
@@ -277,12 +435,78 @@ export function ProjectBudgetPanel({ slug }: Props) {
                         <Trash2 size={11} />
                       </button>
                     )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                  </div>
+                </div>
+                <div className="mt-3 flex min-w-0 flex-wrap items-start gap-x-5 gap-y-3">
+                  <SkillRuntimeField label="Max turns">
+                    <NumericInput
+                      value={row?.maxTurns ?? null}
+                      placeholder={defaults != null ? String(defaults.maxTurns) : 'default'}
+                      overridden={row?.maxTurns != null}
+                      subtitle={defaults != null ? `default: ${defaults.maxTurns}` : null}
+                      onCommit={(val) => patchSkill.mutate({ skill, patch: { maxTurns: val } })}
+                    />
+                  </SkillRuntimeField>
+                  <SkillRuntimeField label="Max budget">
+                    <NumericInput
+                      value={row?.maxBudgetUsd ?? null}
+                      placeholder={defaults != null ? defaults.maxBudgetUsd.toFixed(2) : 'default'}
+                      isFloat
+                      overridden={row?.maxBudgetUsd != null}
+                      subtitle={
+                        defaults != null ? `default: $${defaults.maxBudgetUsd.toFixed(2)}` : null
+                      }
+                      onCommit={(val) => patchSkill.mutate({ skill, patch: { maxBudgetUsd: val } })}
+                    />
+                  </SkillRuntimeField>
+                  <SkillRuntimeField label="Timeout">
+                    <NumericInput
+                      value={row?.timeoutMs ?? null}
+                      placeholder={defaults != null ? String(defaults.timeoutMs) : 'default'}
+                      overridden={row?.timeoutMs != null}
+                      subtitle={defaults != null ? `default: ${defaults.timeoutMs} ms` : null}
+                      onCommit={(val) => patchSkill.mutate({ skill, patch: { timeoutMs: val } })}
+                    />
+                  </SkillRuntimeField>
+                  <SkillRuntimeField label="Tier">
+                    <RuntimeSelect
+                      value={row?.modelTier ?? null}
+                      options={TIERS}
+                      defaultValue={defaults?.modelTier}
+                      overridden={row?.modelTier != null}
+                      onCommit={(val) =>
+                        patchSkill.mutate({ skill, patch: { modelTier: val as ModelTier | null } })
+                      }
+                    />
+                  </SkillRuntimeField>
+                  <SkillRuntimeField label="Provider">
+                    <RuntimeSelect
+                      value={row?.provider ?? null}
+                      options={PROVIDERS}
+                      defaultValue={defaults?.modelProvider}
+                      overridden={row?.provider != null}
+                      onCommit={(val) =>
+                        patchSkill.mutate({
+                          skill,
+                          patch: { provider: val as ModelProvider | null },
+                        })
+                      }
+                    />
+                  </SkillRuntimeField>
+                  <SkillRuntimeField label="Primary" wide>
+                    <RuntimeModelCell value={resolved?.resolvedPrimary} />
+                  </SkillRuntimeField>
+                  <SkillRuntimeField label="Fallback" wide>
+                    <RuntimeModelCell value={resolved?.resolvedFallback} />
+                  </SkillRuntimeField>
+                  <SkillRuntimeField label="Advisor" wide>
+                    <RuntimeModelCell value={resolved?.resolvedAdvisor} />
+                  </SkillRuntimeField>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </section>
     </div>
   );

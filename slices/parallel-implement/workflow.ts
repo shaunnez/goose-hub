@@ -10,6 +10,10 @@ import {
   shouldRunDevReview,
 } from '@goose-hub/core/agent-runtime/dev-review-advisor.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
+import {
+  latestInvestigationContext,
+  pathsTouchInvestigationSurface,
+} from '@goose-hub/core/agent-runtime/investigation-context.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
@@ -27,7 +31,11 @@ import {
   orchestratorCommitWp,
   revertWpChanges,
 } from '@goose-hub/core/workspaces/orchestrator-git.js';
-import { type cleanupWorktree, createWorktree } from '@goose-hub/core/workspaces/worktree.js';
+import {
+  type cleanupWorktree,
+  createWorktree,
+  resolveWorkflowBase,
+} from '@goose-hub/core/workspaces/worktree.js';
 import { ImplementWpSchema } from '@goose-hub/skills/implement-wp/schema.js';
 import type { EngineeringSpec } from '@goose-hub/skills/spec-author/schema.js';
 import {
@@ -56,6 +64,7 @@ export interface ParallelImplementDeps {
   openPRImpl?: typeof openPR;
   createWpWorktreeImpl?: typeof createWpScratchWorktree;
   createIssueWorktreeImpl?: typeof createWorktree;
+  resolveWorkflowBaseImpl?: typeof resolveWorkflowBase;
   cleanupWpWorktreesImpl?: typeof cleanupAllWpWorktrees;
   cleanupIssueWorktreeImpl?: typeof cleanupWorktree;
   orchestratorCommitWpImpl?: typeof orchestratorCommitWp;
@@ -100,6 +109,7 @@ export async function runParallelImplementWorkflow(
   const openPRFn = deps.openPRImpl ?? openPR;
   const createWpFn = deps.createWpWorktreeImpl ?? createWpScratchWorktree;
   const createIssueFn = deps.createIssueWorktreeImpl ?? createWorktree;
+  const resolveWorkflowBaseFn = deps.resolveWorkflowBaseImpl ?? resolveWorkflowBase;
   const cleanupWpsFn = deps.cleanupWpWorktreesImpl ?? cleanupAllWpWorktrees;
   // cleanupIssueWorktreeImpl is available for test injection but unused in production:
   // the integration worktree persists until PR merge so QA can reuse the same environment.
@@ -109,6 +119,7 @@ export async function runParallelImplementWorkflow(
   const getStatusFn = deps.getLastStatusImpl ?? getLastWpStatus;
 
   const projectConfig = await getProjectBySlug(projectId);
+  const workflowBase = resolveWorkflowBaseFn(targetRepo, projectConfig?.targetRepo?.defaultBranch);
   const { runtime, resolvedBudget: implementWpBudget } = resolveProjectAgentExecution({
     skill: 'implement-wp',
     role: 'developer',
@@ -133,6 +144,7 @@ export async function runParallelImplementWorkflow(
   const { personaId } = (deps.selectPersonaImpl ?? selectPersona)(projectId, 'developer');
   const implementWpPrompt = readPromptWithContext('implement-wp', projectId);
   const implementWpJsonSchema = toJsonSchema(ImplementWpSchema);
+  const investigation = latestInvestigationContext({ projectId, workItemId: workItem.id });
 
   const stack = projectConfig?.stack
     ? {
@@ -147,13 +159,42 @@ export async function runParallelImplementWorkflow(
   let issueWorktreePath: string | undefined;
 
   try {
+    const plannedWpFiles = spec.workPackages.flatMap((wp) => wp.filesOwned);
+    if (!pathsTouchInvestigationSurface(plannedWpFiles, investigation)) {
+      append({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'agent.wrong-surface-guard',
+        payload: {
+          runId,
+          skill: 'parallel-implement',
+          reason: 'engineering-spec-missed-investigation-surface',
+          expectedKeyFiles: investigation?.keyFiles.map((f) => f.path) ?? [],
+          touchedPaths: plannedWpFiles,
+          investigationRunId: investigation?.investigationRunId ?? null,
+        },
+        runId,
+      });
+      await stateSource.comment(
+        workItem.externalId,
+        buildAgentComment('Dev', 'Failed', 'Parallel implement blocked by wrong-surface guard', [
+          `Expected one of: ${investigation?.keyFiles.map((f) => f.path).join(', ')}`,
+        ]),
+      );
+      return {
+        status: 'failed',
+        devRunId: runId,
+        errorReason: 'engineering spec did not target investigated key files',
+      };
+    }
+
     // Create the integration worktree (all WP commits land here).
-    issueWorktreePath = createIssueFn(targetRepo, runId);
+    issueWorktreePath = createIssueFn(targetRepo, runId, workflowBase.ref);
 
     // Create per-WP scratch worktrees. Sandbox is written in runOneWpBuilder
     // (per-spawn, so retries always get a fresh sandbox with correct opts).
     for (const wp of spec.workPackages) {
-      const wtPath = createWpFn(targetRepo, runId, wp.id);
+      const wtPath = createWpFn(targetRepo, runId, wp.id, workflowBase.ref);
       scratchWorktrees.set(wp.id, wtPath);
     }
 
@@ -205,6 +246,7 @@ export async function runParallelImplementWorkflow(
             recordIterationFn: recordFn,
             implementWpPrompt,
             implementWpJsonSchema,
+            investigation,
           }),
         );
 
@@ -330,7 +372,7 @@ export async function runParallelImplementWorkflow(
                 priority: workItem.priority,
               },
               worktreePath: issueWorktreePath,
-              baseBranch: 'main',
+              baseBranch: workflowBase.branch,
               stack,
               runtime: deps.devReviewRuntime,
               appendEvent: append,
@@ -341,7 +383,7 @@ export async function runParallelImplementWorkflow(
             if (devReviewOutput.verdict === 'inconclusive' && turns === maxTurns - 1) break;
 
             // Re-fetch diff after any previous response commits so Codex sees current state.
-            const currentDiff = getDiffFn(issueWorktreePath, 'main');
+            const currentDiff = getDiffFn(issueWorktreePath, workflowBase.branch);
             await devReviewResponseFn({
               runId: turnRunId,
               projectId,
@@ -398,7 +440,7 @@ export async function runParallelImplementWorkflow(
       title,
       body,
       branchName,
-      baseBranch: 'main',
+      baseBranch: workflowBase.branch,
       token,
     });
 
@@ -410,6 +452,7 @@ export async function runParallelImplementWorkflow(
         prNumber: prResult.prNumber,
         prUrl: prResult.prUrl,
         branch: prResult.branch,
+        baseBranch: prResult.base,
         worktreePath: issueWorktreePath ?? '',
         devRunId: runId,
       },

@@ -18,6 +18,20 @@ export const ScreenshotSchema = z.object({
     .describe('SHA-pinned raw.githubusercontent.com URL once pushed to evidence branch'),
 });
 
+export const EvidencePostPlanSchema = z.object({
+  specPath: z
+    .string()
+    .describe('Workspace-relative path to the Playwright spec that validates the shipped work'),
+  slug: z.string().describe('Filesystem-safe slug used for /tmp/evidence-staging-<slug>'),
+  validationIntent: z
+    .string()
+    .describe('Short statement of what the AFTER-state evidence validates'),
+  expectedAssertions: z
+    .array(z.string())
+    .describe('Assertions the workflow should expect the spec to cover'),
+  notes: z.string().optional(),
+});
+
 export const EvidencePostSchema = z.object({
   screenshots: z.array(ScreenshotSchema),
   gifPath: z
@@ -39,4 +53,5 @@ export const EvidencePostSchema = z.object({
   decisionSummaries: z.array(DecisionSummarySchema).min(1),
 });
 
+export type EvidencePostPlanOutput = z.infer<typeof EvidencePostPlanSchema>;
 export type EvidencePostOutput = z.infer<typeof EvidencePostSchema>;

@@ -21,6 +21,9 @@ vi.mock('node:child_process', async (importOriginal) => {
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   eventStore: { appendEvent: vi.fn(), replay: vi.fn().mockReturnValue([]) },
 }));
+vi.mock('@goose-hub/core/agent-artifacts/repository.js', () => ({
+  getArtifact: vi.fn(),
+}));
 vi.mock('@goose-hub/core/workspaces/worktree.js', () => ({
   cleanupWorktree: vi.fn(),
 }));
@@ -57,6 +60,7 @@ vi.mock('../../shared/resolve-milestone.js', () => ({
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
+import { getArtifact } from '@goose-hub/core/agent-artifacts/repository.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { isLegalTransition } from '@goose-hub/core/state-machine/transitions.js';
 import { cleanupWorktree } from '@goose-hub/core/workspaces/worktree.js';
@@ -67,6 +71,7 @@ import {
   commentOnIssue,
   fakeRun,
   getIssue,
+  getIssueArtifact,
   listIssues,
   overrideIssueRepo,
   setIssueLabel,
@@ -88,6 +93,7 @@ const mockSource = {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getSourceForSlug).mockResolvedValue(mockSource as never);
+  vi.mocked(getArtifact).mockReturnValue(null);
 });
 
 describe('transitionIssue — validation', () => {
@@ -410,6 +416,52 @@ describe('getIssueWorktreeDiff (#185)', () => {
     );
   });
 
+  it('filters generated package-store files from live worktree diffs', async () => {
+    const { getIssueWorktreeDiff } = await import('./service.js');
+    const events = await import('@goose-hub/core/event-stream/store.js');
+    vi.mocked(events.eventStore.replay).mockReturnValueOnce([
+      {
+        id: 1,
+        projectId: 'proj',
+        workItemId: 'github:owner/repo#1',
+        kind: 'agent.run-started',
+        runId: 'run-live-store',
+        payload: {},
+        createdAt: '2026-05-02T22:00:00Z',
+      },
+    ] as never);
+    vi.mocked(existsSync).mockImplementation((p) => String(p).includes('run-live-store'));
+    vi.mocked(execFileSync).mockReturnValueOnce(
+      [
+        'diff --git a/.pnpm-store/v10/files/aa/hash b/.pnpm-store/v10/files/aa/hash',
+        'new file mode 100644',
+        '--- /dev/null',
+        '+++ b/.pnpm-store/v10/files/aa/hash',
+        '@@ -0,0 +1 @@',
+        '+generated dependency cache',
+        'diff --git a/src/foo.ts b/src/foo.ts',
+        '--- a/src/foo.ts',
+        '+++ b/src/foo.ts',
+        '@@ -1 +1 @@',
+        '-old',
+        '+new',
+      ].join('\n') as never,
+    );
+
+    const result = await getIssueWorktreeDiff('proj', '1');
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.diff).not.toContain('.pnpm-store');
+      expect(result.data.diff).toContain('diff --git a/src/foo.ts b/src/foo.ts');
+    }
+    expect(vi.mocked(execFileSync)).toHaveBeenCalledWith(
+      'git',
+      expect.arrayContaining([':(exclude).pnpm-store/', ':(exclude)node_modules/']),
+      expect.any(Object),
+    );
+  });
+
   it('fetches diff from GitHub PR when worktree is gone and pr.opened event has prNumber', async () => {
     const { getIssueWorktreeDiff } = await import('./service.js');
     const events = await import('@goose-hub/core/event-stream/store.js');
@@ -443,6 +495,45 @@ describe('getIssueWorktreeDiff (#185)', () => {
         headers: expect.objectContaining({ Accept: 'application/vnd.github.v3.diff' }),
       }),
     );
+  });
+
+  it('filters generated package-store files from GitHub PR diffs', async () => {
+    const { getIssueWorktreeDiff } = await import('./service.js');
+    const events = await import('@goose-hub/core/event-stream/store.js');
+    process.env.GITHUB_TOKEN = 'ghp_test';
+    vi.mocked(events.eventStore.replay).mockReturnValueOnce([
+      {
+        id: 1,
+        projectId: 'proj',
+        workItemId: 'github:owner/repo#1',
+        kind: 'pr.opened',
+        runId: 'run-pr-gone-store',
+        payload: { prNumber: 42, prUrl: 'https://github.com/owner/repo/pull/42' },
+        createdAt: '2026-05-02T22:00:00Z',
+      },
+    ] as never);
+    const mockFetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      text: () =>
+        Promise.resolve(
+          [
+            'diff --git a/.pnpm-store/v10/files/aa/hash b/.pnpm-store/v10/files/aa/hash',
+            '+generated dependency cache',
+            'diff --git a/apps/server/src/foo.ts b/apps/server/src/foo.ts',
+            '+real change',
+          ].join('\n'),
+        ),
+    });
+
+    const result = await getIssueWorktreeDiff('proj', '1', {
+      fetchImpl: mockFetch as typeof fetch,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.diff).not.toContain('.pnpm-store');
+      expect(result.data.diff).toContain('apps/server/src/foo.ts');
+    }
   });
 });
 
@@ -615,6 +706,92 @@ describe('getIssueEvents', () => {
       expect(events[0].id).toBe(2);
       expect(events[1].id).toBe(1);
     }
+  });
+});
+
+describe('getIssueArtifact', () => {
+  const artifact = {
+    id: 1,
+    artifactKey: 'pr-diff:abc',
+    projectId: 'proj',
+    workItemId: 'github:owner/repo#1',
+    runId: 'run-1',
+    kind: 'pr-diff',
+    summary: '1 changed file',
+    payload: 'diff',
+    bytes: 4,
+    createdAt: '2026-05-14T00:00:00Z',
+    expiresAt: null,
+  };
+
+  it('returns artifact payload when project and issue association match', async () => {
+    vi.mocked(getArtifact).mockReturnValueOnce(artifact);
+
+    const result = await getIssueArtifact('proj', '1', 'pr-diff:abc');
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.artifact).toEqual({
+        artifactKey: 'pr-diff:abc',
+        projectId: 'proj',
+        workItemId: 'github:owner/repo#1',
+        runId: 'run-1',
+        kind: 'pr-diff',
+        summary: '1 changed file',
+        bytes: 4,
+        createdAt: '2026-05-14T00:00:00Z',
+        expiresAt: null,
+        payload: 'diff',
+      });
+    }
+  });
+
+  it('rejects artifacts from another project', async () => {
+    vi.mocked(getArtifact).mockReturnValueOnce({ ...artifact, projectId: 'other' });
+
+    const result = await getIssueArtifact('proj', '1', 'pr-diff:abc');
+
+    expect(result).toMatchObject({ ok: false, status: 404, error: 'artifact not found' });
+  });
+
+  it('rejects artifacts from another issue', async () => {
+    vi.mocked(getArtifact).mockReturnValueOnce({
+      ...artifact,
+      workItemId: 'github:owner/repo#2',
+    });
+
+    const result = await getIssueArtifact('proj', '1', 'pr-diff:abc');
+
+    expect(result).toMatchObject({ ok: false, status: 404, error: 'artifact not found' });
+  });
+
+  it('returns 404 for unknown artifact keys', async () => {
+    vi.mocked(getArtifact).mockReturnValueOnce(null);
+
+    const result = await getIssueArtifact('proj', '1', 'missing');
+
+    expect(result).toMatchObject({ ok: false, status: 404, error: 'artifact not found' });
+  });
+
+  it('does not let artifact key tampering bypass association checks', async () => {
+    vi.mocked(getArtifact).mockReturnValueOnce({
+      ...artifact,
+      artifactKey: 'pr-diff:tampered',
+      projectId: 'other',
+      workItemId: 'github:owner/repo#999',
+    });
+
+    const result = await getIssueArtifact('proj', '1', 'pr-diff:tampered');
+
+    expect(result).toMatchObject({ ok: false, status: 404, error: 'artifact not found' });
+  });
+
+  it('returns 404 when project is unknown', async () => {
+    vi.mocked(getSourceForSlug).mockResolvedValueOnce(null);
+
+    const result = await getIssueArtifact('unknown', '1', 'pr-diff:abc');
+
+    expect(result).toMatchObject({ ok: false, status: 404, error: 'project not found' });
   });
 });
 

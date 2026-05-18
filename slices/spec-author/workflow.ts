@@ -3,9 +3,15 @@ import { invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
 import { persistEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
+import { buildScoutReportDigestBundle } from '@goose-hub/core/scout-reports/digest.js';
 import { listScoutReportsForInvestigation } from '@goose-hub/core/scout-reports/repository.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
-import { cleanupWorktree, createWorktree } from '@goose-hub/core/workspaces/worktree.js';
+import {
+  cleanupWorktree,
+  createWorktree,
+  resolveWorkflowBase,
+} from '@goose-hub/core/workspaces/worktree.js';
 import {
   type EngineeringSpec,
   EngineeringSpecSchema,
@@ -17,6 +23,7 @@ import {
 
 export interface SpecAuthorWorkflowDeps {
   createWorktreeImpl?: typeof createWorktree;
+  resolveWorkflowBaseImpl?: typeof resolveWorkflowBase;
 }
 
 type OutputValidationIssue = {
@@ -125,6 +132,17 @@ function normalizeSpecAuthorOutput(output: unknown): EngineeringSpec {
   };
 }
 
+function stringifyScoutDigestForContext(
+  reports: ReturnType<typeof buildScoutReportDigestBundle>['reports'],
+): string {
+  return JSON.stringify({
+    format: 'scout-report-digest-v1',
+    guidance:
+      'Use topFindings and highConfidenceFacts as orientation. If a report has artifactKeys, the full report is stored outside prompt context; verify exact citations with targeted file reads before relying on them.',
+    reports,
+  });
+}
+
 /**
  * Runs the spec-author workflow for a work item in `factory:dev-ready` state.
  *
@@ -150,9 +168,12 @@ export async function runSpecAuthorWorkflow(
   deps: SpecAuthorWorkflowDeps = {},
 ): Promise<void> {
   const createWtFn = deps.createWorktreeImpl ?? createWorktree;
+  const resolveWorkflowBaseFn = deps.resolveWorkflowBaseImpl ?? resolveWorkflowBase;
 
   const pipelineRunId = crypto.randomUUID();
-  const worktreePath = createWtFn(targetRepo, pipelineRunId);
+  const projectConfig = await getProjectBySlug(projectId);
+  const workflowBase = resolveWorkflowBaseFn(targetRepo, projectConfig?.targetRepo?.defaultBranch);
+  const worktreePath = createWtFn(targetRepo, pipelineRunId, workflowBase.ref);
 
   try {
     // Load scout reports from the most recent investigation for this work item.
@@ -178,8 +199,38 @@ export async function runSpecAuthorWorkflow(
         );
         const wave1 = allReports.filter((r) => !r.scoutSkill.startsWith('wave2-'));
         const wave2 = allReports.filter((r) => r.scoutSkill.startsWith('wave2-'));
-        if (wave1.length > 0) scoutReports = JSON.stringify(wave1);
-        if (wave2.length > 0) wave2Reports = JSON.stringify(wave2);
+        const emitScoutDisclosure = (
+          phase: 'wave1' | 'wave2',
+          bundle: ReturnType<typeof buildScoutReportDigestBundle>,
+        ) => {
+          if (bundle.bytesSaved <= 0 && bundle.artifactKeys.length === 0) return;
+          eventStore.appendEvent({
+            projectId,
+            workItemId: workItem.id,
+            kind: 'agent.disclosure',
+            payload: {
+              kind: 'scout_reports_summarized',
+              skill: 'spec-author',
+              phase,
+              rawBytes: bundle.rawBytes,
+              contextBytes: bundle.digestBytes,
+              bytesSaved: bundle.bytesSaved,
+              artifactKeys: bundle.artifactKeys,
+            },
+            runId: pipelineRunId,
+          });
+        };
+
+        if (wave1.length > 0) {
+          const bundle = buildScoutReportDigestBundle(wave1);
+          scoutReports = stringifyScoutDigestForContext(bundle.reports);
+          emitScoutDisclosure('wave1', bundle);
+        }
+        if (wave2.length > 0) {
+          const bundle = buildScoutReportDigestBundle(wave2);
+          wave2Reports = stringifyScoutDigestForContext(bundle.reports);
+          emitScoutDisclosure('wave2', bundle);
+        }
       }
       if (payload.investigate != null) {
         investigationSynthesis = JSON.stringify(payload.investigate);

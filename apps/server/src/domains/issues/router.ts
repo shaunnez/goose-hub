@@ -9,6 +9,7 @@ import {
   declinePRD,
   fakeRun,
   getIssue,
+  getIssueArtifact,
   getIssueComments,
   getIssueEvents,
   getIssueSpec,
@@ -63,6 +64,15 @@ router.get('/:slug/issues/:id/triage', async (c) => {
 
 router.get('/:slug/issues/:id/spec', async (c) => {
   const result = await getIssueSpec(c.req.param('slug'), c.req.param('id'));
+  return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);
+});
+
+router.get('/:slug/issues/:id/artifacts/:artifactKey', async (c) => {
+  const result = await getIssueArtifact(
+    c.req.param('slug'),
+    c.req.param('id'),
+    c.req.param('artifactKey'),
+  );
   return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);
 });
 

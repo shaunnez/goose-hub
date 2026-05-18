@@ -1,10 +1,16 @@
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockGetCostSummary, mockGetCostsForWorkItem, mockGetProject } = vi.hoisted(() => ({
-  mockGetCostSummary: vi.fn(),
-  mockGetCostsForWorkItem: vi.fn(),
-  mockGetProject: vi.fn(),
+const { mockGetCostSummary, mockGetCostsForWorkItem, mockGetProject, mockResolveGlobalSettings } =
+  vi.hoisted(() => ({
+    mockGetCostSummary: vi.fn(),
+    mockGetCostsForWorkItem: vi.fn(),
+    mockGetProject: vi.fn(),
+    mockResolveGlobalSettings: vi.fn(),
+  }));
+
+vi.mock('@goose-hub/core/agent-runtime/resolve-for-project.js', () => ({
+  resolveGlobalSettingsForProject: mockResolveGlobalSettings,
 }));
 
 vi.mock('./service.js', () => ({
@@ -24,6 +30,7 @@ function makeApp() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockResolveGlobalSettings.mockReturnValue({ dailyTokens: 50_000_000 });
 });
 
 describe('GET /:slug/costs/summary', () => {
@@ -39,7 +46,10 @@ describe('GET /:slug/costs/summary', () => {
   });
 
   it('returns 200 with summary data on success', async () => {
-    mockGetProject.mockResolvedValue({ source: { kind: 'github', repo: 'org/repo' } });
+    mockGetProject.mockResolvedValue({
+      source: { kind: 'github', repo: 'org/repo' },
+      budgets: { dailyTokens: 50_000_000 },
+    });
     const summary = {
       projectId: 'goose-hub-self',
       windows: {
@@ -55,7 +65,9 @@ describe('GET /:slug/costs/summary', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toEqual(summary);
-    expect(mockGetCostSummary).toHaveBeenCalledWith('goose-hub-self');
+    expect(mockGetCostSummary).toHaveBeenCalledWith('goose-hub-self', {
+      dailyTokensLimit: 50_000_000,
+    });
   });
 
   it('forwards service error status and body', async () => {

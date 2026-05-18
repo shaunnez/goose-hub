@@ -1,6 +1,8 @@
+import { ProjectBudgetBanner } from '@/components/ui/ProjectBudgetBanner';
 import { fetchIssues, fetchMilestoneIssues } from '@/lib/api';
 import { LANES, laneForState, sortLaneItems } from '@/lib/lanes.config';
 import { logger } from '@/lib/logger';
+import { useProjectBudgetStatus } from '@/lib/project-budget';
 import type { WorkItemDto } from '@/lib/types';
 import { useActiveMilestone } from '@/state/active-milestone';
 import { useLaneVisibility } from '@/state/lane-visibility';
@@ -17,6 +19,7 @@ export function Board({ projectSlug }: BoardProps) {
   const queryClient = useQueryClient();
   const { hidden, toggle, reset } = useLaneVisibility();
   const { activeNumber: resolvedMilestone, milestones, setActiveNumber } = useActiveMilestone();
+  const { data: budgetStatus } = useProjectBudgetStatus(projectSlug);
 
   const {
     data: items = [],
@@ -165,6 +168,7 @@ export function Board({ projectSlug }: BoardProps) {
           </details>
         )}
       </div>
+      <ProjectBudgetBanner status={budgetStatus} />
       <div className="flex-1 min-h-0 px-3 py-3 flex gap-3 overflow-x-auto">
         {visibleLanes.map((lane) => (
           <BoardColumn

@@ -87,13 +87,23 @@ describe('resolveBudgets', () => {
     );
   });
 
+  it('does not treat a DB row as a fallback registration for an unknown skill', () => {
+    expect(() =>
+      resolveBudgets('unknown-skill-xyz', undefined, {
+        maxTurns: 20,
+        maxBudgetUsd: 1,
+        timeoutMs: 120_000,
+        modelTier: 'sonnet',
+      }),
+    ).toThrow("no budget registered for skill 'unknown-skill-xyz'");
+  });
+
   it('haiku skills resolve to haiku model IDs', () => {
     for (const skill of [
       'triage',
       'repo-match',
-      'implement',
       'evidence-post',
-      'investigate',
+      'implement',
       'retrospective-light',
     ]) {
       const { modelOverride } = resolveBudgets(skill);
@@ -109,7 +119,7 @@ describe('resolveBudgets', () => {
   });
 
   it('sonnet skills resolve to sonnet model IDs', () => {
-    for (const skill of ['qa', 'review', 'retrospective-deep']) {
+    for (const skill of ['investigate', 'qa', 'review', 'retrospective-deep']) {
       const { modelOverride } = resolveBudgets(skill);
       expect(modelOverride, `${skill} should use sonnet`).toContain('sonnet');
     }

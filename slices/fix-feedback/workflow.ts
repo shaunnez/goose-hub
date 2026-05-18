@@ -18,18 +18,23 @@ export interface FixFeedbackDeps {
 }
 
 /**
- * Finds the worktree path from the most recent `pr.opened` event for this work item.
+ * Finds the PR lifecycle identity from the most recent `pr.opened` event for this work item.
  * Returns undefined if no such event exists.
  */
-function findWorktreePath(workItemId: string): string | undefined {
-  const events = eventStore.replay({ workItemId });
+function findPrLifecycle(events: ReturnType<typeof eventStore.replay>): PrLifecycle | undefined {
   const prOpened = events
     .slice()
     .reverse()
     .find((e) => e.kind === 'pr.opened');
   if (prOpened == null) return undefined;
   const payload = prOpened.payload as Record<string, unknown>;
-  return typeof payload.worktreePath === 'string' ? payload.worktreePath : undefined;
+  const rawPrNumber = payload.prNumber ?? payload.number;
+  return {
+    pipelineRunId: typeof payload.pipelineRunId === 'string' ? payload.pipelineRunId : undefined,
+    devRunId: typeof payload.devRunId === 'string' ? payload.devRunId : undefined,
+    worktreePath: typeof payload.worktreePath === 'string' ? payload.worktreePath : undefined,
+    prNumber: typeof rawPrNumber === 'number' ? rawPrNumber : undefined,
+  };
 }
 
 type TierResult = {
@@ -53,6 +58,34 @@ type ReviewPayload = {
   findings?: Array<{ severity: string; description: string }>;
 };
 
+type PrLifecycle = {
+  pipelineRunId?: string;
+  devRunId?: string;
+  worktreePath?: string;
+  prNumber?: number;
+};
+
+type SourceFailure = {
+  kind: 'qa' | 'review';
+  runId?: string;
+  feedback: string;
+};
+
+function compactPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
+}
+
+function sourceRunId(event: ReturnType<typeof eventStore.replay>[number]): string | undefined {
+  if (typeof event.runId === 'string') return event.runId;
+  const payload = event.payload as { runId?: unknown } | null;
+  return typeof payload?.runId === 'string' ? payload.runId : undefined;
+}
+
+function nextRepairCycle(events: ReturnType<typeof eventStore.replay>): number {
+  const completedCycles = events.filter((event) => event.kind === 'agent.fix-feedback-complete');
+  return completedCycles.length + 1;
+}
+
 /**
  * Finds the most recent failure from either `qa.completed` (non-pass) or
  * `review.completed` (needs-fix), whichever is later in the event stream,
@@ -61,9 +94,9 @@ type ReviewPayload = {
  * Skips QA passes so a qa-fail → fix → qa-pass → review-fail cycle correctly
  * surfaces the review findings rather than the superseded QA pass.
  */
-function buildAdvisorFeedback(workItemId: string): string {
-  const events = eventStore.replay({ workItemId });
-
+function findLatestSourceFailure(
+  events: ReturnType<typeof eventStore.replay>,
+): SourceFailure | null {
   let qaIdx = -1;
   let qaEvent: (typeof events)[number] | null = null;
   for (let i = events.length - 1; i >= 0; i--) {
@@ -93,7 +126,7 @@ function buildAdvisorFeedback(workItemId: string): string {
     for (const f of findings) {
       lines.push(`- [${f.severity}] ${f.description}`);
     }
-    return lines.join('\n');
+    return { kind: 'review', runId: sourceRunId(reviewEvent), feedback: lines.join('\n') };
   }
 
   if (qaEvent != null) {
@@ -115,10 +148,10 @@ function buildAdvisorFeedback(workItemId: string): string {
         );
       }
     }
-    return lines.join('\n');
+    return { kind: 'qa', runId: sourceRunId(qaEvent), feedback: lines.join('\n') };
   }
 
-  return '';
+  return null;
 }
 
 /**
@@ -148,6 +181,22 @@ export async function runFixFeedbackWorkflow(
   deps: FixFeedbackDeps = {},
 ): Promise<void> {
   const runId = crypto.randomUUID();
+  const attemptId = crypto.randomUUID();
+  const events = eventStore.replay({ workItemId: workItem.id });
+  const prLifecycle = findPrLifecycle(events);
+  const sourceFailure = findLatestSourceFailure(events);
+  const repairCycle = nextRepairCycle(events);
+  const repairPayload = compactPayload({
+    pipelineRunId: prLifecycle?.pipelineRunId,
+    attemptId,
+    repairMode: 'legacy-implement',
+    repairCycle,
+    sourceFailureKind: sourceFailure?.kind,
+    sourceFailureRunId: sourceFailure?.runId,
+    worktreePath: prLifecycle?.worktreePath,
+    prNumber: prLifecycle?.prNumber,
+    devRunId: prLifecycle?.devRunId,
+  });
   const projectConfig = await getProjectBySlug(projectId);
   const { runtime, resolvedBudget } = resolveProjectAgentExecution({
     skill: 'implement',
@@ -157,7 +206,7 @@ export async function runFixFeedbackWorkflow(
     injectedRuntime: deps.runtime,
   });
 
-  const worktreePath = findWorktreePath(workItem.id);
+  const worktreePath = prLifecycle?.worktreePath;
   if (worktreePath == null) {
     await stateSource.comment(
       workItem.externalId,
@@ -179,12 +228,17 @@ export async function runFixFeedbackWorkflow(
       to: 'factory:needs-human',
       by: 'fix-feedback',
       runId,
+      extraPayload: repairPayload,
     });
     eventStore.appendEvent({
       projectId,
       workItemId: workItem.id,
       kind: 'agent.run-failed',
-      payload: { runId, error: 'fix-feedback: no worktree found in pr.opened events' },
+      payload: {
+        runId,
+        error: 'fix-feedback: no worktree found in pr.opened events',
+        ...repairPayload,
+      },
       runId,
     });
     return;
@@ -193,7 +247,7 @@ export async function runFixFeedbackWorkflow(
   const implementPrompt = readPromptWithContext('implement', projectId);
   const implementJsonSchema = toJsonSchema(ImplementSchema);
   const { personaId } = selectPersona(projectId, 'developer');
-  const advisorFeedback = buildAdvisorFeedback(workItem.id);
+  const advisorFeedback = sourceFailure?.feedback ?? '';
 
   await stateSource.transitionState(
     workItem.externalId,
@@ -207,6 +261,7 @@ export async function runFixFeedbackWorkflow(
     to: 'factory:in-progress',
     by: 'fix-feedback',
     runId,
+    extraPayload: repairPayload,
   });
 
   try {
@@ -274,6 +329,7 @@ export async function runFixFeedbackWorkflow(
       workItemId: workItem.id,
       kind: 'agent.fix-feedback-complete',
       payload: {
+        ...repairPayload,
         filesWritten: implementOutput.filesWritten.length,
         testsWritten: implementOutput.testsWritten.length,
         confidence: implementOutput.confidence,
@@ -300,6 +356,7 @@ export async function runFixFeedbackWorkflow(
       to: 'factory:needs-qa',
       by: 'fix-feedback',
       runId,
+      extraPayload: repairPayload,
     });
   } catch (err) {
     accumulatePersonaStats({ personaName: personaId, role: 'developer', outcome: 'failure' });
@@ -308,7 +365,7 @@ export async function runFixFeedbackWorkflow(
       projectId,
       workItemId: workItem.id,
       kind: 'agent.run-failed',
-      payload: { runId, error: error.message },
+      payload: { runId, error: error.message, ...repairPayload },
       runId,
     });
     await stateSource.comment(
@@ -329,6 +386,7 @@ export async function runFixFeedbackWorkflow(
       to: 'factory:needs-human',
       by: 'fix-feedback',
       runId,
+      extraPayload: repairPayload,
     });
   }
 }

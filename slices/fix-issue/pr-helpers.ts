@@ -1,19 +1,25 @@
 import { execFileSync } from 'node:child_process';
 import { findFreePort } from '@goose-hub/core/agent-runtime/find-free-port.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
-import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
+import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
+import { getEvidencePostEnabled } from '@goose-hub/core/db/repositories/project-settings.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
-import { EvidencePostSchema } from '@goose-hub/skills/evidence-post/schema.js';
+import {
+  EvidencePostPlanSchema,
+  EvidencePostSchema,
+} from '@goose-hub/skills/evidence-post/schema.js';
+import { runEvidencePostPlan } from './evidence-post-workflow.js';
 import type { ImplementOutputShape } from './types.js';
 
 export interface RunEvidencePostInput {
   workItem: WorkItem;
   projectId: string;
   runId: string;
-  runtime: AgentRuntime;
+  /** Test seam only. Production resolves evidence-post independently. */
+  evidenceRuntime?: AgentRuntime;
   appendSystemPrompt: string;
   outputJsonSchema: Record<string, unknown>;
   prNumber: number;
@@ -41,6 +47,23 @@ export interface RunEvidencePostInput {
  * `evidence.no-spec-declared` and skip.
  */
 export async function runEvidencePost(input: RunEvidencePostInput): Promise<void> {
+  const projectConfig = await getProjectBySlug(input.projectId);
+  const settingsProjectId = projectConfig?.id ?? input.projectId;
+  const evidencePostEnabled = getEvidencePostEnabled(
+    settingsProjectId,
+    projectConfig?.evidencePostEnabled ?? true,
+  );
+  if (!evidencePostEnabled) {
+    eventStore.appendEvent({
+      projectId: input.projectId,
+      workItemId: input.workItem.id,
+      kind: 'evidence.post-skipped',
+      payload: { runId: input.runId, reason: 'evidencePostEnabled=false' },
+      runId: input.runId,
+    });
+    return;
+  }
+
   if (input.evidenceSpecPath == null) {
     eventStore.appendEvent({
       projectId: input.projectId,
@@ -53,10 +76,23 @@ export async function runEvidencePost(input: RunEvidencePostInput): Promise<void
   }
 
   const evidenceRunId = crypto.randomUUID();
-  const projectConfig = await getProjectBySlug(input.projectId);
-  const webPort = await findFreePort();
+  const { runtime, resolvedBudget } = resolveProjectAgentExecution({
+    skill: 'evidence-post',
+    role: 'developer',
+    projectId: input.projectId,
+    projectConfig,
+    injectedRuntime: input.evidenceRuntime,
+  });
+  const [webPort, apiPort] = await Promise.all([findFreePort(), findFreePort()]);
+  const evidenceEnv = {
+    WEB_PORT: String(webPort),
+    API_PORT: String(apiPort),
+    SERVER_PORT: String(apiPort),
+    CI: 'true',
+    EVIDENCE_ONLY: 'true',
+  };
   try {
-    const result = await input.runtime.run({
+    const result = await runtime.run({
       runId: evidenceRunId,
       role: 'developer',
       skill: 'evidence-post',
@@ -86,23 +122,36 @@ export async function runEvidencePost(input: RunEvidencePostInput): Promise<void
       freshContext: false,
       toolBundles: ['validate'],
       toolExtras: [],
-      env: {
-        WEB_PORT: String(webPort),
-        CI: 'true',
-        EVIDENCE_ONLY: 'true',
-      },
-      ...resolveBudgetsForProject('evidence-post', projectConfig?.budgets, input.projectId),
+      env: evidenceEnv,
+      ...resolvedBudget,
       personaId: selectPersona(input.projectId, 'developer').personaId,
       outputJsonSchema: input.outputJsonSchema,
       appendSystemPrompt: input.appendSystemPrompt,
     });
 
-    const parsed = EvidencePostSchema.safeParse(result.output);
+    const planParsed = EvidencePostPlanSchema.safeParse(result.output);
+    const finalParsed = EvidencePostSchema.safeParse(result.output);
+    const output = planParsed.success
+      ? runEvidencePostPlan({
+          plan: planParsed.data,
+          workspaceDir: input.worktreePath,
+          issueNumber: Number(input.workItem.externalId),
+          repo: input.repoRef,
+          prNumber: input.prNumber,
+          prHeadSha: input.prHeadSha,
+          beforeCommentUrl: input.beforeCommentUrl,
+          env: evidenceEnv,
+        })
+      : finalParsed.success
+        ? finalParsed.data
+        : null;
+
+    const parsed = EvidencePostSchema.safeParse(output);
     if (!parsed.success) {
       throw new Error('evidence-post output validation failed');
     }
     if (!parsed.data.commentUrl) {
-      throw new Error('evidence-post returned no commentUrl — playwright run likely failed');
+      throw new Error('evidence-post returned no commentUrl — evidence comment was not posted');
     }
     eventStore.appendEvent({
       projectId: input.projectId,

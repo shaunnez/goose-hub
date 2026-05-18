@@ -9,6 +9,7 @@ export type EventKind =
   | 'milestone.activated'
   | 'agent.spawned'
   | 'agent.decision-summary'
+  | 'agent.disclosure'
   | 'agent.log'
   | 'agent.terminated'
   | 'gate.awaiting-human'
@@ -25,6 +26,8 @@ export type EventKind =
   | 'agent.triage-complete'
   | 'agent.repo-override'
   | 'agent.investigation-complete'
+  | 'agent.investigation-context-injected'
+  | 'agent.wrong-surface-guard'
   // Three-tier verification framework (M19.05, issue #562)
   | 'qa.structural-passed'
   | 'qa.structural-failed'
@@ -32,12 +35,16 @@ export type EventKind =
   | 'qa.functional-failed'
   | 'qa.regression-passed'
   | 'qa.regression-failed'
+  | 'qa.verification-summary-built'
   // M7 fix-issue workflow lifecycle (#183) + evidence-post wiring (#234)
   | 'agent.implement-complete'
   | 'pr.opened'
   | 'evidence.posted'
   | 'evidence.post-failed'
   | 'evidence.no-spec-declared'
+  | 'evidence.playwright-ran'
+  | 'evidence.playwright-repro-skipped'
+  | 'evidence.post-skipped'
   // M7 approval gate (#186)
   | 'gate.approved'
   | 'gate.rejected'
@@ -133,6 +140,9 @@ export type EventKind =
   // ImprovementCandidates, and the autonomous-mode escalation gate.
   | 'audit.completed'
   | 'audit.failed'
+  // Symbol index utility telemetry — lets us measure whether hints save work.
+  | 'symbol-index.lookup'
+  | 'symbol-index.hints-used'
   | 'audit.autonomy-gate-fired';
 
 export interface AgentEvent {

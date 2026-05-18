@@ -28,10 +28,17 @@ export function wpWorktreePath(runId: string, wpId: string): string {
  * @param wpId   - Work Package identifier (e.g. "WP1").
  * @returns The absolute path to the created scratch worktree.
  */
-export function createWpScratchWorktree(repo: string, runId: string, wpId: string): string {
+export function createWpScratchWorktree(
+  repo: string,
+  runId: string,
+  wpId: string,
+  baseRef?: string,
+): string {
   const wtPath = wpWorktreePath(runId, wpId);
   mkdirSync(WORKSPACES_DIR, { recursive: true });
-  execFileSync('git', ['worktree', 'add', '--detach', wtPath], {
+  const args = ['worktree', 'add', '--detach', wtPath];
+  if (baseRef != null && baseRef.length > 0) args.push(baseRef);
+  execFileSync('git', args, {
     cwd: repo,
     stdio: 'pipe',
     env: GIT_ENV,

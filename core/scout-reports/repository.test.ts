@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../db/db.js';
-import { scoutReports } from '../db/schema.js';
+import { agentArtifacts, scoutReports } from '../db/schema.js';
 import { listScoutReportsForInvestigation, persistScoutReport } from './repository.js';
 
 const PROJECT = 'test-scout-reports-repo';
@@ -31,10 +31,12 @@ beforeAll(() => {
 
 beforeEach(() => {
   db.delete(scoutReports).where(sql`project_id = ${PROJECT}`).run();
+  db.delete(agentArtifacts).where(sql`project_id = ${PROJECT}`).run();
 });
 
 afterAll(() => {
   db.delete(scoutReports).where(sql`project_id = ${PROJECT}`).run();
+  db.delete(agentArtifacts).where(sql`project_id = ${PROJECT}`).run();
 });
 
 describe('persistScoutReport', () => {
@@ -59,6 +61,44 @@ describe('persistScoutReport', () => {
     const rows = listScoutReportsForInvestigation(PROJECT, WORK_ITEM, RUN_A);
     expect(rows).toHaveLength(1);
     expect(rows[0].report).toEqual({ findings: ['second'] });
+  });
+
+  it('stores oversized report payload once and leaves compact metadata in scout_reports', () => {
+    const largeReport = {
+      findings: [
+        {
+          file: 'core/big.ts',
+          line: 7,
+          fact: 'x'.repeat(30 * 1024),
+          confidence: 'high',
+        },
+      ],
+      decisionSummaries: [{ kind: 'READ', summary: 'large report' }],
+    };
+
+    const stored = persistScoutReport(PROJECT, WORK_ITEM, RUN_A, 'repo-scout', largeReport);
+    const rows = listScoutReportsForInvestigation(PROJECT, WORK_ITEM, RUN_A);
+
+    expect(stored).toMatchObject({
+      summary: 'repo-scout: 1 findings, 1 decision summaries',
+      findingCount: 1,
+      decisionSummaryCount: 1,
+      artifactRef: {
+        kind: 'scout-report',
+        stored: true,
+      },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].report).toEqual(stored);
+    expect(JSON.stringify(rows[0].report)).not.toContain('x'.repeat(1024));
+
+    const artifactRows = db
+      .select()
+      .from(agentArtifacts)
+      .where(sql`project_id = ${PROJECT} AND work_item_id = ${WORK_ITEM}`)
+      .all();
+    expect(artifactRows).toHaveLength(1);
+    expect(JSON.parse(artifactRows[0].payloadJson)).toEqual(largeReport);
   });
 
   it('stores multiple scouts in the same investigation run', () => {

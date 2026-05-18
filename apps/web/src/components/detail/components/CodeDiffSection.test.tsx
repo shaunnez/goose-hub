@@ -61,4 +61,32 @@ describe('CodeDiffSection (#185)', () => {
       expect(screen.getByTestId('code-diff-empty')).toBeTruthy();
     });
   });
+
+  it('hides generated package-store files from the rendered diff', async () => {
+    vi.mocked(fetchIssueDiff).mockResolvedValueOnce({
+      diff: [
+        'diff --git a/.pnpm-store/v10/files/aa/hash b/.pnpm-store/v10/files/aa/hash',
+        'new file mode 100644',
+        '--- /dev/null',
+        '+++ b/.pnpm-store/v10/files/aa/hash',
+        '@@ -0,0 +1 @@',
+        '+generated dependency cache',
+        'diff --git a/src/real.ts b/src/real.ts',
+        '--- a/src/real.ts',
+        '+++ b/src/real.ts',
+        '@@ -1 +1 @@',
+        '-old',
+        '+new',
+      ].join('\n'),
+      runId: 'run-1',
+    });
+
+    render_(<CodeDiffSection projectSlug="proj" id="42" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('code-diff-pre')).toBeTruthy();
+    });
+    expect(screen.queryByText(/\.pnpm-store/)).toBeNull();
+    expect(screen.getByText(/src\/real\.ts/)).toBeTruthy();
+  });
 });

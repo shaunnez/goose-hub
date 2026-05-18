@@ -9,7 +9,7 @@ const API_PORT = Number(process.env.API_PORT ?? 3001);
 
 export default defineConfig({
   testDir: './e2e',
-  testIgnore: ['**/pipeline/**'],
+  testIgnore: ['**/pipeline/**', '**/issue-*.spec.ts', '**/repro-*.spec.ts'],
   timeout: 30_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,

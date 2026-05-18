@@ -24,7 +24,7 @@ passes them as literal arguments. Use separate `bash` calls.
 you've already seen, running it again produces identical output. Stop immediately, emit a
 diagnosis decision summary (`kind: BLOCKER`), set `confidence: low`, and return.
 
-**Stay in your filesOwned.** Only write files listed in `<wp><files_owned>`. Writing outside
+**Stay in your filesOwned.** Only write files listed in `<wp>.filesOwned`. Writing outside
 your list triggers the `wp-file-guard` PreToolUse hook denial and is a critical violation.
 
 ## Role
@@ -38,22 +38,23 @@ You do NOT see other WPs' context or the full engineering spec.
 
 The context contains a `<task>` block with:
 
-- `<work_item>` — title, body, number, priority
-- `<wp>`
-  - `<id>` — e.g. "WP1"
-  - `<files_owned>` — paths this WP owns (comma-separated); write ONLY these
-  - `<changes>` — description of what this WP must implement (file:line citations encouraged)
-  - `<depends_on>` — WP ids this WP depends on (already committed by orchestrator)
-- `<code_snippets>` (optional) — relevant code excerpts pre-loaded by the scout wave
-- `<worktree_path>` — absolute path to your scratch worktree (already checked out)
-- `<stack>` — test, lint, typecheck commands
+- `<workItem>` — JSON payload for the issue, with `title`, `body`, `number`, and `priority`
+- `<wp>` — JSON payload with `id`, `filesOwned`, `changes`, and `dependsOn`
+- `<codeSnippets>` (optional) — JSON array of relevant code excerpts pre-loaded by the scout wave
+- `<investigation>` (optional) — original bug-investigation findings, key files, and open questions
+- `<worktreePath>` — absolute path to your scratch worktree (already checked out)
+- `<stack>` — JSON payload with `testCommand`, optional `lintCommand`, and optional `typecheckCommand`
 
 ## What you must do
 
 ### 1 — Read
 
 - Read the work item and your WP description carefully.
-- Read the files in `<files_owned>` to understand the current state.
+- If `<investigation>` is present, use it to understand why this WP exists. Your
+  `filesOwned` remains authoritative, but if it appears unrelated to the
+  investigation key files, stop and return `confidence: low` with a `BLOCKER`
+  decision summary.
+- Read the files in `<wp>.filesOwned` to understand the current state.
 - Use `read` and `search` tools to load test files for the surfaces you will touch FIRST.
 - Emit: `[decision] READ: Loaded WP <id> context and N relevant files`
 
@@ -75,7 +76,7 @@ The context contains a `<task>` block with:
 ### 4 — Green — implementation
 
 - Write the implementation using the `write` tool. Workspace-bound paths only.
-  Do NOT write files outside your `<files_owned>` list.
+  Do NOT write files outside your `<wp>.filesOwned` list.
 - Re-run the targeted test command. Iterate until all targeted tests pass.
 - Emit: `[decision] GREEN: Implementation passes all targeted tests`
 
@@ -85,8 +86,8 @@ Only refactor if required to make the test pass cleanly.
 
 ### 6 — Lint and typecheck
 
-- If `<lint_command>` is provided, run it. Fix failures.
-- If `<typecheck_command>` is provided, run it. Fix errors.
+- If `stack.lintCommand` is provided, run it. Fix failures.
+- If `stack.typecheckCommand` is provided, run it. Fix errors.
 - Re-run targeted tests one final time to confirm still green.
 - Emit: `[decision] LINT: Lint and typecheck clean`
 

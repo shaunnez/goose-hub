@@ -1,3 +1,4 @@
+import { getArtifact } from '@goose-hub/core/agent-artifacts/repository.js';
 import { getEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import {
@@ -115,6 +116,57 @@ export async function getIssueSpec(
         objective: s.objective,
         workPackages: s.workPackages,
         acceptanceCriteriaCount: s.acceptanceCriteria.length,
+      },
+    },
+  };
+}
+
+export async function getIssueArtifact(
+  slug: string,
+  id: string,
+  artifactKey: string,
+): Promise<
+  Result<{
+    artifact: {
+      artifactKey: string;
+      projectId: string;
+      workItemId: string | null;
+      runId: string;
+      kind: string;
+      summary: string;
+      bytes: number;
+      createdAt: string;
+      expiresAt: string | null;
+      payload: unknown;
+    };
+  }>
+> {
+  const source = await getSourceForSlug(slug);
+  if (source == null) return { ok: false, error: 'project not found', status: 404 };
+
+  const item = await source.getItem(id);
+  const expectedWorkItemId = (item as { id: string }).id;
+  const artifact = getArtifact(artifactKey);
+  if (artifact == null) return { ok: false, error: 'artifact not found', status: 404 };
+  if (artifact.projectId !== slug) return { ok: false, error: 'artifact not found', status: 404 };
+  if (artifact.workItemId !== expectedWorkItemId) {
+    return { ok: false, error: 'artifact not found', status: 404 };
+  }
+
+  return {
+    ok: true,
+    data: {
+      artifact: {
+        artifactKey: artifact.artifactKey,
+        projectId: artifact.projectId,
+        workItemId: artifact.workItemId,
+        runId: artifact.runId,
+        kind: artifact.kind,
+        summary: artifact.summary,
+        bytes: artifact.bytes,
+        createdAt: artifact.createdAt,
+        expiresAt: artifact.expiresAt,
+        payload: artifact.payload,
       },
     },
   };

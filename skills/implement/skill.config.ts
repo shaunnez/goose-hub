@@ -5,20 +5,11 @@ import { z } from 'zod';
  * Context expected by the implement skill. Rendered as XML in the user prompt:
  *
  *   <task>
- *     <work_item>
- *       <title>...</title>
- *       <body>...</body>
- *       <number>...</number>
- *       <priority>...</priority>
- *     </work_item>
- *     <worktree_path>/abs/path/to/worktree</worktree_path>
- *     <stack>
- *       <test_command>pnpm test</test_command>
- *       <lint_command>pnpm lint</lint_command>            <!-- optional -->
- *       <typecheck_command>pnpm typecheck</typecheck_command>  <!-- optional -->
- *     </stack>
- *     <advisor_feedback>...</advisor_feedback>             <!-- optional, when revising -->
- *     <revision_pass>0 | 1</revision_pass>                 <!-- optional, default 0 -->
+ *     <workItem>{"title":"...","body":"...","number":123,"priority":"medium"}</workItem>
+ *     <worktreePath>/abs/path/to/worktree</worktreePath>
+ *     <stack>{"testCommand":"pnpm test","lintCommand":"pnpm lint","typecheckCommand":"pnpm typecheck"}</stack>
+ *     <advisorFeedback>...</advisorFeedback>               <!-- optional, when revising -->
+ *     <revisionPass>0 | 1</revisionPass>                   <!-- optional, default 0 -->
  *   </task>
  */
 export const ImplementContextSchema = z.object({
@@ -36,10 +27,27 @@ export const ImplementContextSchema = z.object({
   }),
   advisorFeedback: z.string().optional(),
   revisionPass: z.union([z.literal(0), z.literal(1)]).optional(),
+  evidencePostEnabled: z.boolean().optional(),
 });
 
 const config: SkillConfig = {
-  contextSchema: ImplementContextSchema,
+  contextSchema: ImplementContextSchema.extend({
+    investigation: z
+      .object({
+        findings: z.string().optional(),
+        keyFiles: z
+          .array(
+            z.object({
+              path: z.string(),
+              reason: z.string().optional(),
+            }),
+          )
+          .optional(),
+        openQuestions: z.array(z.string()).optional(),
+        investigationRunId: z.string().optional(),
+      })
+      .optional(),
+  }),
   contextAllowlist: [
     'workItem.title',
     'workItem.body',
@@ -49,8 +57,10 @@ const config: SkillConfig = {
     'stack.testCommand',
     'stack.lintCommand',
     'stack.typecheckCommand',
+    'investigation',
     'advisorFeedback',
     'revisionPass',
+    'evidencePostEnabled',
   ],
   /**
    * `dev-tools` bundle — read, search, work-item-read, write, bash, test

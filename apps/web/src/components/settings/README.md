@@ -1,14 +1,20 @@
 # settings
 
-Read-only settings panel for registered project configs. Closes #280.
+Settings panel for registered project configs and local runtime controls.
 
 ## Structure
 
 ```
 settings/
   components/
-    SettingsPage.tsx       — top-level page (list + detail layout)
-    ProjectConfigPanel.tsx — read-only display of a single ProjectConfig
+    SettingsPage.tsx                 — top-level page (list + detail layout)
+    ProjectConfigPanel.tsx           — read-only display of a single ProjectConfig
+    WorkflowMapPanel.tsx             — data/query orchestration for the workflow map tab
+    WorkflowMapFlow.tsx              — vertical effective-flow renderer
+    WorkflowPipelineReviewSettings.tsx — pipeline/review settings summary strip
+    WorkflowSkillDetailModal.tsx     — selected skill metadata modal
+  lib/
+    workflow-map.ts        — feature-local workflow map helpers and view-model types
   slice.test.ts
   README.md
 ```
@@ -19,8 +25,18 @@ settings/
 
 ## Data
 
-`GET /projects/configs` → `ProjectConfigDto[]`
+`GET /projects/configs` -> `ProjectConfigDto[]`
 
 Fields shown per project: slug, source, activeMilestone, mode, colorStripe, budget limits.
-All fields are display-only. Editing requires modifying `target-projects/<slug>/project.config.ts`
-and restarting the server. The Reload button invalidates the React Query cache.
+
+The Workflow map tab also reads:
+
+- `GET /workflow-catalog`
+- `GET /projects/:slug/settings`
+- `GET /projects/:slug/settings/pipeline`
+- `GET /projects/:slug/settings/dev-review`
+- `GET /projects/:slug/settings/review`
+
+It renders the effective vertical path for the selected project: active variants are highlighted,
+inactive alternatives are muted, conditional/retry branches stay secondary, and selected skill
+details open in a modal.

@@ -110,10 +110,12 @@ function makePrOpenedEvent(worktreePath = '/work/wt', branch = 'factory/run-abc'
       branch,
       worktreePath,
       devRunId: 'run-abc',
+      pipelineRunId: 'pipe-abc',
     },
     projectId: 'proj',
     workItemId: 'github:owner/repo#42',
     createdAt: new Date().toISOString(),
+    runId: 'run-abc',
   };
 }
 
@@ -149,6 +151,7 @@ function makeQaCompletedEvent(passed = false) {
     projectId: 'proj',
     workItemId: 'github:owner/repo#42',
     createdAt: new Date().toISOString(),
+    runId: 'qa-run-1',
   };
 }
 
@@ -265,6 +268,79 @@ describe('runFixFeedbackWorkflow', () => {
     expect(eventStore.appendEvent).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'agent.fix-feedback-complete' }),
     );
+  });
+
+  it('carries legacy repair lifecycle metadata on completion and state transitions', async () => {
+    vi.mocked(eventStore.replay).mockReturnValue([makePrOpenedEvent(), makeQaCompletedEvent()]);
+    mockClaudeCliRun.mockResolvedValue({ output: makeImplementOutput() });
+    const workItem = makeWorkItem();
+
+    await runFixFeedbackWorkflow(workItem, stateSource, 'proj', 'owner/repo');
+
+    const completeEvent = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'agent.fix-feedback-complete')?.[0];
+    expect(completeEvent?.payload).toEqual(
+      expect.objectContaining({
+        pipelineRunId: 'pipe-abc',
+        repairMode: 'legacy-implement',
+        repairCycle: 1,
+        sourceFailureKind: 'qa',
+        sourceFailureRunId: 'qa-run-1',
+        worktreePath: '/work/wt',
+        prNumber: 99,
+        devRunId: 'run-abc',
+      }),
+    );
+    expect((completeEvent?.payload as { attemptId?: unknown }).attemptId).toEqual(
+      expect.any(String),
+    );
+
+    const transitionEvents = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.map(([event]) => event)
+      .filter((event) => event.kind === 'state.transitioned');
+    expect(transitionEvents).toHaveLength(2);
+    expect(transitionEvents[0].payload).toEqual(
+      expect.objectContaining({
+        to: 'factory:in-progress',
+        pipelineRunId: 'pipe-abc',
+        repairMode: 'legacy-implement',
+        repairCycle: 1,
+      }),
+    );
+    expect(transitionEvents[1].payload).toEqual(
+      expect.objectContaining({
+        to: 'factory:needs-qa',
+        pipelineRunId: 'pipe-abc',
+        repairMode: 'legacy-implement',
+        repairCycle: 1,
+      }),
+    );
+  });
+
+  it('increments repairCycle from prior fix-feedback completions', async () => {
+    vi.mocked(eventStore.replay).mockReturnValue([
+      makePrOpenedEvent(),
+      makeQaCompletedEvent(),
+      {
+        id: 3,
+        kind: 'agent.fix-feedback-complete' as EventKind,
+        payload: { repairMode: 'legacy-implement', repairCycle: 1 },
+        projectId: 'proj',
+        workItemId: 'github:owner/repo#42',
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+    mockClaudeCliRun.mockResolvedValue({ output: makeImplementOutput() });
+    const workItem = makeWorkItem();
+
+    await runFixFeedbackWorkflow(workItem, stateSource, 'proj', 'owner/repo');
+
+    const completeEvent = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'agent.fix-feedback-complete')?.[0];
+    expect(completeEvent?.payload).toEqual(expect.objectContaining({ repairCycle: 2 }));
   });
 
   it('works with custom runtime dep injection', async () => {

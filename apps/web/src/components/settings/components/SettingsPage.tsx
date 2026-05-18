@@ -8,10 +8,19 @@ import { DevReviewPanel } from './DevReviewPanel';
 import { PipelinePanel } from './PipelinePanel';
 import { ProjectBudgetPanel } from './ProjectBudgetPanel';
 import { ProjectConfigPanel } from './ProjectConfigPanel';
-import { ProjectModelPanel } from './ProjectModelPanel';
 import { ReviewPanel } from './ReviewPanel';
+import { WorkflowMapPanel } from './WorkflowMapPanel';
 
-type Tab = 'config' | 'budgets' | 'models' | 'pipeline' | 'review' | 'dev-review';
+type Tab = 'config' | 'runtime' | 'workflow-map' | 'pipeline' | 'review' | 'dev-review';
+
+const TAB_LABELS: Record<Tab, string> = {
+  config: 'Config',
+  runtime: 'Skill runtime',
+  'workflow-map': 'Workflow map',
+  pipeline: 'Pipeline',
+  review: 'Review',
+  'dev-review': 'Dev-review',
+};
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
@@ -87,12 +96,12 @@ export function SettingsPage() {
       </div>
 
       {/* Right: config detail */}
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-8 py-6">
         <h1 className="text-[15px] font-semibold mb-1">Settings</h1>
 
         {/* Tab bar */}
-        <div className="flex gap-1 mb-6 border-b border-line">
-          {(['config', 'budgets', 'models', 'pipeline', 'review', 'dev-review'] as Tab[]).map(
+        <div className="flex flex-wrap gap-1 mb-6 border-b border-line">
+          {(['config', 'runtime', 'workflow-map', 'pipeline', 'review', 'dev-review'] as Tab[]).map(
             (t) => (
               <button
                 key={t}
@@ -105,7 +114,7 @@ export function SettingsPage() {
                     : 'border-transparent text-fg-2 hover:text-fg',
                 ].join(' ')}
               >
-                {t}
+                {TAB_LABELS[t]}
               </button>
             ),
           )}
@@ -114,11 +123,11 @@ export function SettingsPage() {
         {tab === 'config' && selectedConfig != null && (
           <ProjectConfigPanel config={selectedConfig} />
         )}
-        {tab === 'budgets' && selectedConfig != null && (
+        {tab === 'runtime' && selectedConfig != null && (
           <ProjectBudgetPanel slug={selectedConfig.slug} />
         )}
-        {tab === 'models' && selectedConfig != null && (
-          <ProjectModelPanel slug={selectedConfig.slug} />
+        {tab === 'workflow-map' && selectedConfig != null && (
+          <WorkflowMapPanel slug={selectedConfig.slug} />
         )}
         {tab === 'pipeline' && selectedConfig != null && (
           <PipelinePanel slug={selectedConfig.slug} />

@@ -1,25 +1,26 @@
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
-import { selectModel } from '@goose-hub/core/agent-runtime/model-router.js';
 import {
-  type ModelProvider,
-  type ModelTier,
-  defaultModelForTierAndProvider,
-  tierOf,
-} from '@goose-hub/core/agent-runtime/models.js';
+  type InvestigationContext,
+  latestInvestigationContext,
+  pathsTouchInvestigationSurface,
+  toolCallsTouchInvestigationSurface,
+} from '@goose-hub/core/agent-runtime/investigation-context.js';
+import type { ModelTier } from '@goose-hub/core/agent-runtime/models.js';
 import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
-import {
-  resolveBudgetsForProject,
-  resolveComplexityOverridesForProject,
-  resolveRoleModelForProject,
-} from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
+import { resolveSkillRuntimeForProject } from '@goose-hub/core/agent-runtime/skill-runtime-resolver.js';
 import { runWithEscalation } from '@goose-hub/core/agent-runtime/with-escalation.js';
 import type { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
+import {
+  emitSymbolIndexHintsUsedEvent,
+  offeredHintsFromSymbolKeyFiles,
+} from '@goose-hub/core/symbol-index/hints-used.js';
+import type { SymbolKeyFileHint } from '@goose-hub/core/symbol-index/lookup.js';
 import type { orchestratorCommitAll } from '@goose-hub/core/workspaces/orchestrator-git.js';
 import { ImplementSchema } from '@goose-hub/skills/implement/schema.js';
 import { buildPrBody, runEvidencePost } from './pr-helpers.js';
@@ -38,13 +39,16 @@ export interface RunImplementInput {
   outputJsonSchema: Record<string, unknown>;
   personaId: string;
   advisorFeedback?: string;
+  investigation?: InvestigationContext;
+  surfaceGuardInvestigation?: InvestigationContext;
+  symbolIndexKeyFiles?: SymbolKeyFileHint[];
   revisionPass?: 0 | 1;
 }
 
 export interface ImplementExecution {
   runtime: AgentRuntime;
   projectConfig: Awaited<ReturnType<typeof getProjectBySlug>>;
-  budgets: ReturnType<typeof resolveBudgetsForProject>['budgets'];
+  budgets: ReturnType<typeof resolveSkillRuntimeForProject>['budgets'];
   modelOverride: string;
   selectedTier: ModelTier;
   selectionReason: string;
@@ -60,7 +64,7 @@ export interface AfterImplementInput {
   worktreePath: string;
   baseBranch: string;
   openPRFn: typeof openPR;
-  runtime: AgentRuntime;
+  evidenceRuntime?: AgentRuntime;
   evidencePostPrompt: string;
   evidencePostJsonSchema: Record<string, unknown>;
   resolveHeadShaFn: (worktreePath: string) => string;
@@ -68,10 +72,53 @@ export interface AfterImplementInput {
   orchestratorCommitFn: typeof orchestratorCommitAll;
 }
 
-function forcedProviderFromRuntime(configRuntime: string | undefined): ModelProvider | null {
-  if (configRuntime === 'codex-cli') return 'codex';
-  if (configRuntime === 'claude-cli') return 'claude';
-  return null;
+export { latestInvestigationContext };
+
+function appendWrongSurfaceGuardEvent(input: {
+  projectId: string;
+  workItemId: string;
+  runId: string;
+  personaId?: string;
+  investigation: InvestigationContext;
+  reason: string;
+  touchedPaths?: string[];
+}): void {
+  eventStore.appendEvent({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    kind: 'agent.wrong-surface-guard',
+    payload: {
+      runId: input.runId,
+      skill: 'implement',
+      reason: input.reason,
+      expectedKeyFiles: input.investigation.keyFiles.map((f) => f.path),
+      touchedPaths: input.touchedPaths ?? [],
+      investigationRunId: input.investigation.investigationRunId ?? null,
+    },
+    runId: input.runId,
+    personaId: input.personaId,
+  });
+}
+
+export function emitWrongSurfaceGuardForRun(input: {
+  projectId: string;
+  workItemId: string;
+  runId: string;
+  personaId?: string;
+  investigation?: InvestigationContext;
+}): void {
+  if (input.investigation == null) return;
+  const runEvents = eventStore.replay({ runId: input.runId });
+  if (
+    toolCallsTouchInvestigationSurface({ events: runEvents, investigation: input.investigation })
+  ) {
+    return;
+  }
+  appendWrongSurfaceGuardEvent({
+    ...input,
+    investigation: input.investigation,
+    reason: 'tool-calls-missed-investigation-surface',
+  });
 }
 
 export async function resolveImplementExecution(input: {
@@ -80,61 +127,40 @@ export async function resolveImplementExecution(input: {
   injectedRuntime?: AgentRuntime;
 }): Promise<ImplementExecution> {
   const projectConfig = await getProjectBySlug(input.projectId);
-  const { budgets, modelOverride: budgetModelOverride } = resolveBudgetsForProject(
-    'implement',
-    projectConfig?.budgets,
-    input.projectId,
-  );
-
-  const dbComplexityOverrides = resolveComplexityOverridesForProject(
-    'developer',
-    input.projectId,
-    projectConfig?.agentConfig?.modelRouter?.overrides,
-  );
-  const routerResult = selectModel({
-    workItem: input.workItem,
-    role: 'developer',
+  const configRuntime = projectConfig?.agentConfig?.runtime ?? 'auto';
+  const resolvedRuntime = resolveSkillRuntimeForProject({
+    skill: 'implement',
+    projectBudgets: projectConfig?.budgets,
     projectId: input.projectId,
-    modelRouterConfig: projectConfig?.agentConfig?.modelRouter,
-    dbComplexityOverrides,
+    configRuntime,
+    role: 'developer',
+    allowHoldoutOverride: projectConfig?.agentConfig?.allowHoldoutOverride,
   });
-  const selectedTier = routerResult?.tier ?? tierOf(budgetModelOverride);
 
   if (input.injectedRuntime != null) {
     return {
       runtime: input.injectedRuntime,
       projectConfig,
-      budgets,
-      modelOverride:
-        routerResult != null
-          ? defaultModelForTierAndProvider(routerResult.tier, 'claude')
-          : budgetModelOverride,
-      selectedTier,
-      selectionReason: routerResult?.reason ?? 'budget-default',
+      budgets: resolvedRuntime.budgets,
+      modelOverride: resolvedRuntime.modelOverride,
+      selectedTier: resolvedRuntime.tier,
+      selectionReason: resolvedRuntime.source,
     };
   }
 
-  const roleModel = resolveRoleModelForProject({
-    role: 'developer',
-    projectId: input.projectId,
-    configRoleModel: projectConfig?.agentConfig?.rolesModels?.developer,
-    allowHoldoutOverride: projectConfig?.agentConfig?.allowHoldoutOverride,
-    skill: 'implement',
+  const runtime = selectRuntime({
+    configRuntime,
+    model: resolvedRuntime.modelOverride,
+    skillProvider: resolvedRuntime.provider,
   });
-  const configRuntime = projectConfig?.agentConfig?.runtime ?? 'auto';
-  const provider =
-    forcedProviderFromRuntime(configRuntime) ??
-    (roleModel.source === 'db' || roleModel.source === 'config' ? roleModel.provider : 'claude');
-  const modelOverride = defaultModelForTierAndProvider(selectedTier, provider);
-  const runtime = selectRuntime({ configRuntime, model: modelOverride });
 
   return {
     runtime,
     projectConfig,
-    budgets,
-    modelOverride,
-    selectedTier,
-    selectionReason: routerResult?.reason ?? 'budget-default',
+    budgets: resolvedRuntime.budgets,
+    modelOverride: resolvedRuntime.modelOverride,
+    selectedTier: resolvedRuntime.tier,
+    selectionReason: resolvedRuntime.source,
   };
 }
 
@@ -154,6 +180,24 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
     },
     runId: input.runId,
   });
+  if (input.investigation != null) {
+    eventStore.appendEvent({
+      projectId: input.projectId,
+      workItemId: input.workItem.id,
+      kind: 'agent.investigation-context-injected',
+      payload: {
+        runId: input.runId,
+        skill: 'implement',
+        investigationRunId: input.investigation.investigationRunId ?? null,
+        keyFiles: input.investigation.keyFiles.map((f) => f.path),
+        keyFileCount: input.investigation.keyFiles.length,
+        findingsChars: input.investigation.findings?.length ?? 0,
+        openQuestionCount: input.investigation.openQuestions.length,
+      },
+      runId: input.runId,
+      personaId: input.personaId,
+    });
+  }
 
   const { output } = await runWithEscalation({
     runtime: execution.runtime,
@@ -176,8 +220,10 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
         },
         worktreePath: input.worktreePath,
         stack: input.stack,
+        investigation: input.investigation,
         advisorFeedback: input.advisorFeedback,
         revisionPass: input.revisionPass ?? 0,
+        evidencePostEnabled: execution.projectConfig?.evidencePostEnabled ?? true,
       },
       contextAllowlist: [
         'workItem.title',
@@ -188,8 +234,10 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
         'stack.testCommand',
         'stack.lintCommand',
         'stack.typecheckCommand',
+        'investigation',
         'advisorFeedback',
         'revisionPass',
+        'evidencePostEnabled',
       ],
       freshContext: false,
       toolBundles: ['dev-tools'],
@@ -201,6 +249,39 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
       appendSystemPrompt: input.appendSystemPrompt,
     },
   });
+  emitSymbolIndexHintsUsedEvent({
+    projectId: input.projectId,
+    workItemId: input.workItem.id,
+    consumerSkill: 'implement',
+    runId: input.runId,
+    personaId: input.personaId,
+    offeredHints: offeredHintsFromSymbolKeyFiles(input.symbolIndexKeyFiles ?? []),
+    toolEvents: eventStore.replay({ runId: input.runId, kind: 'agent.tool-call' }),
+    worktreePath: input.worktreePath,
+    appendEvent: (event) => eventStore.appendEvent(event),
+  });
+  const touchedPaths = [
+    ...output.filesWritten.map((f) => f.path),
+    ...output.testsWritten.map((t) => t.path),
+    ...output.testsRun.paths,
+  ];
+  const surfaceGuardInvestigation = input.surfaceGuardInvestigation ?? input.investigation;
+  if (!pathsTouchInvestigationSurface(touchedPaths, surfaceGuardInvestigation)) {
+    appendWrongSurfaceGuardEvent({
+      projectId: input.projectId,
+      workItemId: input.workItem.id,
+      runId: input.runId,
+      personaId: input.personaId,
+      investigation: surfaceGuardInvestigation as InvestigationContext,
+      reason: 'implement-output-missed-investigation-surface',
+      touchedPaths,
+    });
+    throw new Error(
+      `wrong surface guard: implement output did not touch investigated key files (${surfaceGuardInvestigation?.keyFiles
+        .map((f) => f.path)
+        .join(', ')})`,
+    );
+  }
   return output;
 }
 
@@ -268,6 +349,7 @@ export async function afterImplement(input: AfterImplementInput): Promise<void> 
       prNumber: prResult.prNumber,
       prUrl: prResult.prUrl,
       branch: prResult.branch,
+      baseBranch: prResult.base,
       worktreePath,
       devRunId: runId,
     },
@@ -303,7 +385,6 @@ export async function afterImplement(input: AfterImplementInput): Promise<void> 
     workItem,
     projectId,
     runId,
-    runtime: input.runtime,
     appendSystemPrompt: input.evidencePostPrompt,
     outputJsonSchema: input.evidencePostJsonSchema,
     prNumber: prResult.prNumber,
@@ -312,6 +393,7 @@ export async function afterImplement(input: AfterImplementInput): Promise<void> 
     evidenceSpecPath: implementOutput.evidenceSpecPath,
     beforeCommentUrl,
     worktreePath,
+    evidenceRuntime: input.evidenceRuntime,
   });
 
   // Step 7: M8 path — route through QA before approval (factory:in-progress → factory:needs-qa)

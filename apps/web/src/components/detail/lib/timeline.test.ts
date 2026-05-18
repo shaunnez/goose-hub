@@ -27,7 +27,7 @@ function makeEvent(
 }
 
 describe('groupEvents — investigation runs', () => {
-  it('leaves investigation, scout, and wave runs as ordinary run-groups', () => {
+  it('wraps investigation, scout, and wave runs into an investigation phase', () => {
     const events: AgentEventDto[] = [
       makeEvent(1, 'agent.run-started', 'run-investigate:scout:pattern:0', {
         payload: { skill: 'scout-pattern' },
@@ -49,19 +49,29 @@ describe('groupEvents — investigation runs', () => {
     ];
 
     const items = groupEvents(events);
-    const runGroups = items.filter((item) => item.kind === 'run-group');
+    const phase = items.find((item) => item.kind === 'investigation-phase');
 
-    expect(runGroups.map((item) => item.runId)).toEqual([
-      'run-investigate',
-      'run-investigate:scout:wave2-risk-analyst:1',
-      'run-investigate:scout:pattern:0',
-    ]);
+    expect(phase).toBeDefined();
+    expect(phase?.kind).toBe('investigation-phase');
+    if (phase?.kind === 'investigation-phase') {
+      expect(phase.investigationRunId).toBe('run-investigate');
+      expect(phase.status).toBe('completed');
+      expect(
+        phase.items
+          .filter((item) => item.kind === 'run-group')
+          .map((item) => (item.kind === 'run-group' ? item.runId : null)),
+      ).toEqual([
+        'run-investigate',
+        'run-investigate:scout:wave2-risk-analyst:1',
+        'run-investigate:scout:pattern:0',
+      ]);
+    }
     expect(
       items.some((item) => item.kind === 'event' && item.event.kind === 'state.transitioned'),
     ).toBe(true);
   });
 
-  it('orders run-groups by latest activity, not start time', () => {
+  it('orders investigation phases by latest activity, not start time', () => {
     const events: AgentEventDto[] = [
       makeEvent(1, 'agent.run-started', 'run-investigate', {
         payload: { skill: 'investigate' },
@@ -74,12 +84,75 @@ describe('groupEvents — investigation runs', () => {
     ];
 
     const items = groupEvents(events);
-    const runGroups = items.filter((item) => item.kind === 'run-group');
+    const phase = items.find((item) => item.kind === 'investigation-phase');
 
-    expect(runGroups.map((item) => item.runId)).toEqual([
-      'run-investigate',
-      'run-investigate:scout:pattern:0',
+    expect(phase?.kind).toBe('investigation-phase');
+    if (phase?.kind === 'investigation-phase') {
+      expect(phase.investigationRunId).toBe('run-investigate');
+      expect(phase.lastEventAt).toBe(events[3].createdAt);
+    }
+  });
+
+  it('leaves orphan scout runs flat when no parent investigation run exists', () => {
+    const events: AgentEventDto[] = [
+      makeEvent(1, 'agent.run-started', 'run-missing:scout:pattern:0', {
+        payload: { skill: 'scout-pattern' },
+      }),
+      makeEvent(2, 'agent.run-completed', 'run-missing:scout:pattern:0'),
+    ];
+
+    const items = groupEvents(events);
+
+    expect(items.some((item) => item.kind === 'investigation-phase')).toBe(false);
+    expect(items[0]?.kind).toBe('run-group');
+  });
+
+  it('marks an investigation phase as started before child runs appear', () => {
+    const items = groupEvents([
+      makeEvent(1, 'agent.run-started', 'run-investigate', {
+        payload: { skill: 'investigate' },
+      }),
     ]);
+
+    const phase = items[0];
+    expect(phase?.kind).toBe('investigation-phase');
+    if (phase?.kind === 'investigation-phase') {
+      expect(phase.status).toBe('started');
+    }
+  });
+
+  it('marks an investigation phase as live when children are running', () => {
+    const items = groupEvents([
+      makeEvent(1, 'agent.run-started', 'run-investigate', {
+        payload: { skill: 'investigate' },
+      }),
+      makeEvent(2, 'agent.run-started', 'run-investigate:scout:pattern:0', {
+        payload: { skill: 'scout-pattern' },
+      }),
+    ]);
+
+    const phase = items[0];
+    expect(phase?.kind).toBe('investigation-phase');
+    if (phase?.kind === 'investigation-phase') {
+      expect(phase.status).toBe('live');
+    }
+  });
+
+  it('marks an investigation phase as failed on wave halt', () => {
+    const items = groupEvents([
+      makeEvent(1, 'agent.run-started', 'run-investigate', {
+        payload: { skill: 'investigate' },
+      }),
+      makeEvent(2, 'swarm.wave-halted', 'run-investigate', {
+        payload: { failedScouts: ['scout-schema'] },
+      }),
+    ]);
+
+    const phase = items[0];
+    expect(phase?.kind).toBe('investigation-phase');
+    if (phase?.kind === 'investigation-phase') {
+      expect(phase.status).toBe('failed');
+    }
   });
 
   it('uses start time and runId as stable tie-breakers for same-second activity', () => {
@@ -249,6 +322,74 @@ describe('groupByDevPhase', () => {
     ).toBe(true);
   });
 
+  it('groups WP run-groups by nested pipelineRunId when their runId uses the parallel run prefix', () => {
+    const PID = 'pipe-ui-123';
+    const WP_RUN = 'parallel-run-456:wp:WP1:iter:1';
+    const events: AgentEventDto[] = [
+      makeEvent(1, 'agent.run-started', PID, { payload: { skill: 'spec-author' } }),
+      makeEvent(2, 'spec.completed', PID, { payload: { pipelineRunId: PID } }),
+      makeEvent(3, 'agent.run-completed', PID),
+      makeEvent(4, 'parallel-implement.iteration-started', 'parallel-run-456', {
+        payload: { pipelineRunId: PID, iteration: 1, wpCount: 1, wpIds: ['WP1'] },
+      }),
+      makeEvent(5, 'agent.run-started', WP_RUN, { payload: { skill: 'implement-wp' } }),
+      makeEvent(6, 'parallel-implement.wp-started', WP_RUN, {
+        payload: { pipelineRunId: PID, wpId: 'WP1', wpRunId: WP_RUN },
+      }),
+    ];
+
+    const result = groupEvents(events);
+    const pg = result.find((item) => item.kind === 'phase-group') as Extract<
+      (typeof result)[0],
+      { kind: 'phase-group' }
+    >;
+
+    expect(pg).toBeDefined();
+    expect(pg.status).toBe('live');
+    expect(pg.items.some((item) => item.kind === 'run-group' && item.runId === WP_RUN)).toBe(true);
+    expect(result.some((item) => item.kind === 'run-group' && item.runId === WP_RUN)).toBe(false);
+  });
+
+  it('marks dev phase completed when the pipeline transitions to QA', () => {
+    const PID = 'pipe-complete-123';
+    const events: AgentEventDto[] = [
+      makeEvent(1, 'agent.run-started', PID, { payload: { skill: 'spec-author' } }),
+      makeEvent(2, 'spec.completed', PID, { payload: { pipelineRunId: PID } }),
+      makeEvent(3, 'agent.run-completed', PID),
+      makeEvent(4, 'state.transitioned', PID, {
+        payload: { pipelineRunId: PID, to: 'factory:needs-qa' },
+      }),
+    ];
+
+    const result = groupEvents(events);
+    const pg = result.find((item) => item.kind === 'phase-group') as Extract<
+      (typeof result)[0],
+      { kind: 'phase-group' }
+    >;
+
+    expect(pg.status).toBe('completed');
+  });
+
+  it('marks dev phase failed when parallel implement exhausts', () => {
+    const PID = 'pipe-failed-123';
+    const events: AgentEventDto[] = [
+      makeEvent(1, 'agent.run-started', PID, { payload: { skill: 'spec-author' } }),
+      makeEvent(2, 'spec.completed', PID, { payload: { pipelineRunId: PID } }),
+      makeEvent(3, 'agent.run-completed', PID),
+      makeEvent(4, 'parallel-implement.exhausted', 'parallel-run-456', {
+        payload: { pipelineRunId: PID, failedWpIds: ['WP1'] },
+      }),
+    ];
+
+    const result = groupEvents(events);
+    const pg = result.find((item) => item.kind === 'phase-group') as Extract<
+      (typeof result)[0],
+      { kind: 'phase-group' }
+    >;
+
+    expect(pg.status).toBe('failed');
+  });
+
   it('groups dev-review.* events with matching pipelineRunId into the phase-group', () => {
     const PID = 'pipe-review-456';
     const events: AgentEventDto[] = [
@@ -278,6 +419,78 @@ describe('groupByDevPhase', () => {
     expect(phaseEventKinds).toContain('dev-review.started');
     expect(phaseEventKinds).toContain('dev-review.completed');
   });
+
+  it('groups legacy fix-feedback repair cycles with matching pipelineRunId into the dev phase', () => {
+    const PID = 'pipe-repair-123';
+    const REPAIR_RUN = 'repair-run-1';
+    const events: AgentEventDto[] = [
+      makeEvent(1, 'agent.run-started', PID, { payload: { skill: 'spec-author' } }),
+      makeEvent(2, 'spec.completed', PID, { payload: { pipelineRunId: PID } }),
+      makeEvent(3, 'agent.run-completed', PID),
+      makeEvent(4, 'parallel-implement.wp-started', `${PID}:wp:WP1:iter:1`, {
+        payload: { pipelineRunId: PID, wpId: 'WP1' },
+      }),
+      makeEvent(5, 'agent.run-started', REPAIR_RUN, { payload: { skill: 'implement' } }),
+      makeEvent(6, 'agent.fix-feedback-complete', REPAIR_RUN, {
+        payload: {
+          pipelineRunId: PID,
+          repairMode: 'legacy-implement',
+          repairCycle: 1,
+          sourceFailureKind: 'qa',
+          sourceFailureRunId: 'qa-run-1',
+          worktreePath: '/work/wt',
+        },
+      }),
+      makeEvent(7, 'agent.run-completed', REPAIR_RUN),
+    ];
+
+    const result = groupEvents(events);
+    const pg = result.find((item) => item.kind === 'phase-group') as Extract<
+      (typeof result)[0],
+      { kind: 'phase-group' }
+    >;
+
+    expect(pg).toBeDefined();
+    expect(pg.items.some((item) => item.kind === 'run-group' && item.runId === REPAIR_RUN)).toBe(
+      true,
+    );
+    expect(result.some((item) => item.kind === 'run-group' && item.runId === REPAIR_RUN)).toBe(
+      false,
+    );
+  });
+
+  it('leaves fix-feedback repair events ungrouped when pipelineRunId is missing', () => {
+    const PID = 'pipe-repair-missing-pid';
+    const REPAIR_RUN = 'repair-run-missing-pid';
+    const events: AgentEventDto[] = [
+      makeEvent(1, 'agent.run-started', PID, { payload: { skill: 'spec-author' } }),
+      makeEvent(2, 'spec.completed', PID, { payload: { pipelineRunId: PID } }),
+      makeEvent(3, 'agent.run-completed', PID),
+      makeEvent(4, 'agent.run-started', REPAIR_RUN, { payload: { skill: 'implement' } }),
+      makeEvent(5, 'agent.fix-feedback-complete', REPAIR_RUN, {
+        payload: {
+          repairMode: 'legacy-implement',
+          repairCycle: 1,
+          worktreePath: '/work/wt',
+        },
+      }),
+      makeEvent(6, 'agent.run-completed', REPAIR_RUN),
+    ];
+
+    const result = groupEvents(events);
+    const pg = result.find((item) => item.kind === 'phase-group') as Extract<
+      (typeof result)[0],
+      { kind: 'phase-group' }
+    >;
+
+    expect(pg).toBeDefined();
+    expect(pg.items.some((item) => item.kind === 'run-group' && item.runId === REPAIR_RUN)).toBe(
+      false,
+    );
+    expect(result.some((item) => item.kind === 'run-group' && item.runId === REPAIR_RUN)).toBe(
+      true,
+    );
+  });
 });
 
 describe('EVENT_KIND_LABEL — dev-review kinds', () => {
@@ -293,6 +506,25 @@ describe('EVENT_KIND_LABEL — dev-review kinds', () => {
   ] as const;
 
   it.each(DEV_REVIEW_KINDS)('has a label for %s', (kind) => {
+    expect(EVENT_KIND_LABEL[kind]).toBeDefined();
+    expect(typeof EVENT_KIND_LABEL[kind]).toBe('string');
+    expect(EVENT_KIND_LABEL[kind].length).toBeGreaterThan(0);
+  });
+});
+
+describe('EVENT_KIND_LABEL — QA and fix-feedback kinds', () => {
+  const KINDS = [
+    'agent.disclosure',
+    'agent.fix-feedback-complete',
+    'agent.retry-escalated',
+    'symbol-index.hints-used',
+    'evidence.playwright-ran',
+    'qa.structural-passed',
+    'qa.functional-passed',
+    'qa.regression-passed',
+  ] as const;
+
+  it.each(KINDS)('has a label for %s', (kind) => {
     expect(EVENT_KIND_LABEL[kind]).toBeDefined();
     expect(typeof EVENT_KIND_LABEL[kind]).toBe('string');
     expect(EVENT_KIND_LABEL[kind].length).toBeGreaterThan(0);

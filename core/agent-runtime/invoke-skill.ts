@@ -5,16 +5,11 @@ import { getProjectBySlug } from '../projects/loader.js';
 import type { ProjectConfig } from '../types.js';
 import type { ResolvedBudget } from './budgets.js';
 import type { AgentResult, AgentRuntime, SkillConfig } from './interface.js';
-import { defaultModelForTierAndProvider } from './models.js';
 import { readPromptWithContext } from './read-prompt.js';
-import {
-  resolveBudgetsForProject,
-  resolveRoleBudgetOverrideForProject,
-  resolveRoleModelForProject,
-} from './resolve-for-project.js';
 import { toJsonSchema } from './schema-bridge.js';
 import { selectPersona } from './select-persona.js';
 import { selectRuntime } from './select-runtime.js';
+import { resolveSkillRuntimeForProject } from './skill-runtime-resolver.js';
 
 export class ContextValidationError extends Error {
   issues: Array<{ path: Array<string | number>; message: string }>;
@@ -60,12 +55,9 @@ export type InvokeSkillInput = {
     projectConfigOverride?: Partial<ProjectConfig> | null;
     /** Caller-supplied freshContext flag. When provided, overrides the skill config value. */
     freshContextOverride?: boolean;
+    /** Skip runtime-owned agent.run-started when caller already emitted the parent marker. */
+    suppressRunStarted?: boolean;
   };
-};
-
-const FALLBACK_BUDGET: ResolvedBudget = {
-  budgets: { maxTurns: 25, maxBudgetUsd: 1.0, timeoutMs: 120_000 },
-  modelOverride: defaultModelForTierAndProvider('sonnet', 'claude'),
 };
 
 /**
@@ -115,61 +107,20 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<AgentResult>
     overrides?.projectConfigOverride !== undefined
       ? overrides.projectConfigOverride
       : await getProjectBySlug(projectId);
-  let resolved: ResolvedBudget;
-  try {
-    resolved = resolveBudgetsForProject(skillName, projectConfig?.budgets, projectId);
-  } catch {
-    resolved = {
-      ...FALLBACK_BUDGET,
-      modelOverride: defaultModelForTierAndProvider(
-        skillConfig.modelPin,
-        skillConfig.provider ?? 'claude',
-      ),
-    };
-  }
-
-  // 5b. Apply per-role budget overrides (maxTurns / timeoutMs) from DB on top of
-  //     the skill-level resolution. null means "no override — keep skill default".
-  //     Holdout gating is applied inside resolveRoleBudgetOverrideForProject.
-  const roleBudget = resolveRoleBudgetOverrideForProject(
+  const resolved: ResolvedBudget = resolveSkillRuntimeForProject({
+    skill: skillName,
+    projectBudgets: projectConfig?.budgets,
     projectId,
+    configRuntime: projectConfig?.agentConfig?.runtime ?? 'auto',
+    skillProvider: skillConfig.provider,
+    fallbackTier: skillConfig.modelPin,
+    fallbackProvider: skillConfig.provider,
+    callerModelOverride: overrides?.modelOverride,
     role,
-    projectConfig?.agentConfig?.allowHoldoutOverride,
-  );
-  resolved = {
-    ...resolved,
-    budgets: {
-      ...resolved.budgets,
-      ...(roleBudget.maxTurns != null && { maxTurns: roleBudget.maxTurns }),
-      ...(roleBudget.timeoutMs != null && { timeoutMs: roleBudget.timeoutMs }),
-    },
-  };
-
-  // 6. Resolve model — precedence: caller override > per-role override (DB / config) > skill budget default
-  // When runtimeOverride is supplied the caller owns the runtime; skip DB provider overrides so a
-  // codex-targeted DB row can't inject a Codex model ID into a ClaudeCliRuntime call.
-  let modelOverride: string;
-  if (overrides?.modelOverride != null) {
-    modelOverride = overrides.modelOverride;
-  } else if (overrides?.runtimeOverride != null) {
-    modelOverride = resolved.modelOverride;
-  } else {
-    const roleModel = resolveRoleModelForProject({
-      role,
-      projectId,
-      configRoleModel: projectConfig?.agentConfig?.rolesModels?.[role],
-      allowHoldoutOverride: projectConfig?.agentConfig?.allowHoldoutOverride,
-      skill: skillName,
-      skillProvider: skillConfig.provider,
-    });
-    // Use the role's resolved model when it differs from the skill-budget default
-    // (i.e. a DB or config override is active). Otherwise stick with the budget
-    // resolution so skill-pinned tiers still drive budget math correctly.
-    modelOverride =
-      roleModel.source === 'db' || roleModel.source === 'config'
-        ? roleModel.modelId
-        : resolved.modelOverride;
-  }
+    allowHoldoutOverride: projectConfig?.agentConfig?.allowHoldoutOverride,
+    ignoreProviderOverride: overrides?.runtimeOverride != null && overrides?.modelOverride == null,
+  });
+  const modelOverride = resolved.modelOverride;
 
   // 7. Select runtime — runtimeOverride short-circuits for tests and bespoke callers
   const runtime =
@@ -211,6 +162,7 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<AgentResult>
     appendSystemPrompt,
     workspaceDir: overrides?.workspaceDir,
     extraEventPayload: overrides?.extraEventPayload,
+    suppressRunStarted: overrides?.suppressRunStarted,
   });
 
   // 11. Validate output when skill declares an outputSchema
