@@ -58,7 +58,8 @@ vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   writeProjectSettings: (id: string, patch: Record<string, unknown>, by: string) =>
     mockWriteProjectSettings(id, patch, by),
   getUseMultiAgentPipeline: (id: string) => mockGetUseMultiAgentPipeline(id),
-  getUseInvestigationSwarm: (id: string) => mockGetUseInvestigationSwarm(id),
+  getUseInvestigationSwarm: (id: string, configDefault?: boolean) =>
+    mockGetUseInvestigationSwarm(id, configDefault),
 }));
 
 const mockResolveActiveMilestone: ReturnType<typeof vi.fn> = vi.fn(async () => ({
@@ -80,6 +81,11 @@ const mockSetActiveMilestoneViaBridge: ReturnType<typeof vi.fn> = vi.fn(
 vi.mock('#shared/milestone-bridge.js', () => ({
   setActiveMilestoneViaBridge: (slug: string, n: number | null) =>
     mockSetActiveMilestoneViaBridge(slug, n),
+}));
+
+const mockGetProject: ReturnType<typeof vi.fn> = vi.fn(async () => null);
+vi.mock('#shared/projects.js', () => ({
+  getProject: (slug: string) => mockGetProject(slug),
 }));
 
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
@@ -287,6 +293,7 @@ describe('chat-tools — get_settings', () => {
     } as unknown as ReturnType<typeof mockReadProjectSettings>);
     mockGetUseMultiAgentPipeline.mockReturnValueOnce(true);
     mockGetUseInvestigationSwarm.mockReturnValueOnce(true);
+    mockGetProject.mockResolvedValueOnce(null);
 
     const result = (await CHAT_TOOL_IMPLEMENTATIONS.get_settings(
       { projectSlug: 'goose-hub-self' },
@@ -294,6 +301,7 @@ describe('chat-tools — get_settings', () => {
     )) as {
       projectId: string;
       settings: Record<string, unknown>;
+      effective: Record<string, unknown>;
       activeMilestone: { milestoneNumber: number | null; source: string };
     };
     expect(result.projectId).toBe('goose-hub-self');
@@ -301,6 +309,38 @@ describe('chat-tools — get_settings', () => {
     expect(result.settings.useMultiAgentPipeline).toBe(true);
     expect(result.settings.qaE2eMode).toBe('ui-changed');
     expect(result.activeMilestone.milestoneNumber).toBe(20);
+    // effective falls back to override values when no config defaults available
+    expect(result.effective.perWorkflowMaxUsd).toBe(0.5);
+  });
+
+  it('falls back to project config budgets when no override row exists', async () => {
+    mockReadProjectSettings.mockReturnValueOnce(null);
+    mockGetUseMultiAgentPipeline.mockReturnValueOnce(false);
+    mockGetUseInvestigationSwarm.mockReturnValueOnce(false);
+    mockGetProject.mockResolvedValueOnce({
+      id: 'goose-hub-self',
+      slug: 'goose-hub-self',
+      budgets: {
+        perWorkflowMaxUsd: 0.4,
+        perAgentMaxUsd: 0.08,
+        perAdvisorMaxUsd: 0.03,
+        maxParallelAgents: 3,
+        maxRetries: 2,
+      },
+      investigationSwarm: { enabled: false },
+    });
+
+    const result = (await CHAT_TOOL_IMPLEMENTATIONS.get_settings(
+      { projectSlug: 'goose-hub-self' },
+      ctx,
+    )) as {
+      settings: Record<string, unknown>;
+      effective: Record<string, unknown>;
+    };
+    expect(result.settings.perWorkflowMaxUsd).toBeNull();
+    expect(result.effective.perWorkflowMaxUsd).toBe(0.4);
+    expect(result.effective.maxParallelAgents).toBe(3);
+    expect(mockGetUseInvestigationSwarm).toHaveBeenCalledWith('goose-hub-self', false);
   });
 
   it('rejects unknown projects with a 404', async () => {
@@ -362,6 +402,40 @@ describe('chat-tools — update_settings', () => {
     ).rejects.toBeInstanceOf(ToolExecutionError);
   });
 
+  it('rejects integer values above the upper cap (maxParallelAgents > 50)', async () => {
+    await expect(
+      CHAT_TOOL_IMPLEMENTATIONS.update_settings(
+        {
+          projectSlug: 'goose-hub-self',
+          key: 'maxParallelAgents',
+          value: 100_000,
+          rationale: 'wildly high',
+        },
+        ctx,
+      ),
+    ).rejects.toMatchObject({
+      name: 'ToolExecutionError',
+      message: expect.stringContaining('between 0 and 50'),
+    });
+  });
+
+  it('rejects maxRetries above its upper cap', async () => {
+    await expect(
+      CHAT_TOOL_IMPLEMENTATIONS.update_settings(
+        {
+          projectSlug: 'goose-hub-self',
+          key: 'maxRetries',
+          value: 200,
+          rationale: 'too many retries',
+        },
+        ctx,
+      ),
+    ).rejects.toMatchObject({
+      name: 'ToolExecutionError',
+      message: expect.stringContaining('between 0 and 20'),
+    });
+  });
+
   it('rejects an out-of-range qaE2eMode value', async () => {
     await expect(
       CHAT_TOOL_IMPLEMENTATIONS.update_settings(
@@ -404,8 +478,8 @@ describe('chat-tools — set_active_milestone', () => {
         rationale: 'flip to next',
       },
       ctx,
-    )) as { ok: boolean; milestoneNumber: number | null };
-    expect(result).toEqual({ ok: true, milestoneNumber: 21 });
+    )) as { ok: boolean; milestoneNumber: number | null; cleared: boolean };
+    expect(result).toEqual({ ok: true, milestoneNumber: 21, cleared: false });
     expect(mockSetActiveMilestoneViaBridge).toHaveBeenCalledWith('goose-hub-self', 21);
   });
 
@@ -431,6 +505,7 @@ describe('chat-tools — set_active_milestone', () => {
     mockSetActiveMilestoneViaBridge.mockResolvedValueOnce({
       ok: true,
       milestoneNumber: null,
+      cleared: true,
     });
     const result = (await CHAT_TOOL_IMPLEMENTATIONS.set_active_milestone(
       {
@@ -439,7 +514,8 @@ describe('chat-tools — set_active_milestone', () => {
         rationale: 'clear',
       },
       ctx,
-    )) as { ok: boolean; milestoneNumber: number | null };
+    )) as { ok: boolean; milestoneNumber: number | null; cleared: boolean };
     expect(result.milestoneNumber).toBeNull();
+    expect(result.cleared).toBe(true);
   });
 });

@@ -416,8 +416,14 @@ const NUMERIC_BUDGET_KEYS = new Set<UpdateSettingsKey>([
   'perAdvisorMaxUsd',
 ]);
 const BOOLEAN_KEYS = new Set<UpdateSettingsKey>(['useMultiAgentPipeline', 'useInvestigationSwarm']);
-const INTEGER_KEYS = new Set<UpdateSettingsKey>(['maxParallelAgents', 'maxRetries']);
 const ENUM_QA_E2E = new Set(['off', 'ui-changed', 'always']);
+
+// Upper bounds mirror `apps/server/src/domains/project-settings/router.ts` so a
+// chat write cannot persist values the Settings API would reject.
+const INTEGER_BOUNDS: Partial<Record<UpdateSettingsKey, { min: number; max: number }>> = {
+  maxParallelAgents: { min: 0, max: 50 },
+  maxRetries: { min: 0, max: 20 },
+};
 
 function coerceSettingValue(key: UpdateSettingsKey, value: unknown): unknown {
   if (NUMERIC_BUDGET_KEYS.has(key)) {
@@ -433,10 +439,19 @@ function coerceSettingValue(key: UpdateSettingsKey, value: unknown): unknown {
     }
     return value ? 1 : 0;
   }
-  if (INTEGER_KEYS.has(key)) {
+  const bounds = INTEGER_BOUNDS[key];
+  if (bounds != null) {
     if (value === null) return null;
-    if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
-      throw new ToolExecutionError(`${key} must be a non-negative integer`, 400);
+    if (
+      typeof value !== 'number' ||
+      !Number.isInteger(value) ||
+      value < bounds.min ||
+      value > bounds.max
+    ) {
+      throw new ToolExecutionError(
+        `${key} must be an integer between ${bounds.min} and ${bounds.max}`,
+        400,
+      );
     }
     return value;
   }
@@ -457,21 +472,42 @@ async function getSettings(input: { projectSlug: string }): Promise<unknown> {
   if (source == null) {
     throw new ToolExecutionError(`project not found: ${input.projectSlug}`, 404);
   }
+  // case 2: runtime-resolved path to the project config — needed so the
+  // returned "effective" budgets and flags reflect what dispatch actually
+  // sees, not just the raw DB override row.
+  const projectsHelper = await import('#shared/projects.js');
+  const cfg = await projectsHelper.getProject(input.projectSlug);
   const row = readProjectSettings(source.projectId);
   const activeMilestone = await resolveActiveMilestone(input.projectSlug);
+
+  const configBudgets = cfg?.budgets;
+  const swarmEnabled = cfg?.investigationSwarm?.enabled ?? true;
+
+  const override = {
+    perWorkflowMaxUsd: row?.perWorkflowMaxUsd ?? null,
+    perAgentMaxUsd: row?.perAgentMaxUsd ?? null,
+    perAdvisorMaxUsd: row?.perAdvisorMaxUsd ?? null,
+    dailyTokens: row?.dailyTokens ?? null,
+    maxParallelAgents: row?.maxParallelAgents ?? null,
+    maxRetries: row?.maxRetries ?? null,
+    perBashCommandMaxSeconds: row?.perBashCommandMaxSeconds ?? null,
+    qaE2eMode: row?.qaE2eMode ?? null,
+  };
+
   return {
     projectId: source.projectId,
     settings: {
-      perWorkflowMaxUsd: row?.perWorkflowMaxUsd ?? null,
-      perAgentMaxUsd: row?.perAgentMaxUsd ?? null,
-      perAdvisorMaxUsd: row?.perAdvisorMaxUsd ?? null,
-      dailyTokens: row?.dailyTokens ?? null,
-      maxParallelAgents: row?.maxParallelAgents ?? null,
-      maxRetries: row?.maxRetries ?? null,
-      perBashCommandMaxSeconds: row?.perBashCommandMaxSeconds ?? null,
-      qaE2eMode: row?.qaE2eMode ?? null,
+      ...override,
       useMultiAgentPipeline: getUseMultiAgentPipeline(source.projectId),
-      useInvestigationSwarm: getUseInvestigationSwarm(source.projectId),
+      useInvestigationSwarm: getUseInvestigationSwarm(source.projectId, swarmEnabled),
+    },
+    effective: {
+      perWorkflowMaxUsd: override.perWorkflowMaxUsd ?? configBudgets?.perWorkflowMaxUsd ?? null,
+      perAgentMaxUsd: override.perAgentMaxUsd ?? configBudgets?.perAgentMaxUsd ?? null,
+      perAdvisorMaxUsd: override.perAdvisorMaxUsd ?? configBudgets?.perAdvisorMaxUsd ?? null,
+      maxParallelAgents: override.maxParallelAgents ?? configBudgets?.maxParallelAgents ?? null,
+      maxRetries: override.maxRetries ?? configBudgets?.maxRetries ?? null,
+      qaE2eMode: override.qaE2eMode ?? null,
     },
     activeMilestone: {
       milestoneNumber: activeMilestone.milestoneNumber,
@@ -517,7 +553,11 @@ async function setActiveMilestoneTool(input: {
       result.error === 'project not found' ? 404 : 400,
     );
   }
-  return { ok: true, milestoneNumber: result.milestoneNumber };
+  return {
+    ok: true,
+    milestoneNumber: result.milestoneNumber,
+    cleared: result.cleared ?? false,
+  };
 }
 
 type ToolFn = (input: unknown, ctx: ToolContext) => Promise<unknown>;
