@@ -13,16 +13,9 @@ import { z } from 'zod';
  * the original issue, the diff, and the QA verdict for context.
  *
  *   <task>
- *     <work_item>
- *       <title>...</title>
- *       <body>...</body>
- *       <number>...</number>
- *     </work_item>
- *     <pr_diff>...</pr_diff>
- *     <qa_verdict>
- *       <verdict>pass|fail|partial</verdict>
- *       <overall_score>82</overall_score>
- *     </qa_verdict>
+ *     <workItem>{"title":"...","body":"...","number":123}</workItem>
+ *     <prDiff>...</prDiff>
+ *     <qaVerdict>{"verdict":"pass","overallScore":82}</qaVerdict>
  *   </task>
  */
 export const ReviewContextSchema = z.object({

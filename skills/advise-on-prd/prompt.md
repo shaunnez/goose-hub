@@ -14,10 +14,10 @@ The orchestrator invokes this skill only for `priority:high` and `priority:criti
 
 ## Input
 
-The context contains:
+The context contains a `<task>` block with:
 
-- `prdOutput` — the PRD JSON object produced by `write-prd`. It conforms to `PRDOutputSchema` (see `skills/write-prd/schema.ts`).
-- `priority` — the work item priority: `low`, `medium`, `high`, or `critical`.
+- `<prdOutput>` — JSON payload for the PRD object produced by `write-prd`. It conforms to `PRDOutputSchema` (see `skills/write-prd/schema.ts`).
+- `<priority>` — the work item priority: `low`, `medium`, `high`, or `critical`.
 
 ## What you must do
 

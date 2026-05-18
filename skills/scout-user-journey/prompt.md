@@ -6,9 +6,9 @@ You have **read and search access only**.
 
 ## Input
 
-- `<work_item>` — title, body, number
-- `<scout_focus>` — one sentence naming the user-facing flow
-- `<worktree_path>` — the worktree to read from
+- `<workItem>` — JSON payload for the work item, with `title`, `body`, and `number`
+- `<scoutFocus>` — one sentence naming the user-facing flow
+- `<worktreePath>` — the worktree to read from
 
 ## Discipline
 

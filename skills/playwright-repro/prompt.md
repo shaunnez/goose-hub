@@ -10,13 +10,13 @@ Investigator (repro sub-task). Called after the investigate skill for `type:bug`
 
 ## Input
 
-Context `<work_item>` has:
-- `<title>` — bug issue title
-- `<body>` — full bug issue body
-- `<reproSteps>` — repro steps from the issue
-- `<url>` (optional) — URL of the page exhibiting the bug
-- `<number>` — issue number (drives the evidence branch name and `gh issue comment`)
-- `<repo>` — `owner/repo` (e.g. `shaunnez/goose-hub`)
+Context `<workItem>` is a JSON payload with:
+- `title` — bug issue title
+- `body` — full bug issue body
+- `reproSteps` — repro steps from the issue
+- `url` (optional) — URL of the page exhibiting the bug
+- `number` — issue number (drives the evidence branch name and `gh issue comment`)
+- `repo` — `owner/repo` (e.g. `shaunnez/goose-hub`)
 
 Context `<appUrl>` — running app base URL (e.g. `http://localhost:5173`).
 

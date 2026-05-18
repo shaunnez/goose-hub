@@ -12,8 +12,13 @@ vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
   getUseMultiAgentPipeline: vi.fn().mockReturnValue(false),
   getUseInvestigationSwarm: vi.fn().mockReturnValue(false),
+  getQaE2eMode: vi.fn((_projectId: string, configDefault = 'off') => configDefault),
+  getPlaywrightReproEnabled: vi.fn((_projectId: string, configDefault = true) => configDefault),
+  getEvidencePostEnabled: vi.fn((_projectId: string, configDefault = true) => configDefault),
   setUseMultiAgentPipeline: vi.fn(),
   deriveUseMultiAgentPipeline: vi.fn().mockReturnValue(false),
+  deriveUseInvestigationSwarm: vi.fn((_row, configDefault = true) => configDefault),
+  deriveQaE2eMode: vi.fn((_row, configDefault = 'off') => configDefault),
 }));
 
 const mockDispatchWaveSF = vi.fn();

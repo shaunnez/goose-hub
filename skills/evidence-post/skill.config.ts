@@ -5,15 +5,10 @@ import { z } from 'zod';
  * Context expected by the evidence-post agent. Rendered as XML in the user prompt:
  *
  *   <task>
- *     <work_item>
- *       <number>...</number>
- *       <repo>owner/repo</repo>
- *       <title>...</title>
- *       <beforeCommentUrl>...</beforeCommentUrl>  <!-- optional, type:bug only -->
- *     </work_item>
- *     <pr_number>...</pr_number>
- *     <pr_head_sha>...</pr_head_sha>
- *     <spec_path>apps/web/e2e/issue-N.spec.ts</spec_path>
+ *     <workItem>{"number":123,"repo":"owner/repo","title":"...","beforeCommentUrl":"..."}</workItem>
+ *     <prNumber>...</prNumber>
+ *     <prHeadSha>...</prHeadSha>
+ *     <specPath>apps/web/e2e/issue-N.spec.ts</specPath>
  *   </task>
  */
 export const EvidencePostContextSchema = z.object({

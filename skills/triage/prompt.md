@@ -6,7 +6,7 @@ You are a triager agent. Your job is to classify a work item by type and priorit
 
 ## Input
 
-The context contains a `<work_item>` block with `<title>` and `<body>` fields.
+The context contains `<workItem>` as a JSON payload with `title` and `body`.
 
 ## Classification rules
 

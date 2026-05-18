@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { TestRunSchema } from './schema.js';
 
 /**
  * Context keys provided to the QA holdout agent, formatted as structured XML.
@@ -13,20 +14,10 @@ import { z } from 'zod';
  * the original issue, the diff, and the commands needed to verify it.
  *
  *   <task>
- *     <work_item>
- *       <title>...</title>
- *       <body>...</body>
- *       <number>...</number>
- *     </work_item>
- *     <pr_diff>...</pr_diff>
- *     <project_commands>
- *       <test_command>...</test_command>
- *       <lint_command>...</lint_command>
- *       <e2e_command>...</e2e_command>
- *     </project_commands>
- *     <slice_tests>
- *       <path>...</path>
- *     </slice_tests>
+ *     <workItem>{"title":"...","body":"...","number":123}</workItem>
+ *     <prDiff>...</prDiff>
+ *     <projectCommands>{"testCommand":"...","lintCommand":"...","e2eCommand":"..."}</projectCommands>
+ *     <sliceTests>["path/to/test.ts"]</sliceTests>
  *   </task>
  */
 export const QaContextSchema = z.object({
@@ -82,6 +73,8 @@ export const QaContextSchema = z.object({
       paths: z.array(z.string()),
     })
     .optional(),
+  /** Structured test results captured by the workflow before the QA agent starts. */
+  testRun: TestRunSchema.nullable().optional(),
 });
 
 const config: SkillConfig = {
@@ -120,6 +113,7 @@ const config: SkillConfig = {
     'evidenceCommentUrl',
     'verifyCommands',
     'devTestsRun',
+    'testRun',
   ],
 };
 

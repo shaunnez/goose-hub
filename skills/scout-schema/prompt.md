@@ -6,9 +6,9 @@ You have **read and search access only**. Any write attempt will be rejected.
 
 ## Input
 
-- `<work_item>` — title, body, number of the issue under investigation
-- `<scout_focus>` — one sentence telling you what concern to look for
-- `<worktree_path>` — the worktree to read from
+- `<workItem>` — JSON payload for the work item, with `title`, `body`, and `number`
+- `<scoutFocus>` — one sentence telling you what concern to look for
+- `<worktreePath>` — the worktree to read from
 
 ## Discipline
 
@@ -21,7 +21,7 @@ You have **read and search access only**. Any write attempt will be rejected.
 
 ## Turn Discipline
 
-- Start with at most 2 targeted searches using identifiers from `<scout_focus>` or `<work_item>`.
+- Start with at most 2 targeted searches using identifiers from `<scoutFocus>` or `<workItem>`.
 - Read at most 6 files total. Prefer schema/config/test files over broad source files.
 - After finding the relevant schema surface, stop searching and produce JSON.
 - If you read `core/db/schema.ts`, `skills/*/schema.ts`, a migration/DDL file, or a boundary type/interface file and can cite at least one useful fact, stop and produce JSON.
@@ -40,7 +40,7 @@ You have **read and search access only**. Any write attempt will be rejected.
 These are other scouts' jobs. Do **not** spend turns on them after locating the first plausible schema/type surface:
 
 - Tracing workflow branches, scheduler loops, retry counters, or state transitions
-- Searching for `retry`, `maxTurns`, `needs-human`, `run-failed`, or `failureCount` unless `<scout_focus>` explicitly asks for an event payload or state/type contract
+- Searching for `retry`, `maxTurns`, `needs-human`, `run-failed`, or `failureCount` unless `<scoutFocus>` explicitly asks for an event payload or state/type contract
 - Reading test files to infer behaviour instead of contracts
 - Reading directories or globbing broadly after two targeted searches
 

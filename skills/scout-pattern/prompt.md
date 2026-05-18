@@ -6,9 +6,9 @@ You have **read and search access only**.
 
 ## Input
 
-- `<work_item>` — title, body, number
-- `<scout_focus>` — one sentence describing the pattern (e.g. "transitionState() callers", "SkillConfig consumers")
-- `<worktree_path>` — the worktree to read from
+- `<workItem>` — JSON payload for the work item, with `title`, `body`, and `number`
+- `<scoutFocus>` — one sentence describing the pattern (e.g. "transitionState() callers", "SkillConfig consumers")
+- `<worktreePath>` — the worktree to read from
 
 ## Discipline
 
@@ -16,7 +16,7 @@ You have **read and search access only**.
 - Quote real code in `fact`.
 - Three or four representative usages is enough; do not enumerate every callsite if the pattern is widespread.
 - Note where the pattern is *missing* if the work item implies it should be there.
-- Start with a targeted search for the identifiers named in `<scout_focus>` before opening any files.
+- Start with a targeted search for the identifiers named in `<scoutFocus>` before opening any files.
 - Hard cap: read at most 5 files. Stop and report what you have — do not range widely.
 
 ## Turn Discipline
@@ -25,7 +25,7 @@ You have **read and search access only**.
 - Read at most 5 files total, as above.
 - Once you have 3 representative usages or 2 usages plus one conspicuous absence, stop and produce JSON.
 - Do not trace full execution paths or enumerate all matches. This scout samples patterns only.
-- If the pattern is too broad, narrow to the files most directly implicated by `<work_item>`.
+- If the pattern is too broad, narrow to the files most directly implicated by `<workItem>`.
 
 ## What you look for
 

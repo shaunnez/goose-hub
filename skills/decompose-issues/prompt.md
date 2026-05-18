@@ -7,8 +7,8 @@ You are a decomposer agent. Your job is to take the PRD output (a set of SliceOu
 ## Input
 
 The context contains:
-- `parentIssue`: `{ number, title, body }` — the PRD/epic issue this decomposition belongs to.
-- `prdOutput`: A PRD output object containing an array of slice outlines, each with a name, description, and optional dependencies on sibling slices.
+- `<parentIssue>` — JSON payload for the PRD/epic issue this decomposition belongs to (`number`, `title`, `body`).
+- `<prdOutput>` — JSON payload for the PRD output object containing slice outlines and any dependency hints.
 
 ## Output requirements
 

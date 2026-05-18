@@ -10,11 +10,9 @@ You have **read and search access only**. You must not attempt to write, create,
 
 The context contains a `<task>` block with:
 
-- `<work_item>` — the issue being investigated
-  - `<title>` — issue title
-  - `<body>` — issue body with reproduction steps and expected/actual behaviour
-  - `<number>` — issue number for reference
-- `<worktree_path>` — absolute path to the checked-out worktree to explore
+- `<workItem>` — JSON payload for the issue being investigated, with `title`, `body`, and `number`
+- `<worktreePath>` — absolute path to the checked-out worktree to explore
+- `<scoutReports>` (optional) — JSON-stringified Wave-1 scout reports and contradictions passed by the orchestrator
 
 ## Investigation process
 
@@ -65,7 +63,7 @@ Emit: `[decision] READ: Issue #<number> — <one-sentence summary of the bug>`
 - Use search tools to locate files relevant to the symptom area
 - Read directory structure to understand the code organisation
 
-**Wave-aware mode:** if `<scout_reports>` is present in your context, read the cross-validated Wave-1 reports first. Small reports may include full findings; large reports may include only summaries, previews, and `artifactRef` metadata. Treat full findings as primary evidence. Treat summarized artifact refs as orientation and verify exact file:line claims with targeted reads before relying on them. **Do not perform general code exploration.** You may make at most 2 targeted tool calls total — only to verify a specific file:line citation from the reports where your confidence in that citation is low or where the full report was summarized. If `crossValidate` has flagged contradictions across scouts, surface them in `openQuestions` rather than re-investigating. Wave-1 partial-failure rules (informational — the orchestrator enforces them before you see the reports):
+**Wave-aware mode:** if `<scoutReports>` is present in your context, read the cross-validated Wave-1 reports first. Small reports may include full findings; large reports may include only summaries, previews, and `artifactRef` metadata. Treat full findings as primary evidence. Treat summarized artifact refs as orientation and verify exact file:line claims with targeted reads before relying on them. **Do not perform general code exploration.** You may make at most 2 targeted tool calls total — only to verify a specific file:line citation from the reports where your confidence in that citation is low or where the full report was summarized. If `crossValidate` has flagged contradictions across scouts, surface them in `openQuestions` rather than re-investigating. Wave-1 partial-failure rules (informational — the orchestrator enforces them before you see the reports):
 - ≥3 scouts succeeded AND ≤1 failed → wave advanced; reports are usable.
 - 2+ scouts failed → orchestrator halted the wave and escalated; you should not be running.
 

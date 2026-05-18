@@ -6,15 +6,10 @@ import { AdviseOnPlanSchema } from './schema.js';
  * Context expected by the advisor. Rendered as XML in the user prompt:
  *
  *   <task>
- *     <work_item>
- *       <title>...</title>
- *       <body>...</body>
- *       <number>...</number>
- *       <priority>high | critical</priority>
- *     </work_item>
+ *     <workItem>{"title":"...","body":"...","number":123,"priority":"high"}</workItem>
  *     <plan>...the developer's plan text...</plan>
- *     <revision_pass>0 | 1</revision_pass>            <!-- optional -->
- *     <previous_advisor_feedback>...</previous_advisor_feedback>  <!-- present when revisionPass === 1 -->
+ *     <revisionPass>0 | 1</revisionPass>                       <!-- optional -->
+ *     <previousAdvisorFeedback>...</previousAdvisorFeedback>    <!-- present when revisionPass === 1 -->
  *   </task>
  *
  * `priority` constrained to `high | critical` because the orchestrator only

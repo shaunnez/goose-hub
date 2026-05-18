@@ -8,9 +8,9 @@ import { z } from 'zod';
  * Context (rendered as XML in the user prompt):
  *
  *   <task>
- *     <work_item><title>...</title><body>...</body><number>...</number></work_item>
- *     <scout_focus>...</scout_focus>
- *     <worktree_path>...</worktree_path>
+ *     <workItem>{"title":"...","body":"...","number":123}</workItem>
+ *     <scoutFocus>...</scoutFocus>
+ *     <worktreePath>...</worktreePath>
  *   </task>
  */
 export const ScoutSchemaContextSchema = z.object({

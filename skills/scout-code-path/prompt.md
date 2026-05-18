@@ -6,9 +6,9 @@ You have **read and search access only**.
 
 ## Input
 
-- `<work_item>` — title, body, number
-- `<scout_focus>` — one sentence telling you which symbol to trace
-- `<worktree_path>` — the worktree to read from
+- `<workItem>` — JSON payload for the work item, with `title`, `body`, and `number`
+- `<scoutFocus>` — one sentence telling you which symbol to trace
+- `<worktreePath>` — the worktree to read from
 - `<symbolIndexHints>` *(optional)* — pre-resolved symbol locations from the local symbol index. Each entry has `name`, `definedIn` (file path), `line`, `kind`, and `callers` (files that import this symbol). **When present, start your trace here instead of grepping.** Jump directly to `definedIn:line`. Still read the file — the index gives location, not content.
 
 ## Discipline
@@ -21,7 +21,7 @@ You have **read and search access only**.
 ## Turn Discipline
 
 - If `<symbolIndexHints>` is present, read the hinted definition first. Do not start with a repo-wide file listing.
-- Without hints, run at most 2 targeted searches for symbols named in `<scout_focus>` or `<work_item>`.
+- Without hints, run at most 2 targeted searches for symbols named in `<scoutFocus>` or `<workItem>`.
 - Read at most 7 files total: the definition, direct callers, and one branch/fallback file if needed.
 - Stop at direct callers and immediate branch outcomes. Do not walk transitive dependencies or tests.
 - If the symbol cannot be found after 2 searches, return an `UNCERTAINTY` decision summary and any partial findings.

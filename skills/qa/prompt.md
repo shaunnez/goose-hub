@@ -25,21 +25,17 @@ If you find yourself reasoning about "why the developer did X", stop. Your job i
 
 ## Input
 
-Your context contains:
+The context contains a `<task>` block with:
 
-- `workItem` — the original GitHub issue
-  - `title` — the issue title
-  - `body` — the full issue body, including acceptance criteria
-  - `number` — the issue number
-- `prDiff` — the complete git diff of the PR being reviewed
-- `projectCommands` — shell commands to run
-  - `testCommand` — command to run unit and integration tests
-  - `lintCommand` — command to run lint and type-check (optional)
-  - `e2eCommand` — command to run Playwright end-to-end tests (optional; only present when the orchestrator decided e2e should run)
-- `e2eDecision` — orchestrator decision for e2e policy: `{ mode, command?, reason }`
-- `sliceTests` — array of paths to slice-level test files (optional)
-- `evidenceCommentUrl` — permalink to the evidence-post comment on the GitHub issue, containing SHA-pinned screenshots and a walkthrough GIF (optional; absent for backend-only changes or when evidence capture did not run)
-- `testRun` — structured test results pre-run by the workflow before you started (optional; `null` if the run failed to produce a report). When present:
+- `<workItem>` — JSON payload for the original GitHub issue, with `title`, `body`, and `number`
+- `<prDiff>` — complete git diff of the PR being reviewed
+- `<projectCommands>` — JSON payload with `testCommand`, optional `lintCommand`, and optional `e2eCommand`
+- `<e2eDecision>` (optional) — JSON payload for e2e policy: `{ mode, command?, reason }`
+- `<sliceTests>` (optional) — JSON array of paths to slice-level test files
+- `<evidenceCommentUrl>` (optional) — permalink to the evidence-post comment on the GitHub issue, containing SHA-pinned screenshots and a walkthrough GIF
+- `<verifyCommands>` (optional) — JSON array of per-AC verify commands extracted from the issue body
+- `<devTestsRun>` (optional) — JSON payload with the targeted test command and paths the developer ran
+- `<testRun>` (optional) — structured test results pre-run by the workflow before you started, or `null` if the run failed to produce a report. When present:
   - `wallTimeMs`, `total`, `passed`, `failed`, `skipped`, `success`
   - `suites` — per-file: `{ name, filePath, total, passed, failed, skipped, durationMs, status }`
   Do **not** re-run `testCommand` when `testRun` is present — grade the Functional tier from `testRun` directly. Only re-run if you need to verify a specific test in isolation (e.g. confirming a regression is genuinely fixed, not just skipped).
@@ -321,14 +317,22 @@ Return a JSON object conforming exactly to this structure:
 
 ```json
 {
-  "verdict": "pass | fail | partial",
+  "verdict": "fail",
   "overallScore": 0,
   "threshold": 70,
   "tierResults": {
     "structural": {
       "passed": false,
       "findings": [
-        { "tier": "structural", "severity": "error", "description": "Type error in src/foo.ts: Property 'x' does not exist on type 'Bar'", "file": "src/foo.ts", "line": 12 }
+        {
+          "tier": "structural",
+          "severity": "error",
+          "description": "Type error in src/foo.ts: Property 'x' does not exist on type 'Bar'",
+          "file": "src/foo.ts",
+          "line": 12,
+          "disposition": "registered",
+          "dispositionRef": "type error must be fixed before approval"
+        }
       ],
       "command": "pnpm biome check .",
       "output": "src/foo.ts:12 error TS2339: Property 'x' does not exist on type 'Bar'"
@@ -355,7 +359,15 @@ Return a JSON object conforming exactly to this structure:
     "cyclomaticComplexity": 0
   },
   "findings": [
-    { "tier": "structural", "severity": "error", "description": "Type error in src/foo.ts: Property 'x' does not exist on type 'Bar'", "file": "src/foo.ts", "line": 12 },
+    {
+      "tier": "structural",
+      "severity": "error",
+      "description": "Type error in src/foo.ts: Property 'x' does not exist on type 'Bar'",
+      "file": "src/foo.ts",
+      "line": 12,
+      "disposition": "registered",
+      "dispositionRef": "type error must be fixed before approval"
+    },
     { "tier": "functional", "severity": "warning", "description": "Acceptance criterion 3 not covered by any test" }
   ],
   "decisionSummaries": [

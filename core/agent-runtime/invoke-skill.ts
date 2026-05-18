@@ -112,6 +112,7 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<AgentResult>
     projectId,
     configRuntime: projectConfig?.agentConfig?.runtime ?? 'auto',
     skillProvider: skillConfig.provider,
+    configRoleModel: projectConfig?.agentConfig?.rolesModels?.[role],
     fallbackTier: skillConfig.modelPin,
     fallbackProvider: skillConfig.provider,
     callerModelOverride: overrides?.modelOverride,

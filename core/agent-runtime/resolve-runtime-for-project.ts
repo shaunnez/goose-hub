@@ -28,6 +28,7 @@ export function resolveProjectAgentExecution(input: {
     projectId: input.projectId,
     configRuntime,
     skillProvider: input.skillProvider,
+    configRoleModel: input.projectConfig?.agentConfig?.rolesModels?.[input.role],
     role: input.role,
     allowHoldoutOverride: input.projectConfig?.agentConfig?.allowHoldoutOverride,
     ignoreProviderOverride: input.injectedRuntime != null,

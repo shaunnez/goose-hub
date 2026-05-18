@@ -230,6 +230,7 @@ describe('playwright-repro skill config', () => {
 
   it('contextSchema validates required workItem fields', () => {
     const valid = PlaywrightReproContextSchema.safeParse({
+      appUrl: 'http://localhost:5173',
       workItem: {
         title: 'Login page crashes on submit',
         body: 'When I click submit the page crashes.',
@@ -243,6 +244,7 @@ describe('playwright-repro skill config', () => {
 
   it('contextSchema accepts optional url', () => {
     const valid = PlaywrightReproContextSchema.safeParse({
+      appUrl: 'http://localhost:5173',
       workItem: {
         title: 'Dashboard broken',
         body: 'Dashboard shows nothing.',

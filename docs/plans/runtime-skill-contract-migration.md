@@ -101,7 +101,7 @@ Known prompt/config drift examples:
 
 ## Ordered Chunks
 
-### [ ] Chunk 1 - Runtime Contract Auditor, ADR, and Context Summary
+### [x] Chunk 1 - Runtime Contract Auditor, ADR, and Context Summary
 
 Goal: create the safety net before changing skill families.
 
@@ -143,7 +143,15 @@ pnpm test core/agent-runtime
 pnpm tsx scripts/audit-skill-contracts.ts
 ```
 
-### [ ] Chunk 2 - Grill / PRD / Decompose / Advisor Family
+Completed 2026-05-15:
+
+- Added shared auditor implementation at `core/agent-runtime/skill-contract-audit.ts` with per-skill reporting for allowlist tags, prompt tags, snake_case tags, schema fields, and likely consumers.
+- Added script entrypoint at `scripts/audit-skill-contracts.ts` (advisory default, `--strict` snake_case failure mode scaffold).
+- Added non-blocking Vitest coverage in `core/agent-runtime/skill-contract-audit.test.ts`.
+- Added ADR `docs/adr/0041-runtime-skill-contracts.md`.
+- Updated `CONTEXT.md` with the operational runtime-skill contract summary.
+
+### [x] Chunk 2 - Grill / PRD / Decompose / Advisor Family
 
 Skills:
 
@@ -177,7 +185,15 @@ pnpm test core/workflows/grill-and-prd core/workflows/decompose-prd.test.ts
 pnpm tsx scripts/audit-skill-contracts.ts
 ```
 
-### [ ] Chunk 3 - Investigate / Scout / Wave / Spec-Author Family
+Completed 2026-05-18:
+
+- Updated `grill-me`, `write-prd`, `advise-on-prd`, `decompose-issues`, and `advise-on-plan` prompt input contracts to use camelCase rendered XML tags.
+- Clarified object-valued tags as JSON payloads inside top-level tags, matching current renderer behavior.
+- Updated the `advise-on-plan` config comment to document rendered camelCase tags.
+- Refined the auditor to compare context tags rather than placeholder/example angle brackets, and added a test that keeps this family clean while later families remain advisory.
+- Verified the planned `core/workflows/decompose-prd.test.ts` path does not exist; ran `slices/decompose-prd` as the available decompose workflow coverage.
+
+### [x] Chunk 3 - Investigate / Scout / Wave / Spec-Author Family
 
 Skills:
 
@@ -215,7 +231,16 @@ pnpm test core/agent-runtime/scout-runner.test.ts core/agent-runtime/swarm.test.
 pnpm tsx scripts/audit-skill-contracts.ts
 ```
 
-### [ ] Chunk 4 - Implement / QA / Review / Evidence Family
+Completed 2026-05-18:
+
+- Updated `investigate`, all Wave-1 scout prompts, Wave-2 prompts, and `spec-author` to reference camelCase rendered context tags.
+- Clarified JSON-in-tag payloads for `workItem`, `scoutReports`, `wave2Reports`, `investigationSynthesis`, and related object-valued tags.
+- Updated stale snake_case rendered-tag comments in `investigate`, `scout-schema`, `wave2-interface-designer`, and `spec-author` configs.
+- Added `symbolIndexHints` to `scout-code-path` config because `scout-runner` already permits and injects that top-level rendered context key.
+- Added a focused auditor test that keeps the investigate/scout/wave/spec-author family clean while later families remain advisory.
+- Verified the planned `core/agent-runtime/scout-runner.test.ts` path does not exist; ran the available `swarm`, `slices/investigate`, and `slices/spec-author` coverage.
+
+### [x] Chunk 4 - Implement / QA / Review / Evidence Family
 
 Skills:
 
@@ -257,7 +282,17 @@ pnpm test slices/fix-issue slices/fix-feedback slices/parallel-implement slices/
 pnpm tsx scripts/audit-skill-contracts.ts
 ```
 
-### [ ] Chunk 5 - Retrospective / Audit / Coach / Sprint Family
+Completed 2026-05-18:
+
+- Updated `implement`, `implement-wp`, `qa`, `review`, `dev-review`, `dev-review-response`, `evidence-post`, and `playwright-repro` prompts to use camelCase rendered context tags.
+- Clarified object-valued tags as JSON payloads for work items, stack/project commands, diffs, QA verdicts, dev-review findings, and evidence context.
+- Updated stale snake_case rendered-tag examples in `implement`, `qa`, `review`, and `evidence-post` configs.
+- Added `testRun` to the QA config source-of-truth because the QA workflow already passes and allowlists workflow-captured test results.
+- Added `appUrl` to the `playwright-repro` config source-of-truth because the investigate workflow already injects it for repro capture.
+- Tightened QA output examples so error-severity findings include the required disposition fields.
+- Added a focused auditor test that keeps the implement/QA/review/evidence family clean while later families remain advisory.
+
+### [x] Chunk 5 - Retrospective / Audit / Coach / Sprint Family
 
 Skills:
 
@@ -299,7 +334,16 @@ pnpm test core/workflows/retrospective.ts core/workflows/cross-run-retro.test.ts
 pnpm tsx scripts/audit-skill-contracts.ts
 ```
 
-### [ ] Chunk 6 - Final Enforcement Pass
+Completed 2026-05-18:
+
+- Updated retrospective, cross-run, code-quality-audit, skill-coach, bug-enhance, repo-match, and triage prompts to use camelCase rendered context tags.
+- Clarified JSON-in-tag payloads for retrospective summaries, persona lists, role trends, audit metrics, cross-run playbook inputs, coaching evidence, and triage/repo-match work items.
+- Aligned retrospective skill configs with the workflow-provided `activePersonas` and `roleTrends` context.
+- Passed `triggerReasons` into deep retrospectives and kept it out of light retrospective rendered context.
+- Added a focused auditor test that keeps the retrospective/audit/coach/sprint family clean while final enforcement remains in Chunk 6.
+- Ran additional available retrospective and sprint-trigger coverage because two planned verification paths are source files rather than test files.
+
+### [x] Chunk 6 - Final Enforcement Pass
 
 Goal: turn the advisory audit into a real guardrail for all runtime skills.
 
@@ -319,6 +363,14 @@ pnpm test
 pnpm typecheck
 pnpm lint
 ```
+
+Completed 2026-05-18:
+
+- Tightened `scripts/audit-skill-contracts.ts --strict` so deterministic context-tag drift now fails on snake_case prompt tags, missing allowlisted prompt references, and extra prompt context tags.
+- Added a global `skill-contract-audit` test that runs under `pnpm test` and enforces deterministic context-tag drift checks for every runtime skill.
+- Extended the audit report with output-example status fields, parseable example counts, best-effort schema field inventory, and targeted consumer inventory per schema-backed skill.
+- Left output-example/schema checks report-only where schema extraction is not reliable for unions, intersections, shared schemas, or prompts without parseable JSON examples.
+- Verified all runtime skills now pass strict prompt/config tag drift checks.
 
 ## Non-Goals
 

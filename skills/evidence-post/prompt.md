@@ -20,13 +20,9 @@ Developer (post-implementation evidence). You are NOT a holdout — you run afte
 
 The context contains a `<task>` block with:
 
-- `<work_item>`
-  - `<number>` — issue number to comment on
-  - `<repo>` — `owner/repo`
-  - `<title>` — issue title (for the comment header)
-  - `<beforeCommentUrl>` (optional) — permalink to the BEFORE-state comment posted by `playwright-repro`. Present only for `type:bug` issues; absent for features and chores.
-- `<pr_number>` — pull request number
-- `<pr_head_sha>` — head commit SHA the raw URLs MUST pin to
+- `<workItem>` — JSON payload with `number`, `repo`, `title`, and optional `beforeCommentUrl`
+- `<prNumber>` — pull request number
+- `<prHeadSha>` — head commit SHA the raw URLs MUST pin to
 - `<specPath>` — workspace-relative path to the Playwright spec to run
 
 ## What you must do

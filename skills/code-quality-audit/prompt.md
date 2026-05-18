@@ -10,9 +10,9 @@ You are an **auditor agent**. You have read-only access to the working tree and 
 
 The context contains:
 
-- `<worktree_path>` — absolute path to the checked-out codebase to audit
-- `<metrics_json>` — pre-computed automated metrics for Cat 5/6/8 (if provided). **Do not re-score automated categories — consume the JSON scores directly.**
-- `<work_item>` — optional issue context
+- `<worktreePath>` — absolute path to the checked-out codebase to audit
+- `<metricsJson>` — pre-computed automated metrics for Cat 5/6/8 (if provided). **Do not re-score automated categories — consume the JSON scores directly.**
+- `<workItem>` — optional JSON payload with issue context
 
 ---
 
@@ -35,7 +35,7 @@ The context contains:
 
 ## Mandatory pre-work: orient before scoring
 
-1. List `<worktree_path>` top-level directories to understand layout.
+1. List `<worktreePath>` top-level directories to understand layout.
 2. Identify `core/`, `apps/`, `slices/`, `skills/` (or language equivalents).
 3. Find the registration/dispatch mechanism — where new capabilities are added.
 4. Identify the top-5 largest source files by SLOC using `find` + `wc -l`.
@@ -118,9 +118,9 @@ Evidence: for each complecting instance, cite both concerns with file:line.
 
 ## Category 5: LOC Discipline (10 pts) — AUTOMATED
 
-**Use `<metrics_json>.locDiscipline.score` directly. Do not re-score.**
+**Use `<metricsJson>.locDiscipline.score` directly. Do not re-score.**
 
-If metrics_json is absent, compute:
+If `<metricsJson>` is absent, compute:
 1. Find all `.ts` / `.js` source files (exclude `node_modules`, `dist`, `*.d.ts`)
 2. Count files over/under 200 SLOC using `wc -l`
 3. Apply scoring table: 10/8/5/3/0 for 100%/90%+/70-89%/50-69%/<50%
@@ -131,9 +131,9 @@ Evidence: list each file over 200 SLOC with its line count.
 
 ## Category 6: Coupling / Fan-Out (10 pts) — AUTOMATED
 
-**Use `<metrics_json>.coupling.score` directly. Do not re-score.**
+**Use `<metricsJson>.coupling.score` directly. Do not re-score.**
 
-If metrics_json is absent, grep for `^import` lines per file and apply thresholds:
+If `<metricsJson>` is absent, grep for `^import` lines per file and apply thresholds:
 - Orchestrators: healthy ≤5, warning 6–8, critical 9+
 - Handlers/tools: healthy ≤3, warning 4–5, critical 6+
 - Config/manifest: healthy ≤2, warning 3–4, critical 5+
@@ -147,9 +147,9 @@ Evidence: list all files at critical fan-out with their import count and violati
 Run git history analysis (read-only):
 
 ```bash
-git -C <worktree_path> log --pretty=format:"%ad" --date=format:"%Y-%m" | sort | uniq -c
-git -C <worktree_path> log --pretty=format:"%H %s" --shortstat | head -40
-git -C <worktree_path> log --diff-filter=A --pretty=format:"%ad %f" --date=short | sort | head -30
+git -C <worktreePath> log --pretty=format:"%ad" --date=format:"%Y-%m" | sort | uniq -c
+git -C <worktreePath> log --pretty=format:"%H %s" --shortstat | head -40
+git -C <worktreePath> log --diff-filter=A --pretty=format:"%ad %f" --date=short | sort | head -30
 ```
 
 Look for:
@@ -171,9 +171,9 @@ Evidence: cite specific commits with dates and line deltas.
 
 ## Category 8: Cyclomatic Complexity (5 pts) — AUTOMATED
 
-**Use `<metrics_json>.cyclomaticComplexity.score` directly. Do not re-score.**
+**Use `<metricsJson>.cyclomaticComplexity.score` directly. Do not re-score.**
 
-If metrics_json is absent, estimate CC by counting control-flow keywords (`if`, `else if`, `for`, `while`, `switch`, `catch`, `&&`, `||`, `?`) per function.
+If `<metricsJson>` is absent, estimate CC by counting control-flow keywords (`if`, `else if`, `for`, `while`, `switch`, `catch`, `&&`, `||`, `?`) per function.
 
 | Score | Criteria |
 |-------|----------|

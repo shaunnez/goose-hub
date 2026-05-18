@@ -1,6 +1,10 @@
 import { SKILL_BUDGETS } from '@goose-hub/core/agent-runtime/budgets.js';
 import { deriveSkillRuntimeResponse } from '@goose-hub/core/agent-runtime/skill-runtime-resolver.js';
 import {
+  type ProjectModelSettingsRow,
+  readProjectModelSettings,
+} from '@goose-hub/core/db/repositories/project-model-settings.js';
+import {
   deleteProjectSkillSetting,
   readProjectSettings,
   readProjectSkillSettings,
@@ -8,6 +12,7 @@ import {
   writeProjectSettings,
   writeProjectSkillSetting,
 } from '@goose-hub/core/db/repositories/project-settings.js';
+import type { Role } from '@goose-hub/core/types.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { parseBody } from '#shared/middleware.js';
@@ -37,13 +42,37 @@ const SkillBudgetPatchSchema = z.object({
   provider: z.enum(['claude', 'codex']).nullable().optional(),
 });
 
-function roleForSkill(skill: string): string | undefined {
-  if (skill === 'qa') return 'qa';
-  if (skill === 'review') return 'reviewer';
-  if (skill === 'implement' || skill === 'implement-wp') return 'developer';
+function roleForSkill(skill: string): Role | undefined {
+  if (skill === 'advise-on-plan') return 'researcher';
+  if (skill === 'advise-on-prd' || skill === 'write-prd') return 'prd-writer';
+  if (skill === 'bug-enhance' || skill === 'triage') return 'triager';
+  if (skill === 'code-quality-audit') return 'auditor';
+  if (skill === 'decompose-issues') return 'decomposer';
+  if (skill === 'dev-review') return 'dev-reviewer';
+  if (
+    skill === 'dev-review-response' ||
+    skill === 'echo-test' ||
+    skill === 'evidence-post' ||
+    skill === 'implement' ||
+    skill === 'implement-wp' ||
+    skill === 'resolve-conflict' ||
+    skill === 'spec-author'
+  )
+    return 'developer';
+  if (skill === 'grill-me') return 'griller';
   if (skill === 'investigate' || skill === 'playwright-repro') return 'investigator';
+  if (skill === 'qa') return 'qa';
+  if (skill === 'repo-match') return 'researcher';
+  if (
+    skill === 'retrospective-light' ||
+    skill === 'retrospective-deep' ||
+    skill === 'retrospective-cross-run' ||
+    skill === 'skill-coach' ||
+    skill === 'sprint-review'
+  )
+    return 'retrospector';
+  if (skill === 'review') return 'reviewer';
   if (skill.startsWith('scout-') || skill.startsWith('wave2-')) return 'investigator';
-  if (skill === 'repo-match' || skill === 'triage' || skill === 'bug-enhance') return 'triager';
   return undefined;
 }
 
@@ -55,6 +84,7 @@ router.get('/:slug/settings', async (c) => {
 
   const globalRow = readProjectSettings(project.id);
   const skillRows = readProjectSkillSettings(project.id);
+  const roleRows = readProjectModelSettings(project.id);
 
   const skillSettings: Record<
     string,
@@ -113,12 +143,15 @@ router.get('/:slug/settings', async (c) => {
     }
   > = {};
   for (const skill of Object.keys(SKILL_BUDGETS)) {
+    const role = roleForSkill(skill);
     const resolved = deriveSkillRuntimeResponse({
       skill,
       row: skillRows.get(skill),
       projectBudgets: project.budgets,
       configRuntime: project.agentConfig.runtime,
-      role: roleForSkill(skill),
+      role,
+      configRoleModel: role != null ? project.agentConfig.rolesModels?.[role] : undefined,
+      dbRoleModel: role != null ? (roleRows.get(role) as ProjectModelSettingsRow | null) : null,
       allowHoldoutOverride: project.agentConfig.allowHoldoutOverride,
       skillProvider: SKILL_BUDGETS[skill]?.provider,
     });

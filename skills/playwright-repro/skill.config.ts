@@ -10,6 +10,7 @@ export const PlaywrightReproContextSchema = z.object({
     number: z.number().describe('Issue number — drives evidence branch name and gh comment'),
     repo: z.string().describe('owner/repo, e.g. shaunnez/goose-hub'),
   }),
+  appUrl: z.string().url().describe('Running app base URL, e.g. http://localhost:5173'),
   investigation: z
     .object({
       findings: z.string().describe('Root cause hypothesis from the investigate skill'),
@@ -31,6 +32,7 @@ const config: SkillConfig = {
     'workItem.url',
     'workItem.number',
     'workItem.repo',
+    'appUrl',
     'investigation.findings',
     'investigation.keyFiles',
     'investigation.confidence',

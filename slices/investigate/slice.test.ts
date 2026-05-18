@@ -20,6 +20,7 @@ const mockExtractIdentifiers = vi.fn();
 const mockGetUseInvestigationSwarm = vi.fn();
 const mockReadProjectSettings = vi.fn();
 const mockReadProjectSkillSettings = vi.fn();
+const mockReadProjectModelSettingsForRole = vi.fn();
 
 vi.mock('@goose-hub/core/agent-runtime/swarm.js', () => ({
   dispatchWave: (...args: unknown[]) => mockDispatchWave(...args),
@@ -47,6 +48,11 @@ vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   getUseInvestigationSwarm: (...args: unknown[]) => mockGetUseInvestigationSwarm(...args),
   readProjectSettings: (...args: unknown[]) => mockReadProjectSettings(...args),
   readProjectSkillSettings: (...args: unknown[]) => mockReadProjectSkillSettings(...args),
+}));
+
+vi.mock('@goose-hub/core/db/repositories/project-model-settings.js', () => ({
+  readProjectModelSettingsForRole: (...args: unknown[]) =>
+    mockReadProjectModelSettingsForRole(...args),
 }));
 
 // Single shared mock for ClaudeCliRuntime (playwright-repro step)
@@ -211,6 +217,7 @@ beforeEach(() => {
   mockGetUseInvestigationSwarm.mockReset();
   mockReadProjectSettings.mockReset();
   mockReadProjectSkillSettings.mockReset();
+  mockReadProjectModelSettingsForRole.mockReset();
   mockRun.mockReset();
   vi.clearAllMocks();
   mockAccumulatePersonaStats.mockClear();
@@ -219,6 +226,7 @@ beforeEach(() => {
   mockGetUseInvestigationSwarm.mockReturnValue(true);
   mockReadProjectSettings.mockReturnValue(null);
   mockReadProjectSkillSettings.mockReturnValue(new Map());
+  mockReadProjectModelSettingsForRole.mockReturnValue(null);
 
   // Default happy path
   mockDispatchWave.mockResolvedValue(makeWaveResult());
@@ -298,6 +306,31 @@ describe('runInvestigateWorkflow', () => {
         expect.objectContaining({
           skillName: 'investigate',
           context: expect.not.objectContaining({ scoutReports: expect.anything() }),
+        }),
+      );
+    });
+
+    it('uses the investigator role provider for synthesis model routing', async () => {
+      mockReadProjectModelSettingsForRole.mockReturnValue({
+        projectId: 'goose-hub-self',
+        role: 'investigator',
+        primaryModel: 'sonnet',
+        primaryProvider: 'codex',
+        fallbackModel: null,
+        fallbackProvider: null,
+        advisorModel: 'opus',
+        advisorProvider: 'codex',
+      });
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(mockInvokeSkill).toHaveBeenCalledWith(
+        expect.objectContaining({
+          skillName: 'investigate',
+          overrides: expect.objectContaining({
+            modelOverride: 'gpt-5.4',
+          }),
         }),
       );
     });
