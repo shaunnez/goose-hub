@@ -13,6 +13,19 @@ export const ScoutTestInventoryContextSchema = z.object({
   }),
   scoutFocus: z.string().describe('One sentence describing the test surface to inventory'),
   worktreePath: z.string(),
+  symbolIndexHints: z
+    .array(
+      z.object({
+        name: z.string(),
+        definedIn: z.string(),
+        line: z.number(),
+        kind: z.string(),
+        callers: z.array(z.string()),
+        importers: z.array(z.string()).optional(),
+        nearbyTests: z.array(z.string()).optional(),
+      }),
+    )
+    .optional(),
 });
 
 const config: SkillConfig = {
@@ -23,6 +36,7 @@ const config: SkillConfig = {
     'workItem.number',
     'scoutFocus',
     'worktreePath',
+    'symbolIndexHints',
   ],
   toolBundles: ['read'],
   modelPin: 'haiku',

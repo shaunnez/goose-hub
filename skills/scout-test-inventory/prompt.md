@@ -9,6 +9,7 @@ You have **read and search access only**.
 - `<workItem>` — JSON payload for the work item, with `title`, `body`, and `number`
 - `<scoutFocus>` — one sentence naming the file, module, or feature whose test coverage you should map
 - `<worktreePath>` — the worktree to read from
+- `<symbolIndexHints>` *(optional)* — pre-resolved symbols with importer files and nearby `*.test.ts` / `*.test.tsx` files. The index is a starting point, not authority. Read files before reporting.
 
 ## Discipline
 
@@ -20,6 +21,7 @@ You have **read and search access only**.
 ## Turn Discipline
 
 - Run at most 3 searches: likely unit tests, likely slice tests, and likely e2e tests.
+- If `<symbolIndexHints>` includes `nearbyTests`, read those test files first before searching.
 - Read at most 6 test files total. Prefer files whose names or test titles match `<scoutFocus>`.
 - Report representative coverage, not every test in a large suite. Cap findings at 12 unless the work item explicitly asks for exhaustive inventory.
 - Do not judge test quality or inspect implementation files except to identify the target module name.

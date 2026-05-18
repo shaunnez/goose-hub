@@ -1,9 +1,5 @@
 import type { AgentResult, AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import type { ScoutReport, WaveResult } from '@goose-hub/core/agent-runtime/swarm.js';
-import {
-  deleteRoleModelSetting,
-  writeRoleModelSetting,
-} from '@goose-hub/core/db/repositories/project-model-settings.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -21,6 +17,14 @@ const mockInvokeSkill = vi.fn();
 const mockPersistScoutReport = vi.fn();
 const mockLookupWorkItemSymbols = vi.fn();
 const mockExtractIdentifiers = vi.fn();
+const mockShapeSymbolIndexHintsForScout = vi.fn(
+  (hints: Array<{ name: string; kind: string }>, consumer: string, _options?: unknown) =>
+    consumer === 'scout-schema'
+      ? hints.filter(
+          (hint) => hint.kind === 'type' || hint.kind === 'interface' || /schema/i.test(hint.name),
+        )
+      : hints,
+);
 const mockEnsureSymbolIndexFresh = vi.fn();
 const mockGetUseInvestigationSwarm = vi.fn();
 const mockReadProjectSettings = vi.fn();
@@ -34,6 +38,12 @@ vi.mock('@goose-hub/core/agent-runtime/swarm.js', () => ({
 vi.mock('@goose-hub/core/symbol-index/lookup.js', () => ({
   lookupWorkItemSymbols: (...args: unknown[]) => mockLookupWorkItemSymbols(...args),
   extractIdentifiers: (...args: unknown[]) => mockExtractIdentifiers(...args),
+  shapeSymbolIndexHintsForScout: (hints: unknown, consumer: unknown, options: unknown) =>
+    mockShapeSymbolIndexHintsForScout(
+      hints as Array<{ name: string; kind: string }>,
+      String(consumer),
+      options,
+    ),
 }));
 
 vi.mock('@goose-hub/core/symbol-index/freshness.js', () => ({
@@ -329,31 +339,6 @@ describe('runInvestigateWorkflow', () => {
           context: expect.not.objectContaining({ scoutReports: expect.anything() }),
         }),
       );
-    });
-
-    it('ignores investigator role provider rows for synthesis model routing', async () => {
-      writeRoleModelSetting(
-        'goose-hub-self',
-        'investigator',
-        { primaryModel: 'sonnet', primaryProvider: 'codex' },
-        'test',
-      );
-
-      try {
-        const { runInvestigateWorkflow } = await import('./workflow.js');
-        await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
-
-        expect(mockInvokeSkill).toHaveBeenCalledWith(
-          expect.objectContaining({
-            skillName: 'investigate',
-            overrides: expect.objectContaining({
-              modelOverride: 'claude-sonnet-4-6',
-            }),
-          }),
-        );
-      } finally {
-        deleteRoleModelSetting('goose-hub-self', 'investigator');
-      }
     });
 
     it('passes the effective maxScoutAgents cap into both waves', async () => {
@@ -1159,7 +1144,7 @@ describe('runInvestigateWorkflow', () => {
       expect(codePath?.extraContext).toBeUndefined();
     });
 
-    it('other Wave 1 scouts are unaffected by symbol index hints', async () => {
+    it('injects shaped symbol hints into dependency and test-inventory scouts', async () => {
       const hints = [
         { name: 'AuthService', definedIn: 'core/auth.ts', line: 10, kind: 'function', callers: [] },
       ];
@@ -1171,11 +1156,36 @@ describe('runInvestigateWorkflow', () => {
       const wave1Opts = mockDispatchWave.mock.calls[0][0] as {
         scoutSpecs: Array<{ scoutName: string; extraContext?: Record<string, unknown> }>;
       };
-      for (const spec of wave1Opts.scoutSpecs) {
-        if (spec.scoutName !== 'scout-code-path') {
-          expect(spec.extraContext).toBeUndefined();
-        }
-      }
+      const dependency = wave1Opts.scoutSpecs.find((s) => s.scoutName === 'scout-dependency');
+      const testInventory = wave1Opts.scoutSpecs.find(
+        (s) => s.scoutName === 'scout-test-inventory',
+      );
+      const schema = wave1Opts.scoutSpecs.find((s) => s.scoutName === 'scout-schema');
+      expect(dependency?.extraContext).toEqual({ symbolIndexHints: hints });
+      expect(testInventory?.extraContext).toEqual({ symbolIndexHints: hints });
+      expect(schema?.extraContext).toBeUndefined();
+    });
+
+    it('injects schema scout hints only for schema-shaped symbols', async () => {
+      const hints = [
+        {
+          name: 'AuthPayload',
+          definedIn: 'skills/auth/schema.ts',
+          line: 10,
+          kind: 'type',
+          callers: [],
+        },
+      ];
+      mockLookupWorkItemSymbols.mockReturnValue(hints);
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const wave1Opts = mockDispatchWave.mock.calls[0][0] as {
+        scoutSpecs: Array<{ scoutName: string; extraContext?: Record<string, unknown> }>;
+      };
+      const schema = wave1Opts.scoutSpecs.find((s) => s.scoutName === 'scout-schema');
+      expect(schema?.extraContext).toEqual({ symbolIndexHints: hints });
     });
 
     it('lookupWorkItemSymbols called with work item title, body, and worktreePath', async () => {
@@ -1236,13 +1246,20 @@ describe('runInvestigateWorkflow', () => {
       expect(eventStore.appendEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           kind: 'symbol-index.lookup',
-          payload: {
+          payload: expect.objectContaining({
             consumerSkill: 'scout-code-path',
             identifierCount: 2,
             hintCount: 1,
+            rawHintCount: 1,
+            consumerHintCounts: expect.objectContaining({
+              'scout-code-path': 1,
+              'scout-dependency': 1,
+              'scout-schema': 0,
+              'scout-test-inventory': 1,
+            }),
             dbAgeMs: 123,
             stale: true,
-          },
+          }),
         }),
       );
     });

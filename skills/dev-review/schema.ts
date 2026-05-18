@@ -62,6 +62,19 @@ export const DevReviewContextSchema = z.object({
       typecheckCommand: z.string().optional(),
     })
     .optional(),
+  /**
+   * Capped static-import signal for exported symbols changed by the diff.
+   * These are likely consumers to inspect, not proof of affected behavior.
+   */
+  symbolImpact: z
+    .array(
+      z.object({
+        changedExport: z.string(),
+        definedIn: z.string(),
+        importers: z.array(z.string()),
+      }),
+    )
+    .optional(),
 });
 
 export type DevReviewFinding = z.infer<typeof DevReviewFindingSchema>;

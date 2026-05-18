@@ -30,6 +30,14 @@ vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
   return { ...actual, readFileSync: vi.fn().mockReturnValue('# mock skill prompt') };
 });
+const { mockLookupWorkItemSymbols, mockSymbolHintsToKeyFiles } = vi.hoisted(() => ({
+  mockLookupWorkItemSymbols: vi.fn().mockReturnValue([]),
+  mockSymbolHintsToKeyFiles: vi.fn().mockReturnValue([]),
+}));
+vi.mock('@goose-hub/core/symbol-index/lookup.js', () => ({
+  lookupWorkItemSymbols: (...args: unknown[]) => mockLookupWorkItemSymbols(...args),
+  symbolHintsToKeyFiles: (...args: unknown[]) => mockSymbolHintsToKeyFiles(...args),
+}));
 
 // Mock default dep implementations so the ?? fallback branches (lines 68-73) are reachable
 const mockClaudeCliRun = vi.fn();
@@ -84,6 +92,8 @@ import { eventStore } from '@goose-hub/core/event-stream/store.js';
 
 function resetEventStoreMocks(): void {
   vi.mocked(eventStore.replay).mockReturnValue([]);
+  mockLookupWorkItemSymbols.mockReturnValue([]);
+  mockSymbolHintsToKeyFiles.mockReturnValue([]);
 }
 
 function makeInvestigationEvent(item: WorkItem, overrides: Record<string, unknown> = {}) {
@@ -555,6 +565,163 @@ describe('runFixIssueWorkflow (#183)', () => {
       keyFileCount: 2,
       openQuestionCount: 1,
     });
+  });
+
+  it('adds curated symbol key files to implement context without raw symbol payloads', async () => {
+    const item = makeWorkItem({ priority: 'medium', type: 'bug', title: 'Fix dispatchWave' });
+    const source = makeStateSource();
+    vi.mocked(eventStore.replay).mockReturnValue([makeInvestigationEvent(item)]);
+    const rawHints = [
+      {
+        name: 'dispatchWave',
+        definedIn: 'core/agent-runtime/swarm.ts',
+        line: 10,
+        kind: 'function',
+        callers: ['slices/investigate/workflow.ts'],
+      },
+    ];
+    mockLookupWorkItemSymbols.mockReturnValue(rawHints);
+    mockSymbolHintsToKeyFiles.mockReturnValue([
+      {
+        path: 'slices/investigate/workflow.ts',
+        reason: 'Symbol index: imports dispatchWave',
+      },
+    ]);
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockResolvedValueOnce({
+        output: makeImplementOutput({
+          filesWritten: [
+            {
+              path: 'apps/server/src/domains/workflows/triage-batch.ts',
+              reason: 'fix investigated surface',
+            },
+          ],
+          testsWritten: [
+            {
+              path: 'apps/server/src/domains/workflows/triage-batch.test.ts',
+              cases: 1,
+            },
+          ],
+          testsRun: {
+            command: 'pnpm test --reporter=json',
+            paths: ['apps/server/src/domains/workflows/triage-batch.test.ts'],
+          },
+        }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult),
+    };
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl: vi.fn().mockResolvedValue({
+        prNumber: 100,
+        prUrl: 'https://github.com/owner/repo/pull/100',
+        branch: 'factory/abc',
+        base: 'main',
+      }),
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    expect(mockLookupWorkItemSymbols).toHaveBeenCalledWith(
+      'Fix dispatchWave',
+      item.body,
+      expect.objectContaining({ worktreePath: '/work/wt' }),
+    );
+    expect(mockSymbolHintsToKeyFiles).toHaveBeenCalledWith(
+      rawHints,
+      expect.objectContaining({
+        existingPaths: [
+          'apps/server/src/domains/workflows/triage-batch.ts',
+          'core/agent-runtime/fallback.ts',
+        ],
+        maxFiles: 8,
+      }),
+    );
+
+    const implementSpec = vi.mocked(runtime.run).mock.calls[0][0] as {
+      context: Record<string, unknown> & {
+        investigation?: { keyFiles?: Array<{ path: string; reason?: string }> };
+      };
+    };
+    expect(implementSpec.context.investigation?.keyFiles?.map((file) => file.path)).toEqual([
+      'apps/server/src/domains/workflows/triage-batch.ts',
+      'core/agent-runtime/fallback.ts',
+      'slices/investigate/workflow.ts',
+    ]);
+    expect(implementSpec.context.symbolIndexHints).toBeUndefined();
+    expect(JSON.stringify(implementSpec.context)).not.toContain('"definedIn"');
+    expect(JSON.stringify(implementSpec.context)).not.toContain('"callers"');
+  });
+
+  it('keeps wrong-surface guard anchored to investigation key files, not symbol key files', async () => {
+    const item = makeWorkItem({ priority: 'medium', type: 'bug', title: 'Fix dispatchWave' });
+    const source = makeStateSource();
+    vi.mocked(eventStore.replay).mockReturnValue([makeInvestigationEvent(item)]);
+    mockLookupWorkItemSymbols.mockReturnValue([
+      {
+        name: 'dispatchWave',
+        definedIn: 'core/agent-runtime/swarm.ts',
+        line: 10,
+        kind: 'function',
+        callers: ['slices/investigate/workflow.ts'],
+      },
+    ]);
+    mockSymbolHintsToKeyFiles.mockReturnValue([
+      {
+        path: 'slices/investigate/workflow.ts',
+        reason: 'Symbol index: imports dispatchWave',
+      },
+    ]);
+    const openPRImpl = vi.fn();
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockResolvedValueOnce({
+        output: makeImplementOutput({
+          filesWritten: [{ path: 'slices/investigate/workflow.ts', reason: 'symbol hint only' }],
+          testsWritten: [{ path: 'slices/investigate/slice.test.ts', cases: 1 }],
+          testsRun: {
+            command: 'pnpm test --reporter=json',
+            paths: ['slices/investigate/slice.test.ts'],
+          },
+        }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult),
+    };
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    expect(openPRImpl).not.toHaveBeenCalled();
+    const guard = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'agent.wrong-surface-guard');
+    expect(guard?.[0].payload).toMatchObject({
+      expectedKeyFiles: [
+        'apps/server/src/domains/workflows/triage-batch.ts',
+        'core/agent-runtime/fallback.ts',
+      ],
+    });
+    expect((guard?.[0].payload as { expectedKeyFiles?: string[] }).expectedKeyFiles).not.toContain(
+      'slices/investigate/workflow.ts',
+    );
   });
 
   it('wrong-surface guard blocks PRs when implement output misses investigated files', async () => {

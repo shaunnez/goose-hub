@@ -464,13 +464,10 @@ The escape hatch deletes events for a work item. Documented as test-only.
 Worth a runtime check that `process.env.VITEST != null` (or similar) to
 prevent accidental production calls.
 
-### F-22 — `ProjectModelPanel.tsx` is 759 lines
+### F-22 — resolved: `ProjectModelPanel.tsx` removed
 
-**Where:** `apps/web/src/components/settings/ProjectModelPanel.tsx`
-
-Already split into subcomponents but the parent file is still long.
-Pull the role row, the dev-review panel, the codex auth panel, and the
-complexity-overrides table out into their own files.
+The Advanced roles panel was removed when per-skill runtime settings became the
+only user-facing model/provider surface.
 
 ### F-23 — `BootstrapWizard.tsx` is 654 lines
 
@@ -565,7 +562,7 @@ minimum a snapshot test that runs the same fixture through both.
 | F-19 | L | event-stream | `agent.run-started` with null runId silently ignored |
 | F-20 | L | event-stream | `kind: r.kind as EventKind` cast unchecked |
 | F-21 | L | event-stream | `deleteByWorkItem` lacks production-guard |
-| F-22 | L | web | `ProjectModelPanel.tsx` 759 lines |
+| F-22 | L | web | Resolved: `ProjectModelPanel.tsx` removed |
 | F-23 | L | web | `BootstrapWizard.tsx` 654 lines |
 | F-24 | L | workflows | `grill-and-prd.ts` 739 lines |
 | F-25 | L | server | `domains/issues/transitions.ts` lacks race-model doc |

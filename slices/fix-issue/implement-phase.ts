@@ -35,6 +35,7 @@ export interface RunImplementInput {
   personaId: string;
   advisorFeedback?: string;
   investigation?: InvestigationContext;
+  surfaceGuardInvestigation?: InvestigationContext;
   revisionPass?: 0 | 1;
 }
 
@@ -247,18 +248,19 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
     ...output.testsWritten.map((t) => t.path),
     ...output.testsRun.paths,
   ];
-  if (!pathsTouchInvestigationSurface(touchedPaths, input.investigation)) {
+  const surfaceGuardInvestigation = input.surfaceGuardInvestigation ?? input.investigation;
+  if (!pathsTouchInvestigationSurface(touchedPaths, surfaceGuardInvestigation)) {
     appendWrongSurfaceGuardEvent({
       projectId: input.projectId,
       workItemId: input.workItem.id,
       runId: input.runId,
       personaId: input.personaId,
-      investigation: input.investigation as InvestigationContext,
+      investigation: surfaceGuardInvestigation as InvestigationContext,
       reason: 'implement-output-missed-investigation-surface',
       touchedPaths,
     });
     throw new Error(
-      `wrong surface guard: implement output did not touch investigated key files (${input.investigation?.keyFiles
+      `wrong surface guard: implement output did not touch investigated key files (${surfaceGuardInvestigation?.keyFiles
         .map((f) => f.path)
         .join(', ')})`,
     );

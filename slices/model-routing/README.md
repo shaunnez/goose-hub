@@ -1,6 +1,10 @@
 # slices/model-routing
 
-M19.09 — provider-aware model routing with UI-configurable role and complexity overrides.
+M19.09 — provider-aware model routing with config-based complexity overrides.
+
+Fully superseded for user-facing settings by ADR 0042. Users configure model
+tier/provider per skill through Skill runtime settings; the old role UI/API/table
+has been removed.
 
 Superseded for normal dispatch by ADR 0042. Role model rows now exist only as
 advanced/internal compatibility state; users configure model tier/provider per
@@ -8,23 +12,16 @@ skill through Skill runtime settings.
 
 ## What this slice covers
 
-- `ProjectModelPanel` — Settings → Advanced roles compatibility UI.
-- `project_model_settings` CRUD retained for historical/internal state.
+- `model-router.ts` — legacy predictive selector for static/config/pattern tiers.
+- Runtime provider/tier selection is handled by per-skill runtime settings.
 
 ## Resolution order
 
 ### Normal skill runtime selection
 
-Normal dispatch uses `resolveSkillRuntimeForProject()` and ignores
-`project_model_settings`. Precedence is caller model override, forced runtime
-provider, DB per-skill tier/provider, config `skillBudgetOverrides`, then
-`SKILL_BUDGETS`.
-
-### Compatibility role state
-
-`project_model_settings.primary_model` and `complexity_overrides_json` remain
-available to the advanced role API/UI, but they are not normal skill runtime
-inputs.
+Normal dispatch uses `resolveSkillRuntimeForProject()`. Precedence is caller
+model override, forced runtime provider, DB per-skill tier/provider, config
+`skillBudgetOverrides`, then `SKILL_BUDGETS`.
 
 ## Holdout gating
 
@@ -39,10 +36,6 @@ not exposed for holdout skill runtime rows.
 | `core/agent-runtime/skill-runtime-resolver.ts` | Normal per-skill runtime resolver |
 | `core/agent-runtime/resolve-for-project.ts` | Global and per-skill budget wrappers |
 | `core/agent-runtime/model-router.ts` | Legacy complexity selector |
-| `core/db/repositories/project-model-settings.ts` | CRUD |
-| `core/db/migrations/0010_project_model_settings.sql` | Schema |
-| `apps/server/src/domains/project-settings/model-router.ts` | API routes |
-| `apps/web/src/components/settings/components/ProjectModelPanel.tsx` | UI |
 
 ## ADR
 

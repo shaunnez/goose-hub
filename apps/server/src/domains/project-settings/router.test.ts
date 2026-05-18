@@ -3,18 +3,36 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   mockDeleteProjectSkillSetting,
+  mockGetUseInvestigationSwarm,
+  mockGetUseMultiAgentPipeline,
   mockGetProject,
+  mockParseReviewerSlots,
+  mockReadProjectDevReviewSettings,
+  mockReadProjectReviewSettings,
   mockReadProjectSettings,
   mockReadProjectSkillSettings,
   mockResetAllProjectBudgets,
+  mockSetUseInvestigationSwarm,
+  mockSetUseMultiAgentPipeline,
+  mockWriteProjectDevReviewSettings,
+  mockWriteProjectReviewSettings,
   mockWriteProjectSettings,
   mockWriteProjectSkillSetting,
 } = vi.hoisted(() => ({
   mockDeleteProjectSkillSetting: vi.fn(),
+  mockGetUseInvestigationSwarm: vi.fn(),
+  mockGetUseMultiAgentPipeline: vi.fn(),
   mockGetProject: vi.fn(),
+  mockParseReviewerSlots: vi.fn(),
+  mockReadProjectDevReviewSettings: vi.fn(),
+  mockReadProjectReviewSettings: vi.fn(),
   mockReadProjectSettings: vi.fn(),
   mockReadProjectSkillSettings: vi.fn(),
   mockResetAllProjectBudgets: vi.fn(),
+  mockSetUseInvestigationSwarm: vi.fn(),
+  mockSetUseMultiAgentPipeline: vi.fn(),
+  mockWriteProjectDevReviewSettings: vi.fn(),
+  mockWriteProjectReviewSettings: vi.fn(),
   mockWriteProjectSettings: vi.fn(),
   mockWriteProjectSkillSetting: vi.fn(),
 }));
@@ -25,11 +43,26 @@ vi.mock('#shared/projects.js', () => ({
 
 vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   deleteProjectSkillSetting: mockDeleteProjectSkillSetting,
+  getUseInvestigationSwarm: mockGetUseInvestigationSwarm,
+  getUseMultiAgentPipeline: mockGetUseMultiAgentPipeline,
   readProjectSettings: mockReadProjectSettings,
   readProjectSkillSettings: mockReadProjectSkillSettings,
   resetAllProjectBudgets: mockResetAllProjectBudgets,
+  setUseInvestigationSwarm: mockSetUseInvestigationSwarm,
+  setUseMultiAgentPipeline: mockSetUseMultiAgentPipeline,
   writeProjectSettings: mockWriteProjectSettings,
   writeProjectSkillSetting: mockWriteProjectSkillSetting,
+}));
+
+vi.mock('@goose-hub/core/db/repositories/project-dev-review-settings.js', () => ({
+  readProjectDevReviewSettings: mockReadProjectDevReviewSettings,
+  writeProjectDevReviewSettings: mockWriteProjectDevReviewSettings,
+}));
+
+vi.mock('@goose-hub/core/db/repositories/project-review-settings.js', () => ({
+  parseReviewerSlots: mockParseReviewerSlots,
+  readProjectReviewSettings: mockReadProjectReviewSettings,
+  writeProjectReviewSettings: mockWriteProjectReviewSettings,
 }));
 
 import { projectSettingsRouter } from './router.js';
@@ -56,6 +89,28 @@ describe('project settings router', () => {
     mockGetProject.mockResolvedValue(project());
     mockReadProjectSettings.mockReturnValue(null);
     mockReadProjectSkillSettings.mockReturnValue(new Map());
+    mockReadProjectDevReviewSettings.mockReturnValue(null);
+    mockReadProjectReviewSettings.mockReturnValue(null);
+    mockParseReviewerSlots.mockReturnValue(null);
+    mockGetUseMultiAgentPipeline.mockReturnValue(false);
+    mockGetUseInvestigationSwarm.mockReturnValue(true);
+  });
+
+  it('does not expose the removed role-model settings route', async () => {
+    const app = makeApp();
+    const res = await app.request('/projects/goose-hub-self/settings/models');
+
+    expect(res.status).toBe(404);
+  });
+
+  it('keeps Codex auth status under project settings', async () => {
+    const app = makeApp();
+    const res = await app.request('/projects/goose-hub-self/settings/codex-auth');
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      loginCommand: 'codex login',
+    });
   });
 
   it('returns Codex provider defaults for provider-pinned skills', async () => {

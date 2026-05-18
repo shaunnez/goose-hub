@@ -1,8 +1,8 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
 import { defaultDbPath, openIndexDb } from './db.js';
-import { findCallers, findSymbol } from './query.js';
+import { findCallers, findSymbol, listExportsOf } from './query.js';
 
 export interface SymbolHint {
   name: string;
@@ -10,6 +10,34 @@ export interface SymbolHint {
   line: number;
   kind: string;
   callers: string[];
+}
+
+export type SymbolIndexHintConsumer =
+  | 'scout-code-path'
+  | 'scout-dependency'
+  | 'scout-schema'
+  | 'scout-test-inventory';
+
+export interface SymbolHintBoundary {
+  packageBoundary: string;
+  moduleBoundary: string;
+}
+
+export interface ShapedSymbolHint extends SymbolHint {
+  importers?: string[];
+  boundary?: SymbolHintBoundary;
+  nearbyTests?: string[];
+}
+
+export interface SymbolKeyFileHint {
+  path: string;
+  reason: string;
+}
+
+export interface SymbolImpact {
+  changedExport: string;
+  definedIn: string;
+  importers: string[];
 }
 
 export interface LookupOptions {
@@ -83,6 +111,20 @@ const SKIP_WORDS = new Set([
 const MAX_IDENTIFIERS = 12;
 const MAX_HINTS = 20;
 const MAX_CALLERS_PER_HINT = 5;
+const SCOUT_HINT_CAPS: Record<SymbolIndexHintConsumer, number> = {
+  'scout-code-path': 20,
+  'scout-dependency': 8,
+  'scout-schema': 8,
+  'scout-test-inventory': 8,
+};
+const MAX_NEARBY_TESTS_PER_HINT = 3;
+const MAX_SYMBOL_KEY_FILES = 8;
+const MAX_IMPORTER_KEY_FILES = 2;
+const MAX_SYMBOL_IMPACT = 8;
+const MAX_IMPORTERS_PER_IMPACT = 5;
+const SCHEMA_SYMBOL_NAME_RE =
+  /(schema|table|payload|contract|settings|config|state|event|input|output|row|record|entity|definition|defs)$/i;
+const SCHEMA_SYMBOL_KINDS = new Set(['interface', 'type', 'enum']);
 
 export function extractIdentifiers(text: string): string[] {
   // Backtick spans are high-confidence code references — extract identifier tokens from them first
@@ -111,6 +153,160 @@ export function extractIdentifiers(text: string): string[] {
     if (result.length >= MAX_IDENTIFIERS) break;
   }
   return result;
+}
+
+function symbolExistsInWorktree(filePath: string, worktreePath: string | undefined): boolean {
+  return worktreePath === undefined || existsSync(path.join(worktreePath, filePath));
+}
+
+function classifyBoundary(filePath: string): SymbolHintBoundary {
+  const parts = filePath.split('/');
+  const [top, second, third] = parts;
+  if (top === 'apps' && second != null) {
+    return {
+      packageBoundary: `apps/${second}`,
+      moduleBoundary: third != null ? `apps/${second}/${third}` : `apps/${second}`,
+    };
+  }
+  if ((top === 'skills' || top === 'slices') && second != null) {
+    return {
+      packageBoundary: `${top}/${second}`,
+      moduleBoundary: `${top}/${second}`,
+    };
+  }
+  if (top === 'core') {
+    return {
+      packageBoundary: 'core',
+      moduleBoundary: second != null ? `core/${second}` : 'core',
+    };
+  }
+  return {
+    packageBoundary: top ?? filePath,
+    moduleBoundary: second != null ? `${top}/${second}` : (top ?? filePath),
+  };
+}
+
+function findNearbyTestFiles(filePath: string, worktreePath: string | undefined): string[] {
+  if (worktreePath === undefined) return [];
+  const dir = path.posix.dirname(filePath);
+  const absDir = path.join(worktreePath, dir);
+  if (!existsSync(absDir)) return [];
+
+  const stem = path.posix.basename(filePath).replace(/\.[^.]+$/, '');
+  try {
+    return readdirSync(absDir, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && /\.test\.tsx?$/.test(entry.name))
+      .map((entry) => path.posix.join(dir, entry.name))
+      .sort((a, b) => {
+        const aSameStem = path.posix.basename(a).startsWith(`${stem}.`) ? 0 : 1;
+        const bSameStem = path.posix.basename(b).startsWith(`${stem}.`) ? 0 : 1;
+        return aSameStem - bSameStem || a.localeCompare(b);
+      })
+      .slice(0, MAX_NEARBY_TESTS_PER_HINT);
+  } catch {
+    return [];
+  }
+}
+
+function isSchemaSymbol(hint: SymbolHint): boolean {
+  return SCHEMA_SYMBOL_KINDS.has(hint.kind) || SCHEMA_SYMBOL_NAME_RE.test(hint.name);
+}
+
+export function shapeSymbolIndexHintsForScout(
+  hints: SymbolHint[],
+  consumer: SymbolIndexHintConsumer,
+  options?: { worktreePath?: string; maxHints?: number },
+): ShapedSymbolHint[] {
+  const maxHints = options?.maxHints ?? SCOUT_HINT_CAPS[consumer];
+  const scopedHints =
+    consumer === 'scout-schema' ? hints.filter((hint) => isSchemaSymbol(hint)) : hints;
+
+  return scopedHints.slice(0, maxHints).map((hint) => {
+    if (consumer === 'scout-code-path') return { ...hint };
+    if (consumer === 'scout-dependency') {
+      return {
+        ...hint,
+        importers: hint.callers,
+        boundary: classifyBoundary(hint.definedIn),
+      };
+    }
+    if (consumer === 'scout-test-inventory') {
+      return {
+        ...hint,
+        importers: hint.callers,
+        nearbyTests: findNearbyTestFiles(hint.definedIn, options?.worktreePath),
+      };
+    }
+    return { ...hint };
+  });
+}
+
+export function symbolHintsToKeyFiles(
+  hints: SymbolHint[],
+  options?: { existingPaths?: Iterable<string>; maxFiles?: number },
+): SymbolKeyFileHint[] {
+  const existing = new Set(options?.existingPaths ?? []);
+  const maxFiles = options?.maxFiles ?? MAX_SYMBOL_KEY_FILES;
+  const out: SymbolKeyFileHint[] = [];
+  const seen = new Set(existing);
+
+  const push = (pathValue: string, reason: string): void => {
+    if (seen.has(pathValue) || out.length >= maxFiles) return;
+    seen.add(pathValue);
+    out.push({ path: pathValue, reason });
+  };
+
+  for (const hint of hints) {
+    push(hint.definedIn, `Symbol index: ${hint.name} is exported here`);
+    for (const importer of hint.callers.slice(0, MAX_IMPORTER_KEY_FILES)) {
+      push(importer, `Symbol index: imports ${hint.name}`);
+    }
+    if (out.length >= maxFiles) break;
+  }
+
+  return out;
+}
+
+export function lookupChangedExportImpact(
+  changedFiles: string[],
+  options?: LookupOptions & { maxImpacts?: number },
+): SymbolImpact[] {
+  const resolved = options?.dbPath ?? defaultDbPath();
+  if (!existsSync(resolved)) return [];
+
+  let db: Database.Database | null = null;
+  try {
+    db = openIndexDb(resolved);
+    const impacts: SymbolImpact[] = [];
+    const seen = new Set<string>();
+
+    for (const filePath of changedFiles) {
+      if (!/\.(ts|tsx)$/.test(filePath)) continue;
+      if (!symbolExistsInWorktree(filePath, options?.worktreePath)) continue;
+      for (const sym of listExportsOf(db, filePath)) {
+        const key = `${sym.filePath}:${sym.name}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const importers = findCallers(db, sym.name)
+          .filter((importer) => importer !== sym.filePath)
+          .filter((importer) => symbolExistsInWorktree(importer, options?.worktreePath))
+          .slice(0, MAX_IMPORTERS_PER_IMPACT);
+        if (importers.length === 0) continue;
+        impacts.push({
+          changedExport: sym.name,
+          definedIn: sym.filePath,
+          importers,
+        });
+        if (impacts.length >= (options?.maxImpacts ?? MAX_SYMBOL_IMPACT)) return impacts;
+      }
+    }
+
+    return impacts;
+  } catch {
+    return [];
+  } finally {
+    db?.close();
+  }
 }
 
 /**
@@ -147,10 +343,7 @@ export function lookupWorkItemSymbols(
         // Skip hints whose source file doesn't exist in the active worktree.
         // This prevents Goose Hub-internal paths from appearing in investigations
         // against unrelated target repos.
-        if (
-          options?.worktreePath !== undefined &&
-          !existsSync(path.join(options.worktreePath, sym.filePath))
-        ) {
+        if (!symbolExistsInWorktree(sym.filePath, options?.worktreePath)) {
           continue;
         }
 

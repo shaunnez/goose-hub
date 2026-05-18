@@ -70,7 +70,7 @@ erDiagram
 | `scout_reports` | Wave-1 scout JSON outputs | `(project_id, work_item_id, run_id)` | uniq + 1 |
 | `governance_audit` | Per-PR governance check verdicts | by `pr_url` | PK only |
 | `inbox_items` | Raw notes pending promotion to an issue | by id | PK |
-| `project_settings`, `project_skill_settings`, `project_model_settings`, `project_dev_review_settings`, `project_review_settings` | Per-project settings; `project_skill_settings` owns normal skill runtime, `project_model_settings` is advanced compatibility state | by project | PKs |
+| `project_settings`, `project_skill_settings`, `project_dev_review_settings`, `project_review_settings` | Per-project settings; `project_skill_settings` owns normal skill runtime | by project | PKs |
 
 ## Two-place state split
 
@@ -93,7 +93,7 @@ When `invokeSkill()` resolves a model and budget for a run:
 4. **`project.config.ts`** `budgets.skillBudgetOverrides[skill]`.
 5. **`SKILL_BUDGETS` defaults** in `core/agent-runtime/budgets.ts`.
 
-Normal dispatch does not read `project_model_settings`.
+Normal dispatch reads per-skill runtime settings, not role-model rows.
 
 Code: `core/agent-runtime/skill-runtime-resolver.ts`.
 

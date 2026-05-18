@@ -24,7 +24,7 @@ Normal skill dispatch uses this precedence:
 4. Project config `budgets.skillBudgetOverrides[skill]`.
 5. Built-in `SKILL_BUDGETS[skill]`.
 
-`project_model_settings` is advanced/internal compatibility state only. Normal dispatch must not read role model rows, role fallback/advisor slots, role complexity rows, or role max-turn/timeout columns.
+The role UI, role settings API, role repository, and `project_model_settings` table are removed. Historical migrations that created or altered the table remain in the migration history; a later migration drops the table from current databases.
 
 Holdout rules:
 
@@ -37,8 +37,9 @@ Unknown skills fail fast unless they have an intentional, complete compatibility
 
 ## Consequences
 
-- Settings UI labels the old role surface as "Advanced roles".
+- Settings UI has no "Advanced roles" tab.
 - Role max-turn and timeout controls are not exposed as normal runtime settings.
 - Role fallback/advisor controls are not exposed for ordinary runs.
 - `invokeSkill()` receives budgets from `resolveSkillRuntimeForProject()` and does not reintroduce role budget overrides.
-- `project_model_settings` schema remains for compatibility and existing rows, but users should tune normal runs in Skill runtime settings.
+- Codex CLI auth status is displayed in Skill runtime because provider selection is per skill.
+- `agentConfig.rolesModels` remains parsed for historical config compatibility, but normal dispatch does not read it.

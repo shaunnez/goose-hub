@@ -101,10 +101,10 @@ The exact model IDs above match OpenAI's published Codex model names at filing t
 
 ### 7. Settings UI
 
-`apps/web/src/components/settings/components/ProjectModelPanel.tsx` gains a "Codex auth" subsection:
+Settings -> Skill runtime includes a "Codex CLI auth" subsection:
 
 - Read-only status: **Connected** / **Run `codex login` to connect**, plus a copy-to-clipboard button for the install/login command.
-- Backed by a global server route `GET /codex-auth/status` (status is per-machine, not per-project; placing it inside the project model panel is purely a UI placement decision).
+- Backed by `GET /projects/:slug/settings/codex-auth` (status is per-machine, not per-project; placing it beside per-skill provider controls is a UI placement decision).
 
 No interactive OAuth from the web UI — same constraint as Claude.
 
