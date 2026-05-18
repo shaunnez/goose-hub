@@ -87,6 +87,20 @@ const OpenUrlInput = z.object({
   rationale: z.string().min(1),
 });
 
+const SubscribeToRunInput = z.object({
+  runId: z.string().min(1).describe('Run identifier emitted on agent.run-started events.'),
+  rationale: z
+    .string()
+    .min(1)
+    .describe('Why this run is worth waiting on — shown to the human approver.'),
+});
+
+const SubscribeToIssueInput = z.object({
+  projectSlug: z.string().min(1),
+  issueNumber: z.union([z.number().int().positive(), z.string()]),
+  rationale: z.string().min(1),
+});
+
 export const CHAT_TOOL_REGISTRY: ChatToolManifestEntry[] = [
   // ── Read-only ────────────────────────────────────────────────────────────
   {
@@ -181,6 +195,20 @@ export const CHAT_TOOL_REGISTRY: ChatToolManifestEntry[] = [
       'Navigate the active web UI to an internal path (e.g. open the kanban, an issue detail page, settings). Side-effect only: no return value.',
     mutating: true,
     inputSchema: OpenUrlInput,
+  },
+  {
+    name: 'subscribe_to_run',
+    description:
+      'Watch an in-flight agent run by runId and post a follow-up chat message when it completes or fails. Auto-expires after 30 minutes.',
+    mutating: true,
+    inputSchema: SubscribeToRunInput,
+  },
+  {
+    name: 'subscribe_to_issue',
+    description:
+      'Watch a work item for its next state.transitioned event and post a follow-up chat message when it lands. Auto-expires after 30 minutes.',
+    mutating: true,
+    inputSchema: SubscribeToIssueInput,
   },
 ];
 
