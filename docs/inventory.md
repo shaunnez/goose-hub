@@ -49,7 +49,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `workflows` | yes | Orchestration workflows that compose skills, persist results, and transition work-item state. |
 | `workspaces` | yes | Git worktree lifecycle management for Factory investigation runs. |
 
-## slices/ (37 entries, 0 missing README)
+## slices/ (38 entries, 0 missing README)
 
 | Name | README | Summary |
 |---|---|---|
@@ -65,6 +65,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `dependency-scheduler` | yes | Scheduler dependency-satisfaction filter. Closes M11.03 (#292). |
 | `description-loop` | yes | Skill auto-trigger description loop (eval Layer 1). Closes M11.19 (#557). |
 | `discover-lane-e2e` | yes | M13.10: End-to-end integration test for the Discover Lane (#321). |
+| `dogfood` | yes | End-to-end harness for proving Factory's bug/feature workflows actually work against Goose Hub itself. |
 | `fix-feedback` | yes | Handles the QA retry loop: when QA fails and `factory:qa-failed` is applied, the orchestrator auto-transitions to `factory:needs-fix` and dispatches this workflow. |
 | `fix-issue` | yes | The M7 supervised dev workflow. Picks up a `factory:dev-ready` issue, creates a worktree, optionally runs the advisor (high/critical priority), runs the implement skill (TDD), opens a PR, posts evidence, and transitions the issue to `factory:approved`. |
 | `governance-check` | yes | Governance PR protection check. Closes M12.05 (#305). |
