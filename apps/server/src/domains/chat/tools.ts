@@ -1,10 +1,19 @@
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { UPDATE_SETTINGS_KEYS } from '@goose-hub/core/chat-tools/registry.js';
+import {
+  getUseInvestigationSwarm,
+  getUseMultiAgentPipeline,
+  readProjectSettings,
+  writeProjectSettings,
+} from '@goose-hub/core/db/repositories/project-settings.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { loadProjects } from '@goose-hub/core/projects/loader.js';
 import { skillsRoot } from '@goose-hub/skills';
 import { addInboxNote } from '#shared/inbox-bridge.js';
+import { setActiveMilestoneViaBridge } from '#shared/milestone-bridge.js';
+import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
 import { getSourceForSlug, isValidSlug } from '#shared/source.js';
 import { getWatchRegistry } from './watch-singleton.js';
 
@@ -399,6 +408,118 @@ async function subscribeToIssue(
   };
 }
 
+type UpdateSettingsKey = (typeof UPDATE_SETTINGS_KEYS)[number];
+
+const NUMERIC_BUDGET_KEYS = new Set<UpdateSettingsKey>([
+  'perWorkflowMaxUsd',
+  'perAgentMaxUsd',
+  'perAdvisorMaxUsd',
+]);
+const BOOLEAN_KEYS = new Set<UpdateSettingsKey>(['useMultiAgentPipeline', 'useInvestigationSwarm']);
+const INTEGER_KEYS = new Set<UpdateSettingsKey>(['maxParallelAgents', 'maxRetries']);
+const ENUM_QA_E2E = new Set(['off', 'ui-changed', 'always']);
+
+function coerceSettingValue(key: UpdateSettingsKey, value: unknown): unknown {
+  if (NUMERIC_BUDGET_KEYS.has(key)) {
+    if (value === null) return null;
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1000) {
+      throw new ToolExecutionError(`${key} must be a number between 0 and 1000`, 400);
+    }
+    return value;
+  }
+  if (BOOLEAN_KEYS.has(key)) {
+    if (typeof value !== 'boolean') {
+      throw new ToolExecutionError(`${key} must be a boolean`, 400);
+    }
+    return value ? 1 : 0;
+  }
+  if (INTEGER_KEYS.has(key)) {
+    if (value === null) return null;
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+      throw new ToolExecutionError(`${key} must be a non-negative integer`, 400);
+    }
+    return value;
+  }
+  if (key === 'qaE2eMode') {
+    if (value === null) return null;
+    if (typeof value !== 'string' || !ENUM_QA_E2E.has(value)) {
+      throw new ToolExecutionError(`qaE2eMode must be one of: ${[...ENUM_QA_E2E].join(', ')}`, 400);
+    }
+    return value;
+  }
+  // Defensive — the registry's Zod enum should have caught this already.
+  throw new ToolExecutionError(`unsupported setting key: '${key}'`, 400);
+}
+
+async function getSettings(input: { projectSlug: string }): Promise<unknown> {
+  assertValidSlug(input.projectSlug);
+  const source = await getSourceForSlug(input.projectSlug);
+  if (source == null) {
+    throw new ToolExecutionError(`project not found: ${input.projectSlug}`, 404);
+  }
+  const row = readProjectSettings(source.projectId);
+  const activeMilestone = await resolveActiveMilestone(input.projectSlug);
+  return {
+    projectId: source.projectId,
+    settings: {
+      perWorkflowMaxUsd: row?.perWorkflowMaxUsd ?? null,
+      perAgentMaxUsd: row?.perAgentMaxUsd ?? null,
+      perAdvisorMaxUsd: row?.perAdvisorMaxUsd ?? null,
+      dailyTokens: row?.dailyTokens ?? null,
+      maxParallelAgents: row?.maxParallelAgents ?? null,
+      maxRetries: row?.maxRetries ?? null,
+      perBashCommandMaxSeconds: row?.perBashCommandMaxSeconds ?? null,
+      qaE2eMode: row?.qaE2eMode ?? null,
+      useMultiAgentPipeline: getUseMultiAgentPipeline(source.projectId),
+      useInvestigationSwarm: getUseInvestigationSwarm(source.projectId),
+    },
+    activeMilestone: {
+      milestoneNumber: activeMilestone.milestoneNumber,
+      source: activeMilestone.source,
+    },
+  };
+}
+
+async function updateSettings(input: {
+  projectSlug: string;
+  key: UpdateSettingsKey;
+  value: unknown;
+  rationale: string;
+}): Promise<unknown> {
+  assertValidSlug(input.projectSlug);
+  if (!UPDATE_SETTINGS_KEYS.includes(input.key)) {
+    throw new ToolExecutionError(`unknown setting key: '${input.key}'`, 400);
+  }
+  const source = await getSourceForSlug(input.projectSlug);
+  if (source == null) {
+    throw new ToolExecutionError(`project not found: ${input.projectSlug}`, 404);
+  }
+  const coerced = coerceSettingValue(input.key, input.value);
+  writeProjectSettings(source.projectId, { [input.key]: coerced }, 'chat');
+  return {
+    ok: true,
+    projectId: source.projectId,
+    key: input.key,
+    value: input.value,
+  };
+}
+
+async function setActiveMilestoneTool(input: {
+  projectSlug: string;
+  milestoneNumber: number | null;
+  rationale: string;
+}): Promise<unknown> {
+  assertValidSlug(input.projectSlug);
+  const result = await setActiveMilestoneViaBridge(input.projectSlug, input.milestoneNumber);
+  if (!result.ok) {
+    throw new ToolExecutionError(
+      result.error ?? 'set_active_milestone failed',
+      result.error === 'project not found' ? 404 : 400,
+    );
+  }
+  return { ok: true, milestoneNumber: result.milestoneNumber };
+}
+
 type ToolFn = (input: unknown, ctx: ToolContext) => Promise<unknown>;
 
 export const CHAT_TOOL_IMPLEMENTATIONS: Record<string, ToolFn> = {
@@ -421,4 +542,8 @@ export const CHAT_TOOL_IMPLEMENTATIONS: Record<string, ToolFn> = {
     subscribeToRun(input as Parameters<typeof subscribeToRun>[0], ctx),
   subscribe_to_issue: (input, ctx) =>
     subscribeToIssue(input as Parameters<typeof subscribeToIssue>[0], ctx),
+  get_settings: (input) => getSettings(input as Parameters<typeof getSettings>[0]),
+  update_settings: (input) => updateSettings(input as Parameters<typeof updateSettings>[0]),
+  set_active_milestone: (input) =>
+    setActiveMilestoneTool(input as Parameters<typeof setActiveMilestoneTool>[0]),
 };

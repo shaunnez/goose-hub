@@ -101,6 +101,40 @@ const SubscribeToIssueInput = z.object({
   rationale: z.string().min(1),
 });
 
+/**
+ * Whitelist of project-settings keys writable via `update_settings`. Mirrors
+ * the validation in `apps/server/src/domains/chat/tools.ts`; the chat agent
+ * sees this list through the input schema description so it cannot propose
+ * fields outside the safe set.
+ */
+export const UPDATE_SETTINGS_KEYS = [
+  'perWorkflowMaxUsd',
+  'perAgentMaxUsd',
+  'perAdvisorMaxUsd',
+  'useMultiAgentPipeline',
+  'useInvestigationSwarm',
+  'maxParallelAgents',
+  'maxRetries',
+  'qaE2eMode',
+] as const;
+
+const UpdateSettingsInput = z.object({
+  projectSlug: z.string().min(1),
+  key: z
+    .enum(UPDATE_SETTINGS_KEYS)
+    .describe('One of the whitelisted setting keys; arbitrary keys are rejected.'),
+  value: z
+    .union([z.string(), z.number(), z.boolean(), z.null()])
+    .describe('Value for the key — type is validated per-key by the dispatcher.'),
+  rationale: z.string().min(1),
+});
+
+const SetActiveMilestoneInput = z.object({
+  projectSlug: z.string().min(1),
+  milestoneNumber: z.number().int().nonnegative().nullable().describe('Null clears the override.'),
+  rationale: z.string().min(1),
+});
+
 export const CHAT_TOOL_REGISTRY: ChatToolManifestEntry[] = [
   // ── Read-only ────────────────────────────────────────────────────────────
   {
@@ -145,6 +179,13 @@ export const CHAT_TOOL_REGISTRY: ChatToolManifestEntry[] = [
   {
     name: 'list_milestones',
     description: 'List milestones for a project with open/closed counts and active flag.',
+    mutating: false,
+    inputSchema: SlugInput,
+  },
+  {
+    name: 'get_settings',
+    description:
+      'Read resolved budget + flag settings for a project (perWorkflowMaxUsd, useMultiAgentPipeline, qaE2eMode, etc.) plus the currently active milestone.',
     mutating: false,
     inputSchema: SlugInput,
   },
@@ -209,6 +250,20 @@ export const CHAT_TOOL_REGISTRY: ChatToolManifestEntry[] = [
       'Watch a work item for its next state.transitioned event and post a follow-up chat message when it lands. Auto-expires after 30 minutes.',
     mutating: true,
     inputSchema: SubscribeToIssueInput,
+  },
+  {
+    name: 'update_settings',
+    description:
+      'Update a single whitelisted project setting (perWorkflowMaxUsd, useMultiAgentPipeline, qaE2eMode, etc.). Rejects unknown keys and type mismatches.',
+    mutating: true,
+    inputSchema: UpdateSettingsInput,
+  },
+  {
+    name: 'set_active_milestone',
+    description:
+      "Flip the active milestone for a project. Pass null to clear the project_state override and fall back to the project config's milestone.",
+    mutating: true,
+    inputSchema: SetActiveMilestoneInput,
   },
 ];
 
