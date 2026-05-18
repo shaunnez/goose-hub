@@ -11,6 +11,7 @@ import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { loadProjects } from '@goose-hub/core/projects/loader.js';
 import { skillsRoot } from '@goose-hub/skills';
+import { runBootstrapViaBridge } from '#shared/bootstrap-bridge.js';
 import { addInboxNote } from '#shared/inbox-bridge.js';
 import { setActiveMilestoneViaBridge } from '#shared/milestone-bridge.js';
 import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
@@ -560,6 +561,61 @@ async function setActiveMilestoneTool(input: {
   };
 }
 
+/**
+ * Accept GitHub repo URL or owner/repo ref. Returns canonical 'owner/repo'.
+ * Throws ToolExecutionError on shapes we cannot parse.
+ */
+function parseRepoUrl(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) throw new ToolExecutionError('repoUrl is required', 400);
+
+  // owner/repo direct form
+  if (!trimmed.includes('://') && !trimmed.startsWith('git@')) {
+    const parts = trimmed.replace(/\.git$/, '').split('/');
+    if (parts.length === 2 && parts[0] && parts[1]) return `${parts[0]}/${parts[1]}`;
+    throw new ToolExecutionError(`could not parse repoUrl: '${raw}'`, 400);
+  }
+
+  // https://github.com/owner/repo[.git]
+  const httpsMatch = /github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/|$)/i.exec(trimmed);
+  if (httpsMatch) return `${httpsMatch[1]}/${httpsMatch[2]}`;
+
+  // git@github.com:owner/repo[.git]
+  const sshMatch = /^git@github\.com:([^/]+)\/(.+?)(?:\.git)?$/i.exec(trimmed);
+  if (sshMatch) return `${sshMatch[1]}/${sshMatch[2]}`;
+
+  throw new ToolExecutionError(`unsupported repoUrl shape: '${raw}'`, 400);
+}
+
+async function bootstrapProjectTool(input: {
+  repoUrl: string;
+  slug?: string;
+  mode?: 'interactive' | 'supervised' | 'autonomous';
+  rationale: string;
+}): Promise<unknown> {
+  const repoRef = parseRepoUrl(input.repoUrl);
+  if (input.slug != null && !isValidSlug(input.slug)) {
+    throw new ToolExecutionError(`invalid slug '${input.slug}' — must match /^[a-z0-9-]+$/`, 400);
+  }
+  const result = await runBootstrapViaBridge(repoRef, input.slug);
+  if (!result.ok) {
+    const status = result.errorStatus ?? 500;
+    throw new ToolExecutionError(result.error ?? 'bootstrap failed', status);
+  }
+  return {
+    ok: true,
+    repoRef,
+    slug: result.slug,
+    status: result.status,
+    registrationPrUrl: result.registrationPrUrl,
+    stackSummary: result.stackSummary,
+    auditAction: result.auditAction,
+    labelCounts: result.labelCounts,
+    requestedMode: input.mode ?? null,
+    path: result.slug ? `/projects/${result.slug}` : null,
+  };
+}
+
 type ToolFn = (input: unknown, ctx: ToolContext) => Promise<unknown>;
 
 export const CHAT_TOOL_IMPLEMENTATIONS: Record<string, ToolFn> = {
@@ -586,4 +642,6 @@ export const CHAT_TOOL_IMPLEMENTATIONS: Record<string, ToolFn> = {
   update_settings: (input) => updateSettings(input as Parameters<typeof updateSettings>[0]),
   set_active_milestone: (input) =>
     setActiveMilestoneTool(input as Parameters<typeof setActiveMilestoneTool>[0]),
+  bootstrap_project: (input) =>
+    bootstrapProjectTool(input as Parameters<typeof bootstrapProjectTool>[0]),
 };

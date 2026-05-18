@@ -39,6 +39,10 @@ describe('chat-tools registry', () => {
     expect(getToolManifest('set_active_milestone')?.mutating).toBe(true);
   });
 
+  it('registers bootstrap_project as a mutating tool', () => {
+    expect(getToolManifest('bootstrap_project')?.mutating).toBe(true);
+  });
+
   it('every entry has a non-empty description', () => {
     for (const entry of CHAT_TOOL_REGISTRY) {
       expect(entry.description.length, `empty description for ${entry.name}`).toBeGreaterThan(10);
