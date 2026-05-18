@@ -227,7 +227,9 @@ describe('apply/restore round-trip against real source files', () => {
       const targetByID: Record<string, string> = {
         'logger-001-drop-meta': 'apps/web/src/lib/logger.ts',
         'frontend-002-truncate-boundary': 'apps/web/src/lib/utils.ts',
+        'frontend-003-format-tokens-rounding': 'apps/web/src/lib/utils.ts',
         'backend-001-budget-threshold': 'apps/server/src/shared/budget.ts',
+        'backend-002-qa-priority-mapping': 'core/findings/priority.ts',
       };
       const targetRel = targetByID[seed.id];
       if (!targetRel) {
