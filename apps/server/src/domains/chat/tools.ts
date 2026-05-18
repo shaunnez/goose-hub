@@ -561,30 +561,73 @@ async function setActiveMilestoneTool(input: {
   };
 }
 
+// Owner and repo segments may contain alphanumerics, dashes, dots, and
+// underscores; the test is conservative on purpose so a hostile URL with extra
+// path segments cannot smuggle in a different repo.
+const OWNER_REPO_SEGMENT = /^[A-Za-z0-9._-]+$/;
+
 /**
- * Accept GitHub repo URL or owner/repo ref. Returns canonical 'owner/repo'.
- * Throws ToolExecutionError on shapes we cannot parse.
+ * Accept a GitHub repo URL or `owner/repo` shorthand. Returns canonical
+ * `owner/repo`. Throws ToolExecutionError on anything that doesn't anchor
+ * exactly to the github.com host (or the equivalent ssh form).
+ *
+ * Defence against tricks like `https://evil.example/github.com/octo/widgets`
+ * or `https://api.github.com/repos/octo/widgets` parsing as `octo/widgets` —
+ * the bootstrap workflow would create labels and PRs against an unintended
+ * target. We parse https URLs through `URL` so the host check is exact.
  */
 function parseRepoUrl(raw: string): string {
   const trimmed = raw.trim();
   if (trimmed.length === 0) throw new ToolExecutionError('repoUrl is required', 400);
 
-  // owner/repo direct form
+  // owner/repo direct form (no scheme, no SSH).
   if (!trimmed.includes('://') && !trimmed.startsWith('git@')) {
-    const parts = trimmed.replace(/\.git$/, '').split('/');
-    if (parts.length === 2 && parts[0] && parts[1]) return `${parts[0]}/${parts[1]}`;
+    const cleaned = trimmed.replace(/\.git$/, '');
+    const parts = cleaned.split('/');
+    if (
+      parts.length === 2 &&
+      OWNER_REPO_SEGMENT.test(parts[0]) &&
+      OWNER_REPO_SEGMENT.test(parts[1])
+    ) {
+      return `${parts[0]}/${parts[1]}`;
+    }
     throw new ToolExecutionError(`could not parse repoUrl: '${raw}'`, 400);
   }
 
-  // https://github.com/owner/repo[.git]
-  const httpsMatch = /github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/|$)/i.exec(trimmed);
-  if (httpsMatch) return `${httpsMatch[1]}/${httpsMatch[2]}`;
+  // git@github.com:owner/repo[.git] — anchored to the exact host.
+  if (trimmed.startsWith('git@')) {
+    const sshMatch = /^git@github\.com:([^/]+)\/(.+?)(?:\.git)?$/.exec(trimmed);
+    if (sshMatch && OWNER_REPO_SEGMENT.test(sshMatch[1]) && OWNER_REPO_SEGMENT.test(sshMatch[2])) {
+      return `${sshMatch[1]}/${sshMatch[2]}`;
+    }
+    throw new ToolExecutionError(`unsupported repoUrl shape: '${raw}'`, 400);
+  }
 
-  // git@github.com:owner/repo[.git]
-  const sshMatch = /^git@github\.com:([^/]+)\/(.+?)(?:\.git)?$/i.exec(trimmed);
-  if (sshMatch) return `${sshMatch[1]}/${sshMatch[2]}`;
-
-  throw new ToolExecutionError(`unsupported repoUrl shape: '${raw}'`, 400);
+  // HTTPS — parse through URL so the host check is exact and path segments
+  // are validated. Anything other than `github.com` host with exactly
+  // `/owner/repo[.git]` is rejected.
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    throw new ToolExecutionError(`could not parse repoUrl: '${raw}'`, 400);
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    throw new ToolExecutionError(`unsupported repoUrl protocol: '${url.protocol}'`, 400);
+  }
+  if (url.host.toLowerCase() !== 'github.com') {
+    throw new ToolExecutionError(`repoUrl host must be github.com, got '${url.host}'`, 400);
+  }
+  const segments = url.pathname.replace(/^\/+/, '').replace(/\/+$/, '').split('/');
+  if (segments.length !== 2) {
+    throw new ToolExecutionError(`repoUrl path must be /owner/repo, got '${url.pathname}'`, 400);
+  }
+  const owner = segments[0];
+  const repo = segments[1].replace(/\.git$/, '');
+  if (!OWNER_REPO_SEGMENT.test(owner) || !OWNER_REPO_SEGMENT.test(repo)) {
+    throw new ToolExecutionError(`invalid owner/repo characters in '${raw}'`, 400);
+  }
+  return `${owner}/${repo}`;
 }
 
 async function bootstrapProjectTool(input: {

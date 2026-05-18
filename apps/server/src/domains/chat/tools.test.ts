@@ -614,6 +614,36 @@ describe('chat-tools — bootstrap_project', () => {
     expect(mockRunBootstrapViaBridge).not.toHaveBeenCalled();
   });
 
+  it('rejects a URL hosted somewhere other than github.com', async () => {
+    await expect(
+      CHAT_TOOL_IMPLEMENTATIONS.bootstrap_project(
+        { repoUrl: 'https://evil.example/github.com/octo/widgets', rationale: 'attack' },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ name: 'ToolExecutionError', status: 400 });
+    expect(mockRunBootstrapViaBridge).not.toHaveBeenCalled();
+  });
+
+  it('rejects api.github.com URLs even though they share the company suffix', async () => {
+    await expect(
+      CHAT_TOOL_IMPLEMENTATIONS.bootstrap_project(
+        { repoUrl: 'https://api.github.com/repos/octo/widgets', rationale: 'attack' },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ name: 'ToolExecutionError', status: 400 });
+    expect(mockRunBootstrapViaBridge).not.toHaveBeenCalled();
+  });
+
+  it('rejects HTTPS URLs that carry extra path segments', async () => {
+    await expect(
+      CHAT_TOOL_IMPLEMENTATIONS.bootstrap_project(
+        { repoUrl: 'https://github.com/octo/widgets/issues/42', rationale: 'wrong path' },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ name: 'ToolExecutionError', status: 400 });
+    expect(mockRunBootstrapViaBridge).not.toHaveBeenCalled();
+  });
+
   it('rejects an invalid slug before calling the workflow', async () => {
     await expect(
       CHAT_TOOL_IMPLEMENTATIONS.bootstrap_project(
