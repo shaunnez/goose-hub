@@ -671,6 +671,59 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
         events: [],
       };
 
+    // hub-chat — M20 default chat assistant. E2E spec needs deterministic
+    // replies including a read-only auto-run, a mutating proposal, and an
+    // open_url proposal to exercise the panel's full lifecycle.
+    case 'hub-chat': {
+      const lastUserMessage = extractLastUserMessage(spec.context);
+      const text = lastUserMessage.toLowerCase();
+
+      if (text.includes('open the kanban')) {
+        return mockChatReply({
+          say: 'Opening the kanban now.',
+          proposals: [
+            {
+              toolName: 'open_url',
+              input: { path: '/projects/goose-hub-self', rationale: 'navigate to kanban' },
+              rationale: 'If you approve, the panel will navigate to the kanban.',
+            },
+          ],
+        });
+      }
+      if (text.includes('list projects')) {
+        return mockChatReply({
+          say: 'Listing the registered projects for you.',
+          proposals: [
+            {
+              toolName: 'list_projects',
+              input: {},
+              rationale: 'Auto-running list_projects to answer your question.',
+            },
+          ],
+        });
+      }
+      if (text.includes('comment')) {
+        return mockChatReply({
+          say: 'I can post that comment if you approve.',
+          proposals: [
+            {
+              toolName: 'comment_on_issue',
+              input: {
+                projectSlug: 'goose-hub-self',
+                issueNumber: 1,
+                body: 'mock comment from e2e',
+              },
+              rationale: 'If you approve, the chat will post a comment on issue #1.',
+            },
+          ],
+        });
+      }
+      return mockChatReply({
+        say: 'Mock hub-chat reply (MOCK_AGENTS=true).',
+        proposals: [],
+      });
+    }
+
     // echo-test / echo-test-holdout — debug/smoke skills.
     case 'echo-test':
     case 'echo-test-holdout':
@@ -724,4 +777,33 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
     default:
       throw new Error(`resolveMockOutput: no preset for skill "${spec.skill}"`);
   }
+}
+
+function extractLastUserMessage(context: AgentSpec['context']): string {
+  const messages = (context.priorMessages ?? []) as Array<{ role: string; content: string }>;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'user' && typeof messages[i].content === 'string') {
+      return messages[i].content;
+    }
+  }
+  return '';
+}
+
+function mockChatReply(opts: {
+  say: string;
+  proposals: Array<{ toolName: string; input: Record<string, unknown>; rationale: string }>;
+}): AgentResult {
+  const decisionSummaries = [
+    { kind: 'PLAN' as const, summary: 'Mock hub-chat reply for e2e test' },
+  ];
+  return {
+    output: {
+      say: opts.say,
+      proposals: opts.proposals,
+      done: false,
+      decisionSummaries,
+    },
+    decisionSummaries,
+    events: [],
+  };
 }

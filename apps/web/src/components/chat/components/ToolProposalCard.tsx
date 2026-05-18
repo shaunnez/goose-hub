@@ -72,7 +72,12 @@ export function ToolProposalCard({
   const navPath = isOpenUrl ? ((invocation.result as { path?: string })?.path ?? null) : null;
 
   return (
-    <div className="my-2 rounded-md border border-line bg-bg-elev p-3 text-[12px]">
+    <div
+      data-testid="chat-tool-card"
+      data-tool-name={invocation.toolName}
+      data-tool-status={invocation.status}
+      className="my-2 rounded-md border border-line bg-bg-elev p-3 text-[12px]"
+    >
       <div className="flex items-center gap-2 mb-1">
         <span className="font-mono text-fg-3 text-[11px]">{invocation.toolName}</span>
         {invocation.mutating && (
@@ -113,6 +118,7 @@ export function ToolProposalCard({
             type="button"
             disabled={busy}
             onClick={() => onApprove(invocation.id)}
+            data-testid="chat-tool-approve"
             className={cn(
               'px-2 py-1 rounded text-[11.5px]',
               'bg-green-600/20 text-green-300 hover:bg-green-600/30 disabled:opacity-50',
@@ -124,6 +130,7 @@ export function ToolProposalCard({
             type="button"
             disabled={busy}
             onClick={() => onReject(invocation.id)}
+            data-testid="chat-tool-reject"
             className={cn(
               'px-2 py-1 rounded text-[11.5px]',
               'bg-bg text-fg-2 border border-line hover:bg-bg-hover disabled:opacity-50',

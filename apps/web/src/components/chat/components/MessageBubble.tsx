@@ -9,7 +9,10 @@ interface MessageBubbleProps {
 export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   return (
-    <div className={cn('flex flex-col gap-1 py-2', isUser ? 'items-end pl-8' : 'items-start pr-8')}>
+    <div
+      data-testid={isUser ? 'chat-user-message' : 'chat-agent-message'}
+      className={cn('flex flex-col gap-1 py-2', isUser ? 'items-end pl-8' : 'items-start pr-8')}
+    >
       <div className="text-[10.5px] uppercase tracking-wider text-fg-2">
         {isUser ? 'You' : 'Hub Chat'}
       </div>
