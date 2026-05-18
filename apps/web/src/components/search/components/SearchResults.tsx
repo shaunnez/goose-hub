@@ -286,6 +286,7 @@ function ConfidencePill({ value }: { value: number }) {
   return (
     <span
       data-testid="search-confidence"
+      title={`Match strength: ${value}% (relative to the top result for this query)`}
       className={`shrink-0 tnum mono text-[10.5px] px-1.5 py-0.5 rounded border ${tone}`}
     >
       {value}
