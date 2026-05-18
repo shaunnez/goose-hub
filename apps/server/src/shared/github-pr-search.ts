@@ -67,8 +67,11 @@ export class GithubPrSearch {
     const trimmed = query.trim();
     if (trimmed.length === 0) return [];
     const cacheKey = `${repoRef}::${trimmed.toLowerCase()}`;
-    const cached = this.cache.get(cacheKey);
     const now = this.now();
+    // Sweep expired entries on every call so a long-running server with
+    // varied chat queries doesn't accumulate stale keys forever.
+    this.pruneExpired(now);
+    const cached = this.cache.get(cacheKey);
     if (cached != null && cached.expiresAt > now) {
       return cached.matches;
     }
@@ -76,6 +79,12 @@ export class GithubPrSearch {
     const matches = await this.fetchFromGithub(repoRef, trimmed);
     this.cache.set(cacheKey, { matches, expiresAt: now + this.ttlMs });
     return matches;
+  }
+
+  private pruneExpired(now: number): void {
+    for (const [key, entry] of this.cache) {
+      if (entry.expiresAt <= now) this.cache.delete(key);
+    }
   }
 
   private async fetchFromGithub(repoRef: string, query: string): Promise<PrSearchMatch[]> {
@@ -87,8 +96,7 @@ export class GithubPrSearch {
     // the fast path: hit the canonical /pulls/:n route directly. Spares the
     // search-rate-limit budget when the user already knows the number.
     if (/^\d+$/.test(query)) {
-      const single = await this.fetchByNumber(repoRef, Number(query), token);
-      return single ? [single] : [];
+      return await this.fetchByNumber(repoRef, Number(query), token);
     }
 
     const q = `is:pr repo:${repoRef} ${query}`;
@@ -117,23 +125,43 @@ export class GithubPrSearch {
         updated_at: string;
       }>;
     };
-    return (body.items ?? []).map((item) => ({
+    const items = body.items ?? [];
+    // The /search/issues endpoint does not populate `pull_request.merged_at`
+    // for PR results, so a closed-merged PR would land here as merged=false
+    // and downstream classifiers would mark it `pr.closed` instead of
+    // `pr.merged`. Follow up on each closed item via /pulls/:n in parallel
+    // (capped at per_page=10) to recover the merged flag.
+    const baseMatches = items.map((item) => ({
       prNumber: item.number,
       url: item.html_url,
       title: item.title,
-      state: item.state === 'closed' ? 'closed' : 'open',
+      state: (item.state === 'closed' ? 'closed' : 'open') as 'open' | 'closed',
       merged: Boolean(item.pull_request?.merged_at),
       authorLogin: item.user?.login ?? null,
       createdAt: item.created_at,
       updatedAt: item.updated_at,
     }));
+    const enriched = await Promise.all(
+      baseMatches.map(async (match) => {
+        if (match.state !== 'closed') return match;
+        const detail = await this.fetchPullDetail(repoRef, match.prNumber, token);
+        if (detail == null) return match;
+        return { ...match, merged: detail.merged };
+      }),
+    );
+    return enriched;
   }
 
+  /** Numeric query — single PR fast path. A 404 here means either the PR
+   * doesn't exist OR the token lacks access; both cases should fall back to
+   * the event-stream so the chat user still gets a best-effort answer rather
+   * than silently empty results. Throwing here lets `searchPrsOrLog` catch
+   * the error and the caller route to the fallback path. */
   private async fetchByNumber(
     repoRef: string,
     prNumber: number,
     token: string,
-  ): Promise<PrSearchMatch | null> {
+  ): Promise<PrSearchMatch[]> {
     const url = `https://api.github.com/repos/${repoRef}/pulls/${prNumber}`;
     const response = await this.fetchImpl(url, {
       headers: {
@@ -142,7 +170,11 @@ export class GithubPrSearch {
         'X-GitHub-Api-Version': '2022-11-28',
       },
     });
-    if (response.status === 404) return null;
+    if (response.status === 404) {
+      throw new Error(
+        `GitHub PR fetch returned 404 for ${url} — either the PR does not exist or the token lacks access; falling back`,
+      );
+    }
     if (!response.ok) {
       throw new Error(
         `GitHub PR fetch failed: ${response.status} ${response.statusText} for ${url}`,
@@ -158,16 +190,44 @@ export class GithubPrSearch {
       created_at: string;
       updated_at: string;
     };
-    return {
-      prNumber: item.number,
-      url: item.html_url,
-      title: item.title,
-      state: item.state === 'closed' ? 'closed' : 'open',
-      merged: Boolean(item.merged_at),
-      authorLogin: item.user?.login ?? null,
-      createdAt: item.created_at,
-      updatedAt: item.updated_at,
-    };
+    return [
+      {
+        prNumber: item.number,
+        url: item.html_url,
+        title: item.title,
+        state: item.state === 'closed' ? 'closed' : 'open',
+        merged: Boolean(item.merged_at),
+        authorLogin: item.user?.login ?? null,
+        createdAt: item.created_at,
+        updatedAt: item.updated_at,
+      },
+    ];
+  }
+
+  /** Light follow-up call used by the free-text path to recover the merged
+   * flag that /search/issues doesn't populate. Silent on errors — we'd
+   * rather return the search result with `merged: false` than fail the
+   * whole query. */
+  private async fetchPullDetail(
+    repoRef: string,
+    prNumber: number,
+    token: string,
+  ): Promise<{ merged: boolean } | null> {
+    const url = `https://api.github.com/repos/${repoRef}/pulls/${prNumber}`;
+    try {
+      const response = await this.fetchImpl(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      });
+      if (!response.ok) return null;
+      const item = (await response.json()) as { merged_at?: string | null };
+      return { merged: Boolean(item.merged_at) };
+    } catch {
+      return null;
+    }
   }
 }
 
