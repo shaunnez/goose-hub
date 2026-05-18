@@ -587,6 +587,37 @@ export interface ReviewSettingsDto {
   updatedBy: string | null;
 }
 
+export interface SearchHitDto {
+  projectSlug: string;
+  externalId: string;
+  title: string;
+  state: string;
+  type: string;
+  priority: string;
+  milestoneTitle: string | null;
+  repoRef: string;
+  confidence: number;
+}
+
+export interface EventHitDto {
+  eventId: number;
+  projectSlug: string;
+  workItemExternalId: string | null;
+  eventKind: string;
+  summary: string;
+  decisionKind: string | null;
+  createdAt: string;
+  confidence: number;
+}
+
+export interface SearchResultDto {
+  items: SearchHitDto[];
+  events: EventHitDto[];
+  total: number;
+  totalEvents: number;
+  hasMore: boolean;
+}
+
 // ───── M20 Hub Chat ─────────────────────────────────────────────────────────
 
 export type ChatScope = 'global' | 'project' | 'item';

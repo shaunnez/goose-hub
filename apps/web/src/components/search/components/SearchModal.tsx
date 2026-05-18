@@ -1,0 +1,303 @@
+import type { SearchClientFilters, SearchTypeFilter } from '@/lib/api';
+import type { EventHitDto, SearchHitDto } from '@/lib/types';
+import { Search, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { loadRecentSearches, pushRecentSearch } from '../lib/recentSearches';
+import { useDebouncedValue } from '../lib/useDebouncedValue';
+import { useFocusTrap } from '../lib/useFocusTrap';
+import { SearchResults } from './SearchResults';
+
+interface SearchModalProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+const DEBOUNCE_MS = 200;
+
+const TYPE_CYCLE: ReadonlyArray<SearchTypeFilter | undefined> = [
+  undefined,
+  'feature',
+  'bug',
+  'chore',
+  'research',
+];
+
+interface FilterState {
+  scope: 'this' | 'all';
+  milestone: 'active' | 'all';
+  type: SearchTypeFilter | undefined;
+  includeClosed: boolean;
+}
+
+const DEFAULT_FILTERS: FilterState = {
+  scope: 'this',
+  milestone: 'active',
+  type: undefined,
+  includeClosed: false,
+};
+
+export function SearchModal({ open, onClose }: SearchModalProps) {
+  const [query, setQuery] = useState('');
+  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  const [recents, setRecents] = useState<string[]>([]);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  useFocusTrap(cardRef, open);
+  const navigate = useNavigate();
+  const params = useParams<{ slug?: string }>();
+  const currentSlug = params.slug;
+  const debounced = useDebouncedValue(query, DEBOUNCE_MS);
+
+  // Refresh recents whenever the modal opens — covers the case where the
+  // user picked a result, the modal closed, and is then reopened.
+  useEffect(() => {
+    if (open) setRecents(loadRecentSearches());
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    inputRef.current?.focus();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open) {
+      setQuery('');
+      setFilters(DEFAULT_FILTERS);
+    }
+  }, [open]);
+
+  const clientFilters: SearchClientFilters = useMemo(() => {
+    const out: SearchClientFilters = {};
+    if (filters.scope === 'this' && currentSlug != null) {
+      out.projectSlug = currentSlug;
+    }
+    if (filters.milestone === 'all') out.milestone = 'all';
+    if (filters.type != null) out.type = filters.type;
+    if (filters.includeClosed) out.includeClosed = true;
+    return out;
+  }, [filters, currentSlug]);
+
+  // Server only iterates closed items when scoped to a milestone. If the
+  // user picks "All milestones" while "Include closed" is on, downgrade
+  // the chip silently — surfaced via the tooltip on the chip itself.
+  const closedDisabledByMilestone = filters.milestone === 'all';
+
+  function handleSelect(hit: SearchHitDto, opts?: { newTab?: boolean }) {
+    pushRecentSearch(query);
+    const url = `/projects/${hit.projectSlug}/items/${hit.externalId}`;
+    if (opts?.newTab) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    navigate(url);
+    onClose();
+  }
+
+  function handleSelectEvent(ev: EventHitDto, opts?: { newTab?: boolean }) {
+    pushRecentSearch(query);
+    // Decisions live on the issue timeline. If the event is detached
+    // from a work item, fall back to the project Kanban.
+    const url =
+      ev.workItemExternalId != null
+        ? `/projects/${ev.projectSlug}/items/${ev.workItemExternalId}/timeline`
+        : `/projects/${ev.projectSlug}`;
+    if (opts?.newTab) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    navigate(url);
+    onClose();
+  }
+
+  function handlePickRecent(q: string) {
+    setQuery(q);
+    inputRef.current?.focus();
+  }
+
+  if (!open) return null;
+
+  return (
+    <div
+      data-testid="search-modal"
+      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xl flex items-start justify-center pt-[12vh] px-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') onClose();
+      }}
+      role="presentation"
+    >
+      <div
+        ref={cardRef}
+        className="w-full max-w-2xl bg-bg-elev border border-line rounded-lg shadow-lg overflow-hidden"
+        aria-label="Search"
+      >
+        <div className="flex items-center gap-2 px-4 h-12 border-b border-line">
+          <Search size={15} className="text-fg-3 shrink-0" />
+          <input
+            ref={inputRef}
+            data-testid="search-input"
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search work items across all projects…"
+            className="flex-1 bg-transparent outline-none text-fg placeholder:text-fg-3 text-[14px]"
+          />
+          <button
+            type="button"
+            data-testid="search-close"
+            onClick={onClose}
+            className="p-1 rounded hover:bg-bg-hover text-fg-3 hover:text-fg cursor-pointer"
+            aria-label="Close search"
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        <div
+          data-testid="search-filters"
+          className="flex flex-wrap items-center gap-1.5 px-4 py-2.5 border-b border-line bg-bg/40"
+        >
+          <FilterChip
+            testid="search-filter-scope"
+            active={filters.scope === 'this' && currentSlug != null}
+            disabled={currentSlug == null}
+            title={
+              currentSlug == null
+                ? 'Open a project to enable "This project"'
+                : 'Toggle between this project and all projects'
+            }
+            label={
+              currentSlug != null && filters.scope === 'this'
+                ? `In: ${currentSlug}`
+                : 'All projects'
+            }
+            onClick={() => {
+              if (currentSlug == null) return;
+              setFilters((f) => ({ ...f, scope: f.scope === 'this' ? 'all' : 'this' }));
+            }}
+          />
+          <FilterChip
+            testid="search-filter-milestone"
+            active={filters.milestone === 'active'}
+            label={filters.milestone === 'active' ? 'Active milestone' : 'All milestones'}
+            title="Toggle between active milestone and all milestones"
+            onClick={() =>
+              setFilters((f) => ({
+                ...f,
+                milestone: f.milestone === 'active' ? 'all' : 'active',
+              }))
+            }
+          />
+          <FilterChip
+            testid="search-filter-type"
+            active={filters.type != null}
+            label={filters.type ?? 'Any type'}
+            title="Cycle through work-item types"
+            onClick={() =>
+              setFilters((f) => {
+                const idx = TYPE_CYCLE.indexOf(f.type);
+                const next = TYPE_CYCLE[(idx + 1) % TYPE_CYCLE.length];
+                return { ...f, type: next };
+              })
+            }
+          />
+          <FilterChip
+            testid="search-filter-include-closed"
+            active={filters.includeClosed && !closedDisabledByMilestone}
+            disabled={closedDisabledByMilestone}
+            label={
+              closedDisabledByMilestone
+                ? 'Open only'
+                : filters.includeClosed
+                  ? 'Include closed'
+                  : 'Open only'
+            }
+            title={
+              closedDisabledByMilestone
+                ? 'Pick an active milestone to include closed items'
+                : 'Toggle whether closed items are included'
+            }
+            onClick={() => {
+              if (closedDisabledByMilestone) return;
+              setFilters((f) => ({ ...f, includeClosed: !f.includeClosed }));
+            }}
+          />
+        </div>
+
+        <SearchResults
+          query={debounced}
+          filters={clientFilters}
+          recents={recents}
+          onPickRecent={handlePickRecent}
+          onSelect={handleSelect}
+          onSelectEvent={handleSelectEvent}
+        />
+
+        <div className="flex items-center justify-between px-4 h-9 border-t border-line bg-bg/40 text-[11px] text-fg-3">
+          <span>
+            <kbd className="px-1 py-0.5 mr-1 rounded border border-line bg-bg text-fg-3">↑↓</kbd>
+            navigate
+            <kbd className="px-1 py-0.5 mx-1 ml-3 rounded border border-line bg-bg text-fg-3">
+              ↵
+            </kbd>
+            open
+            <kbd className="px-1 py-0.5 mx-1 ml-3 rounded border border-line bg-bg text-fg-3">
+              ⌘↵
+            </kbd>
+            new tab
+          </span>
+          <span>
+            <kbd className="px-1 py-0.5 rounded border border-line bg-bg text-fg-3">Esc</kbd>
+            <span className="ml-1">close</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface FilterChipProps {
+  label: string;
+  active: boolean;
+  testid: string;
+  title: string;
+  onClick: () => void;
+  disabled?: boolean;
+}
+
+function FilterChip({ label, active, testid, title, onClick, disabled }: FilterChipProps) {
+  const base = 'h-6 px-2 rounded-md text-[11.5px] border';
+  const tone = disabled
+    ? 'text-fg-3 border-line bg-bg cursor-not-allowed'
+    : active
+      ? 'text-fg border-accent-line bg-accent-soft cursor-pointer'
+      : 'text-fg-2 border-line bg-bg hover:bg-bg-elev cursor-pointer';
+  return (
+    <button
+      type="button"
+      data-testid={testid}
+      data-active={active ? 'true' : 'false'}
+      disabled={disabled}
+      title={title}
+      onClick={onClick}
+      className={`${base} ${tone}`}
+    >
+      {label}
+    </button>
+  );
+}

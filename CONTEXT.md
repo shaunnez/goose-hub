@@ -527,6 +527,18 @@ Both `target-projects/` and `skills/` are pnpm workspace packages (`@goose-hub/t
 
 **Per-project active milestone:** each `ProjectConfig` declares its own `activeMilestone`; the Kanban filters per-project; the All Projects view aggregates across them.
 
+## Cross-project Search (ADR 0044)
+
+`apps/server/src/domains/search/` mounts `GET /search?q=&projectSlug=&type=&milestone=&includeClosed=&limit=` and returns a unified `SearchResult` with two banks: work-item hits and `agent.decision-summary` event hits. Both banks normalise confidence independently to top-result = 100.
+
+**Ranker:** hand-rolled BM25-lite in `score.ts` — title × 3, milestone × 1.5, body × 1 for work items; single-text × 30 for event summaries. Both get a ±10% recency boost inside a 30-day window. `#234` → externalId direct-hit score (1000). Swap to SQLite FTS5 behind the same `scoreItem` interface when the corpus demands it.
+
+**Fan-out cache:** 60s TTL memo in `cache.ts` keyed by `(slug, 'open'|'closed', milestoneNumber)`. Coalesces bursty typing across multiple registered projects so search doesn't re-hit GitHub on every keystroke.
+
+**URL mount note:** server is at `/search` (no `/api` prefix) so the vite dev proxy's `rewrite: (p) => p.replace(/^\/api/, '')` resolves to a real route. The existing `/api/changelog` / `/api/decisions` routes are reachable in production but 404 under the dev proxy — separate concern.
+
+**Holdout discipline:** search reads post-redaction event payloads through `eventStore.replay`. It does NOT touch raw decision-summary text from agent runs; it's a post-emission consumer.
+
 ## Skill File Convention (ADR 0022)
 
 Every skill in `skills/<name>/` uses `prompt.md` (Markdown instructions) and `skill.config.ts` (SkillConfig with role, contextSchema, toolBundles, modelTier, budgets). All prompt loading routes through `readPromptWithContext(skillName, projectSlug)` in `core/agent-runtime/read-prompt.ts`, which appends `target-projects/<slug>/agent-context/<skillName>.md` if the overlay file exists. Per-project overlays are now available to every skill, not just orchestrator-side ones. The CLI's `run-agent` command takes an optional `--project=<slug>` flag for the same overlay path. Resolved at M11.
