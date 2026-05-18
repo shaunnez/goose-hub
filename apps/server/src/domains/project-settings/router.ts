@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { SKILL_BUDGETS } from '@goose-hub/core/agent-runtime/budgets.js';
@@ -42,6 +43,42 @@ const SkillBudgetPatchSchema = z.object({
   provider: z.enum(['claude', 'codex']).nullable().optional(),
 });
 
+const SKILL_CALLERS: Record<string, string[]> = {
+  triage: ['triage-batch workflow', 'fake-run/debug route'],
+  'repo-match': ['triage-batch workflow'],
+  'bug-enhance': ['inbox promotion'],
+  'evidence-post': ['post-QA evidence workflow'],
+  implement: ['standard implementation workflow', 'repair loop'],
+  qa: ['post-implementation QA gate'],
+  review: ['final review gate'],
+  'resolve-conflict': ['conflict resolution workflow'],
+  investigate: ['bug investigation workflow', 'fake-run/debug route'],
+  'playwright-repro': ['bug evidence workflow'],
+  'advise-on-plan': ['advisor gate'],
+  'spec-author': ['parallel implementation workflow'],
+  'retrospective-light': ['post-merge retrospective workflow'],
+  'retrospective-deep': ['post-merge retrospective workflow'],
+  'retrospective-cross-run': ['cross-run retrospective workflow'],
+  'skill-coach': ['cross-run retrospective workflow'],
+  'grill-me': ['grill-and-prd workflow'],
+  'write-prd': ['grill-and-prd workflow'],
+  'advise-on-prd': ['grill-and-prd workflow'],
+  'decompose-issues': ['PRD decomposition workflow'],
+  'sprint-review': ['milestone completion workflow'],
+  'scout-schema': ['investigation scout wave'],
+  'scout-code-path': ['investigation scout wave'],
+  'scout-pattern': ['investigation scout wave'],
+  'scout-test-inventory': ['investigation scout wave'],
+  'scout-dependency': ['investigation scout wave'],
+  'scout-user-journey': ['investigation scout wave'],
+  'wave2-interface-designer': ['investigation synthesis wave'],
+  'wave2-risk-analyst': ['investigation synthesis wave'],
+  'dev-review': ['developer pre-QA advisor'],
+  'dev-review-response': ['developer pre-QA advisor'],
+  'implement-wp': ['parallel implementation workflow'],
+  'code-quality-audit': ['architecture audit workflow'],
+};
+
 function roleForSkill(skill: string): Role | undefined {
   if (skill === 'advise-on-plan') return 'researcher';
   if (skill === 'advise-on-prd' || skill === 'write-prd') return 'prd-writer';
@@ -76,24 +113,81 @@ function roleForSkill(skill: string): Role | undefined {
   return undefined;
 }
 
+function cleanMarkdownText(markdown: string): string {
+  return markdown
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/^#+\s*/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function loadSkillDescription(skill: string): Promise<string | null> {
+  try {
+    const readme = await readFile(join(skillsRoot, skill, 'README.md'), 'utf8');
+    const paragraphs = readme
+      .split(/\n\s*\n/)
+      .map((paragraph) => cleanMarkdownText(paragraph))
+      .filter(
+        (paragraph) =>
+          paragraph !== '' &&
+          paragraph !== skill &&
+          paragraph !== `${skill} skill` &&
+          paragraph !== `skills/${skill}` &&
+          paragraph !== `skill: ${skill}`,
+      );
+    const description = paragraphs.find(
+      (paragraph) =>
+        !paragraph.startsWith('File | Purpose') &&
+        !paragraph.startsWith('When this skill runs') &&
+        !paragraph.startsWith('When it runs') &&
+        !paragraph.startsWith('Inputs') &&
+        !paragraph.startsWith('Role'),
+    );
+    if (description == null) return null;
+    return description.length > 220 ? `${description.slice(0, 217).trimEnd()}...` : description;
+  } catch {
+    return null;
+  }
+}
+
 async function loadSkillRuntimeHint(skill: string): Promise<{
   role?: Role;
   modelTier?: ModelTier;
   provider?: ModelProvider;
+  dependencies: string[];
+  callers: string[];
+  description: string | null;
 }> {
   try {
     const configPath = join(skillsRoot, skill, 'skill.config.ts');
     // Cross-package boundary at runtime path: skill configs live in @goose-hub/skills.
     const mod = (await import(pathToFileURL(configPath).href)) as { default?: unknown };
-    if (mod.default == null || typeof mod.default !== 'object') return {};
+    if (mod.default == null || typeof mod.default !== 'object') {
+      return {
+        dependencies: [],
+        callers: SKILL_CALLERS[skill] ?? [],
+        description: await loadSkillDescription(skill),
+      };
+    }
     const config = mod.default as Partial<SkillConfig>;
     return {
       role: config.role,
       modelTier: config.modelPin,
       provider: config.provider,
+      dependencies: config.contextAllowlist ?? [],
+      callers: SKILL_CALLERS[skill] ?? [],
+      description: await loadSkillDescription(skill),
     };
   } catch {
-    return {};
+    return {
+      dependencies: [],
+      callers: SKILL_CALLERS[skill] ?? [],
+      description: await loadSkillDescription(skill),
+    };
   }
 }
 
@@ -145,6 +239,14 @@ router.get('/:slug/settings', async (c) => {
       modelProvider: string;
     }
   > = {};
+  const skillMetadata: Record<
+    string,
+    {
+      description: string | null;
+      dependencies: string[];
+      callers: string[];
+    }
+  > = {};
   for (const [skill, budget] of Object.entries(SKILL_BUDGETS)) {
     const hint = skillRuntimeHints.get(skill);
     skillDefaults[skill] = {
@@ -153,6 +255,11 @@ router.get('/:slug/settings', async (c) => {
       timeoutMs: budget.timeoutMs,
       modelTier: budget.modelTier,
       modelProvider: hint?.provider ?? budget.provider ?? 'claude',
+    };
+    skillMetadata[skill] = {
+      description: hint?.description ?? null,
+      dependencies: hint?.dependencies ?? [],
+      callers: hint?.callers ?? [],
     };
   }
 
@@ -234,6 +341,7 @@ router.get('/:slug/settings', async (c) => {
     dbSkillOverrides: skillSettings,
     registeredSkills: Object.keys(SKILL_BUDGETS),
     skillDefaults,
+    skillMetadata,
     resolvedSkillRuntimes,
   });
 });

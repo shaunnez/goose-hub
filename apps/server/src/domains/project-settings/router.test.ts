@@ -65,6 +65,10 @@ describe('project settings router', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       skillDefaults: Record<string, { modelProvider: string }>;
+      skillMetadata: Record<
+        string,
+        { description: string | null; dependencies: string[]; callers: string[] }
+      >;
       resolvedSkillRuntimes: Record<
         string,
         { effectiveProvider: string; resolvedPrimary: { modelId: string } }
@@ -74,6 +78,9 @@ describe('project settings router', () => {
     expect(body.skillDefaults['dev-review'].modelProvider).toBe('codex');
     expect(body.resolvedSkillRuntimes['dev-review'].effectiveProvider).toBe('codex');
     expect(body.resolvedSkillRuntimes['dev-review'].resolvedPrimary.modelId).toBe('gpt-5.4');
+    expect(body.skillMetadata['dev-review'].description).toContain('Codex pre-QA dev-review');
+    expect(body.skillMetadata['dev-review'].dependencies).toContain('prDiff');
+    expect(body.skillMetadata['dev-review'].callers).toContain('developer pre-QA advisor');
   });
 
   it('writes tier/provider patches to project_skill_settings model columns', async () => {

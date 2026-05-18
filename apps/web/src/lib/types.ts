@@ -380,6 +380,14 @@ export interface ProjectSettingsDto {
     }
   >;
   registeredSkills: string[];
+  skillMetadata?: Record<
+    string,
+    {
+      description: string | null;
+      dependencies: string[];
+      callers: string[];
+    }
+  >;
   /** SKILL_BUDGETS defaults — UX-3 hint surfaced under each per-skill input. */
   skillDefaults: Record<
     string,

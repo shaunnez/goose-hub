@@ -96,11 +96,11 @@ export function SettingsPage() {
       </div>
 
       {/* Right: config detail */}
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-8 py-6">
         <h1 className="text-[15px] font-semibold mb-1">Settings</h1>
 
         {/* Tab bar */}
-        <div className="flex gap-1 mb-6 border-b border-line">
+        <div className="flex flex-wrap gap-1 mb-6 border-b border-line">
           {(
             ['config', 'runtime', 'advanced-roles', 'pipeline', 'review', 'dev-review'] as Tab[]
           ).map((t) => (
