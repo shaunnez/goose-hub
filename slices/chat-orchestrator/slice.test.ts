@@ -16,6 +16,7 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
 
 import { invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
 import type { Conversation } from '@goose-hub/core/conversations/types.js';
+import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { runChatOrchestratorTurn } from './workflow.js';
 
 const stubConversation: Conversation = {
@@ -104,5 +105,78 @@ describe('chat-orchestrator slice', () => {
       runId: 'chat_test_run_4',
     });
     expect(result.reply).toBeNull();
+  });
+
+  it('emits chat.agent-thinking checkpoints around the skill invocation', async () => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    vi.mocked(invokeSkill).mockResolvedValueOnce({
+      output: {
+        say: 'sure.',
+        proposals: [],
+        done: false,
+        decisionSummaries: [{ kind: 'PLAN', summary: 'ok.' }],
+      },
+      decisionSummaries: [],
+      events: [],
+    });
+    await runChatOrchestratorTurn({
+      conversation: stubConversation,
+      history: [],
+      runId: 'chat_test_thinking',
+    });
+    const thinkingCalls = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.map((c) => c[0])
+      .filter((e) => e.kind === 'chat.agent-thinking');
+    expect(thinkingCalls).toHaveLength(2);
+    const checkpoints = thinkingCalls.map((e) => (e.payload as { checkpoint?: string }).checkpoint);
+    expect(checkpoints).toEqual(['skill-invoked', 'structured-output-received']);
+    for (const e of thinkingCalls) {
+      const payload = e.payload as { conversationId?: string; runId?: string };
+      expect(payload.conversationId).toBe('conv_test');
+      expect(payload.runId).toBe('chat_test_thinking');
+      expect(e.runId).toBe('chat_test_thinking');
+    }
+  });
+
+  it('emits the skill-invoked thinking event even when the run later throws', async () => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    vi.mocked(invokeSkill).mockRejectedValueOnce(new Error('boom'));
+    await runChatOrchestratorTurn({
+      conversation: stubConversation,
+      history: [],
+      runId: 'chat_test_thinking_err',
+    });
+    const thinkingCalls = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.map((c) => c[0])
+      .filter((e) => e.kind === 'chat.agent-thinking');
+    // Only the pre-spawn checkpoint should fire on a thrown run.
+    expect(thinkingCalls.map((e) => (e.payload as { checkpoint?: string }).checkpoint)).toEqual([
+      'skill-invoked',
+    ]);
+  });
+
+  it('emits chat.run-failed when the skill throws so the thinking indicator clears', async () => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    vi.mocked(invokeSkill).mockRejectedValueOnce(new Error('subprocess died'));
+    await runChatOrchestratorTurn({
+      conversation: stubConversation,
+      history: [],
+      runId: 'chat_test_run_failed_event',
+    });
+    const failedCalls = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.map((c) => c[0])
+      .filter((e) => e.kind === 'chat.run-failed');
+    expect(failedCalls).toHaveLength(1);
+    const payload = failedCalls[0].payload as {
+      conversationId?: string;
+      runId?: string;
+      error?: string;
+    };
+    expect(payload.conversationId).toBe('conv_test');
+    expect(payload.runId).toBe('chat_test_run_failed_event');
+    expect(payload.error).toMatch(/subprocess died/);
   });
 });

@@ -14,6 +14,7 @@ import type {
 import { Bot, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { deriveThinkingFromEvents, mergeToolStatusFromEvents } from '../lib/liveState';
 import { resolveScopeFromPath } from '../lib/scope';
 import { useChatEvents } from '../lib/useChatEvents';
 import { ChatInput } from './ChatInput';
@@ -65,46 +66,59 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
     };
   }, [open, resolved.scope, resolved.projectSlug, resolved.workItemId, runtime]);
 
-  // Subscribe to chat.* events for this conversation. We use them to refresh
-  // the invocations list whenever a tool transitions state.
+  // Subscribe to chat.* events for this conversation. The events drive two
+  // render-only behaviours that don't need a network round-trip:
+  //   - the "thinking…" indicator between user message and agent reply
+  //   - live `running` → `completed`/`failed` status badge updates on tool
+  //     cards we already know about
+  //
+  // We deliberately do NOT refetch the conversation on every event tick.
+  // Authoritative reconciliation happens via `postMessage` (after a turn)
+  // and `resolveInvocation` (after an approve/reject). New invocations the
+  // base state hasn't seen yet are still rendered after the next refresh —
+  // tool events for unknown ids are ignored by the merge helper.
   const events = useChatEvents(conversation?.id ?? null);
-
-  useEffect(() => {
-    if (events.length === 0 || conversation == null) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const full = await fetchConversation(conversation.id);
-        if (!cancelled) {
-          setMessages(full.messages);
-          setInvocations(full.invocations);
-        }
-      } catch {
-        // best-effort refresh; ignore
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [events.length, conversation]);
+  const isThinking = useMemo(() => deriveThinkingFromEvents(events), [events]);
+  const liveInvocations = useMemo(
+    () => mergeToolStatusFromEvents(invocations, events),
+    [invocations, events],
+  );
 
   const sendMessage = useCallback(
     async (content: string) => {
       if (conversation == null) return;
       setBusy(true);
       setError(null);
+      // Optimistic user bubble. `postUserMessage` on the server runs the
+      // whole orchestrator turn before responding, which can be several
+      // seconds; without this the user's message would not render until
+      // the agent reply lands. The authoritative refetch below replaces
+      // the optimistic row with the persisted one.
+      const optimisticId = -Date.now();
+      const optimistic: ChatMessageDto = {
+        id: optimisticId,
+        conversationId: conversation.id,
+        role: 'user',
+        content,
+        runId: null,
+        meta: null,
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, optimistic]);
       try {
         await postMessage(conversation.id, content);
         // Authoritative reconciliation — refetch once after the POST settles.
-        // The SSE handler may also refresh during the turn, but both paths
-        // converge through fetchConversation, which is the single source of
-        // truth. Appending the POST response inline would double messages
-        // if the SSE refresh fired first (Codex P2 finding).
+        // The fetchConversation result is the single source of truth and
+        // already includes the persisted user message, so this replaces the
+        // optimistic row cleanly.
         const full = await fetchConversation(conversation.id);
         setMessages(full.messages);
         setInvocations(full.invocations);
       } catch (err) {
         setError(`Send failed: ${String(err)}`);
+        // Roll back the optimistic row on failure so we don't leave a
+        // phantom bubble the server doesn't know about.
+        setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       } finally {
         setBusy(false);
       }
@@ -216,8 +230,9 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
 
       <ChatThread
         messages={messages}
-        invocations={invocations}
+        invocations={liveInvocations}
         pendingDecision={pendingDecision}
+        thinking={isThinking}
         onApprove={handleApprove}
         onReject={handleReject}
         onNavigate={handleNavigate}
