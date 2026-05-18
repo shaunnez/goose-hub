@@ -97,8 +97,8 @@ describe('CODE_ACTIVE_STATES', () => {
 });
 
 describe('GATE_STATES', () => {
-  it('covers exactly two human gate states', () => {
-    expect(Object.keys(GATE_STATES)).toHaveLength(2);
+  it('covers exactly three human gate states', () => {
+    expect(Object.keys(GATE_STATES)).toHaveLength(3);
   });
 
   it('does not include non-gate states', () => {
