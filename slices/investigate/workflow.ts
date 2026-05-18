@@ -26,6 +26,7 @@ import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { persistScoutReport } from '@goose-hub/core/scout-reports/repository.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
+import { ensureSymbolIndexFresh } from '@goose-hub/core/symbol-index/freshness.js';
 import { extractIdentifiers, lookupWorkItemSymbols } from '@goose-hub/core/symbol-index/lookup.js';
 import {
   cleanupWorktree,
@@ -238,14 +239,48 @@ export async function runInvestigateWorkflow(
     let allScoutReports: string | undefined;
 
     if (investigationSwarmEnabled) {
-      // Pre-fetch symbol index hints for scout-code-path (best-effort; empty if index absent).
+      // Pre-fetch symbol index hints for scout-code-path. Freshness and lookup are best-effort:
+      // a missing, stale, or corrupt index must never block investigation.
+      const symbolIndexFreshness = ensureSymbolIndexFresh({ repoRoot: process.cwd() });
+      const symbolIdentifiers = extractIdentifiers(`${workItem.title} ${workItem.body}`);
+
+      if (symbolIndexFreshness.error != null) {
+        eventStore.appendEvent({
+          projectId,
+          workItemId: workItem.id,
+          kind: 'agent.log',
+          payload: {
+            level: 'warn',
+            message: 'symbol-index: freshness check failed; continuing without blocking',
+            error: symbolIndexFreshness.error,
+          },
+          runId,
+          personaId,
+        });
+      }
+
       // Pass worktreePath so hints are filtered to files that actually exist in the target repo,
       // preventing Goose Hub-internal paths from leaking into non-goose-hub investigations.
       const symbolIndexHints = lookupWorkItemSymbols(workItem.title, workItem.body, {
         worktreePath,
       });
 
-      const patternTokens = extractIdentifiers(`${workItem.title} ${workItem.body}`).slice(0, 4);
+      eventStore.appendEvent({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'symbol-index.lookup',
+        payload: {
+          consumerSkill: 'scout-code-path',
+          identifierCount: symbolIdentifiers.length,
+          hintCount: symbolIndexHints.length,
+          dbAgeMs: symbolIndexFreshness.dbAgeMs,
+          stale: symbolIndexFreshness.stale,
+        },
+        runId,
+        personaId,
+      });
+
+      const patternTokens = symbolIdentifiers.slice(0, 4);
       const patternFocus =
         patternTokens.length > 0
           ? `Find existing usages of: ${patternTokens.join(', ')} — patterns this fix must follow`

@@ -21,6 +21,7 @@
     "manifest": "tsx scripts/build-manifest.ts",
     "audit-docs": "tsx scripts/audit-docs.ts",
     "symbol-index": "tsx scripts/build-symbol-index.ts",
+    "symbol": "tsx scripts/query-symbol-index.ts",
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config=drizzle.config.ts",
     "cleanup-worktrees": "bash scripts/cleanup-worktrees.sh",

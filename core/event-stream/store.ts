@@ -140,6 +140,8 @@ export type EventKind =
   // ImprovementCandidates, and the autonomous-mode escalation gate.
   | 'audit.completed'
   | 'audit.failed'
+  // Symbol index utility telemetry — lets us measure whether hints save work.
+  | 'symbol-index.lookup'
   | 'audit.autonomy-gate-fired';
 
 export interface AgentEvent {
