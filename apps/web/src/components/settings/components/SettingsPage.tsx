@@ -11,7 +11,16 @@ import { ProjectConfigPanel } from './ProjectConfigPanel';
 import { ProjectModelPanel } from './ProjectModelPanel';
 import { ReviewPanel } from './ReviewPanel';
 
-type Tab = 'config' | 'budgets' | 'models' | 'pipeline' | 'review' | 'dev-review';
+type Tab = 'config' | 'runtime' | 'advanced-roles' | 'pipeline' | 'review' | 'dev-review';
+
+const TAB_LABELS: Record<Tab, string> = {
+  config: 'Config',
+  runtime: 'Skill runtime',
+  'advanced-roles': 'Advanced roles',
+  pipeline: 'Pipeline',
+  review: 'Review',
+  'dev-review': 'Dev-review',
+};
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
@@ -92,32 +101,32 @@ export function SettingsPage() {
 
         {/* Tab bar */}
         <div className="flex gap-1 mb-6 border-b border-line">
-          {(['config', 'budgets', 'models', 'pipeline', 'review', 'dev-review'] as Tab[]).map(
-            (t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setTab(t)}
-                className={[
-                  'px-3 py-1.5 text-[12px] capitalize -mb-px border-b-2 transition-colors',
-                  tab === t
-                    ? 'border-accent text-fg font-medium'
-                    : 'border-transparent text-fg-2 hover:text-fg',
-                ].join(' ')}
-              >
-                {t}
-              </button>
-            ),
-          )}
+          {(
+            ['config', 'runtime', 'advanced-roles', 'pipeline', 'review', 'dev-review'] as Tab[]
+          ).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className={[
+                'px-3 py-1.5 text-[12px] capitalize -mb-px border-b-2 transition-colors',
+                tab === t
+                  ? 'border-accent text-fg font-medium'
+                  : 'border-transparent text-fg-2 hover:text-fg',
+              ].join(' ')}
+            >
+              {TAB_LABELS[t]}
+            </button>
+          ))}
         </div>
 
         {tab === 'config' && selectedConfig != null && (
           <ProjectConfigPanel config={selectedConfig} />
         )}
-        {tab === 'budgets' && selectedConfig != null && (
+        {tab === 'runtime' && selectedConfig != null && (
           <ProjectBudgetPanel slug={selectedConfig.slug} />
         )}
-        {tab === 'models' && selectedConfig != null && (
+        {tab === 'advanced-roles' && selectedConfig != null && (
           <ProjectModelPanel slug={selectedConfig.slug} />
         )}
         {tab === 'pipeline' && selectedConfig != null && (

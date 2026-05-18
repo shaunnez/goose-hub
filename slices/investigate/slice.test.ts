@@ -315,7 +315,7 @@ describe('runInvestigateWorkflow', () => {
       );
     });
 
-    it('uses the investigator role provider for synthesis model routing', async () => {
+    it('ignores investigator role provider rows for synthesis model routing', async () => {
       mockReadProjectModelSettingsForRole.mockReturnValue({
         projectId: 'goose-hub-self',
         role: 'investigator',
@@ -334,7 +334,7 @@ describe('runInvestigateWorkflow', () => {
         expect.objectContaining({
           skillName: 'investigate',
           overrides: expect.objectContaining({
-            modelOverride: 'gpt-5.4',
+            modelOverride: 'claude-sonnet-4-6',
           }),
         }),
       );

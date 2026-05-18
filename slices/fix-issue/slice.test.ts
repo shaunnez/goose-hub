@@ -2,10 +2,11 @@ import type { AgentResult, AgentRuntime } from '@goose-hub/core/agent-runtime/in
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+let mockProjectSkillSettings = new Map<string, Record<string, unknown>>();
 vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   getEvidencePostEnabled: vi.fn((_projectId: string, configDefault = true) => configDefault),
   readProjectSettings: vi.fn().mockReturnValue(null),
-  readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
+  readProjectSkillSettings: vi.fn(() => mockProjectSkillSettings),
 }));
 let mockProjectModelSettingsRow: Record<string, unknown> | null = null;
 vi.mock('@goose-hub/core/db/repositories/project-model-settings.js', () => ({
@@ -196,6 +197,7 @@ function makeImplementOutput(overrides: Record<string, unknown> = {}) {
 
 function resetRuntimeRoutingMocks(): void {
   mockProjectModelSettingsRow = null;
+  mockProjectSkillSettings = new Map();
   mockProjectConfig = {
     agentConfig: { runtime: 'auto' },
     budgets: undefined,
@@ -213,6 +215,7 @@ describe('runFixIssueWorkflow — default deps (lines 68-73 ?? fallbacks)', () =
     resetEventStoreMocks();
     mockAccumulatePersonaStats.mockClear();
     resetRuntimeRoutingMocks();
+    mockProjectSkillSettings = new Map();
     process.env.GITHUB_TOKEN = 'ghp_test';
     mockClaudeCliRun.mockResolvedValueOnce({
       output: makeImplementOutput(),
@@ -262,12 +265,23 @@ describe('runFixIssueWorkflow — provider-aware runtime dispatch', () => {
     process.env.GITHUB_TOKEN = undefined;
   });
 
-  it('uses CodexCliRuntime and a gpt model when DB developer provider is codex', async () => {
+  it('uses CodexCliRuntime and a gpt model when per-skill provider is codex', async () => {
+    mockProjectSkillSettings = new Map([
+      [
+        'implement',
+        {
+          projectId: 'proj',
+          skillName: 'implement',
+          modelTier: 'haiku',
+          modelProvider: 'codex',
+        },
+      ],
+    ]);
     mockProjectModelSettingsRow = {
       projectId: 'proj',
       role: 'developer',
-      primaryModel: 'haiku',
-      primaryProvider: 'codex',
+      primaryModel: 'sonnet',
+      primaryProvider: 'claude',
     };
     const item = makeWorkItem({ priority: 'medium', type: 'chore' });
     const source = makeStateSource();
@@ -321,7 +335,7 @@ describe('runFixIssueWorkflow — provider-aware runtime dispatch', () => {
 
     expect(mockCodexCliRun).toHaveBeenCalledTimes(1);
     const spec = mockCodexCliRun.mock.calls[0][0] as { modelOverride?: string };
-    expect(spec.modelOverride).toBe('gpt-5.4');
+    expect(spec.modelOverride).toBe('gpt-5.4-mini');
   });
 
   it('keeps an injected runtime instead of replacing it with provider dispatch', async () => {
@@ -367,13 +381,18 @@ describe('runFixIssueWorkflow — provider-aware runtime dispatch', () => {
     expect(mockClaudeCliRun).not.toHaveBeenCalled();
   });
 
-  it('maps implement router type:bug -> haiku onto Codex haiku when provider is Codex', async () => {
-    mockProjectModelSettingsRow = {
-      projectId: 'proj',
-      role: 'developer',
-      primaryModel: 'sonnet',
-      primaryProvider: 'codex',
-    };
+  it('maps per-skill DB tier/provider to the concrete Codex model', async () => {
+    mockProjectSkillSettings = new Map([
+      [
+        'implement',
+        {
+          projectId: 'proj',
+          skillName: 'implement',
+          modelTier: 'haiku',
+          modelProvider: 'codex',
+        },
+      ],
+    ]);
 
     const { runFixIssueWorkflow } = await import('./workflow.js');
     await runFixIssueWorkflow(

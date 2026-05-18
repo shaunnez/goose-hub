@@ -219,13 +219,11 @@ function RoleRow({
   slug,
   data,
   allowHoldoutOverride,
-  codexAvailable,
 }: {
   role: string;
   slug: string;
   data: RoleModelDto;
   allowHoldoutOverride: boolean;
-  codexAvailable: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const qc = useQueryClient();
@@ -254,12 +252,7 @@ function RoleRow({
 
   const db = data.dbRoleModel;
   const hasDbOverride =
-    db != null &&
-    (db.primaryModel != null ||
-      db.fallbackModel != null ||
-      db.advisorModel != null ||
-      db.maxTurns != null ||
-      db.timeoutMs != null);
+    db != null && (db.primaryModel != null || db.maxTurns != null || db.timeoutMs != null);
   const hasComplexity = Object.keys(data.dbComplexityOverrides).length > 0;
 
   // Local state for budget inputs — PATCH on blur, not on every keystroke.
@@ -277,8 +270,6 @@ function RoleRow({
   }, [db?.timeoutMs]);
 
   const configPrimary = (data.configRoleModel?.primary as ModelTier) ?? null;
-  const codexDisabled = !codexAvailable;
-
   return (
     <>
       <tr className="border-b border-line/50 hover:bg-bg-hover">
@@ -314,40 +305,6 @@ function RoleRow({
             }
           />
         </td>
-        <td className="py-1.5 px-2 align-top">
-          <TierProviderSelect
-            tier={db?.fallbackModel ?? null}
-            provider={db?.fallbackProvider ?? null}
-            overridden={db?.fallbackModel != null}
-            placeholder={data.configRoleModel?.fallback ?? '—'}
-            disabled={locked}
-            codexDisabled={codexDisabled}
-            subtitle={null}
-            onChange={(next) =>
-              patchRole.mutate({
-                fallbackModel: next.tier,
-                fallbackProvider: next.tier == null ? null : next.provider,
-              })
-            }
-          />
-        </td>
-        <td className="py-1.5 px-2 align-top">
-          <TierProviderSelect
-            tier={db?.advisorModel ?? null}
-            provider={db?.advisorProvider ?? null}
-            overridden={db?.advisorModel != null}
-            placeholder={data.configRoleModel?.advisor ?? '—'}
-            disabled={locked}
-            codexDisabled={codexDisabled}
-            subtitle={null}
-            onChange={(next) =>
-              patchRole.mutate({
-                advisorModel: next.tier,
-                advisorProvider: next.tier == null ? null : next.provider,
-              })
-            }
-          />
-        </td>
         <td className="py-1.5 pl-1">
           {(hasDbOverride || hasComplexity) && (
             <button
@@ -363,7 +320,7 @@ function RoleRow({
       </tr>
       {expanded && (
         <tr className="border-b border-line/30">
-          <td colSpan={5} className="py-2 px-2">
+          <td colSpan={3} className="py-2 px-2">
             {locked ? (
               <p className="text-[11px] text-fg-3 ml-4">
                 Holdout role — set <code>agentConfig.allowHoldoutOverride: true</code> in project
@@ -681,7 +638,7 @@ export function ProjectModelPanel({ slug }: Props) {
       <div>
         <div className="flex items-center justify-between mb-1">
           <h3 className="text-[12px] font-semibold uppercase tracking-wider text-fg-2">
-            Role model assignments
+            Advanced role settings
           </h3>
           <div className="flex items-center gap-2">
             <button
@@ -718,21 +675,15 @@ export function ProjectModelPanel({ slug }: Props) {
           </div>
         </div>
         <p className="text-[11px] text-fg-3 mb-4">
-          DB overrides win over project config <code>rolesModels</code> and skill defaults. Clear a
-          field to revert to config. Expand a row to set complexity-based rules. The model ID below
-          each primary select is the resolved dispatch target.
-        </p>
-        <p className="text-[11px] text-fg-3 mb-4">
-          To switch to codex/claude there must be an entry in the db. So change the "tier" first
-          then the "model" e.g. Haiku then Codex
+          Compatibility controls for role-level persona and internal policy experiments. Normal
+          skill dispatch uses Skill runtime settings; role rows are not a fallback/advisor control
+          surface for ordinary runs.
         </p>
         <table className="w-full text-[12px]">
           <thead>
             <tr className="text-fg-3 text-left border-b border-line">
               <th className="pb-2 font-medium">Role</th>
               <th className="pb-2 font-medium px-2">Primary</th>
-              <th className="pb-2 font-medium px-2">Fallback</th>
-              <th className="pb-2 font-medium px-2">Advisor</th>
               <th className="pb-2 w-6" />
             </tr>
           </thead>
@@ -744,7 +695,6 @@ export function ProjectModelPanel({ slug }: Props) {
                 slug={slug}
                 data={data.roles[role]}
                 allowHoldoutOverride={data.allowHoldoutOverride}
-                codexAvailable={codexAvailable}
               />
             ))}
           </tbody>

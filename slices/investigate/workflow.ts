@@ -173,7 +173,6 @@ export async function runInvestigateWorkflow(
     projectId,
     configRuntime,
     role: 'investigator',
-    configRoleModel: projectConfig?.agentConfig?.rolesModels?.investigator,
   });
   const investigatorModelOverride = investigateBudget.modelOverride;
   const runtime =
@@ -216,7 +215,6 @@ export async function runInvestigateWorkflow(
       projectId: currentProjectId,
       configRuntime,
       role: 'investigator',
-      configRoleModel: projectConfig?.agentConfig?.rolesModels?.investigator,
     });
     return {
       ...resolved,
@@ -478,7 +476,6 @@ export async function runInvestigateWorkflow(
             projectId,
             configRuntime,
             role: 'investigator',
-            configRoleModel: projectConfig?.agentConfig?.rolesModels?.investigator,
           });
           const playwrightModelOverride = playwrightBudget.modelOverride;
           const playwrightRuntime =
