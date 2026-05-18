@@ -25,8 +25,11 @@ export function useFocusTrap(containerRef: RefObject<HTMLElement | null>, active
       if (e.key !== 'Tab') return;
       const root = containerRef.current;
       if (root == null) return;
+      // The `:not([disabled])` already in FOCUSABLE keeps disabled buttons
+      // out; we deliberately don't filter by offsetParent because the modal
+      // never display:none's its descendants and jsdom doesn't compute it.
       const nodes = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
-        (el) => !el.hasAttribute('disabled') && el.offsetParent !== null,
+        (el) => !el.hasAttribute('disabled'),
       );
       if (nodes.length === 0) return;
       const first = nodes[0];

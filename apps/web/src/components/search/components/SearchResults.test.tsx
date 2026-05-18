@@ -197,6 +197,76 @@ describe('SearchResults', () => {
     );
   });
 
+  it('Cmd+Enter / Ctrl+Enter signals newTab=true', async () => {
+    mockFetchSearch.mockResolvedValue(
+      withResult({
+        items: [
+          {
+            projectSlug: 'p',
+            externalId: '1',
+            title: 'first',
+            state: 's',
+            type: 'feature',
+            priority: 'medium',
+            milestoneTitle: null,
+            repoRef: 'r',
+            confidence: 100,
+          },
+        ],
+        total: 1,
+      }),
+    );
+    const onSelect = vi.fn();
+    render(
+      <Providers>
+        <SearchResults query="x" onSelect={onSelect} />
+      </Providers>,
+    );
+    await waitFor(() => {
+      expect(screen.getAllByTestId('search-result-row').length).toBe(1);
+    });
+    fireEvent.keyDown(document, { key: 'Enter', metaKey: true });
+    expect(onSelect).toHaveBeenCalledWith(
+      expect.objectContaining({ externalId: '1' }),
+      expect.objectContaining({ newTab: true }),
+    );
+  });
+
+  it('Cmd+click on a result row signals newTab=true', async () => {
+    mockFetchSearch.mockResolvedValue(
+      withResult({
+        items: [
+          {
+            projectSlug: 'p',
+            externalId: '7',
+            title: 'cache row',
+            state: 's',
+            type: 'feature',
+            priority: 'medium',
+            milestoneTitle: null,
+            repoRef: 'r',
+            confidence: 100,
+          },
+        ],
+        total: 1,
+      }),
+    );
+    const onSelect = vi.fn();
+    render(
+      <Providers>
+        <SearchResults query="cache" onSelect={onSelect} />
+      </Providers>,
+    );
+    await waitFor(() => {
+      expect(screen.getAllByTestId('search-result-row').length).toBe(1);
+    });
+    fireEvent.click(screen.getAllByTestId('search-result-row')[0], { metaKey: true });
+    expect(onSelect).toHaveBeenCalledWith(
+      expect.objectContaining({ externalId: '7' }),
+      expect.objectContaining({ newTab: true }),
+    );
+  });
+
   it('renders a row per hit, with confidence pill, and calls onSelect on click', async () => {
     mockFetchSearch.mockResolvedValue(
       withResult({
