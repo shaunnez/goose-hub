@@ -1,7 +1,8 @@
 import { type SearchClientFilters, fetchSearch } from '@/lib/api';
 import type { SearchHitDto, SearchResultDto } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { highlight, tokenize } from '../lib/highlight';
 
 interface SearchResultsProps {
   query: string;
@@ -23,7 +24,10 @@ export function SearchResults({
   const trimmed = query.trim();
   const enabled = trimmed.length > 0;
   const [limitIdx, setLimitIdx] = useState(0);
+  const [selectedIdx, setSelectedIdx] = useState(0);
   const limit = PAGE_SIZES[limitIdx];
+  const tokens = useMemo(() => tokenize(trimmed), [trimmed]);
+  const listRef = useRef<HTMLUListElement | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery<SearchResultDto>({
     queryKey: ['search', trimmed, filters ?? {}, limit],
@@ -31,6 +35,55 @@ export function SearchResults({
     enabled,
     staleTime: 30_000,
   });
+
+  const items = data?.items ?? [];
+
+  // Reset / clamp selection whenever the query, filters, or page tier
+  // change. The deps are listed for the effect to fire on change even
+  // though we don't read them inside.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional reset trigger
+  useEffect(() => {
+    setSelectedIdx(0);
+  }, [trimmed, filters, limit]);
+
+  useEffect(() => {
+    if (items.length === 0) return;
+    if (selectedIdx >= items.length) setSelectedIdx(items.length - 1);
+  }, [items.length, selectedIdx]);
+
+  // Arrow-key navigation. Lives at document level so it fires while the
+  // input keeps focus.
+  useEffect(() => {
+    if (!enabled || items.length === 0) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedIdx((i) => Math.min(i + 1, items.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedIdx((i) => Math.max(i - 1, 0));
+      } else if (e.key === 'Enter') {
+        const hit = items[selectedIdx];
+        if (hit != null) {
+          e.preventDefault();
+          onSelect(hit);
+        }
+      }
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [enabled, items, selectedIdx, onSelect]);
+
+  // Keep the selected row visible as arrow keys move past the viewport.
+  // `scrollIntoView` is missing under jsdom — guard so tests don't crash.
+  useEffect(() => {
+    const list = listRef.current;
+    if (list == null) return;
+    const node = list.children[selectedIdx];
+    if (node instanceof HTMLElement && typeof node.scrollIntoView === 'function') {
+      node.scrollIntoView({ block: 'nearest' });
+    }
+  }, [selectedIdx]);
 
   if (!enabled) {
     return <IdleBody recents={recents ?? []} onPickRecent={onPickRecent ?? (() => {})} />;
@@ -74,7 +127,6 @@ export function SearchResults({
     );
   }
 
-  const items = data?.items ?? [];
   if (items.length === 0) {
     return (
       <div data-testid="search-body" className="px-4 py-10 min-h-[200px]">
@@ -92,29 +144,38 @@ export function SearchResults({
       <div className="px-4 pt-3 pb-1.5 text-[10.5px] uppercase tracking-wider text-fg-3">
         Work items · {data?.total ?? items.length}
       </div>
-      <ul data-testid="search-results" className="flex flex-col">
-        {items.map((hit) => (
-          <li key={`${hit.projectSlug}#${hit.externalId}`}>
-            <button
-              type="button"
-              data-testid="search-result-row"
-              onClick={() => onSelect(hit)}
-              className="w-full flex items-center gap-3 px-4 py-2 text-left hover:bg-bg-hover focus:bg-bg-hover focus:outline-none cursor-pointer"
-            >
-              <span className="font-mono text-[11.5px] text-fg-3 w-12 shrink-0">
-                #{hit.externalId}
-              </span>
-              <span className="flex-1 min-w-0">
-                <span className="block truncate text-[13px] text-fg">{hit.title}</span>
-                <span className="block truncate text-[11px] text-fg-3">
-                  {hit.state} · {hit.type}
-                  {hit.milestoneTitle != null ? ` · ${hit.milestoneTitle}` : ''} · {hit.repoRef}
+      <ul ref={listRef} data-testid="search-results" className="flex flex-col">
+        {items.map((hit, idx) => {
+          const selected = idx === selectedIdx;
+          return (
+            <li key={`${hit.projectSlug}#${hit.externalId}`}>
+              <button
+                type="button"
+                data-testid="search-result-row"
+                data-selected={selected ? 'true' : 'false'}
+                onClick={() => onSelect(hit)}
+                onMouseEnter={() => setSelectedIdx(idx)}
+                className={`w-full flex items-center gap-3 px-4 py-2 text-left focus:outline-none cursor-pointer ${
+                  selected ? 'bg-bg-hover' : 'hover:bg-bg-hover'
+                }`}
+              >
+                <span className="font-mono text-[11.5px] text-fg-3 w-12 shrink-0">
+                  #{hit.externalId}
                 </span>
-              </span>
-              <ConfidencePill value={hit.confidence} />
-            </button>
-          </li>
-        ))}
+                <span className="flex-1 min-w-0">
+                  <span className="block truncate text-[13px] text-fg">
+                    {highlight(hit.title, tokens)}
+                  </span>
+                  <span className="block truncate text-[11px] text-fg-3">
+                    {hit.state} · {hit.type}
+                    {hit.milestoneTitle != null ? ` · ${hit.milestoneTitle}` : ''} · {hit.repoRef}
+                  </span>
+                </span>
+                <ConfidencePill value={hit.confidence} />
+              </button>
+            </li>
+          );
+        })}
       </ul>
       {hasMore ? (
         <div className="px-4 py-2 border-t border-line/60">

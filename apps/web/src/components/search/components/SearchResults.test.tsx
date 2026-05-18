@@ -139,6 +139,59 @@ describe('SearchResults', () => {
     });
   });
 
+  it('arrow keys move the selected row and Enter triggers onSelect', async () => {
+    mockFetchSearch.mockResolvedValue(
+      withResult({
+        items: [
+          {
+            projectSlug: 'p',
+            externalId: '1',
+            title: 'first',
+            state: 's',
+            type: 'feature',
+            priority: 'medium',
+            milestoneTitle: null,
+            repoRef: 'r',
+            confidence: 100,
+          },
+          {
+            projectSlug: 'p',
+            externalId: '2',
+            title: 'second',
+            state: 's',
+            type: 'feature',
+            priority: 'medium',
+            milestoneTitle: null,
+            repoRef: 'r',
+            confidence: 80,
+          },
+        ],
+        total: 2,
+      }),
+    );
+    const onSelect = vi.fn();
+    render(
+      <Providers>
+        <SearchResults query="x" onSelect={onSelect} />
+      </Providers>,
+    );
+    await waitFor(() => {
+      expect(screen.getAllByTestId('search-result-row').length).toBe(2);
+    });
+    const rows = screen.getAllByTestId('search-result-row');
+    expect(rows[0].getAttribute('data-selected')).toBe('true');
+    expect(rows[1].getAttribute('data-selected')).toBe('false');
+
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+    await waitFor(() => {
+      const after = screen.getAllByTestId('search-result-row');
+      expect(after[1].getAttribute('data-selected')).toBe('true');
+    });
+
+    fireEvent.keyDown(document, { key: 'Enter' });
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ externalId: '2' }));
+  });
+
   it('renders a row per hit, with confidence pill, and calls onSelect on click', async () => {
     mockFetchSearch.mockResolvedValue(
       withResult({

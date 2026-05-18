@@ -6,22 +6,32 @@ Tracking issue: [#834](https://github.com/shaunnez/goose-hub/issues/834).
 
 ## Components
 
-- `SearchModal` — full-bleed overlay (`backdrop-blur-xl`) hosting the search input, filter chips, results body, and footer key-hint row. Focuses the input on open. Closes on Esc, backdrop click, or the close button. Resets its query each time it re-opens.
-- `SearchResults` — React Query consumer of `/api/search`. Renders idle / loading (skeleton rows) / error (retry button) / empty / results states. Each result row carries a percent confidence pill normalised so the top hit reads `100`.
+- `SearchModal` — full-bleed overlay (`backdrop-blur-xl`) hosting the input, filter chips, results body, and footer key-hint row. Focuses the input on open; closes on Esc, backdrop click, or the close button. Resets query + filters on close. Owns `FilterState` and the recent-searches list.
+- `SearchResults` — React Query consumer of `/api/search`. Renders idle (recents or hint) / loading (skeleton rows) / error (retry button) / empty / results states. `↑↓` moves the selected row, `↵` opens it, hover moves selection too. Each row shows a percent confidence pill and matching tokens in the title are wrapped in `<mark>`.
 
 ## Lib
 
-- `useDebouncedValue<T>(value, delayMs)` — generic value debounce; the modal feeds it the raw input with `delayMs = 200` so React Query keys settle before firing.
+- `useDebouncedValue<T>(value, delayMs)` — generic value debounce. SearchModal feeds it the raw input at 200ms so React Query keys settle before requests fire.
+- `recentSearches.{loadRecentSearches, pushRecentSearch, clearRecentSearches}` — localStorage-backed list of the last 5 queries the user opens a result from. Tolerant of corrupt / disabled storage.
+- `highlight(text, tokens)` — splits a string around case-insensitive token matches and wraps each in `<mark>`. `tokenize(query)` extracts the same token list used for matching.
+
+## Filters
+
+- **Scope** — toggle between the current project (when one is in the URL) and all projects.
+- **Milestone** — toggle between the project's active milestone and all milestones.
+- **Type** — cycle through `Any type` → feature → bug → chore → research.
+- **Open only** — disabled stub; include-closed needs a different source path and lands later.
 
 ## Surfaces touched
 
-- `apps/web/src/components/chrome/TopBar.tsx` — enables the Search button, binds the `⌘K` / `Ctrl+K` hotkey, mounts `SearchModal`.
-- `apps/web/src/lib/api/search.ts` — `fetchSearch(q, { limit?, signal? })` hits `GET /api/search`.
+- `apps/web/src/components/chrome/TopBar.tsx` — Search button + `⌘K` / `Ctrl+K` shortcut + modal mount.
+- `apps/web/src/lib/api/search.ts` — `fetchSearch(q, { limit?, projectSlug?, type?, milestone?, signal? })` hits `GET /api/search`.
 - `apps/web/src/lib/types.ts` — `SearchHitDto`, `SearchResultDto`.
 - `apps/server/src/domains/search/` — server-side endpoint, scoring, ranking.
 
-## Out of scope (still PRs to come under #834)
+## Still out of scope
 
-- Live filter chips (scope / milestone / type / includeClosed) — PR-4.
-- `Show more` pagination + recent searches — PR-5.
-- Highlighted match snippets, focus trap, `search.performed` telemetry — PR-6.
+- Include-closed / archived items toggle.
+- Searchable surfaces beyond work items (inbox, milestones, projects, comments, events).
+- `search.performed` telemetry event.
+- SQLite FTS5 index — revisit if the in-memory ranker doesn't scale.

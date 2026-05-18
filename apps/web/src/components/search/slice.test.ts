@@ -50,4 +50,16 @@ describe('search slice — client wiring', () => {
     expect(source).toContain('useQuery');
     expect(source).toContain('30_000');
   });
+
+  it('SearchResults binds ArrowDown / ArrowUp / Enter for keyboard nav', () => {
+    const source = readFileSync(join(import.meta.dirname, 'components/SearchResults.tsx'), 'utf-8');
+    expect(source).toContain('ArrowDown');
+    expect(source).toContain('ArrowUp');
+    expect(source).toContain("'Enter'");
+  });
+
+  it('SearchResults highlights matched tokens in the title', () => {
+    const source = readFileSync(join(import.meta.dirname, 'components/SearchResults.tsx'), 'utf-8');
+    expect(source).toContain('highlight(hit.title, tokens)');
+  });
 });
