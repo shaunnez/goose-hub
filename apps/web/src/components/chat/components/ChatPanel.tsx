@@ -14,7 +14,7 @@ import type {
   ChatToolInvocationDto,
 } from '@/lib/types';
 import { Bot, List, MessageCircle, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { deriveThinkingFromEvents, mergeToolStatusFromEvents } from '../lib/liveState';
 import { resolveScopeFromPath } from '../lib/scope';
@@ -46,6 +46,13 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
   const [pendingDecision, setPendingDecision] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [runtime, setRuntime] = useState<ChatRuntime>('claude');
+  // Monotonic counter the load handlers bump on every new request. Only the
+  // response whose token still matches `loadTokenRef.current` is allowed to
+  // apply state — protects against:
+  //  * rapid A → B clicks where A's response arrives after B's,
+  //  * the open-panel roster effect clobbering a thread the user just clicked
+  //    "New" to create while the list was still in flight.
+  const loadTokenRef = useRef(0);
 
   const readActiveId = useCallback((): string | null => {
     try {
@@ -64,17 +71,29 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
     }
   }, []);
 
+  /**
+   * Load a conversation by id. Returns the loaded conversation on success or
+   * `null` on either failure or a stale response (because a newer load
+   * request started in the meantime). Callers use the return value to decide
+   * whether to flip the view to 'thread' — a failed load should NOT force
+   * thread view onto an empty panel.
+   */
   const loadConversation = useCallback(
-    async (id: string) => {
+    async (id: string): Promise<ChatConversationDto | null> => {
+      const token = ++loadTokenRef.current;
       try {
         const full = await fetchConversation(id);
+        if (loadTokenRef.current !== token) return null;
         setConversation(full.conversation);
         setMessages(full.messages);
         setInvocations(full.invocations);
         writeActiveId(full.conversation.id);
         setView('thread');
+        return full.conversation;
       } catch (err) {
+        if (loadTokenRef.current !== token) return null;
         setError(`Could not load conversation: ${String(err)}`);
+        return null;
       }
     },
     [writeActiveId],
@@ -87,17 +106,27 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
     if (!open) return;
     let cancelled = false;
     setError(null);
+    // Token snapshot for this open. If `loadTokenRef` advances before we
+    // settle (e.g. user clicked New / picked a row mid-flight), drop our
+    // state writes — the newer interaction is the source of truth now.
+    const openToken = ++loadTokenRef.current;
     (async () => {
       try {
         const list = await listConversations({});
-        if (cancelled) return;
+        if (cancelled || loadTokenRef.current !== openToken) return;
         setConversations(list);
         const previousId = readActiveId();
         const previous = list.find((c) => c.id === previousId);
         if (previous != null) {
-          await loadConversation(previous.id);
-          setView('thread');
+          // loadConversation flips the view + state on its own; we don't
+          // force 'thread' here so a failed restore lands cleanly on 'list'.
+          const restored = await loadConversation(previous.id);
+          if (cancelled) return;
+          if (restored == null) {
+            setView('list');
+          }
         } else {
+          if (cancelled) return;
           setConversation(null);
           setMessages([]);
           setInvocations([]);
@@ -115,6 +144,10 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
   const handleNewConversation = useCallback(async () => {
     setBusy(true);
     setError(null);
+    // Bumping the token here invalidates any in-flight roster/load response —
+    // they'd otherwise reset the panel back to 'list' after the new
+    // conversation lands.
+    const token = ++loadTokenRef.current;
     try {
       const conv = await createConversation({
         scope: resolved.scope,
@@ -122,6 +155,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         workItemId: resolved.workItemId,
         runtime,
       });
+      if (loadTokenRef.current !== token) return;
       setConversation(conv);
       setMessages([]);
       setInvocations([]);
@@ -129,6 +163,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
       writeActiveId(conv.id);
       setView('thread');
     } catch (err) {
+      if (loadTokenRef.current !== token) return;
       setError(`Could not start a conversation: ${String(err)}`);
     } finally {
       setBusy(false);
