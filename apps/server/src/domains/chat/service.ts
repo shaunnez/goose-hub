@@ -313,6 +313,7 @@ export async function executeInvocation(
     conversationId: conversation.id,
     projectId: conversation.projectId,
     workItemId: conversation.workItemId,
+    invocationId,
   };
 
   try {

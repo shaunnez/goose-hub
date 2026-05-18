@@ -51,6 +51,7 @@ function rowToInvocation(r: typeof chatToolInvocations.$inferSelect): ChatToolIn
     status: r.status as ChatToolStatus,
     result: r.resultJson ? JSON.parse(r.resultJson) : null,
     errorMessage: r.errorMessage,
+    runId: r.runId,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
@@ -182,6 +183,7 @@ export interface UpdateToolInvocationInput {
   status: ChatToolStatus;
   result?: unknown;
   errorMessage?: string | null;
+  runId?: string | null;
 }
 
 export function updateToolInvocation(input: UpdateToolInvocationInput): ChatToolInvocation | null {
@@ -191,11 +193,27 @@ export function updateToolInvocation(input: UpdateToolInvocationInput): ChatTool
   };
   if (input.result !== undefined) update.resultJson = JSON.stringify(input.result);
   if (input.errorMessage !== undefined) update.errorMessage = input.errorMessage;
+  if (input.runId !== undefined) update.runId = input.runId;
 
   const [row] = db
     .update(chatToolInvocations)
     .set(update)
     .where(eq(chatToolInvocations.id, input.id))
+    .returning()
+    .all();
+  return row ? rowToInvocation(row) : null;
+}
+
+/**
+ * Stamp a chat tool invocation with the runId of the agent-runtime run it
+ * spawned (M20.09). Used by `invoke_skill` to link the row back to the run
+ * before the run completes so the UI can render the live indicator.
+ */
+export function setToolInvocationRunId(id: string, runId: string): ChatToolInvocation | null {
+  const [row] = db
+    .update(chatToolInvocations)
+    .set({ runId, updatedAt: nowIso() })
+    .where(eq(chatToolInvocations.id, id))
     .returning()
     .all();
   return row ? rowToInvocation(row) : null;

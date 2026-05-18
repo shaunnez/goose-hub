@@ -35,6 +35,7 @@ const completedInvocation: ChatToolInvocationDto = {
   status: 'completed',
   result: null,
   errorMessage: null,
+  runId: null,
   createdAt: '2026-05-18T00:00:00Z',
   updatedAt: '2026-05-18T00:00:00Z',
 };
