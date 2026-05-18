@@ -391,6 +391,11 @@ async function tickProject(input: {
   return { ok: true };
 }
 
+// Tight skill-name validator. Same shape as project slugs (lowercase, digits,
+// dashes) so a crafted name like '../triage' cannot escape skillsRoot when
+// invokeSkill builds its import path from `skillsRoot + skillName`.
+const SKILL_NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+
 /**
  * Spawn a Factory skill through the agent-runtime. Returns the runId so the
  * UI can link the chat invocation row to the live run. The runtime layer
@@ -403,6 +408,9 @@ async function invokeSkillTool(
   ctx: ToolContext,
 ): Promise<unknown> {
   assertValidSlug(input.projectSlug);
+  if (!SKILL_NAME_PATTERN.test(input.skillName)) {
+    throw new ToolExecutionError(`invalid skill name: '${input.skillName}'`, 400);
+  }
   if (SKILLS_BLOCKED_FROM_CHAT.has(input.skillName)) {
     throw new ToolExecutionError(
       `skill '${input.skillName}' must be invoked from a workflow, not chat (holdout / post-implementation role).`,
@@ -417,12 +425,15 @@ async function invokeSkillTool(
   }
 
   const runId = `chat_skill_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-  if (ctx.invocationId) {
-    // Stamp the row before spawn so the UI live-links the run as soon as
-    // `agent.run-started` arrives — without this, the run is anonymous until
-    // the spawn returns.
-    setToolInvocationRunId(ctx.invocationId, runId);
-  }
+
+  // Pass project + work-item identifiers up-front so skills whose contextSchema
+  // declares them as required fields can validate. Skills that need additional
+  // fields will surface a clear ContextValidationError below.
+  const skillContext: Record<string, unknown> = {
+    projectId: source.projectId,
+    projectSlug: input.projectSlug,
+    ...(input.workItemId != null && { workItemId: input.workItemId }),
+  };
 
   try {
     const result = await invokeSkill({
@@ -430,8 +441,15 @@ async function invokeSkillTool(
       projectId: source.projectId,
       workItemId: input.workItemId,
       runId,
-      context: {},
+      context: skillContext,
     });
+    // Stamp the row only after invokeSkill has at least entered the spawn
+    // phase. ContextValidationError throws before any subprocess starts; we
+    // skip the stamp in that case so the runId does not point at a run the
+    // runtime never tried to spawn.
+    if (ctx.invocationId) {
+      setToolInvocationRunId(ctx.invocationId, runId);
+    }
     return {
       ok: true,
       runId,
@@ -449,8 +467,21 @@ async function invokeSkillTool(
       );
     }
     const message = err instanceof Error ? err.message : String(err);
-    if (/no valid default export|Cannot find module|ENOENT/.test(message)) {
+    // "Unknown skill" only when the failure is specifically about the skill's
+    // own config import. Generic ENOENTs from runtime filesystem dependencies
+    // (prompt overlays, workspace setup) must surface as 500s so the operator
+    // can diagnose them, not be misclassified as "skill doesn't exist".
+    if (
+      /invokeSkill: skill '.+?' config has no valid default export/.test(message) ||
+      /Cannot find module .*?skill\.config/.test(message) ||
+      /ENOENT.*?skill\.config/.test(message)
+    ) {
       throw new ToolExecutionError(`unknown skill: '${input.skillName}'`, 404);
+    }
+    // Past the validation gate — stamp so the chat invocation links to the
+    // real (failed) run that the runtime attempted.
+    if (ctx.invocationId) {
+      setToolInvocationRunId(ctx.invocationId, runId);
     }
     logger.warn('chat-tools.invoke_skill failed', { err: message, runId, input });
     throw new ToolExecutionError(`invoke_skill failed: ${message}`, 500);
