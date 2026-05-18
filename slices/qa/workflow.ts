@@ -28,14 +28,13 @@ import {
   toAgentTierResults,
 } from './deterministic-tiers.js';
 export type { VerifyCommand } from './deterministic-tiers.js';
-import {
-  classifyUiChanges,
-  findDevTestsRun,
-  findPrOpenedHints,
-  getChangedFilePaths,
-  getPrDiff,
-} from './qa-helpers.js';
+import { findDevTestsRun, findPrOpenedHints, getPrDiff } from './qa-helpers.js';
 import { buildSyntheticQaOutput } from './synthetic-output.js';
+import {
+  type RunQaCommand,
+  buildVerificationSummary,
+  estimateVerificationSummaryBytes,
+} from './verification-summary.js';
 
 export interface QaWorkflowDeps {
   runtime?: AgentRuntime;
@@ -46,6 +45,8 @@ export interface QaWorkflowDeps {
    * QA agent still runs, just without real suite numbers in its context.
    */
   runTests?: (cwd: string, command: string) => Promise<TestRun | null>;
+  /** Inject for tests — run compact lint/typecheck command summaries. */
+  runCommand?: RunQaCommand;
   /** Per-AC verify commands extracted from the issue body before QA spawn. */
   verifyCommands?: VerifyCommand[];
   /** Inject for tests — return the spec for this work item, or null. */
@@ -90,6 +91,7 @@ export async function runQaWorkflow(
 ): Promise<void> {
   const runId = crypto.randomUUID();
   const runTests = deps.runTests ?? defaultRunTests;
+  const runCommand = deps.runCommand;
   const verifyCommands = deps.verifyCommands;
   const getSpec = deps.getEngineeringSpecImpl ?? defaultGetEngineeringSpec;
   const runTier = deps.runTierImpl ?? defaultRunTier;
@@ -239,33 +241,46 @@ export async function runQaWorkflow(
     // Run tests deterministically before invoking the QA agent so the agent
     // grades against real numbers instead of re-running the suite. Failures
     // here are non-fatal — the agent still runs without testRun.
-    const testCommand = DEFAULT_TEST_COMMAND;
-    const testRun = workspaceDir != null ? await runTests(workspaceDir, testCommand) : null;
+    const testCommand = projectConfig?.stack?.testCommand ?? DEFAULT_TEST_COMMAND;
+    const lintCommand = projectConfig?.stack?.lintCommand ?? 'pnpm biome check .';
+    const typecheckCommand = projectConfig?.stack?.typecheckCommand;
+    const configuredE2eCommand = projectConfig?.stack?.e2eCommand;
+    const { verificationSummary, testRun, e2eDecision } = await buildVerificationSummary({
+      workspaceDir,
+      prHints,
+      prDiff,
+      qaE2eMode,
+      configuredE2eCommand,
+      commands: {
+        testCommand,
+        lintCommand,
+        ...(typecheckCommand != null ? { typecheckCommand } : {}),
+      },
+      priorEvents,
+      devTestsRun,
+      runTests,
+      ...(runCommand != null ? { runCommand } : {}),
+    });
+
+    eventStore.appendEvent({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      kind: 'qa.verification-summary-built',
+      payload: {
+        changedFileCount: verificationSummary.changedFiles.count,
+        diffCharCount: verificationSummary.changedFiles.diffCharCount,
+        contextByteSizeEstimate: estimateVerificationSummaryBytes(verificationSummary),
+        lintStatus: verificationSummary.commands.lint?.status ?? 'skipped',
+        typecheckStatus: verificationSummary.commands.typecheck?.status ?? 'skipped',
+        testStatus: verificationSummary.commands.test.status,
+        e2eStatus: verificationSummary.e2e.status,
+        evidenceStatus: verificationSummary.evidence.status,
+      },
+      runId,
+    });
+
     const [webPort, apiPort] =
       workspaceDir != null ? await Promise.all([findFreePort(), findFreePort()]) : [null, null];
-    const changedFiles = getChangedFilePaths(workspaceDir, prHints.baseBranch);
-    const uiClassification = classifyUiChanges(changedFiles);
-    const configuredE2eCommand = projectConfig?.stack?.e2eCommand;
-    const e2eDecision =
-      qaE2eMode === 'off'
-        ? { mode: qaE2eMode, reason: 'qa e2e disabled by project setting' }
-        : qaE2eMode === 'always'
-          ? configuredE2eCommand != null
-            ? { mode: qaE2eMode, command: configuredE2eCommand, reason: 'qa e2e mode is always' }
-            : { mode: qaE2eMode, reason: 'qa e2e mode is always but no command is configured' }
-          : uiClassification.hasSignificantUiChange && configuredE2eCommand != null
-            ? {
-                mode: qaE2eMode,
-                command: configuredE2eCommand,
-                reason: uiClassification.reason,
-              }
-            : {
-                mode: qaE2eMode,
-                reason:
-                  configuredE2eCommand == null
-                    ? 'qa e2e mode is ui-changed but no command is configured'
-                    : uiClassification.reason,
-              };
 
     const deterministicTierResults = deterministic
       ? toAgentTierResults(deterministic.tierResults)
@@ -286,9 +301,10 @@ export async function runQaWorkflow(
         prDiff,
         projectCommands: {
           testCommand,
-          lintCommand: 'pnpm biome check .',
+          lintCommand,
           ...(e2eDecision.command != null ? { e2eCommand: e2eDecision.command } : {}),
         },
+        verificationSummary,
         e2eDecision,
         ...(verifyCommands != null && verifyCommands.length > 0 ? { verifyCommands } : {}),
         testRun,
@@ -300,6 +316,7 @@ export async function runQaWorkflow(
         'workItem',
         'prDiff',
         'projectCommands',
+        'verificationSummary',
         'e2eDecision',
         'testRun',
         'verifyCommands',

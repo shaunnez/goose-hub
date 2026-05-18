@@ -67,6 +67,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'qa.functional-failed': 'QA functional failed',
   'qa.regression-passed': 'QA regression passed',
   'qa.regression-failed': 'QA regression failed',
+  'qa.verification-summary-built': 'QA verification summary built',
   'retrospective.completed': 'Retrospective completed',
   'grill.question-posted': 'Grill question posted',
   'grill.completed': 'Grill completed',

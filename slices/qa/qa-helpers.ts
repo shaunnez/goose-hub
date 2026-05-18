@@ -58,6 +58,16 @@ export function getPrDiff(_workItem: WorkItem, workspaceDir?: string, baseBranch
   }
 }
 
+export function getPrDiffStat(workspaceDir?: string, baseBranch = 'main'): string {
+  if (workspaceDir == null) return '';
+  try {
+    const baseRef = diffBaseRef(baseBranch);
+    return runGit(workspaceDir, ['diff', '--stat', `${baseRef}...HEAD`]).trim();
+  } catch {
+    return '';
+  }
+}
+
 export function getChangedFilePaths(workspaceDir?: string, baseBranch = 'main'): string[] {
   if (workspaceDir == null) return [];
   try {
@@ -132,6 +142,8 @@ export interface PrOpenedHints {
   devRunId?: string;
   pipelineRunId?: string;
   baseBranch?: string;
+  prNumber?: number;
+  prHeadSha?: string;
 }
 
 export function findPrOpenedHints(workItemId: string): PrOpenedHints {
@@ -147,6 +159,13 @@ export function findPrOpenedHints(workItemId: string): PrOpenedHints {
     devRunId: typeof payload.devRunId === 'string' ? payload.devRunId : undefined,
     pipelineRunId: typeof payload.pipelineRunId === 'string' ? payload.pipelineRunId : undefined,
     baseBranch: typeof payload.baseBranch === 'string' ? payload.baseBranch : undefined,
+    prNumber: typeof payload.prNumber === 'number' ? payload.prNumber : undefined,
+    prHeadSha:
+      typeof payload.prHeadSha === 'string'
+        ? payload.prHeadSha
+        : typeof payload.headSha === 'string'
+          ? payload.headSha
+          : undefined,
   };
 }
 
