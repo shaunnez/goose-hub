@@ -23,6 +23,17 @@ export const ScoutSchemaContextSchema = z.object({
     .string()
     .describe('One sentence describing the schema concern this scout investigates'),
   worktreePath: z.string(),
+  symbolIndexHints: z
+    .array(
+      z.object({
+        name: z.string(),
+        definedIn: z.string(),
+        line: z.number(),
+        kind: z.string(),
+        callers: z.array(z.string()),
+      }),
+    )
+    .optional(),
 });
 
 const config: SkillConfig = {
@@ -33,6 +44,7 @@ const config: SkillConfig = {
     'workItem.number',
     'scoutFocus',
     'worktreePath',
+    'symbolIndexHints',
   ],
   toolBundles: ['read'],
   modelPin: 'haiku',

@@ -9,6 +9,10 @@ import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-tra
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
+import {
+  lookupWorkItemSymbols,
+  symbolHintsToKeyFiles,
+} from '@goose-hub/core/symbol-index/lookup.js';
 import { orchestratorCommitAll } from '@goose-hub/core/workspaces/orchestrator-git.js';
 import {
   cleanupWorktree,
@@ -115,6 +119,20 @@ export async function runFixIssueWorkflow(
   const baseBranch = workflowBase.branch;
   const investigation = latestInvestigationContext({ projectId, workItemId: workItem.id });
   const worktreePath = createWtFn(targetRepo, runId, workflowBase.ref);
+  const symbolKeyFiles =
+    investigation == null
+      ? []
+      : symbolHintsToKeyFiles(
+          lookupWorkItemSymbols(workItem.title, workItem.body, { worktreePath }),
+          { existingPaths: investigation.keyFiles.map((file) => file.path), maxFiles: 8 },
+        );
+  const implementInvestigation =
+    investigation == null || symbolKeyFiles.length === 0
+      ? investigation
+      : {
+          ...investigation,
+          keyFiles: [...investigation.keyFiles, ...symbolKeyFiles],
+        };
 
   try {
     // Transition into in-progress as soon as the worktree exists.
@@ -156,7 +174,8 @@ export async function runFixIssueWorkflow(
         appendSystemPrompt: implementPrompt,
         outputJsonSchema: implementJsonSchema,
         personaId: implementPersonaId,
-        investigation,
+        investigation: implementInvestigation,
+        surfaceGuardInvestigation: investigation,
         revisionPass: 0,
       });
 
@@ -243,7 +262,8 @@ export async function runFixIssueWorkflow(
       appendSystemPrompt: implementPrompt,
       outputJsonSchema: implementJsonSchema,
       personaId: implementPersonaId,
-      investigation,
+      investigation: implementInvestigation,
+      surfaceGuardInvestigation: investigation,
       advisorFeedback,
       revisionPass,
     });

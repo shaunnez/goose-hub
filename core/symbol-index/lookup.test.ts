@@ -5,7 +5,13 @@ import type Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildIndex } from './builder.js';
 import { openIndexDb } from './db.js';
-import { extractIdentifiers, lookupWorkItemSymbols } from './lookup.js';
+import {
+  extractIdentifiers,
+  lookupChangedExportImpact,
+  lookupWorkItemSymbols,
+  shapeSymbolIndexHintsForScout,
+  symbolHintsToKeyFiles,
+} from './lookup.js';
 
 function writeFile(root: string, rel: string, content: string): void {
   const abs = path.join(root, rel);
@@ -225,5 +231,128 @@ describe('lookupWorkItemSymbols', () => {
     // The punctuation-bearing spans should not appear as-is
     expect(ids).not.toContain('dispatchWave()');
     expect(ids).not.toContain('AuthService.login');
+  });
+
+  it('shapes dependency hints with importers and boundaries under a separate cap', () => {
+    const hints = Array.from({ length: 10 }, (_, i) => ({
+      name: `Symbol${i}`,
+      definedIn: `core/agent-runtime/symbol-${i}.ts`,
+      line: 1,
+      kind: 'function',
+      callers: [`slices/investigate/caller-${i}.ts`],
+    }));
+
+    const shaped = shapeSymbolIndexHintsForScout(hints, 'scout-dependency');
+
+    expect(shaped).toHaveLength(8);
+    expect(shaped[0].importers).toEqual(['slices/investigate/caller-0.ts']);
+    expect(shaped[0].boundary).toEqual({
+      packageBoundary: 'core',
+      moduleBoundary: 'core/agent-runtime',
+    });
+  });
+
+  it('limits schema hints to exported schema/type/table-shaped symbols', () => {
+    const shaped = shapeSymbolIndexHintsForScout(
+      [
+        {
+          name: 'dispatchWave',
+          definedIn: 'core/agent-runtime/swarm.ts',
+          line: 1,
+          kind: 'function',
+          callers: [],
+        },
+        {
+          name: 'DevReviewContextSchema',
+          definedIn: 'skills/dev-review/schema.ts',
+          line: 1,
+          kind: 'const',
+          callers: [],
+        },
+        {
+          name: 'WorkItem',
+          definedIn: 'core/state-source/interface.ts',
+          line: 1,
+          kind: 'interface',
+          callers: [],
+        },
+      ],
+      'scout-schema',
+    );
+
+    expect(shaped.map((hint) => hint.name)).toEqual(['DevReviewContextSchema', 'WorkItem']);
+  });
+
+  it('adds nearby tests for test inventory hints', () => {
+    writeFile(tmp, 'core/auth.ts', 'export function AuthService() {}');
+    writeFile(tmp, 'core/auth.test.ts', 'test("auth", () => {})');
+    writeFile(tmp, 'core/slice.test.ts', 'test("slice", () => {})');
+
+    const shaped = shapeSymbolIndexHintsForScout(
+      [
+        {
+          name: 'AuthService',
+          definedIn: 'core/auth.ts',
+          line: 1,
+          kind: 'function',
+          callers: ['core/app.ts'],
+        },
+      ],
+      'scout-test-inventory',
+      { worktreePath: tmp },
+    );
+
+    expect(shaped[0].importers).toEqual(['core/app.ts']);
+    expect(shaped[0].nearbyTests).toEqual(['core/auth.test.ts', 'core/slice.test.ts']);
+  });
+
+  it('turns symbol hints into capped key files without duplicating investigation files', () => {
+    const keyFiles = symbolHintsToKeyFiles(
+      [
+        {
+          name: 'dispatchWave',
+          definedIn: 'core/agent-runtime/swarm.ts',
+          line: 1,
+          kind: 'function',
+          callers: ['slices/investigate/workflow.ts', 'slices/parallel-implement/workflow.ts'],
+        },
+      ],
+      { existingPaths: ['core/agent-runtime/swarm.ts'], maxFiles: 3 },
+    );
+
+    expect(keyFiles).toEqual([
+      {
+        path: 'slices/investigate/workflow.ts',
+        reason: 'Symbol index: imports dispatchWave',
+      },
+      {
+        path: 'slices/parallel-implement/workflow.ts',
+        reason: 'Symbol index: imports dispatchWave',
+      },
+    ]);
+  });
+
+  it('builds capped changed-export impact for dev-review consumers', () => {
+    writeFile(tmp, 'core/swarm.ts', 'export function dispatchWave() {}');
+    writeFile(
+      tmp,
+      'slices/investigate/workflow.ts',
+      `import { dispatchWave } from '../../core/swarm.js';`,
+    );
+    buildIndex({ repoRoot: tmp, db, includeDirs: ['core', 'slices'] });
+    db.close();
+
+    const impact = lookupChangedExportImpact(['core/swarm.ts'], {
+      dbPath,
+      worktreePath: tmp,
+    });
+
+    expect(impact).toEqual([
+      {
+        changedExport: 'dispatchWave',
+        definedIn: 'core/swarm.ts',
+        importers: ['slices/investigate/workflow.ts'],
+      },
+    ]);
   });
 });

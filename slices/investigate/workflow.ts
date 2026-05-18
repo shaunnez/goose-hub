@@ -28,7 +28,11 @@ import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { persistScoutReport } from '@goose-hub/core/scout-reports/repository.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { ensureSymbolIndexFresh } from '@goose-hub/core/symbol-index/freshness.js';
-import { extractIdentifiers, lookupWorkItemSymbols } from '@goose-hub/core/symbol-index/lookup.js';
+import {
+  extractIdentifiers,
+  lookupWorkItemSymbols,
+  shapeSymbolIndexHintsForScout,
+} from '@goose-hub/core/symbol-index/lookup.js';
 import {
   cleanupWorktree,
   createWorktree,
@@ -266,6 +270,17 @@ export async function runInvestigateWorkflow(
         worktreePath,
       });
 
+      const symbolIndexHintsByScout = {
+        'scout-code-path': shapeSymbolIndexHintsForScout(symbolIndexHints, 'scout-code-path'),
+        'scout-dependency': shapeSymbolIndexHintsForScout(symbolIndexHints, 'scout-dependency'),
+        'scout-schema': shapeSymbolIndexHintsForScout(symbolIndexHints, 'scout-schema'),
+        'scout-test-inventory': shapeSymbolIndexHintsForScout(
+          symbolIndexHints,
+          'scout-test-inventory',
+          { worktreePath },
+        ),
+      };
+
       eventStore.appendEvent({
         projectId,
         workItemId: workItem.id,
@@ -273,7 +288,11 @@ export async function runInvestigateWorkflow(
         payload: {
           consumerSkill: 'scout-code-path',
           identifierCount: symbolIdentifiers.length,
-          hintCount: symbolIndexHints.length,
+          hintCount: symbolIndexHintsByScout['scout-code-path'].length,
+          rawHintCount: symbolIndexHints.length,
+          consumerHintCounts: Object.fromEntries(
+            Object.entries(symbolIndexHintsByScout).map(([skill, hints]) => [skill, hints.length]),
+          ),
           dbAgeMs: symbolIndexFreshness.dbAgeMs,
           stale: symbolIndexFreshness.stale,
         },
@@ -288,12 +307,29 @@ export async function runInvestigateWorkflow(
           : 'Identify existing patterns the fix should follow';
 
       const wave1Scouts = WAVE_1_SCOUTS.map((spec) => {
-        if (spec.scoutName === 'scout-code-path' && symbolIndexHints.length > 0)
-          return { ...spec, extraContext: { symbolIndexHints } };
-        if (spec.scoutName === 'scout-pattern') return { ...spec, scoutFocus: patternFocus };
+        const shapedHints =
+          spec.scoutName === 'scout-code-path' ||
+          spec.scoutName === 'scout-dependency' ||
+          spec.scoutName === 'scout-schema' ||
+          spec.scoutName === 'scout-test-inventory'
+            ? symbolIndexHintsByScout[spec.scoutName]
+            : [];
+        const specWithHints =
+          shapedHints.length > 0
+            ? { ...spec, extraContext: { symbolIndexHints: shapedHints } }
+            : spec;
+        if (
+          spec.scoutName === 'scout-code-path' ||
+          spec.scoutName === 'scout-dependency' ||
+          spec.scoutName === 'scout-test-inventory'
+        ) {
+          return specWithHints;
+        }
+        if (spec.scoutName === 'scout-pattern')
+          return { ...specWithHints, scoutFocus: patternFocus };
         if (spec.scoutName === 'scout-schema')
-          return { ...spec, scoutFocus: buildSchemaScoutFocus(workItemCtx) };
-        return spec;
+          return { ...specWithHints, scoutFocus: buildSchemaScoutFocus(workItemCtx) };
+        return specWithHints;
       });
 
       // Wave 1 — parallel fact-gathering

@@ -9,6 +9,7 @@ You have **read and search access only**. Any write attempt will be rejected.
 - `<workItem>` — JSON payload for the work item, with `title`, `body`, and `number`
 - `<scoutFocus>` — one sentence telling you what concern to look for
 - `<worktreePath>` — the worktree to read from
+- `<symbolIndexHints>` *(optional)* — pre-filtered exported schema/type/table-like symbols. The index is a starting point, not authority. Read files before reporting.
 
 ## Discipline
 
@@ -22,6 +23,7 @@ You have **read and search access only**. Any write attempt will be rejected.
 ## Turn Discipline
 
 - Start with at most 2 targeted searches using identifiers from `<scoutFocus>` or `<workItem>`.
+- If `<symbolIndexHints>` is present, read the hinted schema/type/table file before searching.
 - Read at most 6 files total. Prefer schema/config/test files over broad source files.
 - After finding the relevant schema surface, stop searching and produce JSON.
 - If you read `core/db/schema.ts`, `skills/*/schema.ts`, a migration/DDL file, or a boundary type/interface file and can cite at least one useful fact, stop and produce JSON.
