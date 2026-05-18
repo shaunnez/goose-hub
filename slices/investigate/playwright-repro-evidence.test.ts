@@ -1,7 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { runPlaywrightReproPlan, shouldSkipBeforeEvidence } from './playwright-repro-evidence.js';
+import {
+  assemblePlaywrightReproPayload,
+  runPlaywrightReproPlan,
+  shouldSkipBeforeEvidence,
+} from './playwright-repro-evidence.js';
 
 const slug = 'unit-playwright';
 const tmpReproDir = `/tmp/repro-${slug}`;
@@ -42,6 +46,9 @@ describe('playwright repro evidence workflow helper', () => {
       passed: false,
       status: 'failed',
       errors: ['REPRO_EXPECTED_BUG: missing error banner'],
+      consoleErrors: [],
+      testErrors: ['REPRO_EXPECTED_BUG: missing error banner'],
+      runnerErrors: [],
       stdout: [],
       screenshots: [screenshot],
       videoPath: null,
@@ -86,6 +93,48 @@ describe('playwright repro evidence workflow helper', () => {
     expect(output.commentUrl).toBe(
       'https://github.com/shaunnez/goose-hub/issues/42#issuecomment-1',
     );
+    expect(output.consoleErrors).toEqual([]);
+    expect(output.testErrors).toEqual(['REPRO_EXPECTED_BUG: missing error banner']);
+    expect(output.runnerErrors).toEqual([]);
+  });
+
+  it('keeps browser console, assertion, and runner errors in separate payload buckets', () => {
+    const output = assemblePlaywrightReproPayload({
+      issueNumber: 42,
+      repo: 'shaunnez/goose-hub',
+      plan: {
+        specPath: 'apps/web/e2e/repro-unit-playwright.spec.ts',
+        specSource: "import { test } from '@playwright/test';\n\ntest('repro', async () => {});\n",
+        slug,
+        route: '/login',
+        expectedAssertion: 'Error banner remains visible',
+        reproSteps: ['Navigate to /login'],
+        evidenceIntent: 'Capture the BEFORE login error.',
+      },
+      evidence: {
+        issue: 42,
+        slug,
+        phase: 'before',
+        classification: 'setup_failed',
+        reproduced: false,
+        passed: false,
+        status: 'failed',
+        errors: ['REPRO_EXPECTED_BUG: missing error banner', 'Error: No tests found.'],
+        consoleErrors: [{ message: 'TypeError: boom', type: 'error' }],
+        testErrors: ['REPRO_EXPECTED_BUG: missing error banner'],
+        runnerErrors: ['Error: No tests found.'],
+        stdout: [],
+        screenshots: [],
+        videoPath: null,
+        gifPath: null,
+        ffmpegError: null,
+        notes: 'Error: No tests found.',
+      },
+    });
+
+    expect(output.consoleErrors).toEqual([{ message: 'TypeError: boom', type: 'error' }]);
+    expect(output.testErrors).toEqual(['REPRO_EXPECTED_BUG: missing error banner']);
+    expect(output.runnerErrors).toEqual(['Error: No tests found.']);
   });
 
   it('rejects unsafe spec paths before spawning Playwright', () => {

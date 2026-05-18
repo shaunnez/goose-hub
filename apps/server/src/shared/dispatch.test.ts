@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // ─── module-level mock stubs ───────────────────────────────────────────────
 
 const mockRunTriageBatch = vi.fn();
+const mockRunInvestigateWorkflow = vi.fn();
 const mockGetSourceForSlug = vi.fn();
 const mockGetProject = vi.fn();
 const mockLoggerError = vi.fn();
@@ -53,6 +54,10 @@ vi.mock('../domains/workflows/triage-batch.js', () => ({
   runTriageBatch: mockRunTriageBatch,
 }));
 
+vi.mock('../../../../slices/investigate/workflow.js', () => ({
+  runInvestigateWorkflow: mockRunInvestigateWorkflow,
+}));
+
 vi.mock('../domains/workflows/retro-batch.js', () => ({
   runRetroForItem: mockRunRetroForItem,
   runRetroBatch: vi.fn(),
@@ -90,10 +95,18 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
 
 // ─── helpers ──────────────────────────────────────────────────────────────
 
+const originalMockSource = process.env.MOCK_SOURCE;
+
 beforeEach(() => {
   vi.resetModules(); // reset module-level in-flight Sets between tests
   vi.resetAllMocks(); // clears call counts AND implementation queues (once-mocks)
+  if (originalMockSource == null) {
+    process.env.MOCK_SOURCE = undefined;
+  } else {
+    process.env.MOCK_SOURCE = originalMockSource;
+  }
   mockRunTriageBatch.mockResolvedValue(undefined);
+  mockRunInvestigateWorkflow.mockResolvedValue(undefined);
   mockRunRetroForItem.mockResolvedValue(undefined);
   mockRunGrillAndPrdWorkflow.mockResolvedValue(undefined);
   mockRunParallelImplementWorkflow.mockResolvedValue({ status: 'success' });
@@ -243,6 +256,134 @@ describe('dispatchInvestigate', () => {
     await Promise.all([dispatchInvestigate('slug', 1), dispatchInvestigate('slug', 2)]);
     expect(mockGetSourceForSlug).toHaveBeenCalledTimes(2);
     expect(mockLoggerWarn).not.toHaveBeenCalled();
+  });
+
+  it('does not chain investigation-complete routing in production webhook mode', async () => {
+    const item = { id: 'github:shaunnez/goose-hub#42', externalId: '42' };
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi.fn().mockResolvedValue(item),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+
+    const { dispatchInvestigate } = await import('./dispatch.js');
+    await dispatchInvestigate('goose-hub-self', 42);
+
+    expect(mockRunInvestigateWorkflow).toHaveBeenCalledOnce();
+    expect(source.transitionState).not.toHaveBeenCalled();
+    expect(mockEventStoreAppendEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'state.transitioned' }),
+    );
+  });
+
+  it('chains investigation-complete routing in MOCK_SOURCE mode', async () => {
+    process.env.MOCK_SOURCE = 'true';
+    const item = {
+      id: 'github:shaunnez/goose-hub#42',
+      externalId: '42',
+      state: 'factory:investigation-complete',
+    };
+    const source = {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi.fn().mockResolvedValue(item),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockEventStoreReplay.mockReturnValue([
+      {
+        kind: 'agent.investigation-complete',
+        payload: { investigate: { confidence: 'high' } },
+      },
+    ]);
+
+    const { dispatchInvestigate } = await import('./dispatch.js');
+    await dispatchInvestigate('goose-hub-self', 42);
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      'github:shaunnez/goose-hub#42',
+      'factory:investigation-complete',
+      'factory:dev-ready',
+    );
+    expect(mockEventStoreAppendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'state.transitioned' }),
+    );
+  });
+});
+
+// ─── dispatchInvestigationComplete ───────────────────────────────────────
+
+describe('dispatchInvestigationComplete', () => {
+  function investigationCompleteSource() {
+    return {
+      repoRef: 'shaunnez/goose-hub',
+      getItem: vi.fn().mockResolvedValue({
+        id: 'github:shaunnez/goose-hub#42',
+        externalId: '42',
+        state: 'factory:investigation-complete',
+      }),
+      transitionState: vi.fn().mockResolvedValue(undefined),
+    };
+  }
+
+  it('suppresses duplicate equivalent investigation-complete to dev-ready events', async () => {
+    const source = investigationCompleteSource();
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockEventStoreReplay.mockReturnValue([
+      {
+        kind: 'agent.investigation-complete',
+        payload: { investigate: { confidence: 'high' } },
+      },
+      {
+        kind: 'state.transitioned',
+        payload: {
+          from: 'factory:investigation-complete',
+          to: 'factory:dev-ready',
+          by: 'orchestrator',
+        },
+      },
+    ]);
+
+    const { dispatchInvestigationComplete } = await import('./dispatch.js');
+    await dispatchInvestigationComplete('goose-hub-self', 42);
+
+    expect(source.transitionState).not.toHaveBeenCalled();
+    expect(mockEventStoreAppendEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'state.transitioned' }),
+    );
+  });
+
+  it('coalesces near-simultaneous investigation-complete dispatches to one transition event', async () => {
+    let releaseTransition!: () => void;
+    const source = investigationCompleteSource();
+    source.transitionState.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseTransition = resolve;
+        }),
+    );
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockEventStoreReplay.mockReturnValue([
+      {
+        kind: 'agent.investigation-complete',
+        payload: { investigate: { confidence: 'high' } },
+      },
+    ]);
+
+    const { dispatchInvestigationComplete } = await import('./dispatch.js');
+    const first = dispatchInvestigationComplete('goose-hub-self', 42);
+    await vi.waitFor(() => {
+      expect(source.transitionState).toHaveBeenCalledTimes(1);
+    });
+    const second = dispatchInvestigationComplete('goose-hub-self', 42);
+    await second;
+    releaseTransition();
+    await first;
+
+    const stateEvents = mockEventStoreAppendEvent.mock.calls.filter(
+      ([event]) => event.kind === 'state.transitioned',
+    );
+    expect(stateEvents).toHaveLength(1);
   });
 });
 

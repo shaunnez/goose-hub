@@ -8,7 +8,6 @@ import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-tra
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { filterEligibleByDependencies } from '@goose-hub/core/projects/dependency-scheduler.js';
-import { parallelLock } from '@goose-hub/core/projects/parallel-lock.js';
 import { createProjectAwareTargetSource } from '@goose-hub/core/state-source/dependency-resolver.js';
 import type { InvestigateOutput } from '@goose-hub/skills/investigate/schema.js';
 import { EngineeringSpecSchema } from '@goose-hub/skills/spec-author/schema.js';
@@ -19,6 +18,25 @@ import { REPO_ROOT, sliceUrl } from './slice-url.js';
 import { getSourceForSlug } from './source.js';
 
 type InvCompletePayload = { investigate?: InvestigateOutput; investigationRunId?: string };
+
+function shouldChainInvestigationCompleteDirectly(): boolean {
+  return process.env.MOCK_SOURCE === 'true';
+}
+
+function hasEquivalentInvestigationCompleteTransition(
+  events: Array<{ kind: string; payload: unknown }>,
+  targetState: 'factory:gate-pending' | 'factory:dev-ready',
+): boolean {
+  return events.some((event) => {
+    if (event.kind !== 'state.transitioned') return false;
+    const payload = event.payload as { from?: unknown; to?: unknown; by?: unknown } | null;
+    return (
+      payload?.from === 'factory:investigation-complete' &&
+      payload.to === targetState &&
+      payload.by === 'orchestrator'
+    );
+  });
+}
 
 /**
  * For bugs in the M19 pipeline: read the latest investigation event and decide
@@ -80,11 +98,11 @@ export async function dispatchInvestigate(slug: string, issueNumber: number): Pr
           : undefined;
       await runInvestigateWorkflow(item, source, slug, REPO_ROOT, mockInvestigateDeps);
 
-      // Chain to investigation-complete routing outside the lock. In production the
-      // GitHub label-change webhook fires dispatchForLabel('factory:investigation-complete')
-      // instead; in MOCK_SOURCE mode there are no webhooks so we chain explicitly.
-      // Idempotency is enforced by the state check inside dispatchInvestigationComplete.
-      return () => dispatchInvestigationComplete(slug, issueNumber);
+      // In production the GitHub label-change webhook owns the next dispatch.
+      // MOCK_SOURCE has no webhook delivery, so local runs chain explicitly.
+      if (shouldChainInvestigationCompleteDirectly()) {
+        return () => dispatchInvestigationComplete(slug, issueNumber);
+      }
     },
   );
 }
@@ -98,58 +116,77 @@ export async function dispatchInvestigationComplete(
   slug: string,
   issueNumber: number,
 ): Promise<void> {
-  if (parallelLock.isInFlight(slug, issueNumber)) {
-    logger.warn('dispatchInvestigationComplete: in-flight, skipping', { slug, issueNumber });
-    return;
-  }
+  await withParallelLock(
+    slug,
+    issueNumber,
+    'dispatchInvestigationComplete',
+    dispatchInvestigationComplete,
+    async () => {
+      const source = await getSourceForSlug(slug);
+      if (source == null) {
+        logger.error('dispatchInvestigationComplete: no source for slug', { slug });
+        return;
+      }
 
-  const source = await getSourceForSlug(slug);
-  if (source == null) {
-    logger.error('dispatchInvestigationComplete: no source for slug', { slug });
-    return;
-  }
+      const item = await source.getItem(issueNumber.toString());
+      if (item.state !== 'factory:investigation-complete') {
+        logger.info('dispatchInvestigationComplete: state already moved', {
+          slug,
+          issueNumber,
+          state: item.state,
+        });
+        return;
+      }
 
-  const item = await source.getItem(issueNumber.toString());
-  if (item.state !== 'factory:investigation-complete') {
-    logger.info('dispatchInvestigationComplete: state already moved', {
-      slug,
-      issueNumber,
-      state: item.state,
-    });
-    return;
-  }
+      const workItemId = `github:${source.repoRef}#${issueNumber}`;
+      const allEvents = eventStore.replay({ projectId: slug, workItemId });
+      const investigationEvents = allEvents.filter(
+        (e) => e.kind === 'agent.investigation-complete',
+      );
+      const latest = investigationEvents.at(-1);
+      const confidence =
+        (latest?.payload as { investigate?: { confidence?: string } } | null)?.investigate
+          ?.confidence ?? 'medium';
 
-  const workItemId = `github:${source.repoRef}#${issueNumber}`;
-  const allEvents = eventStore.replay({ projectId: slug, workItemId });
-  const investigationEvents = allEvents.filter((e) => e.kind === 'agent.investigation-complete');
-  const latest = investigationEvents.at(-1);
-  const confidence =
-    (latest?.payload as { investigate?: { confidence?: string } } | null)?.investigate
-      ?.confidence ?? 'medium';
+      const targetState = confidence === 'low' ? 'factory:gate-pending' : 'factory:dev-ready';
+      if (hasEquivalentInvestigationCompleteTransition(allEvents, targetState)) {
+        logger.info('dispatchInvestigationComplete: equivalent transition already emitted', {
+          slug,
+          issueNumber,
+          targetState,
+        });
+        return;
+      }
 
-  const targetState = confidence === 'low' ? 'factory:gate-pending' : 'factory:dev-ready';
-  await source.transitionState(workItemId, 'factory:investigation-complete', targetState);
+      await source.transitionState(workItemId, 'factory:investigation-complete', targetState);
 
-  emitStateTransitionEvent({
-    projectId: slug,
-    workItemId,
-    from: 'factory:investigation-complete',
-    to: targetState,
-    by: 'orchestrator',
-  });
+      emitStateTransitionEvent({
+        projectId: slug,
+        workItemId,
+        from: 'factory:investigation-complete',
+        to: targetState,
+        by: 'orchestrator',
+      });
 
-  if (targetState === 'factory:gate-pending') {
-    eventStore.appendEvent({
-      projectId: slug,
-      workItemId,
-      kind: 'gate.awaiting-human',
-      payload: {
-        reason: 'Investigation confidence is low — human review required before proceeding to dev.',
-      },
-    });
-  }
+      if (targetState === 'factory:gate-pending') {
+        eventStore.appendEvent({
+          projectId: slug,
+          workItemId,
+          kind: 'gate.awaiting-human',
+          payload: {
+            reason:
+              'Investigation confidence is low — human review required before proceeding to dev.',
+          },
+        });
+      }
 
-  logger.info('dispatchInvestigationComplete: transitioned', { slug, issueNumber, targetState });
+      logger.info('dispatchInvestigationComplete: transitioned', {
+        slug,
+        issueNumber,
+        targetState,
+      });
+    },
+  );
 }
 
 /** Run the spec-author workflow for a single issue. Drops duplicate triggers for the same issue. */
