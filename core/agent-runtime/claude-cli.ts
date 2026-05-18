@@ -19,6 +19,7 @@ import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { resolveMockOutput } from './mock-outputs.js';
 import { defaultModelForTier } from './models.js';
 import { killProcessGroupOrChild } from './process-kill.js';
+import { withFactoryRuntimeInstructions } from './runtime-instructions.js';
 import type { JsonSchema } from './schema-bridge.js';
 
 const STDOUT_CAP = 4 * 1024 * 1024; // 4 MB
@@ -181,10 +182,9 @@ export class ClaudeCliRuntime implements AgentRuntime {
     ];
 
     // --system-prompt replaces the default IDE system prompt so the agent follows
-    // the skill's instructions rather than responding as a general coding assistant.
-    if (spec.appendSystemPrompt != null) {
-      argv.push('--system-prompt', spec.appendSystemPrompt);
-    }
+    // Factory runtime invariants and the skill's instructions rather than responding
+    // as a general coding assistant.
+    argv.push('--system-prompt', withFactoryRuntimeInstructions(spec.appendSystemPrompt));
 
     // Pass --allowedTools whenever bundles were explicitly declared, even if they
     // resolve to an empty list. An empty list means "no tools" (e.g. grill-me uses

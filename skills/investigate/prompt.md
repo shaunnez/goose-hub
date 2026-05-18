@@ -40,7 +40,9 @@ When wired, dispatch the 4–6 scouts that are actually relevant. Do **not** dis
 
 ### Discipline — applied throughout (single-agent and wave-aware modes)
 
-- **Orient first.** Before searching for anything, list the top-level directory structure to understand the codebase layout. Know where `core/`, `apps/`, and `slices/` live before diving in.
+- **Orient inside `<worktreePath>` first.** Before searching for anything, list the top-level directory structure under `<worktreePath>` only to understand the codebase layout. Know where `core/`, `apps/`, and `slices/` live before diving in.
+- **Stay under `<worktreePath>`.** All list, read, and search operations must stay inside the provided `<worktreePath>`. Do not inspect sibling repos, parent directories, user home directories, or local assistant memory/config folders such as `~/.codex`, `~/.agents`, or `~/.claude`.
+- **No memory quick pass.** Do not perform memory quick passes or read local assistant memory files. If prior context is needed, use only the context Factory provided in this run.
 - **Read before hypothesising.** Read actual source files before forming hypotheses. File names and directory names are not evidence. Code is evidence.
 - **Search before assuming location.** Grep for symbol definitions before assuming a file path. A module named `Sidebar` may not be in `sidebar.ts` — search for the export.
 - **Widen before speculating.** If two search attempts return no relevant results, widen the search term or try a synonym. Do not speculate about root cause from empty search results.
