@@ -14,6 +14,7 @@ vi.mock('#shared/source.js', () => ({
     if (slug === 'unknown') return null;
     return {
       projectId: slug,
+      repoRef: `shaunnez/${slug}`,
       listOpenWork: mockListOpenWork,
       getItem: mockGetItem,
       listMilestones: mockListMilestones,
@@ -31,6 +32,7 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   eventStore: {
     replay: vi.fn(() => []),
     appendEvent: vi.fn(),
+    subscribe: vi.fn(() => () => {}),
   },
 }));
 
@@ -188,5 +190,51 @@ describe('chat-tools — open_url', () => {
       ctx,
     )) as { ok: boolean; path: string };
     expect(result).toEqual({ ok: true, path: '/projects/goose-hub-self' });
+  });
+});
+
+describe('chat-tools — subscribe_to_run', () => {
+  it('registers a watch in the shared registry for the given runId', async () => {
+    const { getWatchRegistry, __resetWatchRegistryForTests } = await import('./watch-singleton.js');
+    __resetWatchRegistryForTests();
+    const result = (await CHAT_TOOL_IMPLEMENTATIONS.subscribe_to_run(
+      { runId: 'run_test_alpha', rationale: 'long investigation' },
+      { ...ctx, conversationId: 'conv_subscribe' },
+    )) as { ok: boolean; watchId: string; runId: string; expiresAt: string };
+
+    expect(result.ok).toBe(true);
+    expect(result.runId).toBe('run_test_alpha');
+    expect(getWatchRegistry().listForConversation('conv_subscribe')).toHaveLength(1);
+    __resetWatchRegistryForTests();
+  });
+});
+
+describe('chat-tools — subscribe_to_issue', () => {
+  it('resolves project + workItemId then registers a watch', async () => {
+    const { getWatchRegistry, __resetWatchRegistryForTests } = await import('./watch-singleton.js');
+    __resetWatchRegistryForTests();
+    const result = (await CHAT_TOOL_IMPLEMENTATIONS.subscribe_to_issue(
+      { projectSlug: 'goose-hub-self', issueNumber: 42, rationale: 'awaiting QA' },
+      { ...ctx, conversationId: 'conv_subscribe_issue' },
+    )) as {
+      ok: boolean;
+      workItemId: string;
+      projectId: string;
+    };
+
+    expect(result.ok).toBe(true);
+    expect(result.workItemId).toBe('github:shaunnez/goose-hub-self#42');
+    expect(result.projectId).toBe('goose-hub-self');
+    expect(getWatchRegistry().listForConversation('conv_subscribe_issue')).toHaveLength(1);
+    __resetWatchRegistryForTests();
+  });
+
+  it('returns a 404 ToolExecutionError when the project is unknown', async () => {
+    await expect(
+      CHAT_TOOL_IMPLEMENTATIONS.subscribe_to_issue(
+        { projectSlug: 'unknown', issueNumber: 1, rationale: 'x' },
+        ctx,
+      ),
+    ).rejects.toBeInstanceOf(ToolExecutionError);
   });
 });

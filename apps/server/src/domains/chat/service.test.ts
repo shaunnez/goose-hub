@@ -5,11 +5,13 @@ vi.mock('#shared/chat-dispatch.js', () => ({
 }));
 
 import {
+  deleteConversationService,
   fetchConversation,
   listConversationsService,
   postUserMessage,
   startConversation,
 } from './service.js';
+import { __resetWatchRegistryForTests, getWatchRegistry } from './watch-singleton.js';
 
 describe('chat service', () => {
   it('rejects scope=project without a projectSlug', async () => {
@@ -57,6 +59,27 @@ describe('chat service', () => {
       expect(after.data.messages.length).toBe(1);
       expect(after.data.messages[0].content).toBe('hello goose hub');
     }
+  });
+
+  it('deletes a conversation and clears its pending watches', async () => {
+    __resetWatchRegistryForTests();
+    const start = await startConversation({ scope: 'global' });
+    if (!start.ok) throw new Error('expected ok');
+    const id = start.data.conversation.id;
+
+    getWatchRegistry().addRunWatch(id, 'run_owned');
+    getWatchRegistry().addRunWatch('other_conversation', 'run_other');
+
+    const result = await deleteConversationService(id);
+    expect(result.ok).toBe(true);
+
+    expect(getWatchRegistry().listForConversation(id)).toHaveLength(0);
+    expect(getWatchRegistry().listForConversation('other_conversation')).toHaveLength(1);
+
+    const fetched = await fetchConversation(id);
+    expect(fetched.ok).toBe(false);
+
+    __resetWatchRegistryForTests();
   });
 
   it('lists conversations filtered by scope', async () => {

@@ -25,6 +25,7 @@ import {
   updateToolInvocation,
 } from './repository.js';
 import { CHAT_TOOL_IMPLEMENTATIONS, type ToolContext, ToolExecutionError } from './tools.js';
+import { getWatchRegistry } from './watch-singleton.js';
 
 function newConversationId(): string {
   const ts = Date.now().toString(36);
@@ -97,6 +98,7 @@ export async function listConversationsService(
 
 export async function deleteConversationService(id: string): Promise<Result<{ ok: true }>> {
   if (getConversation(id) == null) return { ok: false, error: 'not found', status: 404 };
+  getWatchRegistry().removeByConversation(id);
   deleteConversation(id);
   return { ok: true, data: { ok: true } };
 }

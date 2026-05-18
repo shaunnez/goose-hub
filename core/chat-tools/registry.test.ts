@@ -28,6 +28,11 @@ describe('chat-tools registry', () => {
     expect(getToolManifest('open_url')?.mutating).toBe(true);
   });
 
+  it('registers the subscribe_to_run / subscribe_to_issue tools as mutating', () => {
+    expect(getToolManifest('subscribe_to_run')?.mutating).toBe(true);
+    expect(getToolManifest('subscribe_to_issue')?.mutating).toBe(true);
+  });
+
   it('every entry has a non-empty description', () => {
     for (const entry of CHAT_TOOL_REGISTRY) {
       expect(entry.description.length, `empty description for ${entry.name}`).toBeGreaterThan(10);

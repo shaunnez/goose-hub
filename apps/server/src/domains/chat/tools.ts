@@ -6,6 +6,7 @@ import { loadProjects } from '@goose-hub/core/projects/loader.js';
 import { skillsRoot } from '@goose-hub/skills';
 import { addInboxNote } from '#shared/inbox-bridge.js';
 import { getSourceForSlug, isValidSlug } from '#shared/source.js';
+import { getWatchRegistry } from './watch-singleton.js';
 
 export interface ToolContext {
   conversationId: string;
@@ -365,6 +366,39 @@ async function openUrl(input: { path: string; rationale: string }): Promise<unkn
   return { ok: true, path: input.path };
 }
 
+async function subscribeToRun(
+  input: { runId: string; rationale: string },
+  ctx: ToolContext,
+): Promise<unknown> {
+  const watch = getWatchRegistry().addRunWatch(ctx.conversationId, input.runId);
+  return {
+    ok: true,
+    watchId: watch.id,
+    watchKind: watch.kind,
+    runId: input.runId,
+    expiresAt: new Date(watch.expiresAt).toISOString(),
+  };
+}
+
+async function subscribeToIssue(
+  input: { projectSlug: string; issueNumber: number | string; rationale: string },
+  ctx: ToolContext,
+): Promise<unknown> {
+  assertValidSlug(input.projectSlug);
+  const source = await getSourceForSlug(input.projectSlug);
+  if (source == null) throw new ToolExecutionError(`project not found: ${input.projectSlug}`, 404);
+  const workItemId = `github:${source.repoRef}#${String(input.issueNumber)}`;
+  const watch = getWatchRegistry().addIssueWatch(ctx.conversationId, source.projectId, workItemId);
+  return {
+    ok: true,
+    watchId: watch.id,
+    watchKind: watch.kind,
+    projectId: source.projectId,
+    workItemId,
+    expiresAt: new Date(watch.expiresAt).toISOString(),
+  };
+}
+
 type ToolFn = (input: unknown, ctx: ToolContext) => Promise<unknown>;
 
 export const CHAT_TOOL_IMPLEMENTATIONS: Record<string, ToolFn> = {
@@ -383,4 +417,8 @@ export const CHAT_TOOL_IMPLEMENTATIONS: Record<string, ToolFn> = {
   tick_project: (input) => tickProject(input as Parameters<typeof tickProject>[0]),
   invoke_skill: (input) => invokeSkillTool(input as Parameters<typeof invokeSkillTool>[0]),
   open_url: (input) => openUrl(input as Parameters<typeof openUrl>[0]),
+  subscribe_to_run: (input, ctx) =>
+    subscribeToRun(input as Parameters<typeof subscribeToRun>[0], ctx),
+  subscribe_to_issue: (input, ctx) =>
+    subscribeToIssue(input as Parameters<typeof subscribeToIssue>[0], ctx),
 };
