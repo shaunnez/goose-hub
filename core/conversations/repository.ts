@@ -206,6 +206,29 @@ export function getToolInvocation(id: string): ChatToolInvocation | null {
   return row ? rowToInvocation(row) : null;
 }
 
+/**
+ * Atomic compare-and-swap. Update the invocation to `toStatus` only if its
+ * current status is `fromStatus`. Returns the new row when the transition
+ * happened, or `null` when no row matched (already transitioned by a
+ * concurrent caller). The orchestrator relies on this to make mutating-tool
+ * approval idempotent across racing approve clicks.
+ */
+export function transitionToolInvocationStatus(input: {
+  id: string;
+  fromStatus: ChatToolStatus;
+  toStatus: ChatToolStatus;
+}): ChatToolInvocation | null {
+  const rows = db
+    .update(chatToolInvocations)
+    .set({ status: input.toStatus, updatedAt: nowIso() })
+    .where(
+      and(eq(chatToolInvocations.id, input.id), eq(chatToolInvocations.status, input.fromStatus)),
+    )
+    .returning()
+    .all();
+  return rows.length > 0 ? rowToInvocation(rows[0]) : null;
+}
+
 export function listToolInvocations(conversationId: string): ChatToolInvocation[] {
   const rows = db
     .select()

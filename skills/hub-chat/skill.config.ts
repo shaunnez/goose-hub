@@ -69,9 +69,12 @@ const config: SkillConfig = {
   toolBundles: ['read'],
   modelPin: 'sonnet',
   freshContext: false,
-  // Hub Chat is a research/assistant role. It is NOT a holdout — it sees
+  // Hub Chat surveys state and surfaces what the user should attend to.
+  // Reuses the `auditor` role (broad read, evaluative). Not a holdout — sees
   // the event stream, prior decision summaries, and per-project context.
-  role: 'researcher',
+  // The orchestrator forces the model to sonnet per-call (project config
+  // sets auditor.primary='opus' for code-quality-audit; we override for chat).
+  role: 'auditor',
   contextAllowlist: [
     'scope',
     'conversationId',

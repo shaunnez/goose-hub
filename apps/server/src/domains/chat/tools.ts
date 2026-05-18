@@ -4,6 +4,7 @@ import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { loadProjects } from '@goose-hub/core/projects/loader.js';
 import { skillsRoot } from '@goose-hub/skills';
+import { addInboxNote } from '#shared/inbox-bridge.js';
 import { getSourceForSlug, isValidSlug } from '#shared/source.js';
 
 export interface ToolContext {
@@ -68,15 +69,17 @@ async function listSkills(): Promise<{ skills: Array<{ name: string; hasPrompt: 
 async function listOpenIssues(input: {
   projectSlug: string;
   milestoneNumber?: number;
+  state?: 'any' | 'in-progress' | 'needs-human' | 'gate-pending';
   limit?: number;
 }): Promise<unknown> {
   assertValidSlug(input.projectSlug);
   const source = await getSourceForSlug(input.projectSlug);
   if (source == null) throw new ToolExecutionError(`project not found: ${input.projectSlug}`, 404);
-  const items = await source.listOpenWork(input.milestoneNumber);
+  const allItems = await source.listOpenWork(input.milestoneNumber);
+  const filtered = filterByState(allItems, input.state);
   const limit = input.limit ?? 20;
   return {
-    items: items.slice(0, limit).map((i) => ({
+    items: filtered.slice(0, limit).map((i) => ({
       id: i.id,
       number: i.externalId,
       title: i.title,
@@ -86,9 +89,30 @@ async function listOpenIssues(input: {
       type: i.type ?? null,
       path: `/projects/${input.projectSlug}/items/${i.externalId}`,
     })),
-    truncated: items.length > limit,
-    total: items.length,
+    truncated: filtered.length > limit,
+    total: filtered.length,
+    appliedStateFilter: input.state ?? 'any',
   };
+}
+
+function filterByState<T extends { state: string }>(
+  items: T[],
+  state: 'any' | 'in-progress' | 'needs-human' | 'gate-pending' | undefined,
+): T[] {
+  if (state == null || state === 'any') return items;
+  if (state === 'needs-human') return items.filter((i) => i.state === 'factory:needs-human');
+  if (state === 'gate-pending') return items.filter((i) => i.state === 'factory:gate-pending');
+  // 'in-progress' covers any active workflow state — everything that isn't
+  // a terminal lane (done/archived) or a human-waiting state.
+  const terminalOrWaiting = new Set([
+    'factory:done',
+    'factory:archived',
+    'factory:needs-human',
+    'factory:gate-pending',
+    'factory:triaging',
+    'factory:backlog',
+  ]);
+  return items.filter((i) => !terminalOrWaiting.has(i.state));
 }
 
 async function getIssue(input: {
@@ -228,7 +252,15 @@ async function findPr(input: { query: string; projectSlug?: string }): Promise<u
   // Without the github SDK wired up for PR search we fall back to scanning
   // recent `pr.opened` / `pr.merged` events for matches. Good enough for v1;
   // a richer search is a follow-up issue.
-  const events = eventStore.replay({ order: 'desc', limit: 200 });
+  let projectId: string | undefined;
+  if (input.projectSlug) {
+    assertValidSlug(input.projectSlug);
+    const source = await getSourceForSlug(input.projectSlug);
+    if (source == null)
+      throw new ToolExecutionError(`project not found: ${input.projectSlug}`, 404);
+    projectId = source.projectId;
+  }
+  const events = eventStore.replay({ projectId, order: 'desc', limit: 200 });
   const q = input.query.toLowerCase().trim();
   const isNumeric = /^\d+$/.test(q);
 
@@ -295,16 +327,8 @@ async function createInboxNote(input: {
   body?: string;
   type?: string;
 }): Promise<unknown> {
-  // Lazy import — domains never import other domains directly per server STANDARDS,
-  // so we use the repository function through the cross-package boundary.
-  // case 2: runtime-resolved cross-package path.
-  const inboxRepo = await import('../inbox/repository.js');
-  const item = await inboxRepo.insertInboxItem({
-    title: input.title,
-    body: input.body ?? '',
-    type: input.type ?? 'feature',
-  });
-  return { ok: true, id: item.id };
+  const { id } = await addInboxNote(input);
+  return { ok: true, id };
 }
 
 async function tickProject(input: {

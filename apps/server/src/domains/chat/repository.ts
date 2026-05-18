@@ -14,6 +14,7 @@ export {
   listToolInvocations,
   recordToolInvocation,
   touchConversation,
+  transitionToolInvocationStatus,
   updateToolInvocation,
 } from '@goose-hub/core/conversations/repository.js';
 

@@ -21,6 +21,7 @@ import {
   listMessages,
   listToolInvocations,
   recordToolInvocation,
+  transitionToolInvocationStatus,
   updateToolInvocation,
 } from './repository.js';
 import { CHAT_TOOL_IMPLEMENTATIONS, type ToolContext, ToolExecutionError } from './tools.js';
@@ -186,12 +187,25 @@ export async function resolveProposal(input: {
 
   const existing = getToolInvocation(input.invocationId);
   if (existing == null) return { ok: false, error: 'tool invocation not found', status: 404 };
+
+  // Ownership check: an invocation id is only resolvable via its owning
+  // conversation route. Prevents cross-conversation mutation if an id leaks.
+  if (existing.conversationId !== input.conversationId) {
+    return { ok: false, error: 'tool invocation not found', status: 404 };
+  }
+
   if (existing.status !== 'proposed')
     return { ok: false, error: `invocation already ${existing.status}`, status: 409 };
 
   if (input.decision === 'reject') {
-    const updated = updateToolInvocation({ id: input.invocationId, status: 'rejected' });
-    if (updated == null) return { ok: false, error: 'update failed', status: 500 };
+    // Atomic transition prevents double-reject races.
+    const updated = transitionToolInvocationStatus({
+      id: input.invocationId,
+      fromStatus: 'proposed',
+      toStatus: 'rejected',
+    });
+    if (updated == null)
+      return { ok: false, error: 'invocation already resolved by another caller', status: 409 };
     eventStore.appendEvent({
       projectId: conversation.projectId ?? 'goose-hub-self',
       workItemId: conversation.workItemId,
@@ -205,7 +219,17 @@ export async function resolveProposal(input: {
     return { ok: true, data: { invocation: updated } };
   }
 
-  // Approve → execute through the same dispatcher path the chat orchestrator uses.
+  // Approve → atomically transition proposed → approved so concurrent
+  // approve clicks can't both run the tool. Whichever request wins the CAS
+  // executes; the loser returns 409 idempotently.
+  const claimed = transitionToolInvocationStatus({
+    id: input.invocationId,
+    fromStatus: 'proposed',
+    toStatus: 'approved',
+  });
+  if (claimed == null)
+    return { ok: false, error: 'invocation already resolved by another caller', status: 409 };
+
   eventStore.appendEvent({
     projectId: conversation.projectId ?? 'goose-hub-self',
     workItemId: conversation.workItemId,

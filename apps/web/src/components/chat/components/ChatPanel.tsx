@@ -94,9 +94,15 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
       setBusy(true);
       setError(null);
       try {
-        const res = await postMessage(conversation.id, content);
-        setMessages((prev) => [...prev, res.user, ...(res.agent ? [res.agent] : [])]);
-        setInvocations(res.invocations);
+        await postMessage(conversation.id, content);
+        // Authoritative reconciliation — refetch once after the POST settles.
+        // The SSE handler may also refresh during the turn, but both paths
+        // converge through fetchConversation, which is the single source of
+        // truth. Appending the POST response inline would double messages
+        // if the SSE refresh fired first (Codex P2 finding).
+        const full = await fetchConversation(conversation.id);
+        setMessages(full.messages);
+        setInvocations(full.invocations);
       } catch (err) {
         setError(`Send failed: ${String(err)}`);
       } finally {
@@ -115,13 +121,27 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         setInvocations((prev) =>
           prev.map((i) => (i.id === res.invocation.id ? res.invocation : i)),
         );
+        // Auto-navigate when the approved tool is open_url. The agent
+        // proposed a navigation intent; approving it should actually navigate
+        // rather than render a second click target.
+        if (
+          res.invocation.toolName === 'open_url' &&
+          res.invocation.status === 'completed' &&
+          res.invocation.result != null
+        ) {
+          const path = (res.invocation.result as { path?: string }).path;
+          if (typeof path === 'string' && path.startsWith('/')) {
+            navigate(path);
+            onClose();
+          }
+        }
       } catch (err) {
         setError(`Approve failed: ${String(err)}`);
       } finally {
         setPendingDecision(null);
       }
     },
-    [conversation],
+    [conversation, navigate, onClose],
   );
 
   const handleReject = useCallback(

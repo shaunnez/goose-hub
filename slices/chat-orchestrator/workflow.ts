@@ -8,9 +8,15 @@ import { join } from 'node:path';
  * drives the loop across user messages; persistence lives in the chat domain.
  */
 import { invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
+import { defaultModelForTierAndProvider } from '@goose-hub/core/agent-runtime/models.js';
 import { toJsonSchema as zodToJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { listToolManifests } from '@goose-hub/core/chat-tools/registry.js';
-import type { ChatMessage, Conversation } from '@goose-hub/core/conversations/types.js';
+import { listToolInvocations } from '@goose-hub/core/conversations/repository.js';
+import type {
+  ChatMessage,
+  ChatToolInvocation,
+  Conversation,
+} from '@goose-hub/core/conversations/types.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import {
@@ -112,10 +118,40 @@ function buildContext(input: ChatTurnInput): Record<string, unknown> {
     conversationId: conversation.id,
     priorMessages: history.map((m) => ({ role: m.role, content: m.content })),
     availableTools: manifests,
-    toolResults: [],
+    toolResults: priorToolResults(conversation.id),
     recentEvents: recentEventSlice(conversation),
     governanceDigest: readGovernanceDigest(),
   };
+}
+
+/**
+ * Hydrate the prior tool-results for the conversation so the agent doesn't
+ * re-run read-only tools whose results it can already see. We summarise only:
+ * `proposed` invocations are intentionally suppressed because the agent
+ * shouldn't reason as if they ran.
+ */
+function priorToolResults(conversationId: string): Array<{
+  toolName: string;
+  status: 'completed' | 'failed' | 'rejected' | 'pending';
+  result?: unknown;
+  errorMessage?: string;
+}> {
+  const invocations: ChatToolInvocation[] = listToolInvocations(conversationId);
+  return invocations
+    .filter((i) => i.status !== 'proposed' && i.status !== 'running' && i.status !== 'approved')
+    .map((i) => ({
+      toolName: i.toolName,
+      status:
+        i.status === 'completed'
+          ? ('completed' as const)
+          : i.status === 'failed'
+            ? ('failed' as const)
+            : i.status === 'rejected'
+              ? ('rejected' as const)
+              : ('pending' as const),
+      result: i.result,
+      errorMessage: i.errorMessage ?? undefined,
+    }));
 }
 
 function tryToJsonSchema(schema: z.ZodType): unknown {
@@ -134,6 +170,14 @@ export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<Cha
   const { conversation, runId } = input;
   const context = buildContext(input);
 
+  // Honour the user-picked runtime stored on the conversation. We map
+  // claude→sonnet-claude and codex→sonnet-codex so the agent-runtime
+  // dispatcher (`selectRuntime`) picks the right CLI via `providerOf()`.
+  // This also overrides any project-level rolesModels entry that would
+  // otherwise pin auditor to opus (and bust chat's $0.4 budget).
+  const provider = conversation.runtime === 'codex' ? 'codex' : 'claude';
+  const modelOverride = defaultModelForTierAndProvider('sonnet', provider);
+
   try {
     const result = await invokeSkill({
       skillName: 'hub-chat',
@@ -141,6 +185,7 @@ export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<Cha
       workItemId: conversation.workItemId ?? undefined,
       runId,
       context,
+      overrides: { modelOverride },
     });
     const parsed = HubChatOutputSchema.safeParse(result.output);
     if (!parsed.success) {
