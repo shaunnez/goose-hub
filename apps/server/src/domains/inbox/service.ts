@@ -2,6 +2,7 @@ import { db } from '@goose-hub/core/db/db.js';
 import { projectState } from '@goose-hub/core/db/schema.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { eq } from 'drizzle-orm';
+import { dispatchTriageBatch } from '#shared/dispatch.js';
 import type { Result } from '#shared/middleware.js';
 import { getSourceForSlug } from '#shared/source.js';
 import { runBugEnhance } from './enhance.js';
@@ -72,6 +73,7 @@ export async function promoteInboxItem(
     type: item.type as 'feature' | 'bug' | 'chore' | 'research',
     ...(effectiveMilestoneNumber != null ? { milestoneId: String(effectiveMilestoneNumber) } : {}),
   });
+  void dispatchTriageBatch(projectSlug);
 
   try {
     await repoDeleteInboxItem(id);
