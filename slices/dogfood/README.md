@@ -26,6 +26,8 @@ The agent's job is to investigate from the user-language issue, fix the bug, and
 
 ## CLI
 
+**Seed mechanics:**
+
 ```
 pnpm dogfood list                          # List registered seeds
 pnpm dogfood status                        # Show which seeds are currently applied
@@ -35,9 +37,27 @@ pnpm dogfood verify-red <seed-id>          # Run the truth-signal test, expect i
 pnpm dogfood issue <seed-id>               # Print the user-language issue title + body for filing
 ```
 
-## Running an end-to-end loop (manual, v1)
+**Outcome tracking:**
 
-This v1 harness handles seed mechanics. Filing the issue and kicking the workflow is still manual — automation lands in v2 once the loop is proven once.
+```
+pnpm dogfood file-issue <seed-id>          # Print gh-issue-create cmd + record a pending run row
+pnpm dogfood record <run-id> --completion=reached-terminal --truth-pass=true ...
+pnpm dogfood runs [--limit=N]              # List recent dogfood runs (default 20)
+pnpm dogfood runs:summary                  # Aggregate stats across all recorded runs
+```
+
+The outcome row lives in `~/.factory/dogfood/runs.jsonl` (one JSON line per run). Each row carries `seedId`, `workflow`, `startedAt`, `issue` (number + URL), `completion`, and the four outcome signals:
+
+- `truthPass` — did the truth-signal test go red → green on the PR head?
+- `qaCorrect` — did the QA agent's verdict match `truthPass`? (Measures QA accuracy.)
+- `hygieneClean` — workspace pruned, branch deleted, no stray processes?
+- `efficiency` — turns, tool calls, repeated-identical tool invocations
+
+Completion is one of: `pending | reached-terminal | stalled | aborted-by-human | failed:<node>[:<reason>]`.
+
+## Running an end-to-end loop (manual)
+
+The harness handles seed mechanics, issue-command generation, and outcome recording. Kicking the workflow itself is still manual — needs a running server with the project's mode set to `supervised`.
 
 1. **Apply the seed locally on `main`:**
    ```bash
@@ -47,11 +67,12 @@ This v1 harness handles seed mechanics. Filing the issue and kicking the workflo
    git push origin main
    ```
 
-2. **File the issue on `shaunnez/goose-hub`** using the printed body:
+2. **Generate the file-issue command and record a pending run:**
    ```bash
-   pnpm dogfood issue logger-001-drop-meta
-   # Copy title + body, file with `gh issue create` or the GitHub UI
-   # Apply labels: type:bug, priority:medium, factory:triaging
+   pnpm dogfood file-issue logger-001-drop-meta
+   # Prints the `gh issue create` command + creates a pending row in ~/.factory/dogfood/runs.jsonl
+   # Run the printed command yourself (or paste into the GitHub UI if no gh)
+   pnpm dogfood record <run-id> --issue-url=<url-from-gh-output>
    ```
 
 3. **Let the workflow run.** With the local server running and the project on supervised mode, dispatch picks up `factory:triaging` and routes through:
@@ -62,12 +83,29 @@ This v1 harness handles seed mechanics. Filing the issue and kicking the workflo
    curl -N "http://localhost:3001/events?projectId=goose-hub-self&workItemId=<n>"
    ```
 
-5. **Once the PR merges**, the seed is naturally restored (the agent's fix returns the file to a passing state).
+5. **Once the PR merges**, the seed is naturally restored (the agent's fix returns the file to a passing state). Record the outcome:
+   ```bash
+   pnpm dogfood record <run-id> \
+     --completion=reached-terminal \
+     --truth-pass=true \
+     --qa-correct=true \
+     --hygiene-clean=true
+   ```
 
-6. **If something stalls**, restore the seed and reset:
+6. **If something stalls or fails**, record where:
+   ```bash
+   pnpm dogfood record <run-id> --completion=failed:qa:playwright-crashed --truth-pass=false
+   ```
+   Then restore and reset:
    ```bash
    pnpm dogfood restore logger-001-drop-meta
    git checkout main && git reset --hard HEAD~1 && git push --force-with-lease origin main
+   ```
+
+7. **See the trend:**
+   ```bash
+   pnpm dogfood runs:summary
+   # Total runs, pass rates, by-workflow + by-seed breakdowns
    ```
 
 ## What v1 covers vs. what comes later

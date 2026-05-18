@@ -3,7 +3,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { describeCompletion, newRun, newRunId } from './outcome.js';
 import { applySeed, restoreSeed, statusAll } from './runner.js';
+import { RunsStore, aggregate } from './runs-store.js';
 import { getSeed, listSeeds } from './seeds/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -236,4 +238,115 @@ describe('apply/restore round-trip against real source files', () => {
       expect(await seed.isApplied(tmpRoot)).toBe(false);
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Outcome tracking — runs-store + aggregate.
+// ---------------------------------------------------------------------------
+
+describe('runs store', () => {
+  let storeDir: string;
+  let store: RunsStore;
+
+  beforeEach(async () => {
+    storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dogfood-runs-'));
+    store = new RunsStore({ dir: storeDir });
+  });
+
+  afterEach(async () => {
+    await fs.rm(storeDir, { recursive: true, force: true });
+  });
+
+  it('newRunId yields unique ids on consecutive calls', () => {
+    const ids = new Set([newRunId(), newRunId(), newRunId(), newRunId()]);
+    expect(ids.size).toBe(4);
+  });
+
+  it('append + list round-trips a single row', async () => {
+    const run = newRun('seed-a', 'bug');
+    await store.append(run);
+    const rows = await store.list();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].runId).toBe(run.runId);
+    expect(rows[0].seedId).toBe('seed-a');
+    expect(rows[0].completion).toBe('pending');
+  });
+
+  it('returns [] when the store file does not yet exist', async () => {
+    const rows = await store.list();
+    expect(rows).toEqual([]);
+  });
+
+  it('refuses to append a duplicate runId', async () => {
+    const run = newRun('seed-a', 'bug');
+    await store.append(run);
+    await expect(store.append(run)).rejects.toThrowError(/already exists/);
+  });
+
+  it('update patches fields and preserves runId + startedAt', async () => {
+    const run = newRun('seed-a', 'bug');
+    await store.append(run);
+    const updated = await store.update(run.runId, {
+      completion: 'reached-terminal',
+      truthPass: true,
+    });
+    expect(updated.runId).toBe(run.runId);
+    expect(updated.startedAt).toBe(run.startedAt);
+    expect(updated.completion).toBe('reached-terminal');
+    expect(updated.truthPass).toBe(true);
+  });
+
+  it('update throws on unknown runId', async () => {
+    await expect(store.update('nope', { truthPass: false })).rejects.toThrowError(/not found/);
+  });
+
+  it('listRecent returns most-recent-first', async () => {
+    const r1 = newRun('a', 'bug');
+    const r2 = newRun('b', 'bug');
+    const r3 = newRun('c', 'bug');
+    await store.append(r1);
+    await store.append(r2);
+    await store.append(r3);
+    const recent = await store.listRecent();
+    expect(recent.map((r) => r.runId)).toEqual([r3.runId, r2.runId, r1.runId]);
+  });
+
+  it('describeCompletion handles both string and failed shapes', () => {
+    expect(describeCompletion('reached-terminal')).toBe('reached-terminal');
+    expect(describeCompletion({ failed: { node: 'qa' } })).toMatch(/failed at qa/);
+    expect(describeCompletion({ failed: { node: 'qa', reason: 'playwright crashed' } })).toMatch(
+      /failed at qa: playwright crashed/,
+    );
+  });
+
+  it('aggregate computes counts and rates correctly', async () => {
+    const r1 = newRun('seed-a', 'bug');
+    const r2 = newRun('seed-a', 'bug');
+    const r3 = newRun('seed-b', 'bug');
+    await store.append(r1);
+    await store.append(r2);
+    await store.append(r3);
+    await store.update(r1.runId, {
+      completion: 'reached-terminal',
+      truthPass: true,
+      qaCorrect: true,
+    });
+    await store.update(r2.runId, {
+      completion: { failed: { node: 'qa' } },
+      truthPass: false,
+      qaCorrect: false,
+    });
+    await store.update(r3.runId, { completion: 'reached-terminal', truthPass: true });
+
+    const stats = aggregate(await store.list());
+    expect(stats.total).toBe(3);
+    expect(stats.reachedTerminal).toBe(2);
+    expect(stats.failed).toBe(1);
+    expect(stats.pending).toBe(0);
+    expect(stats.truthPassRate).toBeCloseTo(2 / 3);
+    expect(stats.qaCorrectRate).toBeCloseTo(0.5);
+    expect(stats.bySeed['seed-a'].total).toBe(2);
+    expect(stats.bySeed['seed-a'].reachedTerminal).toBe(1);
+    expect(stats.bySeed['seed-a'].truthPassCount).toBe(1);
+  });
 });
