@@ -1,7 +1,7 @@
 /**
- * 3A smoke test: codex provider toggle in Settings → Models.
+ * 3A smoke test: codex provider toggle in Settings → Advanced roles.
  *
- * These tests exercise the Models settings panel at the UI level. They do not
+ * These tests exercise the Advanced roles settings panel at the UI level. They do not
  * require a Codex CLI token to be installed; where auth is needed the test
  * either checks for the "disabled" state or is marked to skip.
  */
@@ -12,10 +12,11 @@ const PROJECT_SLUG = 'goose-hub-self';
 // developer role is a non-holdout role safe to patch in tests.
 const TEST_ROLE = 'developer';
 
-test.describe('Settings → Models (3A smoke)', () => {
+test.describe('Settings → Advanced roles (3A smoke)', () => {
   test.beforeEach(async ({ page }) => {
-    // Navigate to the settings models tab for the test project.
-    await page.goto(`/projects/${PROJECT_SLUG}/settings?tab=models`);
+    // Navigate to the settings page and open the advanced role compatibility tab.
+    await page.goto(`/projects/${PROJECT_SLUG}/settings`);
+    await page.getByRole('button', { name: 'Advanced roles' }).click();
     await page.waitForSelector('table', { timeout: 10_000 });
   });
 
@@ -101,8 +102,8 @@ test.describe('Settings → Models (3A smoke)', () => {
         page.locator('span.font-mono').filter({ hasText: 'gpt-5.4' }).first(),
       ).toBeVisible({ timeout: 5_000 });
     } finally {
-      // Restore only the fields this test changed, preserving any other overrides
-      // (complexity rules, budget fields, etc.) that may exist on the row.
+      // Restore only the fields this test changed, preserving any complexity rules
+      // that may exist on the row.
       await page.request.patch(`/api/projects/${PROJECT_SLUG}/settings/models/${TEST_ROLE}`, {
         data: { primaryModel: priorPrimary, primaryProvider: priorProvider },
         headers: { 'Content-Type': 'application/json' },
@@ -110,18 +111,14 @@ test.describe('Settings → Models (3A smoke)', () => {
     }
   });
 
-  test('per-role max-turns input is visible in expanded row', async ({ page }) => {
+  test('per-role budget inputs are not exposed in expanded row', async ({ page }) => {
     const roleBtn = page
       .locator('button')
       .filter({ hasText: new RegExp(`^${TEST_ROLE}`) })
       .first();
     await roleBtn.click();
 
-    // The budget inputs should appear after expansion.
-    const maxTurnsInput = page
-      .locator('input[type="number"]')
-      .filter({ hasAttribute: 'max' })
-      .first();
-    await expect(maxTurnsInput).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('Max turns')).toHaveCount(0);
+    await expect(page.getByText('Timeout (ms)')).toHaveCount(0);
   });
 });

@@ -452,31 +452,18 @@ export type ModelProvider = 'claude' | 'codex';
 export interface RoleModelDto {
   configRoleModel: {
     primary: string;
-    fallback: string | null;
-    advisor: string | null;
     primaryProvider: ModelProvider | null;
-    fallbackProvider: ModelProvider | null;
-    advisorProvider: ModelProvider | null;
   } | null;
   dbRoleModel: {
     primaryModel: ModelTier | null;
-    fallbackModel: ModelTier | null;
-    advisorModel: ModelTier | null;
     primaryProvider: ModelProvider | null;
-    fallbackProvider: ModelProvider | null;
-    advisorProvider: ModelProvider | null;
-    maxTurns: number | null;
-    timeoutMs: number | null;
     updatedAt: string | null;
   } | null;
   dbComplexityOverrides: Record<string, ModelTier>;
-  /** Concrete model ID that will be dispatched for the primary slot right now,
-   *  resolved from DB → config → skill default → role default. UX-3 hint. */
+  /** Compatibility-only role primary model ID. Normal skill dispatch ignores role rows. */
   resolvedPrimary: string | null;
   /** The role's hardcoded default tier (claude). Used as a placeholder hint. */
   roleDefaultTier: ModelTier;
-  /** ROLE_DEFAULTS budgets — used by the UI as "default: N" hints under each input. */
-  roleDefaultBudgets: { maxTurns: number; timeoutMs: number };
 }
 
 export interface ProjectModelSettingsDto {

@@ -8,13 +8,6 @@ vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
   readProjectSettings: vi.fn().mockReturnValue(null),
   readProjectSkillSettings: vi.fn(() => mockProjectSkillSettings),
 }));
-let mockProjectModelSettingsRow: Record<string, unknown> | null = null;
-vi.mock('@goose-hub/core/db/repositories/project-model-settings.js', () => ({
-  readProjectModelSettingsForRole: vi.fn(() => mockProjectModelSettingsRow),
-  parseComplexityOverrides: vi.fn((row: { complexityOverridesJson?: string | null }) =>
-    row.complexityOverridesJson ? JSON.parse(row.complexityOverridesJson) : {},
-  ),
-}));
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   eventStore: {
     appendEvent: vi.fn().mockReturnValue({ id: 1 }),
@@ -196,7 +189,6 @@ function makeImplementOutput(overrides: Record<string, unknown> = {}) {
 }
 
 function resetRuntimeRoutingMocks(): void {
-  mockProjectModelSettingsRow = null;
   mockProjectSkillSettings = new Map();
   mockProjectConfig = {
     agentConfig: { runtime: 'auto' },
@@ -277,12 +269,6 @@ describe('runFixIssueWorkflow — provider-aware runtime dispatch', () => {
         },
       ],
     ]);
-    mockProjectModelSettingsRow = {
-      projectId: 'proj',
-      role: 'developer',
-      primaryModel: 'sonnet',
-      primaryProvider: 'claude',
-    };
     const item = makeWorkItem({ priority: 'medium', type: 'chore' });
     const source = makeStateSource();
 
@@ -339,12 +325,6 @@ describe('runFixIssueWorkflow — provider-aware runtime dispatch', () => {
   });
 
   it('keeps an injected runtime instead of replacing it with provider dispatch', async () => {
-    mockProjectModelSettingsRow = {
-      projectId: 'proj',
-      role: 'developer',
-      primaryModel: 'haiku',
-      primaryProvider: 'codex',
-    };
     const runtime: AgentRuntime = {
       run: vi.fn().mockResolvedValueOnce({
         output: makeImplementOutput(),

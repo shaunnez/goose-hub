@@ -1,17 +1,9 @@
-import {
-  parseComplexityOverrides,
-  readProjectModelSettingsForRole,
-} from '../db/repositories/project-model-settings.js';
 import { readProjectSettings } from '../db/repositories/project-settings.js';
-import type { ModelTier, Role, RoleModel } from '../types.js';
 import {
   type ResolvedBudget,
   type SkillBudgetOverride,
   resolveEscalatedBudgets,
 } from './budgets.js';
-import type { ModelProvider } from './models.js';
-import { HOLDOUT_ROLES } from './roles.js';
-import { type SelectModelForRoleResult, selectModelForRole } from './select-model-for-role.js';
 import { resolveSkillRuntimeForProject } from './skill-runtime-resolver.js';
 
 /** Merged global settings: DB row wins over projectConfig value when non-null. */
@@ -105,106 +97,4 @@ export function resolveEscalatedBudgetsForProject(
     globalRow?.perWorkflowMaxUsd,
     globalRow?.perAgentMaxUsd,
   );
-}
-
-export interface RoleBudgetOverride {
-  maxTurns: number | null;
-  timeoutMs: number | null;
-}
-
-/**
- * Pure resolver for per-role budget overrides. Reads maxTurns / timeoutMs
- * from the DB row and returns them as nullable numbers. null means "no
- * override — use the skill budget default".
- *
- * Holdout gating: when honourOverrides is false (holdout role without
- * allowHoldoutOverride), returns {maxTurns: null, timeoutMs: null} so that
- * the holdout always runs with its skill-default budget.
- */
-export function resolveRoleBudgetOverride(
-  dbRow: { maxTurns?: number | null; timeoutMs?: number | null } | null | undefined,
-  honourOverrides: boolean,
-): RoleBudgetOverride {
-  if (!honourOverrides || dbRow == null) {
-    return { maxTurns: null, timeoutMs: null };
-  }
-  return {
-    maxTurns: dbRow.maxTurns ?? null,
-    timeoutMs: dbRow.timeoutMs ?? null,
-  };
-}
-
-/**
- * DB-backed wrapper around resolveRoleBudgetOverride. Reads the
- * project_model_settings row for the given role and applies holdout gating.
- */
-export function resolveRoleBudgetOverrideForProject(
-  projectId: string,
-  role: Role,
-  allowHoldoutOverride?: boolean,
-): RoleBudgetOverride {
-  const dbRow = readProjectModelSettingsForRole(projectId, role);
-  const isHoldout = HOLDOUT_ROLES.has(role);
-  const honourOverrides = !isHoldout || allowHoldoutOverride === true;
-  return resolveRoleBudgetOverride(dbRow, honourOverrides);
-}
-
-/**
- * Resolves the per-role primary model for a project, honouring DB row +
- * project config + skill default + role default in that order. Used by
- * invokeSkill to override the skill-budget-derived default model when the
- * user (or project config) has explicitly picked one for the role.
- */
-export function resolveRoleModelForProject(input: {
-  role: Role;
-  projectId: string;
-  configRoleModel?: RoleModel;
-  allowHoldoutOverride?: boolean;
-  skill?: string;
-  skillProvider?: ModelProvider;
-}): SelectModelForRoleResult {
-  const dbRow = readProjectModelSettingsForRole(input.projectId, input.role);
-  return selectModelForRole({
-    role: input.role,
-    configRoleModel: input.configRoleModel,
-    allowHoldoutOverride: input.allowHoldoutOverride,
-    dbRow,
-    skill: input.skill,
-    skillProvider: input.skillProvider,
-  });
-}
-
-/**
- * Returns the complexity overrides for a role from the DB, merged with any
- * project-config overrides. DB wins per key. Keys are "type:<T>",
- * "priority:<P>", or "default". Values are ModelTier strings.
- *
- * These are fed into selectModel() as the highest-priority override layer.
- */
-export function resolveComplexityOverridesForProject(
-  role: Role,
-  projectId: string,
-  configOverrides: Record<string, ModelTier> | undefined,
-): Record<string, ModelTier> {
-  const dbRow = readProjectModelSettingsForRole(projectId, role);
-  const dbOverrides = dbRow ? parseComplexityOverrides(dbRow) : {};
-
-  // Build the merged map: configOverrides as base, DB keys win over config keys
-  const merged: Record<string, ModelTier> = {};
-  if (configOverrides) {
-    for (const [key, tier] of Object.entries(configOverrides)) {
-      // Config keys are "role+type:T" / "role+priority:P" / "role" — strip role prefix
-      const rolePrefix = `${role}+`;
-      const bare = key.startsWith(rolePrefix)
-        ? key.slice(rolePrefix.length)
-        : key === role
-          ? 'default'
-          : null;
-      if (bare != null) merged[bare] = tier;
-    }
-  }
-  for (const [key, tier] of Object.entries(dbOverrides)) {
-    merged[key] = tier;
-  }
-  return merged;
 }

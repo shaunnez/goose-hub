@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { writeRoleModelSetting } from '../db/repositories/project-model-settings.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { ContextValidationError, OutputValidationError, invokeSkill } from './invoke-skill.js';
 
@@ -201,5 +202,27 @@ describe('invokeSkill', () => {
     });
     expect(runtime.calls[0].modelOverride).not.toMatch(/codex/i);
     expect(runtime.calls[0].modelOverride).toMatch(/sonnet/i);
+  });
+
+  it('ignores project_model_settings role rows for normal skill dispatch', async () => {
+    const runtime = mockRuntime();
+    const projectId = uid();
+    writeRoleModelSetting(
+      projectId,
+      'developer',
+      { primaryModel: 'haiku', primaryProvider: 'codex' },
+      'test',
+    );
+
+    await invokeSkill({
+      skillName: 'echo-test',
+      projectId,
+      runId: uid(),
+      context: VALID_ECHO_CTX,
+      overrides: { runtimeOverride: runtime },
+    });
+
+    expect(runtime.calls[0].modelOverride).toMatch(/sonnet/i);
+    expect(runtime.calls[0].modelOverride).not.toMatch(/^gpt-/);
   });
 });

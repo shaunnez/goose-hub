@@ -87,6 +87,17 @@ describe('resolveBudgets', () => {
     );
   });
 
+  it('does not treat a DB row as a fallback registration for an unknown skill', () => {
+    expect(() =>
+      resolveBudgets('unknown-skill-xyz', undefined, {
+        maxTurns: 20,
+        maxBudgetUsd: 1,
+        timeoutMs: 120_000,
+        modelTier: 'sonnet',
+      }),
+    ).toThrow("no budget registered for skill 'unknown-skill-xyz'");
+  });
+
   it('haiku skills resolve to haiku model IDs', () => {
     for (const skill of [
       'triage',

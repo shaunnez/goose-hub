@@ -65,7 +65,7 @@ The internal lifecycle event names (`agent.run-started`, `agent.run-completed`, 
 ```ts
 selectRuntime(opts: {
   configRuntime: 'claude-cli' | 'codex-cli' | 'auto';
-  model?: string;          // resolved model ID (from selectModelForRole + tier→ID)
+  model?: string;          // resolved model ID from per-skill runtime settings
   skillProvider?: 'claude' | 'codex';  // SkillConfig.provider hint
 }): AgentRuntime
 ```
