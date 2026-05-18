@@ -176,13 +176,15 @@ export class CodexCliRuntime implements AgentRuntime {
           if (assistantMessage != null) {
             const key = assistantMessage.id ?? '__default_assistant_message__';
             const previousOffset = assistantMarkerOffsets.get(key) ?? 0;
+            const scanText = assistantMessage.terminal
+              ? assistantMessage.text
+              : completeLinePrefix(assistantMessage.text);
             const safePreviousOffset =
-              assistantMessage.text.length < previousOffset ? 0 : previousOffset;
-            const markers = parseDecisionMarkersAfter(assistantMessage.text, safePreviousOffset);
-            assistantMarkerOffsets.set(
-              key,
-              Math.max(safePreviousOffset, assistantMessage.text.length),
-            );
+              scanText.length < previousOffset || assistantMessage.text.length < previousOffset
+                ? 0
+                : previousOffset;
+            const markers = parseDecisionMarkersAfter(scanText, safePreviousOffset);
+            assistantMarkerOffsets.set(key, Math.max(safePreviousOffset, scanText.length));
             for (const marker of markers) {
               const kind = isDecisionKind(marker.kind) ? marker.kind : 'UNKNOWN';
               eventStore.appendEvent({
@@ -464,4 +466,9 @@ export class CodexCliRuntime implements AgentRuntime {
       });
     });
   }
+}
+
+function completeLinePrefix(text: string): string {
+  const lastNewline = Math.max(text.lastIndexOf('\n'), text.lastIndexOf('\r'));
+  return lastNewline === -1 ? '' : text.slice(0, lastNewline + 1);
 }

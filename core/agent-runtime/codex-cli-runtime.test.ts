@@ -258,12 +258,16 @@ describe('CodexCliRuntime timeout handling', () => {
             item: {
               id: 'msg_1',
               type: 'agent_message',
-              text: '[decision] READ: Searching files\n[decision] INSIGHT: Found owner',
+              text: '[decision] READ: Searching files\n[decision] INSIGHT: Found owner\n',
             },
           }),
           JSON.stringify({
             type: 'item.completed',
-            item: { id: 'msg_2', type: 'agent_message', text: '{"ok":true}' },
+            item: {
+              id: 'msg_1',
+              type: 'agent_message',
+              text: '[decision] READ: Searching files\n[decision] INSIGHT: Found owner\n{"ok":true}',
+            },
           }),
           '',
         ].join('\n'),
@@ -276,6 +280,99 @@ describe('CodexCliRuntime timeout handling', () => {
       .filter(([e]) => e.kind === 'agent.decision-summary-live')
       .map(([e]) => (e.payload as { summary?: string }).summary);
     expect(summaries).toEqual(['Searching files', 'Found owner']);
+  });
+
+  it('does not emit partial updates or re-emit a marker whose line is later extended', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec());
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        [
+          JSON.stringify({
+            type: 'item.updated',
+            item: {
+              id: 'msg_1',
+              type: 'agent_message',
+              text: '[decision] READ: Searching',
+            },
+          }),
+          JSON.stringify({
+            type: 'item.updated',
+            item: {
+              id: 'msg_1',
+              type: 'agent_message',
+              text: '[decision] READ: Searching files\n',
+            },
+          }),
+          JSON.stringify({
+            type: 'item.updated',
+            item: {
+              id: 'msg_1',
+              type: 'agent_message',
+              text: '[decision] READ: Searching files and confirming ownership\n',
+            },
+          }),
+          JSON.stringify({
+            type: 'item.completed',
+            item: {
+              id: 'msg_1',
+              type: 'agent_message',
+              text: '[decision] READ: Searching files and confirming ownership\n{"ok":true}',
+            },
+          }),
+          '',
+        ].join('\n'),
+      ),
+    );
+    child.emit('close', 0);
+    await run;
+
+    const summaries = mockEventStore.appendEvent.mock.calls
+      .filter(([e]) => e.kind === 'agent.decision-summary-live')
+      .map(([e]) => (e.payload as { summary?: string }).summary);
+    expect(summaries).toEqual(['Searching files']);
+  });
+
+  it('ignores raw delta chunks for live decision parsing', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec());
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        [
+          JSON.stringify({
+            type: 'item.delta',
+            item: {
+              id: 'msg_1',
+              type: 'agent_message',
+              delta: '[decision] READ: partial chunk',
+            },
+          }),
+          JSON.stringify({
+            type: 'item.completed',
+            item: { id: 'msg_1', type: 'agent_message', text: '{"ok":true}' },
+          }),
+          '',
+        ].join('\n'),
+      ),
+    );
+    child.emit('close', 0);
+    await run;
+
+    expect(
+      mockEventStore.appendEvent.mock.calls.filter(
+        ([e]) => e.kind === 'agent.decision-summary-live',
+      ),
+    ).toHaveLength(0);
   });
 
   it('normalizes invalid live decision marker kinds to UNKNOWN', async () => {

@@ -30,5 +30,5 @@ export function parseDecisionMarkersAfter(
   text: string,
   previousEndOffset: number,
 ): DecisionMarker[] {
-  return parseDecisionMarkers(text).filter((marker) => marker.end > previousEndOffset);
+  return parseDecisionMarkers(text).filter((marker) => marker.start >= previousEndOffset);
 }

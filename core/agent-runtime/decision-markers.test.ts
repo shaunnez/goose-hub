@@ -48,4 +48,12 @@ describe('parseDecisionMarkersAfter', () => {
       'Found the owner',
     ]);
   });
+
+  it('does not re-emit an already-started marker when cumulative text extends it', () => {
+    const cumulative = '[decision] READ: Searching files and confirming ownership';
+
+    expect(
+      parseDecisionMarkersAfter(cumulative, '[decision] READ: Searching files'.length),
+    ).toEqual([]);
+  });
 });

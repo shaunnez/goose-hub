@@ -16,6 +16,7 @@ export interface CodexToolCall {
 export interface CodexAssistantMessage {
   id: string | null;
   text: string;
+  terminal: boolean;
 }
 
 /**
@@ -25,20 +26,29 @@ export interface CodexAssistantMessage {
  * Exported for unit testing.
  */
 export function pickCodexAgentMessageText(obj: Record<string, unknown>): string | null {
-  return pickCodexAssistantMessage(obj)?.text ?? null;
+  if (obj.type !== 'item.completed' || typeof obj.item !== 'object' || obj.item === null) {
+    return null;
+  }
+  const item = obj.item as Record<string, unknown>;
+  if (!isAssistantItem(item)) return null;
+  return pickAssistantText(item);
 }
 
 export function pickCodexAssistantMessage(
   obj: Record<string, unknown>,
 ): CodexAssistantMessage | null {
-  if (!isCodexItemEvent(obj.type) || typeof obj.item !== 'object' || obj.item === null) {
+  if (!isAssistantMessageEvent(obj.type) || typeof obj.item !== 'object' || obj.item === null) {
     return null;
   }
   const item = obj.item as Record<string, unknown>;
   if (!isAssistantItem(item)) return null;
   const text = pickAssistantText(item);
   if (text == null || text.length === 0) return null;
-  return { id: typeof item.id === 'string' ? item.id : null, text };
+  return {
+    id: typeof item.id === 'string' ? item.id : null,
+    text,
+    terminal: obj.type === 'item.completed',
+  };
 }
 
 /**
@@ -180,13 +190,8 @@ function pickString(obj: Record<string, unknown>, keys: string[]): string | null
   return null;
 }
 
-function isCodexItemEvent(type: unknown): boolean {
-  return (
-    type === 'item.started' ||
-    type === 'item.updated' ||
-    type === 'item.delta' ||
-    type === 'item.completed'
-  );
+function isAssistantMessageEvent(type: unknown): boolean {
+  return type === 'item.updated' || type === 'item.completed';
 }
 
 function isAssistantItem(item: Record<string, unknown>): boolean {
@@ -195,7 +200,7 @@ function isAssistantItem(item: Record<string, unknown>): boolean {
 }
 
 function pickAssistantText(item: Record<string, unknown>): string | null {
-  const direct = pickString(item, ['text', 'content', 'message', 'delta']);
+  const direct = pickString(item, ['text', 'content', 'message']);
   if (direct != null) return direct;
   if (Array.isArray(item.content)) {
     const parts = item.content
