@@ -82,6 +82,10 @@ describe('GatePendingBanner — gate state map', () => {
     expect(GATE_STATES['factory:needs-human']).toBe('Human intervention required');
   });
 
+  it('returns banner text for gate-pending grill state', () => {
+    expect(GATE_STATES['factory:gate-pending']).toBe('Question ready — grill');
+  });
+
   it('does not include non-gate states', () => {
     expect(GATE_STATES['factory:in-progress']).toBeUndefined();
     expect(GATE_STATES['factory:triaging']).toBeUndefined();
