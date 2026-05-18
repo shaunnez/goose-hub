@@ -200,6 +200,19 @@ export interface CostStageTotal extends CostWindowTotals {
   stage: CostStage;
 }
 
+export interface SymbolIndexLookupReportDto {
+  lookupCount: number;
+  averageIdentifiersPerLookup: number;
+  averageHintsPerLookup: number;
+  staleRate: number;
+  hintsUsedEventCount: number;
+  usedHintCount: number;
+  hintsByConsumerSkill: Record<
+    string,
+    { lookupCount: number; averageHints: number; totalHints: number }
+  >;
+}
+
 export interface CostSummaryDto {
   projectId: string;
   dailyTokensUsed: number;
@@ -214,6 +227,7 @@ export interface CostSummaryDto {
     claude: CostWindowTotals;
     codex: CostWindowTotals;
   };
+  symbolIndex: SymbolIndexLookupReportDto;
 }
 
 export interface WorkItemCostsDto {

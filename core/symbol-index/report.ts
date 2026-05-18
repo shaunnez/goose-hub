@@ -5,6 +5,8 @@ export interface SymbolIndexLookupReport {
   averageIdentifiersPerLookup: number;
   averageHintsPerLookup: number;
   staleRate: number;
+  hintsUsedEventCount: number;
+  usedHintCount: number;
   hintsByConsumerSkill: Record<
     string,
     { lookupCount: number; averageHints: number; totalHints: number }
@@ -25,10 +27,12 @@ export function buildSymbolIndexLookupReport(
   events: Array<Pick<AgentEvent, 'kind' | 'payload'>>,
 ): SymbolIndexLookupReport {
   const lookups = events.filter((event) => event.kind === 'symbol-index.lookup');
+  const hintsUsedEvents = events.filter((event) => event.kind === 'symbol-index.hints-used');
   const consumerTotals = new Map<string, { lookupCount: number; totalHints: number }>();
   let identifierTotal = 0;
   let hintTotal = 0;
   let staleCount = 0;
+  let usedHintCount = 0;
 
   for (const event of lookups) {
     const payload = asRecord(event.payload);
@@ -57,6 +61,11 @@ export function buildSymbolIndexLookupReport(
     consumerTotals.set(consumerSkill, current);
   }
 
+  for (const event of hintsUsedEvents) {
+    const payload = asRecord(event.payload);
+    usedHintCount += asNumber(payload.usedHintCount);
+  }
+
   const lookupCount = lookups.length;
   const hintsByConsumerSkill = Object.fromEntries(
     [...consumerTotals.entries()].map(([consumerSkill, totals]) => [
@@ -74,6 +83,8 @@ export function buildSymbolIndexLookupReport(
     averageIdentifiersPerLookup: lookupCount === 0 ? 0 : identifierTotal / lookupCount,
     averageHintsPerLookup: lookupCount === 0 ? 0 : hintTotal / lookupCount,
     staleRate: lookupCount === 0 ? 0 : staleCount / lookupCount,
+    hintsUsedEventCount: hintsUsedEvents.length,
+    usedHintCount,
     hintsByConsumerSkill,
   };
 }

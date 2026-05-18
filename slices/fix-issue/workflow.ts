@@ -176,6 +176,7 @@ export async function runFixIssueWorkflow(
         personaId: implementPersonaId,
         investigation: implementInvestigation,
         surfaceGuardInvestigation: investigation,
+        symbolIndexKeyFiles: symbolKeyFiles,
         revisionPass: 0,
       });
 
@@ -264,6 +265,7 @@ export async function runFixIssueWorkflow(
       personaId: implementPersonaId,
       investigation: implementInvestigation,
       surfaceGuardInvestigation: investigation,
+      symbolIndexKeyFiles: symbolKeyFiles,
       advisorFeedback,
       revisionPass,
     });

@@ -100,6 +100,7 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
     appendEvent: vi
       .fn()
       .mockReturnValue({ id: 1, kind: 'agent.investigation-complete', payload: {}, createdAt: '' }),
+    replay: vi.fn().mockReturnValue([]),
   },
 }));
 
@@ -1282,6 +1283,53 @@ describe('runInvestigateWorkflow', () => {
             }),
             dbAgeMs: 123,
             stale: true,
+          }),
+        }),
+      );
+    });
+
+    it('emits symbol-index.hints-used when scout tool calls touch offered hint paths', async () => {
+      const hints = [
+        {
+          name: 'AuthPayload',
+          definedIn: 'skills/auth/schema.ts',
+          line: 10,
+          kind: 'type',
+          callers: [],
+        },
+      ];
+      mockLookupWorkItemSymbols.mockReturnValue(hints);
+
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      vi.mocked(eventStore.replay).mockImplementation((filter = {}) => {
+        if (filter.runId === 'run:scout:scout-code-path:0') {
+          return [
+            {
+              kind: 'agent.tool-call',
+              payload: {
+                tool_name: 'Read',
+                tool_input: { file_path: '/tmp/test-worktree/skills/auth/schema.ts' },
+              },
+            },
+          ] as never;
+        }
+        return [];
+      });
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(eventStore.appendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'symbol-index.hints-used',
+          payload: expect.objectContaining({
+            consumerSkill: 'scout-code-path',
+            offeredHintCount: 1,
+            usedHintCount: 1,
+            detectionMethod: 'tool-call-path-match',
+            usedHints: [
+              { name: 'AuthPayload', path: 'skills/auth/schema.ts', source: 'definition' },
+            ],
           }),
         }),
       );

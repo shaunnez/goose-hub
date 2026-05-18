@@ -32,12 +32,18 @@ describe('buildSymbolIndexLookupReport', () => {
         kind: 'agent.run-started',
         payload: {},
       },
+      {
+        kind: 'symbol-index.hints-used',
+        payload: { usedHintCount: 2 },
+      },
     ]);
 
     expect(report.lookupCount).toBe(2);
     expect(report.averageIdentifiersPerLookup).toBe(3);
     expect(report.averageHintsPerLookup).toBe(2);
     expect(report.staleRate).toBe(0.5);
+    expect(report.hintsUsedEventCount).toBe(1);
+    expect(report.usedHintCount).toBe(2);
     expect(report.hintsByConsumerSkill).toEqual({
       'scout-code-path': { lookupCount: 2, averageHints: 2, totalHints: 4 },
       'scout-dependency': { lookupCount: 2, averageHints: 1, totalHints: 2 },

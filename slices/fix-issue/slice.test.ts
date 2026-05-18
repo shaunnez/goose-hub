@@ -661,6 +661,100 @@ describe('runFixIssueWorkflow (#183)', () => {
     expect(JSON.stringify(implementSpec.context)).not.toContain('"callers"');
   });
 
+  it('emits symbol-index.hints-used when implement tool calls touch curated symbol key files', async () => {
+    const item = makeWorkItem({ priority: 'medium', type: 'bug', title: 'Fix dispatchWave' });
+    const source = makeStateSource();
+    vi.mocked(eventStore.replay).mockImplementation((filter = {}) => {
+      if (filter.kind === 'agent.investigation-complete') return [makeInvestigationEvent(item)];
+      if (filter.runId != null && filter.kind === 'agent.tool-call') {
+        return [
+          {
+            id: 101,
+            projectId: 'proj',
+            workItemId: item.id,
+            kind: 'agent.tool-call',
+            payload: {
+              tool_name: 'Read',
+              tool_input: { file_path: '/work/wt/slices/investigate/workflow.ts' },
+            },
+            runId: String(filter.runId),
+            createdAt: new Date().toISOString(),
+          },
+        ] as never;
+      }
+      return [];
+    });
+    mockLookupWorkItemSymbols.mockReturnValue([
+      {
+        name: 'dispatchWave',
+        definedIn: 'core/agent-runtime/swarm.ts',
+        line: 10,
+        kind: 'function',
+        callers: ['slices/investigate/workflow.ts'],
+      },
+    ]);
+    mockSymbolHintsToKeyFiles.mockReturnValue([
+      {
+        path: 'slices/investigate/workflow.ts',
+        reason: 'Symbol index: imports dispatchWave',
+      },
+    ]);
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockResolvedValueOnce({
+        output: makeImplementOutput({
+          filesWritten: [
+            {
+              path: 'apps/server/src/domains/workflows/triage-batch.ts',
+              reason: 'fix investigated surface',
+            },
+          ],
+          testsWritten: [
+            {
+              path: 'apps/server/src/domains/workflows/triage-batch.test.ts',
+              cases: 1,
+            },
+          ],
+          testsRun: {
+            command: 'pnpm test --reporter=json',
+            paths: ['apps/server/src/domains/workflows/triage-batch.test.ts'],
+          },
+        }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult),
+    };
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl: vi.fn().mockResolvedValue({
+        prNumber: 100,
+        prUrl: 'https://github.com/owner/repo/pull/100',
+        branch: 'factory/abc',
+        base: 'main',
+      }),
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    const hintsUsed = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'symbol-index.hints-used');
+    expect(hintsUsed?.[0].payload).toMatchObject({
+      consumerSkill: 'implement',
+      offeredHintCount: 1,
+      usedHintCount: 1,
+      usedHints: [
+        { name: 'dispatchWave', path: 'slices/investigate/workflow.ts', source: 'key-file' },
+      ],
+    });
+  });
+
   it('keeps wrong-surface guard anchored to investigation key files, not symbol key files', async () => {
     const item = makeWorkItem({ priority: 'medium', type: 'bug', title: 'Fix dispatchWave' });
     const source = makeStateSource();

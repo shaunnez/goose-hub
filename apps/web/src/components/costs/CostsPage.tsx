@@ -27,6 +27,10 @@ function StatTile({
   );
 }
 
+function formatMetric(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
 export function CostsPage() {
   const { slug = 'goose-hub-self' } = useParams<{ slug: string }>();
 
@@ -107,6 +111,67 @@ export function CostsPage() {
                 sub={`${data.byProvider.codex.totalRuns} run${data.byProvider.codex.totalRuns === 1 ? '' : 's'}`}
               />
             </div>
+          </section>
+
+          <section
+            data-testid="symbol-index-measurement"
+            className="border border-line rounded-lg p-5 mb-6"
+          >
+            <h2 className="text-[11px] uppercase tracking-wider text-fg-2 mb-4">
+              Symbol index · all time
+            </h2>
+            <div className="flex gap-3 mb-4">
+              <StatTile
+                testId="symbol-index-lookups"
+                label="Lookups"
+                value={data.symbolIndex.lookupCount.toLocaleString()}
+                sub={`${data.symbolIndex.hintsUsedEventCount.toLocaleString()} hints-used event${data.symbolIndex.hintsUsedEventCount === 1 ? '' : 's'}`}
+              />
+              <StatTile
+                testId="symbol-index-identifiers"
+                label="Avg identifiers"
+                value={formatMetric(data.symbolIndex.averageIdentifiersPerLookup)}
+                sub={`${formatMetric(data.symbolIndex.averageHintsPerLookup)} hints per lookup`}
+              />
+              <StatTile
+                testId="symbol-index-used"
+                label="Used hints"
+                value={data.symbolIndex.usedHintCount.toLocaleString()}
+                sub={`${Math.round(data.symbolIndex.staleRate * 100)}% stale lookups`}
+              />
+            </div>
+            {Object.keys(data.symbolIndex.hintsByConsumerSkill).length > 0 && (
+              <div className="overflow-hidden rounded-md border border-line/70">
+                <table className="w-full text-left text-[11.5px]">
+                  <thead className="bg-bg/60 text-fg-3">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">Consumer</th>
+                      <th className="px-3 py-2 font-medium text-right">Lookups</th>
+                      <th className="px-3 py-2 font-medium text-right">Avg hints</th>
+                      <th className="px-3 py-2 font-medium text-right">Total hints</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(data.symbolIndex.hintsByConsumerSkill).map(
+                      ([consumerSkill, row]) => (
+                        <tr key={consumerSkill} className="border-t border-line/60">
+                          <td className="px-3 py-2 font-mono text-fg-2">{consumerSkill}</td>
+                          <td className="px-3 py-2 text-right tnum">
+                            {row.lookupCount.toLocaleString()}
+                          </td>
+                          <td className="px-3 py-2 text-right tnum">
+                            {formatMetric(row.averageHints)}
+                          </td>
+                          <td className="px-3 py-2 text-right tnum">
+                            {row.totalHints.toLocaleString()}
+                          </td>
+                        </tr>
+                      ),
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
 
           <section data-testid="stage-breakdown" className="border border-line rounded-lg p-5">
