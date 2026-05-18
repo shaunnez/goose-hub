@@ -453,3 +453,71 @@ export const engineeringSpecs = sqliteTable(
     ),
   }),
 );
+
+// Hub Chat conversations (M20). A conversation is the long-lived thread the
+// user opens with the default agent in the right-side panel.
+// `scope` is informational: 'global' | 'project' | 'item'.
+// `runtime` selects the underlying agent runtime; default 'claude'.
+export const chatConversations = sqliteTable(
+  'chat_conversations',
+  {
+    id: text('id').primaryKey(),
+    scope: text('scope').notNull(), // 'global' | 'project' | 'item'
+    projectId: text('project_id'),
+    workItemId: text('work_item_id'),
+    title: text('title').notNull().default(''),
+    runtime: text('runtime').notNull().default('claude'), // 'claude' | 'codex'
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+    updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  },
+  (t) => ({
+    scopeIdx: index('chat_conversations_scope_idx').on(t.scope, t.projectId, t.workItemId),
+    updatedIdx: index('chat_conversations_updated_idx').on(t.updatedAt),
+  }),
+);
+
+// One row per turn in a chat conversation. `role` is 'user' or 'agent'; tool
+// invocations are NOT stored here — they flow through the events table tagged
+// with `payload.conversationId` so the live SSE stream interleaves them.
+export const chatMessages = sqliteTable(
+  'chat_messages',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    conversationId: text('conversation_id').notNull(),
+    role: text('role').notNull(), // 'user' | 'agent'
+    content: text('content').notNull(),
+    runId: text('run_id'),
+    /** JSON metadata: pending tool proposals, citations, decisions surfaced this turn. */
+    metaJson: text('meta_json'),
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  },
+  (t) => ({
+    conversationIdx: index('chat_messages_conversation_idx').on(t.conversationId, t.id),
+  }),
+);
+
+// One row per tool invocation the chat agent proposes. Read-only tools are
+// auto-executed and recorded with status='completed' immediately; mutating
+// tools are inserted with status='proposed' and wait for an explicit
+// approve/reject from the UI before executing. `resultJson` and `errorMessage`
+// fill in once the dispatcher resolves.
+export const chatToolInvocations = sqliteTable(
+  'chat_tool_invocations',
+  {
+    id: text('id').primaryKey(),
+    conversationId: text('conversation_id').notNull(),
+    messageId: integer('message_id'),
+    toolName: text('tool_name').notNull(),
+    inputJson: text('input_json').notNull(),
+    mutating: integer('mutating', { mode: 'boolean' }).notNull().default(false),
+    status: text('status').notNull(), // 'proposed' | 'approved' | 'rejected' | 'running' | 'completed' | 'failed'
+    resultJson: text('result_json'),
+    errorMessage: text('error_message'),
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+    updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  },
+  (t) => ({
+    conversationIdx: index('chat_tool_invocations_conversation_idx').on(t.conversationId, t.id),
+    statusIdx: index('chat_tool_invocations_status_idx').on(t.status),
+  }),
+);

@@ -14,7 +14,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `server` | yes | API + SSE host for the Goose Hub web UI. Stands up the server process the UI talks to. Closes M2.01 (#26). |
 | `web` | yes | Vite + React 19 + Tailwind 4 + React Router v6. Closes M2.02 (#27). |
 
-## core/ (28 entries, 1 missing README)
+## core/ (30 entries, 1 missing README)
 
 | Name | README | Summary |
 |---|---|---|
@@ -23,7 +23,9 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `agent-runtime` | yes | Typed contracts and model registry for all agent runtime code. |
 | `audit` | yes | Orchestration glue for the `code-quality-audit` skill (M19.22, #698). |
 | `bootstrap` | yes | Library code that supports the bootstrap workflow (`slices/bootstrap-project`). Each module is independently testable and stateless; the slice composes them. |
+| `chat-tools` | yes | M20 — registry of tools the Hub Chat assistant (`skills/hub-chat`) may propose. Read-only tools auto-run; mutating tools require explicit human approval in the chat panel before the dispatcher executes them. |
 | `connectors` | yes | External-system adapters. Each subdirectory wraps one external API behind a narrow interface that slices and workflows depend on. Connectors own retry, timeout, and error-shape contracts so workflow code stays oblivious to transport details. |
+| `conversations` | yes | M20 — persistence layer for Hub Chat conversations. Three tables in the operational SQLite DB: |
 | `cost` | yes | Persists per-run agent cost so the UI can show: |
 | `db` | yes | Local SQLite store (Drizzle ORM). Holds **operational state only** — events, persona stats, governance audit trail, per-project settings. Work-item authority lives in the source of truth (GitHub Issues), never here. |
 | `engineering-specs` | yes | Per-work-item storage for `EngineeringSpec` JSON blobs produced by the `spec-author` skill. One row per `(projectId, workItemId)`; the latest pipeline run wins. |
@@ -47,12 +49,13 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `workflows` | yes | Orchestration workflows that compose skills, persist results, and transition work-item state. |
 | `workspaces` | yes | Git worktree lifecycle management for Factory investigation runs. |
 
-## slices/ (36 entries, 0 missing README)
+## slices/ (37 entries, 0 missing README)
 
 | Name | README | Summary |
 |---|---|---|
 | `bootstrap-project` | yes | End-to-end project bootstrap workflow. Closes M12.04 (#307). |
 | `bootstrap-wizard` | yes | End-to-end UI for adding a new project to Factory's roster (M12.07, issue #308). |
+| `chat-orchestrator` | yes | M20 — drives one turn of a conversation between the user and the `hub-chat` assistant skill. |
 | `claude-md-auditor` | yes | CLAUDE.md auditor — create and diff. Closes M12.02 (#303). |
 | `cli-bootstrap` | yes | `goose project bootstrap` CLI command. Closes M12.06 (#309). |
 | `codex-runtime` | yes | Workflow-only slice — owns coverage for the Codex CLI runtime sibling introduced |
@@ -88,7 +91,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `stack-detector` | yes | Stack detector for target project repositories. Closes M12.01 (#304). |
 | `webhook-runbook` | yes | **Status:** Documentation slice for M12 project bootstrap. |
 
-## skills/ (35 entries, 0 missing README)
+## skills/ (36 entries, 0 missing README)
 
 | Name | README | Summary |
 |---|---|---|
@@ -103,6 +106,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `echo-test-holdout` | yes | Holdout variant of echo-test that verifies context allowlist enforcement. |
 | `evidence-post` | yes | Runs the slice's Playwright spec on the PR commit, captures screenshots and a continuous WebM walkthrough to `evidence/issue-<N>/`, commits those artefacts to the PR branch, and posts a comment on the linked issue with the screenshots embedded inline via `raw.githubusercontent.com` URLs **pinned to the PR head commit SHA**. |
 | `grill-me` | yes | Runs a structured discovery session on a vague work item. Asks ONE focused question per round (Mat Pocock interrogation pattern) until the intent is precise enough to hand off to a PRD writer. |
+| `hub-chat` | yes | The default assistant the user (Shaun) talks to inside the Goose Hub web UI. Interactive multi-turn skill, invoked once per round. Conversation history lives in the `chat_messages` table (M20). The orchestrator slice that drives the loop is `slices/chat-orchestrator/`. |
 | `implement` | yes | TDD-first developer skill. Reads the issue, writes a plan, writes failing tests, writes implementation until tests pass, runs lint and typecheck, and returns structured output describing what shipped. The orchestrator opens the PR after this skill returns. |
 | `implement-wp` | yes | **Role:** Developer (WP builder) |
 | `investigate` | yes | Investigates a bug issue by reading the worktree with read/search tools, then produces structured findings conforming to `InvestigateSchema`. |

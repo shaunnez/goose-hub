@@ -617,3 +617,57 @@ export interface SearchResultDto {
   totalEvents: number;
   hasMore: boolean;
 }
+
+// ───── M20 Hub Chat ─────────────────────────────────────────────────────────
+
+export type ChatScope = 'global' | 'project' | 'item';
+export type ChatRuntime = 'claude' | 'codex';
+export type ChatMessageRole = 'user' | 'agent';
+export type ChatToolStatus =
+  | 'proposed'
+  | 'approved'
+  | 'rejected'
+  | 'running'
+  | 'completed'
+  | 'failed';
+
+export interface ChatConversationDto {
+  id: string;
+  scope: ChatScope;
+  projectId: string | null;
+  workItemId: string | null;
+  title: string;
+  runtime: ChatRuntime;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatMessageDto {
+  id: number;
+  conversationId: string;
+  role: ChatMessageRole;
+  content: string;
+  runId: string | null;
+  meta: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface ChatToolInvocationDto {
+  id: string;
+  conversationId: string;
+  messageId: number | null;
+  toolName: string;
+  input: Record<string, unknown>;
+  mutating: boolean;
+  status: ChatToolStatus;
+  result: unknown;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatToolManifestDto {
+  name: string;
+  description: string;
+  mutating: boolean;
+}

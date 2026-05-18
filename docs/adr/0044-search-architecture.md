@@ -1,4 +1,4 @@
-# ADR 0043: Cross-project search architecture
+# ADR 0044: Cross-project search architecture
 
 - Status: Accepted
 - Date: 2026-05-18

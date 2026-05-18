@@ -218,6 +218,13 @@
       "when": 1779089834325,
       "tag": "0030_wild_slyde",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1779200000000,
+      "tag": "0031_hub_chat",
+      "breakpoints": true
     }
   ]
 }

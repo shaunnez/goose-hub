@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { bootstrapRouter } from './domains/bootstrap/router.js';
 import { changelogRouter } from './domains/changelog/router.js';
+import { chatRouter } from './domains/chat/router.js';
 import { costsRouter } from './domains/costs/router.js';
 import { decisionsRouter } from './domains/decisions/router.js';
 import { eventsRouter } from './domains/events/router.js';
@@ -44,9 +45,10 @@ app.route('/events', eventsRouter); // GET /events
 app.route('/webhooks', webhooksRouter); // POST /webhooks/github
 app.route('/api/decisions', decisionsRouter); // POST /api/decisions (M19.23)
 app.route('/api/changelog', changelogRouter); // GET /api/changelog?days=7 (M14.XX)
+app.route('/chat', chatRouter); // GET/POST/DELETE /chat/** (M20 — Hub Chat)
 // Mounted at /search (no /api prefix) so the vite dev-server proxy's
 // `rewrite: (p) => p.replace(/^\/api/, '')` resolves correctly: frontend
 // fetches /api/search → vite strips /api → server sees /search.
-app.route('/search', searchRouter); // GET /search?q=&limit= (#834 PR-2)
+app.route('/search', searchRouter); // GET /search?q=&limit= (#834)
 
 export { app };

@@ -527,7 +527,7 @@ Both `target-projects/` and `skills/` are pnpm workspace packages (`@goose-hub/t
 
 **Per-project active milestone:** each `ProjectConfig` declares its own `activeMilestone`; the Kanban filters per-project; the All Projects view aggregates across them.
 
-## Cross-project Search (ADR 0043)
+## Cross-project Search (ADR 0044)
 
 `apps/server/src/domains/search/` mounts `GET /search?q=&projectSlug=&type=&milestone=&includeClosed=&limit=` and returns a unified `SearchResult` with two banks: work-item hits and `agent.decision-summary` event hits. Both banks normalise confidence independently to top-result = 100.
 

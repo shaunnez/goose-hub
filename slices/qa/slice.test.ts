@@ -331,7 +331,19 @@ describe('verification summary harness', () => {
     execFileSync('git', ['add', '.'], { cwd: dir });
     execFileSync(
       'git',
-      ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-m', 'base'],
+      [
+        '-c',
+        'user.name=Test',
+        '-c',
+        'user.email=test@example.com',
+        '-c',
+        'commit.gpgsign=false',
+        '-c',
+        'tag.gpgsign=false',
+        'commit',
+        '-m',
+        'base',
+      ],
       { cwd: dir },
     );
     execFileSync('git', ['update-ref', 'refs/remotes/origin/main', 'HEAD'], { cwd: dir });
@@ -339,7 +351,19 @@ describe('verification summary harness', () => {
     execFileSync('git', ['add', '.'], { cwd: dir });
     execFileSync(
       'git',
-      ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-m', 'change'],
+      [
+        '-c',
+        'user.name=Test',
+        '-c',
+        'user.email=test@example.com',
+        '-c',
+        'commit.gpgsign=false',
+        '-c',
+        'tag.gpgsign=false',
+        'commit',
+        '-m',
+        'change',
+      ],
       { cwd: dir },
     );
     return dir;
