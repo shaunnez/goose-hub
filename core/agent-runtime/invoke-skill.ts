@@ -61,6 +61,17 @@ export type InvokeSkillInput = {
 };
 
 /**
+ * Augmented result from `invokeSkill` that surfaces the resolved persona and
+ * role to callers — the orchestrator needs these to write `persona_stats`
+ * (M20.14) without re-running the round-robin selector. `AgentResult` fields
+ * (`output`, `decisionSummaries`, `events`) are preserved unchanged.
+ */
+export interface InvokeSkillResult extends AgentResult {
+  personaId: string;
+  role: string;
+}
+
+/**
  * Canonical entry point for skill-driven agent spawns. Handles the full
  * composer pipeline: config load → context validation → prompt load →
  * persona selection → budget resolution → model resolution → runtime
@@ -72,7 +83,7 @@ export type InvokeSkillInput = {
  *
  * See ADR 0038.
  */
-export async function invokeSkill(input: InvokeSkillInput): Promise<AgentResult> {
+export async function invokeSkill(input: InvokeSkillInput): Promise<InvokeSkillResult> {
   const { skillName, projectId, workItemId, runId, context, overrides } = input;
 
   // 1. Load skill config — absolute path import matches loader.ts pattern (tsx-safe)
@@ -180,5 +191,5 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<AgentResult>
     }
   }
 
-  return result;
+  return { ...result, personaId, role };
 }

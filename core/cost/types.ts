@@ -21,6 +21,7 @@ export type Stage =
   | 'qa'
   | 'review'
   | 'retrospective'
+  | 'chat'
   | 'other';
 
 export interface CostRecord {
