@@ -36,6 +36,7 @@ export default defineConfig({
             env: {
               PORT: String(MOCK_SERVER_PORT),
               GITHUB_TOKEN: '',
+              GITHUB_WEBHOOK_SECRET: 'mock-webhook-secret-for-e2e',
               MOCK_AGENTS: 'true',
               MOCK_SOURCE: 'true',
               DB_PATH: resolve(import.meta.dirname, '../../.e2e-chat.db'),
