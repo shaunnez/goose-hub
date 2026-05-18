@@ -185,7 +185,9 @@ Return a single JSON object conforming to `EngineeringSpecSchema`. Do not includ
 
 `decisionSummaries` must have at least one entry. Use the canonical `DecisionKindSchema` enum (`READ`, `PLAN`, `INSIGHT`, `UNCERTAINTY`, etc.).
 
-Live markers use the format `[decision] KIND: what — why` where ` — ` (space, em-dash, space) separates the decision from its rationale. Example: `[decision] PLAN: Defined 5 falsifiable ACs — one per journey step, all with verifyCommand`.
+Live markers are short progress/rationale markers, not raw thinking. Emit them before major evidence reads, after important spec-shaping findings, and on uncertainty/pivots. Do not emit before every command. Keep each marker to one sentence with no secrets, hidden reasoning, raw output, or file dumps.
+
+Live marker format: `[decision] KIND: <one sentence>`. Example: `[decision] PLAN: Defining falsifiable ACs around the checkout journey and verifyCommand coverage`.
 
 ## Failure modes (the validator will catch)
 

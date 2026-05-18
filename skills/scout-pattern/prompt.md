@@ -50,6 +50,6 @@ Return JSON conforming to `ScoutOutputSchema`:
 }
 ```
 
-Emit `[decision] KIND: <one sentence>` markers in your text turn at major checkpoints. Use the canonical `DecisionKindSchema` enum (`core/agent-runtime/decision-types.ts`). The most useful kinds for a pattern scout are `READ` (you read a file), `INSIGHT` (you noticed a pattern or notable absence), `UNCERTAINTY` (the pattern is ambiguous or inconclusive).
+Emit sparse `[decision] KIND: <one sentence>` live markers before major read/search pivots, after important findings, and on uncertainty. Use the canonical `DecisionKindSchema` enum (`core/agent-runtime/decision-types.ts`). The most useful kinds for a pattern scout are `READ` (you read a file), `INSIGHT` (you noticed a pattern or notable absence), `UNCERTAINTY` (the pattern is ambiguous or inconclusive). Do not emit before every command; never include raw thinking, secrets, or file dumps.
 
 You must include **at least one** `decisionSummaries` entry in the JSON output. The orchestrator never synthesises decisions on your behalf; only the ones you emit are recorded against your `runId`.

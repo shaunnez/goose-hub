@@ -191,6 +191,33 @@ describe('groupEvents — run-group by runId', () => {
       expect(result[0].event.kind).toBe('agent.tool-call');
     }
   });
+
+  it('keeps live decision summaries inside the same run group as tool calls', () => {
+    const events: AgentEventDto[] = [
+      makeRunEvent(1, 'run-live', 'agent.run-started', 'implement'),
+      makeRunEvent(2, 'run-live', 'agent.tool-call'),
+      {
+        ...makeRunEvent(3, 'run-live', 'agent.decision-summary-live'),
+        payload: { kind: 'READ', summary: 'Searching app shell components', skill: 'implement' },
+      },
+      makeRunEvent(4, 'run-live', 'agent.tool-call'),
+    ];
+
+    const result = groupEvents(events);
+    expect(result).toHaveLength(1);
+    expect(result[0].kind).toBe('run-group');
+    if (result[0].kind === 'run-group') {
+      expect(result[0].runId).toBe('run-live');
+      expect(
+        result[0].items.map((item) => (item.kind === 'event' ? item.event.kind : item.kind)),
+      ).toEqual([
+        'agent.run-started',
+        'agent.tool-call',
+        'agent.decision-summary-live',
+        'agent.tool-call',
+      ]);
+    }
+  });
 });
 
 // ─── run-group metadata ───────────────────────────────────────────────────────
