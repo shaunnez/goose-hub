@@ -29,4 +29,9 @@ describe('settings slice', () => {
     const mod = await import('./components/DevReviewPanel');
     expect(typeof mod.DevReviewPanel).toBe('function');
   });
+
+  it('exports WorkflowMapPanel', async () => {
+    const mod = await import('./components/WorkflowMapPanel');
+    expect(typeof mod.WorkflowMapPanel).toBe('function');
+  });
 });

@@ -85,6 +85,11 @@ vi.mock('@goose-hub/core/workspaces/worktree.js', () => ({
   createWorktree: vi.fn().mockReturnValue('/mock/worktree'),
   cleanupWorktree: vi.fn(),
   prewarmWorktree: vi.fn(),
+  resolveWorkflowBase: vi.fn().mockReturnValue({
+    branch: 'main',
+    ref: 'origin/main',
+    source: 'fallback-main',
+  }),
   resolveWorktreeHeadSha: vi.fn().mockReturnValue('mock-sha-abc123'),
 }));
 vi.mock('@goose-hub/core/workspaces/orchestrator-git.js', () => ({

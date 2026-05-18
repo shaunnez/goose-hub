@@ -10,8 +10,8 @@ import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-tra
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
-import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import type { StateSource } from '@goose-hub/core/state-source/interface.js';
+import { targetStateForTriage } from '@goose-hub/core/workflows/triage-routing.js';
 import { RepoMatchOutputSchema } from '@goose-hub/skills/repo-match/schema.js';
 import { TriageOutputSchema } from '@goose-hub/skills/triage/schema.js';
 import { targetProjectsRoot } from '@goose-hub/target-projects';
@@ -321,33 +321,8 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       runId,
     });
 
-    // Determine whether this item carries factory:from-prd (decomposed child)
-    const isFromPrd = itemLabels.includes('factory:from-prd');
-
-    let finalState: StateName;
-    if (triageOutput.type === 'bug') {
-      await stateSource.transitionState(
-        item.externalId,
-        'factory:accepted',
-        'factory:investigating',
-      );
-      finalState = 'factory:investigating';
-    } else if (triageOutput.type === 'research') {
-      await stateSource.transitionState(
-        item.externalId,
-        'factory:accepted',
-        'factory:research-pending',
-      );
-      finalState = 'factory:research-pending';
-    } else if (triageOutput.type === 'feature' && !isFromPrd) {
-      // Fresh feature (not from decompose-prd): route to Discover Lane grilling
-      await stateSource.transitionState(item.externalId, 'factory:accepted', 'factory:grilling');
-      finalState = 'factory:grilling';
-    } else {
-      // Chore, or feature with factory:from-prd (decomposed child): skip grilling
-      await stateSource.transitionState(item.externalId, 'factory:accepted', 'factory:dev-ready');
-      finalState = 'factory:dev-ready';
-    }
+    const finalState = targetStateForTriage(triageOutput.type, itemLabels);
+    await stateSource.transitionState(item.externalId, 'factory:accepted', finalState);
     emitStateTransitionEvent({
       projectId,
       workItemId,

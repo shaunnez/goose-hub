@@ -8,6 +8,7 @@ import type {
   ProjectSettingsDto,
   ReviewSettingsDto,
   ReviewerSlot,
+  WorkflowCatalogDto,
 } from '../types.js';
 import { deleteRequest, getJson, patchJson } from './client.js';
 
@@ -145,6 +146,10 @@ export async function fetchReviewSettings(
   signal?: AbortSignal,
 ): Promise<ReviewSettingsDto> {
   return getJson<ReviewSettingsDto>(`/projects/${slug}/settings/review`, signal);
+}
+
+export async function fetchWorkflowCatalog(signal?: AbortSignal): Promise<WorkflowCatalogDto> {
+  return getJson<WorkflowCatalogDto>('/workflow-catalog', signal);
 }
 
 export async function patchReviewSettings(

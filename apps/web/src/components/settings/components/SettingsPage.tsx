@@ -10,12 +10,21 @@ import { ProjectBudgetPanel } from './ProjectBudgetPanel';
 import { ProjectConfigPanel } from './ProjectConfigPanel';
 import { ProjectModelPanel } from './ProjectModelPanel';
 import { ReviewPanel } from './ReviewPanel';
+import { WorkflowMapPanel } from './WorkflowMapPanel';
 
-type Tab = 'config' | 'runtime' | 'advanced-roles' | 'pipeline' | 'review' | 'dev-review';
+type Tab =
+  | 'config'
+  | 'runtime'
+  | 'workflow-map'
+  | 'advanced-roles'
+  | 'pipeline'
+  | 'review'
+  | 'dev-review';
 
 const TAB_LABELS: Record<Tab, string> = {
   config: 'Config',
   runtime: 'Skill runtime',
+  'workflow-map': 'Workflow map',
   'advanced-roles': 'Advanced roles',
   pipeline: 'Pipeline',
   review: 'Review',
@@ -102,7 +111,15 @@ export function SettingsPage() {
         {/* Tab bar */}
         <div className="flex flex-wrap gap-1 mb-6 border-b border-line">
           {(
-            ['config', 'runtime', 'advanced-roles', 'pipeline', 'review', 'dev-review'] as Tab[]
+            [
+              'config',
+              'runtime',
+              'workflow-map',
+              'advanced-roles',
+              'pipeline',
+              'review',
+              'dev-review',
+            ] as Tab[]
           ).map((t) => (
             <button
               key={t}
@@ -125,6 +142,9 @@ export function SettingsPage() {
         )}
         {tab === 'runtime' && selectedConfig != null && (
           <ProjectBudgetPanel slug={selectedConfig.slug} />
+        )}
+        {tab === 'workflow-map' && selectedConfig != null && (
+          <WorkflowMapPanel slug={selectedConfig.slug} />
         )}
         {tab === 'advanced-roles' && selectedConfig != null && (
           <ProjectModelPanel slug={selectedConfig.slug} />
