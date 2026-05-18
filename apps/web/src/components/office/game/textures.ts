@@ -195,8 +195,10 @@ const OFFICE_TEXTURE_DISPLAY_SIZES: Record<string, TextureDisplaySize> = {
   // remain readable next to the new larger desks under fit-width camera.
   'office:goose_idle': { width: 40, height: 40 },
   // Walking animation spritesheet (loaded separately in OfficeScene.preload).
-  // 2 frames at 32×32 native, displayed at the same 40×40 as goose_idle.
-  'office:goose-walk': { width: 40, height: 40 },
+  // 4 frames at 16×32 native — half the width of goose_idle's 32×32 source,
+  // so displayed at 20×40 to keep the goose the same visual height/scale as
+  // the idle texture (which displays at 40×40).
+  'office:goose-walk': { width: 20, height: 40 },
   'office:goose_triage': { width: 40, height: 40 },
   'office:goose_investigator': { width: 40, height: 40 },
   'office:goose_dev': { width: 40, height: 40 },
@@ -280,33 +282,17 @@ export function roomDeskTextureKey(roomId: string, scene?: Phaser.Scene): string
   return TEXTURE_KEYS.desk;
 }
 
-// Per-role goose PNG mapping. Roles without a matching PNG fall back to
-// goose_idle (white goose). Callers should SKIP setTint() when the returned
-// key starts with 'office:goose_' — the PNGs are pre-coloured.
-const ROLE_GOOSE_KEYS: Record<string, string> = {
-  triager: 'office:goose_triage',
-  griller: 'office:goose_idle',
-  'prd-writer': 'office:goose_idle',
-  decomposer: 'office:goose_idle',
-  researcher: 'office:goose_scout',
-  investigator: 'office:goose_investigator',
-  developer: 'office:goose_dev',
-  'dev-reviewer': 'office:goose_dev',
-  qa: 'office:goose_qa',
-  reviewer: 'office:goose_reviewer',
-  retrospector: 'office:goose_idle',
-  auditor: 'office:goose_ops',
-};
-
 /**
- * Returns the sprite texture key for a given role. Prefers a goose PNG when
- * one is loaded; falls back to the procedural spriteBase. Role tint is only
- * applied when the returned key is the procedural sprite — goose PNGs are
- * pre-coloured.
+ * Returns the sprite texture key for a given role. Currently returns the
+ * ordinary white goose (`goose_idle`) for every role — the per-role goose
+ * PNGs (goose_dev, goose_qa, etc.) face inconsistent directions and clash
+ * visually with the walk spritesheet, so we collapse them to a single
+ * consistent base sprite. Falls back to the procedural spriteBase if the
+ * PNG hasn't loaded. Role tint is only applied to the procedural sprite —
+ * goose PNGs are pre-coloured.
  */
-export function spriteTextureKeyForRole(role: string, scene?: Phaser.Scene): string {
-  const candidate = ROLE_GOOSE_KEYS[role] ?? 'office:goose_idle';
-  if (scene?.textures.exists(candidate)) return candidate;
+export function spriteTextureKeyForRole(_role: string, scene?: Phaser.Scene): string {
+  if (scene?.textures.exists('office:goose_idle')) return 'office:goose_idle';
   return TEXTURE_KEYS.spriteBase;
 }
 

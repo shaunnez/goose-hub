@@ -23,6 +23,7 @@ import { HudLayer } from './layers/HudLayer';
 import { PersonaLayer } from './layers/PersonaLayer';
 import { RoomLayer } from './layers/RoomLayer';
 import { TicketLayer } from './layers/TicketLayer';
+import { generateOfficeFloorTexture } from './static-floor-texture';
 import { ensureOfficeTextures } from './textures';
 
 // Re-export types so the React mount (OfficeGameMount.tsx) doesn't need
@@ -71,10 +72,13 @@ export class OfficeScene extends Phaser.Scene {
 
   preload(): void {
     queueVerifiedPngAssets(this, this.verifiedAssets);
-    // Phase 10: load the goose walking spritesheet under a dedicated key
-    // (the PNG is 64×32 — 2 frames at 32×32).
+    // Goose walking spritesheet — the PNG is 64×32 packing 4 horizontally-
+    // arranged walk-cycle frames at 16×32 each (matches the asset manifest
+    // entry in scripts/generate-office-assets.ts). Loading with frameWidth=32
+    // would slice 2 frames per Phaser frame, producing the "two blue birds"
+    // composite the player sees.
     this.load.spritesheet('office:goose-walk', '/office/goose_walk_sheet.png', {
-      frameWidth: 32,
+      frameWidth: 16,
       frameHeight: 32,
     });
   }
@@ -82,15 +86,18 @@ export class OfficeScene extends Phaser.Scene {
   create(): void {
     this.cameras.main.setBackgroundColor('#050309');
     ensureOfficeTextures(this);
+    // Bake the static floor (brick floor, walls, doors, lighting, per-room
+    // backboards) into a single texture. RoomLayer uses it as the base layer.
+    generateOfficeFloorTexture(this);
 
-    // Phase 10: register the goose walking animation (used by AmbientLayer
-    // and any future walking persona). No-op if the spritesheet didn't
-    // load (then geese fall back to the static idle texture).
+    // Register the 4-frame goose walking animation (used by AmbientLayer and
+    // PersonaLayer). No-op if the spritesheet didn't load (then geese fall
+    // back to the static idle texture).
     if (this.textures.exists('office:goose-walk') && !this.anims.exists('goose-walk')) {
       this.anims.create({
         key: 'goose-walk',
-        frames: this.anims.generateFrameNumbers('office:goose-walk', { start: 0, end: 1 }),
-        frameRate: 6,
+        frames: this.anims.generateFrameNumbers('office:goose-walk', { start: 0, end: 3 }),
+        frameRate: 8,
         repeat: -1,
       });
     }

@@ -33,6 +33,7 @@ import {
   roomDoor,
   roomQueueAnchor,
 } from '../../lib/rooms';
+import { STATIC_FLOOR_TEXTURE_KEY } from '../static-floor-texture';
 import {
   BRASS_TINTS,
   HUD_TINTS,
@@ -496,18 +497,35 @@ export class RoomLayer {
     const container = this.scene.add.container(0, 0);
     this.floorContainers.push(container);
 
-    this.drawBase(container, originY);
-    this.drawWalls(container, originY);
-    this.drawRoomBackWalls(container, originY);
-    this.drawRoomBackWallProps(container, originY);
+    // Baked static layer (brick floor, walls, doors, lighting, backboards).
+    // Replaces drawBase/drawWalls/drawBrickWalls/drawRoomBackWalls/
+    // drawRoomBackWallProps/drawDoneShelf/drawTopBandDoors/
+    // drawBottomBandDoors. Falls back to the procedural path if the texture
+    // failed to generate (e.g. no CanvasRenderingContext2D in tests).
+    if (this.scene.textures.exists(STATIC_FLOOR_TEXTURE_KEY)) {
+      const bg = this.scene.add.graphics();
+      bg.fillStyle(PALETTE.floor, 1);
+      bg.fillRect(0, originY, FLOOR_WORLD.width, FLOOR_WORLD.height);
+      container.add(bg);
+      const baked = this.scene.add.image(0, originY, STATIC_FLOOR_TEXTURE_KEY);
+      baked.setOrigin(0, 0);
+      baked.setDepth(0);
+      container.add(baked);
+    } else {
+      this.drawBase(container, originY);
+      this.drawWalls(container, originY);
+      this.drawRoomBackWalls(container, originY);
+      this.drawRoomBackWallProps(container, originY);
+      this.drawDoneShelf(container, originY);
+      this.drawTopBandDoors(container, originY);
+      this.drawBottomBandDoors(container, originY);
+    }
+
     this.drawRoomOverlays(container, originY);
-    this.drawDoneShelf(container, originY);
     this.drawBanner(container, originY, project, floorIndex);
     this.drawRoomLabels(container, originY);
     this.drawDesks(container, originY, floorIndex);
     this.drawRoomLamps(container, originY);
-    this.drawTopBandDoors(container, originY);
-    this.drawBottomBandDoors(container, originY);
     this.registerClickZones(container, originY, floorIndex);
   }
 
@@ -897,6 +915,10 @@ export class RoomLayer {
   }
 
   private drawRoomOverlays(container: Phaser.GameObjects.Container, originY: number): void {
+    // The baked floor texture already carries per-room ambient washes;
+    // skip the legacy tint overlays so the rooms don't read as muddy.
+    if (this.scene.textures.exists(STATIC_FLOOR_TEXTURE_KEY)) return;
+
     const overlays = this.scene.add.graphics();
 
     // QA chamber (top band) — subtle frosted-cyan tint

@@ -56,8 +56,11 @@ interface PersonaEntry {
   deskSlot: number;
   floorIndex: number;
   container: Phaser.GameObjects.Container;
-  body: Phaser.GameObjects.Image;
+  body: Phaser.GameObjects.Sprite;
   indicator: Phaser.GameObjects.Image;
+  /** Role the body texture currently represents — used to restore the
+   *  correct goose PNG when the walk animation finishes. */
+  bodyRole: string;
   walkTween?: Phaser.Tweens.Tween | Phaser.Tweens.TweenChain;
   /** Resolve function for an in-flight intent walk; called by cancelWalk(). */
   walkResolve?: (result: IntentResult) => void;
@@ -248,6 +251,7 @@ export class PersonaLayer {
       }
 
       entry.walkResolve = settle;
+      this.startWalkAnimation(entry);
       const totalLen = pathLength(segment.waypoints);
       const baseDuration = Math.max(150, totalLen / WALK_PIXELS_PER_MS);
       const tweens: Phaser.Types.Tweens.TweenBuilderConfig[] = targets.map((next, i) => {
@@ -269,7 +273,7 @@ export class PersonaLayer {
       entry.walkTween = this.scene.tweens.chain({
         tweens,
         onComplete: () => {
-          entry.body.setFlipX(false);
+          this.stopWalkAnimation(entry, entry.bodyRole);
           entry.roomId = destRoomId;
           entry.deskSlot = deskSlot;
           entry.walkTween = undefined;
@@ -292,6 +296,9 @@ export class PersonaLayer {
       entry.walkResolve({ status: 'cancelled' });
       entry.walkResolve = undefined;
     }
+    // Reset the walk-anim state so a cancelled goose returns to its idle
+    // texture rather than freezing on a walk frame.
+    this.stopWalkAnimation(entry, entry.bodyRole);
   }
 
   /**
@@ -378,6 +385,37 @@ export class PersonaLayer {
 
   // ─── private ─────────────────────────────────────────────────────────────
 
+  /** Swap the body to the goose-walk spritesheet and play the looped walk
+   *  animation. Safe to call on every walk start — no-ops if the spritesheet
+   *  failed to load (geese then walk with the static role texture). */
+  private startWalkAnimation(entry: PersonaEntry): void {
+    if (!this.scene.anims.exists('goose-walk')) return;
+    if (!this.scene.textures.exists('office:goose-walk')) return;
+    // Clear any role tint — the walk sheet is pre-coloured and tinting it
+    // would mask the animation pixels.
+    entry.body.clearTint();
+    entry.body.play('goose-walk', true);
+    applyOfficeTextureDisplaySize(
+      entry.body as unknown as Phaser.GameObjects.Image,
+      'office:goose-walk',
+    );
+  }
+
+  /** Stop the walk animation, restore the role-specific goose texture, and
+   *  reset flipX so the idle pose renders in its natural orientation. */
+  private stopWalkAnimation(entry: PersonaEntry, role: string): void {
+    if (!this.scene.anims.exists('goose-walk')) return;
+    entry.body.stop();
+    entry.body.setFlipX(false);
+    const bodyKey = spriteTextureKeyForRole(role, this.scene);
+    entry.body.setTexture(bodyKey);
+    applyOfficeTextureDisplaySize(entry.body as unknown as Phaser.GameObjects.Image, bodyKey);
+    if (!isGooseTextureKey(bodyKey)) {
+      entry.body.setTint(ROLE_TINTS[role] ?? PALETTE.amber);
+    }
+    entry.bodyRole = role;
+  }
+
   private floorIndexFor(slug: string): number {
     return this.deps.getProjects().findIndex((p) => p.slug === slug);
   }
@@ -404,9 +442,10 @@ export class PersonaLayer {
 
     const role = p.roomId != null ? (ROOM_DEFAULT_ROLE[p.roomId] ?? 'developer') : 'developer';
     const bodyKey = spriteTextureKeyForRole(role, this.scene);
-    const body = this.scene.add.image(0, 0, bodyKey);
+    // Sprite (not Image) so we can play the goose-walk animation during walks.
+    const body = this.scene.add.sprite(0, 0, bodyKey);
     body.setOrigin(0.5, 1);
-    applyOfficeTextureDisplaySize(body, bodyKey);
+    applyOfficeTextureDisplaySize(body as unknown as Phaser.GameObjects.Image, bodyKey);
     if (!isGooseTextureKey(bodyKey)) {
       body.setTint(ROLE_TINTS[role] ?? PALETTE.amber);
     }
@@ -458,6 +497,7 @@ export class PersonaLayer {
       container,
       body,
       indicator,
+      bodyRole: role,
     });
   }
 
@@ -500,6 +540,7 @@ export class PersonaLayer {
     }
     if (entry.walkTween) entry.walkTween.stop();
 
+    this.startWalkAnimation(entry);
     const tweens: Phaser.Types.Tweens.TweenBuilderConfig[] = [];
     for (let i = 0; i < targets.length; i++) {
       const prev = i === 0 ? fromPos : targets[i - 1];
@@ -521,14 +562,12 @@ export class PersonaLayer {
     entry.walkTween = this.scene.tweens.chain({
       tweens,
       onComplete: () => {
-        entry.body.setFlipX(false);
         entry.roomId = p.roomId;
         entry.deskSlot = p.deskSlot;
         entry.floorIndex = toFloorIndex;
-        if (p.roomId != null) {
-          const newRole = ROOM_DEFAULT_ROLE[p.roomId] ?? 'developer';
-          entry.body.setTint(ROLE_TINTS[newRole] ?? PALETTE.amber);
-        }
+        const newRole =
+          p.roomId != null ? (ROOM_DEFAULT_ROLE[p.roomId] ?? 'developer') : entry.bodyRole;
+        this.stopWalkAnimation(entry, newRole);
         this.updateIndicator(entry, p);
         this.restackAtSharedDesks();
       },

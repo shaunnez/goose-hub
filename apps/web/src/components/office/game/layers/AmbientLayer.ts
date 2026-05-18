@@ -276,8 +276,11 @@ export class AmbientLayer {
     const next = () => {
       if (idx >= waypoints.length) {
         this.stopWalkBob(entry);
-        // Stop walk anim, return to idle texture.
+        // Stop walk anim, return to idle texture. Reset flipX so the idle
+        // pose displays in its natural orientation (the idle and walk
+        // sheets do not share a default-facing direction).
         entry.body.stop();
+        entry.body.setFlipX(false);
         entry.body.setTexture(gooseKey);
         applyOfficeTextureDisplaySize(entry.body as unknown as Phaser.GameObjects.Image, gooseKey);
         onDone();
@@ -292,12 +295,12 @@ export class AmbientLayer {
         next();
         return;
       }
-      // Default sprite faces RIGHT — flip when walking LEFT.
-      // Phase 10: inverted from prior (was making the goose face the
-      // wrong way relative to motion).
+      // The walk spritesheet birds face RIGHT by default — verified from the
+      // asset pixel data (orange beak on the right edge of each 16-wide
+      // frame). So flip when moving LEFT, leave unflipped when moving RIGHT.
       const facing = facingFromMovement({ x: entry.body.x, y: entry.body.y }, target);
-      if (facing === 'left') entry.body.setFlipX(false);
-      else if (facing === 'right') entry.body.setFlipX(true);
+      if (facing === 'left') entry.body.setFlipX(true);
+      else if (facing === 'right') entry.body.setFlipX(false);
       const duration = Math.max(220, dist / WALK_PIXELS_PER_MS);
       const mugOffsetX = entry.mug != null ? entry.mug.x - entry.body.x : 0;
       const mugOffsetY = entry.mug != null ? entry.mug.y - entry.body.y : 0;
