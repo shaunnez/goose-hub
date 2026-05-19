@@ -45,6 +45,8 @@ The context contains a `<task>` block with:
 - `<worktreePath>` — absolute path to your scratch worktree (already checked out)
 - `<stack>` — JSON payload with `testCommand`, optional `lintCommand`, and optional `typecheckCommand`
 
+Path contract: all output paths must be repo-root/worktree-root relative POSIX paths. Do not use package-relative paths like `src/...` for files under `apps/web`; use `apps/web/src/...`.
+
 ## What you must do
 
 ### 1 — Read
@@ -75,7 +77,7 @@ The context contains a `<task>` block with:
 
 ### 4 — Green — implementation
 
-- Write the implementation using the `write` tool. Workspace-bound paths only.
+- Write the implementation using the `write` tool. Repo-root/worktree-root relative POSIX paths only.
   Do NOT write files outside your `<wp>.filesOwned` list.
 - Re-run the targeted test command. Iterate until all targeted tests pass.
 - Emit: `[decision] GREEN: Implementation passes all targeted tests`
@@ -88,7 +90,7 @@ Only refactor if required to make the test pass cleanly.
 
 - If `stack.lintCommand` is provided, run it. Fix failures.
 - If `stack.typecheckCommand` is provided, run it. Fix errors.
-- Re-run targeted tests one final time to confirm still green.
+- Re-run targeted tests one final time to confirm still green. In `testsRun.paths`, return canonical repo-relative paths for the files you tested, even if the command accepted a shorter package-relative path.
 - Emit: `[decision] LINT: Lint and typecheck clean`
 
 ### 7 — Return (no commit — orchestrator commits)

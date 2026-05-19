@@ -3,6 +3,9 @@ import { z } from 'zod';
 
 export { DecisionSummarySchema };
 
+const RepoRelativePathDescription =
+  'Repo-root/worktree-root relative POSIX path. Do not use package-relative paths like src/... for files under apps/web; use apps/web/src/....';
+
 /**
  * Output schema for the implement-wp skill (M19.03, ADR 0031).
  *
@@ -18,19 +21,23 @@ export const ImplementWpSchema = z
       .describe('The plan the builder wrote and executed (markdown, multi-line allowed)'),
     filesWritten: z.array(
       z.object({
-        path: z.string().min(1).describe('Workspace-relative path written or modified'),
+        path: z.string().min(1).describe(RepoRelativePathDescription),
         reason: z.string().min(1).describe('Why this file was changed (one short sentence)'),
       }),
     ),
     testsWritten: z.array(
       z.object({
-        path: z.string().min(1).describe('Workspace-relative path to the test file'),
+        path: z.string().min(1).describe(RepoRelativePathDescription),
         cases: z.number().int().min(0).describe('Number of test cases added or modified'),
       }),
     ),
     testsRun: z.object({
       command: z.string().min(1).describe('The test command actually invoked'),
-      paths: z.array(z.string().min(1)).describe('Test file paths passed to the command'),
+      paths: z
+        .array(z.string().min(1))
+        .describe(
+          `${RepoRelativePathDescription} List the canonical files tested, even if the command accepted shorter package-relative paths.`,
+        ),
     }),
     confidence: z.enum(['low', 'medium', 'high']),
     decisionSummaries: z.array(DecisionSummarySchema).min(1),

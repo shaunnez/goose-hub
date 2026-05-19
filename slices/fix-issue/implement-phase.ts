@@ -21,7 +21,14 @@ import {
   offeredHintsFromSymbolKeyFiles,
 } from '@goose-hub/core/symbol-index/hints-used.js';
 import type { SymbolKeyFileHint } from '@goose-hub/core/symbol-index/lookup.js';
+import { canonicalPathStringFromAuditPayload } from '@goose-hub/core/tool-layer/tool-call-audit.js';
+import { deriveObservedChangedFiles } from '@goose-hub/core/workspaces/observed-changes.js';
 import type { orchestratorCommitAll } from '@goose-hub/core/workspaces/orchestrator-git.js';
+import {
+  type RepoRelativePathNormalization,
+  discoverPackageRoots,
+  normalizeRepoRelativePath,
+} from '@goose-hub/core/workspaces/path-normalization.js';
 import { ImplementSchema } from '@goose-hub/skills/implement/schema.js';
 import { buildPrBody, runEvidencePost } from './pr-helpers.js';
 import type { ImplementOutputShape } from './types.js';
@@ -73,6 +80,158 @@ export interface AfterImplementInput {
 }
 
 export { latestInvestigationContext };
+
+type NormalizedPathField = {
+  field: string;
+  from: string;
+  to: string;
+  source: RepoRelativePathNormalization['source'];
+  ambiguous?: string[];
+};
+
+const WRITE_TOOL_NAMES = new Set([
+  'Write',
+  'Edit',
+  'MultiEdit',
+  'NotebookEdit',
+  'write',
+  'edit',
+  'write_file',
+  'edit_file',
+]);
+const FACT_MISMATCH_PATH_LIMIT = 25;
+
+function uniqueSorted(paths: string[]): string[] {
+  return [...new Set(paths)].sort((a, b) => a.localeCompare(b));
+}
+
+function compactPaths(paths: string[]): { count: number; paths: string[]; truncated: boolean } {
+  const unique = uniqueSorted(paths);
+  return {
+    count: unique.length,
+    paths: unique.slice(0, FACT_MISMATCH_PATH_LIMIT),
+    truncated: unique.length > FACT_MISMATCH_PATH_LIMIT,
+  };
+}
+
+function isWriteOrEditToolName(value: unknown): boolean {
+  return typeof value === 'string' && WRITE_TOOL_NAMES.has(value);
+}
+
+function observedWritePathsFromToolAudit(runId: string): string[] {
+  const events = eventStore.replay({ runId, kind: 'agent.tool-call' });
+  const paths: string[] = [];
+  for (const event of events) {
+    const payload = event.payload as Record<string, unknown> | null;
+    if (payload == null || !isWriteOrEditToolName(payload.tool_name)) continue;
+    const path = canonicalPathStringFromAuditPayload(payload);
+    if (path != null) paths.push(path);
+  }
+  return uniqueSorted(paths);
+}
+
+function emitOutputFactMismatch(input: {
+  projectId: string;
+  workItemId: string;
+  runId: string;
+  personaId?: string;
+  implementOutput: ImplementOutputShape;
+  observedChangedPaths: string[];
+  observedWritePaths: string[];
+}): void {
+  const modelDeclaredFiles = uniqueSorted([
+    ...input.implementOutput.filesWritten.map((file) => file.path),
+    ...input.implementOutput.testsWritten.map((test) => test.path),
+  ]);
+  const observedFiles = uniqueSorted([...input.observedChangedPaths, ...input.observedWritePaths]);
+  if (observedFiles.length === 0) return;
+
+  const declared = new Set(modelDeclaredFiles);
+  const observed = new Set(observedFiles);
+  const observedNotDeclared = observedFiles.filter((path) => !declared.has(path));
+  const declaredNotObserved = modelDeclaredFiles.filter((path) => !observed.has(path));
+  if (observedNotDeclared.length === 0 && declaredNotObserved.length === 0) return;
+
+  eventStore.appendEvent({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    kind: 'agent.output-fact-mismatch',
+    payload: {
+      runId: input.runId,
+      skill: 'implement',
+      observedChangedFiles: compactPaths(input.observedChangedPaths),
+      observedWriteFiles: compactPaths(input.observedWritePaths),
+      modelDeclaredFiles: compactPaths(modelDeclaredFiles),
+      mismatches: {
+        observedNotDeclared: compactPaths(observedNotDeclared),
+        declaredNotObserved: compactPaths(declaredNotObserved),
+      },
+    },
+    runId: input.runId,
+    personaId: input.personaId,
+  });
+}
+
+function normalizeImplementOutputPaths(input: {
+  output: ImplementOutputShape;
+  worktreePath: string;
+  investigation?: InvestigationContext;
+  surfaceGuardInvestigation?: InvestigationContext;
+}): { output: ImplementOutputShape; fields: NormalizedPathField[] } {
+  const packageRoots = discoverPackageRoots(input.worktreePath);
+  const referencePaths = [
+    ...input.output.filesWritten.map((f) => f.path),
+    ...input.output.testsWritten.map((t) => t.path),
+    ...input.output.testsRun.paths,
+    ...(input.output.evidenceSpecPath == null ? [] : [input.output.evidenceSpecPath]),
+    ...(input.investigation?.keyFiles.map((f) => f.path) ?? []),
+    ...(input.surfaceGuardInvestigation?.keyFiles.map((f) => f.path) ?? []),
+  ];
+  const fields: NormalizedPathField[] = [];
+  const normalizeField = (field: string, rawPath: string): string => {
+    const result = normalizeRepoRelativePath({
+      rawPath,
+      worktreePath: input.worktreePath,
+      packageRoots,
+      referencePaths,
+    });
+    if (result.path !== rawPath || result.ambiguous != null) {
+      fields.push({
+        field,
+        from: rawPath,
+        to: result.path,
+        source: result.source,
+        ...(result.ambiguous != null && { ambiguous: result.ambiguous }),
+      });
+    }
+    return result.path;
+  };
+
+  return {
+    output: {
+      ...input.output,
+      filesWritten: input.output.filesWritten.map((file, index) => ({
+        ...file,
+        path: normalizeField(`filesWritten[${index}].path`, file.path),
+      })),
+      testsWritten: input.output.testsWritten.map((test, index) => ({
+        ...test,
+        path: normalizeField(`testsWritten[${index}].path`, test.path),
+      })),
+      testsRun: {
+        ...input.output.testsRun,
+        paths: input.output.testsRun.paths.map((path, index) =>
+          normalizeField(`testsRun.paths[${index}]`, path),
+        ),
+      },
+      evidenceSpecPath:
+        input.output.evidenceSpecPath == null
+          ? null
+          : normalizeField('evidenceSpecPath', input.output.evidenceSpecPath),
+    },
+    fields,
+  };
+}
 
 function appendWrongSurfaceGuardEvent(input: {
   projectId: string;
@@ -260,11 +419,45 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
     worktreePath: input.worktreePath,
     appendEvent: (event) => eventStore.appendEvent(event),
   });
-  const touchedPaths = [
-    ...output.filesWritten.map((f) => f.path),
-    ...output.testsWritten.map((t) => t.path),
-    ...output.testsRun.paths,
+  const normalized = normalizeImplementOutputPaths({
+    output,
+    worktreePath: input.worktreePath,
+    investigation: input.investigation,
+    surfaceGuardInvestigation: input.surfaceGuardInvestigation,
+  });
+  if (normalized.fields.length > 0) {
+    eventStore.appendEvent({
+      projectId: input.projectId,
+      workItemId: input.workItem.id,
+      kind: 'agent.path-normalized',
+      payload: {
+        runId: input.runId,
+        skill: 'implement',
+        fields: normalized.fields,
+      },
+      runId: input.runId,
+      personaId: input.personaId,
+    });
+  }
+  const implementOutput = ImplementSchema.parse(normalized.output);
+  const modelTouchedPaths = [
+    ...implementOutput.filesWritten.map((f) => f.path),
+    ...implementOutput.testsWritten.map((t) => t.path),
+    ...implementOutput.testsRun.paths,
   ];
+  const observedChangedFiles = deriveObservedChangedFiles(input.worktreePath);
+  const observedWritePaths = observedWritePathsFromToolAudit(input.runId);
+  emitOutputFactMismatch({
+    projectId: input.projectId,
+    workItemId: input.workItem.id,
+    runId: input.runId,
+    personaId: input.personaId,
+    implementOutput,
+    observedChangedPaths: observedChangedFiles.paths,
+    observedWritePaths,
+  });
+  const touchedPaths =
+    observedChangedFiles.paths.length > 0 ? observedChangedFiles.paths : modelTouchedPaths;
   const surfaceGuardInvestigation = input.surfaceGuardInvestigation ?? input.investigation;
   if (!pathsTouchInvestigationSurface(touchedPaths, surfaceGuardInvestigation)) {
     appendWrongSurfaceGuardEvent({
@@ -282,11 +475,12 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
         .join(', ')})`,
     );
   }
-  return output;
+  return implementOutput;
 }
 
 export async function afterImplement(input: AfterImplementInput): Promise<void> {
   const { implementOutput, workItem, stateSource, projectId, runId, worktreePath } = input;
+  const observedChangedFiles = deriveObservedChangedFiles(worktreePath);
 
   // Orchestrator commits the builder's work before opening the PR (ADR 0031).
   // The implement skill writes files but no longer commits; this call stages
@@ -316,6 +510,10 @@ export async function afterImplement(input: AfterImplementInput): Promise<void> 
       // test command + paths into its context as `devTestsRun` and bucket
       // full-suite failures as inside- vs outside-targeted.
       testsRun: implementOutput.testsRun,
+      observedChangedFiles: {
+        count: observedChangedFiles.count,
+        paths: observedChangedFiles.paths,
+      },
     },
     runId,
   });
@@ -328,7 +526,7 @@ export async function afterImplement(input: AfterImplementInput): Promise<void> 
   const repoRef = stateSource.repoRef;
   const branchName = `factory/${runId}`;
   const title = `M7.XX: ${workItem.title.slice(0, 50)}`;
-  const body = buildPrBody({ workItem, implementOutput });
+  const body = buildPrBody({ workItem, implementOutput, observedChangedFiles });
 
   const prResult = await input.openPRFn({
     worktreePath,

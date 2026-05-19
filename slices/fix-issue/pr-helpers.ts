@@ -7,6 +7,7 @@ import { getEvidencePostEnabled } from '@goose-hub/core/db/repositories/project-
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
+import type { ObservedChangedFilesPacket } from '@goose-hub/core/workspaces/observed-changes.js';
 import {
   EvidencePostPlanSchema,
   EvidencePostSchema,
@@ -176,14 +177,19 @@ export async function runEvidencePost(input: RunEvidencePostInput): Promise<void
 export function buildPrBody(opts: {
   workItem: WorkItem;
   implementOutput: ImplementOutputShape;
+  observedChangedFiles?: ObservedChangedFilesPacket;
 }): string {
   // Body intentionally contains NO implementation reasoning (FACTORY_RULES
   // rule 1 — QA / Reviewer holdouts read this on M8). Lists files written
   // and test files added; the work-item link plus `Closes #N` ties back
   // to the issue.
-  const filesList = opts.implementOutput.filesWritten
-    .map((f) => `- \`${f.path}\` — ${f.reason}`)
-    .join('\n');
+  const observedFiles = opts.observedChangedFiles?.files ?? [];
+  const filesList =
+    observedFiles.length > 0
+      ? observedFiles
+          .map((file) => `- \`${file.path}\` — observed ${file.status} change`)
+          .join('\n')
+      : opts.implementOutput.filesWritten.map((f) => `- \`${f.path}\` — ${f.reason}`).join('\n');
   const testsList = opts.implementOutput.testsWritten
     .map((t) => `- \`${t.path}\` (${t.cases} cases)`)
     .join('\n');

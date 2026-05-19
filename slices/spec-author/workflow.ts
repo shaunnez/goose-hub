@@ -20,6 +20,7 @@ import {
   type ValidationResult,
   validateEngineeringSpec,
 } from '@goose-hub/skills/spec-author/validate.js';
+import { normalizeEngineeringSpecPaths } from './path-normalization.js';
 
 export interface SpecAuthorWorkflowDeps {
   createWorktreeImpl?: typeof createWorktree;
@@ -130,6 +131,20 @@ function normalizeSpecAuthorOutput(output: unknown): EngineeringSpec {
       return next;
     }),
   };
+}
+
+function investigationKeyFilePaths(event: { payload: unknown } | undefined): string[] {
+  const keyFiles = (event?.payload as { investigate?: { keyFiles?: unknown } } | undefined)
+    ?.investigate?.keyFiles;
+  if (!Array.isArray(keyFiles)) return [];
+  return keyFiles.flatMap((file) => {
+    if (typeof file === 'string') return [file];
+    if (file != null && typeof file === 'object') {
+      const path = (file as { path?: unknown }).path;
+      if (typeof path === 'string') return [path];
+    }
+    return [];
+  });
 }
 
 function stringifyScoutDigestForContext(
@@ -272,11 +287,36 @@ export async function runSpecAuthorWorkflow(
         },
       });
 
-      const spec = normalizeSpecAuthorOutput(result.output);
+      const rawSpec = normalizeSpecAuthorOutput(result.output);
+      const normalized = normalizeEngineeringSpecPaths({
+        spec: rawSpec,
+        worktreePath,
+        referencePaths: investigationKeyFilePaths(latestInv),
+      });
+      if (normalized.fields.length > 0) {
+        eventStore.appendEvent({
+          projectId,
+          workItemId: workItem.id,
+          kind: 'agent.path-normalized',
+          payload: {
+            runId,
+            skill: 'spec-author',
+            fields: normalized.fields,
+          },
+          runId,
+        });
+      }
+      if (normalized.ambiguousFields.length > 0) {
+        throw new Error(
+          `ambiguous repo-relative paths in spec-author output: ${normalized.ambiguousFields
+            .map((field) => `${field.field} (${field.from})`)
+            .join(', ')}`,
+        );
+      }
       return {
         runId,
-        spec,
-        validation: validateEngineeringSpec(spec, {
+        spec: normalized.spec,
+        validation: validateEngineeringSpec(normalized.spec, {
           issueType: workItem.type === 'bug' ? 'bug' : 'feature',
         }),
       };

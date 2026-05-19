@@ -10,7 +10,13 @@ import type { AgentEvent, AppendEventInput } from '@goose-hub/core/event-stream/
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { writeWpBuilderSandbox } from '@goose-hub/core/tool-layer/sandbox.js';
 import type { revertWpChanges } from '@goose-hub/core/workspaces/orchestrator-git.js';
+import {
+  type RepoRelativePathNormalization,
+  discoverPackageRoots,
+  normalizeRepoRelativePath,
+} from '@goose-hub/core/workspaces/path-normalization.js';
 import { ImplementWpSchema } from '@goose-hub/skills/implement-wp/schema.js';
+import type { ImplementWpOutput } from '@goose-hub/skills/implement-wp/schema.js';
 import type { WorkPackage } from '@goose-hub/skills/spec-author/schema.js';
 import type { recordWpIteration } from './parallel-helpers.js';
 
@@ -48,6 +54,76 @@ export interface RunOneWpBuilderOptions {
   implementWpPrompt: string;
   implementWpJsonSchema: Record<string, unknown>;
   investigation?: InvestigationContext;
+}
+
+type NormalizedPathField = {
+  field: string;
+  from: string;
+  to: string;
+  source: RepoRelativePathNormalization['source'];
+  ambiguous?: string[];
+};
+
+function normalizeImplementWpOutputPaths(input: {
+  output: ImplementWpOutput;
+  worktreePath: string;
+  wp: WorkPackage;
+}): {
+  output: ImplementWpOutput;
+  fields: NormalizedPathField[];
+  ambiguousFields: NormalizedPathField[];
+} {
+  const packageRoots = discoverPackageRoots(input.worktreePath);
+  const referencePaths = [
+    ...input.wp.filesOwned,
+    ...input.output.filesWritten.map((file) => file.path),
+    ...input.output.testsWritten.map((test) => test.path),
+    ...input.output.testsRun.paths,
+  ];
+  const fields: NormalizedPathField[] = [];
+  const normalizeField = (field: string, rawPath: string): string => {
+    const result = normalizeRepoRelativePath({
+      rawPath,
+      worktreePath: input.worktreePath,
+      packageRoots,
+      referencePaths,
+    });
+    if (result.path !== rawPath || result.ambiguous != null) {
+      fields.push({
+        field,
+        from: rawPath,
+        to: result.path,
+        source: result.source,
+        ...(result.ambiguous != null && { ambiguous: result.ambiguous }),
+      });
+    }
+    return result.path;
+  };
+  const output: ImplementWpOutput = {
+    ...input.output,
+    filesWritten: input.output.filesWritten.map((file, index) => ({
+      ...file,
+      path: normalizeField(`filesWritten[${index}].path`, file.path),
+    })),
+    testsWritten: input.output.testsWritten.map((test, index) => ({
+      ...test,
+      path: normalizeField(`testsWritten[${index}].path`, test.path),
+    })),
+    testsRun: {
+      ...input.output.testsRun,
+      paths: input.output.testsRun.paths.map((path, index) =>
+        normalizeField(`testsRun.paths[${index}]`, path),
+      ),
+    },
+  };
+
+  return {
+    output,
+    fields,
+    ambiguousFields: fields.filter(
+      (field) => field.source === 'unresolved' && field.ambiguous != null,
+    ),
+  };
 }
 
 // ─── Single-WP builder runner ─────────────────────────────────────────────────
@@ -208,12 +284,48 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
     return { status: 'failed', wpId: wp.id, errorReason: reason, runId: wpRunId };
   }
 
+  const normalized = normalizeImplementWpOutputPaths({
+    output: parsed.data,
+    worktreePath: opts.scratchWorktreePath,
+    wp,
+  });
+  if (normalized.fields.length > 0) {
+    opts.appendEvent({
+      projectId,
+      workItemId: workItemId ?? null,
+      kind: 'agent.path-normalized',
+      payload: {
+        runId: wpRunId,
+        skill: 'implement-wp',
+        wpId: wp.id,
+        fields: normalized.fields,
+      },
+      runId: wpRunId,
+    });
+  }
+  if (normalized.ambiguousFields.length > 0) {
+    const reason = `ambiguous repo-relative paths in implement-wp output: ${normalized.ambiguousFields
+      .map((field) => `${field.field} (${field.from})`)
+      .join(', ')}`;
+    opts.appendEvent({
+      projectId,
+      workItemId: workItemId ?? null,
+      kind: 'parallel-implement.wp-failed',
+      payload: { wpId: wp.id, wpRunId, errorReason: reason },
+      runId: wpRunId,
+    });
+    opts.revertWpChangesFn(opts.scratchWorktreePath, wp.filesOwned);
+    opts.recordIterationFn(runId, wp.id, iteration, 'failed', reason);
+    return { status: 'failed', wpId: wp.id, errorReason: reason, runId: wpRunId };
+  }
+  const output = ImplementWpSchema.parse(normalized.output);
+
   // Build succeeded — return files for the serial commit phase.
   const commitMsg = `M:${wp.id} ${wp.changes.slice(0, 60)}\n\nBuilt by ${opts.personaId}`;
   return {
     status: 'built',
     wp,
-    parsedFilesWritten: parsed.data.filesWritten,
+    parsedFilesWritten: output.filesWritten,
     wpRunId,
     commitMsg,
     scratchWorktreePath: opts.scratchWorktreePath,

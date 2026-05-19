@@ -1,5 +1,9 @@
 import { posix as pathPosix } from 'node:path';
 import { eventStore } from '../event-stream/store.js';
+import {
+  discoverPackageRoots,
+  normalizeRepoRelativePath,
+} from '../workspaces/path-normalization.js';
 
 export interface InvestigationContext {
   findings?: string;
@@ -24,6 +28,7 @@ function normalizeKeyFile(raw: unknown): { path: string; reason?: string } | nul
 export function latestInvestigationContext(input: {
   projectId: string;
   workItemId: string;
+  worktreePath?: string;
 }): InvestigationContext | undefined {
   const latest = eventStore.replay({
     projectId: input.projectId,
@@ -47,9 +52,23 @@ export function latestInvestigationContext(input: {
   const investigation = payload?.investigate;
   if (investigation == null) return undefined;
 
-  const keyFiles = Array.isArray(investigation.keyFiles)
+  const rawKeyFiles = Array.isArray(investigation.keyFiles)
     ? investigation.keyFiles.map(normalizeKeyFile).filter((f) => f != null)
     : [];
+  const worktreePath = input.worktreePath;
+  const packageRoots = worktreePath == null ? undefined : discoverPackageRoots(worktreePath);
+  const keyFiles =
+    worktreePath == null
+      ? rawKeyFiles
+      : rawKeyFiles.map((file) => ({
+          ...file,
+          path: normalizeRepoRelativePath({
+            rawPath: file.path,
+            worktreePath,
+            packageRoots,
+            referencePaths: rawKeyFiles.map((f) => f.path),
+          }).path,
+        }));
   const openQuestions = Array.isArray(investigation.openQuestions)
     ? investigation.openQuestions.filter((q): q is string => typeof q === 'string')
     : [];

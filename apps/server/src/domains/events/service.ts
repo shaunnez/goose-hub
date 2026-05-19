@@ -1,5 +1,9 @@
 import { isDecisionKind } from '@goose-hub/core/agent-runtime/decision-types.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import {
+  normalizeToolCallAuditPayload,
+  normalizeToolResultAuditPayload,
+} from '@goose-hub/core/tool-layer/tool-call-audit.js';
 
 export interface SseFilterInput {
   projectId?: string;
@@ -117,7 +121,7 @@ export function recordToolCall(payload: ToolCallHookPayload): RecordToolCallResu
     projectId,
     workItemId,
     kind: 'agent.tool-call',
-    payload: skill != null ? { ...payload, skill } : payload,
+    payload: normalizeToolCallAuditPayload(skill != null ? { ...payload, skill } : payload),
     runId,
   });
   return { ok: true };
@@ -167,7 +171,7 @@ export function recordToolResult(payload: ToolResultHookPayload): RecordToolResu
     projectId,
     workItemId,
     kind: 'agent.tool-result',
-    payload: skill != null ? { ...payload, skill } : payload,
+    payload: normalizeToolResultAuditPayload(skill != null ? { ...payload, skill } : payload),
     runId,
   });
   return { ok: true };

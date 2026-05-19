@@ -117,8 +117,12 @@ export async function runFixIssueWorkflow(
     implementExecution.projectConfig?.targetRepo?.defaultBranch,
   );
   const baseBranch = workflowBase.branch;
-  const investigation = latestInvestigationContext({ projectId, workItemId: workItem.id });
   const worktreePath = createWtFn(targetRepo, runId, workflowBase.ref);
+  const investigation = latestInvestigationContext({
+    projectId,
+    workItemId: workItem.id,
+    worktreePath,
+  });
   const symbolKeyFiles =
     investigation == null
       ? []

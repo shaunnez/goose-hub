@@ -11,6 +11,7 @@ import { deployDecisionCaptureHook } from '../tool-layer/decision-capture-hook.j
 import { buildFactoryMcpConfig } from '../tool-layer/mcp/build-config.js';
 import { deployHooks } from '../tool-layer/pre-tool-use-hook.js';
 import { writeWorkspaceSandbox } from '../tool-layer/sandbox.js';
+import { normalizeToolCallAuditPayload } from '../tool-layer/tool-call-audit.js';
 import { emitBudgetExceededIfNeeded } from './budget-guard.js';
 import {
   CodexBinaryNotFoundError,
@@ -268,14 +269,15 @@ export class CodexCliRuntime implements AgentRuntime {
               projectId,
               workItemId,
               kind: 'agent.tool-call',
-              payload: {
+              payload: normalizeToolCallAuditPayload({
                 tool_name: toolCall.toolName,
                 run_id: runId,
                 tool_input: toolCall.toolInput,
                 skill: spec.skill,
+                workspace_dir: workspaceDir,
                 blocked: true,
                 block_reason: boundaryReason,
-              },
+              }),
               runId,
               personaId,
             });
@@ -300,12 +302,13 @@ export class CodexCliRuntime implements AgentRuntime {
             projectId,
             workItemId,
             kind: 'agent.tool-call',
-            payload: {
+            payload: normalizeToolCallAuditPayload({
               tool_name: toolCall.toolName,
               run_id: runId,
               tool_input: toolCall.toolInput,
               skill: spec.skill,
-            },
+              workspace_dir: workspaceDir,
+            }),
             runId,
             personaId,
           });

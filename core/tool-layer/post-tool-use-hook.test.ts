@@ -172,6 +172,7 @@ describe('deployPostHook', () => {
     expect(script).toContain('/events/tool-result');
     expect(script).toContain("toolName === 'Bash'");
     expect(script).toContain('tool_response');
+    expect(script).toContain('workspace_dir: process.env.FACTORY_WORKSPACE_DIR');
   });
 
   it('hook script caps error at 2048 chars and sets truncated flag', () => {

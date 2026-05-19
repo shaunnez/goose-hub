@@ -97,6 +97,7 @@ async function emitToolCallAudit(toolName, toolInput, extra = {}) {
       tool_name: toolName,
       run_id: runId,
       tool_input: toolInput,
+      workspace_dir: workspaceDir,
       ...extra,
     };
     await fetch(\`http://localhost:\${serverPort}/events/tool-call\`, {

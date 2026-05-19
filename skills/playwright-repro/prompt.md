@@ -31,6 +31,8 @@ Context `<reproPacket>` is the preferred source of truth when present:
 
 Context `<investigation>` may also include the root cause hypothesis, key files, and confidence.
 
+Path contract: all output paths must be repo-root/worktree-root relative POSIX paths. Do not use package-relative paths like `src/...` for files under `apps/web`; use `apps/web/src/...`.
+
 ## Tools
 
 Use `Read`, `Glob`, and `Grep` only for source exploration. Prefer the files, route, selectors, and setup in `<reproPacket>`. Do not do broad repo discovery unless the packet is missing a route or selector required for the spec.

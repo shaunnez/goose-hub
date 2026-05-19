@@ -1,4 +1,7 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import type { AgentResult } from '@goose-hub/core/agent-runtime/interface.js';
+import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -154,6 +157,12 @@ function makeMockSource(overrides: Partial<StateSource> = {}): StateSource {
     watchForUpdates: vi.fn(),
     ...overrides,
   };
+}
+
+function touchSpecWorktree(path: string): void {
+  const absPath = join('/tmp/test-spec-worktree', path);
+  mkdirSync(dirname(absPath), { recursive: true });
+  writeFileSync(absPath, '');
 }
 
 // ─── test setup ───────────────────────────────────────────────────────────────
@@ -594,6 +603,49 @@ describe('runSpecAuthorWorkflow', () => {
         phase: 'wave1',
         artifactKeys: ['scout-report:abc'],
       });
+    });
+
+    it('blocks ambiguous package-relative filesOwned before persistence', async () => {
+      touchSpecWorktree('apps/web/src/index.ts');
+      touchSpecWorktree('apps/server/src/index.ts');
+      mockInvokeSkill.mockResolvedValueOnce({
+        output: makeSpecOutput({
+          workPackages: [
+            {
+              id: 'WP1',
+              filesOwned: ['src/index.ts'],
+              changes: 'Ambiguous package-relative ownership.',
+              dependsOn: [],
+              builderTier: 'sonnet',
+            },
+          ],
+        }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+      const source = makeMockSource();
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), source, 'goose-hub-self', '/repo');
+
+      expect(mockPersistEngineeringSpec).not.toHaveBeenCalled();
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '55',
+        'factory:dev-ready',
+        'factory:needs-human',
+      );
+      const normalized = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([event]) => event.kind === 'agent.path-normalized');
+      expect((normalized?.[0].payload as { fields?: unknown[] }).fields).toEqual([
+        {
+          field: 'workPackages[0].filesOwned[0]',
+          from: 'src/index.ts',
+          to: 'src/index.ts',
+          source: 'unresolved',
+          ambiguous: ['apps/server/src/index.ts', 'apps/web/src/index.ts'],
+        },
+      ]);
     });
   });
 

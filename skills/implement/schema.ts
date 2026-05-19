@@ -4,6 +4,9 @@ import { QualityScoresSchema, computeOverallScore } from '../qa/schema.js';
 
 export { computeOverallScore };
 
+const RepoRelativePathDescription =
+  'Repo-root/worktree-root relative POSIX path. Do not use package-relative paths like src/... for files under apps/web; use apps/web/src/....';
+
 export function anyZeroCategory(scores: z.infer<typeof QualityScoresSchema>): boolean {
   return Object.values(scores).some((v) => v === 0);
 }
@@ -13,12 +16,12 @@ export { DecisionSummarySchema };
 const ConfidenceSchema = z.enum(['low', 'medium', 'high']);
 
 export const FileWrittenSchema = z.object({
-  path: z.string().describe('Workspace-relative path to the file written or modified'),
+  path: z.string().describe(RepoRelativePathDescription),
   reason: z.string().describe('Why this file was changed (one short sentence)'),
 });
 
 export const TestWrittenSchema = z.object({
-  path: z.string().describe('Workspace-relative path to the test file'),
+  path: z.string().describe(RepoRelativePathDescription),
   cases: z.number().int().min(0).describe('Number of test cases added / modified in this file'),
 });
 
@@ -35,7 +38,9 @@ export const TestsRunSchema = z.object({
     .describe('The test command the developer actually invoked (without file path arguments)'),
   paths: z
     .array(z.string().min(1))
-    .describe('Workspace-relative test file paths passed to the command'),
+    .describe(
+      `${RepoRelativePathDescription} List the canonical files tested, even if the command accepted shorter package-relative paths.`,
+    ),
 });
 
 export const ImplementSchema = z
@@ -51,14 +56,14 @@ export const ImplementSchema = z
         'Test files written or modified — empty array is valid for chore PRs without tests',
       ),
     testsRun: TestsRunSchema.describe(
-      'The targeted test command the developer ran, plus the file paths passed to it',
+      'The targeted test command the developer ran, plus the canonical repo-relative files tested',
     ),
     prUrl: z
       .string()
       .url()
       .describe('URL of the pull request opened by the workflow after this skill returns'),
     /**
-     * Workspace-relative path to the Playwright spec for the evidence-post skill (#234).
+     * Repo-root/worktree-root relative path to the Playwright spec for the evidence-post skill (#234).
      * Required when any file in filesWritten is under apps/web/ — the superRefine below
      * enforces this. Null only for backend-only or chore PRs with no web files.
      */
@@ -66,7 +71,7 @@ export const ImplementSchema = z
       .string()
       .nullable()
       .describe(
-        'Workspace-relative spec path; required for any slice touching apps/web/, null otherwise',
+        `${RepoRelativePathDescription} Required for any slice touching apps/web/, null otherwise.`,
       ),
     confidence: ConfidenceSchema,
     decisionSummaries: z.array(DecisionSummarySchema).min(1),
