@@ -1,13 +1,33 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { type FactoryContext, FactoryContextError, loadFactoryContext } from './context.js';
-import { GetProjectContextInput, GetStackCommandsInput, RecordDecisionInput } from './schemas.js';
+import {
+  FileExistsInput,
+  FileInfoInput,
+  GetProjectContextInput,
+  GetStackCommandsInput,
+  ListDirInput,
+  ListFilesInput,
+  ReadFileInput,
+  ReadManyFilesInput,
+  RecordDecisionInput,
+  SearchTextInput,
+} from './schemas.js';
 import {
   ToolDataMissingError,
   getProjectContext,
   getStackCommands,
   recordDecisionTool,
 } from './tools/context.js';
+import {
+  fileExistsTool,
+  fileInfoTool,
+  listDirTool,
+  listFilesTool,
+  readFileTool,
+  readManyFilesTool,
+  searchTextTool,
+} from './tools/read.js';
 
 const SERVER_NAME = 'factory-tools';
 const SERVER_VERSION = '0.1.0';
@@ -83,6 +103,124 @@ export function buildFactoryMcpServer(ctx: FactoryContext): McpServer {
     async (input) => {
       try {
         const result = recordDecisionTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'read_file',
+    {
+      description:
+        'Read a workspace-relative file. Optional startLine/lineCount slice for large files; 256 KB byte cap; truncation flagged in the result.',
+      inputSchema: ReadFileInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await readFileTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'read_many_files',
+    {
+      description:
+        'Read up to 50 workspace-relative files in one call. Per-file errors are reported in the `errors` array rather than aborting the batch.',
+      inputSchema: ReadManyFilesInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await readManyFilesTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'list_dir',
+    {
+      description:
+        'List directory entries (name + kind). Optional depth up to 3; entry count capped at 500.',
+      inputSchema: ListDirInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await listDirTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'list_files',
+    {
+      description:
+        'List files via ripgrep (respects .gitignore). Optional glob + path filter; result count capped at 500.',
+      inputSchema: ListFilesInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await listFilesTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'search_text',
+    {
+      description:
+        'Search file contents via ripgrep. Returns structured `{path, line, text}` matches; capped at 200 matches per call.',
+      inputSchema: SearchTextInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await searchTextTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'file_exists',
+    {
+      description: 'Cheap existence check for a workspace-relative path.',
+      inputSchema: FileExistsInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await fileExistsTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'file_info',
+    {
+      description:
+        'Returns size, kind, mtime, and isSymlink for a workspace-relative path. Reports exists=false for missing paths rather than throwing.',
+      inputSchema: FileInfoInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await fileInfoTool(ctx, input);
         return { content: jsonContent(result), structuredContent: { ...result } };
       } catch (err) {
         return errorResult(err);
