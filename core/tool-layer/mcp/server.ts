@@ -16,6 +16,11 @@ import {
   ReadFileInput,
   ReadManyFilesInput,
   RecordDecisionInput,
+  RunLintInput,
+  RunPackageScriptInput,
+  RunTargetedCommandInput,
+  RunTestsInput,
+  RunTypecheckInput,
   SearchTextInput,
   WriteFileInput,
 } from './schemas.js';
@@ -34,6 +39,13 @@ import {
   readManyFilesTool,
   searchTextTool,
 } from './tools/read.js';
+import {
+  runLintTool,
+  runPackageScriptTool,
+  runTargetedCommandTool,
+  runTestsTool,
+  runTypecheckTool,
+} from './tools/verify.js';
 import {
   applyPatchTool,
   createDirectoryTool,
@@ -336,6 +348,91 @@ export function buildFactoryMcpServer(ctx: FactoryContext): McpServer {
     async (input) => {
       try {
         const result = await deleteFileTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'run_tests',
+    {
+      description:
+        "Run the project's testCommand from the worktree root. Optional `path` narrows scope to a workspace-relative file or directory; 5-minute timeout.",
+      inputSchema: RunTestsInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await runTestsTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'run_lint',
+    {
+      description:
+        "Run the project's lintCommand. Optional `path` narrows scope. 90-second timeout.",
+      inputSchema: RunLintInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await runLintTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'run_typecheck',
+    {
+      description:
+        "Run the project's typecheckCommand (no path narrowing — typecheck is whole-project). 3-minute timeout.",
+      inputSchema: RunTypecheckInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await runTypecheckTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'run_package_script',
+    {
+      description:
+        'Run a package.json script via the project package manager. Script name must exist in package.json#scripts.',
+      inputSchema: RunPackageScriptInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await runPackageScriptTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'run_targeted_command',
+    {
+      description:
+        'Convenience wrapper for run_tests / run_lint / run_typecheck narrowed to a single path.',
+      inputSchema: RunTargetedCommandInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await runTargetedCommandTool(ctx, input);
         return { content: jsonContent(result), structuredContent: { ...result } };
       } catch (err) {
         return errorResult(err);
