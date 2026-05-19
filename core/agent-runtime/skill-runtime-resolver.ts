@@ -239,8 +239,12 @@ function resolveEffortDecision(input: {
   return null;
 }
 
-function legacySourceFromTrace(trace: RuntimeResolutionTrace): SkillRuntimeSource {
+function legacySourceFromTrace(
+  trace: RuntimeResolutionTrace,
+  dbOverride?: SkillRuntimeDbOverride | null,
+): SkillRuntimeSource {
   if (trace.tier.source === 'caller' || trace.provider.source === 'caller') return 'caller';
+  if (isModelProvider(dbOverride?.modelProvider)) return 'db';
   if (trace.tier.source === 'db' || trace.provider.source === 'db') return 'db';
   if (trace.effort?.source === 'db') return 'db';
   return trace.effort?.source ?? trace.tier.source;
@@ -362,7 +366,7 @@ export function resolveSkillRuntime(input: {
     provider: providerResult,
     ...(effortResult != null ? { effort: effortResult } : {}),
   };
-  const source = legacySourceFromTrace(runtimeTrace);
+  const source = legacySourceFromTrace(runtimeTrace, dbOverride);
 
   return {
     ...resolvedBudget,

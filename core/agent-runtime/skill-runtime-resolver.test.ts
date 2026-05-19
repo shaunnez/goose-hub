@@ -125,6 +125,23 @@ describe('resolveSkillRuntime', () => {
     expect(resolved.runtimeTrace.provider.reason).toContain('codex-cli forces provider codex');
   });
 
+  it('preserves DB source when forced runtime coerces a DB provider-only override', () => {
+    const resolved = resolveSkillRuntime({
+      skill: 'repo-match',
+      dbOverride: { modelProvider: 'claude' },
+      configRuntime: 'codex-cli',
+    });
+
+    expect(resolved.source).toBe('db');
+    expect(resolved.tier).toBe('haiku');
+    expect(resolved.provider).toBe('codex');
+    expect(resolved.runtimeTrace.tier).toMatchObject({
+      value: 'haiku',
+      source: 'skill-default',
+    });
+    expect(resolved.runtimeTrace.provider).toMatchObject({ value: 'codex', source: 'config' });
+  });
+
   it('keeps a caller concrete model override above forced runtime provider', () => {
     const resolved = resolveSkillRuntime({
       skill: 'repo-match',
@@ -179,6 +196,25 @@ describe('resolveSkillRuntime', () => {
     expect(resolved.provider).toBe('claude');
     expect(resolved.modelOverride).toBe('claude-sonnet-4-6');
     expect(resolved.runtimeTrace.tier).toMatchObject({ value: 'sonnet', source: 'db' });
+    expect(resolved.runtimeTrace.provider).toMatchObject({ value: 'claude', source: 'fallback' });
+    expect(resolved.runtimeTrace.provider.reason).toContain('provider override ignored');
+  });
+
+  it('preserves DB source when injected runtimes ignore a DB provider-only override', () => {
+    const resolved = resolveSkillRuntime({
+      skill: 'repo-match',
+      dbOverride: { modelProvider: 'codex' },
+      configRuntime: 'codex-cli',
+      ignoreProviderOverride: true,
+    });
+
+    expect(resolved.source).toBe('db');
+    expect(resolved.tier).toBe('haiku');
+    expect(resolved.provider).toBe('claude');
+    expect(resolved.runtimeTrace.tier).toMatchObject({
+      value: 'haiku',
+      source: 'skill-default',
+    });
     expect(resolved.runtimeTrace.provider).toMatchObject({ value: 'claude', source: 'fallback' });
     expect(resolved.runtimeTrace.provider.reason).toContain('provider override ignored');
   });
