@@ -23,6 +23,7 @@ import type { DevReviewOutput } from '@goose-hub/skills/dev-review/schema.js';
 import type { ImplementWpOutput } from '@goose-hub/skills/implement-wp/schema.js';
 import type { EngineeringSpec, WorkPackage } from '@goose-hub/skills/spec-author/schema.js';
 import { runParallelImplementWorkflow } from './workflow.js';
+import { runOneWpBuilder } from './wp-builder.js';
 
 vi.mock('@goose-hub/core/agent-runtime/select-persona.js', () => ({
   selectPersona: vi.fn().mockReturnValue({
@@ -297,6 +298,121 @@ describe('parallel-implement repo-relative path normalization', () => {
     } finally {
       replaySpy.mockRestore();
     }
+  });
+});
+
+describe('implement-wp ownership gate', () => {
+  it('blocks ambiguous filesOwned before the WP builder starts', async () => {
+    const scratchWorktree = makeTempRepo(['apps/web/src/index.ts', 'packages/admin/src/index.ts']);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const iterations: Array<{ wpId: string; status: string; reason?: string }> = [];
+    const runtime: AgentRuntime = { run: vi.fn() };
+
+    const result = await runOneWpBuilder({
+      wp: makeWp('WP1', ['src/index.ts']),
+      iteration: 1,
+      runId: 'run-wp-ownership',
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      workItem: makeWorkItem(),
+      scratchWorktreePath: scratchWorktree,
+      stack: { testCommand: 'pnpm test' },
+      runtime,
+      budgets: { maxTurns: 3, maxBudgetUsd: 1, timeoutMs: 10_000 },
+      modelOverride: 'gpt-5.4-mini',
+      personaId: 'goose-hub-self/developer/0',
+      wpTimeoutMs: 10_000,
+      appendEvent,
+      revertWpChangesFn: vi.fn(),
+      recordIterationFn: (_runId, wpId, _iteration, status, reason) => {
+        iterations.push({ wpId, status, reason });
+      },
+      implementWpPrompt: '# prompt',
+      implementWpJsonSchema: {},
+    });
+
+    expect(result).toMatchObject({ status: 'failed', wpId: 'WP1' });
+    expect(runtime.run).not.toHaveBeenCalled();
+    expect(iterations).toContainEqual({
+      wpId: 'WP1',
+      status: 'failed',
+      reason: expect.stringContaining('ambiguous repo-relative paths'),
+    });
+    const blocked = events.find((event) => event.kind === 'agent.contract-gate-blocked');
+    expect(blocked?.payload).toMatchObject({
+      skill: 'implement-wp',
+      wpId: 'WP1',
+      gate: 'implement-wp-ownership',
+      reason: 'ambiguous-files-owned',
+      fields: [
+        {
+          field: 'filesOwned[0]',
+          from: 'src/index.ts',
+          to: 'src/index.ts',
+          source: 'unresolved',
+          ambiguous: ['apps/web/src/index.ts', 'packages/admin/src/index.ts'],
+        },
+      ],
+    });
+  });
+
+  it('passes canonical filesOwned to the builder context, sandbox env, and revert path', async () => {
+    const scratchWorktree = makeTempRepo(['apps/web/src/foo.ts']);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const reverted: string[][] = [];
+    const specs: AgentSpec[] = [];
+
+    const result = await runOneWpBuilder({
+      wp: makeWp('WP1', ['src/foo.ts']),
+      iteration: 1,
+      runId: 'run-wp-canonical',
+      projectId: 'goose-hub-self',
+      workItemId: 'wi-560',
+      workItem: makeWorkItem(),
+      scratchWorktreePath: scratchWorktree,
+      stack: { testCommand: 'pnpm test' },
+      runtime: {
+        run: async (spec) => {
+          specs.push(spec);
+          throw new Error('builder failed');
+        },
+      },
+      budgets: { maxTurns: 3, maxBudgetUsd: 1, timeoutMs: 10_000 },
+      modelOverride: 'gpt-5.4-mini',
+      personaId: 'goose-hub-self/developer/0',
+      wpTimeoutMs: 10_000,
+      appendEvent,
+      revertWpChangesFn: (_worktreePath, filesOwned) => {
+        reverted.push(filesOwned);
+      },
+      recordIterationFn: () => undefined,
+      implementWpPrompt: '# prompt',
+      implementWpJsonSchema: {},
+    });
+
+    expect(result).toMatchObject({ status: 'failed', wpId: 'WP1' });
+    expect(specs[0]?.context).toMatchObject({
+      wp: { id: 'WP1', filesOwned: ['apps/web/src/foo.ts'] },
+    });
+    expect(specs[0]?.env).toMatchObject({
+      FACTORY_WP_FILESOWNED: 'apps/web/src/foo.ts',
+      FACTORY_WP_ID: 'WP1',
+    });
+    expect(reverted).toEqual([['apps/web/src/foo.ts']]);
+    const repaired = events.find((event) => event.kind === 'agent.output-repaired');
+    expect(repaired?.payload).toMatchObject({
+      skill: 'implement-wp',
+      wpId: 'WP1',
+      gate: 'implement-wp-ownership',
+      fields: [
+        {
+          field: 'filesOwned[0]',
+          from: 'src/foo.ts',
+          to: 'apps/web/src/foo.ts',
+          source: 'package-root',
+        },
+      ],
+    });
   });
 });
 

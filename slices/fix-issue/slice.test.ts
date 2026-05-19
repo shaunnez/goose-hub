@@ -881,24 +881,26 @@ describe('runFixIssueWorkflow (#183)', () => {
     });
 
     expect(openPRImpl).not.toHaveBeenCalled();
-    const normalized = vi
+    const repaired = vi
       .mocked(eventStore.appendEvent)
-      .mock.calls.find(([event]) => event.kind === 'agent.path-normalized');
-    expect(normalized?.[0].payload).toMatchObject({ skill: 'implement' });
-    const normalizedFields = (
-      normalized?.[0].payload as { fields?: Array<Record<string, unknown>> }
-    ).fields;
-    expect(normalizedFields).toContainEqual({
+      .mock.calls.find(([event]) => event.kind === 'agent.output-repaired');
+    expect(repaired?.[0].payload).toMatchObject({
+      skill: 'implement',
+      gate: 'implement-output-repair',
+    });
+    const repairedFields = (repaired?.[0].payload as { fields?: Array<Record<string, unknown>> })
+      .fields;
+    expect(repairedFields).toContainEqual({
       field: 'filesWritten[0].path',
-      from: 'src/components/chrome/slice.test.ts',
-      to: 'apps/web/src/components/chrome/slice.test.ts',
+      rawValue: 'src/components/chrome/slice.test.ts',
+      normalizedValue: 'apps/web/src/components/chrome/slice.test.ts',
       source: 'package-root',
     });
     const failed = vi
       .mocked(eventStore.appendEvent)
       .mock.calls.find(([event]) => event.kind === 'agent.run-failed');
     expect((failed?.[0].payload as { error?: string }).error).toContain(
-      'evidenceSpecPath is required when filesWritten includes apps/web/',
+      'evidenceSpecPath is required for apps/web changes',
     );
   });
 
@@ -976,6 +978,260 @@ describe('runFixIssueWorkflow (#183)', () => {
     expect(guard).toBeUndefined();
   });
 
+  it('continues when repaired model paths match observed git changes', async () => {
+    const item = makeWorkItem({ priority: 'medium', type: 'bug' });
+    const source = makeStateSource();
+    const worktreePath = makeGitWorktree();
+    vi.mocked(eventStore.replay).mockReturnValue([
+      makeInvestigationEvent(item, {
+        keyFiles: [{ path: 'apps/web/src/index.ts', reason: 'observed frontend surface' }],
+      }),
+    ]);
+    const openPRImpl = vi.fn().mockResolvedValue({
+      prNumber: 100,
+      prUrl: 'https://github.com/owner/repo/pull/100',
+      branch: 'factory/abc',
+      base: 'main',
+    });
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockImplementationOnce(async (spec) => {
+        const wt = (spec.context as { worktreePath: string }).worktreePath;
+        const observedPath = join(wt, 'apps/web/src/index.ts');
+        const evidencePath = join(wt, 'apps/web/e2e/issue-42.spec.ts');
+        mkdirSync(dirname(observedPath), { recursive: true });
+        mkdirSync(dirname(evidencePath), { recursive: true });
+        writeFileSync(observedPath, 'export const observed = true;\n');
+        writeFileSync(evidencePath, 'test("issue 42", async () => {});\n');
+        return {
+          output: makeImplementOutput({
+            filesWritten: [{ path: 'src/index.ts', reason: 'model reported package-relative' }],
+            testsWritten: [],
+            testsRun: { command: 'pnpm test ', paths: ['src/index.ts'] },
+            evidenceSpecPath: 'e2e/issue-42.spec.ts',
+          }),
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult;
+      }),
+    };
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      evidenceRuntime: {
+        run: vi.fn().mockResolvedValue({
+          output: {
+            screenshots: [],
+            gifPath: null,
+            commentUrl: 'https://github.com/owner/repo/issues/42#issuecomment-1',
+            commitSha: 'abc1234567890abcdef1234567890abcdef1234',
+            decisionSummaries: [{ kind: 'GREEN', summary: 'Evidence captured' }],
+          },
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult),
+      },
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue(worktreePath),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    expect(openPRImpl).toHaveBeenCalled();
+    const repaired = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'agent.output-repaired');
+    expect(repaired?.[0].payload).toMatchObject({
+      skill: 'implement',
+      gate: 'implement-output-repair',
+      observedChangedFiles: {
+        count: 2,
+        paths: ['apps/web/e2e/issue-42.spec.ts', 'apps/web/src/index.ts'],
+      },
+    });
+    const blocked = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'agent.contract-gate-blocked');
+    expect(blocked).toBeUndefined();
+  });
+
+  it('blocks ambiguous implement output path repairs before PR and evidence work', async () => {
+    const item = makeWorkItem({ priority: 'medium', type: 'chore' });
+    const source = makeStateSource();
+    const worktreePath = makeTempWorktree(['apps/web/src/index.ts', 'packages/admin/src/index.ts']);
+    const openPRImpl = vi.fn();
+    const evidenceRuntime: AgentRuntime = { run: vi.fn() };
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockResolvedValueOnce({
+        output: makeImplementOutput({
+          filesWritten: [{ path: 'src/index.ts', reason: 'ambiguous package-relative path' }],
+          testsWritten: [],
+          testsRun: { command: 'pnpm test ', paths: [] },
+          evidenceSpecPath: null,
+        }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult),
+    };
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      evidenceRuntime,
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue(worktreePath),
+      cleanupWorktreeImpl: vi.fn(),
+    });
+
+    expect(openPRImpl).not.toHaveBeenCalled();
+    expect(evidenceRuntime.run).not.toHaveBeenCalled();
+    const blocked = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'agent.contract-gate-blocked');
+    expect(blocked?.[0].payload).toMatchObject({
+      skill: 'implement',
+      gate: 'implement-output-repair',
+      reason: 'ambiguous-path-repair',
+      fields: [
+        {
+          field: 'filesWritten[0].path',
+          rawValue: 'src/index.ts',
+          normalizedValue: 'src/index.ts',
+          source: 'unresolved',
+          candidates: {
+            count: 2,
+            paths: ['apps/web/src/index.ts', 'packages/admin/src/index.ts'],
+            truncated: false,
+          },
+        },
+      ],
+    });
+    expect(JSON.stringify(blocked?.[0].payload)).not.toContain(worktreePath);
+    const failed = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'agent.run-failed');
+    expect((failed?.[0].payload as { error?: string }).error).toContain(
+      'contract gate blocked: ambiguous implement output path repair',
+    );
+  });
+
+  it('requires evidence when observed git changes touch apps/web even if model output omits them', async () => {
+    const item = makeWorkItem({ priority: 'medium', type: 'bug' });
+    const source = makeStateSource();
+    const worktreePath = makeGitWorktree();
+    const openPRImpl = vi.fn();
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockImplementationOnce(async (spec) => {
+        const wt = (spec.context as { worktreePath: string }).worktreePath;
+        const observedPath = join(wt, 'apps/web/src/observed.ts');
+        mkdirSync(dirname(observedPath), { recursive: true });
+        writeFileSync(observedPath, 'export const observed = true;\n');
+        return {
+          output: makeImplementOutput({
+            filesWritten: [{ path: 'docs/model-only.md', reason: 'stale model output' }],
+            testsWritten: [],
+            testsRun: { command: 'pnpm test ', paths: [] },
+            evidenceSpecPath: null,
+          }),
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult;
+      }),
+    };
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue(worktreePath),
+      cleanupWorktreeImpl: vi.fn(),
+    });
+
+    expect(openPRImpl).not.toHaveBeenCalled();
+    const blocked = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'agent.contract-gate-blocked');
+    expect(blocked?.[0].payload).toMatchObject({
+      skill: 'implement',
+      gate: 'evidence-requirement',
+      reason: 'missing-evidence-spec',
+      observedChangedFiles: {
+        count: 1,
+        paths: ['apps/web/src/observed.ts'],
+      },
+    });
+    const failed = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'agent.run-failed');
+    expect((failed?.[0].payload as { error?: string }).error).toContain(
+      'evidenceSpecPath is required for apps/web changes',
+    );
+  });
+
+  it('blocks a declared evidence spec path that does not exist before evidence-post starts', async () => {
+    const item = makeWorkItem({ priority: 'medium', type: 'bug' });
+    const source = makeStateSource();
+    const worktreePath = makeTempWorktree(['apps/web/src/index.ts']);
+    const openPRImpl = vi.fn();
+    const evidenceRuntime: AgentRuntime = { run: vi.fn() };
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockResolvedValueOnce({
+        output: makeImplementOutput({
+          filesWritten: [{ path: 'apps/web/src/index.ts', reason: 'frontend change' }],
+          testsWritten: [],
+          testsRun: { command: 'pnpm test ', paths: [] },
+          evidenceSpecPath: 'apps/web/e2e/missing.spec.ts',
+        }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult),
+    };
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      evidenceRuntime,
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue(worktreePath),
+      cleanupWorktreeImpl: vi.fn(),
+    });
+
+    expect(openPRImpl).not.toHaveBeenCalled();
+    expect(evidenceRuntime.run).not.toHaveBeenCalled();
+    const blocked = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'agent.contract-gate-blocked');
+    expect(blocked?.[0].payload).toMatchObject({
+      skill: 'implement',
+      gate: 'evidence-requirement',
+      reason: 'evidence-spec-not-found',
+      fields: [
+        {
+          field: 'evidenceSpecPath',
+          rawValue: 'apps/web/e2e/missing.spec.ts',
+          normalizedValue: 'apps/web/e2e/missing.spec.ts',
+          source: 'as-is',
+        },
+      ],
+    });
+    const failed = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'agent.run-failed');
+    expect((failed?.[0].payload as { error?: string }).error).toContain(
+      'evidenceSpecPath does not exist',
+    );
+  });
+
   it('wrong-surface guard blocks PRs when implement output misses investigated files', async () => {
     const item = makeWorkItem({ priority: 'medium', type: 'bug' });
     const source = makeStateSource();
@@ -1017,7 +1273,7 @@ describe('runFixIssueWorkflow (#183)', () => {
       .mock.calls.find(([e]) => e.kind === 'agent.wrong-surface-guard');
     expect(guard).toBeDefined();
     expect(guard?.[0].payload).toMatchObject({
-      reason: 'implement-output-missed-investigation-surface',
+      reason: 'reported-output-missed-investigation-surface',
       expectedKeyFiles: [
         'apps/server/src/domains/workflows/triage-batch.ts',
         'core/agent-runtime/fallback.ts',
@@ -1033,6 +1289,124 @@ describe('runFixIssueWorkflow (#183)', () => {
       'factory:in-progress',
       'factory:needs-human',
     );
+  });
+
+  it('wrong-surface guard blocks when the run reads investigated files but changes unrelated files', async () => {
+    const item = makeWorkItem({ priority: 'medium', type: 'bug' });
+    const source = makeStateSource();
+    const worktreePath = makeGitWorktree();
+    vi.mocked(eventStore.replay).mockImplementation((filter = {}) => {
+      if (filter.kind === 'agent.investigation-complete') {
+        return [
+          makeInvestigationEvent(item, {
+            keyFiles: [{ path: 'core/investigated.ts', reason: 'investigated surface' }],
+          }),
+        ];
+      }
+      if (filter.runId != null && filter.kind === 'agent.tool-call') {
+        return [
+          {
+            id: 101,
+            projectId: 'proj',
+            workItemId: item.id,
+            kind: 'agent.tool-call',
+            payload: {
+              tool_name: 'Read',
+              canonical_path: { path: 'core/investigated.ts', root: 'worktree' },
+            },
+            runId: String(filter.runId),
+            createdAt: new Date().toISOString(),
+          },
+        ] as never;
+      }
+      return [];
+    });
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockImplementationOnce(async (spec) => {
+        const wt = (spec.context as { worktreePath: string }).worktreePath;
+        const unrelatedPath = join(wt, 'docs/unrelated.md');
+        mkdirSync(dirname(unrelatedPath), { recursive: true });
+        writeFileSync(unrelatedPath, 'unrelated\n');
+        return {
+          output: makeImplementOutput({
+            filesWritten: [{ path: 'core/investigated.ts', reason: 'model claimed key file' }],
+            testsWritten: [],
+            testsRun: { command: 'pnpm test ', paths: [] },
+          }),
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult;
+      }),
+    };
+    const openPRImpl = vi.fn();
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue(worktreePath),
+      cleanupWorktreeImpl: vi.fn(),
+    });
+
+    expect(openPRImpl).not.toHaveBeenCalled();
+    const guard = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'agent.wrong-surface-guard');
+    expect(guard?.[0].payload).toMatchObject({
+      reason: 'observed-changes-missed-investigation-surface',
+      expectedKeyFiles: ['core/investigated.ts'],
+      touchedPaths: ['docs/unrelated.md'],
+    });
+  });
+
+  it('wrong-surface guard reports no observed changed files for unchanged git worktrees', async () => {
+    const item = makeWorkItem({ priority: 'medium', type: 'bug' });
+    const source = makeStateSource();
+    const worktreePath = makeGitWorktree();
+    vi.mocked(eventStore.replay).mockImplementation((filter = {}) => {
+      if (filter.kind === 'agent.investigation-complete') {
+        return [
+          makeInvestigationEvent(item, {
+            keyFiles: [{ path: 'core/investigated.ts', reason: 'investigated surface' }],
+          }),
+        ];
+      }
+      return [];
+    });
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockResolvedValueOnce({
+        output: makeImplementOutput({
+          filesWritten: [{ path: 'core/investigated.ts', reason: 'reported but not changed' }],
+          testsWritten: [],
+          testsRun: { command: 'pnpm test ', paths: [] },
+        }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult),
+    };
+    const openPRImpl = vi.fn();
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue(worktreePath),
+      cleanupWorktreeImpl: vi.fn(),
+    });
+
+    expect(openPRImpl).not.toHaveBeenCalled();
+    const guard = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'agent.wrong-surface-guard');
+    expect(guard?.[0].payload).toMatchObject({
+      reason: 'no-observed-changed-files',
+      expectedKeyFiles: ['core/investigated.ts'],
+      touchedPaths: [],
+    });
   });
 
   it('records observed changed files and prefers them in the PR body', async () => {
@@ -1564,6 +1938,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
   it('with evidenceSpecPath set: runs evidence-post skill and emits evidence.posted on success', async () => {
     const item = makeWorkItem({ priority: 'medium' });
     const source = makeStateSource();
+    const worktreePath = makeTempWorktree(['evidence/spec.json']);
 
     const evidenceOutput = {
       screenshots: [{ path: 'evidence/issue-42/step-1.png', caption: 'Initial state', step: 1 }],
@@ -1600,7 +1975,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
       runtime,
       openPRImpl,
       adviseOnPlanImpl: vi.fn(),
-      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      createWorktreeImpl: vi.fn().mockReturnValue(worktreePath),
       cleanupWorktreeImpl: vi.fn(),
       resolveWorktreeHeadShaImpl: vi
         .fn()
@@ -1619,6 +1994,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
   it('passes worktreePath as workspaceDir on the evidence-post run spec (so git commands work)', async () => {
     const item = makeWorkItem({ priority: 'medium' });
     const source = makeStateSource();
+    const worktreePath = makeTempWorktree(['evidence/spec.json']);
 
     const evidenceOutput = {
       screenshots: [],
@@ -1655,7 +2031,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
       runtime,
       openPRImpl,
       adviseOnPlanImpl: vi.fn(),
-      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      createWorktreeImpl: vi.fn().mockReturnValue(worktreePath),
       cleanupWorktreeImpl: vi.fn(),
       resolveWorktreeHeadShaImpl: vi
         .fn()
@@ -1665,12 +2041,13 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
     const evidenceCall = vi.mocked(runtime.run).mock.calls[1][0] as unknown as {
       workspaceDir?: string;
     };
-    expect(evidenceCall.workspaceDir).toBe('/work/wt');
+    expect(evidenceCall.workspaceDir).toBe(worktreePath);
   });
 
   it('looks up the BEFORE comment URL from agent.investigation-complete and passes into evidence-post context', async () => {
     const item = makeWorkItem({ priority: 'medium', type: 'bug' });
     const source = makeStateSource();
+    const worktreePath = makeTempWorktree(['evidence/spec.json']);
 
     const evidenceOutput = {
       screenshots: [],
@@ -1720,7 +2097,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
       runtime,
       openPRImpl,
       adviseOnPlanImpl: vi.fn(),
-      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      createWorktreeImpl: vi.fn().mockReturnValue(worktreePath),
       cleanupWorktreeImpl: vi.fn(),
       resolveWorktreeHeadShaImpl: vi
         .fn()
@@ -1778,6 +2155,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
   it('evidence-post runtime failure: emits evidence.post-failed and still transitions to needs-qa (best-effort)', async () => {
     const item = makeWorkItem({ priority: 'medium' });
     const source = makeStateSource();
+    const worktreePath = makeTempWorktree(['evidence/spec.json']);
 
     const runtime: AgentRuntime = {
       run: vi
@@ -1802,7 +2180,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
       runtime,
       openPRImpl,
       adviseOnPlanImpl: vi.fn(),
-      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      createWorktreeImpl: vi.fn().mockReturnValue(worktreePath),
       cleanupWorktreeImpl: vi.fn(),
       resolveWorktreeHeadShaImpl: vi
         .fn()
@@ -1826,6 +2204,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
   it('evidence-post invalid output: emits evidence.post-failed and still transitions to needs-qa', async () => {
     const item = makeWorkItem({ priority: 'medium' });
     const source = makeStateSource();
+    const worktreePath = makeTempWorktree(['evidence/spec.json']);
 
     const runtime: AgentRuntime = {
       run: vi
@@ -1855,7 +2234,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
       runtime,
       openPRImpl,
       adviseOnPlanImpl: vi.fn(),
-      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      createWorktreeImpl: vi.fn().mockReturnValue(worktreePath),
       cleanupWorktreeImpl: vi.fn(),
       resolveWorktreeHeadShaImpl: vi
         .fn()
@@ -2066,6 +2445,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
     // Covers line 448: `err instanceof Error ? err : new Error(String(err))` in runEvidencePost
     const item = makeWorkItem({ priority: 'medium' });
     const source = makeStateSource();
+    const worktreePath = makeTempWorktree(['evidence/spec.json']);
 
     const runtime: AgentRuntime = {
       run: vi
@@ -2092,7 +2472,7 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
       runtime,
       openPRImpl,
       adviseOnPlanImpl: vi.fn(),
-      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
+      createWorktreeImpl: vi.fn().mockReturnValue(worktreePath),
       cleanupWorktreeImpl: vi.fn(),
       resolveWorktreeHeadShaImpl: vi
         .fn()

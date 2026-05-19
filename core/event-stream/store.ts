@@ -29,7 +29,9 @@ export type EventKind =
   | 'agent.investigation-context-injected'
   | 'agent.wrong-surface-guard'
   | 'agent.path-normalized'
+  | 'agent.output-repaired'
   | 'agent.output-fact-mismatch'
+  | 'agent.contract-gate-blocked'
   // Three-tier verification framework (M19.05, issue #562)
   | 'qa.structural-passed'
   | 'qa.structural-failed'

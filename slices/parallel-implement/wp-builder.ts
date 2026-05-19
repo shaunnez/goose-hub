@@ -64,6 +64,39 @@ type NormalizedPathField = {
   ambiguous?: string[];
 };
 
+function normalizeWpFilesOwned(input: {
+  wp: WorkPackage;
+  worktreePath: string;
+}): { wp: WorkPackage; fields: NormalizedPathField[]; ambiguousFields: NormalizedPathField[] } {
+  const packageRoots = discoverPackageRoots(input.worktreePath);
+  const fields: NormalizedPathField[] = [];
+  const filesOwned = input.wp.filesOwned.map((rawPath, index) => {
+    const result = normalizeRepoRelativePath({
+      rawPath,
+      worktreePath: input.worktreePath,
+      packageRoots,
+      referencePaths: input.wp.filesOwned,
+    });
+    if (result.path !== rawPath || result.ambiguous != null) {
+      fields.push({
+        field: `filesOwned[${index}]`,
+        from: rawPath,
+        to: result.path,
+        source: result.source,
+        ...(result.ambiguous != null && { ambiguous: result.ambiguous }),
+      });
+    }
+    return result.path;
+  });
+  return {
+    wp: { ...input.wp, filesOwned },
+    fields,
+    ambiguousFields: fields.filter(
+      (field) => field.source === 'unresolved' && field.ambiguous != null,
+    ),
+  };
+}
+
 function normalizeImplementWpOutputPaths(input: {
   output: ImplementWpOutput;
   worktreePath: string;
@@ -129,8 +162,51 @@ function normalizeImplementWpOutputPaths(input: {
 // ─── Single-WP builder runner ─────────────────────────────────────────────────
 
 export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpBuildPhaseResult> {
-  const { wp, iteration, runId, projectId, workItemId } = opts;
-  const wpRunId = `${runId}:wp:${wp.id}:iter:${iteration}`;
+  const { iteration, runId, projectId, workItemId } = opts;
+  const wpRunId = `${runId}:wp:${opts.wp.id}:iter:${iteration}`;
+
+  const normalizedWp = normalizeWpFilesOwned({
+    wp: opts.wp,
+    worktreePath: opts.scratchWorktreePath,
+  });
+  if (normalizedWp.ambiguousFields.length > 0) {
+    const reason = `ambiguous repo-relative paths in implement-wp filesOwned: ${normalizedWp.ambiguousFields
+      .map((field) => `${field.field} (${field.from})`)
+      .join(', ')}`;
+    opts.appendEvent({
+      projectId,
+      workItemId: workItemId ?? null,
+      kind: 'agent.contract-gate-blocked',
+      payload: {
+        runId: wpRunId,
+        skill: 'implement-wp',
+        wpId: opts.wp.id,
+        gate: 'implement-wp-ownership',
+        reason: 'ambiguous-files-owned',
+        fields: normalizedWp.ambiguousFields,
+      },
+      runId: wpRunId,
+    });
+    opts.recordIterationFn(runId, opts.wp.id, iteration, 'failed', reason);
+    return { status: 'failed', wpId: opts.wp.id, errorReason: reason, runId: wpRunId };
+  }
+
+  const wp = normalizedWp.wp;
+  if (normalizedWp.fields.length > 0) {
+    opts.appendEvent({
+      projectId,
+      workItemId: workItemId ?? null,
+      kind: 'agent.output-repaired',
+      payload: {
+        runId: wpRunId,
+        skill: 'implement-wp',
+        wpId: wp.id,
+        gate: 'implement-wp-ownership',
+        fields: normalizedWp.fields,
+      },
+      runId: wpRunId,
+    });
+  }
 
   opts.recordIterationFn(runId, wp.id, iteration, 'in-progress');
 

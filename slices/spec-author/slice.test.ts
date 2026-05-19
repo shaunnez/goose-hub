@@ -318,6 +318,92 @@ describe('runSpecAuthorWorkflow', () => {
       });
     });
 
+    it('repairs package-relative spec paths before validation and persistence', async () => {
+      touchSpecWorktree('apps/web/src/api.ts');
+      touchSpecWorktree('apps/web/migrations/001.sql');
+      touchSpecWorktree('apps/web/scripts/check.ts');
+      mockInvokeSkill.mockResolvedValueOnce({
+        output: makeSpecOutput({
+          schemaChanges: { ddl: [], migrations: ['migrations/001.sql'] },
+          interfaceContracts: [
+            {
+              name: 'ApiContract',
+              signature: 'export function loadApi(): void;',
+              file: 'src/api.ts',
+              lineRange: null,
+            },
+          ],
+          workPackages: [
+            {
+              id: 'WP1',
+              filesOwned: ['src/api.ts'],
+              changes: 'Update the API contract and implementation.',
+              dependsOn: [],
+              builderTier: 'sonnet',
+            },
+          ],
+          verificationTooling: [
+            {
+              name: 'web-check',
+              scriptPath: 'scripts/check.ts',
+              expectedExitCodes: [0],
+              inputSpec: null,
+            },
+          ],
+        }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const persistedSpec = mockPersistEngineeringSpec.mock.calls[0]?.[3] as {
+        schemaChanges: { migrations: string[] };
+        interfaceContracts: Array<{ file: string }>;
+        workPackages: Array<{ filesOwned: string[] }>;
+        verificationTooling: Array<{ scriptPath: string }>;
+      };
+      expect(persistedSpec.schemaChanges.migrations).toEqual(['apps/web/migrations/001.sql']);
+      expect(persistedSpec.interfaceContracts[0]?.file).toBe('apps/web/src/api.ts');
+      expect(persistedSpec.workPackages[0]?.filesOwned).toEqual(['apps/web/src/api.ts']);
+      expect(persistedSpec.verificationTooling[0]?.scriptPath).toBe('apps/web/scripts/check.ts');
+
+      const repaired = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([event]) => event.kind === 'agent.output-repaired');
+      expect(repaired?.[0].payload).toMatchObject({
+        skill: 'spec-author',
+        gate: 'spec-author-output',
+        fields: expect.arrayContaining([
+          {
+            field: 'schemaChanges.migrations[0]',
+            from: 'migrations/001.sql',
+            to: 'apps/web/migrations/001.sql',
+            source: 'package-root',
+          },
+          {
+            field: 'interfaceContracts[0].file',
+            from: 'src/api.ts',
+            to: 'apps/web/src/api.ts',
+            source: 'package-root',
+          },
+          {
+            field: 'workPackages[0].filesOwned[0]',
+            from: 'src/api.ts',
+            to: 'apps/web/src/api.ts',
+            source: 'package-root',
+          },
+          {
+            field: 'verificationTooling[0].scriptPath',
+            from: 'scripts/check.ts',
+            to: 'apps/web/scripts/check.ts',
+            source: 'package-root',
+          },
+        ]),
+      });
+    });
+
     it('emits spec.completed event with pipelineRunId and workItemId', async () => {
       const { runSpecAuthorWorkflow } = await import('./workflow.js');
       const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
@@ -634,18 +720,71 @@ describe('runSpecAuthorWorkflow', () => {
         'factory:dev-ready',
         'factory:needs-human',
       );
-      const normalized = vi
+      const blocked = vi
         .mocked(eventStore.appendEvent)
-        .mock.calls.find(([event]) => event.kind === 'agent.path-normalized');
-      expect((normalized?.[0].payload as { fields?: unknown[] }).fields).toEqual([
-        {
-          field: 'workPackages[0].filesOwned[0]',
-          from: 'src/index.ts',
-          to: 'src/index.ts',
-          source: 'unresolved',
-          ambiguous: ['apps/server/src/index.ts', 'apps/web/src/index.ts'],
-        },
-      ]);
+        .mock.calls.find(([event]) => event.kind === 'agent.contract-gate-blocked');
+      expect(blocked?.[0].payload).toMatchObject({
+        skill: 'spec-author',
+        gate: 'spec-author-output',
+        reason: 'ambiguous-path-repair',
+        fields: [
+          {
+            field: 'workPackages[0].filesOwned[0]',
+            from: 'src/index.ts',
+            to: 'src/index.ts',
+            source: 'unresolved',
+            ambiguous: ['apps/server/src/index.ts', 'apps/web/src/index.ts'],
+          },
+        ],
+      });
+    });
+
+    it('blocks duplicate filesOwned after normalization before persistence', async () => {
+      touchSpecWorktree('apps/web/src/duplicate-owned.ts');
+      mockInvokeSkill.mockResolvedValueOnce({
+        output: makeSpecOutput({
+          workPackages: [
+            {
+              id: 'WP1',
+              filesOwned: ['src/duplicate-owned.ts'],
+              changes: 'Own the frontend index through a package-relative path.',
+              dependsOn: [],
+              builderTier: 'sonnet',
+            },
+            {
+              id: 'WP2',
+              filesOwned: ['apps/web/src/duplicate-owned.ts'],
+              changes: 'Also owns the same frontend index path.',
+              dependsOn: [],
+              builderTier: 'sonnet',
+            },
+          ],
+          executionOrder: [{ batch: 0, wpIds: ['WP1', 'WP2'] }],
+        }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+      const source = makeMockSource();
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), source, 'goose-hub-self', '/repo');
+
+      expect(mockPersistEngineeringSpec).not.toHaveBeenCalled();
+      expect(mockValidateEngineeringSpec).not.toHaveBeenCalled();
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '55',
+        'factory:dev-ready',
+        'factory:needs-human',
+      );
+      const blocked = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([event]) => event.kind === 'agent.contract-gate-blocked');
+      expect(blocked?.[0].payload).toMatchObject({
+        skill: 'spec-author',
+        gate: 'spec-author-output',
+        reason: 'duplicate-files-owned',
+        duplicates: [{ path: 'apps/web/src/duplicate-owned.ts', owners: ['WP1', 'WP2'] }],
+      });
     });
   });
 

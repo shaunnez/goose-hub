@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { isAbsolute, relative, resolve } from 'node:path';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import {
@@ -12,6 +14,7 @@ import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
 import { resolveSkillRuntimeForProject } from '@goose-hub/core/agent-runtime/skill-runtime-resolver.js';
 import { runWithEscalation } from '@goose-hub/core/agent-runtime/with-escalation.js';
 import type { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
+import { getEvidencePostEnabled } from '@goose-hub/core/db/repositories/project-settings.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
@@ -100,6 +103,7 @@ const WRITE_TOOL_NAMES = new Set([
   'edit_file',
 ]);
 const FACT_MISMATCH_PATH_LIMIT = 25;
+const CONTRACT_GATE_PATH_LIMIT = 10;
 
 function uniqueSorted(paths: string[]): string[] {
   return [...new Set(paths)].sort((a, b) => a.localeCompare(b));
@@ -112,6 +116,56 @@ function compactPaths(paths: string[]): { count: number; paths: string[]; trunca
     paths: unique.slice(0, FACT_MISMATCH_PATH_LIMIT),
     truncated: unique.length > FACT_MISMATCH_PATH_LIMIT,
   };
+}
+
+function stripEventPathDecorators(value: string): string {
+  let next = value.trim();
+  while (
+    next.length >= 2 &&
+    ((next.startsWith('"') && next.endsWith('"')) ||
+      (next.startsWith("'") && next.endsWith("'")) ||
+      (next.startsWith('`') && next.endsWith('`')))
+  ) {
+    next = next.slice(1, -1).trim();
+  }
+  return next.replace(/\\/g, '/');
+}
+
+function sanitizePathValueForEvent(value: string, worktreePath: string): string {
+  const cleaned = stripEventPathDecorators(value);
+  if (!isAbsolute(cleaned)) return cleaned;
+
+  const resolvedWorktree = resolve(worktreePath);
+  const resolvedPath = resolve(cleaned);
+  const relativePath = relative(resolvedWorktree, resolvedPath).replace(/\\/g, '/');
+  if (relativePath === '') return '<worktree>';
+  if (relativePath === '..' || relativePath.startsWith('../')) return '<outside-worktree>';
+  return `<worktree>/${relativePath}`;
+}
+
+function compactNormalizedFields(
+  fields: NormalizedPathField[],
+  worktreePath: string,
+): Array<{
+  field: string;
+  rawValue: string;
+  normalizedValue: string;
+  source: RepoRelativePathNormalization['source'];
+  candidates?: { count: number; paths: string[]; truncated: boolean };
+}> {
+  return fields.map((field) => ({
+    field: field.field,
+    rawValue: sanitizePathValueForEvent(field.from, worktreePath),
+    normalizedValue: field.to,
+    source: field.source,
+    ...(field.ambiguous != null && {
+      candidates: {
+        count: field.ambiguous.length,
+        paths: uniqueSorted(field.ambiguous).slice(0, CONTRACT_GATE_PATH_LIMIT),
+        truncated: field.ambiguous.length > CONTRACT_GATE_PATH_LIMIT,
+      },
+    }),
+  }));
 }
 
 function isWriteOrEditToolName(value: unknown): boolean {
@@ -170,6 +224,186 @@ function emitOutputFactMismatch(input: {
     runId: input.runId,
     personaId: input.personaId,
   });
+}
+
+function emitOutputRepaired(input: {
+  projectId: string;
+  workItemId: string;
+  runId: string;
+  personaId?: string;
+  worktreePath: string;
+  fields: NormalizedPathField[];
+  observedChangedPaths: string[];
+  observedWritePaths: string[];
+}): void {
+  if (input.fields.length === 0) return;
+  eventStore.appendEvent({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    kind: 'agent.output-repaired',
+    payload: {
+      runId: input.runId,
+      skill: 'implement',
+      gate: 'implement-output-repair',
+      fields: compactNormalizedFields(input.fields, input.worktreePath),
+      observedChangedFiles: compactPaths(input.observedChangedPaths),
+      observedWriteFiles: compactPaths(input.observedWritePaths),
+    },
+    runId: input.runId,
+    personaId: input.personaId,
+  });
+}
+
+function emitContractGateBlocked(input: {
+  projectId: string;
+  workItemId: string;
+  runId: string;
+  personaId?: string;
+  gate: string;
+  worktreePath: string;
+  reason: string;
+  fields: NormalizedPathField[];
+  observedChangedPaths: string[];
+  observedWritePaths: string[];
+}): void {
+  eventStore.appendEvent({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    kind: 'agent.contract-gate-blocked',
+    payload: {
+      runId: input.runId,
+      skill: 'implement',
+      gate: input.gate,
+      reason: input.reason,
+      fields: compactNormalizedFields(input.fields, input.worktreePath),
+      observedChangedFiles: compactPaths(input.observedChangedPaths),
+      observedWriteFiles: compactPaths(input.observedWritePaths),
+    },
+    runId: input.runId,
+    personaId: input.personaId,
+  });
+}
+
+function evaluateImplementOutputRepairGate(input: {
+  projectId: string;
+  workItemId: string;
+  runId: string;
+  personaId?: string;
+  worktreePath: string;
+  fields: NormalizedPathField[];
+  observedChangedPaths: string[];
+  observedWritePaths: string[];
+}): void {
+  const ambiguousFields = input.fields.filter(
+    (field) => field.ambiguous != null && field.ambiguous.length > 0,
+  );
+  if (ambiguousFields.length > 0) {
+    emitContractGateBlocked({
+      ...input,
+      gate: 'implement-output-repair',
+      reason: 'ambiguous-path-repair',
+      fields: ambiguousFields,
+    });
+    const fieldNames = ambiguousFields.map((field) => field.field).join(', ');
+    throw new Error(
+      `contract gate blocked: ambiguous implement output path repair (${fieldNames})`,
+    );
+  }
+
+  emitOutputRepaired(input);
+}
+
+function hasEvidenceBlockerSummary(output: ImplementOutputShape): boolean {
+  return output.decisionSummaries.some(
+    (summary) =>
+      (summary.kind === 'TOOL_FAILURE' ||
+        summary.kind === 'UNCERTAINTY' ||
+        summary.kind === 'SKIP_GATE') &&
+      /\b(e2e|evidence|playwright)\b/i.test(summary.summary) &&
+      /\b(block\w*|fail\w*|unclear|disabled|setting|skip\w*)\b/i.test(summary.summary),
+  );
+}
+
+function evaluateEvidenceRequirementGate(input: {
+  projectId: string;
+  workItemId: string;
+  runId: string;
+  personaId?: string;
+  worktreePath: string;
+  output: ImplementOutputShape;
+  observedChangedPaths: string[];
+  observedWritePaths: string[];
+  evidencePostEnabled: boolean;
+}): void {
+  if (!input.evidencePostEnabled) return;
+
+  const modelDeclaredPaths = [
+    ...input.output.filesWritten.map((file) => file.path),
+    ...input.output.testsWritten.map((test) => test.path),
+  ];
+  const frontendPaths = uniqueSorted([...input.observedChangedPaths, ...modelDeclaredPaths]).filter(
+    (path) => path.startsWith('apps/web/'),
+  );
+  const evidenceBlockerSummary = hasEvidenceBlockerSummary(input.output);
+
+  if (
+    frontendPaths.length > 0 &&
+    input.output.evidenceSpecPath == null &&
+    !evidenceBlockerSummary
+  ) {
+    emitContractGateBlocked({
+      projectId: input.projectId,
+      workItemId: input.workItemId,
+      runId: input.runId,
+      personaId: input.personaId,
+      gate: 'evidence-requirement',
+      worktreePath: input.worktreePath,
+      reason: 'missing-evidence-spec',
+      fields: [
+        {
+          field: 'evidenceSpecPath',
+          from: 'null',
+          to: 'null',
+          source: 'unresolved',
+        },
+      ],
+      observedChangedPaths: input.observedChangedPaths,
+      observedWritePaths: input.observedWritePaths,
+    });
+    throw new Error(
+      `contract gate blocked: evidenceSpecPath is required for apps/web changes (${frontendPaths.join(
+        ', ',
+      )})`,
+    );
+  }
+
+  if (input.output.evidenceSpecPath != null) {
+    const evidenceSpecPath = input.output.evidenceSpecPath;
+    if (!existsSync(resolve(input.worktreePath, evidenceSpecPath))) {
+      emitContractGateBlocked({
+        projectId: input.projectId,
+        workItemId: input.workItemId,
+        runId: input.runId,
+        personaId: input.personaId,
+        gate: 'evidence-requirement',
+        worktreePath: input.worktreePath,
+        reason: 'evidence-spec-not-found',
+        fields: [
+          {
+            field: 'evidenceSpecPath',
+            from: evidenceSpecPath,
+            to: evidenceSpecPath,
+            source: 'as-is',
+          },
+        ],
+        observedChangedPaths: input.observedChangedPaths,
+        observedWritePaths: input.observedWritePaths,
+      });
+      throw new Error(
+        `contract gate blocked: evidenceSpecPath does not exist (${evidenceSpecPath})`,
+      );
+    }
+  }
 }
 
 function normalizeImplementOutputPaths(input: {
@@ -425,28 +659,39 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
     investigation: input.investigation,
     surfaceGuardInvestigation: input.surfaceGuardInvestigation,
   });
-  if (normalized.fields.length > 0) {
-    eventStore.appendEvent({
-      projectId: input.projectId,
-      workItemId: input.workItem.id,
-      kind: 'agent.path-normalized',
-      payload: {
-        runId: input.runId,
-        skill: 'implement',
-        fields: normalized.fields,
-      },
-      runId: input.runId,
-      personaId: input.personaId,
-    });
-  }
+  const observedChangedFiles = deriveObservedChangedFiles(input.worktreePath);
+  const observedWritePaths = observedWritePathsFromToolAudit(input.runId);
+  evaluateImplementOutputRepairGate({
+    projectId: input.projectId,
+    workItemId: input.workItem.id,
+    runId: input.runId,
+    personaId: input.personaId,
+    worktreePath: input.worktreePath,
+    fields: normalized.fields,
+    observedChangedPaths: observedChangedFiles.paths,
+    observedWritePaths,
+  });
+  const evidencePostEnabled = getEvidencePostEnabled(
+    execution.projectConfig?.id ?? input.projectId,
+    execution.projectConfig?.evidencePostEnabled ?? true,
+  );
+  evaluateEvidenceRequirementGate({
+    projectId: input.projectId,
+    workItemId: input.workItem.id,
+    runId: input.runId,
+    personaId: input.personaId,
+    worktreePath: input.worktreePath,
+    output: normalized.output,
+    observedChangedPaths: observedChangedFiles.paths,
+    observedWritePaths,
+    evidencePostEnabled,
+  });
   const implementOutput = ImplementSchema.parse(normalized.output);
   const modelTouchedPaths = [
     ...implementOutput.filesWritten.map((f) => f.path),
     ...implementOutput.testsWritten.map((t) => t.path),
     ...implementOutput.testsRun.paths,
   ];
-  const observedChangedFiles = deriveObservedChangedFiles(input.worktreePath);
-  const observedWritePaths = observedWritePathsFromToolAudit(input.runId);
   emitOutputFactMismatch({
     projectId: input.projectId,
     workItemId: input.workItem.id,
@@ -456,21 +701,58 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
     observedChangedPaths: observedChangedFiles.paths,
     observedWritePaths,
   });
-  const touchedPaths =
-    observedChangedFiles.paths.length > 0 ? observedChangedFiles.paths : modelTouchedPaths;
   const surfaceGuardInvestigation = input.surfaceGuardInvestigation ?? input.investigation;
-  if (!pathsTouchInvestigationSurface(touchedPaths, surfaceGuardInvestigation)) {
+  if (surfaceGuardInvestigation == null) return implementOutput;
+
+  if (observedChangedFiles.paths.length > 0) {
+    if (pathsTouchInvestigationSurface(observedChangedFiles.paths, surfaceGuardInvestigation)) {
+      return implementOutput;
+    }
     appendWrongSurfaceGuardEvent({
       projectId: input.projectId,
       workItemId: input.workItem.id,
       runId: input.runId,
       personaId: input.personaId,
-      investigation: surfaceGuardInvestigation as InvestigationContext,
-      reason: 'implement-output-missed-investigation-surface',
-      touchedPaths,
+      investigation: surfaceGuardInvestigation,
+      reason: 'observed-changes-missed-investigation-surface',
+      touchedPaths: observedChangedFiles.paths,
     });
     throw new Error(
-      `wrong surface guard: implement output did not touch investigated key files (${surfaceGuardInvestigation?.keyFiles
+      `wrong surface guard: observed changes did not touch investigated key files (${surfaceGuardInvestigation.keyFiles
+        .map((f) => f.path)
+        .join(', ')})`,
+    );
+  }
+
+  if (observedChangedFiles.gitAvailable) {
+    appendWrongSurfaceGuardEvent({
+      projectId: input.projectId,
+      workItemId: input.workItem.id,
+      runId: input.runId,
+      personaId: input.personaId,
+      investigation: surfaceGuardInvestigation,
+      reason: 'no-observed-changed-files',
+      touchedPaths: [],
+    });
+    throw new Error(
+      `wrong surface guard: no observed changed files for investigated key files (${surfaceGuardInvestigation.keyFiles
+        .map((f) => f.path)
+        .join(', ')})`,
+    );
+  }
+
+  if (!pathsTouchInvestigationSurface(modelTouchedPaths, surfaceGuardInvestigation)) {
+    appendWrongSurfaceGuardEvent({
+      projectId: input.projectId,
+      workItemId: input.workItem.id,
+      runId: input.runId,
+      personaId: input.personaId,
+      investigation: surfaceGuardInvestigation,
+      reason: 'reported-output-missed-investigation-surface',
+      touchedPaths: modelTouchedPaths,
+    });
+    throw new Error(
+      `wrong surface guard: reported output did not touch investigated key files (${surfaceGuardInvestigation.keyFiles
         .map((f) => f.path)
         .join(', ')})`,
     );

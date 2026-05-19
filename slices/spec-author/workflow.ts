@@ -67,6 +67,11 @@ type SpecAttempt = {
   validation: ValidationResult;
 };
 
+type DuplicateOwnedPath = {
+  path: string;
+  owners: string[];
+};
+
 function formatValidationErrors(validation: Exclude<ValidationResult, { ok: true }>): string[] {
   return validation.errors.map((e) => e.message);
 }
@@ -99,6 +104,65 @@ function appendRepairRetryEvent(
     },
     runId,
   });
+}
+
+function emitSpecOutputRepaired(input: {
+  projectId: string;
+  workItemId: string;
+  runId: string;
+  fields: Array<Record<string, unknown>>;
+}): void {
+  if (input.fields.length === 0) return;
+  eventStore.appendEvent({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    kind: 'agent.output-repaired',
+    payload: {
+      runId: input.runId,
+      skill: 'spec-author',
+      gate: 'spec-author-output',
+      fields: input.fields,
+    },
+    runId: input.runId,
+  });
+}
+
+function emitSpecContractGateBlocked(input: {
+  projectId: string;
+  workItemId: string;
+  runId: string;
+  reason: string;
+  fields?: Array<Record<string, unknown>>;
+  duplicates?: DuplicateOwnedPath[];
+}): void {
+  eventStore.appendEvent({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    kind: 'agent.contract-gate-blocked',
+    payload: {
+      runId: input.runId,
+      skill: 'spec-author',
+      gate: 'spec-author-output',
+      reason: input.reason,
+      ...(input.fields != null && { fields: input.fields }),
+      ...(input.duplicates != null && { duplicates: input.duplicates }),
+    },
+    runId: input.runId,
+  });
+}
+
+function duplicateFilesOwned(spec: EngineeringSpec): DuplicateOwnedPath[] {
+  const ownersByPath = new Map<string, Set<string>>();
+  for (const wp of spec.workPackages) {
+    for (const path of wp.filesOwned) {
+      const owners = ownersByPath.get(path) ?? new Set<string>();
+      owners.add(wp.id);
+      ownersByPath.set(path, owners);
+    }
+  }
+  return [...ownersByPath.entries()].flatMap(([path, owners]) =>
+    owners.size > 1 ? [{ path, owners: [...owners].sort((a, b) => a.localeCompare(b)) }] : [],
+  );
 }
 
 function errorRunId(error: Error, fallbackRunId: string): string {
@@ -293,24 +357,40 @@ export async function runSpecAuthorWorkflow(
         worktreePath,
         referencePaths: investigationKeyFilePaths(latestInv),
       });
-      if (normalized.fields.length > 0) {
-        eventStore.appendEvent({
+      if (normalized.ambiguousFields.length > 0) {
+        emitSpecContractGateBlocked({
           projectId,
           workItemId: workItem.id,
-          kind: 'agent.path-normalized',
-          payload: {
-            runId,
-            skill: 'spec-author',
-            fields: normalized.fields,
-          },
           runId,
+          reason: 'ambiguous-path-repair',
+          fields: normalized.ambiguousFields,
         });
-      }
-      if (normalized.ambiguousFields.length > 0) {
         throw new Error(
           `ambiguous repo-relative paths in spec-author output: ${normalized.ambiguousFields
             .map((field) => `${field.field} (${field.from})`)
             .join(', ')}`,
+        );
+      }
+      emitSpecOutputRepaired({
+        projectId,
+        workItemId: workItem.id,
+        runId,
+        fields: normalized.fields,
+      });
+
+      const duplicateOwnership = duplicateFilesOwned(normalized.spec);
+      if (duplicateOwnership.length > 0) {
+        emitSpecContractGateBlocked({
+          projectId,
+          workItemId: workItem.id,
+          runId,
+          reason: 'duplicate-files-owned',
+          duplicates: duplicateOwnership,
+        });
+        throw new Error(
+          `duplicate filesOwned after normalization: ${duplicateOwnership
+            .map((duplicate) => `${duplicate.path} (${duplicate.owners.join(', ')})`)
+            .join('; ')}`,
         );
       }
       return {
