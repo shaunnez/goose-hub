@@ -57,6 +57,7 @@ vi.mock('@/lib/api', () => ({
         timeoutMs: 120000,
         modelTier: 'haiku',
         modelProvider: 'claude',
+        effort: null,
       },
       qa: {
         maxTurns: 100,
@@ -64,6 +65,7 @@ vi.mock('@/lib/api', () => ({
         timeoutMs: 600000,
         modelTier: 'sonnet',
         modelProvider: 'claude',
+        effort: null,
       },
       'dev-review': {
         maxTurns: 20,
@@ -71,32 +73,55 @@ vi.mock('@/lib/api', () => ({
         timeoutMs: 180000,
         modelTier: 'sonnet',
         modelProvider: 'codex',
+        effort: null,
       },
     },
     resolvedSkillRuntimes: {
       triage: {
-        source: 'default',
+        source: 'skill-default',
         effectiveTier: 'haiku',
         effectiveProvider: 'claude',
+        effectiveEffort: null,
         resolvedPrimary: { tier: 'haiku', provider: 'claude', modelId: 'claude-haiku' },
         resolvedFallback: null,
         resolvedAdvisor: null,
+        selectionReason: 'tier skill-default, provider fallback',
+        resolutionTrace: {
+          tier: { value: 'haiku', source: 'skill-default', reason: 'SKILL_BUDGETS default tier' },
+          provider: { value: 'claude', source: 'fallback', reason: 'resolver fallback provider' },
+        },
       },
       qa: {
-        source: 'default',
+        source: 'skill-default',
         effectiveTier: 'sonnet',
         effectiveProvider: 'claude',
+        effectiveEffort: null,
         resolvedPrimary: { tier: 'sonnet', provider: 'claude', modelId: 'claude-sonnet' },
         resolvedFallback: null,
         resolvedAdvisor: null,
+        selectionReason: 'tier skill-default, provider fallback',
+        resolutionTrace: {
+          tier: { value: 'sonnet', source: 'skill-default', reason: 'SKILL_BUDGETS default tier' },
+          provider: { value: 'claude', source: 'fallback', reason: 'resolver fallback provider' },
+        },
       },
       'dev-review': {
-        source: 'default',
+        source: 'skill-default',
         effectiveTier: 'sonnet',
         effectiveProvider: 'codex',
+        effectiveEffort: null,
         resolvedPrimary: { tier: 'sonnet', provider: 'codex', modelId: 'gpt-5.4' },
         resolvedFallback: null,
         resolvedAdvisor: null,
+        selectionReason: 'tier skill-default, provider skill-default',
+        resolutionTrace: {
+          tier: { value: 'sonnet', source: 'skill-default', reason: 'SKILL_BUDGETS default tier' },
+          provider: {
+            value: 'codex',
+            source: 'skill-default',
+            reason: 'skill runtime provider hint',
+          },
+        },
       },
     },
   }),
@@ -334,6 +359,9 @@ describe('WorkflowMapPanel', () => {
     expect(modal).toBeTruthy();
     expect(screen.getByRole('dialog', { name: 'triage details' })).toBeTruthy();
     expect(detail.textContent).toContain('Classifies incoming work.');
+    expect(detail.textContent).toContain('Tier from skill-default');
+    expect(detail.textContent).toContain('Provider from fallback');
+    expect(screen.getAllByTestId('workflow-skill-node')[0]?.textContent).not.toContain('Tier from');
 
     fireEvent.click(screen.getByRole('button', { name: 'Close skill detail' }));
     expect(screen.queryByTestId('skill-detail-modal')).toBeNull();

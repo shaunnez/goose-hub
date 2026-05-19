@@ -12,6 +12,8 @@ describe('resolveSkillRuntime', () => {
     expect(resolved.tier).toBe('sonnet');
     expect(resolved.provider).toBe('codex');
     expect(resolved.modelOverride).toBe('gpt-5.4');
+    expect(resolved.runtimeTrace.tier).toMatchObject({ value: 'sonnet', source: 'db' });
+    expect(resolved.runtimeTrace.provider).toMatchObject({ value: 'codex', source: 'db' });
   });
 
   it('resolves playwright-repro to Codex haiku from a per-skill DB override', () => {
@@ -65,6 +67,8 @@ describe('resolveSkillRuntime', () => {
     expect(resolved.source).toBe('db');
     expect(resolved.tier).toBe('opus');
     expect(resolved.effort).toBe('medium');
+    expect(resolved.runtimeTrace.tier).toMatchObject({ value: 'opus', source: 'db' });
+    expect(resolved.runtimeTrace.effort).toMatchObject({ value: 'medium', source: 'config' });
   });
 
   it('keeps effort displayable when the effective provider is Claude', () => {
@@ -101,6 +105,10 @@ describe('resolveSkillRuntime', () => {
     expect(resolved.tier).toBe('sonnet');
     expect(resolved.provider).toBe('codex');
     expect(resolved.modelOverride).toBe('gpt-5.4');
+    expect(resolved.runtimeTrace.provider).toMatchObject({
+      value: 'codex',
+      source: 'skill-default',
+    });
   });
 
   it('coerces provider when the project runtime is forced', () => {
@@ -112,6 +120,9 @@ describe('resolveSkillRuntime', () => {
 
     expect(resolved.provider).toBe('codex');
     expect(resolved.modelOverride).toBe('gpt-5.4');
+    expect(resolved.source).toBe('db');
+    expect(resolved.runtimeTrace.provider).toMatchObject({ value: 'codex', source: 'config' });
+    expect(resolved.runtimeTrace.provider.reason).toContain('codex-cli forces provider codex');
   });
 
   it('keeps a caller concrete model override above forced runtime provider', () => {
@@ -124,6 +135,8 @@ describe('resolveSkillRuntime', () => {
     expect(resolved.source).toBe('caller');
     expect(resolved.provider).toBe('claude');
     expect(resolved.modelOverride).toBe('claude-opus-4-7');
+    expect(resolved.runtimeTrace.tier).toMatchObject({ value: 'opus', source: 'caller' });
+    expect(resolved.runtimeTrace.provider).toMatchObject({ value: 'claude', source: 'caller' });
   });
 
   it('does not derive fallback/advisor models for holdouts', () => {
@@ -145,6 +158,13 @@ describe('resolveSkillRuntime', () => {
     expect(resolved.tier).toBe('sonnet');
     expect(resolved.provider).toBe('claude');
     expect(resolved.modelOverride).toBe('claude-sonnet-4-6');
+    expect(resolved.runtimeTrace.tier).toMatchObject({
+      value: 'sonnet',
+      source: 'skill-default',
+    });
+    expect(resolved.runtimeTrace.tier.reason).toContain('holdout skill ignores');
+    expect(resolved.runtimeTrace.provider).toMatchObject({ value: 'claude', source: 'fallback' });
+    expect(resolved.runtimeTrace.provider.reason).toContain('holdout skill ignores');
   });
 
   it('can ignore provider overrides for injected runtimes while keeping the tier', () => {
@@ -158,6 +178,9 @@ describe('resolveSkillRuntime', () => {
     expect(resolved.tier).toBe('sonnet');
     expect(resolved.provider).toBe('claude');
     expect(resolved.modelOverride).toBe('claude-sonnet-4-6');
+    expect(resolved.runtimeTrace.tier).toMatchObject({ value: 'sonnet', source: 'db' });
+    expect(resolved.runtimeTrace.provider).toMatchObject({ value: 'claude', source: 'fallback' });
+    expect(resolved.runtimeTrace.provider.reason).toContain('provider override ignored');
   });
 });
 

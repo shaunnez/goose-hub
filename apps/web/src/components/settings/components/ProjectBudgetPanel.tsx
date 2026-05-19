@@ -68,6 +68,18 @@ const TIERS: ModelTier[] = ['haiku', 'sonnet', 'opus'];
 const PROVIDERS: ModelProvider[] = ['claude', 'codex'];
 const EFFORTS: RuntimeEffort[] = ['low', 'medium', 'high', 'xhigh'];
 
+type ResolvedSkillRuntimeDto = NonNullable<ProjectSettingsDto['resolvedSkillRuntimes']>[string];
+type RuntimeAxis = keyof NonNullable<ResolvedSkillRuntimeDto['resolutionTrace']>;
+
+function provenanceSubtitle(
+  resolved: ResolvedSkillRuntimeDto | undefined,
+  axis: RuntimeAxis,
+): string | undefined {
+  const decision = resolved?.resolutionTrace?.[axis];
+  if (decision == null) return undefined;
+  return `from ${decision.source}: ${decision.reason}`;
+}
+
 function NumericInput({
   value,
   placeholder,
@@ -582,6 +594,7 @@ export function ProjectBudgetPanel({ slug }: Props) {
                       options={TIERS}
                       defaultValue={defaults?.modelTier}
                       overridden={row?.modelTier != null}
+                      subtitle={provenanceSubtitle(resolved, 'tier')}
                       onCommit={(val) =>
                         patchSkill.mutate({ skill, patch: { modelTier: val as ModelTier | null } })
                       }
@@ -593,6 +606,7 @@ export function ProjectBudgetPanel({ slug }: Props) {
                       options={PROVIDERS}
                       defaultValue={defaults?.modelProvider}
                       overridden={row?.provider != null}
+                      subtitle={provenanceSubtitle(resolved, 'provider')}
                       onCommit={(val) =>
                         patchSkill.mutate({
                           skill,
@@ -608,9 +622,14 @@ export function ProjectBudgetPanel({ slug }: Props) {
                       defaultValue={defaults?.effort ?? undefined}
                       overridden={row?.effort != null}
                       subtitle={
-                        (resolved?.effectiveProvider ?? defaults?.modelProvider) === 'claude'
-                          ? 'display only for Claude'
-                          : undefined
+                        [
+                          provenanceSubtitle(resolved, 'effort'),
+                          (resolved?.effectiveProvider ?? defaults?.modelProvider) === 'claude'
+                            ? 'display only for Claude'
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' | ') || undefined
                       }
                       onCommit={(val) =>
                         patchSkill.mutate({

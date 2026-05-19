@@ -113,6 +113,30 @@ function SkillDetail({
               : 'Inherits default',
           ]}
         />
+        {runtime?.resolutionTrace?.tier != null && (
+          <DetailBlock
+            label={`Tier from ${runtime.resolutionTrace.tier.source}`}
+            values={[
+              `${runtime.resolutionTrace.tier.value}: ${runtime.resolutionTrace.tier.reason}`,
+            ]}
+          />
+        )}
+        {runtime?.resolutionTrace?.provider != null && (
+          <DetailBlock
+            label={`Provider from ${runtime.resolutionTrace.provider.source}`}
+            values={[
+              `${runtime.resolutionTrace.provider.value}: ${runtime.resolutionTrace.provider.reason}`,
+            ]}
+          />
+        )}
+        {runtime?.resolutionTrace?.effort != null && (
+          <DetailBlock
+            label={`Effort from ${runtime.resolutionTrace.effort.source}`}
+            values={[
+              `${runtime.resolutionTrace.effort.value}: ${runtime.resolutionTrace.effort.reason}`,
+            ]}
+          />
+        )}
       </div>
     </section>
   );

@@ -26,10 +26,24 @@ export interface ResolvedDisplayModel {
   modelId: string;
 }
 
+export interface RuntimeTraceDecision<T> {
+  value: T;
+  source: SkillRuntimeSource;
+  reason: string;
+}
+
+export interface RuntimeResolutionTrace {
+  tier: RuntimeTraceDecision<ModelTier>;
+  provider: RuntimeTraceDecision<ModelProvider>;
+  effort?: RuntimeTraceDecision<RuntimeEffort>;
+}
+
 export interface ResolvedSkillRuntime extends ResolvedBudget {
   tier: ModelTier;
   provider: ModelProvider;
   source: SkillRuntimeSource;
+  selectionReason: string;
+  runtimeTrace: RuntimeResolutionTrace;
   resolvedPrimary: ResolvedDisplayModel;
   resolvedFallback: ResolvedDisplayModel | null;
   resolvedAdvisor: ResolvedDisplayModel | null;
@@ -70,41 +84,47 @@ function displayModel(tier: ModelTier, provider: ModelProvider): ResolvedDisplay
   return { tier, provider, modelId: defaultModelForTierAndProvider(tier, provider) };
 }
 
-function sourceForSkill(
-  skill: string,
-  dbOverride?: SkillRuntimeDbOverride | null,
-): SkillRuntimeSource {
-  if (
-    isModelTier(dbOverride?.modelTier) ||
-    isModelProvider(dbOverride?.modelProvider) ||
-    isRuntimeEffort(dbOverride?.effort)
-  )
-    return 'db';
-  if (SKILL_BUDGETS[skill] != null) return 'skill-default';
-  return 'fallback';
-}
-
-function resolveTier(input: {
+function resolveTierDecision(input: {
   skill: string;
   projectBudgets?: Pick<BudgetConfig, 'skillBudgetOverrides'>;
   dbOverride?: SkillRuntimeDbOverride | null;
   fallbackTier?: ModelTier;
-}): { tier: ModelTier; source: SkillRuntimeSource } {
+  suppressedModelOverride?: boolean;
+}): RuntimeTraceDecision<ModelTier> {
   if (isModelTier(input.dbOverride?.modelTier)) {
-    return { tier: input.dbOverride.modelTier, source: 'db' };
+    return {
+      value: input.dbOverride.modelTier,
+      source: 'db',
+      reason: 'project_skill_settings.model_tier override',
+    };
   }
 
   const configTier = input.projectBudgets?.skillBudgetOverrides?.[input.skill]?.modelTier;
   if (isModelTier(configTier)) {
-    return { tier: configTier, source: 'config' };
+    return {
+      value: configTier,
+      source: 'config',
+      reason: `project config budgets.skillBudgetOverrides.${input.skill}.modelTier`,
+    };
   }
 
   const skillTier = SKILL_BUDGETS[input.skill]?.modelTier;
   if (skillTier != null) {
-    return { tier: skillTier, source: sourceForSkill(input.skill, input.dbOverride) };
+    return {
+      value: skillTier,
+      source: 'skill-default',
+      reason:
+        input.suppressedModelOverride === true
+          ? 'holdout skill ignores DB/config tier overrides; using SKILL_BUDGETS default'
+          : 'SKILL_BUDGETS default tier',
+    };
   }
 
-  return { tier: input.fallbackTier ?? 'sonnet', source: 'fallback' };
+  return {
+    value: input.fallbackTier ?? 'sonnet',
+    source: 'fallback',
+    reason: input.fallbackTier != null ? 'caller fallbackTier' : 'resolver fallback tier',
+  };
 }
 
 function withoutConfigModelTier(
@@ -119,23 +139,116 @@ function withoutConfigModelTier(
   return { ...projectBudgets, skillBudgetOverrides };
 }
 
-function resolveEffort(input: {
+function resolveProviderDecision(input: {
+  skill: string;
+  dbOverride?: SkillRuntimeDbOverride | null;
+  providerConfigRuntime: ConfigRuntime;
+  skillProvider?: ModelProvider;
+  fallbackProvider?: ModelProvider;
+  ignoreProviderOverride?: boolean;
+  suppressedModelOverride?: boolean;
+}): RuntimeTraceDecision<ModelProvider> {
+  const forcedProvider = forcedProviderFromRuntime(input.providerConfigRuntime);
+  if (forcedProvider != null) {
+    return {
+      value: forcedProvider,
+      source: 'config',
+      reason: `${input.providerConfigRuntime} forces provider ${forcedProvider}`,
+    };
+  }
+
+  if (!input.ignoreProviderOverride && isModelProvider(input.dbOverride?.modelProvider)) {
+    return {
+      value: input.dbOverride.modelProvider,
+      source: 'db',
+      reason: 'project_skill_settings.model_provider override',
+    };
+  }
+
+  if (input.skillProvider != null) {
+    return {
+      value: input.skillProvider,
+      source: 'skill-default',
+      reason:
+        input.ignoreProviderOverride === true
+          ? 'provider override ignored for injected runtime; using skill provider hint'
+          : 'skill runtime provider hint',
+    };
+  }
+
+  const skillProvider = SKILL_BUDGETS[input.skill]?.provider;
+  if (skillProvider != null) {
+    return {
+      value: skillProvider,
+      source: 'skill-default',
+      reason:
+        input.ignoreProviderOverride === true
+          ? 'provider override ignored for injected runtime; using SKILL_BUDGETS provider'
+          : 'SKILL_BUDGETS provider',
+    };
+  }
+
+  if (input.fallbackProvider != null) {
+    return {
+      value: input.fallbackProvider,
+      source: 'fallback',
+      reason: 'caller fallbackProvider',
+    };
+  }
+
+  return {
+    value: 'claude',
+    source: 'fallback',
+    reason:
+      input.ignoreProviderOverride === true
+        ? 'provider override ignored for injected runtime; using resolver fallback provider'
+        : input.suppressedModelOverride === true
+          ? 'holdout skill ignores DB/config provider overrides; using resolver fallback provider'
+          : 'resolver fallback provider',
+  };
+}
+
+function resolveEffortDecision(input: {
   skill: string;
   projectBudgets?: Pick<BudgetConfig, 'skillBudgetOverrides'>;
   dbOverride?: SkillRuntimeDbOverride | null;
-}): { effort?: RuntimeEffort; source: SkillRuntimeSource | null } {
+}): RuntimeTraceDecision<RuntimeEffort> | null {
   if (isRuntimeEffort(input.dbOverride?.effort)) {
-    return { effort: input.dbOverride.effort, source: 'db' };
+    return {
+      value: input.dbOverride.effort,
+      source: 'db',
+      reason: 'project_skill_settings.effort override',
+    };
   }
   const configEffort = input.projectBudgets?.skillBudgetOverrides?.[input.skill]?.effort;
   if (isRuntimeEffort(configEffort)) {
-    return { effort: configEffort, source: 'config' };
+    return {
+      value: configEffort,
+      source: 'config',
+      reason: `project config budgets.skillBudgetOverrides.${input.skill}.effort`,
+    };
   }
   const skillEffort = SKILL_BUDGETS[input.skill]?.effort;
   if (isRuntimeEffort(skillEffort)) {
-    return { effort: skillEffort, source: sourceForSkill(input.skill, input.dbOverride) };
+    return {
+      value: skillEffort,
+      source: 'skill-default',
+      reason: 'SKILL_BUDGETS default effort',
+    };
   }
-  return { source: null };
+  return null;
+}
+
+function legacySourceFromTrace(trace: RuntimeResolutionTrace): SkillRuntimeSource {
+  if (trace.tier.source === 'caller' || trace.provider.source === 'caller') return 'caller';
+  if (trace.tier.source === 'db' || trace.provider.source === 'db') return 'db';
+  if (trace.effort?.source === 'db') return 'db';
+  return trace.effort?.source ?? trace.tier.source;
+}
+
+function selectionReasonFromTrace(trace: RuntimeResolutionTrace): string {
+  const effort = trace.effort != null ? `, effort ${trace.effort.source}` : '';
+  return `tier ${trace.tier.source}, provider ${trace.provider.source}${effort}`;
 }
 
 export function resolveSkillRuntime(input: {
@@ -160,6 +273,11 @@ export function resolveSkillRuntime(input: {
   const configRuntime = input.configRuntime ?? 'auto';
   const isHoldout = input.role === 'qa' || input.role === 'reviewer';
   const honourModelOverrides = !isHoldout || input.allowHoldoutOverride === true;
+  const suppressedModelOverride =
+    !honourModelOverrides &&
+    (isModelTier(input.dbOverride?.modelTier) ||
+      isModelProvider(input.dbOverride?.modelProvider) ||
+      input.projectBudgets?.skillBudgetOverrides?.[input.skill]?.modelTier != null);
   const dbOverride = honourModelOverrides
     ? input.dbOverride
     : input.dbOverride == null
@@ -180,12 +298,32 @@ export function resolveSkillRuntime(input: {
   if (input.callerModelOverride != null) {
     const tier = tierOf(input.callerModelOverride);
     const provider = providerOf(input.callerModelOverride);
+    const effortResult = resolveEffortDecision({
+      skill: input.skill,
+      projectBudgets: input.projectBudgets,
+      dbOverride,
+    });
+    const runtimeTrace: RuntimeResolutionTrace = {
+      tier: {
+        value: tier,
+        source: 'caller',
+        reason: 'caller supplied concrete modelOverride',
+      },
+      provider: {
+        value: provider,
+        source: 'caller',
+        reason: 'caller supplied concrete modelOverride',
+      },
+      ...(effortResult != null ? { effort: effortResult } : {}),
+    };
     return {
       ...resolvedBudget,
       modelOverride: input.callerModelOverride,
       tier,
       provider,
       source: 'caller',
+      selectionReason: selectionReasonFromTrace(runtimeTrace),
+      runtimeTrace,
       resolvedPrimary: { tier, provider, modelId: input.callerModelOverride },
       resolvedFallback: null,
       resolvedAdvisor: null,
@@ -193,33 +331,38 @@ export function resolveSkillRuntime(input: {
     };
   }
 
-  const tierResult = resolveTier({
+  const tierResult = resolveTierDecision({
     skill: input.skill,
     projectBudgets: modelProjectBudgets,
     dbOverride,
     fallbackTier: input.fallbackTier,
+    suppressedModelOverride,
   });
-  const tier = tierResult.tier;
-  const provider =
-    forcedProviderFromRuntime(providerConfigRuntime) ??
-    (!input.ignoreProviderOverride && isModelProvider(dbOverride?.modelProvider)
-      ? dbOverride.modelProvider
-      : (input.skillProvider ??
-        SKILL_BUDGETS[input.skill]?.provider ??
-        input.fallbackProvider ??
-        'claude'));
+  const providerResult = resolveProviderDecision({
+    skill: input.skill,
+    dbOverride,
+    providerConfigRuntime,
+    skillProvider: input.skillProvider,
+    fallbackProvider: input.fallbackProvider,
+    ignoreProviderOverride: input.ignoreProviderOverride,
+    suppressedModelOverride,
+  });
+  const tier = tierResult.value;
+  const provider = providerResult.value;
   const modelOverride = defaultModelForTierAndProvider(tier, provider);
   const supportsFallback = SKILL_BUDGETS[input.skill]?.escalation != null;
   const supportsAdvisor = input.skill === 'implement' || input.skill === 'write-prd';
-  const effortResult = resolveEffort({
+  const effortResult = resolveEffortDecision({
     skill: input.skill,
     projectBudgets: input.projectBudgets,
     dbOverride,
   });
-  const source =
-    isModelProvider(dbOverride?.modelProvider) || tierResult.source === 'db'
-      ? 'db'
-      : (effortResult.source ?? tierResult.source);
+  const runtimeTrace: RuntimeResolutionTrace = {
+    tier: tierResult,
+    provider: providerResult,
+    ...(effortResult != null ? { effort: effortResult } : {}),
+  };
+  const source = legacySourceFromTrace(runtimeTrace);
 
   return {
     ...resolvedBudget,
@@ -227,12 +370,14 @@ export function resolveSkillRuntime(input: {
     tier,
     provider,
     source,
+    selectionReason: selectionReasonFromTrace(runtimeTrace),
+    runtimeTrace,
     resolvedPrimary: displayModel(tier, provider),
     resolvedFallback:
       !isHoldout && supportsFallback ? displayModel(lowerTier(tier), provider) : null,
     resolvedAdvisor:
       !isHoldout && supportsAdvisor ? displayModel(higherTier(tier), provider) : null,
-    ...(effortResult.effort != null ? { effort: effortResult.effort } : {}),
+    ...(effortResult?.value != null ? { effort: effortResult.value } : {}),
   };
 }
 

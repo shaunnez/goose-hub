@@ -330,6 +330,8 @@ router.get('/:slug/settings', async (c) => {
       resolvedPrimary: unknown;
       resolvedFallback: unknown;
       resolvedAdvisor: unknown;
+      selectionReason: string;
+      resolutionTrace: unknown;
     }
   > = {};
   for (const skill of Object.keys(SKILL_BUDGETS)) {
@@ -354,6 +356,8 @@ router.get('/:slug/settings', async (c) => {
       resolvedPrimary: resolved.resolvedPrimary,
       resolvedFallback: resolved.resolvedFallback,
       resolvedAdvisor: resolved.resolvedAdvisor,
+      selectionReason: resolved.selectionReason,
+      resolutionTrace: resolved.runtimeTrace,
     };
   }
 
