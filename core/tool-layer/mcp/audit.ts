@@ -1,4 +1,9 @@
 import { eventStore } from '../../event-stream/store.js';
+import {
+  type ToolCallAuditPayload,
+  normalizeToolCallAuditPayload,
+  normalizeToolResultAuditPayload,
+} from '../tool-call-audit.js';
 import type { FactoryContext } from './context.js';
 import type { PathPolicyReason } from './path-policy.js';
 
@@ -21,16 +26,24 @@ export interface BlockedToolCallAudit extends ToolCallAudit {
 
 /**
  * Emits a structured `agent.tool-call` event for a successful or failed
- * (but allowed) tool invocation. Payload is redacted by `eventStore` before
- * persistence; callers should still avoid placing raw secrets in `input`.
+ * (but allowed) tool invocation. Uses `normalizeToolCallAuditPayload` so
+ * persisted events carry `raw_path` + `canonical_path` for path-bearing
+ * tools, consistent with the rest of the system.
  */
 export function emitToolCall(ctx: FactoryContext, audit: ToolCallAudit): void {
+  const raw: ToolCallAuditPayload = {
+    ...audit,
+    blocked: false,
+    tool_input: audit.input,
+    workspace_dir: ctx.workspaceRoot,
+  };
+  const normalized = normalizeToolCallAuditPayload(raw);
   eventStore.appendEvent({
     projectId: ctx.projectId,
     workItemId: ctx.workItemId,
     runId: ctx.runId,
     kind: 'agent.tool-call',
-    payload: { blocked: false, ...audit },
+    payload: normalized,
   });
 }
 
@@ -40,11 +53,17 @@ export function emitToolCall(ctx: FactoryContext, audit: ToolCallAudit): void {
  * can aggregate by failure class without parsing free text.
  */
 export function emitBlockedToolCall(ctx: FactoryContext, audit: BlockedToolCallAudit): void {
+  const raw: ToolCallAuditPayload = {
+    ...audit,
+    tool_input: audit.input,
+    workspace_dir: ctx.workspaceRoot,
+  };
+  const normalized = normalizeToolResultAuditPayload(raw);
   eventStore.appendEvent({
     projectId: ctx.projectId,
     workItemId: ctx.workItemId,
     runId: ctx.runId,
     kind: 'agent.tool-call',
-    payload: audit,
+    payload: normalized,
   });
 }

@@ -1,4 +1,6 @@
 import type { z } from 'zod';
+import type { RepoRelativePath } from '../../path-contract.js';
+import { canonicalizeFactoryToolPath } from '../../path-contract.js';
 import { emitBlockedToolCall, emitToolCall } from '../audit.js';
 import { type CommandResult, minimalEnv, runCommand } from '../command-policy.js';
 import type { FactoryContext } from '../context.js';
@@ -41,7 +43,7 @@ export type GitChangeStatus =
   | 'unknown';
 
 export interface GitStatusEntry {
-  path: string;
+  path: RepoRelativePath;
   status: GitChangeStatus;
   staged: boolean;
 }
@@ -55,7 +57,7 @@ export interface GetStatusResult {
 }
 
 export interface GetChangedFilesResult {
-  files: string[];
+  files: RepoRelativePath[];
 }
 
 export interface GetDiffResult {
@@ -120,6 +122,11 @@ function mapPorcelainCode(code: string): GitChangeStatus {
   }
 }
 
+function gitPathToCanonical(rawPath: string, workspaceRoot: string): RepoRelativePath {
+  const result = canonicalizeFactoryToolPath({ rawPath, worktreePath: workspaceRoot });
+  return result.ok ? result.path : { path: rawPath, root: 'worktree' };
+}
+
 /**
  * Returns the working-tree status alongside branch + ahead/behind counts.
  * Reads `--porcelain=v2 --branch` so the output is stable across git
@@ -153,11 +160,19 @@ export async function getStatusTool(
     if (line.startsWith('#')) continue;
 
     if (line.startsWith('? ')) {
-      entries.push({ path: line.slice(2).trim(), status: 'untracked', staged: false });
+      entries.push({
+        path: gitPathToCanonical(line.slice(2).trim(), ctx.workspaceRoot),
+        status: 'untracked',
+        staged: false,
+      });
       continue;
     }
     if (line.startsWith('! ')) {
-      entries.push({ path: line.slice(2).trim(), status: 'ignored', staged: false });
+      entries.push({
+        path: gitPathToCanonical(line.slice(2).trim(), ctx.workspaceRoot),
+        status: 'ignored',
+        staged: false,
+      });
       continue;
     }
     // Tracked entries: `1 <xy> ...` (ordinary) or `2 <xy> ...` (renamed/copied).
@@ -165,9 +180,13 @@ export async function getStatusTool(
     if (parts.length < 9) continue;
     const xy = parts[1];
     const isRename = parts[0] === '2';
-    const path = isRename ? parts.slice(9).join(' ').split('\t')[0] : parts.slice(8).join(' ');
+    const rawPath = isRename ? parts.slice(9).join(' ').split('\t')[0] : parts.slice(8).join(' ');
     const staged = xy[0] !== '.' && xy[0] !== ' ';
-    entries.push({ path, status: mapPorcelainCode(xy), staged });
+    entries.push({
+      path: gitPathToCanonical(rawPath, ctx.workspaceRoot),
+      status: mapPorcelainCode(xy),
+      staged,
+    });
   }
 
   const out: GetStatusResult = {
@@ -197,7 +216,14 @@ export async function getChangedFilesTool(
   _input: z.infer<typeof GetChangedFilesInput> = {},
 ): Promise<GetChangedFilesResult> {
   const status = await getStatusTool(ctx, {});
-  const files = Array.from(new Set(status.entries.map((e) => e.path)));
+  const seen = new Set<string>();
+  const files: RepoRelativePath[] = [];
+  for (const entry of status.entries) {
+    if (!seen.has(entry.path.path)) {
+      seen.add(entry.path.path);
+      files.push(entry.path);
+    }
+  }
 
   emitToolCall(ctx, { tool: 'get_changed_files', input: {}, status: 'ok' });
   return { files };
@@ -339,7 +365,7 @@ export async function getLogTool(
   if (input.path != null) {
     let relPath: string;
     try {
-      relPath = resolveWorkspacePath(ctx.workspaceRoot, input.path).relative;
+      relPath = resolveWorkspacePath(ctx.workspaceRoot, input.path).canonical.path;
     } catch (err) {
       if (err instanceof PathPolicyViolation) handleBlocked(ctx, 'get_log', err, { ...input });
       throw err;
@@ -381,7 +407,7 @@ export interface BlameLine {
 }
 
 export interface GetBlameResult {
-  path: string;
+  path: RepoRelativePath;
   lines: BlameLine[];
   truncated: boolean;
 }
@@ -395,9 +421,9 @@ export async function getBlameTool(
   ctx: FactoryContext,
   input: z.infer<typeof GetBlameInput>,
 ): Promise<GetBlameResult> {
-  let relPath: string;
+  let resolved: ReturnType<typeof resolveWorkspacePath>;
   try {
-    relPath = resolveWorkspacePath(ctx.workspaceRoot, input.path).relative;
+    resolved = resolveWorkspacePath(ctx.workspaceRoot, input.path);
   } catch (err) {
     if (err instanceof PathPolicyViolation) handleBlocked(ctx, 'get_blame', err, { ...input });
     throw err;
@@ -408,7 +434,7 @@ export async function getBlameTool(
     const end = input.endLine ?? input.startLine;
     args.push('-L', `${input.startLine},${end}`);
   }
-  args.push('--', relPath);
+  args.push('--', resolved.canonical.path);
 
   const result = ensureOk('get_blame', await git(ctx, args, DIFF_STDOUT_LIMIT_BYTES));
   const lines: BlameLine[] = [];
@@ -445,10 +471,14 @@ export async function getBlameTool(
 
   emitToolCall(ctx, {
     tool: 'get_blame',
-    input: { path: relPath, startLine: input.startLine ?? null, endLine: input.endLine ?? null },
+    input: {
+      path: resolved.canonical.path,
+      startLine: input.startLine ?? null,
+      endLine: input.endLine ?? null,
+    },
     status: 'ok',
     durationMs: result.durationMs,
     truncated: result.truncated,
   });
-  return { path: relPath, lines, truncated: result.truncated };
+  return { path: resolved.canonical, lines, truncated: result.truncated };
 }

@@ -1,4 +1,5 @@
-import { isAbsolute, normalize, relative, resolve, sep } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
+import { type RepoRelativePath, canonicalizeFactoryToolPath } from '../path-contract.js';
 
 export class PathPolicyViolation extends Error {
   readonly kind = 'PathPolicyViolation' as const;
@@ -20,7 +21,8 @@ export type PathPolicyReason =
   | 'assistant_home'
   | 'factory_internals'
   | 'empty_path'
-  | 'workspace_escape';
+  | 'workspace_escape'
+  | 'ambiguous_path';
 
 const DENIED_SEGMENTS: ReadonlyArray<{ segment: string; reason: PathPolicyReason }> = [
   { segment: '.codex', reason: 'assistant_home' },
@@ -31,7 +33,7 @@ const DENIED_SEGMENTS: ReadonlyArray<{ segment: string; reason: PathPolicyReason
 
 export interface ResolvedPath {
   absolute: string;
-  relative: string;
+  canonical: RepoRelativePath;
 }
 
 /**
@@ -41,6 +43,10 @@ export interface ResolvedPath {
  * Inputs are workspace-relative by contract. Absolute paths, `..`, `~`, and
  * the denied segments fail with a typed `PathPolicyViolation` whose `code`
  * is suitable for the structured `agent.tool-call` audit event.
+ *
+ * Path resolution is delegated to `canonicalizeFactoryToolPath` from
+ * `path-contract.ts`, which normalizes package-relative and absolute-worktree
+ * paths and returns the structured `RepoRelativePath` shape.
  */
 export function resolveWorkspacePath(workspaceRoot: string, requested: string): ResolvedPath {
   if (typeof requested !== 'string' || requested.trim().length === 0) {
@@ -63,8 +69,7 @@ export function resolveWorkspacePath(workspaceRoot: string, requested: string): 
     );
   }
 
-  const normalized = normalize(requested);
-  const segments = normalized.split(/[\\/]/).filter((s) => s.length > 0);
+  const segments = requested.split(/[\\/]/).filter((s) => s.length > 0);
 
   if (segments.includes('..')) {
     throw new PathPolicyViolation(
@@ -84,19 +89,20 @@ export function resolveWorkspacePath(workspaceRoot: string, requested: string): 
     }
   }
 
-  const root = resolve(workspaceRoot);
-  const absolute = resolve(root, normalized);
-  const rel = relative(root, absolute);
+  const result = canonicalizeFactoryToolPath({
+    rawPath: requested,
+    worktreePath: workspaceRoot,
+  });
 
-  if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) {
-    throw new PathPolicyViolation(
-      'workspace_escape',
-      requested,
-      `Path resolves outside the workspace: ${requested}`,
-    );
+  if (!result.ok) {
+    if (result.error.kind === 'ambiguous-repo-relative-path') {
+      throw new PathPolicyViolation('ambiguous_path', requested, result.error.message);
+    }
+    throw new PathPolicyViolation('workspace_escape', requested, result.error.message);
   }
 
-  return { absolute, relative: rel.split(sep).join('/') };
+  const absolute = resolve(workspaceRoot, result.path.path);
+  return { absolute, canonical: result.path };
 }
 
 export function isPathPolicyViolation(err: unknown): err is PathPolicyViolation {

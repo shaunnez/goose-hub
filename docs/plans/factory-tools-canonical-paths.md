@@ -48,15 +48,12 @@ Acceptance criteria:
 
 Completed:
 
-- Confirmed there is no existing `factory-tools` MCP server in the repo; `core/tool-layer/tools/*` remains a pre-built in-process tool layer for a future server.
-- Added `core/tool-layer/path-contract.ts` with the reusable `RepoRelativePath` response shape, canonicalization helpers, and structured ambiguity errors.
-- Reused `core/workspaces/path-normalization.ts` so factory-tool path responses match the workflow-side normalizer.
-- Wired the current core/tool-layer helpers to the same contract where appropriate:
-  - `readFileWithMetadata` returns `{ path, content }`.
-  - `searchFilesWithMetadata` returns `{ stdout, paths }` and canonicalizes ripgrep path prefixes.
-  - `writeFileWithMetadata` returns `{ path, written: true }`.
-  - `runTests` accepts optional path args and returns canonical `RepoRelativePath[]`.
-- Kept the existing simple helper APIs (`readFile`, `searchFiles`, `writeFile`) compatible for current callers while making the future MCP response contract available.
+- `core/tool-layer/path-contract.ts` provides the `RepoRelativePath` shape and `canonicalizeFactoryToolPath`.
+- `core/workspaces/path-normalization.ts` is the upstream normalizer; path-contract delegates to it.
+- The `factory-tools` MCP server (`core/tool-layer/mcp/`) is the primary consumer of these contracts.
+- `mcp/path-policy.ts` replaced: now a thin denylist wrapper over `canonicalizeFactoryToolPath` that returns `RepoRelativePath` via the `ResolvedPath.canonical` field.
+- Every path-bearing MCP tool response field returns `RepoRelativePath` (read, write, git, evidence tools).
+- Legacy in-process helpers (`core/tool-layer/tools/read.ts`, `write.ts`, `bash.ts`, `test.ts`) deleted; `record-decision.ts` preserved as it has live callers.
 
 ### [x] Slice 2 - Audit events carry canonical paths
 
@@ -70,14 +67,12 @@ Acceptance criteria:
 
 Completed:
 
-- Added `core/tool-layer/tool-call-audit.ts` as the shared audit payload normalizer.
-- `agent.tool-call` payloads now keep sanitized raw input and add `raw_path` plus `canonical_path` when a path-bearing tool input can be resolved against the workspace.
-- Claude/Codex hook payloads pass `workspace_dir` transiently so the server can canonicalize paths; the persisted event strips that absolute workspace path.
-- Codex runtime-owned `agent.tool-call` events use the same audit normalizer, including blocked workspace-boundary events.
-- `agent.tool-result` payloads are sanitized through the same boundary so Bash errors do not persist absolute user paths.
-- Added compatibility coverage for older payloads without `canonical_path`.
+- `core/tool-layer/tool-call-audit.ts` is the canonical audit payload normalizer.
+- `mcp/audit.ts` reduced to a thin shim: `emitToolCall`/`emitBlockedToolCall` now delegate to `normalizeToolCallAuditPayload` before persisting, so every `agent.tool-call` event carries `raw_path` + `canonical_path` for path-bearing tools.
+- `workspace_dir` is passed transiently and stripped from persisted payloads.
+- Blocked tool-call events pass through the same normalizer.
 
-### [ ] Slice 3 - Test tool returns canonical test paths
+### [ ] Slice 3 - MCP test tool returns canonical test paths
 
 Make the factory test tool report the canonical test files it ran.
 
@@ -89,7 +84,7 @@ Acceptance criteria:
 
 ### [ ] Slice 4 - Prompt simplification pass
 
-Update implement-style prompts to tell agents to use factory-tools-returned paths verbatim in terminal JSON.
+Update implement-style skill prompts to tell agents to use `mcp__factory-tools__`-returned paths verbatim in terminal JSON.
 
 Acceptance criteria:
 

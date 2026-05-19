@@ -65,6 +65,22 @@ describe('writeFileTool', () => {
   });
 });
 
+describe('canonical RepoRelativePath contract', () => {
+  it('write_file returns RepoRelativePath with root=worktree', async () => {
+    const result = await writeFileTool(ctx, { path: 'src/new.ts', content: 'x' });
+    expect(result.path.root).toBe('worktree');
+    expect(result.path.path).toBe('src/new.ts');
+  });
+
+  it('audit event carries canonical_path for a write_file call', async () => {
+    await writeFileTool(ctx, { path: 'audit-test.ts', content: 'y' });
+    const events = eventStore.replay({ runId: ctx.runId, kind: 'agent.tool-call' });
+    const writeEvent = events.find((e) => (e.payload as { tool: string }).tool === 'write_file');
+    const payload = writeEvent?.payload as Record<string, unknown>;
+    expect(payload.canonical_path).toMatchObject({ path: 'audit-test.ts', root: 'worktree' });
+  });
+});
+
 describe('editFileTool', () => {
   beforeEach(() => {
     writeFileSync(join(workspace, 'edit.txt'), 'one\ntwo\nthree\n');
@@ -184,8 +200,8 @@ describe('moveFileTool', () => {
   it('renames a file across nested paths', async () => {
     writeFileSync(join(workspace, 'a.txt'), 'x');
     const result = await moveFileTool(ctx, { from: 'a.txt', to: 'nested/b.txt' });
-    expect(result.from).toBe('a.txt');
-    expect(result.to).toBe('nested/b.txt');
+    expect(result.from).toMatchObject({ path: 'a.txt', root: 'worktree' });
+    expect(result.to).toMatchObject({ path: 'nested/b.txt', root: 'worktree' });
     expect(existsSync(join(workspace, 'a.txt'))).toBe(false);
     expect(readFileSync(join(workspace, 'nested/b.txt'), 'utf8')).toBe('x');
   });

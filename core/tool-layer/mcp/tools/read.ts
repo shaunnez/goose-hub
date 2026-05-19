@@ -1,6 +1,8 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
-import { join, relative, sep } from 'node:path';
+import { join } from 'node:path';
 import type { z } from 'zod';
+import type { RepoRelativePath } from '../../path-contract.js';
+import { canonicalizeFactoryToolPath } from '../../path-contract.js';
 import { emitBlockedToolCall, emitToolCall } from '../audit.js';
 import { DEFAULT_STDOUT_LIMIT_BYTES, minimalEnv, runCommand } from '../command-policy.js';
 import type { FactoryContext } from '../context.js';
@@ -26,7 +28,7 @@ const LIST_FILES_TIMEOUT_MS = 10_000;
 export type FileKind = 'file' | 'dir' | 'symlink' | 'other';
 
 export interface ReadFileResult {
-  path: string;
+  path: RepoRelativePath;
   content: string;
   truncated: boolean;
   startLine: number;
@@ -35,28 +37,28 @@ export interface ReadFileResult {
 }
 
 export interface ReadManyFilesResult {
-  files: Array<{ path: string; content: string; truncated: boolean }>;
+  files: Array<{ path: RepoRelativePath; content: string; truncated: boolean }>;
   errors: Array<{ path: string; reason: string }>;
 }
 
 export interface ListDirEntry {
-  name: string;
+  name: RepoRelativePath;
   kind: FileKind;
 }
 
 export interface ListDirResult {
-  path: string;
+  path: RepoRelativePath;
   entries: ListDirEntry[];
   truncated: boolean;
 }
 
 export interface ListFilesResult {
-  files: string[];
+  files: RepoRelativePath[];
   truncated: boolean;
 }
 
 export interface SearchMatch {
-  path: string;
+  path: RepoRelativePath;
   line: number;
   text: string;
 }
@@ -67,7 +69,7 @@ export interface SearchTextResult {
 }
 
 export interface FileInfoResult {
-  path: string;
+  path: RepoRelativePath;
   exists: boolean;
   kind: FileKind;
   sizeBytes: number;
@@ -100,6 +102,11 @@ function handleBlocked(
     message: err.message,
   });
   throw err;
+}
+
+function rawPathToCanonical(rawPath: string, workspaceRoot: string): RepoRelativePath {
+  const result = canonicalizeFactoryToolPath({ rawPath, worktreePath: workspaceRoot });
+  return result.ok ? result.path : { path: rawPath, root: 'worktree' };
 }
 
 /**
@@ -136,7 +143,7 @@ export async function readFileTool(
   const truncated = truncatedByBytes || endIndex < allLines.length;
 
   const result: ReadFileResult = {
-    path: resolved.relative,
+    path: resolved.canonical,
     content: sliced.join('\n'),
     truncated,
     startLine: startIndex + 1,
@@ -146,7 +153,7 @@ export async function readFileTool(
 
   emitToolCall(ctx, {
     tool: 'read_file',
-    input: { path: resolved.relative },
+    input: { path: resolved.canonical.path },
     status: 'ok',
     truncated,
   });
@@ -186,6 +193,7 @@ export async function readManyFilesTool(
 /**
  * Lists immediate (or shallow-nested) entries of a directory. `depth` > 1
  * recurses but the entry-count cap still applies, so deep trees truncate.
+ * Entry names are workspace-relative `RepoRelativePath` values.
  */
 export async function listDirTool(
   ctx: FactoryContext,
@@ -202,10 +210,11 @@ export async function listDirTool(
   const depth = input.depth ?? 1;
   const entries: ListDirEntry[] = [];
   let truncated = false;
+  const dirWorkspacePath = resolved.canonical.path;
 
   async function walk(
     absolute: string,
-    relativePath: string,
+    parentWorkspacePath: string,
     remainingDepth: number,
   ): Promise<void> {
     if (entries.length >= LIST_DIR_CAP_ENTRIES) {
@@ -225,23 +234,24 @@ export async function listDirTool(
           : dirent.isDirectory()
             ? 'dir'
             : 'other';
-      const name = relativePath === '' ? dirent.name : `${relativePath}/${dirent.name}`;
+      const entryPath = `${parentWorkspacePath}/${dirent.name}`;
+      const name: RepoRelativePath = rawPathToCanonical(entryPath, ctx.workspaceRoot);
       entries.push({ name, kind });
       if (kind === 'dir' && remainingDepth > 1) {
-        await walk(join(absolute, dirent.name), name, remainingDepth - 1);
+        await walk(join(absolute, dirent.name), entryPath, remainingDepth - 1);
       }
     }
   }
 
-  await walk(resolved.absolute, '', depth);
+  await walk(resolved.absolute, dirWorkspacePath, depth);
 
   emitToolCall(ctx, {
     tool: 'list_dir',
-    input: { path: resolved.relative, depth },
+    input: { path: resolved.canonical.path, depth },
     status: 'ok',
     truncated,
   });
-  return { path: resolved.relative, entries, truncated };
+  return { path: resolved.canonical, entries, truncated };
 }
 
 /**
@@ -258,7 +268,7 @@ export async function listFilesTool(
   let searchPath = '.';
   if (input.path != null) {
     try {
-      searchPath = resolveWorkspacePath(ctx.workspaceRoot, input.path).relative || '.';
+      searchPath = resolveWorkspacePath(ctx.workspaceRoot, input.path).canonical.path || '.';
     } catch (err) {
       if (err instanceof PathPolicyViolation) handleBlocked(ctx, 'list_files', err, { ...input });
       throw err;
@@ -282,7 +292,10 @@ export async function listFilesTool(
     .filter((line) => line.length > 0);
 
   const truncated = result.truncated || lines.length > limit;
-  const files = lines.slice(0, limit);
+  const rawFiles = lines.slice(0, limit);
+  const files: RepoRelativePath[] = rawFiles.map((rawPath) =>
+    rawPathToCanonical(rawPath, ctx.workspaceRoot),
+  );
 
   emitToolCall(ctx, {
     tool: 'list_files',
@@ -321,7 +334,7 @@ export async function searchTextTool(
   let searchPath = '.';
   if (input.path != null) {
     try {
-      searchPath = resolveWorkspacePath(ctx.workspaceRoot, input.path).relative || '.';
+      searchPath = resolveWorkspacePath(ctx.workspaceRoot, input.path).canonical.path || '.';
     } catch (err) {
       if (err instanceof PathPolicyViolation) handleBlocked(ctx, 'search_text', err, { ...input });
       throw err;
@@ -351,11 +364,11 @@ export async function searchTextTool(
     if (firstColon === -1) continue;
     const secondColon = line.indexOf(':', firstColon + 1);
     if (secondColon === -1) continue;
-    const path = line.slice(0, firstColon);
+    const rawPath = line.slice(0, firstColon);
     const lineNum = Number.parseInt(line.slice(firstColon + 1, secondColon), 10);
     const text = line.slice(secondColon + 1);
     if (!Number.isFinite(lineNum)) continue;
-    matches.push({ path, line: lineNum, text });
+    matches.push({ path: rawPathToCanonical(rawPath, ctx.workspaceRoot), line: lineNum, text });
   }
 
   const truncated = result.truncated || matches.length >= limit;
@@ -378,7 +391,7 @@ export async function searchTextTool(
 export async function fileExistsTool(
   ctx: FactoryContext,
   input: z.infer<typeof FileExistsInput>,
-): Promise<{ path: string; exists: boolean }> {
+): Promise<{ path: RepoRelativePath; exists: boolean }> {
   let resolved: ReturnType<typeof resolveWorkspacePath>;
   try {
     resolved = resolveWorkspacePath(ctx.workspaceRoot, input.path);
@@ -397,10 +410,10 @@ export async function fileExistsTool(
 
   emitToolCall(ctx, {
     tool: 'file_exists',
-    input: { path: resolved.relative },
+    input: { path: resolved.canonical.path },
     status: 'ok',
   });
-  return { path: resolved.relative, exists };
+  return { path: resolved.canonical, exists };
 }
 
 /**
@@ -424,7 +437,7 @@ export async function fileInfoTool(
   try {
     const s = await stat(resolved.absolute);
     result = {
-      path: resolved.relative,
+      path: resolved.canonical,
       exists: true,
       kind: statKind(s),
       sizeBytes: s.size,
@@ -433,7 +446,7 @@ export async function fileInfoTool(
     };
   } catch {
     result = {
-      path: resolved.relative,
+      path: resolved.canonical,
       exists: false,
       kind: 'other',
       sizeBytes: 0,
@@ -444,11 +457,11 @@ export async function fileInfoTool(
 
   emitToolCall(ctx, {
     tool: 'file_info',
-    input: { path: resolved.relative },
+    input: { path: resolved.canonical.path },
     status: 'ok',
   });
   return result;
 }
 
 // Re-exports for testing — keep internal but addressable.
-export const __internal = { READ_FILE_CAP_BYTES, LIST_DIR_CAP_ENTRIES, sep, relative };
+export const __internal = { READ_FILE_CAP_BYTES, LIST_DIR_CAP_ENTRIES };

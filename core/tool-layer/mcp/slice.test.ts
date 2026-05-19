@@ -25,7 +25,7 @@ describe('path-policy', () => {
   it('resolves a workspace-relative path to an absolute path under root', () => {
     writeFileSync(join(workspace, 'README.md'), '');
     const resolved = resolveWorkspacePath(workspace, 'README.md');
-    expect(resolved.relative).toBe('README.md');
+    expect(resolved.canonical.path).toBe('README.md');
     expect(resolved.absolute).toBe(join(workspace, 'README.md'));
   });
 

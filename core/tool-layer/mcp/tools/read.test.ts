@@ -43,7 +43,7 @@ describe('readFileTool', () => {
   it('reads a workspace-relative file and emits a tool-call audit', async () => {
     const result = await readFileTool(ctx, { path: 'README.md' });
     expect(result.content).toContain('hello world');
-    expect(result.path).toBe('README.md');
+    expect(result.path).toMatchObject({ path: 'README.md', root: 'worktree' });
     expect(result.truncated).toBe(false);
 
     const events = eventStore.replay({ runId: ctx.runId, kind: 'agent.tool-call' });
@@ -83,7 +83,7 @@ describe('readManyFilesTool', () => {
       paths: ['README.md', 'does-not-exist.txt'],
     });
     expect(result.files).toHaveLength(1);
-    expect(result.files[0].path).toBe('README.md');
+    expect(result.files[0].path).toMatchObject({ path: 'README.md', root: 'worktree' });
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0].path).toBe('does-not-exist.txt');
   });
@@ -92,8 +92,8 @@ describe('readManyFilesTool', () => {
 describe('listDirTool', () => {
   it('lists immediate entries at depth 1', async () => {
     const result = await listDirTool(ctx, { path: 'src' });
-    const names = result.entries.map((e) => e.name).sort();
-    expect(names).toEqual(['index.ts', 'util.ts']);
+    const names = result.entries.map((e) => e.name.path).sort();
+    expect(names).toEqual(['src/index.ts', 'src/util.ts']);
   });
 
   it('rejects parent traversal', async () => {
@@ -106,9 +106,9 @@ describe('listDirTool', () => {
 describe('listFilesTool', () => {
   it('lists files via ripgrep with a glob filter', async () => {
     const result = await listFilesTool(ctx, { glob: '*.ts' });
-    expect(result.files.some((f) => f.endsWith('index.ts'))).toBe(true);
-    expect(result.files.some((f) => f.endsWith('util.ts'))).toBe(true);
-    expect(result.files.some((f) => f.endsWith('README.md'))).toBe(false);
+    expect(result.files.some((f) => f.path.endsWith('index.ts'))).toBe(true);
+    expect(result.files.some((f) => f.path.endsWith('util.ts'))).toBe(true);
+    expect(result.files.some((f) => f.path.endsWith('README.md'))).toBe(false);
   });
 });
 
@@ -116,7 +116,7 @@ describe('searchTextTool', () => {
   it('finds a literal needle and returns structured matches', async () => {
     const result = await searchTextTool(ctx, { query: 'NEEDLE' });
     expect(result.matches.length).toBeGreaterThan(0);
-    const hit = result.matches.find((m) => m.path.endsWith('index.ts'));
+    const hit = result.matches.find((m) => m.path.path.endsWith('index.ts'));
     expect(hit).toBeTruthy();
     expect(hit?.line).toBe(1);
     expect(hit?.text).toContain('NEEDLE');
@@ -126,6 +126,49 @@ describe('searchTextTool', () => {
     const result = await searchTextTool(ctx, { query: 'NO_SUCH_TOKEN_xyzzy' });
     expect(result.matches).toEqual([]);
     expect(result.truncated).toBe(false);
+  });
+});
+
+describe('canonical RepoRelativePath contract', () => {
+  it('read_file returns RepoRelativePath with root=worktree', async () => {
+    const result = await readFileTool(ctx, { path: 'README.md' });
+    expect(result.path.root).toBe('worktree');
+    expect(result.path.path).toBe('README.md');
+  });
+
+  it('list_dir returns workspace-relative entry paths', async () => {
+    const result = await listDirTool(ctx, { path: 'src' });
+    const paths = result.path;
+    expect(paths.root).toBe('worktree');
+    const entryPaths = result.entries.map((e) => e.name.path).sort();
+    expect(entryPaths).toEqual(['src/index.ts', 'src/util.ts']);
+  });
+
+  it('search_text match paths are RepoRelativePath with root=worktree', async () => {
+    const result = await searchTextTool(ctx, { query: 'NEEDLE' });
+    const hit = result.matches.find((m) => m.path.path.endsWith('index.ts'));
+    expect(hit?.path.root).toBe('worktree');
+  });
+
+  it('audit event carries canonical_path for a read_file call', async () => {
+    await readFileTool(ctx, { path: 'README.md' });
+    const events = eventStore.replay({ runId: ctx.runId, kind: 'agent.tool-call' });
+    const readEvent = events.find((e) => (e.payload as { tool: string }).tool === 'read_file');
+    expect(readEvent).toBeTruthy();
+    const payload = readEvent?.payload as Record<string, unknown>;
+    expect(payload.canonical_path).toMatchObject({ path: 'README.md', root: 'worktree' });
+    expect(typeof payload.raw_path).toBe('string');
+  });
+
+  it.each([
+    ['.codex/auth.json', 'assistant_home'],
+    ['.agents/state.json', 'assistant_home'],
+    ['.claude/settings.json', 'assistant_home'],
+    ['.factory/mcp-config.json', 'factory_internals'],
+    ['../escape.ts', 'parent_traversal'],
+    ['/etc/passwd', 'absolute_path'],
+  ])('denylist blocks %s with reason %s', async (path, expectedReason) => {
+    await expect(readFileTool(ctx, { path })).rejects.toMatchObject({ code: expectedReason });
   });
 });
 

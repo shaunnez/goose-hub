@@ -99,3 +99,11 @@ Missing variables fail server bootstrap. Mismatches between env workspace and th
 ## Migration
 
 Phases 1–7 are tracked as separate work items under M19. Phase 1 (this PR) ships the policy and context primitives plus the ADR and CONTEXT.md decisions. The server bootstrap, tool families, runtime wiring, and bundle migration follow in dependent issues.
+
+## Addendum — canonical-path integration
+
+After the MCP server tool families landed, the canonical-path plan (`docs/plans/factory-tools-canonical-paths.md`) was fully integrated:
+
+- **Path responses follow `RepoRelativePath` from `path-contract.ts`.** Every MCP tool that returns a file or directory path returns the structured `{ path, root, packageRoot?, normalizedFrom? }` shape, not a bare string. `mcp/path-policy.ts` is now a thin denylist-first wrapper over `canonicalizeFactoryToolPath`; path resolution logic is not duplicated.
+- **Audit emission goes through `tool-call-audit.ts`.** `mcp/audit.ts` delegates to `normalizeToolCallAuditPayload` so every `agent.tool-call` event carries `raw_path` + `canonical_path` for path-bearing tools, consistent with the pre-tool-use hook events.
+- **Legacy in-process scaffolding deleted.** `core/tool-layer/tools/{read,write,bash,test}.ts` and their tests are removed. `record-decision.ts` is preserved (still imported by the server decisions router and the record-decision slice).
