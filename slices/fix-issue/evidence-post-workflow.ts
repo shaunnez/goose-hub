@@ -30,6 +30,20 @@ function webSpecPath(specPath: string): string {
   return specPath.startsWith('apps/web/') ? specPath.slice('apps/web/'.length) : specPath;
 }
 
+function materializeEvidenceSpec(workspaceDir: string, specPath: string): string {
+  const webRelativePath = webSpecPath(specPath);
+  const normalizedWebPath = path.normalize(webRelativePath);
+  if (
+    path.isAbsolute(specPath) ||
+    normalizedWebPath.startsWith('..') ||
+    !normalizedWebPath.startsWith(`e2e${path.sep}`)
+  ) {
+    throw new Error(`Invalid evidence specPath: ${specPath}`);
+  }
+
+  return path.join(workspaceDir, 'apps', 'web', normalizedWebPath);
+}
+
 function evidencePath(issueNumber: number, filePath: string): string {
   return `evidence/issue-${issueNumber}/${path.basename(filePath)}`;
 }
@@ -271,7 +285,16 @@ export function runEvidencePostPlan(input: RunEvidencePostPlanInput): EvidencePo
   const stagingDir = `/tmp/evidence-staging-${input.issueNumber}`;
   const resultsPath = path.join(stagingDir, 'pw-results.json');
   const stderrPath = path.join(stagingDir, 'pw-stderr.txt');
-  const absoluteSpecPath = path.join(input.workspaceDir, input.plan.specPath);
+  let absoluteSpecPath: string;
+  let webRelativeSpecPath: string;
+
+  try {
+    absoluteSpecPath = materializeEvidenceSpec(input.workspaceDir, input.plan.specPath);
+    webRelativeSpecPath = webSpecPath(input.plan.specPath);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return failedEvidencePlan(input.plan, message);
+  }
 
   if (input.plan.expectedAssertions.length === 0) {
     return failedEvidencePlan(input.plan, 'Evidence plan declared no AFTER-state assertions');
@@ -293,7 +316,7 @@ export function runEvidencePostPlan(input: RunEvidencePostPlanInput): EvidencePo
         'exec',
         'playwright',
         'test',
-        webSpecPath(input.plan.specPath),
+        webRelativeSpecPath,
         '--config',
         'playwright-evidence.config.ts',
         '--reporter=json',

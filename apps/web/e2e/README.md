@@ -27,12 +27,15 @@ The test skips gracefully when `GITHUB_TOKEN` is empty, per #36's acceptance cri
 
 The full state-transition round-trip (POST → GitHub label updated → SSE event arrives → Board card moves lane) is covered manually because the GitHub label flip side-effects a real issue. CI runs the popover-only path for safety.
 
-## Pipeline E2E (`e2e/pipeline/`)
+## Pipeline E2E (`e2e/pipeline/` + `issue-*.spec.ts`)
 
 `pnpm --filter @goose-hub/web test:e2e:pipeline` — runs against MOCK_AGENTS + MOCK_SOURCE + MOCK_OPEN_PR, no real GitHub token required.
 
-This is the canonical QA regression suite. The legacy UI smoke script is kept
-only for explicit manual checks against a real GitHub token.
+This is the canonical QA regression suite. It includes the durable pipeline
+fixtures under `e2e/pipeline/` plus issue-specific regression specs at
+`e2e/issue-*.spec.ts`, so evidence-post and QA stay aligned. The legacy UI
+smoke script is kept only for explicit manual checks against a real GitHub
+token.
 
 Specs:
 - `full-lifecycle.spec.ts` — chore: triaging → done (triage + fix + QA + review + approve)

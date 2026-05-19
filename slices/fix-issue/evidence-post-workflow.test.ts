@@ -14,6 +14,7 @@ afterEach(() => {
   fs.rmSync(helperWorktree, { recursive: true, force: true });
   fs.rmSync('/tmp/evidence-staging-813', { recursive: true, force: true });
   fs.rmSync('/tmp/evidence-issue-813', { recursive: true, force: true });
+  fs.rmSync('/tmp/evidence-post-outside.spec.ts', { force: true });
 });
 
 function plan() {
@@ -208,5 +209,29 @@ describe('evidence-post workflow helper', () => {
     expect(spawnSync).not.toHaveBeenCalled();
     expect(output.commentUrl).toBeUndefined();
     expect(output.decisionSummaries[0]?.summary).toContain('no AFTER-state assertions');
+  });
+
+  it('rejects evidence specs outside apps/web/e2e before spawning Playwright', () => {
+    const outsideSpecPath = '/tmp/evidence-post-outside.spec.ts';
+    fs.writeFileSync(outsideSpecPath, 'spec');
+
+    const spawnSync = vi.fn(() => ({ status: 0 }));
+
+    const output = runEvidencePostPlan({
+      plan: {
+        ...plan(),
+        specPath: outsideSpecPath,
+      },
+      workspaceDir,
+      issueNumber,
+      repo: 'owner/repo',
+      prNumber: 10,
+      prHeadSha: 'def5678',
+      publisher: { spawnSync: spawnSync as never },
+    });
+
+    expect(spawnSync).not.toHaveBeenCalled();
+    expect(output.commentUrl).toBeUndefined();
+    expect(output.decisionSummaries[0]?.summary).toContain('Invalid evidence specPath');
   });
 });

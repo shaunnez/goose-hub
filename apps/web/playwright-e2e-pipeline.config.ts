@@ -11,7 +11,8 @@ const MOCK_SERVER_PORT = Number(process.env.MOCK_SERVER_PORT ?? process.env.API_
 process.env.SERVER_URL = `http://localhost:${MOCK_SERVER_PORT}`;
 
 export default defineConfig({
-  testDir: './e2e/pipeline',
+  testDir: './e2e',
+  testMatch: ['pipeline/**/*.spec.ts', 'issue-*.spec.ts'],
   testIgnore: ['**/state-flow.spec.ts'],
   timeout: 120_000,
   expect: { timeout: 30_000 },
