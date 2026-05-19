@@ -1,7 +1,8 @@
 import type { z } from 'zod';
 import { eventStore } from '../../../event-stream/store.js';
+import { getProjectBySlug } from '../../../projects/loader.js';
 import { emitBlockedToolCall, emitToolCall } from '../audit.js';
-import { type CommandResult, minimalEnv, runCommand } from '../command-policy.js';
+import { minimalEnv, runCommand } from '../command-policy.js';
 import type { FactoryContext } from '../context.js';
 import { PathPolicyViolation, resolveWorkspacePath } from '../path-policy.js';
 import type {
@@ -92,9 +93,16 @@ export async function getPrDiffTool(
     );
   }
 
+  // Diff against the project's configured default branch rather than a
+  // hardcoded `origin/main` so projects with `master`, `develop`, etc.
+  // get correct deltas.
+  const project = await getProjectBySlug(ctx.projectId);
+  const defaultBranch = project?.targetRepo.defaultBranch?.trim() || 'main';
+  const baseRef = `origin/${defaultBranch}`;
+
   const result = await runCommand({
     command: 'git',
-    args: ['diff', '--no-color', `origin/main...${resolvedRef}`],
+    args: ['diff', '--no-color', `${baseRef}...${resolvedRef}`],
     cwd: ctx.workspaceRoot,
     timeoutMs: PR_DIFF_TIMEOUT_MS,
     stdoutLimitBytes: PR_DIFF_STDOUT_LIMIT_BYTES,
@@ -148,70 +156,72 @@ export async function runFullSuiteIfNeededTool(
 /**
  * Runs the project test command narrowed to a single file. Optional
  * `testName` is passed positionally after the path — vitest, jest, and
- * playwright all accept a name filter as the next argv, so this is the
- * lowest-common-denominator wiring.
+ * playwright all accept a name filter as the next argv. The whole-file
+ * fallback (no `testName`) routes through `runTestsTool` for shared
+ * argv-building; the named-test path constructs the argv directly so
+ * unrelated tests in the same file do not run first.
  */
 export async function runIsolatedTestTool(
   ctx: FactoryContext,
   input: z.infer<typeof RunIsolatedTestInput>,
 ): Promise<VerifyResult> {
-  // Pre-resolve to surface policy violations through the qa.* audit
-  // namespace; runTestsTool also resolves but emits under run_tests.
+  let relPath: string;
   try {
-    resolveWorkspacePath(ctx.workspaceRoot, input.path);
+    relPath = resolveWorkspacePath(ctx.workspaceRoot, input.path).relative;
   } catch (err) {
     if (err instanceof PathPolicyViolation)
       handleBlocked(ctx, 'run_isolated_test', err, { ...input });
     throw err;
   }
 
-  // Lean on runTestsTool for the underlying argv + spawn + audit
-  // emission, then layer the qa-specific audit on top so the verification
-  // call site is attributable.
-  const result = await runTestsTool(ctx, { path: input.path });
-
-  if (input.testName != null) {
-    // The simple `path` invocation already narrows to a file; running with
-    // an additional `testName` requires a second invocation that appends
-    // the name as a positional arg. We do that explicitly here so the
-    // first call's audit captures the wider surface and the second
-    // captures the narrowed name filter.
-    const argv = [...result.command, input.testName];
-    const narrowed: CommandResult = await runCommand({
-      command: argv[0],
-      args: argv.slice(1),
-      cwd: ctx.workspaceRoot,
-      timeoutMs: 5 * 60 * 1000,
-      env: minimalEnv(),
-    });
+  if (input.testName == null) {
+    const result = await runTestsTool(ctx, { path: input.path });
     emitToolCall(ctx, {
       tool: 'run_isolated_test',
-      input: { path: input.path, testName: input.testName },
-      status: narrowed.status,
-      exitCode: narrowed.exitCode,
-      durationMs: narrowed.durationMs,
-      truncated: narrowed.truncated,
+      input: { path: input.path },
+      status: result.status,
+      exitCode: result.exitCode,
+      durationMs: result.durationMs,
+      truncated: result.truncated,
     });
-    return {
-      status: narrowed.status,
-      exitCode: narrowed.exitCode,
-      stdout: narrowed.stdout,
-      stderr: narrowed.stderr,
-      durationMs: narrowed.durationMs,
-      truncated: narrowed.truncated,
-      command: argv,
-    };
+    return result;
   }
 
+  const project = await getProjectBySlug(ctx.projectId);
+  if (project == null || project.stack.testCommand.trim().length === 0) {
+    throw new Error(`run_isolated_test: project '${ctx.projectId}' has no testCommand configured.`);
+  }
+
+  const argv = project.stack.testCommand
+    .trim()
+    .split(/\s+/)
+    .filter((s) => s.length > 0);
+  argv.push(relPath, input.testName);
+
+  const narrowed = await runCommand({
+    command: argv[0],
+    args: argv.slice(1),
+    cwd: ctx.workspaceRoot,
+    timeoutMs: 5 * 60 * 1000,
+    env: minimalEnv(),
+  });
   emitToolCall(ctx, {
     tool: 'run_isolated_test',
-    input: { path: input.path },
-    status: result.status,
-    exitCode: result.exitCode,
-    durationMs: result.durationMs,
-    truncated: result.truncated,
+    input: { path: input.path, testName: input.testName },
+    status: narrowed.status,
+    exitCode: narrowed.exitCode,
+    durationMs: narrowed.durationMs,
+    truncated: narrowed.truncated,
   });
-  return result;
+  return {
+    status: narrowed.status,
+    exitCode: narrowed.exitCode,
+    stdout: narrowed.stdout,
+    stderr: narrowed.stderr,
+    durationMs: narrowed.durationMs,
+    truncated: narrowed.truncated,
+    command: argv,
+  };
 }
 
 export interface GetVerificationSummaryResult {

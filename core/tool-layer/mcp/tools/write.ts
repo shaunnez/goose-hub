@@ -180,27 +180,58 @@ export interface ApplyPatchResult {
 }
 
 /**
- * Applies a unified diff via `git apply`. The patch is written to a
- * Factory-owned tmp file outside the workspace (the path policy applies to
- * agent-supplied paths, not orchestrator internals) and removed in the
- * `finally`. `git apply` refuses patches that touch paths outside the
- * working tree, layering on top of the path policy.
+ * Extracts every target path mentioned in a unified diff. Handles both
+ * `+++ b/<path>` and `--- a/<path>` headers, and the special `/dev/null`
+ * sentinels (which mean "create" / "delete" and have no policy
+ * implications themselves — the *other* side carries the real path).
+ */
+export function extractDiffPaths(patch: string): string[] {
+  const paths = new Set<string>();
+  for (const line of patch.split('\n')) {
+    let path: string | null = null;
+    if (line.startsWith('--- a/')) path = line.slice('--- a/'.length).trim();
+    else if (line.startsWith('+++ b/')) path = line.slice('+++ b/'.length).trim();
+    if (path != null && path.length > 0 && path !== '/dev/null') {
+      paths.add(path);
+    }
+  }
+  return [...paths];
+}
+
+/**
+ * Applies a unified diff via `git apply`. EVERY target path inside the
+ * diff is validated through `resolveWorkspacePath` before `git apply`
+ * runs — an agent supplying a benign `path` argument with a patch body
+ * that writes `.factory/mcp-config.json` or `.codex/auth.json` is
+ * rejected at the policy layer, not just at the worktree boundary
+ * (which `git apply` would catch anyway, but only for paths outside
+ * the worktree — internal denylist segments are workspace-internal).
+ *
+ * The patch is written to a Factory-owned tmp file outside the workspace
+ * and removed in the `finally`.
  */
 export async function applyPatchTool(
   ctx: FactoryContext,
   input: z.infer<typeof ApplyPatchInput>,
 ): Promise<ApplyPatchResult> {
-  // The agent-supplied `path` arg is reserved for a future "patch this
-  // specific file" semantic. Today we always invoke `git apply` from the
-  // worktree root with the patch on disk; we still resolve `path` to
-  // surface policy violations early and to enforce the workspace boundary
-  // even though `git apply` would also refuse out-of-tree edits.
   try {
     resolveWorkspacePath(ctx.workspaceRoot, input.path);
   } catch (err) {
     if (err instanceof PathPolicyViolation)
       handleBlocked(ctx, 'apply_patch', err, { path: input.path });
     throw err;
+  }
+
+  // Validate every path the diff actually touches — agent's `path` arg
+  // is just a hint. Reject the whole patch if any target violates the
+  // path policy (assistant-home / factory-internals / parent traversal).
+  for (const diffPath of extractDiffPaths(input.patch)) {
+    try {
+      resolveWorkspacePath(ctx.workspaceRoot, diffPath);
+    } catch (err) {
+      if (err instanceof PathPolicyViolation) handleBlocked(ctx, 'apply_patch', err, { diffPath });
+      throw err;
+    }
   }
 
   const patchFile = join(tmpdir(), `factory-patch-${randomUUID()}.patch`);

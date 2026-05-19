@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 // Static so it survives `vi.mock('node:fs')` in agent-runtime tests.
 
 const SERVER_SCRIPT_RELATIVE = 'core/tool-layer/mcp/server.ts';
+const TSX_BIN_RELATIVE = 'node_modules/.bin/tsx';
 
 const PER_RUN_CONFIG_RELATIVE = '.factory/mcp-config.json';
 
@@ -78,7 +79,7 @@ export function buildFactoryMcpConfig(
   const config: McpConfigJson = {
     mcpServers: {
       'factory-tools': {
-        command: 'tsx',
+        command: resolveTsxBinary(orchestratorRoot),
         args: [serverScript],
         env,
       },
@@ -91,6 +92,23 @@ export function buildFactoryMcpConfig(
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, { flag: 'w' });
 
   return { configPath, config };
+}
+
+/**
+ * Resolves the absolute path to `tsx`. The Claude/Codex CLIs spawn this
+ * MCP server with the orchestrator's minimal env (PATH = /usr/local/bin:
+ * /usr/bin:/bin on Linux), which doesn't include `node_modules/.bin`. Using
+ * an absolute path guarantees the spawn succeeds regardless of the
+ * subprocess PATH.
+ *
+ * Falls back to the bare command `tsx` only when the local install isn't
+ * present (e.g. a globally-installed dev shell) so the helper stays usable
+ * in environments where the repo wasn't installed.
+ */
+function resolveTsxBinary(orchestratorRoot: string): string {
+  const local = join(orchestratorRoot, TSX_BIN_RELATIVE);
+  if (existsSync(local)) return local;
+  return 'tsx';
 }
 
 function resolveBundleServers(

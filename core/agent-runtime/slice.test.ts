@@ -40,6 +40,7 @@ vi.mock('node:fs', () => ({
   mkdirSync: vi.fn(),
   writeFileSync: vi.fn(),
   existsSync: vi.fn().mockReturnValue(false),
+  readFileSync: vi.fn(),
 }));
 vi.mock('node:os', () => ({ homedir: vi.fn().mockReturnValue('/mock-home') }));
 vi.mock('../event-stream/store.js', () => ({

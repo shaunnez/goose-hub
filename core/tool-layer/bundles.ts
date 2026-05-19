@@ -38,6 +38,8 @@ const FT_GIT_READ = [
   'mcp__factory-tools__get_diff',
   'mcp__factory-tools__get_head_sha',
   'mcp__factory-tools__get_merge_base',
+  'mcp__factory-tools__get_log',
+  'mcp__factory-tools__get_blame',
 ];
 const FT_QA = [
   'mcp__factory-tools__get_pr_diff',

@@ -56,6 +56,7 @@ export async function runCommand(spec: CommandSpec): Promise<CommandResult> {
     let stderrBytes = 0;
     let truncated = false;
     let timedOut = false;
+    let exited = false;
     let forceKillTimer: NodeJS.Timeout | null = null;
 
     child.stdout?.on('data', (chunk: Buffer) => {
@@ -93,12 +94,16 @@ export async function runCommand(spec: CommandSpec): Promise<CommandResult> {
     const timeoutHandle = setTimeout(() => {
       timedOut = true;
       child.kill('SIGTERM');
+      // `child.killed` flips on signal *send*, not exit — checking it here
+      // would skip SIGKILL for processes that ignore SIGTERM. Track exit
+      // via the close handler instead.
       forceKillTimer = setTimeout(() => {
-        if (!child.killed) child.kill('SIGKILL');
+        if (!exited) child.kill('SIGKILL');
       }, FORCE_KILL_GRACE_MS);
     }, spec.timeoutMs);
 
     const finish = (exitCode: number | null, signal: NodeJS.Signals | null) => {
+      exited = true;
       clearTimeout(timeoutHandle);
       if (forceKillTimer) clearTimeout(forceKillTimer);
       const status: CommandStatus = timedOut ? 'timed_out' : exitCode === 0 ? 'ok' : 'failed';
@@ -114,6 +119,7 @@ export async function runCommand(spec: CommandSpec): Promise<CommandResult> {
     };
 
     child.on('error', (err) => {
+      exited = true;
       clearTimeout(timeoutHandle);
       if (forceKillTimer) clearTimeout(forceKillTimer);
       stderrChunks.push(Buffer.from(`${err.message}\n`, 'utf8'));

@@ -1,11 +1,14 @@
 import type { z } from 'zod';
-import { emitToolCall } from '../audit.js';
+import { emitBlockedToolCall, emitToolCall } from '../audit.js';
 import { type CommandResult, minimalEnv, runCommand } from '../command-policy.js';
 import type { FactoryContext } from '../context.js';
+import { PathPolicyViolation, resolveWorkspacePath } from '../path-policy.js';
 import type {
+  GetBlameInput,
   GetChangedFilesInput,
   GetDiffInput,
   GetHeadShaInput,
+  GetLogInput,
   GetMergeBaseInput,
   GetStatusInput,
 } from '../schemas.js';
@@ -281,4 +284,171 @@ export async function getMergeBaseTool(
     durationMs: result.durationMs,
   });
   return { base, ref };
+}
+
+export interface GitLogEntry {
+  sha: string;
+  authorName: string;
+  authorEmail: string;
+  date: string;
+  subject: string;
+}
+
+export interface GetLogResult {
+  commits: GitLogEntry[];
+  truncated: boolean;
+}
+
+const LOG_DEFAULT_LIMIT = 50;
+const LOG_MAX_LIMIT = 500;
+const LOG_FIELD_SEP = '\x1f';
+const LOG_RECORD_SEP = '\x1e';
+
+function handleBlocked(
+  ctx: FactoryContext,
+  tool: string,
+  err: PathPolicyViolation,
+  input: Record<string, unknown>,
+): never {
+  emitBlockedToolCall(ctx, {
+    tool,
+    input,
+    blocked: true,
+    reason: err.code,
+    message: err.message,
+  });
+  throw err;
+}
+
+/**
+ * Reads commit history. Used by code-quality-audit for Cat 7 (Gall's Law
+ * evolution analysis) — when did each surface stabilize, who touched it,
+ * how big were the deltas. Output uses ASCII control-byte separators so
+ * the format is unambiguous regardless of locale or commit message
+ * content.
+ */
+export async function getLogTool(
+  ctx: FactoryContext,
+  input: z.infer<typeof GetLogInput>,
+): Promise<GetLogResult> {
+  const limit = Math.min(input.limit ?? LOG_DEFAULT_LIMIT, LOG_MAX_LIMIT);
+  const format = ['%H', '%an', '%ae', '%aI', '%s'].join(LOG_FIELD_SEP) + LOG_RECORD_SEP;
+
+  const args = ['log', `--max-count=${limit}`, `--pretty=format:${format}`];
+  if (input.range != null) args.push(input.range);
+  if (input.path != null) {
+    let relPath: string;
+    try {
+      relPath = resolveWorkspacePath(ctx.workspaceRoot, input.path).relative;
+    } catch (err) {
+      if (err instanceof PathPolicyViolation) handleBlocked(ctx, 'get_log', err, { ...input });
+      throw err;
+    }
+    args.push('--', relPath);
+  }
+
+  const result = ensureOk('get_log', await git(ctx, args, DIFF_STDOUT_LIMIT_BYTES));
+  const commits: GitLogEntry[] = [];
+  for (const record of result.stdout.split(LOG_RECORD_SEP)) {
+    if (record.length === 0) continue;
+    const [sha, authorName, authorEmail, date, subject] = record.split(LOG_FIELD_SEP);
+    if (sha == null || sha.length === 0) continue;
+    commits.push({
+      sha,
+      authorName: authorName ?? '',
+      authorEmail: authorEmail ?? '',
+      date: date ?? '',
+      subject: (subject ?? '').replace(/^\n/, ''),
+    });
+  }
+
+  emitToolCall(ctx, {
+    tool: 'get_log',
+    input: { path: input.path ?? null, range: input.range ?? null, limit },
+    status: 'ok',
+    durationMs: result.durationMs,
+    truncated: result.truncated,
+  });
+  return { commits, truncated: result.truncated };
+}
+
+export interface BlameLine {
+  sha: string;
+  authorName: string;
+  date: string;
+  lineNumber: number;
+  content: string;
+}
+
+export interface GetBlameResult {
+  path: string;
+  lines: BlameLine[];
+  truncated: boolean;
+}
+
+/**
+ * Per-line authorship for a workspace-relative file. `--line-porcelain`
+ * is verbose but unambiguous to parse — each line emits the same set of
+ * header fields followed by a literal `\t<content>` line.
+ */
+export async function getBlameTool(
+  ctx: FactoryContext,
+  input: z.infer<typeof GetBlameInput>,
+): Promise<GetBlameResult> {
+  let relPath: string;
+  try {
+    relPath = resolveWorkspacePath(ctx.workspaceRoot, input.path).relative;
+  } catch (err) {
+    if (err instanceof PathPolicyViolation) handleBlocked(ctx, 'get_blame', err, { ...input });
+    throw err;
+  }
+
+  const args = ['blame', '--line-porcelain'];
+  if (input.startLine != null) {
+    const end = input.endLine ?? input.startLine;
+    args.push('-L', `${input.startLine},${end}`);
+  }
+  args.push('--', relPath);
+
+  const result = ensureOk('get_blame', await git(ctx, args, DIFF_STDOUT_LIMIT_BYTES));
+  const lines: BlameLine[] = [];
+  let current: Partial<BlameLine> | null = null;
+
+  for (const line of result.stdout.split('\n')) {
+    if (line.startsWith('\t')) {
+      if (current != null && current.sha != null) {
+        lines.push({
+          sha: current.sha,
+          authorName: current.authorName ?? '',
+          date: current.date ?? '',
+          lineNumber: current.lineNumber ?? 0,
+          content: line.slice(1),
+        });
+      }
+      current = null;
+      continue;
+    }
+    // Header line: `<sha> <orig-line> <final-line> [<count>]` or `<key> <value>`.
+    const shaMatch = line.match(/^([0-9a-f]{40})\s+\d+\s+(\d+)/);
+    if (shaMatch) {
+      current = { sha: shaMatch[1], lineNumber: Number.parseInt(shaMatch[2], 10) };
+      continue;
+    }
+    if (current == null) continue;
+    if (line.startsWith('author ')) {
+      current.authorName = line.slice('author '.length);
+    } else if (line.startsWith('author-time ')) {
+      const epoch = Number.parseInt(line.slice('author-time '.length), 10);
+      if (Number.isFinite(epoch)) current.date = new Date(epoch * 1000).toISOString();
+    }
+  }
+
+  emitToolCall(ctx, {
+    tool: 'get_blame',
+    input: { path: relPath, startLine: input.startLine ?? null, endLine: input.endLine ?? null },
+    status: 'ok',
+    durationMs: result.durationMs,
+    truncated: result.truncated,
+  });
+  return { path: relPath, lines, truncated: result.truncated };
 }

@@ -17,6 +17,7 @@ import {
   CodexNotAuthenticatedError,
   assertCodexAuthenticated,
   buildCodexArgv,
+  buildCodexMcpInlineArgs,
   escapeForTomlMultilineBasic,
   resolveCodexBinary,
 } from './codex-config.js';
@@ -103,17 +104,19 @@ export class CodexCliRuntime implements AgentRuntime {
     mkdirSync(workspaceDir, { recursive: true });
     const projectId = (spec.context.projectId as string) ?? 'unknown';
     const workItemId = (spec.context.workItemId as string | undefined) ?? spec.workItemId ?? null;
-    // Per-run MCP config under <worktree>/.factory/mcp-config.json (ADR 0045).
-    // Codex CLI does not yet accept `--mcp-config`; the config is written
-    // in the canonical location regardless so the codex runtime aligns
-    // with the claude runtime once codex MCP wiring lands.
-    buildFactoryMcpConfig({
+    // Per-run MCP config (ADR 0045). For Claude we pass `--mcp-config`; for
+    // Codex we pass each MCP server entry as `-c mcp_servers.<n>.command=...`
+    // / `.args=...` / `.env=...` since Codex CLI consumes MCP via TOML and
+    // `--ignore-user-config` skips `~/.codex/config.toml`. The JSON config
+    // file is still written under the worktree for parity / debugging.
+    const { config: factoryMcpConfig } = buildFactoryMcpConfig({
       workspaceDir,
       runId,
       projectId,
       workItemId,
       toolBundles: spec.toolBundles,
     });
+    const codexMcpInlineArgs = buildCodexMcpInlineArgs(factoryMcpConfig.mcpServers);
     const recordDecisionTool = getRecordDecisionTool(projectId);
     if (spec.sandboxMode !== 'preconfigured') {
       writeWorkspaceSandbox(workspaceDir, { role: spec.role, recordDecisionTool });
@@ -154,6 +157,7 @@ export class CodexCliRuntime implements AgentRuntime {
       maxTurns: spec.budgets.maxTurns,
       commandSandbox: needsBrowserProcessAccess ? 'danger-full-access' : undefined,
       approvalPolicy: needsBrowserProcessAccess ? 'never' : undefined,
+      inlineConfig: codexMcpInlineArgs,
     });
 
     return new Promise((resolve, reject) => {

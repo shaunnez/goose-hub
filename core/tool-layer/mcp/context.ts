@@ -20,10 +20,16 @@ export interface FactoryContext {
   serverPort: number;
 }
 
+/**
+ * Required env: the run identifies a project + workspace + server port at
+ * minimum. `FACTORY_WORK_ITEM_ID` is *not* in this list because project-
+ * level / ad-hoc skill invocations have no work item; tools that need one
+ * (`get_work_item`, `check_acceptance_criteria`) throw on their own when
+ * the field is empty.
+ */
 const REQUIRED_ENV = [
   'FACTORY_RUN_ID',
   'FACTORY_PROJECT_ID',
-  'FACTORY_WORK_ITEM_ID',
   'FACTORY_WORKSPACE_DIR',
   'FACTORY_SERVER_PORT',
 ] as const;
@@ -55,7 +61,8 @@ export function loadFactoryContext(env: NodeJS.ProcessEnv = process.env): Factor
   return {
     runId: (env.FACTORY_RUN_ID as string).trim(),
     projectId: (env.FACTORY_PROJECT_ID as string).trim(),
-    workItemId: (env.FACTORY_WORK_ITEM_ID as string).trim(),
+    // Empty string means "no work item" for project-level / ad-hoc runs.
+    workItemId: (env.FACTORY_WORK_ITEM_ID ?? '').trim(),
     workspaceRoot,
     serverPort,
   };

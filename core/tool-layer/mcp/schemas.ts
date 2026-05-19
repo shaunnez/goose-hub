@@ -16,8 +16,6 @@ export const GetWorkItemInput = z.object({}).strict();
 
 export const GetProjectContextInput = z.object({}).strict();
 
-export const GetHandoffInput = z.object({}).strict();
-
 export const GetStackCommandsInput = z.object({}).strict();
 
 export const RecordDecisionInput = z
@@ -145,11 +143,11 @@ export const CollectEvidenceInput = z
   })
   .strict();
 
-export const ValidateEvidenceArtifactsInput = z.object({ runId: z.string().min(1) }).strict();
-
-export const PackageEvidencePacketInput = z
-  .object({ runId: z.string().min(1), workItemId: z.string().min(1) })
-  .strict();
+// `validate_evidence_artifacts`, `package_evidence_packet`, and
+// `publish_evidence` from the original ADR catalog are workflow-internal
+// concerns owned by `slices/fix-issue/evidence-post-workflow.ts`. They
+// were dropped from the agent surface in favour of the workflow keeping
+// direct access to its existing helpers.
 
 // ─── git / diff (read-only) ──────────────────────────────────────────────────
 
@@ -162,6 +160,25 @@ export const GetDiffInput = z.object({ staged: z.boolean().optional() }).strict(
 export const GetHeadShaInput = z.object({}).strict();
 
 export const GetMergeBaseInput = z.object({ ref: z.string().min(1).max(200).optional() }).strict();
+
+export const GetLogInput = z
+  .object({
+    path: WorkspacePath.optional(),
+    /** Maximum commits to return (default 50, cap 500). */
+    limit: z.number().int().min(1).max(500).optional(),
+    /** Range expression, e.g. `origin/main..HEAD` or `<sha>..<sha>`. */
+    range: z.string().min(1).max(200).optional(),
+  })
+  .strict();
+
+export const GetBlameInput = z
+  .object({
+    path: WorkspacePath,
+    /** Optional line range to blame (inclusive). */
+    startLine: z.number().int().min(1).optional(),
+    endLine: z.number().int().min(1).optional(),
+  })
+  .strict();
 
 // ─── workflow-owned (not exposed to agent bundles) ───────────────────────────
 
@@ -193,8 +210,6 @@ export const TransitionStateInput = z
   .object({ issueNumber: z.number().int().min(1), to: z.string().min(1).max(64) })
   .strict();
 
-export const PublishEvidenceInput = z.object({ runId: z.string().min(1) }).strict();
-
 // ─── qa / review ─────────────────────────────────────────────────────────────
 
 export const GetPrDiffInput = z.object({ prNumber: z.number().int().min(1) }).strict();
@@ -220,7 +235,6 @@ export const FACTORY_TOOL_NAMES = [
   // context
   'get_work_item',
   'get_project_context',
-  'get_handoff',
   'get_stack_commands',
   'record_decision',
   // read / search
@@ -249,22 +263,21 @@ export const FACTORY_TOOL_NAMES = [
   'write_playwright_spec',
   'run_playwright_spec',
   'collect_evidence',
-  'validate_evidence_artifacts',
-  'package_evidence_packet',
   // git / diff (read-only)
   'get_status',
   'get_changed_files',
   'get_diff',
   'get_head_sha',
   'get_merge_base',
-  // workflow-owned
+  'get_log',
+  'get_blame',
+  // workflow-owned (NOT registered on the MCP server, NOT in any agent bundle)
   'stage_changes',
   'commit_changes',
   'open_pr',
   'update_pr',
   'post_issue_comment',
   'transition_state',
-  'publish_evidence',
   // qa / review
   'get_pr_diff',
   'get_verification_summary',

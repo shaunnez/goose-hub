@@ -14,11 +14,14 @@ describe('FACTORY_TOOL_NAMES', () => {
     expect(set.size).toBe(FACTORY_TOOL_NAMES.length);
   });
 
-  it('includes every tool family from ADR 0045', () => {
+  it('includes every implemented tool family', () => {
+    // Phantom names (get_handoff, validate_evidence_artifacts,
+    // package_evidence_packet, publish_evidence) from the original ADR
+    // catalog were dropped — those are workflow-internal or undefined
+    // artifacts, not agent-callable tools.
     const expected = [
       'get_work_item',
       'get_project_context',
-      'get_handoff',
       'get_stack_commands',
       'record_decision',
       'read_file',
@@ -30,6 +33,8 @@ describe('FACTORY_TOOL_NAMES', () => {
       'run_typecheck',
       'collect_evidence',
       'get_diff',
+      'get_log',
+      'get_blame',
       'stage_changes',
       'commit_changes',
       'open_pr',
@@ -38,6 +43,18 @@ describe('FACTORY_TOOL_NAMES', () => {
     ];
     for (const name of expected) {
       expect(FACTORY_TOOL_NAMES).toContain(name);
+    }
+  });
+
+  it('does not include the dropped phantom names', () => {
+    const phantoms = [
+      'get_handoff',
+      'validate_evidence_artifacts',
+      'package_evidence_packet',
+      'publish_evidence',
+    ];
+    for (const name of phantoms) {
+      expect(FACTORY_TOOL_NAMES).not.toContain(name);
     }
   });
 });

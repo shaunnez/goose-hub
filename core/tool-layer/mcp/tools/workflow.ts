@@ -1,3 +1,21 @@
+/**
+ * tools/workflow.ts — **status: unused / deprecated until adopted**.
+ *
+ * These helpers were drafted in Phase 3 of ADR 0045 as typed wrappers
+ * around git + GitHub API operations that workflows could import directly
+ * (NOT registered with the MCP server, NOT in any agent bundle).
+ *
+ * As of today, nothing imports them. The existing workflow code at
+ * `slices/fix-issue/evidence-post-workflow.ts`, the `core/connectors/github/*`
+ * helpers, and `GitHubLabelsSource` already cover the same operations
+ * with shapes the workflows are wired against. Adopting these wrappers
+ * would also require reshaping the audit story (`emitToolCall` is meant
+ * for agent calls; workflow ops are not agent actions).
+ *
+ * Kept in tree as a reference surface in case a future refactor wants
+ * uniform typed entry points. Delete this file rather than maintain
+ * dead code if that refactor never happens.
+ */
 import type { z } from 'zod';
 import { openPR } from '../../../connectors/github/open-pr.js';
 import type { StateName } from '../../../state-machine/states.js';

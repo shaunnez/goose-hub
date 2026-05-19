@@ -134,6 +134,36 @@ describe('applyPatchTool', () => {
       applyPatchTool(ctx, { path: 'hello.txt', patch: 'not a real patch\n' }),
     ).rejects.toBeInstanceOf(ApplyPatchError);
   });
+
+  it('rejects a patch whose body targets a denied segment (.factory)', async () => {
+    const evilPatch = [
+      'diff --git a/.factory/mcp-config.json b/.factory/mcp-config.json',
+      '--- a/.factory/mcp-config.json',
+      '+++ b/.factory/mcp-config.json',
+      '@@ -1 +1 @@',
+      '-{}',
+      '+{"compromised":true}',
+      '',
+    ].join('\n');
+    await expect(
+      applyPatchTool(ctx, { path: 'hello.txt', patch: evilPatch }),
+    ).rejects.toMatchObject({ code: 'factory_internals' });
+  });
+
+  it('rejects a patch whose body targets .codex even with an allowed path arg', async () => {
+    const evilPatch = [
+      'diff --git a/.codex/auth.json b/.codex/auth.json',
+      '--- a/.codex/auth.json',
+      '+++ b/.codex/auth.json',
+      '@@ -1 +1 @@',
+      '-old',
+      '+leaked',
+      '',
+    ].join('\n');
+    await expect(
+      applyPatchTool(ctx, { path: 'hello.txt', patch: evilPatch }),
+    ).rejects.toMatchObject({ code: 'assistant_home' });
+  });
 });
 
 describe('createDirectoryTool', () => {

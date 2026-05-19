@@ -4,11 +4,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FactoryContext } from '../context.js';
+import { PathPolicyViolation } from '../path-policy.js';
 import {
   GitCommandError,
+  getBlameTool,
   getChangedFilesTool,
   getDiffTool,
   getHeadShaTool,
+  getLogTool,
   getMergeBaseTool,
   getStatusTool,
 } from './git.js';
@@ -138,5 +141,30 @@ describe('GitCommandError', () => {
     } finally {
       rmSync(outside, { recursive: true, force: true });
     }
+  });
+});
+
+describe('getLogTool', () => {
+  it('returns a structured commit list for the HEAD ref', async () => {
+    const result = await getLogTool(ctx, { limit: 5 });
+    expect(result.commits.length).toBeGreaterThan(0);
+    const first = result.commits[0];
+    expect(first.sha).toMatch(/^[0-9a-f]{40}$/);
+    expect(first.subject).toBe('init');
+    expect(first.authorName).toBe('Test');
+  });
+
+  it('rejects parent-traversal paths', async () => {
+    await expect(getLogTool(ctx, { path: '../escape.txt' })).rejects.toBeInstanceOf(
+      PathPolicyViolation,
+    );
+  });
+});
+
+describe('getBlameTool', () => {
+  it('rejects assistant-home paths', async () => {
+    await expect(getBlameTool(ctx, { path: '.codex/auth.json' })).rejects.toBeInstanceOf(
+      PathPolicyViolation,
+    );
   });
 });

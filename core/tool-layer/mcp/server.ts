@@ -11,9 +11,11 @@ import {
   FileExistsInput,
   FileInfoInput,
   GetAppUrlInput,
+  GetBlameInput,
   GetChangedFilesInput,
   GetDiffInput,
   GetHeadShaInput,
+  GetLogInput,
   GetMergeBaseInput,
   GetPrDiffInput,
   GetProjectContextInput,
@@ -53,9 +55,11 @@ import {
   writePlaywrightSpecTool,
 } from './tools/evidence.js';
 import {
+  getBlameTool,
   getChangedFilesTool,
   getDiffTool,
   getHeadShaTool,
+  getLogTool,
   getMergeBaseTool,
   getStatusTool,
 } from './tools/git.js';
@@ -557,6 +561,40 @@ export function buildFactoryMcpServer(ctx: FactoryContext): McpServer {
     async (input) => {
       try {
         const result = await getMergeBaseTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_log',
+    {
+      description:
+        'Commit history. Optional `path` narrows to one file; optional `range` (e.g. `origin/main..HEAD`); default 50 commits, cap 500. Returns structured `{sha, authorName, authorEmail, date, subject}[]`.',
+      inputSchema: GetLogInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await getLogTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_blame',
+    {
+      description:
+        'Per-line authorship for a workspace-relative file. Optional startLine/endLine narrows the range. Returns structured `{sha, authorName, date, lineNumber, content}[]`.',
+      inputSchema: GetBlameInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await getBlameTool(ctx, input);
         return { content: jsonContent(result), structuredContent: { ...result } };
       } catch (err) {
         return errorResult(err);
