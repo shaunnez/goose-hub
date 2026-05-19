@@ -14,6 +14,10 @@ import {
   type WorkItemInterventionEvent,
 } from './types.js';
 
+export function interventionTimestamp(date = new Date()): string {
+  return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
 function parseJson(value: string | null | undefined, fallback: unknown): unknown {
   if (value == null || value.length === 0) return fallback;
   return JSON.parse(value);
@@ -196,7 +200,7 @@ export function updateInterventionCas(input: {
     .set({
       ...input.patch,
       version: input.expectedVersion + 1,
-      updatedAt: new Date().toISOString(),
+      updatedAt: interventionTimestamp(),
     })
     .where(
       and(

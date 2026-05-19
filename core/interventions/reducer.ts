@@ -3,8 +3,10 @@ import {
   createIntervention,
   findLatestByRootCause,
   getIntervention,
+  interventionTimestamp,
   isActiveStatus,
   isClosedStatus,
+  listInterventionEvents,
   listInterventions,
   updateInterventionCas,
 } from './repository.js';
@@ -50,6 +52,19 @@ function canMove(from: InterventionStatus, to: InterventionStatus): boolean {
   return graph[from].includes(to);
 }
 
+function hasSeenSourceEvent(
+  intervention: WorkItemIntervention,
+  sourceEventId?: number | null,
+): boolean {
+  if (sourceEventId == null) return false;
+  if (intervention.sourceEventId === sourceEventId) return true;
+  return listInterventionEvents(intervention.id).some((event) => {
+    if (event.payload == null || typeof event.payload !== 'object') return false;
+    const payload = event.payload as Record<string, unknown>;
+    return payload.sourceEventId === sourceEventId;
+  });
+}
+
 function transition(input: {
   id: string;
   expectedVersion: number;
@@ -72,7 +87,7 @@ function transition(input: {
     patch: {
       ...input.patch,
       status: input.to,
-      ...(input.to === 'RESOLVED' ? { resolvedAt: new Date().toISOString() } : {}),
+      ...(input.to === 'RESOLVED' ? { resolvedAt: interventionTimestamp() } : {}),
       ...(input.to === 'OPEN' ? { resolvedAt: null, leaseOwner: null, leaseExpiresAt: null } : {}),
     },
   });
@@ -91,6 +106,9 @@ function transition(input: {
 export function open(input: OpenInterventionInput): InterventionReducerResult {
   const existing = findLatestByRootCause(input);
   if (existing != null && isActiveStatus(existing.status)) {
+    if (hasSeenSourceEvent(existing, input.sourceEventId)) {
+      return { ok: true, intervention: existing };
+    }
     appendInterventionEvent({
       intervention: existing,
       eventType: 'dedupe',
@@ -102,6 +120,9 @@ export function open(input: OpenInterventionInput): InterventionReducerResult {
     return { ok: true, intervention: existing };
   }
   if (existing != null && isClosedStatus(existing.status)) {
+    if (hasSeenSourceEvent(existing, input.sourceEventId)) {
+      return { ok: true, intervention: existing };
+    }
     return reopen({
       id: existing.id,
       expectedVersion: existing.version,
@@ -187,7 +208,7 @@ export function recordApplicationResult(input: {
   return transition({
     id: input.id,
     expectedVersion: input.expectedVersion,
-    to: input.ok ? 'APPLIED' : 'OPEN',
+    to: input.ok ? 'APPLIED' : 'FAILED',
     eventType: 'recordApplicationResult',
     actor: input.actor ?? 'intervention-applier',
     patch: {
@@ -249,6 +270,11 @@ export function reopen(input: {
     patch: {
       reason: input.reason,
       sourceEventId: input.sourceEventId ?? null,
+      proposedOptionsJson: '[]',
+      decidedActionType: null,
+      decidedActionPayloadJson: null,
+      decidedBy: null,
+      decisionReason: null,
       applicationResultJson: null,
       verificationJson: null,
     },

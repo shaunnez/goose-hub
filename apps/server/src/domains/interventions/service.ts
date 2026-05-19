@@ -54,11 +54,12 @@ export async function decideIntervention(
   const validation = validateInterventionAction(body.actionType, body.actionPayload);
   if (!validation.ok) return { ok: false, error: validation.error, status: 422 };
 
-  const expectedVersion =
-    typeof body.expectedVersion === 'number' ? body.expectedVersion : intervention.version;
+  if (typeof body.expectedVersion !== 'number' || !Number.isInteger(body.expectedVersion)) {
+    return { ok: false, error: 'expectedVersion is required', status: 400 };
+  }
   const result = decide({
     id,
-    expectedVersion,
+    expectedVersion: body.expectedVersion,
     actionType: body.actionType,
     actionPayload: validation.data,
     decidedBy: typeof body.decidedBy === 'string' ? body.decidedBy : 'operator',

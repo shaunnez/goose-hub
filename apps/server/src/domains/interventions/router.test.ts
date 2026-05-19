@@ -62,6 +62,7 @@ describe('interventions router', () => {
       body: JSON.stringify({
         actionType: 'no_action',
         actionPayload: { reason: 'wait' },
+        expectedVersion: 3,
       }),
     });
     expect(res.status).toBe(200);
@@ -69,6 +70,7 @@ describe('interventions router', () => {
     expect(mockDecideIntervention).toHaveBeenCalledWith('i1', {
       actionType: 'no_action',
       actionPayload: { reason: 'wait' },
+      expectedVersion: 3,
     });
   });
 });

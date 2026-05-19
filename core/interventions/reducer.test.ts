@@ -48,6 +48,78 @@ describe('intervention reducer', () => {
     ]);
   });
 
+  it('does not write audit rows when replaying an already projected source event', () => {
+    const first = open({
+      projectId: 'proj',
+      workItemId: 'github:owner/repo#replay-active',
+      interventionType: 'needs_human',
+      title: 'Needs human',
+      reason: 'Workflow asked for help',
+      rootCauseSignature: 'needs-human|replay-active',
+      actor: 'test',
+      sourceEventId: 11,
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    const replay = open({
+      projectId: first.intervention.projectId,
+      workItemId: first.intervention.workItemId,
+      interventionType: 'needs_human',
+      title: 'Needs human',
+      reason: 'Workflow asked for help',
+      rootCauseSignature: first.intervention.rootCauseSignature,
+      actor: 'test',
+      sourceEventId: 11,
+    });
+
+    expect(replay.ok).toBe(true);
+    expect(listInterventionEvents(first.intervention.id).map((event) => event.eventType)).toEqual([
+      'open',
+    ]);
+  });
+
+  it('does not reopen a resolved intervention when replaying its original source event', () => {
+    const first = open({
+      projectId: 'proj',
+      workItemId: 'github:owner/repo#replay-closed',
+      interventionType: 'needs_human',
+      title: 'Needs human',
+      reason: 'Workflow asked for help',
+      rootCauseSignature: 'needs-human|replay-closed',
+      actor: 'test',
+      sourceEventId: 12,
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const resolved = resolve({
+      id: first.intervention.id,
+      expectedVersion: first.intervention.version,
+      reason: 'handled',
+    });
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) return;
+
+    const replay = open({
+      projectId: first.intervention.projectId,
+      workItemId: first.intervention.workItemId,
+      interventionType: 'needs_human',
+      title: 'Needs human',
+      reason: 'Workflow asked for help',
+      rootCauseSignature: first.intervention.rootCauseSignature,
+      actor: 'test',
+      sourceEventId: 12,
+    });
+
+    expect(replay.ok).toBe(true);
+    if (!replay.ok) return;
+    expect(replay.intervention.status).toBe('RESOLVED');
+    expect(listInterventionEvents(first.intervention.id).map((event) => event.eventType)).toEqual([
+      'open',
+      'resolve',
+    ]);
+  });
+
   it('enforces CAS on double decide', () => {
     const intervention = openFixture('cas');
     const proposed = propose({
@@ -127,6 +199,8 @@ describe('intervention reducer', () => {
     });
     expect(resolved.ok).toBe(true);
     if (!resolved.ok) return;
+    expect(resolved.intervention.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    expect(resolved.intervention.resolvedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
     const reopened = reopen({
       id: intervention.id,
       expectedVersion: resolved.intervention.version,
@@ -135,6 +209,11 @@ describe('intervention reducer', () => {
     expect(reopened.ok).toBe(true);
     if (!reopened.ok) return;
     expect(reopened.intervention.status).toBe('OPEN');
+    expect(reopened.intervention.decidedActionType).toBeNull();
+    expect(reopened.intervention.decidedActionPayload).toBeNull();
+    expect(reopened.intervention.decidedBy).toBeNull();
+    expect(reopened.intervention.decisionReason).toBeNull();
+    expect(reopened.intervention.proposedOptions).toEqual([]);
     expect(listInterventionEvents(intervention.id).map((event) => event.eventType)).toEqual([
       'open',
       'decide',
@@ -144,6 +223,37 @@ describe('intervention reducer', () => {
       'resolve',
       'reopen',
     ]);
+  });
+
+  it('records failed application attempts as FAILED', () => {
+    const intervention = openFixture('failed');
+    const decided = decide({
+      id: intervention.id,
+      expectedVersion: intervention.version,
+      actionType: 'no_action',
+      actionPayload: { reason: 'manual test' },
+      decidedBy: 'operator',
+    });
+    expect(decided.ok).toBe(true);
+    if (!decided.ok) return;
+    const applying = markApplying({
+      id: intervention.id,
+      expectedVersion: decided.intervention.version,
+      leaseOwner: 'worker',
+      leaseExpiresAt: new Date(Date.now() + 1000).toISOString(),
+    });
+    expect(applying.ok).toBe(true);
+    if (!applying.ok) return;
+    const failed = recordApplicationResult({
+      id: intervention.id,
+      expectedVersion: applying.intervention.version,
+      ok: false,
+      result: { error: 'boom' },
+    });
+
+    expect(failed.ok).toBe(true);
+    if (!failed.ok) return;
+    expect(failed.intervention.status).toBe('FAILED');
   });
 
   it('rejects illegal status transitions', () => {
