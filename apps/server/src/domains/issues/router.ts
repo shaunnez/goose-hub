@@ -12,6 +12,7 @@ import {
   getIssueArtifact,
   getIssueComments,
   getIssueEvents,
+  getIssueLegalTargets,
   getIssueSpec,
   getIssueTriage,
   getIssueWorktreeDiff,
@@ -39,6 +40,13 @@ router.get('/:slug/issues', async (c) => {
 router.get('/:slug/issues/:id', async (c) => {
   const result = await getIssue(c.req.param('slug'), c.req.param('id'));
   return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);
+});
+
+router.get('/:slug/issues/:id/legal-targets', async (c) => {
+  const result = await getIssueLegalTargets(c.req.param('slug'), c.req.param('id'));
+  return result.ok
+    ? c.json(result.data)
+    : c.json({ error: result.error }, result.status as 404 | 500);
 });
 
 router.get('/:slug/issues/:id/events', async (c) => {

@@ -4,6 +4,10 @@ config({ path: resolve(import.meta.dirname, '../../../.env') });
 
 import { startNightlyAuditScheduler } from '@goose-hub/core/audit/nightly-scheduler.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import {
+  replayInterventionProjector,
+  startInterventionProjector,
+} from '@goose-hub/core/interventions/projector.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { loadProjects } from '@goose-hub/core/projects/loader.js';
 import { startPerProjectScheduler } from '@goose-hub/core/projects/scheduler.js';
@@ -13,6 +17,8 @@ import { app } from './server.js';
 
 if (process.env.VITEST == null) {
   const closed = eventStore.closeOrphanedRuns();
+  replayInterventionProjector();
+  startInterventionProjector();
   if (closed > 0) {
     logger.info('startup: closed orphaned agent runs', { count: closed });
   }

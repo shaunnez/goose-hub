@@ -7,6 +7,15 @@ import {
 import { getUseMultiAgentPipeline } from '@goose-hub/core/db/repositories/project-settings.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { validateInterventionAction } from '@goose-hub/core/interventions/actions.js';
+import {
+  decide,
+  markApplying,
+  open,
+  recordApplicationResult,
+  resolve,
+  verify,
+} from '@goose-hub/core/interventions/reducer.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { STATES } from '@goose-hub/core/state-machine/states.js';
@@ -310,9 +319,88 @@ export async function transitionIssue(
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
 
   const workItemId = `github:${source.repoRef}#${id}`;
-  await source.transitionState(workItemId, fromState, toState);
+  const manual = open({
+    projectId: slug,
+    workItemId,
+    interventionType: 'manual_override',
+    title: 'Manual operator transition',
+    reason: `Operator requested ${fromState} -> ${toState}`,
+    rootCauseSignature: `manual_override|${slug}|${workItemId}|${fromState}|${toState}|${Date.now()}`,
+    actor: 'ui',
+    evidence: { from: fromState, to: toState },
+  });
+  if (!manual.ok) return { ok: false, error: manual.error, status: manual.status };
 
-  emitStateTransitionEvent({ projectId: slug, workItemId, from: fromState, to: toState, by: 'ui' });
+  const payload = { from: fromState, to: toState, reason: 'manual operator transition' };
+  const validation = validateInterventionAction('manual_transition', payload);
+  if (!validation.ok) return { ok: false, error: validation.error, status: 422 };
+
+  const decided = decide({
+    id: manual.intervention.id,
+    expectedVersion: manual.intervention.version,
+    actionType: 'manual_transition',
+    actionPayload: payload,
+    decidedBy: 'ui',
+    reason: payload.reason,
+  });
+  if (!decided.ok) return { ok: false, error: decided.error, status: decided.status };
+
+  const applying = markApplying({
+    id: manual.intervention.id,
+    expectedVersion: decided.intervention.version,
+    leaseOwner: 'ui',
+    leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+  });
+  if (!applying.ok) return { ok: false, error: applying.error, status: applying.status };
+
+  try {
+    await source.transitionState(workItemId, fromState, toState);
+  } catch (err) {
+    recordApplicationResult({
+      id: manual.intervention.id,
+      expectedVersion: applying.intervention.version,
+      ok: false,
+      result: { error: err instanceof Error ? err.message : String(err) },
+      actor: 'ui',
+    });
+    throw err;
+  }
+
+  emitStateTransitionEvent({
+    projectId: slug,
+    workItemId,
+    from: fromState,
+    to: toState,
+    by: 'ui',
+    extraPayload: {
+      interventionId: manual.intervention.id,
+      causedByInterventionId: manual.intervention.id,
+      correlationId: manual.intervention.correlationId,
+    },
+  });
+  const applied = recordApplicationResult({
+    id: manual.intervention.id,
+    expectedVersion: applying.intervention.version,
+    ok: true,
+    result: { from: fromState, to: toState },
+    actor: 'ui',
+  });
+  if (applied.ok) {
+    const verified = verify({
+      id: manual.intervention.id,
+      expectedVersion: applied.intervention.version,
+      verification: { stateTransitionEmitted: true },
+      actor: 'ui',
+    });
+    if (verified.ok) {
+      resolve({
+        id: manual.intervention.id,
+        expectedVersion: verified.intervention.version,
+        reason: 'manual transition applied',
+        actor: 'ui',
+      });
+    }
+  }
 
   bustCache(CACHE_KEY.issues(slug));
   return { ok: true, data: { ok: true, from: fromState, to: toState } };

@@ -35,6 +35,80 @@ export const events = sqliteTable(
   }),
 );
 
+export const workItemInterventions = sqliteTable(
+  'work_item_interventions',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id').notNull(),
+    workItemId: text('work_item_id').notNull(),
+    interventionType: text('intervention_type').notNull(),
+    status: text('status').notNull(),
+    title: text('title').notNull(),
+    reason: text('reason').notNull(),
+    rootCauseSignature: text('root_cause_signature').notNull(),
+    correlationId: text('correlation_id').notNull(),
+    sourceEventId: integer('source_event_id'),
+    proposedOptionsJson: text('proposed_options_json').notNull().default('[]'),
+    decidedActionType: text('decided_action_type'),
+    decidedActionPayloadJson: text('decided_action_payload_json'),
+    decidedBy: text('decided_by'),
+    decisionReason: text('decision_reason'),
+    applicationResultJson: text('application_result_json'),
+    verificationJson: text('verification_json'),
+    leaseOwner: text('lease_owner'),
+    leaseExpiresAt: text('lease_expires_at'),
+    version: integer('version').notNull().default(0),
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+    updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+    resolvedAt: text('resolved_at'),
+  },
+  (t) => ({
+    projectStatusIdx: index('work_item_interventions_project_status_idx').on(
+      t.projectId,
+      t.status,
+      t.updatedAt,
+    ),
+    workItemStatusIdx: index('work_item_interventions_work_item_status_idx').on(
+      t.workItemId,
+      t.status,
+      t.updatedAt,
+    ),
+    rootCauseIdx: index('work_item_interventions_root_cause_idx').on(
+      t.projectId,
+      t.workItemId,
+      t.rootCauseSignature,
+    ),
+  }),
+);
+
+export const workItemInterventionEvents = sqliteTable(
+  'work_item_intervention_events',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    interventionId: text('intervention_id').notNull(),
+    projectId: text('project_id').notNull(),
+    workItemId: text('work_item_id').notNull(),
+    eventType: text('event_type').notNull(),
+    actor: text('actor').notNull(),
+    fromStatus: text('from_status'),
+    toStatus: text('to_status'),
+    payloadJson: text('payload_json').notNull().default('{}'),
+    correlationId: text('correlation_id').notNull(),
+    createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  },
+  (t) => ({
+    interventionIdx: index('work_item_intervention_events_intervention_idx').on(
+      t.interventionId,
+      t.id,
+    ),
+    projectWorkItemIdx: index('work_item_intervention_events_project_work_item_idx').on(
+      t.projectId,
+      t.workItemId,
+      t.id,
+    ),
+  }),
+);
+
 export const governanceAudit = sqliteTable('governance_audit', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   prUrl: text('pr_url').notNull(),
