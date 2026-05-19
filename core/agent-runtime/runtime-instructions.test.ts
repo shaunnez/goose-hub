@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS,
+  FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX,
   FACTORY_WORKSPACE_ONLY_INSTRUCTIONS,
   withFactoryRuntimeInstructions,
 } from './runtime-instructions.js';
@@ -58,5 +59,39 @@ describe('FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS', () => {
 
   it('states that paths must be workspace-relative', () => {
     expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toMatch(/workspace-relative/i);
+  });
+});
+
+describe('FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX', () => {
+  it('names the high-traffic factory tool families with bare Codex names', () => {
+    for (const name of [
+      '`read_file`',
+      '`search_text`',
+      '`write_file`',
+      '`edit_file`',
+      '`run_tests`',
+      '`get_diff`',
+      '`get_project_context`',
+    ]) {
+      expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain(name);
+    }
+  });
+
+  it('does not advertise Claude-style prefixed names to Codex', () => {
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).not.toContain('mcp__factory-tools__');
+  });
+});
+
+describe('withFactoryRuntimeInstructions runtime selection', () => {
+  it('uses the Claude variant by default', () => {
+    const out = withFactoryRuntimeInstructions('body');
+    expect(out).toContain(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS);
+    expect(out).not.toContain(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX);
+  });
+
+  it('uses the Codex variant when runtime is codex-cli', () => {
+    const out = withFactoryRuntimeInstructions('body', { runtime: 'codex-cli' });
+    expect(out).toContain(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX);
+    expect(out).not.toContain(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS);
   });
 });

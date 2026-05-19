@@ -96,6 +96,11 @@ export function buildCodexMcpInlineArgs(
     const base = `mcp_servers.${name}`;
     out.push('-c', `${base}.command=${tomlString(entry.command)}`);
     out.push('-c', `${base}.args=[${entry.args.map((a) => tomlString(a)).join(',')}]`);
+    // Codex defaults to prompting for every MCP tool call. Factory-owned
+    // servers are already gated by the run allowlist and PreToolUse hook,
+    // so re-prompting per tool call would just cancel the run in `--ephemeral`
+    // / `--ask-for-approval never` modes. Force pre-approval.
+    out.push('-c', `${base}.default_tools_approval_mode=${tomlString('approve')}`);
     if (entry.enabledTools != null) {
       out.push(
         '-c',
