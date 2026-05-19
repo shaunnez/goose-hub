@@ -69,6 +69,51 @@ export function escapeForTomlMultilineBasic(input: string): string {
 }
 
 /**
+ * Builds `-c` flag pairs that register MCP servers with the Codex CLI.
+ * Codex consumes MCP servers via TOML `[mcp_servers.<name>]` tables in
+ * `~/.codex/config.toml`. We pass `--ignore-user-config` for hygiene,
+ * so the per-run config is supplied inline via `-c key=value` flags.
+ *
+ * Each entry produces three `-c` pairs: `command`, `args` (as a TOML
+ * array literal), and `env` (as a TOML inline table). Strings are
+ * double-quoted with `\` and `"` escaped — keys are alphanumeric/`-`/`_`
+ * only (server name) and TOML-safe (`command`, `args`, `env`).
+ */
+export function buildCodexMcpInlineArgs(
+  servers: Record<
+    string,
+    { command: string; args: ReadonlyArray<string>; env?: Record<string, string> }
+  >,
+): string[] {
+  const out: string[] = [];
+  for (const [name, entry] of Object.entries(servers)) {
+    const base = `mcp_servers.${name}`;
+    out.push('-c', `${base}.command=${tomlString(entry.command)}`);
+    out.push('-c', `${base}.args=[${entry.args.map((a) => tomlString(a)).join(',')}]`);
+    if (entry.env != null && Object.keys(entry.env).length > 0) {
+      const inline = Object.entries(entry.env)
+        .map(([k, v]) => `${tomlBareKey(k)}=${tomlString(v)}`)
+        .join(',');
+      out.push('-c', `${base}.env={${inline}}`);
+    }
+  }
+  return out;
+}
+
+function tomlString(value: string): string {
+  // TOML basic string: escape `\` and `"`. Other characters pass through
+  // literally; agent-supplied content is never routed here (server name,
+  // command path, env keys/values are all Factory-owned).
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+function tomlBareKey(value: string): string {
+  // TOML bare keys are [A-Za-z0-9_-]. Env var names match. Anything else
+  // gets quoted as a basic string for safety.
+  return /^[A-Za-z0-9_-]+$/.test(value) ? value : tomlString(value);
+}
+
+/**
  * Builds argv for `codex exec` invocation. Isolated for unit testing — the
  * exact flag set is version-dependent and may need revision against a live
  * binary (see ADR 0036 §1).
@@ -84,6 +129,8 @@ export function buildCodexArgv(input: {
   commandSandbox?: 'read-only' | 'workspace-write' | 'danger-full-access';
   /** Optional global approval policy. Must be placed before the `exec` subcommand. */
   approvalPolicy?: 'never';
+  /** Additional inline `-c key=value` overrides (e.g. MCP server config). */
+  inlineConfig?: ReadonlyArray<string>;
 }): string[] {
   const argv: string[] = [];
   if (input.approvalPolicy != null) {
@@ -109,6 +156,9 @@ export function buildCodexArgv(input: {
     // TOML multi-line basic string (triple-quoted) so prompts can carry raw
     // newlines without escaping; only `\` and any embedded `"""` need escape.
     argv.push('-c', `instructions="""${escapeForTomlMultilineBasic(input.systemPrompt)}"""`);
+  }
+  if (input.inlineConfig != null && input.inlineConfig.length > 0) {
+    argv.push(...input.inlineConfig);
   }
   argv.push(input.prompt);
   return argv;

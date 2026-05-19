@@ -7,6 +7,7 @@
     "./*": "./*"
   },
   "dependencies": {
-    "@goose-hub/skills": "workspace:*"
+    "@goose-hub/skills": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0"
   }
 }

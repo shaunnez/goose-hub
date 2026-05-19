@@ -29,11 +29,14 @@ vi.mock('./codex-config.js', () => ({
   CodexNotAuthenticatedError: class CodexNotAuthenticatedError extends Error {},
   assertCodexAuthenticated: vi.fn(),
   buildCodexArgv: vi.fn().mockReturnValue(['exec', '--json']),
+  buildCodexMcpInlineArgs: vi.fn().mockReturnValue([]),
   escapeForTomlMultilineBasic: vi.fn((value: string) => value),
   resolveCodexBinary: vi.fn().mockReturnValue('/usr/local/bin/codex'),
 }));
 vi.mock('node:fs', () => ({
+  existsSync: vi.fn().mockReturnValue(false),
   mkdirSync: vi.fn(),
+  readFileSync: vi.fn(),
   writeFileSync: vi.fn(),
 }));
 vi.mock('node:child_process', () => ({

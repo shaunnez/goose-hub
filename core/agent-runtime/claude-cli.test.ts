@@ -33,6 +33,7 @@ vi.mock('./models.js', () => ({
 vi.mock('node:fs', () => ({
   existsSync: vi.fn().mockReturnValue(false),
   mkdirSync: vi.fn(),
+  readFileSync: vi.fn(),
   writeFileSync: vi.fn(),
 }));
 vi.mock('node:child_process', () => ({
