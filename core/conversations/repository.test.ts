@@ -7,6 +7,7 @@ import {
   listMessages,
   listToolInvocations,
   recordToolInvocation,
+  setToolInvocationRunId,
   updateToolInvocation,
 } from './repository.js';
 
@@ -69,6 +70,24 @@ describe('conversations repository', () => {
     const invocations = listToolInvocations(id);
     expect(invocations.length).toBe(1);
     expect(invocations[0].status).toBe('completed');
+  });
+
+  it('setToolInvocationRunId stamps the runId on the invocation row', () => {
+    const id = newId();
+    createConversation({ id, scope: 'global' });
+    const toolId = `tool_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    recordToolInvocation({
+      id: toolId,
+      conversationId: id,
+      toolName: 'invoke_skill',
+      input: {},
+      mutating: true,
+      status: 'running',
+    });
+
+    const stamped = setToolInvocationRunId(toolId, 'run_abc123');
+    expect(stamped?.runId).toBe('run_abc123');
+    expect(listToolInvocations(id)[0].runId).toBe('run_abc123');
   });
 
   it('lists conversations filtered by scope', () => {

@@ -40,6 +40,8 @@ export interface ChatToolInvocation {
   status: ChatToolStatus;
   result: unknown;
   errorMessage: string | null;
+  /** Set when the tool spawned an agent-runtime run (M20.09). */
+  runId: string | null;
   createdAt: string;
   updatedAt: string;
 }

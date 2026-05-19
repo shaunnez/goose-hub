@@ -13,6 +13,7 @@ export {
   listMessages,
   listToolInvocations,
   recordToolInvocation,
+  setToolInvocationRunId,
   touchConversation,
   transitionToolInvocationStatus,
   updateToolInvocation,

@@ -1,6 +1,8 @@
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { ContextValidationError, invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
 import { UPDATE_SETTINGS_KEYS } from '@goose-hub/core/chat-tools/registry.js';
+import { setToolInvocationRunId } from '@goose-hub/core/conversations/repository.js';
 import {
   getUseInvestigationSwarm,
   getUseMultiAgentPipeline,
@@ -19,10 +21,19 @@ import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
 import { getSourceForSlug, isValidSlug } from '#shared/source.js';
 import { getWatchRegistry } from './watch-singleton.js';
 
+// Skills that must be invoked from a workflow context, not chat. Chat-driven
+// runs of these would either fail context validation immediately (holdouts
+// require fresh context fed by the workflow) or run without the inputs they
+// need (post-implementation reviewers). Reject them up-front with a clear
+// message instead of letting the validator throw a noisy error.
+const SKILLS_BLOCKED_FROM_CHAT = new Set(['qa', 'review', 'retro', 'retro-deep']);
+
 export interface ToolContext {
   conversationId: string;
   projectId?: string | null;
   workItemId?: string | null;
+  /** Set when the dispatcher is executing a recorded invocation row. */
+  invocationId?: string;
 }
 
 export class ToolExecutionError extends Error {
@@ -380,21 +391,101 @@ async function tickProject(input: {
   return { ok: true };
 }
 
-async function invokeSkillTool(input: {
-  skillName: string;
-  projectSlug: string;
-  workItemId?: string;
-  rationale: string;
-}): Promise<unknown> {
-  // Defensive: we accept invoke_skill proposals but do not actually run skills
-  // from chat in v1 — chat-driven skill runs need a dedicated workflow that
-  // routes through invokeSkill() with budgets + persona selection. Marking the
-  // tool as a no-op with a clear message keeps the contract honest.
-  return {
-    ok: false,
-    note: 'invoke_skill via chat is not yet wired to the agent-runtime; this proposal is approved but not executed. File an issue if you need this capability.',
-    skillName: input.skillName,
+// Tight skill-name validator. Same shape as project slugs (lowercase, digits,
+// dashes) so a crafted name like '../triage' cannot escape skillsRoot when
+// invokeSkill builds its import path from `skillsRoot + skillName`.
+const SKILL_NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+
+/**
+ * Spawn a Factory skill through the agent-runtime. Returns the runId so the
+ * UI can link the chat invocation row to the live run. The runtime layer
+ * emits `agent.run-started` / `agent.run-completed` / `agent.run-failed` and
+ * records cost into `agent_run_costs` automatically; this function only
+ * orchestrates the spawn and surfaces the terminal output back to chat.
+ */
+async function invokeSkillTool(
+  input: { skillName: string; projectSlug: string; workItemId?: string; rationale: string },
+  ctx: ToolContext,
+): Promise<unknown> {
+  assertValidSlug(input.projectSlug);
+  if (!SKILL_NAME_PATTERN.test(input.skillName)) {
+    throw new ToolExecutionError(`invalid skill name: '${input.skillName}'`, 400);
+  }
+  if (SKILLS_BLOCKED_FROM_CHAT.has(input.skillName)) {
+    throw new ToolExecutionError(
+      `skill '${input.skillName}' must be invoked from a workflow, not chat (holdout / post-implementation role).`,
+      400,
+    );
+  }
+
+  // Resolve project so projectId is the canonical ProjectConfig.id, not the slug.
+  const source = await getSourceForSlug(input.projectSlug);
+  if (source == null) {
+    throw new ToolExecutionError(`project not found: ${input.projectSlug}`, 404);
+  }
+
+  const runId = `chat_skill_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+  // Pass project + work-item identifiers up-front so skills whose contextSchema
+  // declares them as required fields can validate. Skills that need additional
+  // fields will surface a clear ContextValidationError below.
+  const skillContext: Record<string, unknown> = {
+    projectId: source.projectId,
+    projectSlug: input.projectSlug,
+    ...(input.workItemId != null && { workItemId: input.workItemId }),
   };
+
+  try {
+    const result = await invokeSkill({
+      skillName: input.skillName,
+      projectId: source.projectId,
+      workItemId: input.workItemId,
+      runId,
+      context: skillContext,
+    });
+    // Stamp the row only after invokeSkill has at least entered the spawn
+    // phase. ContextValidationError throws before any subprocess starts; we
+    // skip the stamp in that case so the runId does not point at a run the
+    // runtime never tried to spawn.
+    if (ctx.invocationId) {
+      setToolInvocationRunId(ctx.invocationId, runId);
+    }
+    return {
+      ok: true,
+      runId,
+      skillName: input.skillName,
+      output: result.output,
+    };
+  } catch (err) {
+    if (err instanceof ContextValidationError) {
+      const issues = err.issues
+        .map((i) => `${i.path.join('.') || '<root>'}: ${i.message}`)
+        .join('; ');
+      throw new ToolExecutionError(
+        `skill '${input.skillName}' rejected context — chat does not currently supply the fields it needs: ${issues}`,
+        400,
+      );
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    // "Unknown skill" only when the failure is specifically about the skill's
+    // own config import. Generic ENOENTs from runtime filesystem dependencies
+    // (prompt overlays, workspace setup) must surface as 500s so the operator
+    // can diagnose them, not be misclassified as "skill doesn't exist".
+    if (
+      /invokeSkill: skill '.+?' config has no valid default export/.test(message) ||
+      /Cannot find module .*?skill\.config/.test(message) ||
+      /ENOENT.*?skill\.config/.test(message)
+    ) {
+      throw new ToolExecutionError(`unknown skill: '${input.skillName}'`, 404);
+    }
+    // Past the validation gate — stamp so the chat invocation links to the
+    // real (failed) run that the runtime attempted.
+    if (ctx.invocationId) {
+      setToolInvocationRunId(ctx.invocationId, runId);
+    }
+    logger.warn('chat-tools.invoke_skill failed', { err: message, runId, input });
+    throw new ToolExecutionError(`invoke_skill failed: ${message}`, 500);
+  }
 }
 
 async function openUrl(input: { path: string; rationale: string }): Promise<unknown> {
@@ -702,7 +793,8 @@ export const CHAT_TOOL_IMPLEMENTATIONS: Record<string, ToolFn> = {
   comment_on_issue: (input) => commentOnIssue(input as Parameters<typeof commentOnIssue>[0]),
   create_inbox_note: (input) => createInboxNote(input as Parameters<typeof createInboxNote>[0]),
   tick_project: (input) => tickProject(input as Parameters<typeof tickProject>[0]),
-  invoke_skill: (input) => invokeSkillTool(input as Parameters<typeof invokeSkillTool>[0]),
+  invoke_skill: (input, ctx) =>
+    invokeSkillTool(input as Parameters<typeof invokeSkillTool>[0], ctx),
   open_url: (input) => openUrl(input as Parameters<typeof openUrl>[0]),
   subscribe_to_run: (input, ctx) =>
     subscribeToRun(input as Parameters<typeof subscribeToRun>[0], ctx),

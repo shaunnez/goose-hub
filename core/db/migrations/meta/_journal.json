@@ -225,6 +225,13 @@
       "when": 1779200000000,
       "tag": "0031_hub_chat",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1779200000001,
+      "tag": "0032_chat_invocation_run_id",
+      "breakpoints": true
     }
   ]
 }

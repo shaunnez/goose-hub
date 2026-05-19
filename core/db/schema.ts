@@ -513,6 +513,8 @@ export const chatToolInvocations = sqliteTable(
     status: text('status').notNull(), // 'proposed' | 'approved' | 'rejected' | 'running' | 'completed' | 'failed'
     resultJson: text('result_json'),
     errorMessage: text('error_message'),
+    /** Run id when the tool spawned an agent-runtime run (M20.09). */
+    runId: text('run_id'),
     createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
     updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
   },

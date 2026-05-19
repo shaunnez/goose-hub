@@ -120,6 +120,32 @@ vi.mock('#shared/projects.js', () => ({
   getProject: (slug: string) => mockGetProject(slug),
 }));
 
+const invokeSkillHoisted = vi.hoisted(() => {
+  class ContextValidationErrorMock extends Error {
+    issues: Array<{ path: Array<string | number>; message: string }>;
+    constructor(issues: Array<{ path: Array<string | number>; message: string }>) {
+      super('ContextValidationError');
+      this.name = 'ContextValidationError';
+      this.issues = issues;
+    }
+  }
+  return {
+    mockInvokeSkill: vi.fn(),
+    ContextValidationErrorMock,
+  };
+});
+const { mockInvokeSkill, ContextValidationErrorMock } = invokeSkillHoisted;
+
+vi.mock('@goose-hub/core/agent-runtime/invoke-skill.js', () => ({
+  invokeSkill: (...args: unknown[]) => invokeSkillHoisted.mockInvokeSkill(...args),
+  ContextValidationError: invokeSkillHoisted.ContextValidationErrorMock,
+}));
+
+const mockSetToolInvocationRunId = vi.hoisted(() => vi.fn());
+vi.mock('@goose-hub/core/conversations/repository.js', () => ({
+  setToolInvocationRunId: (...args: unknown[]) => mockSetToolInvocationRunId(...args),
+}));
+
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { CHAT_TOOL_IMPLEMENTATIONS, ToolExecutionError } from './tools.js';
 
@@ -710,5 +736,160 @@ describe('chat-tools — bootstrap_project', () => {
     await expect(
       CHAT_TOOL_IMPLEMENTATIONS.bootstrap_project({ repoUrl: 'octo/widgets', rationale: 'x' }, ctx),
     ).rejects.toMatchObject({ name: 'ToolExecutionError', status: 500 });
+  });
+});
+
+describe('chat-tools — invoke_skill', () => {
+  beforeEach(() => {
+    mockInvokeSkill.mockReset();
+    mockSetToolInvocationRunId.mockReset();
+  });
+
+  it('spawns the requested skill via invokeSkill and surfaces the runId', async () => {
+    mockInvokeSkill.mockResolvedValueOnce({
+      output: { ok: true, note: 'fake skill result' },
+    });
+
+    const result = (await CHAT_TOOL_IMPLEMENTATIONS.invoke_skill(
+      {
+        skillName: 'list-skills',
+        projectSlug: 'goose-hub-self',
+        workItemId: 'github:shaunnez/goose-hub#1',
+        rationale: 'manual run',
+      },
+      { ...ctx, conversationId: 'conv_invoke', invocationId: 'tool_inv_1' },
+    )) as { ok: boolean; runId: string; skillName: string };
+
+    expect(result.ok).toBe(true);
+    expect(result.skillName).toBe('list-skills');
+    expect(result.runId).toMatch(/^chat_skill_/);
+
+    expect(mockInvokeSkill).toHaveBeenCalledTimes(1);
+    const args = mockInvokeSkill.mock.calls[0][0];
+    expect(args.skillName).toBe('list-skills');
+    expect(args.projectId).toBe('goose-hub-self');
+    expect(args.workItemId).toBe('github:shaunnez/goose-hub#1');
+    expect(args.runId).toBe(result.runId);
+    expect(args.context).toMatchObject({
+      projectId: 'goose-hub-self',
+      projectSlug: 'goose-hub-self',
+      workItemId: 'github:shaunnez/goose-hub#1',
+    });
+
+    expect(mockSetToolInvocationRunId).toHaveBeenCalledWith('tool_inv_1', result.runId);
+  });
+
+  it('rejects with a 404 ToolExecutionError when the project is unknown', async () => {
+    await expect(
+      CHAT_TOOL_IMPLEMENTATIONS.invoke_skill(
+        {
+          skillName: 'list-skills',
+          projectSlug: 'unknown',
+          rationale: 'x',
+        },
+        ctx,
+      ),
+    ).rejects.toBeInstanceOf(ToolExecutionError);
+    expect(mockInvokeSkill).not.toHaveBeenCalled();
+  });
+
+  it('rejects a skillName with path traversal characters', async () => {
+    await expect(
+      CHAT_TOOL_IMPLEMENTATIONS.invoke_skill(
+        {
+          skillName: '../triage',
+          projectSlug: 'goose-hub-self',
+          rationale: 'should not be allowed',
+        },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ name: 'ToolExecutionError', status: 400 });
+    expect(mockInvokeSkill).not.toHaveBeenCalled();
+  });
+
+  it('translates unknown-skill failures into a 404 ToolExecutionError', async () => {
+    mockInvokeSkill.mockRejectedValueOnce(
+      new Error("invokeSkill: skill 'never-was' config has no valid default export"),
+    );
+    await expect(
+      CHAT_TOOL_IMPLEMENTATIONS.invoke_skill(
+        {
+          skillName: 'never-was',
+          projectSlug: 'goose-hub-self',
+          rationale: 'x',
+        },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ name: 'ToolExecutionError', status: 404 });
+  });
+
+  it('does not misclassify generic ENOENT failures as unknown-skill', async () => {
+    mockInvokeSkill.mockRejectedValueOnce(
+      new Error("ENOENT: no such file or directory, open '/tmp/missing-fixture.json'"),
+    );
+    await expect(
+      CHAT_TOOL_IMPLEMENTATIONS.invoke_skill(
+        {
+          skillName: 'triage',
+          projectSlug: 'goose-hub-self',
+          rationale: 'real error',
+        },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ name: 'ToolExecutionError', status: 500 });
+  });
+
+  it('translates a context validation error into a 400 ToolExecutionError with field info', async () => {
+    mockInvokeSkill.mockRejectedValueOnce(
+      new ContextValidationErrorMock([{ path: ['workItem', 'id'], message: 'Required' }]),
+    );
+    await expect(
+      CHAT_TOOL_IMPLEMENTATIONS.invoke_skill(
+        {
+          skillName: 'triage',
+          projectSlug: 'goose-hub-self',
+          rationale: 'try it',
+        },
+        ctx,
+      ),
+    ).rejects.toMatchObject({
+      name: 'ToolExecutionError',
+      status: 400,
+      message: expect.stringContaining('workItem.id'),
+    });
+  });
+
+  it('does not stamp the invocation row when the run never reached the spawn phase', async () => {
+    mockInvokeSkill.mockRejectedValueOnce(
+      new ContextValidationErrorMock([{ path: ['workItem'], message: 'Required' }]),
+    );
+    await expect(
+      CHAT_TOOL_IMPLEMENTATIONS.invoke_skill(
+        {
+          skillName: 'triage',
+          projectSlug: 'goose-hub-self',
+          rationale: 'context check',
+        },
+        { ...ctx, invocationId: 'tool_pre_spawn' },
+      ),
+    ).rejects.toBeInstanceOf(ToolExecutionError);
+    expect(mockSetToolInvocationRunId).not.toHaveBeenCalledWith(
+      'tool_pre_spawn',
+      expect.any(String),
+    );
+  });
+
+  it('refuses to spawn holdout / post-implementation skills from chat', async () => {
+    await expect(
+      CHAT_TOOL_IMPLEMENTATIONS.invoke_skill(
+        {
+          skillName: 'qa',
+          projectSlug: 'goose-hub-self',
+          rationale: 'try qa',
+        },
+        ctx,
+      ),
+    ).rejects.toBeInstanceOf(ToolExecutionError);
+    expect(mockInvokeSkill).not.toHaveBeenCalled();
   });
 });
