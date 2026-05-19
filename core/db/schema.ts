@@ -295,6 +295,7 @@ export const projectSkillSettings = sqliteTable(
     timeoutMs: integer('timeout_ms'),
     modelTier: text('model_tier'),
     modelProvider: text('model_provider'),
+    effort: text('effort'),
     updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
     updatedBy: text('updated_by'),
   },

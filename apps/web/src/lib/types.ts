@@ -391,6 +391,7 @@ export interface ProjectSettingsDto {
       timeoutMs: number | null;
       modelTier: ModelTier | null;
       provider: ModelProvider | null;
+      effort: RuntimeEffort | null;
       updatedAt: string;
     }
   >;
@@ -412,6 +413,7 @@ export interface ProjectSettingsDto {
       timeoutMs: number;
       modelTier: ModelTier;
       modelProvider: ModelProvider;
+      effort: RuntimeEffort | null;
     }
   >;
   resolvedSkillRuntimes?: Record<
@@ -420,11 +422,48 @@ export interface ProjectSettingsDto {
       source: string;
       effectiveTier: ModelTier;
       effectiveProvider: ModelProvider;
+      effectiveEffort: RuntimeEffort | null;
       resolvedPrimary: { tier: ModelTier; provider: ModelProvider; modelId: string } | null;
       resolvedFallback: { tier: ModelTier; provider: ModelProvider; modelId: string } | null;
       resolvedAdvisor: { tier: ModelTier; provider: ModelProvider; modelId: string } | null;
     }
   >;
+}
+
+export interface RuntimeProfilerDto {
+  projectId: string;
+  window: {
+    days: number;
+    sinceIso: string;
+    untilIso: string;
+  };
+  skills: Array<{
+    skill: string;
+    metrics: {
+      runCount: number;
+      medianInputTokens: number;
+      p95InputTokens: number;
+      medianOutputTokens: number;
+      p95OutputTokens: number;
+      medianCostUsd: number;
+      p95CostUsd: number;
+      maxCostOutlier: { runId: string; costUsd: number } | null;
+      timeoutRate: number;
+      budgetExceededRate: number;
+      schemaValidationRetryRate: number;
+      toolCallCount: number;
+      topToolNames: Array<{ name: string; count: number }>;
+      repeatedBashCommands: Array<{ command: string; count: number }>;
+      commonCommandSequences: Array<{ sequence: string[]; count: number }>;
+    };
+    recommendations: Array<{
+      kind: string;
+      severity: 'info' | 'warning' | 'critical';
+      summary: string;
+      evidence: string;
+      suggestedPatch?: Record<string, unknown>;
+    }>;
+  }>;
 }
 
 export type WorkflowKind = 'bug' | 'feature' | 'chore' | 'research';
@@ -533,6 +572,7 @@ export interface WorkflowCatalogDto {
 
 export type ModelTier = 'haiku' | 'sonnet' | 'opus';
 export type ModelProvider = 'claude' | 'codex';
+export type RuntimeEffort = 'low' | 'medium' | 'high' | 'xhigh';
 
 export interface CodexAuthStatusDto {
   status: 'connected' | 'missing';

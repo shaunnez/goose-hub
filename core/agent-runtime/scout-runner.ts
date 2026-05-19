@@ -147,6 +147,7 @@ export async function runOneScout(
     toolBundles: ['read'],
     toolExtras: [],
     budgets,
+    effort: resolvedBudget.effort,
     personaId: ctx.personaId,
     modelOverride: resolvedBudget.modelOverride,
     appendSystemPrompt: skillAssets?.appendSystemPrompt,

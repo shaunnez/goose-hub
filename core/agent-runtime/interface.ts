@@ -1,6 +1,6 @@
 import type { ZodType } from 'zod';
 import type { AgentEvent } from '../event-stream/store.js';
-import type { ModelTier, Role } from '../types.js';
+import type { ModelTier, Role, RuntimeEffort } from '../types.js';
 import type { DecisionKind } from './decision-types.js';
 
 export interface DecisionSummary {
@@ -36,6 +36,8 @@ export type AgentSpec<R extends RoleSpec = RoleSpec> = {
   toolBundles: string[];
   toolExtras: string[];
   budgets: AgentBudgets;
+  /** Runtime reasoning effort when the selected backend supports it. Unsupported runtimes ignore it. */
+  effort?: RuntimeEffort;
   /** Persona identity for this run. Format: "<projectId>/<role>/<index>". Required. */
   personaId: string;
   /** Work-item driving this run. Promotes context.workItemId to first-class for runtime use. */

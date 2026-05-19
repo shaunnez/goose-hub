@@ -22,6 +22,7 @@ export interface StackConfig {
 }
 
 export type ModelTier = 'haiku' | 'sonnet' | 'opus';
+export type RuntimeEffort = 'low' | 'medium' | 'high' | 'xhigh';
 export type FallbackPolicy = 'same-tier-only' | 'allow-down-tier';
 export type Role =
   | 'triager'
@@ -141,7 +142,13 @@ export interface BudgetConfig {
   /** Per-project overrides for specific skill budgets. Merged over SKILL_BUDGETS defaults. */
   skillBudgetOverrides?: Record<
     string,
-    { maxTurns?: number; maxBudgetUsd?: number; timeoutMs?: number; modelTier?: ModelTier }
+    {
+      maxTurns?: number;
+      maxBudgetUsd?: number;
+      timeoutMs?: number;
+      modelTier?: ModelTier;
+      effort?: RuntimeEffort | null;
+    }
   >;
 }
 

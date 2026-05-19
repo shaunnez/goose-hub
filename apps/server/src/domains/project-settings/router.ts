@@ -27,7 +27,8 @@ import {
   writeProjectSettings,
   writeProjectSkillSetting,
 } from '@goose-hub/core/db/repositories/project-settings.js';
-import type { ModelProvider, ModelTier, Role } from '@goose-hub/core/types.js';
+import { profileRuntimeProject } from '@goose-hub/core/runtime-profiler/profile-runs.js';
+import type { ModelProvider, ModelTier, Role, RuntimeEffort } from '@goose-hub/core/types.js';
 import { skillsRoot } from '@goose-hub/skills';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -56,6 +57,7 @@ const SkillBudgetPatchSchema = z.object({
   timeoutMs: z.number().int().min(5_000).max(3_600_000).nullable().optional(),
   modelTier: z.enum(['haiku', 'sonnet', 'opus']).nullable().optional(),
   provider: z.enum(['claude', 'codex']).nullable().optional(),
+  effort: z.enum(['low', 'medium', 'high', 'xhigh']).nullable().optional(),
 });
 
 const DevReviewPatchSchema = z.object({
@@ -81,6 +83,11 @@ const ReviewPatchSchema = z.object({
 const PipelinePatchSchema = z.object({
   useMultiAgentPipeline: z.boolean().optional(),
   useInvestigationSwarm: z.boolean().optional(),
+});
+
+const RuntimeProfilerQuerySchema = z.object({
+  days: z.coerce.number().int().min(1).max(90).optional(),
+  skill: z.string().min(1).optional(),
 });
 
 const SKILL_CALLERS: Record<string, string[]> = {
@@ -252,6 +259,7 @@ router.get('/:slug/settings', async (c) => {
       timeoutMs: number | null;
       modelTier: string | null;
       provider: string | null;
+      effort: RuntimeEffort | null;
       updatedAt: string | null;
     }
   > = {};
@@ -262,6 +270,13 @@ router.get('/:slug/settings', async (c) => {
       timeoutMs: row.timeoutMs ?? null,
       modelTier: row.modelTier ?? null,
       provider: row.modelProvider ?? null,
+      effort:
+        row.effort === 'low' ||
+        row.effort === 'medium' ||
+        row.effort === 'high' ||
+        row.effort === 'xhigh'
+          ? row.effort
+          : null,
       updatedAt: row.updatedAt,
     };
   }
@@ -277,6 +292,7 @@ router.get('/:slug/settings', async (c) => {
       timeoutMs: number;
       modelTier: string;
       modelProvider: string;
+      effort: RuntimeEffort | null;
     }
   > = {};
   const skillMetadata: Record<
@@ -295,6 +311,7 @@ router.get('/:slug/settings', async (c) => {
       timeoutMs: budget.timeoutMs,
       modelTier: budget.modelTier,
       modelProvider: hint?.provider ?? budget.provider ?? 'claude',
+      effort: budget.effort ?? null,
     };
     skillMetadata[skill] = {
       description: hint?.description ?? null,
@@ -309,6 +326,7 @@ router.get('/:slug/settings', async (c) => {
       source: string;
       effectiveTier: string;
       effectiveProvider: string;
+      effectiveEffort: RuntimeEffort | null;
       resolvedPrimary: unknown;
       resolvedFallback: unknown;
       resolvedAdvisor: unknown;
@@ -332,6 +350,7 @@ router.get('/:slug/settings', async (c) => {
       source: resolved.source,
       effectiveTier: resolved.tier,
       effectiveProvider: resolved.provider,
+      effectiveEffort: resolved.effort ?? null,
       resolvedPrimary: resolved.resolvedPrimary,
       resolvedFallback: resolved.resolvedFallback,
       resolvedAdvisor: resolved.resolvedAdvisor,
@@ -472,6 +491,29 @@ router.get('/:slug/settings/codex-auth', async (c) => {
     authPath,
     loginCommand: 'codex login',
   });
+});
+
+/** GET /projects/:slug/runtime-profiler — observed read-only runtime tuning data */
+router.get('/:slug/runtime-profiler', async (c) => {
+  const slug = c.req.param('slug');
+  const project = await getProject(slug);
+  if (project == null) return c.json({ error: 'project not found' }, 404);
+
+  const parsed = RuntimeProfilerQuerySchema.safeParse({
+    days: c.req.query('days'),
+    skill: c.req.query('skill'),
+  });
+  if (!parsed.success) {
+    return c.json({ error: 'invalid query', details: parsed.error.issues }, 422);
+  }
+
+  return c.json(
+    profileRuntimeProject({
+      projectId: project.id,
+      days: parsed.data.days,
+      skill: parsed.data.skill,
+    }),
+  );
 });
 
 /** GET /projects/:slug/settings/dev-review — merged view of config + DB override */

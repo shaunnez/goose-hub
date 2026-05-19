@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import type { RuntimeEffort } from '../types.js';
 
 const CODEX_AUTH_PATH = join(homedir(), '.codex', 'auth.json');
 
@@ -123,6 +124,7 @@ export function buildCodexArgv(input: {
   workspaceDir: string;
   prompt: string;
   systemPrompt?: string;
+  effort?: RuntimeEffort;
   /** Reserved for future use; Codex `exec --json` does not currently accept turn caps. */
   maxTurns?: number;
   /** Optional Codex CLI sandbox mode for model-generated shell commands. */
@@ -156,6 +158,9 @@ export function buildCodexArgv(input: {
     // TOML multi-line basic string (triple-quoted) so prompts can carry raw
     // newlines without escaping; only `\` and any embedded `"""` need escape.
     argv.push('-c', `instructions="""${escapeForTomlMultilineBasic(input.systemPrompt)}"""`);
+  }
+  if (input.effort != null) {
+    argv.push('-c', `model_reasoning_effort=${tomlString(input.effort)}`);
   }
   if (input.inlineConfig != null && input.inlineConfig.length > 0) {
     argv.push(...input.inlineConfig);
