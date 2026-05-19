@@ -2,15 +2,23 @@ import {
   deleteSkillBudgetSetting,
   fetchCodexAuthStatus,
   fetchProjectSettings,
+  fetchRuntimeProfiler,
   patchGlobalBudgetSettings,
   patchSkillBudgetSetting,
   resetAllProjectBudgets,
 } from '@/lib/api';
-import type { CodexAuthStatusDto, ModelProvider, ModelTier, ProjectSettingsDto } from '@/lib/types';
+import type {
+  CodexAuthStatusDto,
+  ModelProvider,
+  ModelTier,
+  ProjectSettingsDto,
+  RuntimeEffort,
+  RuntimeProfilerDto,
+} from '@/lib/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Copy, RotateCcw, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 
 interface Props {
   slug: string;
@@ -58,6 +66,7 @@ const GLOBAL_FIELDS: Array<{
 
 const TIERS: ModelTier[] = ['haiku', 'sonnet', 'opus'];
 const PROVIDERS: ModelProvider[] = ['claude', 'codex'];
+const EFFORTS: RuntimeEffort[] = ['low', 'medium', 'high', 'xhigh'];
 
 function NumericInput({
   value,
@@ -121,12 +130,14 @@ function RuntimeSelect({
   options,
   defaultValue,
   overridden,
+  subtitle,
   onCommit,
 }: {
   value: string | null;
   options: string[];
   defaultValue?: string;
   overridden: boolean;
+  subtitle?: string;
   onCommit: (val: string | null) => void;
 }) {
   return (
@@ -153,6 +164,9 @@ function RuntimeSelect({
       </div>
       {defaultValue != null && (
         <span className="text-[10px] text-fg-3 font-mono break-words">default: {defaultValue}</span>
+      )}
+      {subtitle != null && subtitle !== '' && (
+        <span className="text-[10px] text-fg-3 font-mono break-words">{subtitle}</span>
       )}
     </div>
   );
@@ -278,6 +292,103 @@ function CodexAuthSection({ slug }: { slug: string }) {
   );
 }
 
+function RuntimeProfilerSection({
+  slug,
+  settings,
+}: {
+  slug: string;
+  settings: ProjectSettingsDto;
+}) {
+  const { data, isLoading } = useQuery<RuntimeProfilerDto>({
+    queryKey: ['runtime-profiler', slug],
+    queryFn: ({ signal }) => fetchRuntimeProfiler(slug, signal),
+    staleTime: 60_000,
+  });
+
+  return (
+    <section>
+      <h3 className="text-[12px] font-semibold uppercase tracking-wider text-fg-2 mb-3">
+        Observed runtime profile
+      </h3>
+      <p className="text-[11px] text-fg-3 mb-4">
+        Read-only recommendations from recent run history. Suggested changes are context, not
+        auto-applied.
+      </p>
+      {isLoading ? (
+        <div className="border-y border-line px-3 py-4 text-[12px] text-fg-3">
+          Loading observed profile…
+        </div>
+      ) : data == null || data.skills.length === 0 ? (
+        <div className="border-y border-line px-3 py-4 text-[12px] text-fg-3">
+          No observed runs in the last 14 days.
+        </div>
+      ) : (
+        <div className="border-y border-line text-[12px]">
+          {data.skills.slice(0, 12).map((entry) => {
+            const current = settings.resolvedSkillRuntimes?.[entry.skill];
+            return (
+              <div key={entry.skill} className="border-b border-line/50 px-3 py-3 last:border-b-0">
+                <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <span className="block font-mono text-[12px] text-fg break-all leading-snug">
+                      {entry.skill}
+                    </span>
+                    <div className="mt-1 flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-[11px] text-fg-3">
+                      <span>{entry.metrics.runCount} runs</span>
+                      <span>p95 ${entry.metrics.p95CostUsd.toFixed(2)}</span>
+                      <span>p95 in {entry.metrics.p95InputTokens.toLocaleString()} tok</span>
+                      <span>p95 out {entry.metrics.p95OutputTokens.toLocaleString()} tok</span>
+                    </div>
+                  </div>
+                  <div className="min-w-0 text-right text-[11px] text-fg-3">
+                    <div>
+                      Current:{' '}
+                      <span className="font-mono text-fg">
+                        {current?.effectiveProvider ?? 'unknown'}:
+                        {current?.effectiveTier ?? 'unknown'}
+                      </span>
+                    </div>
+                    <div>
+                      Effort:{' '}
+                      <span className="font-mono text-fg">
+                        {current?.effectiveEffort ?? 'default'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-2 flex min-w-0 flex-wrap gap-2 text-[11px]">
+                  <ProfilerMetric label="timeout" value={entry.metrics.timeoutRate} />
+                  <ProfilerMetric label="budget" value={entry.metrics.budgetExceededRate} />
+                  <ProfilerMetric label="schema" value={entry.metrics.schemaValidationRetryRate} />
+                  <span className="text-fg-3">{entry.metrics.toolCallCount} tool calls</span>
+                </div>
+                {entry.recommendations.length > 0 && (
+                  <div className="mt-2 flex min-w-0 flex-col gap-1">
+                    {entry.recommendations.slice(0, 3).map((rec) => (
+                      <div key={`${rec.kind}-${rec.summary}`} className="min-w-0 text-[11px]">
+                        <span className="font-medium text-fg">{rec.summary}</span>{' '}
+                        <span className="text-fg-3">{rec.evidence}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ProfilerMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <span className={value > 0 ? 'text-warning' : 'text-fg-3'}>
+      {label} {Math.round(value * 100)}%
+    </span>
+  );
+}
+
 export function ProjectBudgetPanel({ slug }: Props) {
   const queryClient = useQueryClient();
   const { data, isLoading, error } = useQuery<ProjectSettingsDto>({
@@ -359,15 +470,11 @@ export function ProjectBudgetPanel({ slug }: Props) {
             const dbVal = dbGlobal?.[key] ?? null;
             const isOverridden = dbVal != null;
             return (
-              <>
-                <span
-                  key={`${key}-label`}
-                  className="text-[12px] text-fg-2 flex items-center gap-1.5 pt-1"
-                >
+              <Fragment key={key}>
+                <span className="text-[12px] text-fg-2 flex items-center gap-1.5 pt-1">
                   {label}
                 </span>
                 <NumericInput
-                  key={`${key}-input`}
                   value={dbVal}
                   placeholder={configVal != null ? String(configVal) : '—'}
                   isFloat={isFloat}
@@ -375,7 +482,7 @@ export function ProjectBudgetPanel({ slug }: Props) {
                   subtitle={configVal != null ? `default: ${configVal}` : null}
                   onCommit={(val) => patchGlobal.mutate({ [key]: val })}
                 />
-              </>
+              </Fragment>
             );
           })}
         </div>
@@ -403,7 +510,8 @@ export function ProjectBudgetPanel({ slug }: Props) {
                 row.maxBudgetUsd != null ||
                 row.timeoutMs != null ||
                 row.modelTier != null ||
-                row.provider != null);
+                row.provider != null ||
+                row.effort != null);
             return (
               <div
                 key={skill}
@@ -493,6 +601,25 @@ export function ProjectBudgetPanel({ slug }: Props) {
                       }
                     />
                   </SkillRuntimeField>
+                  <SkillRuntimeField label="Effort">
+                    <RuntimeSelect
+                      value={row?.effort ?? null}
+                      options={EFFORTS}
+                      defaultValue={defaults?.effort ?? undefined}
+                      overridden={row?.effort != null}
+                      subtitle={
+                        (resolved?.effectiveProvider ?? defaults?.modelProvider) === 'claude'
+                          ? 'display only for Claude'
+                          : undefined
+                      }
+                      onCommit={(val) =>
+                        patchSkill.mutate({
+                          skill,
+                          patch: { effort: val as RuntimeEffort | null },
+                        })
+                      }
+                    />
+                  </SkillRuntimeField>
                   <SkillRuntimeField label="Primary" wide>
                     <RuntimeModelCell value={resolved?.resolvedPrimary} />
                   </SkillRuntimeField>
@@ -508,6 +635,8 @@ export function ProjectBudgetPanel({ slug }: Props) {
           })}
         </div>
       </section>
+
+      <RuntimeProfilerSection slug={slug} settings={data} />
     </div>
   );
 }

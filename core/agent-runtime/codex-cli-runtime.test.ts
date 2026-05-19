@@ -139,6 +139,16 @@ describe('CodexCliRuntime timeout handling', () => {
     expect(call?.systemPrompt).toContain('skill prompt body');
   });
 
+  it('forwards AgentSpec effort into Codex argv construction', async () => {
+    await runSuccessfulCodexSpec({ effort: 'high' });
+
+    expect(buildCodexArgv).toHaveBeenCalledWith(
+      expect.objectContaining({
+        effort: 'high',
+      }),
+    );
+  });
+
   it('does not use danger-full-access for QA even though QA includes validate', async () => {
     await runSuccessfulCodexSpec({
       skill: 'qa',

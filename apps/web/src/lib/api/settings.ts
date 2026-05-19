@@ -7,6 +7,8 @@ import type {
   ProjectSettingsDto,
   ReviewSettingsDto,
   ReviewerSlot,
+  RuntimeEffort,
+  RuntimeProfilerDto,
   WorkflowCatalogDto,
 } from '../types.js';
 import { deleteRequest, getJson, patchJson } from './client.js';
@@ -34,6 +36,7 @@ export async function patchSkillBudgetSetting(
     timeoutMs: number | null;
     modelTier: ModelTier | null;
     provider: ModelProvider | null;
+    effort: RuntimeEffort | null;
   }>,
 ): Promise<void> {
   await patchJson(`/projects/${slug}/settings/skills/${encodeURIComponent(skill)}`, patch);
@@ -53,6 +56,13 @@ export async function fetchCodexAuthStatus(
   signal?: AbortSignal,
 ): Promise<CodexAuthStatusDto> {
   return getJson<CodexAuthStatusDto>(`/projects/${slug}/settings/codex-auth`, signal);
+}
+
+export async function fetchRuntimeProfiler(
+  slug: string,
+  signal?: AbortSignal,
+): Promise<RuntimeProfilerDto> {
+  return getJson<RuntimeProfilerDto>(`/projects/${slug}/runtime-profiler?days=14`, signal);
 }
 
 export async function fetchDevReviewSettings(

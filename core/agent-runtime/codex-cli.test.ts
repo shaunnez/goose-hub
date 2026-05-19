@@ -39,6 +39,19 @@ describe('buildCodexArgv', () => {
       '<task></task>',
     ]);
   });
+
+  it('passes configured reasoning effort as a Codex config override', () => {
+    const argv = buildCodexArgv({
+      model: 'gpt-5.4',
+      workspaceDir: '/tmp/worktree',
+      prompt: '<task></task>',
+      effort: 'xhigh',
+    });
+
+    expect(argv).toContain('-c');
+    expect(argv).toContain('model_reasoning_effort="xhigh"');
+    expect(argv.at(-1)).toBe('<task></task>');
+  });
 });
 
 // ─── parseCodexEnvelope ───────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import type { ModelProvider, ModelTier } from '../types.js';
+import type { ModelProvider, ModelTier, RuntimeEffort } from '../types.js';
 import type { AgentBudgets } from './interface.js';
 import { defaultModelForTierAndProvider } from './models.js';
 
@@ -7,6 +7,8 @@ export interface SkillBudget {
   maxBudgetUsd: number;
   timeoutMs: number;
   modelTier: ModelTier;
+  /** Runtime reasoning effort. Only enforced by runtimes that support it. */
+  effort?: RuntimeEffort | null;
   /** Default provider for this skill. Omit for Claude (the default). */
   provider?: ModelProvider;
   /**
@@ -239,6 +241,8 @@ export interface ResolvedBudget {
   budgets: AgentBudgets;
   /** Resolved model ID — maps directly to AgentSpec.modelOverride. */
   modelOverride: string;
+  /** Runtime reasoning effort when configured. Unsupported runtimes ignore it. */
+  effort?: RuntimeEffort;
 }
 
 /** DB-sourced per-skill override. Passed in by callers that have a projectId. */
@@ -248,6 +252,11 @@ export interface DbSkillOverride {
   timeoutMs?: number | null;
   modelTier?: ModelTier | string | null;
   modelProvider?: string | null;
+  effort?: RuntimeEffort | string | null;
+}
+
+function isRuntimeEffort(value: unknown): value is RuntimeEffort {
+  return value === 'low' || value === 'medium' || value === 'high' || value === 'xhigh';
 }
 
 /**
@@ -297,6 +306,7 @@ export function resolveBudgets(
     ...(dbOverride?.maxTurns != null ? { maxTurns: dbOverride.maxTurns } : {}),
     ...(dbOverride?.maxBudgetUsd != null ? { maxBudgetUsd: dbOverride.maxBudgetUsd } : {}),
     ...(dbOverride?.timeoutMs != null ? { timeoutMs: dbOverride.timeoutMs } : {}),
+    ...(isRuntimeEffort(dbOverride?.effort) ? { effort: dbOverride.effort } : {}),
   };
 
   const effectivePerWorkflowCap = dbPerWorkflowMaxUsd ?? projectBudgets?.perWorkflowMaxUsd;
@@ -310,9 +320,11 @@ export function resolveBudgets(
     maxBudgetUsd = effectivePerAgentCap;
   }
 
+  const effort = isRuntimeEffort(merged.effort) ? merged.effort : undefined;
   return {
     budgets: { maxTurns: merged.maxTurns, maxBudgetUsd, timeoutMs: merged.timeoutMs },
     modelOverride: defaultModelForTierAndProvider(merged.modelTier, 'claude'),
+    ...(effort != null ? { effort } : {}),
   };
 }
 
@@ -360,8 +372,10 @@ export function resolveEscalatedBudgets(
     maxBudgetUsd = effectivePerAgentCap;
   }
 
+  const effort = isRuntimeEffort(override?.effort) ? override.effort : undefined;
   return {
     budgets: { maxTurns, maxBudgetUsd, timeoutMs },
     modelOverride: defaultModelForTierAndProvider(escalation.modelTier, 'claude'),
+    ...(effort != null ? { effort } : {}),
   };
 }

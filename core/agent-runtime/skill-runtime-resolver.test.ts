@@ -44,6 +44,39 @@ describe('resolveSkillRuntime', () => {
     expect(resolved.modelOverride).toBe('claude-opus-4-7');
   });
 
+  it('resolves effort with DB above project config and skill defaults', () => {
+    const resolved = resolveSkillRuntime({
+      skill: 'repo-match',
+      projectBudgets: { skillBudgetOverrides: { 'repo-match': { effort: 'medium' } } },
+      dbOverride: { effort: 'xhigh' },
+    });
+
+    expect(resolved.source).toBe('db');
+    expect(resolved.effort).toBe('xhigh');
+  });
+
+  it('keeps DB source attribution when DB tier wins but effort comes from config', () => {
+    const resolved = resolveSkillRuntime({
+      skill: 'repo-match',
+      projectBudgets: { skillBudgetOverrides: { 'repo-match': { effort: 'medium' } } },
+      dbOverride: { modelTier: 'opus' },
+    });
+
+    expect(resolved.source).toBe('db');
+    expect(resolved.tier).toBe('opus');
+    expect(resolved.effort).toBe('medium');
+  });
+
+  it('keeps effort displayable when the effective provider is Claude', () => {
+    const resolved = resolveSkillRuntime({
+      skill: 'repo-match',
+      dbOverride: { effort: 'high', modelProvider: 'claude' },
+    });
+
+    expect(resolved.provider).toBe('claude');
+    expect(resolved.effort).toBe('high');
+  });
+
   it('lets per-skill DB model/provider override skill defaults', () => {
     const resolved = resolveSkillRuntime({
       skill: 'investigate',

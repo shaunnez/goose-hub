@@ -18,6 +18,7 @@ const {
   mockWriteProjectReviewSettings,
   mockWriteProjectSettings,
   mockWriteProjectSkillSetting,
+  mockProfileRuntimeProject,
 } = vi.hoisted(() => ({
   mockDeleteProjectSkillSetting: vi.fn(),
   mockGetUseInvestigationSwarm: vi.fn(),
@@ -35,6 +36,7 @@ const {
   mockWriteProjectReviewSettings: vi.fn(),
   mockWriteProjectSettings: vi.fn(),
   mockWriteProjectSkillSetting: vi.fn(),
+  mockProfileRuntimeProject: vi.fn(),
 }));
 
 vi.mock('#shared/projects.js', () => ({
@@ -63,6 +65,10 @@ vi.mock('@goose-hub/core/db/repositories/project-review-settings.js', () => ({
   parseReviewerSlots: mockParseReviewerSlots,
   readProjectReviewSettings: mockReadProjectReviewSettings,
   writeProjectReviewSettings: mockWriteProjectReviewSettings,
+}));
+
+vi.mock('@goose-hub/core/runtime-profiler/profile-runs.js', () => ({
+  profileRuntimeProject: mockProfileRuntimeProject,
 }));
 
 import { projectSettingsRouter } from './router.js';
@@ -94,6 +100,15 @@ describe('project settings router', () => {
     mockParseReviewerSlots.mockReturnValue(null);
     mockGetUseMultiAgentPipeline.mockReturnValue(false);
     mockGetUseInvestigationSwarm.mockReturnValue(true);
+    mockProfileRuntimeProject.mockReturnValue({
+      projectId: 'goose-hub-self',
+      window: {
+        days: 14,
+        sinceIso: '2026-05-06T00:00:00.000Z',
+        untilIso: '2026-05-20T00:00:00.000Z',
+      },
+      skills: [],
+    });
   });
 
   it('does not expose the removed role-model settings route', async () => {
@@ -110,6 +125,22 @@ describe('project settings router', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
       loginCommand: 'codex login',
+    });
+  });
+
+  it('returns observed runtime profiler data for the project', async () => {
+    const app = makeApp();
+    const res = await app.request('/projects/goose-hub-self/runtime-profiler?days=7&skill=qa');
+
+    expect(res.status).toBe(200);
+    expect(mockProfileRuntimeProject).toHaveBeenCalledWith({
+      projectId: 'goose-hub-self',
+      days: 7,
+      skill: 'qa',
+    });
+    expect(await res.json()).toMatchObject({
+      projectId: 'goose-hub-self',
+      skills: [],
     });
   });
 
@@ -155,6 +186,23 @@ describe('project settings router', () => {
     );
   });
 
+  it('writes effort patches to project_skill_settings', async () => {
+    const app = makeApp();
+    const res = await app.request('/projects/goose-hub-self/settings/skills/repo-match', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ effort: 'high' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockWriteProjectSkillSetting).toHaveBeenCalledWith(
+      'goose-hub-self',
+      'repo-match',
+      { effort: 'high' },
+      'ui',
+    );
+  });
+
   it('resolves per-skill DB tier/provider above project config and skill defaults', async () => {
     mockGetProject.mockResolvedValue({
       ...project(),
@@ -173,6 +221,7 @@ describe('project settings router', () => {
             skillName: 'repo-match',
             modelTier: 'sonnet',
             modelProvider: 'codex',
+            effort: 'xhigh',
             updatedAt: '2026-05-18T00:00:00Z',
           },
         ],
@@ -188,6 +237,7 @@ describe('project settings router', () => {
           source: string;
           effectiveTier: string;
           effectiveProvider: string;
+          effectiveEffort: string | null;
           resolvedPrimary: { modelId: string };
         }
       >;
@@ -197,6 +247,7 @@ describe('project settings router', () => {
       source: 'db',
       effectiveTier: 'sonnet',
       effectiveProvider: 'codex',
+      effectiveEffort: 'xhigh',
       resolvedPrimary: { modelId: 'gpt-5.4' },
     });
   });

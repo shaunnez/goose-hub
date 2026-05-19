@@ -175,6 +175,7 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<InvokeSkillR
     toolBundles: skillConfig.toolBundles,
     toolExtras: [],
     budgets: resolved.budgets,
+    effort: resolved.effort,
     personaId,
     workItemId,
     modelOverride,

@@ -29,6 +29,7 @@ export type SkillBudgetPatch = {
   timeoutMs?: number | null;
   modelTier?: string | null;
   modelProvider?: string | null;
+  effort?: string | null;
 };
 
 export function readProjectSettings(projectId: string): ProjectSettingsRow | null {

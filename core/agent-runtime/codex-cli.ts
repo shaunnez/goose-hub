@@ -155,6 +155,7 @@ export class CodexCliRuntime implements AgentRuntime {
       workspaceDir,
       prompt: contextXml,
       systemPrompt: withFactoryRuntimeInstructions(spec.appendSystemPrompt),
+      effort: spec.effort,
       maxTurns: spec.budgets.maxTurns,
       commandSandbox: needsBrowserProcessAccess ? 'danger-full-access' : undefined,
       approvalPolicy: needsBrowserProcessAccess ? 'never' : undefined,

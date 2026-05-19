@@ -3,7 +3,7 @@ import {
   readProjectSettings,
   readProjectSkillSettings,
 } from '../db/repositories/project-settings.js';
-import type { BudgetConfig, ModelProvider, ModelTier, Role } from '../types.js';
+import type { BudgetConfig, ModelProvider, ModelTier, Role, RuntimeEffort } from '../types.js';
 import type { ResolvedBudget, SkillBudgetOverride } from './budgets.js';
 import { SKILL_BUDGETS, resolveBudgets } from './budgets.js';
 import { defaultModelForTierAndProvider, providerOf, tierOf } from './models.js';
@@ -17,6 +17,7 @@ export interface SkillRuntimeDbOverride {
   timeoutMs?: number | null;
   modelTier?: ModelTier | string | null;
   modelProvider?: ModelProvider | string | null;
+  effort?: RuntimeEffort | string | null;
 }
 
 export interface ResolvedDisplayModel {
@@ -32,6 +33,7 @@ export interface ResolvedSkillRuntime extends ResolvedBudget {
   resolvedPrimary: ResolvedDisplayModel;
   resolvedFallback: ResolvedDisplayModel | null;
   resolvedAdvisor: ResolvedDisplayModel | null;
+  effort?: RuntimeEffort;
 }
 
 const TIER_ORDER: ModelTier[] = ['haiku', 'sonnet', 'opus'];
@@ -42,6 +44,10 @@ function isModelTier(value: unknown): value is ModelTier {
 
 function isModelProvider(value: unknown): value is ModelProvider {
   return value === 'claude' || value === 'codex';
+}
+
+function isRuntimeEffort(value: unknown): value is RuntimeEffort {
+  return value === 'low' || value === 'medium' || value === 'high' || value === 'xhigh';
 }
 
 export function lowerTier(tier: ModelTier): ModelTier {
@@ -68,7 +74,12 @@ function sourceForSkill(
   skill: string,
   dbOverride?: SkillRuntimeDbOverride | null,
 ): SkillRuntimeSource {
-  if (isModelTier(dbOverride?.modelTier) || isModelProvider(dbOverride?.modelProvider)) return 'db';
+  if (
+    isModelTier(dbOverride?.modelTier) ||
+    isModelProvider(dbOverride?.modelProvider) ||
+    isRuntimeEffort(dbOverride?.effort)
+  )
+    return 'db';
   if (SKILL_BUDGETS[skill] != null) return 'skill-default';
   return 'fallback';
 }
@@ -106,6 +117,25 @@ function withoutConfigModelTier(
     skillBudgetOverrides[skill] = rest;
   }
   return { ...projectBudgets, skillBudgetOverrides };
+}
+
+function resolveEffort(input: {
+  skill: string;
+  projectBudgets?: Pick<BudgetConfig, 'skillBudgetOverrides'>;
+  dbOverride?: SkillRuntimeDbOverride | null;
+}): { effort?: RuntimeEffort; source: SkillRuntimeSource | null } {
+  if (isRuntimeEffort(input.dbOverride?.effort)) {
+    return { effort: input.dbOverride.effort, source: 'db' };
+  }
+  const configEffort = input.projectBudgets?.skillBudgetOverrides?.[input.skill]?.effort;
+  if (isRuntimeEffort(configEffort)) {
+    return { effort: configEffort, source: 'config' };
+  }
+  const skillEffort = SKILL_BUDGETS[input.skill]?.effort;
+  if (isRuntimeEffort(skillEffort)) {
+    return { effort: skillEffort, source: sourceForSkill(input.skill, input.dbOverride) };
+  }
+  return { source: null };
 }
 
 export function resolveSkillRuntime(input: {
@@ -159,6 +189,7 @@ export function resolveSkillRuntime(input: {
       resolvedPrimary: { tier, provider, modelId: input.callerModelOverride },
       resolvedFallback: null,
       resolvedAdvisor: null,
+      effort: resolvedBudget.effort,
     };
   }
 
@@ -180,7 +211,15 @@ export function resolveSkillRuntime(input: {
   const modelOverride = defaultModelForTierAndProvider(tier, provider);
   const supportsFallback = SKILL_BUDGETS[input.skill]?.escalation != null;
   const supportsAdvisor = input.skill === 'implement' || input.skill === 'write-prd';
-  const source = isModelProvider(dbOverride?.modelProvider) ? 'db' : tierResult.source;
+  const effortResult = resolveEffort({
+    skill: input.skill,
+    projectBudgets: input.projectBudgets,
+    dbOverride,
+  });
+  const source =
+    isModelProvider(dbOverride?.modelProvider) || tierResult.source === 'db'
+      ? 'db'
+      : (effortResult.source ?? tierResult.source);
 
   return {
     ...resolvedBudget,
@@ -193,6 +232,7 @@ export function resolveSkillRuntime(input: {
       !isHoldout && supportsFallback ? displayModel(lowerTier(tier), provider) : null,
     resolvedAdvisor:
       !isHoldout && supportsAdvisor ? displayModel(higherTier(tier), provider) : null,
+    ...(effortResult.effort != null ? { effort: effortResult.effort } : {}),
   };
 }
 
