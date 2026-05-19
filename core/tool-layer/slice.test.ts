@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { TOOL_BUNDLES, computeAllowlist } from './allowlist.js';
 import {
   DECISION_CAPTURE_EXCLUDED_ROLES,
+  writeCodexWorkspaceSandbox,
   writeWorkspaceSandbox,
   writeWpBuilderSandbox,
 } from './sandbox.js';
@@ -322,6 +323,26 @@ describe('writeWorkspaceSandbox', () => {
       const cfg = JSON.parse(raw) as { hooks?: { PostToolUse?: unknown[] } };
       expect(cfg.hooks?.PostToolUse).toBeDefined();
       expect(Array.isArray(cfg.hooks?.PostToolUse)).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+});
+
+describe('writeCodexWorkspaceSandbox', () => {
+  it('writes .codex/hooks.json with a broad Factory PreToolUse hook', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'codex-sandbox-test-'));
+    try {
+      writeCodexWorkspaceSandbox(dir);
+      const raw = readFileSync(join(dir, '.codex', 'hooks.json'), 'utf8');
+      const cfg = JSON.parse(raw) as {
+        hooks?: { PreToolUse?: Array<{ matcher?: string; hooks?: Array<{ command?: string }> }> };
+      };
+      const preHook = cfg.hooks?.PreToolUse?.find((entry) =>
+        entry.hooks?.some((hook) => hook.command?.includes('pre-tool-use.js')),
+      );
+      expect(preHook).toBeDefined();
+      expect(preHook?.matcher).toBe('.*');
     } finally {
       rmSync(dir, { recursive: true });
     }

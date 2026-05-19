@@ -83,7 +83,12 @@ export function escapeForTomlMultilineBasic(input: string): string {
 export function buildCodexMcpInlineArgs(
   servers: Record<
     string,
-    { command: string; args: ReadonlyArray<string>; env?: Record<string, string> }
+    {
+      command: string;
+      args: ReadonlyArray<string>;
+      env?: Record<string, string>;
+      enabledTools?: ReadonlyArray<string>;
+    }
   >,
 ): string[] {
   const out: string[] = [];
@@ -91,6 +96,12 @@ export function buildCodexMcpInlineArgs(
     const base = `mcp_servers.${name}`;
     out.push('-c', `${base}.command=${tomlString(entry.command)}`);
     out.push('-c', `${base}.args=[${entry.args.map((a) => tomlString(a)).join(',')}]`);
+    if (entry.enabledTools != null) {
+      out.push(
+        '-c',
+        `${base}.enabled_tools=[${entry.enabledTools.map((tool) => tomlString(tool)).join(',')}]`,
+      );
+    }
     if (entry.env != null && Object.keys(entry.env).length > 0) {
       const inline = Object.entries(entry.env)
         .map(([k, v]) => `${tomlBareKey(k)}=${tomlString(v)}`)
@@ -99,6 +110,16 @@ export function buildCodexMcpInlineArgs(
     }
   }
   return out;
+}
+
+export function codexMcpEnabledToolsForServer(
+  serverName: string,
+  allowedTools: ReadonlyArray<string>,
+): string[] {
+  const prefix = `mcp__${serverName}__`;
+  return allowedTools
+    .filter((tool) => tool.startsWith(prefix))
+    .map((tool) => tool.slice(prefix.length));
 }
 
 function tomlString(value: string): string {
@@ -131,6 +152,8 @@ export function buildCodexArgv(input: {
   commandSandbox?: 'read-only' | 'workspace-write' | 'danger-full-access';
   /** Optional global approval policy. Must be placed before the `exec` subcommand. */
   approvalPolicy?: 'never';
+  /** Trust Factory-generated project hooks without relying on user-global Codex trust state. */
+  bypassHookTrust?: boolean;
   /** Additional inline `-c key=value` overrides (e.g. MCP server config). */
   inlineConfig?: ReadonlyArray<string>;
 }): string[] {
@@ -144,6 +167,7 @@ export function buildCodexArgv(input: {
     '--ephemeral',
     '--ignore-user-config',
     '--ignore-rules',
+    ...(input.bypassHookTrust ? ['--dangerously-bypass-hook-trust'] : []),
     '--skip-git-repo-check',
     '--cd',
     input.workspaceDir,

@@ -96,6 +96,8 @@ describe('deployHooks', () => {
     expect(scriptContent).toContain('allowlist');
     expect(scriptContent).toContain('decision');
     expect(scriptContent).toContain('block');
+    expect(scriptContent).toContain('permissionDecision');
+    expect(scriptContent).toContain('deny');
   });
 
   it('the written script emits a tool-call audit event over HTTP', () => {

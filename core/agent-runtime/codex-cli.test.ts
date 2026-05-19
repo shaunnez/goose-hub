@@ -52,6 +52,20 @@ describe('buildCodexArgv', () => {
     expect(argv).toContain('model_reasoning_effort="xhigh"');
     expect(argv.at(-1)).toBe('<task></task>');
   });
+
+  it('can bypass hook trust for Factory-generated Codex hook configs', () => {
+    const argv = buildCodexArgv({
+      model: 'gpt-5.4',
+      workspaceDir: '/tmp/worktree',
+      prompt: '<task></task>',
+      bypassHookTrust: true,
+    });
+
+    expect(argv).toContain('--dangerously-bypass-hook-trust');
+    expect(argv.indexOf('--dangerously-bypass-hook-trust')).toBeLessThan(
+      argv.indexOf('--skip-git-repo-check'),
+    );
+  });
 });
 
 // ─── parseCodexEnvelope ───────────────────────────────────────────────────────

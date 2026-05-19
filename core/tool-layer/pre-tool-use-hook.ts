@@ -62,6 +62,18 @@ function bashCommand(toolInput) {
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
 }
 
+function denyHookResponse(reason) {
+  return {
+    decision: 'block',
+    reason,
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'deny',
+      permissionDecisionReason: reason,
+    },
+  };
+}
+
 function workspaceBoundaryDecision(toolName, toolInput) {
   const roots = normalizeRoots([workspaceDir, ...allowedSecondaryWorkspaces]);
   if (roots.length === 0) return null;
@@ -117,7 +129,9 @@ async function main() {
   try { call = JSON.parse(input); } catch { process.exit(0); }
 
   // Normalise Codex hook aliases → canonical CC shape.
-  const toolName = call?.tool_name ?? call?.name ?? '';
+  const rawToolName = call?.tool_name ?? call?.name ?? '';
+  const toolName =
+    rawToolName === 'command_execution' || rawToolName === 'bash' ? 'Bash' : rawToolName;
   const toolInput =
     asObj(call?.tool_input) ??
     asObj(call?.parameters) ??
@@ -133,7 +147,12 @@ async function main() {
       return prefix === toolName;
     });
     if (!permitted) {
-      const msg = JSON.stringify({ decision: 'block', reason: \`Tool '\${toolName}' not in allowlist\` });
+      const reason = \`tool not in allowlist: \${toolName}\`;
+      await emitToolCallAudit(toolName, toolInput, {
+        blocked: true,
+        block_reason: reason,
+      });
+      const msg = JSON.stringify(denyHookResponse(reason));
       process.stdout.write(msg);
       process.exit(0);
     }
@@ -145,7 +164,7 @@ async function main() {
       blocked: true,
       block_reason: boundaryReason,
     });
-    const msg = JSON.stringify({ decision: 'block', reason: boundaryReason });
+    const msg = JSON.stringify(denyHookResponse(boundaryReason));
     process.stdout.write(msg);
     process.exit(0);
   }

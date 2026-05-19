@@ -39,6 +39,11 @@ const CODEX_PRE_INPUT: Record<string, unknown> = {
   input: { path: '/tmp/out.ts', content: 'hello' },
 };
 
+const CODEX_NATIVE_COMMAND_EXECUTION: Record<string, unknown> = {
+  tool_name: 'command_execution',
+  tool_input: { command: 'pnpm test' },
+};
+
 const CODEX_POST_OUTPUT: Record<string, unknown> = {
   name: 'bash',
   output: 'stdout text here',
@@ -75,7 +80,7 @@ describe('normalizeCodexHookEvent — Claude canonical pass-through', () => {
 describe('normalizeCodexHookEvent — Codex PreToolUse (name + parameters/arguments/input)', () => {
   it('maps name→tool_name and parameters→tool_input', () => {
     const result = normalizeCodexHookEvent(CODEX_PRE_PARAMETERS);
-    expect(result.tool_name).toBe('bash');
+    expect(result.tool_name).toBe('Bash');
     expect(result.tool_input).toEqual({ command: 'ls -la' });
     expect(result.tool_response).toBeUndefined();
   });
@@ -91,6 +96,12 @@ describe('normalizeCodexHookEvent — Codex PreToolUse (name + parameters/argume
     expect(result.tool_name).toBe('write_file');
     expect(result.tool_input).toEqual({ path: '/tmp/out.ts', content: 'hello' });
   });
+
+  it('maps native command_execution to the Factory Bash tool name', () => {
+    const result = normalizeCodexHookEvent(CODEX_NATIVE_COMMAND_EXECUTION);
+    expect(result.tool_name).toBe('Bash');
+    expect(result.tool_input).toEqual({ command: 'pnpm test' });
+  });
 });
 
 // ─── Codex PostToolUse normalization ────────────────────────────────────────
@@ -98,14 +109,14 @@ describe('normalizeCodexHookEvent — Codex PreToolUse (name + parameters/argume
 describe('normalizeCodexHookEvent — Codex PostToolUse (name + output/error)', () => {
   it('maps name→tool_name and output→tool_response.output', () => {
     const result = normalizeCodexHookEvent(CODEX_POST_OUTPUT);
-    expect(result.tool_name).toBe('bash');
+    expect(result.tool_name).toBe('Bash');
     expect(result.tool_response).toEqual({ output: 'stdout text here', error: '' });
     expect(result.tool_input).toBeUndefined();
   });
 
   it('maps name→tool_name and error→tool_response.error', () => {
     const result = normalizeCodexHookEvent(CODEX_POST_ERROR);
-    expect(result.tool_name).toBe('bash');
+    expect(result.tool_name).toBe('Bash');
     expect(result.tool_response).toEqual({ output: '', error: 'command not found: foo' });
   });
 });

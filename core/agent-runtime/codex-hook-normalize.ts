@@ -46,7 +46,9 @@ function asString(v: unknown): string {
  */
 export function normalizeCodexHookEvent(raw: Record<string, unknown>): NormalizedHookEvent {
   // ── tool_name resolution ──────────────────────────────────────────────────
-  const tool_name = asString(raw.tool_name) || asString(raw.name);
+  const rawToolName = asString(raw.tool_name) || asString(raw.name);
+  const tool_name =
+    rawToolName === 'command_execution' || rawToolName === 'bash' ? 'Bash' : rawToolName;
 
   // ── transcript_path pass-through ─────────────────────────────────────────
   const transcript_path = typeof raw.transcript_path === 'string' ? raw.transcript_path : undefined;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCodexMcpInlineArgs } from './codex-config.js';
+import { buildCodexMcpInlineArgs, codexMcpEnabledToolsForServer } from './codex-config.js';
 
 describe('buildCodexMcpInlineArgs', () => {
   it('emits command + args + env as -c TOML overrides for a single server', () => {
@@ -57,5 +57,27 @@ describe('buildCodexMcpInlineArgs', () => {
 
   it('produces an empty array when given no servers', () => {
     expect(buildCodexMcpInlineArgs({})).toEqual([]);
+  });
+
+  it('emits enabled_tools as server-local tool names when provided', () => {
+    const out = buildCodexMcpInlineArgs({
+      'factory-tools': {
+        command: 'tsx',
+        args: ['server.ts'],
+        enabledTools: ['read_file', 'run_tests'],
+      },
+    });
+
+    expect(out).toContain('mcp_servers.factory-tools.enabled_tools=["read_file","run_tests"]');
+  });
+
+  it('keeps native tools out of server-local enabled_tools derivation', () => {
+    expect(
+      codexMcpEnabledToolsForServer('factory-tools', [
+        'mcp__factory-tools__read_file',
+        'Bash',
+        'mcp__playwright-test__browser_click',
+      ]),
+    ).toEqual(['read_file']);
   });
 });

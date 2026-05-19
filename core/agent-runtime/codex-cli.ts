@@ -10,7 +10,7 @@ import { computeAllowlist } from '../tool-layer/allowlist.js';
 import { deployDecisionCaptureHook } from '../tool-layer/decision-capture-hook.js';
 import { buildFactoryMcpConfig } from '../tool-layer/mcp/build-config.js';
 import { deployHooks } from '../tool-layer/pre-tool-use-hook.js';
-import { writeWorkspaceSandbox } from '../tool-layer/sandbox.js';
+import { writeCodexWorkspaceSandbox, writeWorkspaceSandbox } from '../tool-layer/sandbox.js';
 import { normalizeToolCallAuditPayload } from '../tool-layer/tool-call-audit.js';
 import { emitBudgetExceededIfNeeded } from './budget-guard.js';
 import {
@@ -19,6 +19,7 @@ import {
   assertCodexAuthenticated,
   buildCodexArgv,
   buildCodexMcpInlineArgs,
+  codexMcpEnabledToolsForServer,
   escapeForTomlMultilineBasic,
   resolveCodexBinary,
 } from './codex-config.js';
@@ -89,6 +90,14 @@ function workspaceBoundaryViolation(input: {
   return null;
 }
 
+function toolAllowedByRunAllowlist(toolName: string, allowedTools: ReadonlyArray<string>): boolean {
+  if (allowedTools.length === 0) return false;
+  return allowedTools.some((entry) => {
+    if (entry === toolName) return true;
+    return entry.split('(')[0] === toolName;
+  });
+}
+
 export class CodexCliRuntime implements AgentRuntime {
   async run(spec: AgentSpec): Promise<AgentResult> {
     if (process.env.MOCK_AGENTS === 'true') {
@@ -105,6 +114,7 @@ export class CodexCliRuntime implements AgentRuntime {
     mkdirSync(workspaceDir, { recursive: true });
     const projectId = (spec.context.projectId as string) ?? 'unknown';
     const workItemId = (spec.context.workItemId as string | undefined) ?? spec.workItemId ?? null;
+    const allowedTools = computeAllowlist(spec);
     // Per-run MCP config (ADR 0045). For Claude we pass `--mcp-config`; for
     // Codex we pass each MCP server entry as `-c mcp_servers.<n>.command=...`
     // / `.args=...` / `.env=...` since Codex CLI consumes MCP via TOML and
@@ -117,10 +127,21 @@ export class CodexCliRuntime implements AgentRuntime {
       workItemId,
       toolBundles: spec.toolBundles,
     });
-    const codexMcpInlineArgs = buildCodexMcpInlineArgs(factoryMcpConfig.mcpServers);
+    const codexMcpInlineArgs = buildCodexMcpInlineArgs(
+      Object.fromEntries(
+        Object.entries(factoryMcpConfig.mcpServers).map(([name, entry]) => [
+          name,
+          {
+            ...entry,
+            enabledTools: codexMcpEnabledToolsForServer(name, allowedTools),
+          },
+        ]),
+      ),
+    );
     const recordDecisionTool = getRecordDecisionTool(projectId);
     if (spec.sandboxMode !== 'preconfigured') {
       writeWorkspaceSandbox(workspaceDir, { role: spec.role, recordDecisionTool });
+      writeCodexWorkspaceSandbox(workspaceDir);
     }
     deployHooks();
     if (recordDecisionTool) deployDecisionCaptureHook();
@@ -146,7 +167,6 @@ export class CodexCliRuntime implements AgentRuntime {
     }
 
     const { contextXml } = assembleSpawnContext(spec);
-    const allowedTools = computeAllowlist(spec);
     const needsBrowserProcessAccess =
       spec.toolBundles.includes('validate') && BROWSER_PROCESS_ACCESS_SKILLS.has(spec.skill);
 
@@ -159,6 +179,7 @@ export class CodexCliRuntime implements AgentRuntime {
       maxTurns: spec.budgets.maxTurns,
       commandSandbox: needsBrowserProcessAccess ? 'danger-full-access' : undefined,
       approvalPolicy: needsBrowserProcessAccess ? 'never' : undefined,
+      bypassHookTrust: true,
       inlineConfig: codexMcpInlineArgs,
     });
 
@@ -258,6 +279,45 @@ export class CodexCliRuntime implements AgentRuntime {
           const toolCall = pickCodexToolCall(event);
           if (toolCall == null) return;
           toolCallCount += 1;
+          const allowlistReason = toolAllowedByRunAllowlist(toolCall.toolName, allowedTools)
+            ? null
+            : `tool not in allowlist: ${toolCall.toolName}`;
+          if (allowlistReason != null && !settled) {
+            settled = true;
+            clearTimeout(timeout);
+            eventStore.appendEvent({
+              projectId,
+              workItemId,
+              kind: 'agent.tool-call',
+              payload: normalizeToolCallAuditPayload({
+                tool_name: toolCall.toolName,
+                run_id: runId,
+                tool_input: toolCall.toolInput,
+                skill: spec.skill,
+                workspace_dir: workspaceDir,
+                blocked: true,
+                block_reason: allowlistReason,
+              }),
+              runId,
+              personaId,
+            });
+            killProcessGroupOrChild(child);
+            eventStore.appendEvent({
+              projectId,
+              workItemId,
+              kind: 'agent.run-failed',
+              payload: {
+                runId,
+                skill: spec.skill,
+                reason: 'tool-not-in-allowlist',
+                error: allowlistReason,
+              },
+              runId,
+              personaId,
+            });
+            reject(new Error(allowlistReason));
+            return;
+          }
           const boundaryReason = workspaceBoundaryViolation({
             toolCall,
             workspaceDir,

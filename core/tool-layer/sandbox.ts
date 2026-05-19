@@ -118,6 +118,30 @@ export function writeWorkspaceSandbox(workspacePath: string, opts: SandboxOption
   );
 }
 
+/** Writes workspace .codex/hooks.json with Factory allowlist enforcement. Idempotent. */
+export function writeCodexWorkspaceSandbox(workspacePath: string): void {
+  const codexDir = join(workspacePath, '.codex');
+  mkdirSync(codexDir, { recursive: true });
+  writeFileSync(
+    join(codexDir, 'hooks.json'),
+    `${JSON.stringify(
+      {
+        hooks: {
+          PreToolUse: [
+            {
+              matcher: '.*',
+              hooks: [{ type: 'command', command: `"${process.execPath}" "${HOOK_PATH}"` }],
+            },
+          ],
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    'utf8',
+  );
+}
+
 /**
  * Writes a WP builder sandbox — extends `writeWorkspaceSandbox` with:
  *   1. Hard-block on all git mutations (`Bash(git *)` patterns, ADR 0031 / rule 37).

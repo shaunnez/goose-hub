@@ -12,11 +12,11 @@ side effect can happen.
 
 The context contains:
 
-- `intervention` - durable row with type, reason, root-cause signature, and
+- `<intervention>` - durable row with type, reason, root-cause signature, and
   source event ID.
-- `workItem` - optional current issue data.
-- `recentEvents` - optional timeline evidence.
-- `legalTargets` - optional legal lifecycle targets for the current state.
+- `<workItem>` - optional current issue data.
+- `<recentEvents>` - optional timeline evidence.
+- `<legalTargets>` - optional legal lifecycle targets for the current state.
 
 ## Output
 

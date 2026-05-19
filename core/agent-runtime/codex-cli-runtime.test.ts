@@ -16,7 +16,10 @@ vi.mock('../db/repositories/project-settings.js', () => ({
 vi.mock('../tool-layer/allowlist.js', () => ({ computeAllowlist: vi.fn().mockReturnValue([]) }));
 vi.mock('../tool-layer/decision-capture-hook.js', () => ({ deployDecisionCaptureHook: vi.fn() }));
 vi.mock('../tool-layer/pre-tool-use-hook.js', () => ({ deployHooks: vi.fn() }));
-vi.mock('../tool-layer/sandbox.js', () => ({ writeWorkspaceSandbox: vi.fn() }));
+vi.mock('../tool-layer/sandbox.js', () => ({
+  writeCodexWorkspaceSandbox: vi.fn(),
+  writeWorkspaceSandbox: vi.fn(),
+}));
 vi.mock('./context-assembly.js', () => ({
   assembleSpawnContext: vi.fn().mockReturnValue({ contextXml: '<task></task>' }),
 }));
@@ -30,6 +33,7 @@ vi.mock('./codex-config.js', () => ({
   assertCodexAuthenticated: vi.fn(),
   buildCodexArgv: vi.fn().mockReturnValue(['exec', '--json']),
   buildCodexMcpInlineArgs: vi.fn().mockReturnValue([]),
+  codexMcpEnabledToolsForServer: vi.fn().mockReturnValue([]),
   escapeForTomlMultilineBasic: vi.fn((value: string) => value),
   resolveCodexBinary: vi.fn().mockReturnValue('/usr/local/bin/codex'),
 }));
@@ -43,8 +47,14 @@ vi.mock('node:child_process', () => ({
   spawn: mockSpawn,
 }));
 
+import { computeAllowlist } from '../tool-layer/allowlist.js';
+import { writeCodexWorkspaceSandbox, writeWorkspaceSandbox } from '../tool-layer/sandbox.js';
 import { CodexCliRuntime } from './codex-cli.js';
-import { buildCodexArgv } from './codex-config.js';
+import {
+  buildCodexArgv,
+  buildCodexMcpInlineArgs,
+  codexMcpEnabledToolsForServer,
+} from './codex-config.js';
 
 function makeSpec(overrides: Record<string, unknown> = {}) {
   return {
@@ -81,6 +91,9 @@ function makeHangingChild(): FakeChild {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(computeAllowlist).mockReturnValue([]);
+  vi.mocked(buildCodexMcpInlineArgs).mockReturnValue([]);
+  vi.mocked(codexMcpEnabledToolsForServer).mockReturnValue([]);
   mockEventStore.replay.mockReturnValue([]);
 });
 
@@ -149,6 +162,57 @@ describe('CodexCliRuntime timeout handling', () => {
     );
   });
 
+  it('writes the Codex workspace hook sandbox for default sandboxed runs', async () => {
+    await runSuccessfulCodexSpec({ workspaceDir: '/tmp/factory-worktree' });
+
+    expect(writeWorkspaceSandbox).toHaveBeenCalledWith('/tmp/factory-worktree', {
+      role: 'developer',
+      recordDecisionTool: false,
+    });
+    expect(writeCodexWorkspaceSandbox).toHaveBeenCalledWith('/tmp/factory-worktree');
+  });
+
+  it('skips Codex workspace hook sandbox when sandboxMode is preconfigured', async () => {
+    await runSuccessfulCodexSpec({ sandboxMode: 'preconfigured' });
+
+    expect(writeWorkspaceSandbox).not.toHaveBeenCalled();
+    expect(writeCodexWorkspaceSandbox).not.toHaveBeenCalled();
+  });
+
+  it('derives Codex MCP enabled_tools from the run allowlist', async () => {
+    vi.mocked(computeAllowlist).mockReturnValue([
+      'mcp__factory-tools__read_file',
+      'mcp__factory-tools__run_tests',
+      'Bash',
+    ]);
+    vi.mocked(codexMcpEnabledToolsForServer).mockReturnValue(['read_file', 'run_tests']);
+
+    await runSuccessfulCodexSpec({ toolBundles: ['dev-tools'] });
+
+    expect(codexMcpEnabledToolsForServer).toHaveBeenCalledWith('factory-tools', [
+      'mcp__factory-tools__read_file',
+      'mcp__factory-tools__run_tests',
+      'Bash',
+    ]);
+    expect(buildCodexMcpInlineArgs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        'factory-tools': expect.objectContaining({
+          enabledTools: ['read_file', 'run_tests'],
+        }),
+      }),
+    );
+  });
+
+  it('asks Codex argv construction to trust Factory-generated hooks', async () => {
+    await runSuccessfulCodexSpec();
+
+    expect(buildCodexArgv).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bypassHookTrust: true,
+      }),
+    );
+  });
+
   it('does not use danger-full-access for QA even though QA includes validate', async () => {
     await runSuccessfulCodexSpec({
       skill: 'qa',
@@ -163,6 +227,7 @@ describe('CodexCliRuntime timeout handling', () => {
   });
 
   it('fails fast when a streamed Bash command references a /Users path outside the workspace', async () => {
+    vi.mocked(computeAllowlist).mockReturnValue(['Bash']);
     const child = makeHangingChild();
     mockSpawn.mockReturnValue(child);
     const processKill = vi.spyOn(process, 'kill').mockImplementation(() => true);
@@ -201,6 +266,51 @@ describe('CodexCliRuntime timeout handling', () => {
       expect.objectContaining({
         kind: 'agent.run-failed',
         payload: expect.objectContaining({ reason: 'workspace-boundary-violation' }),
+      }),
+    );
+
+    child.emit('close', 0);
+    expect(mockEventStore.appendEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent.run-completed' }),
+    );
+    processKill.mockRestore();
+  });
+
+  it('fails fast when streamed native Bash is not in the run allowlist', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+    const processKill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec({ workspaceDir: '/Users/shaunnesbitt/project/worktree' }));
+    const rejection = expect(run).rejects.toThrow('tool not in allowlist: Bash');
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        `${JSON.stringify({
+          type: 'item.started',
+          item: { type: 'command_execution', command: '/bin/zsh -lc pwd' },
+        })}\n`,
+      ),
+    );
+
+    await rejection;
+
+    expect(processKill).toHaveBeenCalledWith(-4321, 'SIGKILL');
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.tool-call',
+        payload: expect.objectContaining({
+          blocked: true,
+          block_reason: 'tool not in allowlist: Bash',
+        }),
+      }),
+    );
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-failed',
+        payload: expect.objectContaining({ reason: 'tool-not-in-allowlist' }),
       }),
     );
 
@@ -531,6 +641,7 @@ describe('CodexCliRuntime timeout handling', () => {
   });
 
   it('kills and rejects when streamed tool calls exceed maxTurns', async () => {
+    vi.mocked(computeAllowlist).mockReturnValue(['Bash']);
     const child = makeHangingChild();
     mockSpawn.mockReturnValue(child);
     const processKill = vi.spyOn(process, 'kill').mockImplementation(() => true);

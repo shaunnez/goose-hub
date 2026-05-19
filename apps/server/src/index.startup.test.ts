@@ -7,10 +7,12 @@ const mocks = vi.hoisted(() => ({
   loadProjects: vi.fn(),
   loggerError: vi.fn(),
   loggerInfo: vi.fn(),
+  replayEvents: vi.fn(),
   runTriageBatch: vi.fn(),
   serve: vi.fn(),
   startNightlyAuditScheduler: vi.fn(),
   startPerProjectScheduler: vi.fn(),
+  subscribeEvents: vi.fn(),
 }));
 
 vi.mock('@goose-hub/core/audit/nightly-scheduler.js', () => ({
@@ -20,6 +22,8 @@ vi.mock('@goose-hub/core/audit/nightly-scheduler.js', () => ({
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   eventStore: {
     closeOrphanedRuns: mocks.closeOrphanedRuns,
+    replay: mocks.replayEvents,
+    subscribe: mocks.subscribeEvents,
   },
 }));
 
@@ -72,6 +76,8 @@ describe('server startup', () => {
     mocks.closeOrphanedRuns.mockReturnValue(0);
     mocks.dispatchTriageBatch.mockResolvedValue(undefined);
     mocks.loadProjects.mockResolvedValue([{ slug: 'goose-hub-self' }]);
+    mocks.replayEvents.mockReturnValue([]);
+    mocks.subscribeEvents.mockReturnValue(() => undefined);
   });
 
   afterEach(() => {

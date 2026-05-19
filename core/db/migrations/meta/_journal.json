@@ -253,6 +253,13 @@
       "when": 1779290000000,
       "tag": "0035_work_item_interventions",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1779290000001,
+      "tag": "0036_spotty_prima",
+      "breakpoints": true
     }
   ]
 }

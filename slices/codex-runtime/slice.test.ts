@@ -16,6 +16,7 @@ import {
 } from '@goose-hub/core/agent-runtime/codex-cli.js';
 import type { AgentSpec } from '@goose-hub/core/agent-runtime/interface.js';
 import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
+import { computeAllowlist } from '@goose-hub/core/tool-layer/allowlist.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('node:child_process', () => ({
@@ -41,7 +42,10 @@ vi.mock('@goose-hub/core/tool-layer/allowlist.js', () => ({
   computeAllowlist: vi.fn().mockReturnValue([]),
 }));
 vi.mock('@goose-hub/core/tool-layer/pre-tool-use-hook.js', () => ({ deployHooks: vi.fn() }));
-vi.mock('@goose-hub/core/tool-layer/sandbox.js', () => ({ writeWorkspaceSandbox: vi.fn() }));
+vi.mock('@goose-hub/core/tool-layer/sandbox.js', () => ({
+  writeCodexWorkspaceSandbox: vi.fn(),
+  writeWorkspaceSandbox: vi.fn(),
+}));
 vi.mock('@goose-hub/core/cost/repository.js', () => ({ recordCost: vi.fn() }));
 
 interface MockProcess {
@@ -96,6 +100,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(execFileSync).mockReturnValue('/mock/bin/codex' as never);
   vi.mocked(existsSync).mockReturnValue(true);
+  vi.mocked(computeAllowlist).mockReturnValue([]);
   process.env.CODEX_BIN = '';
   process.env.MOCK_AGENTS = '';
   process.env.OPENAI_API_KEY = '';
@@ -385,6 +390,7 @@ describe('CodexCliRuntime — spawn lifecycle', () => {
   });
 
   it('emits agent.tool-call events from Codex JSONL command_execution items', async () => {
+    vi.mocked(computeAllowlist).mockReturnValue(['Bash']);
     const proc = createMockProcess();
     vi.mocked(spawn).mockReturnValue(proc as unknown as ReturnType<typeof spawn>);
 
