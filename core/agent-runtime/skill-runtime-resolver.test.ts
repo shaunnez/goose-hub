@@ -55,6 +55,18 @@ describe('resolveSkillRuntime', () => {
     expect(resolved.effort).toBe('xhigh');
   });
 
+  it('keeps DB source attribution when DB tier wins but effort comes from config', () => {
+    const resolved = resolveSkillRuntime({
+      skill: 'repo-match',
+      projectBudgets: { skillBudgetOverrides: { 'repo-match': { effort: 'medium' } } },
+      dbOverride: { modelTier: 'opus' },
+    });
+
+    expect(resolved.source).toBe('db');
+    expect(resolved.tier).toBe('opus');
+    expect(resolved.effort).toBe('medium');
+  });
+
   it('keeps effort displayable when the effective provider is Claude', () => {
     const resolved = resolveSkillRuntime({
       skill: 'repo-match',

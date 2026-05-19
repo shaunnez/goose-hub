@@ -67,7 +67,7 @@ function tool(runId: string, toolName: string, command?: string) {
   return {
     runId,
     kind: 'agent.tool-call',
-    payload: { tool_name: toolName, command },
+    payload: { tool_name: toolName, tool_input: command == null ? {} : { command } },
     createdAt: '2026-05-19T00:00:00Z',
   };
 }

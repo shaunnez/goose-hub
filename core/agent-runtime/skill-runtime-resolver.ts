@@ -216,9 +216,10 @@ export function resolveSkillRuntime(input: {
     projectBudgets: input.projectBudgets,
     dbOverride,
   });
-  const source = isModelProvider(dbOverride?.modelProvider)
-    ? 'db'
-    : (effortResult.source ?? tierResult.source);
+  const source =
+    isModelProvider(dbOverride?.modelProvider) || tierResult.source === 'db'
+      ? 'db'
+      : (effortResult.source ?? tierResult.source);
 
   return {
     ...resolvedBudget,

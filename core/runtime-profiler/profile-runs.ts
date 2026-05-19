@@ -141,9 +141,7 @@ function buildMetrics(
       sequence.push(toolName);
       sequencesByRun.set(event.runId, sequence);
       if (toolName === 'Bash') {
-        const command = normalizeCommand(
-          payload.command ?? payload.redacted_tool_input ?? payload.input,
-        );
+        const command = normalizeCommand(commandFromToolPayload(payload));
         if (command !== '') bashCommands.set(command, (bashCommands.get(command) ?? 0) + 1);
       }
     }
@@ -206,6 +204,17 @@ function commonSequences(
 function toolNameFromPayload(payload: Record<string, unknown>): string {
   const raw = payload.tool_name ?? payload.toolName ?? payload.name;
   return typeof raw === 'string' && raw !== '' ? raw : 'unknown';
+}
+
+function commandFromToolPayload(payload: Record<string, unknown>): unknown {
+  const toolInput = payloadRecord(payload.tool_input ?? payload.toolInput);
+  return (
+    toolInput.command ??
+    toolInput.cmd ??
+    payload.command ??
+    payload.redacted_tool_input ??
+    payload.input
+  );
 }
 
 function normalizeCommand(value: unknown): string {
