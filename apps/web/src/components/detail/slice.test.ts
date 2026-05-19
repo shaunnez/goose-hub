@@ -8,7 +8,7 @@ import { extractPlaywrightRepro } from './lib/playwright-capture';
 import { SECTIONS } from './lib/sections';
 
 describe('detail page — sections config', () => {
-  it('lists the 12 design sections in order (grill added in M13)', () => {
+  it('lists the 11 design sections in order (chat removed post-M20)', () => {
     expect(SECTIONS.map((s) => s.key)).toEqual([
       'overview',
       'repo',
@@ -20,7 +20,6 @@ describe('detail page — sections config', () => {
       'review',
       'retrospective',
       'timeline',
-      'chat',
       'costs',
     ]);
   });

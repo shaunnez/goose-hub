@@ -5,12 +5,14 @@ const config: SkillConfig = {
   contextSchema: CodeQualityAuditContextSchema,
   outputSchema: CodeQualityAuditOutputSchema,
   /**
-   * Tool bundles:
-   * - 'read'  — Read files, Grep, Glob against the working tree
-   * - 'shell' — git log / git blame for Cat 7 (Gall's Law evolution analysis)
-   *             Shell is restricted by prompt to read-only git operations only.
+   * Tool bundles (post-ADR 0045):
+   * - 'read' — factory-tools read/search/list + read-only git/diff family
+   *   (covers Cat 7 Gall's Law evolution analysis via get_diff /
+   *   get_status / get_head_sha / get_merge_base).
+   * No 'shell' bundle — git invocations route through factory_get_diff
+   * etc. instead of `git log` / `git blame` via Bash.
    */
-  toolBundles: ['read', 'shell'],
+  toolBundles: ['read'],
   /** Opus: qualitative reasoning across Cat 1-4, 7 requires deep synthesis. */
   modelPin: 'opus',
   /** Not a holdout role — auditor sees full reasoning. */

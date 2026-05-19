@@ -320,9 +320,9 @@ describe('code-quality-audit skill config', () => {
     expect(config.modelPin).toBe('opus');
   });
 
-  it('has read and shell toolBundles', () => {
+  it('uses the read bundle (factory-tools read + git/diff covers Cat 7)', () => {
     expect(config.toolBundles).toContain('read');
-    expect(config.toolBundles).toContain('shell');
+    expect(config.toolBundles).not.toContain('shell');
   });
 
   it('does not require fresh context (not a holdout role)', () => {
