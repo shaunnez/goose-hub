@@ -5,11 +5,10 @@ import { HubChatOutputSchema } from './schema.js';
 /**
  * Per-turn context schema for the hub-chat assistant.
  *
- * The chat orchestrator reconstructs the full conversation from the
- * `chat_messages` table and passes it in `priorMessages`. `availableTools` is
- * the manifest of tools the agent may propose this turn — derived from
- * `CHAT_TOOL_REGISTRY` and trimmed to whatever scope makes sense for the
- * conversation (e.g. project-scope conversations never see `list_projects`).
+ * The chat orchestrator reconstructs the conversation from the `chat_messages`
+ * table, passes the most recent turns in `priorMessages`, and condenses older
+ * turns into `conversationSummary`. `availableTools` is a compact manifest of
+ * tools the agent may propose this turn.
  *
  * `recentEvents` are a small slice of the event stream, already filtered to
  * the conversation's scope, so the agent can answer "what is the orchestrator
@@ -24,7 +23,7 @@ export const HubChatToolManifestSchema = z.object({
   name: z.string(),
   description: z.string(),
   mutating: z.boolean(),
-  inputSchemaJson: z.unknown(),
+  inputSchemaJson: z.unknown().optional(),
 });
 
 export const HubChatToolResultSchema = z.object({
@@ -43,6 +42,7 @@ export const HubChatScopeSchema = z.object({
 export const HubChatContextSchema = z.object({
   scope: HubChatScopeSchema,
   conversationId: z.string(),
+  conversationSummary: z.string().default(''),
   priorMessages: z.array(HubChatPriorMessageSchema),
   availableTools: z.array(HubChatToolManifestSchema),
   /** Resolved results of any tool calls executed this conversation, ordered. */
@@ -59,6 +59,8 @@ export const HubChatContextSchema = z.object({
       }),
     )
     .default([]),
+  /** Backend-built item snapshot for issue-scoped conversations. */
+  issueContext: z.record(z.string(), z.unknown()).nullable().optional(),
   /** Cheat-sheet of governance vocabulary loaded from CLAUDE.md / MISSION.md / CONTEXT.md. */
   governanceDigest: z.string().default(''),
 });
@@ -78,10 +80,12 @@ const config: SkillConfig = {
   contextAllowlist: [
     'scope',
     'conversationId',
+    'conversationSummary',
     'priorMessages',
     'availableTools',
     'toolResults',
     'recentEvents',
+    'issueContext',
     'governanceDigest',
   ],
 };

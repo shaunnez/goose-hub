@@ -84,4 +84,25 @@ describe('ChatThread', () => {
     // its own.
     expect(screen.getByText(/completed/i)).toBeTruthy();
   });
+
+  it('shows available tools in the empty-state copy', () => {
+    render(
+      <ChatThread
+        messages={[]}
+        invocations={[]}
+        tools={[
+          { name: 'list_projects', description: 'List projects', mutating: false },
+          { name: 'find_pr', description: 'Find PRs', mutating: false },
+          { name: 'update_settings', description: 'Update settings', mutating: true },
+        ]}
+        pendingDecision={null}
+        onApprove={noop}
+        onReject={noop}
+      />,
+    );
+    expect(screen.getByText('Available:')).toBeTruthy();
+    expect(screen.getByText('list_projects, find_pr')).toBeTruthy();
+    expect(screen.getByText('With approval:')).toBeTruthy();
+    expect(screen.getByText('update_settings')).toBeTruthy();
+  });
 });

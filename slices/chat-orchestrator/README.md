@@ -5,15 +5,16 @@ M20 — drives one turn of a conversation between the user and the `hub-chat` as
 ## Contract
 
 `runChatOrchestratorTurn({ conversation, history, runId })` →
-`{ reply: HubChatOutput | null }`
+`{ reply: HubChatOutput | null, telemetry: ChatTurnTelemetry }`
 
 - Reads the conversation history from `chat_messages` (passed in).
-- Reads a slice of the event stream scoped to the conversation.
-- Loads `CLAUDE.md` / `MISSION.md` / `CONTEXT.md` heads as `governanceDigest`.
-- Builds the `availableTools` manifest from `core/chat-tools/registry.ts`.
+- Sends the last 8 messages as `priorMessages` and condenses older turns into `conversationSummary`.
+- Reads a capped, summarized slice of the event stream scoped to the conversation.
+- Sends a short static `governanceDigest` on the first turn only.
+- Builds a compact `availableTools` manifest from `core/chat-tools/registry.ts`.
 - Invokes the `hub-chat` skill once via `invokeSkill`.
 - Validates the structured output and drops proposals whose `toolName` is not registered.
-- Returns the reply for the chat domain to persist.
+- Returns the reply and per-turn telemetry for the chat domain to persist/emit.
 
 ## Non-goals
 

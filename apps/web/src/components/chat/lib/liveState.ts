@@ -1,4 +1,4 @@
-import type { ChatToolInvocationDto } from '@/lib/types';
+import type { ChatMessageDto, ChatToolInvocationDto } from '@/lib/types';
 import type { ChatLiveEvent } from './useChatEvents';
 
 /**
@@ -15,6 +15,49 @@ export function deriveThinkingFromEvents(events: ChatLiveEvent[]): boolean {
     if (kind === 'chat.agent-thinking') return true;
   }
   return false;
+}
+
+export function mergeMessagesFromEvents(
+  base: ChatMessageDto[],
+  events: ChatLiveEvent[],
+  conversationId: string,
+): ChatMessageDto[] {
+  if (events.length === 0) return base;
+  const byId = new Map(base.map((m) => [m.id, m]));
+  let next = base;
+  let changed = false;
+
+  for (const ev of events) {
+    if (ev.kind !== 'chat.user-message' && ev.kind !== 'chat.agent-message') continue;
+    const payload = ev.payload as { messageId?: unknown; content?: unknown; runId?: unknown };
+    if (typeof payload.messageId !== 'number' || typeof payload.content !== 'string') continue;
+    if (byId.has(payload.messageId)) continue;
+
+    const role = ev.kind === 'chat.user-message' ? 'user' : 'agent';
+    const message: ChatMessageDto = {
+      id: payload.messageId,
+      conversationId,
+      role,
+      content: payload.content,
+      runId: typeof payload.runId === 'string' ? payload.runId : null,
+      meta: null,
+      createdAt: ev.createdAt,
+    };
+
+    const optimisticIndex =
+      role === 'user'
+        ? next.findIndex((m) => m.id < 0 && m.role === 'user' && m.content === payload.content)
+        : -1;
+    if (optimisticIndex >= 0) {
+      next = next.map((m, index) => (index === optimisticIndex ? message : m));
+    } else {
+      next = [...next, message];
+    }
+    byId.set(message.id, message);
+    changed = true;
+  }
+
+  return changed ? next : base;
 }
 
 /**
@@ -42,10 +85,37 @@ export function mergeToolStatusFromEvents(
   if (events.length === 0) return base;
   const byId = new Map(base.map((i) => [i.id, i]));
   let changed = false;
+  let added = false;
   for (const ev of events) {
     const id = (ev.payload as { invocationId?: string }).invocationId;
     if (id == null) continue;
     const existing = byId.get(id);
+    if (existing == null && ev.kind === 'chat.tool-proposed') {
+      const payload = ev.payload as {
+        conversationId?: string;
+        toolName?: string;
+        mutating?: boolean;
+        rationale?: string;
+      };
+      if (payload.conversationId == null || payload.toolName == null) continue;
+      byId.set(id, {
+        id,
+        conversationId: payload.conversationId,
+        messageId: null,
+        toolName: payload.toolName,
+        input: typeof payload.rationale === 'string' ? { _rationale: payload.rationale } : {},
+        mutating: payload.mutating === true,
+        status: payload.mutating === true ? 'proposed' : 'running',
+        result: null,
+        errorMessage: null,
+        runId: null,
+        createdAt: ev.createdAt,
+        updatedAt: ev.createdAt,
+      });
+      changed = true;
+      added = true;
+      continue;
+    }
     if (existing == null) continue;
     // Sticky terminal: nothing overwrites `completed`/`failed`.
     if (TERMINAL_STATUSES.has(existing.status)) continue;
@@ -77,5 +147,7 @@ export function mergeToolStatusFromEvents(
       changed = true;
     }
   }
-  return changed ? base.map((i) => byId.get(i.id) ?? i) : base;
+  if (!changed) return base;
+  if (added) return Array.from(byId.values());
+  return base.map((i) => byId.get(i.id) ?? i);
 }

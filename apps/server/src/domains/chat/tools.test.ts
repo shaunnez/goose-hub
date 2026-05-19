@@ -29,8 +29,14 @@ vi.mock('#shared/github-pr-search.js', () => ({
   searchPrsOrLog: (repoRef: string, query: string) => mockSearchPrsOrLog(repoRef, query),
 }));
 
+const mockAddInboxNote = vi.hoisted(() =>
+  vi.fn(async (input: { title: string; type: string }) => ({
+    id: 42,
+    type: input.type,
+  })),
+);
 vi.mock('#shared/inbox-bridge.js', () => ({
-  addInboxNote: vi.fn(async (_input: { title: string }) => ({ id: 42 })),
+  addInboxNote: mockAddInboxNote,
 }));
 
 interface BootstrapBridgeResult {
@@ -113,6 +119,16 @@ const mockSetActiveMilestoneViaBridge: ReturnType<typeof vi.fn> = vi.fn(
 vi.mock('#shared/milestone-bridge.js', () => ({
   setActiveMilestoneViaBridge: (slug: string, n: number | null) =>
     mockSetActiveMilestoneViaBridge(slug, n),
+}));
+
+const mockGetWorkItemSnapshot: ReturnType<typeof vi.fn> = vi.fn(async () => ({
+  issueNumber: '42',
+  workItemId: 'github:shaunnez/goose-hub#42',
+  qa: null,
+}));
+vi.mock('#shared/work-item-snapshot.js', () => ({
+  getWorkItemSnapshot: (projectSlug: string, issueNumber: number | string, options?: unknown) =>
+    mockGetWorkItemSnapshot(projectSlug, issueNumber, options),
 }));
 
 const mockGetProject: ReturnType<typeof vi.fn> = vi.fn(async () => null);
@@ -231,6 +247,20 @@ describe('chat-tools — get_issue', () => {
   });
 });
 
+describe('chat-tools — get_issue_context', () => {
+  it('returns a section-specific snapshot for an issue', async () => {
+    const result = (await CHAT_TOOL_IMPLEMENTATIONS.get_issue_context(
+      { projectSlug: 'goose-hub-self', issueNumber: 42, sections: ['qa', 'costs'], depth: 'full' },
+      ctx,
+    )) as { issueNumber: string; workItemId: string };
+    expect(result.workItemId).toBe('github:shaunnez/goose-hub#42');
+    expect(mockGetWorkItemSnapshot).toHaveBeenCalledWith('goose-hub-self', 42, {
+      sections: ['qa', 'costs'],
+      depth: 'full',
+    });
+  });
+});
+
 describe('chat-tools — transition_issue', () => {
   it('calls source.transitionState with the resolved from-state', async () => {
     mockGetItem.mockResolvedValueOnce(workItem({ externalId: '5', state: 'factory:in-progress' }));
@@ -312,10 +342,11 @@ describe('chat-tools — find_pr', () => {
 describe('chat-tools — create_inbox_note', () => {
   it('delegates to the shared inbox-bridge', async () => {
     const result = (await CHAT_TOOL_IMPLEMENTATIONS.create_inbox_note(
-      { title: 'follow up on retro' },
+      { title: 'follow up on retro', type: 'chore' },
       ctx,
-    )) as { ok: boolean; id: number };
-    expect(result.id).toBe(42);
+    )) as { ok: boolean; id: number; type: string };
+    expect(mockAddInboxNote).toHaveBeenCalledWith({ title: 'follow up on retro', type: 'chore' });
+    expect(result).toEqual({ ok: true, id: 42, type: 'chore' });
   });
 });
 
@@ -326,6 +357,25 @@ describe('chat-tools — open_url', () => {
       ctx,
     )) as { ok: boolean; path: string };
     expect(result).toEqual({ ok: true, path: '/projects/goose-hub-self' });
+  });
+
+  it('normalizes repo-qualified work item ids to item route numbers', async () => {
+    const result = (await CHAT_TOOL_IMPLEMENTATIONS.open_url(
+      {
+        path: '/projects/goose-hub-self/items/github:shaunnez/goose-hub#843',
+        rationale: 'show failed item',
+      },
+      ctx,
+    )) as { ok: boolean; path: string };
+    expect(result).toEqual({ ok: true, path: '/projects/goose-hub-self/items/843' });
+  });
+
+  it('normalizes project-relative router paths from the conversation scope', async () => {
+    const result = (await CHAT_TOOL_IMPLEMENTATIONS.open_url(
+      { path: '/inbox', rationale: 'show inbox' },
+      { ...ctx, projectId: 'goose-hub-self' },
+    )) as { ok: boolean; path: string };
+    expect(result).toEqual({ ok: true, path: '/projects/goose-hub-self/inbox' });
   });
 });
 

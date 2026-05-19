@@ -58,8 +58,7 @@ export async function deleteConversation(id: string): Promise<void> {
 
 export interface PostMessageResponse {
   user: ChatMessageDto;
-  agent: ChatMessageDto | null;
-  invocations: ChatToolInvocationDto[];
+  runId: string;
 }
 
 export async function postMessage(

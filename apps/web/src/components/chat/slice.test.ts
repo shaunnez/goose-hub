@@ -30,7 +30,7 @@ describe('chat api — createConversation', () => {
 });
 
 describe('chat api — postMessage', () => {
-  it('returns user and agent messages plus invocations', async () => {
+  it('returns the persisted user message and background run id', async () => {
     const mockPost = vi.fn().mockResolvedValue({
       user: {
         id: 1,
@@ -41,16 +41,7 @@ describe('chat api — postMessage', () => {
         meta: null,
         createdAt: '2026-05-18T00:00:00Z',
       },
-      agent: {
-        id: 2,
-        conversationId: 'conv_x',
-        role: 'agent',
-        content: 'hello',
-        runId: 'chat_run',
-        meta: null,
-        createdAt: '2026-05-18T00:00:01Z',
-      },
-      invocations: [],
+      runId: 'chat_run',
     });
     vi.doMock('@/lib/api/chat', async (importOriginal) => {
       const actual = await importOriginal<typeof import('@/lib/api/chat')>();
@@ -59,7 +50,7 @@ describe('chat api — postMessage', () => {
     const { postMessage } = await import('@/lib/api/chat');
     const result = await postMessage('conv_x', 'hi');
     expect(result.user.content).toBe('hi');
-    expect(result.agent?.content).toBe('hello');
+    expect(result.runId).toBe('chat_run');
   });
 });
 

@@ -2,6 +2,7 @@ import {
   createConversation,
   deleteConversation,
   fetchConversation,
+  fetchToolManifest,
   listConversations,
   postMessage,
   resolveInvocation,
@@ -12,11 +13,16 @@ import type {
   ChatMessageDto,
   ChatRuntime,
   ChatToolInvocationDto,
+  ChatToolManifestDto,
 } from '@/lib/types';
 import { Bot, List, MessageCircle, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { deriveThinkingFromEvents, mergeToolStatusFromEvents } from '../lib/liveState';
+import {
+  deriveThinkingFromEvents,
+  mergeMessagesFromEvents,
+  mergeToolStatusFromEvents,
+} from '../lib/liveState';
 import { resolveScopeFromPath } from '../lib/scope';
 import { useChatEvents } from '../lib/useChatEvents';
 import { ChatInput } from './ChatInput';
@@ -42,10 +48,14 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
   const [view, setView] = useState<View>('list');
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
   const [invocations, setInvocations] = useState<ChatToolInvocationDto[]>([]);
+  const [toolManifest, setToolManifest] = useState<ChatToolManifestDto[]>([]);
+  const [sendingConversationIds, setSendingConversationIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [busy, setBusy] = useState(false);
   const [pendingDecision, setPendingDecision] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [runtime, setRuntime] = useState<ChatRuntime>('claude');
+  const [runtime, setRuntime] = useState<ChatRuntime>('codex');
   // Monotonic counter the load handlers bump on every new request. Only the
   // response whose token still matches `loadTokenRef.current` is allowed to
   // apply state — protects against:
@@ -53,6 +63,61 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
   //  * the open-panel roster effect clobbering a thread the user just clicked
   //    "New" to create while the list was still in flight.
   const loadTokenRef = useRef(0);
+  const activeConversationIdRef = useRef<string | null>(null);
+  const inFlightRunByConversationRef = useRef<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    activeConversationIdRef.current = conversation?.id ?? null;
+  }, [conversation?.id]);
+
+  const setConversationSending = useCallback((conversationId: string, sending: boolean) => {
+    setSendingConversationIds((prev) => {
+      const next = new Set(prev);
+      if (sending) next.add(conversationId);
+      else next.delete(conversationId);
+      return next;
+    });
+  }, []);
+
+  const pollConversationUntilSettled = useCallback(
+    (conversationId: string, runId: string) => {
+      let attempts = 0;
+      const poll = async () => {
+        await new Promise((resolve) => setTimeout(resolve, attempts === 0 ? 1500 : 2500));
+        attempts += 1;
+        try {
+          const full = await fetchConversation(conversationId);
+          setConversations((prev) =>
+            prev.map((c) => (c.id === full.conversation.id ? full.conversation : c)),
+          );
+          if (activeConversationIdRef.current === conversationId) {
+            setMessages(full.messages);
+            setInvocations(full.invocations);
+            setConversation(full.conversation);
+          }
+          const hasAgentReply = full.messages.some((m) => m.role === 'agent' && m.runId === runId);
+          if (hasAgentReply && inFlightRunByConversationRef.current.get(conversationId) === runId) {
+            inFlightRunByConversationRef.current.delete(conversationId);
+            setConversationSending(conversationId, false);
+            return;
+          }
+        } catch {
+          // Best-effort fallback; SSE remains the primary live path.
+        }
+
+        if (attempts >= 10) {
+          if (inFlightRunByConversationRef.current.get(conversationId) === runId) {
+            inFlightRunByConversationRef.current.delete(conversationId);
+            setConversationSending(conversationId, false);
+          }
+          return;
+        }
+        void poll();
+      };
+      void poll();
+    },
+    [setConversationSending],
+  );
 
   const readActiveId = useCallback((): string | null => {
     try {
@@ -70,6 +135,22 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
       // localStorage unavailable — accept the loss; selection is best-effort.
     }
   }, []);
+
+  useEffect(() => {
+    if (!open || toolManifest.length > 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const tools = await fetchToolManifest();
+        if (!cancelled) setToolManifest(tools);
+      } catch {
+        // Placeholder help is nice-to-have; the chat input still works without it.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, toolManifest.length]);
 
   /**
    * Load a conversation by id. Returns the loaded conversation on success or
@@ -199,25 +280,50 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
   //     cards we already know about
   const events = useChatEvents(conversation?.id ?? null);
   const isThinking = useMemo(() => deriveThinkingFromEvents(events), [events]);
+  useEffect(() => {
+    if (conversation == null) return;
+    setMessages((prev) => mergeMessagesFromEvents(prev, events, conversation.id));
+    setInvocations((prev) => mergeToolStatusFromEvents(prev, events));
+
+    const latestTerminal = [...events]
+      .reverse()
+      .find((event) => event.kind === 'chat.agent-message' || event.kind === 'chat.run-failed');
+    if (latestTerminal != null) {
+      const runId = (latestTerminal.payload as { runId?: unknown }).runId;
+      if (
+        typeof runId === 'string' &&
+        inFlightRunByConversationRef.current.get(conversation.id) === runId
+      ) {
+        inFlightRunByConversationRef.current.delete(conversation.id);
+        setConversationSending(conversation.id, false);
+      }
+      if (latestTerminal.kind === 'chat.run-failed') {
+        const error = (latestTerminal.payload as { error?: unknown }).error;
+        setError(typeof error === 'string' ? `Chat run failed: ${error}` : 'Chat run failed.');
+      }
+    }
+  }, [conversation, events, setConversationSending]);
   const liveInvocations = useMemo(
     () => mergeToolStatusFromEvents(invocations, events),
     [invocations, events],
   );
+  const activeConversationSending =
+    conversation != null && sendingConversationIds.has(conversation.id);
+  const visibleThinking = isThinking && activeConversationSending;
 
   const sendMessage = useCallback(
     async (content: string) => {
       if (conversation == null) return;
-      setBusy(true);
+      const conversationId = conversation.id;
+      if (sendingConversationIds.has(conversationId)) return;
+      setConversationSending(conversationId, true);
       setError(null);
-      // Optimistic user bubble. `postUserMessage` on the server runs the
-      // whole orchestrator turn before responding, which can be several
-      // seconds; without this the user's message would not render until
-      // the agent reply lands. The authoritative refetch below replaces
-      // the optimistic row with the persisted one.
+      // Optimistic user bubble. The POST should return quickly, but this
+      // keeps the thread feeling instant while the persisted row comes back.
       const optimisticId = -Date.now();
       const optimistic: ChatMessageDto = {
         id: optimisticId,
-        conversationId: conversation.id,
+        conversationId,
         role: 'user',
         content,
         runId: null,
@@ -226,24 +332,22 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
       };
       setMessages((prev) => [...prev, optimistic]);
       try {
-        await postMessage(conversation.id, content);
-        const full = await fetchConversation(conversation.id);
-        setMessages(full.messages);
-        setInvocations(full.invocations);
-        setConversation(full.conversation);
-        // Keep the roster fresh (title may have been derived from the first
-        // user message).
-        setConversations((prev) =>
-          prev.map((c) => (c.id === full.conversation.id ? full.conversation : c)),
-        );
+        const posted = await postMessage(conversationId, content);
+        inFlightRunByConversationRef.current.set(conversationId, posted.runId);
+        if (activeConversationIdRef.current === conversationId) {
+          setMessages((prev) => prev.map((m) => (m.id === optimisticId ? posted.user : m)));
+        }
+        pollConversationUntilSettled(conversationId, posted.runId);
       } catch (err) {
-        setError(`Send failed: ${String(err)}`);
-        setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-      } finally {
-        setBusy(false);
+        if (activeConversationIdRef.current === conversationId) {
+          setError(`Send failed: ${String(err)}`);
+          setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+        }
+        inFlightRunByConversationRef.current.delete(conversationId);
+        setConversationSending(conversationId, false);
       }
     },
-    [conversation],
+    [conversation, sendingConversationIds, setConversationSending, pollConversationUntilSettled],
   );
 
   const handleApprove = useCallback(
@@ -376,8 +480,9 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         <ChatThread
           messages={messages}
           invocations={liveInvocations}
+          tools={toolManifest}
           pendingDecision={pendingDecision}
-          thinking={isThinking}
+          thinking={visibleThinking}
           onApprove={handleApprove}
           onReject={handleReject}
           onNavigate={handleNavigate}
@@ -385,7 +490,10 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
       )}
 
       {view === 'thread' && (
-        <ChatInput disabled={busy || conversation == null} onSubmit={sendMessage} />
+        <ChatInput
+          disabled={busy || conversation == null || activeConversationSending}
+          onSubmit={sendMessage}
+        />
       )}
     </aside>
   );

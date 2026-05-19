@@ -19,6 +19,11 @@ import { addInboxNote } from '#shared/inbox-bridge.js';
 import { setActiveMilestoneViaBridge } from '#shared/milestone-bridge.js';
 import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
 import { getSourceForSlug, isValidSlug } from '#shared/source.js';
+import {
+  type WorkItemSnapshotDepth,
+  type WorkItemSnapshotSection,
+  getWorkItemSnapshot,
+} from '#shared/work-item-snapshot.js';
 import { getWatchRegistry } from './watch-singleton.js';
 
 // Skills that must be invoked from a workflow context, not chat. Chat-driven
@@ -49,6 +54,56 @@ function assertValidSlug(slug: string): void {
   if (!isValidSlug(slug)) {
     throw new ToolExecutionError(`invalid project slug '${slug}'`, 400);
   }
+}
+
+const PROJECT_RELATIVE_ROUTES = new Set(['/inbox', '/roster', '/costs', '/office']);
+const PROJECT_ROOT_ALIASES = new Set(['/kanban', '/board']);
+
+function normalizeProjectRelativePath(path: string, projectId?: string | null): string {
+  if (!projectId || !isValidSlug(projectId)) return path;
+  const match = path.match(/^([^?#]*)([?#].*)?$/);
+  const pathname = match?.[1] ?? path;
+  const suffix = match?.[2] ?? '';
+  const normalizedPathname =
+    pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+
+  if (PROJECT_ROOT_ALIASES.has(normalizedPathname)) {
+    return `/projects/${projectId}${suffix}`;
+  }
+  if (PROJECT_RELATIVE_ROUTES.has(normalizedPathname)) {
+    return `/projects/${projectId}${normalizedPathname}${suffix}`;
+  }
+  if (/^\/items\/[^/]+(?:\/[^/]+)?$/.test(normalizedPathname)) {
+    return `/projects/${projectId}${normalizedPathname}${suffix}`;
+  }
+
+  return path;
+}
+
+function normalizeOpenUrlPath(path: string, ctx?: Pick<ToolContext, 'projectId'>): string {
+  const rawMatch = path.match(
+    /^\/projects\/([^/?#]+)\/items\/github:[^#]+#(\d+)(\/[^?#]*)?(\?.*)?$/,
+  );
+  if (rawMatch != null) {
+    const [, slug, issueNumber, section = '', query = ''] = rawMatch;
+    return `/projects/${slug}/items/${issueNumber}${section}${query}`;
+  }
+
+  const encodedMatch = path.match(/^\/projects\/([^/?#]+)\/items\/([^/?#]+)(\/[^?#]*)?(\?.*)?$/);
+  if (encodedMatch != null) {
+    const [, slug, encodedId, section = '', query = ''] = encodedMatch;
+    try {
+      const decodedId = decodeURIComponent(encodedId);
+      const idMatch = decodedId.match(/^github:[^#]+#(\d+)$/);
+      if (idMatch != null) {
+        return `/projects/${slug}/items/${idMatch[1]}${section}${query}`;
+      }
+    } catch {
+      return path;
+    }
+  }
+
+  return normalizeProjectRelativePath(path, ctx?.projectId);
 }
 
 async function listProjects(): Promise<{ projects: unknown[] }> {
@@ -162,6 +217,24 @@ async function getIssue(input: {
   } catch (err) {
     logger.warn('chat-tools.get_issue failed', { err: String(err), input });
     throw new ToolExecutionError(`could not load issue ${id}`, 404);
+  }
+}
+
+async function getIssueContext(input: {
+  projectSlug: string;
+  issueNumber: number | string;
+  sections?: WorkItemSnapshotSection[];
+  depth?: WorkItemSnapshotDepth;
+}): Promise<unknown> {
+  assertValidSlug(input.projectSlug);
+  try {
+    return await getWorkItemSnapshot(input.projectSlug, input.issueNumber, {
+      sections: input.sections,
+      depth: input.depth ?? 'compact',
+    });
+  } catch (err) {
+    logger.warn('chat-tools.get_issue_context failed', { err: String(err), input });
+    throw new ToolExecutionError(`could not load issue context for ${input.issueNumber}`, 404);
   }
 }
 
@@ -374,10 +447,10 @@ async function commentOnIssue(input: {
 async function createInboxNote(input: {
   title: string;
   body?: string;
-  type?: string;
+  type: 'feature' | 'bug' | 'chore' | 'research';
 }): Promise<unknown> {
-  const { id } = await addInboxNote(input);
-  return { ok: true, id };
+  const { id, type } = await addInboxNote(input);
+  return { ok: true, id, type };
 }
 
 async function tickProject(input: {
@@ -488,10 +561,13 @@ async function invokeSkillTool(
   }
 }
 
-async function openUrl(input: { path: string; rationale: string }): Promise<unknown> {
+async function openUrl(
+  input: { path: string; rationale: string },
+  ctx: Pick<ToolContext, 'projectId'>,
+): Promise<unknown> {
   // open_url is a UI side-effect emitted as a chat.tool-completed event; the
   // dispatcher records the result and the web client navigates on receipt.
-  return { ok: true, path: input.path };
+  return { ok: true, path: normalizeOpenUrlPath(input.path, ctx) };
 }
 
 async function subscribeToRun(
@@ -784,6 +860,7 @@ export const CHAT_TOOL_IMPLEMENTATIONS: Record<string, ToolFn> = {
   list_skills: () => listSkills(),
   list_open_issues: (input) => listOpenIssues(input as Parameters<typeof listOpenIssues>[0]),
   get_issue: (input) => getIssue(input as Parameters<typeof getIssue>[0]),
+  get_issue_context: (input) => getIssueContext(input as Parameters<typeof getIssueContext>[0]),
   list_milestones: (input) => listMilestones(input as Parameters<typeof listMilestones>[0]),
   recent_events: (input) => recentEvents(input as Parameters<typeof recentEvents>[0]),
   what_needs_human_help: (input) =>
@@ -795,7 +872,7 @@ export const CHAT_TOOL_IMPLEMENTATIONS: Record<string, ToolFn> = {
   tick_project: (input) => tickProject(input as Parameters<typeof tickProject>[0]),
   invoke_skill: (input, ctx) =>
     invokeSkillTool(input as Parameters<typeof invokeSkillTool>[0], ctx),
-  open_url: (input) => openUrl(input as Parameters<typeof openUrl>[0]),
+  open_url: (input, ctx) => openUrl(input as Parameters<typeof openUrl>[0], ctx),
   subscribe_to_run: (input, ctx) =>
     subscribeToRun(input as Parameters<typeof subscribeToRun>[0], ctx),
   subscribe_to_issue: (input, ctx) =>

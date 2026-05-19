@@ -62,13 +62,6 @@ export const SECTIONS: readonly DetailSection[] = [
   },
   { key: 'timeline', label: 'Timeline', available: true },
   {
-    key: 'chat',
-    label: 'Chat',
-    available: false,
-    milestone: 'later',
-    description: 'In-context conversation with the orchestrator.',
-  },
-  {
     key: 'costs',
     label: 'Costs',
     available: true,

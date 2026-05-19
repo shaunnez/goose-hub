@@ -8,6 +8,7 @@ describe('chat-tools registry', () => {
       'list_skills',
       'list_open_issues',
       'get_issue',
+      'get_issue_context',
       'recent_events',
       'invoke_skill',
       'transition_issue',
@@ -41,6 +42,23 @@ describe('chat-tools registry', () => {
 
   it('registers bootstrap_project as a mutating tool', () => {
     expect(getToolManifest('bootstrap_project')?.mutating).toBe(true);
+  });
+
+  it('requires create_inbox_note to carry a real type', () => {
+    const schema = getToolManifest('create_inbox_note')?.inputSchema;
+    expect(schema?.safeParse({ title: 'follow up on retro' }).success).toBe(false);
+    expect(schema?.safeParse({ title: 'follow up on retro', type: 'chore' }).success).toBe(true);
+  });
+
+  it('derives create_inbox_note type only from explicit Type markers', () => {
+    const schema = getToolManifest('create_inbox_note')?.inputSchema;
+    const parsed = schema?.safeParse({
+      title: 'goose hub logo wrong 911',
+      body: 'Type - bug\n\nExpected logo text should read GOOSEHUB.',
+    });
+    expect(parsed?.success).toBe(true);
+    if (!parsed?.success) return;
+    expect(parsed.data).toMatchObject({ type: 'bug' });
   });
 
   it('every entry has a non-empty description', () => {

@@ -87,7 +87,7 @@ export function CostsSection({ projectSlug, id }: CostsSectionProps) {
   if (!data || data.rows.length === 0) {
     return (
       <div className="px-8 py-6">
-        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">12. Costs</div>
+        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">11. Costs</div>
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-[17px] font-semibold text-fg leading-snug ">
             Token economics for this task
@@ -111,7 +111,7 @@ export function CostsSection({ projectSlug, id }: CostsSectionProps) {
   return (
     <div data-testid="costs-section" className="px-8 py-6 space-y-6">
       <div>
-        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">12. Costs</div>
+        <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">11. Costs</div>
         <div className="flex items-center justify-between">
           <h2 className="text-[17px] font-semibold text-fg leading-snug ">
             Token economics for this task

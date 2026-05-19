@@ -10,15 +10,17 @@
 import { insertInboxItem } from '../domains/inbox/repository.js';
 
 const VALID_TYPES = new Set(['feature', 'bug', 'chore', 'research']);
+export type InboxNoteType = 'feature' | 'bug' | 'chore' | 'research';
 
 export interface AddInboxNoteInput {
   title: string;
   body?: string;
-  type?: string;
+  type: InboxNoteType;
 }
 
 export interface AddedInboxNote {
   id: number;
+  type: InboxNoteType;
 }
 
 export async function addInboxNote(input: AddInboxNoteInput): Promise<AddedInboxNote> {
@@ -26,11 +28,13 @@ export async function addInboxNote(input: AddInboxNoteInput): Promise<AddedInbox
   if (trimmedTitle.length === 0) {
     throw new Error('addInboxNote: title required');
   }
-  const safeType = input.type && VALID_TYPES.has(input.type) ? input.type : 'feature';
+  if (!VALID_TYPES.has(input.type)) {
+    throw new Error(`addInboxNote: invalid type '${input.type}'`);
+  }
   const item = await insertInboxItem({
     title: trimmedTitle,
     body: input.body ?? '',
-    type: safeType,
+    type: input.type,
   });
-  return { id: item.id };
+  return { id: item.id, type: input.type };
 }

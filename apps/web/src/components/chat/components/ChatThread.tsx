@@ -1,4 +1,4 @@
-import type { ChatMessageDto, ChatToolInvocationDto } from '@/lib/types';
+import type { ChatMessageDto, ChatToolInvocationDto, ChatToolManifestDto } from '@/lib/types';
 import { Loader2 } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { MessageBubble } from './MessageBubble';
@@ -7,6 +7,7 @@ import { ToolProposalCard } from './ToolProposalCard';
 interface ChatThreadProps {
   messages: ChatMessageDto[];
   invocations: ChatToolInvocationDto[];
+  tools?: ChatToolManifestDto[];
   pendingDecision: string | null;
   thinking?: boolean;
   onApprove: (id: string) => void;
@@ -23,6 +24,7 @@ interface ChatThreadProps {
 export function ChatThread({
   messages,
   invocations,
+  tools = [],
   pendingDecision,
   thinking = false,
   onApprove,
@@ -30,6 +32,8 @@ export function ChatThread({
   onNavigate,
 }: ChatThreadProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const readOnlyTools = tools.filter((tool) => !tool.mutating).map((tool) => tool.name);
+  const approvalTools = tools.filter((tool) => tool.mutating).map((tool) => tool.name);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: only scroll on length change
   useEffect(() => {
@@ -42,6 +46,22 @@ export function ChatThread({
         <div className="text-center text-fg-2 text-[12px] py-8">
           <p className="mb-1">Say hi.</p>
           <p>Try: "what needs human help?" or "list open issues in goose-hub-self".</p>
+          {tools.length > 0 && (
+            <div className="mx-auto mt-3 max-w-[320px] space-y-1 text-[11.5px] leading-relaxed">
+              {readOnlyTools.length > 0 && (
+                <p>
+                  <span className="text-fg-3">Available: </span>
+                  {readOnlyTools.join(', ')}
+                </p>
+              )}
+              {approvalTools.length > 0 && (
+                <p>
+                  <span className="text-fg-3">With approval: </span>
+                  {approvalTools.join(', ')}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
       {messages.map((msg) => {

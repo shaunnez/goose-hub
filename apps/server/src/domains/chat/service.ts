@@ -9,8 +9,9 @@ import type {
 } from '@goose-hub/core/conversations/types.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
-import { runChatTurn } from '#shared/chat-dispatch.js';
+import { newChatRunId, runChatTurn } from '#shared/chat-dispatch.js';
 import type { Result } from '#shared/middleware.js';
+import { canonicalizeWorkItemId } from '#shared/work-item-snapshot.js';
 import {
   appendMessage,
   createConversation,
@@ -44,6 +45,18 @@ function deriveTitle(content: string): string {
   return firstLine.slice(0, 80);
 }
 
+const activeConversationTurns = new Set<string>();
+
+function claimConversationTurn(conversationId: string): boolean {
+  if (activeConversationTurns.has(conversationId)) return false;
+  activeConversationTurns.add(conversationId);
+  return true;
+}
+
+function releaseConversationTurn(conversationId: string): void {
+  activeConversationTurns.delete(conversationId);
+}
+
 export async function startConversation(input: {
   scope?: ConversationScope;
   projectSlug?: string | null;
@@ -56,11 +69,20 @@ export async function startConversation(input: {
   if (scope === 'item' && (!input.projectSlug || !input.workItemId))
     return { ok: false, error: 'projectSlug + workItemId required for scope=item', status: 400 };
 
+  let workItemId = input.workItemId ?? null;
+  if (scope === 'item' && input.projectSlug && input.workItemId) {
+    try {
+      workItemId = await canonicalizeWorkItemId(input.projectSlug, input.workItemId);
+    } catch (err) {
+      return { ok: false, error: String(err), status: 404 };
+    }
+  }
+
   const conversation = createConversation({
     id: newConversationId(),
     scope,
     projectId: input.projectSlug ?? null,
-    workItemId: input.workItemId ?? null,
+    workItemId,
     runtime: input.runtime ?? 'claude',
   });
   return { ok: true, data: { conversation } };
@@ -107,11 +129,12 @@ export async function deleteConversationService(id: string): Promise<Result<{ ok
  * The user posted a message. We:
  *  1. Persist it.
  *  2. Emit `chat.user-message`.
- *  3. Hand it off to the chat orchestrator, which runs the hub-chat skill,
+ *  3. Hand it off to the chat orchestrator in the background. That run
  *     persists the agent's reply, auto-runs any read-only tool proposals,
  *     and parks mutating proposals as 'proposed' for human approval.
  *
- * Returns the saved user message and the agent's reply once the run finishes.
+ * Returns the saved user message and run id immediately; SSE carries the
+ * eventual thinking/reply/tool events.
  */
 export async function postUserMessage(input: {
   conversationId: string;
@@ -119,64 +142,79 @@ export async function postUserMessage(input: {
 }): Promise<
   Result<{
     user: ChatMessage;
-    agent: ChatMessage | null;
-    invocations: ChatToolInvocation[];
+    runId: string;
   }>
 > {
   const conversation = getConversation(input.conversationId);
   if (conversation == null) return { ok: false, error: 'conversation not found', status: 404 };
   if (!input.content.trim()) return { ok: false, error: 'content required', status: 400 };
-
-  // Persist the user turn first so the chat orchestrator reads it back.
-  const user = appendMessage({
-    conversationId: conversation.id,
-    role: 'user',
-    content: input.content,
-    meta: { scope: conversation.scope, runtime: conversation.runtime },
-  });
-
-  // Stamp the first user turn as the conversation title (UX nicety).
-  const allMessages = listMessages(conversation.id);
-  if (allMessages.length === 1 && !conversation.title) {
-    const repo = await import('@goose-hub/core/conversations/repository.js');
-    repo.touchConversation(conversation.id, deriveTitle(input.content));
+  if (!claimConversationTurn(conversation.id)) {
+    return {
+      ok: false,
+      error: 'conversation already has an in-flight turn',
+      status: 409,
+    };
   }
 
-  eventStore.appendEvent({
-    projectId: conversation.projectId ?? 'goose-hub-self',
-    workItemId: conversation.workItemId,
-    kind: 'chat.user-message',
-    payload: {
-      conversationId: conversation.id,
-      messageId: user.id,
-      content: input.content,
-    },
-  });
-
-  // Run one round of the chat orchestrator.
+  let user: ChatMessage;
   try {
-    const result = await runChatTurn(conversation);
-    return {
-      ok: true,
-      data: {
-        user,
-        agent: result.agentMessage,
-        invocations: result.invocations,
-      },
-    };
+    // Persist the user turn first so the chat orchestrator reads it back.
+    user = appendMessage({
+      conversationId: conversation.id,
+      role: 'user',
+      content: input.content,
+      meta: { scope: conversation.scope, runtime: conversation.runtime },
+    });
+
+    // Stamp the first user turn as the conversation title (UX nicety).
+    const allMessages = listMessages(conversation.id);
+    if (allMessages.length === 1 && !conversation.title) {
+      const repo = await import('@goose-hub/core/conversations/repository.js');
+      repo.touchConversation(conversation.id, deriveTitle(input.content));
+    }
   } catch (err) {
-    logger.error('chat orchestrator failed', { err: String(err), conversationId: conversation.id });
+    releaseConversationTurn(conversation.id);
+    throw err;
+  }
+
+  const runId = newChatRunId();
+  try {
     eventStore.appendEvent({
       projectId: conversation.projectId ?? 'goose-hub-self',
       workItemId: conversation.workItemId,
-      kind: 'chat.run-failed',
-      payload: { conversationId: conversation.id, error: String(err) },
+      kind: 'chat.user-message',
+      payload: {
+        conversationId: conversation.id,
+        messageId: user.id,
+        runId,
+        content: input.content,
+      },
+      runId,
     });
-    return {
-      ok: true,
-      data: { user, agent: null, invocations: listToolInvocations(conversation.id) },
-    };
+
+    void runChatTurn(conversation, runId)
+      .catch((err) => {
+        logger.error('chat orchestrator failed', {
+          err: String(err),
+          conversationId: conversation.id,
+        });
+        eventStore.appendEvent({
+          projectId: conversation.projectId ?? 'goose-hub-self',
+          workItemId: conversation.workItemId,
+          kind: 'chat.run-failed',
+          payload: { conversationId: conversation.id, error: String(err), runId },
+          runId,
+        });
+      })
+      .finally(() => {
+        releaseConversationTurn(conversation.id);
+      });
+  } catch (err) {
+    releaseConversationTurn(conversation.id);
+    throw err;
   }
+
+  return { ok: true, data: { user, runId } };
 }
 
 export async function resolveProposal(input: {
@@ -255,6 +293,7 @@ export async function executeInvocation(
   conversation: Conversation,
   invocationId: string,
 ): Promise<ChatToolInvocation> {
+  const startedAt = Date.now();
   const invocation = getToolInvocation(invocationId);
   if (invocation == null) throw new Error(`invocation ${invocationId} not found`);
 
@@ -296,6 +335,7 @@ export async function executeInvocation(
         invocationId,
         toolName: invocation.toolName,
         error: failed?.errorMessage,
+        durationMs: Math.max(0, Date.now() - startedAt),
       },
     });
     return failed ?? invocation;
@@ -328,6 +368,7 @@ export async function executeInvocation(
         invocationId,
         toolName: invocation.toolName,
         result,
+        durationMs: Math.max(0, Date.now() - startedAt),
       },
     });
     return completed ?? invocation;
@@ -347,6 +388,7 @@ export async function executeInvocation(
         invocationId,
         toolName: invocation.toolName,
         error: message,
+        durationMs: Math.max(0, Date.now() - startedAt),
       },
     });
     return failed ?? invocation;

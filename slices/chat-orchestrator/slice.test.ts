@@ -14,6 +14,10 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   },
 }));
 
+vi.mock('@goose-hub/core/conversations/repository.js', () => ({
+  listToolInvocations: vi.fn(() => []),
+}));
+
 // Persona-stats writes touch SQLite; mock to a spy so we can assert against
 // the calls without needing a DB in this slice test.
 vi.mock('@goose-hub/core/persona/accumulate.js', () => ({
@@ -21,6 +25,7 @@ vi.mock('@goose-hub/core/persona/accumulate.js', () => ({
 }));
 
 import { invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
+import { listToolInvocations } from '@goose-hub/core/conversations/repository.js';
 import type { Conversation } from '@goose-hub/core/conversations/types.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
@@ -64,6 +69,148 @@ const stubConversation: Conversation = {
 };
 
 describe('chat-orchestrator slice', () => {
+  it('passes compact chat context into the hub-chat skill', async () => {
+    mockInvokeOnce({
+      resolve: {
+        ...baseInvokeResult,
+        output: {
+          say: 'Compact reply.',
+          proposals: [],
+          done: false,
+          decisionSummaries: [{ kind: 'PLAN', summary: 'Used compact context.' }],
+        },
+      },
+    });
+    vi.mocked(listToolInvocations).mockReturnValueOnce([
+      {
+        id: 'tool_old',
+        conversationId: 'conv_test',
+        messageId: 1,
+        toolName: 'recent_events',
+        input: {},
+        mutating: false,
+        status: 'completed',
+        result: { message: 'older irrelevant output '.repeat(200) },
+        errorMessage: null,
+        runId: null,
+        createdAt: '2026-05-18T00:00:00Z',
+        updatedAt: '2026-05-18T00:00:00Z',
+      },
+      {
+        id: 'tool_recent',
+        conversationId: 'conv_test',
+        messageId: 2,
+        toolName: 'get_issue',
+        input: {},
+        mutating: false,
+        status: 'completed',
+        result: { issue: 812, title: 'Chat latency work' },
+        errorMessage: null,
+        runId: null,
+        createdAt: '2026-05-18T00:01:00Z',
+        updatedAt: '2026-05-18T00:01:00Z',
+      },
+    ]);
+    vi.mocked(eventStore.replay).mockReturnValueOnce([
+      {
+        id: 1,
+        projectId: 'goose-hub-self',
+        workItemId: null,
+        kind: 'agent.run-completed',
+        payload: { message: 'very long event payload '.repeat(100) },
+        runId: 'other_run',
+        personaId: null,
+        createdAt: '2026-05-18T00:02:00Z',
+      },
+    ]);
+
+    const history = Array.from({ length: 14 }, (_, index) => ({
+      id: index + 1,
+      conversationId: 'conv_test',
+      role: index % 2 === 0 ? ('user' as const) : ('agent' as const),
+      content: `message ${index + 1} ${
+        index < 6 ? 'older commitment context' : 'recent turn context'
+      }${index === 12 ? ' issue 812 chat latency' : ''}`,
+      runId: null,
+      meta: null,
+      createdAt: `2026-05-18T00:${String(index).padStart(2, '0')}:00Z`,
+    }));
+
+    await runChatOrchestratorTurn({
+      conversation: stubConversation,
+      history,
+      runId: 'chat_test_compact_context',
+    });
+
+    const context = vi.mocked(invokeSkill).mock.calls.at(-1)?.[0].context as Record<
+      string,
+      unknown
+    >;
+    expect(context.priorMessages).toHaveLength(8);
+    expect((context.priorMessages as Array<{ content: string }>)[0].content).toContain('message 7');
+    expect(context.conversationSummary).toContain('message 1');
+    expect(context.conversationSummary).toContain('message 6');
+    expect(context.availableTools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'list_projects',
+          description: expect.any(String),
+          mutating: false,
+        }),
+      ]),
+    );
+    expect(JSON.stringify(context.availableTools)).not.toContain('inputSchemaJson');
+    expect(context.toolResults).toEqual([
+      expect.objectContaining({ toolName: 'get_issue', status: 'completed' }),
+      expect.objectContaining({ toolName: 'recent_events', status: 'completed' }),
+    ]);
+    expect(JSON.stringify(context.toolResults).length).toBeLessThan(2500);
+    expect(JSON.stringify(context.recentEvents).length).toBeLessThan(700);
+    expect((context.governanceDigest as string).length).toBeLessThan(1800);
+  });
+
+  it('injects backend-built issueContext for item-scoped chats', async () => {
+    mockInvokeOnce({
+      resolve: {
+        ...baseInvokeResult,
+        output: {
+          say: 'QA passed.',
+          proposals: [],
+          done: false,
+          decisionSummaries: [{ kind: 'READ', summary: 'Used issue context.' }],
+        },
+      },
+    });
+    const issueConversation: Conversation = {
+      ...stubConversation,
+      scope: 'item',
+      projectId: 'goose-hub-self',
+      workItemId: 'github:shaunnez/goose-hub#827',
+    };
+    await runChatOrchestratorTurn({
+      conversation: issueConversation,
+      history: [],
+      runId: 'chat_test_issue_context',
+      issueContext: {
+        issue: { number: '827', state: 'factory:needs-review' },
+        qa: { verdict: 'pass', testRun: { passed: 3770, failed: 0, skipped: 7, total: 3777 } },
+      },
+    });
+    const context = vi.mocked(invokeSkill).mock.calls.at(-1)?.[0].context as Record<
+      string,
+      unknown
+    >;
+    expect(context.scope).toMatchObject({
+      kind: 'item',
+      projectSlug: 'goose-hub-self',
+      workItemId: 'github:shaunnez/goose-hub#827',
+    });
+    expect(context.issueContext).toMatchObject({
+      issue: { number: '827' },
+      qa: { verdict: 'pass', testRun: { passed: 3770, failed: 0 } },
+    });
+  });
+
   it('returns a parsed reply when the skill output validates', async () => {
     mockInvokeOnce({
       resolve: {
@@ -93,6 +240,11 @@ describe('chat-orchestrator slice', () => {
     });
     expect(result.reply).not.toBeNull();
     expect(result.reply?.say).toBe('Hello there.');
+    expect(result.telemetry.durationMs.total).toBeGreaterThanOrEqual(0);
+    expect(result.telemetry.durationMs.contextBuild).toBeGreaterThanOrEqual(0);
+    expect(result.telemetry.durationMs.modelInvocation).toBeGreaterThanOrEqual(0);
+    expect(result.telemetry.durationMs.postModelParsing).toBeGreaterThanOrEqual(0);
+    expect(result.telemetry.tokens.estimatedInput.contextSections.priorMessages).toBeGreaterThan(0);
   });
 
   it('drops proposals for unknown tool names', async () => {

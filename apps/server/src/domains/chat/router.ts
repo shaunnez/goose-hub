@@ -64,7 +64,7 @@ router.post('/conversations/:id/messages', async (c) => {
   });
   return result.ok
     ? c.json(result.data)
-    : c.json({ error: result.error }, result.status as 400 | 404);
+    : c.json({ error: result.error }, result.status as 400 | 404 | 409);
 });
 
 router.post('/conversations/:id/invocations/:invocationId', async (c) => {

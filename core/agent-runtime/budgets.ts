@@ -231,7 +231,7 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     maxTurns: 12,
     maxBudgetUsd: 0.4,
     timeoutMs: 90_000,
-    modelTier: 'sonnet',
+    modelTier: 'haiku',
   },
 };
 

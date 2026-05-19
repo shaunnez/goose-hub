@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 /**
  * M20 — chat-orchestrator slice.
  *
@@ -9,7 +7,6 @@ import { join } from 'node:path';
  */
 import { invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
 import { defaultModelForTierAndProvider } from '@goose-hub/core/agent-runtime/models.js';
-import { toJsonSchema as zodToJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { listToolManifests } from '@goose-hub/core/chat-tools/registry.js';
 import { listToolInvocations } from '@goose-hub/core/conversations/repository.js';
 import type {
@@ -25,51 +22,73 @@ import {
   HubChatOutputSchema,
   type HubChatProposal,
 } from '@goose-hub/skills/hub-chat/schema.js';
-import type { z } from 'zod';
 
 export interface ChatTurnInput {
   conversation: Conversation;
   history: ChatMessage[];
   runId: string;
+  issueContext?: Record<string, unknown> | null;
 }
 
 export interface ChatTurnOutput {
   reply: HubChatOutput | null;
+  telemetry: ChatTurnTelemetry;
 }
 
-const GOVERNANCE_FILES = ['CLAUDE.md', 'MISSION.md', 'CONTEXT.md'] as const;
-
-function readGovernanceDigest(): string {
-  const root = process.env.GOOSE_HUB_ROOT ? process.env.GOOSE_HUB_ROOT : findRepoRoot();
-  if (root == null) return '';
-  const sections: string[] = [];
-  for (const filename of GOVERNANCE_FILES) {
-    try {
-      const content = readFileSync(join(root, filename), 'utf-8');
-      const heading = content.split('\n').slice(0, 80).join('\n');
-      sections.push(`## ${filename} (first 80 lines)\n${heading}`);
-    } catch {
-      // best-effort; skip missing files
-    }
-  }
-  return sections.join('\n\n');
+export interface ChatTurnTelemetry {
+  durationMs: {
+    total: number;
+    contextBuild: number;
+    modelInvocation: number;
+    postModelParsing: number;
+    toolExecution: number;
+  };
+  tokens: {
+    actualInput: number | null;
+    actualOutput: number | null;
+    estimatedInput: {
+      total: number;
+      contextSections: {
+        priorMessages: number;
+        availableTools: number;
+        toolResults: number;
+        recentEvents: number;
+        issueContext: number;
+        governanceDigest: number;
+        conversationSummary: number;
+      };
+    };
+  };
+  context: {
+    priorMessagesSent: number;
+    priorMessagesSummarized: number;
+    availableToolsSent: number;
+    toolResultsSent: number;
+    recentEventsSent: number;
+    governanceDigestIncluded: boolean;
+  };
 }
 
-function findRepoRoot(): string | null {
-  // Walk up from this module looking for pnpm-workspace.yaml.
-  try {
-    let dir = new URL('.', import.meta.url).pathname;
-    for (let i = 0; i < 8; i++) {
-      try {
-        readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf-8');
-        return dir;
-      } catch {
-        dir = join(dir, '..');
-      }
-    }
-  } catch {}
-  return null;
+interface BuiltChatContext {
+  context: Record<string, unknown>;
+  telemetry: Pick<ChatTurnTelemetry, 'tokens' | 'context'>;
 }
+
+const RECENT_MESSAGE_LIMIT = 8;
+const TOOL_RESULT_LIMIT = 6;
+const TOOL_RESULT_VALUE_CHAR_LIMIT = 1_200;
+const TOOL_RESULT_MATCH_CHAR_LIMIT = 3_000;
+const RECENT_EVENT_LIMIT = 12;
+const SUMMARY_CHAR_LIMIT = 1_400;
+const EVENT_SUMMARY_CHAR_LIMIT = 240;
+
+const FIRST_TURN_GOVERNANCE_DIGEST = [
+  'Goose Hub is the product; Factory is the orchestration engine inside it.',
+  'Use Factory vocabulary: Work item, state, lane, Source of Truth, workflow, agent run.',
+  'Work-item state lives on issues, not PRs; PR labels are decorative.',
+  'Mutating chat tools require human approval; read-only chat tools may auto-run.',
+  'Use app links like /projects/<slug>/items/<issueNumber>; never put internal github:owner/repo#n ids in app URLs.',
+].join('\n');
 
 function recentEventSlice(conversation: Conversation): Array<{
   kind: string;
@@ -82,13 +101,14 @@ function recentEventSlice(conversation: Conversation): Array<{
     projectId: conversation.projectId ?? undefined,
     workItemId: conversation.workItemId ?? undefined,
     order: 'desc',
-    limit: 30,
+    limit: RECENT_EVENT_LIMIT,
   });
   return events.map((e) => {
     const payload = (e.payload ?? {}) as Record<string, unknown>;
     const summary =
       (typeof payload.summary === 'string' && payload.summary) ||
       (typeof payload.message === 'string' && payload.message) ||
+      (typeof payload.error === 'string' && payload.error) ||
       (typeof payload.skill === 'string' && `skill=${payload.skill}`) ||
       undefined;
     return {
@@ -96,32 +116,55 @@ function recentEventSlice(conversation: Conversation): Array<{
       createdAt: e.createdAt,
       projectId: e.projectId,
       workItemId: e.workItemId,
-      summary,
+      summary: truncate(summary, EVENT_SUMMARY_CHAR_LIMIT),
     };
   });
 }
 
-function buildContext(input: ChatTurnInput): Record<string, unknown> {
+function buildContext(input: ChatTurnInput): BuiltChatContext {
   const { conversation, history } = input;
   const manifests = listToolManifests().map((m) => ({
     name: m.name,
     description: m.description,
     mutating: m.mutating,
-    inputSchemaJson: tryToJsonSchema(m.inputSchema),
   }));
+  const recentMessages = history.slice(-RECENT_MESSAGE_LIMIT);
+  const summarizedMessages = history.slice(0, Math.max(0, history.length - RECENT_MESSAGE_LIMIT));
+  const governanceDigest = history.length <= 1 ? FIRST_TURN_GOVERNANCE_DIGEST : '';
 
-  return {
+  const context = {
     scope: {
       kind: conversation.scope,
       projectSlug: conversation.projectId ?? undefined,
       workItemId: conversation.workItemId ?? undefined,
     },
     conversationId: conversation.id,
-    priorMessages: history.map((m) => ({ role: m.role, content: m.content })),
+    conversationSummary: summarizePriorMessages(summarizedMessages),
+    priorMessages: recentMessages.map((m) => ({ role: m.role, content: m.content })),
     availableTools: manifests,
-    toolResults: priorToolResults(conversation.id),
+    toolResults: priorToolResults(conversation.id, latestUserMessage(history)),
     recentEvents: recentEventSlice(conversation),
-    governanceDigest: readGovernanceDigest(),
+    issueContext: input.issueContext ?? null,
+    governanceDigest,
+  };
+
+  return {
+    context,
+    telemetry: {
+      tokens: {
+        actualInput: null,
+        actualOutput: null,
+        estimatedInput: estimateContextTokens(context),
+      },
+      context: {
+        priorMessagesSent: recentMessages.length,
+        priorMessagesSummarized: summarizedMessages.length,
+        availableToolsSent: manifests.length,
+        toolResultsSent: context.toolResults.length,
+        recentEventsSent: context.recentEvents.length,
+        governanceDigestIncluded: governanceDigest.length > 0,
+      },
+    },
   };
 }
 
@@ -131,35 +174,188 @@ function buildContext(input: ChatTurnInput): Record<string, unknown> {
  * `proposed` invocations are intentionally suppressed because the agent
  * shouldn't reason as if they ran.
  */
-function priorToolResults(conversationId: string): Array<{
+function priorToolResults(
+  conversationId: string,
+  latestUser: string,
+): Array<{
   toolName: string;
   status: 'completed' | 'failed' | 'rejected' | 'pending';
   result?: unknown;
   errorMessage?: string;
 }> {
   const invocations: ChatToolInvocation[] = listToolInvocations(conversationId);
-  return invocations
+  const candidates = invocations
     .filter((i) => i.status !== 'proposed' && i.status !== 'running' && i.status !== 'approved')
-    .map((i) => ({
-      toolName: i.toolName,
-      status:
-        i.status === 'completed'
-          ? ('completed' as const)
-          : i.status === 'failed'
-            ? ('failed' as const)
-            : i.status === 'rejected'
-              ? ('rejected' as const)
-              : ('pending' as const),
-      result: i.result,
-      errorMessage: i.errorMessage ?? undefined,
-    }));
+    .map((i) => {
+      const compact = {
+        toolName: i.toolName,
+        status:
+          i.status === 'completed'
+            ? ('completed' as const)
+            : i.status === 'failed'
+              ? ('failed' as const)
+              : i.status === 'rejected'
+                ? ('rejected' as const)
+                : ('pending' as const),
+        result: compactValue(i.result),
+        errorMessage: truncate(i.errorMessage ?? undefined, 300),
+      };
+      return {
+        invocation: i,
+        compact,
+        relevant: isToolResultRelevant(i, latestUser),
+      };
+    })
+    .sort((a, b) => {
+      if (a.relevant !== b.relevant) return a.relevant ? -1 : 1;
+      return Date.parse(b.invocation.updatedAt) - Date.parse(a.invocation.updatedAt);
+    })
+    .slice(0, TOOL_RESULT_LIMIT)
+    .map(({ compact }) => compact);
+  return candidates.map((i) => ({
+    toolName: i.toolName,
+    status: i.status,
+    result: i.result,
+    errorMessage: i.errorMessage,
+  }));
 }
 
-function tryToJsonSchema(schema: z.ZodType): unknown {
+function latestUserMessage(history: ChatMessage[]): string {
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].role === 'user') return history[i].content;
+  }
+  return '';
+}
+
+function summarizePriorMessages(messages: ChatMessage[]): string {
+  if (messages.length === 0) return '';
+  const lines = messages.map((m) => {
+    const label = m.role === 'user' ? 'User' : 'Hub Chat';
+    return `- ${label}: ${truncate(oneLine(m.content), 180)}`;
+  });
+  return (
+    truncate(
+      `Earlier conversation (${messages.length} messages):\n${lines.join('\n')}`,
+      SUMMARY_CHAR_LIMIT,
+    ) ?? ''
+  );
+}
+
+function isToolResultRelevant(invocation: ChatToolInvocation, latestUser: string): boolean {
+  if (!latestUser.trim()) return false;
+  const haystack = `${invocation.toolName} ${stringifyForMatch(invocation.result)} ${
+    invocation.errorMessage ?? ''
+  }`.toLowerCase();
+  const words = latestUser
+    .toLowerCase()
+    .split(/[^a-z0-9_#-]+/)
+    .filter((word) => word.length >= 4);
+  return words.some((word) => haystack.includes(word));
+}
+
+function stringifyForMatch(value: unknown): string {
   try {
-    return zodToJsonSchema(schema);
+    return JSON.stringify(value).slice(0, TOOL_RESULT_MATCH_CHAR_LIMIT);
   } catch {
-    return { type: 'object' };
+    return String(value).slice(0, TOOL_RESULT_MATCH_CHAR_LIMIT);
+  }
+}
+
+function compactValue(value: unknown): unknown {
+  if (value == null) return value;
+  const text = stringifyForMatch(value);
+  if (text.length <= TOOL_RESULT_VALUE_CHAR_LIMIT) return value;
+  return { summary: truncate(text, TOOL_RESULT_VALUE_CHAR_LIMIT) };
+}
+
+function truncate(value: string | undefined, limit: number): string | undefined {
+  if (value == null) return undefined;
+  if (value.length <= limit) return value;
+  return `${value.slice(0, Math.max(0, limit - 3))}...`;
+}
+
+function oneLine(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function estimateTokens(value: unknown): number {
+  const text = typeof value === 'string' ? value : JSON.stringify(value ?? '');
+  return Math.ceil(text.length / 4);
+}
+
+function estimateContextTokens(
+  context: Record<string, unknown>,
+): ChatTurnTelemetry['tokens']['estimatedInput'] {
+  const contextSections = {
+    priorMessages: estimateTokens(context.priorMessages),
+    availableTools: estimateTokens(context.availableTools),
+    toolResults: estimateTokens(context.toolResults),
+    recentEvents: estimateTokens(context.recentEvents),
+    issueContext: estimateTokens(context.issueContext),
+    governanceDigest: estimateTokens(context.governanceDigest),
+    conversationSummary: estimateTokens(context.conversationSummary),
+  };
+  return {
+    total: Object.values(contextSections).reduce((sum, value) => sum + value, 0),
+    contextSections,
+  };
+}
+
+function emptyTelemetry(): ChatTurnTelemetry {
+  return {
+    durationMs: {
+      total: 0,
+      contextBuild: 0,
+      modelInvocation: 0,
+      postModelParsing: 0,
+      toolExecution: 0,
+    },
+    tokens: {
+      actualInput: null,
+      actualOutput: null,
+      estimatedInput: {
+        total: 0,
+        contextSections: {
+          priorMessages: 0,
+          availableTools: 0,
+          toolResults: 0,
+          recentEvents: 0,
+          issueContext: 0,
+          governanceDigest: 0,
+          conversationSummary: 0,
+        },
+      },
+    },
+    context: {
+      priorMessagesSent: 0,
+      priorMessagesSummarized: 0,
+      availableToolsSent: 0,
+      toolResultsSent: 0,
+      recentEventsSent: 0,
+      governanceDigestIncluded: false,
+    },
+  };
+}
+
+function elapsedSince(start: number): number {
+  return Math.max(0, Date.now() - start);
+}
+
+function readActualTokens(
+  runId: string,
+): Pick<ChatTurnTelemetry['tokens'], 'actualInput' | 'actualOutput'> {
+  try {
+    const completed = eventStore.replay({ runId, kind: 'agent.run-completed', limit: 1 })[0];
+    const payload = completed?.payload as {
+      cost?: { inputTokens?: unknown; outputTokens?: unknown };
+    };
+    return {
+      actualInput: typeof payload?.cost?.inputTokens === 'number' ? payload.cost.inputTokens : null,
+      actualOutput:
+        typeof payload?.cost?.outputTokens === 'number' ? payload.cost.outputTokens : null,
+    };
+  } catch {
+    return { actualInput: null, actualOutput: null };
   }
 }
 
@@ -169,7 +365,18 @@ function tryToJsonSchema(schema: z.ZodType): unknown {
  */
 export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<ChatTurnOutput> {
   const { conversation, runId } = input;
-  const context = buildContext(input);
+  const totalStarted = Date.now();
+  const contextStarted = Date.now();
+  const built = buildContext(input);
+  const context = built.context;
+  const telemetry: ChatTurnTelemetry = {
+    ...emptyTelemetry(),
+    ...built.telemetry,
+    durationMs: {
+      ...emptyTelemetry().durationMs,
+      contextBuild: elapsedSince(contextStarted),
+    },
+  };
 
   // Honour the user-picked runtime stored on the conversation. We map
   // claude→sonnet-claude and codex→sonnet-codex so the agent-runtime
@@ -205,6 +412,7 @@ export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<Cha
   };
 
   try {
+    const modelStarted = Date.now();
     const result = await invokeSkill({
       skillName: 'hub-chat',
       projectId: conversation.projectId ?? 'goose-hub-self',
@@ -218,9 +426,14 @@ export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<Cha
         },
       },
     });
+    telemetry.durationMs.modelInvocation = elapsedSince(modelStarted);
     emitThinking(conversation, runId, 'structured-output-received');
+    const parsingStarted = Date.now();
     const parsed = HubChatOutputSchema.safeParse(result.output);
     if (!parsed.success) {
+      telemetry.durationMs.postModelParsing = elapsedSince(parsingStarted);
+      telemetry.durationMs.total = elapsedSince(totalStarted);
+      Object.assign(telemetry.tokens, readActualTokens(runId));
       logger.warn('hub-chat: output validation failed', {
         runId,
         issues: parsed.error.issues,
@@ -241,6 +454,7 @@ export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<Cha
             },
           ],
         },
+        telemetry,
       };
     }
     // Reconcile proposals: drop any whose toolName is unknown. The skill's
@@ -249,14 +463,20 @@ export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<Cha
     const validProposals = parsed.data.proposals.filter((p: HubChatProposal) =>
       manifestHas(p.toolName),
     );
+    telemetry.durationMs.postModelParsing = elapsedSince(parsingStarted);
+    telemetry.durationMs.total = elapsedSince(totalStarted);
+    Object.assign(telemetry.tokens, readActualTokens(runId));
     tryAccumulate('success');
     return {
       reply: {
         ...parsed.data,
         proposals: validProposals,
       },
+      telemetry,
     };
   } catch (err) {
+    telemetry.durationMs.total = elapsedSince(totalStarted);
+    Object.assign(telemetry.tokens, readActualTokens(runId));
     logger.error('chat orchestrator invokeSkill threw', { runId, err: String(err) });
     // Clear the thinking indicator the UI is now showing. The dispatch
     // wrapper only emits `chat.run-failed` from its own try/catch — we
@@ -266,7 +486,7 @@ export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<Cha
       projectId: conversation.projectId ?? 'goose-hub-self',
       workItemId: conversation.workItemId,
       kind: 'chat.run-failed',
-      payload: { conversationId: conversation.id, runId, error: String(err) },
+      payload: { conversationId: conversation.id, runId, error: String(err), telemetry },
       runId,
     });
     // `selectedPersona` is non-null when the throw happened after
@@ -274,7 +494,7 @@ export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<Cha
     // Pre-spawn ContextValidationError throws before the callback fires,
     // so we skip in that case — there's no persona to penalise.
     tryAccumulate('failure');
-    return { reply: null };
+    return { reply: null, telemetry };
   }
 }
 

@@ -1,5 +1,5 @@
 import { cn } from '@/lib/cn';
-import { GRILL_ACTIVE_STATES, PRD_ACTIVE_STATES } from '@/lib/constants';
+// import { GRILL_ACTIVE_STATES, PRD_ACTIVE_STATES } from '@/lib/constants';
 import {
   Brain,
   Bug,
@@ -29,7 +29,6 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   review: Eye,
   retrospective: RotateCcw,
   timeline: Clock,
-  chat: MessageSquare,
   costs: Coins,
 };
 

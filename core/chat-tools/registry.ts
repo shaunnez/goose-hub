@@ -32,6 +32,28 @@ const GetIssueInput = z.object({
   issueNumber: z.union([z.number().int().positive(), z.string()]),
 });
 
+const IssueContextSectionSchema = z.enum([
+  'issue',
+  'triage',
+  'investigation',
+  'grill',
+  'prd',
+  'code',
+  'qa',
+  'review',
+  'retrospective',
+  'timeline',
+  'costs',
+  'artifacts',
+]);
+
+const GetIssueContextInput = z.object({
+  projectSlug: z.string().min(1),
+  issueNumber: z.union([z.number().int().positive(), z.string()]),
+  sections: z.array(IssueContextSectionSchema).optional(),
+  depth: z.enum(['compact', 'full']).default('compact').optional(),
+});
+
 const ListOpenIssuesInput = z.object({
   projectSlug: z.string().min(1),
   milestoneNumber: z.number().int().positive().optional(),
@@ -73,17 +95,41 @@ const TickProjectInput = z.object({
   rationale: z.string().min(1),
 });
 
-const CreateInboxNoteInput = z.object({
-  title: z.string().min(1),
-  body: z.string().default('').optional(),
-  type: z.enum(['feature', 'bug', 'chore', 'research']).default('feature').optional(),
-});
+const WorkItemTypeInput = z.enum(['feature', 'bug', 'chore', 'research']);
+
+function explicitTypeMarker(
+  value: string | undefined,
+): z.infer<typeof WorkItemTypeInput> | undefined {
+  const match = value?.match(/(?:^|\n)\s*type\s*[-:]\s*(feature|bug|chore|research)\b/i);
+  return match ? (match[1].toLowerCase() as z.infer<typeof WorkItemTypeInput>) : undefined;
+}
+
+const CreateInboxNoteInput = z
+  .object({
+    title: z.string().min(1),
+    body: z.string().default('').optional(),
+    type: WorkItemTypeInput.optional(),
+  })
+  .transform((input) => ({
+    ...input,
+    body: input.body ?? '',
+    type: input.type ?? explicitTypeMarker(input.body) ?? explicitTypeMarker(input.title),
+  }))
+  .pipe(
+    z.object({
+      title: z.string().min(1),
+      body: z.string(),
+      type: WorkItemTypeInput,
+    }),
+  );
 
 const OpenUrlInput = z.object({
   path: z
     .string()
     .startsWith('/')
-    .describe('Internal app path (e.g. /projects/goose-hub-self/items/123).'),
+    .describe(
+      'Internal app path (e.g. /projects/goose-hub-self/items/123). Project routes are /projects/<slug>, /projects/<slug>/inbox, /projects/<slug>/roster, /projects/<slug>/costs, /projects/<slug>/office, and /projects/<slug>/items/<n>. For work items, use the external issue number, not github:owner/repo#123.',
+    ),
   rationale: z.string().min(1),
 });
 
@@ -184,6 +230,13 @@ export const CHAT_TOOL_REGISTRY: ChatToolManifestEntry[] = [
     inputSchema: GetIssueInput,
   },
   {
+    name: 'get_issue_context',
+    description:
+      'Fetch a backend-built work item snapshot for issue-aware chat, including issue, QA, code, review, costs, timeline, and artifacts. Supports section-specific full expansion.',
+    mutating: false,
+    inputSchema: GetIssueContextInput,
+  },
+  {
     name: 'find_pr',
     description:
       'Find a pull request by number, branch name, or text. Returns matching PRs with URL and status.',
@@ -247,7 +300,7 @@ export const CHAT_TOOL_REGISTRY: ChatToolManifestEntry[] = [
   {
     name: 'create_inbox_note',
     description:
-      'Create a note in the global inbox. Useful for capturing follow-ups raised in chat.',
+      'Create a note in the global inbox. Input must include title, body, and a work item type: feature, bug, chore, or research.',
     mutating: true,
     inputSchema: CreateInboxNoteInput,
   },
