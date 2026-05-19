@@ -8,10 +8,12 @@ import {
   EditFileInput,
   FileExistsInput,
   FileInfoInput,
+  GetAppUrlInput,
   GetChangedFilesInput,
   GetDiffInput,
   GetHeadShaInput,
   GetMergeBaseInput,
+  GetPrDiffInput,
   GetProjectContextInput,
   GetStackCommandsInput,
   GetStatusInput,
@@ -21,13 +23,17 @@ import {
   ReadFileInput,
   ReadManyFilesInput,
   RecordDecisionInput,
+  RunFullSuiteIfNeededInput,
+  RunIsolatedTestInput,
   RunLintInput,
   RunPackageScriptInput,
+  RunPlaywrightSpecInput,
   RunTargetedCommandInput,
   RunTestsInput,
   RunTypecheckInput,
   SearchTextInput,
   WriteFileInput,
+  WritePlaywrightSpecInput,
 } from './schemas.js';
 import {
   ToolDataMissingError,
@@ -35,6 +41,7 @@ import {
   getStackCommands,
   recordDecisionTool,
 } from './tools/context.js';
+import { getAppUrlTool, runPlaywrightSpecTool, writePlaywrightSpecTool } from './tools/evidence.js';
 import {
   getChangedFilesTool,
   getDiffTool,
@@ -42,6 +49,7 @@ import {
   getMergeBaseTool,
   getStatusTool,
 } from './tools/git.js';
+import { getPrDiffTool, runFullSuiteIfNeededTool, runIsolatedTestTool } from './tools/qa.js';
 import {
   fileExistsTool,
   fileInfoTool,
@@ -90,9 +98,14 @@ function errorResult(err: unknown): { content: JsonContent[]; isError: true } {
  * `(FactoryContext, validatedInput)`; the server is a thin envelope that
  * wires schema, handler, and error mapping.
  *
- * Phase 2 registers only the implementable subset of context tools
- * (`get_project_context`, `get_stack_commands`, `record_decision`). The
- * remaining tools land as their upstream data sources become available.
+ * Tools whose upstream data source does not yet exist (`get_work_item`,
+ * `get_handoff`, `get_verification_summary`, `check_acceptance_criteria`,
+ * `collect_evidence`, `validate_evidence_artifacts`,
+ * `package_evidence_packet`) have schemas in `schemas.ts` but are not yet
+ * registered here. Workflow-owned mutations (`stage_changes`,
+ * `commit_changes`, `open_pr`, etc.) are intentionally never registered —
+ * they live on the orchestrator side and are reachable only through
+ * explicit workflow delegation.
  */
 export function buildFactoryMcpServer(ctx: FactoryContext): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
@@ -528,6 +541,108 @@ export function buildFactoryMcpServer(ctx: FactoryContext): McpServer {
     async (input) => {
       try {
         const result = await getMergeBaseTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_pr_diff',
+    {
+      description:
+        'Diff for a pull request resolved from `refs/pull/<n>/head` or `pr/<n>`. Throws PrDiffUnavailableError when no local ref exists.',
+      inputSchema: GetPrDiffInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await getPrDiffTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'run_full_suite_if_needed',
+    {
+      description:
+        "Runs the project's full test suite. The 'if needed' decision is workflow-owned — this tool always runs and reports the result.",
+      inputSchema: RunFullSuiteIfNeededInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await runFullSuiteIfNeededTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'run_isolated_test',
+    {
+      description:
+        'Run the project test command narrowed to a single file. Optional `testName` appends a name filter as a second positional arg.',
+      inputSchema: RunIsolatedTestInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await runIsolatedTestTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_app_url',
+    {
+      description:
+        'Return the URL where the app under test is running (from FACTORY_APP_URL env). Returns url=null when unset.',
+      inputSchema: GetAppUrlInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = getAppUrlTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'write_playwright_spec',
+    {
+      description:
+        'Write a Playwright spec to apps/web/e2e/. Path must end in .spec.ts(x) and live under apps/web/e2e/.',
+      inputSchema: WritePlaywrightSpecInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await writePlaywrightSpecTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'run_playwright_spec',
+    {
+      description:
+        "Run a Playwright spec via the project's e2eCommand. Spec path is positional; FACTORY_APP_URL and mock-mode env vars propagate when set.",
+      inputSchema: RunPlaywrightSpecInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await runPlaywrightSpecTool(ctx, input);
         return { content: jsonContent(result), structuredContent: { ...result } };
       } catch (err) {
         return errorResult(err);
