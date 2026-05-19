@@ -21,7 +21,7 @@
  *     assets already wired into asset-loader.ts. slice.test.ts pins its
  *     length and palette rules.
  *   - ASSET_MANIFEST: the 122 snake_case assets defined by
- *     docs/design/goose-hub-full-asset-manifest/asset-manifest.md.
+ *     docs/archive/legacy/design/goose-hub-full-asset-manifest/asset-manifest.md.
  *     Generated incrementally by the Goose Hub asset loop.
  *
  * Concurrency is bounded to 4 parallel PixelLab calls (the loop's batch
@@ -194,7 +194,7 @@ export const MANIFEST: AssetSpec[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// ASSET_MANIFEST — the 122 assets from docs/design/goose-hub-full-asset-manifest/.
+// ASSET_MANIFEST — the 122 assets from docs/archive/legacy/design/goose-hub-full-asset-manifest/.
 // Filenames MUST match the asset-manifest.md ledger exactly. Every prompt
 // uses only Board 06 canonical hex codes (see BOARD06_HEX in slice.test.ts).
 // ---------------------------------------------------------------------------

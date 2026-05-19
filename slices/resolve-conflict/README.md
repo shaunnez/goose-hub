@@ -66,4 +66,4 @@ All of these route to `factory:needs-human`:
 - `core/connectors/github/merge-pr.ts` — `mergePR` + `MergeConflictError`
 - `skills/resolve-conflict/` — the resolver skill (schema + prompt + config)
 - `core/event-stream/store.ts` — event kinds: `merge.conflict-resolved`, `merge.conflict-unresolvable`, `pr.merged`, `gate.approved`
-- Source spec: `docs/superpowers/specs/2026-05-05-merge-conflict-resolution-design.md`
+- Source spec: `docs/archive/legacy/superpowers/specs/2026-05-05-merge-conflict-resolution-design.md`

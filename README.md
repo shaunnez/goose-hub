@@ -7,7 +7,6 @@ See `FACTORY_RULES.md` for non-negotiables.
 See `CLAUDE.md` for AI agent orientation.  
 See `CONTEXT.md` for resolved implementation decisions.  
 See `docs/inventory.md` for an auto-generated, always-current map of every package, slice, skill, app, and target-project (regenerate with `pnpm manifest`).  
-See `docs/archive/PLAN.md` for the archived full plan and milestone ladder.
 
 Drift-check: `pnpm audit-docs` reports drift between governance docs and code (role lists, file references, milestone span, skill structure). Run it before merging changes that touch `core/types.ts` or the skill catalogue.
 
