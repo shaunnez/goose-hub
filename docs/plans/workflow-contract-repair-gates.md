@@ -58,7 +58,7 @@ Verification:
 - `pnpm vitest run slices/fix-issue/slice.test.ts core/workspaces/path-normalization.test.ts core/workspaces/observed-changes.test.ts core/tool-layer/path-contract.test.ts` — passed, 48 tests.
 - `pnpm lint` — passed.
 
-Next unchecked slice: Slice 2 - Evidence requirement gate.
+Slice 1 status: complete.
 
 ### [x] Slice 2 - Evidence requirement gate
 
@@ -91,7 +91,7 @@ Verification:
 - `pnpm vitest run slices/fix-issue/slice.test.ts core/workspaces/path-normalization.test.ts core/workspaces/observed-changes.test.ts core/tool-layer/path-contract.test.ts` — passed, 50 tests.
 - `pnpm lint` — passed.
 
-Next unchecked slice: Slice 3 - Wrong-surface gate rewrite.
+Slice 2 status: complete.
 
 ### [x] Slice 3 - Wrong-surface gate rewrite
 
@@ -121,7 +121,7 @@ Verification:
 - `pnpm vitest run slices/fix-issue/slice.test.ts core/workspaces/path-normalization.test.ts core/workspaces/observed-changes.test.ts core/tool-layer/path-contract.test.ts` — passed, 52 tests.
 - `pnpm lint` — passed.
 
-Next unchecked slice: Slice 4 - Implement-wp ownership gate.
+Slice 3 status: complete.
 
 ### [x] Slice 4 - Implement-wp ownership gate
 
@@ -151,7 +151,7 @@ Verification:
 - `pnpm vitest run slices/parallel-implement/slice.test.ts core/workspaces/path-normalization.test.ts core/tool-layer/path-contract.test.ts` — passed, 42 tests.
 - `pnpm lint` — passed.
 
-Next unchecked slice: Slice 5 - Spec-author output gate.
+Slice 4 status: complete.
 
 ### [x] Slice 5 - Spec-author output gate
 
@@ -189,7 +189,7 @@ Completed in this run: Slices 1-5. Current code changes are concentrated in impl
 
 Final verification:
 
-- `pnpm vitest run slices/fix-issue/slice.test.ts slices/parallel-implement/slice.test.ts slices/spec-author/slice.test.ts core/workspaces/path-normalization.test.ts core/workspaces/observed-changes.test.ts core/tool-layer/path-contract.test.ts core/tool-layer/tools/slice.test.ts` — passed, 154 tests.
+- `pnpm vitest run slices/fix-issue/slice.test.ts slices/parallel-implement/slice.test.ts slices/spec-author/slice.test.ts core/workspaces/path-normalization.test.ts core/workspaces/observed-changes.test.ts core/tool-layer/path-contract.test.ts core/tool-layer/mcp/slice.test.ts` — passed, 154 tests.
 - `pnpm lint` — passed.
 - `pnpm typecheck` — passed.
 

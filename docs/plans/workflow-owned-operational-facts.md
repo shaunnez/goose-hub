@@ -90,7 +90,7 @@ Notes:
 - Tool-audit reconciliation only uses write/edit-style tool calls that already carry canonical path metadata.
 - This slice does not derive canonical targeted test execution; `testsRun.paths` remains Slice 3.
 
-### [ ] Slice 3 - Derive targeted tests from tool/test audit
+### [x] Slice 3 - Derive targeted tests from tool/test audit
 
 Use factory-tools test output or existing test audit events to populate canonical `devTestsRun`.
 
@@ -100,7 +100,13 @@ Acceptance criteria:
 - Model `testsRun.paths` becomes advisory or a fallback.
 - Outside-targeted failure bucketing uses observed paths.
 
-### [ ] Slice 4 - Evidence facts come from collector output
+Completed:
+
+- QA now looks up the developer run's `agent.tool-call` events and derives `devTestsRun` from observed `run_tests` audit metadata when available.
+- Canonical test paths from audit events win over model-authored `agent.implement-complete.testsRun`; the model output remains a fallback for older runs.
+- Outside-targeted failure bucketing in QA receives canonical observed paths.
+
+### [x] Slice 4 - Evidence facts come from collector output
 
 Treat evidence artifacts, screenshots, GIFs, and comment URLs as collector/publisher facts, not model facts.
 
@@ -109,6 +115,12 @@ Acceptance criteria:
 - Evidence-post result reflects collector classification and publisher output.
 - Screenshot paths are discovered and normalized by workflow code.
 - Missing `commentUrl` is reported as publish failure, not guessed as Playwright failure.
+
+Completed:
+
+- Evidence-post success events now persist publisher/collector facts: `commentUrl`, `runId`, screenshot paths, GIF path, and commit SHA when available.
+- QA verification summaries carry those evidence artifact facts forward without relying on model-authored guesses.
+- Existing publish failure handling remains the source of truth for missing comment URLs.
 
 ## Verification
 
@@ -124,5 +136,6 @@ Latest verification:
 - Guard: `pnpm typecheck`
 - Slice 2: `pnpm vitest run slices/fix-issue/slice.test.ts core/workspaces/observed-changes.test.ts core/tool-layer/tool-call-audit.test.ts`
 - Slice 2: `pnpm lint`
+- Slice 3/4: `pnpm test slices/qa/slice.test.ts slices/fix-issue/slice.test.ts skills/qa/slice.test.ts`
 
-Next unchecked slice: Slice 3 - Derive targeted tests from tool/test audit.
+Next unchecked slice: none.

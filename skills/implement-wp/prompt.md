@@ -45,7 +45,7 @@ The context contains a `<task>` block with:
 - `<worktreePath>` — absolute path to your scratch worktree (already checked out)
 - `<stack>` — JSON payload with `testCommand`, optional `lintCommand`, and optional `typecheckCommand`
 
-Path contract: all output paths must be repo-root/worktree-root relative POSIX paths. Do not use package-relative paths like `src/...` for files under `apps/web`; use `apps/web/src/...`.
+Path contract: all output paths must be repo-root/worktree-root relative POSIX paths. When a `mcp__factory-tools__*` response returns `{ path, root, packageRoot, normalizedFrom }`, copy the returned `path` value verbatim into your terminal JSON. Do not infer paths from CWD or package root.
 
 ## What you must do
 
@@ -57,7 +57,7 @@ Path contract: all output paths must be repo-root/worktree-root relative POSIX p
   investigation key files, stop and return `confidence: low` with a `BLOCKER`
   decision summary.
 - Read the files in `<wp>.filesOwned` to understand the current state.
-- Use `read` and `search` tools to load test files for the surfaces you will touch FIRST.
+- Use `mcp__factory-tools__read_file` and `mcp__factory-tools__search_text` to load test files for the surfaces you will touch FIRST.
 - Emit: `[decision] READ: Loaded WP <id> context and N relevant files`
 
 ### 2 — Plan
@@ -71,13 +71,13 @@ Path contract: all output paths must be repo-root/worktree-root relative POSIX p
 
 - Write test cases that fail with the current code. Cover the WP's acceptance criteria and
   at least one negative path.
-- Run the targeted test command via the `test` tool (pass only the new test file paths).
+- Run the targeted test command via `mcp__factory-tools__run_tests` (pass only the new test file paths).
 - Confirm the new tests fail and pre-existing tests still pass.
 - Emit: `[decision] RED: Wrote N failing tests for <surface>`
 
 ### 4 — Green — implementation
 
-- Write the implementation using the `write` tool. Repo-root/worktree-root relative POSIX paths only.
+- Write the implementation using `mcp__factory-tools__write_file` or `mcp__factory-tools__edit_file`. Use returned `path.path` values in `filesWritten` and `testsWritten`.
   Do NOT write files outside your `<wp>.filesOwned` list.
 - Re-run the targeted test command. Iterate until all targeted tests pass.
 - Emit: `[decision] GREEN: Implementation passes all targeted tests`
@@ -90,7 +90,7 @@ Only refactor if required to make the test pass cleanly.
 
 - If `stack.lintCommand` is provided, run it. Fix failures.
 - If `stack.typecheckCommand` is provided, run it. Fix errors.
-- Re-run targeted tests one final time to confirm still green. In `testsRun.paths`, return canonical repo-relative paths for the files you tested, even if the command accepted a shorter package-relative path.
+- Re-run targeted tests one final time to confirm still green. In `testsRun.paths`, return the canonical `paths[].path` values from `mcp__factory-tools__run_tests`.
 - Emit: `[decision] LINT: Lint and typecheck clean`
 
 ### 7 — Return (no commit — orchestrator commits)

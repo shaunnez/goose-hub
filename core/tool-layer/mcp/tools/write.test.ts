@@ -75,9 +75,14 @@ describe('canonical RepoRelativePath contract', () => {
   it('audit event carries canonical_path for a write_file call', async () => {
     await writeFileTool(ctx, { path: 'audit-test.ts', content: 'y' });
     const events = eventStore.replay({ runId: ctx.runId, kind: 'agent.tool-call' });
-    const writeEvent = events.find((e) => (e.payload as { tool: string }).tool === 'write_file');
+    const writeEvent = events.find(
+      (e) => (e.payload as { tool_name: string }).tool_name === 'write_file',
+    );
     const payload = writeEvent?.payload as Record<string, unknown>;
     expect(payload.canonical_path).toMatchObject({ path: 'audit-test.ts', root: 'worktree' });
+    expect(payload.raw_path).toBe('audit-test.ts');
+    expect(payload.tool_input).toEqual({ path: 'audit-test.ts', created: true });
+    expect(payload).not.toHaveProperty('input');
   });
 });
 

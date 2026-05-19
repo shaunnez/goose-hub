@@ -32,6 +32,33 @@ type WrongSurfaceGuardPayload = {
   investigationRunId?: string | null;
 };
 
+type CompactPathList = {
+  count?: number;
+  paths?: string[];
+  truncated?: boolean;
+};
+
+type ContractDriftPayload = {
+  skill?: string;
+  gate?: string;
+  reason?: string;
+  fields?: Array<{
+    field?: string;
+    from?: string;
+    to?: string;
+    rawValue?: string;
+    normalizedValue?: string;
+    source?: string;
+  }>;
+  observedChangedFiles?: CompactPathList;
+  observedWriteFiles?: CompactPathList;
+  modelDeclaredFiles?: CompactPathList;
+  mismatches?: {
+    observedNotDeclared?: CompactPathList;
+    declaredNotObserved?: CompactPathList;
+  };
+};
+
 type DisclosurePayload = {
   kind?: string;
   skill?: string;
@@ -317,6 +344,83 @@ export function WrongSurfaceGuardEvent({ event }: { event: AgentEventDto }) {
           Touched: <span className="font-mono text-fg-2">{touched.slice(0, 3).join(', ')}</span>
         </div>
       )}
+    </li>
+  );
+}
+
+function PathList({ label, list }: { label: string; list?: CompactPathList }) {
+  const paths = list?.paths ?? [];
+  if (paths.length === 0 && list?.count == null) return null;
+  return (
+    <div className="mt-1 text-[11.5px] text-fg-3">
+      {label}: <span className="font-mono text-fg-2">{paths.slice(0, 3).join(', ')}</span>
+      {list?.count != null && list.count > paths.length && (
+        <span className="text-fg-4"> +{list.count - paths.length} more</span>
+      )}
+    </div>
+  );
+}
+
+export function ContractDriftEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as ContractDriftPayload | null;
+  const title =
+    event.kind === 'agent.output-repaired'
+      ? 'Path normalized'
+      : event.kind === 'agent.output-fact-mismatch'
+        ? 'Operational fact mismatch'
+        : event.kind === 'agent.path-normalized'
+          ? 'Path normalized'
+          : 'Contract gate blocked';
+  const fields = p?.fields ?? [];
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-warning bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <AlertTriangle size={13} className="shrink-0 text-amber-400" />
+        <span className="font-mono uppercase tracking-wider">{title}</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="text-[12.5px] text-fg-2">
+        {p?.skill ?? 'agent'}
+        {p?.gate != null && (
+          <>
+            <span className="text-fg-4 mx-1">·</span>
+            {p.gate}
+          </>
+        )}
+        {p?.reason != null && (
+          <>
+            <span className="text-fg-4 mx-1">·</span>
+            {p.reason}
+          </>
+        )}
+      </div>
+      {fields.length > 0 && (
+        <div className="mt-2 flex flex-col gap-1 text-[11px] text-fg-3">
+          {fields.slice(0, 3).map((field, index) => (
+            <div key={`${field.field ?? 'field'}-${index}`}>
+              <span className="font-mono text-fg-2">{field.field}</span>
+              {(field.rawValue ?? field.from) != null &&
+                (field.normalizedValue ?? field.to) != null && (
+                  <>
+                    {' '}
+                    <span className="font-mono">{field.rawValue ?? field.from}</span>
+                    <span className="text-fg-4"> → </span>
+                    <span className="font-mono">{field.normalizedValue ?? field.to}</span>
+                  </>
+                )}
+            </div>
+          ))}
+        </div>
+      )}
+      <PathList label="Git observed changed" list={p?.observedChangedFiles} />
+      <PathList label="Tool observed writes" list={p?.observedWriteFiles} />
+      <PathList label="Model declared" list={p?.modelDeclaredFiles} />
+      <PathList label="Observed not declared" list={p?.mismatches?.observedNotDeclared} />
+      <PathList label="Declared not observed" list={p?.mismatches?.declaredNotObserved} />
     </li>
   );
 }

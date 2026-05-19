@@ -125,7 +125,7 @@ export async function runQaWorkflow(
   const evidenceCommentUrl = (evidencePosted?.payload as { commentUrl?: string } | undefined)
     ?.commentUrl;
 
-  const devTestsRun = findDevTestsRun(workItem.id);
+  const devTestsRun = findDevTestsRun(workItem.id, prHints.devRunId ?? prHints.pipelineRunId);
 
   try {
     // ─── Deterministic 3-tier verify (M19.19) ────────────────────────────────

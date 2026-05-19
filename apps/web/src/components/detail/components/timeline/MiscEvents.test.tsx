@@ -6,9 +6,9 @@ import { renderTimelineItem } from '../TimelineEvents';
 
 afterEach(cleanup);
 
-function makeEvent(kind: string, payload: unknown): AgentEventDto {
+function makeEvent(kind: string, payload: unknown, id = 1): AgentEventDto {
   return {
-    id: 1,
+    id,
     kind,
     payload,
     runId: 'e3bb94b3-4bf6-4c93-9407-9a2dc30c760d',
@@ -83,6 +83,66 @@ describe('Misc timeline events', () => {
     expect(rendered).toContain('apps/server/src/domains/workflows/triage-batch.ts');
     expect(rendered).toContain('slices/parallel-implement/workflow.ts');
     expect(rendered).not.toContain('"expectedKeyFiles"');
+  });
+
+  it('renders path-normalized and contract drift events as compact operational facts', () => {
+    const normalized = makeEvent(
+      'agent.path-normalized',
+      {
+        skill: 'parallel-implement',
+        fields: [
+          {
+            field: 'workPackages[0].filesOwned[0]',
+            from: 'src/Button.tsx',
+            to: 'apps/web/src/Button.tsx',
+          },
+        ],
+      },
+      11,
+    );
+    const mismatch = makeEvent(
+      'agent.output-fact-mismatch',
+      {
+        skill: 'implement',
+        observedChangedFiles: { count: 1, paths: ['apps/web/src/Button.tsx'] },
+        observedWriteFiles: { count: 1, paths: ['apps/web/src/Button.tsx'] },
+        modelDeclaredFiles: { count: 1, paths: ['src/Button.tsx'] },
+        mismatches: {
+          observedNotDeclared: { count: 1, paths: ['apps/web/src/Button.tsx'] },
+          declaredNotObserved: { count: 1, paths: ['src/Button.tsx'] },
+        },
+      },
+      12,
+    );
+    const blocked = makeEvent(
+      'agent.contract-gate-blocked',
+      {
+        skill: 'implement-wp',
+        gate: 'implement-wp-ownership',
+        reason: 'ambiguous-files-owned',
+      },
+      13,
+    );
+
+    render(
+      <ul>
+        {renderTimelineItem({ kind: 'event', event: normalized }, 0)}
+        {renderTimelineItem({ kind: 'event', event: mismatch }, 1)}
+        {renderTimelineItem({ kind: 'event', event: blocked }, 2)}
+      </ul>,
+    );
+
+    const rendered = document.body.textContent ?? '';
+    expect(rendered).toContain('Path normalized');
+    expect(rendered).toContain('src/Button.tsx');
+    expect(rendered).toContain('apps/web/src/Button.tsx');
+    expect(rendered).toContain('Operational fact mismatch');
+    expect(rendered).toContain('Git observed changed');
+    expect(rendered).toContain('Tool observed writes');
+    expect(rendered).toContain('Observed not declared');
+    expect(rendered).toContain('Contract gate blocked');
+    expect(rendered).toContain('ambiguous-files-owned');
+    expect(rendered).not.toContain('"observedChangedFiles"');
   });
 
   it('renders agent.disclosure as summarized input metadata', () => {

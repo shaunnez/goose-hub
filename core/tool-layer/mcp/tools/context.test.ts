@@ -71,7 +71,9 @@ describe('recordDecisionTool', () => {
     expect(result.id).toMatch(/^[0-9a-f-]{36}$/);
 
     const events = eventStore.replay({ runId: ctx.runId, kind: 'agent.tool-call' });
-    const audit = events.find((e) => (e.payload as { tool?: string }).tool === 'record_decision');
+    const audit = events.find(
+      (e) => (e.payload as { tool_name?: string }).tool_name === 'record_decision',
+    );
     expect(audit).toBeTruthy();
   });
 

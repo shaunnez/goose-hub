@@ -158,7 +158,13 @@ export async function runEvidencePost(input: RunEvidencePostInput): Promise<void
       projectId: input.projectId,
       workItemId: input.workItem.id,
       kind: 'evidence.posted',
-      payload: { commentUrl: parsed.data.commentUrl, runId: evidenceRunId },
+      payload: {
+        commentUrl: parsed.data.commentUrl,
+        runId: evidenceRunId,
+        screenshots: parsed.data.screenshots.map((screenshot) => screenshot.path),
+        gifPath: parsed.data.gifPath,
+        ...(parsed.data.commitSha != null ? { commitSha: parsed.data.commitSha } : {}),
+      },
       runId: evidenceRunId,
     });
   } catch (err) {

@@ -1,6 +1,6 @@
 # ADR 0035 — Bash Command Timeout Scope and Field Naming
 
-**Status:** Accepted
+**Status:** Accepted; superseded for agent-facing tool execution by ADR 0045
 **Date:** 2026-05-08
 **Issue:** #630 (wire dead global budget fields from PR #628)
 
@@ -12,14 +12,13 @@ PR #628 added the `project_settings` table with three fields that are stored,
 exposed via API, and rendered in the UI but not yet read at runtime:
 `maxBashSeconds`, `perAgentMaxUsd`, and `maxIssuesPerDayFromNonOwners`.
 
-`maxBashSeconds` requires a scope decision before it can be wired. Two timeout
-locations already exist in the codebase:
+`maxBashSeconds` required a scope decision before it could be wired. At the
+time of this ADR, two timeout locations existed in the codebase:
 
-1. **Per-invocation** — `core/tool-layer/tools/bash.ts:27` defines
-   `BASH_TIMEOUT_MS = 30_000`. This caps any single `runBash()` call. The
-   function already accepts a `timeoutMs` override parameter. This is the
-   orchestrator's in-process bash, used for git operations, applying patches,
-   etc. (FACTORY_RULES rule 32.)
+1. **Per-invocation** — the pre-MCP in-process bash helper
+   (`core/tool-layer/tools/bash.ts`) capped any single `runBash()` call and
+   accepted a `timeoutMs` override parameter. That helper was later deleted
+   during the ADR 0045 `factory-tools` MCP migration.
 
 2. **Whole-agent-run** — `core/agent-runtime/claude-cli.ts:233` reads
    `spec.budgets.timeoutMs` to time-bound the entire Claude CLI subprocess.
@@ -31,15 +30,15 @@ by Claude CLI internals and cannot be capped per-command from the orchestrator.
 
 ## Decision
 
-`maxBashSeconds` caps **per-invocation orchestrator-side `runBash` calls only**.
-It overrides the default `BASH_TIMEOUT_MS = 30_000` for that project. It does
-**not** affect agent-run timeouts and does **not** affect bash commands the
-agent issues inside a Claude CLI run.
+`maxBashSeconds` caps **per-invocation orchestrator-side command/tool calls
+only**. It overrides the default per-command timeout for that project. It does
+**not** affect agent-run timeouts and does **not** affect native bash commands
+an agent issues inside a Claude CLI run.
 
-Precedence (in `runBash` callers):
+Precedence for command runners:
 
 ```
-effectiveTimeoutMs = explicitParam ?? (dbRow.perBashCommandMaxSeconds * 1000) ?? BASH_TIMEOUT_MS
+effectiveTimeoutMs = explicitParam ?? (dbRow.perBashCommandMaxSeconds * 1000) ?? toolDefaultTimeoutMs
 ```
 
 The DB value is in seconds (matching the field name and UI affordance); it is
@@ -78,22 +77,18 @@ internal bash calls would require either (a) replacing Claude CLI's bash tool
 with our own subprocess shim, or (b) post-hoc kill via PID inspection. Both
 are out of scope for #630 and would warrant a separate ADR.
 
-## Future consumption
+## Supersession
 
-`core/tool-layer/tools/bash.ts:runBash()` has no production callers at the time
-of this ADR — `core/tool-layer/bundles.ts` lines 13–14 note that the MCP
-sandboxed tool server is not yet wired up; agent bash runs through Claude CLI's
-built-in tools governed by workspace-level deny rules in `sandbox.ts`. When the
-MCP tool server lands, its bash adapter must read
-`resolveGlobalSettingsForProject(projectId).perBashCommandMaxSeconds`,
-multiply by 1000, and pass as the `timeoutMs` parameter to `runBash()` (only
-when the caller hasn't already supplied an explicit `timeoutMs`).
+ADR 0045 replaced the unused `runBash()` helper path with the `factory-tools`
+MCP server. Agent-facing bundles now use `mcp__factory-tools__*` tools instead
+of native broad `Bash` or the deleted `core/tool-layer/tools/bash.ts` helper.
+MCP command tools own argv construction, timeout selection, output caps, and
+audit events. Any future per-project `perBashCommandMaxSeconds` enforcement
+belongs in the MCP command-policy/verify-tool layer rather than in deleted
+`runBash()` callers.
 
-Until then, the field is structurally enforced: it is read from DB, exposed via
-the resolution layer, and ready for consumption. The "not yet enforced" UI
-badge is still removed, because the orchestrator's resolution layer *does*
-honour the value — it's the agent's bash subprocess that doesn't exist as a
-consumer yet.
+The original scope decision still stands: this setting is for individual
+command/tool invocations, not whole agent runs.
 
 ## Consequences
 
@@ -102,10 +97,9 @@ consumer yet.
 - `core/db/repositories/project-settings.ts`, `apps/server/src/domains/project-settings/router.ts`,
   `apps/web/src/lib/api.ts`, and `apps/web/src/components/settings/components/ProjectBudgetPanel.tsx`
   rename in lockstep.
-- `runBash()` callers in `core/` that have a `projectId` available need to read
-  the resolved value. A helper in `core/agent-runtime/resolve-for-project.ts`
-  (extending `EffectiveGlobalSettings`) is the natural place; callers without a
-  `projectId` continue to use the default.
+- MCP command tools with a `projectId` available need to read the resolved
+  value and apply it as a per-invocation timeout. Callers without a `projectId`
+  continue to use the tool default.
 - `maxIssuesPerDayFromNonOwners` is descoped (see #630 task 3) — Goose Hub is
   single-user (CLAUDE.md), there are no non-owners. Schema column dropped in
   the same migration.

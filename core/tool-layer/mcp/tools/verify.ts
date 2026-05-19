@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { z } from 'zod';
 import { getProjectBySlug } from '../../../projects/loader.js';
 import type { ProjectConfig, StackConfig } from '../../../types.js';
+import type { RepoRelativePath } from '../../path-contract.js';
 import { emitBlockedToolCall, emitToolCall } from '../audit.js';
 import { type CommandResult, minimalEnv, runCommand } from '../command-policy.js';
 import type { FactoryContext } from '../context.js';
@@ -50,6 +51,8 @@ export interface VerifyResult {
   durationMs: number;
   truncated: boolean;
   command: ReadonlyArray<string>;
+  rawPaths?: string[];
+  paths?: RepoRelativePath[];
 }
 
 function tokeniseCommand(command: string): string[] {
@@ -59,7 +62,11 @@ function tokeniseCommand(command: string): string[] {
     .filter((s) => s.length > 0);
 }
 
-function toVerifyResult(argv: ReadonlyArray<string>, r: CommandResult): VerifyResult {
+function toVerifyResult(
+  argv: ReadonlyArray<string>,
+  r: CommandResult,
+  paths?: { rawPaths: string[]; paths: RepoRelativePath[] },
+): VerifyResult {
   return {
     status: r.status,
     exitCode: r.exitCode,
@@ -68,6 +75,8 @@ function toVerifyResult(argv: ReadonlyArray<string>, r: CommandResult): VerifyRe
     durationMs: r.durationMs,
     truncated: r.truncated,
     command: argv,
+    ...(paths != null && paths.rawPaths.length > 0 ? { rawPaths: paths.rawPaths } : {}),
+    ...(paths != null && paths.paths.length > 0 ? { paths: paths.paths } : {}),
   };
 }
 
@@ -117,15 +126,17 @@ export async function runTestsTool(
   }
 
   const argv = tokeniseCommand(stack.testCommand);
+  let pathMetadata: { rawPaths: string[]; paths: RepoRelativePath[] } | undefined;
   if (input.path != null) {
-    let relPath: string;
+    let canonical: RepoRelativePath;
     try {
-      relPath = resolveWorkspacePath(ctx.workspaceRoot, input.path).canonical.path;
+      canonical = resolveWorkspacePath(ctx.workspaceRoot, input.path).canonical;
     } catch (err) {
       if (err instanceof PathPolicyViolation) handleBlocked(ctx, 'run_tests', err, { ...input });
       throw err;
     }
-    argv.push(relPath);
+    argv.push(canonical.path);
+    pathMetadata = { rawPaths: [input.path], paths: [canonical] };
   }
 
   const result = await runCommand({
@@ -138,13 +149,18 @@ export async function runTestsTool(
 
   emitToolCall(ctx, {
     tool: 'run_tests',
-    input: { path: input.path ?? null },
+    input: {
+      path: input.path ?? null,
+      command: argv.join(' '),
+      rawPaths: pathMetadata?.rawPaths ?? [],
+      paths: pathMetadata?.paths.map((path) => path.path) ?? [],
+    },
     status: result.status,
     exitCode: result.exitCode,
     durationMs: result.durationMs,
     truncated: result.truncated,
   });
-  return toVerifyResult(argv, result);
+  return toVerifyResult(argv, result, pathMetadata);
 }
 
 export async function runLintTool(

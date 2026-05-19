@@ -14,6 +14,8 @@ describe('skill-contract-audit', () => {
     expect(output).toContain('allowlistTags:');
     expect(output).toContain('schemaFields:');
     expect(output).toContain('outputExample:');
+    expect(output).toContain('pathLanguageWorkspaceRelative:');
+    expect(output).toContain('pathLanguagePackageRelativeExamples:');
   });
 
   it('enforces deterministic context tag drift checks for every runtime skill', () => {
@@ -109,6 +111,24 @@ describe('skill-contract-audit', () => {
       expect(report?.extraPromptTags, `${skill} should only reference allowlisted tags`).toEqual(
         [],
       );
+    }
+  });
+
+  it('keeps implement-family path language canonical and advisory-audited', () => {
+    const audit = auditSkillContracts(process.cwd());
+    const implementFamily = ['implement', 'implement-wp', 'spec-author'];
+
+    for (const skill of implementFamily) {
+      const report = audit.skills.find((s: { skill: string }) => s.skill === skill);
+      expect(report, `${skill} should be audited`).toBeDefined();
+      expect(
+        report?.pathLanguage.vagueWorkspaceRelative,
+        `${skill} should avoid vague workspace-relative path language`,
+      ).toEqual([]);
+      expect(
+        report?.pathLanguage.packageRelativeExamples,
+        `${skill} should avoid package-relative src/... output examples`,
+      ).toEqual([]);
     }
   });
 

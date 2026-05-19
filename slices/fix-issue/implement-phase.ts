@@ -177,7 +177,7 @@ function observedWritePathsFromToolAudit(runId: string): string[] {
   const paths: string[] = [];
   for (const event of events) {
     const payload = event.payload as Record<string, unknown> | null;
-    if (payload == null || !isWriteOrEditToolName(payload.tool_name)) continue;
+    if (payload == null || !isWriteOrEditToolName(payload.tool_name ?? payload.tool)) continue;
     const path = canonicalPathStringFromAuditPayload(payload);
     if (path != null) paths.push(path);
   }

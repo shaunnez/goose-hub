@@ -20,6 +20,7 @@
     "gen:office-assets": "tsx scripts/generate-office-assets.ts",
     "manifest": "tsx scripts/build-manifest.ts",
     "audit-docs": "tsx scripts/audit-docs.ts",
+    "path-drift:report": "tsx scripts/report-path-drift.ts",
     "symbol-index": "tsx scripts/build-symbol-index.ts",
     "symbol-index:report": "tsx scripts/report-symbol-index-lookups.ts",
     "symbol": "tsx scripts/query-symbol-index.ts",
