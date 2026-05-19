@@ -1,6 +1,8 @@
 import {
   createConversation,
+  deleteConversation,
   fetchConversation,
+  listConversations,
   postMessage,
   resolveInvocation,
 } from '@/lib/api/chat';
@@ -11,19 +13,24 @@ import type {
   ChatRuntime,
   ChatToolInvocationDto,
 } from '@/lib/types';
-import { Bot, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Bot, List, MessageCircle, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { deriveThinkingFromEvents, mergeToolStatusFromEvents } from '../lib/liveState';
 import { resolveScopeFromPath } from '../lib/scope';
 import { useChatEvents } from '../lib/useChatEvents';
 import { ChatInput } from './ChatInput';
 import { ChatThread } from './ChatThread';
+import { ConversationList } from './ConversationList';
+
+const ACTIVE_CONVERSATION_STORAGE_KEY = 'hub-chat-active-conversation-id';
 
 interface ChatPanelProps {
   open: boolean;
   onClose: () => void;
 }
+
+type View = 'thread' | 'list';
 
 export function ChatPanel({ open, onClose }: ChatPanelProps) {
   const location = useLocation();
@@ -31,52 +38,165 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
   const resolved = useMemo(() => resolveScopeFromPath(location.pathname), [location.pathname]);
 
   const [conversation, setConversation] = useState<ChatConversationDto | null>(null);
+  const [conversations, setConversations] = useState<ChatConversationDto[]>([]);
+  const [view, setView] = useState<View>('list');
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
   const [invocations, setInvocations] = useState<ChatToolInvocationDto[]>([]);
   const [busy, setBusy] = useState(false);
   const [pendingDecision, setPendingDecision] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [runtime, setRuntime] = useState<ChatRuntime>('claude');
+  // Monotonic counter the load handlers bump on every new request. Only the
+  // response whose token still matches `loadTokenRef.current` is allowed to
+  // apply state — protects against:
+  //  * rapid A → B clicks where A's response arrives after B's,
+  //  * the open-panel roster effect clobbering a thread the user just clicked
+  //    "New" to create while the list was still in flight.
+  const loadTokenRef = useRef(0);
 
-  // Whenever the panel opens or the scope changes, start (or resume) a
-  // conversation matching the current scope. v1 starts a fresh conversation
-  // each time; conversation listing is a follow-up UI feature.
+  const readActiveId = useCallback((): string | null => {
+    try {
+      return localStorage.getItem(ACTIVE_CONVERSATION_STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const writeActiveId = useCallback((id: string | null) => {
+    try {
+      if (id == null) localStorage.removeItem(ACTIVE_CONVERSATION_STORAGE_KEY);
+      else localStorage.setItem(ACTIVE_CONVERSATION_STORAGE_KEY, id);
+    } catch {
+      // localStorage unavailable — accept the loss; selection is best-effort.
+    }
+  }, []);
+
+  /**
+   * Load a conversation by id. Returns the loaded conversation on success or
+   * `null` on either failure or a stale response (because a newer load
+   * request started in the meantime). Callers use the return value to decide
+   * whether to flip the view to 'thread' — a failed load should NOT force
+   * thread view onto an empty panel.
+   */
+  const loadConversation = useCallback(
+    async (id: string): Promise<ChatConversationDto | null> => {
+      const token = ++loadTokenRef.current;
+      try {
+        const full = await fetchConversation(id);
+        if (loadTokenRef.current !== token) return null;
+        setConversation(full.conversation);
+        setMessages(full.messages);
+        setInvocations(full.invocations);
+        writeActiveId(full.conversation.id);
+        setView('thread');
+        return full.conversation;
+      } catch (err) {
+        if (loadTokenRef.current !== token) return null;
+        setError(`Could not load conversation: ${String(err)}`);
+        return null;
+      }
+    },
+    [writeActiveId],
+  );
+
+  // Refresh the conversation roster whenever the panel opens. Don't auto-
+  // create on mount any more; the user picks one or clicks New explicitly
+  // (M20.15 AC).
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     setError(null);
+    // Token snapshot for this open. If `loadTokenRef` advances before we
+    // settle (e.g. user clicked New / picked a row mid-flight), drop our
+    // state writes — the newer interaction is the source of truth now.
+    const openToken = ++loadTokenRef.current;
     (async () => {
       try {
-        const conv = await createConversation({
-          scope: resolved.scope,
-          projectSlug: resolved.projectSlug,
-          workItemId: resolved.workItemId,
-          runtime,
-        });
-        if (cancelled) return;
-        setConversation(conv);
-        setMessages([]);
-        setInvocations([]);
+        const list = await listConversations({});
+        if (cancelled || loadTokenRef.current !== openToken) return;
+        setConversations(list);
+        const previousId = readActiveId();
+        const previous = list.find((c) => c.id === previousId);
+        if (previous != null) {
+          // loadConversation flips the view + state on its own; we don't
+          // force 'thread' here so a failed restore lands cleanly on 'list'.
+          const restored = await loadConversation(previous.id);
+          if (cancelled) return;
+          if (restored == null) {
+            setView('list');
+          }
+        } else {
+          if (cancelled) return;
+          setConversation(null);
+          setMessages([]);
+          setInvocations([]);
+          setView('list');
+        }
       } catch (err) {
-        if (!cancelled) setError(`Could not start a conversation: ${String(err)}`);
+        if (!cancelled) setError(`Could not load conversations: ${String(err)}`);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [open, resolved.scope, resolved.projectSlug, resolved.workItemId, runtime]);
+  }, [open, readActiveId, loadConversation]);
+
+  const handleNewConversation = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    // Bumping the token here invalidates any in-flight roster/load response —
+    // they'd otherwise reset the panel back to 'list' after the new
+    // conversation lands.
+    const token = ++loadTokenRef.current;
+    try {
+      const conv = await createConversation({
+        scope: resolved.scope,
+        projectSlug: resolved.projectSlug,
+        workItemId: resolved.workItemId,
+        runtime,
+      });
+      if (loadTokenRef.current !== token) return;
+      setConversation(conv);
+      setMessages([]);
+      setInvocations([]);
+      setConversations((prev) => [conv, ...prev.filter((c) => c.id !== conv.id)]);
+      writeActiveId(conv.id);
+      setView('thread');
+    } catch (err) {
+      if (loadTokenRef.current !== token) return;
+      setError(`Could not start a conversation: ${String(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [resolved.scope, resolved.projectSlug, resolved.workItemId, runtime, writeActiveId]);
+
+  const handleDeleteConversation = useCallback(
+    async (id: string) => {
+      setBusy(true);
+      try {
+        await deleteConversation(id);
+        setConversations((prev) => prev.filter((c) => c.id !== id));
+        if (conversation?.id === id) {
+          setConversation(null);
+          setMessages([]);
+          setInvocations([]);
+          writeActiveId(null);
+          setView('list');
+        }
+      } catch (err) {
+        setError(`Delete failed: ${String(err)}`);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [conversation, writeActiveId],
+  );
 
   // Subscribe to chat.* events for this conversation. The events drive two
   // render-only behaviours that don't need a network round-trip:
   //   - the "thinking…" indicator between user message and agent reply
   //   - live `running` → `completed`/`failed` status badge updates on tool
   //     cards we already know about
-  //
-  // We deliberately do NOT refetch the conversation on every event tick.
-  // Authoritative reconciliation happens via `postMessage` (after a turn)
-  // and `resolveInvocation` (after an approve/reject). New invocations the
-  // base state hasn't seen yet are still rendered after the next refresh —
-  // tool events for unknown ids are ignored by the merge helper.
   const events = useChatEvents(conversation?.id ?? null);
   const isThinking = useMemo(() => deriveThinkingFromEvents(events), [events]);
   const liveInvocations = useMemo(
@@ -107,17 +227,17 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
       setMessages((prev) => [...prev, optimistic]);
       try {
         await postMessage(conversation.id, content);
-        // Authoritative reconciliation — refetch once after the POST settles.
-        // The fetchConversation result is the single source of truth and
-        // already includes the persisted user message, so this replaces the
-        // optimistic row cleanly.
         const full = await fetchConversation(conversation.id);
         setMessages(full.messages);
         setInvocations(full.invocations);
+        setConversation(full.conversation);
+        // Keep the roster fresh (title may have been derived from the first
+        // user message).
+        setConversations((prev) =>
+          prev.map((c) => (c.id === full.conversation.id ? full.conversation : c)),
+        );
       } catch (err) {
         setError(`Send failed: ${String(err)}`);
-        // Roll back the optimistic row on failure so we don't leave a
-        // phantom bubble the server doesn't know about.
         setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       } finally {
         setBusy(false);
@@ -135,9 +255,6 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         setInvocations((prev) =>
           prev.map((i) => (i.id === res.invocation.id ? res.invocation : i)),
         );
-        // Auto-navigate when the approved tool is open_url. The agent
-        // proposed a navigation intent; approving it should actually navigate
-        // rather than render a second click target.
         if (
           res.invocation.toolName === 'open_url' &&
           res.invocation.status === 'completed' &&
@@ -184,6 +301,10 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
     [navigate, onClose],
   );
 
+  const toggleView = useCallback(() => {
+    setView((v) => (v === 'thread' ? 'list' : conversation != null ? 'thread' : 'list'));
+  }, [conversation]);
+
   return (
     <aside
       data-testid="chat-panel"
@@ -204,10 +325,23 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         >
           {resolved.label}
         </span>
+        <button
+          type="button"
+          onClick={toggleView}
+          aria-label={view === 'thread' ? 'Show conversations' : 'Show current thread'}
+          data-testid="chat-toggle-view"
+          className={cn(
+            'ml-auto p-1 rounded text-fg-2 hover:text-fg',
+            view === 'list' && 'bg-bg text-fg',
+          )}
+          title={view === 'thread' ? 'Show conversations' : 'Back to thread'}
+        >
+          {view === 'thread' ? <List size={14} /> : <MessageCircle size={14} />}
+        </button>
         <select
           value={runtime}
           onChange={(e) => setRuntime(e.target.value as ChatRuntime)}
-          className="ml-auto bg-bg border border-line rounded text-[11px] px-1 py-0.5"
+          className="bg-bg border border-line rounded text-[11px] px-1 py-0.5"
           title="Runtime"
         >
           <option value="claude">claude</option>
@@ -229,17 +363,30 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         </div>
       )}
 
-      <ChatThread
-        messages={messages}
-        invocations={liveInvocations}
-        pendingDecision={pendingDecision}
-        thinking={isThinking}
-        onApprove={handleApprove}
-        onReject={handleReject}
-        onNavigate={handleNavigate}
-      />
+      {view === 'list' ? (
+        <ConversationList
+          conversations={conversations}
+          activeConversationId={conversation?.id ?? null}
+          busy={busy}
+          onSelect={(id) => loadConversation(id)}
+          onDelete={handleDeleteConversation}
+          onNew={handleNewConversation}
+        />
+      ) : (
+        <ChatThread
+          messages={messages}
+          invocations={liveInvocations}
+          pendingDecision={pendingDecision}
+          thinking={isThinking}
+          onApprove={handleApprove}
+          onReject={handleReject}
+          onNavigate={handleNavigate}
+        />
+      )}
 
-      <ChatInput disabled={busy || conversation == null} onSubmit={sendMessage} />
+      {view === 'thread' && (
+        <ChatInput disabled={busy || conversation == null} onSubmit={sendMessage} />
+      )}
     </aside>
   );
 }
