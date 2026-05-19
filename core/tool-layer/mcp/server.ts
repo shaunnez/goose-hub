@@ -8,8 +8,13 @@ import {
   EditFileInput,
   FileExistsInput,
   FileInfoInput,
+  GetChangedFilesInput,
+  GetDiffInput,
+  GetHeadShaInput,
+  GetMergeBaseInput,
   GetProjectContextInput,
   GetStackCommandsInput,
+  GetStatusInput,
   ListDirInput,
   ListFilesInput,
   MoveFileInput,
@@ -30,6 +35,13 @@ import {
   getStackCommands,
   recordDecisionTool,
 } from './tools/context.js';
+import {
+  getChangedFilesTool,
+  getDiffTool,
+  getHeadShaTool,
+  getMergeBaseTool,
+  getStatusTool,
+} from './tools/git.js';
 import {
   fileExistsTool,
   fileInfoTool,
@@ -433,6 +445,89 @@ export function buildFactoryMcpServer(ctx: FactoryContext): McpServer {
     async (input) => {
       try {
         const result = await runTargetedCommandTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_status',
+    {
+      description:
+        'Working-tree status (branch, ahead/behind, structured entries with staged flag) via `git status --porcelain=v2 --branch`.',
+      inputSchema: GetStatusInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await getStatusTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_changed_files',
+    {
+      description: 'Flat list of changed-or-untracked workspace-relative paths.',
+      inputSchema: GetChangedFilesInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await getChangedFilesTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_diff',
+    {
+      description:
+        'Diff for the working tree (or the index when `staged: true`). Capped at 512 KB; truncation flagged.',
+      inputSchema: GetDiffInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await getDiffTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_head_sha',
+    {
+      description: 'Current HEAD commit sha.',
+      inputSchema: GetHeadShaInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await getHeadShaTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_merge_base',
+    {
+      description:
+        'Merge base between HEAD and `ref` (defaults to origin/main). `base: null` means no common ancestor was found.',
+      inputSchema: GetMergeBaseInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await getMergeBaseTool(ctx, input);
         return { content: jsonContent(result), structuredContent: { ...result } };
       } catch (err) {
         return errorResult(err);
