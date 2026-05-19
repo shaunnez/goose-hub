@@ -303,7 +303,11 @@ const HAPPY_INPUT: BootstrapInput = {
 };
 
 function happyDetectStack() {
-  return vi.fn().mockResolvedValue(makeNodeStack({ test: 'pnpm test', lint: 'pnpm lint' }));
+  return vi
+    .fn()
+    .mockResolvedValue(
+      makeNodeStack({ test: 'pnpm test', lint: 'pnpm lint', e2e: 'pnpm test:e2e:pipeline' }),
+    );
 }
 
 function happyAudit(action: 'create' | 'update' | 'ok' = 'create') {
@@ -398,6 +402,31 @@ describe('bootstrapProject — happy path', () => {
     const reposDecoded = Buffer.from(reposPutBody.content, 'base64').toString('utf-8');
     expect(reposDecoded).toContain('octo/widgets');
     expect(reposDecoded).toContain('Repo Registry');
+  });
+
+  it('writes e2eCommand into the scaffolded project config when the detected stack exposes e2e', async () => {
+    const { fetchImpl, recorded } = makeMockFetch({
+      openedPr: { number: 4243, html_url: 'https://github.com/shaunnez/goose-hub/pull/4243' },
+    });
+
+    const detectStack = happyDetectStack();
+    const auditClaudeMd = happyAudit('create');
+    const installLabels = happyInstallLabels();
+    const deps = makeDeps({ fetchImpl, detectStack, auditClaudeMd, installLabels });
+
+    await bootstrapProject(HAPPY_INPUT, deps);
+
+    const configPut = recorded.find(
+      (r) =>
+        r.method === 'PUT' && r.url.includes('/contents/target-projects/widgets/project.config.ts'),
+    );
+    expect(configPut).toBeDefined();
+
+    const decoded = Buffer.from(
+      (configPut?.body as { content: string }).content,
+      'base64',
+    ).toString('utf-8');
+    expect(decoded).toContain('e2eCommand: "pnpm test:e2e:pipeline"');
   });
 
   it('CLAUDE.md update path: diff is included in PR body', async () => {
