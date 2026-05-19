@@ -12,7 +12,6 @@ goose-hub.db
 claude-design/
 coverage/
 .codex
-AGENTS.md
 .e2e-pipeline.db-shm
 .e2e-pipeline.db-wal
 .e2e-chat.db-shm
