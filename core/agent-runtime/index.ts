@@ -11,4 +11,9 @@ export {
   resolveSkillRuntime,
   resolveSkillRuntimeForProject,
 } from './skill-runtime-resolver.js';
-export type { ResolvedSkillRuntime, SkillRuntimeSource } from './skill-runtime-resolver.js';
+export type {
+  ResolvedSkillRuntime,
+  RuntimeResolutionTrace,
+  RuntimeTraceDecision,
+  SkillRuntimeSource,
+} from './skill-runtime-resolver.js';

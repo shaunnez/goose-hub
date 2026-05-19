@@ -29,6 +29,12 @@ settings/
 
 Fields shown per project: slug, source, activeMilestone, mode, colorStripe, budget limits.
 
+The Skill runtime settings tab reads `GET /projects/:slug/settings` and shows
+editable per-skill overrides for budget, tier, provider, and effort. The same
+response includes resolved runtime attribution, so each row can explain where
+the effective tier/provider/effort came from while keeping primary, fallback,
+and advisor models read-only.
+
 The Workflow map tab also reads:
 
 - `GET /workflow-catalog`
@@ -39,4 +45,5 @@ The Workflow map tab also reads:
 
 It renders the effective vertical path for the selected project: active variants are highlighted,
 inactive alternatives are muted, conditional/retry branches stay secondary, and selected skill
-details open in a modal.
+details open in a modal. Skill nodes stay lightweight; the modal reuses
+`resolvedSkillRuntimes` to show resolved primary runtime plus tier/provider/effort attribution.
