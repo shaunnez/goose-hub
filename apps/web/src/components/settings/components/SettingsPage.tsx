@@ -5,17 +5,26 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { DevReviewPanel } from './DevReviewPanel';
+import { MilestonesPanel } from './MilestonesPanel';
 import { PipelinePanel } from './PipelinePanel';
 import { ProjectBudgetPanel } from './ProjectBudgetPanel';
 import { ProjectConfigPanel } from './ProjectConfigPanel';
 import { ReviewPanel } from './ReviewPanel';
 import { WorkflowMapPanel } from './WorkflowMapPanel';
 
-type Tab = 'config' | 'runtime' | 'workflow-map' | 'pipeline' | 'review' | 'dev-review';
+type Tab =
+  | 'summary'
+  | 'runtime'
+  | 'milestones'
+  | 'workflow-map'
+  | 'pipeline'
+  | 'review'
+  | 'dev-review';
 
 const TAB_LABELS: Record<Tab, string> = {
-  config: 'Config',
+  summary: 'Summary',
   runtime: 'Skill runtime',
+  milestones: 'Milestones',
   'workflow-map': 'Workflow map',
   pipeline: 'Pipeline',
   review: 'Review',
@@ -25,7 +34,7 @@ const TAB_LABELS: Record<Tab, string> = {
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>('config');
+  const [tab, setTab] = useState<Tab>('summary');
   const [wizardOpen, setWizardOpen] = useState(false);
 
   const {
@@ -95,36 +104,47 @@ export function SettingsPage() {
         ))}
       </div>
 
-      {/* Right: config detail */}
+      {/* Right: project detail */}
       <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-8 py-6">
         <h1 className="text-[15px] font-semibold mb-1">Settings</h1>
 
         {/* Tab bar */}
         <div className="flex flex-wrap gap-1 mb-6 border-b border-line">
-          {(['config', 'runtime', 'workflow-map', 'pipeline', 'review', 'dev-review'] as Tab[]).map(
-            (t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setTab(t)}
-                className={[
-                  'px-3 py-1.5 text-[12px] capitalize -mb-px border-b-2 transition-colors',
-                  tab === t
-                    ? 'border-accent text-fg font-medium'
-                    : 'border-transparent text-fg-2 hover:text-fg',
-                ].join(' ')}
-              >
-                {TAB_LABELS[t]}
-              </button>
-            ),
-          )}
+          {(
+            [
+              'summary',
+              'runtime',
+              'milestones',
+              'workflow-map',
+              'pipeline',
+              'review',
+              'dev-review',
+            ] as Tab[]
+          ).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className={[
+                'px-3 py-1.5 text-[12px] capitalize -mb-px border-b-2 transition-colors',
+                tab === t
+                  ? 'border-accent text-fg font-medium'
+                  : 'border-transparent text-fg-2 hover:text-fg',
+              ].join(' ')}
+            >
+              {TAB_LABELS[t]}
+            </button>
+          ))}
         </div>
 
-        {tab === 'config' && selectedConfig != null && (
+        {tab === 'summary' && selectedConfig != null && (
           <ProjectConfigPanel config={selectedConfig} />
         )}
         {tab === 'runtime' && selectedConfig != null && (
           <ProjectBudgetPanel slug={selectedConfig.slug} />
+        )}
+        {tab === 'milestones' && selectedConfig != null && (
+          <MilestonesPanel slug={selectedConfig.slug} />
         )}
         {tab === 'workflow-map' && selectedConfig != null && (
           <WorkflowMapPanel slug={selectedConfig.slug} />

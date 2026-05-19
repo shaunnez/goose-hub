@@ -27,6 +27,19 @@ describe('listProjectConfigsService (#280)', () => {
     slug: 'my-proj',
     name: 'My Project',
     source: { kind: 'github', repo: 'owner/my-proj' },
+    targetRepo: {
+      cloneUrl: 'git@github.com:owner/my-proj.git',
+      defaultBranch: 'main',
+      localPath: '~/code/my-proj',
+    },
+    stack: {
+      runtime: 'node',
+      packageManager: 'pnpm',
+      testCommand: 'pnpm test',
+      lintCommand: 'pnpm lint',
+      typecheckCommand: 'pnpm typecheck',
+      e2eCommand: 'pnpm test:e2e',
+    },
     activeMilestone: 'M10: Orchestration',
     colorStripe: '#7c3aed',
     budgets: {
@@ -39,6 +52,8 @@ describe('listProjectConfigsService (#280)', () => {
       perAgentMaxUsd: 1,
     },
     mode: 'supervised',
+    storage: { kind: 'local', path: '~/.factory/data/my-proj' },
+    isolation: { mode: 'native' },
   };
 
   it('maps full ProjectConfig to ProjectConfigDto shape', async () => {
@@ -50,10 +65,25 @@ describe('listProjectConfigsService (#280)', () => {
           slug: 'my-proj',
           name: 'My Project',
           source: { kind: 'github', repo: 'owner/my-proj' },
+          targetRepo: {
+            cloneUrl: 'git@github.com:owner/my-proj.git',
+            defaultBranch: 'main',
+            localPath: '~/code/my-proj',
+          },
+          stack: {
+            runtime: 'node',
+            packageManager: 'pnpm',
+            testCommand: 'pnpm test',
+            lintCommand: 'pnpm lint',
+            typecheckCommand: 'pnpm typecheck',
+            e2eCommand: 'pnpm test:e2e',
+          },
           activeMilestone: 'M10: Orchestration',
           colorStripe: '#7c3aed',
           budgets: { perWorkflowMaxUsd: 2, dailyTokens: 500000, perAdvisorMaxUsd: 0.5 },
           mode: 'supervised',
+          storage: { path: '~/.factory/data/my-proj' },
+          isolation: { mode: 'native' },
         },
       ],
     });
