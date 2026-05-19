@@ -357,4 +357,12 @@ describe('playwright-repro prompt discipline', () => {
   it('does not instruct the agent to publish evidence or comment on GitHub', () => {
     expect(PROMPT).not.toMatch(/gh issue comment|git push|evidence\/issue-<N>|git worktree/i);
   });
+
+  it('forbids memory and skill quick passes', () => {
+    expect(PROMPT).toContain('Do not perform a memory or skill quick pass');
+    expect(PROMPT).toContain('Do not read local assistant memory');
+    expect(PROMPT).toContain('~/.codex');
+    expect(PROMPT).toContain('~/.agents');
+    expect(PROMPT).toContain('~/.claude');
+  });
 });

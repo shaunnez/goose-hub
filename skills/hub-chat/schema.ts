@@ -26,7 +26,9 @@ export const HubChatProposalSchema = z.object({
     .describe("Object matching the tool's declared inputSchema."),
   rationale: z
     .string()
-    .describe('One sentence the human will read when deciding whether to approve.'),
+    .describe(
+      'One sentence shown in the tool card. Use conditional approval wording only for mutating tools; read-only tools auto-run.',
+    ),
 });
 
 export const HubChatOutputSchema = z.object({

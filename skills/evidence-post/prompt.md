@@ -30,6 +30,7 @@ If the spec path is missing or clearly not an AFTER-state validation, still retu
 
 ## Boundaries
 
+- Do not read local assistant memory, skill, config, or session files. Never inspect `~/.codex`, `~/.agents`, `~/.claude`, sibling repos, or parent directories. If prior context is needed, use only the context provided in this run.
 - Do not run Playwright.
 - Do not run `scripts/collect-playwright-evidence.ts`.
 - Do not create or push `evidence/issue-*` branches.

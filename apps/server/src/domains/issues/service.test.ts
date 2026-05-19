@@ -707,6 +707,95 @@ describe('getIssueEvents', () => {
       expect(events[1].id).toBe(1);
     }
   });
+
+  it('excludes historical Hub Chat events from issue timelines', async () => {
+    vi.mocked(eventStore.replay).mockReturnValueOnce([
+      {
+        id: 1,
+        kind: 'chat.agent-message',
+        payload: { conversationId: 'conv_1' },
+        projectId: 'proj',
+        workItemId: 'github:owner/repo#1',
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+      {
+        id: 2,
+        kind: 'agent.run-started',
+        payload: { skill: 'hub-chat', runId: 'chat_1' },
+        projectId: 'proj',
+        workItemId: 'github:owner/repo#1',
+        createdAt: '2026-01-01T00:00:01Z',
+      },
+      {
+        id: 3,
+        kind: 'agent.run-started',
+        payload: { skill: 'investigate', runId: 'run_1' },
+        projectId: 'proj',
+        workItemId: 'github:owner/repo#1',
+        createdAt: '2026-01-01T00:00:02Z',
+      },
+    ] as never);
+
+    const { getIssueEvents } = await import('./service.js');
+    const result = await getIssueEvents('proj', '1');
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const events = result.data.events as Array<{ id: number; kind: string }>;
+      expect(events.map((event) => event.id)).toEqual([3]);
+      expect(events.map((event) => event.kind)).toEqual(['agent.run-started']);
+    }
+  });
+
+  it('keeps paginated issue timelines full after filtering Hub Chat rows', async () => {
+    vi.mocked(eventStore.replay)
+      .mockReturnValueOnce([
+        {
+          id: 10,
+          kind: 'chat.agent-message',
+          payload: { conversationId: 'conv_1' },
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#1',
+          createdAt: '2026-01-01T00:00:10Z',
+        },
+        {
+          id: 9,
+          kind: 'agent.run-completed',
+          payload: { skill: 'hub-chat', runId: 'chat_1' },
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#1',
+          createdAt: '2026-01-01T00:00:09Z',
+        },
+      ] as never)
+      .mockReturnValueOnce([
+        {
+          id: 8,
+          kind: 'agent.run-started',
+          payload: { skill: 'investigate', runId: 'run_1' },
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#1',
+          createdAt: '2026-01-01T00:00:08Z',
+        },
+        {
+          id: 7,
+          kind: 'state.transitioned',
+          payload: { to: 'factory:triaging' },
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#1',
+          createdAt: '2026-01-01T00:00:07Z',
+        },
+      ] as never);
+
+    const { getIssueEvents } = await import('./service.js');
+    const result = await getIssueEvents('proj', '1', { limit: 1 });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const events = result.data.events as Array<{ id: number }>;
+      expect(events.map((event) => event.id)).toEqual([8]);
+      expect(result.data.hasMore).toBe(true);
+    }
+  });
 });
 
 describe('getIssueArtifact', () => {

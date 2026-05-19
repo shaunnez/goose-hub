@@ -200,6 +200,8 @@ describe('chat-orchestrator slice', () => {
       string,
       unknown
     >;
+    const invokeInput = vi.mocked(invokeSkill).mock.calls.at(-1)?.[0];
+    expect(invokeInput?.workItemId).toBeUndefined();
     expect(context.scope).toMatchObject({
       kind: 'item',
       projectSlug: 'goose-hub-self',
@@ -325,7 +327,40 @@ describe('chat-orchestrator slice', () => {
       expect(payload.conversationId).toBe('conv_test');
       expect(payload.runId).toBe('chat_test_thinking');
       expect(e.runId).toBe('chat_test_thinking');
+      expect(e.workItemId).toBeNull();
     }
+  });
+
+  it('does not attach item-scoped chat lifecycle events to the issue timeline', async () => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    mockInvokeOnce({
+      resolve: {
+        ...baseInvokeResult,
+        output: {
+          say: 'issue-aware reply.',
+          proposals: [],
+          done: false,
+          decisionSummaries: [{ kind: 'READ', summary: 'Used issue context.' }],
+        },
+      },
+    });
+    await runChatOrchestratorTurn({
+      conversation: {
+        ...stubConversation,
+        scope: 'item',
+        projectId: 'goose-hub-self',
+        workItemId: 'github:shaunnez/goose-hub#827',
+      },
+      history: [],
+      runId: 'chat_test_item_timeline_isolated',
+    });
+
+    const chatEvents = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.map((c) => c[0])
+      .filter((event) => event.kind.startsWith('chat.'));
+    expect(chatEvents.length).toBeGreaterThan(0);
+    expect(chatEvents.every((event) => event.workItemId == null)).toBe(true);
   });
 
   it('emits the skill-invoked thinking event even when the run later throws', async () => {

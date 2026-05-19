@@ -45,6 +45,8 @@ function deriveTitle(content: string): string {
   return firstLine.slice(0, 80);
 }
 
+const CHAT_EVENT_WORK_ITEM_ID = null;
+
 const activeConversationTurns = new Set<string>();
 
 function claimConversationTurn(conversationId: string): boolean {
@@ -181,7 +183,7 @@ export async function postUserMessage(input: {
   try {
     eventStore.appendEvent({
       projectId: conversation.projectId ?? 'goose-hub-self',
-      workItemId: conversation.workItemId,
+      workItemId: CHAT_EVENT_WORK_ITEM_ID,
       kind: 'chat.user-message',
       payload: {
         conversationId: conversation.id,
@@ -200,7 +202,7 @@ export async function postUserMessage(input: {
         });
         eventStore.appendEvent({
           projectId: conversation.projectId ?? 'goose-hub-self',
-          workItemId: conversation.workItemId,
+          workItemId: CHAT_EVENT_WORK_ITEM_ID,
           kind: 'chat.run-failed',
           payload: { conversationId: conversation.id, error: String(err), runId },
           runId,
@@ -248,7 +250,7 @@ export async function resolveProposal(input: {
       return { ok: false, error: 'invocation already resolved by another caller', status: 409 };
     eventStore.appendEvent({
       projectId: conversation.projectId ?? 'goose-hub-self',
-      workItemId: conversation.workItemId,
+      workItemId: CHAT_EVENT_WORK_ITEM_ID,
       kind: 'chat.tool-rejected',
       payload: {
         conversationId: conversation.id,
@@ -272,7 +274,7 @@ export async function resolveProposal(input: {
 
   eventStore.appendEvent({
     projectId: conversation.projectId ?? 'goose-hub-self',
-    workItemId: conversation.workItemId,
+    workItemId: CHAT_EVENT_WORK_ITEM_ID,
     kind: 'chat.tool-approved',
     payload: {
       conversationId: conversation.id,
@@ -328,7 +330,7 @@ export async function executeInvocation(
     });
     eventStore.appendEvent({
       projectId: conversation.projectId ?? 'goose-hub-self',
-      workItemId: conversation.workItemId,
+      workItemId: CHAT_EVENT_WORK_ITEM_ID,
       kind: 'chat.tool-failed',
       payload: {
         conversationId: conversation.id,
@@ -344,7 +346,7 @@ export async function executeInvocation(
   updateToolInvocation({ id: invocationId, status: 'running' });
   eventStore.appendEvent({
     projectId: conversation.projectId ?? 'goose-hub-self',
-    workItemId: conversation.workItemId,
+    workItemId: CHAT_EVENT_WORK_ITEM_ID,
     kind: 'chat.tool-running',
     payload: { conversationId: conversation.id, invocationId, toolName: invocation.toolName },
   });
@@ -361,7 +363,7 @@ export async function executeInvocation(
     const completed = updateToolInvocation({ id: invocationId, status: 'completed', result });
     eventStore.appendEvent({
       projectId: conversation.projectId ?? 'goose-hub-self',
-      workItemId: conversation.workItemId,
+      workItemId: CHAT_EVENT_WORK_ITEM_ID,
       kind: 'chat.tool-completed',
       payload: {
         conversationId: conversation.id,
@@ -381,7 +383,7 @@ export async function executeInvocation(
     });
     eventStore.appendEvent({
       projectId: conversation.projectId ?? 'goose-hub-self',
-      workItemId: conversation.workItemId,
+      workItemId: CHAT_EVENT_WORK_ITEM_ID,
       kind: 'chat.tool-failed',
       payload: {
         conversationId: conversation.id,
@@ -413,14 +415,21 @@ export async function persistAndMaybeRunProposal(
     conversationId: conversation.id,
     messageId,
     toolName: proposal.toolName,
-    input: { ...proposal.input, _rationale: proposal.rationale },
+    input: {
+      ...proposal.input,
+      rationale:
+        typeof proposal.input.rationale === 'string'
+          ? proposal.input.rationale
+          : proposal.rationale,
+      _rationale: proposal.rationale,
+    },
     mutating,
     status: mutating ? 'proposed' : 'running',
   });
 
   eventStore.appendEvent({
     projectId: conversation.projectId ?? 'goose-hub-self',
-    workItemId: conversation.workItemId,
+    workItemId: CHAT_EVENT_WORK_ITEM_ID,
     kind: 'chat.tool-proposed',
     payload: {
       conversationId: conversation.id,
@@ -432,9 +441,59 @@ export async function persistAndMaybeRunProposal(
   });
 
   if (!mutating) {
-    return executeInvocation(conversation, invocation.id);
+    setTimeout(() => {
+      void executeReadOnlyInvocationInBackground(conversation, invocation.id, proposal);
+    }, 0);
   }
   return invocation;
+}
+
+async function executeReadOnlyInvocationInBackground(
+  conversation: Conversation,
+  invocationId: string,
+  proposal: { toolName: string; input: Record<string, unknown>; rationale: string },
+): Promise<void> {
+  try {
+    const completed = await executeInvocation(conversation, invocationId);
+    if (shouldPostToolFollowUp(proposal.toolName, completed.result, proposal)) {
+      logger.warn('chat tool follow-up requested but no follow-up dispatcher is registered', {
+        conversationId: conversation.id,
+        invocationId,
+        toolName: proposal.toolName,
+      });
+    }
+  } catch (err) {
+    logger.error('background chat tool execution failed', {
+      err: String(err),
+      conversationId: conversation.id,
+      invocationId,
+      toolName: proposal.toolName,
+    });
+    updateToolInvocation({
+      id: invocationId,
+      status: 'failed',
+      errorMessage: String(err),
+    });
+    eventStore.appendEvent({
+      projectId: conversation.projectId ?? 'goose-hub-self',
+      workItemId: CHAT_EVENT_WORK_ITEM_ID,
+      kind: 'chat.tool-failed',
+      payload: {
+        conversationId: conversation.id,
+        invocationId,
+        toolName: proposal.toolName,
+        error: String(err),
+      },
+    });
+  }
+}
+
+export function shouldPostToolFollowUp(
+  _toolName: string,
+  _result: unknown,
+  _proposal: { toolName: string; input: Record<string, unknown>; rationale: string },
+): boolean {
+  return false;
 }
 
 export { listToolManifests };

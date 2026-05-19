@@ -201,6 +201,35 @@ describe('mergeToolStatusFromEvents', () => {
     );
   });
 
+  it('can build a completed read-only tool card from SSE events only', () => {
+    const merged = mergeToolStatusFromEvents(
+      [],
+      [
+        event(1, 'chat.tool-proposed', {
+          conversationId: 'conv_x',
+          invocationId: 'tool_a',
+          toolName: 'recent_events',
+          mutating: false,
+          rationale: 'check status',
+        }),
+        event(2, 'chat.tool-running', { invocationId: 'tool_a' }),
+        event(3, 'chat.tool-completed', {
+          invocationId: 'tool_a',
+          result: { events: [{ kind: 'agent.run-completed' }] },
+        }),
+      ],
+    );
+
+    expect(merged[0]).toEqual(
+      expect.objectContaining({
+        id: 'tool_a',
+        toolName: 'recent_events',
+        status: 'completed',
+        result: { events: [{ kind: 'agent.run-completed' }] },
+      }),
+    );
+  });
+
   it('does not regress a terminal status back to running', () => {
     const base = [invocation('tool_a', 'completed')];
     // A late chat.tool-running for an already-completed invocation must not

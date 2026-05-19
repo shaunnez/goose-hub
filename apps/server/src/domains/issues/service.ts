@@ -1,6 +1,6 @@
 import { getArtifact } from '@goose-hub/core/agent-artifacts/repository.js';
 import { getEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
-import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { type AgentEvent, eventStore } from '@goose-hub/core/event-stream/store.js';
 import {
   SCHEDULE_UI_TO_VALUE,
   type ScheduleUIValue,
@@ -183,12 +183,11 @@ export async function getIssueEvents(
   const workItemId = `github:${repoRef}#${id}`;
 
   if (opts?.limit != null) {
-    const fetched = eventStore.replay({
+    const fetched = fetchVisibleIssueTimelineEvents({
       projectId: slug,
       workItemId,
       limit: opts.limit + 1,
       before: opts.before,
-      order: 'desc',
     });
     const hasMore = fetched.length > opts.limit;
     return {
@@ -198,7 +197,43 @@ export async function getIssueEvents(
   }
 
   const ascending = eventStore.replay({ projectId: slug, workItemId });
-  return { ok: true, data: { events: [...ascending].reverse(), hasMore: false } };
+  return {
+    ok: true,
+    data: { events: [...ascending].filter(isIssueTimelineEvent).reverse(), hasMore: false },
+  };
+}
+
+function fetchVisibleIssueTimelineEvents(input: {
+  projectId: string;
+  workItemId: string;
+  limit: number;
+  before?: number;
+}): AgentEvent[] {
+  const visible: AgentEvent[] = [];
+  let before = input.before;
+  const batchSize = Math.max(input.limit, 100);
+
+  while (visible.length < input.limit) {
+    const batch = eventStore.replay({
+      projectId: input.projectId,
+      workItemId: input.workItemId,
+      limit: batchSize,
+      before,
+      order: 'desc',
+    });
+    if (batch.length === 0) break;
+    visible.push(...batch.filter(isIssueTimelineEvent));
+    before = batch.at(-1)?.id;
+    if (before == null) break;
+  }
+
+  return visible;
+}
+
+function isIssueTimelineEvent(event: AgentEvent): boolean {
+  if (event.kind.startsWith('chat.')) return false;
+  const payload = event.payload as { skill?: unknown } | null;
+  return payload?.skill !== 'hub-chat';
 }
 
 export async function getIssueComments(

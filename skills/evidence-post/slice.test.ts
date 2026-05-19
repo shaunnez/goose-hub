@@ -206,6 +206,13 @@ describe('evidence-post prompt discipline', () => {
     expect(PROMPT).toContain('classification: "validation_failed"');
     expect(PROMPT).toContain('assertion failure means the fix did not validate');
   });
+
+  it('forbids memory and skill quick passes', () => {
+    expect(PROMPT).toContain('Do not read local assistant memory');
+    expect(PROMPT).toContain('~/.codex');
+    expect(PROMPT).toContain('~/.agents');
+    expect(PROMPT).toContain('~/.claude');
+  });
 });
 
 describe('evidence-post context schema', () => {

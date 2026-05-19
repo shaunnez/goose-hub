@@ -92,6 +92,9 @@ export function buildCodexArgv(input: {
   argv.push(
     'exec',
     '--json',
+    '--ephemeral',
+    '--ignore-user-config',
+    '--ignore-rules',
     '--skip-git-repo-check',
     '--cd',
     input.workspaceDir,

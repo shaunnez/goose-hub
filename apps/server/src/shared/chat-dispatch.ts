@@ -13,6 +13,8 @@ import { logger } from '@goose-hub/core/logger.js';
 import { sliceUrl } from './slice-url.js';
 import { getWorkItemSnapshot, issueNumberFromWorkItemId } from './work-item-snapshot.js';
 
+const CHAT_EVENT_WORK_ITEM_ID = null;
+
 interface ChatOrchestratorModule {
   runChatOrchestratorTurn: (input: {
     conversation: Conversation;
@@ -59,8 +61,8 @@ export function newChatRunId(): string {
  * persisting a user message. The orchestrator:
  *   1. Reads the conversation history from chat_messages
  *   2. Invokes the hub-chat skill
- *   3. Persists the agent reply
- *   4. Auto-runs read-only tool proposals, parks mutating ones
+ *   3. Persists and emits the agent reply
+ *   4. Persists tool proposals, then dispatches read-only tools in the background
  *
  * Errors are caught here and turned into chat.run-failed events so the UI can
  * surface them without taking the server down. The function still returns
@@ -101,19 +103,10 @@ export async function runChatTurn(
       },
     });
 
-    // Hand off proposals to the chat service for proposal persistence + dispatch.
-    // case 4: test stub injection — defer import to break the cycle with service.ts.
-    const service = await import('../domains/chat/service.js');
-    const toolsStarted = Date.now();
-    for (const proposal of result.reply.proposals) {
-      await service.persistAndMaybeRunProposal(conversation, agentMessage.id, proposal);
-    }
-    const toolExecutionMs = Math.max(0, Date.now() - toolsStarted);
-    const telemetry = attachToolDuration(result.telemetry, toolExecutionMs);
-
+    const telemetry = attachToolDuration(result.telemetry, 0);
     eventStore.appendEvent({
       projectId: conversation.projectId ?? 'goose-hub-self',
-      workItemId: conversation.workItemId,
+      workItemId: CHAT_EVENT_WORK_ITEM_ID,
       kind: 'chat.agent-message',
       payload: {
         conversationId: conversation.id,
@@ -125,6 +118,13 @@ export async function runChatTurn(
       runId,
     });
 
+    // Hand off proposals to the chat service for proposal persistence + dispatch.
+    // case 4: test stub injection — defer import to break the cycle with service.ts.
+    const service = await import('../domains/chat/service.js');
+    for (const proposal of result.reply.proposals) {
+      await service.persistAndMaybeRunProposal(conversation, agentMessage.id, proposal);
+    }
+
     return { agentMessage, invocations: listToolInvocations(conversation.id), telemetry };
   } catch (err) {
     logger.error('chat orchestrator turn failed', {
@@ -133,7 +133,7 @@ export async function runChatTurn(
     });
     eventStore.appendEvent({
       projectId: conversation.projectId ?? 'goose-hub-self',
-      workItemId: conversation.workItemId,
+      workItemId: CHAT_EVENT_WORK_ITEM_ID,
       kind: 'chat.run-failed',
       payload: { conversationId: conversation.id, error: String(err), runId },
       runId,

@@ -35,6 +35,8 @@ Context `<investigation>` may also include the root cause hypothesis, key files,
 
 Use `Read`, `Glob`, and `Grep` only for source exploration. Prefer the files, route, selectors, and setup in `<reproPacket>`. Do not do broad repo discovery unless the packet is missing a route or selector required for the spec.
 
+Do not read local assistant memory, skill, config, or session files. Never inspect `~/.codex`, `~/.agents`, `~/.claude`, sibling repos, or parent directories. If prior context is needed, use only the context provided in this run.
+
 ## Execution
 
 1. Read the issue and the repro packet.
@@ -45,6 +47,7 @@ Use `Read`, `Glob`, and `Grep` only for source exploration. Prefer the files, ro
 6. If setup is required, encode it before navigation when possible. If auth or external state cannot be encoded safely, include that in `notes`.
 7. Do not write files or modify app source code. The workflow writes `specSource` to `specPath`.
 8. Do not publish evidence, create branches, or post issue comments.
+9. Do not perform a memory or skill quick pass.
 
 If the runtime still asks you to run Playwright directly, run it at most once, then return the same structured plan plus a short `notes` summary. The workflow still owns collector parsing and final evidence payload assembly.
 

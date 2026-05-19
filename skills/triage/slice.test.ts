@@ -1,7 +1,10 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
 import { TriageOutputSchema } from './schema.js';
 import config, { TriageContextSchema } from './skill.config.js';
+
+const PROMPT = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
 
 describe('triage schema', () => {
   it('accepts valid output with all required fields', () => {
@@ -135,5 +138,15 @@ describe('triage skill config', () => {
   it('contextSchema rejects missing workItem entirely', () => {
     const invalid = TriageContextSchema.safeParse({});
     expect(invalid.success).toBe(false);
+  });
+});
+
+describe('triage prompt discipline', () => {
+  it('forbids memory and skill quick passes', () => {
+    expect(PROMPT).toContain('No memory or skill quick pass');
+    expect(PROMPT).toContain('Do not read local assistant memory');
+    expect(PROMPT).toContain('~/.codex');
+    expect(PROMPT).toContain('~/.agents');
+    expect(PROMPT).toContain('~/.claude');
   });
 });

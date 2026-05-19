@@ -12,6 +12,8 @@ These two rules are enforced before any other step. Violating them wastes budget
 
 **No shell syntax.** Never add `2>&1`, `>`, `&&`, `;`, or `|` to commands — `shell: false` passes them as literal arguments to the program, breaking the command silently. Use separate `bash` calls instead.
 
+**No memory or skill quick pass.** Do not read local assistant memory, skill, config, or session files. Never inspect `~/.codex`, `~/.agents`, `~/.claude`, sibling repos, or parent directories. If prior context is needed, use only the context provided in this run.
+
 **No command retry.** CWD is always the worktree root and cannot change between bash calls. If a command returns output you have already seen, running it again (with any description or flag variation) produces identical output. Stop immediately: emit a diagnosis decision summary (`kind: BLOCKER`), set `confidence: low`, and return. Do not retry.
 
 ## Role
@@ -93,10 +95,11 @@ generation was blocked. Do not spend more discovery budget on e2e plumbing.
 1. **Read before write.** Use the `read` tool on the target component/module before writing any test for it. No exceptions. A test written without reading the component will mock the wrong things.
 2. **Structured test output.** Append `--reporter=json` to the test command. The output is JSON — parse it as structured data. Check `numFailedTests` first: if `0`, suite is green, stop. If `> 0`, read `testResults[].assertionResults[]` where `status === "failed"` for full error detail and stack traces. One structured pass beats ten grep loops.
 3. **Orient first.** First command in the worktree: `cat package.json` (and `cat apps/web/package.json` if touching the web app) to understand available test scripts before running anything.
-4. **Two-rewrite cap.** Before any rewrite, re-read the component under test and grep for the exact state-access pattern you are testing — tests must mirror what the code actually does. Maximum 2 rewrites per file. On a 3rd failure: emit a diagnosis decision summary (exact error, what you tried, what is still unclear), set `confidence: low`, commit what you have, and return — no further rewrites.
-5. **Mock from source.** Before mocking any import, grep the component file for its import statements. Only mock what it actually imports — never mock by assumption.
-6. **No shell syntax.** Never add `2>&1`, `>`, `&&`, `;`, or `|` to commands — `shell: false` passes them as literal arguments to the program, breaking the command. Use separate `bash` calls instead.
-7. **No command retry.** CWD is always the worktree root and cannot change between bash calls. If a command returns output you have already seen, running it again (with any description or "from a different directory") produces identical output. Stop, emit a diagnosis decision summary, set `confidence: low`, and return.
+4. **No memory or skill quick pass.** Stay inside `<worktreePath>`. Do not read local assistant memory, skill, config, or session files such as `~/.codex`, `~/.agents`, or `~/.claude`.
+5. **Two-rewrite cap.** Before any rewrite, re-read the component under test and grep for the exact state-access pattern you are testing — tests must mirror what the code actually does. Maximum 2 rewrites per file. On a 3rd failure: emit a diagnosis decision summary (exact error, what you tried, what is still unclear), set `confidence: low`, commit what you have, and return — no further rewrites.
+6. **Mock from source.** Before mocking any import, grep the component file for its import statements. Only mock what it actually imports — never mock by assumption.
+7. **No shell syntax.** Never add `2>&1`, `>`, `&&`, `;`, or `|` to commands — `shell: false` passes them as literal arguments to the program, breaking the command. Use separate `bash` calls instead.
+8. **No command retry.** CWD is always the worktree root and cannot change between bash calls. If a command returns output you have already seen, running it again (with any description or "from a different directory") produces identical output. Stop, emit a diagnosis decision summary, set `confidence: low`, and return.
 
 - Emit: `[decision] READ: Loaded acceptance criteria for #<number> and N relevant test files`
 

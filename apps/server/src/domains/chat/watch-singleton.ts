@@ -58,7 +58,7 @@ function fireSubscriptionFollowUp({ watch, event }: { watch: Watch; event: Agent
 
   eventStore.appendEvent({
     projectId: conversation.projectId ?? 'goose-hub-self',
-    workItemId: conversation.workItemId,
+    workItemId: null,
     kind: 'chat.agent-message',
     payload: {
       conversationId: conversation.id,

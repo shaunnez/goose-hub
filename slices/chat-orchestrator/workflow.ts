@@ -81,6 +81,7 @@ const TOOL_RESULT_MATCH_CHAR_LIMIT = 3_000;
 const RECENT_EVENT_LIMIT = 12;
 const SUMMARY_CHAR_LIMIT = 1_400;
 const EVENT_SUMMARY_CHAR_LIMIT = 240;
+const CHAT_EVENT_WORK_ITEM_ID = null;
 
 const FIRST_TURN_GOVERNANCE_DIGEST = [
   'Goose Hub is the product; Factory is the orchestration engine inside it.',
@@ -416,7 +417,6 @@ export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<Cha
     const result = await invokeSkill({
       skillName: 'hub-chat',
       projectId: conversation.projectId ?? 'goose-hub-self',
-      workItemId: conversation.workItemId ?? undefined,
       runId,
       context,
       overrides: {
@@ -484,7 +484,7 @@ export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<Cha
     // the in-flight indicator would never go away for this conversation.
     eventStore.appendEvent({
       projectId: conversation.projectId ?? 'goose-hub-self',
-      workItemId: conversation.workItemId,
+      workItemId: CHAT_EVENT_WORK_ITEM_ID,
       kind: 'chat.run-failed',
       payload: { conversationId: conversation.id, runId, error: String(err), telemetry },
       runId,
@@ -507,7 +507,7 @@ type ThinkingCheckpoint = 'skill-invoked' | 'structured-output-received';
 function emitThinking(conversation: Conversation, runId: string, checkpoint: ThinkingCheckpoint) {
   eventStore.appendEvent({
     projectId: conversation.projectId ?? 'goose-hub-self',
-    workItemId: conversation.workItemId,
+    workItemId: CHAT_EVENT_WORK_ITEM_ID,
     kind: 'chat.agent-thinking',
     payload: { conversationId: conversation.id, runId, checkpoint },
     runId,

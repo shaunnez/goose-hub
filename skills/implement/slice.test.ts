@@ -412,4 +412,12 @@ describe('implement prompt', () => {
     );
     expect(prompt).toContain('ship the implementation plus targeted tests');
   });
+
+  it('forbids memory and skill quick passes', () => {
+    expect(prompt).toContain('No memory or skill quick pass');
+    expect(prompt).toContain('Do not read local assistant memory');
+    expect(prompt).toContain('~/.codex');
+    expect(prompt).toContain('~/.agents');
+    expect(prompt).toContain('~/.claude');
+  });
 });
