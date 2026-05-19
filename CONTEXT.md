@@ -551,11 +551,13 @@ Per-run MCP config lives at `<worktree>/.factory/mcp-config.json`, written at sp
 
 The server reads its identity from env: `FACTORY_RUN_ID`, `FACTORY_PROJECT_ID`, `FACTORY_WORK_ITEM_ID`, `FACTORY_WORKSPACE_DIR`, `FACTORY_SERVER_PORT`. The agent receives none of these. Tools never accept a `workspaceRoot` argument.
 
-Path policy denylist: absolute paths, `..`, `~`, `.codex`, `.agents`, `.claude`, `.factory`, parent dirs, sibling worktrees. Command policy: `spawn(cmd, args, { shell: false })`, capped output, per-tool timeout, typed `{ status, exitCode, stdout, stderr, durationMs, truncated }` return.
+Path policy denylist: absolute paths, `..`, `~`, `.codex`, `.agents`, `.claude`, `.factory`, parent dirs, sibling worktrees. The policy is enforced in `mcp/path-policy.ts` as a denylist-first wrapper over `canonicalizeFactoryToolPath` from `core/tool-layer/path-contract.ts`; path resolution is not duplicated. Command policy: `spawn(cmd, args, { shell: false })`, capped output, per-tool timeout, typed `{ status, exitCode, stdout, stderr, durationMs, truncated }` return.
 
-Every tool call emits `agent.tool-call`. Every blocked call emits `agent.tool-call` with `blocked: true` and a reason code. Workflow-owned mutations (commit, open PR, transition, publish evidence) are not exposed to normal bundles; the orchestrator drives them.
+Every path-bearing tool response returns the structured `RepoRelativePath` shape (`{ path, root, packageRoot?, normalizedFrom? }`) from `core/tool-layer/path-contract.ts`, not a bare string. Package-relative inputs are normalized when uniquely resolvable; ambiguous inputs return a `PathPolicyViolation` with `code: 'ambiguous_path'`.
 
-`core/tool-layer/tools/read.ts`, `write.ts`, `bash.ts`, `test.ts` are unused first-pass scaffolding and are deleted in Phase 7 of the migration. `core/tool-layer/tools/record-decision.ts` is the surviving helper and is wrapped by the new `tools/context.ts`.
+Every tool call emits `agent.tool-call`. The audit payload is normalized via `core/tool-layer/tool-call-audit.ts` (`normalizeToolCallAuditPayload`) so every path-bearing event carries `raw_path` + `canonical_path`. Every blocked call emits `agent.tool-call` with `blocked: true` and a reason code. Workflow-owned mutations (commit, open PR, transition, publish evidence) are not exposed to normal bundles; the orchestrator drives them.
+
+`core/tool-layer/tools/{read,write,bash,test}.ts` and their tests have been deleted (Phase 7 cleanup complete). `core/tool-layer/tools/record-decision.ts` is the surviving helper, wrapped by `mcp/tools/context.ts`.
 
 ## Flagged ambiguities
 

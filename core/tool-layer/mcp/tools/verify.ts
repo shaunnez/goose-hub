@@ -104,7 +104,7 @@ function handleBlocked(
  *
  * The command string is tokenised on whitespace. Projects whose test
  * invocation needs quoted args should wrap them in a `package.json` script
- * (the same convention `core/tool-layer/tools/test.ts` follows) and point
+ * (the same convention package.json scripts follow) and point
  * `testCommand` at the script.
  */
 export async function runTestsTool(
@@ -120,7 +120,7 @@ export async function runTestsTool(
   if (input.path != null) {
     let relPath: string;
     try {
-      relPath = resolveWorkspacePath(ctx.workspaceRoot, input.path).relative;
+      relPath = resolveWorkspacePath(ctx.workspaceRoot, input.path).canonical.path;
     } catch (err) {
       if (err instanceof PathPolicyViolation) handleBlocked(ctx, 'run_tests', err, { ...input });
       throw err;
@@ -160,7 +160,7 @@ export async function runLintTool(
   if (input.path != null) {
     let relPath: string;
     try {
-      relPath = resolveWorkspacePath(ctx.workspaceRoot, input.path).relative;
+      relPath = resolveWorkspacePath(ctx.workspaceRoot, input.path).canonical.path;
     } catch (err) {
       if (err instanceof PathPolicyViolation) handleBlocked(ctx, 'run_lint', err, { ...input });
       throw err;

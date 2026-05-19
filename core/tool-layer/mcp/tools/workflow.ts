@@ -103,7 +103,7 @@ export async function stageChangesTool(
   for (const path of paths) {
     try {
       const r = resolveWorkspacePath(ctx.workspaceRoot, path);
-      resolved.push(r.relative);
+      resolved.push(r.canonical.path);
     } catch (err) {
       if (err instanceof PathPolicyViolation) handleBlocked(ctx, 'stage_changes', err, { paths });
       throw err;

@@ -70,13 +70,15 @@ describe('getStatusTool', () => {
     writeFileSync(join(workspace, 'new.txt'), 'x');
     const result = await getStatusTool(ctx);
     expect(result.clean).toBe(false);
-    expect(result.entries.some((e) => e.path === 'new.txt' && e.status === 'untracked')).toBe(true);
+    expect(result.entries.some((e) => e.path.path === 'new.txt' && e.status === 'untracked')).toBe(
+      true,
+    );
   });
 
   it('surfaces a modified-but-unstaged change', async () => {
     writeFileSync(join(workspace, 'README.md'), 'two\n');
     const result = await getStatusTool(ctx);
-    const entry = result.entries.find((e) => e.path === 'README.md');
+    const entry = result.entries.find((e) => e.path.path === 'README.md');
     expect(entry?.status).toBe('modified');
     expect(entry?.staged).toBe(false);
   });
@@ -85,7 +87,7 @@ describe('getStatusTool', () => {
     writeFileSync(join(workspace, 'README.md'), 'staged\n');
     git('add README.md');
     const result = await getStatusTool(ctx);
-    const entry = result.entries.find((e) => e.path === 'README.md');
+    const entry = result.entries.find((e) => e.path.path === 'README.md');
     expect(entry?.staged).toBe(true);
   });
 });
@@ -95,7 +97,7 @@ describe('getChangedFilesTool', () => {
     writeFileSync(join(workspace, 'a.txt'), 'a');
     writeFileSync(join(workspace, 'b.txt'), 'b');
     const result = await getChangedFilesTool(ctx);
-    expect(result.files.sort()).toEqual(['a.txt', 'b.txt']);
+    expect(result.files.map((f) => f.path).sort()).toEqual(['a.txt', 'b.txt']);
   });
 });
 

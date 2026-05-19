@@ -5,6 +5,7 @@ import {
   collectPlaywrightEvidence,
 } from '../../../../scripts/collect-playwright-evidence.js';
 import { getProjectBySlug } from '../../../projects/loader.js';
+import type { RepoRelativePath } from '../../path-contract.js';
 import { emitBlockedToolCall, emitToolCall } from '../audit.js';
 import { minimalEnv, runCommand } from '../command-policy.js';
 import type { FactoryContext } from '../context.js';
@@ -117,7 +118,7 @@ export function getAppUrlTool(
 export async function writePlaywrightSpecTool(
   ctx: FactoryContext,
   input: z.infer<typeof WritePlaywrightSpecInput>,
-): Promise<{ path: string; bytesWritten: number; created: boolean }> {
+): Promise<{ path: RepoRelativePath; bytesWritten: number; created: boolean }> {
   let resolved: ReturnType<typeof resolveWorkspacePath>;
   try {
     resolved = resolveWorkspacePath(ctx.workspaceRoot, input.path);
@@ -127,13 +128,16 @@ export async function writePlaywrightSpecTool(
     throw err;
   }
 
-  assertSpecPath(resolved.relative);
+  assertSpecPath(resolved.canonical.path);
 
-  const written = await writeFileTool(ctx, { path: resolved.relative, content: input.content });
+  const written = await writeFileTool(ctx, {
+    path: resolved.canonical.path,
+    content: input.content,
+  });
 
   emitToolCall(ctx, {
     tool: 'write_playwright_spec',
-    input: { path: resolved.relative, created: written.created },
+    input: { path: resolved.canonical.path, created: written.created },
     status: 'ok',
   });
   return written;
@@ -157,7 +161,7 @@ export async function runPlaywrightSpecTool(
     throw err;
   }
 
-  assertSpecPath(resolved.relative);
+  assertSpecPath(resolved.canonical.path);
 
   const project = await getProjectBySlug(ctx.projectId);
   if (
@@ -174,7 +178,7 @@ export async function runPlaywrightSpecTool(
     .trim()
     .split(/\s+/)
     .filter((s) => s.length > 0);
-  argv.push(resolved.relative);
+  argv.push(resolved.canonical.path);
   if (input.project != null) argv.push('--project', input.project);
 
   const extraEnv: Record<string, string> = {};
@@ -193,7 +197,7 @@ export async function runPlaywrightSpecTool(
 
   emitToolCall(ctx, {
     tool: 'run_playwright_spec',
-    input: { spec: resolved.relative, project: input.project ?? null },
+    input: { spec: resolved.canonical.path, project: input.project ?? null },
     status: result.status,
     exitCode: result.exitCode,
     durationMs: result.durationMs,
@@ -212,8 +216,8 @@ export async function runPlaywrightSpecTool(
 
 export interface CollectEvidenceResult {
   evidence: PlaywrightEvidence;
-  resultsPath: string;
-  evidenceDir: string;
+  resultsPath: RepoRelativePath;
+  evidenceDir: RepoRelativePath;
 }
 
 function extractIssueNumber(workItemId: string): number | null {
@@ -247,34 +251,38 @@ export async function collectEvidenceTool(
     throw new EvidenceConfigMissingError(`No project config found for slug '${ctx.projectId}'.`);
   }
 
-  let resultsPath: string;
+  let resultsAbsolute: string;
+  let resultsCanonical: RepoRelativePath;
   try {
-    resultsPath = resolveWorkspacePath(ctx.workspaceRoot, input.resultsPath).absolute;
+    const resolved = resolveWorkspacePath(ctx.workspaceRoot, input.resultsPath);
+    resultsAbsolute = resolved.absolute;
+    resultsCanonical = resolved.canonical;
   } catch (err) {
     if (err instanceof PathPolicyViolation)
       handleBlocked(ctx, 'collect_evidence', err, { ...input });
     throw err;
   }
-  if (!existsSync(resultsPath)) {
+  if (!existsSync(resultsAbsolute)) {
     throw new EvidenceConfigMissingError(`Playwright results not found at ${input.resultsPath}.`);
   }
 
-  let evidenceDirRelative = input.evidenceDir ?? `evidence/${issue}`;
+  let evidenceDirCanonical: RepoRelativePath;
   let evidenceDirAbsolute: string;
+  const evidenceDirRaw = input.evidenceDir ?? `evidence/${issue}`;
   try {
-    const resolved = resolveWorkspacePath(ctx.workspaceRoot, evidenceDirRelative);
-    evidenceDirRelative = resolved.relative;
+    const resolved = resolveWorkspacePath(ctx.workspaceRoot, evidenceDirRaw);
+    evidenceDirCanonical = resolved.canonical;
     evidenceDirAbsolute = resolved.absolute;
   } catch (err) {
     if (err instanceof PathPolicyViolation)
-      handleBlocked(ctx, 'collect_evidence', err, { ...input, evidenceDir: evidenceDirRelative });
+      handleBlocked(ctx, 'collect_evidence', err, { ...input, evidenceDir: evidenceDirRaw });
     throw err;
   }
 
   const evidence = collectPlaywrightEvidence({
     issue,
     slug: project.slug,
-    resultsPath,
+    resultsPath: resultsAbsolute,
     evidenceDir: evidenceDirAbsolute,
     phase: input.phase ?? 'before',
     runFfmpeg: input.skipFfmpeg !== true,
@@ -285,5 +293,9 @@ export async function collectEvidenceTool(
     input: { resultsPath: input.resultsPath, phase: input.phase ?? 'before' },
     status: 'ok',
   });
-  return { evidence, resultsPath: input.resultsPath, evidenceDir: evidenceDirRelative };
+  return {
+    evidence,
+    resultsPath: resultsCanonical,
+    evidenceDir: evidenceDirCanonical,
+  };
 }

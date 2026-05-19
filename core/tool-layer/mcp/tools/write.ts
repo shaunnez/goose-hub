@@ -4,6 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { z } from 'zod';
+import type { RepoRelativePath } from '../../path-contract.js';
+import { canonicalizeFactoryToolPath } from '../../path-contract.js';
 import { emitBlockedToolCall, emitToolCall } from '../audit.js';
 import { minimalEnv, runCommand } from '../command-policy.js';
 import type { FactoryContext } from '../context.js';
@@ -67,8 +69,13 @@ function handleBlocked(
   throw err;
 }
 
+function rawPathToCanonical(rawPath: string, workspaceRoot: string): RepoRelativePath {
+  const result = canonicalizeFactoryToolPath({ rawPath, worktreePath: workspaceRoot });
+  return result.ok ? result.path : { path: rawPath, root: 'worktree' };
+}
+
 export interface WriteFileResult {
-  path: string;
+  path: RepoRelativePath;
   bytesWritten: number;
   created: boolean;
 }
@@ -103,14 +110,14 @@ export async function writeFileTool(
 
   emitToolCall(ctx, {
     tool: 'write_file',
-    input: { path: resolved.relative, created },
+    input: { path: input.path, created },
     status: 'ok',
   });
-  return { path: resolved.relative, bytesWritten: Buffer.byteLength(input.content), created };
+  return { path: resolved.canonical, bytesWritten: Buffer.byteLength(input.content), created };
 }
 
 export interface EditFileResult {
-  path: string;
+  path: RepoRelativePath;
   replacements: number;
 }
 
@@ -144,13 +151,13 @@ export async function editFileTool(
   } else {
     const firstIdx = original.indexOf(input.oldString);
     if (firstIdx === -1) {
-      throw new EditMatchError(0, `edit_file: oldString not found in ${resolved.relative}`);
+      throw new EditMatchError(0, `edit_file: oldString not found in ${resolved.canonical.path}`);
     }
     const secondIdx = original.indexOf(input.oldString, firstIdx + input.oldString.length);
     if (secondIdx !== -1) {
       throw new EditMatchError(
         2,
-        `edit_file: oldString matches more than once in ${resolved.relative}; pass replaceAll:true or pick a unique fragment.`,
+        `edit_file: oldString matches more than once in ${resolved.canonical.path}; pass replaceAll:true or pick a unique fragment.`,
       );
     }
     replacements = 1;
@@ -161,22 +168,22 @@ export async function editFileTool(
   }
 
   if (replacements === 0) {
-    throw new EditMatchError(0, `edit_file: oldString not found in ${resolved.relative}`);
+    throw new EditMatchError(0, `edit_file: oldString not found in ${resolved.canonical.path}`);
   }
 
   await writeFile(resolved.absolute, next, 'utf8');
 
   emitToolCall(ctx, {
     tool: 'edit_file',
-    input: { path: resolved.relative, replaceAll, replacements },
+    input: { path: input.path, replaceAll, replacements },
     status: 'ok',
   });
-  return { path: resolved.relative, replacements };
+  return { path: resolved.canonical, replacements };
 }
 
 export interface ApplyPatchResult {
   applied: boolean;
-  filesChanged: string[];
+  filesChanged: RepoRelativePath[];
 }
 
 /**
@@ -263,7 +270,10 @@ export async function applyPatchTool(
       timeoutMs: APPLY_PATCH_TIMEOUT_MS,
       env: minimalEnv(),
     });
-    const filesChanged = parseNumstat(statResult.stdout);
+    const rawFiles = parseNumstat(statResult.stdout);
+    const filesChanged: RepoRelativePath[] = rawFiles.map((rawPath) =>
+      rawPathToCanonical(rawPath, ctx.workspaceRoot),
+    );
 
     emitToolCall(ctx, {
       tool: 'apply_patch',
@@ -290,7 +300,7 @@ function parseNumstat(stdout: string): string[] {
 }
 
 export interface CreateDirectoryResult {
-  path: string;
+  path: RepoRelativePath;
   created: boolean;
 }
 
@@ -319,15 +329,15 @@ export async function createDirectoryTool(
 
   emitToolCall(ctx, {
     tool: 'create_directory',
-    input: { path: resolved.relative },
+    input: { path: input.path },
     status: 'ok',
   });
-  return { path: resolved.relative, created: !existed };
+  return { path: resolved.canonical, created: !existed };
 }
 
 export interface MoveFileResult {
-  from: string;
-  to: string;
+  from: RepoRelativePath;
+  to: RepoRelativePath;
 }
 
 export async function moveFileTool(
@@ -349,14 +359,14 @@ export async function moveFileTool(
 
   emitToolCall(ctx, {
     tool: 'move_file',
-    input: { from: fromResolved.relative, to: toResolved.relative },
+    input: { from: input.from, to: input.to },
     status: 'ok',
   });
-  return { from: fromResolved.relative, to: toResolved.relative };
+  return { from: fromResolved.canonical, to: toResolved.canonical };
 }
 
 export interface DeleteFileResult {
-  path: string;
+  path: RepoRelativePath;
   deleted: boolean;
 }
 
@@ -383,7 +393,7 @@ export async function deleteFileTool(
     const s = await stat(resolved.absolute);
     if (s.isDirectory()) {
       throw new DeleteKindError(
-        `delete_file refuses directories: ${resolved.relative}. Move it to a workflow-owned trash path instead.`,
+        `delete_file refuses directories: ${resolved.canonical.path}. Move it to a workflow-owned trash path instead.`,
       );
     }
     existed = true;
@@ -396,8 +406,8 @@ export async function deleteFileTool(
 
   emitToolCall(ctx, {
     tool: 'delete_file',
-    input: { path: resolved.relative },
+    input: { path: input.path },
     status: 'ok',
   });
-  return { path: resolved.relative, deleted: existed };
+  return { path: resolved.canonical, deleted: existed };
 }

@@ -167,7 +167,7 @@ export async function runIsolatedTestTool(
 ): Promise<VerifyResult> {
   let relPath: string;
   try {
-    relPath = resolveWorkspacePath(ctx.workspaceRoot, input.path).relative;
+    relPath = resolveWorkspacePath(ctx.workspaceRoot, input.path).canonical.path;
   } catch (err) {
     if (err instanceof PathPolicyViolation)
       handleBlocked(ctx, 'run_isolated_test', err, { ...input });
@@ -178,7 +178,7 @@ export async function runIsolatedTestTool(
     const result = await runTestsTool(ctx, { path: input.path });
     emitToolCall(ctx, {
       tool: 'run_isolated_test',
-      input: { path: input.path },
+      input: { path: relPath },
       status: result.status,
       exitCode: result.exitCode,
       durationMs: result.durationMs,
