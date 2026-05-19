@@ -81,6 +81,10 @@ export const ROLE_DEFAULTS: Record<Role, RoleDefaults> = {
     modelTier: 'opus',
     budgets: { maxTurns: 30, maxBudgetUsd: 3.0, timeoutMs: 30_000 },
   },
+  'intervention-proposer': {
+    modelTier: 'sonnet',
+    budgets: { maxTurns: 12, maxBudgetUsd: 0.5, timeoutMs: 120_000 },
+  },
   // Hub Chat assistant — broad-read, interactive, non-holdout. Sonnet tier
   // is enough for the conversational use case; opus is too expensive for
   // multi-turn chat. Budget caps mirror the hub-chat skill entry in

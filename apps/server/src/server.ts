@@ -8,6 +8,7 @@ import { costsRouter } from './domains/costs/router.js';
 import { decisionsRouter } from './domains/decisions/router.js';
 import { eventsRouter } from './domains/events/router.js';
 import { inboxRouter } from './domains/inbox/router.js';
+import { interventionsRouter, projectInterventionsRouter } from './domains/interventions/router.js';
 import { issuesRouter } from './domains/issues/router.js';
 import { milestonesRouter } from './domains/milestones/router.js';
 import { playbooksRouter } from './domains/playbooks/router.js';
@@ -34,12 +35,14 @@ app.use('*', async (c, next) => {
 app.route('/', projectsRouter); // GET /health, GET /projects
 app.route('/projects', milestonesRouter); // GET/POST /projects/:slug/milestones/**, /active-milestone
 app.route('/projects', issuesRouter); // GET/POST /projects/:slug/issues/**
+app.route('/projects', projectInterventionsRouter); // GET /projects/:slug/interventions
 app.route('/projects', workflowsRouter); // POST /projects/:slug/tick
 app.route('/projects', costsRouter); // GET /projects/:slug/costs/summary, /projects/:slug/issues/:id/costs
 app.route('/projects', playbooksRouter); // GET/POST /projects/:slug/playbooks (M11.12)
 app.route('/projects', bootstrapRouter); // POST /projects/bootstrap/{preview,run} (M12.07)
 app.route('/projects', projectSettingsRouter); // GET/PATCH/DELETE /projects/:slug/settings/**
 app.route('/inbox', inboxRouter); // GET/POST /inbox/**
+app.route('/interventions', interventionsRouter); // GET/POST /interventions/**
 app.route('/roster', rosterRouter); // GET /roster/**
 app.route('/events', eventsRouter); // GET /events
 app.route('/webhooks', webhooksRouter); // POST /webhooks/github

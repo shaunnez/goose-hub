@@ -37,6 +37,7 @@ export type Role =
   | 'retrospector'
   | 'researcher'
   | 'auditor'
+  | 'intervention-proposer'
   | 'assistant';
 
 export type ModelProvider = 'claude' | 'codex';

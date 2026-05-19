@@ -225,6 +225,15 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     timeoutMs: 480_000,
     modelTier: 'opus',
   },
+  // M21 — read-only operator intervention proposer. It explains why an item is
+  // blocked and returns registry-validated action options; appliers perform all
+  // side effects server-side.
+  'intervention-proposer': {
+    maxTurns: 20,
+    maxBudgetUsd: 1.0,
+    timeoutMs: 180_000,
+    modelTier: 'sonnet',
+  },
   // Test / eval harness skill — not used in production workflows.
   'echo-test': { maxTurns: 5, maxBudgetUsd: 0.1, timeoutMs: 30_000, modelTier: 'sonnet' },
   // M20 — Hub Chat. One round per call; cheap and snappy. Sonnet is the

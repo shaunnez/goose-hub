@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   mockListIssues,
   mockGetIssue,
+  mockGetIssueLegalTargets,
   mockGetIssueEvents,
   mockGetIssueArtifact,
   mockGetIssueComments,
@@ -29,6 +30,7 @@ const {
 } = vi.hoisted(() => ({
   mockListIssues: vi.fn(),
   mockGetIssue: vi.fn(),
+  mockGetIssueLegalTargets: vi.fn(),
   mockGetIssueEvents: vi.fn(),
   mockGetIssueArtifact: vi.fn(),
   mockGetIssueComments: vi.fn(),
@@ -54,6 +56,7 @@ const {
 vi.mock('./service.js', () => ({
   listIssues: mockListIssues,
   getIssue: mockGetIssue,
+  getIssueLegalTargets: mockGetIssueLegalTargets,
   getIssueEvents: mockGetIssueEvents,
   getIssueArtifact: mockGetIssueArtifact,
   getIssueComments: mockGetIssueComments,

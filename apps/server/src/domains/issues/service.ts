@@ -1,6 +1,9 @@
 import { getArtifact } from '@goose-hub/core/agent-artifacts/repository.js';
 import { getEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
 import { type AgentEvent, eventStore } from '@goose-hub/core/event-stream/store.js';
+import { STATES } from '@goose-hub/core/state-machine/states.js';
+import type { StateName } from '@goose-hub/core/state-machine/states.js';
+import { legalTargets } from '@goose-hub/core/state-machine/transitions.js';
 import {
   SCHEDULE_UI_TO_VALUE,
   type ScheduleUIValue,
@@ -82,6 +85,20 @@ export async function getIssue(slug: string, id: string): Promise<Result<{ item:
     prdParent: byChild.get(externalId),
   };
   return { ok: true, data: { item: enriched } };
+}
+
+export async function getIssueLegalTargets(
+  slug: string,
+  id: string,
+): Promise<Result<{ from: StateName; legalTargets: readonly StateName[] }>> {
+  const source = await getSourceForSlug(slug);
+  if (source == null) return { ok: false, error: 'project not found', status: 404 };
+  const item = await source.getItem(id);
+  const state = item.state;
+  if (!(STATES as readonly string[]).includes(state)) {
+    return { ok: false, error: `invalid issue state: ${state}`, status: 500 };
+  }
+  return { ok: true, data: { from: state, legalTargets: legalTargets(state) } };
 }
 
 export async function getIssueSpec(
