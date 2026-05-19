@@ -198,6 +198,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         <Bot size={14} className="text-accent" />
         <h2 className="text-[13px] font-semibold tracking-tight">Hub Chat</h2>
         <span
+          data-testid="chat-scope-chip"
           className="text-[10.5px] uppercase tracking-wider text-fg-2"
           title="Current conversation scope (derived from page)"
         >

@@ -77,3 +77,33 @@ jobs:
           MOCK_AGENTS: 'true'
           MOCK_SOURCE: 'true'
           MOCK_OPEN_PR: 'true'
+
+  chat-e2e:
+    name: Chat E2E (mock)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @goose-hub/web exec playwright install chromium --with-deps
+
+      - name: Run chat E2E (MOCK_AGENTS + MOCK_SOURCE)
+        run: pnpm --filter @goose-hub/web test:e2e:chat
+        env:
+          MOCK_AGENTS: 'true'
+          MOCK_SOURCE: 'true'

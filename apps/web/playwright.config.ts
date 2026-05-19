@@ -9,7 +9,13 @@ const API_PORT = Number(process.env.API_PORT ?? 3001);
 
 export default defineConfig({
   testDir: './e2e',
-  testIgnore: ['**/pipeline/**', '**/issue-*.spec.ts', '**/repro-*.spec.ts'],
+  testIgnore: [
+    '**/pipeline/**',
+    '**/issue-*.spec.ts',
+    '**/repro-*.spec.ts',
+    // The chat spec is mock-only; runs through its own playwright-chat.config.ts.
+    '**/chat.spec.ts',
+  ],
   timeout: 30_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,

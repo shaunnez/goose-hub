@@ -7,6 +7,7 @@ dist
 .worktrees/
 goose-hub.db
 .e2e-pipeline.db
+.e2e-chat.db
 .factory/
 claude-design/
 coverage/
@@ -14,5 +15,7 @@ coverage/
 AGENTS.md
 .e2e-pipeline.db-shm
 .e2e-pipeline.db-wal
+.e2e-chat.db-shm
+.e2e-chat.db-wal
 .worktrees
 .playwright-mcp

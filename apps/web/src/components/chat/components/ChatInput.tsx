@@ -39,6 +39,7 @@ export function ChatInput({ disabled, onSubmit }: ChatInputProps) {
           }
           disabled={disabled}
           rows={2}
+          data-testid="chat-input"
           className={cn(
             'flex-1 resize-none bg-bg text-fg text-[12.5px] rounded-md border border-line px-3 py-2',
             'focus:outline-none focus:ring-1 focus:ring-accent',
@@ -49,6 +50,7 @@ export function ChatInput({ disabled, onSubmit }: ChatInputProps) {
           type="button"
           onClick={send}
           disabled={disabled || draft.trim().length === 0}
+          data-testid="chat-send"
           className={cn('p-2 rounded-md bg-accent text-bg hover:bg-accent/90 disabled:opacity-40')}
           aria-label="Send"
         >
