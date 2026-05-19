@@ -29,7 +29,13 @@ export function mergeMessagesFromEvents(
 
   for (const ev of events) {
     if (ev.kind !== 'chat.user-message' && ev.kind !== 'chat.agent-message') continue;
-    const payload = ev.payload as { messageId?: unknown; content?: unknown; runId?: unknown };
+    const payload = ev.payload as {
+      conversationId?: unknown;
+      messageId?: unknown;
+      content?: unknown;
+      runId?: unknown;
+    };
+    if (payload.conversationId !== conversationId) continue;
     if (typeof payload.messageId !== 'number' || typeof payload.content !== 'string') continue;
     if (byId.has(payload.messageId)) continue;
 

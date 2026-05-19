@@ -279,13 +279,23 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
   //   - live `running` → `completed`/`failed` status badge updates on tool
   //     cards we already know about
   const events = useChatEvents(conversation?.id ?? null);
-  const isThinking = useMemo(() => deriveThinkingFromEvents(events), [events]);
+  const conversationEvents = useMemo(() => {
+    if (conversation == null) return [];
+    return events.filter((event) => {
+      const conversationId = (event.payload as { conversationId?: unknown }).conversationId;
+      return conversationId === conversation.id;
+    });
+  }, [conversation, events]);
+  const isThinking = useMemo(
+    () => deriveThinkingFromEvents(conversationEvents),
+    [conversationEvents],
+  );
   useEffect(() => {
     if (conversation == null) return;
-    setMessages((prev) => mergeMessagesFromEvents(prev, events, conversation.id));
-    setInvocations((prev) => mergeToolStatusFromEvents(prev, events));
+    setMessages((prev) => mergeMessagesFromEvents(prev, conversationEvents, conversation.id));
+    setInvocations((prev) => mergeToolStatusFromEvents(prev, conversationEvents));
 
-    const latestTerminal = [...events]
+    const latestTerminal = [...conversationEvents]
       .reverse()
       .find((event) => event.kind === 'chat.agent-message' || event.kind === 'chat.run-failed');
     if (latestTerminal != null) {
@@ -302,10 +312,10 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         setError(typeof error === 'string' ? `Chat run failed: ${error}` : 'Chat run failed.');
       }
     }
-  }, [conversation, events, setConversationSending]);
+  }, [conversation, conversationEvents, setConversationSending]);
   const liveInvocations = useMemo(
-    () => mergeToolStatusFromEvents(invocations, events),
-    [invocations, events],
+    () => mergeToolStatusFromEvents(invocations, conversationEvents),
+    [invocations, conversationEvents],
   );
   const activeConversationSending =
     conversation != null && sendingConversationIds.has(conversation.id);

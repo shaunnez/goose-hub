@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
-import { ChatDock } from '../chat/components/ChatDock';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 
@@ -18,7 +17,6 @@ export function AppShell({ children, breadcrumb }: AppShellProps) {
         <TopBar breadcrumb={breadcrumb} />
         <main className="flex-1 min-h-0 overflow-hidden">{children}</main>
       </div>
-      <ChatDock />
     </div>
   );
 }

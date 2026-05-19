@@ -89,7 +89,14 @@ describe('mergeMessagesFromEvents', () => {
   it('appends agent messages from the event stream', () => {
     const merged = mergeMessagesFromEvents(
       [message(1, 'user', 'hello')],
-      [event(2, 'chat.agent-message', { messageId: 2, content: 'hi', runId: 'chat_run' })],
+      [
+        event(2, 'chat.agent-message', {
+          conversationId: 'conv_x',
+          messageId: 2,
+          content: 'hi',
+          runId: 'chat_run',
+        }),
+      ],
       'conv_x',
     );
     expect(merged.map((m) => m.content)).toEqual(['hello', 'hi']);
@@ -99,11 +106,35 @@ describe('mergeMessagesFromEvents', () => {
   it('replaces a matching optimistic user message', () => {
     const merged = mergeMessagesFromEvents(
       [message(-1, 'user', 'hello')],
-      [event(1, 'chat.user-message', { messageId: 1, content: 'hello', runId: 'chat_run' })],
+      [
+        event(1, 'chat.user-message', {
+          conversationId: 'conv_x',
+          messageId: 1,
+          content: 'hello',
+          runId: 'chat_run',
+        }),
+      ],
       'conv_x',
     );
     expect(merged).toHaveLength(1);
     expect(merged[0].id).toBe(1);
+  });
+
+  it('ignores stale message events from the previously selected conversation', () => {
+    const merged = mergeMessagesFromEvents(
+      [],
+      [
+        event(1, 'chat.user-message', {
+          conversationId: 'conv_old',
+          messageId: 1,
+          content: 'old thread message',
+          runId: 'chat_run_old',
+        }),
+      ],
+      'conv_new',
+    );
+
+    expect(merged).toEqual([]);
   });
 });
 

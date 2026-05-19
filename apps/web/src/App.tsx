@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { AllProjectsBoard } from './components/board/components/AllProjectsBoard';
 import { Board } from './components/board/components/Board';
+import { ChatDock } from './components/chat/components/ChatDock';
 import { AppShell } from './components/chrome/AppShell';
 import { CostsPage } from './components/costs/CostsPage';
 import { DetailPage } from './components/detail/components/DetailPage';
@@ -180,6 +181,7 @@ export function App() {
             }
           />
         </Routes>
+        <ChatDock />
       </BrowserRouter>
       {/* <ReactQueryDevtools initialIsOpen={false} /> */}
     </QueryClientProvider>
