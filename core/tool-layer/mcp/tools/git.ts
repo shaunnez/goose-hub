@@ -1,6 +1,5 @@
 import type { z } from 'zod';
 import type { RepoRelativePath } from '../../path-contract.js';
-import { canonicalizeFactoryToolPath } from '../../path-contract.js';
 import { emitBlockedToolCall, emitToolCall } from '../audit.js';
 import { type CommandResult, minimalEnv, runCommand } from '../command-policy.js';
 import type { FactoryContext } from '../context.js';
@@ -122,9 +121,9 @@ function mapPorcelainCode(code: string): GitChangeStatus {
   }
 }
 
-function gitPathToCanonical(rawPath: string, workspaceRoot: string): RepoRelativePath {
-  const result = canonicalizeFactoryToolPath({ rawPath, worktreePath: workspaceRoot });
-  return result.ok ? result.path : { path: rawPath, root: 'worktree' };
+// Git porcelain output is already repo-relative; wrap without package-root remapping.
+function gitPathToCanonical(rawPath: string, _workspaceRoot: string): RepoRelativePath {
+  return { path: rawPath, root: 'worktree' };
 }
 
 /**

@@ -110,7 +110,7 @@ export async function writeFileTool(
 
   emitToolCall(ctx, {
     tool: 'write_file',
-    input: { path: resolved.canonical.path, created },
+    input: { path: input.path, created },
     status: 'ok',
   });
   return { path: resolved.canonical, bytesWritten: Buffer.byteLength(input.content), created };
@@ -175,7 +175,7 @@ export async function editFileTool(
 
   emitToolCall(ctx, {
     tool: 'edit_file',
-    input: { path: resolved.canonical.path, replaceAll, replacements },
+    input: { path: input.path, replaceAll, replacements },
     status: 'ok',
   });
   return { path: resolved.canonical, replacements };
@@ -329,7 +329,7 @@ export async function createDirectoryTool(
 
   emitToolCall(ctx, {
     tool: 'create_directory',
-    input: { path: resolved.canonical.path },
+    input: { path: input.path },
     status: 'ok',
   });
   return { path: resolved.canonical, created: !existed };
@@ -359,7 +359,7 @@ export async function moveFileTool(
 
   emitToolCall(ctx, {
     tool: 'move_file',
-    input: { from: fromResolved.canonical.path, to: toResolved.canonical.path },
+    input: { from: input.from, to: input.to },
     status: 'ok',
   });
   return { from: fromResolved.canonical, to: toResolved.canonical };
@@ -406,7 +406,7 @@ export async function deleteFileTool(
 
   emitToolCall(ctx, {
     tool: 'delete_file',
-    input: { path: resolved.canonical.path },
+    input: { path: input.path },
     status: 'ok',
   });
   return { path: resolved.canonical, deleted: existed };

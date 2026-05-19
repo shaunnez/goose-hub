@@ -101,6 +101,19 @@ export function resolveWorkspacePath(workspaceRoot: string, requested: string): 
     throw new PathPolicyViolation('workspace_escape', requested, result.error.message);
   }
 
+  // Re-check denylist on the canonical path so decorators (quotes, `./`) that
+  // passed the raw-segment check above cannot smuggle a denied segment through.
+  const canonicalSegments = result.path.path.split('/').filter((s) => s.length > 0);
+  for (const denied of DENIED_SEGMENTS) {
+    if (canonicalSegments.includes(denied.segment)) {
+      throw new PathPolicyViolation(
+        denied.reason,
+        requested,
+        `Path references ${denied.segment}: ${requested}`,
+      );
+    }
+  }
+
   const absolute = resolve(workspaceRoot, result.path.path);
   return { absolute, canonical: result.path };
 }

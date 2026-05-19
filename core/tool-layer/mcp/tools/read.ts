@@ -153,7 +153,7 @@ export async function readFileTool(
 
   emitToolCall(ctx, {
     tool: 'read_file',
-    input: { path: resolved.canonical.path },
+    input: { path: input.path },
     status: 'ok',
     truncated,
   });
@@ -247,7 +247,7 @@ export async function listDirTool(
 
   emitToolCall(ctx, {
     tool: 'list_dir',
-    input: { path: resolved.canonical.path, depth },
+    input: { path: input.path, depth },
     status: 'ok',
     truncated,
   });
@@ -299,7 +299,7 @@ export async function listFilesTool(
 
   emitToolCall(ctx, {
     tool: 'list_files',
-    input: { path: searchPath, glob: input.glob ?? null },
+    input: { path: input.path ?? null, glob: input.glob ?? null },
     status: result.status,
     durationMs: result.durationMs,
     truncated,
@@ -375,7 +375,7 @@ export async function searchTextTool(
 
   emitToolCall(ctx, {
     tool: 'search_text',
-    input: { query: input.query, path: searchPath, glob: input.glob ?? null },
+    input: { query: input.query, path: input.path ?? null, glob: input.glob ?? null },
     status: result.status,
     durationMs: result.durationMs,
     truncated,
@@ -410,7 +410,7 @@ export async function fileExistsTool(
 
   emitToolCall(ctx, {
     tool: 'file_exists',
-    input: { path: resolved.canonical.path },
+    input: { path: input.path },
     status: 'ok',
   });
   return { path: resolved.canonical, exists };
@@ -457,7 +457,7 @@ export async function fileInfoTool(
 
   emitToolCall(ctx, {
     tool: 'file_info',
-    input: { path: resolved.canonical.path },
+    input: { path: input.path },
     status: 'ok',
   });
   return result;
