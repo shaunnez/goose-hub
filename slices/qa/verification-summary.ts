@@ -324,9 +324,18 @@ function summarizeEvidence(events: AgentEvent[]): VerificationSummary['evidence'
 
   const payload = evidence.payload as Record<string, unknown>;
   if (evidence.kind === 'evidence.posted') {
-    return typeof payload.commentUrl === 'string'
-      ? { status: 'posted', url: payload.commentUrl }
-      : { status: 'posted' };
+    const screenshots = Array.isArray(payload.screenshots)
+      ? payload.screenshots.filter((path): path is string => typeof path === 'string')
+      : [];
+    return {
+      status: 'posted',
+      ...(typeof payload.commentUrl === 'string' ? { url: payload.commentUrl } : {}),
+      ...(screenshots.length > 0 ? { screenshots } : {}),
+      ...(typeof payload.gifPath === 'string' || payload.gifPath === null
+        ? { gifPath: payload.gifPath }
+        : {}),
+      ...(typeof payload.commitSha === 'string' ? { commitSha: payload.commitSha } : {}),
+    };
   }
   if (evidence.kind === 'evidence.post-failed') {
     return {

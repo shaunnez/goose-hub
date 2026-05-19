@@ -31,10 +31,12 @@ export interface BlockedToolCallAudit extends ToolCallAudit {
  * tools, consistent with the rest of the system.
  */
 export function emitToolCall(ctx: FactoryContext, audit: ToolCallAudit): void {
+  const { input, ...rest } = audit;
   const raw: ToolCallAuditPayload = {
-    ...audit,
+    ...rest,
     blocked: false,
-    tool_input: audit.input,
+    tool_name: audit.tool,
+    tool_input: input,
     workspace_dir: ctx.workspaceRoot,
   };
   const normalized = normalizeToolCallAuditPayload(raw);
@@ -53,9 +55,11 @@ export function emitToolCall(ctx: FactoryContext, audit: ToolCallAudit): void {
  * can aggregate by failure class without parsing free text.
  */
 export function emitBlockedToolCall(ctx: FactoryContext, audit: BlockedToolCallAudit): void {
+  const { input, ...rest } = audit;
   const raw: ToolCallAuditPayload = {
-    ...audit,
-    tool_input: audit.input,
+    ...rest,
+    tool_name: audit.tool,
+    tool_input: input,
     workspace_dir: ctx.workspaceRoot,
   };
   const normalized = normalizeToolResultAuditPayload(raw);

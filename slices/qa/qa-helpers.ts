@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
+import { canonicalPathStringFromAuditPayload } from '@goose-hub/core/tool-layer/tool-call-audit.js';
 
 export const QA_PR_DIFF_CHAR_LIMIT = 200_000;
 
@@ -177,7 +178,11 @@ export function findPrOpenedHints(workItemId: string): PrOpenedHints {
  */
 export function findDevTestsRun(
   workItemId: string,
+  devRunId?: string,
 ): { command: string; paths: string[] } | undefined {
+  const observed = devRunId == null ? undefined : findObservedDevTestsRun(devRunId);
+  if (observed != null) return observed;
+
   const events = eventStore.replay({ workItemId });
   const implementComplete = events
     .slice()
@@ -196,4 +201,33 @@ export function findDevTestsRun(
     return undefined;
   }
   return tr as { command: string; paths: string[] };
+}
+
+function findObservedDevTestsRun(runId: string): { command: string; paths: string[] } | undefined {
+  const events = eventStore.replay({ runId, kind: 'agent.tool-call' });
+  const testEvents = events.filter((event) => {
+    const payload = event.payload as Record<string, unknown> | null;
+    if (payload == null) return false;
+    const toolName = payload.tool_name ?? payload.tool;
+    return toolName === 'run_tests';
+  });
+  const latest = testEvents.at(-1);
+  if (latest == null) return undefined;
+
+  const payload = latest.payload as Record<string, unknown>;
+  const toolInput = payload.tool_input;
+  const command =
+    toolInput != null &&
+    typeof toolInput === 'object' &&
+    !Array.isArray(toolInput) &&
+    typeof (toolInput as { command?: unknown }).command === 'string'
+      ? (toolInput as { command: string }).command
+      : undefined;
+  const paths = testEvents.flatMap((event) => {
+    const path = canonicalPathStringFromAuditPayload(event.payload);
+    return path == null ? [] : [path];
+  });
+  const uniquePaths = [...new Set(paths)];
+  if (command == null || uniquePaths.length === 0) return undefined;
+  return { command, paths: uniquePaths };
 }

@@ -402,7 +402,12 @@ describe('verification summary harness', () => {
             projectId: 'test-project',
             workItemId: 'github:owner/repo#42',
             kind: 'evidence.posted',
-            payload: { commentUrl: 'https://github.com/owner/repo/issues/42#issuecomment-1' },
+            payload: {
+              commentUrl: 'https://github.com/owner/repo/issues/42#issuecomment-1',
+              screenshots: ['evidence/issue-42/step-1.png'],
+              gifPath: null,
+              commitSha: 'abc1234',
+            },
             createdAt: '',
           },
         ],
@@ -431,6 +436,11 @@ describe('verification summary harness', () => {
         status: 'passed',
       });
       expect(result.verificationSummary.evidence.status).toBe('posted');
+      expect(result.verificationSummary.evidence).toMatchObject({
+        screenshots: ['evidence/issue-42/step-1.png'],
+        gifPath: null,
+        commitSha: 'abc1234',
+      });
       expect(result.verificationSummary.devTestsRun?.paths).toEqual(['src/foo.test.ts']);
       expect(runCommand).toHaveBeenNthCalledWith(3, dir, 'pnpm test:e2e:pipeline', undefined);
     } finally {
@@ -1453,6 +1463,69 @@ describe('runQaWorkflow', () => {
   });
 
   describe('devTestsRun propagation (#467)', () => {
+    it('prefers observed factory-tools test audit paths over implement-complete payload', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockImplementation((filter = {}) => {
+        if ((filter as { runId?: string; kind?: string }).runId === 'dev-run-1') {
+          return [
+            {
+              id: 3,
+              kind: 'agent.tool-call',
+              payload: {
+                tool_name: 'run_tests',
+                tool_input: {
+                  command: 'pnpm test --reporter=json apps/web/src/foo.test.ts',
+                  path: 'src/foo.test.ts',
+                },
+                canonical_path: {
+                  path: 'apps/web/src/foo.test.ts',
+                  root: 'worktree',
+                  packageRoot: 'apps/web',
+                  normalizedFrom: 'src/foo.test.ts',
+                },
+              },
+              runId: 'dev-run-1',
+              createdAt: '',
+            },
+          ];
+        }
+        return [
+          {
+            id: 1,
+            kind: 'pr.opened',
+            payload: { worktreePath: '/wt/abc', devRunId: 'dev-run-1' },
+            createdAt: '',
+          },
+          {
+            id: 2,
+            kind: 'agent.implement-complete',
+            payload: {
+              testsRun: {
+                command: 'pnpm test ',
+                paths: ['src/foo.test.ts'],
+              },
+            },
+            createdAt: '',
+          },
+        ];
+      });
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const spec = mockRun.mock.calls[0][0] as {
+        context: Record<string, unknown>;
+        contextAllowlist: string[];
+      };
+      expect(spec.context.devTestsRun).toEqual({
+        command: 'pnpm test --reporter=json apps/web/src/foo.test.ts',
+        paths: ['apps/web/src/foo.test.ts'],
+      });
+      expect(spec.contextAllowlist).toContain('devTestsRun');
+    });
+
     it('reads testsRun from agent.implement-complete and passes it as devTestsRun in context', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();

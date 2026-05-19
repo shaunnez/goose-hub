@@ -21,10 +21,10 @@ Do not start the plans below until workflow consumers can rely on canonical path
 
 ## Ordered Plans
 
-1. [Factory-tools canonical path integration](./factory-tools-canonical-paths.md)
-2. [Workflow-owned operational facts](./workflow-owned-operational-facts.md)
-3. [Workflow contract repair gates](./workflow-contract-repair-gates.md)
-4. [Telemetry and prompt hardening](./telemetry-and-prompt-hardening.md)
+1. [Factory-tools canonical path integration](./factory-tools-canonical-paths.md) - complete
+2. [Workflow-owned operational facts](./workflow-owned-operational-facts.md) - complete
+3. [Workflow contract repair gates](./workflow-contract-repair-gates.md) - complete
+4. [Telemetry and prompt hardening](./telemetry-and-prompt-hardening.md) - complete
 
 ## Resume Rule
 
@@ -36,6 +36,8 @@ When asked to continue this roadmap:
 4. Complete only the next unchecked slice in that plan.
 5. Update the plan document with status and notes.
 6. Stop and report the slice completed plus the next slice.
+
+Current status: all roadmap plan slices are complete; future work should start from new issues or follow-up plan docs rather than this roadmap's resume rule.
 
 ## Target End State
 
@@ -52,4 +54,3 @@ When asked to continue this roadmap:
 - Ambiguous normalization does not silently choose a candidate.
 - Workflow-owned evidence wins over model-declared facts.
 - Prompt rules are guidance only; enforcement lives in tools and workflows.
-

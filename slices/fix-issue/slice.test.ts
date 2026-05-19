@@ -1505,7 +1505,7 @@ describe('runFixIssueWorkflow (#183)', () => {
             workItemId: item.id,
             kind: 'agent.tool-call',
             payload: {
-              tool_name: 'Write',
+              tool: 'write_file',
               canonical_path: { path: 'core/tool-observed.ts', root: 'worktree' },
             },
             runId: String(filter.runId),
@@ -1989,6 +1989,12 @@ describe('runFixIssueWorkflow — evidence-post branch coverage', () => {
       .mocked(eventStore.appendEvent)
       .mock.calls.find(([e]) => e.kind === 'evidence.posted');
     expect(evidencePosted).toBeDefined();
+    expect(evidencePosted?.[0].payload).toMatchObject({
+      commentUrl: 'https://github.com/owner/repo/issues/42#issuecomment-1',
+      screenshots: ['evidence/issue-42/step-1.png'],
+      gifPath: null,
+      commitSha: 'abc1234567890abcdef',
+    });
   });
 
   it('passes worktreePath as workspaceDir on the evidence-post run spec (so git commands work)', async () => {

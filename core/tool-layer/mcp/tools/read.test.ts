@@ -47,7 +47,9 @@ describe('readFileTool', () => {
     expect(result.truncated).toBe(false);
 
     const events = eventStore.replay({ runId: ctx.runId, kind: 'agent.tool-call' });
-    expect(events.find((e) => (e.payload as { tool: string }).tool === 'read_file')).toBeTruthy();
+    expect(
+      events.find((e) => (e.payload as { tool_name: string }).tool_name === 'read_file'),
+    ).toBeTruthy();
   });
 
   it('emits a blocked tool-call event when path is .codex', async () => {

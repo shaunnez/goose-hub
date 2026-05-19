@@ -72,7 +72,7 @@ Completed:
 - `workspace_dir` is passed transiently and stripped from persisted payloads.
 - Blocked tool-call events pass through the same normalizer.
 
-### [ ] Slice 3 - MCP test tool returns canonical test paths
+### [x] Slice 3 - MCP test tool returns canonical test paths
 
 Make the factory test tool report the canonical test files it ran.
 
@@ -82,7 +82,13 @@ Acceptance criteria:
 - `testsRun.paths` can be derived from tool output.
 - Package-relative test args such as `src/foo.test.ts` normalize to the package path when unique.
 
-### [ ] Slice 4 - Prompt simplification pass
+Completed:
+
+- `mcp__factory-tools__run_tests` now resolves targeted `path` input through the shared `RepoRelativePath` contract before building argv.
+- Test-tool results include `rawPaths` and canonical `paths` so workflow handoffs can derive `testsRun.paths` from observed tool output.
+- `agent.tool-call` audit payloads for `run_tests` include compact raw/canonical path metadata and never persist absolute worktree paths.
+
+### [x] Slice 4 - Prompt simplification pass
 
 Update implement-style skill prompts to tell agents to use `mcp__factory-tools__`-returned paths verbatim in terminal JSON.
 
@@ -91,6 +97,11 @@ Acceptance criteria:
 - Prompts no longer rely on agents inferring CWD or package root.
 - Prompts still state the canonical path contract.
 - Prompt wording does not replace workflow validation.
+
+Completed:
+
+- `skills/implement/prompt.md` and `skills/implement-wp/prompt.md` now instruct agents to use `mcp__factory-tools__*` returned `path` / `paths[].path` values verbatim.
+- Shell/CWD mechanics were reduced to high-signal rules while preserving tool/workflow validation as the enforcement boundary.
 
 ## Verification
 
@@ -102,9 +113,10 @@ Latest verification:
 
 - Prerequisite: `pnpm lint`
 - Prerequisite: `pnpm vitest run core/workspaces/path-normalization.test.ts slices/fix-issue/slice.test.ts slices/parallel-implement/slice.test.ts slices/spec-author/slice.test.ts`
-- Slice 1: `pnpm vitest run core/tool-layer/path-contract.test.ts core/tool-layer/tools/slice.test.ts core/tool-layer/tools/read.test.ts core/workspaces/path-normalization.test.ts`
+- Slice 1: `pnpm vitest run core/tool-layer/path-contract.test.ts core/tool-layer/mcp/slice.test.ts core/tool-layer/mcp/tools/read.test.ts core/tool-layer/mcp/tools/write.test.ts core/workspaces/path-normalization.test.ts`
 - Slice 2: `pnpm vitest run core/tool-layer/tool-call-audit.test.ts core/tool-layer/path-contract.test.ts core/tool-layer/pre-tool-use-hook.test.ts core/tool-layer/post-tool-use-hook.test.ts apps/server/src/domains/events/service.test.ts apps/server/src/domains/events/router.test.ts core/agent-runtime/codex-cli-runtime.test.ts`
 - Slice 2: `pnpm lint`
 - Final guard: `pnpm typecheck`
+- Slice 3/4: `pnpm test core/tool-layer/mcp/tools/verify.test.ts skills/implement/slice.test.ts skills/implement-wp/slice.test.ts`
 
-Next unchecked slice: Slice 3 - Test tool returns canonical test paths.
+Next unchecked slice: none.

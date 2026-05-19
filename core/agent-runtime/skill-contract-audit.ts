@@ -10,6 +10,7 @@ export type SkillContractReport = {
   extraPromptTags: string[];
   schemaFields: string[];
   outputExample: OutputExampleReport;
+  pathLanguage: PathLanguageReport;
   consumerPaths: string[];
 };
 
@@ -27,6 +28,11 @@ export type OutputExampleReport = {
   parseableExamples: number;
   missingSchemaFields: string[];
   extraExampleFields: string[];
+};
+
+export type PathLanguageReport = {
+  vagueWorkspaceRelative: string[];
+  packageRelativeExamples: string[];
 };
 
 function extractTags(input: string): string[] {
@@ -174,6 +180,56 @@ function parseTopLevelObjectFields(source: string): string[] | null {
   }
 }
 
+function lineHits(source: string, predicate: (line: string) => boolean): string[] {
+  return source
+    .split('\n')
+    .map((line, index) => ({ line: line.trim(), lineNumber: index + 1 }))
+    .filter(({ line }) => line.length > 0 && predicate(line))
+    .map(({ line, lineNumber }) => `${lineNumber}: ${line}`);
+}
+
+function collectJsonStrings(value: unknown, strings: string[] = []): string[] {
+  if (typeof value === 'string') {
+    strings.push(value);
+    return strings;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectJsonStrings(item, strings);
+    return strings;
+  }
+  if (value != null && typeof value === 'object') {
+    for (const item of Object.values(value)) collectJsonStrings(item, strings);
+  }
+  return strings;
+}
+
+function auditPathLanguage(prompt: string, schema: string): PathLanguageReport {
+  const combined = `${prompt}\n${schema}`;
+  const vagueWorkspaceRelative = lineHits(combined, (line) => {
+    const lower = line.toLowerCase();
+    if (!lower.includes('workspace-relative')) return false;
+    return !(
+      lower.includes('repo-root') ||
+      lower.includes('worktree-root') ||
+      lower.includes('canonical') ||
+      lower.includes('mcp__factory-tools__')
+    );
+  });
+
+  const packageRelativeExamples = extractJsonExamples(prompt).flatMap((example) => {
+    try {
+      return collectJsonStrings(JSON.parse(example)).filter((value) => /^src\/[^/]/.test(value));
+    } catch {
+      return [];
+    }
+  });
+
+  return {
+    vagueWorkspaceRelative,
+    packageRelativeExamples: Array.from(new Set(packageRelativeExamples)).sort(),
+  };
+}
+
 function auditOutputExample(prompt: string, schemaFields: string[]): OutputExampleReport {
   if (schemaFields.length === 0) {
     return {
@@ -316,6 +372,7 @@ export function auditSkillContracts(repoRoot: string): SkillContractAudit {
       extraPromptTags,
       schemaFields,
       outputExample: auditOutputExample(prompt, schemaFields),
+      pathLanguage: auditPathLanguage(prompt, schema),
       consumerPaths: existsSync(schemaPath)
         ? collectConsumers(repoRoot, schemaPath, schema, skill)
         : [],
@@ -340,6 +397,8 @@ export function formatSkillContractAudit(audit: SkillContractAudit): string {
         `outputExampleParseable: ${r.outputExample.parseableExamples}`,
         `outputExampleMissingFields: ${r.outputExample.missingSchemaFields.join(', ') || '(none)'}`,
         `outputExampleExtraFields: ${r.outputExample.extraExampleFields.join(', ') || '(none)'}`,
+        `pathLanguageWorkspaceRelative: ${r.pathLanguage.vagueWorkspaceRelative.length}`,
+        `pathLanguagePackageRelativeExamples: ${r.pathLanguage.packageRelativeExamples.join(', ') || '(none)'}`,
         `consumers: ${r.consumerPaths.length}`,
       ];
       for (const c of r.consumerPaths) lines.push(`- ${c}`);

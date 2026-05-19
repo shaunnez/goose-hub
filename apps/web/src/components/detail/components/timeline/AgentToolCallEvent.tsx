@@ -2,6 +2,12 @@ import type { AgentEventDto } from '@/lib/types';
 import { ChevronDown, ChevronRight, Wrench } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 
+type RepoRelativePathPayload = {
+  path?: string;
+  normalizedFrom?: string;
+  packageRoot?: string;
+};
+
 function normalizeToolInput(
   toolName: string,
   input: unknown,
@@ -23,8 +29,16 @@ function normalizeToolInput(
     const desc = typeof inp.description === 'string' ? inp.description : null;
     const timeoutMs = typeof inp.timeout === 'number' ? inp.timeout : null;
     const cmdPreview = inp.command.length > 60 ? `${inp.command.slice(0, 60)}…` : inp.command;
+    const commandLabel =
+      toolName === 'run_tests'
+        ? 'Test run'
+        : toolName === 'run_lint'
+          ? 'Lint run'
+          : toolName === 'run_typecheck'
+            ? 'Typecheck run'
+            : 'Command';
     return {
-      summary: desc != null ? `Bash: ${desc}` : `Bash: ${cmdPreview}`,
+      summary: desc != null ? `${commandLabel}: ${desc}` : `${commandLabel}: ${cmdPreview}`,
       body: (
         <div className="mt-1.5 flex flex-col gap-1">
           {desc != null && <span className="text-[11px] text-fg-3 italic">{desc}</span>}
@@ -165,9 +179,18 @@ function normalizeToolInput(
 
 export function AgentToolCallEvent({ event }: { event: AgentEventDto }) {
   const [open, setOpen] = useState(false);
-  const p = event.payload as { tool_name?: string; tool_input?: unknown } | null;
-  const toolName = p?.tool_name ?? 'unknown';
-  const { summary, body } = normalizeToolInput(toolName, p?.tool_input ?? null);
+  const p = event.payload as {
+    tool_name?: string;
+    tool?: string;
+    tool_input?: unknown;
+    input?: unknown;
+    raw_path?: string;
+    canonical_path?: RepoRelativePathPayload;
+  } | null;
+  const toolName = p?.tool_name ?? p?.tool ?? 'unknown';
+  const input = p?.tool_input ?? p?.input ?? null;
+  const { summary, body } = normalizeToolInput(toolName, input);
+  const canonicalPath = p?.canonical_path?.path;
   return (
     <li
       data-event-kind={event.kind}
@@ -186,6 +209,23 @@ export function AgentToolCallEvent({ event }: { event: AgentEventDto }) {
           <span>{summary}</span>
         </summary>
         {body}
+        {(p?.raw_path != null || canonicalPath != null) && (
+          <div className="mt-2 flex flex-col gap-1 text-[10.5px] text-fg-3">
+            {p.raw_path != null && (
+              <div>
+                raw path: <span className="font-mono text-fg-2">{p.raw_path}</span>
+              </div>
+            )}
+            {canonicalPath != null && (
+              <div>
+                canonical path: <span className="font-mono text-fg-2">{canonicalPath}</span>
+                {p.canonical_path?.normalizedFrom != null && (
+                  <span className="text-fg-4"> from {p.canonical_path.normalizedFrom}</span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </details>
     </li>
   );

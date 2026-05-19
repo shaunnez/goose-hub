@@ -139,6 +139,9 @@ export const VerificationSummarySchema = z.object({
   evidence: z.object({
     status: z.enum(['posted', 'skipped', 'failed', 'absent']),
     url: z.string().url().optional(),
+    screenshots: z.array(z.string()).optional(),
+    gifPath: z.string().nullable().optional(),
+    commitSha: z.string().optional(),
     error: z.string().optional(),
     reason: z.string().optional(),
   }),
