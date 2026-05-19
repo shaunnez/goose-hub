@@ -70,11 +70,11 @@ const config: SkillConfig = {
   modelPin: 'sonnet',
   freshContext: false,
   // Hub Chat surveys state and surfaces what the user should attend to.
-  // Reuses the `auditor` role (broad read, evaluative). Not a holdout — sees
-  // the event stream, prior decision summaries, and per-project context.
-  // The orchestrator forces the model to sonnet per-call (project config
-  // sets auditor.primary='opus' for code-quality-audit; we override for chat).
-  role: 'auditor',
+  // Runs under the dedicated `assistant` role (M20.17) — non-holdout, broad
+  // read, sonnet-tier baseline. Was previously sharing the `auditor` role
+  // with code-quality-audit, which conflated persona stats and retrospective
+  // groupings across two distinct operational profiles.
+  role: 'assistant',
   contextAllowlist: [
     'scope',
     'conversationId',

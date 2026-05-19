@@ -81,6 +81,14 @@ export const ROLE_DEFAULTS: Record<Role, RoleDefaults> = {
     modelTier: 'opus',
     budgets: { maxTurns: 30, maxBudgetUsd: 3.0, timeoutMs: 30_000 },
   },
+  // Hub Chat assistant — broad-read, interactive, non-holdout. Sonnet tier
+  // is enough for the conversational use case; opus is too expensive for
+  // multi-turn chat. Budget caps mirror the hub-chat skill entry in
+  // SKILL_BUDGETS so a runaway turn can't pin chat at $3 per reply.
+  assistant: {
+    modelTier: 'sonnet',
+    budgets: { maxTurns: 8, maxBudgetUsd: 0.4, timeoutMs: 60_000 },
+  },
 };
 
 /** Returns defaults for a role, falling back to a safe sentinel if the role is unknown. */

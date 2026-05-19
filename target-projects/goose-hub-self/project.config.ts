@@ -42,6 +42,9 @@ const config: ProjectConfig = {
       retrospector: { primary: 'sonnet', fallback: 'haiku', advisor: null },
       researcher: { primary: 'opus', fallback: 'sonnet', advisor: null },
       auditor: { primary: 'opus', fallback: 'sonnet', advisor: null },
+      // M20.17 — Hub Chat assistant. Sonnet baseline; chat budgets cap below
+      // $0.4 per turn so a runaway conversation can't spike spend.
+      assistant: { primary: 'sonnet', fallback: 'haiku', advisor: null },
     },
     fallbackPolicy: {
       critical: 'same-tier-only',
@@ -61,6 +64,10 @@ const config: ProjectConfig = {
       retrospector: { bundles: ['core'], extras: ['event-read', 'persona-stats'] },
       researcher: { bundles: ['web', 'workItemAdmin'] },
       auditor: { bundles: ['read', 'shell'] },
+      // Hub Chat assistant needs broad read across the workspace; tool
+      // permissions for chat-tool dispatch are scoped per-tool in
+      // core/chat-tools/registry.ts (mutating tools always require approval).
+      assistant: { bundles: ['read', 'core'] },
     },
     advisorMode: {
       enabled: true,
