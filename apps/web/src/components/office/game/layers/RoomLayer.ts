@@ -35,7 +35,6 @@ import {
 } from '../../lib/rooms';
 import { STATIC_FLOOR_TEXTURE_KEY } from '../static-floor-texture';
 import {
-  BRASS_TINTS,
   HUD_TINTS,
   PALETTE,
   TEXTURE_KEYS,
@@ -82,6 +81,20 @@ const DOOR_HALF_WIDTH = TILE_SIZE;
 // Banner R-cell: hero ticket display (px 848..1263, right-aligned, 12px)
 const BANNER_HERO_X = 1263;
 
+const ROOM_ACCENTS: Record<RoomId, number> = {
+  dev: PALETTE.amber,
+  qa: PALETTE.cyan,
+  review: PALETTE.purple,
+  retro: PALETTE.purple,
+  done: PALETTE.success,
+  archive: PALETTE.amber,
+  backlog: PALETTE.amber,
+  triage: PALETTE.cyan,
+  investigation: PALETTE.amber,
+  library: PALETTE.cyan,
+  coffee: PALETTE.amber,
+};
+
 export class RoomLayer {
   private readonly scene: Phaser.Scene;
   private readonly callbacks: RoomLayerCallbacks;
@@ -113,13 +126,15 @@ export class RoomLayer {
   }
 
   refreshIdleDeskIndicators(occupiedKeys: ReadonlySet<string>): void {
+    // Idle mugs read as random cups above empty desks. Keep this hook for the
+    // scene contract, but do not surface decorative desk indicators.
+    void occupiedKeys;
     for (const c of this.floorContainers) {
       const children = c.list as Phaser.GameObjects.GameObject[];
       for (const child of children) {
         const obj = child as Phaser.GameObjects.Image;
         if (obj.getData?.('kind') !== 'idle-indicator') continue;
-        const key = `${String(obj.getData('floorIndex'))}:${String(obj.getData('deskKey'))}`;
-        obj.setVisible(!occupiedKeys.has(key));
+        obj.setVisible(false);
       }
     }
   }
@@ -524,7 +539,7 @@ export class RoomLayer {
     this.drawRoomOverlays(container, originY);
     this.drawBanner(container, originY, project, floorIndex);
     this.drawRoomLabels(container, originY);
-    this.drawDesks(container, originY, floorIndex);
+    this.drawDesks(container, originY);
     this.drawRoomLamps(container, originY);
     this.registerClickZones(container, originY, floorIndex);
   }
@@ -632,16 +647,17 @@ export class RoomLayer {
 
     container.add(walls);
 
-    // Stone texture overlay on the bottom outer wall, vertical inter-room
-    // walls, the new left exterior wall, and the doored band walls.
+    // Dark brick-line overlay for fallback rendering. The baked static floor
+    // normally owns this, but the fallback path should match it rather than
+    // using the older light stone overlays.
     this.drawBrickWalls(container, originY);
   }
 
-  /** Stone-block texture overlay on every wall surface. Phase 9 dropped
-   * the outer top wall + top-band ceiling rows (the new HUD covers that
-   * area). Adds the new left exterior wall column. */
+  /** Dark brick-line texture overlay on every wall surface. Phase 9 dropped
+   * the outer top wall + top-band ceiling rows (the DOM HUD covers that
+   * area). Adds the left exterior wall column. */
   private drawBrickWalls(container: Phaser.GameObjects.Container, originY: number): void {
-    const brickKey = TEXTURE_KEYS.stoneWall;
+    const brickKey = TEXTURE_KEYS.wallTile;
     if (!this.scene.textures.exists(brickKey)) return;
     const W = FLOOR_WORLD.width;
     // Outer bottom horizontal wall only (top + ceiling removed in Phase 9)
@@ -767,8 +783,6 @@ export class RoomLayer {
    * depth read. */
   private drawRoomBackWalls(container: Phaser.GameObjects.Container, originY: number): void {
     const TOTAL_WALL_HEIGHT = TILE_SIZE * 6;
-    const darkKey = TEXTURE_KEYS.darkWall;
-    const darkLoaded = this.scene.textures.exists(darkKey);
 
     for (const id of ROOM_IDS) {
       const b = roomBounds(id);
@@ -778,17 +792,10 @@ export class RoomLayer {
 
       // Solid dark base in case the dark-wall texture doesn't load
       const bg = this.scene.add.graphics();
-      bg.fillStyle(PALETTE.wall, 1);
+      bg.fillStyle(this.fallbackBackWallColor(id), 1);
       bg.fillRect(x, y0, w, TOTAL_WALL_HEIGHT);
       bg.setDepth(2);
       container.add(bg);
-
-      if (darkLoaded) {
-        const dark = this.scene.add.tileSprite(x, y0, w, TOTAL_WALL_HEIGHT, darkKey);
-        dark.setOrigin(0, 0);
-        dark.setDepth(2);
-        container.add(dark);
-      }
 
       // Wall-bottom darkening — pools shadow at the wall/floor seam,
       // giving the back wall a sense of recession.
@@ -807,6 +814,22 @@ export class RoomLayer {
       seam.fillRect(x, y0 + TOTAL_WALL_HEIGHT, w, 2);
       seam.setDepth(2);
       container.add(seam);
+    }
+  }
+
+  private fallbackBackWallColor(id: RoomId): number {
+    switch (id) {
+      case 'qa':
+      case 'triage':
+      case 'library':
+        return PALETTE.qaWall;
+      case 'review':
+      case 'retro':
+        return PALETTE.reviewWall;
+      case 'done':
+        return PALETTE.success;
+      default:
+        return PALETTE.wall;
     }
   }
 
@@ -986,13 +1009,11 @@ export class RoomLayer {
    * wall band, framed by a darker rounded rectangle with a 1-px brass
    * border so they read as etched signage rather than a console label. */
   private drawRoomLabels(container: Phaser.GameObjects.Container, originY: number): void {
-    const PLATE_BG = BRASS_TINTS.brassPlateBg;
-    const PLATE_BORDER_BRASS = BRASS_TINTS.brassEdge;
-    const PLATE_BORDER_DARK = BRASS_TINTS.brassDark;
     const TEXT_FILL = '#fff4c2';
     const TEXT_STROKE = '#1a0f05';
 
     for (const id of ROOM_IDS) {
+      const accent = ROOM_ACCENTS[id];
       const b = roomBounds(id);
       const cx = (b.x1 + b.x2) / 2;
       // Sign sits in the upper portion of the (now 6-tile-tall) dark wall,
@@ -1020,14 +1041,14 @@ export class RoomLayer {
       const plateY = signY - plateH / 2;
       const plate = this.scene.add.graphics();
       plate.setDepth(4);
-      // Outer brass border
-      plate.fillStyle(PLATE_BORDER_BRASS, 1);
+      // Outer room-hue border.
+      plate.fillStyle(accent, 1);
       plate.fillRect(plateX, plateY, plateW, plateH);
       // Dark inset
-      plate.fillStyle(PLATE_BORDER_DARK, 1);
+      plate.fillStyle(PALETTE.wall, 1);
       plate.fillRect(plateX + 1, plateY + 1, plateW - 2, plateH - 2);
       // Plate face
-      plate.fillStyle(PLATE_BG, 1);
+      plate.fillStyle(accent, 0.32);
       plate.fillRect(plateX + 2, plateY + 2, plateW - 4, plateH - 4);
       container.add(plate);
       container.add(t);
@@ -1086,13 +1107,13 @@ export class RoomLayer {
     for (const id of ROOM_IDS) {
       const b = roomBounds(id);
       const width = b.x2 - b.x1;
-      const count = Math.max(1, Math.min(3, Math.round(width / 96)));
-      for (let i = 0; i < count; i++) {
-        const t = (i + 1) / (count + 1);
-        const x = b.x1 + width * t;
+      const accent = ROOM_ACCENTS[id];
+      const inset = Math.min(34, Math.max(22, width * 0.16));
+      const lampXs = [b.x1 + inset, b.x2 - inset];
+      for (const x of lampXs) {
         // Brass chain rectangle from ceiling pipes to lamp top
         const chain = this.scene.add.graphics();
-        chain.fillStyle(BRASS_TINTS.brassDark, 1);
+        chain.fillStyle(accent, 0.85);
         chain.fillRect(x - 1, originY + b.y1 + chainTopOffset, 2, lampTopOffset - chainTopOffset);
         chain.setDepth(3);
         container.add(chain);
@@ -1101,7 +1122,8 @@ export class RoomLayer {
           const halo = this.scene.add.image(x, originY + b.y1 + lampTopOffset + 14, haloKey);
           halo.setOrigin(0.5, 0.5);
           applyOfficeTextureDisplaySize(halo, haloKey);
-          halo.setAlpha(0.28);
+          halo.setTint(accent);
+          halo.setAlpha(0.24);
           halo.setBlendMode(Phaser.BlendModes.NORMAL);
           halo.setDepth(3);
           container.add(halo);
@@ -1109,17 +1131,14 @@ export class RoomLayer {
         const lamp = this.scene.add.image(x, originY + b.y1 + lampTopOffset, lampKey);
         lamp.setOrigin(0.5, 0);
         applyOfficeTextureDisplaySize(lamp, lampKey);
+        lamp.setTint(accent);
         lamp.setDepth(4);
         container.add(lamp);
       }
     }
   }
 
-  private drawDesks(
-    container: Phaser.GameObjects.Container,
-    originY: number,
-    floorIndex: number,
-  ): void {
+  private drawDesks(container: Phaser.GameObjects.Container, originY: number): void {
     for (const id of ROOM_IDS) {
       const anchors = roomDeskAnchors(id as RoomId);
       const deskKey = roomDeskTextureKey(id, this.scene);
@@ -1129,21 +1148,6 @@ export class RoomLayer {
         img.setOrigin(0.5, 1);
         applyOfficeTextureDisplaySize(img, deskKey);
         container.add(img);
-
-        // Idle indicator (coffee mug) is hidden by default — Phase 5 will
-        // surface it dynamically as part of the goose coffee-loop behaviour.
-        const idle = this.scene.add.image(
-          x,
-          originY + y - TILE_SIZE * 2.5,
-          TEXTURE_KEYS.indicatorCoffee,
-        );
-        idle.setOrigin(0.5, 1);
-        applyOfficeTextureDisplaySize(idle, TEXTURE_KEYS.indicatorCoffee);
-        idle.setData('kind', 'idle-indicator');
-        idle.setData('floorIndex', floorIndex);
-        idle.setData('deskKey', `${id}:${i}`);
-        idle.setVisible(false);
-        container.add(idle);
       }
     }
   }

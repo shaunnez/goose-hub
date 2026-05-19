@@ -8,6 +8,7 @@ export const FLOOR_TILES_WIDE = 80; // v1 canonical floor: 80 tiles × 16 px = 1
 export const FLOOR_TILES_TALL = 34; // v2 canonical floor: 34 tiles × 16 px = 544 px
 export const FLOOR_PIXEL_WIDTH = TILE_SIZE * FLOOR_TILES_WIDE; // 1280
 export const FLOOR_PIXEL_HEIGHT = TILE_SIZE * FLOOR_TILES_TALL; // 544
+export const FLOOR_VISIBLE_TOP_TRIM = TILE_SIZE * 4; // trim empty header void above the top wall
 export const FLOOR_GAP_PX = TILE_SIZE * 2;
 
 export interface CameraBounds {
@@ -118,7 +119,8 @@ export function floorOverviewCameraLayout(
   const visibleWorldWidth = Math.max(1, viewportWidth) / zoom;
   const visibleWorldHeight = Math.max(1, viewportHeight) / zoom;
   const horizontalPad = Math.max(0, (visibleWorldWidth - FLOOR_PIXEL_WIDTH) / 2);
-  const verticalSlack = Math.max(0, visibleWorldHeight - FLOOR_PIXEL_HEIGHT);
+  const visibleFloorHeight = FLOOR_PIXEL_HEIGHT - FLOOR_VISIBLE_TOP_TRIM;
+  const verticalSlack = Math.max(0, visibleWorldHeight - visibleFloorHeight);
   const worldHeight = totalWorldHeight(floorCount);
 
   // Phase 10: top-anchor the camera — any vertical slack between the

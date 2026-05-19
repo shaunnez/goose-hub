@@ -68,11 +68,11 @@ const FLOOR_TONES: BrickTones = {
 };
 
 const WALL_TONES: BrickTones = {
-  base: '#5e564a',
-  hi: '#6c6354',
-  lo: '#4a4338',
-  grout: '#2e2820',
-  spec: 'rgba(255,235,200,0.04)',
+  base: '#171922',
+  hi: '#202330',
+  lo: '#10121a',
+  grout: '#05060a',
+  spec: 'rgba(255,255,255,0.014)',
 };
 
 /**
@@ -129,7 +129,7 @@ export function generateOfficeFloorTexture(scene: Phaser.Scene): void {
   for (const id of ROOM_IDS) {
     const b = roomBounds(id);
     const w = b.x2 - b.x1 + 1;
-    drawRoomBackWall(ctx, b.x1, b.y1, w, BACK_WALL_HEIGHT);
+    drawRoomBackWall(ctx, id, b.x1, b.y1, w, BACK_WALL_HEIGHT);
     drawWallObjects(ctx, id, b.x1, b.y1, w, BACK_WALL_HEIGHT);
   }
 
@@ -219,8 +219,6 @@ function drawBrickWall(
   h: number,
 ): void {
   drawBrickArea(ctx, x, y, w, h, WALL_TONES);
-  fill(ctx, x, y, w, 1, '#7c7268');
-  fill(ctx, x, y + h - 1, w, 1, '#1a1410');
 }
 
 // ─── per-room ambient + back wall ──────────────────────────────────────────
@@ -252,23 +250,109 @@ function roomAmbient(id: RoomId): string | null {
   }
 }
 
-/** Lighter-brick back wall + ceiling shadow + wall-to-floor seam shadow. */
+function roomBackWallTones(id: RoomId): BrickTones {
+  switch (id) {
+    case 'dev':
+      return {
+        base: '#3a332c',
+        hi: '#474036',
+        lo: '#29241f',
+        grout: '#0d0b09',
+        spec: 'rgba(255,220,160,0.026)',
+      };
+    case 'qa':
+      return {
+        base: '#1f3640',
+        hi: '#284753',
+        lo: '#15262e',
+        grout: '#061014',
+        spec: 'rgba(160,230,255,0.026)',
+      };
+    case 'review':
+      return {
+        base: '#33263b',
+        hi: '#44314f',
+        lo: '#231a2b',
+        grout: '#0b0710',
+        spec: 'rgba(220,170,255,0.024)',
+      };
+    case 'retro':
+      return {
+        base: '#35263a',
+        hi: '#46314c',
+        lo: '#251a29',
+        grout: '#0b0710',
+        spec: 'rgba(235,170,235,0.022)',
+      };
+    case 'done':
+      return {
+        base: '#263729',
+        hi: '#314634',
+        lo: '#1a261c',
+        grout: '#071007',
+        spec: 'rgba(180,240,170,0.022)',
+      };
+    case 'archive':
+      return {
+        base: '#3a3025',
+        hi: '#493c2d',
+        lo: '#292118',
+        grout: '#0d0905',
+        spec: 'rgba(255,210,130,0.022)',
+      };
+    case 'backlog':
+      return {
+        base: '#3b3327',
+        hi: '#4a402f',
+        lo: '#292318',
+        grout: '#0d0a05',
+        spec: 'rgba(255,220,150,0.022)',
+      };
+    case 'triage':
+      return {
+        base: '#213544',
+        hi: '#2b4659',
+        lo: '#172631',
+        grout: '#061015',
+        spec: 'rgba(150,220,255,0.022)',
+      };
+    case 'investigation':
+      return {
+        base: '#332d25',
+        hi: '#40382e',
+        lo: '#242019',
+        grout: '#0b0906',
+        spec: 'rgba(255,220,160,0.02)',
+      };
+    case 'library':
+      return {
+        base: '#1e3a34',
+        hi: '#294c44',
+        lo: '#142822',
+        grout: '#05110e',
+        spec: 'rgba(150,255,220,0.024)',
+      };
+    case 'coffee':
+      return {
+        base: '#3a2c22',
+        hi: '#4a392b',
+        lo: '#281e17',
+        grout: '#0d0805',
+        spec: 'rgba(255,200,130,0.024)',
+      };
+  }
+}
+
+/** Room-toned brick back wall + wall-to-floor seam shadow. */
 function drawRoomBackWall(
   ctx: CanvasRenderingContext2D,
+  id: RoomId,
   x: number,
   y: number,
   w: number,
   wallH: number,
 ): void {
-  drawBrickArea(ctx, x, y, w, wallH, WALL_TONES);
-  // Top ceiling shadow — gradient at the very top of the wall.
-  ctx.save();
-  const cg = ctx.createLinearGradient(0, y, 0, y + 14);
-  cg.addColorStop(0, 'rgba(0,0,0,0.55)');
-  cg.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = cg;
-  ctx.fillRect(x, y, w, 14);
-  ctx.restore();
+  drawBrickArea(ctx, x, y, w, wallH, roomBackWallTones(id));
   // Wall-to-floor seam shadow.
   fill(ctx, x, y + wallH - 1, w, 1, '#1a1410');
   fill(ctx, x, y + wallH, w, 2, 'rgba(0,0,0,0.55)');

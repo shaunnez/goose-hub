@@ -88,7 +88,7 @@ export function OfficeGameMount({
       const game = new Phaser.Game({
         type: Phaser.AUTO,
         parent: container,
-        backgroundColor: '#0d0a13',
+        backgroundColor: '#2c2a2e',
         scale: {
           mode: Phaser.Scale.RESIZE,
           width: container.clientWidth || 800,
@@ -184,7 +184,7 @@ export function OfficeGameMount({
     <div
       ref={containerRef}
       data-testid="office-canvas"
-      className="w-full h-full bg-[#0d0a13]"
+      className="w-full h-full bg-[#2c2a2e]"
       style={{ minHeight: 320 }}
     />
   );

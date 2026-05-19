@@ -1,7 +1,6 @@
 // Ambient persona layer — decorative geese that aren't tied to work items.
-// Models the "idle goose coffee loop": a few geese hang around the Coffee
-// room, bob in place, periodically wander to a random other room via the
-// proper corridor route, and come back for more coffee.
+// They stay in the Coffee room so they read as background life rather than
+// as "fake" work-driven geese roaming the office.
 //
 // Independent of PersonaLayer. Spawned per-floor when applyProjects fires.
 // Pure visual layer — no events emitted, no clicks handled.
@@ -111,7 +110,6 @@ export class AmbientLayer {
       };
       this.entries.push(entry);
       this.startBobbing(entry);
-      this.scheduleWander(entry);
     }
   }
 

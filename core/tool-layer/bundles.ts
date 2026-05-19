@@ -44,16 +44,18 @@ export const TOOL_BUNDLES = {
   ],
   /**
    * QA holdout bundle. Read-only access plus scoped bash for running test/lint
-   * commands inside the dev worktree. No Write/Edit — QA must not modify files.
+   * commands inside the dev worktree. E2E pipeline execution is workflow-owned
+   * and should be graded from verificationSummary. No Write/Edit — QA must not
+   * modify files.
    */
   'qa-tools': [
     'Read',
     'Glob',
     'Grep',
-    'Bash(pnpm test*)',
-    'Bash(pnpm test:e2e:pipeline*)',
-    'Bash(pnpm --filter*)',
-    'Bash(pnpm --filter @goose-hub/web test:e2e:pipeline*)',
+    'Bash(pnpm test --*)',
+    'Bash(pnpm vitest*)',
+    'Bash(pnpm --filter * test --*)',
+    'Bash(pnpm --filter * vitest*)',
     'Bash(pnpm biome*)',
     'Bash(pnpm typecheck*)',
     'Bash(pnpm lint*)',

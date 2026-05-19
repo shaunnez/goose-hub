@@ -20,6 +20,7 @@ If you find yourself reasoning about "why the developer did X", stop. Your job i
 
 - **Start from `verificationSummary`.** It is workflow-owned ground truth for changed files, command choices, deterministic lint/typecheck/test results, e2e policy, evidence-post status, and developer targeted-test metadata. Use it before spending tool calls.
 - **Do not re-run deterministic checks that already ran.** When `verificationSummary.commands.lint`, `verificationSummary.commands.typecheck`, or `verificationSummary.testRun` are present, grade those results from the structured packet. Do not re-run `testCommand` when structured test results are present. Only run an isolated command if you have a specific uncertainty that the packet cannot answer.
+- **Do not re-run workflow-owned e2e.** If `verificationSummary.e2e.status` is `passed` or `failed`, grade Regression from that structured result and do not re-run e2e. Only run e2e yourself when `verificationSummary.e2e.status` is `skipped`, a command is provided, and the reason explicitly says the harness did not run.
 - **Full output, no grep.** If `testRun` and `verificationSummary.testRun` are both absent, run `testCommand` once. Read the complete output before drawing any conclusions. Do not re-run the suite more than once in a verification pass. Re-running speculatively wastes budget and does not produce new information.
 - **Verify the command first.** If `testRun` is absent from context, confirm the test command from `projectCommands` before running it. Do not assume `pnpm test` works — the project may require a workspace-specific invocation.
 - **Isolate sparingly.** Only re-run a single test file if you have a specific hypothesis about that file. State the hypothesis in a decision summary before running.
@@ -37,7 +38,7 @@ The context contains a `<task>` block with:
   - `pr` — PR number, base branch, and head SHA when available
   - `commands` — lint/typecheck/test/e2e commands chosen by the workflow and compact statuses
   - `testRun` — pass/fail counts and failing suite names, never raw output
-  - `e2e` — policy mode, selected command, skipped/ran/failed status, and reason
+  - `e2e` — policy mode, selected command, passed/failed/skipped status, and reason
   - `evidence` — posted/skipped/failed/absent status, URL when posted, sanitized operational error when failed
   - `devTestsRun` — targeted developer test metadata when available
 - `<projectCommands>` — JSON payload with `testCommand`, optional `lintCommand`, and optional `e2eCommand`
@@ -102,11 +103,11 @@ Record tier result with:
 Purpose: Catch UX regressions that only appear in end-to-end flows.
 
 Steps:
-1. If `verificationSummary.e2e` says e2e already ran or failed, grade from that structured status. If it was skipped but an `e2eDecision.command` or `projectCommands.e2eCommand` is provided, run that command and record results. Do not invent or run an e2e command when no command is provided.
+1. If `verificationSummary.e2e.status` is `passed` or `failed`, grade from that structured status and do not re-run e2e. If it is `skipped`, only run e2e when an `e2eDecision.command` or `projectCommands.e2eCommand` is provided and the skip reason explicitly says the harness did not run. Do not invent or run an e2e command when no command is provided.
 2. Read the diff and identify any UI surface changes (component changes, route changes, API changes visible to the frontend).
 3. **If no e2e command is provided:** treat the orchestrator's `e2eDecision.reason` as authoritative. Mark the tier passed with one `info`-severity finding such as `"e2e skipped by policy: <reason>"`. Do not return `partial` or `fail` solely because e2e was intentionally skipped.
 4. Check that any new UI paths introduced by the PR are reachable and render correctly (if e2e tests cover them).
-5. If `evidenceCommentUrl` is present, fetch the comment and review the screenshots and walkthrough GIF for visual AC verification. Note any visible regressions or UI acceptance criteria that are not met in the captured state.
+5. If `evidenceCommentUrl` is present, fetch the comment and review the screenshots and walkthrough GIF for visual AC verification. Note any visible regressions or UI acceptance criteria that are not met in the captured state. One-off visual evidence specs under `apps/web/e2e/issue-<number>.spec.ts` are evidence-post inputs, not durable pipeline coverage; do not warn that they live outside `apps/web/e2e/pipeline` unless the PR explicitly claims durable pipeline coverage.
 
 Emit: `[decision] REGRESSION_CHECK: <one-sentence summary including passed|failed|skipped>`
 

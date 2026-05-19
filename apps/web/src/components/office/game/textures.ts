@@ -415,8 +415,15 @@ function generateWallTile(scene: Phaser.Scene): void {
   const g = scene.add.graphics({ x: 0, y: 0 });
   g.fillStyle(PALETTE.wall, 1);
   g.fillRect(0, 0, 16, 16);
-  g.fillStyle(PALETTE.wall, 0.5);
-  g.fillRect(0, 14, 16, 2);
+  g.fillStyle(PALETTE.floor, 0.48);
+  g.fillRect(0, 0, 16, 1);
+  g.fillRect(0, 8, 16, 1);
+  g.fillRect(0, 15, 16, 1);
+  g.fillRect(0, 0, 1, 8);
+  g.fillRect(8, 8, 1, 8);
+  g.fillStyle(PALETTE.floorAlt, 0.24);
+  g.fillRect(1, 1, 7, 1);
+  g.fillRect(9, 9, 6, 1);
   g.generateTexture(key, 16, 16);
   g.destroy();
 }

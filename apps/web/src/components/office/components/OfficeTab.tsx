@@ -237,7 +237,7 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
 
   // Floor up/down via the indicator buttons. We poke the scene by changing
   // `activeProjectSlug` — that triggers `panToProject` which fires `floor-change`.
-  const upDown = useCallback(
+  const _upDown = useCallback(
     (delta: number) => {
       const next = floorIndex + delta;
       if (next < 0 || next >= projects.length) return;
@@ -338,7 +338,7 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
           />
         </Suspense>
       </div>
-      {projects.length > 0 && activeProject && (
+      {/* {projects.length > 0 && activeProject && (
         <FloorIndicator
           floorIndex={floorIndex}
           totalFloors={projects.length}
@@ -346,7 +346,7 @@ export function OfficeTab({ initialProjectSlug }: OfficeTabProps) {
           onUp={() => upDown(-1)}
           onDown={() => upDown(+1)}
         />
-      )}
+      )} */}
       {projects.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center text-fg-2 text-[12px]">
           No projects registered. Bootstrap one to populate the office.

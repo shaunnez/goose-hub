@@ -28,6 +28,11 @@ vi.mock('@goose-hub/core/projects/loader.js', () => ({
   getProjectBySlug: (...args: unknown[]) => mockGetProjectBySlug(...args),
 }));
 
+const mockFindFreePort = vi.fn();
+vi.mock('@goose-hub/core/agent-runtime/find-free-port.js', () => ({
+  findFreePort: () => mockFindFreePort(),
+}));
+
 const mockRun = vi.fn();
 
 vi.mock('@goose-hub/core/agent-runtime/claude-cli.js', () => ({
@@ -275,6 +280,7 @@ beforeEach(() => {
   mockGetProjectBySlug.mockReset();
   mockGetProjectBySlug.mockReturnValue(null);
   vi.clearAllMocks();
+  mockFindFreePort.mockResolvedValueOnce(4173).mockResolvedValueOnce(4301);
 });
 
 // ─── tests ────────────────────────────────────────────────────────────────────
@@ -419,11 +425,116 @@ describe('verification summary harness', () => {
       expect(result.verificationSummary.testRun?.failed).toBe(1);
       expect(result.verificationSummary.testRun?.failingSuites).toEqual(['core/cart.test.ts']);
       expect(result.verificationSummary.e2e.command).toBe('pnpm test:e2e:pipeline');
+      expect(result.verificationSummary.e2e.status).toBe('passed');
+      expect(result.verificationSummary.commands.e2e).toEqual({
+        command: 'pnpm test:e2e:pipeline',
+        status: 'passed',
+      });
       expect(result.verificationSummary.evidence.status).toBe('posted');
       expect(result.verificationSummary.devTestsRun?.paths).toEqual(['src/foo.test.ts']);
+      expect(runCommand).toHaveBeenNthCalledWith(3, dir, 'pnpm test:e2e:pipeline', undefined);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it('reflects failed workflow-owned e2e in command and summary status', async () => {
+    const dir = makeGitFixture();
+    try {
+      const { buildVerificationSummary } = await import('./verification-summary.js');
+      const runCommand = vi.fn(async (_cwd: string, command: string) => ({
+        command,
+        status: 'failed' as const,
+        exitCode: 1,
+        stderr: 'browser failed to render route',
+      }));
+
+      const result = await buildVerificationSummary({
+        workspaceDir: dir,
+        prHints: { baseBranch: 'main' },
+        prDiff: 'diff',
+        qaE2eMode: 'ui-changed',
+        configuredE2eCommand: 'pnpm test:e2e:pipeline',
+        commands: { testCommand: 'pnpm test --reporter=json' },
+        priorEvents: [],
+        runTests: vi.fn().mockResolvedValue(makeSampleTestRun()),
+        runCommand,
+      });
+
+      expect(result.verificationSummary.commands.e2e).toMatchObject({
+        command: 'pnpm test:e2e:pipeline',
+        status: 'failed',
+        exitCode: 1,
+        stderr: 'browser failed to render route',
+      });
+      expect(result.verificationSummary.e2e).toMatchObject({
+        command: 'pnpm test:e2e:pipeline',
+        status: 'failed',
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('passes command env through to workflow-owned e2e execution', async () => {
+    const dir = makeGitFixture();
+    try {
+      const { buildVerificationSummary } = await import('./verification-summary.js');
+      const runCommand = vi.fn(async (_cwd: string, command: string) => ({
+        command,
+        status: 'passed' as const,
+      }));
+
+      await buildVerificationSummary({
+        workspaceDir: dir,
+        prHints: { baseBranch: 'main' },
+        prDiff: 'diff',
+        qaE2eMode: 'ui-changed',
+        configuredE2eCommand: 'pnpm test:e2e:pipeline',
+        commandEnv: {
+          WEB_PORT: '4173',
+          API_PORT: '4301',
+          MOCK_SERVER_PORT: '4301',
+          SERVER_PORT: '4301',
+          CI: 'true',
+        },
+        commands: { testCommand: 'pnpm test --reporter=json' },
+        priorEvents: [],
+        runTests: vi.fn().mockResolvedValue(makeSampleTestRun()),
+        runCommand,
+      });
+
+      expect(runCommand).toHaveBeenCalledWith(
+        dir,
+        'pnpm test:e2e:pipeline',
+        expect.objectContaining({
+          env: expect.objectContaining({
+            WEB_PORT: '4173',
+            API_PORT: '4301',
+            MOCK_SERVER_PORT: '4301',
+            SERVER_PORT: '4301',
+            CI: 'true',
+          }),
+        }),
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('captures bounded stdout and stderr tails for failed command summaries', async () => {
+    const { defaultRunCommand } = await import('./verification-summary.js');
+
+    const result = await defaultRunCommand(
+      process.cwd(),
+      "node -e \"console.log('x'.repeat(5000)); console.error('browser failed'); process.exit(2)\"",
+    );
+
+    expect(result.status).toBe('failed');
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout?.length).toBeLessThanOrEqual(4000);
+    expect(result.stdout).toContain('x');
+    expect(result.stderr).toContain('browser failed');
   });
 
   it('omits compact testRun and marks test command skipped when capture returns null', async () => {
@@ -887,6 +998,62 @@ describe('runQaWorkflow', () => {
         },
       });
       expect(spec.contextAllowlist).toContain('verificationSummary');
+    });
+
+    it('runs workflow-owned e2e with the same controlled ports passed to QA', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockGetProjectBySlug.mockReturnValue({
+        id: 'test-project',
+        qaE2eMode: 'always',
+        stack: {
+          runtime: 'node',
+          packageManager: 'pnpm',
+          testCommand: 'pnpm test --reporter=json',
+          e2eCommand: 'pnpm test:e2e:pipeline',
+          detectedAt: '',
+        },
+      });
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: { worktreePath: '/wt/abc' },
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+      const runCommand = vi.fn(async (_cwd, command) => ({ command, status: 'passed' as const }));
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn().mockResolvedValue(makeSampleTestRun()),
+        runCommand,
+      });
+
+      expect(runCommand).toHaveBeenCalledWith(
+        '/wt/abc',
+        'pnpm test:e2e:pipeline',
+        expect.objectContaining({
+          env: expect.objectContaining({
+            WEB_PORT: '4173',
+            API_PORT: '4301',
+            MOCK_SERVER_PORT: '4301',
+            SERVER_PORT: '4301',
+          }),
+        }),
+      );
+      const spec = mockRun.mock.calls[0][0] as {
+        env?: Record<string, string>;
+        context: { verificationSummary: { e2e: { status: string } } };
+      };
+      expect(spec.env).toMatchObject({
+        WEB_PORT: '4173',
+        API_PORT: '4301',
+        MOCK_SERVER_PORT: '4301',
+        SERVER_PORT: '4301',
+      });
+      expect(spec.context.verificationSummary.e2e.status).toBe('passed');
     });
 
     it('does not include forbidden holdout keys in QA context or allowlist', async () => {

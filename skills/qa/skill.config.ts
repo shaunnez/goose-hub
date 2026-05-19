@@ -88,10 +88,13 @@ const config: SkillConfig = {
   /**
    * Tool bundles:
    * - 'read'     — read source files to understand what changed
-   * - 'shell'    — run lint, tests, and e2e commands
-   * - 'validate' — validate JSON output against the skill schema
+   * - 'qa-tools' — read-only verification commands for targeted uncertainty
+   *
+   * The workflow owns lint/typecheck/test/e2e execution when it can provide
+   * structured verificationSummary results. QA should grade those packets
+   * before spending shell calls.
    */
-  toolBundles: ['read', 'shell', 'validate'],
+  toolBundles: ['read', 'qa-tools'],
   /**
    * Model pin: QA uses sonnet-tier.
    * Verification is structured and repeatable — doesn't require opus-level reasoning.

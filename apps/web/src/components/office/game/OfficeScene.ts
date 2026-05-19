@@ -15,7 +15,12 @@ import Phaser from 'phaser';
 import type { PersonaPlacement, TicketPlacement } from '../lib/agent-positions';
 import type { Timeline } from '../lib/choreography';
 import { type HudState, hudStateFromPlacements } from '../lib/hud-state';
-import { FLOOR_PIXEL_WIDTH, floorCenterY, floorOverviewCameraLayout } from '../lib/layout';
+import {
+  FLOOR_PIXEL_WIDTH,
+  FLOOR_VISIBLE_TOP_TRIM,
+  floorOriginY,
+  floorOverviewCameraLayout,
+} from '../lib/layout';
 import { queueVerifiedPngAssets } from './asset-loader';
 import { ChoreographyPlayer } from './choreography/ChoreographyPlayer';
 import { AmbientLayer } from './layers/AmbientLayer';
@@ -84,7 +89,7 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.cameras.main.setBackgroundColor('#050309');
+    this.cameras.main.setBackgroundColor('#2c2a2e');
     ensureOfficeTextures(this);
     // Bake the static floor (brick floor, walls, doors, lighting, per-room
     // backboards) into a single texture. RoomLayer uses it as the base layer.
@@ -240,7 +245,7 @@ export class OfficeScene extends Phaser.Scene {
     this.currentFloorIndex = floorIndex;
     this.cameras.main.pan(
       FLOOR_PIXEL_WIDTH / 2,
-      floorCenterY(floorIndex),
+      this.floorViewportCenterY(floorIndex),
       400,
       Phaser.Math.Easing.Cubic.InOut,
     );
@@ -283,7 +288,7 @@ export class OfficeScene extends Phaser.Scene {
 
   private snapCameraToFloor(floorIndex: number): void {
     if (this.projects.length === 0) return;
-    this.cameras.main.centerOn(FLOOR_PIXEL_WIDTH / 2, floorCenterY(floorIndex));
+    this.cameras.main.centerOn(FLOOR_PIXEL_WIDTH / 2, this.floorViewportCenterY(floorIndex));
     const project = this.projects[floorIndex];
     if (project) {
       this.emitter.emit('floor-change', {
@@ -311,5 +316,10 @@ export class OfficeScene extends Phaser.Scene {
       cameraLayout.bounds.width,
       cameraLayout.bounds.height,
     );
+  }
+
+  private floorViewportCenterY(floorIndex: number): number {
+    const visibleWorldHeight = this.cameras.main.height / this.cameras.main.zoom;
+    return floorOriginY(floorIndex) + FLOOR_VISIBLE_TOP_TRIM + visibleWorldHeight / 2;
   }
 }

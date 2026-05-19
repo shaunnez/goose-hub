@@ -106,6 +106,15 @@ describe('TOOL_BUNDLES', () => {
     expect(TOOL_BUNDLES.validate).not.toContain('Bash');
   });
 
+  it('qa-tools excludes workflow-owned e2e pipeline commands', () => {
+    expect(TOOL_BUNDLES['qa-tools']).not.toContain('Bash(pnpm test:e2e:pipeline*)');
+    expect(TOOL_BUNDLES['qa-tools']).not.toContain(
+      'Bash(pnpm --filter @goose-hub/web test:e2e:pipeline*)',
+    );
+    expect(TOOL_BUNDLES['qa-tools']).not.toContain('Bash(pnpm test*)');
+    expect(TOOL_BUNDLES['qa-tools']).not.toContain('Bash(pnpm --filter*)');
+  });
+
   it('playwright-mcp bundle contains browser_* and planner_* and generator_* tools', () => {
     expect(TOOL_BUNDLES['playwright-mcp']).toContain('mcp__playwright-test__browser_navigate');
     expect(TOOL_BUNDLES['playwright-mcp']).toContain(

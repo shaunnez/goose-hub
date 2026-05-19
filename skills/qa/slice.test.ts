@@ -551,8 +551,8 @@ describe('qa skill config', () => {
     expect(config.freshContext).toBe(true);
   });
 
-  it('has shell toolBundle for running commands', () => {
-    expect(config.toolBundles).toContain('shell');
+  it('uses the QA tool bundle for read-only verification', () => {
+    expect(config.toolBundles).toContain('qa-tools');
   });
 
   it('contextAllowlist contains workItem', () => {
@@ -729,6 +729,12 @@ describe('qa prompt verificationSummary guidance', () => {
     expect(prompt).toContain('Start from `verificationSummary`');
     expect(prompt).toContain(
       'Do not re-run `testCommand` when structured test results are present',
+    );
+    expect(prompt).toContain(
+      'If `verificationSummary.e2e.status` is `passed` or `failed`, grade Regression from that structured result and do not re-run e2e',
+    );
+    expect(prompt).toContain(
+      'One-off visual evidence specs under `apps/web/e2e/issue-<number>.spec.ts` are evidence-post inputs, not durable pipeline coverage',
     );
     expect(prompt).toContain('Inspect changed files first');
   });

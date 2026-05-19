@@ -96,6 +96,8 @@ export const VerificationCommandSummarySchema = z.object({
   exitCode: z.number().int().optional(),
   durationMs: z.number().int().min(0).optional(),
   error: z.string().optional(),
+  stdout: z.string().optional(),
+  stderr: z.string().optional(),
 });
 
 export const VerificationSummarySchema = z.object({
@@ -131,7 +133,7 @@ export const VerificationSummarySchema = z.object({
   e2e: z.object({
     mode: z.enum(['off', 'ui-changed', 'always']),
     command: z.string().optional(),
-    status: z.enum(['ran', 'skipped', 'failed']),
+    status: VerificationCommandStatusSchema,
     reason: z.string(),
   }),
   evidence: z.object({

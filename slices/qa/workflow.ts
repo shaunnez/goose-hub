@@ -252,6 +252,18 @@ export async function runQaWorkflow(
       runtime: projectConfig?.stack?.runtime,
       testCommand,
     });
+    const [webPort, apiPort] =
+      workspaceDir != null ? await Promise.all([findFreePort(), findFreePort()]) : [null, null];
+    const qaEnv =
+      workspaceDir != null && webPort != null && apiPort != null
+        ? {
+            WEB_PORT: String(webPort),
+            CI: 'true',
+            API_PORT: String(apiPort),
+            MOCK_SERVER_PORT: String(apiPort),
+            SERVER_PORT: String(apiPort),
+          }
+        : undefined;
     const { verificationSummary, testRun, e2eDecision } = await buildVerificationSummary({
       workspaceDir,
       prHints,
@@ -266,6 +278,7 @@ export async function runQaWorkflow(
       priorEvents,
       devTestsRun,
       testCapture,
+      ...(qaEnv != null ? { commandEnv: qaEnv } : {}),
       commandTimeoutMs: resolvedBudget.budgets.timeoutMs,
       runTests,
       ...(runCommand != null ? { runCommand } : {}),
@@ -287,9 +300,6 @@ export async function runQaWorkflow(
       },
       runId,
     });
-
-    const [webPort, apiPort] =
-      workspaceDir != null ? await Promise.all([findFreePort(), findFreePort()]) : [null, null];
 
     const deterministicTierResults = deterministic
       ? toAgentTierResults(deterministic.tierResults)
@@ -337,17 +347,7 @@ export async function runQaWorkflow(
       toolBundles: ['read', 'qa-tools'],
       workspaceDir,
       toolExtras: [],
-      ...(workspaceDir != null && webPort != null && apiPort != null
-        ? {
-            env: {
-              WEB_PORT: String(webPort),
-              CI: 'true',
-              API_PORT: String(apiPort),
-              MOCK_SERVER_PORT: String(apiPort),
-              SERVER_PORT: String(apiPort),
-            },
-          }
-        : {}),
+      ...(qaEnv != null ? { env: qaEnv } : {}),
       ...resolvedBudget,
       personaId,
       outputJsonSchema: qaJsonSchema,

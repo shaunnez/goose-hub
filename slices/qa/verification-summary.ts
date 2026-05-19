@@ -16,6 +16,7 @@ import {
 
 export interface RunQaCommandOptions {
   timeoutMs?: number;
+  env?: NodeJS.ProcessEnv;
 }
 
 export type RunQaCommand = (
@@ -38,6 +39,7 @@ export interface VerificationSummaryInput {
   priorEvents: AgentEvent[];
   devTestsRun?: { command: string; paths: string[] };
   testCapture?: { enabled: boolean; reason?: string };
+  commandEnv?: NodeJS.ProcessEnv;
   commandTimeoutMs?: number;
   runTests: (cwd: string, command: string) => Promise<TestRun | null>;
   runCommand?: RunQaCommand;
@@ -50,6 +52,8 @@ export interface VerificationSummaryResult {
 }
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 600_000;
+const COMMAND_OUTPUT_TAIL_CHARS = 4_000;
+const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
 
 export async function defaultRunCommand(
   cwd: string,
@@ -66,6 +70,8 @@ export async function defaultRunCommand(
   return await new Promise((resolve) => {
     let settled = false;
     let child: ReturnType<typeof spawn> | undefined;
+    let stdoutTail = '';
+    let stderrTail = '';
     const finish = (summary: VerificationCommandSummary) => {
       if (settled) return;
       settled = true;
@@ -78,6 +84,7 @@ export async function defaultRunCommand(
         command,
         status: 'failed',
         error: `command timed out after ${timeoutMs}ms`,
+        ...failedOutputTails(stdoutTail, stderrTail),
       });
     }, timeoutMs);
 
@@ -85,8 +92,8 @@ export async function defaultRunCommand(
       child = spawn('sh', ['-c', trimmed], {
         cwd,
         detached: process.platform !== 'win32',
-        env: { ...process.env, CI: 'true' },
-        stdio: ['ignore', 'ignore', 'ignore'],
+        env: { ...process.env, CI: 'true', ...options.env },
+        stdio: ['ignore', 'pipe', 'pipe'],
       });
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
@@ -94,14 +101,26 @@ export async function defaultRunCommand(
       return;
     }
 
+    child.stdout?.on('data', (chunk: Buffer | string) => {
+      stdoutTail = appendOutputTail(stdoutTail, chunk);
+    });
+    child.stderr?.on('data', (chunk: Buffer | string) => {
+      stderrTail = appendOutputTail(stderrTail, chunk);
+    });
     child.on('error', (err) => {
-      finish({ command, status: 'failed', error: sanitizeOperationalMessage(err.message) });
+      finish({
+        command,
+        status: 'failed',
+        error: sanitizeOperationalMessage(err.message),
+        ...failedOutputTails(stdoutTail, stderrTail),
+      });
     });
     child.on('close', (code) => {
       finish({
         command,
         status: code === 0 ? 'passed' : 'failed',
         ...(code != null ? { exitCode: code } : {}),
+        ...(code === 0 ? {} : failedOutputTails(stdoutTail, stderrTail)),
       });
     });
   });
@@ -124,12 +143,14 @@ export async function buildVerificationSummary(
     input.commands.lintCommand,
     runCommand,
     input.commandTimeoutMs,
+    input.commandEnv,
   );
   const typecheck = await runOptionalCommand(
     input.workspaceDir,
     input.commands.typecheckCommand,
     runCommand,
     input.commandTimeoutMs,
+    input.commandEnv,
   );
 
   let testRun: TestRun | null = null;
@@ -156,6 +177,13 @@ export async function buildVerificationSummary(
           ? (testCaptureError ?? 'test command did not produce structured output')
           : undefined;
   const compactedTestRun = compactTestRun(input.commands.testCommand, testStatus, testRun);
+  const e2e = await runOptionalCommand(
+    input.workspaceDir,
+    e2eDecision.command,
+    runCommand,
+    input.commandTimeoutMs,
+    input.commandEnv,
+  );
 
   const verificationSummary: VerificationSummary = {
     changedFiles: {
@@ -178,19 +206,14 @@ export async function buildVerificationSummary(
         ...(testRun != null ? { durationMs: testRun.wallTimeMs } : {}),
         ...(testError != null ? { error: testError } : {}),
       },
-      ...(e2eDecision.command != null
-        ? { e2e: { command: e2eDecision.command, status: 'skipped' as const } }
-        : {}),
+      ...(e2e != null ? { e2e } : {}),
     },
     ...(compactedTestRun != null ? { testRun: compactedTestRun } : {}),
     e2e: {
       mode: e2eDecision.mode,
       ...(e2eDecision.command != null ? { command: e2eDecision.command } : {}),
-      status: 'skipped',
-      reason:
-        e2eDecision.command != null
-          ? `${e2eDecision.reason}; harness did not run e2e`
-          : e2eDecision.reason,
+      status: e2e?.status ?? 'skipped',
+      reason: e2eReason(e2eDecision.reason, e2e),
     },
     evidence: summarizeEvidence(input.priorEvents),
     ...(input.devTestsRun != null ? { devTestsRun: input.devTestsRun } : {}),
@@ -238,12 +261,28 @@ function runOptionalCommand(
   command: string | undefined,
   runCommand: RunQaCommand,
   timeoutMs?: number,
+  env?: NodeJS.ProcessEnv,
 ): Promise<VerificationCommandSummary | null> {
   if (command == null || command.trim().length === 0) return Promise.resolve(null);
   if (workspaceDir == null) {
     return Promise.resolve({ command, status: 'skipped', error: 'no worktree available' });
   }
-  return runCommand(workspaceDir, command, timeoutMs != null ? { timeoutMs } : undefined);
+  const options =
+    timeoutMs != null || env != null
+      ? {
+          ...(timeoutMs != null ? { timeoutMs } : {}),
+          ...(env != null ? { env } : {}),
+        }
+      : undefined;
+  return runCommand(workspaceDir, command, options);
+}
+
+function e2eReason(reason: string, e2e: VerificationCommandSummary | null): string {
+  if (e2e == null) return reason;
+  if (e2e.status !== 'skipped') return reason;
+  return e2e.error != null
+    ? `${reason}; harness did not run e2e: ${e2e.error}`
+    : `${reason}; harness did not run e2e`;
 }
 
 function compactTestRun(
@@ -307,4 +346,27 @@ function summarizeEvidence(events: AgentEvent[]): VerificationSummary['evidence'
 function sanitizeOperationalMessage(value: unknown): string {
   const message = typeof value === 'string' ? value : String(value ?? 'unknown error');
   return message.replace(/\s+/g, ' ').trim().slice(0, 300);
+}
+
+function appendOutputTail(current: string, chunk: Buffer | string): string {
+  const next = current + String(chunk);
+  return next.length > COMMAND_OUTPUT_TAIL_CHARS ? next.slice(-COMMAND_OUTPUT_TAIL_CHARS) : next;
+}
+
+function failedOutputTails(
+  stdoutTail: string,
+  stderrTail: string,
+): Pick<VerificationCommandSummary, 'stdout' | 'stderr'> {
+  return {
+    ...(stdoutTail.trim().length > 0 ? { stdout: sanitizeCommandOutput(stdoutTail) } : {}),
+    ...(stderrTail.trim().length > 0 ? { stderr: sanitizeCommandOutput(stderrTail) } : {}),
+  };
+}
+
+function sanitizeCommandOutput(value: string): string {
+  return value
+    .replace(ANSI_ESCAPE_PATTERN, '')
+    .replace(/\r\n/g, '\n')
+    .trim()
+    .slice(-COMMAND_OUTPUT_TAIL_CHARS);
 }
