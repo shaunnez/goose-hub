@@ -242,10 +242,21 @@ export interface ProjectConfigDto {
   slug: string;
   name: string;
   source: { kind: string; repo: string };
+  targetRepo: { cloneUrl: string; defaultBranch: string; localPath: string };
+  stack: {
+    runtime: string;
+    packageManager: string;
+    testCommand: string;
+    lintCommand?: string;
+    typecheckCommand?: string;
+    e2eCommand?: string;
+  };
   activeMilestone: string | null;
   colorStripe: string;
   budgets: { perWorkflowMaxUsd: number; dailyTokens: number; perAdvisorMaxUsd: number };
   mode: string;
+  storage: { path: string };
+  isolation: { mode: string };
 }
 
 export interface ImprovementCandidateDto {
