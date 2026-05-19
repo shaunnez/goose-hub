@@ -96,6 +96,7 @@ async function main() {
           tool_name: toolName,
           error: errorText,
           truncated,
+          workspace_dir: process.env.FACTORY_WORKSPACE_DIR ?? '',
         }),
         signal: AbortSignal.timeout(500),
       }).catch(() => {});

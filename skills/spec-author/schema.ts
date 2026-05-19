@@ -3,6 +3,9 @@ import { z } from 'zod';
 
 export { DecisionSummarySchema };
 
+const RepoRelativePathDescription =
+  'Repo-root/worktree-root relative POSIX path. Do not use package-relative paths like src/... for files under apps/web; use apps/web/src/....';
+
 /**
  * Engineering Spec schema (M19.02, issue #559).
  *
@@ -53,16 +56,16 @@ export const ArchitectureSchema = z.object({
 export const SchemaChangesSchema = z.object({
   /** Verbatim DDL — no pseudocode. Empty array if no schema changes. */
   ddl: z.array(z.string()),
-  /** Migration files (relative paths). */
-  migrations: z.array(z.string()),
+  /** Migration files. */
+  migrations: z.array(z.string().describe(RepoRelativePathDescription)),
 });
 
 export const InterfaceContractSchema = z.object({
   name: z.string().min(1),
   /** Paste-ready signature: function declaration, type alias, or full Zod block. */
   signature: z.string().min(1),
-  /** Workspace-relative file the signature lives in (or will live in). */
-  file: z.string().min(1),
+  /** Repo-root/worktree-root relative file the signature lives in (or will live in). */
+  file: z.string().min(1).describe(RepoRelativePathDescription),
   /** Optional `start-end` line range as a string, e.g. "12-34". */
   lineRange: optionalAiString,
 });
@@ -70,7 +73,7 @@ export const InterfaceContractSchema = z.object({
 export const WorkPackageSchema = z.object({
   id: z.string().min(1),
   /** Paths this WP owns. No path may appear in two WPs (full-stop, not per-batch). */
-  filesOwned: z.array(z.string().min(1)).min(1),
+  filesOwned: z.array(z.string().min(1).describe(RepoRelativePathDescription)).min(1),
   /** Description of changes — file:line citations encouraged. */
   changes: z.string().min(1),
   /** WP ids this WP depends on; must reference real WPs in the spec. */
@@ -85,8 +88,8 @@ export const ExecutionBatchSchema = z.object({
 
 export const VerificationToolSchema = z.object({
   name: z.string().min(1),
-  /** Workspace-relative path to the script that runs this verification. */
-  scriptPath: z.string().min(1),
+  /** Repo-root/worktree-root relative path to the script that runs this verification. */
+  scriptPath: z.string().min(1).describe(RepoRelativePathDescription),
   /** Exit codes that count as success. */
   expectedExitCodes: z.array(z.number().int()).min(1),
   /** Optional input format spec (e.g. JSON schema for stdin). */

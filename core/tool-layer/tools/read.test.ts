@@ -160,7 +160,7 @@ describe('searchFiles — spawn paths', () => {
     expect(spawnArgs).not.toContain('--glob');
   });
 
-  it('always pins the search path to workspaceRoot (never user-supplied)', async () => {
+  it('pins the search cwd to workspaceRoot and searches the relative root', async () => {
     vi.mocked(spawn).mockReturnValue(
       makeChild({ exitCode: 0, stdoutData: '' }) as ReturnType<typeof spawn>,
     );
@@ -169,8 +169,9 @@ describe('searchFiles — spawn paths', () => {
     await searchFiles({ workspaceRoot: root, pattern: 'x' });
 
     const spawnArgs = vi.mocked(spawn).mock.calls[0][1] as string[];
-    // Last arg is the search path — must be workspaceRoot
-    expect(spawnArgs[spawnArgs.length - 1]).toBe(root);
+    const spawnOptions = vi.mocked(spawn).mock.calls[0][2] as { cwd?: string };
+    expect(spawnOptions.cwd).toBe(root);
+    expect(spawnArgs[spawnArgs.length - 1]).toBe('.');
   });
 
   it('collects stdout across multiple data events', async () => {

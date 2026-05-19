@@ -1,4 +1,5 @@
 import type { DecisionSummary } from '@goose-hub/core/agent-runtime/interface.js';
+import type { ObservedChangedFilesPacket } from '@goose-hub/core/workspaces/observed-changes.js';
 
 export interface ImplementOutputShape {
   plan: string;
@@ -10,3 +11,5 @@ export interface ImplementOutputShape {
   confidence: 'low' | 'medium' | 'high';
   decisionSummaries: DecisionSummary[];
 }
+
+export type { ObservedChangedFilesPacket };

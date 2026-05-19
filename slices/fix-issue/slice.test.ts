@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import type { AgentResult, AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -89,6 +93,7 @@ vi.mock('@goose-hub/core/workspaces/orchestrator-git.js', () => ({
 }));
 
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { GIT_ENV } from '@goose-hub/core/workspaces/git-env.js';
 
 function resetEventStoreMocks(): void {
   vi.mocked(eventStore.replay).mockReturnValue([]);
@@ -196,6 +201,30 @@ function makeImplementOutput(overrides: Record<string, unknown> = {}) {
     ],
     ...overrides,
   };
+}
+
+function makeTempWorktree(paths: string[]): string {
+  const worktreePath = mkdtempSync(join(tmpdir(), 'goose-hub-fix-issue-'));
+  for (const path of paths) {
+    const absPath = join(worktreePath, path);
+    mkdirSync(dirname(absPath), { recursive: true });
+    writeFileSync(absPath, '');
+  }
+  return worktreePath;
+}
+
+function makeGitWorktree(paths: string[] = []): string {
+  const worktreePath = makeTempWorktree(paths);
+  execFileSync('git', ['init', '-q'], { cwd: worktreePath, env: GIT_ENV });
+  execFileSync('git', ['config', 'user.email', 'factory@example.test'], {
+    cwd: worktreePath,
+    env: GIT_ENV,
+  });
+  execFileSync('git', ['config', 'user.name', 'Factory Test'], {
+    cwd: worktreePath,
+    env: GIT_ENV,
+  });
+  return worktreePath;
 }
 
 function resetRuntimeRoutingMocks(): void {
@@ -818,6 +847,135 @@ describe('runFixIssueWorkflow (#183)', () => {
     );
   });
 
+  it('fires the frontend evidence gate after package-relative paths are normalized', async () => {
+    const item = makeWorkItem({ priority: 'medium', type: 'bug' });
+    const source = makeStateSource();
+    const worktreePath = makeTempWorktree(['apps/web/src/components/chrome/slice.test.ts']);
+    const openPRImpl = vi.fn();
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockResolvedValueOnce({
+        output: makeImplementOutput({
+          filesWritten: [
+            { path: 'src/components/chrome/slice.test.ts', reason: 'frontend regression test' },
+          ],
+          testsWritten: [{ path: 'src/components/chrome/slice.test.ts', cases: 1 }],
+          testsRun: {
+            command: 'pnpm test --reporter=json',
+            paths: ['src/components/chrome/slice.test.ts'],
+          },
+          evidenceSpecPath: null,
+        }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult),
+    };
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue(worktreePath),
+      cleanupWorktreeImpl: vi.fn(),
+    });
+
+    expect(openPRImpl).not.toHaveBeenCalled();
+    const normalized = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'agent.path-normalized');
+    expect(normalized?.[0].payload).toMatchObject({ skill: 'implement' });
+    const normalizedFields = (
+      normalized?.[0].payload as { fields?: Array<Record<string, unknown>> }
+    ).fields;
+    expect(normalizedFields).toContainEqual({
+      field: 'filesWritten[0].path',
+      from: 'src/components/chrome/slice.test.ts',
+      to: 'apps/web/src/components/chrome/slice.test.ts',
+      source: 'package-root',
+    });
+    const failed = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'agent.run-failed');
+    expect((failed?.[0].payload as { error?: string }).error).toContain(
+      'evidenceSpecPath is required when filesWritten includes apps/web/',
+    );
+  });
+
+  it('passes the wrong-surface guard when normalized output matches an investigation key file', async () => {
+    const item = makeWorkItem({ priority: 'medium', type: 'bug' });
+    const source = makeStateSource();
+    const worktreePath = makeTempWorktree([
+      'apps/web/src/components/chrome/slice.test.ts',
+      'apps/web/e2e/issue-42.spec.ts',
+    ]);
+    vi.mocked(eventStore.replay).mockReturnValue([
+      makeInvestigationEvent(item, {
+        keyFiles: [
+          {
+            path: 'apps/web/src/components/chrome/slice.test.ts',
+            reason: 'frontend surface under investigation',
+          },
+        ],
+      }),
+    ]);
+    const openPRImpl = vi.fn().mockResolvedValue({
+      prNumber: 100,
+      prUrl: 'https://github.com/owner/repo/pull/100',
+      branch: 'factory/abc',
+      base: 'main',
+    });
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockResolvedValueOnce({
+        output: makeImplementOutput({
+          filesWritten: [
+            { path: 'src/components/chrome/slice.test.ts', reason: 'fix frontend surface' },
+          ],
+          testsWritten: [{ path: 'src/components/chrome/slice.test.ts', cases: 1 }],
+          testsRun: {
+            command: 'pnpm test --reporter=json',
+            paths: ['src/components/chrome/slice.test.ts'],
+          },
+          evidenceSpecPath: 'apps/web/e2e/issue-42.spec.ts',
+        }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult),
+    };
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      evidenceRuntime: {
+        run: vi.fn().mockResolvedValue({
+          output: {
+            screenshots: [],
+            gifPath: null,
+            commentUrl: 'https://github.com/owner/repo/issues/42#issuecomment-1',
+            commitSha: 'abc1234567890abcdef1234567890abcdef1234',
+            decisionSummaries: [{ kind: 'GREEN', summary: 'Evidence captured' }],
+          },
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult),
+      },
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue(worktreePath),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    expect(openPRImpl).toHaveBeenCalled();
+    const guard = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'agent.wrong-surface-guard');
+    expect(guard).toBeUndefined();
+  });
+
   it('wrong-surface guard blocks PRs when implement output misses investigated files', async () => {
     const item = makeWorkItem({ priority: 'medium', type: 'bug' });
     const source = makeStateSource();
@@ -875,6 +1033,230 @@ describe('runFixIssueWorkflow (#183)', () => {
       'factory:in-progress',
       'factory:needs-human',
     );
+  });
+
+  it('records observed changed files and prefers them in the PR body', async () => {
+    const item = makeWorkItem({ priority: 'medium' });
+    const source = makeStateSource();
+    const worktreePath = makeGitWorktree();
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockImplementationOnce(async (spec) => {
+        const wt = (spec.context as { worktreePath: string }).worktreePath;
+        const observedPath = join(wt, 'core/observed.ts');
+        mkdirSync(dirname(observedPath), { recursive: true });
+        writeFileSync(observedPath, 'export const observed = true;\n');
+        return {
+          output: makeImplementOutput({
+            filesWritten: [{ path: 'docs/model-only.md', reason: 'model declared this' }],
+            testsWritten: [],
+            testsRun: { command: 'pnpm test ', paths: [] },
+          }),
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult;
+      }),
+    };
+    const openPRImpl = vi.fn().mockResolvedValue({
+      prNumber: 100,
+      prUrl: 'https://github.com/owner/repo/pull/100',
+      branch: 'factory/abc',
+      base: 'main',
+    });
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue(worktreePath),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    const completeEvent = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'agent.implement-complete');
+    expect(completeEvent?.[0].payload).toMatchObject({
+      observedChangedFiles: {
+        count: 1,
+        paths: ['core/observed.ts'],
+      },
+    });
+    const prCall = vi.mocked(openPRImpl).mock.calls[0][0];
+    expect(prCall.body).toContain('`core/observed.ts` — observed untracked change');
+    expect(prCall.body).not.toContain('docs/model-only.md');
+    const mismatchEvent = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'agent.output-fact-mismatch');
+    expect(mismatchEvent?.[0].payload).toMatchObject({
+      skill: 'implement',
+      observedChangedFiles: {
+        count: 1,
+        paths: ['core/observed.ts'],
+      },
+      observedWriteFiles: {
+        count: 0,
+        paths: [],
+      },
+      modelDeclaredFiles: {
+        count: 1,
+        paths: ['docs/model-only.md'],
+      },
+      mismatches: {
+        observedNotDeclared: {
+          count: 1,
+          paths: ['core/observed.ts'],
+        },
+        declaredNotObserved: {
+          count: 1,
+          paths: ['docs/model-only.md'],
+        },
+      },
+    });
+  });
+
+  it('records output fact mismatches from observed write tool audit paths', async () => {
+    const item = makeWorkItem({ priority: 'medium' });
+    const source = makeStateSource();
+    const worktreePath = makeTempWorktree([]);
+    vi.mocked(eventStore.replay).mockImplementation((filter = {}) => {
+      if (filter.runId != null && filter.kind === 'agent.tool-call') {
+        return [
+          {
+            id: 101,
+            projectId: 'proj',
+            workItemId: item.id,
+            kind: 'agent.tool-call',
+            payload: {
+              tool_name: 'Write',
+              canonical_path: { path: 'core/tool-observed.ts', root: 'worktree' },
+            },
+            runId: String(filter.runId),
+            createdAt: new Date().toISOString(),
+          },
+        ] as never;
+      }
+      return [];
+    });
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockResolvedValueOnce({
+        output: makeImplementOutput({
+          filesWritten: [{ path: 'docs/model-only.md', reason: 'model declared this' }],
+          testsWritten: [],
+          testsRun: { command: 'pnpm test ', paths: [] },
+        }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult),
+    };
+    const openPRImpl = vi.fn().mockResolvedValue({
+      prNumber: 100,
+      prUrl: 'https://github.com/owner/repo/pull/100',
+      branch: 'factory/abc',
+      base: 'main',
+    });
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue(worktreePath),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    expect(openPRImpl).toHaveBeenCalled();
+    const mismatchEvent = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'agent.output-fact-mismatch');
+    expect(mismatchEvent?.[0].payload).toMatchObject({
+      skill: 'implement',
+      observedChangedFiles: {
+        count: 0,
+        paths: [],
+      },
+      observedWriteFiles: {
+        count: 1,
+        paths: ['core/tool-observed.ts'],
+      },
+      mismatches: {
+        observedNotDeclared: {
+          count: 1,
+          paths: ['core/tool-observed.ts'],
+        },
+        declaredNotObserved: {
+          count: 1,
+          paths: ['docs/model-only.md'],
+        },
+      },
+    });
+  });
+
+  it('wrong-surface guard can pass using observed git changes when model output omits the key file', async () => {
+    const item = makeWorkItem({ priority: 'medium', type: 'bug' });
+    const source = makeStateSource();
+    const worktreePath = makeGitWorktree();
+    vi.mocked(eventStore.replay).mockImplementation((filter = {}) => {
+      if (filter.kind === 'agent.investigation-complete') {
+        return [
+          makeInvestigationEvent(item, {
+            keyFiles: [{ path: 'core/observed.ts', reason: 'observed implementation surface' }],
+          }),
+        ];
+      }
+      return [];
+    });
+
+    const runtime: AgentRuntime = {
+      run: vi.fn().mockImplementationOnce(async (spec) => {
+        const wt = (spec.context as { worktreePath: string }).worktreePath;
+        const observedPath = join(wt, 'core/observed.ts');
+        mkdirSync(dirname(observedPath), { recursive: true });
+        writeFileSync(observedPath, 'export const observed = true;\n');
+        return {
+          output: makeImplementOutput({
+            filesWritten: [
+              { path: 'slices/parallel-implement/workflow.ts', reason: 'stale model output' },
+            ],
+            testsWritten: [],
+            testsRun: { command: 'pnpm test ', paths: [] },
+          }),
+          decisionSummaries: [],
+          events: [],
+        } satisfies AgentResult;
+      }),
+    };
+    const openPRImpl = vi.fn().mockResolvedValue({
+      prNumber: 100,
+      prUrl: 'https://github.com/owner/repo/pull/100',
+      branch: 'factory/abc',
+      base: 'main',
+    });
+
+    const { runFixIssueWorkflow } = await import('./workflow.js');
+    await runFixIssueWorkflow(item, source, 'proj', '/repo', {
+      runtime,
+      openPRImpl,
+      adviseOnPlanImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue(worktreePath),
+      cleanupWorktreeImpl: vi.fn(),
+      resolveWorktreeHeadShaImpl: vi
+        .fn()
+        .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
+    });
+
+    expect(openPRImpl).toHaveBeenCalled();
+    const guard = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'agent.wrong-surface-guard');
+    expect(guard).toBeUndefined();
   });
 
   it('wrong-surface guard records failed runs whose tool calls never touched investigation files', async () => {

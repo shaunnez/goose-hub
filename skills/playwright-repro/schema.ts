@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+const RepoRelativePathDescription =
+  'Repo-root/worktree-root relative POSIX path. Do not use package-relative paths like src/... for files under apps/web; use apps/web/src/....';
+
 export const InvestigationReproPacketSchema = z.object({
   route: z.string().nullable().describe('Route path for the browser repro, or null if unknown'),
   selectors: z.array(z.string()).describe('Known selectors or stable locators for the repro'),
@@ -8,7 +11,9 @@ export const InvestigationReproPacketSchema = z.object({
     .nullable()
     .describe('The visible assertion the repro should prove, or null if unknown'),
   setupRequired: z.array(z.string()).describe('Required auth, localStorage, seed, or UI setup'),
-  keyFiles: z.array(z.object({ path: z.string(), reason: z.string() })),
+  keyFiles: z.array(
+    z.object({ path: z.string().describe(RepoRelativePathDescription), reason: z.string() }),
+  ),
   confidence: z.enum(['low', 'medium', 'high']),
   skipBeforeEvidenceEligible: z.boolean().default(false),
 });
@@ -16,9 +21,7 @@ export const InvestigationReproPacketSchema = z.object({
 export const PlaywrightReproSpecSchema = z.object({
   specPath: z
     .string()
-    .describe(
-      'Workspace-relative Playwright spec path, usually apps/web/e2e/repro-issue-N.spec.ts',
-    ),
+    .describe(`${RepoRelativePathDescription} Usually apps/web/e2e/repro-issue-N.spec.ts.`),
   specSource: z
     .string()
     .describe('Complete TypeScript source for the Playwright repro spec at specPath'),
@@ -35,7 +38,7 @@ export const PlaywrightReproSpecSchema = z.object({
 export const PlaywrightReproSchema = z.object({
   screenshots: z.array(
     z.object({
-      path: z.string().describe('Workspace-relative path to screenshot file'),
+      path: z.string().describe(RepoRelativePathDescription),
       caption: z.string().describe('Description of what this screenshot shows'),
       step: z.number().describe('Repro step number'),
       githubUrl: z
@@ -48,7 +51,7 @@ export const PlaywrightReproSchema = z.object({
   gifPath: z
     .string()
     .nullable()
-    .describe('Workspace-relative path to walkthrough GIF, or null if not captured'),
+    .describe(`${RepoRelativePathDescription} Path to walkthrough GIF, or null if not captured.`),
   consoleErrors: z.array(
     z.object({
       message: z.string(),

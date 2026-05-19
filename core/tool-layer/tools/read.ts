@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { readFile as fsReadFile } from 'node:fs/promises';
-import { isAbsolute, resolve, sep } from 'node:path';
+import { resolve } from 'node:path';
+import { type RepoRelativePath, canonicalizeFactoryToolPath } from '../path-contract.js';
 
 /**
  * Typed error thrown when a tool call attempts to escape the workspace root.
@@ -18,43 +19,45 @@ export class SandboxViolationError extends Error {
 interface ReadFileParams {
   /** Absolute path to the workspace root (the git worktree directory). */
   workspaceRoot: string;
-  /** Relative path to the file within the workspace. Must not be absolute or traverse above root. */
+  /** Repo-relative, package-relative, or absolute-in-worktree path to read. */
   path: string;
+}
+
+export interface ReadFileResult {
+  path: RepoRelativePath;
+  content: string;
 }
 
 /**
  * Reads a file at `path` relative to `workspaceRoot`.
  *
  * Security constraints:
- * - `path` must be a non-empty relative path (no leading `/`)
- * - After resolution, the resulting absolute path must start with `workspaceRoot`
- *   (prevents `../` traversal)
+ * - `path` must be non-empty
+ * - Absolute paths are allowed only when they are inside `workspaceRoot`
+ * - Package-relative paths are normalized when uniquely resolvable
+ * - Ambiguous package-relative paths and `../` traversal are rejected
  *
  * @throws {SandboxViolationError} if the resolved path would escape the workspace root.
  */
 export async function readFile(params: ReadFileParams): Promise<string> {
+  const result = await readFileWithMetadata(params);
+  return result.content;
+}
+
+export async function readFileWithMetadata(params: ReadFileParams): Promise<ReadFileResult> {
   const { workspaceRoot, path } = params;
 
   if (path.length === 0) {
     throw new SandboxViolationError('path must not be empty');
   }
 
-  if (isAbsolute(path)) {
-    throw new SandboxViolationError(
-      `Absolute paths are not permitted: "${path}". Use a path relative to the workspace root.`,
-    );
+  const canonical = canonicalizeFactoryToolPath({ rawPath: path, worktreePath: workspaceRoot });
+  if (!canonical.ok) {
+    throw new SandboxViolationError(canonical.error.message);
   }
 
-  const resolved = resolve(workspaceRoot, path);
-  const rootNormalized = resolve(workspaceRoot);
-
-  if (!resolved.startsWith(`${rootNormalized}${sep}`) && resolved !== rootNormalized) {
-    throw new SandboxViolationError(
-      `Path traversal detected: "${path}" resolves outside workspace root "${workspaceRoot}".`,
-    );
-  }
-
-  return fsReadFile(resolved, 'utf8');
+  const content = await fsReadFile(resolve(workspaceRoot, canonical.path.path), 'utf8');
+  return { path: canonical.path, content };
 }
 
 interface SearchFilesParams {
@@ -64,6 +67,28 @@ interface SearchFilesParams {
   pattern: string;
   /** Optional glob pattern to restrict which files are searched (e.g. `*.ts`). */
   glob?: string;
+}
+
+export interface SearchFilesResult {
+  stdout: string;
+  paths: RepoRelativePath[];
+}
+
+function canonicalizeRipgrepOutput(workspaceRoot: string, stdout: string): SearchFilesResult {
+  const paths = new Map<string, RepoRelativePath>();
+  const lines = stdout.split(/\r?\n/);
+  const canonicalLines = lines.map((line) => {
+    const match = line.match(/^(.+?):(\d+):(.*)$/);
+    if (match == null) return line;
+    const [, rawPath, lineNumber, rest] = match;
+    if (rawPath == null || lineNumber == null || rest == null) return line;
+    const canonical = canonicalizeFactoryToolPath({ rawPath, worktreePath: workspaceRoot });
+    if (!canonical.ok) return line;
+    paths.set(canonical.path.path, canonical.path);
+    return `${canonical.path.path}:${lineNumber}:${rest}`;
+  });
+
+  return { stdout: canonicalLines.join('\n'), paths: [...paths.values()] };
 }
 
 /**
@@ -79,6 +104,13 @@ interface SearchFilesParams {
  * @throws {SandboxViolationError} if the pattern fails validation.
  */
 export async function searchFiles(params: SearchFilesParams): Promise<string> {
+  const result = await searchFilesWithMetadata(params);
+  return result.stdout;
+}
+
+export async function searchFilesWithMetadata(
+  params: SearchFilesParams,
+): Promise<SearchFilesResult> {
   const { workspaceRoot, pattern, glob } = params;
 
   if (pattern.length === 0) {
@@ -90,16 +122,21 @@ export async function searchFiles(params: SearchFilesParams): Promise<string> {
       `Pattern "${pattern}" contains path traversal sequence "../". This is not permitted.`,
     );
   }
+  if (glob?.includes('../')) {
+    throw new SandboxViolationError(
+      `Glob "${glob}" contains path traversal sequence "../". This is not permitted.`,
+    );
+  }
 
-  return new Promise<string>((resolve, reject) => {
+  return new Promise<SearchFilesResult>((resolveSearch, reject) => {
     const args: string[] = ['--no-heading', '--with-filename', '--line-number'];
 
     if (glob != null && glob.length > 0) {
       args.push('--glob', glob);
     }
 
-    // Always pin the search path to workspaceRoot — never user-supplied.
-    args.push(pattern, workspaceRoot);
+    // cwd pins the search to workspaceRoot. Search "." so ripgrep prints relative paths.
+    args.push(pattern, '.');
 
     const child = spawn('rg', args, {
       cwd: workspaceRoot,
@@ -121,10 +158,10 @@ export async function searchFiles(params: SearchFilesParams): Promise<string> {
     child.on('close', (code) => {
       // ripgrep exits with 0 on match, 1 on no match, 2+ on error.
       if (code === 0) {
-        resolve(stdout);
+        resolveSearch(canonicalizeRipgrepOutput(workspaceRoot, stdout));
       } else if (code === 1) {
         // No matches — not an error.
-        resolve('');
+        resolveSearch({ stdout: '', paths: [] });
       } else {
         reject(new Error(`ripgrep exited with code ${code}: ${stderr.trim()}`));
       }

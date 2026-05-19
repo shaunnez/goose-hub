@@ -3,8 +3,11 @@ import { z } from 'zod';
 
 export { DecisionSummarySchema };
 
+const RepoRelativePathDescription =
+  'Repo-root/worktree-root relative POSIX path. Do not use package-relative paths like src/... for files under apps/web; use apps/web/src/....';
+
 export const KeyFileSchema = z.object({
-  path: z.string(),
+  path: z.string().describe(RepoRelativePathDescription),
   reason: z.string(),
 });
 

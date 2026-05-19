@@ -1,5 +1,7 @@
 import { spawnSync } from 'node:child_process';
-import { dirname, resolve } from 'node:path';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -141,6 +143,16 @@ function makeAppendEvent(): {
   };
 }
 
+function makeTempRepo(paths: string[] = []): string {
+  const repoPath = mkdtempSync(join(tmpdir(), 'goose-hub-parallel-'));
+  for (const path of paths) {
+    const absPath = join(repoPath, path);
+    mkdirSync(dirname(absPath), { recursive: true });
+    writeFileSync(absPath, '');
+  }
+  return repoPath;
+}
+
 function makeStateSource(
   overrides: Partial<{
     transitionState: (...args: unknown[]) => Promise<void>;
@@ -154,6 +166,139 @@ function makeStateSource(
     ...overrides,
   } as unknown as import('@goose-hub/core/state-source/interface.js').StateSource;
 }
+
+describe('parallel-implement repo-relative path normalization', () => {
+  it('blocks ambiguous package-relative filesOwned before dispatch', async () => {
+    const repoPath = makeTempRepo(['apps/web/src/index.ts', 'apps/server/src/index.ts']);
+    const spec = makeSpec([makeWp('WP1', ['src/index.ts'])]);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const stateSource = makeStateSource();
+    const replaySpy = vi.spyOn(eventStore, 'replay').mockReturnValue([]);
+
+    try {
+      const result = await runParallelImplementWorkflow(
+        makeWorkItem(),
+        spec,
+        'pipeline-run-paths',
+        stateSource,
+        'goose-hub-self',
+        repoPath,
+        {
+          runtime: makeRuntime({ WP1: async () => makeOkResult('WP1') }),
+          resolveWorkflowBaseImpl: () => ({
+            branch: 'main',
+            ref: 'origin/main',
+            source: 'configured-default',
+          }),
+          devReviewConfigOverride: {
+            enabled: false,
+            triggerOn: 'priority:high+',
+            perCycleMaxUsd: 0,
+            maxRevisionTurns: 1,
+            timeoutMs: 1_000,
+          },
+          appendEvent,
+        },
+      );
+
+      expect(result.status).toBe('failed');
+      if (result.status !== 'failed') throw new Error('expected ambiguous paths to fail');
+      expect(result.errorReason).toBe('engineering spec contains ambiguous repo-relative paths');
+      expect(stateSource.comment).toHaveBeenCalledWith(
+        '560',
+        expect.stringContaining('Parallel implement blocked by ambiguous paths'),
+      );
+      const normalized = events.find((event) => event.kind === 'agent.path-normalized');
+      expect((normalized?.payload as { fields?: unknown[] }).fields).toEqual([
+        {
+          field: 'workPackages[0].filesOwned[0]',
+          from: 'src/index.ts',
+          to: 'src/index.ts',
+          source: 'unresolved',
+          ambiguous: ['apps/server/src/index.ts', 'apps/web/src/index.ts'],
+        },
+      ]);
+    } finally {
+      replaySpy.mockRestore();
+    }
+  });
+
+  it('passes canonical filesOwned into the WP commit step after normalization', async () => {
+    const repoPath = makeTempRepo(['apps/web/src/foo.ts']);
+    const issueWorktree = makeTempRepo();
+    const scratchWorktree = makeTempRepo(['apps/web/src/foo.ts']);
+    const spec = makeSpec([makeWp('WP1', ['src/foo.ts'])]);
+    const committedFiles: string[][] = [];
+    const iterations: Array<{ wpId: string; status: string }> = [];
+    const { fn: appendEvent } = makeAppendEvent();
+    const replaySpy = vi.spyOn(eventStore, 'replay').mockReturnValue([]);
+
+    try {
+      const result = await runParallelImplementWorkflow(
+        makeWorkItem({ priority: 'medium' }),
+        spec,
+        'pipeline-run-canonical',
+        makeStateSource(),
+        'goose-hub-self',
+        repoPath,
+        {
+          runtime: makeRuntime({
+            WP1: async () => {
+              const output = makeOkResult('WP1').output as ImplementWpOutput;
+              return {
+                output: {
+                  ...output,
+                  filesWritten: [{ path: 'apps/web/src/foo.ts', reason: 'updated component' }],
+                },
+                decisionSummaries: [],
+                events: [],
+              };
+            },
+          }),
+          resolveWorkflowBaseImpl: () => ({
+            branch: 'main',
+            ref: 'origin/main',
+            source: 'configured-default',
+          }),
+          createIssueWorktreeImpl: () => issueWorktree,
+          createWpWorktreeImpl: () => scratchWorktree,
+          cleanupWpWorktreesImpl: () => undefined,
+          orchestratorCommitWpImpl: (_wt, files) => {
+            committedFiles.push(files);
+            return 'sha1';
+          },
+          revertWpChangesImpl: () => undefined,
+          recordIterationImpl: (_runId, wpId, _iteration, status) => {
+            iterations.push({ wpId, status });
+          },
+          getLastStatusImpl: (_runId, wpId) => {
+            const last = [...iterations].reverse().find((entry) => entry.wpId === wpId);
+            return (last?.status as 'ok' | 'failed' | 'in-progress' | null) ?? null;
+          },
+          openPRImpl: async () => ({
+            prNumber: 1,
+            prUrl: 'https://gh/pr/1',
+            branch: 'b',
+            base: 'main',
+          }),
+          devReviewConfigOverride: {
+            enabled: false,
+            triggerOn: 'priority:high+',
+            perCycleMaxUsd: 0,
+            maxRevisionTurns: 1,
+            timeoutMs: 1_000,
+          },
+          appendEvent,
+        },
+      );
+
+      expect(result.status).toBe('success');
+      expect(committedFiles).toEqual([['apps/web/src/foo.ts']]);
+    } finally {
+      replaySpy.mockRestore();
+    }
+  });
+});
 
 // ─── Rollback test ─────────────────────────────────────────────────────────────
 

@@ -45,6 +45,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'agent.investigation-complete': 'Investigation complete',
   'agent.investigation-context-injected': 'Investigation context injected',
   'agent.wrong-surface-guard': 'Wrong surface guard',
+  'agent.output-fact-mismatch': 'Output fact mismatch',
   'symbol-index.hints-used': 'Symbol hints used',
   'agent.implement-complete': 'Implement complete',
   'agent.fix-feedback-complete': 'Fix feedback complete',

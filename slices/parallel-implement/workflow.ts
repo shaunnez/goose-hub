@@ -38,6 +38,7 @@ import {
 } from '@goose-hub/core/workspaces/worktree.js';
 import { ImplementWpSchema } from '@goose-hub/skills/implement-wp/schema.js';
 import type { EngineeringSpec } from '@goose-hub/skills/spec-author/schema.js';
+import { normalizeEngineeringSpecPaths } from '../spec-author/path-normalization.js';
 import {
   type WpDispatchResult,
   buildParallelPrBody,
@@ -144,7 +145,45 @@ export async function runParallelImplementWorkflow(
   const { personaId } = (deps.selectPersonaImpl ?? selectPersona)(projectId, 'developer');
   const implementWpPrompt = readPromptWithContext('implement-wp', projectId);
   const implementWpJsonSchema = toJsonSchema(ImplementWpSchema);
-  const investigation = latestInvestigationContext({ projectId, workItemId: workItem.id });
+  const investigation = latestInvestigationContext({
+    projectId,
+    workItemId: workItem.id,
+    worktreePath: targetRepo,
+  });
+  const normalizedSpec = normalizeEngineeringSpecPaths({
+    spec,
+    worktreePath: targetRepo,
+    referencePaths: investigation?.keyFiles.map((file) => file.path) ?? [],
+  });
+  if (normalizedSpec.fields.length > 0) {
+    append({
+      projectId,
+      workItemId: workItem.id,
+      kind: 'agent.path-normalized',
+      payload: {
+        runId,
+        skill: 'parallel-implement',
+        fields: normalizedSpec.fields,
+      },
+      runId,
+    });
+  }
+  if (normalizedSpec.ambiguousFields.length > 0) {
+    await stateSource.comment(
+      workItem.externalId,
+      buildAgentComment('Dev', 'Failed', 'Parallel implement blocked by ambiguous paths', [
+        `Ambiguous paths: ${normalizedSpec.ambiguousFields
+          .map((field) => `${field.field} (${field.from})`)
+          .join(', ')}`,
+      ]),
+    );
+    return {
+      status: 'failed',
+      devRunId: runId,
+      errorReason: 'engineering spec contains ambiguous repo-relative paths',
+    };
+  }
+  const specForRun = normalizedSpec.spec;
 
   const stack = projectConfig?.stack
     ? {
@@ -154,12 +193,12 @@ export async function runParallelImplementWorkflow(
       }
     : { testCommand: 'pnpm test' };
 
-  const allWpIds = spec.workPackages.map((wp) => wp.id);
+  const allWpIds = specForRun.workPackages.map((wp) => wp.id);
   const scratchWorktrees = new Map<string, string>(); // wpId → path
   let issueWorktreePath: string | undefined;
 
   try {
-    const plannedWpFiles = spec.workPackages.flatMap((wp) => wp.filesOwned);
+    const plannedWpFiles = specForRun.workPackages.flatMap((wp) => wp.filesOwned);
     if (!pathsTouchInvestigationSurface(plannedWpFiles, investigation)) {
       append({
         projectId,
@@ -193,7 +232,7 @@ export async function runParallelImplementWorkflow(
 
     // Create per-WP scratch worktrees. Sandbox is written in runOneWpBuilder
     // (per-spawn, so retries always get a fresh sandbox with correct opts).
-    for (const wp of spec.workPackages) {
+    for (const wp of specForRun.workPackages) {
       const wtPath = createWpFn(targetRepo, runId, wp.id, workflowBase.ref);
       scratchWorktrees.set(wp.id, wtPath);
     }
@@ -202,7 +241,7 @@ export async function runParallelImplementWorkflow(
 
     for (let iteration = 1; iteration <= maxRetries + 1; iteration++) {
       // Carry-forward: skip WPs that are already ok.
-      const wpsToRun = spec.workPackages.filter((wp) => {
+      const wpsToRun = specForRun.workPackages.filter((wp) => {
         const lastStatus = getStatusFn(runId, wp.id);
         return lastStatus !== 'ok';
       });
@@ -221,7 +260,7 @@ export async function runParallelImplementWorkflow(
       // Phase 1: WPs within the same batch build concurrently.
       // Phase 2: successful builds commit serially to the integration worktree
       //          to avoid git index lock contention (ADR 0031).
-      for (const batch of spec.executionOrder) {
+      for (const batch of specForRun.executionOrder) {
         const batchWps = wpsToRun.filter((wp) => batch.wpIds.includes(wp.id));
         if (batchWps.length === 0) continue;
 
@@ -431,7 +470,7 @@ export async function runParallelImplementWorkflow(
 
     const branchName = `factory/${runId}`;
     const title = `M19.XX: ${workItem.title.slice(0, 50)}`;
-    const body = buildParallelPrBody({ workItem, spec, wpResults: allWpResults });
+    const body = buildParallelPrBody({ workItem, spec: specForRun, wpResults: allWpResults });
 
     const prResult = await openPRFn({
       worktreePath: issueWorktreePath ?? '',

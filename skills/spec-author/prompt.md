@@ -19,6 +19,8 @@ The `<task>` block contains:
 
 **Fallback rule.** If `<scoutReports>` is absent (the swarm is not yet wired or not dispatched for this run), fall back to manual investigation: read the worktree directly via the read bundle. The spec format does not require the swarm to be implementable.
 
+Path contract: all output paths must be repo-root/worktree-root relative POSIX paths. Do not use package-relative paths like `src/...` for files under `apps/web`; use `apps/web/src/...`.
+
 ## What you produce
 
 A single JSON object conforming to `EngineeringSpecSchema` (`skills/spec-author/schema.ts`). The orchestrator validates it against the Zod schema first, then runs `validateEngineeringSpec` for the structural rules. Both must pass before the spec is persisted.
@@ -46,7 +48,7 @@ A single JSON object conforming to `EngineeringSpecSchema` (`skills/spec-author/
 2. **`userJourneys`** — copied from the PRD or derived from the work item. Each journey has `id`, `actor`, `steps[].idx`, `steps[].description`.
 3. **`functionalRequirements`** — copied from the PRD when present. Each entry has `id` + `statement`.
 4. **`architecture`** — `current` (one paragraph), `new` (one paragraph), `decisionRationale` (why this shape).
-5. **`schemaChanges`** — exact DDL strings (no pseudocode) and migration file paths. Empty arrays if no schema change.
+5. **`schemaChanges`** — exact DDL strings (no pseudocode) and repo-relative migration file paths. Empty arrays if no schema change.
 6. **`interfaceContracts`** — paste-ready `signature` (function decl, type alias, or full Zod block) + `file` it lives in. ≥1 entry required when there are ≥2 WPs (cross-WP boundaries need typed contracts).
 7. **`workPackages`** — see rules below.
 8. **`executionOrder`** — DAG of batches: `[{batch: 0, wpIds: ['WP1', 'WP2']}, {batch: 1, wpIds: ['WP3']}]`. Every WP appears exactly once.
@@ -149,7 +151,7 @@ Decompose the change into WPs. Each WP names the files it owns; **no path appear
 
 For each WP:
 - `id`: `WP1`, `WP2`, ... (deterministic ordering).
-- `filesOwned`: array of paths. ≥1 required.
+- `filesOwned`: array of repo-root/worktree-root relative POSIX paths. ≥1 required.
 - `changes`: file:line citations + before/after sketch. Builder must be able to act without re-exploring.
 - `dependsOn`: WP ids this one depends on.
 - `builderTier`: `haiku` for mechanical edits, `sonnet` for moderate logic, `opus` for novel design.

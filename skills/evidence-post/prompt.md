@@ -15,7 +15,9 @@ The context contains:
 - `<workItem>` — JSON with `number`, `repo`, `title`, and optional `beforeCommentUrl`
 - `<prNumber>` — pull request number
 - `<prHeadSha>` — PR head commit SHA for traceability
-- `<specPath>` — workspace-relative Playwright spec path produced by the implementation
+- `<specPath>` — repo-root/worktree-root relative POSIX Playwright spec path produced by the implementation
+
+Path contract: all output paths must be repo-root/worktree-root relative POSIX paths. Do not use package-relative paths like `src/...` for files under `apps/web`; use `apps/web/src/...`.
 
 ## What You Must Do
 

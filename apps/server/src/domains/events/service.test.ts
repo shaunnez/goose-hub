@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
@@ -15,6 +18,21 @@ import {
   recordToolResult,
   recordVerifyCommand,
 } from './service.js';
+
+function makeWorktree(): string {
+  const worktreePath = mkdtempSync(join(tmpdir(), 'goose-hub-events-service-'));
+  writeFileSync(
+    join(worktreePath, 'pnpm-workspace.yaml'),
+    ['packages:', "  - 'apps/*'", "  - 'core'"].join('\n'),
+  );
+  return worktreePath;
+}
+
+function touch(worktreePath: string, path: string): void {
+  const absPath = join(worktreePath, path);
+  mkdirSync(dirname(absPath), { recursive: true });
+  writeFileSync(absPath, '');
+}
 
 describe('parseSseFilter (#208)', () => {
   it('passes through projectId and workItemId from input', () => {
@@ -61,6 +79,31 @@ describe('recordToolCall (#208)', () => {
     recordToolCall({ tool_name: 'Bash' });
     const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
     expect(arg.runId).toBeNull();
+  });
+
+  it('persists sanitized raw input and canonical path metadata when workspace_dir is supplied', () => {
+    const worktreePath = makeWorktree();
+    touch(worktreePath, 'apps/web/src/components/chrome/Sidebar.tsx');
+
+    vi.mocked(eventStore.appendEvent).mockClear();
+    recordToolCall({
+      tool_name: 'Read',
+      run_id: 'run-path',
+      workspace_dir: worktreePath,
+      tool_input: { file_path: join(worktreePath, 'apps/web/src/components/chrome/Sidebar.tsx') },
+    });
+
+    const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
+    expect(arg.payload).toMatchObject({
+      tool_input: { file_path: '<worktree>/apps/web/src/components/chrome/Sidebar.tsx' },
+      raw_path: '<worktree>/apps/web/src/components/chrome/Sidebar.tsx',
+      canonical_path: {
+        path: 'apps/web/src/components/chrome/Sidebar.tsx',
+        root: 'worktree',
+        packageRoot: 'apps/web',
+      },
+    });
+    expect(JSON.stringify(arg.payload)).not.toContain(worktreePath);
   });
 });
 
@@ -149,6 +192,22 @@ describe('recordToolResult', () => {
     recordToolResult({ tool_name: 'Bash', error: 'oops' });
     const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
     expect(arg.runId).toBeNull();
+  });
+
+  it('strips workspace_dir and sanitizes absolute paths before persisting', () => {
+    vi.mocked(eventStore.appendEvent).mockClear();
+    recordToolResult({
+      run_id: 'run-result',
+      tool_name: 'Bash',
+      workspace_dir: '/Users/shaunnesbitt/project/worktree',
+      error: 'Failed: /Users/shaunnesbitt/project/worktree/apps/web/src/App.tsx',
+    });
+    const arg = vi.mocked(eventStore.appendEvent).mock.calls[0][0];
+    expect(arg.payload).toMatchObject({
+      error: 'Failed: <worktree>/apps/web/src/App.tsx',
+    });
+    expect((arg.payload as Record<string, unknown>).workspace_dir).toBeUndefined();
+    expect(JSON.stringify(arg.payload)).not.toContain('/Users/shaunnesbitt');
   });
 
   it('resolves projectId/workItemId from agent.run-started when runId matches', () => {

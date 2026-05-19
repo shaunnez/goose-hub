@@ -12,6 +12,7 @@ Tool management and security infrastructure for agent runtime.
 | `sandbox.ts` | `writeWorkspaceSandbox` | M4.08 |
 | `pre-tool-use-hook.ts` | `deployHooks`, `HOOK_PATH` | M4.08 |
 | `post-tool-use-hook.ts` | `deployPostHook`, `POST_HOOK_PATH` | M9.XX (#465) |
+| `path-contract.ts` | `RepoRelativePath`, `canonicalizeFactoryToolPath` | agent-operational-truth Slice 1 |
 | `tools/read.ts` | `readFile`, `searchFiles`, `SandboxViolationError` | M6.02 |
 | `tools/write.ts` | `writeFile` | M7.01 |
 | `tools/bash.ts` | `runBash`, `BashResult`, `DEFAULT_BASH_DENYLIST` | M7.01 |
@@ -38,6 +39,28 @@ Named bundles passed via `AgentSpec.toolBundles`. At spawn, `computeAllowlist(sp
 | `playwright-mcp` | `mcp__playwright-test__*` (browser/planner/generator) | `spec-author` skill (auto-merges `apps/web/.mcp.json`) |
 
 **Note on `dev-tools`:** the bundle currently uses Claude Code's built-in tools. The lowercase sandboxed variants in `tools/` (`runBash`, `writeFile`, `runTests`, `readFile`, `searchFiles`) are pre-built but not yet exposed via an MCP server, so agents reach the host shell through Claude Code's `Bash` rather than `runBash`. Workspace-level deny rules in `sandbox.ts` plus the PreToolUse hook are the active safety boundary. Wiring the MCP server (and thereby enforcing fields like `perBashCommandMaxSeconds`) is tracked in #635 — see ADR 0035 for the timeout-scope decision that depends on it.
+
+## Canonical Path Contract
+
+`path-contract.ts` defines the reusable response shape for future `factory-tools` MCP path-bearing results:
+
+```ts
+interface RepoRelativePath {
+  path: string;
+  root: 'worktree';
+  packageRoot?: string;
+  normalizedFrom?: string;
+}
+```
+
+`canonicalizeFactoryToolPath({ rawPath, worktreePath })` reuses the shared repo-relative normalizer from `core/workspaces/path-normalization.ts`. It strips absolute worktree paths, resolves uniquely discoverable package-relative paths, and returns a structured `ambiguous-repo-relative-path` error with candidates when a package-relative path cannot be chosen safely.
+
+The current in-process helpers expose metadata-bearing variants for the future MCP server:
+
+- `readFileWithMetadata` returns `{ path, content }`.
+- `searchFilesWithMetadata` returns `{ stdout, paths }` with canonicalized match prefixes.
+- `writeFileWithMetadata` returns `{ path, written: true }`.
+- `runTests` accepts optional `paths` and returns them as canonical `RepoRelativePath[]`.
 
 ## Workspace Sandbox
 
@@ -73,11 +96,13 @@ The PostToolUse script (`post-tool-use-hook.ts`) fires after each tool call and 
 
 ### `readFile({ workspaceRoot, path })`
 
-Reads a file at `path` relative to `workspaceRoot`. Returns the file contents as a UTF-8 string.
+Reads a file at `path` inside `workspaceRoot`. Returns the file contents as a UTF-8 string.
 
 Security constraints:
-- `path` must be a non-empty relative path — absolute paths (starting with `/`) are rejected.
-- After resolution, the resulting path must remain within `workspaceRoot` — `../` traversal is rejected.
+- `path` must be non-empty.
+- Absolute paths are allowed only when they resolve inside `workspaceRoot`; returned metadata strips the worktree prefix.
+- Package-relative paths are normalized when uniquely resolvable.
+- Ambiguous package-relative paths and `../` traversal are rejected.
 - Throws `SandboxViolationError` on any violation.
 
 ```ts
@@ -131,7 +156,7 @@ try {
 
 ### `writeFile({ workspaceRoot, path, content, createParents? })`
 
-Writes UTF-8 `content` to `path` relative to `workspaceRoot`. Parent directories are created by default. Existing files are overwritten.
+Writes UTF-8 `content` to `path` inside `workspaceRoot`. Parent directories are created by default. Existing files are overwritten.
 
 ```ts
 import { writeFile } from './tools/write.js';
@@ -143,7 +168,7 @@ await writeFile({
 });
 ```
 
-Throws `SandboxViolationError` on absolute paths or `../` traversal.
+Throws `SandboxViolationError` on paths outside the worktree, ambiguous package-relative paths, or `../` traversal.
 
 ## Sandboxed Bash Tool
 

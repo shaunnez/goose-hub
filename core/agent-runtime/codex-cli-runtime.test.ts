@@ -180,7 +180,7 @@ describe('CodexCliRuntime timeout handling', () => {
         kind: 'agent.tool-call',
         payload: expect.objectContaining({
           blocked: true,
-          block_reason: expect.stringContaining('/Users/shaunnesbitt/.codex/memories/MEMORY.md'),
+          block_reason: expect.stringContaining('[REDACTED_PATH]'),
         }),
       }),
     );

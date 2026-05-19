@@ -14,6 +14,8 @@ The context contains a `<task>` block with:
 - `<worktreePath>` — absolute path to the checked-out worktree to explore
 - `<scoutReports>` (optional) — JSON-stringified Wave-1 scout reports and contradictions passed by the orchestrator
 
+Path contract: all output paths must be repo-root/worktree-root relative POSIX paths. Do not use package-relative paths like `src/...` for files under `apps/web`; use `apps/web/src/...`.
+
 ## Investigation process
 
 In wave-aware mode, you decide WHICH scouts ran and WHAT each one focused on; the orchestrator handles fan-out, holdout boundaries, timeouts, and cross-validation.
@@ -116,7 +118,7 @@ Return a JSON object with this exact structure:
 {
   "findings": "<root cause hypothesis and full analysis, 2–5 paragraphs>",
   "keyFiles": [
-    { "path": "<relative or absolute file path>", "reason": "<why this file is relevant>" }
+    { "path": "<repo-relative POSIX file path>", "reason": "<why this file is relevant>" }
   ],
   "confidence": "<low|medium|high>",
   "openQuestions": [

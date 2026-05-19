@@ -4,9 +4,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BASH_DENYLIST, runBash } from './bash.js';
-import { SandboxViolationError, readFile, searchFiles } from './read.js';
+import {
+  SandboxViolationError,
+  readFile,
+  readFileWithMetadata,
+  searchFiles,
+  searchFilesWithMetadata,
+} from './read.js';
 import { runTests } from './test.js';
-import { writeFile } from './write.js';
+import { writeFile, writeFileWithMetadata } from './write.js';
 
 const rgAvailable = (() => {
   try {
@@ -49,6 +55,47 @@ describe('readFile', () => {
       await expect(readFile({ workspaceRoot: dir, path: '/etc/passwd' })).rejects.toThrow(
         SandboxViolationError,
       );
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('normalizes a unique package-relative path before reading', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'read-tool-test-'));
+    try {
+      writeFileSync(join(dir, 'pnpm-workspace.yaml'), ['packages:', "  - 'apps/*'"].join('\n'));
+      mkdirSync(join(dir, 'apps/web/src'), { recursive: true });
+      writeFileSync(join(dir, 'apps/web/src/app.ts'), 'export const app = true;');
+
+      const result = await readFileWithMetadata({ workspaceRoot: dir, path: 'src/app.ts' });
+
+      expect(result.content).toBe('export const app = true;');
+      expect(result.path).toEqual({
+        path: 'apps/web/src/app.ts',
+        root: 'worktree',
+        packageRoot: 'apps/web',
+        normalizedFrom: 'src/app.ts',
+      });
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('strips an absolute worktree path before returning metadata', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'read-tool-test-'));
+    try {
+      writeFileSync(join(dir, 'hello.txt'), 'hello world');
+
+      const result = await readFileWithMetadata({
+        workspaceRoot: dir,
+        path: join(dir, 'hello.txt'),
+      });
+
+      expect(result.path).toEqual({
+        path: 'hello.txt',
+        root: 'worktree',
+        normalizedFrom: join(dir, 'hello.txt'),
+      });
     } finally {
       rmSync(dir, { recursive: true });
     }
@@ -163,6 +210,30 @@ describe.skipIf(!rgAvailable)('searchFiles', () => {
       rmSync(dir, { recursive: true });
     }
   });
+
+  it('returns canonical match paths from metadata search', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'search-tool-test-'));
+    try {
+      mkdirSync(join(dir, 'apps/web/src'), { recursive: true });
+      writeFileSync(join(dir, 'apps/web/src/app.ts'), 'const marker = "findme";');
+      const { stdout, paths } = await searchFilesWithMetadata({
+        workspaceRoot: dir,
+        pattern: 'findme',
+      });
+
+      expect(stdout).toContain('apps/web/src/app.ts:1:');
+      expect(paths).toEqual([
+        {
+          path: 'apps/web/src/app.ts',
+          root: 'worktree',
+          packageRoot: 'apps/web',
+          normalizedFrom: './apps/web/src/app.ts',
+        },
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
 });
 
 // ─── writeFile ────────────────────────────────────────────────────────────────
@@ -246,6 +317,31 @@ describe('writeFile', () => {
       await expect(writeFile({ workspaceRoot: dir, path: '', content: 'x' })).rejects.toThrow(
         SandboxViolationError,
       );
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('returns canonical path metadata for writes', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'write-tool-test-'));
+    try {
+      const result = await writeFileWithMetadata({
+        workspaceRoot: dir,
+        path: './apps/web/src/new-file.ts',
+        content: 'export const value = 1;',
+      });
+
+      expect(readFileSync(join(dir, 'apps/web/src/new-file.ts'), 'utf8')).toBe(
+        'export const value = 1;',
+      );
+      expect(result).toEqual({
+        path: {
+          path: 'apps/web/src/new-file.ts',
+          root: 'worktree',
+          normalizedFrom: './apps/web/src/new-file.ts',
+        },
+        written: true,
+      });
     } finally {
       rmSync(dir, { recursive: true });
     }
@@ -505,6 +601,32 @@ describe('runTests', () => {
       await expect(runTests({ workspaceRoot: dir, testCommand: 'sudo make test' })).rejects.toThrow(
         SandboxViolationError,
       );
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('returns canonical metadata for supplied test paths', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'test-tool-test-'));
+    try {
+      writeFileSync(join(dir, 'pnpm-workspace.yaml'), ['packages:', "  - 'apps/*'"].join('\n'));
+      mkdirSync(join(dir, 'apps/web/src'), { recursive: true });
+      writeFileSync(join(dir, 'apps/web/src/app.test.ts'), 'test file');
+
+      const result = await runTests({
+        workspaceRoot: dir,
+        testCommand: 'node -e process.exit(0)',
+        paths: ['src/app.test.ts'],
+      });
+
+      expect(result.paths).toEqual([
+        {
+          path: 'apps/web/src/app.test.ts',
+          root: 'worktree',
+          packageRoot: 'apps/web',
+          normalizedFrom: 'src/app.test.ts',
+        },
+      ]);
     } finally {
       rmSync(dir, { recursive: true });
     }

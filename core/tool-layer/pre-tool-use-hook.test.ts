@@ -107,6 +107,7 @@ describe('deployHooks', () => {
     expect(scriptContent).toContain('/events/tool-call');
     expect(scriptContent).toContain('FACTORY_RUN_ID');
     expect(scriptContent).toContain('FACTORY_SERVER_PORT');
+    expect(scriptContent).toContain('workspace_dir: workspaceDir');
   });
 
   it('the written script enforces and audits workspace path boundaries', () => {
