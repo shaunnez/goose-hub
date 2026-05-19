@@ -57,8 +57,27 @@ export type InvokeSkillInput = {
     freshContextOverride?: boolean;
     /** Skip runtime-owned agent.run-started when caller already emitted the parent marker. */
     suppressRunStarted?: boolean;
+    /**
+     * Fired immediately after `selectPersona()` resolves a persona but before
+     * the spawn. Callers that need to record `persona_stats` on a throw can
+     * stash this and write `outcome: 'failure'` from their catch block — the
+     * augmented `InvokeSkillResult` only returns on successful resolve, so
+     * persona attribution would otherwise be lost on every error path.
+     */
+    onPersonaSelected?: (info: { personaId: string; role: string }) => void;
   };
 };
+
+/**
+ * Augmented result from `invokeSkill` that surfaces the resolved persona and
+ * role to callers — the orchestrator needs these to write `persona_stats`
+ * (M20.14) without re-running the round-robin selector. `AgentResult` fields
+ * (`output`, `decisionSummaries`, `events`) are preserved unchanged.
+ */
+export interface InvokeSkillResult extends AgentResult {
+  personaId: string;
+  role: string;
+}
 
 /**
  * Canonical entry point for skill-driven agent spawns. Handles the full
@@ -72,7 +91,7 @@ export type InvokeSkillInput = {
  *
  * See ADR 0038.
  */
-export async function invokeSkill(input: InvokeSkillInput): Promise<AgentResult> {
+export async function invokeSkill(input: InvokeSkillInput): Promise<InvokeSkillResult> {
   const { skillName, projectId, workItemId, runId, context, overrides } = input;
 
   // 1. Load skill config — absolute path import matches loader.ts pattern (tsx-safe)
@@ -101,6 +120,7 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<AgentResult>
   // 4. Select persona (round-robin within projectId + role)
   const role = skillConfig.role ?? 'developer';
   const { personaId } = selectPersona(projectId, role);
+  overrides?.onPersonaSelected?.({ personaId, role });
 
   // 5. Resolve budgets — fall back for skills not yet in SKILL_BUDGETS
   const projectConfig =
@@ -180,5 +200,5 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<AgentResult>
     }
   }
 
-  return result;
+  return { ...result, personaId, role };
 }

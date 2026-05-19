@@ -14,10 +14,43 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   },
 }));
 
+// Persona-stats writes touch SQLite; mock to a spy so we can assert against
+// the calls without needing a DB in this slice test.
+vi.mock('@goose-hub/core/persona/accumulate.js', () => ({
+  accumulatePersonaStats: vi.fn(),
+}));
+
 import { invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
 import type { Conversation } from '@goose-hub/core/conversations/types.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { runChatOrchestratorTurn } from './workflow.js';
+
+const baseInvokeResult = {
+  personaId: 'auditor-1',
+  role: 'auditor',
+  decisionSummaries: [],
+  events: [],
+};
+
+type InvokeArgs = Parameters<typeof invokeSkill>[0];
+
+/**
+ * Mirror the real invokeSkill contract: fire `onPersonaSelected` before the
+ * promise settles so the orchestrator can capture persona attribution and
+ * write `persona_stats` even on a throw. The returned value/throw is chosen
+ * by the caller.
+ */
+function mockInvokeOnce(
+  outcome: { resolve: typeof baseInvokeResult & { output: unknown } } | { reject: Error },
+  selected: { personaId: string; role: string } = baseInvokeResult,
+) {
+  vi.mocked(invokeSkill).mockImplementationOnce(async (input: InvokeArgs) => {
+    input.overrides?.onPersonaSelected?.(selected);
+    if ('reject' in outcome) throw outcome.reject;
+    return outcome.resolve;
+  });
+}
 
 const stubConversation: Conversation = {
   id: 'conv_test',
@@ -32,15 +65,16 @@ const stubConversation: Conversation = {
 
 describe('chat-orchestrator slice', () => {
   it('returns a parsed reply when the skill output validates', async () => {
-    vi.mocked(invokeSkill).mockResolvedValueOnce({
-      output: {
-        say: 'Hello there.',
-        proposals: [],
-        done: false,
-        decisionSummaries: [{ kind: 'PLAN', summary: 'Replied to greeting.' }],
+    mockInvokeOnce({
+      resolve: {
+        ...baseInvokeResult,
+        output: {
+          say: 'Hello there.',
+          proposals: [],
+          done: false,
+          decisionSummaries: [{ kind: 'PLAN', summary: 'Replied to greeting.' }],
+        },
       },
-      decisionSummaries: [],
-      events: [],
     });
     const result = await runChatOrchestratorTurn({
       conversation: stubConversation,
@@ -62,18 +96,19 @@ describe('chat-orchestrator slice', () => {
   });
 
   it('drops proposals for unknown tool names', async () => {
-    vi.mocked(invokeSkill).mockResolvedValueOnce({
-      output: {
-        say: 'Doing things.',
-        proposals: [
-          { toolName: 'list_projects', input: {}, rationale: 'see all projects' },
-          { toolName: 'i_made_this_up', input: {}, rationale: 'nope' },
-        ],
-        done: false,
-        decisionSummaries: [{ kind: 'PLAN', summary: 'Proposing two tools.' }],
+    mockInvokeOnce({
+      resolve: {
+        ...baseInvokeResult,
+        output: {
+          say: 'Doing things.',
+          proposals: [
+            { toolName: 'list_projects', input: {}, rationale: 'see all projects' },
+            { toolName: 'i_made_this_up', input: {}, rationale: 'nope' },
+          ],
+          done: false,
+          decisionSummaries: [{ kind: 'PLAN', summary: 'Proposing two tools.' }],
+        },
       },
-      decisionSummaries: [],
-      events: [],
     });
     const result = await runChatOrchestratorTurn({
       conversation: stubConversation,
@@ -84,10 +119,11 @@ describe('chat-orchestrator slice', () => {
   });
 
   it('returns a graceful error message on schema validation failure', async () => {
-    vi.mocked(invokeSkill).mockResolvedValueOnce({
-      output: { not: 'the right shape' },
-      decisionSummaries: [],
-      events: [],
+    mockInvokeOnce({
+      resolve: {
+        ...baseInvokeResult,
+        output: { not: 'the right shape' },
+      },
     });
     const result = await runChatOrchestratorTurn({
       conversation: stubConversation,
@@ -98,7 +134,7 @@ describe('chat-orchestrator slice', () => {
   });
 
   it('returns reply: null when the runtime throws', async () => {
-    vi.mocked(invokeSkill).mockRejectedValueOnce(new Error('subprocess died'));
+    mockInvokeOnce({ reject: new Error('subprocess died') });
     const result = await runChatOrchestratorTurn({
       conversation: stubConversation,
       history: [],
@@ -109,15 +145,16 @@ describe('chat-orchestrator slice', () => {
 
   it('emits chat.agent-thinking checkpoints around the skill invocation', async () => {
     vi.mocked(eventStore.appendEvent).mockClear();
-    vi.mocked(invokeSkill).mockResolvedValueOnce({
-      output: {
-        say: 'sure.',
-        proposals: [],
-        done: false,
-        decisionSummaries: [{ kind: 'PLAN', summary: 'ok.' }],
+    mockInvokeOnce({
+      resolve: {
+        ...baseInvokeResult,
+        output: {
+          say: 'sure.',
+          proposals: [],
+          done: false,
+          decisionSummaries: [{ kind: 'PLAN', summary: 'ok.' }],
+        },
       },
-      decisionSummaries: [],
-      events: [],
     });
     await runChatOrchestratorTurn({
       conversation: stubConversation,
@@ -141,7 +178,7 @@ describe('chat-orchestrator slice', () => {
 
   it('emits the skill-invoked thinking event even when the run later throws', async () => {
     vi.mocked(eventStore.appendEvent).mockClear();
-    vi.mocked(invokeSkill).mockRejectedValueOnce(new Error('boom'));
+    mockInvokeOnce({ reject: new Error('boom') });
     await runChatOrchestratorTurn({
       conversation: stubConversation,
       history: [],
@@ -157,9 +194,106 @@ describe('chat-orchestrator slice', () => {
     ]);
   });
 
+  it('writes a success persona-stats row when the run lands a parseable reply', async () => {
+    vi.mocked(accumulatePersonaStats).mockClear();
+    mockInvokeOnce(
+      {
+        resolve: {
+          ...baseInvokeResult,
+          personaId: 'auditor-2',
+          role: 'auditor',
+          output: {
+            say: 'Sure.',
+            proposals: [],
+            done: false,
+            decisionSummaries: [{ kind: 'PLAN', summary: 'replied.' }],
+          },
+        },
+      },
+      { personaId: 'auditor-2', role: 'auditor' },
+    );
+    await runChatOrchestratorTurn({
+      conversation: stubConversation,
+      history: [],
+      runId: 'chat_test_persona_success',
+    });
+    expect(accumulatePersonaStats).toHaveBeenCalledTimes(1);
+    expect(accumulatePersonaStats).toHaveBeenCalledWith({
+      personaName: 'auditor-2',
+      role: 'auditor',
+      outcome: 'success',
+    });
+  });
+
+  it('writes a failure persona-stats row when the skill output fails validation', async () => {
+    vi.mocked(accumulatePersonaStats).mockClear();
+    mockInvokeOnce(
+      {
+        resolve: {
+          ...baseInvokeResult,
+          personaId: 'auditor-3',
+          role: 'auditor',
+          output: { not: 'the right shape' },
+        },
+      },
+      { personaId: 'auditor-3', role: 'auditor' },
+    );
+    await runChatOrchestratorTurn({
+      conversation: stubConversation,
+      history: [],
+      runId: 'chat_test_persona_failure',
+    });
+    expect(accumulatePersonaStats).toHaveBeenCalledWith({
+      personaName: 'auditor-3',
+      role: 'auditor',
+      outcome: 'failure',
+    });
+  });
+
+  it('writes a failure persona-stats row when invokeSkill rejects after persona selection', async () => {
+    vi.mocked(accumulatePersonaStats).mockClear();
+    mockInvokeOnce(
+      { reject: new Error('OutputValidationError: bad shape') },
+      { personaId: 'auditor-4', role: 'auditor' },
+    );
+    await runChatOrchestratorTurn({
+      conversation: stubConversation,
+      history: [],
+      runId: 'chat_test_persona_reject',
+    });
+    expect(accumulatePersonaStats).toHaveBeenCalledWith({
+      personaName: 'auditor-4',
+      role: 'auditor',
+      outcome: 'failure',
+    });
+  });
+
+  it('still returns a parseable reply when persona-stats telemetry throws', async () => {
+    vi.mocked(accumulatePersonaStats).mockImplementationOnce(() => {
+      throw new Error('sqlite locked');
+    });
+    mockInvokeOnce({
+      resolve: {
+        ...baseInvokeResult,
+        output: {
+          say: 'Replied OK.',
+          proposals: [],
+          done: false,
+          decisionSummaries: [{ kind: 'PLAN', summary: 'replied.' }],
+        },
+      },
+    });
+    const result = await runChatOrchestratorTurn({
+      conversation: stubConversation,
+      history: [],
+      runId: 'chat_test_telemetry_throws',
+    });
+    expect(result.reply?.say).toBe('Replied OK.');
+  });
+
   it('emits chat.run-failed when the skill throws so the thinking indicator clears', async () => {
     vi.mocked(eventStore.appendEvent).mockClear();
-    vi.mocked(invokeSkill).mockRejectedValueOnce(new Error('subprocess died'));
+    mockInvokeOnce({ reject: new Error('subprocess died') });
     await runChatOrchestratorTurn({
       conversation: stubConversation,
       history: [],

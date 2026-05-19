@@ -9,6 +9,7 @@ const STAGE_LABEL: Record<CostStage, string> = {
   qa: 'QA',
   review: 'Review',
   retrospective: 'Retrospective',
+  chat: 'Chat',
   other: 'Other',
 };
 

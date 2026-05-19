@@ -13,6 +13,10 @@ describe('stageForSkill', () => {
     expect(stageForSkill('retrospective-deep')).toBe('retrospective');
   });
 
+  it('maps hub-chat to the chat stage so dashboards can group it separately', () => {
+    expect(stageForSkill('hub-chat')).toBe('chat');
+  });
+
   it('returns "other" for unknown skills', () => {
     expect(stageForSkill('something-new')).toBe('other');
     expect(stageForSkill('')).toBe('other');

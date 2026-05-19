@@ -24,6 +24,10 @@ const SKILL_TO_STAGE: Record<string, Stage> = {
   review: 'review',
   'retrospective-light': 'retrospective',
   'retrospective-deep': 'retrospective',
+  // M20.14 — chat turns spawn the hub-chat skill via the chat orchestrator.
+  // Group them under their own stage so the costs dashboard separates them
+  // from the workflow pipeline.
+  'hub-chat': 'chat',
 };
 
 export function stageForSkill(skill: string): Stage {

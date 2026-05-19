@@ -173,6 +173,7 @@ export type CostStage =
   | 'qa'
   | 'review'
   | 'retrospective'
+  | 'chat'
   | 'other';
 
 export interface CostRowDto {
