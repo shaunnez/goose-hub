@@ -1,3 +1,54 @@
+// factory-tools MCP tools per ADR 0045. Names match `FACTORY_TOOL_NAMES`
+// in core/tool-layer/mcp/schemas.ts; the runtime adds the
+// `mcp__factory-tools__` prefix when building the CLI allowlist. Listed
+// directly here as full names so the bundle audit is greppable.
+const FT_CONTEXT = [
+  'mcp__factory-tools__get_project_context',
+  'mcp__factory-tools__get_stack_commands',
+  'mcp__factory-tools__record_decision',
+];
+const FT_READ = [
+  'mcp__factory-tools__read_file',
+  'mcp__factory-tools__read_many_files',
+  'mcp__factory-tools__list_dir',
+  'mcp__factory-tools__list_files',
+  'mcp__factory-tools__search_text',
+  'mcp__factory-tools__file_exists',
+  'mcp__factory-tools__file_info',
+];
+const FT_WRITE = [
+  'mcp__factory-tools__write_file',
+  'mcp__factory-tools__edit_file',
+  'mcp__factory-tools__apply_patch',
+  'mcp__factory-tools__create_directory',
+  'mcp__factory-tools__move_file',
+  'mcp__factory-tools__delete_file',
+];
+const FT_VERIFY = [
+  'mcp__factory-tools__run_tests',
+  'mcp__factory-tools__run_lint',
+  'mcp__factory-tools__run_typecheck',
+  'mcp__factory-tools__run_package_script',
+  'mcp__factory-tools__run_targeted_command',
+];
+const FT_GIT_READ = [
+  'mcp__factory-tools__get_status',
+  'mcp__factory-tools__get_changed_files',
+  'mcp__factory-tools__get_diff',
+  'mcp__factory-tools__get_head_sha',
+  'mcp__factory-tools__get_merge_base',
+];
+const FT_QA = [
+  'mcp__factory-tools__get_pr_diff',
+  'mcp__factory-tools__run_full_suite_if_needed',
+  'mcp__factory-tools__run_isolated_test',
+];
+const FT_EVIDENCE = [
+  'mcp__factory-tools__get_app_url',
+  'mcp__factory-tools__write_playwright_spec',
+  'mcp__factory-tools__run_playwright_spec',
+];
+
 export const TOOL_BUNDLES = {
   /**
    * No-tool bundle for skills that receive all context via prompt injection
@@ -11,17 +62,28 @@ export const TOOL_BUNDLES = {
   'bash-restricted': ['Bash'],
   /**
    * Read bundle for investigator agents (scouts, grill-and-prd).
-   * Temporarily uses native tools — MCP sandboxed tool server not yet wired up.
-   * When core/tool-layer/tools/ is exposed as an MCP server, revert to:
-   *   ['read', 'search', 'work-item-read']
+   * Phase 5a (ADR 0045): factory-tools read family added alongside native
+   * tools. Native tools remain during prompt-migration transition and are
+   * removed in Phase 7.
    */
-  read: ['Read', 'Glob', 'Grep', 'Bash(cat *)', 'Bash(ls *)'],
+  read: ['Read', 'Glob', 'Grep', 'Bash(cat *)', 'Bash(ls *)', ...FT_CONTEXT, ...FT_READ],
   /**
-   * Developer bundle for the fix-issue agent. Uses Claude's native built-in tools.
-   * The MCP sandboxed tool server (core/tool-layer/tools/) is not yet wired up;
-   * workspace-level deny rules in sandbox.ts provide the safety boundary instead.
+   * Developer bundle for the fix-issue agent.
+   * Phase 5a (ADR 0045): factory-tools read + write + verify families
+   * added. Native tools remain pending Phase 7 cleanup.
    */
-  'dev-tools': ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'],
+  'dev-tools': [
+    'Read',
+    'Write',
+    'Edit',
+    'Glob',
+    'Grep',
+    'Bash',
+    ...FT_CONTEXT,
+    ...FT_READ,
+    ...FT_WRITE,
+    ...FT_VERIFY,
+  ],
   /**
    * Shell bundle: read-only bash access for skills that need to run commands
    * but must not write files. Covers two use cases:
@@ -47,6 +109,10 @@ export const TOOL_BUNDLES = {
    * commands inside the dev worktree. E2E pipeline execution is workflow-owned
    * and should be graded from verificationSummary. No Write/Edit — QA must not
    * modify files.
+   *
+   * Phase 5a (ADR 0045): factory-tools read + git/diff + qa families added
+   * alongside native tools. No factory-tools write family — QA stays
+   * read-only.
    */
   'qa-tools': [
     'Read',
@@ -59,11 +125,20 @@ export const TOOL_BUNDLES = {
     'Bash(pnpm biome*)',
     'Bash(pnpm typecheck*)',
     'Bash(pnpm lint*)',
+    ...FT_CONTEXT,
+    ...FT_READ,
+    ...FT_GIT_READ,
+    ...FT_QA,
   ],
   /**
    * Playwright validation bundle. Used by skills that run e2e specs and
    * commit/push evidence artefacts (skills/playwright-repro, skills/evidence-post).
    * Bash patterns scoped to test invocation, evidence I/O, and git push of evidence.
+   *
+   * Phase 5a (ADR 0045): factory-tools evidence + read families added
+   * alongside the existing bash patterns. The collect-evidence /
+   * publish-evidence Bash patterns remain pending the evidence-packet
+   * MCP tools (deferred — see core/tool-layer/mcp/README.md).
    */
   validate: [
     'Read',
@@ -94,6 +169,9 @@ export const TOOL_BUNDLES = {
     'Bash(git -C /tmp/evidence-* push*)',
     'Bash(git -C /tmp/evidence-* rev-parse HEAD)',
     'Bash(gh issue comment*)',
+    ...FT_CONTEXT,
+    ...FT_READ,
+    ...FT_EVIDENCE,
   ],
   /**
    * M19.06 — record-decision tool (opt-in, feature-flagged).

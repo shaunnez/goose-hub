@@ -115,6 +115,62 @@ describe('TOOL_BUNDLES', () => {
     expect(TOOL_BUNDLES['qa-tools']).not.toContain('Bash(pnpm --filter*)');
   });
 
+  // ─── Phase 5a (ADR 0045): factory-tools additions ──────────────────────────
+
+  it('read bundle includes factory-tools context + read families', () => {
+    expect(TOOL_BUNDLES.read).toContain('mcp__factory-tools__read_file');
+    expect(TOOL_BUNDLES.read).toContain('mcp__factory-tools__search_text');
+    expect(TOOL_BUNDLES.read).toContain('mcp__factory-tools__get_project_context');
+  });
+
+  it('dev-tools bundle includes factory-tools read + write + verify families', () => {
+    expect(TOOL_BUNDLES['dev-tools']).toContain('mcp__factory-tools__write_file');
+    expect(TOOL_BUNDLES['dev-tools']).toContain('mcp__factory-tools__edit_file');
+    expect(TOOL_BUNDLES['dev-tools']).toContain('mcp__factory-tools__run_tests');
+    expect(TOOL_BUNDLES['dev-tools']).toContain('mcp__factory-tools__record_decision');
+  });
+
+  it('qa-tools bundle includes factory-tools read + git/diff + qa families', () => {
+    expect(TOOL_BUNDLES['qa-tools']).toContain('mcp__factory-tools__get_diff');
+    expect(TOOL_BUNDLES['qa-tools']).toContain('mcp__factory-tools__get_pr_diff');
+    expect(TOOL_BUNDLES['qa-tools']).toContain('mcp__factory-tools__run_isolated_test');
+  });
+
+  it('qa-tools bundle does not include any factory-tools write tools (holdout discipline)', () => {
+    for (const name of TOOL_BUNDLES['qa-tools']) {
+      expect(name.startsWith('mcp__factory-tools__write_')).toBe(false);
+      expect(name.startsWith('mcp__factory-tools__edit_')).toBe(false);
+      expect(name.startsWith('mcp__factory-tools__apply_patch')).toBe(false);
+      expect(name.startsWith('mcp__factory-tools__delete_file')).toBe(false);
+    }
+  });
+
+  it('validate bundle includes factory-tools evidence family', () => {
+    expect(TOOL_BUNDLES.validate).toContain('mcp__factory-tools__get_app_url');
+    expect(TOOL_BUNDLES.validate).toContain('mcp__factory-tools__write_playwright_spec');
+    expect(TOOL_BUNDLES.validate).toContain('mcp__factory-tools__run_playwright_spec');
+  });
+
+  it('no bundle exposes factory-tools workflow-owned mutations (stage/commit/PR/transition)', () => {
+    const WORKFLOW_OWNED = [
+      'mcp__factory-tools__stage_changes',
+      'mcp__factory-tools__commit_changes',
+      'mcp__factory-tools__open_pr',
+      'mcp__factory-tools__update_pr',
+      'mcp__factory-tools__post_issue_comment',
+      'mcp__factory-tools__transition_state',
+      'mcp__factory-tools__publish_evidence',
+    ];
+    for (const [name, tools] of Object.entries(TOOL_BUNDLES)) {
+      for (const tool of WORKFLOW_OWNED) {
+        expect(
+          tools.includes(tool),
+          `Bundle '${name}' must not include workflow-owned ${tool}`,
+        ).toBe(false);
+      }
+    }
+  });
+
   it('playwright-mcp bundle contains browser_* and planner_* and generator_* tools', () => {
     expect(TOOL_BUNDLES['playwright-mcp']).toContain('mcp__playwright-test__browser_navigate');
     expect(TOOL_BUNDLES['playwright-mcp']).toContain(
