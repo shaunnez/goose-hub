@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { recordCost } from '../cost/repository.js';
@@ -8,6 +8,7 @@ import { getRecordDecisionTool } from '../db/repositories/project-settings.js';
 import { eventStore } from '../event-stream/store.js';
 import { computeAllowlist } from '../tool-layer/allowlist.js';
 import { deployDecisionCaptureHook } from '../tool-layer/decision-capture-hook.js';
+import { buildFactoryMcpConfig } from '../tool-layer/mcp/build-config.js';
 import { deployHooks } from '../tool-layer/pre-tool-use-hook.js';
 import { writeWorkspaceSandbox } from '../tool-layer/sandbox.js';
 import { emitBudgetExceededIfNeeded } from './budget-guard.js';
@@ -53,7 +54,6 @@ export {
 const STDOUT_CAP = 4 * 1024 * 1024; // 4 MB
 const TIMEOUT_MS = 30_000; // 30 seconds — FACTORY_RULES rule 32
 const WORKSPACES_DIR = join(homedir(), '.factory', 'workspaces');
-const MCP_CONFIG_PATH = join(homedir(), '.factory', 'mcp-config.json');
 const BROWSER_PROCESS_ACCESS_SKILLS = new Set(['playwright-repro', 'evidence-post']);
 const ABSOLUTE_USER_PATH_RE = /\/Users\/[^\s'"`]+/g;
 
@@ -101,15 +101,25 @@ export class CodexCliRuntime implements AgentRuntime {
     assertCodexAuthenticated();
 
     mkdirSync(workspaceDir, { recursive: true });
-    writeFileSync(MCP_CONFIG_PATH, '{"mcpServers":{}}', { flag: 'w' });
     const projectId = (spec.context.projectId as string) ?? 'unknown';
+    const workItemId = (spec.context.workItemId as string | undefined) ?? spec.workItemId ?? null;
+    // Per-run MCP config under <worktree>/.factory/mcp-config.json (ADR 0045).
+    // Codex CLI does not yet accept `--mcp-config`; the config is written
+    // in the canonical location regardless so the codex runtime aligns
+    // with the claude runtime once codex MCP wiring lands.
+    buildFactoryMcpConfig({
+      workspaceDir,
+      runId,
+      projectId,
+      workItemId,
+      toolBundles: spec.toolBundles,
+    });
     const recordDecisionTool = getRecordDecisionTool(projectId);
     if (spec.sandboxMode !== 'preconfigured') {
       writeWorkspaceSandbox(workspaceDir, { role: spec.role, recordDecisionTool });
     }
     deployHooks();
     if (recordDecisionTool) deployDecisionCaptureHook();
-    const workItemId = (spec.context.workItemId as string | undefined) ?? spec.workItemId ?? null;
     const { personaId } = spec;
     const model = spec.modelOverride ?? defaultModelForTierAndProvider('sonnet', 'codex');
 

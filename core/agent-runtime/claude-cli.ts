@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { costFromCliEnvelope } from '../cost/extract.js';
@@ -11,6 +11,7 @@ import { agentRuns } from '../db/schema.js';
 import { eventStore } from '../event-stream/store.js';
 import { computeAllowlist } from '../tool-layer/allowlist.js';
 import { deployDecisionCaptureHook } from '../tool-layer/decision-capture-hook.js';
+import { buildFactoryMcpConfig } from '../tool-layer/mcp/build-config.js';
 import { deployHooks } from '../tool-layer/pre-tool-use-hook.js';
 import { writeWorkspaceSandbox } from '../tool-layer/sandbox.js';
 import { emitBudgetExceededIfNeeded } from './budget-guard.js';
@@ -25,27 +26,6 @@ import type { JsonSchema } from './schema-bridge.js';
 const STDOUT_CAP = 4 * 1024 * 1024; // 4 MB
 const TIMEOUT_MS = 30_000; // 30 seconds — FACTORY_RULES rule 32
 const WORKSPACES_DIR = join(homedir(), '.factory', 'workspaces');
-const MCP_CONFIG_PATH = join(homedir(), '.factory', 'mcp-config.json');
-
-/** Bundle name → workspace-relative MCP config path. */
-const MCP_CONFIG_FOR_BUNDLE: Record<string, string> = {
-  'playwright-mcp': 'apps/web/.mcp.json',
-};
-
-/**
- * Resolves which MCP config to pass via --mcp-config based on the spec's tool bundles.
- * When a bundle is mapped to a workspace-relative path AND that file exists, that path
- * is returned. Otherwise the global empty MCP config is used.
- */
-export function resolveMcpConfigPath(workspaceDir: string, toolBundles: string[]): string {
-  for (const bundle of toolBundles) {
-    const relPath = MCP_CONFIG_FOR_BUNDLE[bundle];
-    if (relPath == null) continue;
-    const candidate = join(workspaceDir, relPath);
-    if (existsSync(candidate)) return candidate;
-  }
-  return MCP_CONFIG_PATH;
-}
 
 /**
  * Resolves the absolute path to the `claude` binary.
@@ -127,9 +107,19 @@ export class ClaudeCliRuntime implements AgentRuntime {
 
     // Bootstrap workspace
     mkdirSync(workspaceDir, { recursive: true });
-    writeFileSync(MCP_CONFIG_PATH, '{"mcpServers":{}}', { flag: 'w' });
     const projectId = (spec.context.projectId as string) ?? 'unknown';
     const workItemId = (spec.context.workItemId as string | undefined) ?? spec.workItemId ?? null;
+    // Per-run MCP config under <worktree>/.factory/mcp-config.json (ADR 0045).
+    // Always written; the factory-tools server entry carries the run's
+    // identity via env. Bundle-specific servers (playwright-mcp) are
+    // merged in from their workspace-relative configs when declared.
+    const { configPath: factoryMcpConfigPath } = buildFactoryMcpConfig({
+      workspaceDir,
+      runId,
+      projectId,
+      workItemId,
+      toolBundles: spec.toolBundles,
+    });
     const recordDecisionTool = getRecordDecisionTool(projectId);
     if (spec.sandboxMode !== 'preconfigured') {
       writeWorkspaceSandbox(workspaceDir, { role: spec.role, recordDecisionTool });
@@ -160,8 +150,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
 
     const { contextXml } = assembleSpawnContext(spec);
     const allowedTools = computeAllowlist(spec);
-    const mcpConfigPath =
-      spec.mcpConfigPath ?? resolveMcpConfigPath(workspaceDir, spec.toolBundles);
+    const mcpConfigPath = spec.mcpConfigPath ?? factoryMcpConfigPath;
 
     // Build argv array — Security rule: never use shell: true
     const binaryPath = resolveBinary('claude');
