@@ -1,10 +1,16 @@
+import { existsSync } from 'node:fs';
 import type { z } from 'zod';
+import {
+  type PlaywrightEvidence,
+  collectPlaywrightEvidence,
+} from '../../../../scripts/collect-playwright-evidence.js';
 import { getProjectBySlug } from '../../../projects/loader.js';
 import { emitBlockedToolCall, emitToolCall } from '../audit.js';
 import { minimalEnv, runCommand } from '../command-policy.js';
 import type { FactoryContext } from '../context.js';
 import { PathPolicyViolation, resolveWorkspacePath } from '../path-policy.js';
 import type {
+  CollectEvidenceInput,
   GetAppUrlInput,
   RunPlaywrightSpecInput,
   WritePlaywrightSpecInput,
@@ -24,6 +30,17 @@ export class EvidenceConfigMissingError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'EvidenceConfigMissingError';
+  }
+}
+
+export class EvidenceWorkItemIdError extends Error {
+  readonly kind = 'EvidenceWorkItemIdError' as const;
+  readonly workItemId: string;
+
+  constructor(workItemId: string) {
+    super(`collect_evidence: cannot derive a GitHub issue number from workItemId '${workItemId}'.`);
+    this.name = 'EvidenceWorkItemIdError';
+    this.workItemId = workItemId;
   }
 }
 
@@ -191,4 +208,82 @@ export async function runPlaywrightSpecTool(
     truncated: result.truncated,
     command: argv,
   };
+}
+
+export interface CollectEvidenceResult {
+  evidence: PlaywrightEvidence;
+  resultsPath: string;
+  evidenceDir: string;
+}
+
+function extractIssueNumber(workItemId: string): number | null {
+  // workItemId: "github:owner/repo#42"
+  const match = workItemId.match(/#(\d+)$/);
+  if (match == null) return null;
+  const n = Number.parseInt(match[1], 10);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/**
+ * `factory_collect_evidence` — wraps `scripts/collect-playwright-evidence.ts`
+ * as a typed function call (no subprocess spawn). Reads the Playwright
+ * results JSON at `resultsPath`, copies videos/screenshots into the
+ * evidence dir (default `evidence/<issue>/`), and returns the structured
+ * PlaywrightEvidence record the workflow uses to grade.
+ *
+ * The agent supplies `resultsPath` + `phase`; Factory derives the issue
+ * number from `ctx.workItemId` and the slug from the project config so
+ * the agent cannot misdirect the artefacts.
+ */
+export async function collectEvidenceTool(
+  ctx: FactoryContext,
+  input: z.infer<typeof CollectEvidenceInput>,
+): Promise<CollectEvidenceResult> {
+  const issue = extractIssueNumber(ctx.workItemId);
+  if (issue == null) throw new EvidenceWorkItemIdError(ctx.workItemId);
+
+  const project = await getProjectBySlug(ctx.projectId);
+  if (project == null) {
+    throw new EvidenceConfigMissingError(`No project config found for slug '${ctx.projectId}'.`);
+  }
+
+  let resultsPath: string;
+  try {
+    resultsPath = resolveWorkspacePath(ctx.workspaceRoot, input.resultsPath).absolute;
+  } catch (err) {
+    if (err instanceof PathPolicyViolation)
+      handleBlocked(ctx, 'collect_evidence', err, { ...input });
+    throw err;
+  }
+  if (!existsSync(resultsPath)) {
+    throw new EvidenceConfigMissingError(`Playwright results not found at ${input.resultsPath}.`);
+  }
+
+  let evidenceDirRelative = input.evidenceDir ?? `evidence/${issue}`;
+  let evidenceDirAbsolute: string;
+  try {
+    const resolved = resolveWorkspacePath(ctx.workspaceRoot, evidenceDirRelative);
+    evidenceDirRelative = resolved.relative;
+    evidenceDirAbsolute = resolved.absolute;
+  } catch (err) {
+    if (err instanceof PathPolicyViolation)
+      handleBlocked(ctx, 'collect_evidence', err, { ...input, evidenceDir: evidenceDirRelative });
+    throw err;
+  }
+
+  const evidence = collectPlaywrightEvidence({
+    issue,
+    slug: project.slug,
+    resultsPath,
+    evidenceDir: evidenceDirAbsolute,
+    phase: input.phase ?? 'before',
+    runFfmpeg: input.skipFfmpeg !== true,
+  });
+
+  emitToolCall(ctx, {
+    tool: 'collect_evidence',
+    input: { resultsPath: input.resultsPath, phase: input.phase ?? 'before' },
+    status: 'ok',
+  });
+  return { evidence, resultsPath: input.resultsPath, evidenceDir: evidenceDirRelative };
 }

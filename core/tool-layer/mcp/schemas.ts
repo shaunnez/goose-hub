@@ -134,7 +134,16 @@ export const RunPlaywrightSpecInput = z
   .object({ spec: WorkspacePath, project: z.string().min(1).max(64).optional() })
   .strict();
 
-export const CollectEvidenceInput = z.object({ runId: z.string().min(1) }).strict();
+export const CollectEvidenceInput = z
+  .object({
+    resultsPath: WorkspacePath,
+    phase: z.enum(['before', 'after']).default('before'),
+    /** Workspace-relative output directory; defaults to `evidence/<issue>/`. */
+    evidenceDir: WorkspacePath.optional(),
+    /** Skip ffmpeg post-processing (useful when ffmpeg is not installed). */
+    skipFfmpeg: z.boolean().optional(),
+  })
+  .strict();
 
 export const ValidateEvidenceArtifactsInput = z.object({ runId: z.string().min(1) }).strict();
 

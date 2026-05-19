@@ -76,51 +76,21 @@ describe('redactSecrets', () => {
 // ─── tool bundles + allowlist ─────────────────────────────────────────────────
 
 describe('TOOL_BUNDLES', () => {
-  it('defines read-only, read-write, and bash-restricted bundles', () => {
-    expect(TOOL_BUNDLES['read-only']).toBeDefined();
-    expect(TOOL_BUNDLES['read-write']).toBeDefined();
-    expect(TOOL_BUNDLES['bash-restricted']).toBeDefined();
+  it('read / dev-tools / qa-tools / validate / core are defined', () => {
+    expect(TOOL_BUNDLES.core).toBeDefined();
+    expect(TOOL_BUNDLES.read).toBeDefined();
+    expect(TOOL_BUNDLES['dev-tools']).toBeDefined();
+    expect(TOOL_BUNDLES['qa-tools']).toBeDefined();
+    expect(TOOL_BUNDLES.validate).toBeDefined();
   });
 
-  it('read-only bundle contains Read and Grep', () => {
-    expect(TOOL_BUNDLES['read-only']).toContain('Read');
-    expect(TOOL_BUNDLES['read-only']).toContain('Grep');
-  });
+  // ─── Phase 5b (ADR 0045): native-tool cutover — bundles are factory-tools only ─
 
-  it('read-write bundle contains Write and Edit', () => {
-    expect(TOOL_BUNDLES['read-write']).toContain('Write');
-    expect(TOOL_BUNDLES['read-write']).toContain('Edit');
-  });
-
-  it('validate bundle contains Read, Write, and scoped Bash patterns', () => {
-    expect(TOOL_BUNDLES.validate).toContain('Read');
-    expect(TOOL_BUNDLES.validate).toContain('Write');
-    expect(TOOL_BUNDLES.validate).toContain('Bash(pnpm test:e2e*)');
-    expect(TOOL_BUNDLES.validate).toContain(
-      'Bash(pnpm tsx scripts/collect-playwright-evidence.ts*)',
-    );
-    expect(TOOL_BUNDLES.validate).toContain('Bash(git push*)');
-  });
-
-  it('validate bundle does not include unrestricted Bash', () => {
-    expect(TOOL_BUNDLES.validate).not.toContain('Bash');
-  });
-
-  it('qa-tools excludes workflow-owned e2e pipeline commands', () => {
-    expect(TOOL_BUNDLES['qa-tools']).not.toContain('Bash(pnpm test:e2e:pipeline*)');
-    expect(TOOL_BUNDLES['qa-tools']).not.toContain(
-      'Bash(pnpm --filter @goose-hub/web test:e2e:pipeline*)',
-    );
-    expect(TOOL_BUNDLES['qa-tools']).not.toContain('Bash(pnpm test*)');
-    expect(TOOL_BUNDLES['qa-tools']).not.toContain('Bash(pnpm --filter*)');
-  });
-
-  // ─── Phase 5a (ADR 0045): factory-tools additions ──────────────────────────
-
-  it('read bundle includes factory-tools context + read families', () => {
+  it('read bundle includes factory-tools context + read + git/diff families', () => {
     expect(TOOL_BUNDLES.read).toContain('mcp__factory-tools__read_file');
     expect(TOOL_BUNDLES.read).toContain('mcp__factory-tools__search_text');
     expect(TOOL_BUNDLES.read).toContain('mcp__factory-tools__get_project_context');
+    expect(TOOL_BUNDLES.read).toContain('mcp__factory-tools__get_diff');
   });
 
   it('dev-tools bundle includes factory-tools read + write + verify families', () => {
@@ -134,6 +104,8 @@ describe('TOOL_BUNDLES', () => {
     expect(TOOL_BUNDLES['qa-tools']).toContain('mcp__factory-tools__get_diff');
     expect(TOOL_BUNDLES['qa-tools']).toContain('mcp__factory-tools__get_pr_diff');
     expect(TOOL_BUNDLES['qa-tools']).toContain('mcp__factory-tools__run_isolated_test');
+    expect(TOOL_BUNDLES['qa-tools']).toContain('mcp__factory-tools__get_verification_summary');
+    expect(TOOL_BUNDLES['qa-tools']).toContain('mcp__factory-tools__check_acceptance_criteria');
   });
 
   it('qa-tools bundle does not include any factory-tools write tools (holdout discipline)', () => {
@@ -149,6 +121,23 @@ describe('TOOL_BUNDLES', () => {
     expect(TOOL_BUNDLES.validate).toContain('mcp__factory-tools__get_app_url');
     expect(TOOL_BUNDLES.validate).toContain('mcp__factory-tools__write_playwright_spec');
     expect(TOOL_BUNDLES.validate).toContain('mcp__factory-tools__run_playwright_spec');
+    expect(TOOL_BUNDLES.validate).toContain('mcp__factory-tools__collect_evidence');
+  });
+
+  it('agent-facing bundles contain ONLY mcp__ tool names (no native Read/Write/Edit/Glob/Grep/Bash)', () => {
+    const AGENT_BUNDLES = ['read', 'dev-tools', 'qa-tools', 'validate'] as const;
+    const FORBIDDEN = ['Read', 'Write', 'Edit', 'Glob', 'Grep'];
+    for (const bundle of AGENT_BUNDLES) {
+      for (const tool of TOOL_BUNDLES[bundle]) {
+        expect(FORBIDDEN.includes(tool), `Bundle '${bundle}' must not contain native ${tool}`).toBe(
+          false,
+        );
+        expect(
+          tool === 'Bash' || tool.startsWith('Bash('),
+          `Bundle '${bundle}' must not contain native Bash entry '${tool}'`,
+        ).toBe(false);
+      }
+    }
   });
 
   it('no bundle exposes factory-tools workflow-owned mutations (stage/commit/PR/transition)', () => {
@@ -193,19 +182,22 @@ describe('TOOL_BUNDLES', () => {
 
 describe('computeAllowlist', () => {
   it('returns tools from specified bundles', () => {
-    const list = computeAllowlist({ toolBundles: ['read-only'], toolExtras: [] });
-    expect(list).toContain('Read');
-    expect(list).toContain('Grep');
+    const list = computeAllowlist({ toolBundles: ['read'], toolExtras: [] });
+    expect(list).toContain('mcp__factory-tools__read_file');
+    expect(list).toContain('mcp__factory-tools__search_text');
   });
 
   it('merges extras with bundle tools', () => {
-    const list = computeAllowlist({ toolBundles: ['read-only'], toolExtras: ['Bash'] });
-    expect(list).toContain('Bash');
+    const list = computeAllowlist({
+      toolBundles: ['read'],
+      toolExtras: ['mcp__factory-tools__run_tests'],
+    });
+    expect(list).toContain('mcp__factory-tools__run_tests');
   });
 
   it('deduplicates tools that appear in multiple bundles', () => {
-    const list = computeAllowlist({ toolBundles: ['read-only', 'read-write'], toolExtras: [] });
-    const reads = list.filter((t) => t === 'Read');
+    const list = computeAllowlist({ toolBundles: ['read', 'dev-tools'], toolExtras: [] });
+    const reads = list.filter((t) => t === 'mcp__factory-tools__read_file');
     expect(reads).toHaveLength(1);
   });
 

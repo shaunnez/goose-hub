@@ -1,14 +1,17 @@
 import type { z } from 'zod';
-import { emitToolCall } from '../audit.js';
-import { emitBlockedToolCall } from '../audit.js';
+import { eventStore } from '../../../event-stream/store.js';
+import { emitBlockedToolCall, emitToolCall } from '../audit.js';
 import { type CommandResult, minimalEnv, runCommand } from '../command-policy.js';
 import type { FactoryContext } from '../context.js';
 import { PathPolicyViolation, resolveWorkspacePath } from '../path-policy.js';
 import type {
+  CheckAcceptanceCriteriaInput,
   GetPrDiffInput,
+  GetVerificationSummaryInput,
   RunFullSuiteIfNeededInput,
   RunIsolatedTestInput,
 } from '../schemas.js';
+import { getWorkItem } from './context.js';
 import { GitCommandError } from './git.js';
 import { type VerifyResult, runTestsTool } from './verify.js';
 
@@ -207,6 +210,104 @@ export async function runIsolatedTestTool(
     exitCode: result.exitCode,
     durationMs: result.durationMs,
     truncated: result.truncated,
+  });
+  return result;
+}
+
+export interface GetVerificationSummaryResult {
+  available: boolean;
+  builtAt: string | null;
+  summary: unknown;
+}
+
+/**
+ * `factory_get_verification_summary` — returns the most recent
+ * `qa.verification-summary-built` event for the current work item, or
+ * `available: false` when QA hasn't graded yet. The MCP tool does NOT
+ * rebuild the summary — that's a workflow concern (slices/qa) — it just
+ * surfaces the artifact for the agent to grade against.
+ */
+export function getVerificationSummaryTool(
+  ctx: FactoryContext,
+  _input: z.infer<typeof GetVerificationSummaryInput> = {},
+): GetVerificationSummaryResult {
+  const events = eventStore.replay({
+    projectId: ctx.projectId,
+    workItemId: ctx.workItemId,
+    kind: 'qa.verification-summary-built',
+    order: 'desc',
+    limit: 1,
+  });
+
+  let result: GetVerificationSummaryResult;
+  if (events.length === 0) {
+    result = { available: false, builtAt: null, summary: null };
+  } else {
+    const event = events[0];
+    result = {
+      available: true,
+      builtAt: event.createdAt,
+      summary: event.payload,
+    };
+  }
+
+  emitToolCall(ctx, {
+    tool: 'get_verification_summary',
+    input: {},
+    status: 'ok',
+  });
+  return result;
+}
+
+export interface AcceptanceCriterion {
+  text: string;
+  completed: boolean;
+}
+
+export interface CheckAcceptanceCriteriaResult {
+  total: number;
+  completed: number;
+  allCompleted: boolean;
+  items: AcceptanceCriterion[];
+}
+
+const CHECKBOX_RE = /^\s*[-*]\s+\[(?<state>[ xX])\]\s+(?<text>.+?)\s*$/;
+
+/**
+ * `factory_check_acceptance_criteria` — parses `- [ ]` / `- [x]` markdown
+ * checkboxes from the work item body and reports completion. Used by QA
+ * to grade the implementation against the issue's acceptance criteria
+ * without needing to ask the agent to do the parsing.
+ */
+export async function checkAcceptanceCriteriaTool(
+  ctx: FactoryContext,
+  _input: z.infer<typeof CheckAcceptanceCriteriaInput> = {},
+): Promise<CheckAcceptanceCriteriaResult> {
+  const item = await getWorkItem(ctx, {});
+  const items: AcceptanceCriterion[] = [];
+
+  for (const line of item.body.split('\n')) {
+    const match = line.match(CHECKBOX_RE);
+    if (match?.groups != null) {
+      items.push({
+        text: match.groups.text,
+        completed: match.groups.state.toLowerCase() === 'x',
+      });
+    }
+  }
+
+  const completed = items.filter((i) => i.completed).length;
+  const result: CheckAcceptanceCriteriaResult = {
+    total: items.length,
+    completed,
+    allCompleted: items.length > 0 && completed === items.length,
+    items,
+  };
+
+  emitToolCall(ctx, {
+    tool: 'check_acceptance_criteria',
+    input: {},
+    status: 'ok',
   });
   return result;
 }

@@ -5,6 +5,7 @@
 const FT_CONTEXT = [
   'mcp__factory-tools__get_project_context',
   'mcp__factory-tools__get_stack_commands',
+  'mcp__factory-tools__get_work_item',
   'mcp__factory-tools__record_decision',
 ];
 const FT_READ = [
@@ -42,11 +43,14 @@ const FT_QA = [
   'mcp__factory-tools__get_pr_diff',
   'mcp__factory-tools__run_full_suite_if_needed',
   'mcp__factory-tools__run_isolated_test',
+  'mcp__factory-tools__get_verification_summary',
+  'mcp__factory-tools__check_acceptance_criteria',
 ];
 const FT_EVIDENCE = [
   'mcp__factory-tools__get_app_url',
   'mcp__factory-tools__write_playwright_spec',
   'mcp__factory-tools__run_playwright_spec',
+  'mcp__factory-tools__collect_evidence',
 ];
 
 export const TOOL_BUNDLES = {
@@ -57,122 +61,41 @@ export const TOOL_BUNDLES = {
    * zero filesystem/shell access.
    */
   core: [] as string[],
-  'read-only': ['Read', 'Glob', 'Grep', 'Bash(cat *)', 'Bash(ls *)'],
-  'read-write': ['Read', 'Write', 'Edit', 'Glob', 'Grep'],
-  'bash-restricted': ['Bash'],
   /**
-   * Read bundle for investigator agents (scouts, grill-and-prd).
-   * Phase 5a (ADR 0045): factory-tools read family added alongside native
-   * tools. Native tools remain during prompt-migration transition and are
-   * removed in Phase 7.
+   * Read bundle for investigator agents (scouts, grill-and-prd, dev-review,
+   * etc.). Pure factory-tools (ADR 0045 Phase 5b — native cutover). Context
+   * + workspace-bound read/search/list, plus read-only git so the agent can
+   * compute diffs without invoking `git` via Bash.
    */
-  read: ['Read', 'Glob', 'Grep', 'Bash(cat *)', 'Bash(ls *)', ...FT_CONTEXT, ...FT_READ],
+  read: [...FT_CONTEXT, ...FT_READ, ...FT_GIT_READ],
   /**
-   * Developer bundle for the fix-issue agent.
-   * Phase 5a (ADR 0045): factory-tools read + write + verify families
-   * added. Native tools remain pending Phase 7 cleanup.
+   * Developer bundle for the fix-issue / implement agents. Pure
+   * factory-tools — no native Read / Write / Edit / Glob / Grep / Bash.
+   * Write + verify + git-read in addition to read/context; record_decision
+   * lives in context.
    */
-  'dev-tools': [
-    'Read',
-    'Write',
-    'Edit',
-    'Glob',
-    'Grep',
-    'Bash',
-    ...FT_CONTEXT,
-    ...FT_READ,
-    ...FT_WRITE,
-    ...FT_VERIFY,
-  ],
+  'dev-tools': [...FT_CONTEXT, ...FT_READ, ...FT_WRITE, ...FT_VERIFY, ...FT_GIT_READ],
   /**
    * Shell bundle: read-only bash access for skills that need to run commands
-   * but must not write files. Covers two use cases:
-   *   1. QA/audit: pnpm test/lint commands (same as qa-tools bash patterns)
-   *   2. code-quality-audit: git log/blame for Gall's Law evolution analysis (Cat 7)
-   * No Read/Glob/Grep — pair with 'read' bundle when file access is also needed.
+   * QA holdout bundle. Pure factory-tools (ADR 0045 Phase 5b). Context +
+   * read/search + git/diff (for PR diff inspection) + qa family
+   * (get_pr_diff, run_full_suite_if_needed, run_isolated_test,
+   * get_verification_summary, check_acceptance_criteria). No write tools.
    */
-  shell: [
-    'Bash(pnpm test*)',
-    'Bash(pnpm test:e2e:pipeline*)',
-    'Bash(pnpm --filter*)',
-    'Bash(pnpm --filter @goose-hub/web test:e2e:pipeline*)',
-    'Bash(pnpm biome*)',
-    'Bash(pnpm typecheck*)',
-    'Bash(pnpm lint*)',
-    'Bash(git log*)',
-    'Bash(git blame*)',
-    'Bash(git diff*)',
-    'Bash(git show*)',
-  ],
-  /**
-   * QA holdout bundle. Read-only access plus scoped bash for running test/lint
-   * commands inside the dev worktree. E2E pipeline execution is workflow-owned
-   * and should be graded from verificationSummary. No Write/Edit — QA must not
-   * modify files.
-   *
-   * Phase 5a (ADR 0045): factory-tools read + git/diff + qa families added
-   * alongside native tools. No factory-tools write family — QA stays
-   * read-only.
-   */
-  'qa-tools': [
-    'Read',
-    'Glob',
-    'Grep',
-    'Bash(pnpm test --*)',
-    'Bash(pnpm vitest*)',
-    'Bash(pnpm --filter * test --*)',
-    'Bash(pnpm --filter * vitest*)',
-    'Bash(pnpm biome*)',
-    'Bash(pnpm typecheck*)',
-    'Bash(pnpm lint*)',
-    ...FT_CONTEXT,
-    ...FT_READ,
-    ...FT_GIT_READ,
-    ...FT_QA,
-  ],
+  'qa-tools': [...FT_CONTEXT, ...FT_READ, ...FT_GIT_READ, ...FT_QA],
   /**
    * Playwright validation bundle. Used by skills that run e2e specs and
-   * commit/push evidence artefacts (skills/playwright-repro, skills/evidence-post).
-   * Bash patterns scoped to test invocation, evidence I/O, and git push of evidence.
+   * Playwright validation bundle for skills that run e2e specs and produce
+   * evidence artefacts (skills/playwright-repro, skills/evidence-post). Pure
+   * factory-tools (ADR 0045 Phase 5b). Evidence family covers spec write,
+   * spec run, evidence collection. Workflow drives the commit/push of
+   * evidence packets via tools/workflow.ts (not in this bundle — never
+   * granted to agents).
    *
-   * Phase 5a (ADR 0045): factory-tools evidence + read families added
-   * alongside the existing bash patterns. The collect-evidence /
-   * publish-evidence Bash patterns remain pending the evidence-packet
-   * MCP tools (deferred — see core/tool-layer/mcp/README.md).
+   * Skill mix continues to use 'validate' for playwright-test MCP browser
+   * tools too via the playwright-mcp bundle.
    */
-  validate: [
-    'Read',
-    'Write',
-    'Edit',
-    'Glob',
-    'Grep',
-    'Bash(pnpm test:e2e*)',
-    'Bash(pnpm --filter @goose-hub/web test:e2e*)',
-    'Bash(pnpm --filter @goose-hub/web exec playwright test * --config playwright-evidence.config.ts*)',
-    'Bash(pnpm --filter @goose-hub/web exec playwright*)',
-    'Bash(pnpm tsx scripts/collect-playwright-evidence.ts*)',
-    'Bash(npx playwright*)',
-    'Bash(ffmpeg*)',
-    'Bash(mkdir -p evidence/*)',
-    'Bash(mkdir -p /tmp/evidence-*)',
-    'Bash(cp *)',
-    'Bash(git add evidence/*)',
-    'Bash(git checkout*)',
-    'Bash(git commit -m *)',
-    'Bash(git fetch origin evidence/*)',
-    'Bash(git push*)',
-    'Bash(git rev-parse HEAD)',
-    'Bash(git show-ref*)',
-    'Bash(git worktree*)',
-    'Bash(git -C /tmp/evidence-* add evidence/*)',
-    'Bash(git -C /tmp/evidence-* commit -m *)',
-    'Bash(git -C /tmp/evidence-* push*)',
-    'Bash(git -C /tmp/evidence-* rev-parse HEAD)',
-    'Bash(gh issue comment*)',
-    ...FT_CONTEXT,
-    ...FT_READ,
-    ...FT_EVIDENCE,
-  ],
+  validate: [...FT_CONTEXT, ...FT_READ, ...FT_EVIDENCE],
   /**
    * M19.06 — record-decision tool (opt-in, feature-flagged).
    * Exposes a single mid-run MCP tool that writes DecisionRecords to SQLite.

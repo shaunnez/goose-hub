@@ -1,9 +1,19 @@
 import type { z } from 'zod';
+import { openPR } from '../../../connectors/github/open-pr.js';
+import type { StateName } from '../../../state-machine/states.js';
 import { emitBlockedToolCall, emitToolCall } from '../audit.js';
 import { type CommandResult, minimalEnv, runCommand } from '../command-policy.js';
 import type { FactoryContext } from '../context.js';
 import { PathPolicyViolation, resolveWorkspacePath } from '../path-policy.js';
-import type { CommitChangesInput, StageChangesInput } from '../schemas.js';
+import type {
+  CommitChangesInput,
+  OpenPrInput,
+  PostIssueCommentInput,
+  StageChangesInput,
+  TransitionStateInput,
+  UpdatePrInput,
+} from '../schemas.js';
+import { getStateSourceForProject, resolveGitHubToken } from './_github.js';
 
 const GIT_TIMEOUT_MS = 30 * 1000;
 
@@ -138,4 +148,171 @@ export async function commitChangesTool(
     durationMs: result.durationMs,
   });
   return { sha, message: input.message };
+}
+
+export interface OpenPrResult {
+  prNumber: number;
+  prUrl: string;
+}
+
+/**
+ * Pushes the current branch to origin and opens a pull request via the
+ * GitHub REST API. Caller must ensure body contains `Closes #N` (the
+ * underlying `openPR` connector validates this).
+ *
+ * Workflow-owned — not exposed to agents. Branch name is derived from
+ * the current HEAD's branch (read via `git rev-parse --abbrev-ref HEAD`)
+ * so the workflow doesn't have to thread it through.
+ */
+export async function openPrTool(
+  ctx: FactoryContext,
+  input: z.infer<typeof OpenPrInput>,
+): Promise<OpenPrResult> {
+  const branchResult = await git(ctx, ['rev-parse', '--abbrev-ref', 'HEAD']);
+  if (branchResult.status !== 'ok') {
+    throw new GitMutationError(
+      branchResult.exitCode,
+      branchResult.stderr,
+      `open_pr: git rev-parse --abbrev-ref HEAD failed: ${branchResult.stderr.trim()}`,
+    );
+  }
+  const branchName = branchResult.stdout.trim();
+
+  const source = await getStateSourceForProject(ctx.projectId);
+  const issueMatch = ctx.workItemId.match(/#(\d+)$/);
+  if (issueMatch == null) {
+    throw new GitMutationError(
+      null,
+      '',
+      `open_pr: cannot derive issue number from workItemId '${ctx.workItemId}'.`,
+    );
+  }
+  const issueNumber = Number.parseInt(issueMatch[1], 10);
+
+  const result = await openPR({
+    worktreePath: ctx.workspaceRoot,
+    repo: source.repoRef,
+    issueNumber,
+    title: input.title,
+    body: input.body ?? `Closes #${issueNumber}`,
+    branchName,
+    baseBranch: input.base,
+    token: resolveGitHubToken(),
+  });
+
+  emitToolCall(ctx, {
+    tool: 'open_pr',
+    input: { issueNumber, branchName, base: input.base ?? 'main' },
+    status: 'ok',
+  });
+  return { prNumber: result.prNumber, prUrl: result.prUrl };
+}
+
+export interface UpdatePrResult {
+  prNumber: number;
+  updated: ReadonlyArray<'title' | 'body'>;
+}
+
+/**
+ * PATCH `/repos/<repo>/pulls/<n>` with title and/or body updates.
+ * Workflow-owned — not exposed to agents.
+ */
+export async function updatePrTool(
+  ctx: FactoryContext,
+  input: z.infer<typeof UpdatePrInput>,
+): Promise<UpdatePrResult> {
+  const source = await getStateSourceForProject(ctx.projectId);
+  const token = resolveGitHubToken();
+  const payload: Record<string, string> = {};
+  const updated: Array<'title' | 'body'> = [];
+  if (input.title != null) {
+    payload.title = input.title;
+    updated.push('title');
+  }
+  if (input.body != null) {
+    payload.body = input.body;
+    updated.push('body');
+  }
+
+  const response = await fetch(
+    `https://api.github.com/repos/${source.repoRef}/pulls/${input.prNumber}`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) {
+    const text = await response.text();
+    throw new GitMutationError(
+      response.status,
+      text,
+      `update_pr: PATCH /pulls/${input.prNumber} failed (${response.status}): ${text}`,
+    );
+  }
+
+  emitToolCall(ctx, {
+    tool: 'update_pr',
+    input: { prNumber: input.prNumber, updated },
+    status: 'ok',
+  });
+  return { prNumber: input.prNumber, updated };
+}
+
+export interface PostIssueCommentResult {
+  issueNumber: number;
+}
+
+/**
+ * Posts a comment to the run's work item (or an explicit issue number).
+ * Workflow-owned. Wraps `GitHubLabelsSource.comment()`.
+ */
+export async function postIssueCommentTool(
+  ctx: FactoryContext,
+  input: z.infer<typeof PostIssueCommentInput>,
+): Promise<PostIssueCommentResult> {
+  const source = await getStateSourceForProject(ctx.projectId);
+  const itemId = `github:${source.repoRef}#${input.issueNumber}`;
+  await source.comment(itemId, input.body);
+
+  emitToolCall(ctx, {
+    tool: 'post_issue_comment',
+    input: { issueNumber: input.issueNumber, bodyLength: input.body.length },
+    status: 'ok',
+  });
+  return { issueNumber: input.issueNumber };
+}
+
+export interface TransitionStateResult {
+  issueNumber: number;
+  from: StateName;
+  to: StateName;
+}
+
+/**
+ * Transitions the work item from its current state to `to`. Reads the
+ * current state first to satisfy the legal-transition check inside
+ * `GitHubLabelsSource.transitionState()`. Workflow-owned.
+ */
+export async function transitionStateTool(
+  ctx: FactoryContext,
+  input: z.infer<typeof TransitionStateInput>,
+): Promise<TransitionStateResult> {
+  const source = await getStateSourceForProject(ctx.projectId);
+  const itemId = `github:${source.repoRef}#${input.issueNumber}`;
+  const current = await source.getItem(itemId);
+  const to = input.to as StateName;
+  await source.transitionState(itemId, current.state, to);
+
+  emitToolCall(ctx, {
+    tool: 'transition_state',
+    input: { issueNumber: input.issueNumber, from: current.state, to },
+    status: 'ok',
+  });
+  return { issueNumber: input.issueNumber, from: current.state, to };
 }

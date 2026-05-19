@@ -3,6 +3,8 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { type FactoryContext, FactoryContextError, loadFactoryContext } from './context.js';
 import {
   ApplyPatchInput,
+  CheckAcceptanceCriteriaInput,
+  CollectEvidenceInput,
   CreateDirectoryInput,
   DeleteFileInput,
   EditFileInput,
@@ -17,6 +19,8 @@ import {
   GetProjectContextInput,
   GetStackCommandsInput,
   GetStatusInput,
+  GetVerificationSummaryInput,
+  GetWorkItemInput,
   ListDirInput,
   ListFilesInput,
   MoveFileInput,
@@ -39,9 +43,15 @@ import {
   ToolDataMissingError,
   getProjectContext,
   getStackCommands,
+  getWorkItem,
   recordDecisionTool,
 } from './tools/context.js';
-import { getAppUrlTool, runPlaywrightSpecTool, writePlaywrightSpecTool } from './tools/evidence.js';
+import {
+  collectEvidenceTool,
+  getAppUrlTool,
+  runPlaywrightSpecTool,
+  writePlaywrightSpecTool,
+} from './tools/evidence.js';
 import {
   getChangedFilesTool,
   getDiffTool,
@@ -49,7 +59,13 @@ import {
   getMergeBaseTool,
   getStatusTool,
 } from './tools/git.js';
-import { getPrDiffTool, runFullSuiteIfNeededTool, runIsolatedTestTool } from './tools/qa.js';
+import {
+  checkAcceptanceCriteriaTool,
+  getPrDiffTool,
+  getVerificationSummaryTool,
+  runFullSuiteIfNeededTool,
+  runIsolatedTestTool,
+} from './tools/qa.js';
 import {
   fileExistsTool,
   fileInfoTool,
@@ -643,6 +659,74 @@ export function buildFactoryMcpServer(ctx: FactoryContext): McpServer {
     async (input) => {
       try {
         const result = await runPlaywrightSpecTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_work_item',
+    {
+      description:
+        "Return the run's work item (title, body, type, state, schedule, dependencies). Holdout-safe slice — omits authorIsOwner/parentId/createdAt.",
+      inputSchema: GetWorkItemInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await getWorkItem(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_verification_summary',
+    {
+      description:
+        'Return the most recent qa.verification-summary-built event for the current work item, or `available: false` if QA has not yet built one.',
+      inputSchema: GetVerificationSummaryInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = getVerificationSummaryTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'check_acceptance_criteria',
+    {
+      description:
+        "Parse `- [ ]` / `- [x]` markdown checkboxes from the work item body and report completion. Used by QA to grade against the issue's stated AC.",
+      inputSchema: CheckAcceptanceCriteriaInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await checkAcceptanceCriteriaTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'collect_evidence',
+    {
+      description:
+        'Process Playwright results into structured PlaywrightEvidence (videos, screenshots, console errors) in `evidence/<issue>/`. Issue number and slug are derived from the run context.',
+      inputSchema: CollectEvidenceInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await collectEvidenceTool(ctx, input);
         return { content: jsonContent(result), structuredContent: { ...result } };
       } catch (err) {
         return errorResult(err);

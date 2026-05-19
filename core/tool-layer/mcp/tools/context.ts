@@ -1,13 +1,16 @@
 import type { z } from 'zod';
 import { getProjectBySlug } from '../../../projects/loader.js';
+import type { WorkItem } from '../../../state-source/interface.js';
 import { recordDecision } from '../../tools/record-decision.js';
 import { emitToolCall } from '../audit.js';
 import type { FactoryContext } from '../context.js';
 import type {
   GetProjectContextInput,
   GetStackCommandsInput,
+  GetWorkItemInput,
   RecordDecisionInput,
 } from '../schemas.js';
+import { getStateSourceForProject } from './_github.js';
 
 export class ToolDataMissingError extends Error {
   readonly kind = 'ToolDataMissingError' as const;
@@ -104,6 +107,64 @@ export async function getStackCommands(
   };
 
   emitToolCall(ctx, { tool: 'get_stack_commands', input: {}, status: 'ok' });
+  return result;
+}
+
+export interface GetWorkItemResult {
+  id: string;
+  externalId: string;
+  repoRef: string;
+  title: string;
+  body: string;
+  type: WorkItem['type'];
+  priority: WorkItem['priority'];
+  state: WorkItem['state'];
+  schedule: WorkItem['schedule'];
+  milestoneTitle: string | null;
+  dependsOn: ReadonlyArray<string>;
+  blocks: ReadonlyArray<string>;
+}
+
+/**
+ * `factory_get_work_item` — returns the run's work item from the state
+ * source. Holdout-safe: omits parentId/authorIsOwner/createdAt; QA and
+ * Review need title + body + state, not the meta fields. Token is read
+ * from the orchestrator env (FACTORY_GITHUB_TOKEN / GITHUB_TOKEN).
+ */
+export async function getWorkItem(
+  ctx: FactoryContext,
+  _input: z.infer<typeof GetWorkItemInput> = {},
+): Promise<GetWorkItemResult> {
+  if (ctx.workItemId.length === 0) {
+    throw new ToolDataMissingError(
+      'get_work_item',
+      `Run ${ctx.runId} has no work item id; factory_get_work_item is not applicable.`,
+    );
+  }
+
+  const source = await getStateSourceForProject(ctx.projectId);
+  const item = await source.getItem(ctx.workItemId);
+
+  const result: GetWorkItemResult = {
+    id: item.id,
+    externalId: item.externalId,
+    repoRef: item.repoRef,
+    title: item.title,
+    body: item.body,
+    type: item.type,
+    priority: item.priority,
+    state: item.state,
+    schedule: item.schedule,
+    milestoneTitle: item.milestoneTitle ?? null,
+    dependsOn: item.dependsOn,
+    blocks: item.blocks,
+  };
+
+  emitToolCall(ctx, {
+    tool: 'get_work_item',
+    input: { workItemId: ctx.workItemId },
+    status: 'ok',
+  });
   return result;
 }
 
