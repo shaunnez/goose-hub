@@ -2,16 +2,22 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { type FactoryContext, FactoryContextError, loadFactoryContext } from './context.js';
 import {
+  ApplyPatchInput,
+  CreateDirectoryInput,
+  DeleteFileInput,
+  EditFileInput,
   FileExistsInput,
   FileInfoInput,
   GetProjectContextInput,
   GetStackCommandsInput,
   ListDirInput,
   ListFilesInput,
+  MoveFileInput,
   ReadFileInput,
   ReadManyFilesInput,
   RecordDecisionInput,
   SearchTextInput,
+  WriteFileInput,
 } from './schemas.js';
 import {
   ToolDataMissingError,
@@ -28,6 +34,14 @@ import {
   readManyFilesTool,
   searchTextTool,
 } from './tools/read.js';
+import {
+  applyPatchTool,
+  createDirectoryTool,
+  deleteFileTool,
+  editFileTool,
+  moveFileTool,
+  writeFileTool,
+} from './tools/write.js';
 
 const SERVER_NAME = 'factory-tools';
 const SERVER_VERSION = '0.1.0';
@@ -221,6 +235,107 @@ export function buildFactoryMcpServer(ctx: FactoryContext): McpServer {
     async (input) => {
       try {
         const result = await fileInfoTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'write_file',
+    {
+      description:
+        'Write content to a workspace-relative path. Parent directories are created on demand. Reports `created` true for new files, false for overwrites.',
+      inputSchema: WriteFileInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await writeFileTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'edit_file',
+    {
+      description:
+        'Replace `oldString` with `newString`. Requires a unique match unless `replaceAll: true`; zero matches throws.',
+      inputSchema: EditFileInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await editFileTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'apply_patch',
+    {
+      description:
+        'Apply a unified diff via `git apply`. Patches that touch paths outside the worktree are refused by git itself.',
+      inputSchema: ApplyPatchInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await applyPatchTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'create_directory',
+    {
+      description: 'mkdir -p for a workspace-relative path. Idempotent.',
+      inputSchema: CreateDirectoryInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await createDirectoryTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'move_file',
+    {
+      description:
+        'Rename or move a workspace-relative file. Parent directories are created on demand.',
+      inputSchema: MoveFileInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await moveFileTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'delete_file',
+    {
+      description:
+        'Delete a single workspace-relative file. Directories are refused — move them to a workflow-owned trash path instead.',
+      inputSchema: DeleteFileInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await deleteFileTool(ctx, input);
         return { content: jsonContent(result), structuredContent: { ...result } };
       } catch (err) {
         return errorResult(err);
