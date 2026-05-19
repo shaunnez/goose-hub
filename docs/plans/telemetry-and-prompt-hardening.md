@@ -57,7 +57,7 @@ Completed:
 
 - Added `core/agent-runtime/path-drift-report.ts` to group repair, mismatch, and gate-block events by skill and field.
 - Added `pnpm path-drift:report [projectId] [limit]` for a lightweight developer report over recent event-stream data.
-- The report includes scanned event counts, drift event counts, latest event id, per-field buckets, and a simple first-half/second-half trend direction.
+- The report includes scanned event counts, drift event counts, latest event id, per-field buckets, and a time-window trend direction.
 
 ### [x] Slice 3 - Prompt contraction pass
 

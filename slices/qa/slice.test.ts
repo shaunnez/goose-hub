@@ -1526,6 +1526,70 @@ describe('runQaWorkflow', () => {
       expect(spec.contextAllowlist).toContain('devTestsRun');
     });
 
+    it('keeps observed dev test command and paths from the same run_tests event', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockImplementation((filter = {}) => {
+        if ((filter as { runId?: string; kind?: string }).runId === 'dev-run-1') {
+          return [
+            {
+              id: 3,
+              kind: 'agent.tool-call',
+              payload: {
+                tool_name: 'run_tests',
+                tool_input: {
+                  command: 'pnpm test --reporter=json apps/web/src/foo.test.ts',
+                  path: 'src/foo.test.ts',
+                },
+                canonical_path: {
+                  path: 'apps/web/src/foo.test.ts',
+                  root: 'worktree',
+                  packageRoot: 'apps/web',
+                  normalizedFrom: 'src/foo.test.ts',
+                },
+              },
+              runId: 'dev-run-1',
+              createdAt: '',
+            },
+            {
+              id: 4,
+              kind: 'agent.tool-call',
+              payload: {
+                tool_name: 'run_tests',
+                tool_input: {
+                  command: 'pnpm test --reporter=json',
+                },
+              },
+              runId: 'dev-run-1',
+              createdAt: '',
+            },
+          ];
+        }
+        return [
+          {
+            id: 1,
+            kind: 'pr.opened',
+            payload: { worktreePath: '/wt/abc', devRunId: 'dev-run-1' },
+            createdAt: '',
+          },
+        ];
+      });
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const spec = mockRun.mock.calls[0][0] as {
+        context: Record<string, unknown>;
+        contextAllowlist: string[];
+      };
+      expect(spec.context.devTestsRun).toEqual({
+        command: 'pnpm test --reporter=json apps/web/src/foo.test.ts',
+        paths: ['apps/web/src/foo.test.ts'],
+      });
+      expect(spec.contextAllowlist).toContain('devTestsRun');
+    });
+
     it('reads testsRun from agent.implement-complete and passes it as devTestsRun in context', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();

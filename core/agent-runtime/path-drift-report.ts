@@ -1,6 +1,7 @@
 import { type AgentEvent, eventStore } from '../event-stream/store.js';
 
 const DRIFT_EVENT_KINDS = new Set([
+  'agent.path-normalized',
   'agent.output-repaired',
   'agent.output-fact-mismatch',
   'agent.contract-gate-blocked',
@@ -44,8 +45,11 @@ export type PathDriftReport = {
   latestEventId?: number;
   buckets: PathDriftBucket[];
   trend: {
-    firstHalfDriftEvents: number;
-    secondHalfDriftEvents: number;
+    windowStartAt?: string;
+    midpointAt?: string;
+    windowEndAt?: string;
+    previousWindowDriftEvents: number;
+    currentWindowDriftEvents: number;
     direction: 'decreasing' | 'flat' | 'increasing';
   };
 };
@@ -82,6 +86,71 @@ function bucketKey(skill: string, field: string): string {
   return `${skill}\0${field}`;
 }
 
+function eventTime(event: AgentEvent): number | undefined {
+  const ms = Date.parse(event.createdAt);
+  return Number.isFinite(ms) ? ms : undefined;
+}
+
+function isoTime(ms: number): string {
+  return new Date(ms).toISOString();
+}
+
+function buildTrend(events: AgentEvent[], driftEvents: AgentEvent[]): PathDriftReport['trend'] {
+  const eventTimes = events.flatMap((event) => {
+    const time = eventTime(event);
+    return time == null ? [] : [time];
+  });
+  if (eventTimes.length === 0 || driftEvents.length === 0) {
+    return {
+      previousWindowDriftEvents: 0,
+      currentWindowDriftEvents: 0,
+      direction: 'flat',
+    };
+  }
+
+  const windowStart = Math.min(...eventTimes);
+  const windowEnd = Math.max(...eventTimes);
+  if (windowStart === windowEnd) {
+    return {
+      windowStartAt: isoTime(windowStart),
+      midpointAt: isoTime(windowStart),
+      windowEndAt: isoTime(windowEnd),
+      previousWindowDriftEvents: driftEvents.length,
+      currentWindowDriftEvents: driftEvents.length,
+      direction: 'flat',
+    };
+  }
+
+  const midpoint = windowStart + (windowEnd - windowStart) / 2;
+  let previousWindowDriftEvents = 0;
+  let currentWindowDriftEvents = 0;
+  for (const event of driftEvents) {
+    const time = eventTime(event);
+    if (time == null) continue;
+    if (time <= midpoint) {
+      previousWindowDriftEvents += 1;
+    } else {
+      currentWindowDriftEvents += 1;
+    }
+  }
+
+  const direction =
+    currentWindowDriftEvents < previousWindowDriftEvents
+      ? 'decreasing'
+      : currentWindowDriftEvents > previousWindowDriftEvents
+        ? 'increasing'
+        : 'flat';
+
+  return {
+    windowStartAt: isoTime(windowStart),
+    midpointAt: isoTime(midpoint),
+    windowEndAt: isoTime(windowEnd),
+    previousWindowDriftEvents,
+    currentWindowDriftEvents,
+    direction,
+  };
+}
+
 export function buildPathDriftReport(events: AgentEvent[], projectId?: string): PathDriftReport {
   const driftEvents = events
     .filter((event) => DRIFT_EVENT_KINDS.has(event.kind))
@@ -102,22 +171,14 @@ export function buildPathDriftReport(events: AgentEvent[], projectId?: string): 
           mismatches: 0,
           blocked: 0,
         } satisfies PathDriftBucket);
-      if (event.kind === 'agent.output-repaired') bucket.repaired += 1;
+      if (event.kind === 'agent.path-normalized' || event.kind === 'agent.output-repaired') {
+        bucket.repaired += 1;
+      }
       if (event.kind === 'agent.output-fact-mismatch') bucket.mismatches += 1;
       if (event.kind === 'agent.contract-gate-blocked') bucket.blocked += 1;
       buckets.set(key, bucket);
     }
   }
-
-  const midpoint = Math.ceil(driftEvents.length / 2);
-  const firstHalfDriftEvents = driftEvents.slice(0, midpoint).length;
-  const secondHalfDriftEvents = driftEvents.slice(midpoint).length;
-  const direction =
-    secondHalfDriftEvents < firstHalfDriftEvents
-      ? 'decreasing'
-      : secondHalfDriftEvents > firstHalfDriftEvents
-        ? 'increasing'
-        : 'flat';
 
   return {
     ...(projectId != null ? { projectId } : {}),
@@ -130,11 +191,7 @@ export function buildPathDriftReport(events: AgentEvent[], projectId?: string): 
         a.skill.localeCompare(b.skill) ||
         a.field.localeCompare(b.field),
     ),
-    trend: {
-      firstHalfDriftEvents,
-      secondHalfDriftEvents,
-      direction,
-    },
+    trend: buildTrend(events, driftEvents),
   };
 }
 
@@ -155,8 +212,11 @@ export function formatPathDriftReport(report: PathDriftReport): string {
     `path drift report${report.projectId != null ? `: ${report.projectId}` : ''}`,
     `scannedEvents: ${report.scannedEvents}`,
     `driftEvents: ${report.driftEvents}`,
-    `trend: ${report.trend.direction} (${report.trend.firstHalfDriftEvents} -> ${report.trend.secondHalfDriftEvents})`,
+    `trend: ${report.trend.direction} (${report.trend.previousWindowDriftEvents} -> ${report.trend.currentWindowDriftEvents})`,
   ];
+  if (report.trend.windowStartAt != null && report.trend.windowEndAt != null) {
+    lines.push(`trendWindow: ${report.trend.windowStartAt}..${report.trend.windowEndAt}`);
+  }
 
   if (report.latestEventId != null) lines.push(`latestEventId: ${report.latestEventId}`);
   if (report.buckets.length === 0) {

@@ -205,29 +205,23 @@ export function findDevTestsRun(
 
 function findObservedDevTestsRun(runId: string): { command: string; paths: string[] } | undefined {
   const events = eventStore.replay({ runId, kind: 'agent.tool-call' });
-  const testEvents = events.filter((event) => {
+  const observedRuns = events.flatMap((event) => {
     const payload = event.payload as Record<string, unknown> | null;
-    if (payload == null) return false;
+    if (payload == null) return [];
     const toolName = payload.tool_name ?? payload.tool;
-    return toolName === 'run_tests';
-  });
-  const latest = testEvents.at(-1);
-  if (latest == null) return undefined;
-
-  const payload = latest.payload as Record<string, unknown>;
-  const toolInput = payload.tool_input;
-  const command =
-    toolInput != null &&
-    typeof toolInput === 'object' &&
-    !Array.isArray(toolInput) &&
-    typeof (toolInput as { command?: unknown }).command === 'string'
-      ? (toolInput as { command: string }).command
-      : undefined;
-  const paths = testEvents.flatMap((event) => {
+    if (toolName !== 'run_tests') return [];
+    const toolInput = payload.tool_input;
+    const command =
+      toolInput != null &&
+      typeof toolInput === 'object' &&
+      !Array.isArray(toolInput) &&
+      typeof (toolInput as { command?: unknown }).command === 'string'
+        ? (toolInput as { command: string }).command
+        : undefined;
     const path = canonicalPathStringFromAuditPayload(event.payload);
-    return path == null ? [] : [path];
+    return command == null || path == null ? [] : [{ command, paths: [path] }];
   });
-  const uniquePaths = [...new Set(paths)];
-  if (command == null || uniquePaths.length === 0) return undefined;
-  return { command, paths: uniquePaths };
+  const latest = observedRuns.at(-1);
+  if (latest == null) return undefined;
+  return { command: latest.command, paths: [...new Set(latest.paths)] };
 }

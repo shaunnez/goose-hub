@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { AgentEvent } from '../event-stream/store.js';
 import { buildPathDriftReport, formatPathDriftReport } from './path-drift-report.js';
 
-function event(id: number, kind: AgentEvent['kind'], payload: unknown): AgentEvent {
+function event(
+  id: number,
+  kind: AgentEvent['kind'],
+  payload: unknown,
+  createdAt = '2026-05-20T00:00:00Z',
+): AgentEvent {
   return {
     id,
     projectId: 'goose-hub-self',
@@ -11,7 +16,7 @@ function event(id: number, kind: AgentEvent['kind'], payload: unknown): AgentEve
     payload,
     runId: 'run-1',
     personaId: null,
-    createdAt: '2026-05-20T00:00:00Z',
+    createdAt,
   };
 }
 
@@ -19,7 +24,7 @@ describe('path-drift-report', () => {
   it('groups repairs and mismatches by skill and field', () => {
     const report = buildPathDriftReport(
       [
-        event(1, 'agent.output-repaired', {
+        event(1, 'agent.path-normalized', {
           skill: 'implement',
           fields: [
             {
@@ -75,5 +80,19 @@ describe('path-drift-report', () => {
     expect(formatPathDriftReport(report)).toContain(
       'implement filesWritten[0].path: repaired=1 mismatches=0 blocked=0',
     );
+  });
+
+  it('computes trend from event time windows instead of list halves', () => {
+    const report = buildPathDriftReport([
+      event(1, 'agent.output-repaired', { skill: 'implement' }, '2026-05-20T00:00:00Z'),
+      event(2, 'agent.run-completed', {}, '2026-05-20T00:10:00Z'),
+      event(3, 'agent.output-fact-mismatch', { skill: 'implement' }, '2026-05-20T01:00:00Z'),
+      event(4, 'agent.contract-gate-blocked', { skill: 'implement' }, '2026-05-20T01:10:00Z'),
+    ]);
+
+    expect(report.trend.previousWindowDriftEvents).toBe(1);
+    expect(report.trend.currentWindowDriftEvents).toBe(2);
+    expect(report.trend.direction).toBe('increasing');
+    expect(formatPathDriftReport(report)).toContain('trend: increasing (1 -> 2)');
   });
 });
