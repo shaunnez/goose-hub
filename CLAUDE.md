@@ -50,7 +50,7 @@ read the real files before reporting findings.
 - **Node** — a single async function inside a workflow.
 - **Lane** — a UI column on the Kanban. Visual grouping of states. Pure display; never drives behaviour.
 - **Agent Run** — one invocation of an AI agent with role, prompt, tool allowlist, budget, output schema.
-- **Role** — Triager, Griller, PRD-Writer, Decomposer, Researcher, Investigator, Developer, Dev-Reviewer, QA, Reviewer, Retrospector, Auditor, Assistant. Canonical source is the `Role` union in `core/types.ts`; this list mirrors it. (Note: "Advisor" is a model-tier *concept*, not a role — see the entry below. Note: "Assistant" is the Hub Chat conversational role added in M20.17; non-holdout, broad read, sonnet baseline.)
+- **Role** — Triager, Griller, PRD-Writer, Decomposer, Researcher, Investigator, Developer, Dev-Reviewer, QA, Reviewer, Retrospector, Auditor, Intervention-Proposer, Assistant. Canonical source is the `Role` union in `core/types.ts`; this list mirrors it. (Note: "Advisor" is a model-tier *concept*, not a role — see the entry below. Note: "Assistant" is the Hub Chat conversational role added in M20.17; non-holdout, broad read, sonnet baseline.)
 - **Persona** — a named instance of a role with personality, history, performance metrics. Project-scoped.
 - **Skill** — a packaged capability: prompt + role + tool bundle list + model config + JSON output schema. Versioned markdown plus a TypeScript schema file.
 - **Tool Bundle** — a named set of related tools. Roles compose allowlists from bundles plus per-role extras.
@@ -120,7 +120,7 @@ If the `gh issue list` command above returns no eligible issues — meaning all 
 - Have unmet `Depends on #N` references pointing at still-open issues
 — then the milestone is structurally complete.
 
-Run the exit audit per `docs/exit-audit.md`. That file describes the generic checks. It also instructs you to read the milestone-specific exit criteria from `docs/archive/PLAN.md` section 28 for the active milestone, and combine both.
+Run the exit audit per `docs/exit-audit.md`. That file describes the generic checks. Do not use archived project plans as active milestone authority; rely on the current project config, live issue state, current governance docs, and the codebase.
 
 Report findings using the structured format `docs/exit-audit.md` specifies. Do NOT close the milestone yourself. Do NOT start work on the next milestone. The human reviews the audit and decides.
 
