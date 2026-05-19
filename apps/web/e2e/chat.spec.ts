@@ -31,10 +31,14 @@ async function openChatPanel(page: Page) {
   await expect(page.locator('[data-testid="chat-panel"]')).toHaveClass(/translate-x-0/);
 }
 
+async function startNewConversation(page: Page) {
+  await page.locator('[data-testid="chat-new-conversation"]').click();
+}
+
 /**
- * Wait until the panel finishes creating its conversation row — the textarea
- * is `disabled` until that POST settles, and Playwright `fill` rejects on a
- * disabled element.
+ * Wait until the panel finishes creating/loading its conversation row — the
+ * textarea is `disabled` until that POST settles, and Playwright `fill`
+ * rejects on a disabled element.
  */
 async function waitForChatReady(page: Page) {
   await expect(page.locator('[data-testid="chat-input"]')).toBeEnabled({ timeout: 20_000 });
@@ -62,6 +66,7 @@ test.describe('hub-chat panel', () => {
   test('sending a message persists it and the user bubble renders', async ({ page }) => {
     await page.goto('/projects/goose-hub-self');
     await openChatPanel(page);
+    await startNewConversation(page);
     await waitForChatReady(page);
 
     const input = page.locator('[data-testid="chat-input"]');
@@ -77,6 +82,7 @@ test.describe('hub-chat panel', () => {
   test('a read-only tool proposal auto-runs and renders a result card', async ({ page }) => {
     await page.goto('/projects/goose-hub-self');
     await openChatPanel(page);
+    await startNewConversation(page);
     await waitForChatReady(page);
 
     await page.locator('[data-testid="chat-input"]').fill('please list projects for me');
@@ -95,6 +101,7 @@ test.describe('hub-chat panel', () => {
   }) => {
     await page.goto('/projects/goose-hub-self');
     await openChatPanel(page);
+    await startNewConversation(page);
     await waitForChatReady(page);
 
     await page.locator('[data-testid="chat-input"]').fill('please post a comment for me');
@@ -114,6 +121,7 @@ test.describe('hub-chat panel', () => {
   test('approving open_url navigates the page', async ({ page }) => {
     await page.goto('/projects/goose-hub-self/inbox');
     await openChatPanel(page);
+    await startNewConversation(page);
     await waitForChatReady(page);
 
     await page.locator('[data-testid="chat-input"]').fill('please open the kanban');
