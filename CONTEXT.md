@@ -543,6 +543,20 @@ Both `target-projects/` and `skills/` are pnpm workspace packages (`@goose-hub/t
 
 Every skill in `skills/<name>/` uses `prompt.md` (Markdown instructions) and `skill.config.ts` (SkillConfig with role, contextSchema, toolBundles, modelTier, budgets). All prompt loading routes through `readPromptWithContext(skillName, projectSlug)` in `core/agent-runtime/read-prompt.ts`, which appends `target-projects/<slug>/agent-context/<skillName>.md` if the overlay file exists. Per-project overlays are now available to every skill, not just orchestrator-side ones. The CLI's `run-agent` command takes an optional `--project=<slug>` flag for the same overlay path. Resolved at M11.
 
+## factory-tools MCP server (ADR 0045)
+
+Spawned agents do not receive native `Read`, `Write`, `Edit`, `Glob`, `Grep`, or broad `Bash`. They receive Factory-owned MCP tools under the `mcp__factory-tools__` prefix that take intent (path, project, kind), not commands. Factory builds the argv, validates the path, caps the output, and emits the audit event.
+
+Per-run MCP config lives at `<worktree>/.factory/mcp-config.json`, written at spawn time and torn down with the worktree. This replaces the singleton `~/.factory/mcp-config.json` used today by `claude-cli.ts` / `codex-cli.ts` (which stomp each other under concurrent spawns).
+
+The server reads its identity from env: `FACTORY_RUN_ID`, `FACTORY_PROJECT_ID`, `FACTORY_WORK_ITEM_ID`, `FACTORY_WORKSPACE_DIR`, `FACTORY_SERVER_PORT`. The agent receives none of these. Tools never accept a `workspaceRoot` argument.
+
+Path policy denylist: absolute paths, `..`, `~`, `.codex`, `.agents`, `.claude`, `.factory`, parent dirs, sibling worktrees. Command policy: `spawn(cmd, args, { shell: false })`, capped output, per-tool timeout, typed `{ status, exitCode, stdout, stderr, durationMs, truncated }` return.
+
+Every tool call emits `agent.tool-call`. Every blocked call emits `agent.tool-call` with `blocked: true` and a reason code. Workflow-owned mutations (commit, open PR, transition, publish evidence) are not exposed to normal bundles; the orchestrator drives them.
+
+`core/tool-layer/tools/read.ts`, `write.ts`, `bash.ts`, `test.ts` are unused first-pass scaffolding and are deleted in Phase 7 of the migration. `core/tool-layer/tools/record-decision.ts` is the surviving helper and is wrapped by the new `tools/context.ts`.
+
 ## Flagged ambiguities
 
 - **Decision-summary two-stream split**: resolved. Canonical record lives in schema field; live markers from `[decision]` footer in `prompt.md`. Tool-call audit is a third, separate stream. All three distinct concerns at distinct cadences.
