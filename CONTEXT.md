@@ -507,7 +507,7 @@ Both `target-projects/` and `skills/` are pnpm workspace packages (`@goose-hub/t
 
 ## Tool Layer (ADR 0010)
 
-**Bundles, not per-tool allowlists.** Skills declare `toolBundles: ['read-only' | 'read-write' | 'bash-restricted']`; `computeAllowlist` expands at spawn time. Adding a new tool to a bundle automatically reaches every skill that uses it.
+**Bundles, not per-tool allowlists.** Skills declare `toolBundles: ['read' | 'dev-tools' | 'qa-tools' | 'validate' | 'core']`; `computeAllowlist` expands at spawn time. Since ADR 0045 Phase 5b, every agent-facing bundle is composed of `mcp__factory-tools__*` names only — native `Read` / `Write` / `Edit` / `Glob` / `Grep` / `Bash` are no longer in any default bundle. Native `Bash` is reachable only via the opt-in `emergency-debug` bundle.
 
 **Pattern-level deny rules** (`Read(./.env*)`, `Bash(sudo *)`, `Bash(rm -rf *)`) live in `<workspace>/.claude/settings.json`, written by `writeWorkspaceSandbox()` at workspace bootstrap. Not passed as `--disallowedTools` argv — settings.json applies for any invocation in the workspace and survives process restarts.
 
