@@ -181,6 +181,15 @@ export const TOOL_BUNDLES = {
    */
   'decision-record-only': ['record-decision'],
   /**
+   * Emergency-debug bundle (ADR 0045 Phase 7). Native Bash for incident
+   * response only. No skill should declare this bundle by default; the
+   * project config must intentionally opt in by listing it in
+   * `agentConfig.bundleOverrides` (or equivalent project surface) for a
+   * specific debug session. Holdout discipline still applies — never grant
+   * to qa / reviewer.
+   */
+  'emergency-debug': ['Bash'],
+  /**
    * Playwright-test MCP bundle. Tool list extracted from Microsoft's
    * apps/web/.claude/agents/playwright-test-{planner,generator}.md.
    *

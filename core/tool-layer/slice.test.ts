@@ -171,6 +171,10 @@ describe('TOOL_BUNDLES', () => {
     }
   });
 
+  it('emergency-debug bundle is defined but no skill declares it by default', () => {
+    expect(TOOL_BUNDLES['emergency-debug']).toEqual(['Bash']);
+  });
+
   it('playwright-mcp bundle contains browser_* and planner_* and generator_* tools', () => {
     expect(TOOL_BUNDLES['playwright-mcp']).toContain('mcp__playwright-test__browser_navigate');
     expect(TOOL_BUNDLES['playwright-mcp']).toContain(
