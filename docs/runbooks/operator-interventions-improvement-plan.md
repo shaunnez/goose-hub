@@ -32,6 +32,8 @@ Regression coverage:
 
 ## Slice 2: Add Proposer Stale-State Guard
 
+Status: implemented.
+
 Before leasing an `OPEN` row, compare the intervention type with the latest
 work-item state:
 
@@ -46,6 +48,8 @@ manual-transition cleanup existed and protects non-web state changes.
 
 ## Slice 3: Backoff And Failure Cap
 
+Status: implemented.
+
 `proposalFailed` currently clears the lease immediately, so the same bad row is
 eligible again on the next worker tick. Add retry control:
 
@@ -59,6 +63,8 @@ This should make schema drift visible without spending continuously.
 
 ## Slice 4: Worker Scope Hygiene
 
+Status: implemented.
+
 The server currently starts the proposer worker globally. Add a startup guard so
 local/dev test projects cannot flood the live worker:
 
@@ -69,6 +75,8 @@ local/dev test projects cannot flood the live worker:
 
 ## Slice 5: Operational Audit
 
+Status: implemented.
+
 Add a small diagnostic command or admin endpoint that reports:
 
 - Active interventions by project and type.
@@ -78,3 +86,10 @@ Add a small diagnostic command or admin endpoint that reports:
 
 This gives the operator a single place to spot future loops before they become
 timeline noise.
+
+Run:
+
+```sh
+pnpm tsx scripts/report-interventions.ts
+pnpm tsx scripts/report-interventions.ts goose-hub-self
+```

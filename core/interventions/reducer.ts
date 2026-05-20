@@ -180,15 +180,29 @@ export function recordProposalFailure(input: {
   error: string;
   evidence?: unknown;
   actor?: string;
+  retryAt?: string | null;
+  failureCount?: number;
+  maxFailures?: number;
 }): InterventionReducerResult {
+  const shouldAbort =
+    input.failureCount != null &&
+    input.maxFailures != null &&
+    input.failureCount >= input.maxFailures;
   return transition({
     id: input.id,
     expectedVersion: input.expectedVersion,
-    to: 'OPEN',
+    to: shouldAbort ? 'ABORTED' : 'OPEN',
     eventType: 'proposalFailed',
     actor: input.actor ?? 'intervention-proposer',
-    patch: { leaseOwner: null, leaseExpiresAt: null },
-    payload: { error: input.error, evidence: input.evidence ?? null },
+    patch: { leaseOwner: null, leaseExpiresAt: shouldAbort ? null : (input.retryAt ?? null) },
+    payload: {
+      error: input.error,
+      evidence: input.evidence ?? null,
+      retryAt: shouldAbort ? null : (input.retryAt ?? null),
+      failureCount: input.failureCount ?? null,
+      maxFailures: input.maxFailures ?? null,
+      aborted: shouldAbort,
+    },
   });
 }
 
@@ -344,6 +358,7 @@ export function supersede(input: {
   expectedVersion: number;
   supersededBy: string;
   actor?: string;
+  evidence?: unknown;
 }): InterventionReducerResult {
   return transition({
     id: input.id,
@@ -351,7 +366,7 @@ export function supersede(input: {
     to: 'SUPERSEDED',
     eventType: 'supersede',
     actor: input.actor ?? 'system',
-    payload: { supersededBy: input.supersededBy },
+    payload: { supersededBy: input.supersededBy, evidence: input.evidence ?? null },
   });
 }
 

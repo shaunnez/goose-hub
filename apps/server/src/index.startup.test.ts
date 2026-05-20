@@ -44,6 +44,8 @@ vi.mock('@goose-hub/core/interventions/reducer.js', () => ({
 }));
 
 vi.mock('@goose-hub/core/interventions/proposer.js', () => ({
+  isGeneratedTestProjectId: (projectId: string) =>
+    projectId.startsWith('goose-hub-self-discover-e2e-') || projectId.startsWith('test-'),
   startInterventionProposerWorker: mocks.startInterventionProposerWorker,
 }));
 
@@ -83,6 +85,7 @@ describe('server startup', () => {
   const originalVitest = process.env.VITEST;
   const originalSecret = process.env.GITHUB_WEBHOOK_SECRET;
   const originalPort = process.env.PORT;
+  const originalInterventionProposerAllProjects = process.env.INTERVENTION_PROPOSER_ALL_PROJECTS;
 
   beforeEach(() => {
     vi.resetModules();
@@ -90,6 +93,7 @@ describe('server startup', () => {
     unsetEnv('VITEST');
     process.env.GITHUB_WEBHOOK_SECRET = 'test-secret';
     unsetEnv('PORT');
+    unsetEnv('INTERVENTION_PROPOSER_ALL_PROJECTS');
     mocks.closeOrphanedRuns.mockReturnValue(0);
     mocks.dispatchTriageBatch.mockResolvedValue(undefined);
     mocks.loadProjects.mockResolvedValue([{ slug: 'goose-hub-self' }]);
@@ -116,6 +120,12 @@ describe('server startup', () => {
       unsetEnv('PORT');
     } else {
       process.env.PORT = originalPort;
+    }
+
+    if (originalInterventionProposerAllProjects == null) {
+      unsetEnv('INTERVENTION_PROPOSER_ALL_PROJECTS');
+    } else {
+      process.env.INTERVENTION_PROPOSER_ALL_PROJECTS = originalInterventionProposerAllProjects;
     }
   });
 
@@ -145,11 +155,53 @@ describe('server startup', () => {
 
     expect(mocks.recoverStaleProposalLeases).toHaveBeenCalledTimes(1);
     expect(mocks.recoverStaleApplying).toHaveBeenCalledTimes(1);
-    expect(mocks.startInterventionProposerWorker).toHaveBeenCalledTimes(1);
     expect(mocks.startServerInterventionApplierWorker).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(mocks.startInterventionProposerWorker).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.startInterventionProposerWorker).toHaveBeenCalledWith({
+      projectId: 'goose-hub-self',
+    });
     expect(mocks.loggerInfo).toHaveBeenCalledWith('startup: recovered stale intervention leases', {
       proposer: 1,
       apply: 1,
+    });
+  });
+
+  it('does not start default proposer workers for generated test projects', async () => {
+    mocks.loadProjects.mockResolvedValue([
+      { slug: 'goose-hub-self' },
+      { slug: 'test-generated' },
+      { slug: 'goose-hub-self-discover-e2e-abc123' },
+    ]);
+
+    await import('./index.js');
+
+    await vi.waitFor(() => {
+      expect(mocks.startInterventionProposerWorker).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.startInterventionProposerWorker).toHaveBeenCalledWith({
+      projectId: 'goose-hub-self',
+    });
+    expect(mocks.loggerInfo).toHaveBeenCalledWith('intervention proposer workers started', {
+      projects: ['goose-hub-self'],
+    });
+  });
+
+  it('supports all-project proposer repair mode behind an explicit env override', async () => {
+    process.env.INTERVENTION_PROPOSER_ALL_PROJECTS = '1';
+    mocks.loadProjects.mockResolvedValue([{ slug: 'goose-hub-self' }, { slug: 'test-generated' }]);
+
+    await import('./index.js');
+
+    await vi.waitFor(() => {
+      expect(mocks.startInterventionProposerWorker).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.startInterventionProposerWorker).toHaveBeenCalledWith({
+      includeGeneratedTestProjects: true,
+    });
+    expect(mocks.loggerInfo).toHaveBeenCalledWith('intervention proposer worker started', {
+      scope: 'all-projects-repair',
     });
   });
 });

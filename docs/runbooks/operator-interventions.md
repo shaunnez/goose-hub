@@ -39,15 +39,27 @@ Use the API when diagnosing:
 
 The full audit history is in `work_item_intervention_events`.
 
+For a read-only operational report, run:
+
+```sh
+pnpm tsx scripts/report-interventions.ts
+pnpm tsx scripts/report-interventions.ts goose-hub-self
+```
+
+The report summarizes active interventions by project/type, active rows whose
+latest lifecycle state is terminal, repeated `proposalFailed` rows, and proposer
+costs where the proposer run id is available in audit evidence.
+
 ## Recovery Behavior
 
 The proposer worker leases `OPEN` rows, invokes `skills/intervention-proposer`,
 and stores validated options as `PROPOSED`. Invalid proposer output leaves the
-row `OPEN` and appends `proposalFailed` evidence.
+row `OPEN`, appends `proposalFailed` evidence, and backs off before retrying.
+After the configured failure cap the row moves to `ABORTED` with the last error
+in the audit payload.
 
-See `docs/runbooks/operator-interventions-improvement-plan.md` for the follow-up
-hardening plan around stale-state guards, proposer backoff, and operational
-audits.
+See `docs/runbooks/operator-interventions-improvement-plan.md` for the hardening
+plan covering stale-state guards, proposer backoff, and operational audits.
 
 `POST /interventions/:id/decide` only records the decision and requires
 `expectedVersion`. The applier worker leases `DECIDED` rows, validates the
