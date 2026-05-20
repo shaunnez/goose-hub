@@ -5,6 +5,14 @@ import { timeAgo } from '@/lib/utils';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, MessageCircleQuestion } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import {
+  GRILL_REPLY_MARKER,
+  isGrillQuestion,
+  parseRecommendedAnswer,
+  selectGrillThreadComments,
+  stripGrillMarker,
+  stripRecommendedAnswer,
+} from '../lib/grill-comments';
 import { SectionEmptyState } from './SectionEmptyState';
 
 interface GrillSectionProps {
@@ -12,35 +20,6 @@ interface GrillSectionProps {
   externalId: string;
   id: string;
   state: string | undefined;
-}
-
-const GRILL_QUESTION_MARKER = '<!-- factory:grill-question -->';
-const RECOMMENDED_ANSWER_MARKER = '<!-- factory:recommended-answer -->';
-const PRD_MARKER = '<!-- factory:prd -->';
-const SYSTEM_MARKER = '<!-- factory:system -->';
-const CHILD_ISSUES_MARKER = '## Child issues';
-
-function isAgentQuestion(body: string): boolean {
-  return body.startsWith(GRILL_QUESTION_MARKER);
-}
-
-function stripMarker(body: string): string {
-  if (body.startsWith(GRILL_QUESTION_MARKER)) {
-    return body.slice(GRILL_QUESTION_MARKER.length).trimStart();
-  }
-  return body;
-}
-
-function parseRecommendedAnswer(body: string): string | null {
-  const idx = body.indexOf(RECOMMENDED_ANSWER_MARKER);
-  if (idx === -1) return null;
-  return body.slice(idx + RECOMMENDED_ANSWER_MARKER.length).trimStart() || null;
-}
-
-function stripRecommendedAnswer(body: string): string {
-  const idx = body.indexOf(RECOMMENDED_ANSWER_MARKER);
-  if (idx === -1) return body;
-  return body.slice(0, idx).trimEnd();
 }
 
 interface OptimisticReply extends IssueCommentDto {
@@ -101,18 +80,11 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
     },
   });
 
-  // Filter out system/metadata comments — PRD drafts, system notices, child
-  // issues posts — they are not part of the grill conversation.
-  const grillComments = comments.filter(
-    (c) =>
-      !c.body.startsWith(PRD_MARKER) &&
-      !c.body.startsWith(SYSTEM_MARKER) &&
-      !c.body.startsWith(CHILD_ISSUES_MARKER),
-  );
+  const grillComments = selectGrillThreadComments(comments);
   const merged: Array<IssueCommentDto | OptimisticReply> = [...grillComments, ...optimisticReplies];
 
   // The last agent question in the thread (used for recommended-answer pill).
-  const lastAgentQuestionId = [...merged].reverse().find((c) => isAgentQuestion(c.body))?.id;
+  const lastAgentQuestionId = [...merged].reverse().find((c) => isGrillQuestion(c.body))?.id;
 
   const grillingComplete =
     state === 'factory:prd-drafting' ||
@@ -129,17 +101,18 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
     e.preventDefault();
     const trimmed = text.trim();
     if (trimmed.length === 0 || send.isPending) return;
+    const replyBody = `${GRILL_REPLY_MARKER}\n${trimmed}`;
     setErrorMsg(null);
     // Optimistic insert.
     const reply: OptimisticReply = {
       id: -Date.now(),
-      body: trimmed,
+      body: replyBody,
       authorLogin: 'you',
       createdAt: new Date().toISOString(),
       __optimistic: true,
     };
     setOptimisticReplies((prev) => [...prev, reply]);
-    send.mutate(trimmed);
+    send.mutate(replyBody);
   };
 
   if (isLoading) {
@@ -183,8 +156,8 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
       ) : (
         <ol className="flex flex-col gap-3" data-testid="grill-thread">
           {merged.map((c) => {
-            const agent = isAgentQuestion(c.body);
-            const rawStripped = stripMarker(c.body);
+            const agent = isGrillQuestion(c.body);
+            const rawStripped = stripGrillMarker(c.body);
             const display = agent ? stripRecommendedAnswer(rawStripped) : rawStripped;
             const isOptimistic = '__optimistic' in c && c.__optimistic === true;
             const recommendedAnswer =

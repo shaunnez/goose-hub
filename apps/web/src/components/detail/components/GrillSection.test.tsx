@@ -1,14 +1,13 @@
 /** @vitest-environment jsdom */
-import { addComment, fetchComments, transitionState } from '@/lib/api';
+import { addComment, fetchComments, proceedToPrd, transitionState } from '@/lib/api';
 import type { IssueCommentDto } from '@/lib/types';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { GRILL_QUESTION_MARKER, GRILL_REPLY_MARKER } from '../lib/grill-comments';
 import { GrillSection } from './GrillSection';
 
 afterEach(cleanup);
-
-import { proceedToPrd } from '@/lib/api';
 
 vi.mock('@/lib/api', () => ({
   fetchComments: vi.fn(),
@@ -19,7 +18,6 @@ vi.mock('@/lib/api', () => ({
 
 // Reset call history between tests so call-count assertions in one test
 // aren't polluted by other tests in the same file.
-import { beforeEach } from 'vitest';
 beforeEach(() => {
   vi.mocked(fetchComments).mockClear();
   vi.mocked(addComment).mockClear();
@@ -52,8 +50,8 @@ describe('GrillSection', () => {
 
   it('distinguishes agent question (with marker) from user reply', async () => {
     vi.mocked(fetchComments).mockResolvedValueOnce([
-      comment(1, '<!-- factory:grill-question -->\n**Round 1** — What does better mean?'),
-      comment(2, 'Better means fewer drop-offs.'),
+      comment(1, `${GRILL_QUESTION_MARKER}\n**Round 1** — What does better mean?`),
+      comment(2, `${GRILL_REPLY_MARKER}\nBetter means fewer drop-offs.`),
     ]);
     render_(
       <GrillSection projectSlug="proj" externalId="42" id="42" state="factory:gate-pending" />,
@@ -64,20 +62,75 @@ describe('GrillSection', () => {
     });
   });
 
-  it('filters out PRD marker comments from the chat thread', async () => {
+  it('renders marked grill question', async () => {
     vi.mocked(fetchComments).mockResolvedValueOnce([
-      comment(1, '<!-- factory:grill-question -->\nQ?'),
-      comment(2, '<!-- factory:prd -->\n# PRD'),
+      comment(1, `${GRILL_QUESTION_MARKER}\nWhat does better mean?`, 'factory-agent'),
     ]);
-    render_(<GrillSection projectSlug="proj" externalId="42" id="42" state="factory:prd-review" />);
+    render_(<GrillSection projectSlug="proj" externalId="42" id="42" state="factory:grilling" />);
+    await waitFor(() => {
+      expect(screen.getByTestId('grill-msg-agent').textContent).toContain('griller');
+    });
+    expect(screen.getByTestId('grill-msg-agent').textContent).toContain('What does better mean?');
+    expect(screen.getByTestId('grill-msg-agent').textContent).not.toContain(
+      'factory:grill-question',
+    );
+  });
+
+  it('renders marked grill reply as the comment author', async () => {
+    vi.mocked(fetchComments).mockResolvedValueOnce([
+      comment(1, `${GRILL_REPLY_MARKER}\nBetter means fewer drop-offs.`, 'shaun'),
+    ]);
+    render_(<GrillSection projectSlug="proj" externalId="42" id="42" state="factory:grilling" />);
+    await waitFor(() => {
+      expect(screen.getByTestId('grill-msg-user').textContent).toContain('shaun');
+    });
+    expect(screen.getByTestId('grill-msg-user').textContent).toContain(
+      'Better means fewer drop-offs.',
+    );
+    expect(screen.getByTestId('grill-msg-user').textContent).not.toContain('factory:grill-reply');
+  });
+
+  it('preserves legacy unmarked human replies after a grill question', async () => {
+    vi.mocked(fetchComments).mockResolvedValueOnce([
+      comment(1, `${GRILL_QUESTION_MARKER}\nQ?`),
+      comment(2, 'Legacy answer before reply markers existed.'),
+    ]);
+    render_(<GrillSection projectSlug="proj" externalId="42" id="42" state="factory:grilling" />);
+    await waitFor(() => {
+      expect(screen.getAllByTestId('grill-msg-agent')).toHaveLength(1);
+    });
+    expect(screen.getByTestId('grill-msg-user').textContent).toContain(
+      'Legacy answer before reply markers existed.',
+    );
+  });
+
+  it('hides unmarked human comments before the grill thread starts', async () => {
+    vi.mocked(fetchComments).mockResolvedValueOnce([
+      comment(1, 'Plain GitHub comment.'),
+      comment(2, `${GRILL_QUESTION_MARKER}\nQ?`),
+    ]);
+    render_(<GrillSection projectSlug="proj" externalId="42" id="42" state="factory:grilling" />);
+    await waitFor(() => {
+      expect(screen.getAllByTestId('grill-msg-agent')).toHaveLength(1);
+    });
+    expect(screen.queryByText('Plain GitHub comment.')).toBeNull();
+  });
+
+  it('hides [Investigate] Escalated comments from the grill thread', async () => {
+    vi.mocked(fetchComments).mockResolvedValueOnce([
+      comment(1, `${GRILL_QUESTION_MARKER}\nQ?`),
+      comment(2, '[Investigate] Escalated\nNeeds additional research.'),
+    ]);
+    render_(<GrillSection projectSlug="proj" externalId="42" id="42" state="factory:grilling" />);
     await waitFor(() => {
       expect(screen.getAllByTestId('grill-msg-agent')).toHaveLength(1);
     });
     expect(screen.queryByTestId('grill-msg-user')).toBeNull();
+    expect(screen.queryByText('[Investigate] Escalated')).toBeNull();
   });
 
   it('Send button posts a comment and (when gate-pending) transitions back to grilling', async () => {
-    vi.mocked(fetchComments).mockResolvedValue([comment(1, '<!-- factory:grill-question -->\nQ?')]);
+    vi.mocked(fetchComments).mockResolvedValue([comment(1, `${GRILL_QUESTION_MARKER}\nQ?`)]);
     vi.mocked(addComment).mockResolvedValueOnce(undefined);
     vi.mocked(transitionState).mockResolvedValueOnce({
       status: 200,
@@ -98,7 +151,11 @@ describe('GrillSection', () => {
     fireEvent.click(screen.getByTestId('grill-send-btn'));
 
     await waitFor(() => {
-      expect(addComment).toHaveBeenCalledWith('proj', '42', 'Better means fewer drop-offs.');
+      expect(addComment).toHaveBeenCalledWith(
+        'proj',
+        '42',
+        `${GRILL_REPLY_MARKER}\nBetter means fewer drop-offs.`,
+      );
     });
     await waitFor(() => {
       expect(transitionState).toHaveBeenCalledWith(
@@ -120,7 +177,7 @@ describe('GrillSection', () => {
   });
 
   it('shows the optimistic reply in the thread before round-trip resolves', async () => {
-    vi.mocked(fetchComments).mockResolvedValue([comment(1, '<!-- factory:grill-question -->\nQ?')]);
+    vi.mocked(fetchComments).mockResolvedValue([comment(1, `${GRILL_QUESTION_MARKER}\nQ?`)]);
     const pending = new Promise<void>((resolve) => {
       // Stash the resolver on the ref so the test can drain the mutation
       // after assertions complete.
@@ -140,6 +197,7 @@ describe('GrillSection', () => {
     await waitFor(() => {
       const userMsgs = screen.getAllByTestId('grill-msg-user');
       expect(userMsgs.some((el) => el.getAttribute('data-optimistic') === 'true')).toBe(true);
+      expect(userMsgs.some((el) => el.textContent?.includes('factory:grill-reply'))).toBe(false);
     });
 
     // Drain the pending mutation so React Query doesn't keep the promise open.
@@ -148,7 +206,7 @@ describe('GrillSection', () => {
 
   it('filters out <!-- factory:system --> comments from the grill thread', async () => {
     vi.mocked(fetchComments).mockResolvedValueOnce([
-      comment(1, '<!-- factory:grill-question -->\nQ?'),
+      comment(1, `${GRILL_QUESTION_MARKER}\nQ?`),
       comment(2, '<!-- factory:system -->\nUser rejected the PRD; returning to grill.'),
     ]);
     render_(<GrillSection projectSlug="proj" externalId="42" id="42" state="factory:grilling" />);
@@ -160,7 +218,7 @@ describe('GrillSection', () => {
 
   it('filters out ## Child issues comments from the grill thread', async () => {
     vi.mocked(fetchComments).mockResolvedValueOnce([
-      comment(1, '<!-- factory:grill-question -->\nQ?'),
+      comment(1, `${GRILL_QUESTION_MARKER}\nQ?`),
       comment(2, '## Child issues\n- #101 Slice 1\n- #102 Slice 2'),
     ]);
     render_(
@@ -173,9 +231,7 @@ describe('GrillSection', () => {
   });
 
   it('renders the "Grilling complete" footer when state has progressed past grilling', async () => {
-    vi.mocked(fetchComments).mockResolvedValueOnce([
-      comment(1, '<!-- factory:grill-question -->\nQ?'),
-    ]);
+    vi.mocked(fetchComments).mockResolvedValueOnce([comment(1, `${GRILL_QUESTION_MARKER}\nQ?`)]);
     render_(<GrillSection projectSlug="proj" externalId="42" id="42" state="factory:prd-review" />);
     await waitFor(() => {
       expect(screen.getByTestId('grill-complete-footer')).toBeTruthy();
@@ -187,7 +243,7 @@ describe('GrillSection', () => {
     vi.mocked(fetchComments).mockResolvedValueOnce([
       comment(
         1,
-        '<!-- factory:grill-question -->\nWhat does "better" mean?\n<!-- factory:recommended-answer -->\nFewer user drop-offs on the checkout screen.',
+        `${GRILL_QUESTION_MARKER}\nWhat does "better" mean?\n<!-- factory:recommended-answer -->\nFewer user drop-offs on the checkout screen.`,
       ),
     ]);
     render_(
@@ -208,7 +264,7 @@ describe('GrillSection', () => {
     vi.mocked(fetchComments).mockResolvedValueOnce([
       comment(
         1,
-        '<!-- factory:grill-question -->\nQ?\n<!-- factory:recommended-answer -->\nSuggested text here.',
+        `${GRILL_QUESTION_MARKER}\nQ?\n<!-- factory:recommended-answer -->\nSuggested text here.`,
       ),
     ]);
     render_(
@@ -223,20 +279,43 @@ describe('GrillSection', () => {
 
   it('does not show recommended answer pill when state is not gate-pending', async () => {
     vi.mocked(fetchComments).mockResolvedValueOnce([
-      comment(
-        1,
-        '<!-- factory:grill-question -->\nQ?\n<!-- factory:recommended-answer -->\nAnswer.',
-      ),
+      comment(1, `${GRILL_QUESTION_MARKER}\nQ?\n<!-- factory:recommended-answer -->\nAnswer.`),
     ]);
     render_(<GrillSection projectSlug="proj" externalId="42" id="42" state="factory:prd-review" />);
     await waitFor(() => expect(screen.getByTestId('grill-msg-agent')).toBeTruthy());
     expect(screen.queryByTestId('grill-recommended-answer')).toBeNull();
   });
 
-  it('shows "Proceed to PRD" button in gate-pending state', async () => {
+  it('does not show recommended answer from an earlier grill question', async () => {
     vi.mocked(fetchComments).mockResolvedValueOnce([
-      comment(1, '<!-- factory:grill-question -->\nQ?'),
+      comment(
+        1,
+        `${GRILL_QUESTION_MARKER}\nFirst question?\n<!-- factory:recommended-answer -->\nOld answer.`,
+      ),
+      comment(2, `${GRILL_REPLY_MARKER}\nFirst reply.`),
+      comment(3, `${GRILL_QUESTION_MARKER}\nLatest question?`),
     ]);
+    render_(
+      <GrillSection projectSlug="proj" externalId="42" id="42" state="factory:gate-pending" />,
+    );
+    await waitFor(() => expect(screen.getAllByTestId('grill-msg-agent')).toHaveLength(2));
+    expect(screen.queryByTestId('grill-recommended-answer')).toBeNull();
+  });
+
+  it('keeps recommended-answer parsing on questions only', async () => {
+    vi.mocked(fetchComments).mockResolvedValueOnce([
+      comment(1, `${GRILL_QUESTION_MARKER}\nQ?`),
+      comment(2, `${GRILL_REPLY_MARKER}\nA.\n<!-- factory:recommended-answer -->\nIgnore me.`),
+    ]);
+    render_(
+      <GrillSection projectSlug="proj" externalId="42" id="42" state="factory:gate-pending" />,
+    );
+    await waitFor(() => expect(screen.getByTestId('grill-msg-agent')).toBeTruthy());
+    expect(screen.queryByTestId('grill-recommended-answer')).toBeNull();
+  });
+
+  it('shows "Proceed to PRD" button in gate-pending state', async () => {
+    vi.mocked(fetchComments).mockResolvedValueOnce([comment(1, `${GRILL_QUESTION_MARKER}\nQ?`)]);
     render_(
       <GrillSection projectSlug="proj" externalId="42" id="42" state="factory:gate-pending" />,
     );
@@ -244,9 +323,7 @@ describe('GrillSection', () => {
   });
 
   it('calls proceedToPrd when "Proceed to PRD" is clicked', async () => {
-    vi.mocked(fetchComments).mockResolvedValueOnce([
-      comment(1, '<!-- factory:grill-question -->\nQ?'),
-    ]);
+    vi.mocked(fetchComments).mockResolvedValueOnce([comment(1, `${GRILL_QUESTION_MARKER}\nQ?`)]);
     vi.mocked(proceedToPrd).mockResolvedValueOnce({ ok: true });
 
     render_(
