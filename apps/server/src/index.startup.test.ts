@@ -8,8 +8,12 @@ const mocks = vi.hoisted(() => ({
   loggerError: vi.fn(),
   loggerInfo: vi.fn(),
   replayEvents: vi.fn(),
+  recoverStaleApplying: vi.fn(),
+  recoverStaleProposalLeases: vi.fn(),
   runTriageBatch: vi.fn(),
   serve: vi.fn(),
+  startServerInterventionApplierWorker: vi.fn(),
+  startInterventionProposerWorker: vi.fn(),
   startNightlyAuditScheduler: vi.fn(),
   startPerProjectScheduler: vi.fn(),
   subscribeEvents: vi.fn(),
@@ -32,6 +36,19 @@ vi.mock('@goose-hub/core/logger.js', () => ({
     error: mocks.loggerError,
     info: mocks.loggerInfo,
   },
+}));
+
+vi.mock('@goose-hub/core/interventions/reducer.js', () => ({
+  recoverStaleApplying: mocks.recoverStaleApplying,
+  recoverStaleProposalLeases: mocks.recoverStaleProposalLeases,
+}));
+
+vi.mock('@goose-hub/core/interventions/proposer.js', () => ({
+  startInterventionProposerWorker: mocks.startInterventionProposerWorker,
+}));
+
+vi.mock('./domains/interventions/applier-worker.js', () => ({
+  startServerInterventionApplierWorker: mocks.startServerInterventionApplierWorker,
 }));
 
 vi.mock('@goose-hub/core/projects/loader.js', () => ({
@@ -77,6 +94,8 @@ describe('server startup', () => {
     mocks.dispatchTriageBatch.mockResolvedValue(undefined);
     mocks.loadProjects.mockResolvedValue([{ slug: 'goose-hub-self' }]);
     mocks.replayEvents.mockReturnValue([]);
+    mocks.recoverStaleApplying.mockReturnValue([]);
+    mocks.recoverStaleProposalLeases.mockReturnValue([]);
     mocks.subscribeEvents.mockReturnValue(() => undefined);
   });
 
@@ -116,5 +135,21 @@ describe('server startup', () => {
 
     expect(mocks.dispatchTriageBatch).toHaveBeenCalledWith('goose-hub-self');
     expect(mocks.runTriageBatch).not.toHaveBeenCalled();
+  });
+
+  it('recovers stale intervention leases and starts intervention workers', async () => {
+    mocks.recoverStaleProposalLeases.mockReturnValue([{ id: 'proposal-lease' }]);
+    mocks.recoverStaleApplying.mockReturnValue([{ id: 'apply-lease' }]);
+
+    await import('./index.js');
+
+    expect(mocks.recoverStaleProposalLeases).toHaveBeenCalledTimes(1);
+    expect(mocks.recoverStaleApplying).toHaveBeenCalledTimes(1);
+    expect(mocks.startInterventionProposerWorker).toHaveBeenCalledTimes(1);
+    expect(mocks.startServerInterventionApplierWorker).toHaveBeenCalledTimes(1);
+    expect(mocks.loggerInfo).toHaveBeenCalledWith('startup: recovered stale intervention leases', {
+      proposer: 1,
+      apply: 1,
+    });
   });
 });

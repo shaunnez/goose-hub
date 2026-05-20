@@ -1,6 +1,13 @@
 import type { StateName } from '../state-machine/states.js';
 import { validateInterventionAction } from './actions.js';
-import { markApplying, recordApplicationResult, resolve, verify } from './reducer.js';
+import {
+  markApplying,
+  recordApplicationResult,
+  recoverStaleApplying,
+  resolve,
+  verify,
+} from './reducer.js';
+import { listInterventions } from './repository.js';
 import type { WorkItemIntervention } from './types.js';
 
 export interface InterventionApplierDeps {
@@ -146,6 +153,70 @@ export async function applyDecidedIntervention(input: {
     if (!failed.ok) return { ok: false, error: failed.error };
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+export interface InterventionApplierRunResult {
+  processed: number;
+  applied: number;
+  failed: number;
+  skipped: number;
+}
+
+export async function runInterventionApplierWorkerOnce(input: {
+  deps: InterventionApplierDeps;
+  projectId?: string;
+  limit?: number;
+  leaseOwner?: string;
+  leaseMs?: number;
+  now?: Date;
+}): Promise<InterventionApplierRunResult> {
+  recoverStaleApplying({ now: input.now, actor: input.leaseOwner });
+  const candidates = listInterventions({
+    projectId: input.projectId,
+    status: 'DECIDED',
+    limit: input.limit ?? 25,
+  });
+  const result: InterventionApplierRunResult = {
+    processed: 0,
+    applied: 0,
+    failed: 0,
+    skipped: 0,
+  };
+
+  for (const intervention of candidates) {
+    result.processed += 1;
+    const applied = await applyDecidedIntervention({
+      intervention,
+      leaseOwner: input.leaseOwner ?? 'intervention-applier',
+      leaseMs: input.leaseMs,
+      deps: input.deps,
+    });
+    if (applied.ok) {
+      result.applied += 1;
+    } else {
+      result.failed += 1;
+    }
+  }
+  return result;
+}
+
+export function startInterventionApplierWorker(input: {
+  deps: InterventionApplierDeps;
+  projectId?: string;
+  intervalMs?: number;
+  limit?: number;
+  leaseOwner?: string;
+  leaseMs?: number;
+}): () => void {
+  const tick = () => {
+    runInterventionApplierWorkerOnce(input).catch((err: unknown) => {
+      console.error(`[intervention-applier] worker tick failed: ${String(err)}`);
+    });
+  };
+  tick();
+  const timer = setInterval(tick, input.intervalMs ?? 30_000);
+  timer.unref?.();
+  return () => clearInterval(timer);
 }
 
 export function isApplyingStale(input: {

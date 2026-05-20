@@ -1,51 +1,102 @@
 import {
+  InterventionStatusSchema,
   decide,
   getIntervention,
   listInterventionEvents,
   listInterventions,
   validateInterventionAction,
 } from '@goose-hub/core/interventions/index.js';
-import type { WorkItemIntervention } from '@goose-hub/core/interventions/types.js';
 import type { Result } from '#shared/middleware.js';
+import { getSourceForSlug } from '#shared/source.js';
+import type { InterventionDetailDto, InterventionsListDto } from './dto.js';
+import { toInterventionDto, toInterventionEventDto } from './dto.js';
 
-function normaliseStatus(status: string | undefined): string | undefined {
-  if (status == null || status.length === 0) return undefined;
-  return status.toUpperCase();
+interface RawDecideInterventionRequest {
+  actionType?: unknown;
+  actionPayload?: unknown;
+  decidedBy?: unknown;
+  reason?: unknown;
+  expectedVersion?: unknown;
+}
+
+function parseStatusFilter(
+  status: string | undefined,
+): { ok: true; statuses: string[] | undefined } | { ok: false; error: string } {
+  if (status == null || status.length === 0) return { ok: true, statuses: undefined };
+  const statuses = status
+    .split(',')
+    .map((value) => value.trim().toUpperCase())
+    .filter(Boolean);
+  if (statuses.length === 0) return { ok: true, statuses: undefined };
+  for (const candidate of statuses) {
+    const parsed = InterventionStatusSchema.safeParse(candidate);
+    if (!parsed.success) return { ok: false, error: `invalid intervention status: ${candidate}` };
+  }
+  return { ok: true, statuses };
+}
+
+function toDetailDto(id: string): InterventionDetailDto {
+  const intervention = getIntervention(id);
+  if (intervention == null) throw new Error(`intervention disappeared: ${id}`);
+  return {
+    intervention: toInterventionDto(intervention),
+    events: listInterventionEvents(id).map(toInterventionEventDto),
+  };
 }
 
 export async function listProjectInterventions(
   slug: string,
   status?: string,
-): Promise<Result<{ interventions: WorkItemIntervention[] }>> {
+): Promise<Result<InterventionsListDto>> {
+  const parsedStatus = parseStatusFilter(status);
+  if (!parsedStatus.ok) return { ok: false, error: parsedStatus.error, status: 400 };
   return {
     ok: true,
     data: {
-      interventions: listInterventions({ projectId: slug, status: normaliseStatus(status) }),
+      interventions: listInterventions({
+        projectId: slug,
+        status: parsedStatus.statuses,
+      }).map(toInterventionDto),
     },
   };
 }
 
-export async function getInterventionDetail(id: string): Promise<
-  Result<{
-    intervention: WorkItemIntervention;
-    events: ReturnType<typeof listInterventionEvents>;
-  }>
-> {
+export async function listIssueInterventions(
+  slug: string,
+  id: string,
+  status?: string,
+): Promise<Result<InterventionsListDto>> {
+  const parsedStatus = parseStatusFilter(status);
+  if (!parsedStatus.ok) return { ok: false, error: parsedStatus.error, status: 400 };
+
+  const source = await getSourceForSlug(slug);
+  if (source == null) return { ok: false, error: 'project not found', status: 404 };
+  const item = await source.getItem(id).catch(() => null);
+  if (item == null) return { ok: false, error: 'issue not found', status: 404 };
+  const workItemId = (item as { id: string }).id;
+
+  return {
+    ok: true,
+    data: {
+      interventions: listInterventions({
+        projectId: slug,
+        workItemId,
+        status: parsedStatus.statuses,
+      }).map(toInterventionDto),
+    },
+  };
+}
+
+export async function getInterventionDetail(id: string): Promise<Result<InterventionDetailDto>> {
   const intervention = getIntervention(id);
   if (intervention == null) return { ok: false, error: 'intervention not found', status: 404 };
-  return { ok: true, data: { intervention, events: listInterventionEvents(id) } };
+  return { ok: true, data: toDetailDto(id) };
 }
 
 export async function decideIntervention(
   id: string,
-  body: {
-    actionType?: unknown;
-    actionPayload?: unknown;
-    decidedBy?: unknown;
-    reason?: unknown;
-    expectedVersion?: unknown;
-  },
-): Promise<Result<{ intervention: WorkItemIntervention }>> {
+  body: RawDecideInterventionRequest,
+): Promise<Result<InterventionDetailDto>> {
   const intervention = getIntervention(id);
   if (intervention == null) return { ok: false, error: 'intervention not found', status: 404 };
   if (typeof body.actionType !== 'string') {
@@ -66,5 +117,5 @@ export async function decideIntervention(
     reason: typeof body.reason === 'string' ? body.reason : undefined,
   });
   if (!result.ok) return { ok: false, error: result.error, status: result.status };
-  return { ok: true, data: { intervention: result.intervention } };
+  return { ok: true, data: toDetailDto(result.intervention.id) };
 }

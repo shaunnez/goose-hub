@@ -116,7 +116,14 @@ export function MilestoneActivatedEvent({ event }: { event: AgentEventDto }) {
 }
 
 export function StateTransitionedEvent({ event }: { event: AgentEventDto }) {
-  const p = event.payload as { from?: string; to?: string; by?: string } | null;
+  const p = event.payload as {
+    from?: string;
+    to?: string;
+    by?: string;
+    interventionId?: string;
+    causedByInterventionId?: string;
+  } | null;
+  const interventionId = p?.interventionId ?? p?.causedByInterventionId;
   const summary =
     p?.from != null && p?.to != null
       ? `${p.from} → ${p.to}${p.by != null ? ` (by ${p.by})` : ''}`
@@ -133,6 +140,11 @@ export function StateTransitionedEvent({ event }: { event: AgentEventDto }) {
         <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
       </div>
       <div className="text-[12.5px] text-fg-2">{summary}</div>
+      {interventionId != null && (
+        <div className="mt-1 text-[11.5px] text-fg-3">
+          Caused by intervention <span className="font-mono">{interventionId.slice(0, 8)}</span>
+        </div>
+      )}
     </li>
   );
 }

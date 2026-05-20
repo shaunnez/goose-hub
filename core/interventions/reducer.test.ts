@@ -2,15 +2,18 @@ import { describe, expect, it } from 'vitest';
 import {
   abort,
   decide,
+  leaseForProposal,
   markApplying,
   open,
   propose,
   recordApplicationResult,
+  recordProposalFailure,
+  recoverStaleProposalLeases,
   reopen,
   resolve,
   verify,
 } from './reducer.js';
-import { listInterventionEvents } from './repository.js';
+import { getIntervention, listInterventionEvents } from './repository.js';
 
 function openFixture(suffix: string) {
   const result = open({
@@ -254,6 +257,65 @@ describe('intervention reducer', () => {
     expect(failed.ok).toBe(true);
     if (!failed.ok) return;
     expect(failed.intervention.status).toBe('FAILED');
+  });
+
+  it('leases proposal work, records auditable failure, and keeps intervention open', () => {
+    const intervention = openFixture('proposal-failure');
+    const leased = leaseForProposal({
+      id: intervention.id,
+      expectedVersion: intervention.version,
+      leaseOwner: 'worker',
+      leaseExpiresAt: new Date(Date.now() + 1000).toISOString(),
+    });
+    expect(leased.ok).toBe(true);
+    if (!leased.ok) return;
+
+    const failed = recordProposalFailure({
+      id: intervention.id,
+      expectedVersion: leased.intervention.version,
+      error: 'invalid proposed option',
+      evidence: { option: 'manual_transition' },
+      actor: 'worker',
+    });
+
+    expect(failed.ok).toBe(true);
+    if (!failed.ok) return;
+    expect(failed.intervention.status).toBe('OPEN');
+    expect(failed.intervention.leaseOwner).toBeNull();
+    expect(failed.intervention.leaseExpiresAt).toBeNull();
+    expect(listInterventionEvents(intervention.id).map((event) => event.eventType)).toEqual([
+      'open',
+      'leaseProposal',
+      'proposalFailed',
+    ]);
+  });
+
+  it('recovers stale proposal leases without moving status', () => {
+    const intervention = openFixture('stale-proposal-lease');
+    const leased = leaseForProposal({
+      id: intervention.id,
+      expectedVersion: intervention.version,
+      leaseOwner: 'worker',
+      leaseExpiresAt: new Date('2026-01-01T00:00:00Z').toISOString(),
+    });
+    expect(leased.ok).toBe(true);
+
+    const recovered = recoverStaleProposalLeases({
+      projectId: intervention.projectId,
+      now: new Date('2026-01-01T00:01:00Z'),
+      actor: 'recovery',
+    });
+
+    expect(recovered.map((item) => item.id)).toContain(intervention.id);
+    const current = getIntervention(intervention.id);
+    expect(current?.status).toBe('OPEN');
+    expect(current?.leaseOwner).toBeNull();
+    expect(current?.leaseExpiresAt).toBeNull();
+    expect(listInterventionEvents(intervention.id).map((event) => event.eventType)).toEqual([
+      'open',
+      'leaseProposal',
+      'proposalLeaseRecovered',
+    ]);
   });
 
   it('rejects illegal status transitions', () => {

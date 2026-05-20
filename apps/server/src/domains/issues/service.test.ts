@@ -62,7 +62,11 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { getArtifact } from '@goose-hub/core/agent-artifacts/repository.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
-import { isLegalTransition } from '@goose-hub/core/state-machine/transitions.js';
+import {
+  listInterventionEvents,
+  listInterventions,
+} from '@goose-hub/core/interventions/repository.js';
+import { isLegalTransition, legalTargets } from '@goose-hub/core/state-machine/transitions.js';
 import { cleanupWorktree } from '@goose-hub/core/workspaces/worktree.js';
 import { bustCache } from '#shared/cache.js';
 import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
@@ -72,6 +76,7 @@ import {
   fakeRun,
   getIssue,
   getIssueArtifact,
+  getIssueLegalTargets,
   listIssues,
   overrideIssueRepo,
   setIssueLabel,
@@ -134,6 +139,80 @@ describe('transitionIssue — validation', () => {
     expect(eventStore.appendEvent).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'state.transitioned' }),
     );
+  });
+
+  it('wraps direct manual transitions in a resolved manual_override intervention', async () => {
+    const result = await transitionIssue(
+      'proj-manual-override',
+      '777',
+      'factory:triaging',
+      'factory:accepted',
+    );
+
+    expect(result.ok).toBe(true);
+    const interventions = listInterventions({
+      projectId: 'proj-manual-override',
+      workItemId: 'github:owner/repo#777',
+    });
+    expect(interventions).toHaveLength(1);
+    expect(interventions[0]).toMatchObject({
+      interventionType: 'manual_override',
+      status: 'RESOLVED',
+      decidedActionType: 'manual_transition',
+    });
+    expect(listInterventionEvents(interventions[0].id).map((event) => event.eventType)).toEqual([
+      'open',
+      'decide',
+      'markApplying',
+      'recordApplicationResult',
+      'verify',
+      'resolve',
+    ]);
+  });
+});
+
+describe('getIssueLegalTargets', () => {
+  it('returns server-derived legal targets for the issue state', async () => {
+    mockSource.getItem.mockResolvedValueOnce({
+      id: 'github:owner/repo#1',
+      state: 'factory:triaging',
+      type: 'chore',
+    });
+    vi.mocked(legalTargets).mockReturnValueOnce(['factory:accepted', 'factory:rejected']);
+
+    const result = await getIssueLegalTargets('proj', '1');
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        from: 'factory:triaging',
+        legalTargets: ['factory:accepted', 'factory:rejected'],
+      },
+    });
+  });
+
+  it('filters type-specific targets on the server', async () => {
+    mockSource.getItem.mockResolvedValueOnce({
+      id: 'github:owner/repo#1',
+      state: 'factory:accepted',
+      type: 'bug',
+    });
+    vi.mocked(legalTargets).mockReturnValueOnce([
+      'factory:grilling',
+      'factory:investigating',
+      'factory:dev-ready',
+      'factory:research-pending',
+    ]);
+
+    const result = await getIssueLegalTargets('proj', '1');
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        from: 'factory:accepted',
+        legalTargets: ['factory:investigating', 'factory:dev-ready'],
+      },
+    });
   });
 });
 
@@ -569,6 +648,25 @@ describe('approveIssue / rejectIssue (#186)', () => {
     expect(rejected).toBeDefined();
   });
 
+  it('rejectIssue carries intervention metadata on downstream events', async () => {
+    const { rejectIssue } = await import('./service.js');
+    const result = await rejectIssue('proj', '1', 'tests are flaky', {
+      intervention: { id: 'i-reject', correlationId: 'c-reject' },
+    });
+    expect(result).toMatchObject({ ok: true });
+
+    const rejected = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'gate.rejected')?.[0];
+    expect(rejected?.payload).toEqual(
+      expect.objectContaining({
+        interventionId: 'i-reject',
+        causedByInterventionId: 'i-reject',
+        correlationId: 'c-reject',
+      }),
+    );
+  });
+
   it('approveIssue rejects when no pr.opened event exists', async () => {
     vi.mocked(eventStore.replay).mockReturnValueOnce([]);
     const { approveIssue } = await import('./service.js');
@@ -592,7 +690,10 @@ describe('approveIssue / rejectIssue (#186)', () => {
     const mergePRImpl = vi.fn().mockResolvedValueOnce({ sha: 'abc1234', merged: true });
 
     const { approveIssue } = await import('./service.js');
-    const result = await approveIssue('proj', '1', { mergePRImpl });
+    const result = await approveIssue('proj', '1', {
+      mergePRImpl,
+      intervention: { id: 'i-approve', correlationId: 'c-approve' },
+    });
     expect(result).toMatchObject({ ok: true, data: { sha: 'abc1234', prNumber: 99 } });
     expect(mergePRImpl).toHaveBeenCalledWith(
       expect.objectContaining({ repo: 'owner/repo', prNumber: 99 }),
@@ -606,6 +707,13 @@ describe('approveIssue / rejectIssue (#186)', () => {
       .mocked(eventStore.appendEvent)
       .mock.calls.find(([e]) => e.kind === 'gate.approved');
     expect(approved).toBeDefined();
+    expect(approved?.[0].payload).toEqual(
+      expect.objectContaining({
+        interventionId: 'i-approve',
+        causedByInterventionId: 'i-approve',
+        correlationId: 'c-approve',
+      }),
+    );
     const merged = vi
       .mocked(eventStore.appendEvent)
       .mock.calls.find(([e]) => e.kind === 'pr.merged');

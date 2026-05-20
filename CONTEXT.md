@@ -161,6 +161,42 @@ type AdvisorVerdict =
 
 **Authorization:** deferred (single-user, v0). ADR when contributor support lands.
 
+## Operator Intervention Control Plane
+
+**Purpose:** Durable operator interventions explain and resolve stuck work-item
+conditions that need a human or server-side operator decision. They replace
+browser-only gate heuristics for `needs-human`, `gate-pending`, merge conflict,
+QA disagreement, and direct manual override flows.
+
+**Storage:** `work_item_interventions` stores the current intervention row.
+`work_item_intervention_events` is the append-only audit log. These are
+operational SQLite tables; GitHub labels remain the lifecycle state authority.
+
+**Projection:** `core/interventions/projector.ts` watches actionable terminal
+events and opens or reopens rows idempotently. Replay/projector code never calls
+the proposer skill inline. Downstream events emitted by an applier include
+`interventionId` / `causedByInterventionId`; projectors ignore those so an
+applied decision cannot reopen itself.
+
+**Proposer:** `core/interventions/proposer.ts` leases `OPEN` rows, invokes
+`skills/intervention-proposer`, validates every proposed option against the
+intervention action registry, and stores `PROPOSED`. Invalid proposer output
+keeps the row `OPEN` and records `proposalFailed` evidence.
+
+**Decision and apply:** `POST /interventions/:id/decide` is record-only and
+requires the observed CAS `expectedVersion`. `core/interventions/applier.ts`
+leases `DECIDED` rows, validates the action payload again, executes through
+existing server paths, records apply evidence, verifies, and resolves. Failed
+apply moves to `FAILED`; stale `APPLYING` leases recover to `DECIDED`.
+
+**Frontend:** The operator queue reads project intervention rows. Issue banners
+read issue-specific `OPEN` / `PROPOSED` rows and legal targets from the server;
+the browser does not maintain a transition table. The issue timeline includes an
+intervention audit panel plus backlinks from state transitions caused by an
+intervention.
+
+See ADR 0046 and `docs/runbooks/operator-interventions.md`.
+
 ## Persona Routing
 
 **Selection strategy:** round-robin within role (option a). Orchestrator tracks `lastPersonaIndex` per `(projectId, role)` in `project_state` table. Next run picks `(lastIndex + 1) % personaCount`, stores updated index. Simple, deterministic, equal exposure. No stats weighting until M9 provides enough data to know if it matters.

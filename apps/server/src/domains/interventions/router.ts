@@ -1,13 +1,31 @@
 import { Hono } from 'hono';
 import { parseBody } from '#shared/middleware.js';
-import { decideIntervention, getInterventionDetail, listProjectInterventions } from './service.js';
+import {
+  decideIntervention,
+  getInterventionDetail,
+  listIssueInterventions,
+  listProjectInterventions,
+} from './service.js';
 
 const projectInterventionsRouter = new Hono();
 const interventionsRouter = new Hono();
 
 projectInterventionsRouter.get('/:slug/interventions', async (c) => {
   const result = await listProjectInterventions(c.req.param('slug'), c.req.query('status'));
-  return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);
+  return result.ok
+    ? c.json(result.data)
+    : c.json({ error: result.error }, result.status as 400 | 404);
+});
+
+projectInterventionsRouter.get('/:slug/issues/:id/interventions', async (c) => {
+  const result = await listIssueInterventions(
+    c.req.param('slug'),
+    c.req.param('id'),
+    c.req.query('status'),
+  );
+  return result.ok
+    ? c.json(result.data)
+    : c.json({ error: result.error }, result.status as 400 | 404);
 });
 
 interventionsRouter.get('/:id', async (c) => {

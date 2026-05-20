@@ -41,7 +41,7 @@ function canMove(from: InterventionStatus, to: InterventionStatus): boolean {
     OPEN: ['PROPOSED', 'DECIDED', 'RESOLVED', 'ABORTED', 'SUPERSEDED'],
     PROPOSED: ['DECIDED', 'OPEN', 'RESOLVED', 'ABORTED', 'SUPERSEDED'],
     DECIDED: ['APPLYING', 'OPEN', 'ABORTED', 'SUPERSEDED'],
-    APPLYING: ['APPLIED', 'OPEN', 'FAILED', 'ABORTED', 'SUPERSEDED'],
+    APPLYING: ['APPLIED', 'DECIDED', 'OPEN', 'FAILED', 'ABORTED', 'SUPERSEDED'],
     APPLIED: ['VERIFIED', 'RESOLVED', 'OPEN', 'SUPERSEDED'],
     FAILED: ['OPEN', 'APPLYING', 'ABORTED', 'SUPERSEDED'],
     VERIFIED: ['RESOLVED', 'OPEN', 'SUPERSEDED'],
@@ -88,7 +88,7 @@ function transition(input: {
       ...input.patch,
       status: input.to,
       ...(input.to === 'RESOLVED' ? { resolvedAt: interventionTimestamp() } : {}),
-      ...(input.to === 'OPEN' ? { resolvedAt: null, leaseOwner: null, leaseExpiresAt: null } : {}),
+      ...(input.to === 'OPEN' ? { resolvedAt: null } : {}),
     },
   });
   if (updated == null) return conflict(getIntervention(input.id));
@@ -148,8 +148,47 @@ export function propose(input: {
     to: 'PROPOSED',
     eventType: 'propose',
     actor: input.actor ?? 'intervention-proposer',
-    patch: { proposedOptionsJson: JSON.stringify(input.options) },
+    patch: {
+      proposedOptionsJson: JSON.stringify(input.options),
+      leaseOwner: null,
+      leaseExpiresAt: null,
+    },
     payload: { options: input.options, evidence: input.evidence ?? null },
+  });
+}
+
+export function leaseForProposal(input: {
+  id: string;
+  expectedVersion: number;
+  leaseOwner: string;
+  leaseExpiresAt: string;
+}): InterventionReducerResult {
+  return transition({
+    id: input.id,
+    expectedVersion: input.expectedVersion,
+    to: 'OPEN',
+    eventType: 'leaseProposal',
+    actor: input.leaseOwner,
+    patch: { leaseOwner: input.leaseOwner, leaseExpiresAt: input.leaseExpiresAt },
+    payload: { leaseExpiresAt: input.leaseExpiresAt },
+  });
+}
+
+export function recordProposalFailure(input: {
+  id: string;
+  expectedVersion: number;
+  error: string;
+  evidence?: unknown;
+  actor?: string;
+}): InterventionReducerResult {
+  return transition({
+    id: input.id,
+    expectedVersion: input.expectedVersion,
+    to: 'OPEN',
+    eventType: 'proposalFailed',
+    actor: input.actor ?? 'intervention-proposer',
+    patch: { leaseOwner: null, leaseExpiresAt: null },
+    payload: { error: input.error, evidence: input.evidence ?? null },
   });
 }
 
@@ -277,6 +316,8 @@ export function reopen(input: {
       decisionReason: null,
       applicationResultJson: null,
       verificationJson: null,
+      leaseOwner: null,
+      leaseExpiresAt: null,
     },
     payload: { reason: input.reason, evidence: input.evidence ?? null },
   });
@@ -326,15 +367,52 @@ export function recoverStaleApplying(
     if (intervention.leaseExpiresAt != null && Date.parse(intervention.leaseExpiresAt) > nowMs) {
       continue;
     }
-    const result = reopen({
+    const result = transition({
       id: intervention.id,
       expectedVersion: intervention.version,
-      reason: 'stale APPLYING lease recovered',
-      evidence: {
+      to: 'DECIDED',
+      eventType: 'applyLeaseRecovered',
+      actor: input.actor ?? 'intervention-recovery',
+      patch: { leaseOwner: null, leaseExpiresAt: null },
+      payload: {
         leaseOwner: intervention.leaseOwner,
         leaseExpiresAt: intervention.leaseExpiresAt,
       },
+    });
+    if (result.ok) recovered.push(result.intervention);
+  }
+  return recovered;
+}
+
+export function recoverStaleProposalLeases(
+  input: {
+    projectId?: string;
+    now?: Date;
+    actor?: string;
+  } = {},
+): WorkItemIntervention[] {
+  const nowMs = (input.now ?? new Date()).getTime();
+  const recovered: WorkItemIntervention[] = [];
+  for (const intervention of listInterventions({
+    projectId: input.projectId,
+    status: 'OPEN',
+    limit: 500,
+  })) {
+    if (intervention.leaseOwner == null && intervention.leaseExpiresAt == null) continue;
+    if (intervention.leaseExpiresAt != null && Date.parse(intervention.leaseExpiresAt) > nowMs) {
+      continue;
+    }
+    const result = transition({
+      id: intervention.id,
+      expectedVersion: intervention.version,
+      to: 'OPEN',
+      eventType: 'proposalLeaseRecovered',
       actor: input.actor ?? 'intervention-recovery',
+      patch: { leaseOwner: null, leaseExpiresAt: null },
+      payload: {
+        leaseOwner: intervention.leaseOwner,
+        leaseExpiresAt: intervention.leaseExpiresAt,
+      },
     });
     if (result.ok) recovered.push(result.intervention);
   }

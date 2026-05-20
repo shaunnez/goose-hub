@@ -1,9 +1,7 @@
 import { GATE_STATES } from '@/lib/constants';
 import { parseDependencies } from '@/lib/dependency-parser';
 import { renderMarkdownToHtml } from '@/lib/markdown';
-import { LEGAL_TARGETS } from '@/lib/transitions';
 import { describe, expect, it } from 'vitest';
-import { GATE_ACTIONS } from './components/GatePendingBanner';
 import { extractPlaywrightRepro } from './lib/playwright-capture';
 import { SECTIONS } from './lib/sections';
 
@@ -87,67 +85,6 @@ describe('GatePendingBanner — gate state map', () => {
     expect(GATE_STATES['factory:in-progress']).toBeUndefined();
     expect(GATE_STATES['factory:triaging']).toBeUndefined();
     expect(GATE_STATES['factory:done']).toBeUndefined();
-  });
-});
-
-describe('gate actions — GATE_ACTIONS mapping', () => {
-  it('prd-review has only approve → decomposing', () => {
-    const actions = GATE_ACTIONS['factory:prd-review'];
-    expect(actions.approve).toBe('factory:decomposing');
-    expect(actions.reject).toBeUndefined();
-    expect(actions.requestChanges).toBeUndefined();
-  });
-
-  it('needs-review has no gate actions because automated review owns the state', () => {
-    expect(GATE_ACTIONS['factory:needs-review']).toBeUndefined();
-  });
-
-  it('approved has only approve → retrospecting', () => {
-    const actions = GATE_ACTIONS['factory:approved'];
-    expect(actions.approve).toBe('factory:retrospecting');
-    expect(actions.reject).toBeUndefined();
-    expect(actions.requestChanges).toBeUndefined();
-  });
-
-  it('needs-human has 4 recovery actions', () => {
-    const actions = GATE_ACTIONS['factory:needs-human'];
-    expect(actions.approve).toBeUndefined();
-    expect(actions.requestChanges).toBeUndefined();
-    expect(actions.sendToTriage).toBe('factory:triaging');
-    expect(actions.sendToDev).toBe('factory:dev-ready');
-    expect(actions.sendToQA).toBe('factory:needs-qa');
-    expect(actions.reject).toBe('factory:rejected');
-  });
-
-  it('reject and requestChanges are absent for non-needs-human gate states', () => {
-    const gates = ['factory:prd-review', 'factory:approved'];
-    for (const gate of gates) {
-      const actions = GATE_ACTIONS[gate];
-      expect(actions.reject).toBeUndefined();
-      expect(actions.requestChanges).toBeUndefined();
-    }
-  });
-});
-
-describe('detail page — legal-target table mirrors core', () => {
-  it('triaging accepts to-accepted, to-rejected, and to-archived', () => {
-    expect(LEGAL_TARGETS['factory:triaging']).toEqual([
-      'factory:accepted',
-      'factory:rejected',
-      'factory:archived',
-    ]);
-  });
-  it('done is terminal-ish: only goes to archived', () => {
-    expect(LEGAL_TARGETS['factory:done']).toEqual(['factory:archived']);
-  });
-  it('needs-human has 5 recovery targets in the UI table', () => {
-    expect(LEGAL_TARGETS['factory:needs-human']).toEqual([
-      'factory:dev-ready',
-      'factory:needs-qa',
-      'factory:triaging',
-      'factory:rejected',
-      'factory:archived',
-    ]);
   });
 });
 

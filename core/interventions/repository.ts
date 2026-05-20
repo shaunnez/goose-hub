@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, lte, or } from 'drizzle-orm';
 import { db } from '../db/db.js';
 import { workItemInterventionEvents, workItemInterventions } from '../db/schema.js';
 import {
@@ -91,6 +91,32 @@ export function listInterventions(filter: {
     .select()
     .from(workItemInterventions)
     .where(conditions.length === 0 ? undefined : and(...conditions))
+    .orderBy(desc(workItemInterventions.updatedAt))
+    .limit(filter.limit ?? 100)
+    .all();
+  return rows.map(toIntervention);
+}
+
+export function listOpenInterventionsReadyForProposal(filter: {
+  projectId?: string;
+  now: string;
+  limit?: number;
+}): WorkItemIntervention[] {
+  const conditions = [
+    eq(workItemInterventions.status, 'OPEN'),
+    or(
+      and(isNull(workItemInterventions.leaseOwner), isNull(workItemInterventions.leaseExpiresAt)),
+      lte(workItemInterventions.leaseExpiresAt, filter.now),
+    ),
+  ];
+  if (filter.projectId != null) {
+    conditions.push(eq(workItemInterventions.projectId, filter.projectId));
+  }
+
+  const rows = db
+    .select()
+    .from(workItemInterventions)
+    .where(and(...conditions))
     .orderBy(desc(workItemInterventions.updatedAt))
     .limit(filter.limit ?? 100)
     .all();

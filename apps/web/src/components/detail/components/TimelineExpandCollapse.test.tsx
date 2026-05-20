@@ -52,6 +52,8 @@ afterEach(() => {
 
 vi.mock('@/lib/api', () => ({
   fetchEventsPage: vi.fn().mockResolvedValue({ events: [], hasMore: false }),
+  fetchIntervention: vi.fn(),
+  fetchIssueInterventions: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('../lib/costs', () => ({

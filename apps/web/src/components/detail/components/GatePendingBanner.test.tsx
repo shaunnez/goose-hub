@@ -1,17 +1,32 @@
 /** @vitest-environment jsdom */
-import { fetchEvents, transitionState } from '@/lib/api';
+import { decideIntervention, fetchIssueInterventions, fetchLegalTargets } from '@/lib/api';
+import type { InterventionDto } from '@/lib/types';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GatePendingBanner } from './GatePendingBanner';
+
+vi.mock('@/lib/api', () => ({
+  decideIntervention: vi.fn(),
+  fetchIssueInterventions: vi.fn(),
+  fetchLegalTargets: vi.fn(),
+}));
 
 afterEach(cleanup);
 
-vi.mock('@/lib/api', () => ({
-  fetchEvents: vi.fn(),
-  transitionState: vi.fn(),
-}));
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(fetchIssueInterventions).mockResolvedValue([]);
+  vi.mocked(fetchLegalTargets).mockResolvedValue({
+    from: 'factory:needs-human',
+    legalTargets: ['factory:dev-ready'],
+  });
+  vi.mocked(decideIntervention).mockResolvedValue({
+    intervention: makeIntervention({ status: 'DECIDED' }),
+    events: [],
+  });
+});
 
 function render_(jsx: React.ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -22,135 +37,149 @@ function render_(jsx: React.ReactNode) {
   );
 }
 
-const DECISION_SUMMARY_EVENT = {
-  id: 1,
-  projectId: 'proj',
-  workItemId: 'github:org/repo#42',
-  kind: 'agent.decision-summary',
-  payload: { summary: 'Retry cap hit after 3 attempts on implement skill' },
-  runId: 'run-1',
-  createdAt: '2026-05-04T10:00:00Z',
-};
+function makeIntervention(overrides: Partial<InterventionDto> = {}): InterventionDto {
+  return {
+    id: 'int-1',
+    projectId: 'proj',
+    workItemId: 'github:org/repo#42',
+    interventionType: 'needs_human',
+    status: 'PROPOSED',
+    title: 'Human intervention required',
+    reason: 'Retry cap hit after 3 attempts on implement skill',
+    rootCauseSignature: 'needs-human:42',
+    correlationId: 'corr-1',
+    sourceEventId: 10,
+    proposedOptions: [
+      {
+        actionType: 'manual_transition',
+        label: 'Send to dev',
+        description: 'Move the issue back to implementation.',
+        payload: {
+          from: 'factory:needs-human',
+          to: 'factory:dev-ready',
+          reason: 'retry implementation',
+        },
+        risk: 'medium',
+      },
+    ],
+    decidedActionType: null,
+    decidedActionPayload: null,
+    decidedBy: null,
+    decisionReason: null,
+    applicationResult: null,
+    verification: null,
+    leaseOwner: null,
+    leaseExpiresAt: null,
+    version: 7,
+    createdAt: '2026-05-04T10:00:00Z',
+    updatedAt: '2026-05-04T10:00:00Z',
+    resolvedAt: null,
+    ...overrides,
+  };
+}
 
-describe('GatePendingBanner — factory:needs-human', () => {
-  it('renders nothing for non-gate states', () => {
-    render_(<GatePendingBanner state="factory:in-progress" projectSlug="proj" id="42" />);
+describe('GatePendingBanner', () => {
+  it('renders nothing when the issue has no active interventions', async () => {
+    render_(<GatePendingBanner state="factory:needs-human" projectSlug="proj" id="42" />);
+
+    await waitFor(() => expect(fetchIssueInterventions).toHaveBeenCalled());
     expect(screen.queryByTestId('gate-pending-banner')).toBeNull();
   });
 
-  it('renders nothing for factory:needs-review because automated review is not a human gate', () => {
-    render_(<GatePendingBanner state="factory:needs-review" projectSlug="proj" id="42" />);
-    expect(screen.queryByTestId('gate-pending-banner')).toBeNull();
-  });
+  it('renders durable intervention title and reason instead of gate-state text', async () => {
+    vi.mocked(fetchIssueInterventions).mockResolvedValueOnce([
+      makeIntervention({
+        title: 'Operator decision needed',
+        reason: 'QA and builder disagree on evidence readiness.',
+      }),
+    ]);
 
-  it('renders all 4 recovery buttons', async () => {
-    vi.mocked(fetchEvents).mockResolvedValueOnce([DECISION_SUMMARY_EVENT]);
     render_(<GatePendingBanner state="factory:needs-human" projectSlug="proj" id="42" />);
-    await waitFor(() => {
-      expect(screen.getByTestId('gate-action-send-to-triage')).toBeTruthy();
-      expect(screen.getByTestId('gate-action-send-to-dev')).toBeTruthy();
-      expect(screen.getByTestId('gate-action-send-to-qa')).toBeTruthy();
-      expect(screen.getByTestId('gate-action-reject')).toBeTruthy();
-    });
+
+    await screen.findByText('Operator decision needed');
+    expect(screen.getByTestId('escalation-reason').textContent).toContain(
+      'QA and builder disagree',
+    );
+    expect(screen.queryByText('Human intervention required')).toBeNull();
   });
 
-  it('shows escalation reason excerpt from last decision-summary', async () => {
-    vi.mocked(fetchEvents).mockResolvedValueOnce([DECISION_SUMMARY_EVENT]);
-    render_(<GatePendingBanner state="factory:needs-human" projectSlug="proj" id="42" />);
-    await waitFor(() => {
-      expect(screen.getByTestId('escalation-reason').textContent).toContain(
-        'Retry cap hit after 3 attempts',
-      );
-    });
-  });
+  it('submits a proposed option with the intervention version as CAS', async () => {
+    const onTransitioned = vi.fn();
+    const intervention = makeIntervention();
+    vi.mocked(fetchIssueInterventions).mockResolvedValueOnce([intervention]);
 
-  it('renders buttons even when events fetch returns empty', async () => {
-    vi.mocked(fetchEvents).mockResolvedValueOnce([]);
-    render_(<GatePendingBanner state="factory:needs-human" projectSlug="proj" id="42" />);
-    await waitFor(() => {
-      expect(screen.getByTestId('gate-action-send-to-dev')).toBeTruthy();
-    });
-    expect(screen.queryByTestId('escalation-reason')).toBeNull();
-  });
-
-  it('renders buttons even when events fetch fails', async () => {
-    vi.mocked(fetchEvents).mockRejectedValueOnce(new Error('network error'));
-    render_(<GatePendingBanner state="factory:needs-human" projectSlug="proj" id="42" />);
-    await waitFor(() => {
-      expect(screen.getByTestId('gate-action-send-to-dev')).toBeTruthy();
-    });
-  });
-
-  it('Dev button calls transitionState with factory:dev-ready', async () => {
-    vi.mocked(fetchEvents).mockResolvedValueOnce([]);
-    vi.mocked(transitionState).mockResolvedValueOnce({ status: 200, data: {} });
     render_(
       <GatePendingBanner
         state="factory:needs-human"
         projectSlug="proj"
         id="42"
-        onTransitioned={vi.fn()}
+        onTransitioned={onTransitioned}
       />,
     );
-    await waitFor(() => screen.getByTestId('gate-action-send-to-dev'));
-    fireEvent.click(screen.getByTestId('gate-action-send-to-dev'));
+
+    fireEvent.click(await screen.findByTestId('gate-action-option-0'));
+
     await waitFor(() => {
-      expect(transitionState).toHaveBeenCalledWith(
-        'proj',
-        '42',
-        'factory:needs-human',
-        'factory:dev-ready',
-      );
+      expect(decideIntervention).toHaveBeenCalledWith('int-1', {
+        actionType: 'manual_transition',
+        actionPayload: intervention.proposedOptions[0]?.payload,
+        expectedVersion: 7,
+        decidedBy: 'operator',
+        reason: 'Move the issue back to implementation.',
+      });
+    });
+    expect(onTransitioned).toHaveBeenCalled();
+  });
+
+  it('renders legal-target fallback for OPEN interventions and decides manual transition', async () => {
+    vi.mocked(fetchIssueInterventions).mockResolvedValueOnce([
+      makeIntervention({
+        status: 'OPEN',
+        proposedOptions: [],
+        leaseOwner: null,
+        version: 3,
+      }),
+    ]);
+    vi.mocked(fetchLegalTargets).mockResolvedValueOnce({
+      from: 'factory:needs-human',
+      legalTargets: ['factory:triaging'],
+    });
+
+    render_(<GatePendingBanner state="factory:needs-human" projectSlug="proj" id="42" />);
+
+    await screen.findByText('Proposal pending');
+    fireEvent.click(await screen.findByTestId('gate-action-manual-factory-triaging'));
+
+    await waitFor(() => {
+      expect(decideIntervention).toHaveBeenCalledWith('int-1', {
+        actionType: 'manual_transition',
+        actionPayload: {
+          from: 'factory:needs-human',
+          to: 'factory:triaging',
+          reason: 'operator selected legal target',
+        },
+        expectedVersion: 3,
+        decidedBy: 'operator',
+        reason: 'manual fallback from intervention banner',
+      });
     });
   });
 
-  it('Triage button calls transitionState with factory:triaging', async () => {
-    vi.mocked(fetchEvents).mockResolvedValueOnce([]);
-    vi.mocked(transitionState).mockResolvedValueOnce({ status: 200, data: {} });
-    render_(
-      <GatePendingBanner
-        state="factory:needs-human"
-        projectSlug="proj"
-        id="42"
-        onTransitioned={vi.fn()}
-      />,
-    );
-    await waitFor(() => screen.getByTestId('gate-action-send-to-triage'));
-    fireEvent.click(screen.getByTestId('gate-action-send-to-triage'));
-    await waitFor(() => {
-      expect(transitionState).toHaveBeenCalledWith(
-        'proj',
-        '42',
-        'factory:needs-human',
-        'factory:triaging',
-      );
-    });
-  });
-});
+  it('keeps the Grill link for gate-pending interventions', async () => {
+    vi.mocked(fetchIssueInterventions).mockResolvedValueOnce([
+      makeIntervention({
+        interventionType: 'gate_pending',
+        title: 'Question ready',
+        reason: 'A grillee answer is needed before PRD.',
+        proposedOptions: [],
+      }),
+    ]);
 
-describe('GatePendingBanner — factory:gate-pending', () => {
-  it('renders info-variant banner with "Question ready — grill" message', () => {
     render_(<GatePendingBanner state="factory:gate-pending" projectSlug="proj" id="42" />);
-    const banner = screen.getByTestId('gate-pending-banner');
-    expect(banner.getAttribute('data-variant')).toBe('info');
-    expect(banner.textContent).toContain('Question ready');
-  });
 
-  it('renders Grill link pointing at the grill section of this issue', () => {
-    render_(<GatePendingBanner state="factory:gate-pending" projectSlug="proj" id="42" />);
+    const banner = await screen.findByTestId('gate-pending-banner');
     const grill = screen.getByTestId('gate-action-grill') as HTMLAnchorElement;
-    expect(grill).toBeTruthy();
+    expect(banner.getAttribute('data-variant')).toBe('info');
     expect(grill.getAttribute('href')).toBe('/projects/proj/items/42/grill');
-  });
-
-  it('does not render needs-human action buttons in gate-pending variant', () => {
-    render_(<GatePendingBanner state="factory:gate-pending" projectSlug="proj" id="42" />);
-    expect(screen.queryByTestId('gate-action-send-to-triage')).toBeNull();
-    expect(screen.queryByTestId('gate-action-reject')).toBeNull();
-  });
-
-  it('omits Grill link when projectSlug/id are absent', () => {
-    render_(<GatePendingBanner state="factory:gate-pending" />);
-    expect(screen.queryByTestId('gate-action-grill')).toBeNull();
   });
 });

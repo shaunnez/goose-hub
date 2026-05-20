@@ -1,10 +1,27 @@
 import { open } from '@goose-hub/core/interventions/reducer.js';
-import { describe, expect, it } from 'vitest';
-import { decideIntervention } from './service.js';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  getSourceForSlug: vi.fn(),
+}));
+
+vi.mock('#shared/source.js', () => ({
+  getSourceForSlug: mocks.getSourceForSlug,
+}));
+
+import { decideIntervention, listIssueInterventions, listProjectInterventions } from './service.js';
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.getSourceForSlug.mockResolvedValue({
+    getItem: vi.fn().mockResolvedValue({ id: 'github:owner/repo#1' }),
+  });
+});
 
 function openIntervention(suffix: string) {
+  const projectId = `proj-${suffix}`;
   const opened = open({
-    projectId: 'proj',
+    projectId,
     workItemId: `github:owner/repo#${suffix}`,
     interventionType: 'needs_human',
     title: 'Needs human',
@@ -45,5 +62,53 @@ describe('decideIntervention', () => {
     if (!result.ok) return;
     expect(result.data.intervention.status).toBe('DECIDED');
     expect(result.data.intervention.decidedActionType).toBe('no_action');
+    expect(result.data.events.map((event) => event.eventType)).toEqual(['open', 'decide']);
+  });
+});
+
+describe('listProjectInterventions', () => {
+  it('returns DTOs filtered by comma-separated statuses', async () => {
+    const intervention = openIntervention('status-filter');
+
+    const result = await listProjectInterventions(intervention.projectId, 'open,PROPOSED');
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.interventions).toEqual([
+      expect.objectContaining({
+        id: intervention.id,
+        projectId: intervention.projectId,
+        workItemId: intervention.workItemId,
+        status: 'OPEN',
+        proposedOptions: [],
+        version: intervention.version,
+      }),
+    ]);
+  });
+
+  it('rejects invalid status filters', async () => {
+    const result = await listProjectInterventions('proj-invalid-status', 'OPEN,WAT');
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'invalid intervention status: WAT',
+      status: 400,
+    });
+  });
+});
+
+describe('listIssueInterventions', () => {
+  it('maps missing issue lookups to 404', async () => {
+    mocks.getSourceForSlug.mockResolvedValueOnce({
+      getItem: vi.fn().mockRejectedValue(new Error('not found')),
+    });
+
+    const result = await listIssueInterventions('proj-missing-issue', '404', 'OPEN');
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'issue not found',
+      status: 404,
+    });
   });
 });
