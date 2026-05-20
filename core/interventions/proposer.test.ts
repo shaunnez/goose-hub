@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { InvokeSkillInput, InvokeSkillResult } from '../agent-runtime/invoke-skill.js';
 import { eventStore } from '../event-stream/store.js';
 import { runInterventionProposerWorkerOnce } from './proposer.js';
-import { open } from './reducer.js';
+import { leaseForProposal, open } from './reducer.js';
 import { getIntervention, listInterventionEvents } from './repository.js';
 
 function openFixture(suffix: string) {
@@ -142,5 +142,69 @@ describe('intervention proposer worker', () => {
     expect(events.at(-1)?.payload).toEqual(
       expect.objectContaining({ error: expect.stringContaining('illegal transition') }),
     );
+  });
+
+  it('does not starve ready interventions behind newer active leases', async () => {
+    const projectId = 'proj-proposal-starvation';
+    const leasedUntil = '2026-05-20T01:00:00Z';
+    const projectReady = open({
+      projectId,
+      workItemId: 'github:owner/repo#starvation-ready',
+      interventionType: 'needs_human',
+      title: 'Ready',
+      reason: 'Ready row should be proposed.',
+      rootCauseSignature: 'needs-human|starvation-ready',
+      actor: 'test',
+    });
+    const projectLeased = open({
+      projectId,
+      workItemId: 'github:owner/repo#starvation-leased',
+      interventionType: 'needs_human',
+      title: 'Leased',
+      reason: 'Leased row should be skipped.',
+      rootCauseSignature: 'needs-human|starvation-leased',
+      actor: 'test',
+    });
+    expect(projectReady.ok).toBe(true);
+    expect(projectLeased.ok).toBe(true);
+    if (!projectReady.ok || !projectLeased.ok) return;
+    const lease = leaseForProposal({
+      id: projectLeased.intervention.id,
+      expectedVersion: projectLeased.intervention.version,
+      leaseOwner: 'other-worker',
+      leaseExpiresAt: leasedUntil,
+    });
+    expect(lease.ok).toBe(true);
+
+    const invokeSkill = vi.fn(async () =>
+      skillResult({
+        summary: 'Wait',
+        options: [
+          {
+            actionType: 'no_action',
+            label: 'Wait',
+            description: 'Leave it open.',
+            payload: { reason: 'wait' },
+            risk: 'low',
+          },
+        ],
+      }),
+    );
+
+    const result = await runInterventionProposerWorkerOnce({
+      projectId,
+      limit: 1,
+      leaseOwner: 'test-proposer',
+      deps: {
+        invokeSkill,
+        now: () => new Date('2026-05-20T00:00:00Z'),
+        runId: () => 'run-proposal-starvation',
+      },
+    });
+
+    expect(result).toEqual({ processed: 1, proposed: 1, failed: 0, skipped: 0 });
+    expect(invokeSkill).toHaveBeenCalledTimes(1);
+    expect(getIntervention(projectReady.intervention.id)?.status).toBe('PROPOSED');
+    expect(getIntervention(projectLeased.intervention.id)?.status).toBe('OPEN');
   });
 });

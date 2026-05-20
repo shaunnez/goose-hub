@@ -7,6 +7,7 @@ export const interventionKeys = {
   issue: (slug: string, id: string, status?: InterventionStatus[]) =>
     ['interventions', 'issue', slug, id, status?.join(',') ?? 'all'] as const,
   detail: (id: string) => ['interventions', 'detail', id] as const,
+  timeline: (slug: string, id: string) => ['intervention-timeline', slug, id] as const,
   legalTargets: (slug: string, id: string) => ['legal-targets', slug, id] as const,
 };
 
@@ -24,6 +25,9 @@ export async function invalidateInterventionDecision(
     }),
     queryClient.invalidateQueries({
       queryKey: ['interventions', 'issue', input.projectSlug, input.issueId],
+    }),
+    queryClient.invalidateQueries({
+      queryKey: interventionKeys.timeline(input.projectSlug, input.issueId),
     }),
     queryClient.invalidateQueries({
       queryKey: interventionKeys.legalTargets(input.projectSlug, input.issueId),

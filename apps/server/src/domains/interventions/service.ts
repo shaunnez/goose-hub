@@ -71,7 +71,8 @@ export async function listIssueInterventions(
 
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
-  const item = await source.getItem(id);
+  const item = await source.getItem(id).catch(() => null);
+  if (item == null) return { ok: false, error: 'issue not found', status: 404 };
   const workItemId = (item as { id: string }).id;
 
   return {

@@ -17,6 +17,11 @@ describe('intervention query keys', () => {
       'OPEN',
     ]);
     expect(interventionKeys.detail('i1')).toEqual(['interventions', 'detail', 'i1']);
+    expect(interventionKeys.timeline('proj', '42')).toEqual([
+      'intervention-timeline',
+      'proj',
+      '42',
+    ]);
     expect(interventionKeys.legalTargets('proj', '42')).toEqual(['legal-targets', 'proj', '42']);
   });
 
@@ -46,6 +51,9 @@ describe('intervention query keys', () => {
     });
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['interventions', 'issue', 'proj', '42'],
+    });
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['intervention-timeline', 'proj', '42'],
     });
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['legal-targets', 'proj', '42'],

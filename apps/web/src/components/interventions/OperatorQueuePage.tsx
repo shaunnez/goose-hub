@@ -186,13 +186,21 @@ export function OperatorQueuePage() {
     return [...byType.entries()].map(([type, rows]) => ({ project, type, rows, issueMap }));
   });
 
+  const handleRetry = async () => {
+    await Promise.all([
+      refetch(),
+      ...interventionQueries.map((query) => query.refetch()),
+      ...issueQueries.map((query) => query.refetch()),
+    ]);
+  };
+
   if (error) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-3 text-center px-8">
         <div className="text-[color:var(--danger)] text-sm">Couldn't load interventions.</div>
         <button
           type="button"
-          onClick={() => void refetch()}
+          onClick={() => void handleRetry()}
           className="h-7 px-3 rounded-md border border-line text-[12px] hover:bg-bg-hover"
         >
           <RefreshCw size={12} className="inline mr-1" /> Retry

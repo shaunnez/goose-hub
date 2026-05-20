@@ -168,4 +168,31 @@ describe('OperatorQueuePage', () => {
       });
     });
   });
+
+  it('retries downstream queue queries from the error state', async () => {
+    vi.mocked(fetchProjectConfigs).mockResolvedValue([
+      {
+        slug: 'proj-a',
+        name: 'Proj A',
+        source: { kind: 'github', repo: 'owner/repo' },
+        activeMilestone: null,
+        colorStripe: '#f00',
+        budgets: { perWorkflowMaxUsd: 1, dailyTokens: 100, perAdvisorMaxUsd: 1 },
+        mode: 'supervised',
+      },
+    ]);
+    vi.mocked(fetchIssues).mockResolvedValue([]);
+    vi.mocked(fetchProjectInterventions)
+      .mockRejectedValueOnce(new Error('queue unavailable'))
+      .mockResolvedValueOnce([]);
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /retry/i }));
+
+    await waitFor(() => {
+      expect(fetchProjectInterventions).toHaveBeenCalledTimes(2);
+    });
+    expect(fetchIssues).toHaveBeenCalledTimes(2);
+  });
 });

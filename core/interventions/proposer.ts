@@ -10,7 +10,7 @@ import {
   recordProposalFailure,
   recoverStaleProposalLeases,
 } from './reducer.js';
-import { listInterventions } from './repository.js';
+import { listOpenInterventionsReadyForProposal } from './repository.js';
 import {
   type InterventionActionOption,
   InterventionActionOptionSchema,
@@ -165,11 +165,11 @@ export async function runInterventionProposerWorkerOnce(
     actor: input.leaseOwner,
   });
   const now = input.deps?.now?.() ?? new Date();
-  const candidates = listInterventions({
+  const candidates = listOpenInterventionsReadyForProposal({
     projectId: input.projectId,
-    status: 'OPEN',
+    now: now.toISOString(),
     limit: input.limit ?? 25,
-  }).filter((intervention) => !isLeaseActive(intervention, now));
+  });
   const result: InterventionProposerRunResult = {
     processed: 0,
     proposed: 0,

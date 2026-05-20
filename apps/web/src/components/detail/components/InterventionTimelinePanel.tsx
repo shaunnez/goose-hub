@@ -1,5 +1,6 @@
 import { fetchIntervention, fetchIssueInterventions } from '@/lib/api';
 import type { InterventionDetailDto, InterventionEventDto } from '@/lib/api/interventions';
+import { interventionKeys } from '@/lib/query-keys';
 import type { InterventionDto } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, ClipboardList, RotateCcw } from 'lucide-react';
@@ -76,7 +77,7 @@ function statusIcon(status: InterventionDto['status']) {
 
 export function InterventionTimelinePanel({ projectSlug, id }: InterventionTimelinePanelProps) {
   const { data: details = [] } = useQuery({
-    queryKey: ['intervention-timeline', projectSlug, id],
+    queryKey: interventionKeys.timeline(projectSlug, id),
     queryFn: async (): Promise<InterventionDetailDto[]> => {
       const interventions = await fetchIssueInterventions(projectSlug, id);
       return Promise.all(interventions.map((intervention) => fetchIntervention(intervention.id)));
