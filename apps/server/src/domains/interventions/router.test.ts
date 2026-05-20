@@ -1,15 +1,21 @@
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockListProjectInterventions, mockGetInterventionDetail, mockDecideIntervention } =
-  vi.hoisted(() => ({
-    mockListProjectInterventions: vi.fn(),
-    mockGetInterventionDetail: vi.fn(),
-    mockDecideIntervention: vi.fn(),
-  }));
+const {
+  mockListProjectInterventions,
+  mockListIssueInterventions,
+  mockGetInterventionDetail,
+  mockDecideIntervention,
+} = vi.hoisted(() => ({
+  mockListProjectInterventions: vi.fn(),
+  mockListIssueInterventions: vi.fn(),
+  mockGetInterventionDetail: vi.fn(),
+  mockDecideIntervention: vi.fn(),
+}));
 
 vi.mock('./service.js', () => ({
   listProjectInterventions: mockListProjectInterventions,
+  listIssueInterventions: mockListIssueInterventions,
   getInterventionDetail: mockGetInterventionDetail,
   decideIntervention: mockDecideIntervention,
 }));
@@ -39,6 +45,34 @@ describe('interventions router', () => {
     expect(mockListProjectInterventions).toHaveBeenCalledWith('proj', 'open');
   });
 
+  it('lists issue interventions filtered by multiple statuses', async () => {
+    mockListIssueInterventions.mockResolvedValue({
+      ok: true,
+      data: { interventions: [{ id: 'i1', workItemId: 'github:owner/repo#42' }] },
+    });
+
+    const res = await makeApp().request(
+      '/projects/proj/issues/42/interventions?status=OPEN,PROPOSED',
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      interventions: [{ id: 'i1', workItemId: 'github:owner/repo#42' }],
+    });
+    expect(mockListIssueInterventions).toHaveBeenCalledWith('proj', '42', 'OPEN,PROPOSED');
+  });
+
+  it('returns status filter errors', async () => {
+    mockListProjectInterventions.mockResolvedValue({
+      ok: false,
+      error: 'invalid intervention status: WAT',
+      status: 400,
+    });
+
+    const res = await makeApp().request('/projects/proj/interventions?status=WAT');
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid intervention status: WAT' });
+  });
+
   it('returns intervention detail', async () => {
     mockGetInterventionDetail.mockResolvedValue({
       ok: true,
@@ -53,7 +87,10 @@ describe('interventions router', () => {
   it('decides an intervention', async () => {
     mockDecideIntervention.mockResolvedValue({
       ok: true,
-      data: { intervention: { id: 'i1', status: 'DECIDED' } },
+      data: {
+        intervention: { id: 'i1', status: 'DECIDED', version: 4 },
+        events: [{ id: 1, eventType: 'decide' }],
+      },
     });
 
     const res = await makeApp().request('/interventions/i1/decide', {
@@ -66,7 +103,10 @@ describe('interventions router', () => {
       }),
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ intervention: { id: 'i1', status: 'DECIDED' } });
+    expect(await res.json()).toEqual({
+      intervention: { id: 'i1', status: 'DECIDED', version: 4 },
+      events: [{ id: 1, eventType: 'decide' }],
+    });
     expect(mockDecideIntervention).toHaveBeenCalledWith('i1', {
       actionType: 'no_action',
       actionPayload: { reason: 'wait' },

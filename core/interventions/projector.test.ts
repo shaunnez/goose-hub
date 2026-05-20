@@ -19,6 +19,66 @@ function event(overrides: Partial<AgentEvent> = {}): AgentEvent {
 }
 
 describe('intervention projector', () => {
+  it.each([
+    [
+      'gate.awaiting-human',
+      event({
+        id: 11,
+        kind: 'gate.awaiting-human',
+        payload: { reason: 'retry cap hit' },
+        workItemId: 'github:owner/repo#gate-human',
+      }),
+      'needs_human',
+    ],
+    [
+      'factory:gate-pending',
+      event({
+        id: 12,
+        payload: { from: 'factory:accepted', to: 'factory:gate-pending' },
+        workItemId: 'github:owner/repo#gate-pending',
+      }),
+      'gate_pending',
+    ],
+    [
+      'merge.conflict',
+      event({
+        id: 13,
+        kind: 'merge.conflict',
+        payload: { prNumber: 123 },
+        workItemId: 'github:owner/repo#merge-conflict',
+      }),
+      'merge_conflict',
+    ],
+    [
+      'factory:merge-conflict',
+      event({
+        id: 14,
+        payload: { from: 'factory:approved', to: 'factory:merge-conflict' },
+        workItemId: 'github:owner/repo#merge-state',
+      }),
+      'merge_conflict',
+    ],
+    [
+      'qa.tier-disagreement',
+      event({
+        id: 15,
+        kind: 'qa.tier-disagreement',
+        payload: { deterministic: 'pass', qa: 'fail' },
+        workItemId: 'github:owner/repo#qa-disagreement',
+      }),
+      'qa_disagreement',
+    ],
+  ])('opens %s as a durable intervention', (_label, input, interventionType) => {
+    const result = projectActionableEvent(input);
+
+    expect(result.opened?.ok).toBe(true);
+    expect(result.shouldScheduleProposer).toBe(true);
+    if (result.opened?.ok) {
+      expect(result.opened.intervention.interventionType).toBe(interventionType);
+      expect(result.opened.intervention.status).toBe('OPEN');
+    }
+  });
+
   it('dedupes repeated actionable events and only schedules first proposal', () => {
     const first = projectActionableEvent(event({ id: 101, workItemId: 'github:owner/repo#101' }));
     const duplicate = projectActionableEvent(
@@ -31,6 +91,29 @@ describe('intervention projector', () => {
     expect(duplicate.shouldScheduleProposer).toBe(false);
     expect(
       listInterventions({ projectId: 'proj', workItemId: 'github:owner/repo#101' }),
+    ).toHaveLength(1);
+  });
+
+  it('is idempotent for repeated gate-pending replay events', () => {
+    const first = projectActionableEvent(
+      event({
+        id: 111,
+        workItemId: 'github:owner/repo#gate-replay',
+        payload: { from: 'factory:accepted', to: 'factory:gate-pending' },
+      }),
+    );
+    const replay = projectActionableEvent(
+      event({
+        id: 111,
+        workItemId: 'github:owner/repo#gate-replay',
+        payload: { from: 'factory:accepted', to: 'factory:gate-pending' },
+      }),
+    );
+
+    expect(first.shouldScheduleProposer).toBe(true);
+    expect(replay.shouldScheduleProposer).toBe(false);
+    expect(
+      listInterventions({ projectId: 'proj', workItemId: 'github:owner/repo#gate-replay' }),
     ).toHaveLength(1);
   });
 

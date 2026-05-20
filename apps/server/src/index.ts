@@ -8,19 +8,35 @@ import {
   replayInterventionProjector,
   startInterventionProjector,
 } from '@goose-hub/core/interventions/projector.js';
+import { startInterventionProposerWorker } from '@goose-hub/core/interventions/proposer.js';
+import {
+  recoverStaleApplying,
+  recoverStaleProposalLeases,
+} from '@goose-hub/core/interventions/reducer.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { loadProjects } from '@goose-hub/core/projects/loader.js';
 import { startPerProjectScheduler } from '@goose-hub/core/projects/scheduler.js';
 import { serve } from '@hono/node-server';
 import { dispatchTriageBatch } from '#shared/dispatch.js';
+import { startServerInterventionApplierWorker } from './domains/interventions/applier-worker.js';
 import { app } from './server.js';
 
 if (process.env.VITEST == null) {
   const closed = eventStore.closeOrphanedRuns();
+  const recoveredProposalLeases = recoverStaleProposalLeases();
+  const recoveredApplyLeases = recoverStaleApplying();
   replayInterventionProjector();
   startInterventionProjector();
+  startInterventionProposerWorker();
+  startServerInterventionApplierWorker();
   if (closed > 0) {
     logger.info('startup: closed orphaned agent runs', { count: closed });
+  }
+  if (recoveredProposalLeases.length > 0 || recoveredApplyLeases.length > 0) {
+    logger.info('startup: recovered stale intervention leases', {
+      proposer: recoveredProposalLeases.length,
+      apply: recoveredApplyLeases.length,
+    });
   }
   if (process.env.GITHUB_WEBHOOK_SECRET == null || process.env.GITHUB_WEBHOOK_SECRET.length === 0) {
     throw new Error('GITHUB_WEBHOOK_SECRET env var is required to start the server');

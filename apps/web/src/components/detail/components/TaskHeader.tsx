@@ -233,7 +233,6 @@ export function TaskHeader({ item, projectSlug, hasOpenDep = false }: TaskHeader
               projectSlug={projectSlug}
               id={item?.externalId}
               currentState={item?.state}
-              itemType={item?.type}
             />
           )}
         </div>

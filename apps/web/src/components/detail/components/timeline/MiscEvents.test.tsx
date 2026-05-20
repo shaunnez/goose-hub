@@ -161,4 +161,20 @@ describe('Misc timeline events', () => {
     expect(screen.getByText('pr-diff:abc')).toBeTruthy();
     expect(screen.getByText('4.0 KB saved')).toBeTruthy();
   });
+
+  it('links state transitions back to the intervention that caused them', () => {
+    const event = makeEvent('state.transitioned', {
+      from: 'factory:needs-human',
+      to: 'factory:dev-ready',
+      by: 'operator',
+      causedByInterventionId: 'intervention-abcdef123456',
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('State transitioned')).toBeTruthy();
+    expect(screen.getByText('factory:needs-human → factory:dev-ready (by operator)')).toBeTruthy();
+    expect(document.body.textContent).toContain('Caused by intervention');
+    expect(document.body.textContent).toContain('interven');
+  });
 });

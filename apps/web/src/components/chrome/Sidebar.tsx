@@ -45,6 +45,12 @@ function buildItems(slug: string | undefined): SidebarItem[] {
       available: true,
     },
     {
+      to: '/interventions',
+      label: 'Interventions',
+      icon: <ListChecks size={14} />,
+      available: true,
+    },
+    {
       to: `/projects/${project}/roster`,
       label: 'Roster',
       icon: <Users size={14} />,

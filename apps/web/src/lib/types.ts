@@ -81,6 +81,86 @@ export interface AgentEventDto {
   createdAt: string;
 }
 
+export type InterventionStatus =
+  | 'OPEN'
+  | 'PROPOSED'
+  | 'DECIDED'
+  | 'APPLYING'
+  | 'APPLIED'
+  | 'FAILED'
+  | 'VERIFIED'
+  | 'RESOLVED'
+  | 'ABORTED'
+  | 'SUPERSEDED';
+
+export type InterventionType =
+  | 'needs_human'
+  | 'gate_pending'
+  | 'merge_conflict'
+  | 'qa_disagreement'
+  | 'manual_override';
+
+export type InterventionActionType =
+  | 'manual_transition'
+  | 'approve_gate'
+  | 'reject_gate'
+  | 'resume_workflow'
+  | 'resolve_conflict'
+  | 'no_action';
+
+export interface InterventionOptionDto {
+  actionType: InterventionActionType | string;
+  label: string;
+  description: string;
+  payload: unknown;
+  risk: 'low' | 'medium' | 'high';
+}
+
+export interface InterventionDto {
+  id: string;
+  projectId: string;
+  workItemId: string;
+  interventionType: InterventionType;
+  status: InterventionStatus;
+  title: string;
+  reason: string;
+  rootCauseSignature: string;
+  correlationId: string;
+  sourceEventId: number | null;
+  proposedOptions: InterventionOptionDto[];
+  decidedActionType: string | null;
+  decidedActionPayload: unknown | null;
+  decidedBy: string | null;
+  decisionReason: string | null;
+  applicationResult: unknown | null;
+  verification: unknown | null;
+  leaseOwner: string | null;
+  leaseExpiresAt: string | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt: string | null;
+}
+
+export interface InterventionEventDto {
+  id: number;
+  interventionId: string;
+  projectId: string;
+  workItemId: string;
+  eventType: string;
+  actor: string;
+  fromStatus: InterventionStatus | null;
+  toStatus: InterventionStatus | null;
+  payload: unknown;
+  correlationId: string;
+  createdAt: string;
+}
+
+export interface LegalTargetsDto {
+  from: string;
+  legalTargets: string[];
+}
+
 export interface TransitionResult {
   ok?: boolean;
   error?: string;

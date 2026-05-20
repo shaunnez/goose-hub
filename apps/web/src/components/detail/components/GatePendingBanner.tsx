@@ -1,43 +1,38 @@
-import { fetchEvents, transitionState } from '@/lib/api';
+import { decideIntervention, fetchIssueInterventions, fetchLegalTargets } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { GATE_STATES } from '@/lib/constants';
-import type { AgentEventDto } from '@/lib/types';
-import { useQuery } from '@tanstack/react-query';
+import { interventionKeys, invalidateInterventionDecision } from '@/lib/query-keys';
+import type { InterventionDto, InterventionOptionDto } from '@/lib/types';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Info, MessageCircleQuestion, ShieldAlert } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
-export { GATE_STATES } from '@/lib/constants';
+const ACTIVE_INTERVENTION_STATUSES = ['OPEN', 'PROPOSED'] as const;
 
-const GATE_ACTIONS: Record<
-  string,
-  {
-    approve?: string;
-    reject?: string;
-    requestChanges?: string;
-    sendToTriage?: string;
-    sendToDev?: string;
-    sendToQA?: string;
-  }
-> = {
-  'factory:prd-review': { approve: 'factory:decomposing' },
-  'factory:approved': { approve: 'factory:retrospecting' },
-  'factory:needs-human': {
-    sendToTriage: 'factory:triaging',
-    sendToDev: 'factory:dev-ready',
-    sendToQA: 'factory:needs-qa',
-    reject: 'factory:rejected',
-  },
-};
+function interventionVariant(
+  interventionType: InterventionDto['interventionType'],
+): 'danger' | 'warning' | 'info' {
+  if (interventionType === 'needs_human') return 'danger';
+  if (interventionType === 'gate_pending') return 'info';
+  return 'warning';
+}
 
-export { GATE_ACTIONS };
+function selectPrimaryIntervention(interventions: InterventionDto[]): InterventionDto | undefined {
+  return (
+    interventions.find((intervention) => intervention.status === 'PROPOSED') ??
+    interventions.find((intervention) => intervention.status === 'OPEN')
+  );
+}
 
-function extractReason(events: AgentEventDto[]): string | null {
-  const last = [...events].find((e) => e.kind === 'agent.decision-summary');
-  if (!last) return null;
-  const p = last.payload as Record<string, unknown>;
-  if (typeof p.summary === 'string') return p.summary.slice(0, 120);
-  return JSON.stringify(p).slice(0, 120);
+function buttonTone(actionType: string): 'danger' | 'warning' | 'accent' | 'info' {
+  if (actionType === 'reject_gate') return 'danger';
+  if (actionType === 'resolve_conflict') return 'warning';
+  if (actionType === 'no_action') return 'info';
+  return 'accent';
+}
+
+function targetLabel(target: string): string {
+  return target.replace(/^factory:/, '').replace(/-/g, ' ');
 }
 
 interface GatePendingBannerProps {
@@ -47,43 +42,63 @@ interface GatePendingBannerProps {
   onTransitioned?: () => void;
 }
 
-export function GatePendingBanner({
-  state,
-  projectSlug,
-  id,
-  onTransitioned,
-}: GatePendingBannerProps) {
+export function GatePendingBanner({ projectSlug, id, onTransitioned }: GatePendingBannerProps) {
+  const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isNeedsHuman = state === 'factory:needs-human';
-  const isGatePending = state === 'factory:gate-pending';
-
-  const { data: events = [] } = useQuery({
-    queryKey: ['events', projectSlug, id],
-    queryFn: () => fetchEvents(projectSlug ?? '', id ?? ''),
-    enabled: isNeedsHuman && !!projectSlug && !!id,
+  const { data: interventions = [] } = useQuery({
+    queryKey:
+      projectSlug && id
+        ? interventionKeys.issue(projectSlug, id, [...ACTIVE_INTERVENTION_STATUSES])
+        : ['interventions', 'issue', 'missing'],
+    queryFn: () =>
+      fetchIssueInterventions(projectSlug ?? '', id ?? '', [...ACTIVE_INTERVENTION_STATUSES]),
+    enabled: !!projectSlug && !!id,
   });
 
-  if (!state || !(state in GATE_STATES)) return null;
+  const primary = selectPrimaryIntervention(interventions);
+  const shouldFetchLegalTargets = primary?.status === 'OPEN' && !!projectSlug && !!id;
 
-  const message = GATE_STATES[state];
-  const actions = GATE_ACTIONS[state] ?? {};
-  const reason = isNeedsHuman ? extractReason(events) : null;
+  const { data: legalTargets } = useQuery({
+    queryKey:
+      projectSlug && id
+        ? interventionKeys.legalTargets(projectSlug, id)
+        : ['legal-targets', 'missing'],
+    queryFn: () => fetchLegalTargets(projectSlug ?? '', id ?? ''),
+    enabled: shouldFetchLegalTargets,
+  });
 
-  const handleAction = async (target: string) => {
-    if (!projectSlug || !id) return;
+  if (!primary || !projectSlug || !id) return null;
+
+  const variant = interventionVariant(primary.interventionType);
+  const showGrillLink = primary.interventionType === 'gate_pending';
+  const options = primary.status === 'PROPOSED' ? primary.proposedOptions : [];
+  const manualTargets =
+    primary.status === 'OPEN' && legalTargets != null ? legalTargets.legalTargets : [];
+
+  const handleDecision = async (
+    intervention: InterventionDto,
+    actionType: string,
+    actionPayload: unknown,
+    reason?: string,
+  ) => {
     setBusy(true);
     setError(null);
     try {
-      const result = await transitionState(projectSlug, id, state, target);
-      if (result.status >= 400) {
-        setError(
-          (result.data as { error?: string }).error ?? `Transition failed (${result.status})`,
-        );
-      } else {
-        onTransitioned?.();
-      }
+      await decideIntervention(intervention.id, {
+        actionType,
+        actionPayload,
+        expectedVersion: intervention.version,
+        decidedBy: 'operator',
+        reason,
+      });
+      await invalidateInterventionDecision(queryClient, {
+        projectSlug,
+        issueId: id,
+        interventionId: intervention.id,
+      });
+      onTransitioned?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -91,11 +106,35 @@ export function GatePendingBanner({
     }
   };
 
-  const variant: 'danger' | 'warning' | 'info' = isNeedsHuman
-    ? 'danger'
-    : isGatePending
-      ? 'info'
-      : 'warning';
+  const renderOption = (option: InterventionOptionDto, index: number) => {
+    const tone = buttonTone(option.actionType);
+    return (
+      <button
+        key={`${option.actionType}-${index}`}
+        type="button"
+        disabled={busy}
+        title={option.description}
+        data-testid={`gate-action-option-${index}`}
+        onClick={() =>
+          void handleDecision(primary, option.actionType, option.payload, option.description)
+        }
+        className={cn(
+          'h-6 px-2.5 rounded text-[11.5px] font-medium border capitalize',
+          tone === 'danger' &&
+            'border-[color:var(--danger)]/60 text-[color:var(--danger)] hover:bg-[color:var(--danger)]/20',
+          tone === 'warning' &&
+            'border-[color:var(--warning)]/60 text-[color:var(--warning)] hover:bg-[color:var(--warning)]/20',
+          tone === 'accent' &&
+            'border-[color:var(--accent)]/60 text-[color:var(--accent)] hover:bg-[color:var(--accent)]/20',
+          tone === 'info' &&
+            'border-[color:var(--info)]/60 text-[color:var(--info)] hover:bg-[color:var(--info)]/20',
+          'disabled:opacity-50 disabled:cursor-not-allowed',
+        )}
+      >
+        {option.label}
+      </button>
+    );
+  };
 
   return (
     <div
@@ -119,11 +158,16 @@ export function GatePendingBanner({
         ) : (
           <ShieldAlert size={14} className="shrink-0" />
         )}
-        <span>{message}</span>
+        <span>{primary.title}</span>
+        {primary.status === 'OPEN' && (
+          <span className="text-[11.5px] opacity-70">
+            {primary.leaseOwner ? 'Proposal running' : 'Proposal pending'}
+          </span>
+        )}
         {error && <span className="text-[color:var(--danger)] ml-2">{error}</span>}
         <span className="grow" />
         <span className="flex items-center gap-2">
-          {isGatePending && projectSlug && id && (
+          {showGrillLink && (
             <Link
               to={`/projects/${projectSlug}/items/${id}/grill`}
               data-testid="gate-action-grill"
@@ -137,112 +181,43 @@ export function GatePendingBanner({
               Grill
             </Link>
           )}
-          {actions.sendToTriage && (
+          {options.map(renderOption)}
+          {manualTargets.map((target) => (
             <button
+              key={target}
               type="button"
               disabled={busy}
-              data-testid="gate-action-send-to-triage"
-              onClick={() => void handleAction(actions.sendToTriage ?? '')}
+              data-testid={`gate-action-manual-${target.replace(/[^a-z0-9]+/gi, '-')}`}
+              onClick={() =>
+                void handleDecision(
+                  primary,
+                  'manual_transition',
+                  {
+                    from: legalTargets?.from,
+                    to: target,
+                    reason: 'operator selected legal target',
+                  },
+                  'manual fallback from intervention banner',
+                )
+              }
               className={cn(
-                'h-6 px-2.5 rounded text-[11.5px] font-medium border',
-                'border-[color:var(--danger)]/60 text-[color:var(--danger)]',
-                'hover:bg-[color:var(--danger)]/20',
-                'disabled:opacity-50 disabled:cursor-not-allowed',
-              )}
-            >
-              Triage
-            </button>
-          )}
-          {actions.sendToDev && (
-            <button
-              type="button"
-              disabled={busy}
-              data-testid="gate-action-send-to-dev"
-              onClick={() => void handleAction(actions.sendToDev ?? '')}
-              className={cn(
-                'h-6 px-2.5 rounded text-[11.5px] font-medium border',
-                'border-[color:var(--danger)]/60 text-[color:var(--danger)]',
-                'hover:bg-[color:var(--danger)]/20',
-                'disabled:opacity-50 disabled:cursor-not-allowed',
-              )}
-            >
-              Dev
-            </button>
-          )}
-          {actions.sendToQA && (
-            <button
-              type="button"
-              disabled={busy}
-              data-testid="gate-action-send-to-qa"
-              onClick={() => void handleAction(actions.sendToQA ?? '')}
-              className={cn(
-                'h-6 px-2.5 rounded text-[11.5px] font-medium border',
-                'border-[color:var(--danger)]/60 text-[color:var(--danger)]',
-                'hover:bg-[color:var(--danger)]/20',
-                'disabled:opacity-50 disabled:cursor-not-allowed',
-              )}
-            >
-              QA
-            </button>
-          )}
-          {actions.requestChanges && (
-            <button
-              type="button"
-              disabled={busy}
-              data-testid="gate-action-request-changes"
-              onClick={() => void handleAction(actions.requestChanges ?? '')}
-              className={cn(
-                'h-6 px-2.5 rounded text-[11.5px] font-medium border',
-                'border-[color:var(--warning)]/60 text-[color:var(--warning)]',
-                'hover:bg-[color:var(--warning)]/20',
-                'disabled:opacity-50 disabled:cursor-not-allowed',
-              )}
-            >
-              Request Changes
-            </button>
-          )}
-          {actions.reject && (
-            <button
-              type="button"
-              disabled={busy}
-              data-testid="gate-action-reject"
-              onClick={() => void handleAction(actions.reject ?? '')}
-              className={cn(
-                'h-6 px-2.5 rounded text-[11.5px] font-medium border',
-                'border-[color:var(--danger)]/60 text-[color:var(--danger)]',
-                'hover:bg-[color:var(--danger)]/20',
-                'disabled:opacity-50 disabled:cursor-not-allowed',
-              )}
-            >
-              Reject
-            </button>
-          )}
-          {actions.approve && (
-            <button
-              type="button"
-              disabled={busy}
-              data-testid="gate-action-approve"
-              onClick={() => void handleAction(actions.approve ?? '')}
-              className={cn(
-                'h-6 px-2.5 rounded text-[11.5px] font-medium border',
+                'h-6 px-2.5 rounded text-[11.5px] font-medium border capitalize',
                 'border-[color:var(--accent)]/60 text-[color:var(--accent)]',
                 'hover:bg-[color:var(--accent)]/20',
                 'disabled:opacity-50 disabled:cursor-not-allowed',
               )}
             >
-              Approve
+              {targetLabel(target)}
             </button>
-          )}
+          ))}
         </span>
       </div>
-      {reason && (
-        <p
-          data-testid="escalation-reason"
-          className="mt-1 pl-[22px] text-[11.5px] opacity-70 italic font-normal truncate"
-        >
-          {reason}
-        </p>
-      )}
+      <p
+        data-testid="escalation-reason"
+        className="mt-1 pl-[22px] text-[11.5px] opacity-70 italic font-normal truncate"
+      >
+        {primary.reason}
+      </p>
     </div>
   );
 }

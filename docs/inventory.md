@@ -14,7 +14,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `server` | yes | API + SSE host for the Goose Hub web UI. Stands up the server process the UI talks to. Closes M2.01 (#26). |
 | `web` | yes | Vite + React 19 + Tailwind 4 + React Router v6. Closes M2.02 (#27). |
 
-## core/ (30 entries, 1 missing README)
+## core/ (31 entries, 1 missing README)
 
 | Name | README | Summary |
 |---|---|---|
@@ -31,6 +31,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `engineering-specs` | yes | Per-work-item storage for `EngineeringSpec` JSON blobs produced by the `spec-author` skill. One row per `(projectId, workItemId)`; the latest pipeline run wins. |
 | `event-stream` | yes | Single-writer chokepoint for operational events. All writes go through `appendEvent()` in `store.ts`; the SQLite write is durable before listeners are notified, so SSE consumers never see an event the DB hasn't recorded. |
 | `findings` | yes | Shared Zod schema for holdout-emitted findings. QA and Review re-export `DispositionSchema` from here so the two skills cannot drift on what counts as a recorded disposition. |
+| `interventions` | yes | Durable operator intervention control plane for stuck work items. Owns the SQLite reducer, projector, proposer worker, applier worker, action registry, and repository helpers. |
 | `learning` | yes | Cross-run learning loop for Goose Hub (M11.11). |
 | `orchestrator` | yes | Cross-cutting orchestration concerns that don't belong to a single slice. The orchestrator is stateless across ticks (FACTORY_RULES rule 7); these modules are pure or scoped to a single dispatch. |
 | `persona` | yes | Persona stats accumulation. Updates `persona_stats` after every agent run. |
@@ -92,7 +93,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `stack-detector` | yes | Stack detector for target project repositories. Closes M12.01 (#304). |
 | `webhook-runbook` | yes | **Status:** Documentation slice for M12 project bootstrap. |
 
-## skills/ (36 entries, 0 missing README)
+## skills/ (37 entries, 0 missing README)
 
 | Name | README | Summary |
 |---|---|---|
@@ -110,6 +111,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `hub-chat` | yes | The default assistant the user (Shaun) talks to inside the Goose Hub web UI. Interactive multi-turn skill, invoked once per round. Conversation history lives in the `chat_messages` table (M20). The orchestrator slice that drives the loop is `slices/chat-orchestrator/`. |
 | `implement` | yes | TDD-first developer skill. Reads the issue, writes a plan, writes failing tests, writes implementation until tests pass, runs lint and typecheck, and returns structured output describing what shipped. The orchestrator opens the PR after this skill returns. |
 | `implement-wp` | yes | **Role:** Developer (WP builder) |
+| `intervention-proposer` | yes | Produces structured operator decision options for durable interventions. The worker validates every option against the intervention action registry before storing it. |
 | `investigate` | yes | Investigates a bug issue by reading the worktree with read/search tools, then produces structured findings conforming to `InvestigateSchema`. |
 | `playwright-repro` | yes | Captures the broken behaviour of a `type:bug` issue using Playwright. Produces structured artefacts: screenshot paths, video path (if captured), console errors, and repro steps actually executed. |
 | `qa` | yes | QA holdout skill. Runs independent three-tier verification of a PR against the original issue acceptance criteria, then produces a structured quality verdict. |
@@ -138,4 +140,3 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | Name | README | Summary |
 |---|---|---|
 | `goose-hub-self` | **missing** | _(no README)_ |
-

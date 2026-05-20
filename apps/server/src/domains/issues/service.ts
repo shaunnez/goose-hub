@@ -11,7 +11,13 @@ import {
 import type { Result } from '#shared/middleware.js';
 import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
 import { getSourceForSlug } from '#shared/source.js';
+import type { LegalTargetsDto } from '../interventions/dto.js';
 import { getLastPersonaIdsByWorkItem, getRepoRef } from './internal.js';
+
+const TYPE_EXCLUDED_LEGAL_TARGETS: Readonly<Record<string, readonly StateName[]>> = {
+  bug: ['factory:grilling', 'factory:research-pending'],
+  feature: ['factory:investigating', 'factory:research-pending'],
+};
 
 function buildPrdRelationships(projectId: string): {
   byParent: Map<string, string[]>;
@@ -90,7 +96,7 @@ export async function getIssue(slug: string, id: string): Promise<Result<{ item:
 export async function getIssueLegalTargets(
   slug: string,
   id: string,
-): Promise<Result<{ from: StateName; legalTargets: readonly StateName[] }>> {
+): Promise<Result<LegalTargetsDto>> {
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
   const item = await source.getItem(id);
@@ -98,7 +104,15 @@ export async function getIssueLegalTargets(
   if (!(STATES as readonly string[]).includes(state)) {
     return { ok: false, error: `invalid issue state: ${state}`, status: 500 };
   }
-  return { ok: true, data: { from: state, legalTargets: legalTargets(state) } };
+  const excluded =
+    typeof item.type === 'string' ? (TYPE_EXCLUDED_LEGAL_TARGETS[item.type] ?? []) : [];
+  return {
+    ok: true,
+    data: {
+      from: state,
+      legalTargets: legalTargets(state).filter((target) => !excluded.includes(target)),
+    },
+  };
 }
 
 export async function getIssueSpec(

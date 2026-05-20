@@ -1,28 +1,32 @@
-import { transitionState } from '@/lib/api';
-import { LEGAL_TARGETS, TYPE_EXCLUDED_TARGETS } from '@/lib/transitions';
+import { fetchLegalTargets, transitionState } from '@/lib/api';
+import { interventionKeys } from '@/lib/query-keys';
 import type { WorkItemDto } from '@/lib/types';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
 interface TransitionButtonProps {
   projectSlug: string;
   id: string;
   currentState: string;
-  itemType?: string;
 }
 
-export function TransitionButton({
-  projectSlug,
-  id,
-  currentState,
-  itemType,
-}: TransitionButtonProps) {
+export function TransitionButton({ projectSlug, id, currentState }: TransitionButtonProps) {
   const queryClient = useQueryClient();
-  const excluded = itemType != null ? (TYPE_EXCLUDED_TARGETS[itemType] ?? []) : [];
-  const targets = (LEGAL_TARGETS[currentState] ?? []).filter((t) => !excluded.includes(t));
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const {
+    data: legalTargets,
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: interventionKeys.legalTargets(projectSlug, id),
+    queryFn: () => fetchLegalTargets(projectSlug, id),
+  });
+
+  const targets = legalTargets?.legalTargets ?? [];
+  const fromState = legalTargets?.from ?? currentState;
 
   useEffect(() => {
     if (!open) return;
@@ -33,12 +37,29 @@ export function TransitionButton({
     return () => window.removeEventListener('keydown', close);
   }, [open]);
 
-  if (targets.length === 0) {
+  if (isLoading) {
     return (
       <button
         type="button"
         disabled
-        title={`Terminal state: ${currentState} has no legal next states`}
+        data-testid="transition-button-loading"
+        className="h-6 px-2.5 rounded-full text-[11.5px] border border-line text-fg-2 cursor-wait"
+      >
+        Loading transitions
+      </button>
+    );
+  }
+
+  if (isError || targets.length === 0) {
+    return (
+      <button
+        type="button"
+        disabled
+        title={
+          isError
+            ? 'Could not load legal next states'
+            : `Terminal state: ${fromState} has no legal next states`
+        }
         data-testid="transition-button-disabled"
         className="h-6 px-2.5 rounded-full text-[11.5px] border border-line text-fg-2 cursor-not-allowed"
       >
@@ -47,28 +68,32 @@ export function TransitionButton({
     );
   }
 
+  const invalidateTransitionQueries = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['issues', projectSlug] }),
+      queryClient.invalidateQueries({ queryKey: ['issue', projectSlug, id] }),
+      queryClient.invalidateQueries({ queryKey: interventionKeys.legalTargets(projectSlug, id) }),
+    ]);
+  };
+
   const onPick = async (to: string) => {
     setBusy(true);
     setError(null);
-    const original = currentState;
 
-    // Optimistic: update the cached item immediately.
     queryClient.setQueryData<WorkItemDto>(['issue', projectSlug, id], (prev) =>
       prev != null ? { ...prev, state: to } : prev,
     );
     setOpen(false);
 
-    const { status, data } = await transitionState(projectSlug, id, original, to);
+    const { status, data } = await transitionState(projectSlug, id, fromState, to);
     setBusy(false);
 
     if (status >= 200 && status < 300) {
-      // Bust the board cache so it reflects the new state on next visit.
-      void queryClient.invalidateQueries({ queryKey: ['issues', projectSlug] });
+      await invalidateTransitionQueries();
       return;
     }
 
-    // Revert: refetch the true state from the server.
-    void queryClient.invalidateQueries({ queryKey: ['issue', projectSlug, id] });
+    await invalidateTransitionQueries();
     setOpen(true);
     setError(data.error ?? `Transition failed (${status})`);
   };
@@ -92,15 +117,15 @@ export function TransitionButton({
           <div className="px-3 py-1 text-[10.5px] uppercase tracking-wider text-fg-2">
             Legal next states
           </div>
-          {targets.map((t) => (
+          {targets.map((target) => (
             <button
-              key={t}
+              key={target}
               type="button"
-              data-testid={`transition-target-${t}`}
-              onClick={() => void onPick(t)}
+              data-testid={`transition-target-${target}`}
+              onClick={() => void onPick(target)}
               className="w-full text-left px-3 py-1.5 text-[12.5px] text-fg-2 hover:text-fg hover:bg-bg-hover font-mono"
             >
-              {t}
+              {target}
             </button>
           ))}
           {error != null && (

@@ -1,5 +1,6 @@
 import { type AgentEvent, eventStore } from '../event-stream/store.js';
 import { open } from './reducer.js';
+import { findLatestByRootCause, isClosedStatus } from './repository.js';
 import type { InterventionReducerResult, InterventionType } from './types.js';
 
 export interface ProjectInterventionResult {
@@ -89,6 +90,11 @@ export function projectActionableEvent(event: AgentEvent): ProjectInterventionRe
     return { opened: null, shouldScheduleProposer: false };
   }
   const rootCauseSignature = signatureParts(event).join('|');
+  const existing = findLatestByRootCause({
+    projectId: event.projectId,
+    workItemId: event.workItemId,
+    rootCauseSignature,
+  });
   const opened = open({
     projectId: event.projectId,
     workItemId: event.workItemId,
@@ -100,10 +106,12 @@ export function projectActionableEvent(event: AgentEvent): ProjectInterventionRe
     actor: 'projector',
     evidence: { eventId: event.id, kind: event.kind, payload: event.payload },
   });
+  const openedOrReopened = existing == null || isClosedStatus(existing.status);
   return {
     opened,
     shouldScheduleProposer:
       opened.ok &&
+      openedOrReopened &&
       opened.intervention.status === 'OPEN' &&
       opened.intervention.sourceEventId === event.id,
   };

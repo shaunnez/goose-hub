@@ -73,6 +73,7 @@ export async function approveIssue(
   id: string,
   options: {
     mergePRImpl?: typeof defaultMergePR;
+    intervention?: { id: string; correlationId: string };
   } = {},
 ): Promise<Result<{ ok: true; sha: string; prNumber: number }>> {
   const source = await getSourceForSlug(slug);
@@ -141,7 +142,12 @@ export async function approveIssue(
       projectId: slug,
       workItemId,
       kind: 'merge-decision.completed',
-      payload: { ...decision, pipelineRunId, prNumber },
+      payload: {
+        ...decision,
+        pipelineRunId,
+        prNumber,
+        ...interventionEventPayload(options.intervention),
+      },
     });
 
     if (!decision.passed) {
@@ -159,6 +165,7 @@ export async function approveIssue(
         from: 'factory:approved',
         to: 'factory:needs-human',
         by: 'merge-decision',
+        extraPayload: interventionEventPayload(options.intervention),
       });
       return {
         ok: false,
@@ -173,7 +180,7 @@ export async function approveIssue(
       projectId: slug,
       workItemId,
       kind: 'merge.conflict',
-      payload: { prNumber },
+      payload: { prNumber, ...interventionEventPayload(options.intervention) },
     });
     await source.transitionState(id, 'factory:approved', 'factory:merge-conflict');
     emitStateTransitionEvent({
@@ -182,6 +189,7 @@ export async function approveIssue(
       from: 'factory:approved',
       to: 'factory:merge-conflict',
       by: 'orchestrator',
+      extraPayload: interventionEventPayload(options.intervention),
     });
     return { ok: false, error: 'merge-conflict', status: 409 };
   }
@@ -195,7 +203,7 @@ export async function approveIssue(
         projectId: slug,
         workItemId,
         kind: 'merge.conflict',
-        payload: { prNumber },
+        payload: { prNumber, ...interventionEventPayload(options.intervention) },
       });
       await source.transitionState(id, 'factory:approved', 'factory:merge-conflict');
       emitStateTransitionEvent({
@@ -204,6 +212,7 @@ export async function approveIssue(
         from: 'factory:approved',
         to: 'factory:merge-conflict',
         by: 'orchestrator',
+        extraPayload: interventionEventPayload(options.intervention),
       });
       return { ok: false, error: 'merge-conflict', status: 409 };
     }
@@ -214,13 +223,13 @@ export async function approveIssue(
     projectId: slug,
     workItemId,
     kind: 'gate.approved',
-    payload: { source: 'ui', prNumber },
+    payload: { source: 'ui', prNumber, ...interventionEventPayload(options.intervention) },
   });
   eventStore.appendEvent({
     projectId: slug,
     workItemId,
     kind: 'pr.merged',
-    payload: { prNumber, sha: merged.sha },
+    payload: { prNumber, sha: merged.sha, ...interventionEventPayload(options.intervention) },
   });
 
   // Clean up the dev worktree now that the PR is merged.
@@ -263,6 +272,7 @@ export async function rejectIssue(
   slug: string,
   id: string,
   reason: unknown,
+  options: { intervention?: { id: string; correlationId: string } } = {},
 ): Promise<Result<{ ok: true }>> {
   if (typeof reason !== 'string' || reason.trim().length === 0) {
     return { ok: false, error: 'rejection reason is required', status: 400 };
@@ -276,15 +286,34 @@ export async function rejectIssue(
     projectId: slug,
     workItemId,
     kind: 'gate.rejected',
-    payload: { source: 'ui', reason },
+    payload: { source: 'ui', reason, ...interventionEventPayload(options.intervention) },
   });
   await source.comment(
     id,
     buildAgentComment('Gate', 'Rejected', 'Rejected at approval gate', [`Reason: ${reason}`]),
   );
   await source.transitionState(id, 'factory:approved', 'factory:needs-fix');
+  emitStateTransitionEvent({
+    projectId: slug,
+    workItemId,
+    from: 'factory:approved',
+    to: 'factory:needs-fix',
+    by: 'ui',
+    extraPayload: interventionEventPayload(options.intervention),
+  });
 
   return { ok: true, data: { ok: true } };
+}
+
+function interventionEventPayload(
+  intervention: { id: string; correlationId: string } | undefined,
+): Record<string, string> {
+  if (intervention == null) return {};
+  return {
+    interventionId: intervention.id,
+    causedByInterventionId: intervention.id,
+    correlationId: intervention.correlationId,
+  };
 }
 
 export async function transitionIssue(

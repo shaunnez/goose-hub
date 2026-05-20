@@ -142,6 +142,22 @@ type ResumeEntry = {
   dispatch: (slug: string, issueNumber: number) => Promise<void>;
 };
 
+interface InterventionDispatchContext {
+  id: string;
+  correlationId: string;
+}
+
+function interventionEventPayload(
+  intervention: InterventionDispatchContext | undefined,
+): Record<string, string> {
+  if (intervention == null) return {};
+  return {
+    interventionId: intervention.id,
+    causedByInterventionId: intervention.id,
+    correlationId: intervention.correlationId,
+  };
+}
+
 const RESUME_WORKFLOWS: Partial<Record<StateName, ResumeEntry>> = {
   // Re-run the full triage batch so a stalled triage or repo-match run is retried.
   'factory:triaging': {
@@ -182,7 +198,11 @@ const RESUME_WORKFLOWS: Partial<Record<StateName, ResumeEntry>> = {
  * supports auto-resume (routes back to the grill workflow). All other origins
  * require manual triage.
  */
-export async function dispatchResumeIssue(slug: string, issueNumber: number): Promise<void> {
+export async function dispatchResumeIssue(
+  slug: string,
+  issueNumber: number,
+  options: { intervention?: InterventionDispatchContext } = {},
+): Promise<void> {
   if (parallelLock.isInFlight(slug, issueNumber)) {
     logger.warn('dispatchResumeIssue: already in-flight, dropping duplicate', {
       slug,
@@ -224,6 +244,7 @@ export async function dispatchResumeIssue(slug: string, issueNumber: number): Pr
         from: fromState,
         to: 'factory:grilling',
         by: 'resume',
+        extraPayload: interventionEventPayload(options.intervention),
       });
       await dispatchGrillAndPrd(slug, issueNumber);
       return;
@@ -255,6 +276,7 @@ export async function dispatchResumeIssue(slug: string, issueNumber: number): Pr
         from: fromState,
         to: 'factory:dev-ready',
         by: 'resume',
+        extraPayload: interventionEventPayload(options.intervention),
       });
       await dispatchFixIssue(slug, issueNumber);
       return;
@@ -272,6 +294,7 @@ export async function dispatchResumeIssue(slug: string, issueNumber: number): Pr
         from: fromState,
         to: 'factory:investigating',
         by: 'resume',
+        extraPayload: interventionEventPayload(options.intervention),
       });
       await dispatchInvestigate(slug, issueNumber);
       return;
@@ -322,6 +345,7 @@ export async function dispatchResumeIssue(slug: string, issueNumber: number): Pr
         from: fromState,
         to: 'factory:spec-ready',
         by: 'resume',
+        extraPayload: interventionEventPayload(options.intervention),
       });
       await dispatchParallelImplement(slug, issueNumber);
       return;
@@ -337,6 +361,7 @@ export async function dispatchResumeIssue(slug: string, issueNumber: number): Pr
       from: fromState,
       to: entry.targetState,
       by: 'resume',
+      extraPayload: interventionEventPayload(options.intervention),
     });
     logger.info('dispatchResumeIssue: forced state for resume', {
       slug,

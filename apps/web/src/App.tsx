@@ -8,6 +8,7 @@ import { AppShell } from './components/chrome/AppShell';
 import { CostsPage } from './components/costs/CostsPage';
 import { DetailPage } from './components/detail/components/DetailPage';
 import { InboxList } from './components/inbox/components/InboxList';
+import { OperatorQueuePage } from './components/interventions/OperatorQueuePage';
 import { OfficePage } from './components/office/components/OfficePage';
 import { RosterPage } from './components/roster/components/RosterPage';
 import { SettingsPage } from './components/settings/components/SettingsPage';
@@ -90,6 +91,16 @@ function InboxPage() {
   );
 }
 
+function OperatorQueueRoute() {
+  return (
+    <GlobalShell>
+      <AppShell breadcrumb={<span>Operator Queue</span>}>
+        <OperatorQueuePage />
+      </AppShell>
+    </GlobalShell>
+  );
+}
+
 function RosterPageRoute() {
   return (
     <AppShell breadcrumb={<span>Roster</span>}>
@@ -123,6 +134,7 @@ export function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/projects/goose-hub-self" replace />} />
           <Route path="/settings" element={<SettingsPageRoute />} />
+          <Route path="/interventions" element={<OperatorQueueRoute />} />
           <Route path="/projects/all" element={<AllProjectsPage />} />
           <Route
             path="/projects/:slug"
