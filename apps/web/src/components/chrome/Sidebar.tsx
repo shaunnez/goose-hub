@@ -1,4 +1,5 @@
 import { cn } from '@/lib/cn';
+import { SIDEBAR_BRAND_WORDMARK } from '@/lib/constants';
 import {
   Building2,
   ChevronLeft,
@@ -127,7 +128,7 @@ export function Sidebar({ activeSlug }: SidebarProps) {
               style={{ background: '#7c3aed' }}
             />
             <span className="text-[14px] font-semibold tracking-tight whitespace-nowrap">
-              Goose Hub
+              {SIDEBAR_BRAND_WORDMARK}
             </span>
           </div>
         )}

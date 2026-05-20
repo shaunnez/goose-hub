@@ -5,6 +5,7 @@ import {
   PRIORITY_BG,
   PRIORITY_BORDER,
   PRIORITY_COLOR,
+  SIDEBAR_BRAND_WORDMARK,
   STATE_LABEL,
 } from './constants';
 
@@ -112,5 +113,11 @@ describe('GATE_STATES', () => {
     expect(GATE_STATES['factory:prd-review']).toBeTruthy();
     expect(GATE_STATES['factory:needs-human']).toBeTruthy();
     expect(GATE_STATES['factory:gate-pending']).toBeTruthy();
+  });
+});
+
+describe('SIDEBAR_BRAND_WORDMARK', () => {
+  it('matches the current sidebar product wordmark', () => {
+    expect(SIDEBAR_BRAND_WORDMARK).toBe('Goose Hub');
   });
 });

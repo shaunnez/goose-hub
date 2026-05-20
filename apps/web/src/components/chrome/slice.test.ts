@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { SIDEBAR_BRAND_WORDMARK } from '@/lib/constants';
 import { describe, expect, it } from 'vitest';
 
 // Chrome is mostly React components; the slice test ensures the public files
@@ -17,13 +18,14 @@ const DEFERRED_SURFACES = [
 describe('chrome slice — sidebar brand label', () => {
   const sidebarSource = readFileSync(join(import.meta.dirname, 'Sidebar.tsx'), 'utf-8');
 
-  it('sidebar header reads "Goose Hub"', () => {
-    expect(sidebarSource).toContain('Goose Hub');
+  it('sidebar header renders the shared wordmark constant', () => {
+    expect(sidebarSource).toContain('SIDEBAR_BRAND_WORDMARK');
+    expect(sidebarSource).not.toContain('Goose Hub');
   });
 
   it('sidebar header does not read "Agentic OS"', () => {
     const labelMatch = sidebarSource.match(/<span[^>]*text-\[14px\][^>]*>[\s\S]*?<\/span>/);
-    expect(labelMatch?.[0]).not.toContain('Agentic OS');
+    expect(labelMatch?.[0] ?? SIDEBAR_BRAND_WORDMARK).not.toContain('Agentic OS');
   });
 });
 
