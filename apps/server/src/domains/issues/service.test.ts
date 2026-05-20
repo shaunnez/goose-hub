@@ -28,7 +28,15 @@ vi.mock('@goose-hub/core/workspaces/worktree.js', () => ({
   cleanupWorktree: vi.fn(),
 }));
 vi.mock('@goose-hub/core/state-machine/states.js', () => ({
-  STATES: ['factory:triaging', 'factory:accepted', 'factory:in-progress', 'factory:done'],
+  STATES: [
+    'factory:triaging',
+    'factory:accepted',
+    'factory:in-progress',
+    'factory:needs-human',
+    'factory:done',
+    'factory:archived',
+  ],
+  TERMINAL_STATES: new Set(['factory:done', 'factory:archived']),
 }));
 vi.mock('@goose-hub/core/state-machine/transitions.js', () => ({
   isLegalTransition: vi.fn().mockReturnValue(true),
@@ -62,6 +70,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { getArtifact } from '@goose-hub/core/agent-artifacts/repository.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { open } from '@goose-hub/core/interventions/reducer.js';
 import {
   listInterventionEvents,
   listInterventions,
@@ -166,6 +175,47 @@ describe('transitionIssue — validation', () => {
       'recordApplicationResult',
       'verify',
       'resolve',
+    ]);
+  });
+
+  it('supersedes stale active interventions when a manual transition archives the issue', async () => {
+    const stale = open({
+      projectId: 'proj-manual-archive-cleanup',
+      workItemId: 'github:owner/repo#899',
+      interventionType: 'needs_human',
+      title: 'Issue moved to needs-human',
+      reason: 'The lifecycle state requires operator intervention.',
+      rootCauseSignature:
+        'proj-manual-archive-cleanup|github:owner/repo#899|state.transitioned|factory:dev-ready|factory:needs-human|',
+      sourceEventId: 51107,
+      actor: 'projector',
+    });
+    expect(stale.ok).toBe(true);
+    if (!stale.ok) return;
+
+    const result = await transitionIssue(
+      'proj-manual-archive-cleanup',
+      '899',
+      'factory:needs-human',
+      'factory:archived',
+    );
+
+    expect(result.ok).toBe(true);
+    const interventions = listInterventions({
+      projectId: 'proj-manual-archive-cleanup',
+      workItemId: 'github:owner/repo#899',
+    });
+    const staleAfter = interventions.find(
+      (intervention) => intervention.id === stale.intervention.id,
+    );
+    const manual = interventions.find(
+      (intervention) => intervention.interventionType === 'manual_override',
+    );
+    expect(staleAfter).toMatchObject({ status: 'SUPERSEDED' });
+    expect(manual).toMatchObject({ status: 'RESOLVED' });
+    expect(listInterventionEvents(stale.intervention.id).map((event) => event.eventType)).toEqual([
+      'open',
+      'supersede',
     ]);
   });
 });

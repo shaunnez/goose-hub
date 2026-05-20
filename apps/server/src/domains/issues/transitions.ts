@@ -14,11 +14,14 @@ import {
   open,
   recordApplicationResult,
   resolve,
+  supersede,
   verify,
 } from '@goose-hub/core/interventions/reducer.js';
+import { listInterventions } from '@goose-hub/core/interventions/repository.js';
+import { ACTIVE_INTERVENTION_STATUSES } from '@goose-hub/core/interventions/types.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
-import { STATES } from '@goose-hub/core/state-machine/states.js';
+import { STATES, TERMINAL_STATES } from '@goose-hub/core/state-machine/states.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { isLegalTransition, legalTargets } from '@goose-hub/core/state-machine/transitions.js';
 import { cleanupWorktree } from '@goose-hub/core/workspaces/worktree.js';
@@ -48,6 +51,45 @@ type RunMergeDecisionFn = (input: {
   runId?: string;
   iteration?: number;
 }) => MergeDecisionResult;
+
+const INTERVENTION_BACKED_STATES: ReadonlySet<StateName> = new Set([
+  'factory:needs-human',
+  'factory:gate-pending',
+  'factory:merge-conflict',
+]);
+
+function shouldSupersedeActiveInterventions(from: StateName, to: StateName): boolean {
+  return TERMINAL_STATES.has(to) || INTERVENTION_BACKED_STATES.has(from);
+}
+
+function supersedeOtherActiveInterventions(input: {
+  projectId: string;
+  workItemId: string;
+  supersededBy: string;
+  actor: string;
+}): void {
+  for (const intervention of listInterventions({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    status: [...ACTIVE_INTERVENTION_STATUSES],
+    limit: 500,
+  })) {
+    if (intervention.id === input.supersededBy) continue;
+    const result = supersede({
+      id: intervention.id,
+      expectedVersion: intervention.version,
+      supersededBy: input.supersededBy,
+      actor: input.actor,
+    });
+    if (!result.ok) {
+      logger.warn('failed to supersede stale intervention after manual transition', {
+        interventionId: intervention.id,
+        workItemId: input.workItemId,
+        error: result.error,
+      });
+    }
+  }
+}
 
 async function loadMergeDecision(): Promise<RunMergeDecisionFn> {
   const mod = (await import(sliceUrl('merge-decision'))) as {
@@ -414,6 +456,7 @@ export async function transitionIssue(
     result: { from: fromState, to: toState },
     actor: 'ui',
   });
+  let manualResolved = false;
   if (applied.ok) {
     const verified = verify({
       id: manual.intervention.id,
@@ -422,13 +465,22 @@ export async function transitionIssue(
       actor: 'ui',
     });
     if (verified.ok) {
-      resolve({
+      const resolved = resolve({
         id: manual.intervention.id,
         expectedVersion: verified.intervention.version,
         reason: 'manual transition applied',
         actor: 'ui',
       });
+      manualResolved = resolved.ok;
     }
+  }
+  if (manualResolved && shouldSupersedeActiveInterventions(fromState, toState)) {
+    supersedeOtherActiveInterventions({
+      projectId: slug,
+      workItemId,
+      supersededBy: manual.intervention.id,
+      actor: 'ui',
+    });
   }
 
   bustCache(CACHE_KEY.issues(slug));

@@ -45,6 +45,10 @@ The proposer worker leases `OPEN` rows, invokes `skills/intervention-proposer`,
 and stores validated options as `PROPOSED`. Invalid proposer output leaves the
 row `OPEN` and appends `proposalFailed` evidence.
 
+See `docs/runbooks/operator-interventions-improvement-plan.md` for the follow-up
+hardening plan around stale-state guards, proposer backoff, and operational
+audits.
+
 `POST /interventions/:id/decide` only records the decision and requires
 `expectedVersion`. The applier worker leases `DECIDED` rows, validates the
 action payload again, executes through existing server paths, records the
