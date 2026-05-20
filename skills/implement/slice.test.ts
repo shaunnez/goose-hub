@@ -428,6 +428,43 @@ describe('implement prompt', () => {
     expect(prompt).toContain('Do not continue broad discovery');
   });
 
+  it('guards against no-op bug-fix implementations', () => {
+    expect(prompt).toContain('No-op implementation guard');
+    expect(prompt).toContain(
+      'Existing tests passing before any edit only proves the current baseline',
+    );
+    expect(prompt).toMatch(/does\s+not satisfy a bug fix/);
+    expect(prompt).toContain('modify at least one implementation-surface file');
+    expect(prompt).toContain('either an investigated key file');
+    expect(prompt).toContain('different implementation file selected by');
+    expect(prompt).toContain('valid pivot under the investigation handoff rules');
+  });
+
+  it('does not allow test or evidence-only edits to satisfy a bug fix', () => {
+    expect(prompt).toContain('Tests and evidence files support the implementation');
+    expect(prompt).toMatch(/do not satisfy this\s+guard by themselves for a bug fix/);
+  });
+
+  it('requires low-confidence blocker output for no-change conclusions', () => {
+    expect(prompt).toContain('stop with `confidence: low`');
+    expect(prompt).toContain('`BLOCKER` decision summary');
+    expect(prompt).toMatch(/appears already fixed or\s+non-actionable/);
+    expect(prompt).toContain('return without pretending to ship');
+  });
+
+  it('forbids reporting filesWritten for files that were only read', () => {
+    expect(prompt).toContain('The `filesWritten` list must match actual writes');
+    expect(prompt).toContain('`mcp__factory-tools__write_file`');
+    expect(prompt).toContain('`mcp__factory-tools__edit_file`');
+    expect(prompt).toMatch(/do not\s+report files that were only read/);
+  });
+
+  it('requires red tests before implementation and green tests only after a write', () => {
+    expect(prompt).toContain('fail with the current behavior before');
+    expect(prompt).toContain('existing tests encode stale behavior');
+    expect(prompt).toMatch(/only after a\s+real write has occurred/);
+  });
+
   it('bounds frontend evidence discovery when e2e support is missing or unclear', () => {
     expect(prompt).toContain('Bounded frontend evidence rule');
     expect(prompt).toContain(
