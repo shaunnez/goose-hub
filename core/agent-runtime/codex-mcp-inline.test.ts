@@ -22,6 +22,22 @@ describe('buildCodexMcpInlineArgs', () => {
     ]);
   });
 
+  it('emits required and timeout settings when provided', () => {
+    const out = buildCodexMcpInlineArgs({
+      'factory-tools': {
+        command: 'tsx',
+        args: ['server.ts'],
+        required: true,
+        startupTimeoutSec: 20,
+        toolTimeoutSec: 600,
+      },
+    });
+
+    expect(out).toContain('mcp_servers.factory-tools.required=true');
+    expect(out).toContain('mcp_servers.factory-tools.startup_timeout_sec=20');
+    expect(out).toContain('mcp_servers.factory-tools.tool_timeout_sec=600');
+  });
+
   it('pre-approves every Factory-managed MCP server so Codex does not prompt mid-run', () => {
     const out = buildCodexMcpInlineArgs({
       'factory-tools': { command: 'tsx', args: ['s1.ts'] },

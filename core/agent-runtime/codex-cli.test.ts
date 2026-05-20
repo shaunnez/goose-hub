@@ -79,6 +79,18 @@ describe('buildCodexArgv', () => {
     expect(argv).toContain('developer_instructions="""Factory tools only"""');
     expect(argv).not.toContain('instructions="""Factory tools only"""');
   });
+
+  it('can disable Codex native shell tool for non-Bash Factory runs', () => {
+    const argv = buildCodexArgv({
+      model: 'gpt-5.4',
+      workspaceDir: '/tmp/worktree',
+      prompt: '<task></task>',
+      disableShellTool: true,
+    });
+
+    expect(argv).toContain('-c');
+    expect(argv).toContain('features.shell_tool=false');
+  });
 });
 
 // ─── parseCodexEnvelope ───────────────────────────────────────────────────────

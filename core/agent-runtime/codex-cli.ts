@@ -134,6 +134,9 @@ export class CodexCliRuntime implements AgentRuntime {
           {
             ...entry,
             enabledTools: codexMcpEnabledToolsForServer(name, allowedTools),
+            ...(name === 'factory-tools'
+              ? { required: true, startupTimeoutSec: 20, toolTimeoutSec: 600 }
+              : {}),
           },
         ]),
       ),
@@ -182,6 +185,7 @@ export class CodexCliRuntime implements AgentRuntime {
       commandSandbox: needsBrowserProcessAccess ? 'danger-full-access' : undefined,
       approvalPolicy: needsBrowserProcessAccess ? 'never' : undefined,
       bypassHookTrust: true,
+      disableShellTool: !toolAllowedByRunAllowlist('Bash', allowedTools),
       inlineConfig: codexMcpInlineArgs,
     });
 

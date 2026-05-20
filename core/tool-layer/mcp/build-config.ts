@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -7,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const SERVER_SCRIPT_RELATIVE = 'core/tool-layer/mcp/server.ts';
 const TSX_BIN_RELATIVE = 'node_modules/.bin/tsx';
+const TSX_CLI_RELATIVE = 'node_modules/tsx/dist/cli.mjs';
 
 const PER_RUN_CONFIG_RELATIVE = '.factory/mcp-config.json';
 
@@ -67,6 +69,7 @@ export function buildFactoryMcpConfig(
   const workspaceDir = resolve(input.workspaceDir);
   const orchestratorRoot = input.orchestratorRoot ?? inferOrchestratorRoot();
   const serverScript = join(orchestratorRoot, SERVER_SCRIPT_RELATIVE);
+  const launcher = resolveTsxLauncher(orchestratorRoot);
 
   const env: Record<string, string> = {
     FACTORY_RUN_ID: input.runId,
@@ -74,13 +77,21 @@ export function buildFactoryMcpConfig(
     FACTORY_WORK_ITEM_ID: input.workItemId ?? '',
     FACTORY_WORKSPACE_DIR: workspaceDir,
     FACTORY_SERVER_PORT: String(input.serverPort ?? DEFAULT_FACTORY_SERVER_PORT),
+    HOME: process.env.HOME ?? homedir(),
+    TMPDIR: process.env.TMPDIR ?? tmpdir(),
+    USER: process.env.USER ?? '',
+    PATH:
+      process.env.PATH ??
+      (process.platform === 'darwin'
+        ? '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin'
+        : '/usr/local/bin:/usr/bin:/bin'),
   };
 
   const config: McpConfigJson = {
     mcpServers: {
       'factory-tools': {
-        command: resolveTsxBinary(orchestratorRoot),
-        args: [serverScript],
+        command: launcher.command,
+        args: [...launcher.argsPrefix, serverScript],
         env,
       },
       ...resolveBundleServers(input.toolBundles, workspaceDir),
@@ -105,6 +116,15 @@ export function buildFactoryMcpConfig(
  * present (e.g. a globally-installed dev shell) so the helper stays usable
  * in environments where the repo wasn't installed.
  */
+function resolveTsxLauncher(orchestratorRoot: string): { command: string; argsPrefix: string[] } {
+  const localCli = join(orchestratorRoot, TSX_CLI_RELATIVE);
+  if (existsSync(localCli)) {
+    return { command: process.execPath, argsPrefix: [localCli] };
+  }
+
+  return { command: resolveTsxBinary(orchestratorRoot), argsPrefix: [] };
+}
+
 function resolveTsxBinary(orchestratorRoot: string): string {
   const local = join(orchestratorRoot, TSX_BIN_RELATIVE);
   if (existsSync(local)) return local;
