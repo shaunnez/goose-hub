@@ -33,9 +33,9 @@ export async function listProjectConfigsService(): Promise<{ configs: ProjectCon
     name: p.name,
     source: p.source,
     targetRepo: {
-      cloneUrl: p.targetRepo.cloneUrl,
-      defaultBranch: p.targetRepo.defaultBranch,
-      localPath: p.targetRepo.localPath,
+      cloneUrl: p.targetRepo?.cloneUrl ?? '',
+      defaultBranch: p.targetRepo?.defaultBranch ?? 'main',
+      localPath: p.targetRepo?.localPath ?? '',
     },
     stack: {
       runtime: p.stack.runtime,
