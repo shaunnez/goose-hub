@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { GrillMeOutputSchema } from './schema.js';
 
 export const ProjectContextSchema = z.object({
   stackSummary: z.string(),
@@ -34,6 +35,7 @@ export const GrillMeContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: GrillMeContextSchema,
+  outputSchema: GrillMeOutputSchema,
   toolBundles: ['read'],
   modelPin: 'sonnet',
   freshContext: false,

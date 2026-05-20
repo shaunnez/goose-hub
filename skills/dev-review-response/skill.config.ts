@@ -1,5 +1,5 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
-import { DevReviewResponseContextSchema } from './schema.js';
+import { DevReviewResponseContextSchema, DevReviewResponseOutputSchema } from './schema.js';
 
 /**
  * Developer response to Codex dev-review findings (M19.12).
@@ -19,6 +19,7 @@ import { DevReviewResponseContextSchema } from './schema.js';
  */
 const config: SkillConfig = {
   contextSchema: DevReviewResponseContextSchema,
+  outputSchema: DevReviewResponseOutputSchema,
   contextAllowlist: [
     'workItem.title',
     'workItem.body',

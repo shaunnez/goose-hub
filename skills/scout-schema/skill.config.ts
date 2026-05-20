@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { ScoutOutputSchema } from './schema.js';
 
 /**
  * Wave-1 scout-schema agent: locate DB schema + Zod schema definitions
@@ -36,6 +37,7 @@ export const ScoutSchemaContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: ScoutSchemaContextSchema,
+  outputSchema: ScoutOutputSchema,
   contextAllowlist: [
     'workItem.title',
     'workItem.body',

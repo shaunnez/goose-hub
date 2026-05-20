@@ -13,6 +13,7 @@ describe('skill-contract-audit', () => {
     expect(output).toContain('## implement');
     expect(output).toContain('allowlistTags:');
     expect(output).toContain('schemaFields:');
+    expect(output).toContain('outputSchema:');
     expect(output).toContain('outputExample:');
     expect(output).toContain('pathLanguageWorkspaceRelative:');
     expect(output).toContain('pathLanguagePackageRelativeExamples:');
@@ -33,6 +34,17 @@ describe('skill-contract-audit', () => {
         report.extraPromptTags,
         `${report.skill} should only reference allowlisted tags`,
       ).toEqual([]);
+    }
+  });
+
+  it('requires every runtime skill to declare its output schema in skill.config.ts', () => {
+    const audit = auditSkillContracts(process.cwd());
+
+    for (const report of audit.skills) {
+      expect(
+        report.outputSchema.configured,
+        `${report.skill} should declare outputSchema in skill.config.ts`,
+      ).toBe(true);
     }
   });
 

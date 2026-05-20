@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { TriageOutputSchema } from './schema.js';
 
 export const TriageContextSchema = z.object({
   workItem: z.object({
@@ -10,6 +11,7 @@ export const TriageContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: TriageContextSchema,
+  outputSchema: TriageOutputSchema,
   contextAllowlist: ['workItem'],
   toolBundles: [],
   modelPin: 'sonnet',

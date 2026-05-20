@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   CostBaselineSchema,
   CrossRunPatternSchema,
+  CrossRunRetroOutputSchema,
   GateThresholdSchema,
   LearningEntrySchema,
 } from './schema.js';
@@ -38,6 +39,7 @@ export const CrossRunRetroContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: CrossRunRetroContextSchema,
+  outputSchema: CrossRunRetroOutputSchema,
   contextAllowlist: [
     'projectId',
     'windowStartAt',

@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { SprintReviewOutputSchema } from './schema.js';
 
 export const SprintReviewContextSchema = z.object({
   milestone: z.object({
@@ -35,6 +36,7 @@ export const SprintReviewContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: SprintReviewContextSchema,
+  outputSchema: SprintReviewOutputSchema,
   contextAllowlist: [
     'milestone.title',
     'milestone.number',

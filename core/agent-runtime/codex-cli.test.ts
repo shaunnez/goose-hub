@@ -91,6 +91,22 @@ describe('buildCodexArgv', () => {
     expect(argv).toContain('-c');
     expect(argv).toContain('features.shell_tool=false');
   });
+
+  it('passes a per-run output schema path before the prompt', () => {
+    const argv = buildCodexArgv({
+      model: 'gpt-5.4',
+      workspaceDir: '/tmp/worktree',
+      prompt: '<task></task>',
+      outputSchemaPath: '/tmp/worktree/.factory/output-schemas/run.schema.json',
+    });
+
+    expect(argv).toContain('--output-schema');
+    expect(argv[argv.indexOf('--output-schema') + 1]).toBe(
+      '/tmp/worktree/.factory/output-schemas/run.schema.json',
+    );
+    expect(argv.indexOf('--output-schema')).toBeLessThan(argv.length - 1);
+    expect(argv.at(-1)).toBe('<task></task>');
+  });
 });
 
 // ─── parseCodexEnvelope ───────────────────────────────────────────────────────

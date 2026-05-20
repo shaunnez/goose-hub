@@ -173,6 +173,8 @@ export function buildCodexArgv(input: {
   bypassHookTrust?: boolean;
   /** Disable Codex's native shell tool when Factory has not allowed Bash. */
   disableShellTool?: boolean;
+  /** Path to a JSON Schema file for Codex's final response. */
+  outputSchemaPath?: string;
   /** Additional inline `-c key=value` overrides (e.g. MCP server config). */
   inlineConfig?: ReadonlyArray<string>;
 }): string[] {
@@ -195,6 +197,9 @@ export function buildCodexArgv(input: {
   );
   if (input.commandSandbox != null) {
     argv.push('--sandbox', input.commandSandbox);
+  }
+  if (input.outputSchemaPath != null) {
+    argv.push('--output-schema', input.outputSchemaPath);
   }
   if (input.systemPrompt != null) {
     // `-c` is Codex's per-invocation override for `developer_instructions`. We use a

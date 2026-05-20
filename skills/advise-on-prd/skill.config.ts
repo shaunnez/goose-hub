@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { AdvisePRDOutputSchema } from './schema.js';
 
 /**
  * Context expected by the PRD advisor.
@@ -18,6 +19,7 @@ export const AdvisePRDContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: AdvisePRDContextSchema,
+  outputSchema: AdvisePRDOutputSchema,
   contextAllowlist: ['prdOutput', 'priority'],
   /**
    * Advisor runs with read + core bundles so it can inspect the codebase and

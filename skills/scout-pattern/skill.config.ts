@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { ScoutOutputSchema } from './schema.js';
 
 /**
  * Wave-1 scout-pattern agent: locate uses of a code idiom or pattern that
@@ -16,6 +17,7 @@ export const ScoutPatternContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: ScoutPatternContextSchema,
+  outputSchema: ScoutOutputSchema,
   contextAllowlist: ['workItem.title', 'workItem.body', 'workItem.number', 'scoutFocus'],
   toolBundles: ['read'],
   modelPin: 'haiku',

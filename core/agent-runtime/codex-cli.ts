@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { recordCost } from '../cost/repository.js';
@@ -57,6 +58,7 @@ export {
 const STDOUT_CAP = 4 * 1024 * 1024; // 4 MB
 const TIMEOUT_MS = 30_000; // 30 seconds — FACTORY_RULES rule 32
 const WORKSPACES_DIR = join(homedir(), '.factory', 'workspaces');
+const OUTPUT_SCHEMAS_DIR = '.factory/output-schemas';
 const BROWSER_PROCESS_ACCESS_SKILLS = new Set(['playwright-repro', 'evidence-post']);
 const ABSOLUTE_USER_PATH_RE = /\/Users\/[^\s'"`]+/g;
 const NATIVE_PATCH_REJECTION_RE =
@@ -66,13 +68,19 @@ const FORBIDDEN_RUNTIME_SURFACE_PATTERNS: Array<{
   toolName: string;
   re: RegExp;
 }> = [
-  { surface: 'resources/read failed', toolName: 'resources/read', re: /resources\/read\s+failed/i },
   { surface: 'collab spawn failed', toolName: 'collab.spawn', re: /collab\s+spawn\s+failed/i },
   {
     surface: 'full-history fork/spawn failed',
     toolName: 'full-history-fork-spawn',
     re: /(?:full[- ]history.*(?:fork|spawn)|(?:fork|spawn).*full[- ]history).*(?:failed|error)/i,
   },
+];
+const BLOCKED_RUNTIME_SURFACE_PATTERNS: Array<{
+  surface: string;
+  toolName: string;
+  re: RegExp;
+}> = [
+  { surface: 'resources/read failed', toolName: 'resources/read', re: /resources\/read\s+failed/i },
 ];
 
 function isPathUnderRoot(path: string, root: string): boolean {
@@ -159,6 +167,28 @@ function handleForbiddenRuntimeSurface(line: string): {
   return detectForbiddenRuntimeSurface(line);
 }
 
+function detectBlockedRuntimeSurface(line: string): {
+  surface: string;
+  toolName: string;
+  blockReason: string;
+} | null {
+  for (const pattern of BLOCKED_RUNTIME_SURFACE_PATTERNS) {
+    if (pattern.re.test(line)) {
+      return {
+        surface: pattern.surface,
+        toolName: pattern.toolName,
+        blockReason: `blocked-runtime-surface: ${pattern.surface}`,
+      };
+    }
+  }
+  return null;
+}
+
+function outputSchemaPathForRun(workspaceDir: string, runId: string): string {
+  const digest = createHash('sha256').update(runId).digest('hex').slice(0, 16);
+  return join(workspaceDir, OUTPUT_SCHEMAS_DIR, `${digest}.schema.json`);
+}
+
 export class CodexCliRuntime implements AgentRuntime {
   async run(spec: AgentSpec): Promise<AgentResult> {
     if (process.env.MOCK_AGENTS === 'true') {
@@ -235,6 +265,16 @@ export class CodexCliRuntime implements AgentRuntime {
     const systemPrompt = withFactoryRuntimeInstructions(spec.appendSystemPrompt, {
       runtime: 'codex-cli',
     });
+    const outputSchemaPath =
+      spec.outputJsonSchema != null && Object.keys(spec.outputJsonSchema).length > 0
+        ? outputSchemaPathForRun(workspaceDir, runId)
+        : undefined;
+    if (outputSchemaPath != null) {
+      mkdirSync(dirname(outputSchemaPath), { recursive: true });
+      writeFileSync(outputSchemaPath, `${JSON.stringify(spec.outputJsonSchema, null, 2)}\n`, {
+        flag: 'w',
+      });
+    }
     eventStore.appendEvent({
       projectId,
       workItemId,
@@ -263,6 +303,7 @@ export class CodexCliRuntime implements AgentRuntime {
       approvalPolicy: needsBrowserProcessAccess ? 'never' : undefined,
       bypassHookTrust: true,
       disableShellTool: !toolAllowedByRunAllowlist('Bash', allowedTools),
+      outputSchemaPath,
       inlineConfig: codexMcpInlineArgs,
     });
 
@@ -572,6 +613,10 @@ export class CodexCliRuntime implements AgentRuntime {
             failForbiddenRuntimeSurface(violation);
             return;
           }
+          const blocked = detectBlockedRuntimeSurface(line);
+          if (blocked != null) {
+            emitForbiddenRuntimeSurfaceBlocked(blocked);
+          }
         }
       });
 
@@ -657,6 +702,10 @@ export class CodexCliRuntime implements AgentRuntime {
             });
             reject(new Error(violation.blockReason));
             return;
+          }
+          const blocked = detectBlockedRuntimeSurface(stderrLineBuffer);
+          if (blocked != null) {
+            emitForbiddenRuntimeSurfaceBlocked(blocked);
           }
         }
 

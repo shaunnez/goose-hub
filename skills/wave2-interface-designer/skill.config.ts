@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { Wave2InterfaceDesignerSchema } from './schema.js';
 
 /**
  * Wave-2 interface-designer agent. Consumes the cross-validated Wave-1
@@ -21,6 +22,7 @@ export const Wave2InterfaceDesignerContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: Wave2InterfaceDesignerContextSchema,
+  outputSchema: Wave2InterfaceDesignerSchema,
   contextAllowlist: ['workItem.title', 'workItem.body', 'workItem.number', 'scoutReports'],
   toolBundles: ['read'],
   modelPin: 'sonnet',

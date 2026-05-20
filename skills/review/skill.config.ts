@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { ReviewOutputSchema } from './schema.js';
 
 /**
  * Context keys provided to the Review holdout agent, formatted as structured XML.
@@ -41,6 +42,7 @@ export const ReviewContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: ReviewContextSchema,
+  outputSchema: ReviewOutputSchema,
   /**
    * Tool bundles:
    * - 'read'     — read source files to understand what changed

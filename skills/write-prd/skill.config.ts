@@ -21,6 +21,7 @@ export const WritePRDContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: WritePRDContextSchema,
+  outputSchema: PRDOutputSchema,
   toolBundles: ['read', 'core'],
   modelPin: 'opus',
   freshContext: true,

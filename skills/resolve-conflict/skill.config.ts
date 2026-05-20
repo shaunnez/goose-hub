@@ -1,8 +1,9 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
-import { ResolveConflictContextSchema } from './schema.js';
+import { ResolveConflictContextSchema, ResolveConflictSchema } from './schema.js';
 
 const config: SkillConfig = {
   contextSchema: ResolveConflictContextSchema,
+  outputSchema: ResolveConflictSchema,
   contextAllowlist: ['conflictedFiles', 'baseBranch', 'prNumber'],
   /**
    * `dev-tools` bundle — read, write, search, bash, test. Workspace-bound

@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { ScoutOutputSchema } from './schema.js';
 
 /**
  * Wave-1 scout-code-path agent: trace the execution path of a function or
@@ -29,6 +30,7 @@ export const ScoutCodePathContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: ScoutCodePathContextSchema,
+  outputSchema: ScoutOutputSchema,
   contextAllowlist: [
     'workItem.title',
     'workItem.body',

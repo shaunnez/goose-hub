@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { RepoMatchOutputSchema } from './schema.js';
 
 export const RepoMatchContextSchema = z.object({
   workItem: z.object({
@@ -10,6 +11,7 @@ export const RepoMatchContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: RepoMatchContextSchema,
+  outputSchema: RepoMatchOutputSchema,
   contextAllowlist: ['workItem'],
   toolBundles: [],
   modelPin: 'sonnet',

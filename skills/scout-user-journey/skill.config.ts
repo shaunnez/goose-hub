@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { ScoutOutputSchema } from './schema.js';
 
 /**
  * Wave-1 scout-user-journey agent: walk the user-facing flow (UI route or
@@ -16,6 +17,7 @@ export const ScoutUserJourneyContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: ScoutUserJourneyContextSchema,
+  outputSchema: ScoutOutputSchema,
   contextAllowlist: ['workItem.title', 'workItem.body', 'workItem.number', 'scoutFocus'],
   toolBundles: ['read'],
   modelPin: 'haiku',

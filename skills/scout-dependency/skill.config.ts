@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { ScoutOutputSchema } from './schema.js';
 
 /**
  * Wave-1 scout-dependency agent: map direct + first-tier transitive imports
@@ -36,6 +37,7 @@ export const ScoutDependencyContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: ScoutDependencyContextSchema,
+  outputSchema: ScoutOutputSchema,
   contextAllowlist: [
     'workItem.title',
     'workItem.body',

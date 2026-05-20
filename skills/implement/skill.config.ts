@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { ImplementSchema } from './schema.js';
 
 /**
  * Context expected by the implement skill. Rendered as XML in the user prompt:
@@ -61,6 +62,7 @@ const config: SkillConfig = {
       })
       .optional(),
   }),
+  outputSchema: ImplementSchema,
   contextAllowlist: [
     'workItem.title',
     'workItem.body',
