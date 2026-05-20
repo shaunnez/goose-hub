@@ -183,10 +183,13 @@ export function buildCodexArgv(input: {
     argv.push('--sandbox', input.commandSandbox);
   }
   if (input.systemPrompt != null) {
-    // `-c` is Codex's per-invocation override for `instructions`. We use a
+    // `-c` is Codex's per-invocation override for `developer_instructions`. We use a
     // TOML multi-line basic string (triple-quoted) so prompts can carry raw
     // newlines without escaping; only `\` and any embedded `"""` need escape.
-    argv.push('-c', `instructions="""${escapeForTomlMultilineBasic(input.systemPrompt)}"""`);
+    argv.push(
+      '-c',
+      `developer_instructions="""${escapeForTomlMultilineBasic(input.systemPrompt)}"""`,
+    );
   }
   if (input.effort != null) {
     argv.push('-c', `model_reasoning_effort=${tomlString(input.effort)}`);

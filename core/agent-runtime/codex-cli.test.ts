@@ -66,6 +66,19 @@ describe('buildCodexArgv', () => {
       argv.indexOf('--skip-git-repo-check'),
     );
   });
+
+  it('passes runtime system prompts through Codex developer instructions', () => {
+    const argv = buildCodexArgv({
+      model: 'gpt-5.4',
+      workspaceDir: '/tmp/worktree',
+      prompt: '<task></task>',
+      systemPrompt: 'Factory tools only',
+    });
+
+    expect(argv).toContain('-c');
+    expect(argv).toContain('developer_instructions="""Factory tools only"""');
+    expect(argv).not.toContain('instructions="""Factory tools only"""');
+  });
 });
 
 // ─── parseCodexEnvelope ───────────────────────────────────────────────────────

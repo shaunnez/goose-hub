@@ -7,7 +7,6 @@ import {
   approvePRD,
   commentOnIssue,
   declinePRD,
-  fakeRun,
   getIssue,
   getIssueArtifact,
   getIssueComments,
@@ -242,13 +241,6 @@ router.post('/:slug/issues/:id/resume', async (c) => {
     logger.error('resume: dispatchResumeIssue failed', { slug, id, error: String(err) });
   });
   return c.json({ ok: true });
-});
-
-router.post('/:slug/issues/:id/fake-run', async (c) => {
-  const body = await parseBody<{ skill?: string }>(c);
-  if (!body.ok) return body.error;
-  const result = await fakeRun(c.req.param('slug'), c.req.param('id'), body.data.skill ?? '');
-  return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);
 });
 
 export { router as issuesRouter };

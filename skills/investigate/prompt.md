@@ -42,7 +42,7 @@ When wired, dispatch the 4–6 scouts that are actually relevant. Do **not** dis
 
 ### Discipline — applied throughout (single-agent and wave-aware modes)
 
-- **Orient inside `<worktreePath>` first.** Before searching for anything, list the top-level directory structure under `<worktreePath>` only to understand the codebase layout. Know where `core/`, `apps/`, and `slices/` live before diving in.
+- **Orient inside `<worktreePath>` first.** Before searching for anything, use the workspace listing tool (`list_dir` in Codex, `mcp__factory-tools__list_dir` in Claude) with path `.` to inspect the top-level directory structure only. Know where `core/`, `apps/`, and `slices/` live before diving in.
 - **Stay under `<worktreePath>`.** All list, read, and search operations must stay inside the provided `<worktreePath>`. Do not inspect sibling repos, parent directories, user home directories, or local assistant memory/config folders such as `~/.codex`, `~/.agents`, or `~/.claude`.
 - **No memory quick pass.** Do not perform memory quick passes or read local assistant memory files. If prior context is needed, use only the context Factory provided in this run.
 - **Read before hypothesising.** Read actual source files before forming hypotheses. File names and directory names are not evidence. Code is evidence.

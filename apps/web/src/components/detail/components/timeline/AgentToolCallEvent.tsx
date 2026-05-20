@@ -190,7 +190,9 @@ export function AgentToolCallEvent({ event }: { event: AgentEventDto }) {
   const toolName = p?.tool_name ?? p?.tool ?? 'unknown';
   const input = p?.tool_input ?? p?.input ?? null;
   const { summary, body } = normalizeToolInput(toolName, input);
+  const rawPath = p?.raw_path;
   const canonicalPath = p?.canonical_path?.path;
+  const normalizedFrom = p?.canonical_path?.normalizedFrom;
   return (
     <li
       data-event-kind={event.kind}
@@ -209,18 +211,18 @@ export function AgentToolCallEvent({ event }: { event: AgentEventDto }) {
           <span>{summary}</span>
         </summary>
         {body}
-        {(p?.raw_path != null || canonicalPath != null) && (
+        {(rawPath != null || canonicalPath != null) && (
           <div className="mt-2 flex flex-col gap-1 text-[10.5px] text-fg-3">
-            {p.raw_path != null && (
+            {rawPath != null && (
               <div>
-                raw path: <span className="font-mono text-fg-2">{p.raw_path}</span>
+                raw path: <span className="font-mono text-fg-2">{rawPath}</span>
               </div>
             )}
             {canonicalPath != null && (
               <div>
                 canonical path: <span className="font-mono text-fg-2">{canonicalPath}</span>
-                {p.canonical_path?.normalizedFrom != null && (
-                  <span className="text-fg-4"> from {p.canonical_path.normalizedFrom}</span>
+                {normalizedFrom != null && (
+                  <span className="text-fg-4"> from {normalizedFrom}</span>
                 )}
               </div>
             )}
