@@ -60,16 +60,40 @@ When `<investigation>` has key files and no open questions, treat it as the impl
 - For `apps/web/` changes with evidence enabled, include the evidence spec path.
 - Emit `[decision] PLAN: <one-sentence implementation plan>`.
 
+#### No-op implementation guard
+
+Existing tests passing before any edit only proves the current baseline; it does
+not satisfy a bug fix.
+
+For `type:bug` or any work item with `<investigation>.keyFiles`, you must
+modify at least one implementation-surface file before returning success:
+either an investigated key file, or a different implementation file selected by
+a valid pivot under the investigation handoff rules above. When you pivot away
+from the investigated key files, emit the required `PLAN` decision summary with
+the contradictory evidence and name the new implementation surface you changed.
+
+Tests and evidence files support the implementation; they do not satisfy this
+guard by themselves for a bug fix. A true chore/no-code task may return without
+a behavioral code change only when the work item asks for that explicitly.
+
+If you believe no code change is needed, stop with `confidence: low`, emit a
+`BLOCKER` decision summary explaining why the issue appears already fixed or
+non-actionable, and return without pretending to ship.
+
+The `filesWritten` list must match actual writes made via
+`mcp__factory-tools__write_file` or `mcp__factory-tools__edit_file`; do not
+report files that were only read.
+
 ### 3. Red
 
-- Write failing targeted tests first unless this is a true chore with no behavioural surface.
+- Write or update targeted tests that fail with the current behavior before implementation unless this is a true chore with no behavioural surface. When existing tests encode stale behavior, update those tests so they fail against the current bug before changing implementation code.
 - Run the targeted test command via Factory test tools and record returned canonical paths.
 - Emit `[decision] RED: Wrote <N> failing tests for <surface>`.
 
 ### 4. Green
 
 - Implement the smallest slice that satisfies the tests and acceptance criteria.
-- Re-run targeted tests until green or blocked.
+- Re-run targeted tests only after a real write has occurred, then iterate until green or blocked.
 - For frontend changes with evidence enabled, create/update `apps/web/e2e/issue-<number>.spec.ts` or the provided `relatedSurface.evidenceSpecPath`. Use bounded discovery; if blocked, return `evidenceSpecPath: null` with `TOOL_FAILURE` or `UNCERTAINTY`.
 - If evidence is disabled, return `evidenceSpecPath: null` with a `SKIP_GATE` summary.
 - Emit `[decision] GREEN: Targeted tests pass`.
