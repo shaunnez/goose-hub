@@ -115,6 +115,48 @@ describe('collect-playwright-evidence', () => {
     }
   });
 
+  it('strips ANSI and control sequences from assertion, runner, and notes output', () => {
+    const dir = makeTmpDir();
+    try {
+      const resultsPath = writeResults(dir, {
+        errors: [{ message: '\u001b[31mError: No tests found.\u001b[0m\u0007' }],
+        suites: [
+          {
+            specs: [
+              {
+                tests: [
+                  {
+                    results: [
+                      {
+                        status: 'failed',
+                        errors: [
+                          {
+                            message:
+                              '\u001b[2mError: REPRO_EXPECTED_BUG expect(locator).toBeVisible() failed\u001b[0m',
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+
+      const evidence = collect({ resultsPath, evidenceDir: dir, phase: 'before' });
+
+      expect(evidence.testErrors).toEqual([
+        'Error: REPRO_EXPECTED_BUG expect(locator).toBeVisible() failed',
+      ]);
+      expect(evidence.runnerErrors).toEqual(['Error: No tests found.']);
+      expect(evidence.notes).toBe('Error: REPRO_EXPECTED_BUG expect(locator).toBeVisible() failed');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('classifies a failed assertion as validation_failed for after-state evidence', () => {
     const dir = makeTmpDir();
     try {

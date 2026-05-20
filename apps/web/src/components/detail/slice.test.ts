@@ -162,6 +162,21 @@ describe('extractPlaywrightRepro', () => {
     expect(result?.reproduced).toBe(false);
     expect(result?.notes).toBe('Could not trigger the error');
   });
+
+  it('strips ANSI/control sequences from historical Playwright repro text', () => {
+    const result = extractPlaywrightRepro([
+      makeInvestigationEvent(1, {
+        ...FULL_REPRO,
+        testErrors: ['\u001b[31mREPRO_EXPECTED_BUG: error banner missing\u001b[0m'],
+        runnerErrors: ['\u001b[2mError: No tests found.\u001b[0m\u0007'],
+        notes: '\u001b[33mCould not trigger the error\u001b[0m',
+      }),
+    ]);
+
+    expect(result?.testErrors).toEqual(['REPRO_EXPECTED_BUG: error banner missing']);
+    expect(result?.runnerErrors).toEqual(['Error: No tests found.']);
+    expect(result?.notes).toBe('Could not trigger the error');
+  });
 });
 
 // ---------------------------------------------------------------------------

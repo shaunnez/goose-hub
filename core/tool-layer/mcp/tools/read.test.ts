@@ -112,6 +112,18 @@ describe('listFilesTool', () => {
     expect(result.files.some((f) => f.path.endsWith('util.ts'))).toBe(true);
     expect(result.files.some((f) => f.path.endsWith('README.md'))).toBe(false);
   });
+
+  it('treats rg exit 1 as an ok empty listing in audit', async () => {
+    const result = await listFilesTool(ctx, { glob: '*.does-not-exist' });
+    expect(result.files).toEqual([]);
+    expect(result.truncated).toBe(false);
+
+    const events = eventStore.replay({ runId: ctx.runId, kind: 'agent.tool-call' });
+    const audit = events.find(
+      (e) => (e.payload as { tool_name?: string }).tool_name === 'list_files',
+    );
+    expect(audit?.payload).toMatchObject({ status: 'ok' });
+  });
 });
 
 describe('searchTextTool', () => {
@@ -128,6 +140,12 @@ describe('searchTextTool', () => {
     const result = await searchTextTool(ctx, { query: 'NO_SUCH_TOKEN_xyzzy' });
     expect(result.matches).toEqual([]);
     expect(result.truncated).toBe(false);
+
+    const events = eventStore.replay({ runId: ctx.runId, kind: 'agent.tool-call' });
+    const audit = events.find(
+      (e) => (e.payload as { tool_name?: string }).tool_name === 'search_text',
+    );
+    expect(audit?.payload).toMatchObject({ status: 'ok' });
   });
 });
 

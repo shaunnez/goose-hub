@@ -198,6 +198,9 @@ describe('CodexCliRuntime timeout handling', () => {
       expect.objectContaining({
         'factory-tools': expect.objectContaining({
           enabledTools: ['read_file', 'run_tests'],
+          env: expect.objectContaining({
+            FACTORY_PERSONA_ID: 'test-project/developer/0',
+          }),
         }),
       }),
     );
@@ -344,6 +347,60 @@ describe('CodexCliRuntime timeout handling', () => {
           modelId: 'gpt-5.4-mini',
           runtime: 'codex-cli',
         }),
+      }),
+    );
+  });
+
+  it('emits lightweight prompt/context size telemetry before spawn', async () => {
+    await runSuccessfulCodexSpec({ appendSystemPrompt: 'skill prompt body' });
+
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.log',
+        payload: expect.objectContaining({
+          stream: 'telemetry',
+          metric: 'prompt_context_size',
+          contextChars: '<task></task>'.length,
+          totalPromptChars: expect.any(Number),
+          estimatedPromptTokens: expect.any(Number),
+        }),
+      }),
+    );
+  });
+
+  it('surfaces native Codex patch rejection as a blocked native write attempt', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec());
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        `${JSON.stringify({
+          type: 'item.completed',
+          item: { type: 'agent_message', text: '{"ok":true}' },
+        })}\n`,
+      ),
+    );
+    child.stderr.emit(
+      'data',
+      Buffer.from('patch rejected: writing is blocked by read-only sandbox\n'),
+    );
+    child.emit('close', 0);
+
+    await expect(run).resolves.toMatchObject({ output: { ok: true } });
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.tool-call',
+        payload: expect.objectContaining({
+          tool_name: 'apply_patch',
+          blocked: true,
+          block_reason: 'native-write-blocked',
+          status: 'failed',
+        }),
+        personaId: 'test-project/developer/0',
       }),
     );
   });

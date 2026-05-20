@@ -37,6 +37,21 @@ export interface PlaywrightEvidence {
   notes: string;
 }
 
+const ESC = String.fromCharCode(27);
+const BEL = String.fromCharCode(7);
+const ANSI_SEQUENCE_RE = new RegExp(
+  `${ESC}\\[[0-?]*[ -/]*[@-~]|${ESC}[PX^_][\\s\\S]*?${ESC}\\\\|${ESC}\\][^${BEL}]*(?:${BEL}|${ESC}\\\\)`,
+  'g',
+);
+const CONTROL_SEQUENCE_RE = new RegExp(
+  `[${String.fromCharCode(0)}-${String.fromCharCode(8)}${String.fromCharCode(11)}${String.fromCharCode(12)}${String.fromCharCode(14)}-${String.fromCharCode(31)}${String.fromCharCode(127)}-${String.fromCharCode(159)}]`,
+  'g',
+);
+
+export function stripAnsiControlSequences(value: string): string {
+  return value.replace(ANSI_SEQUENCE_RE, '').replace(CONTROL_SEQUENCE_RE, '');
+}
+
 interface PlaywrightResult {
   status?: unknown;
   errors?: unknown;
@@ -52,13 +67,13 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function textOf(value: unknown): string | null {
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string') return stripAnsiControlSequences(value);
   const obj = asRecord(value);
   if (obj == null) return null;
-  if (typeof obj.message === 'string') return obj.message;
-  if (typeof obj.value === 'string') return obj.value;
-  if (typeof obj.text === 'string') return obj.text;
-  return JSON.stringify(value);
+  if (typeof obj.message === 'string') return stripAnsiControlSequences(obj.message);
+  if (typeof obj.value === 'string') return stripAnsiControlSequences(obj.value);
+  if (typeof obj.text === 'string') return stripAnsiControlSequences(obj.text);
+  return stripAnsiControlSequences(JSON.stringify(value));
 }
 
 export function extractFirstJsonValue(text: string): unknown {
@@ -161,7 +176,7 @@ function collectConsoleErrors(stdout: string[]): PlaywrightEvidence['consoleErro
       if (obj == null || typeof obj.message !== 'string') continue;
       const url = typeof obj.url === 'string' && obj.url.length > 0 ? obj.url : undefined;
       entries.push({
-        message: obj.message,
+        message: stripAnsiControlSequences(obj.message),
         type: normalizeConsoleType(obj.type),
         ...(url != null ? { url } : {}),
       });

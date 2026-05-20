@@ -59,6 +59,8 @@ const TIMEOUT_MS = 30_000; // 30 seconds — FACTORY_RULES rule 32
 const WORKSPACES_DIR = join(homedir(), '.factory', 'workspaces');
 const BROWSER_PROCESS_ACCESS_SKILLS = new Set(['playwright-repro', 'evidence-post']);
 const ABSOLUTE_USER_PATH_RE = /\/Users\/[^\s'"`]+/g;
+const NATIVE_PATCH_REJECTION_RE =
+  /patch rejected:\s*writing is blocked by read-only sandbox|writing is blocked by read-only sandbox/i;
 
 function isPathUnderRoot(path: string, root: string): boolean {
   const normalizedRoot = join(root, '.');
@@ -98,6 +100,27 @@ function toolAllowedByRunAllowlist(toolName: string, allowedTools: ReadonlyArray
   });
 }
 
+function contextSizeTelemetry(input: { contextXml: string; systemPrompt: string }): {
+  contextChars: number;
+  systemPromptChars: number;
+  totalPromptChars: number;
+  estimatedPromptTokens: number;
+} {
+  const contextChars = input.contextXml.length;
+  const systemPromptChars = input.systemPrompt.length;
+  const totalPromptChars = contextChars + systemPromptChars;
+  return {
+    contextChars,
+    systemPromptChars,
+    totalPromptChars,
+    estimatedPromptTokens: Math.ceil(totalPromptChars / 4),
+  };
+}
+
+function stderrIncludesNativePatchRejection(stderr: string): boolean {
+  return NATIVE_PATCH_REJECTION_RE.test(stderr);
+}
+
 export class CodexCliRuntime implements AgentRuntime {
   async run(spec: AgentSpec): Promise<AgentResult> {
     if (process.env.MOCK_AGENTS === 'true') {
@@ -114,6 +137,7 @@ export class CodexCliRuntime implements AgentRuntime {
     mkdirSync(workspaceDir, { recursive: true });
     const projectId = (spec.context.projectId as string) ?? 'unknown';
     const workItemId = (spec.context.workItemId as string | undefined) ?? spec.workItemId ?? null;
+    const { personaId } = spec;
     const allowedTools = computeAllowlist(spec);
     // Per-run MCP config (ADR 0045). For Claude we pass `--mcp-config`; for
     // Codex we pass each MCP server entry as `-c mcp_servers.<n>.command=...`
@@ -125,6 +149,7 @@ export class CodexCliRuntime implements AgentRuntime {
       runId,
       projectId,
       workItemId,
+      personaId,
       toolBundles: spec.toolBundles,
     });
     const codexMcpInlineArgs = buildCodexMcpInlineArgs(
@@ -148,7 +173,6 @@ export class CodexCliRuntime implements AgentRuntime {
     }
     deployHooks();
     if (recordDecisionTool) deployDecisionCaptureHook();
-    const { personaId } = spec;
     const model = spec.modelOverride ?? defaultModelForTierAndProvider('sonnet', 'codex');
 
     if (spec.suppressRunStarted !== true) {
@@ -170,6 +194,23 @@ export class CodexCliRuntime implements AgentRuntime {
     }
 
     const { contextXml } = assembleSpawnContext(spec);
+    const systemPrompt = withFactoryRuntimeInstructions(spec.appendSystemPrompt, {
+      runtime: 'codex-cli',
+    });
+    eventStore.appendEvent({
+      projectId,
+      workItemId,
+      kind: 'agent.log',
+      payload: {
+        runId,
+        skill: spec.skill,
+        stream: 'telemetry',
+        metric: 'prompt_context_size',
+        ...contextSizeTelemetry({ contextXml, systemPrompt }),
+      },
+      runId,
+      personaId,
+    });
     const needsBrowserProcessAccess =
       spec.toolBundles.includes('validate') && BROWSER_PROCESS_ACCESS_SKILLS.has(spec.skill);
 
@@ -177,9 +218,7 @@ export class CodexCliRuntime implements AgentRuntime {
       model,
       workspaceDir,
       prompt: contextXml,
-      systemPrompt: withFactoryRuntimeInstructions(spec.appendSystemPrompt, {
-        runtime: 'codex-cli',
-      }),
+      systemPrompt,
       effort: spec.effort,
       maxTurns: spec.budgets.maxTurns,
       commandSandbox: needsBrowserProcessAccess ? 'danger-full-access' : undefined,
@@ -241,7 +280,30 @@ export class CodexCliRuntime implements AgentRuntime {
       let truncated = false;
       let settled = false;
       let toolCallCount = 0;
+      let emittedNativePatchBlocked = false;
       const assistantMarkerOffsets = new Map<string, number>();
+
+      const emitNativePatchBlocked = () => {
+        if (emittedNativePatchBlocked) return;
+        emittedNativePatchBlocked = true;
+        eventStore.appendEvent({
+          projectId,
+          workItemId,
+          kind: 'agent.tool-call',
+          payload: normalizeToolCallAuditPayload({
+            tool_name: 'apply_patch',
+            run_id: runId,
+            tool_input: { source: 'codex-native' },
+            skill: spec.skill,
+            workspace_dir: workspaceDir,
+            blocked: true,
+            block_reason: 'native-write-blocked',
+            status: 'failed',
+          }),
+          runId,
+          personaId,
+        });
+      };
 
       const handleStdoutLine = (line: string) => {
         if (line.trim().length === 0) return;
@@ -480,6 +542,7 @@ export class CodexCliRuntime implements AgentRuntime {
         const envelope = parseCodexEnvelope(stdout);
 
         if (code !== 0 && envelope == null) {
+          if (stderrIncludesNativePatchRejection(stderr)) emitNativePatchBlocked();
           eventStore.appendEvent({
             projectId,
             workItemId,
@@ -495,6 +558,7 @@ export class CodexCliRuntime implements AgentRuntime {
         }
 
         if (envelope?.isError) {
+          if (stderrIncludesNativePatchRejection(stderr)) emitNativePatchBlocked();
           eventStore.appendEvent({
             projectId,
             workItemId,
@@ -568,6 +632,7 @@ export class CodexCliRuntime implements AgentRuntime {
 
         const stderrTrimmed = stderr.trim();
         if (stderrTrimmed.length > 0) {
+          if (stderrIncludesNativePatchRejection(stderrTrimmed)) emitNativePatchBlocked();
           eventStore.appendEvent({
             projectId,
             workItemId,

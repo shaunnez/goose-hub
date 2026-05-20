@@ -19,6 +19,7 @@ export interface BuildFactoryMcpConfigInput {
   runId: string;
   projectId: string;
   workItemId: string | null;
+  personaId?: string | null;
   /** Bundle names declared on the skill spec; used to merge bundle-specific MCP servers. */
   toolBundles: ReadonlyArray<string>;
   /** Optional orchestrator HTTP port to expose via FACTORY_SERVER_PORT. */
@@ -75,6 +76,7 @@ export function buildFactoryMcpConfig(
     FACTORY_RUN_ID: input.runId,
     FACTORY_PROJECT_ID: input.projectId,
     FACTORY_WORK_ITEM_ID: input.workItemId ?? '',
+    FACTORY_PERSONA_ID: input.personaId ?? '',
     FACTORY_WORKSPACE_DIR: workspaceDir,
     FACTORY_SERVER_PORT: String(input.serverPort ?? DEFAULT_FACTORY_SERVER_PORT),
     HOME: process.env.HOME ?? homedir(),

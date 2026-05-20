@@ -10,6 +10,7 @@ import {
 } from './command-policy.js';
 import { FactoryContextError, loadFactoryContext } from './context.js';
 import { PathPolicyViolation, resolveWorkspacePath } from './path-policy.js';
+import { buildFactoryMcpServer } from './server.js';
 
 let workspace: string;
 
@@ -90,6 +91,47 @@ describe('path-policy', () => {
       expect(err).toBeInstanceOf(PathPolicyViolation);
       expect((err as PathPolicyViolation).code).toBe('parent_traversal');
     }
+  });
+});
+
+describe('server resources', () => {
+  it('installs empty resource handlers without registering workspace files', async () => {
+    const server = buildFactoryMcpServer({
+      runId: 'run-1',
+      projectId: 'demo',
+      workItemId: '',
+      workspaceRoot: workspace,
+      serverPort: 3001,
+    });
+
+    const internals = server as unknown as {
+      _resourceHandlersInitialized?: boolean;
+      _registeredResources?: Record<string, unknown>;
+      _registeredResourceTemplates?: Record<string, unknown>;
+      server?: {
+        _requestHandlers?: Map<
+          string,
+          (request: Record<string, unknown>, extra: Record<string, unknown>) => unknown
+        >;
+      };
+    };
+
+    expect(internals._resourceHandlersInitialized).toBe(true);
+    expect(Object.keys(internals._registeredResources ?? {})).toEqual([]);
+    expect(Object.keys(internals._registeredResourceTemplates ?? {})).toEqual([]);
+
+    await expect(
+      internals.server?._requestHandlers?.get('resources/list')?.(
+        { method: 'resources/list', params: {} },
+        {},
+      ),
+    ).resolves.toEqual({ resources: [] });
+    await expect(
+      internals.server?._requestHandlers?.get('resources/templates/list')?.(
+        { method: 'resources/templates/list', params: {} },
+        {},
+      ),
+    ).resolves.toEqual({ resourceTemplates: [] });
   });
 });
 
@@ -180,6 +222,11 @@ describe('context', () => {
     expect(ctx.workItemId).toBe('github:owner/repo#42');
     expect(ctx.workspaceRoot).toBe(workspace);
     expect(ctx.serverPort).toBe(3001);
+  });
+
+  it('loads optional persona attribution when present', () => {
+    const ctx = loadFactoryContext(baseEnv({ FACTORY_PERSONA_ID: 'proj-1/developer/0' }));
+    expect(ctx.personaId).toBe('proj-1/developer/0');
   });
 
   it('throws FactoryContextError listing every missing var', () => {
