@@ -324,6 +324,9 @@ function extractRunMeta(items: RenderItem[]): {
   runtime: string | null;
 } {
   let skill: string | null = null;
+  let displaySkill: string | null = null;
+  let lifecycleSkill: string | null = null;
+  let fallbackSkill: string | null = null;
   let startedAt: string | null = null;
   let endedAt: string | null = null;
   let personaId: string | null = null;
@@ -337,7 +340,13 @@ function extractRunMeta(items: RenderItem[]): {
   for (const item of items) {
     if (item.kind !== 'event') continue;
     const ev = item.event;
-    const p = ev.payload as { modelId?: string; runtime?: string; skill?: string } | null;
+    const p = ev.payload as {
+      displaySkill?: string;
+      modelId?: string;
+      runtime?: string;
+      skill?: string;
+      workflowSkill?: string;
+    } | null;
 
     const ms = new Date(ev.createdAt).getTime();
     if (ms < earliestMs) {
@@ -351,16 +360,24 @@ function extractRunMeta(items: RenderItem[]): {
 
     if (personaId == null && ev.personaId != null) personaId = ev.personaId;
 
-    if (skill == null && p?.skill != null) skill = p.skill as string;
+    if (displaySkill == null && p?.displaySkill != null) displaySkill = p.displaySkill;
+    if (displaySkill == null && p?.workflowSkill != null) displaySkill = p.workflowSkill;
+    if (displaySkill == null && ev.kind === 'agent.fix-feedback-complete') {
+      displaySkill = 'fix-feedback';
+    }
+    if (fallbackSkill == null && p?.skill != null) fallbackSkill = p.skill;
     if (modelId == null && p?.modelId != null) modelId = p.modelId;
     if (runtime == null && p?.runtime != null) runtime = p.runtime;
 
     if (ev.kind === 'agent.run-started') {
       if (startedAt == null) startedAt = ev.createdAt;
+      if (lifecycleSkill == null && p?.skill != null) lifecycleSkill = p.skill;
     } else if (ev.kind === 'agent.run-completed') {
       if (endedAt == null) endedAt = ev.createdAt;
+      if (lifecycleSkill == null && p?.skill != null) lifecycleSkill = p.skill;
     } else if (ev.kind === 'agent.run-failed') {
       if (endedAt == null) endedAt = ev.createdAt;
+      if (lifecycleSkill == null && p?.skill != null) lifecycleSkill = p.skill;
     } else if (ev.kind === 'agent.investigation-complete') {
       if (endedAt == null) endedAt = ev.createdAt;
     } else if (ev.kind === 'retrospective.completed') {
@@ -375,6 +392,8 @@ function extractRunMeta(items: RenderItem[]): {
       if (endedAt == null) endedAt = ev.createdAt;
     }
   }
+
+  skill = displaySkill ?? lifecycleSkill ?? fallbackSkill;
 
   return {
     skill,

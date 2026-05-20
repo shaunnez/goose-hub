@@ -311,6 +311,10 @@ export async function runFixFeedbackWorkflow(
         toolExtras: [],
         ...resolvedBudget,
         personaId,
+        extraEventPayload: {
+          displaySkill: 'fix-feedback',
+          workflowSkill: 'fix-feedback',
+        },
         outputJsonSchema: implementJsonSchema,
         appendSystemPrompt: implementPrompt,
       },
