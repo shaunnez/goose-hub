@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { ImplementSchema } from '../../skills/implement/schema.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { HoldoutFallbackForbiddenError } from './interface.js';
 import { runWithEscalation } from './with-escalation.js';
@@ -15,6 +16,34 @@ vi.mock('../event-stream/store.js', () => ({
 }));
 
 const Schema = z.object({ ok: z.literal(true) });
+
+const validImplementOutput = {
+  plan: '1. Add a regression test. 2. Fix the retry prompt. 3. Run focused tests.',
+  filesWritten: [{ path: 'core/agent-runtime/with-escalation.ts', reason: 'repair retry prompt' }],
+  testsWritten: [{ path: 'core/agent-runtime/with-escalation.test.ts', cases: 1 }],
+  testsRun: {
+    command: 'pnpm vitest',
+    paths: ['core/agent-runtime/with-escalation.test.ts'],
+  },
+  prUrl: 'https://github.com/owner/repo/issues/123',
+  evidenceSpecPath: null,
+  confidence: 'high',
+  decisionSummaries: [
+    { kind: 'PLAN', summary: 'Add a validation repair retry for terminal JSON shape failures' },
+  ],
+  selfQualityScore: {
+    openClosed: 18,
+    conceptCount: 12,
+    timeToCapability: 13,
+    complecting: 14,
+    loc: 8,
+    coupling: 9,
+    gallsLaw: 9,
+    cyclomaticComplexity: 4,
+  },
+  selfScoreBelowThreshold: false,
+  selfScoreWarnings: [],
+};
 
 function makeSpec(overrides: Partial<AgentSpec> = {}): AgentSpec {
   return {
@@ -139,8 +168,63 @@ describe('runWithEscalation — escalation', () => {
         projectId: 'p',
         workItemId: 'w',
       }),
-    ).rejects.toThrow(/validation failed after sonnet retry/i);
+    ).rejects.toThrow(/validation failed after sonnet-tier validation retry/i);
     expect(runFn).toHaveBeenCalledTimes(2);
+    expect(appendEvent).toHaveBeenCalledTimes(2);
+    const repairFailed = appendEvent.mock.calls[1][0] as Record<string, unknown>;
+    expect(repairFailed.kind).toBe('agent.output-repair-failed');
+    expect(repairFailed.payload).toMatchObject({
+      skill: 'implement',
+      reason: 'terminal-output-validation-failed-after-repair-retry',
+      message:
+        'Implementation/tool execution may have succeeded; the failure is terminal JSON output validation.',
+    });
+  });
+
+  it('repairs implement terminal JSON when self-quality fields exceed schema limits', async () => {
+    appendEvent.mockClear();
+    const invalidOutput = {
+      ...validImplementOutput,
+      selfQualityScore: {
+        openClosed: 21,
+        conceptCount: 16,
+        timeToCapability: 16,
+        complecting: 16,
+        loc: 11,
+        coupling: 11,
+        gallsLaw: 11,
+        cyclomaticComplexity: 6,
+      },
+      selfScoreBelowThreshold: false,
+    };
+    const correctedOutput = validImplementOutput;
+    const runFn = vi
+      .fn()
+      .mockResolvedValueOnce(makeResult(invalidOutput))
+      .mockResolvedValueOnce(makeResult(correctedOutput));
+    const runtime = makeRuntime(runFn);
+
+    const out = await runWithEscalation({
+      runtime,
+      spec: makeSpec({ appendSystemPrompt: 'Base implement prompt.' }),
+      schema: ImplementSchema,
+      projectId: 'p',
+      workItemId: 'w',
+    });
+
+    expect(out.escalated).toBe(true);
+    expect(out.output.selfQualityScore).toEqual(validImplementOutput.selfQualityScore);
+    expect(runFn).toHaveBeenCalledTimes(2);
+
+    const retrySpec = runFn.mock.calls[1][0] as AgentSpec;
+    expect(retrySpec.appendSystemPrompt).toContain('Base implement prompt.');
+    expect(retrySpec.appendSystemPrompt).toContain('Terminal JSON Validation Repair');
+    expect(retrySpec.appendSystemPrompt).toContain('Do not redo implementation work');
+    expect(retrySpec.appendSystemPrompt).toContain('return corrected JSON only');
+    expect(retrySpec.appendSystemPrompt).toContain('selfQualityScore.openClosed');
+    expect(retrySpec.appendSystemPrompt).toContain('selfQualityScore.cyclomaticComplexity');
+    expect(retrySpec.appendSystemPrompt).toContain('"openClosed": 21');
+    expect(appendEvent).toHaveBeenCalledTimes(1);
   });
 
   it('retries at the same tier when escalation target equals current tier (opus→opus)', async () => {

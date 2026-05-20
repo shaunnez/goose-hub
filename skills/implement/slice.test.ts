@@ -473,6 +473,15 @@ describe('implement prompt', () => {
     expect(prompt).toContain('ship the implementation plus targeted tests');
   });
 
+  it('documents per-field self-quality score ranges', () => {
+    expect(prompt).toContain('`openClosed: 0-20`');
+    expect(prompt).toContain('`conceptCount`, `timeToCapability`, and `complecting: 0-15`');
+    expect(prompt).toContain('`loc`, `coupling`, and `gallsLaw: 0-10`');
+    expect(prompt).toContain('`cyclomaticComplexity: 0-5`');
+    expect(prompt).toContain('Individual fields are not percentages');
+    expect(prompt).toContain('only the aggregate is out of 100');
+  });
+
   it('forbids memory and skill quick passes', () => {
     expect(prompt).toContain('No memory or skill quick pass');
     expect(prompt).toContain('Do not read local assistant memory');

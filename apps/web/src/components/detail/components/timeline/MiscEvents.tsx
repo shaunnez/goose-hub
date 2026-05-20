@@ -475,11 +475,13 @@ export function ContractDriftEvent({ event }: { event: AgentEventDto }) {
   const title =
     event.kind === 'agent.output-repaired'
       ? 'Path normalized'
-      : event.kind === 'agent.output-fact-mismatch'
-        ? 'Operational fact mismatch'
-        : event.kind === 'agent.path-normalized'
-          ? 'Path normalized'
-          : 'Contract gate blocked';
+      : event.kind === 'agent.output-repair-failed'
+        ? 'Output repair failed'
+        : event.kind === 'agent.output-fact-mismatch'
+          ? 'Operational fact mismatch'
+          : event.kind === 'agent.path-normalized'
+            ? 'Path normalized'
+            : 'Contract gate blocked';
   const fields = p?.fields ?? [];
   return (
     <li

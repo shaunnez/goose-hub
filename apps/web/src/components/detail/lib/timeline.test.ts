@@ -619,6 +619,7 @@ describe('EVENT_KIND_LABEL — QA and fix-feedback kinds', () => {
   const KINDS = [
     'agent.disclosure',
     'agent.fix-feedback-complete',
+    'agent.output-repair-failed',
     'agent.retry-escalated',
     'symbol-index.hints-used',
     'evidence.playwright-ran',

@@ -32,6 +32,7 @@ export type EventKind =
   | 'agent.wrong-surface-guard'
   | 'agent.path-normalized'
   | 'agent.output-repaired'
+  | 'agent.output-repair-failed'
   | 'agent.output-fact-mismatch'
   | 'agent.contract-gate-blocked'
   // Three-tier verification framework (M19.05, issue #562)

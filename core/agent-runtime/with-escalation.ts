@@ -1,5 +1,6 @@
-import type { ZodType } from 'zod';
+import type { ZodIssue, ZodType } from 'zod';
 import { eventStore } from '../event-stream/store.js';
+import { redactSecrets } from '../tool-layer/secret-redaction.js';
 import type { ModelTier } from '../types.js';
 import type { SkillBudgetOverride } from './budgets.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
@@ -90,6 +91,11 @@ export async function runWithEscalation<T>(
     runId: retryRunId,
     budgets: escalated.budgets,
     modelOverride: escalatedModelOverride,
+    appendSystemPrompt: appendValidationRepairPrompt(
+      spec.appendSystemPrompt,
+      parsed.error.issues,
+      result.output,
+    ),
   };
 
   eventStore.appendEvent({
@@ -114,10 +120,76 @@ export async function runWithEscalation<T>(
   const retryResult = await runtime.run(retrySpec);
   const retryParsed = schema.safeParse(retryResult.output);
   if (!retryParsed.success) {
+    eventStore.appendEvent({
+      projectId,
+      workItemId: workItemId ?? null,
+      kind: 'agent.output-repair-failed',
+      payload: {
+        runId: spec.runId,
+        retryRunId,
+        skill: spec.skill,
+        reason: 'terminal-output-validation-failed-after-repair-retry',
+        message:
+          'Implementation/tool execution may have succeeded; the failure is terminal JSON output validation.',
+        originalValidationIssues: formatZodIssues(parsed.error.issues),
+        repairValidationIssues: formatZodIssues(retryParsed.error.issues),
+        originalRawOutputPreview: previewOutput(result.output),
+        repairRawOutputPreview: previewOutput(retryResult.output),
+      },
+      runId: retryRunId,
+    });
     throw makeValidationError(spec.skill, retryParsed.error.issues, retryResult.output, targetTier);
   }
 
   return { output: retryParsed.data, result: retryResult, escalated: true };
+}
+
+function appendValidationRepairPrompt(
+  appendSystemPrompt: string | undefined,
+  issues: ZodIssue[],
+  rawOutput: unknown,
+): string {
+  const basePrompt = appendSystemPrompt?.trimEnd() ?? '';
+  const repairPrompt = [
+    '## Terminal JSON Validation Repair',
+    '',
+    'Your previous run completed, but its terminal JSON output failed schema validation.',
+    'Do not redo implementation work, rerun commands, change files, or reopen the task.',
+    'Preserve every truthful field from the previous output and return corrected JSON only.',
+    'Repair only the terminal output shape and invalid values identified below.',
+    '',
+    'Validation issues:',
+    JSON.stringify(formatZodIssues(issues), null, 2),
+    '',
+    'Invalid output preview:',
+    previewOutput(rawOutput),
+  ].join('\n');
+
+  return basePrompt.length > 0 ? `${basePrompt}\n\n${repairPrompt}` : repairPrompt;
+}
+
+function formatZodIssues(
+  issues: ZodIssue[],
+): Array<{ path: string; message: string; code: string }> {
+  return issues.map((issue) => ({
+    path: issue.path.length > 0 ? issue.path.join('.') : '(root)',
+    message: issue.message,
+    code: issue.code,
+  }));
+}
+
+function previewOutput(rawOutput: unknown): string {
+  const redacted = redactSecrets(rawOutput);
+  const rawPreview = typeof redacted === 'string' ? redacted : safeStringify(redacted);
+  return rawPreview.slice(0, 4000);
+}
+
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
 }
 
 function makeValidationError(
@@ -126,12 +198,9 @@ function makeValidationError(
   rawOutput: unknown,
   retriedAtTier: ModelTier | null,
 ): Error {
-  const rawPreview =
-    typeof rawOutput === 'string'
-      ? rawOutput.slice(0, 800)
-      : JSON.stringify(rawOutput).slice(0, 800);
-  const suffix = retriedAtTier != null ? ` after ${retriedAtTier} retry` : '';
+  const rawPreview = previewOutput(rawOutput).slice(0, 800);
+  const suffix = retriedAtTier != null ? ` after ${retriedAtTier}-tier validation retry` : '';
   return new Error(
-    `${skill} output validation failed${suffix}: ${JSON.stringify(issues)}\nRaw output (first 800 chars): ${rawPreview}`,
+    `${skill} terminal output validation failed${suffix}; implementation/tool execution may have succeeded and only terminal JSON shape is invalid: ${JSON.stringify(issues)}\nRaw output (first 800 chars): ${rawPreview}`,
   );
 }
