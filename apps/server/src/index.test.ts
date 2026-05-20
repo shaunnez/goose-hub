@@ -103,7 +103,6 @@ vi.mock('./shared/source.js', () => ({
   }),
 }));
 
-
 describe('GET /projects/:slug/milestones/:milestone/closed-issues', () => {
   it('returns closed work items for the milestone', async () => {
     const res = await app.request('/projects/goose-hub-self/milestones/3/closed-issues');

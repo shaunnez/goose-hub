@@ -296,6 +296,44 @@ describe('intervention proposer worker', () => {
     expect(getIntervention(intervention.id)?.status).toBe('SUPERSEDED');
   });
 
+  it('keeps gate-awaiting-human needs_human rows applicable while latest state is gate-pending', async () => {
+    const intervention = openFixture('proposal-gate-awaiting-human');
+    eventStore.appendEvent({
+      projectId: intervention.projectId,
+      workItemId: intervention.workItemId,
+      kind: 'state.transitioned',
+      payload: { from: 'factory:accepted', to: 'factory:gate-pending' },
+    });
+    const invokeSkill = vi.fn(async () =>
+      skillResult({
+        summary: 'Wait',
+        options: [
+          {
+            actionType: 'no_action',
+            label: 'Wait',
+            description: 'Leave it open.',
+            payload: { reason: 'awaiting human gate input' },
+            risk: 'low',
+          },
+        ],
+      }),
+    );
+
+    const result = await runInterventionProposerWorkerOnce({
+      projectId: intervention.projectId,
+      limit: 10,
+      leaseOwner: 'test-proposer',
+      deps: {
+        invokeSkill,
+        now: () => new Date('2026-05-20T00:00:00Z'),
+      },
+    });
+
+    expect(result).toEqual({ processed: 1, proposed: 1, failed: 0, skipped: 0 });
+    expect(invokeSkill).toHaveBeenCalledTimes(1);
+    expect(getIntervention(intervention.id)?.status).toBe('PROPOSED');
+  });
+
   it('does not starve ready interventions behind newer active leases', async () => {
     const projectId = 'proj-proposal-starvation';
     const leasedUntil = '2026-05-20T01:00:00Z';
@@ -405,5 +443,42 @@ describe('intervention proposer worker', () => {
 
     expect(projectSpecificResult).toEqual({ processed: 1, proposed: 1, failed: 0, skipped: 0 });
     expect(getIntervention(generated.id)?.status).toBe('PROPOSED');
+  });
+
+  it('does not let generated test projects starve global non-test candidates', async () => {
+    const normal = openFixture('normal-starvation-filter', {
+      projectId: 'proj-normal-starvation-filter',
+    });
+    for (let index = 0; index < 5; index += 1) {
+      openFixture(`generated-starvation-filter-${index}`, {
+        projectId: `test-generated-starvation-filter-${index}`,
+      });
+    }
+    const invokeSkill = vi.fn(async () =>
+      skillResult({
+        summary: 'Wait',
+        options: [
+          {
+            actionType: 'no_action',
+            label: 'Wait',
+            description: 'Leave it open.',
+            payload: { reason: 'wait' },
+            risk: 'low',
+          },
+        ],
+      }),
+    );
+
+    const globalResult = await runInterventionProposerWorkerOnce({
+      limit: 1,
+      leaseOwner: 'test-proposer',
+      deps: {
+        invokeSkill,
+        now: () => new Date('2026-05-20T00:00:00Z'),
+      },
+    });
+
+    expect(globalResult).toEqual({ processed: 1, proposed: 1, failed: 0, skipped: 0 });
+    expect(getIntervention(normal.id)?.status).toBe('PROPOSED');
   });
 });

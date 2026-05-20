@@ -3,7 +3,12 @@ import { db } from '../db/db.js';
 import { agentRunCosts } from '../db/schema.js';
 import { eventStore } from '../event-stream/store.js';
 import { type StateName, TERMINAL_STATES } from '../state-machine/states.js';
-import { interventionTimestamp, listInterventionEvents, listInterventions } from './repository.js';
+import {
+  interventionTimestamp,
+  listAllInterventions,
+  listInterventionEvents,
+  listInterventions,
+} from './repository.js';
 import { ACTIVE_INTERVENTION_STATUSES, type InterventionType } from './types.js';
 
 export interface InterventionAuditReport {
@@ -75,10 +80,10 @@ export function loadInterventionAuditReport(
     limit?: number;
   } = {},
 ): InterventionAuditReport {
-  const interventions = listInterventions({
-    projectId: input.projectId,
-    limit: input.limit ?? 1000,
-  });
+  const interventions =
+    input.limit == null
+      ? listAllInterventions({ projectId: input.projectId })
+      : listInterventions({ projectId: input.projectId, limit: input.limit });
   const active = interventions.filter((intervention) =>
     ACTIVE_INTERVENTION_STATUSES.has(intervention.status),
   );

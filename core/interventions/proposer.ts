@@ -57,14 +57,14 @@ function inferCurrentState(intervention: WorkItemIntervention): StateName | null
   return to as StateName;
 }
 
-function expectedStateForType(type: InterventionType): StateName | null {
+function expectedStatesForType(type: InterventionType): readonly StateName[] | null {
   switch (type) {
     case 'needs_human':
-      return 'factory:needs-human';
+      return ['factory:needs-human', 'factory:gate-pending'];
     case 'gate_pending':
-      return 'factory:gate-pending';
+      return ['factory:gate-pending'];
     case 'merge_conflict':
-      return 'factory:merge-conflict';
+      return ['factory:merge-conflict'];
     case 'qa_disagreement':
     case 'manual_override':
       return null;
@@ -74,9 +74,9 @@ function expectedStateForType(type: InterventionType): StateName | null {
 function staleReason(intervention: WorkItemIntervention, state: StateName | null): string | null {
   if (state == null) return null;
   if (TERMINAL_STATES.has(state)) return `latest state is terminal: ${state}`;
-  const expected = expectedStateForType(intervention.interventionType);
-  if (expected != null && state !== expected) {
-    return `${intervention.interventionType} applies only in ${expected}; latest state is ${state}`;
+  const expected = expectedStatesForType(intervention.interventionType);
+  if (expected != null && !expected.includes(state)) {
+    return `${intervention.interventionType} applies only in ${expected.join(', ')}; latest state is ${state}`;
   }
   return null;
 }
@@ -277,13 +277,9 @@ export async function runInterventionProposerWorkerOnce(
   const candidates = listOpenInterventionsReadyForProposal({
     projectId: input.projectId,
     now: now.toISOString(),
-    limit: filtersGeneratedProjects ? Math.max(requestedLimit * 4, 100) : requestedLimit,
-  })
-    .filter((intervention) => {
-      if (!filtersGeneratedProjects) return true;
-      return !isGeneratedTestProjectId(intervention.projectId);
-    })
-    .slice(0, requestedLimit);
+    limit: requestedLimit,
+    excludeGeneratedTestProjects: filtersGeneratedProjects,
+  }).slice(0, requestedLimit);
   const result: InterventionProposerRunResult = {
     processed: 0,
     proposed: 0,

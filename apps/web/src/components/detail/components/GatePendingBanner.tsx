@@ -42,7 +42,12 @@ interface GatePendingBannerProps {
   onTransitioned?: () => void;
 }
 
-export function GatePendingBanner({ projectSlug, id, onTransitioned }: GatePendingBannerProps) {
+export function GatePendingBanner({
+  state,
+  projectSlug,
+  id,
+  onTransitioned,
+}: GatePendingBannerProps) {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +55,7 @@ export function GatePendingBanner({ projectSlug, id, onTransitioned }: GatePendi
   const { data: interventions = [] } = useQuery({
     queryKey:
       projectSlug && id
-        ? interventionKeys.issue(projectSlug, id, [...ACTIVE_INTERVENTION_STATUSES])
+        ? [...interventionKeys.issue(projectSlug, id, [...ACTIVE_INTERVENTION_STATUSES]), state]
         : ['interventions', 'issue', 'missing'],
     queryFn: () =>
       fetchIssueInterventions(projectSlug ?? '', id ?? '', [...ACTIVE_INTERVENTION_STATUSES]),
@@ -63,7 +68,7 @@ export function GatePendingBanner({ projectSlug, id, onTransitioned }: GatePendi
   const { data: legalTargets } = useQuery({
     queryKey:
       projectSlug && id
-        ? interventionKeys.legalTargets(projectSlug, id)
+        ? [...interventionKeys.legalTargets(projectSlug, id), state]
         : ['legal-targets', 'missing'],
     queryFn: () => fetchLegalTargets(projectSlug ?? '', id ?? ''),
     enabled: shouldFetchLegalTargets,
@@ -187,7 +192,11 @@ export function GatePendingBanner({ projectSlug, id, onTransitioned }: GatePendi
               key={target}
               type="button"
               disabled={busy}
-              data-testid={`gate-action-manual-${target.replace(/[^a-z0-9]+/gi, '-')}`}
+              data-testid={
+                target === 'factory:needs-qa'
+                  ? 'gate-action-send-to-qa'
+                  : `gate-action-manual-${target.replace(/[^a-z0-9]+/gi, '-')}`
+              }
               onClick={() =>
                 void handleDecision(
                   primary,

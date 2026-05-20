@@ -112,4 +112,26 @@ describe('intervention audit report', () => {
     ]);
     expect(formatInterventionAuditReport(report)).toContain('Rows with repeated proposalFailed');
   });
+
+  it('aggregates all matching interventions by default instead of silently capping rows', () => {
+    const projectId = 'audit-report-no-default-cap';
+    for (let index = 0; index < 1001; index += 1) {
+      const opened = open({
+        projectId,
+        workItemId: `github:owner/repo#audit-cap-${index}`,
+        interventionType: 'needs_human',
+        title: 'Needs human',
+        reason: 'Workflow asked for help',
+        rootCauseSignature: `audit-report-no-default-cap|${index}`,
+        actor: 'test',
+      });
+      expect(opened.ok).toBe(true);
+    }
+
+    const report = loadInterventionAuditReport({ projectId });
+
+    expect(report.activeByProjectType).toEqual([
+      { projectId, interventionType: 'needs_human', count: 1001 },
+    ]);
+  });
 });
