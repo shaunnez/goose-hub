@@ -26,7 +26,6 @@ const config: SkillConfig = {
     'workItem.priority',
     'prDiff',
     'devReviewFindings',
-    'worktreePath',
     'stack.testCommand',
     'stack.lintCommand',
     'stack.typecheckCommand',

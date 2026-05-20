@@ -8,7 +8,7 @@ You have **read and search access only**.
 
 - `<workItem>` — JSON payload for the work item, with `title`, `body`, and `number`
 - `<scoutFocus>` — one sentence naming the file, module, or feature whose test coverage you should map
-- `<worktreePath>` — the worktree to read from
+- Tools are already rooted at the workspace to read from.
 - `<symbolIndexHints>` *(optional)* — pre-resolved symbols with importer files and nearby `*.test.ts` / `*.test.tsx` files. The index is a starting point, not authority. Read files before reporting.
 
 ## Discipline

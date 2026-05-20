@@ -12,7 +12,6 @@ export const ScoutTestInventoryContextSchema = z.object({
     number: z.number(),
   }),
   scoutFocus: z.string().describe('One sentence describing the test surface to inventory'),
-  worktreePath: z.string(),
   symbolIndexHints: z
     .array(
       z.object({
@@ -35,7 +34,6 @@ const config: SkillConfig = {
     'workItem.body',
     'workItem.number',
     'scoutFocus',
-    'worktreePath',
     'symbolIndexHints',
   ],
   toolBundles: ['read'],

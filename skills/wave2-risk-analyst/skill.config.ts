@@ -13,18 +13,11 @@ export const Wave2RiskAnalystContextSchema = z.object({
   }),
   /** Cross-validated scout reports rendered as a JSON string. */
   scoutReports: z.string(),
-  worktreePath: z.string(),
 });
 
 const config: SkillConfig = {
   contextSchema: Wave2RiskAnalystContextSchema,
-  contextAllowlist: [
-    'workItem.title',
-    'workItem.body',
-    'workItem.number',
-    'scoutReports',
-    'worktreePath',
-  ],
+  contextAllowlist: ['workItem.title', 'workItem.body', 'workItem.number', 'scoutReports'],
   toolBundles: ['read'],
   modelPin: 'sonnet',
   freshContext: true,

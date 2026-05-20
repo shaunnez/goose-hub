@@ -144,7 +144,7 @@ describe('CodexCliRuntime timeout handling', () => {
       }),
     );
     expect(call?.systemPrompt).toContain(
-      'All repo exploration must stay under workspaceDir / <worktreePath>.',
+      'All repo exploration must stay inside the workspace already configured for your tools.',
     );
     expect(call?.systemPrompt).toContain(
       'If prior context is needed, use only context provided by Factory.',

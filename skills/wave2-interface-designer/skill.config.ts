@@ -17,18 +17,11 @@ export const Wave2InterfaceDesignerContextSchema = z.object({
   }),
   /** Cross-validated scout reports rendered as a JSON string. */
   scoutReports: z.string(),
-  worktreePath: z.string(),
 });
 
 const config: SkillConfig = {
   contextSchema: Wave2InterfaceDesignerContextSchema,
-  contextAllowlist: [
-    'workItem.title',
-    'workItem.body',
-    'workItem.number',
-    'scoutReports',
-    'worktreePath',
-  ],
+  contextAllowlist: ['workItem.title', 'workItem.body', 'workItem.number', 'scoutReports'],
   toolBundles: ['read'],
   modelPin: 'sonnet',
   freshContext: true,

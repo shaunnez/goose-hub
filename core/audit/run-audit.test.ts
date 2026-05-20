@@ -182,6 +182,8 @@ describe('runCodeQualityAudit — happy path', () => {
       auditScore: 82,
     });
     expect(mockInsertAuditOnly).not.toHaveBeenCalled();
+    expect(mockInvokeSkill.mock.calls[0][0].context).not.toHaveProperty('worktreePath');
+    expect(mockInvokeSkill.mock.calls[0][0].overrides?.workspaceDir).toBe('/tmp/wt');
 
     const eventKinds = mockAppendEvent.mock.calls.map((c) => (c[0] as { kind: string }).kind);
     expect(eventKinds).toContain('audit.completed');

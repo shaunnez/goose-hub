@@ -285,7 +285,6 @@ export async function runFixFeedbackWorkflow(
             number: Number(workItem.externalId),
             priority: workItem.priority,
           },
-          worktreePath,
           stack: {
             testCommand: 'pnpm test',
             lintCommand: 'pnpm lint',
@@ -299,7 +298,6 @@ export async function runFixFeedbackWorkflow(
           'workItem.body',
           'workItem.number',
           'workItem.priority',
-          'worktreePath',
           'stack.testCommand',
           'stack.lintCommand',
           'stack.typecheckCommand',

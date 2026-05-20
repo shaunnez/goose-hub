@@ -11,6 +11,7 @@ export type SkillContractReport = {
   schemaFields: string[];
   outputExample: OutputExampleReport;
   pathLanguage: PathLanguageReport;
+  worktreePathExposure: WorktreePathExposureReport;
   consumerPaths: string[];
 };
 
@@ -33,6 +34,12 @@ export type OutputExampleReport = {
 export type PathLanguageReport = {
   vagueWorkspaceRelative: string[];
   packageRelativeExamples: string[];
+};
+
+export type WorktreePathExposureReport = {
+  allowlist: boolean;
+  promptLines: string[];
+  configLines: string[];
 };
 
 function extractTags(input: string): string[] {
@@ -230,6 +237,16 @@ function auditPathLanguage(prompt: string, schema: string): PathLanguageReport {
   };
 }
 
+function auditWorktreePathExposure(prompt: string, config: string): WorktreePathExposureReport {
+  const promptLines = lineHits(prompt, (line) => line.includes('worktreePath'));
+  const configLines = lineHits(config, (line) => line.includes('worktreePath'));
+  return {
+    allowlist: extractAllowlistTags(config).includes('worktreePath'),
+    promptLines,
+    configLines,
+  };
+}
+
 function auditOutputExample(prompt: string, schemaFields: string[]): OutputExampleReport {
   if (schemaFields.length === 0) {
     return {
@@ -373,6 +390,7 @@ export function auditSkillContracts(repoRoot: string): SkillContractAudit {
       schemaFields,
       outputExample: auditOutputExample(prompt, schemaFields),
       pathLanguage: auditPathLanguage(prompt, schema),
+      worktreePathExposure: auditWorktreePathExposure(prompt, config),
       consumerPaths: existsSync(schemaPath)
         ? collectConsumers(repoRoot, schemaPath, schema, skill)
         : [],
@@ -399,6 +417,7 @@ export function formatSkillContractAudit(audit: SkillContractAudit): string {
         `outputExampleExtraFields: ${r.outputExample.extraExampleFields.join(', ') || '(none)'}`,
         `pathLanguageWorkspaceRelative: ${r.pathLanguage.vagueWorkspaceRelative.length}`,
         `pathLanguagePackageRelativeExamples: ${r.pathLanguage.packageRelativeExamples.join(', ') || '(none)'}`,
+        `worktreePathExposure: allowlist=${r.worktreePathExposure.allowlist} prompt=${r.worktreePathExposure.promptLines.length} config=${r.worktreePathExposure.configLines.length}`,
         `consumers: ${r.consumerPaths.length}`,
       ];
       for (const c of r.consumerPaths) lines.push(`- ${c}`);

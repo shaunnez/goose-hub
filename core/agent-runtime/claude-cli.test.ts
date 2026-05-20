@@ -134,7 +134,7 @@ describe('ClaudeCliRuntime — agentRuns write path', () => {
     const systemPrompt = argv[promptIndex + 1];
     expect(systemPrompt).toContain('Factory agents must not read ~/.codex');
     expect(systemPrompt).toContain(
-      'All repo exploration must stay under workspaceDir / <worktreePath>.',
+      'All repo exploration must stay inside the workspace already configured for your tools.',
     );
     expect(systemPrompt).toContain(
       'If prior context is needed, use only context provided by Factory.',

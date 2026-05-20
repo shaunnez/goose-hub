@@ -12,7 +12,7 @@ Developer (non-holdout). You receive the worktree path and the list of conflicte
 
 The context contains a `<task>` block with:
 
-- `<worktreePath>` — absolute path to the worktree
+- Tools are already rooted at the conflicted workspace.
 - `<conflictedFiles>` — workspace-relative paths of every file with conflict markers
 - `<baseBranch>` — the branch being merged INTO the PR branch (typically `main`)
 - `<prNumber>` — PR number under resolution

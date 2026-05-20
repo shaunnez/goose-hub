@@ -611,6 +611,7 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
       runId: input.runId,
       role: 'developer',
       skill: 'implement',
+      workspaceDir: input.worktreePath,
       context: {
         projectId: input.projectId,
         workItemId: input.workItem.id,
@@ -620,7 +621,6 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
           number: Number(input.workItem.externalId),
           priority: input.workItem.priority,
         },
-        worktreePath: input.worktreePath,
         stack: input.stack,
         investigation: input.investigation,
         relatedSurface: input.relatedSurface,
@@ -633,7 +633,6 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
         'workItem.body',
         'workItem.number',
         'workItem.priority',
-        'worktreePath',
         'stack.testCommand',
         'stack.lintCommand',
         'stack.typecheckCommand',

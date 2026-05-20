@@ -1,7 +1,7 @@
 export const FACTORY_WORKSPACE_ONLY_INSTRUCTIONS = `## Factory workspace boundary
 
 Factory agents must not read ~/.codex, ~/.agents, ~/.claude, user home memory files, or sibling repos.
-All repo exploration must stay under workspaceDir / <worktreePath>.
+All repo exploration must stay inside the workspace already configured for your tools.
 If prior context is needed, use only context provided by Factory.`;
 
 /**

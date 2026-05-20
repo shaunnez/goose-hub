@@ -42,7 +42,7 @@ The context contains a `<task>` block with:
 - `<wp>` — JSON payload with `id`, `filesOwned`, `changes`, and `dependsOn`
 - `<codeSnippets>` (optional) — JSON array of relevant code excerpts pre-loaded by the scout wave
 - `<investigation>` (optional) — original bug-investigation findings, key files, and open questions
-- `<worktreePath>` — absolute path to your scratch worktree (already checked out)
+- Tools are already rooted at your scratch workspace.
 - `<stack>` — JSON payload with `testCommand`, optional `lintCommand`, and optional `typecheckCommand`
 
 Path contract: all output paths must be repo-root/worktree-root relative POSIX paths. When a `mcp__factory-tools__*` response returns `{ path, root, packageRoot, normalizedFrom }`, copy the returned `path` value verbatim into your terminal JSON. Do not infer paths from CWD or package root.

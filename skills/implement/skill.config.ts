@@ -6,7 +6,6 @@ import { z } from 'zod';
  *
  *   <task>
  *     <workItem>{"title":"...","body":"...","number":123,"priority":"medium"}</workItem>
- *     <worktreePath>/abs/path/to/worktree</worktreePath>
  *     <stack>{"testCommand":"pnpm test","lintCommand":"pnpm lint","typecheckCommand":"pnpm typecheck"}</stack>
  *     <advisorFeedback>...</advisorFeedback>               <!-- optional, when revising -->
  *     <revisionPass>0 | 1</revisionPass>                   <!-- optional, default 0 -->
@@ -19,7 +18,6 @@ export const ImplementContextSchema = z.object({
     number: z.number(),
     priority: z.enum(['low', 'medium', 'high', 'critical']),
   }),
-  worktreePath: z.string().describe('Absolute path to the checked-out worktree to implement in'),
   stack: z.object({
     testCommand: z.string(),
     lintCommand: z.string().optional(),
@@ -56,6 +54,10 @@ const config: SkillConfig = {
         evidenceSpecPath: z.string().nullable(),
         checkedAbsent: z.array(z.string()),
         targetedTestPaths: z.array(z.string()),
+        readFirst: z.array(z.string()),
+        primaryTestPath: z.string().nullable(),
+        testMode: z.enum(['update-existing', 'create-candidate', 'no-test-surface']),
+        doNotSearchFor: z.array(z.string()),
       })
       .optional(),
   }),
@@ -64,7 +66,6 @@ const config: SkillConfig = {
     'workItem.body',
     'workItem.number',
     'workItem.priority',
-    'worktreePath',
     'stack.testCommand',
     'stack.lintCommand',
     'stack.typecheckCommand',

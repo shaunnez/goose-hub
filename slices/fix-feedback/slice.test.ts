@@ -215,7 +215,7 @@ describe('runFixFeedbackWorkflow', () => {
     expect(runCall.context.advisorFeedback).toContain('capitalize("") returns undefined');
   });
 
-  it('passes existing worktreePath to the runtime', async () => {
+  it('passes existing worktreePath as runtime workspaceDir', async () => {
     vi.mocked(eventStore.replay).mockReturnValue([makePrOpenedEvent('/work/existing-wt')]);
     mockClaudeCliRun.mockResolvedValue({ output: makeImplementOutput() });
     const workItem = makeWorkItem();
@@ -223,7 +223,8 @@ describe('runFixFeedbackWorkflow', () => {
     await runFixFeedbackWorkflow(workItem, stateSource, 'proj', 'owner/repo');
 
     const runCall = mockClaudeCliRun.mock.calls[0][0];
-    expect(runCall.context.worktreePath).toBe('/work/existing-wt');
+    expect(runCall.context.worktreePath).toBeUndefined();
+    expect(runCall.workspaceDir).toBe('/work/existing-wt');
   });
 
   it('marks the reused implement runtime as a fix-feedback display run', async () => {

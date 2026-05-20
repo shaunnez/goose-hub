@@ -8,7 +8,7 @@ You have **read and search access only**. Any write attempt will be rejected.
 
 - `<workItem>` — JSON payload for the work item, with `title`, `body`, and `number`
 - `<scoutFocus>` — one sentence telling you what concern to look for
-- `<worktreePath>` — the worktree to read from
+- Tools are already rooted at the workspace to read from.
 - `<symbolIndexHints>` *(optional)* — pre-filtered exported schema/type/table-like symbols. The index is a starting point, not authority. Read files before reporting.
 
 ## Discipline

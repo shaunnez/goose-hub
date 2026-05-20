@@ -8,7 +8,7 @@ You have **read and search access only**.
 
 - `<workItem>` — JSON payload for the work item, with `title`, `body`, and `number`
 - `<scoutFocus>` — one sentence describing the pattern (e.g. "transitionState() callers", "SkillConfig consumers")
-- `<worktreePath>` — the worktree to read from
+- Tools are already rooted at the workspace to read from.
 
 ## Discipline
 

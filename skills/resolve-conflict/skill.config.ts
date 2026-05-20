@@ -3,7 +3,7 @@ import { ResolveConflictContextSchema } from './schema.js';
 
 const config: SkillConfig = {
   contextSchema: ResolveConflictContextSchema,
-  contextAllowlist: ['worktreePath', 'conflictedFiles', 'baseBranch', 'prNumber'],
+  contextAllowlist: ['conflictedFiles', 'baseBranch', 'prNumber'],
   /**
    * `dev-tools` bundle — read, write, search, bash, test. Workspace-bound
    * paths only; bash-denylist enforced. The slice runs the actual git
@@ -16,8 +16,8 @@ const config: SkillConfig = {
    */
   modelPin: 'sonnet',
   /**
-   * `freshContext: false` — the orchestrating slice supplies the worktree
-   * path and conflicted files; no upstream agent reasoning is leaked.
+   * `freshContext: false` — the orchestrating slice supplies conflicted files
+   * and roots tools at the workspace; no upstream agent reasoning is leaked.
    */
   freshContext: false,
   role: 'developer',

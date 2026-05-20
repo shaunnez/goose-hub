@@ -287,27 +287,25 @@ describe('grill-me skill config', () => {
     expect(config.toolBundles).toEqual(['read']);
   });
 
-  it('contextAllowlist includes worktreePath', () => {
-    expect(config.contextAllowlist).toContain('worktreePath');
+  it('contextAllowlist excludes worktreePath', () => {
+    expect(config.contextAllowlist).not.toContain('worktreePath');
   });
 
-  it('contextSchema accepts a worktreePath', () => {
+  it('contextSchema accepts context without worktreePath', () => {
     const result = GrillMeContextSchema.safeParse({
       workItem: { title: 'T', body: 'B', number: 1 },
       priorReplies: [],
       roundNumber: 1,
       projectContext: validProjectContext,
-      worktreePath: '/tmp/wt/run-abc',
     });
     expect(result.success).toBe(true);
   });
 
-  it('contextSchema rejects missing worktreePath', () => {
+  it('contextSchema still rejects missing projectContext', () => {
     const result = GrillMeContextSchema.safeParse({
       workItem: { title: 'T', body: 'B', number: 1 },
       priorReplies: [],
       roundNumber: 1,
-      projectContext: validProjectContext,
     });
     expect(result.success).toBe(false);
   });
@@ -325,7 +323,6 @@ describe('grill-me skill config', () => {
       ],
       roundNumber: 2,
       projectContext: validProjectContext,
-      worktreePath: '/tmp/wt/run-abc',
     });
     expect(result.success).toBe(true);
   });
