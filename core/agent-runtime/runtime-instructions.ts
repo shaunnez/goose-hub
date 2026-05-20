@@ -26,6 +26,8 @@ Prefer the \`mcp__factory-tools__*\` tools over native Read / Write / Edit / Glo
 
 All paths are workspace-relative. Absolute paths and \`..\` traversal are rejected. Commands run with \`shell: false\`; no shell strings. Output is byte-capped and timeouts are per-tool. Every call emits a structured \`agent.tool-call\` audit event.
 
+Do not use MCP resource surfaces or delegation surfaces unless this run explicitly allows them. Forbidden surfaces include \`resources/list\`, \`resources/read\`, \`file://...\` resource handles, collab tools, fork/full-history fork, spawn, and subagent delegation. File access must go through the exposed Factory tools such as \`mcp__factory-tools__read_file\`, \`mcp__factory-tools__list_dir\`, \`mcp__factory-tools__list_files\`, and \`mcp__factory-tools__search_text\`.
+
 Workflow-owned operations (commit, open PR, transition state, publish evidence) are not in your toolset — the orchestrator drives them.`;
 
 /**
@@ -47,6 +49,8 @@ Use the Factory MCP tools exposed by the \`factory-tools\` MCP server. Do not us
 - Project context: \`get_project_context\`, \`get_stack_commands\`
 
 All paths are workspace-relative. Absolute paths and \`..\` traversal are rejected. Commands run with \`shell: false\`; no shell strings. Output is byte-capped and timeouts are per-tool. Every call emits a structured \`agent.tool-call\` audit event.
+
+Do not use MCP resource surfaces or delegation surfaces unless this run explicitly allows them. Forbidden surfaces include \`resources/list\`, \`resources/read\`, \`file://...\` resource handles, collab tools, fork/full-history fork, spawn, and subagent delegation. File access must go through the exposed Factory tools such as \`read_file\`, \`list_dir\`, \`list_files\`, and \`search_text\`.
 
 Workflow-owned operations (commit, open PR, transition state, publish evidence) are not in your toolset — the orchestrator drives them.`;
 
