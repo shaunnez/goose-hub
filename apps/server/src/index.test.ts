@@ -33,6 +33,28 @@ vi.mock('@goose-hub/core/db/schema.js', async (importOriginal) => {
   return { ...actual };
 });
 
+function workItem(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: 'github:owner/repo#5',
+    externalId: '5',
+    repoRef: 'owner/repo',
+    title: 'Done item',
+    body: '',
+    type: 'feature',
+    priority: 'medium',
+    mode: 'supervised',
+    state: 'factory:done',
+    authorIsOwner: true,
+    milestoneId: '3',
+    schedule: 'current',
+    exec: 'parallel',
+    dependsOn: [],
+    blocks: [],
+    createdAt: new Date('2024-01-01'),
+    ...overrides,
+  };
+}
+
 vi.mock('./shared/source.js', () => ({
   getSourceForSlug: vi.fn().mockResolvedValue({
     repoRef: 'owner/repo',
@@ -42,67 +64,19 @@ vi.mock('./shared/source.js', () => ({
     setLabelInGroup: vi.fn().mockResolvedValue(undefined),
     transitionState: vi.fn().mockResolvedValue(undefined),
     listOpenWork: vi.fn().mockResolvedValue([]),
-    listClosedWorkByMilestone: vi.fn().mockResolvedValue([
-      {
-        id: 'github:owner/repo#5',
-        externalId: '5',
-        repoRef: 'owner/repo',
-        title: 'Done item',
-        body: '',
-        type: 'feature',
-        priority: 'medium',
-        mode: 'supervised',
-        state: 'factory:done',
-        authorIsOwner: true,
-        milestoneId: '3',
-        schedule: 'current',
-        exec: 'parallel',
-        dependsOn: [],
-        blocks: [],
-        createdAt: new Date('2024-01-01'),
-      },
-    ]),
+    listClosedWorkByMilestone: vi.fn().mockResolvedValue([workItem()]),
     listWorkByMilestone: vi.fn().mockResolvedValue([
-      {
-        id: 'github:owner/repo#5',
-        externalId: '5',
-        repoRef: 'owner/repo',
-        title: 'Done item',
-        body: '',
-        type: 'feature',
-        priority: 'medium',
-        mode: 'supervised',
-        state: 'factory:done',
-        authorIsOwner: true,
-        milestoneId: '3',
-        schedule: 'current',
-        exec: 'parallel',
-        dependsOn: [],
-        blocks: [],
-        createdAt: new Date('2024-01-01'),
-      },
-      {
+      workItem(),
+      workItem({
         id: 'github:owner/repo#6',
         externalId: '6',
-        repoRef: 'owner/repo',
         title: 'Open item',
-        body: '',
-        type: 'feature',
-        priority: 'medium',
-        mode: 'supervised',
         state: 'factory:in-progress',
-        authorIsOwner: true,
-        milestoneId: '3',
-        schedule: 'current',
-        exec: 'parallel',
-        dependsOn: [],
-        blocks: [],
         createdAt: new Date('2024-01-02'),
-      },
+      }),
     ]),
   }),
 }));
-
 
 describe('GET /projects/:slug/milestones/:milestone/closed-issues', () => {
   it('returns closed work items for the milestone', async () => {
