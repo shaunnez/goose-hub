@@ -97,6 +97,36 @@ describe('listProjectConfigsService (#280)', () => {
     expect(result.configs[0].activeMilestone).toBeNull();
   });
 
+  it('falls back to "main" when targetRepo.defaultBranch is absent', async () => {
+    vi.mocked(listProjectConfigs).mockResolvedValueOnce([
+      {
+        ...mockProject,
+        targetRepo: {
+          cloneUrl: 'git@github.com:owner/my-proj.git',
+          localPath: '~/code/my-proj',
+        },
+      },
+    ] as never);
+    const result = await listProjectConfigsService();
+    expect(result.configs[0].targetRepo).toEqual({
+      cloneUrl: 'git@github.com:owner/my-proj.git',
+      defaultBranch: 'main',
+      localPath: '~/code/my-proj',
+    });
+  });
+
+  it('fills empty target repo fields when targetRepo is absent', async () => {
+    vi.mocked(listProjectConfigs).mockResolvedValueOnce([
+      { ...mockProject, targetRepo: undefined },
+    ] as never);
+    const result = await listProjectConfigsService();
+    expect(result.configs[0].targetRepo).toEqual({
+      cloneUrl: '',
+      defaultBranch: 'main',
+      localPath: '',
+    });
+  });
+
   it('returns empty configs when no projects are registered', async () => {
     vi.mocked(listProjectConfigs).mockResolvedValueOnce([] as never);
     const result = await listProjectConfigsService();
