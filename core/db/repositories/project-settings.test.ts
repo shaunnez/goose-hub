@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   type ProjectSettingsRow,
+  deriveCoachPolicy,
   deriveQaE2eMode,
   deriveUseInvestigationSwarm,
   deriveUseMultiAgentPipeline,
@@ -19,6 +20,9 @@ function makeProjectSettingsRow(overrides: Partial<ProjectSettingsRow> = {}): Pr
     perBashCommandMaxSeconds: null,
     useMultiAgentPipeline: null,
     useInvestigationSwarm: null,
+    coachPolicyEnabled: null,
+    coachPolicyConsistencyThreshold: null,
+    coachPolicyMinLifecycles: null,
     qaE2eMode: null,
     playwrightReproEnabled: null,
     evidencePostEnabled: null,
@@ -48,6 +52,39 @@ describe('deriveUseMultiAgentPipeline', () => {
     expect(deriveUseMultiAgentPipeline(makeProjectSettingsRow({ useMultiAgentPipeline: 1 }))).toBe(
       true,
     );
+  });
+});
+
+describe('deriveCoachPolicy', () => {
+  it('returns disabled defaults when row and config are missing', () => {
+    expect(deriveCoachPolicy(null, null)).toEqual({
+      enabled: false,
+      consistencyThreshold: 0.8,
+      minLifecycles: 3,
+    });
+  });
+
+  it('uses config values when DB overrides are null', () => {
+    expect(
+      deriveCoachPolicy(makeProjectSettingsRow(), {
+        enabled: true,
+        consistencyThreshold: 0.9,
+        minLifecycles: 6,
+      }),
+    ).toEqual({ enabled: true, consistencyThreshold: 0.9, minLifecycles: 6 });
+  });
+
+  it('uses DB values above config values', () => {
+    expect(
+      deriveCoachPolicy(
+        makeProjectSettingsRow({
+          coachPolicyEnabled: 1,
+          coachPolicyConsistencyThreshold: 0.7,
+          coachPolicyMinLifecycles: 4,
+        }),
+        { enabled: false, consistencyThreshold: 0.9, minLifecycles: 6 },
+      ),
+    ).toEqual({ enabled: true, consistencyThreshold: 0.7, minLifecycles: 4 });
   });
 });
 

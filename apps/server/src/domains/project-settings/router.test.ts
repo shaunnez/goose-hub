@@ -44,7 +44,30 @@ vi.mock('#shared/projects.js', () => ({
 }));
 
 vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
+  DEFAULT_COACH_POLICY: { enabled: false, consistencyThreshold: 0.8, minLifecycles: 3 },
   deleteProjectSkillSetting: mockDeleteProjectSkillSetting,
+  deriveCoachPolicy: (
+    row: {
+      coachPolicyEnabled?: number | null;
+      coachPolicyConsistencyThreshold?: number | null;
+      coachPolicyMinLifecycles?: number | null;
+    } | null,
+    configDefault:
+      | { enabled: boolean; consistencyThreshold: number; minLifecycles: number }
+      | null
+      | undefined,
+  ) => {
+    const base = configDefault ?? { enabled: false, consistencyThreshold: 0.8, minLifecycles: 3 };
+    return {
+      enabled: row?.coachPolicyEnabled == null ? base.enabled : row.coachPolicyEnabled === 1,
+      consistencyThreshold:
+        row?.coachPolicyConsistencyThreshold == null
+          ? base.consistencyThreshold
+          : row.coachPolicyConsistencyThreshold,
+      minLifecycles:
+        row?.coachPolicyMinLifecycles == null ? base.minLifecycles : row.coachPolicyMinLifecycles,
+    };
+  },
   getUseInvestigationSwarm: mockGetUseInvestigationSwarm,
   getUseMultiAgentPipeline: mockGetUseMultiAgentPipeline,
   readProjectSettings: mockReadProjectSettings,
@@ -85,6 +108,7 @@ function project() {
       runtime: 'auto',
       allowHoldoutOverride: false,
       rolesModels: {},
+      coachPolicy: { enabled: false, consistencyThreshold: 0.8, minLifecycles: 3 },
     },
   };
 }
@@ -126,6 +150,83 @@ describe('project settings router', () => {
     expect(await res.json()).toMatchObject({
       loginCommand: 'codex login',
     });
+  });
+
+  it('returns learning loop coach policy with DB overrides resolved above config', async () => {
+    mockReadProjectSettings.mockReturnValue({
+      projectId: 'goose-hub-self',
+      coachPolicyEnabled: 1,
+      coachPolicyConsistencyThreshold: 0.92,
+      coachPolicyMinLifecycles: 6,
+      updatedAt: '2026-05-20T00:00:00Z',
+      updatedBy: 'ui',
+    });
+    const app = makeApp();
+    const res = await app.request('/projects/goose-hub-self/settings/learning-loop');
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      projectId: 'goose-hub-self',
+      coachPolicy: { enabled: true, consistencyThreshold: 0.92, minLifecycles: 6 },
+      configDefaults: { enabled: false, consistencyThreshold: 0.8, minLifecycles: 3 },
+      dbOverrides: {
+        enabled: true,
+        consistencyThreshold: 0.92,
+        minLifecycles: 6,
+        updatedBy: 'ui',
+      },
+    });
+  });
+
+  it('writes learning loop coach policy overrides', async () => {
+    const app = makeApp();
+    const res = await app.request('/projects/goose-hub-self/settings/learning-loop', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: true, consistencyThreshold: 0.9, minLifecycles: 5 }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockWriteProjectSettings).toHaveBeenCalledWith(
+      'goose-hub-self',
+      {
+        coachPolicyEnabled: 1,
+        coachPolicyConsistencyThreshold: 0.9,
+        coachPolicyMinLifecycles: 5,
+      },
+      'ui',
+    );
+  });
+
+  it('clears learning loop coach policy overrides with null', async () => {
+    const app = makeApp();
+    const res = await app.request('/projects/goose-hub-self/settings/learning-loop', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: null, consistencyThreshold: null, minLifecycles: null }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockWriteProjectSettings).toHaveBeenCalledWith(
+      'goose-hub-self',
+      {
+        coachPolicyEnabled: null,
+        coachPolicyConsistencyThreshold: null,
+        coachPolicyMinLifecycles: null,
+      },
+      'ui',
+    );
+  });
+
+  it('rejects invalid learning loop policy patches', async () => {
+    const app = makeApp();
+    const res = await app.request('/projects/goose-hub-self/settings/learning-loop', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ consistencyThreshold: 1.5, minLifecycles: 0 }),
+    });
+
+    expect(res.status).toBe(422);
   });
 
   it('returns observed runtime profiler data for the project', async () => {

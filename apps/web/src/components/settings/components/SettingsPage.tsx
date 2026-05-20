@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { DevReviewPanel } from './DevReviewPanel';
+import { LearningLoopPanel } from './LearningLoopPanel';
 import { MilestonesPanel } from './MilestonesPanel';
 import { PipelinePanel } from './PipelinePanel';
 import { ProjectBudgetPanel } from './ProjectBudgetPanel';
@@ -17,6 +18,7 @@ type Tab =
   | 'runtime'
   | 'milestones'
   | 'workflow-map'
+  | 'learning-loop'
   | 'pipeline'
   | 'review'
   | 'dev-review';
@@ -26,6 +28,7 @@ const TAB_LABELS: Record<Tab, string> = {
   runtime: 'Skill runtime',
   milestones: 'Milestones',
   'workflow-map': 'Workflow map',
+  'learning-loop': 'Learning loop',
   pipeline: 'Pipeline',
   review: 'Review',
   'dev-review': 'Dev-review',
@@ -116,6 +119,7 @@ export function SettingsPage() {
               'runtime',
               'milestones',
               'workflow-map',
+              'learning-loop',
               'pipeline',
               'review',
               'dev-review',
@@ -148,6 +152,9 @@ export function SettingsPage() {
         )}
         {tab === 'workflow-map' && selectedConfig != null && (
           <WorkflowMapPanel slug={selectedConfig.slug} />
+        )}
+        {tab === 'learning-loop' && selectedConfig != null && (
+          <LearningLoopPanel slug={selectedConfig.slug} />
         )}
         {tab === 'pipeline' && selectedConfig != null && (
           <PipelinePanel slug={selectedConfig.slug} />
