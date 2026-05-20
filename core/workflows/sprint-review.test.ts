@@ -32,13 +32,19 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   },
 }));
 
+const mockImprovementCandidateRows: Array<{
+  sourceTaskId: string | null;
+  suggestionText: string;
+  suggestionType: string;
+}> = [];
+
 vi.mock('@goose-hub/core/db/db.js', () => ({
   db: {
     select: () => ({
       from: () => ({
         where: () => ({
           orderBy: () => ({ all: () => [] }),
-          all: () => [],
+          all: () => mockImprovementCandidateRows,
         }),
       }),
     }),
@@ -132,6 +138,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockRun.mockReset();
   mockReplay.mockReturnValue([]);
+  mockImprovementCandidateRows.length = 0;
   mockGetProjectBySlug.mockResolvedValue(null);
 });
 
@@ -191,6 +198,66 @@ describe('runSprintReviewWorkflow', () => {
     };
     expect(callArg.context?.milestone?.title).toBe(MILESTONE_TITLE);
     expect(callArg.context?.milestone?.number).toBe(MILESTONE_NUMBER);
+  });
+
+  it('passes only milestone-scoped improvement candidates to the runtime', async () => {
+    const doneItem = makeWorkItem({
+      id: 'github:shaunnez/goose-hub#42',
+      externalId: '42',
+      state: 'factory:done',
+    });
+    const otherItem = makeWorkItem({
+      id: 'github:shaunnez/goose-hub#7',
+      externalId: '7',
+      title: 'Different milestone item',
+      milestoneId: '12',
+      milestoneTitle: 'M12: Something Else',
+    });
+    const source = makeMockSource([doneItem]);
+    mockImprovementCandidateRows.push(
+      {
+        sourceTaskId: doneItem.id,
+        suggestionText: 'Add e2eCommand to project configuration.',
+        suggestionType: 'project-config',
+      },
+      {
+        sourceTaskId: otherItem.id,
+        suggestionText: 'Do not leak this older suggestion into M13.',
+        suggestionType: 'workflow',
+      },
+      {
+        sourceTaskId: null,
+        suggestionText: 'General project cleanup from an unknown source.',
+        suggestionType: 'workflow',
+      },
+    );
+    mockRun.mockResolvedValueOnce(makeAgentResult(makeSprintReviewOutput()));
+
+    const { runSprintReviewWorkflow } = await import('./sprint-review.js');
+    await runSprintReviewWorkflow({
+      projectId: SLUG,
+      milestoneTitle: MILESTONE_TITLE,
+      milestoneNumber: MILESTONE_NUMBER,
+      stateSource: source,
+    });
+
+    const callArg = mockRun.mock.calls[0]?.[0] as {
+      context?: {
+        improvementCandidates?: Array<{
+          suggestionText?: string;
+          kind?: string;
+          confidence?: string;
+        }>;
+      };
+    };
+
+    expect(callArg.context?.improvementCandidates).toEqual([
+      {
+        kind: 'project-config',
+        suggestionText: 'Add e2eCommand to project configuration.',
+        confidence: 'medium',
+      },
+    ]);
   });
 
   it('creates a sprint review issue with the correct title', async () => {
