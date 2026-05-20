@@ -16,7 +16,9 @@ import {
   writeProjectReviewSettings,
 } from '@goose-hub/core/db/repositories/project-review-settings.js';
 import {
+  DEFAULT_COACH_POLICY,
   deleteProjectSkillSetting,
+  deriveCoachPolicy,
   getUseInvestigationSwarm,
   getUseMultiAgentPipeline,
   readProjectSettings,
@@ -83,6 +85,12 @@ const ReviewPatchSchema = z.object({
 const PipelinePatchSchema = z.object({
   useMultiAgentPipeline: z.boolean().optional(),
   useInvestigationSwarm: z.boolean().optional(),
+});
+
+const LearningLoopPatchSchema = z.object({
+  enabled: z.boolean().nullable().optional(),
+  consistencyThreshold: z.number().min(0).max(1).nullable().optional(),
+  minLifecycles: z.number().int().min(1).max(100).nullable().optional(),
 });
 
 const RuntimeProfilerQuerySchema = z.object({
@@ -594,6 +602,63 @@ router.patch('/:slug/settings/review', async (c) => {
   }
 
   writeProjectReviewSettings(project.id, { reviewerSlots: parsed.data.reviewerSlots }, 'ui');
+  return c.json({ ok: true });
+});
+
+/** GET /projects/:slug/settings/learning-loop — current learning loop policy */
+router.get('/:slug/settings/learning-loop', async (c) => {
+  const slug = c.req.param('slug');
+  const project = await getProject(slug);
+  if (project == null) return c.json({ error: 'project not found' }, 404);
+
+  const row = readProjectSettings(project.id);
+  const configDefaults = project.agentConfig?.coachPolicy ?? DEFAULT_COACH_POLICY;
+  return c.json({
+    projectId: project.id,
+    coachPolicy: deriveCoachPolicy(row, configDefaults),
+    configDefaults,
+    dbOverrides:
+      row == null
+        ? null
+        : {
+            enabled: row.coachPolicyEnabled == null ? null : row.coachPolicyEnabled === 1,
+            consistencyThreshold: row.coachPolicyConsistencyThreshold ?? null,
+            minLifecycles: row.coachPolicyMinLifecycles ?? null,
+            updatedAt: row.updatedAt,
+            updatedBy: row.updatedBy ?? null,
+          },
+  });
+});
+
+/** PATCH /projects/:slug/settings/learning-loop — upsert learning loop policy */
+router.patch('/:slug/settings/learning-loop', async (c) => {
+  const slug = c.req.param('slug');
+  const project = await getProject(slug);
+  if (project == null) return c.json({ error: 'project not found' }, 404);
+
+  const body = await parseBody<unknown>(c);
+  if (!body.ok) return body.error;
+
+  const parsed = LearningLoopPatchSchema.safeParse(body.data);
+  if (!parsed.success) {
+    return c.json({ error: 'invalid body', details: parsed.error.issues }, 422);
+  }
+
+  writeProjectSettings(
+    project.id,
+    {
+      ...(parsed.data.enabled !== undefined
+        ? { coachPolicyEnabled: parsed.data.enabled == null ? null : parsed.data.enabled ? 1 : 0 }
+        : {}),
+      ...(parsed.data.consistencyThreshold !== undefined
+        ? { coachPolicyConsistencyThreshold: parsed.data.consistencyThreshold }
+        : {}),
+      ...(parsed.data.minLifecycles !== undefined
+        ? { coachPolicyMinLifecycles: parsed.data.minLifecycles }
+        : {}),
+    },
+    'ui',
+  );
   return c.json({ ok: true });
 });
 
