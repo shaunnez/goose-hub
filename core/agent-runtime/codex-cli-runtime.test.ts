@@ -405,6 +405,86 @@ describe('CodexCliRuntime timeout handling', () => {
     );
   });
 
+  it('rejects a successful Codex process when stderr shows a forbidden runtime surface', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec({ skill: 'scout-code-path' }));
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        `${JSON.stringify({
+          type: 'item.completed',
+          item: { type: 'agent_message', text: '{"ok":true}' },
+        })}\n`,
+      ),
+    );
+    child.stderr.emit('data', Buffer.from('resources/read failed: file://memory\n'));
+    child.emit('close', 0);
+
+    await expect(run).rejects.toThrow('forbidden-runtime-surface');
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.tool-call',
+        payload: expect.objectContaining({
+          tool_name: 'resources/read',
+          blocked: true,
+          block_reason: 'forbidden-runtime-surface: resources/read failed',
+          status: 'failed',
+        }),
+        personaId: 'test-project/developer/0',
+      }),
+    );
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-failed',
+        payload: expect.objectContaining({
+          skill: 'scout-code-path',
+          reason: 'forbidden-runtime-surface',
+        }),
+      }),
+    );
+    expect(mockEventStore.appendEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent.run-completed' }),
+    );
+  });
+
+  it('logs normal Codex stderr without failing the run', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec());
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        `${JSON.stringify({
+          type: 'item.completed',
+          item: { type: 'agent_message', text: '{"ok":true}' },
+        })}\n`,
+      ),
+    );
+    child.stderr.emit('data', Buffer.from('Reading additional input from stdin...\n'));
+    child.emit('close', 0);
+
+    await expect(run).resolves.toMatchObject({ output: { ok: true } });
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.log',
+        payload: expect.objectContaining({
+          stream: 'stderr',
+          text: 'Reading additional input from stdin...',
+        }),
+      }),
+    );
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent.run-completed' }),
+    );
+  });
+
   it('emits one live decision event from a streamed agent_message marker', async () => {
     const child = makeHangingChild();
     mockSpawn.mockReturnValue(child);

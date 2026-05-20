@@ -61,6 +61,20 @@ const BROWSER_PROCESS_ACCESS_SKILLS = new Set(['playwright-repro', 'evidence-pos
 const ABSOLUTE_USER_PATH_RE = /\/Users\/[^\s'"`]+/g;
 const NATIVE_PATCH_REJECTION_RE =
   /patch rejected:\s*writing is blocked by read-only sandbox|writing is blocked by read-only sandbox/i;
+const FORBIDDEN_RUNTIME_SURFACE_PATTERNS: Array<{
+  surface: string;
+  toolName: string;
+  re: RegExp;
+}> = [
+  { surface: 'resources/read failed', toolName: 'resources/read', re: /resources\/read\s+failed/i },
+  { surface: 'resources/list failed', toolName: 'resources/list', re: /resources\/list\s+failed/i },
+  { surface: 'collab spawn failed', toolName: 'collab.spawn', re: /collab\s+spawn\s+failed/i },
+  {
+    surface: 'full-history fork/spawn failed',
+    toolName: 'full-history-fork-spawn',
+    re: /(?:full[- ]history.*(?:fork|spawn)|(?:fork|spawn).*full[- ]history).*(?:failed|error)/i,
+  },
+];
 
 function isPathUnderRoot(path: string, root: string): boolean {
   const normalizedRoot = join(root, '.');
@@ -119,6 +133,23 @@ function contextSizeTelemetry(input: { contextXml: string; systemPrompt: string 
 
 function stderrIncludesNativePatchRejection(stderr: string): boolean {
   return NATIVE_PATCH_REJECTION_RE.test(stderr);
+}
+
+function detectForbiddenRuntimeSurface(stderr: string): {
+  surface: string;
+  toolName: string;
+  blockReason: string;
+} | null {
+  for (const pattern of FORBIDDEN_RUNTIME_SURFACE_PATTERNS) {
+    if (pattern.re.test(stderr)) {
+      return {
+        surface: pattern.surface,
+        toolName: pattern.toolName,
+        blockReason: `forbidden-runtime-surface: ${pattern.surface}`,
+      };
+    }
+  }
+  return null;
 }
 
 export class CodexCliRuntime implements AgentRuntime {
@@ -298,6 +329,30 @@ export class CodexCliRuntime implements AgentRuntime {
             workspace_dir: workspaceDir,
             blocked: true,
             block_reason: 'native-write-blocked',
+            status: 'failed',
+          }),
+          runId,
+          personaId,
+        });
+      };
+
+      const emitForbiddenRuntimeSurfaceBlocked = (violation: {
+        surface: string;
+        toolName: string;
+        blockReason: string;
+      }) => {
+        eventStore.appendEvent({
+          projectId,
+          workItemId,
+          kind: 'agent.tool-call',
+          payload: normalizeToolCallAuditPayload({
+            tool_name: violation.toolName,
+            run_id: runId,
+            tool_input: { source: 'codex-stderr', surface: violation.surface },
+            skill: spec.skill,
+            workspace_dir: workspaceDir,
+            blocked: true,
+            block_reason: violation.blockReason,
             status: 'failed',
           }),
           runId,
@@ -540,6 +595,26 @@ export class CodexCliRuntime implements AgentRuntime {
         stdoutLineBuffer = '';
 
         const envelope = parseCodexEnvelope(stdout);
+        const forbiddenRuntimeSurface = detectForbiddenRuntimeSurface(stderr);
+
+        if (forbiddenRuntimeSurface != null) {
+          emitForbiddenRuntimeSurfaceBlocked(forbiddenRuntimeSurface);
+          eventStore.appendEvent({
+            projectId,
+            workItemId,
+            kind: 'agent.run-failed',
+            payload: {
+              runId,
+              skill: spec.skill,
+              reason: 'forbidden-runtime-surface',
+              error: forbiddenRuntimeSurface.blockReason,
+            },
+            runId,
+            personaId,
+          });
+          reject(new Error(forbiddenRuntimeSurface.blockReason));
+          return;
+        }
 
         if (code !== 0 && envelope == null) {
           if (stderrIncludesNativePatchRejection(stderr)) emitNativePatchBlocked();
