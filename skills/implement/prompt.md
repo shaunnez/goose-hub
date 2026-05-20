@@ -43,6 +43,11 @@ Path contract: all output paths must be repo-root/worktree-root relative POSIX p
   `keyFiles` before exploring adjacent surfaces. If you choose a different
   implementation surface, explain the pivot in a `PLAN` decision summary with
   concrete evidence.
+- If `<relatedSurface>` is present, treat it as the deterministic handoff for
+  related tests, package roots, evidence spec path, and checked-absent paths.
+  Use `existingTests` first; if it is empty, create or update
+  `testCandidates[0]`. Do not search again for paths listed in
+  `checkedAbsent`.
 - Use `mcp__factory-tools__read_file` and `mcp__factory-tools__search_text` to load the test files for the surfaces you'll touch FIRST. Existing tests are the strongest signal of intent.
 
 #### Investigation handoff fast path
@@ -58,6 +63,7 @@ In that case:
 - Patch the files identified by the investigation.
 - Update the directly related test file when one is identified or already
   exists beside the touched surface.
+- Prefer `<relatedSurface>.targetedTestPaths` for the targeted test path list.
 - Run targeted tests for only the touched surface.
 - Do not continue broad discovery after the key files confirm the finding.
 
@@ -66,7 +72,8 @@ Only explore adjacent files when one of these is true:
 - A key file no longer exists.
 - The key file contradicts the investigation.
 - The targeted test cannot be identified from the key files or nearby existing
-  tests.
+  tests, and `<relatedSurface>` did not provide `existingTests` or
+  `testCandidates`.
 - The first patch or targeted test fails and the failure points outside the
   investigated surface.
 

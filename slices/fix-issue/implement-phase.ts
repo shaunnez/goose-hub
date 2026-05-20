@@ -10,6 +10,10 @@ import {
 } from '@goose-hub/core/agent-runtime/investigation-context.js';
 import type { ModelTier } from '@goose-hub/core/agent-runtime/models.js';
 import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
+import {
+  type RelatedSurfaceManifest,
+  discoveryCallsRepeatRelatedSurface,
+} from '@goose-hub/core/agent-runtime/related-surface.js';
 import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
 import { resolveSkillRuntimeForProject } from '@goose-hub/core/agent-runtime/skill-runtime-resolver.js';
 import { runWithEscalation } from '@goose-hub/core/agent-runtime/with-escalation.js';
@@ -50,6 +54,7 @@ export interface RunImplementInput {
   personaId: string;
   advisorFeedback?: string;
   investigation?: InvestigationContext;
+  relatedSurface?: RelatedSurfaceManifest;
   surfaceGuardInvestigation?: InvestigationContext;
   symbolIndexKeyFiles?: SymbolKeyFileHint[];
   revisionPass?: 0 | 1;
@@ -591,6 +596,10 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
       personaId: input.personaId,
     });
   }
+  const evidencePostEnabled = getEvidencePostEnabled(
+    execution.projectConfig?.id ?? input.projectId,
+    execution.projectConfig?.evidencePostEnabled ?? true,
+  );
 
   const { output } = await runWithEscalation({
     runtime: execution.runtime,
@@ -614,9 +623,10 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
         worktreePath: input.worktreePath,
         stack: input.stack,
         investigation: input.investigation,
+        relatedSurface: input.relatedSurface,
         advisorFeedback: input.advisorFeedback,
         revisionPass: input.revisionPass ?? 0,
-        evidencePostEnabled: execution.projectConfig?.evidencePostEnabled ?? true,
+        evidencePostEnabled,
       },
       contextAllowlist: [
         'workItem.title',
@@ -628,6 +638,7 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
         'stack.lintCommand',
         'stack.typecheckCommand',
         'investigation',
+        'relatedSurface',
         'advisorFeedback',
         'revisionPass',
         'evidencePostEnabled',
@@ -653,6 +664,25 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
     worktreePath: input.worktreePath,
     appendEvent: (event) => eventStore.appendEvent(event),
   });
+  if (
+    discoveryCallsRepeatRelatedSurface({
+      relatedSurface: input.relatedSurface,
+      toolEvents: eventStore.replay({ runId: input.runId, kind: 'agent.tool-call' }),
+    })
+  ) {
+    eventStore.appendEvent({
+      projectId: input.projectId,
+      workItemId: input.workItem.id,
+      kind: 'agent.discovery-budget-exceeded',
+      payload: {
+        runId: input.runId,
+        skill: 'implement',
+        checkedAbsentCount: input.relatedSurface?.checkedAbsent.length ?? 0,
+      },
+      runId: input.runId,
+      personaId: input.personaId,
+    });
+  }
   const normalized = normalizeImplementOutputPaths({
     output,
     worktreePath: input.worktreePath,
@@ -671,10 +701,6 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
     observedChangedPaths: observedChangedFiles.paths,
     observedWritePaths,
   });
-  const evidencePostEnabled = getEvidencePostEnabled(
-    execution.projectConfig?.id ?? input.projectId,
-    execution.projectConfig?.evidencePostEnabled ?? true,
-  );
   evaluateEvidenceRequirementGate({
     projectId: input.projectId,
     workItemId: input.workItem.id,

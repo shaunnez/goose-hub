@@ -16,6 +16,7 @@ export interface ToolCallAudit {
   truncated?: boolean;
   status?: 'ok' | 'failed' | 'timed_out';
   exitCode?: number | null;
+  noMatches?: boolean;
 }
 
 export interface BlockedToolCallAudit extends ToolCallAudit {

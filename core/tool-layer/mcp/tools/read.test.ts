@@ -122,7 +122,7 @@ describe('listFilesTool', () => {
     const audit = events.find(
       (e) => (e.payload as { tool_name?: string }).tool_name === 'list_files',
     );
-    expect(audit?.payload).toMatchObject({ status: 'ok' });
+    expect(audit?.payload).toMatchObject({ status: 'ok', noMatches: true });
   });
 });
 
@@ -145,7 +145,7 @@ describe('searchTextTool', () => {
     const audit = events.find(
       (e) => (e.payload as { tool_name?: string }).tool_name === 'search_text',
     );
-    expect(audit?.payload).toMatchObject({ status: 'ok' });
+    expect(audit?.payload).toMatchObject({ status: 'ok', noMatches: true });
   });
 });
 

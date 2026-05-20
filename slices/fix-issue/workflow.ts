@@ -2,9 +2,11 @@ import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { adviseOnPlan } from '@goose-hub/core/agent-runtime/advisor.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
+import { buildRelatedSurfaceManifest } from '@goose-hub/core/agent-runtime/related-surface.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
+import { getEvidencePostEnabled } from '@goose-hub/core/db/repositories/project-settings.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
@@ -137,6 +139,35 @@ export async function runFixIssueWorkflow(
           ...investigation,
           keyFiles: [...investigation.keyFiles, ...symbolKeyFiles],
         };
+  const evidencePostEnabled = getEvidencePostEnabled(
+    implementExecution.projectConfig?.id ?? projectId,
+    implementExecution.projectConfig?.evidencePostEnabled ?? true,
+  );
+  const relatedSurface = buildRelatedSurfaceManifest({
+    worktreePath,
+    workItemNumber: Number(workItem.externalId),
+    investigation: implementInvestigation,
+    evidencePostEnabled,
+  });
+  if (relatedSurface != null) {
+    eventStore.appendEvent({
+      projectId,
+      workItemId: workItem.id,
+      kind: 'agent.related-surface-manifest-created',
+      payload: {
+        runId,
+        skill: 'implement',
+        keyFileCount: relatedSurface.keyFiles.length,
+        packageRootCount: relatedSurface.packageRoots.length,
+        existingTestCount: relatedSurface.existingTests.length,
+        testCandidateCount: relatedSurface.testCandidates.length,
+        checkedAbsentCount: relatedSurface.checkedAbsent.length,
+        evidenceSpecPath: relatedSurface.evidenceSpecPath,
+      },
+      runId,
+      personaId: implementPersonaId,
+    });
+  }
 
   try {
     // Transition into in-progress as soon as the worktree exists.
@@ -179,6 +210,7 @@ export async function runFixIssueWorkflow(
         outputJsonSchema: implementJsonSchema,
         personaId: implementPersonaId,
         investigation: implementInvestigation,
+        relatedSurface,
         surfaceGuardInvestigation: investigation,
         symbolIndexKeyFiles: symbolKeyFiles,
         revisionPass: 0,
@@ -268,6 +300,7 @@ export async function runFixIssueWorkflow(
       outputJsonSchema: implementJsonSchema,
       personaId: implementPersonaId,
       investigation: implementInvestigation,
+      relatedSurface,
       surfaceGuardInvestigation: investigation,
       symbolIndexKeyFiles: symbolKeyFiles,
       advisorFeedback,

@@ -117,6 +117,25 @@ describe('intervention projector', () => {
     ).toHaveLength(1);
   });
 
+  it('does not open interventions for grill gate-pending reply waits', () => {
+    const workItemId = 'github:owner/repo#grill-gate-pending';
+    const result = projectActionableEvent(
+      event({
+        id: 121,
+        workItemId,
+        payload: {
+          from: 'factory:grilling',
+          to: 'factory:gate-pending',
+          by: 'grill-and-prd',
+        },
+      }),
+    );
+
+    expect(result.opened).toBeNull();
+    expect(result.shouldScheduleProposer).toBe(false);
+    expect(listInterventions({ projectId: 'proj', workItemId })).toHaveLength(0);
+  });
+
   it('reopens a resolved recurrence and schedules proposer work', () => {
     const first = projectActionableEvent(event({ id: 201, workItemId: 'github:owner/repo#201' }));
     expect(first.opened?.ok).toBe(true);

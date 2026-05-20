@@ -137,7 +137,7 @@ Return a JSON object with this exact structure:
 
 `decisionSummaries` must have at least one entry. Include one entry per major investigation step.
 
-`keyFiles` must list every file you read or searched that is materially relevant to the bug. Exclude files you only skimmed without finding relevant content.
+`keyFiles` must list the files an implementer most likely needs to change or verify. Include materially relevant implementation files and existing test/spec files when you find them; exclude files you only skimmed or searched without finding actionable implementation signal.
 
 `confidence` reflects how certain you are about your root cause hypothesis:
 - `low` — symptom identified but root cause unclear; many unknowns remain

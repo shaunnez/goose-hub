@@ -1,6 +1,7 @@
-import { fetchPlaybook, fetchPlaybooks } from '@/lib/api';
+import { createPlaybook, fetchPlaybook, fetchPlaybooks } from '@/lib/api';
 import type { PlaybookDetailDto, PlaybookManifestDto, PlaybookSummaryDto } from '@/lib/types';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Play } from 'lucide-react';
 import { useState } from 'react';
 
 function formatDate(iso: string): string {
@@ -19,8 +20,38 @@ interface PlaybooksTabProps {
   projectSlug: string;
 }
 
+type PlaybookPreset = '7d' | '14d' | '10-lifecycles';
+
+const PLAYBOOK_PRESETS: Array<{ id: PlaybookPreset; label: string }> = [
+  { id: '7d', label: 'Last 7 days' },
+  { id: '14d', label: 'Last 14 days' },
+  { id: '10-lifecycles', label: 'Last 10 lifecycles' },
+];
+
+function buildPlaybookBody(
+  preset: PlaybookPreset,
+): { windowSize: number } | { dateRange: { startAt: string; endAt: string } } {
+  if (preset === '10-lifecycles') return { windowSize: 10 };
+
+  const days = preset === '14d' ? 14 : 7;
+  const end = new Date();
+  const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000);
+  return {
+    dateRange: {
+      startAt: start.toISOString(),
+      endAt: end.toISOString(),
+    },
+  };
+}
+
 export function PlaybooksTab({ projectSlug }: PlaybooksTabProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [preset, setPreset] = useState<PlaybookPreset>('7d');
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const [generated, setGenerated] = useState<{ playbookId: number; lifecycleCount: number } | null>(
+    null,
+  );
+  const queryClient = useQueryClient();
 
   const {
     data: playbooks = [],
@@ -31,12 +62,73 @@ export function PlaybooksTab({ projectSlug }: PlaybooksTabProps) {
     queryFn: () => fetchPlaybooks(projectSlug),
   });
 
+  const generate = useMutation({
+    mutationFn: () => createPlaybook(projectSlug, buildPlaybookBody(preset)),
+    onMutate: () => {
+      setGenerateError(null);
+      setGenerated(null);
+    },
+    onSuccess: (result) => {
+      setGenerated(result);
+      setSelectedId(result.playbookId);
+      void queryClient.invalidateQueries({ queryKey: ['playbooks', projectSlug] });
+      void queryClient.invalidateQueries({
+        queryKey: ['playbook-detail', projectSlug, result.playbookId],
+      });
+    },
+    onError: (err: Error) => setGenerateError(err.message),
+  });
+
   return (
     <div data-testid="playbooks-tab" className="flex h-full overflow-hidden">
       <div className="flex-1 overflow-y-auto px-8 py-6">
-        <div className="flex items-baseline justify-between mb-3">
-          <h1 className="text-[15px] font-semibold">Playbooks</h1>
-          <span className="text-[11.5px] text-fg-3">Cross-run retrospective manifests</span>
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div>
+            <h1 className="text-[15px] font-semibold">Playbooks</h1>
+            <span className="text-[11.5px] text-fg-3">Cross-run retrospective manifests</span>
+          </div>
+          <div className="flex flex-col items-end gap-1.5">
+            <div className="flex items-center gap-1 rounded-md border border-line bg-bg-elev p-1">
+              {PLAYBOOK_PRESETS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setPreset(option.id)}
+                  disabled={generate.isPending}
+                  className={[
+                    'h-7 px-2 rounded text-[11px] transition-colors',
+                    preset === option.id
+                      ? 'bg-accent-soft text-fg'
+                      : 'text-fg-3 hover:text-fg hover:bg-bg-hover',
+                    generate.isPending ? 'cursor-not-allowed opacity-70' : '',
+                  ].join(' ')}
+                >
+                  {option.label}
+                </button>
+              ))}
+              <button
+                type="button"
+                data-testid="generate-playbook"
+                onClick={() => generate.mutate()}
+                disabled={generate.isPending}
+                className="h-7 px-2.5 rounded bg-accent text-white text-[11px] font-medium flex items-center gap-1.5 disabled:opacity-70 disabled:cursor-not-allowed"
+                title="Generate cross-run playbook"
+              >
+                <Play size={11} />
+                {generate.isPending ? 'Generating...' : 'Generate'}
+              </button>
+            </div>
+            {generateError != null && (
+              <div className="text-[11px] text-[color:var(--danger)] max-w-[420px] text-right">
+                {generateError}
+              </div>
+            )}
+            {generated != null && !generate.isPending && (
+              <div className="text-[11px] text-fg-3">
+                Created playbook #{generated.playbookId} from {generated.lifecycleCount} lifecycles.
+              </div>
+            )}
+          </div>
         </div>
 
         {isLoading && <div className="text-fg-3 text-[13px]">Loading playbooks…</div>}
@@ -51,10 +143,7 @@ export function PlaybooksTab({ projectSlug }: PlaybooksTabProps) {
             className="text-center text-fg-3 text-[13px] py-16"
           >
             <p className="mb-2 font-medium text-fg-2">No playbooks yet</p>
-            <p>
-              Trigger a cross-run retrospective with{' '}
-              <code className="font-mono">POST /api/projects/{projectSlug}/playbooks</code>.
-            </p>
+            <p>Pick a window and generate the first cross-run retrospective manifest.</p>
           </div>
         )}
 
@@ -142,7 +231,7 @@ function PlaybookDrillIn({ projectSlug, playbookId, onClose }: PlaybookDrillInPr
   return (
     <aside
       data-testid="playbook-drill-in"
-      className="w-[420px] shrink-0 border-l border-line bg-bg-elev overflow-y-auto px-5 py-5"
+      className="w-[620px] shrink-0 border-l border-line bg-bg-elev overflow-y-auto px-5 py-5"
     >
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-[14px] font-semibold">Playbook #{playbookId}</h2>

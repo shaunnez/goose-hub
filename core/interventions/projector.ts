@@ -67,6 +67,7 @@ export function classifyActionableEvent(
       };
     }
     if (payload.to === 'factory:gate-pending') {
+      if (payload.by === 'grill-and-prd') return null;
       return {
         interventionType: 'gate_pending',
         title: 'Gate pending',

@@ -47,6 +47,17 @@ const config: SkillConfig = {
         investigationRunId: z.string().optional(),
       })
       .optional(),
+    relatedSurface: z
+      .object({
+        keyFiles: z.array(z.object({ path: z.string(), reason: z.string().optional() })),
+        packageRoots: z.array(z.string()),
+        existingTests: z.array(z.string()),
+        testCandidates: z.array(z.string()),
+        evidenceSpecPath: z.string().nullable(),
+        checkedAbsent: z.array(z.string()),
+        targetedTestPaths: z.array(z.string()),
+      })
+      .optional(),
   }),
   contextAllowlist: [
     'workItem.title',
@@ -58,6 +69,7 @@ const config: SkillConfig = {
     'stack.lintCommand',
     'stack.typecheckCommand',
     'investigation',
+    'relatedSurface',
     'advisorFeedback',
     'revisionPass',
     'evidencePostEnabled',

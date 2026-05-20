@@ -5,6 +5,7 @@ import {
 import type { RunQualityScore } from '@goose-hub/core/quality-score/types.js';
 import type { Result } from '#shared/middleware.js';
 import { getProject } from '#shared/projects.js';
+import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
 import type {
   AgentRunRow,
   ImprovementCandidateRow,
@@ -84,6 +85,7 @@ async function createGithubImprovementIssue(
   repo: string,
   token: string,
   candidate: ImprovementCandidateRow,
+  milestoneNumber: number | null,
 ): Promise<string> {
   if (process.env.MOCK_SOURCE === 'true') {
     return `https://github.com/${repo}/issues/mock-improvement`;
@@ -101,6 +103,18 @@ async function createGithubImprovementIssue(
   ].join('\n');
 
   const url = `https://api.github.com/repos/${repo}/issues`;
+  const payload: {
+    title: string;
+    body: string;
+    labels: string[];
+    milestone?: number;
+  } = {
+    title,
+    body,
+    labels: ['type:improvement', 'schedule:later'],
+  };
+  if (milestoneNumber != null) payload.milestone = milestoneNumber;
+
   const res = await fetch(url, {
     method: 'POST',
     headers: {
@@ -109,7 +123,7 @@ async function createGithubImprovementIssue(
       'X-GitHub-Api-Version': '2022-11-28',
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ title, body, labels: ['type:improvement', 'schedule:later'] }),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
@@ -143,7 +157,13 @@ export async function approveCandidate(
       return { ok: true, data: { candidate: updated ?? candidate } };
     }
 
-    const issueUrl = await createGithubImprovementIssue(cfg.source.repo, token, existing);
+    const { milestoneNumber } = await resolveActiveMilestone(slug);
+    const issueUrl = await createGithubImprovementIssue(
+      cfg.source.repo,
+      token,
+      existing,
+      milestoneNumber,
+    );
     const updated = await updateCandidateGithubIssue(id, issueUrl, null);
     return { ok: true, data: { candidate: updated ?? candidate } };
   } catch (err) {

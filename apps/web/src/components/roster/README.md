@@ -21,14 +21,15 @@ A filter bar at the top of the page allows scoping to "All Projects" (default) o
 - `GET /projects/configs` — project list and colorStripe map (for filter bar and attribution badges)
 - `GET /roster/runs?persona=<name>` — per-run history (empty until per-run table is added)
 - `GET /roster/candidates?persona=<name>` — pending improvement candidates (from `improvement_candidates` table)
-- `POST /roster/candidates/:id/approve` — approve a candidate (status → approved)
+- `POST /roster/candidates/:id/approve` — approve a candidate (status → approved) and create a GitHub issue in the active milestone
 - `POST /roster/candidates/:id/reject` — reject a candidate (status → rejected)
 
 ## Improvement candidates
 
 Candidates are created by the retrospective workflow (`core/workflows/retrospective.ts`) after each
 retro run. Only `pending` candidates are shown in the drill-in. Approve/reject buttons are visible
-on each pending candidate; clicking one calls the API and removes the row from the list via query
+on each pending candidate; clicking approve creates a `type:improvement` GitHub issue assigned to
+the project active milestone when one is resolved, then removes the row from the list via query
 invalidation.
 
 ## Empty states
@@ -44,3 +45,11 @@ A second tab on the roster page lists cross-run retrospective `PlaybookManifest`
 - `GET /projects/:slug/playbooks` — playbook summaries for the current project
 - `GET /projects/:slug/playbooks/:id` — full manifest detail
 - `POST /projects/:slug/playbooks` — manual trigger; body is one of `{ windowSize: N }` or `{ dateRange: { startAt, endAt } }`
+
+The tab includes a manual generator with three presets:
+
+- Last 7 days — sends `dateRange`
+- Last 14 days — sends `dateRange`
+- Last 10 lifecycles — sends `windowSize: 10`
+
+On success, the playbook list is invalidated and the newly created playbook is selected.

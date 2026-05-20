@@ -44,6 +44,7 @@ const {
   mockGetCandidateById,
   mockUpdateCandidateGithubIssue,
   mockListRunsByPersona,
+  mockResolveActiveMilestone,
 } = vi.hoisted(() => ({
   mockListPersonaStats: vi.fn(),
   mockListCandidatesByPersona: vi.fn(),
@@ -51,6 +52,7 @@ const {
   mockGetCandidateById: vi.fn(),
   mockUpdateCandidateGithubIssue: vi.fn(),
   mockListRunsByPersona: vi.fn().mockReturnValue([]),
+  mockResolveActiveMilestone: vi.fn(),
 }));
 
 vi.mock('./repository.js', () => ({
@@ -71,6 +73,10 @@ vi.mock('../../shared/projects.js', () => ({
   listProjects: vi.fn(),
 }));
 
+vi.mock('#shared/resolve-milestone.js', () => ({
+  resolveActiveMilestone: mockResolveActiveMilestone,
+}));
+
 import {
   approveCandidate,
   getPersonaCandidates,
@@ -82,6 +88,7 @@ import {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
+  mockResolveActiveMilestone.mockResolvedValue({ milestoneNumber: 22, source: 'config' });
 });
 
 afterEach(() => {
@@ -216,6 +223,50 @@ describe('approveCandidate', () => {
       'https://github.com/owner/repo/issues/99',
       null,
     );
+    expect(fetch).toHaveBeenCalledWith(
+      'https://api.github.com/repos/owner/repo/issues',
+      expect.objectContaining({
+        body: expect.stringContaining('"milestone":22'),
+      }),
+    );
+    const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string) as {
+      labels: string[];
+    };
+    expect(body.labels).toContain('schedule:later');
+  });
+
+  it('omits milestone when the project has no active milestone', async () => {
+    const approved = { ...mockCandidateRow, status: 'approved' };
+    const withUrl = { ...approved, githubIssueUrl: 'https://github.com/owner/repo/issues/99' };
+    mockGetCandidateById.mockResolvedValue(mockCandidateRow);
+    mockUpdateCandidateStatus.mockResolvedValue(approved);
+    mockGetProject.mockResolvedValue({
+      id: 'goose-hub-self',
+      source: { kind: 'github', repo: 'owner/repo' },
+    });
+    mockResolveActiveMilestone.mockResolvedValue({
+      milestoneNumber: null,
+      source: 'project_state',
+    });
+    mockUpdateCandidateGithubIssue.mockResolvedValue(withUrl);
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ html_url: 'https://github.com/owner/repo/issues/99', number: 99 }),
+      }),
+    );
+    vi.stubEnv('GITHUB_TOKEN', 'test-token');
+
+    const result = await approveCandidate(1);
+    expect(result.ok).toBe(true);
+    const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string) as {
+      milestone?: number;
+      labels: string[];
+    };
+    expect(body.milestone).toBeUndefined();
+    expect(body.labels).toContain('schedule:later');
   });
 
   it('stores error note when GitHub API call fails', async () => {

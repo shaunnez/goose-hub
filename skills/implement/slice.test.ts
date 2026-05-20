@@ -328,9 +328,10 @@ describe('implement skill config', () => {
     expect(config.freshContext).toBe(false);
   });
 
-  it('contextAllowlist includes worktreePath, stack.testCommand, advisorFeedback', () => {
+  it('contextAllowlist includes worktreePath, stack.testCommand, relatedSurface, advisorFeedback', () => {
     expect(config.contextAllowlist).toContain('worktreePath');
     expect(config.contextAllowlist).toContain('stack.testCommand');
+    expect(config.contextAllowlist).toContain('relatedSurface');
     expect(config.contextAllowlist).toContain('advisorFeedback');
     expect(config.contextAllowlist).toContain('revisionPass');
   });
@@ -362,6 +363,23 @@ describe('implement context schema', () => {
         ...baseContext,
         revisionPass: 1,
         advisorFeedback: 'previous notes',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('accepts relatedSurface handoff context', () => {
+    expect(
+      config.contextSchema.safeParse({
+        ...baseContext,
+        relatedSurface: {
+          keyFiles: [{ path: 'apps/web/src/components/chrome/Sidebar.tsx' }],
+          packageRoots: ['apps/web'],
+          existingTests: [],
+          testCandidates: ['apps/web/src/components/chrome/Sidebar.test.tsx'],
+          evidenceSpecPath: 'apps/web/e2e/issue-876.spec.ts',
+          checkedAbsent: ['apps/web/src/components/chrome/Sidebar.test.tsx'],
+          targetedTestPaths: ['apps/web/src/components/chrome/Sidebar.test.tsx'],
+        },
       }).success,
     ).toBe(true);
   });

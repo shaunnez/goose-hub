@@ -27,6 +27,8 @@ export type EventKind =
   | 'agent.repo-override'
   | 'agent.investigation-complete'
   | 'agent.investigation-context-injected'
+  | 'agent.related-surface-manifest-created'
+  | 'agent.discovery-budget-exceeded'
   | 'agent.wrong-surface-guard'
   | 'agent.path-normalized'
   | 'agent.output-repaired'

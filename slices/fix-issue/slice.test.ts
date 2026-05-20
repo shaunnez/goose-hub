@@ -575,7 +575,14 @@ describe('runFixIssueWorkflow (#183)', () => {
     });
 
     const implementSpec = vi.mocked(runtime.run).mock.calls[0][0] as {
-      context: { investigation?: { findings?: string; keyFiles?: Array<{ path: string }> } };
+      context: {
+        investigation?: { findings?: string; keyFiles?: Array<{ path: string }> };
+        relatedSurface?: {
+          keyFiles?: Array<{ path: string }>;
+          testCandidates?: string[];
+          targetedTestPaths?: string[];
+        };
+      };
       contextAllowlist: string[];
     };
     expect(implementSpec.context.investigation?.findings).toContain('triage-batch');
@@ -583,6 +590,16 @@ describe('runFixIssueWorkflow (#183)', () => {
       'apps/server/src/domains/workflows/triage-batch.ts',
     );
     expect(implementSpec.contextAllowlist).toContain('investigation');
+    expect(implementSpec.contextAllowlist).toContain('relatedSurface');
+    expect(implementSpec.context.relatedSurface?.keyFiles?.map((f) => f.path)).toContain(
+      'apps/server/src/domains/workflows/triage-batch.ts',
+    );
+    expect(implementSpec.context.relatedSurface?.testCandidates?.[0]).toBe(
+      'apps/server/src/domains/workflows/triage-batch.test.ts',
+    );
+    expect(implementSpec.context.relatedSurface?.targetedTestPaths?.[0]).toBe(
+      'apps/server/src/domains/workflows/triage-batch.test.ts',
+    );
 
     const injected = vi
       .mocked(eventStore.appendEvent)
@@ -593,6 +610,15 @@ describe('runFixIssueWorkflow (#183)', () => {
       investigationRunId: 'investigation-run-1',
       keyFileCount: 2,
       openQuestionCount: 1,
+    });
+    const related = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([e]) => e.kind === 'agent.related-surface-manifest-created');
+    expect(related?.[0].payload).toMatchObject({
+      skill: 'implement',
+      keyFileCount: 2,
+      testCandidateCount: 8,
+      checkedAbsentCount: 8,
     });
   });
 

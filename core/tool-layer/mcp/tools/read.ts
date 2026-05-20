@@ -120,6 +120,10 @@ function rgAuditStatus(result: CommandResult): CommandStatus {
   return result.status;
 }
 
+function rgNoMatches(result: CommandResult): boolean {
+  return result.status === 'failed' && result.exitCode === 1;
+}
+
 /**
  * Reads a file's contents with a hard byte cap and an optional line slice.
  * The cap protects against runaway memory on accidental large reads (build
@@ -314,6 +318,7 @@ export async function listFilesTool(
     status: rgAuditStatus(result),
     durationMs: result.durationMs,
     truncated,
+    noMatches: rgNoMatches(result),
   });
   return { files, truncated };
 }
@@ -390,6 +395,7 @@ export async function searchTextTool(
     status: rgAuditStatus(result),
     durationMs: result.durationMs,
     truncated,
+    noMatches: rgNoMatches(result),
   });
   return { matches, truncated };
 }
