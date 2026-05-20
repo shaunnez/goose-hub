@@ -30,6 +30,7 @@ A bug is **NOT** a UI/web bug if it describes:
 
 Then return:
 
+<!-- output-example -->
 ```json
 {
   "enhancedContent": "",
@@ -69,6 +70,7 @@ Emit: `[decision] VERDICT: Classified bug as UI/web or not, then enhanced only i
 
 Then return **only** the JSON object below — no prose, no markdown, no preamble. Begin with `{` and end with `}`. Nothing else.
 
+<!-- output-example -->
 ```json
 {
   "enhancedContent": "<markdown string — only the new sections>",

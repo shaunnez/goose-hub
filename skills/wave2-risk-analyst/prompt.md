@@ -48,6 +48,7 @@ Encode open questions as findings:
 
 Return JSON conforming to `ScoutOutputSchema` (same shape as Wave-1 scouts):
 
+<!-- output-example -->
 ```json
 {
   "findings": [

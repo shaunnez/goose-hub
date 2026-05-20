@@ -251,6 +251,7 @@ Return a JSON object conforming exactly to this structure.
 
 For `approved` or `needs-fix`:
 
+<!-- output-example -->
 ```json
 {
   "verdict": "approved",
@@ -274,6 +275,7 @@ For `approved` or `needs-fix`:
 
 For `needs-human` (escalationReason is REQUIRED):
 
+<!-- output-example -->
 ```json
 {
   "verdict": "needs-human",

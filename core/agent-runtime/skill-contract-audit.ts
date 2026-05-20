@@ -1,5 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import type { SkillConfig } from './interface.js';
 
 export type SkillContractReport = {
   skill: string;
@@ -22,14 +24,16 @@ export type SkillContractAudit = {
 
 export type OutputExampleReport = {
   status:
-    | 'matches-schema-fields'
-    | 'field-drift'
-    | 'no-schema-fields'
-    | 'no-json-example'
-    | 'no-parseable-json-example';
+    | 'valid-output-example'
+    | 'missing-output-example'
+    | 'invalid-output-example'
+    | 'no-marked-output-example'
+    | 'example-not-required';
+  markedExamples: number;
   parseableExamples: number;
   missingSchemaFields: string[];
   extraExampleFields: string[];
+  issues: string[];
 };
 
 export type OutputSchemaReport = {
@@ -64,112 +68,6 @@ function extractConfiguredOutputSchema(configSource: string): string | null {
   return configSource.match(/outputSchema\s*:\s*([A-Za-z][A-Za-z0-9_]*)/)?.[1] ?? null;
 }
 
-function findMatchingBrace(source: string, openIndex: number): number {
-  let depth = 0;
-  let quote: string | null = null;
-  let escaped = false;
-
-  for (let i = openIndex; i < source.length; i += 1) {
-    const char = source[i];
-
-    if (quote) {
-      if (escaped) {
-        escaped = false;
-      } else if (char === '\\') {
-        escaped = true;
-      } else if (char === quote) {
-        quote = null;
-      }
-      continue;
-    }
-
-    if (char === '"' || char === "'" || char === '`') {
-      quote = char;
-    } else if (char === '{') {
-      depth += 1;
-    } else if (char === '}') {
-      depth -= 1;
-      if (depth === 0) return i;
-    }
-  }
-
-  return -1;
-}
-
-function topLevelObjectFields(objectBody: string): string[] {
-  const fields = new Set<string>();
-  let depth = 0;
-  let quote: string | null = null;
-  let escaped = false;
-  let tokenStart = 0;
-
-  for (let i = 0; i < objectBody.length; i += 1) {
-    const char = objectBody[i];
-
-    if (quote) {
-      if (escaped) {
-        escaped = false;
-      } else if (char === '\\') {
-        escaped = true;
-      } else if (char === quote) {
-        quote = null;
-      }
-      continue;
-    }
-
-    if (char === '"' || char === "'" || char === '`') {
-      quote = char;
-      continue;
-    }
-
-    if (char === '{' || char === '[' || char === '(') depth += 1;
-    if (char === '}' || char === ']' || char === ')') depth -= 1;
-
-    if ((char === '\n' || char === ',') && depth === 0) {
-      const token = objectBody.slice(tokenStart, i).trim();
-      const field = token.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s*:/)?.[1];
-      if (field) fields.add(field);
-      tokenStart = i + 1;
-    }
-  }
-
-  const finalToken = objectBody.slice(tokenStart).trim();
-  const finalField = finalToken.match(/^([a-zA-Z][a-zA-Z0-9_]*)\s*:/)?.[1];
-  if (finalField) fields.add(finalField);
-
-  return Array.from(fields);
-}
-
-function extractFieldsFromFirstObjectExpression(source: string, startIndex: number): string[] {
-  const objectCallIndex = source.indexOf('z.object', startIndex);
-  if (objectCallIndex === -1) return [];
-
-  const openBraceIndex = source.indexOf('{', objectCallIndex);
-  if (openBraceIndex === -1) return [];
-
-  const closeBraceIndex = findMatchingBrace(source, openBraceIndex);
-  if (closeBraceIndex === -1) return [];
-
-  return topLevelObjectFields(source.slice(openBraceIndex + 1, closeBraceIndex)).sort();
-}
-
-function extractSchemaFields(schemaSource: string, configSource: string): string[] {
-  const configuredSchema = extractConfiguredOutputSchema(configSource);
-  const exportedSchemas = Array.from(
-    schemaSource.matchAll(/export const ([A-Za-z][A-Za-z0-9_]*Schema)\s*=/g),
-    (m) => ({ name: m[1], index: m.index ?? 0 }),
-  );
-
-  const preferred =
-    exportedSchemas.find((schema) => schema.name === configuredSchema) ??
-    exportedSchemas.find((schema) => schema.name.endsWith('OutputSchema')) ??
-    exportedSchemas.at(-1);
-
-  if (!preferred) return [];
-
-  return extractFieldsFromFirstObjectExpression(schemaSource, preferred.index);
-}
-
 function isSnakeCase(tag: string): boolean {
   return /_/.test(tag) && /^[a-z0-9_]+$/.test(tag);
 }
@@ -187,11 +85,20 @@ function extractJsonExamples(prompt: string): string[] {
   return Array.from(prompt.matchAll(/```json\s*([\s\S]*?)```/g), (m) => m[1].trim());
 }
 
-function parseTopLevelObjectFields(source: string): string[] | null {
+function extractMarkedJsonExamples(prompt: string): string[] {
+  return Array.from(
+    prompt.matchAll(/<!--\s*output-example\s*-->\s*```json\s*([\s\S]*?)```/g),
+    (m) => m[1].trim(),
+  );
+}
+
+function parseJsonObject(
+  source: string,
+): { value: Record<string, unknown>; fields: string[] } | null {
   try {
     const parsed = JSON.parse(source);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-    return Object.keys(parsed).sort();
+    return { value: parsed as Record<string, unknown>, fields: Object.keys(parsed).sort() };
   } catch {
     return null;
   }
@@ -261,58 +168,127 @@ function auditWorktreePathExposure(prompt: string, config: string): WorktreePath
   };
 }
 
-function auditOutputExample(prompt: string, schemaFields: string[]): OutputExampleReport {
-  if (schemaFields.length === 0) {
+function shapeKeysFromSchema(schema: unknown): string[] {
+  const def = getSchemaDef(schema);
+  if (!def) return [];
+
+  if (def.type === 'object') {
+    const shape = typeof def.shape === 'function' ? def.shape() : def.shape;
+    return shape && typeof shape === 'object' ? Object.keys(shape).sort() : [];
+  }
+
+  if (def.type === 'union') {
+    const options = Array.isArray(def.options) ? def.options : [];
+    return Array.from(new Set(options.flatMap(shapeKeysFromSchema))).sort();
+  }
+
+  if (def.type === 'intersection') {
+    return Array.from(
+      new Set([
+        ...(shapeKeysFromSchema(def.left) ?? []),
+        ...(shapeKeysFromSchema(def.right) ?? []),
+      ]),
+    ).sort();
+  }
+
+  return [];
+}
+
+function getSchemaDef(schema: unknown): Record<string, unknown> | null {
+  if (!schema || typeof schema !== 'object') return null;
+  const maybeSchema = schema as { def?: unknown; _def?: unknown };
+  const def = maybeSchema.def ?? maybeSchema._def;
+  return def && typeof def === 'object' ? (def as Record<string, unknown>) : null;
+}
+
+function summarizeValidationError(error: unknown): string {
+  if (!error || typeof error !== 'object') return 'schema validation failed';
+  const issues = (error as { issues?: unknown }).issues;
+  if (!Array.isArray(issues) || issues.length === 0) return 'schema validation failed';
+
+  return issues
+    .slice(0, 5)
+    .map((issue) => {
+      if (!issue || typeof issue !== 'object') return 'schema validation failed';
+      const path = Array.isArray((issue as { path?: unknown }).path)
+        ? ((issue as { path: unknown[] }).path.join('.') ?? '')
+        : '';
+      const message =
+        typeof (issue as { message?: unknown }).message === 'string'
+          ? (issue as { message: string }).message
+          : 'schema validation failed';
+      return path ? `${path}: ${message}` : message;
+    })
+    .join('; ');
+}
+
+function auditOutputExample(
+  prompt: string,
+  outputSchema: SkillConfig['outputSchema'],
+  schemaFields: string[],
+): OutputExampleReport {
+  if (outputSchema == null) {
     return {
-      status: 'no-schema-fields',
+      status: 'example-not-required',
+      markedExamples: 0,
       parseableExamples: 0,
       missingSchemaFields: [],
       extraExampleFields: [],
+      issues: [],
     };
   }
 
-  const examples = extractJsonExamples(prompt);
-  if (examples.length === 0) {
+  const allJsonExamples = extractJsonExamples(prompt);
+  const markedExamples = extractMarkedJsonExamples(prompt);
+  if (markedExamples.length === 0) {
     return {
-      status: 'no-json-example',
+      status: allJsonExamples.length === 0 ? 'missing-output-example' : 'no-marked-output-example',
+      markedExamples: 0,
       parseableExamples: 0,
       missingSchemaFields: schemaFields,
       extraExampleFields: [],
-    };
-  }
-
-  const parseable = examples
-    .map(parseTopLevelObjectFields)
-    .filter((fields): fields is string[] => fields !== null);
-
-  if (parseable.length === 0) {
-    return {
-      status: 'no-parseable-json-example',
-      parseableExamples: 0,
-      missingSchemaFields: schemaFields,
-      extraExampleFields: [],
+      issues:
+        allJsonExamples.length === 0
+          ? ['prompt contains no JSON code block marked as output']
+          : ['prompt contains JSON blocks, but none are preceded by <!-- output-example -->'],
     };
   }
 
   const schemaFieldSet = new Set(schemaFields);
-  const candidates = parseable
-    .map((fields) => ({
-      fields,
-      missing: schemaFields.filter((field) => !fields.includes(field)),
-      extra: fields.filter((field) => !schemaFieldSet.has(field)),
-    }))
-    .sort((a, b) => a.missing.length + a.extra.length - (b.missing.length + b.extra.length));
+  const issues: string[] = [];
+  let parseableExamples = 0;
+  const missingFields = new Set<string>();
+  const extraFields = new Set<string>();
 
-  const best = candidates[0];
+  for (const [index, example] of markedExamples.entries()) {
+    const parsed = parseJsonObject(example);
+    if (!parsed) {
+      issues.push(`marked output example ${index + 1}: invalid top-level JSON object`);
+      for (const field of schemaFields) missingFields.add(field);
+      continue;
+    }
+
+    parseableExamples += 1;
+    for (const field of schemaFields.filter((field) => !parsed.fields.includes(field))) {
+      missingFields.add(field);
+    }
+    for (const field of parsed.fields.filter((field) => !schemaFieldSet.has(field))) {
+      extraFields.add(field);
+    }
+
+    const result = outputSchema.safeParse(parsed.value);
+    if (!result.success) {
+      issues.push(`marked output example ${index + 1}: ${summarizeValidationError(result.error)}`);
+    }
+  }
 
   return {
-    status:
-      best.missing.length === 0 && best.extra.length === 0
-        ? 'matches-schema-fields'
-        : 'field-drift',
-    parseableExamples: parseable.length,
-    missingSchemaFields: best.missing,
-    extraExampleFields: best.extra,
+    status: issues.length === 0 ? 'valid-output-example' : 'invalid-output-example',
+    markedExamples: markedExamples.length,
+    parseableExamples,
+    missingSchemaFields: Array.from(missingFields).sort(),
+    extraExampleFields: Array.from(extraFields).sort(),
+    issues,
   };
 }
 
@@ -369,14 +345,22 @@ function collectConsumers(
   return Array.from(consumers).sort();
 }
 
-export function auditSkillContracts(repoRoot: string): SkillContractAudit {
+async function loadSkillConfig(configPath: string): Promise<SkillConfig | null> {
+  if (!existsSync(configPath)) return null;
+  const module = (await import(pathToFileURL(configPath).href)) as { default?: SkillConfig };
+  return module.default ?? null;
+}
+
+export async function auditSkillContracts(repoRoot: string): Promise<SkillContractAudit> {
   const skillsDir = join(repoRoot, 'skills');
   const skills = readdirSync(skillsDir, { withFileTypes: true })
     .filter((d) => d.isDirectory())
     .map((d) => d.name)
     .sort();
 
-  const reports: SkillContractReport[] = skills.map((skill) => {
+  const reports: SkillContractReport[] = [];
+
+  for (const skill of skills) {
     const skillDir = join(skillsDir, skill);
     const promptPath = join(skillDir, 'prompt.md');
     const configPath = join(skillDir, 'skill.config.ts');
@@ -392,10 +376,11 @@ export function auditSkillContracts(repoRoot: string): SkillContractAudit {
     const missingFromPrompt = allowlistTags.filter((t) => !promptTags.includes(t));
     const extraPromptTags = promptTags.filter((t) => t !== 'task' && !allowlistTags.includes(t));
 
-    const schemaFields = extractSchemaFields(schema, config);
+    const skillConfig = await loadSkillConfig(configPath);
+    const schemaFields = shapeKeysFromSchema(skillConfig?.outputSchema);
     const configuredOutputSchema = extractConfiguredOutputSchema(config);
 
-    return {
+    reports.push({
       skill,
       allowlistTags,
       promptTags,
@@ -404,17 +389,17 @@ export function auditSkillContracts(repoRoot: string): SkillContractAudit {
       extraPromptTags,
       schemaFields,
       outputSchema: {
-        configured: configuredOutputSchema != null,
+        configured: skillConfig?.outputSchema != null,
         configuredSchema: configuredOutputSchema,
       },
-      outputExample: auditOutputExample(prompt, schemaFields),
+      outputExample: auditOutputExample(prompt, skillConfig?.outputSchema, schemaFields),
       pathLanguage: auditPathLanguage(prompt, schema),
       worktreePathExposure: auditWorktreePathExposure(prompt, config),
       consumerPaths: existsSync(schemaPath)
         ? collectConsumers(repoRoot, schemaPath, schema, skill)
         : [],
-    };
-  });
+    });
+  }
 
   return { skills: reports };
 }
@@ -436,9 +421,11 @@ export function formatSkillContractAudit(audit: SkillContractAudit): string {
             : '(missing)'
         }`,
         `outputExample: ${r.outputExample.status}`,
+        `outputExampleMarked: ${r.outputExample.markedExamples}`,
         `outputExampleParseable: ${r.outputExample.parseableExamples}`,
         `outputExampleMissingFields: ${r.outputExample.missingSchemaFields.join(', ') || '(none)'}`,
         `outputExampleExtraFields: ${r.outputExample.extraExampleFields.join(', ') || '(none)'}`,
+        `outputExampleIssues: ${r.outputExample.issues.join(' | ') || '(none)'}`,
         `pathLanguageWorkspaceRelative: ${r.pathLanguage.vagueWorkspaceRelative.length}`,
         `pathLanguagePackageRelativeExamples: ${r.pathLanguage.packageRelativeExamples.join(', ') || '(none)'}`,
         `worktreePathExposure: allowlist=${r.worktreePathExposure.allowlist} prompt=${r.worktreePathExposure.promptLines.length} config=${r.worktreePathExposure.configLines.length}`,

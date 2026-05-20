@@ -113,6 +113,7 @@ Do not inspect old e2e specs, Playwright config, or screenshot conventions befor
 
 Return JSON conforming to `ImplementSchema`. `prUrl` must be a valid placeholder URL; the orchestrator overwrites it.
 
+<!-- output-example -->
 ```json
 {
   "plan": "1. Add tests for X in Y. 2. Implement X. 3. Lint passes.",

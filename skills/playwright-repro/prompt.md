@@ -57,6 +57,7 @@ If the runtime still asks you to run Playwright directly, run it at most once, t
 
 Return only JSON conforming to the spec-plan schema:
 
+<!-- output-example -->
 ```json
 {
   "specPath": "apps/web/e2e/repro-login-error.spec.ts",

@@ -35,6 +35,28 @@ Allowed `actionType` values:
 - `resolve_conflict` - payload may include `{ "reason": "..." }`.
 - `no_action` - payload must include `{ "reason": "..." }`.
 
+<!-- output-example -->
+```json
+{
+  "summary": "The workflow is blocked on a gate that requires human approval.",
+  "options": [
+    {
+      "actionType": "approve_gate",
+      "label": "Approve gate",
+      "description": "Resume the workflow from the pending gate after human approval.",
+      "payload": { "reason": "Human approved the pending gate." },
+      "risk": "low"
+    }
+  ],
+  "decisionSummaries": [
+    {
+      "kind": "VERDICT",
+      "summary": "Recommended approving the pending gate because the legal target is available."
+    }
+  ]
+}
+```
+
 Prefer the least surprising option. If evidence is insufficient, include
 `no_action` with a concrete reason instead of inventing a transition.
 

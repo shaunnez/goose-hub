@@ -102,6 +102,7 @@ Return the structured output now. The `wpId` field must match the `<id>` from yo
 
 ## Output format
 
+<!-- output-example -->
 ```json
 {
   "wpId": "WP1",

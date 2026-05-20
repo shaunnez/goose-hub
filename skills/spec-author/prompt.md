@@ -190,6 +190,75 @@ Live markers are short progress/rationale markers, not raw thinking. Emit them b
 
 Live marker format: `[decision] KIND: <one sentence>`. Example: `[decision] PLAN: Defining falsifiable ACs around the checkout journey and verifyCommand coverage`.
 
+<!-- output-example -->
+```json
+{
+  "objective": "Add schema-backed audit validation for marked skill output examples.",
+  "userJourneys": [
+    {
+      "id": "J1",
+      "actor": "developer",
+      "steps": [
+        { "idx": 1, "description": "Run the skill contract audit." },
+        { "idx": 2, "description": "See which marked output examples fail schema validation." }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    { "id": "FR1", "statement": "The audit must validate marked output examples with outputSchema.safeParse." }
+  ],
+  "architecture": {
+    "current": "The audit compares source-inferred field names.",
+    "new": "The audit loads each skill config and validates marked prompt examples against the configured output schema.",
+    "decisionRationale": "Runtime schema validation is the source of truth for terminal skill output."
+  },
+  "schemaChanges": { "ddl": [], "migrations": [] },
+  "interfaceContracts": [
+    {
+      "name": "auditSkillContracts",
+      "signature": "export async function auditSkillContracts(repoRoot: string): Promise<SkillContractAudit>",
+      "file": "core/agent-runtime/skill-contract-audit.ts",
+      "lineRange": "1-220"
+    }
+  ],
+  "workPackages": [
+    {
+      "id": "WP1",
+      "filesOwned": ["core/agent-runtime/skill-contract-audit.ts", "scripts/audit-skill-contracts.ts"],
+      "changes": "Load skill.config.ts and validate marked output examples through outputSchema.safeParse.",
+      "dependsOn": [],
+      "builderTier": "sonnet"
+    }
+  ],
+  "executionOrder": [{ "batch": 0, "wpIds": ["WP1"] }],
+  "verificationTooling": [
+    { "name": "skill-contract audit", "scriptPath": "scripts/audit-skill-contracts.ts", "expectedExitCodes": [0] }
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "AC1",
+      "statement": "Marked output examples fail the audit when they do not satisfy the configured output schema.",
+      "journeyRef": "J1",
+      "stepIdx": 2,
+      "verifyCommand": "pnpm skill-contract:audit",
+      "source": "user-journey"
+    }
+  ],
+  "constraints": [
+    { "kind": "output-format", "name": "marked-output-example", "source": "core/agent-runtime/skill-contract-audit.ts:auditOutputExample" }
+  ],
+  "riskRegister": [
+    { "risk": "Incidental JSON snippets could be treated as terminal output.", "mitigation": "Only validate JSON blocks preceded by the output-example marker.", "severity": "medium" }
+  ],
+  "decisionSummaries": [
+    {
+      "kind": "PLAN",
+      "summary": "Specified schema-backed validation for marked skill output examples."
+    }
+  ]
+}
+```
+
 ## Failure modes (the validator will catch)
 
 - Same path in two WPs' `filesOwned` → `file-ownership-collision`

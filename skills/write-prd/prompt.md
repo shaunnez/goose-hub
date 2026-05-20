@@ -104,6 +104,7 @@ Return a single JSON object conforming to `PRDOutputSchema`. Free-text-only outp
 
 Exact field names (use these verbatim):
 
+<!-- output-example -->
 ```json
 {
   "title": "<string>",
@@ -131,9 +132,9 @@ Exact field names (use these verbatim):
     "dataConstraints": [{ "type": "<string>", "validation": "<string>" }]
   },
   "verticalSlices": [
-    { "title": "<string>", "goal": "<string>", "estimatedSize": "S|M|L", "journeyRefs": ["<journeyId>"] }
+    { "title": "Schema-backed audit", "goal": "Validate marked output examples against skill schemas", "estimatedSize": "M", "journeyRefs": ["<journeyId>"] }
   ],
-  "estimatedComplexity": "low|medium|high",
+  "estimatedComplexity": "medium",
   "implementationDecisions": [
     { "decision": "<string>", "rationale": "<optional — cite ADR or CONTEXT.md>", "moduleRef": "<optional — primary file affected>" }
   ],

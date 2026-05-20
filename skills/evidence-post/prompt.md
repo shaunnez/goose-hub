@@ -44,6 +44,7 @@ If the spec path is missing or clearly not an AFTER-state validation, still retu
 
 Return only JSON conforming to the evidence plan schema:
 
+<!-- output-example -->
 ```json
 {
   "specPath": "apps/web/e2e/issue-233.spec.ts",

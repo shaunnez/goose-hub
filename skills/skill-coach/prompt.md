@@ -58,4 +58,22 @@ Return JSON conforming to `SkillCoachOutputSchema`. Required fields:
 - `confidence` — `low | medium | high`
 - `decisionSummaries` — at least one VERDICT
 
+<!-- output-example -->
+```json
+{
+  "skillName": "qa",
+  "diagnosis": "The QA prompt under-specifies how to cite workflow-owned verification facts.",
+  "proposedPatch": "diff --git a/skills/qa/prompt.md b/skills/qa/prompt.md\n--- a/skills/qa/prompt.md\n+++ b/skills/qa/prompt.md\n@@\n-Check evidence.\n+Check verificationSummary before judging evidence.\n",
+  "rationale": "Pattern qa-evidence-citation shows that successful QA runs cite structured verification facts before judging browser evidence, so the prompt should make that ordering explicit.",
+  "evidencePatternIds": ["qa-evidence-citation"],
+  "confidence": "high",
+  "decisionSummaries": [
+    {
+      "kind": "VERDICT",
+      "summary": "Coached qa to cite verificationSummary before browser evidence."
+    }
+  ]
+}
+```
+
 [decision] VERDICT: Skill coach complete: <one sentence on the headline finding>

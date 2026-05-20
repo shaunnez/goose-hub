@@ -327,6 +327,7 @@ Bad summaries:
 
 Return a JSON object conforming exactly to this structure:
 
+<!-- output-example -->
 ```json
 {
   "verdict": "fail",

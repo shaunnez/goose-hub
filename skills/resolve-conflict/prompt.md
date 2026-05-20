@@ -41,6 +41,7 @@ Then output **only** the JSON object below — no prose, no markdown, no preambl
 
 If `unresolvable` is non-empty OR `confidence` is `low`, the slice will escalate to `factory:needs-human` without attempting the merge.
 
+<!-- output-example -->
 ```json
 {
   "resolved": ["src/foo.ts", "src/bar.ts"],
