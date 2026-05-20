@@ -1,23 +1,20 @@
 /** @vitest-environment jsdom */
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchChangelog } from '../../lib/api/changelog.js';
+import type { ChangelogEntryDto } from '../../lib/types.js';
 import { ChangelogModal, formatRelative } from './ChangelogModal';
+
+vi.mock('../../lib/api/changelog.js', () => ({
+  fetchChangelog: vi.fn(),
+}));
 
 afterEach(() => {
   cleanup();
-  vi.restoreAllMocks();
+  vi.clearAllMocks();
 });
 
-function entry(
-  overrides: Partial<{
-    number: number;
-    title: string;
-    mergedAt: string;
-    url: string;
-    repo: string;
-    author: string;
-  }> = {},
-) {
+function entry(overrides: Partial<ChangelogEntryDto> = {}): ChangelogEntryDto {
   return {
     number: 1,
     title: 'Some PR',
@@ -31,7 +28,7 @@ function entry(
 
 describe('ChangelogModal', () => {
   beforeEach(() => {
-    vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise(() => {}));
+    vi.mocked(fetchChangelog).mockImplementation(() => new Promise(() => {}));
   });
 
   it('does not render when open=false', () => {
@@ -44,26 +41,24 @@ describe('ChangelogModal', () => {
     expect(screen.getByText('Last 7 days')).toBeTruthy();
   });
 
-  it('shows loading state while fetch is pending', () => {
+  it('shows loading state while the changelog request is pending', () => {
     render(<ChangelogModal open={true} onClose={() => {}} />);
     expect(screen.getByTestId('changelog-loading')).toBeTruthy();
   });
 
   it('renders entries grouped by repo on successful fetch', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify([
-          entry({ number: 1, repo: 'o/a', title: 'First', mergedAt: '2026-05-10T10:00:00Z' }),
-          entry({ number: 2, repo: 'o/a', title: 'Second', mergedAt: '2026-05-12T10:00:00Z' }),
-          entry({ number: 3, repo: 'o/b', title: 'Third', mergedAt: '2026-05-11T10:00:00Z' }),
-        ]),
-        { status: 200 },
-      ),
-    );
+    vi.mocked(fetchChangelog).mockResolvedValueOnce([
+      entry({ number: 1, repo: 'o/a', title: 'First', mergedAt: '2026-05-10T10:00:00Z' }),
+      entry({ number: 2, repo: 'o/a', title: 'Second', mergedAt: '2026-05-12T10:00:00Z' }),
+      entry({ number: 3, repo: 'o/b', title: 'Third', mergedAt: '2026-05-11T10:00:00Z' }),
+    ]);
+
     render(<ChangelogModal open={true} onClose={() => {}} />);
+
     await waitFor(() => {
       expect(screen.getByTestId('changelog-list')).toBeTruthy();
     });
+
     const items = screen.getAllByTestId('changelog-entry');
     expect(items).toHaveLength(3);
     expect(screen.getByText('o/a')).toBeTruthy();
@@ -71,70 +66,64 @@ describe('ChangelogModal', () => {
   });
 
   it('within each repo group, entries are sorted newest first', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify([
-          entry({ number: 1, repo: 'o/a', title: 'Older', mergedAt: '2026-05-08T10:00:00Z' }),
-          entry({ number: 2, repo: 'o/a', title: 'Newer', mergedAt: '2026-05-12T10:00:00Z' }),
-        ]),
-        { status: 200 },
-      ),
-    );
+    vi.mocked(fetchChangelog).mockResolvedValueOnce([
+      entry({ number: 1, repo: 'o/a', title: 'Older', mergedAt: '2026-05-08T10:00:00Z' }),
+      entry({ number: 2, repo: 'o/a', title: 'Newer', mergedAt: '2026-05-12T10:00:00Z' }),
+    ]);
+
     render(<ChangelogModal open={true} onClose={() => {}} />);
+
     await waitFor(() => {
       expect(screen.getByTestId('changelog-list')).toBeTruthy();
     });
+
     const items = screen.getAllByTestId('changelog-entry');
     expect(items[0].textContent).toContain('Newer');
     expect(items[1].textContent).toContain('Older');
   });
 
   it('renders empty state when fetch returns []', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify([]), { status: 200 }),
-    );
+    vi.mocked(fetchChangelog).mockResolvedValueOnce([]);
+
     render(<ChangelogModal open={true} onClose={() => {}} />);
+
     await waitFor(() => {
       expect(screen.getByTestId('changelog-empty')).toBeTruthy();
     });
+
     expect(screen.getByText('No merged PRs in the last 7 days.')).toBeTruthy();
   });
 
-  it('renders error state on non-ok response', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('boom', { status: 500 }));
+  it('renders error state when the changelog request fails', async () => {
+    vi.mocked(fetchChangelog).mockRejectedValueOnce(new Error('network'));
+
     render(<ChangelogModal open={true} onClose={() => {}} />);
+
     await waitFor(() => {
       expect(screen.getByTestId('changelog-error')).toBeTruthy();
     });
+
     expect(screen.getByText('Could not load changelog.')).toBeTruthy();
   });
 
-  it('renders error state when fetch throws', async () => {
-    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network'));
-    render(<ChangelogModal open={true} onClose={() => {}} />);
-    await waitFor(() => {
-      expect(screen.getByTestId('changelog-error')).toBeTruthy();
-    });
-  });
-
   it('PR links open in new tab with safe rel attributes', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify([entry()]), { status: 200 }),
-    );
+    vi.mocked(fetchChangelog).mockResolvedValueOnce([entry()]);
+
     render(<ChangelogModal open={true} onClose={() => {}} />);
+
     await waitFor(() => {
       expect(screen.getByTestId('changelog-list')).toBeTruthy();
     });
+
     const link = screen.getByRole('link') as HTMLAnchorElement;
     expect(link.target).toBe('_blank');
     expect(link.rel).toContain('noopener');
     expect(link.rel).toContain('noreferrer');
   });
 
-  it('fetches /api/changelog?days=7 when modal opens', () => {
-    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise(() => {}));
+  it('requests the last 7 days when the modal opens', () => {
     render(<ChangelogModal open={true} onClose={() => {}} />);
-    expect(spy).toHaveBeenCalledWith('/api/changelog?days=7');
+    expect(fetchChangelog).toHaveBeenCalledWith({ days: 7 });
   });
 });
 

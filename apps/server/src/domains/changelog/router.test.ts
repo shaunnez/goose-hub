@@ -15,8 +15,8 @@ vi.mock('./service.js', async () => {
 
 import { changelogRouter } from './router.js';
 
-function makeApp() {
-  return new Hono().route('/api/changelog', changelogRouter);
+function makeApp(mountPath: '/api/changelog' | '/changelog' = '/api/changelog') {
+  return new Hono().route(mountPath, changelogRouter);
 }
 
 describe('GET /api/changelog', () => {
@@ -80,5 +80,40 @@ describe('GET /api/changelog', () => {
     expect(res.status).toBe(500);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe('github-token-missing');
+  });
+});
+
+describe('GET /changelog', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns entries array on success through the rewritten parent mount', async () => {
+    mockGetChangelog.mockResolvedValue({
+      ok: true,
+      data: {
+        entries: [
+          {
+            number: 7,
+            title: 'A',
+            mergedAt: '2026-05-12T10:00:00Z',
+            url: 'u',
+            repo: 'o/r',
+            author: 'octocat',
+          },
+        ],
+      },
+    });
+    const res = await makeApp('/changelog').request('/changelog?days=7');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as unknown[];
+    expect(Array.isArray(body)).toBe(true);
+    expect(body).toHaveLength(1);
+  });
+
+  it('forwards parsed days param when valid through the rewritten parent mount', async () => {
+    mockGetChangelog.mockResolvedValue({ ok: true, data: { entries: [] } });
+    await makeApp('/changelog').request('/changelog?days=14');
+    expect(mockGetChangelog).toHaveBeenCalledWith(14);
   });
 });
