@@ -24,21 +24,22 @@ The context contains:
 
 Return a JSON object:
 
+<!-- output-example -->
 ```json
 {
   "candidates": [
     {
-      "repo": "<owner/slug>",
-      "confidence": <0-100>,
-      "evidence": "<one sentence>",
+      "repo": "shaunnez/goose-hub",
+      "confidence": 92,
+      "evidence": "The work item mentions Factory workflows and skill prompts, which match Goose Hub.",
       "tier": 3
     }
   ],
   "decisionSummaries": [
     {
       "kind": "PLAN",
-      "summary": "<one sentence describing the match decision>",
-      "evidence": "<key signal from work item or repo description>"
+      "summary": "Selected shaunnez/goose-hub as the best repository match.",
+      "evidence": "Factory workflows and skill prompts"
     }
   ]
 }

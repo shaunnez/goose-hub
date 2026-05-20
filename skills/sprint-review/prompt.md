@@ -51,6 +51,7 @@ Emit one `VERDICT` decision summary summarising the milestone outcome.
 
 Return a JSON object conforming to `SprintReviewOutputSchema`. No free text outside the JSON.
 
+<!-- output-example -->
 ```json
 {
   "milestoneTitle": "M13: Subagents",

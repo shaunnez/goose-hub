@@ -121,6 +121,7 @@ Return JSON conforming to `DeepRetroSchema`. No free-text outside the schema fie
 
 ### Example output
 
+<!-- output-example -->
 ```json
 {
   "outcome": "success",

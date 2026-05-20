@@ -64,6 +64,7 @@ When `readyForPRD: false` you **must** include exactly one question in `question
 
 Return a single JSON object conforming to this exact structure. Free-text-only output fails the run. Your entire response must be valid JSON — no prose, no preamble, no explanation outside the object.
 
+<!-- output-example -->
 ```json
 {
   "questions": [

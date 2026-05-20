@@ -45,6 +45,7 @@ Return a JSON object conforming to `AdvisePRDOutputSchema`. JSON only — no pro
 
 ### approve (clean)
 
+<!-- output-example -->
 ```json
 {
   "verdict": "approve",
@@ -58,6 +59,7 @@ Return a JSON object conforming to `AdvisePRDOutputSchema`. JSON only — no pro
 
 ### approve with notes
 
+<!-- output-example -->
 ```json
 {
   "verdict": "approve",
@@ -71,6 +73,7 @@ Return a JSON object conforming to `AdvisePRDOutputSchema`. JSON only — no pro
 
 ### revise
 
+<!-- output-example -->
 ```json
 {
   "verdict": "revise",
@@ -90,6 +93,7 @@ Return a JSON object conforming to `AdvisePRDOutputSchema`. JSON only — no pro
 
 ### revise with no section patches
 
+<!-- output-example -->
 ```json
 {
   "verdict": "revise",

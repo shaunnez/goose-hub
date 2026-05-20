@@ -130,22 +130,23 @@ Emit:
 
 Return JSON conforming to `DevReviewOutputSchema`:
 
+<!-- output-example -->
 ```json
 {
-  "verdict": "no-blockers" | "blockers-found" | "inconclusive",
+  "verdict": "blockers-found",
   "findings": [
     {
-      "severity": "P0" | "P1" | "P2" | "P3",
-      "category": "correctness" | "security" | "edge-case" | "design" | "other",
+      "severity": "P1",
+      "category": "correctness",
       "file": "core/agent-runtime/codex-cli.ts",
       "line": 142,
-      "summary": "<one sentence — what is wrong>",
-      "suggestion": "<one sentence — what to do about it>"
+      "summary": "The runtime ignores output-schema validation failures.",
+      "suggestion": "Return blockers-found and require the developer to validate the failing path."
     }
   ],
   "decisionSummaries": [
-    { "kind": "READ", "summary": "..." },
-    { "kind": "VERDICT", "summary": "..." }
+    { "kind": "READ", "summary": "Read the changed runtime validation path.", "evidence": "core/agent-runtime/codex-cli.ts:142" },
+    { "kind": "VERDICT", "summary": "Found one P1 blocker in runtime validation." }
   ]
 }
 ```

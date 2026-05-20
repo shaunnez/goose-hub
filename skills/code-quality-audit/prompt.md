@@ -207,6 +207,30 @@ Your output MUST be valid JSON conforming to the `CodeQualityAuditOutputSchema`.
 - `projectedScoreAfterTop3`: realistic score after the top-3 P0/P1 recommendations are applied (must be ≥ total)
 - `decisionSummaries`: at least one summary per major scoring decision (use `SELF_SCORE` kind)
 
+<!-- output-example -->
+```json
+{
+  "scorecard": [
+    { "category": 1, "name": "Open/Closed", "score": 10, "max": 20, "evidence": [{ "file": "core/workflows/example.ts", "note": "Adding a case requires editing a central switch." }] },
+    { "category": 2, "name": "Concept count", "score": 8, "max": 15, "evidence": [{ "file": "core/workflows/example.ts", "note": "Three concepts are interleaved in one function." }] },
+    { "category": 3, "name": "Time to capability", "score": 9, "max": 15, "evidence": [{ "file": "core/workflows/example.ts", "note": "Entrypoint is discoverable but setup requires two call sites." }] },
+    { "category": 4, "name": "Complecting", "score": 7, "max": 15, "evidence": [{ "file": "core/workflows/example.ts", "note": "Validation and persistence are coupled." }] },
+    { "category": 5, "name": "LOC discipline", "score": 6, "max": 10, "evidence": [{ "file": "core/workflows/example.ts", "note": "Primary file is over the preferred size." }] },
+    { "category": 6, "name": "Coupling", "score": 5, "max": 10, "evidence": [{ "file": "core/workflows/example.ts", "note": "Imports span unrelated modules." }] },
+    { "category": 7, "name": "Gall's Law", "score": 6, "max": 10, "evidence": [{ "file": "core/workflows/example.ts", "note": "Change can be staged without a rewrite." }] },
+    { "category": 8, "name": "Cyclomatic complexity", "score": 4, "max": 5, "evidence": [{ "file": "core/workflows/example.ts", "note": "Branching is modest." }] }
+  ],
+  "rating": "NeedsWork",
+  "strengths": ["Workflow entrypoint is easy to find."],
+  "recommendations": [
+    { "priority": "P1", "principle": "Open/Closed", "file": "core/workflows/example.ts", "line": 42, "fix": "Move case-specific behavior behind a registry.", "effort": "Medium", "impactPoints": 12 }
+  ],
+  "mcIlroyQuestion": "The current components expose objects rather than pipe-friendly stages.",
+  "projectedScoreAfterTop3": 70,
+  "decisionSummaries": [{ "kind": "SELF_SCORE", "summary": "Scored the workflow as NeedsWork based on 55 total points." }]
+}
+```
+
 ---
 
 ## Decision summary discipline

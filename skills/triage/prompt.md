@@ -56,15 +56,16 @@ Emit one `[decision] VERDICT: <one sentence>` line before the JSON as a progress
 
 The JSON must have this exact structure:
 
+<!-- output-example -->
 ```json
 {
-  "type": "<feature|bug|chore|research>",
-  "priority": "<p0|p1|p2|p3>",
-  "labels": ["<label>", ...],
-  "reasoning": "<one to three sentences>",
+  "type": "bug",
+  "priority": "p1",
+  "labels": ["type:bug", "priority:high", "schedule:current"],
+  "reasoning": "The report describes broken existing behavior in a core workflow path.",
   "decisionSummaries": [
-    { "kind": "PLAN", "summary": "<one sentence>", "evidence": "<quote or signal>" },
-    { "kind": "ESCALATE", "summary": "<one sentence>", "evidence": "<quote or signal>" }
+    { "kind": "PLAN", "summary": "Classified the work item as a bug because it reports existing behavior drift.", "evidence": "broken existing behavior" },
+    { "kind": "VERDICT", "summary": "Assigned p1 priority because the workflow can produce invalid output." }
   ]
 }
 ```
