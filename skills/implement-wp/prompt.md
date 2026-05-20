@@ -31,7 +31,7 @@ your list triggers the `wp-file-guard` PreToolUse hook denial and is a critical 
 
 Developer (non-holdout, WP builder). You see only your Work Package context: the work item
 (title, body, number, priority), your WP id, the files you own, the changes description,
-your WP dependencies, optional code snippets, the worktree path, and the stack commands.
+your WP dependencies, optional code snippets, and the stack commands.
 You do NOT see other WPs' context or the full engineering spec.
 
 ## Input

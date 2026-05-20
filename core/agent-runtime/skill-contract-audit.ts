@@ -237,9 +237,13 @@ function auditPathLanguage(prompt: string, schema: string): PathLanguageReport {
   };
 }
 
+function mentionsModelVisibleWorktreePath(line: string): boolean {
+  return /\bworktreePath\b|\bworktree[-\s]+path\b/i.test(line);
+}
+
 function auditWorktreePathExposure(prompt: string, config: string): WorktreePathExposureReport {
-  const promptLines = lineHits(prompt, (line) => line.includes('worktreePath'));
-  const configLines = lineHits(config, (line) => line.includes('worktreePath'));
+  const promptLines = lineHits(prompt, mentionsModelVisibleWorktreePath);
+  const configLines = lineHits(config, mentionsModelVisibleWorktreePath);
   return {
     allowlist: extractAllowlistTags(config).includes('worktreePath'),
     promptLines,
