@@ -51,6 +51,15 @@ export interface IssueCommentDto {
   createdAt: string;
 }
 
+export interface ChangelogEntryDto {
+  number: number;
+  title: string;
+  mergedAt: string;
+  url: string;
+  repo: string;
+  author: string;
+}
+
 export interface MilestoneDto {
   id: string;
   title: string;

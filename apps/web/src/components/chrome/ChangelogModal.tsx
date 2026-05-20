@@ -1,13 +1,6 @@
 import { useEffect, useState } from 'react';
-
-interface ChangelogEntry {
-  number: number;
-  title: string;
-  mergedAt: string;
-  url: string;
-  repo: string;
-  author: string;
-}
+import { fetchChangelog } from '../../lib/api/changelog.js';
+import type { ChangelogEntryDto } from '../../lib/types.js';
 
 interface ChangelogModalProps {
   open: boolean;
@@ -16,7 +9,7 @@ interface ChangelogModalProps {
 
 type FetchState =
   | { status: 'loading' }
-  | { status: 'loaded'; entries: ChangelogEntry[] }
+  | { status: 'loaded'; entries: ChangelogEntryDto[] }
   | { status: 'error' };
 
 export function ChangelogModal({ open, onClose }: ChangelogModalProps) {
@@ -26,10 +19,8 @@ export function ChangelogModal({ open, onClose }: ChangelogModalProps) {
     if (!open) return;
     let cancelled = false;
     setState({ status: 'loading' });
-    fetch('/api/changelog?days=7')
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const entries = (await res.json()) as ChangelogEntry[];
+    fetchChangelog({ days: 7 })
+      .then((entries) => {
         if (!cancelled) setState({ status: 'loaded', entries });
       })
       .catch(() => {
@@ -128,7 +119,7 @@ export function ChangelogModal({ open, onClose }: ChangelogModalProps) {
   );
 }
 
-function ChangelogList({ entries }: { entries: ChangelogEntry[] }) {
+function ChangelogList({ entries }: { entries: ChangelogEntryDto[] }) {
   const groups = groupByRepo(entries);
   return (
     <div data-testid="changelog-list" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -164,8 +155,8 @@ function ChangelogList({ entries }: { entries: ChangelogEntry[] }) {
   );
 }
 
-function groupByRepo(entries: ChangelogEntry[]): Array<[string, ChangelogEntry[]]> {
-  const map = new Map<string, ChangelogEntry[]>();
+function groupByRepo(entries: ChangelogEntryDto[]): Array<[string, ChangelogEntryDto[]]> {
+  const map = new Map<string, ChangelogEntryDto[]>();
   for (const entry of entries) {
     const arr = map.get(entry.repo) ?? [];
     arr.push(entry);
