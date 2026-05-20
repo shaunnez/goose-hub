@@ -10,7 +10,6 @@ import { z } from 'zod';
  *   <task>
  *     <workItem>{"title":"...","body":"...","number":123}</workItem>
  *     <scoutFocus>...</scoutFocus>
- *     <worktreePath>...</worktreePath>
  *   </task>
  */
 export const ScoutSchemaContextSchema = z.object({
@@ -22,7 +21,6 @@ export const ScoutSchemaContextSchema = z.object({
   scoutFocus: z
     .string()
     .describe('One sentence describing the schema concern this scout investigates'),
-  worktreePath: z.string(),
   symbolIndexHints: z
     .array(
       z.object({
@@ -43,7 +41,6 @@ const config: SkillConfig = {
     'workItem.body',
     'workItem.number',
     'scoutFocus',
-    'worktreePath',
     'symbolIndexHints',
   ],
   toolBundles: ['read'],

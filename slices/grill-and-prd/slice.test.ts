@@ -753,7 +753,7 @@ describe('grill-and-prd: pre-condition guard', () => {
 // ---------------------------------------------------------------------------
 
 describe('grill-and-prd: worktree lifecycle', () => {
-  it('creates a worktree before grill, cleans up after, and injects worktreePath into the grill context', async () => {
+  it('creates a worktree before grill, cleans up after, and roots grill tools at workspaceDir', async () => {
     const projectId = uniqueProjectId('worktree-lifecycle');
     const source = new InMemoryLabelsSource(projectId, REPO_REF);
     const item = await seedFeatureItem(source, { state: 'factory:grilling' });
@@ -790,7 +790,7 @@ describe('grill-and-prd: worktree lifecycle', () => {
     expect(cleanedRunIds[0]).toBe(createdWith[0].runId);
 
     const runCall = (runtime.run as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(runCall.context.worktreePath).toBe(`/tmp/test-wt/${createdWith[0].runId}`);
+    expect(runCall.context.worktreePath).toBeUndefined();
     expect(runCall.workspaceDir).toBe(`/tmp/test-wt/${createdWith[0].runId}`);
     expect(runCall.toolBundles).toEqual(['read']);
   });

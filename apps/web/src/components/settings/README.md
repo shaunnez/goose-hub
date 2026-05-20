@@ -9,6 +9,7 @@ settings/
   components/
     SettingsPage.tsx                 — top-level page (list + detail layout)
     ProjectConfigPanel.tsx           — read-only display of a single ProjectConfig
+    LearningLoopPanel.tsx            — skill-coach auto-dispatch policy controls
     WorkflowMapPanel.tsx             — data/query orchestration for the workflow map tab
     WorkflowMapFlow.tsx              — vertical effective-flow renderer
     WorkflowPipelineReviewSettings.tsx — pipeline/review settings summary strip
@@ -40,6 +41,7 @@ The Workflow map tab also reads:
 - `GET /workflow-catalog`
 - `GET /projects/:slug/settings`
 - `GET /projects/:slug/settings/pipeline`
+- `GET /projects/:slug/settings/learning-loop`
 - `GET /projects/:slug/settings/dev-review`
 - `GET /projects/:slug/settings/review`
 

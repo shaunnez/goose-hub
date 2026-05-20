@@ -37,6 +37,9 @@ vi.mock('@/lib/api', () => ({
 vi.mock('./DevReviewPanel', () => ({
   DevReviewPanel: () => <div data-testid="dev-review-panel" />,
 }));
+vi.mock('./LearningLoopPanel', () => ({
+  LearningLoopPanel: () => <div data-testid="learning-loop-panel" />,
+}));
 vi.mock('./MilestonesPanel', () => ({
   MilestonesPanel: ({ slug }: { slug: string }) => (
     <div data-testid="milestones-panel">Milestones for {slug}</div>
@@ -82,5 +85,9 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Milestones' }));
 
     expect(screen.getByTestId('milestones-panel').textContent).toContain('my-proj');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Learning loop' }));
+
+    expect(screen.getByTestId('learning-loop-panel')).toBeTruthy();
   });
 });

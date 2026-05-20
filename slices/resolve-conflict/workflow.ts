@@ -124,7 +124,6 @@ export async function runResolveConflictWorkflow(
           role: 'developer',
           skill: 'resolve-conflict',
           context: {
-            worktreePath: wtPath,
             conflictedFiles,
             baseBranch,
             prNumber,

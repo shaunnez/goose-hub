@@ -680,6 +680,8 @@ describe('swarm.dispatchWave', () => {
       expect(spec.runId.startsWith('parent-fresh:scout:')).toBe(true);
       // Allowlist must not include any parent-summary key
       expect(spec.contextAllowlist).not.toContain('parentDecisionSummaries');
+      expect(spec.contextAllowlist).not.toContain('worktreePath');
+      expect((spec.context as { worktreePath?: string }).worktreePath).toBeUndefined();
       expect(spec.contextAllowlist).toContain('workItem.title');
       expect(spec.contextAllowlist).toContain('scoutFocus');
     }

@@ -2,9 +2,6 @@ import { DecisionSummarySchema } from '@goose-hub/core/retrospective/schemas.js'
 import { z } from 'zod';
 
 export const ResolveConflictContextSchema = z.object({
-  worktreePath: z
-    .string()
-    .describe('Absolute path to the worktree where conflict markers are present'),
   conflictedFiles: z.array(z.string()).describe('Workspace-relative paths of conflicted files'),
   baseBranch: z.string().describe('Branch being merged in (e.g. main)'),
   prNumber: z.number().int().describe('PR number under resolution (context only)'),

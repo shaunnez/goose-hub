@@ -331,8 +331,10 @@ describe('runInvestigateWorkflow', () => {
 
       const invokeSpec = mockInvokeSkill.mock.calls[0]?.[0] as {
         context: { worktreePath?: string };
+        overrides?: { workspaceDir?: string };
       };
-      expect(invokeSpec.context.worktreePath).toBe('/tmp/test-worktree');
+      expect(invokeSpec.context.worktreePath).toBeUndefined();
+      expect(invokeSpec.overrides?.workspaceDir).toBe('/tmp/test-worktree');
 
       const renderedRunInputs = JSON.stringify({
         wave1: mockDispatchWave.mock.calls[0]?.[0],

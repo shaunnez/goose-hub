@@ -734,6 +734,27 @@ export interface PipelineSettingsDto {
   };
 }
 
+export interface LearningLoopSettingsDto {
+  projectId: string;
+  coachPolicy: {
+    enabled: boolean;
+    consistencyThreshold: number;
+    minLifecycles: number;
+  };
+  configDefaults: {
+    enabled: boolean;
+    consistencyThreshold: number;
+    minLifecycles: number;
+  };
+  dbOverrides: {
+    enabled: boolean | null;
+    consistencyThreshold: number | null;
+    minLifecycles: number | null;
+    updatedAt: string;
+    updatedBy: string | null;
+  } | null;
+}
+
 export type ReviewerSlotModel = 'claude' | 'codex';
 export type ReviewerSlotPrompt = 'default' | 'unconstrained';
 

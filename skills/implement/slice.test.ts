@@ -328,8 +328,8 @@ describe('implement skill config', () => {
     expect(config.freshContext).toBe(false);
   });
 
-  it('contextAllowlist includes worktreePath, stack.testCommand, relatedSurface, advisorFeedback', () => {
-    expect(config.contextAllowlist).toContain('worktreePath');
+  it('contextAllowlist excludes worktreePath and includes implementation context', () => {
+    expect(config.contextAllowlist).not.toContain('worktreePath');
     expect(config.contextAllowlist).toContain('stack.testCommand');
     expect(config.contextAllowlist).toContain('relatedSurface');
     expect(config.contextAllowlist).toContain('advisorFeedback');
@@ -340,7 +340,6 @@ describe('implement skill config', () => {
 describe('implement context schema', () => {
   const baseContext = {
     workItem: { title: 't', body: 'b', number: 1, priority: 'medium' as const },
-    worktreePath: '/abs/path',
     stack: { testCommand: 'pnpm test' },
   };
 
@@ -379,14 +378,20 @@ describe('implement context schema', () => {
           evidenceSpecPath: 'apps/web/e2e/issue-876.spec.ts',
           checkedAbsent: ['apps/web/src/components/chrome/Sidebar.test.tsx'],
           targetedTestPaths: ['apps/web/src/components/chrome/Sidebar.test.tsx'],
+          readFirst: [
+            'apps/web/src/components/chrome/Sidebar.tsx',
+            'apps/web/src/components/chrome/Sidebar.test.tsx',
+          ],
+          primaryTestPath: 'apps/web/src/components/chrome/Sidebar.test.tsx',
+          testMode: 'create-candidate',
+          doNotSearchFor: ['apps/web/src/components/chrome/Sidebar.test.tsx'],
         },
       }).success,
     ).toBe(true);
   });
 
-  it('rejects missing worktreePath', () => {
-    const { worktreePath: _omit, ...rest } = baseContext;
-    expect(ImplementContextSchema.safeParse(rest).success).toBe(false);
+  it('accepts context without worktreePath', () => {
+    expect(ImplementContextSchema.safeParse(baseContext).success).toBe(true);
   });
 
   it('rejects missing stack.testCommand', () => {

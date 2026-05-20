@@ -7,14 +7,12 @@ import { InvestigateSchema } from './schema.js';
  *
  *   <task>
  *     <workItem>{"title":"...","body":"...","number":123}</workItem>
- *     <worktreePath>...</worktreePath>
  *     <scoutReports>...</scoutReports>
  *   </task>
  *
  * - workItem.title   — the issue title (used as starting investigation signal)
  * - workItem.body    — the issue body (contains steps to reproduce, expected/actual behaviour)
  * - workItem.number  — the issue number (used for references in decision summaries)
- * - worktreePath     — absolute path to the checked-out worktree to investigate
  */
 export const InvestigateContextSchema = z.object({
   workItem: z.object({
@@ -22,7 +20,6 @@ export const InvestigateContextSchema = z.object({
     body: z.string(),
     number: z.number(),
   }),
-  worktreePath: z.string(),
   /** JSON-serialised wave reports + contradictions passed by the orchestrator post-M19.16. */
   scoutReports: z.string().optional(),
 });
@@ -30,7 +27,7 @@ export const InvestigateContextSchema = z.object({
 const config: SkillConfig = {
   contextSchema: InvestigateContextSchema,
   outputSchema: InvestigateSchema,
-  contextAllowlist: ['workItem', 'worktreePath', 'scoutReports'],
+  contextAllowlist: ['workItem', 'scoutReports'],
   /**
    * Tool bundle 'read' maps to ['read', 'search', 'work-item-read'].
    * The investigator has NO write access — file writes will be rejected.

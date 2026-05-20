@@ -581,10 +581,17 @@ describe('runFixIssueWorkflow (#183)', () => {
           keyFiles?: Array<{ path: string }>;
           testCandidates?: string[];
           targetedTestPaths?: string[];
+          readFirst?: string[];
+          primaryTestPath?: string | null;
+          testMode?: string;
+          doNotSearchFor?: string[];
         };
       };
+      workspaceDir?: string;
       contextAllowlist: string[];
     };
+    expect(implementSpec.workspaceDir).toBe('/work/wt');
+    expect((implementSpec.context as { worktreePath?: string }).worktreePath).toBeUndefined();
     expect(implementSpec.context.investigation?.findings).toContain('triage-batch');
     expect(implementSpec.context.investigation?.keyFiles?.map((f) => f.path)).toContain(
       'apps/server/src/domains/workflows/triage-batch.ts',
@@ -598,6 +605,16 @@ describe('runFixIssueWorkflow (#183)', () => {
       'apps/server/src/domains/workflows/triage-batch.test.ts',
     );
     expect(implementSpec.context.relatedSurface?.targetedTestPaths?.[0]).toBe(
+      'apps/server/src/domains/workflows/triage-batch.test.ts',
+    );
+    expect(implementSpec.context.relatedSurface?.readFirst).toContain(
+      'apps/server/src/domains/workflows/triage-batch.ts',
+    );
+    expect(implementSpec.context.relatedSurface?.primaryTestPath).toBe(
+      'apps/server/src/domains/workflows/triage-batch.test.ts',
+    );
+    expect(implementSpec.context.relatedSurface?.testMode).toBe('create-candidate');
+    expect(implementSpec.context.relatedSurface?.doNotSearchFor).toContain(
       'apps/server/src/domains/workflows/triage-batch.test.ts',
     );
 
@@ -1022,7 +1039,7 @@ describe('runFixIssueWorkflow (#183)', () => {
 
     const runtime: AgentRuntime = {
       run: vi.fn().mockImplementationOnce(async (spec) => {
-        const wt = (spec.context as { worktreePath: string }).worktreePath;
+        const wt = spec.workspaceDir as string;
         const observedPath = join(wt, 'apps/web/src/index.ts');
         const evidencePath = join(wt, 'apps/web/e2e/issue-42.spec.ts');
         mkdirSync(dirname(observedPath), { recursive: true });
@@ -1155,7 +1172,7 @@ describe('runFixIssueWorkflow (#183)', () => {
 
     const runtime: AgentRuntime = {
       run: vi.fn().mockImplementationOnce(async (spec) => {
-        const wt = (spec.context as { worktreePath: string }).worktreePath;
+        const wt = spec.workspaceDir as string;
         const observedPath = join(wt, 'apps/web/src/observed.ts');
         mkdirSync(dirname(observedPath), { recursive: true });
         writeFileSync(observedPath, 'export const observed = true;\n');
@@ -1350,7 +1367,7 @@ describe('runFixIssueWorkflow (#183)', () => {
 
     const runtime: AgentRuntime = {
       run: vi.fn().mockImplementationOnce(async (spec) => {
-        const wt = (spec.context as { worktreePath: string }).worktreePath;
+        const wt = spec.workspaceDir as string;
         const unrelatedPath = join(wt, 'docs/unrelated.md');
         mkdirSync(dirname(unrelatedPath), { recursive: true });
         writeFileSync(unrelatedPath, 'unrelated\n');
@@ -1442,7 +1459,7 @@ describe('runFixIssueWorkflow (#183)', () => {
 
     const runtime: AgentRuntime = {
       run: vi.fn().mockImplementationOnce(async (spec) => {
-        const wt = (spec.context as { worktreePath: string }).worktreePath;
+        const wt = spec.workspaceDir as string;
         const observedPath = join(wt, 'core/observed.ts');
         mkdirSync(dirname(observedPath), { recursive: true });
         writeFileSync(observedPath, 'export const observed = true;\n');
@@ -1616,7 +1633,7 @@ describe('runFixIssueWorkflow (#183)', () => {
 
     const runtime: AgentRuntime = {
       run: vi.fn().mockImplementationOnce(async (spec) => {
-        const wt = (spec.context as { worktreePath: string }).worktreePath;
+        const wt = spec.workspaceDir as string;
         const observedPath = join(wt, 'core/observed.ts');
         mkdirSync(dirname(observedPath), { recursive: true });
         writeFileSync(observedPath, 'export const observed = true;\n');

@@ -526,11 +526,9 @@ export async function runInvestigateWorkflow(
 
     const investigateContext: {
       workItem: typeof workItemCtx;
-      worktreePath: string;
       scoutReports?: string;
     } = {
       workItem: workItemCtx,
-      worktreePath,
     };
     if (allScoutReports != null) {
       investigateContext.scoutReports = allScoutReports;
@@ -554,6 +552,7 @@ export async function runInvestigateWorkflow(
       runId,
       context: investigateContext,
       overrides: {
+        workspaceDir: worktreePath,
         runtimeOverride: runtime,
         modelOverride: synthModelOverride,
         suppressRunStarted: true,

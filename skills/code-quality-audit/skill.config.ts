@@ -18,7 +18,7 @@ const config: SkillConfig = {
   /** Not a holdout role — auditor sees full reasoning. */
   freshContext: false,
   role: 'auditor',
-  contextAllowlist: ['worktreePath', 'metricsJson', 'workItem'],
+  contextAllowlist: ['metricsJson', 'workItem'],
 };
 
 export { CodeQualityAuditContextSchema, CodeQualityAuditOutputSchema };

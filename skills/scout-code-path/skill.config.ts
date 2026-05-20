@@ -14,7 +14,6 @@ export const ScoutCodePathContextSchema = z.object({
   scoutFocus: z
     .string()
     .describe('One sentence describing the symbol or function whose call path to trace'),
-  worktreePath: z.string(),
   symbolIndexHints: z
     .array(
       z.object({
@@ -35,7 +34,6 @@ const config: SkillConfig = {
     'workItem.body',
     'workItem.number',
     'scoutFocus',
-    'worktreePath',
     'symbolIndexHints',
   ],
   toolBundles: ['read'],

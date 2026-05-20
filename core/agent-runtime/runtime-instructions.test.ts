@@ -60,6 +60,18 @@ describe('FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS', () => {
   it('states that paths must be workspace-relative', () => {
     expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toMatch(/workspace-relative/i);
   });
+
+  it('forbids MCP resources and spawning while naming Claude factory read tools', () => {
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toContain('resources/read');
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toContain('resources/list');
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toContain('file://');
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toMatch(/spawn/i);
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toMatch(/delegation/i);
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toContain('mcp__factory-tools__read_file');
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toContain('mcp__factory-tools__list_dir');
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toContain('mcp__factory-tools__list_files');
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS).toContain('mcp__factory-tools__search_text');
+  });
 });
 
 describe('FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX', () => {
@@ -79,6 +91,18 @@ describe('FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX', () => {
 
   it('does not advertise Claude-style prefixed names to Codex', () => {
     expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).not.toContain('mcp__factory-tools__');
+  });
+
+  it('forbids MCP resources and spawning while naming bare Codex factory read tools', () => {
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain('resources/read');
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain('resources/list');
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain('file://');
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toMatch(/spawn/i);
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toMatch(/delegation/i);
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain('`read_file`');
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain('`list_dir`');
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain('`list_files`');
+    expect(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX).toContain('`search_text`');
   });
 });
 

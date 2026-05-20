@@ -12,18 +12,11 @@ export const ScoutUserJourneyContextSchema = z.object({
     number: z.number(),
   }),
   scoutFocus: z.string().describe('One sentence describing the user-facing flow to walk'),
-  worktreePath: z.string(),
 });
 
 const config: SkillConfig = {
   contextSchema: ScoutUserJourneyContextSchema,
-  contextAllowlist: [
-    'workItem.title',
-    'workItem.body',
-    'workItem.number',
-    'scoutFocus',
-    'worktreePath',
-  ],
+  contextAllowlist: ['workItem.title', 'workItem.body', 'workItem.number', 'scoutFocus'],
   toolBundles: ['read'],
   modelPin: 'haiku',
   freshContext: true,

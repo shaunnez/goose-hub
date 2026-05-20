@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { app } from './server.js';
 
 const { mockGetChangelog } = vi.hoisted(() => ({
   mockGetChangelog: vi.fn(),
@@ -115,8 +116,6 @@ vi.mock('./domains/changelog/service.js', async () => {
     getChangelog: mockGetChangelog,
   };
 });
-
-import { app } from './server.js';
 
 describe('GET /projects/:slug/milestones/:milestone/closed-issues', () => {
   it('returns closed work items for the milestone', async () => {

@@ -12,18 +12,11 @@ export const ScoutPatternContextSchema = z.object({
     number: z.number(),
   }),
   scoutFocus: z.string().describe('One sentence describing the pattern or idiom to find usages of'),
-  worktreePath: z.string(),
 });
 
 const config: SkillConfig = {
   contextSchema: ScoutPatternContextSchema,
-  contextAllowlist: [
-    'workItem.title',
-    'workItem.body',
-    'workItem.number',
-    'scoutFocus',
-    'worktreePath',
-  ],
+  contextAllowlist: ['workItem.title', 'workItem.body', 'workItem.number', 'scoutFocus'],
   toolBundles: ['read'],
   modelPin: 'haiku',
   freshContext: true,

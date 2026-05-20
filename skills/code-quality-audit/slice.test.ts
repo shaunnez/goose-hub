@@ -282,16 +282,13 @@ describe('golden fixture — coupling violation', () => {
 // ─── Context schema validation ─────────────────────────────────────────────────
 
 describe('CodeQualityAuditContextSchema', () => {
-  it('accepts minimal context with just worktreePath', () => {
-    const result = CodeQualityAuditContextSchema.safeParse({
-      worktreePath: '/tmp/worktrees/42',
-    });
+  it('accepts empty model-visible context', () => {
+    const result = CodeQualityAuditContextSchema.safeParse({});
     expect(result.success).toBe(true);
   });
 
   it('accepts context with metricsJson', () => {
     const result = CodeQualityAuditContextSchema.safeParse({
-      worktreePath: '/tmp/worktrees/42',
       metricsJson: {
         locDiscipline: { score: 8, pctUnder200: 92 },
         coupling: { score: 7, avgImports: 3.2, maxImports: 8, maxFile: 'src/orchestrator.ts' },
@@ -303,9 +300,8 @@ describe('CodeQualityAuditContextSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('rejects missing worktreePath', () => {
-    const result = CodeQualityAuditContextSchema.safeParse({});
-    expect(result.success).toBe(false);
+  it('does not require worktreePath', () => {
+    expect(CodeQualityAuditContextSchema.safeParse({}).success).toBe(true);
   });
 });
 
@@ -329,8 +325,8 @@ describe('code-quality-audit skill config', () => {
     expect(config.freshContext).toBe(false);
   });
 
-  it('contextAllowlist includes worktreePath and metricsJson', () => {
-    expect(config.contextAllowlist).toContain('worktreePath');
+  it('contextAllowlist excludes worktreePath and includes metricsJson', () => {
+    expect(config.contextAllowlist).not.toContain('worktreePath');
     expect(config.contextAllowlist).toContain('metricsJson');
   });
 });

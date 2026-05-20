@@ -61,6 +61,19 @@ const BROWSER_PROCESS_ACCESS_SKILLS = new Set(['playwright-repro', 'evidence-pos
 const ABSOLUTE_USER_PATH_RE = /\/Users\/[^\s'"`]+/g;
 const NATIVE_PATCH_REJECTION_RE =
   /patch rejected:\s*writing is blocked by read-only sandbox|writing is blocked by read-only sandbox/i;
+const FORBIDDEN_RUNTIME_SURFACE_PATTERNS: Array<{
+  surface: string;
+  toolName: string;
+  re: RegExp;
+}> = [
+  { surface: 'resources/read failed', toolName: 'resources/read', re: /resources\/read\s+failed/i },
+  { surface: 'collab spawn failed', toolName: 'collab.spawn', re: /collab\s+spawn\s+failed/i },
+  {
+    surface: 'full-history fork/spawn failed',
+    toolName: 'full-history-fork-spawn',
+    re: /(?:full[- ]history.*(?:fork|spawn)|(?:fork|spawn).*full[- ]history).*(?:failed|error)/i,
+  },
+];
 
 function isPathUnderRoot(path: string, root: string): boolean {
   const normalizedRoot = join(root, '.');
@@ -119,6 +132,31 @@ function contextSizeTelemetry(input: { contextXml: string; systemPrompt: string 
 
 function stderrIncludesNativePatchRejection(stderr: string): boolean {
   return NATIVE_PATCH_REJECTION_RE.test(stderr);
+}
+
+function detectForbiddenRuntimeSurface(stderr: string): {
+  surface: string;
+  toolName: string;
+  blockReason: string;
+} | null {
+  for (const pattern of FORBIDDEN_RUNTIME_SURFACE_PATTERNS) {
+    if (pattern.re.test(stderr)) {
+      return {
+        surface: pattern.surface,
+        toolName: pattern.toolName,
+        blockReason: `forbidden-runtime-surface: ${pattern.surface}`,
+      };
+    }
+  }
+  return null;
+}
+
+function handleForbiddenRuntimeSurface(line: string): {
+  surface: string;
+  toolName: string;
+  blockReason: string;
+} | null {
+  return detectForbiddenRuntimeSurface(line);
 }
 
 export class CodexCliRuntime implements AgentRuntime {
@@ -277,6 +315,7 @@ export class CodexCliRuntime implements AgentRuntime {
       let stdout = '';
       let stderr = '';
       let stdoutLineBuffer = '';
+      let stderrLineBuffer = '';
       let truncated = false;
       let settled = false;
       let toolCallCount = 0;
@@ -303,6 +342,56 @@ export class CodexCliRuntime implements AgentRuntime {
           runId,
           personaId,
         });
+      };
+
+      const emitForbiddenRuntimeSurfaceBlocked = (violation: {
+        surface: string;
+        toolName: string;
+        blockReason: string;
+      }) => {
+        eventStore.appendEvent({
+          projectId,
+          workItemId,
+          kind: 'agent.tool-call',
+          payload: normalizeToolCallAuditPayload({
+            tool_name: violation.toolName,
+            run_id: runId,
+            tool_input: { source: 'codex-stderr', surface: violation.surface },
+            skill: spec.skill,
+            workspace_dir: workspaceDir,
+            blocked: true,
+            block_reason: violation.blockReason,
+            status: 'failed',
+          }),
+          runId,
+          personaId,
+        });
+      };
+
+      const failForbiddenRuntimeSurface = (violation: {
+        surface: string;
+        toolName: string;
+        blockReason: string;
+      }) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        emitForbiddenRuntimeSurfaceBlocked(violation);
+        eventStore.appendEvent({
+          projectId,
+          workItemId,
+          kind: 'agent.run-failed',
+          payload: {
+            runId,
+            skill: spec.skill,
+            reason: 'forbidden-runtime-surface',
+            error: violation.blockReason,
+          },
+          runId,
+          personaId,
+        });
+        killProcessGroupOrChild(child);
+        reject(new Error(violation.blockReason));
       };
 
       const handleStdoutLine = (line: string) => {
@@ -472,7 +561,18 @@ export class CodexCliRuntime implements AgentRuntime {
       };
 
       child.stderr?.on('data', (chunk: Buffer) => {
-        stderr += chunk.toString();
+        const text = chunk.toString();
+        stderr += text;
+        stderrLineBuffer += text;
+        const lines = stderrLineBuffer.split(/\r?\n/);
+        stderrLineBuffer = lines.pop() ?? '';
+        for (const line of lines) {
+          const violation = handleForbiddenRuntimeSurface(line);
+          if (violation != null) {
+            failForbiddenRuntimeSurface(violation);
+            return;
+          }
+        }
       });
 
       child.stdout.on('data', (chunk: Buffer) => {
@@ -538,6 +638,27 @@ export class CodexCliRuntime implements AgentRuntime {
         clearTimeout(timeout);
         handleStdoutLine(stdoutLineBuffer);
         stdoutLineBuffer = '';
+        if (stderrLineBuffer.length > 0) {
+          const violation = handleForbiddenRuntimeSurface(stderrLineBuffer);
+          if (violation != null) {
+            emitForbiddenRuntimeSurfaceBlocked(violation);
+            eventStore.appendEvent({
+              projectId,
+              workItemId,
+              kind: 'agent.run-failed',
+              payload: {
+                runId,
+                skill: spec.skill,
+                reason: 'forbidden-runtime-surface',
+                error: violation.blockReason,
+              },
+              runId,
+              personaId,
+            });
+            reject(new Error(violation.blockReason));
+            return;
+          }
+        }
 
         const envelope = parseCodexEnvelope(stdout);
 

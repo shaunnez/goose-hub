@@ -10,6 +10,7 @@ import { resolveProjectAgentExecution } from '../agent-runtime/resolve-runtime-f
 import { toJsonSchema } from '../agent-runtime/schema-bridge.js';
 import { selectPersona } from '../agent-runtime/select-persona.js';
 import { db } from '../db/db.js';
+import { getCoachPolicy } from '../db/repositories/project-settings.js';
 import { archivedLifecycles, decisionPatterns, playbooks } from '../db/schema.js';
 import { eventStore } from '../event-stream/store.js';
 import {
@@ -386,8 +387,8 @@ export async function runCrossRunRetroWorkflow(
       payload: { tier: 'cross-run', playbookId, manifest },
     });
 
-    const coachPolicy = projectConfig?.agentConfig?.coachPolicy;
-    if (coachPolicy?.enabled) {
+    const coachPolicy = getCoachPolicy(projectId, projectConfig?.agentConfig?.coachPolicy);
+    if (coachPolicy.enabled) {
       const lifecycleIds = lifecycles.map((l) => l.id);
       const coachRunner = input.deps?.coachWorkflowRunner ?? runSkillCoachingWorkflow;
       await dispatchCoachCandidates({
