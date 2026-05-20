@@ -71,6 +71,7 @@ Emit live progress with `[decision] KIND: <one sentence>` markers in your text t
 
 Return a single JSON object conforming exactly to the output schema. Free-text-only output fails the run. Your entire response must be valid JSON — no prose, no preamble, no explanation outside the object.
 
+<!-- output-example -->
 ```json
 {
   "say": "<the user-facing reply>",

@@ -1,7 +1,7 @@
 import { auditSkillContracts, formatSkillContractAudit } from '../core/agent-runtime/skill-contract-audit.js';
 
 const strict = process.argv.includes('--strict');
-const audit = auditSkillContracts(process.cwd());
+const audit = await auditSkillContracts(process.cwd());
 
 console.log(formatSkillContractAudit(audit));
 
@@ -15,6 +15,9 @@ if (strict) {
       !s.outputSchema.configured ||
       s.worktreePathExposure.allowlist ||
       s.worktreePathExposure.promptLines.length > 0 ||
+      ['missing-output-example', 'invalid-output-example', 'no-marked-output-example'].includes(
+        s.outputExample.status,
+      ) ||
       (enforcePathLanguageFor.has(s.skill) &&
         (s.pathLanguage.vagueWorkspaceRelative.length > 0 ||
           s.pathLanguage.packageRelativeExamples.length > 0)),
@@ -35,6 +38,8 @@ if (strict) {
               ? (violation.outputSchema.configuredSchema ?? '(configured)')
               : '(missing)'
           }`,
+          `outputExample=${violation.outputExample.status}`,
+          `outputExampleIssues=${violation.outputExample.issues.join('|') || '(none)'}`,
           `worktreePathExposure=${violation.worktreePathExposure.allowlist ? 'allowlist' : ''}:${
             violation.worktreePathExposure.promptLines.length
           }`,

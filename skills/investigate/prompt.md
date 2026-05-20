@@ -113,23 +113,21 @@ Emit: `[decision] INSIGHT: Recorded <N> open questions`
 
 Return a JSON object with this exact structure:
 
+<!-- output-example -->
 ```json
 {
-  "findings": "<root cause hypothesis and full analysis, 2–5 paragraphs>",
+  "findings": "The root cause is that the audit is checking inferred top-level fields rather than the configured runtime schema. This misses nested validation failures and treats incidental JSON snippets as output examples.",
   "keyFiles": [
-    { "path": "<repo-relative POSIX file path>", "reason": "<why this file is relevant>" }
+    { "path": "core/agent-runtime/skill-contract-audit.ts", "reason": "Contains the audit logic that reads prompt examples and validates contracts." }
   ],
-  "confidence": "<low|medium|high>",
+  "confidence": "high",
   "openQuestions": [
-    "<question 1>",
-    "<question 2>"
+    "Should strict mode require examples for every runtime skill?"
   ],
   "requiresBrowserRepro": false,
   "decisionSummaries": [
-    { "kind": "READ", "summary": "<one sentence>", "evidence": "<quote or signal>" },
-    { "kind": "READ", "summary": "<one sentence>", "evidence": "<file names or search terms>" },
-    { "kind": "READ", "summary": "<one sentence>", "evidence": "<function or module name>" },
-    { "kind": "INSIGHT", "summary": "<one sentence>", "evidence": "<file:line or code snippet>" }
+    { "kind": "READ", "summary": "Read the skill contract audit implementation.", "evidence": "core/agent-runtime/skill-contract-audit.ts" },
+    { "kind": "INSIGHT", "summary": "The audit must validate marked examples with the configured output schema.", "evidence": "outputSchema.safeParse" }
   ]
 }
 ```

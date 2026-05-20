@@ -37,6 +37,9 @@ jobs:
       - name: Audit docs (drift check)
         run: pnpm audit-docs
 
+      - name: Audit skill contracts
+        run: pnpm skill-contract:audit
+
       - name: Manifest freshness check
         run: pnpm manifest --check
 

@@ -62,6 +62,7 @@ Bad behaviour example:
 
 Return a JSON object with this exact shape (validated by `ScoutOutputSchema`):
 
+<!-- output-example -->
 ```json
 {
   "findings": [

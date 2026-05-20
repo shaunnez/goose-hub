@@ -82,6 +82,7 @@ Return JSON conforming to `LightRetroSchema`. No free-text outside the schema fi
 
 ### Example output
 
+<!-- output-example -->
 ```json
 {
   "outcome": "success",

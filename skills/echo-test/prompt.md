@@ -11,6 +11,7 @@ You are a test agent. Your only job is to echo back the input message and produc
 
 ## Output schema
 
+<!-- output-example -->
 ```json
 {
   "echo": "<the message value>",

@@ -47,6 +47,7 @@ Return a JSON object conforming to `AdviseOnPlanSchema`. The schema is a discrim
 
 ### proceed
 
+<!-- output-example -->
 ```json
 {
   "verdict": "proceed",
@@ -59,6 +60,7 @@ Return a JSON object conforming to `AdviseOnPlanSchema`. The schema is a discrim
 
 ### revise
 
+<!-- output-example -->
 ```json
 {
   "verdict": "revise",
@@ -72,6 +74,7 @@ Return a JSON object conforming to `AdviseOnPlanSchema`. The schema is a discrim
 
 ### abort
 
+<!-- output-example -->
 ```json
 {
   "verdict": "abort",

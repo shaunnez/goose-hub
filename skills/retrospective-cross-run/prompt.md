@@ -101,4 +101,61 @@ Return JSON conforming to `CrossRunRetroOutputSchema`. No free-text outside the 
 - `aggregatedLearnings[]`, `topPatterns[]`, `gateThresholds[]`, `costBaselines[]`, `improvementCandidates[]` — arrays (any may be empty)
 - `decisionSummaries[]` — at least one VERDICT
 
+<!-- output-example -->
+```json
+{
+  "outcome": "success",
+  "workItemNumber": 0,
+  "summary": {
+    "wentWell": "Repeated QA failures were grouped into one stable pattern.",
+    "didNotGoWell": "Several archived runs lacked enough evidence for cost baselines.",
+    "architecturalTakeaway": "Cross-run learning is strongest when patterns retain source run ids."
+  },
+  "improvementCandidates": [
+    {
+      "kind": "skill-prompt",
+      "targetPath": "skills/qa/prompt.md",
+      "suggestionText": "Ask QA to cite verificationSummary fields before judging browser evidence.",
+      "evidence": "pattern:qa-evidence-citation",
+      "confidence": "high"
+    }
+  ],
+  "decisionSummaries": [
+    {
+      "kind": "VERDICT",
+      "summary": "Cross-run review found one converged QA evidence pattern."
+    }
+  ],
+  "windowStartAt": "2026-05-01T00:00:00.000Z",
+  "windowEndAt": "2026-05-07T00:00:00.000Z",
+  "lifecycleCount": 12,
+  "aggregatedLearnings": [
+    {
+      "observation": "QA evidence comments are more reliable when verificationSummary is cited directly.",
+      "rationale": "The same pattern appeared in three successful QA runs.",
+      "improvementKind": "skill-prompt",
+      "targetPath": "skills/qa/prompt.md",
+      "confidence": "high"
+    }
+  ],
+  "topPatterns": [
+    {
+      "patternId": "qa-evidence-citation",
+      "pattern": "QA output cites workflow-owned verification facts before judging browser evidence.",
+      "occurrenceCount": 3,
+      "consistencyScore": 0.9,
+      "role": "qa",
+      "kind": "skill-prompt",
+      "exampleWorkItemIds": ["#701", "#702"]
+    }
+  ],
+  "gateThresholds": [
+    { "gate": "qa", "mean": 72, "min": 60, "max": 90, "stdDev": 8, "sampleCount": 6 }
+  ],
+  "costBaselines": [
+    { "role": "qa", "skill": "qa", "mean": 0.42, "p50": 0.4, "p95": 0.7, "sampleCount": 6 }
+  ]
+}
+```
+
 [decision] VERDICT: Cross-run playbook complete: <one sentence on the headline finding>

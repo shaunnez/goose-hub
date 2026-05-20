@@ -75,6 +75,7 @@ Emit at least one `decisionSummary` per major decision point:
 
 Return a JSON object conforming to `DecomposeOutputSchema`:
 
+<!-- output-example -->
 ```json
 {
   "issues": [

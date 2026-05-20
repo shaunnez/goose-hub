@@ -24,6 +24,27 @@ Your terminal JSON must include:
   - `reason`: required for `"dismissed"`, optional for `"addressed"` (explain briefly what you changed).
 - `decisionSummaries`: at minimum one entry per finding with kind `DEV_REVIEW_ADDRESSED` or `DEV_REVIEW_DISMISSED` and a one-sentence summary. Include `evidence` = `findingRef`.
 
+<!-- output-example -->
+```json
+{
+  "findingDispositions": [
+    {
+      "findingRef": "core/example.ts:42",
+      "severity": "P1",
+      "disposition": "addressed",
+      "reason": "Added the missing null guard and verified the affected test."
+    }
+  ],
+  "decisionSummaries": [
+    {
+      "kind": "DEV_REVIEW_ADDRESSED",
+      "summary": "Addressed the P1 review finding by adding the missing null guard.",
+      "evidence": "core/example.ts:42"
+    }
+  ]
+}
+```
+
 ## Constraints
 
 - **One pass only** — you will not get a second Codex review after this turn.

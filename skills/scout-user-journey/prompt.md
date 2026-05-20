@@ -34,6 +34,7 @@ You have **read and search access only**.
 
 Return JSON conforming to `ScoutOutputSchema`:
 
+<!-- output-example -->
 ```json
 {
   "findings": [
