@@ -322,6 +322,64 @@ describe('groupEvents — run-group metadata', () => {
     }
   });
 
+  it('prefers workflow display skill over runtime lifecycle skill for run labels', () => {
+    const events: AgentEventDto[] = [
+      {
+        ...makeRunEvent(3, 'run-fix', 'agent.decision-summary'),
+        payload: { skill: 'fix-feedback', kind: 'GREEN', summary: 'Fixed QA feedback' },
+      },
+      makeRunEvent(2, 'run-fix', 'agent.run-completed', 'implement'),
+      {
+        ...makeRunEvent(1, 'run-fix', 'agent.run-started', 'implement'),
+        payload: {
+          skill: 'implement',
+          displaySkill: 'fix-feedback',
+          workflowSkill: 'fix-feedback',
+        },
+      },
+    ];
+
+    const result = groupEvents(events);
+
+    expect(result).toHaveLength(1);
+    if (result[0].kind === 'run-group') {
+      expect(result[0].skill).toBe('fix-feedback');
+    }
+  });
+
+  it('infers fix-feedback display skill from the completion marker for legacy runs', () => {
+    const events: AgentEventDto[] = [
+      makeRunEvent(3, 'run-fix', 'agent.fix-feedback-complete'),
+      makeRunEvent(2, 'run-fix', 'agent.run-completed', 'implement'),
+      makeRunEvent(1, 'run-fix', 'agent.run-started', 'implement'),
+    ];
+
+    const result = groupEvents(events);
+
+    expect(result).toHaveLength(1);
+    if (result[0].kind === 'run-group') {
+      expect(result[0].skill).toBe('fix-feedback');
+    }
+  });
+
+  it('prefers lifecycle skill over newer decision-summary skill without display metadata', () => {
+    const events: AgentEventDto[] = [
+      {
+        ...makeRunEvent(3, 'run-abc', 'agent.decision-summary'),
+        payload: { skill: 'fix-feedback', kind: 'GREEN', summary: 'Fixed QA feedback' },
+      },
+      makeRunEvent(2, 'run-abc', 'agent.run-completed', 'implement'),
+      makeRunEvent(1, 'run-abc', 'agent.run-started', 'implement'),
+    ];
+
+    const result = groupEvents(events);
+
+    expect(result).toHaveLength(1);
+    if (result[0].kind === 'run-group') {
+      expect(result[0].skill).toBe('implement');
+    }
+  });
+
   it('sets skill to null when no skill found in any event', () => {
     const events: AgentEventDto[] = [
       makeRunEvent(1, 'run-abc', 'agent.run-started'),

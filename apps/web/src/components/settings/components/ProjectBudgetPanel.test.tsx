@@ -50,6 +50,21 @@ vi.mock('@/lib/api', () => ({
         resolvedPrimary: { tier: 'sonnet', provider: 'claude', modelId: 'claude-sonnet' },
         resolvedFallback: null,
         resolvedAdvisor: null,
+        selectionReason: 'tier skill-default, provider fallback, effort db',
+        resolutionTrace: {
+          tier: {
+            value: 'sonnet',
+            source: 'skill-default',
+            reason: 'holdout skill ignores DB/config tier overrides; using SKILL_BUDGETS default',
+          },
+          provider: {
+            value: 'claude',
+            source: 'fallback',
+            reason:
+              'holdout skill ignores DB/config provider overrides; using resolver fallback provider',
+          },
+          effort: { value: 'high', source: 'db', reason: 'project_skill_settings.effort override' },
+        },
       },
     },
   }),
@@ -112,6 +127,9 @@ describe('ProjectBudgetPanel', () => {
 
     await waitFor(() => expect(screen.getByText('Observed runtime profile')).toBeTruthy());
     expect(screen.getByDisplayValue('high')).toBeTruthy();
+    expect(screen.getByText(/from skill-default: holdout skill ignores/)).toBeTruthy();
+    expect(screen.getByText(/from fallback: holdout skill ignores/)).toBeTruthy();
+    expect(screen.getByText(/from db: project_skill_settings\.effort override/)).toBeTruthy();
     expect(await screen.findByText('This skill looks stable and inexpensive.')).toBeTruthy();
   });
 });

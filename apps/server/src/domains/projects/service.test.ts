@@ -27,6 +27,19 @@ describe('listProjectConfigsService (#280)', () => {
     slug: 'my-proj',
     name: 'My Project',
     source: { kind: 'github', repo: 'owner/my-proj' },
+    targetRepo: {
+      cloneUrl: 'git@github.com:owner/my-proj.git',
+      defaultBranch: 'main',
+      localPath: '~/code/my-proj',
+    },
+    stack: {
+      runtime: 'node',
+      packageManager: 'pnpm',
+      testCommand: 'pnpm test',
+      lintCommand: 'pnpm lint',
+      typecheckCommand: 'pnpm typecheck',
+      e2eCommand: 'pnpm test:e2e',
+    },
     activeMilestone: 'M10: Orchestration',
     colorStripe: '#7c3aed',
     budgets: {
@@ -39,6 +52,8 @@ describe('listProjectConfigsService (#280)', () => {
       perAgentMaxUsd: 1,
     },
     mode: 'supervised',
+    storage: { kind: 'local', path: '~/.factory/data/my-proj' },
+    isolation: { mode: 'native' },
   };
 
   it('maps full ProjectConfig to ProjectConfigDto shape', async () => {
@@ -50,10 +65,25 @@ describe('listProjectConfigsService (#280)', () => {
           slug: 'my-proj',
           name: 'My Project',
           source: { kind: 'github', repo: 'owner/my-proj' },
+          targetRepo: {
+            cloneUrl: 'git@github.com:owner/my-proj.git',
+            defaultBranch: 'main',
+            localPath: '~/code/my-proj',
+          },
+          stack: {
+            runtime: 'node',
+            packageManager: 'pnpm',
+            testCommand: 'pnpm test',
+            lintCommand: 'pnpm lint',
+            typecheckCommand: 'pnpm typecheck',
+            e2eCommand: 'pnpm test:e2e',
+          },
           activeMilestone: 'M10: Orchestration',
           colorStripe: '#7c3aed',
           budgets: { perWorkflowMaxUsd: 2, dailyTokens: 500000, perAdvisorMaxUsd: 0.5 },
           mode: 'supervised',
+          storage: { path: '~/.factory/data/my-proj' },
+          isolation: { mode: 'native' },
         },
       ],
     });
@@ -65,6 +95,36 @@ describe('listProjectConfigsService (#280)', () => {
     ] as never);
     const result = await listProjectConfigsService();
     expect(result.configs[0].activeMilestone).toBeNull();
+  });
+
+  it('falls back to "main" when targetRepo.defaultBranch is absent', async () => {
+    vi.mocked(listProjectConfigs).mockResolvedValueOnce([
+      {
+        ...mockProject,
+        targetRepo: {
+          cloneUrl: 'git@github.com:owner/my-proj.git',
+          localPath: '~/code/my-proj',
+        },
+      },
+    ] as never);
+    const result = await listProjectConfigsService();
+    expect(result.configs[0].targetRepo).toEqual({
+      cloneUrl: 'git@github.com:owner/my-proj.git',
+      defaultBranch: 'main',
+      localPath: '~/code/my-proj',
+    });
+  });
+
+  it('fills empty target repo fields when targetRepo is absent', async () => {
+    vi.mocked(listProjectConfigs).mockResolvedValueOnce([
+      { ...mockProject, targetRepo: undefined },
+    ] as never);
+    const result = await listProjectConfigsService();
+    expect(result.configs[0].targetRepo).toEqual({
+      cloneUrl: '',
+      defaultBranch: 'main',
+      localPath: '',
+    });
   });
 
   it('returns empty configs when no projects are registered', async () => {

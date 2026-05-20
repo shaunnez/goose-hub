@@ -73,7 +73,6 @@ import { resolveActiveMilestone } from '#shared/resolve-milestone.js';
 import { getSourceForSlug } from '#shared/source.js';
 import {
   commentOnIssue,
-  fakeRun,
   getIssue,
   getIssueArtifact,
   getIssueLegalTargets,
@@ -378,42 +377,6 @@ describe('getIssue', () => {
     vi.mocked(getSourceForSlug).mockResolvedValueOnce(null);
     const result = await getIssue('unknown', '1');
     expect(result).toMatchObject({ ok: false, status: 404 });
-  });
-});
-
-describe('fakeRun', () => {
-  it('returns 404 for unknown project', async () => {
-    vi.mocked(getSourceForSlug).mockResolvedValueOnce(null);
-    const result = await fakeRun('unknown', '1', 'triage');
-    expect(result).toMatchObject({ ok: false, status: 404 });
-  });
-
-  it('defaults to triage skill for unknown skill name', async () => {
-    const result = await fakeRun('proj', '1', 'unknown-skill');
-    expect(result).toMatchObject({ ok: true, data: { skill: 'triage' } });
-  });
-
-  it('uses investigate when requested', async () => {
-    const result = await fakeRun('proj', '1', 'investigate');
-    expect(result).toMatchObject({ ok: true, data: { skill: 'investigate' } });
-  });
-
-  it('returns 404 in production, refusing to emit synthetic events (#203)', async () => {
-    const original = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'production';
-    try {
-      const result = await fakeRun('proj', '1', 'triage');
-      expect(result).toMatchObject({
-        ok: false,
-        error: 'fake-run is disabled in production',
-        status: 404,
-      });
-      // Confirm getSourceForSlug is never called — the production guard
-      // short-circuits before any side effect.
-      expect(getSourceForSlug).not.toHaveBeenCalled();
-    } finally {
-      process.env.NODE_ENV = original;
-    }
   });
 });
 
@@ -1221,25 +1184,6 @@ describe('overrideIssueRepo — body (requires repos.md mock)', () => {
       const triage = result.data.triage as Record<string, unknown>;
       expect(triage.type).toBe('bug');
       expect(triage.overrideRepo).toBe('owner/repo');
-    }
-  });
-});
-
-describe('fakeRun — async event emission (#203)', () => {
-  it('emits agent.spawned synchronously relative to return value, not waiting for setTimeout', async () => {
-    vi.useFakeTimers();
-    try {
-      const result = await fakeRun('proj', '1', 'triage');
-      expect(result).toMatchObject({ ok: true, data: { skill: 'triage' } });
-      // Advance timers to let the async IIFE complete
-      await vi.runAllTimersAsync();
-      // agent.spawned should have been emitted
-      const spawnedCall = vi
-        .mocked(eventStore.appendEvent)
-        .mock.calls.find(([e]) => e.kind === 'agent.spawned');
-      expect(spawnedCall).toBeDefined();
-    } finally {
-      vi.useRealTimers();
     }
   });
 });

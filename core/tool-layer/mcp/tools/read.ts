@@ -4,7 +4,13 @@ import type { z } from 'zod';
 import type { RepoRelativePath } from '../../path-contract.js';
 import { canonicalizeFactoryToolPath } from '../../path-contract.js';
 import { emitBlockedToolCall, emitToolCall } from '../audit.js';
-import { DEFAULT_STDOUT_LIMIT_BYTES, minimalEnv, runCommand } from '../command-policy.js';
+import {
+  type CommandResult,
+  type CommandStatus,
+  DEFAULT_STDOUT_LIMIT_BYTES,
+  minimalEnv,
+  runCommand,
+} from '../command-policy.js';
 import type { FactoryContext } from '../context.js';
 import { PathPolicyViolation, resolveWorkspacePath } from '../path-policy.js';
 import type {
@@ -107,6 +113,11 @@ function handleBlocked(
 function rawPathToCanonical(rawPath: string, workspaceRoot: string): RepoRelativePath {
   const result = canonicalizeFactoryToolPath({ rawPath, worktreePath: workspaceRoot });
   return result.ok ? result.path : { path: rawPath, root: 'worktree' };
+}
+
+function rgAuditStatus(result: CommandResult): CommandStatus {
+  if (result.status === 'failed' && result.exitCode === 1) return 'ok';
+  return result.status;
 }
 
 /**
@@ -300,7 +311,7 @@ export async function listFilesTool(
   emitToolCall(ctx, {
     tool: 'list_files',
     input: { path: input.path ?? null, glob: input.glob ?? null },
-    status: result.status,
+    status: rgAuditStatus(result),
     durationMs: result.durationMs,
     truncated,
   });
@@ -376,7 +387,7 @@ export async function searchTextTool(
   emitToolCall(ctx, {
     tool: 'search_text',
     input: { query: input.query, path: input.path ?? null, glob: input.glob ?? null },
-    status: result.status,
+    status: rgAuditStatus(result),
     durationMs: result.durationMs,
     truncated,
   });

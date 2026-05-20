@@ -29,7 +29,7 @@
       ".worktrees/",
       "claude-design/",
       "coverage/",
-      "docs/design/",
+      "docs/",
       "target-projects/",
       "apps/web/test-results/"
     ]

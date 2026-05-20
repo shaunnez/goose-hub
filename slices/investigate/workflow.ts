@@ -740,13 +740,16 @@ export async function runInvestigateWorkflow(
     accumulatePersonaStats({ personaName: personaId, role: 'investigator', outcome: 'failure' });
     const error = err instanceof Error ? err : new Error(String(err));
 
-    eventStore.appendEvent({
-      projectId,
-      workItemId: workItem.id,
-      kind: 'agent.run-failed',
-      payload: { skill: 'investigate', runId, error: error.message },
-      runId,
-    });
+    const existingRunFailed = eventStore.replay({ runId, kind: 'agent.run-failed', limit: 1 });
+    if (existingRunFailed.length === 0) {
+      eventStore.appendEvent({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'agent.run-failed',
+        payload: { skill: 'investigate', runId, error: error.message },
+        runId,
+      });
+    }
 
     await stateSource.comment(
       workItem.externalId,

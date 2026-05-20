@@ -322,10 +322,21 @@ export interface ProjectConfigDto {
   slug: string;
   name: string;
   source: { kind: string; repo: string };
+  targetRepo: { cloneUrl: string; defaultBranch: string; localPath: string };
+  stack: {
+    runtime: string;
+    packageManager: string;
+    testCommand: string;
+    lintCommand?: string;
+    typecheckCommand?: string;
+    e2eCommand?: string;
+  };
   activeMilestone: string | null;
   colorStripe: string;
   budgets: { perWorkflowMaxUsd: number; dailyTokens: number; perAdvisorMaxUsd: number };
   mode: string;
+  storage: { path: string };
+  isolation: { mode: string };
 }
 
 export interface ImprovementCandidateDto {
@@ -499,6 +510,7 @@ export interface ProjectSettingsDto {
   resolvedSkillRuntimes?: Record<
     string,
     {
+      /** Compact compatibility summary for older settings consumers. */
       source: string;
       effectiveTier: ModelTier;
       effectiveProvider: ModelProvider;
@@ -506,8 +518,28 @@ export interface ProjectSettingsDto {
       resolvedPrimary: { tier: ModelTier; provider: ModelProvider; modelId: string } | null;
       resolvedFallback: { tier: ModelTier; provider: ModelProvider; modelId: string } | null;
       resolvedAdvisor: { tier: ModelTier; provider: ModelProvider; modelId: string } | null;
+      /** Human-readable summary of the per-axis runtime resolution. */
+      selectionReason?: string;
+      /**
+       * Per-axis runtime provenance. Each decision records the selected value,
+       * source layer, and reason so the UI can explain mixed inheritance such
+       * as DB tier + config effort or forced runtime provider coercion.
+       */
+      resolutionTrace?: RuntimeResolutionTraceDto;
     }
   >;
+}
+
+export interface RuntimeTraceDecisionDto<T> {
+  value: T;
+  source: string;
+  reason: string;
+}
+
+export interface RuntimeResolutionTraceDto {
+  tier: RuntimeTraceDecisionDto<ModelTier>;
+  provider: RuntimeTraceDecisionDto<ModelProvider>;
+  effort?: RuntimeTraceDecisionDto<RuntimeEffort>;
 }
 
 export interface RuntimeProfilerDto {

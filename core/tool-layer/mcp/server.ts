@@ -98,6 +98,10 @@ import {
 const SERVER_NAME = 'factory-tools';
 const SERVER_VERSION = '0.1.0';
 
+interface ResourceHandlerInstaller {
+  setResourceRequestHandlers(): void;
+}
+
 interface JsonContent {
   type: 'text';
   text: string;
@@ -129,6 +133,9 @@ function errorResult(err: unknown): { content: JsonContent[]; isError: true } {
  */
 export function buildFactoryMcpServer(ctx: FactoryContext): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
+  // Register MCP resource handlers even though factory-tools intentionally exposes no resources.
+  // Codex probes resources/list during startup; returning an empty list keeps workspace files hidden.
+  (server as unknown as ResourceHandlerInstaller).setResourceRequestHandlers();
 
   server.registerTool(
     'get_project_context',

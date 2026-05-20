@@ -88,6 +88,9 @@ export function buildCodexMcpInlineArgs(
       args: ReadonlyArray<string>;
       env?: Record<string, string>;
       enabledTools?: ReadonlyArray<string>;
+      required?: boolean;
+      startupTimeoutSec?: number;
+      toolTimeoutSec?: number;
     }
   >,
 ): string[] {
@@ -96,6 +99,20 @@ export function buildCodexMcpInlineArgs(
     const base = `mcp_servers.${name}`;
     out.push('-c', `${base}.command=${tomlString(entry.command)}`);
     out.push('-c', `${base}.args=[${entry.args.map((a) => tomlString(a)).join(',')}]`);
+    // Codex defaults to prompting for every MCP tool call. Factory-owned
+    // servers are already gated by the run allowlist and PreToolUse hook,
+    // so re-prompting per tool call would just cancel the run in `--ephemeral`
+    // / `--ask-for-approval never` modes. Force pre-approval.
+    out.push('-c', `${base}.default_tools_approval_mode=${tomlString('approve')}`);
+    if (entry.required != null) {
+      out.push('-c', `${base}.required=${String(entry.required)}`);
+    }
+    if (entry.startupTimeoutSec != null) {
+      out.push('-c', `${base}.startup_timeout_sec=${String(entry.startupTimeoutSec)}`);
+    }
+    if (entry.toolTimeoutSec != null) {
+      out.push('-c', `${base}.tool_timeout_sec=${String(entry.toolTimeoutSec)}`);
+    }
     if (entry.enabledTools != null) {
       out.push(
         '-c',
@@ -154,6 +171,8 @@ export function buildCodexArgv(input: {
   approvalPolicy?: 'never';
   /** Trust Factory-generated project hooks without relying on user-global Codex trust state. */
   bypassHookTrust?: boolean;
+  /** Disable Codex's native shell tool when Factory has not allowed Bash. */
+  disableShellTool?: boolean;
   /** Additional inline `-c key=value` overrides (e.g. MCP server config). */
   inlineConfig?: ReadonlyArray<string>;
 }): string[] {
@@ -178,13 +197,19 @@ export function buildCodexArgv(input: {
     argv.push('--sandbox', input.commandSandbox);
   }
   if (input.systemPrompt != null) {
-    // `-c` is Codex's per-invocation override for `instructions`. We use a
+    // `-c` is Codex's per-invocation override for `developer_instructions`. We use a
     // TOML multi-line basic string (triple-quoted) so prompts can carry raw
     // newlines without escaping; only `\` and any embedded `"""` need escape.
-    argv.push('-c', `instructions="""${escapeForTomlMultilineBasic(input.systemPrompt)}"""`);
+    argv.push(
+      '-c',
+      `developer_instructions="""${escapeForTomlMultilineBasic(input.systemPrompt)}"""`,
+    );
   }
   if (input.effort != null) {
     argv.push('-c', `model_reasoning_effort=${tomlString(input.effort)}`);
+  }
+  if (input.disableShellTool === true) {
+    argv.push('-c', 'features.shell_tool=false');
   }
   if (input.inlineConfig != null && input.inlineConfig.length > 0) {
     argv.push(...input.inlineConfig);

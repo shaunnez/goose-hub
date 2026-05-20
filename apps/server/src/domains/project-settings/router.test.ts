@@ -239,6 +239,11 @@ describe('project settings router', () => {
           effectiveProvider: string;
           effectiveEffort: string | null;
           resolvedPrimary: { modelId: string };
+          resolutionTrace: {
+            tier: { value: string; source: string };
+            provider: { value: string; source: string };
+            effort?: { value: string; source: string };
+          };
         }
       >;
     };
@@ -249,6 +254,11 @@ describe('project settings router', () => {
       effectiveProvider: 'codex',
       effectiveEffort: 'xhigh',
       resolvedPrimary: { modelId: 'gpt-5.4' },
+      resolutionTrace: {
+        tier: { value: 'sonnet', source: 'db' },
+        provider: { value: 'codex', source: 'db' },
+        effort: { value: 'xhigh', source: 'db' },
+      },
     });
   });
 
@@ -280,12 +290,25 @@ describe('project settings router', () => {
     const body = (await res.json()) as {
       resolvedSkillRuntimes: Record<
         string,
-        { effectiveProvider: string; resolvedPrimary: { modelId: string } }
+        {
+          source: string;
+          effectiveProvider: string;
+          resolvedPrimary: { modelId: string };
+          resolutionTrace: { provider: { value: string; source: string; reason: string } };
+        }
       >;
     };
 
+    expect(body.resolvedSkillRuntimes['repo-match'].source).toBe('db');
     expect(body.resolvedSkillRuntimes['repo-match'].effectiveProvider).toBe('codex');
     expect(body.resolvedSkillRuntimes['repo-match'].resolvedPrimary.modelId).toBe('gpt-5.4');
+    expect(body.resolvedSkillRuntimes['repo-match'].resolutionTrace.provider).toMatchObject({
+      value: 'codex',
+      source: 'config',
+    });
+    expect(body.resolvedSkillRuntimes['repo-match'].resolutionTrace.provider.reason).toContain(
+      'codex-cli forces provider codex',
+    );
   });
 
   it('does not expose fallback or advisor models for holdout skills', async () => {
@@ -314,6 +337,10 @@ describe('project settings router', () => {
           effectiveProvider: string;
           resolvedFallback: unknown;
           resolvedAdvisor: unknown;
+          resolutionTrace: {
+            tier: { value: string; source: string; reason: string };
+            provider: { value: string; source: string; reason: string };
+          };
         }
       >;
     };
@@ -322,5 +349,11 @@ describe('project settings router', () => {
     expect(body.resolvedSkillRuntimes.qa.effectiveProvider).toBe('claude');
     expect(body.resolvedSkillRuntimes.qa.resolvedFallback).toBeNull();
     expect(body.resolvedSkillRuntimes.qa.resolvedAdvisor).toBeNull();
+    expect(body.resolvedSkillRuntimes.qa.resolutionTrace.tier.reason).toContain(
+      'holdout skill ignores',
+    );
+    expect(body.resolvedSkillRuntimes.qa.resolutionTrace.provider.reason).toContain(
+      'holdout skill ignores',
+    );
   });
 });

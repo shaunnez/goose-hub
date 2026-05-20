@@ -9,6 +9,9 @@ If prior context is needed, use only context provided by Factory.`;
  * in the allowlist during transition — Phase 7 removes the native ones —
  * so this note steers agents to the audited, workspace-bound factory_*
  * tools without breaking skills whose prompts still mention native names.
+ *
+ * Claude variant: tools surface as `mcp__factory-tools__<name>` because
+ * the Claude CLI namespaces every MCP tool with its server prefix.
  */
 export const FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS = `## Factory tools
 
@@ -25,8 +28,42 @@ All paths are workspace-relative. Absolute paths and \`..\` traversal are reject
 
 Workflow-owned operations (commit, open PR, transition state, publish evidence) are not in your toolset — the orchestrator drives them.`;
 
-export function withFactoryRuntimeInstructions(systemPrompt: string | undefined): string {
-  const prelude = `${FACTORY_WORKSPACE_ONLY_INSTRUCTIONS}\n\n${FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS}`;
+/**
+ * Codex variant. The Codex CLI exposes MCP tools by their server-local
+ * name (e.g. `list_dir`, `read_file`), not the Claude-style
+ * `mcp__factory-tools__<name>` form. The PreToolUse hook and run-allowlist
+ * still record / enforce the prefixed names internally — this string only
+ * controls what the agent sees in its prompt.
+ */
+export const FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX = `## Factory tools
+
+Use the Factory MCP tools exposed by the \`factory-tools\` MCP server. Do not use native shell or file primitives unless this run explicitly allows \`Bash\`.
+
+- File reads: \`read_file\`, \`read_many_files\`, \`list_dir\`, \`list_files\`, \`file_exists\`, \`file_info\`
+- Text search: \`search_text\` (not \`rg\` via shell)
+- File mutations: \`write_file\`, \`edit_file\`, \`apply_patch\`, \`create_directory\`, \`move_file\`, \`delete_file\`
+- Verification: \`run_tests\`, \`run_lint\`, \`run_typecheck\`, \`run_isolated_test\` (not raw \`pnpm\` invocations)
+- Git read-only: \`get_status\`, \`get_diff\`, \`get_changed_files\`, \`get_head_sha\`, \`get_merge_base\`
+- Project context: \`get_project_context\`, \`get_stack_commands\`
+
+All paths are workspace-relative. Absolute paths and \`..\` traversal are rejected. Commands run with \`shell: false\`; no shell strings. Output is byte-capped and timeouts are per-tool. Every call emits a structured \`agent.tool-call\` audit event.
+
+Workflow-owned operations (commit, open PR, transition state, publish evidence) are not in your toolset — the orchestrator drives them.`;
+
+export type AgentRuntimeKind = 'claude-cli' | 'codex-cli';
+
+export function factoryToolsPreferenceFor(runtime: AgentRuntimeKind): string {
+  return runtime === 'codex-cli'
+    ? FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX
+    : FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS;
+}
+
+export function withFactoryRuntimeInstructions(
+  systemPrompt: string | undefined,
+  opts: { runtime?: AgentRuntimeKind } = {},
+): string {
+  const toolsPreference = factoryToolsPreferenceFor(opts.runtime ?? 'claude-cli');
+  const prelude = `${FACTORY_WORKSPACE_ONLY_INSTRUCTIONS}\n\n${toolsPreference}`;
   if (systemPrompt == null || systemPrompt.trim().length === 0) {
     return prelude;
   }

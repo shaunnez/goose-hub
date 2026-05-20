@@ -16,8 +16,35 @@ describe('buildCodexMcpInlineArgs', () => {
       '-c',
       'mcp_servers.factory-tools.args=["/abs/server.ts"]',
       '-c',
+      'mcp_servers.factory-tools.default_tools_approval_mode="approve"',
+      '-c',
       'mcp_servers.factory-tools.env={FACTORY_RUN_ID="run-1",FACTORY_PROJECT_ID="demo"}',
     ]);
+  });
+
+  it('emits required and timeout settings when provided', () => {
+    const out = buildCodexMcpInlineArgs({
+      'factory-tools': {
+        command: 'tsx',
+        args: ['server.ts'],
+        required: true,
+        startupTimeoutSec: 20,
+        toolTimeoutSec: 600,
+      },
+    });
+
+    expect(out).toContain('mcp_servers.factory-tools.required=true');
+    expect(out).toContain('mcp_servers.factory-tools.startup_timeout_sec=20');
+    expect(out).toContain('mcp_servers.factory-tools.tool_timeout_sec=600');
+  });
+
+  it('pre-approves every Factory-managed MCP server so Codex does not prompt mid-run', () => {
+    const out = buildCodexMcpInlineArgs({
+      'factory-tools': { command: 'tsx', args: ['s1.ts'] },
+      'playwright-test': { command: 'node', args: ['s2.js'] },
+    });
+    expect(out).toContain('mcp_servers.factory-tools.default_tools_approval_mode="approve"');
+    expect(out).toContain('mcp_servers.playwright-test.default_tools_approval_mode="approve"');
   });
 
   it('omits env entirely when env is undefined or empty', () => {
@@ -49,10 +76,10 @@ describe('buildCodexMcpInlineArgs', () => {
       'factory-tools': { command: 'tsx', args: ['s1.ts'] },
       'playwright-test': { command: 'node', args: ['s2.js'] },
     });
-    // 2 servers x 2 directives (no env) = 4 pairs = 8 entries
-    expect(out).toHaveLength(8);
+    // 2 servers x 3 directives (command, args, approval; no env / no enabledTools) = 6 pairs = 12 entries
+    expect(out).toHaveLength(12);
     expect(out[1]).toContain('mcp_servers.factory-tools');
-    expect(out[5]).toContain('mcp_servers.playwright-test');
+    expect(out[7]).toContain('mcp_servers.playwright-test');
   });
 
   it('produces an empty array when given no servers', () => {

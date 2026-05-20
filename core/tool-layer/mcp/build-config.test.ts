@@ -12,7 +12,9 @@ beforeEach(() => {
   orchestratorRoot = mkdtempSync(join(tmpdir(), 'factory-orch-root-'));
   // Stub a server.ts so the path resolves; we don't actually exec it.
   mkdirSync(join(orchestratorRoot, 'core/tool-layer/mcp'), { recursive: true });
+  mkdirSync(join(orchestratorRoot, 'node_modules/tsx/dist'), { recursive: true });
   writeFileSync(join(orchestratorRoot, 'core/tool-layer/mcp/server.ts'), '// stub');
+  writeFileSync(join(orchestratorRoot, 'node_modules/tsx/dist/cli.mjs'), '// stub');
 });
 
 afterEach(() => {
@@ -35,13 +37,18 @@ describe('buildFactoryMcpConfig', () => {
     const written = JSON.parse(readFileSync(result.configPath, 'utf8'));
     expect(written.mcpServers['factory-tools']).toBeDefined();
     const entry = written.mcpServers['factory-tools'];
-    expect(entry.command).toBe('tsx');
-    expect(entry.args[0]).toContain('core/tool-layer/mcp/server.ts');
+    expect(entry.command).toBe(process.execPath);
+    expect(entry.args[0]).toContain('node_modules/tsx/dist/cli.mjs');
+    expect(entry.args[1]).toContain('core/tool-layer/mcp/server.ts');
     expect(entry.env.FACTORY_RUN_ID).toBe('run-123');
     expect(entry.env.FACTORY_PROJECT_ID).toBe('demo');
     expect(entry.env.FACTORY_WORK_ITEM_ID).toBe('github:demo/repo#7');
+    expect(entry.env.FACTORY_PERSONA_ID).toBe('');
     expect(entry.env.FACTORY_WORKSPACE_DIR).toBe(workspace);
     expect(entry.env.FACTORY_SERVER_PORT).toBe('3001');
+    expect(entry.env.PATH).toBeTruthy();
+    expect(entry.env.HOME).toBeTruthy();
+    expect(entry.env.TMPDIR).toBeTruthy();
   });
 
   it('serializes a missing workItemId as an empty string (the server validates non-empty)', () => {
@@ -55,6 +62,20 @@ describe('buildFactoryMcpConfig', () => {
     });
     const env = result.config.mcpServers['factory-tools'].env;
     expect(env?.FACTORY_WORK_ITEM_ID).toBe('');
+  });
+
+  it('propagates FACTORY_PERSONA_ID when the runtime selected a persona', () => {
+    const result = buildFactoryMcpConfig({
+      workspaceDir: workspace,
+      runId: 'run-1',
+      projectId: 'demo',
+      workItemId: null,
+      personaId: 'demo/developer/0',
+      toolBundles: [],
+      orchestratorRoot,
+    });
+    const env = result.config.mcpServers['factory-tools'].env;
+    expect(env?.FACTORY_PERSONA_ID).toBe('demo/developer/0');
   });
 
   it('merges playwright-mcp entries from apps/web/.mcp.json when the bundle is declared', () => {

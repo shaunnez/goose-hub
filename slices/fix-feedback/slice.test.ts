@@ -226,6 +226,21 @@ describe('runFixFeedbackWorkflow', () => {
     expect(runCall.context.worktreePath).toBe('/work/existing-wt');
   });
 
+  it('marks the reused implement runtime as a fix-feedback display run', async () => {
+    vi.mocked(eventStore.replay).mockReturnValue([makePrOpenedEvent(), makeQaCompletedEvent()]);
+    mockClaudeCliRun.mockResolvedValue({ output: makeImplementOutput() });
+    const workItem = makeWorkItem();
+
+    await runFixFeedbackWorkflow(workItem, stateSource, 'proj', 'owner/repo');
+
+    const runCall = mockClaudeCliRun.mock.calls[0][0];
+    expect(runCall.skill).toBe('implement');
+    expect(runCall.extraEventPayload).toEqual({
+      displaySkill: 'fix-feedback',
+      workflowSkill: 'fix-feedback',
+    });
+  });
+
   it('escalates to needs-human when implement throws', async () => {
     vi.mocked(eventStore.replay).mockReturnValue([makePrOpenedEvent(), makeQaCompletedEvent()]);
     mockClaudeCliRun.mockRejectedValue(new Error('agent crashed'));

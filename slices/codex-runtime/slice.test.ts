@@ -196,7 +196,7 @@ describe('buildCodexArgv', () => {
     expect(argv[argv.length - 1]).toBe('<task>hello</task>');
   });
 
-  it('passes systemPrompt via -c instructions= override using TOML multi-line basic string', () => {
+  it('passes systemPrompt via -c developer_instructions= override using TOML multi-line basic string', () => {
     const argv = buildCodexArgv({
       model: 'gpt-5.4',
       workspaceDir: '/work',
@@ -205,7 +205,7 @@ describe('buildCodexArgv', () => {
     });
     expect(argv).toContain('-c');
     const idx = argv.indexOf('-c');
-    expect(argv[idx + 1]).toBe('instructions="""be terse"""');
+    expect(argv[idx + 1]).toBe('developer_instructions="""be terse"""');
   });
 
   it('preserves multi-line systemPrompt content without escaping newlines', () => {
@@ -216,7 +216,7 @@ describe('buildCodexArgv', () => {
       systemPrompt: 'line one\nline two\nline three',
     });
     const idx = argv.indexOf('-c');
-    expect(argv[idx + 1]).toBe('instructions="""line one\nline two\nline three"""');
+    expect(argv[idx + 1]).toBe('developer_instructions="""line one\nline two\nline three"""');
   });
 
   it('does not escape inner double-quotes (multi-line basic strings carry them raw)', () => {
@@ -227,7 +227,7 @@ describe('buildCodexArgv', () => {
       systemPrompt: 'say "hi"',
     });
     const idx = argv.indexOf('-c');
-    expect(argv[idx + 1]).toBe('instructions="""say "hi""""');
+    expect(argv[idx + 1]).toBe('developer_instructions="""say "hi""""');
   });
 });
 

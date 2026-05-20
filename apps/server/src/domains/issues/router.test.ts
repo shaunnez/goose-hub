@@ -24,7 +24,6 @@ const {
   mockDeclinePRD,
   mockRevisePRD,
   mockProceedToPrd,
-  mockFakeRun,
   mockDispatchResolveConflict,
   mockGetIssueSpec,
 } = vi.hoisted(() => ({
@@ -48,7 +47,6 @@ const {
   mockDeclinePRD: vi.fn(),
   mockRevisePRD: vi.fn(),
   mockProceedToPrd: vi.fn(),
-  mockFakeRun: vi.fn(),
   mockDispatchResolveConflict: vi.fn().mockResolvedValue(undefined),
   mockGetIssueSpec: vi.fn(),
 }));
@@ -74,7 +72,6 @@ vi.mock('./service.js', () => ({
   declinePRD: mockDeclinePRD,
   revisePRD: mockRevisePRD,
   proceedToPrd: mockProceedToPrd,
-  fakeRun: mockFakeRun,
   getIssueSpec: mockGetIssueSpec,
 }));
 
@@ -937,52 +934,6 @@ describe('POST /projects/:slug/issues/:id/proceed-to-prd', () => {
       method: 'POST',
     });
     expect(res.status).toBe(409);
-  });
-});
-
-describe('POST /projects/:slug/issues/:id/fake-run', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('runs fake triage skill and returns 200', async () => {
-    mockFakeRun.mockResolvedValue({ ok: true, data: { ok: true, skill: 'triage' } });
-
-    const app = makeApp();
-    const res = await postJson(app, '/projects/my-project/issues/42/fake-run', {
-      skill: 'triage',
-    });
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { ok: boolean; skill: string };
-    expect(body.skill).toBe('triage');
-    expect(mockFakeRun).toHaveBeenCalledWith('my-project', '42', 'triage');
-  });
-
-  it('uses empty string for skill when not provided', async () => {
-    mockFakeRun.mockResolvedValue({ ok: true, data: { ok: true, skill: 'triage' } });
-
-    const app = makeApp();
-    await postJson(app, '/projects/my-project/issues/42/fake-run', {});
-    expect(mockFakeRun).toHaveBeenCalledWith('my-project', '42', '');
-  });
-
-  it('returns 400 for invalid JSON body', async () => {
-    const app = makeApp();
-    const res = await app.request('/projects/my-project/issues/42/fake-run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: 'not-json',
-    });
-    expect(res.status).toBe(400);
-    expect(mockFakeRun).not.toHaveBeenCalled();
-  });
-
-  it('returns 404 when project not found', async () => {
-    mockFakeRun.mockResolvedValue({ ok: false, error: 'project not found', status: 404 });
-
-    const app = makeApp();
-    const res = await postJson(app, '/projects/unknown/issues/1/fake-run', { skill: 'triage' });
-    expect(res.status).toBe(404);
   });
 });
 

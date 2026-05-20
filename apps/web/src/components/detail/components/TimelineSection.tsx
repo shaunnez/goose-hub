@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIssueCostsBreakdown } from '../lib/costs';
 import { EVENT_KIND_LABEL, groupEvents } from '../lib/timeline';
 import type { RenderItem } from '../lib/timeline';
+import { InterventionTimelinePanel } from './InterventionTimelinePanel';
 import { SectionEmptyState } from './SectionEmptyState';
 import { renderTimelineItem } from './TimelineEvents';
 
@@ -156,6 +157,7 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
         <h2 className="text-[17px] font-semibold text-fg leading-snug mb-5">
           Live timeline of agents
         </h2>
+        <InterventionTimelinePanel projectSlug={projectSlug} id={id} />
         <SectionEmptyState
           icon={Clock}
           title="No timeline events yet."
@@ -213,6 +215,8 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
           )}
         </div>
       </div>
+
+      <InterventionTimelinePanel projectSlug={projectSlug} id={id} />
 
       <ol className="flex flex-col gap-3">
         {items.map((item: RenderItem, idx: number) => renderTimelineItem(item, idx, context))}

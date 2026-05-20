@@ -44,6 +44,7 @@ export function emitToolCall(ctx: FactoryContext, audit: ToolCallAudit): void {
     projectId: ctx.projectId,
     workItemId: ctx.workItemId,
     runId: ctx.runId,
+    personaId: ctx.personaId ?? null,
     kind: 'agent.tool-call',
     payload: normalized,
   });
@@ -67,6 +68,7 @@ export function emitBlockedToolCall(ctx: FactoryContext, audit: BlockedToolCallA
     projectId: ctx.projectId,
     workItemId: ctx.workItemId,
     runId: ctx.runId,
+    personaId: ctx.personaId ?? null,
     kind: 'agent.tool-call',
     payload: normalized,
   });

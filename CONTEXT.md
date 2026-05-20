@@ -604,7 +604,7 @@ Every tool call emits `agent.tool-call`. The audit payload is normalized via `co
 
 ## Deferred / Open Questions (to resolve at their milestone)
 
-- **M8**: starting M8 work — read `docs/m8-handoff.md` first. Lists outstanding M7 follow-ups, the M8 issue picking order (#239–#249), recommended PR groupings, holdout-discipline reminders, and the still-required real-Claude chore-shipping demo for M7 close.
+- **M8 historical handoff**: archived under `docs/archive/legacy/m8-handoff.md`. Do not use it as active guidance.
 - **M11 (in flight)**: dependency parser shipped as `core/state-source/dependency-parser.ts` (PR #497, M11.01). The parser is colon-tolerant, supports `Depends on`, `Depends-On`, `Blocks`, `Blocked by`, and same-repo + `owner/repo#N` cross-repo refs, returning typed `DependencyRef`. Still pending in M11: scheduler dependency-satisfaction filter, `factory:blocked-by-dependency` surface, UI dep-state visibility, move-with-dependencies CLI/UI, unregistered cross-repo escalation, multi-parallel project-lock relaxation (ADR for FACTORY_RULES rule 14 wording change), and integration tests.
 - **M12**: Governance PR check CI wiring — how does `core/governance/pr-check.ts` get access to the PR diff and labels in GitHub Actions?
 - **Post-v0**: Claude CLI vs Claude Agent SDK — reference audit (#10) said "compare honestly." SDK lacks subprocess overhead and suits non-coding skills (triage, retro) better. Revisit when v0 ships.

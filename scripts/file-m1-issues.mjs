@@ -391,7 +391,7 @@ This is the issue whose acceptance criteria define M1 done. When this works agai
   },
   {
     slug: 'reference-audit',
-    title: 'M1.10 — Reference audit: docs/reference-audit.md',
+    title: 'M1.10 — Reference audit: docs/archive/legacy/reference-audit.md',
     labels: ['type:chore', 'priority:high', 'schedule:current', 'exec:parallel'],
     dependsOn: [],
     body: `## Goal
@@ -400,7 +400,7 @@ Document what to port from the existing Slack-bot harness, what to leave behind,
 
 ## Scope
 
-- Create \`docs/reference-audit.md\`
+- Create \`docs/archive/legacy/reference-audit.md\`
 - Walk through the existing harness codebase and document:
   - **Reusable concepts** — repo matching strategy, Bitbucket MCP, Jira function shapes, MCP tool definitions, auth/token handling, prompt patterns that worked, failure modes already discovered, useful UI flows
   - **Code worth porting** — specific files/modules clean enough to bring across
@@ -411,7 +411,7 @@ Document what to port from the existing Slack-bot harness, what to leave behind,
 
 ## Acceptance criteria
 
-- [ ] Document committed at \`docs/reference-audit.md\`
+- [ ] Document committed at \`docs/archive/legacy/reference-audit.md\`
 - [ ] Every major area of the existing harness covered (repo matcher, Bitbucket layer, Jira layer, agent orchestration, UI, hooks, observability)
 - [ ] Each item has explicit PORT/REWRITE/SKIP verdict with reasoning
 - [ ] Plan gaps section either lists gaps or explicitly says "none found"
