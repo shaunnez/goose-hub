@@ -1,4 +1,4 @@
-import type { AgentEventDto, CostRowDto } from '@/lib/types';
+import type { AgentEventDto, CostRowDto, InterventionDto, InterventionEventDto } from '@/lib/types';
 
 export type TimelineContext = {
   slug: string;
@@ -7,6 +7,11 @@ export type TimelineContext = {
   runCosts?: Map<string, CostRowDto>;
   /** Monotonic tick that increments each time the user clicks expand/collapse all. */
   expandSignal?: { tick: number; open: boolean };
+};
+
+export type InterventionTimelineDetail = {
+  intervention: InterventionDto;
+  events: InterventionEventDto[];
 };
 
 // ─── display helpers ──────────────────────────────────────────────────────────
@@ -133,6 +138,14 @@ export type RenderItem =
   | { kind: 'event'; event: AgentEventDto }
   | { kind: 'log-group'; events: AgentEventDto[] }
   | {
+      kind: 'intervention-group';
+      intervention: InterventionDto;
+      events: InterventionEventDto[];
+      startedAt: string | null;
+      endedAt: string | null;
+      lastEventAt: string | null;
+    }
+  | {
       kind: 'run-group';
       runId: string;
       items: RenderItem[];
@@ -170,6 +183,9 @@ export type RenderItem =
  * - Events sharing the same runId are grouped into a run-group
  */
 function effectiveTimestamp(item: RenderItem): number {
+  if (item.kind === 'intervention-group') {
+    return new Date(item.lastEventAt ?? item.startedAt ?? 0).getTime();
+  }
   if (item.kind === 'run-group') {
     return new Date(item.lastEventAt ?? item.startedAt ?? 0).getTime();
   }
@@ -268,12 +284,58 @@ export function groupByDevPhase(items: RenderItem[]): RenderItem[] {
   return [...ungrouped, ...phaseGroups].sort(compareRenderItems);
 }
 
-export function groupEvents(events: AgentEventDto[]): RenderItem[] {
+export const VISIBLE_INTERVENTION_EVENT_TYPES = new Set([
+  'open',
+  'propose',
+  'proposalFailed',
+  'decide',
+  'markApplying',
+  'recordApplicationResult',
+  'verify',
+  'resolve',
+  'reopen',
+  'abort',
+  'supersede',
+  'applyLeaseRecovered',
+]);
+
+const CLOSED_INTERVENTION_STATUSES = new Set(['RESOLVED', 'ABORTED', 'SUPERSEDED']);
+
+function buildInterventionGroup(detail: InterventionTimelineDetail): RenderItem {
+  const events = detail.events
+    .filter((event) => VISIBLE_INTERVENTION_EVENT_TYPES.has(event.eventType))
+    .sort((a, b) => {
+      const timestampDelta = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      return timestampDelta === 0 ? a.id - b.id : timestampDelta;
+    });
+  const firstEvent = events[0];
+  const lastEvent = events.at(-1);
+  return {
+    kind: 'intervention-group',
+    intervention: detail.intervention,
+    events,
+    startedAt: firstEvent?.createdAt ?? detail.intervention.createdAt,
+    lastEventAt: lastEvent?.createdAt ?? detail.intervention.updatedAt,
+    endedAt:
+      CLOSED_INTERVENTION_STATUSES.has(detail.intervention.status) &&
+      detail.intervention.resolvedAt != null
+        ? detail.intervention.resolvedAt
+        : null,
+  };
+}
+
+export function groupEvents(
+  events: AgentEventDto[],
+  interventionDetails: InterventionTimelineDetail[] = [],
+): RenderItem[] {
   const collapsed = collapseLogRuns(events.filter((event) => !isNoisyCodexStderrLog(event)));
   const grouped = groupByRunId(collapsed);
   const withInvestigationPhases = groupByInvestigationPhase([...grouped].sort(compareRenderItems));
   const withDevPhases = groupByDevPhase([...withInvestigationPhases].sort(compareRenderItems));
-  return withDevPhases;
+  if (interventionDetails.length === 0) return withDevPhases;
+  return [...withDevPhases, ...interventionDetails.map(buildInterventionGroup)].sort(
+    compareRenderItems,
+  );
 }
 
 function isNoisyCodexStderrLog(event: AgentEventDto): boolean {
@@ -448,6 +510,7 @@ function eventFromRenderItem(item: RenderItem): AgentEventDto[] {
   if (item.kind === 'run-group') return item.items.flatMap(eventFromRenderItem);
   if (item.kind === 'investigation-phase') return item.items.flatMap(eventFromRenderItem);
   if (item.kind === 'phase-group') return item.items.flatMap(eventFromRenderItem);
+  if (item.kind === 'intervention-group') return [];
   return item.events;
 }
 

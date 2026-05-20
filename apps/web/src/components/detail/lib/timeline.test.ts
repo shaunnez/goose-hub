@@ -1,4 +1,4 @@
-import type { AgentEventDto } from '@/lib/types';
+import type { AgentEventDto, InterventionDto, InterventionEventDto } from '@/lib/types';
 import { describe, expect, it } from 'vitest';
 import {
   EVENT_KIND_LABEL,
@@ -25,6 +25,109 @@ function makeEvent(
     ...overrides,
   };
 }
+
+function makeIntervention(overrides: Partial<InterventionDto> = {}): InterventionDto {
+  return {
+    id: 'intervention-123456789',
+    projectId: 'proj',
+    workItemId: 'item-1',
+    interventionType: 'manual_override',
+    status: 'RESOLVED',
+    title: 'Manual operator transition',
+    reason: 'Operator requested a transition',
+    rootCauseSignature: 'manual:item-1',
+    correlationId: 'corr-1',
+    sourceEventId: null,
+    proposedOptions: [],
+    decidedActionType: 'manual_transition',
+    decidedActionPayload: null,
+    decidedBy: 'ui',
+    decisionReason: 'manual operator transition',
+    applicationResult: null,
+    verification: null,
+    leaseOwner: null,
+    leaseExpiresAt: null,
+    version: 1,
+    createdAt: '2026-05-04T10:00:00Z',
+    updatedAt: '2026-05-04T10:03:00Z',
+    resolvedAt: '2026-05-04T10:03:00Z',
+    ...overrides,
+  };
+}
+
+function makeInterventionEvent(
+  id: number,
+  eventType: string,
+  createdAt: string,
+  overrides: Partial<InterventionEventDto> = {},
+): InterventionEventDto {
+  return {
+    id,
+    interventionId: 'intervention-123456789',
+    projectId: 'proj',
+    workItemId: 'item-1',
+    eventType,
+    actor: 'ui',
+    fromStatus: null,
+    toStatus: null,
+    payload: {},
+    correlationId: 'corr-1',
+    createdAt,
+    ...overrides,
+  };
+}
+
+describe('groupEvents — intervention groups', () => {
+  it('sorts intervention groups by latest visible lifecycle activity', () => {
+    const olderEvent = makeEvent(1, 'system.note', null, {
+      createdAt: '2026-05-04T10:01:00Z',
+    });
+    const newerEvent = makeEvent(2, 'system.note', null, {
+      createdAt: '2026-05-04T10:05:00Z',
+    });
+    const intervention = makeIntervention();
+    const interventionEvents = [
+      makeInterventionEvent(1, 'open', '2026-05-04T10:02:00Z'),
+      makeInterventionEvent(2, 'resolve', '2026-05-04T10:03:00Z'),
+    ];
+
+    const result = groupEvents(
+      [olderEvent, newerEvent],
+      [{ intervention, events: interventionEvents }],
+    );
+
+    expect(result.map((item) => item.kind)).toEqual(['event', 'intervention-group', 'event']);
+    if (result[1].kind === 'intervention-group') {
+      expect(result[1].startedAt).toBe('2026-05-04T10:02:00Z');
+      expect(result[1].lastEventAt).toBe('2026-05-04T10:03:00Z');
+      expect(result[1].endedAt).toBe(intervention.resolvedAt);
+    }
+  });
+
+  it('filters noisy intervention events before rendering', () => {
+    const result = groupEvents(
+      [],
+      [
+        {
+          intervention: makeIntervention(),
+          events: [
+            makeInterventionEvent(1, 'open', '2026-05-04T10:00:00Z'),
+            makeInterventionEvent(2, 'dedupe', '2026-05-04T10:01:00Z'),
+            makeInterventionEvent(3, 'leaseProposal', '2026-05-04T10:02:00Z'),
+            makeInterventionEvent(4, 'decide', '2026-05-04T10:03:00Z'),
+          ],
+        },
+      ],
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].kind).toBe('intervention-group');
+    if (result[0].kind === 'intervention-group') {
+      expect(result[0].events.map((event) => event.eventType)).toEqual(['open', 'decide']);
+      expect(result[0].lastEventAt).toBe('2026-05-04T10:03:00Z');
+    }
+  });
+});
 
 describe('groupEvents — investigation runs', () => {
   it('wraps investigation, scout, and wave runs into an investigation phase', () => {

@@ -42,6 +42,7 @@ import {
   GrillDecisionCrystallizedEvent,
   GrillQuestionPostedEvent,
 } from './timeline/GrillEvents';
+import { InterventionGroupWrapper } from './timeline/InterventionGroupWrapper';
 import { InvestigationPhaseWrapper } from './timeline/InvestigationPhaseWrapper';
 import { AgentLogEvent, AgentLogGroupEvent } from './timeline/LogEvents';
 import {
@@ -99,6 +100,19 @@ import { AgentVerifyCommandEvent, ToolWarningEvent } from './timeline/VerifyTool
 export function renderTimelineItem(item: RenderItem, idx: number, context?: TimelineContext) {
   if (item.kind === 'log-group') {
     return <AgentLogGroupEvent key={`log-group-${idx}`} events={item.events} />;
+  }
+  if (item.kind === 'intervention-group') {
+    return (
+      <InterventionGroupWrapper
+        key={`intervention-group-${item.intervention.id}`}
+        intervention={item.intervention}
+        events={item.events}
+        startedAt={item.startedAt}
+        endedAt={item.endedAt}
+        lastEventAt={item.lastEventAt}
+        context={context}
+      />
+    );
   }
   if (item.kind === 'run-group') {
     return (

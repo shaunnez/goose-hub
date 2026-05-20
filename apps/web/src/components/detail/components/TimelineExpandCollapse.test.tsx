@@ -67,7 +67,7 @@ vi.mock('@/lib/usePersonaMap', () => ({
 
 // ─── Test data: two run-groups ────────────────────────────────────────────────
 
-import type { AgentEventDto } from '@/lib/types';
+import type { AgentEventDto, InterventionDto, InterventionEventDto } from '@/lib/types';
 
 function renderTimeline(ui: React.ReactElement, queryClient = new QueryClient()) {
   return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
@@ -87,6 +87,81 @@ function makeRunEvent(
     payload,
     runId,
     createdAt: new Date(Date.now() + id * 1000).toISOString(),
+  };
+}
+
+function makePlainEvent(id: number, createdAt: string): AgentEventDto {
+  return {
+    id,
+    projectId: 'proj',
+    workItemId: 'wi-1',
+    kind: 'system.note',
+    payload: { text: `note ${id}` },
+    createdAt,
+  };
+}
+
+function makeIntervention(overrides: Partial<InterventionDto> = {}): InterventionDto {
+  return {
+    id: 'intervention-123456789',
+    projectId: 'p',
+    workItemId: 'w1',
+    interventionType: 'manual_override',
+    status: 'RESOLVED',
+    title: 'Manual operator transition',
+    reason: 'Operator requested factory:needs-human -> factory:triaging',
+    rootCauseSignature: 'manual:w1',
+    correlationId: 'corr-1',
+    sourceEventId: null,
+    proposedOptions: [],
+    decidedActionType: 'manual_transition',
+    decidedActionPayload: null,
+    decidedBy: 'ui',
+    decisionReason: 'manual operator transition',
+    applicationResult: null,
+    verification: null,
+    leaseOwner: null,
+    leaseExpiresAt: null,
+    version: 1,
+    createdAt: '2026-05-04T10:00:00Z',
+    updatedAt: '2026-05-04T10:03:00Z',
+    resolvedAt: '2026-05-04T10:03:00Z',
+    ...overrides,
+  };
+}
+
+function makeInterventionEvent(
+  id: number,
+  eventType: string,
+  createdAt: string,
+  overrides: Partial<InterventionEventDto> = {},
+): InterventionEventDto {
+  return {
+    id,
+    interventionId: 'intervention-123456789',
+    projectId: 'p',
+    workItemId: 'w1',
+    eventType,
+    actor: 'ui',
+    fromStatus: null,
+    toStatus: null,
+    payload: {},
+    correlationId: 'corr-1',
+    createdAt,
+    ...overrides,
+  };
+}
+
+function makeInterventionDetail(intervention = makeIntervention()) {
+  return {
+    intervention,
+    events: [
+      makeInterventionEvent(1, 'open', '2026-05-04T10:02:00Z', { toStatus: 'OPEN' }),
+      makeInterventionEvent(2, 'resolve', '2026-05-04T10:03:00Z', {
+        fromStatus: 'VERIFIED',
+        toStatus: 'RESOLVED',
+      }),
+    ],
   };
 }
 
@@ -216,5 +291,74 @@ describe('TimelineSection — expand/collapse all', () => {
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issue-costs', 'p', '1'] });
     });
+  });
+
+  it('renders intervention groups inside the main timeline instead of a top audit panel', async () => {
+    const { fetchEventsPage, fetchIntervention, fetchIssueInterventions } = await import(
+      '@/lib/api'
+    );
+    const intervention = makeIntervention();
+    vi.mocked(fetchEventsPage).mockResolvedValue({
+      events: [
+        makePlainEvent(1, '2026-05-04T10:01:00Z'),
+        makePlainEvent(2, '2026-05-04T10:05:00Z'),
+      ],
+      hasMore: false,
+    });
+    vi.mocked(fetchIssueInterventions).mockResolvedValue([intervention]);
+    vi.mocked(fetchIntervention).mockResolvedValue(makeInterventionDetail(intervention));
+
+    const { TimelineSection } = await import('./TimelineSection');
+    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
+
+    await screen.findByText('Manual operator transition');
+    expect(screen.queryByTestId('intervention-timeline-panel')).toBeNull();
+
+    const timelineList = document.querySelector('[data-testid="timeline-section"] > ol');
+    expect(timelineList).toBeTruthy();
+    const children = Array.from(timelineList?.children ?? []);
+    expect(children).toHaveLength(3);
+    expect(children[0].getAttribute('data-event-kind')).toBe('system.note');
+    expect(children[1].getAttribute('data-intervention-id')).toBe(intervention.id);
+    expect(children[2].getAttribute('data-event-kind')).toBe('system.note');
+  });
+
+  it('shows intervention groups instead of the empty state when there are no agent events', async () => {
+    const { fetchEventsPage, fetchIntervention, fetchIssueInterventions } = await import(
+      '@/lib/api'
+    );
+    const intervention = makeIntervention();
+    vi.mocked(fetchEventsPage).mockResolvedValue({ events: [], hasMore: false });
+    vi.mocked(fetchIssueInterventions).mockResolvedValue([intervention]);
+    vi.mocked(fetchIntervention).mockResolvedValue(makeInterventionDetail(intervention));
+
+    const { TimelineSection } = await import('./TimelineSection');
+    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
+
+    await screen.findByText('Manual operator transition');
+    expect(screen.queryByText('No timeline events yet.')).toBeNull();
+  });
+
+  it('expand and collapse all controls intervention accordions', async () => {
+    const { fetchEventsPage, fetchIntervention, fetchIssueInterventions } = await import(
+      '@/lib/api'
+    );
+    const intervention = makeIntervention();
+    vi.mocked(fetchEventsPage).mockResolvedValue({ events: [], hasMore: false });
+    vi.mocked(fetchIssueInterventions).mockResolvedValue([intervention]);
+    vi.mocked(fetchIntervention).mockResolvedValue(makeInterventionDetail(intervention));
+
+    const { TimelineSection } = await import('./TimelineSection');
+    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
+
+    await screen.findByText('Manual operator transition');
+    const details = document.querySelector('[data-intervention-id] details') as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+
+    fireEvent.click(screen.getByTestId('timeline-expand-all'));
+    await waitFor(() => expect(details.open).toBe(true));
+
+    fireEvent.click(screen.getByTestId('timeline-collapse-all'));
+    await waitFor(() => expect(details.open).toBe(false));
   });
 });

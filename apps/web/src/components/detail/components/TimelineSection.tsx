@@ -1,12 +1,13 @@
-import { fetchEventsPage } from '@/lib/api';
+import { fetchEventsPage, fetchIntervention, fetchIssueInterventions } from '@/lib/api';
+import type { InterventionDetailDto } from '@/lib/api/interventions';
+import { interventionKeys } from '@/lib/query-keys';
 import type { AgentEventDto } from '@/lib/types';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIssueCostsBreakdown } from '../lib/costs';
 import { EVENT_KIND_LABEL, groupEvents } from '../lib/timeline';
 import type { RenderItem } from '../lib/timeline';
-import { InterventionTimelinePanel } from './InterventionTimelinePanel';
 import { SectionEmptyState } from './SectionEmptyState';
 import { renderTimelineItem } from './TimelineEvents';
 
@@ -32,6 +33,13 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
   const eventSourceRef = useRef<EventSource | null>(null);
   const queryClient = useQueryClient();
   const { byRun: runCosts } = useIssueCostsBreakdown(projectSlug, id);
+  const { data: interventionDetails = [], isLoading: interventionsLoading } = useQuery({
+    queryKey: interventionKeys.timeline(projectSlug, id),
+    queryFn: async (): Promise<InterventionDetailDto[]> => {
+      const interventions = await fetchIssueInterventions(projectSlug, id);
+      return Promise.all(interventions.map((intervention) => fetchIntervention(intervention.id)));
+    },
+  });
   const [expandSignal, setExpandSignal] = useState<{ tick: number; open: boolean }>({
     tick: 0,
     open: true,
@@ -101,6 +109,17 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
         if (parsed.kind === 'agent.run-completed' || parsed.kind === 'agent.run-failed') {
           void queryClient.invalidateQueries({ queryKey: ['issue-costs', projectSlug, id] });
         }
+        if (parsed.kind === 'state.transitioned') {
+          const payload = parsed.payload as {
+            interventionId?: string;
+            causedByInterventionId?: string;
+          } | null;
+          if (payload?.interventionId != null || payload?.causedByInterventionId != null) {
+            void queryClient.invalidateQueries({
+              queryKey: interventionKeys.timeline(projectSlug, id),
+            });
+          }
+        }
       } catch {
         // ignore
       }
@@ -120,7 +139,7 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
     };
   }, [projectSlug, workItemId, sseReadyAfter, queryClient, id]);
 
-  if (loading) {
+  if (loading || (events.length === 0 && interventionsLoading)) {
     return <div className="px-8 py-6 text-fg-3">Loading timeline…</div>;
   }
 
@@ -129,14 +148,14 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
       <div className="px-8 py-6 text-[color:var(--danger)]">Couldn't load timeline: {error}</div>
     );
   }
-  if (events.length === 0) {
+  const items = groupEvents(events, interventionDetails);
+  if (items.length === 0) {
     return (
       <div data-testid="timeline-section" className="px-8 py-6">
         <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-1">10. Timeline</div>
         <h2 className="text-[17px] font-semibold text-fg leading-snug mb-5">
           Live timeline of agents
         </h2>
-        <InterventionTimelinePanel projectSlug={projectSlug} id={id} />
         <SectionEmptyState
           icon={Clock}
           title="No timeline events yet."
@@ -146,7 +165,6 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
     );
   }
 
-  const items = groupEvents(events);
   const flattenRunItems = (renderItems: RenderItem[]): RenderItem[] =>
     renderItems.flatMap((item: RenderItem): RenderItem[] =>
       item.kind === 'phase-group' || item.kind === 'investigation-phase'
@@ -154,7 +172,9 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
         : [item],
     );
   const allRunItems = flattenRunItems(items);
-  const hasRunGroups = allRunItems.some((item: RenderItem) => item.kind === 'run-group');
+  const hasExpandableGroups = allRunItems.some(
+    (item: RenderItem) => item.kind === 'run-group' || item.kind === 'intervention-group',
+  );
   const latestRunId =
     allRunItems.find((item: RenderItem) => item.kind === 'run-group')?.runId ?? null;
   const context = { slug: projectSlug, issueId: id, latestRunId, runCosts, expandSignal };
@@ -170,7 +190,7 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
           <h2 className="text-[17px] font-semibold text-fg leading-snug">
             Live timeline of agents
           </h2>
-          {hasRunGroups && (
+          {hasExpandableGroups && (
             <div className="flex gap-3 mb-3">
               <button
                 type="button"
@@ -193,8 +213,6 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
           )}
         </div>
       </div>
-
-      <InterventionTimelinePanel projectSlug={projectSlug} id={id} />
 
       <ol className="flex flex-col gap-3">
         {items.map((item: RenderItem, idx: number) => renderTimelineItem(item, idx, context))}
