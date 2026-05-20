@@ -1,6 +1,6 @@
 import type { AgentEventDto } from '@/lib/types';
 import { formatCost, formatTokens } from '@/lib/utils';
-import { AlertTriangle, ArrowRight, Cpu, FileStack, Info, Target, User } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Cpu, FileStack, Info, Route, Target, User } from 'lucide-react';
 import { EVENT_KIND_LABEL, getPayloadStr } from '../../lib/timeline';
 
 type BudgetExceededPayload = {
@@ -22,6 +22,22 @@ type InvestigationContextInjectedPayload = {
   keyFileCount?: number;
   findingsChars?: number;
   openQuestionCount?: number;
+};
+
+type RelatedSurfacePayload = {
+  skill?: string;
+  keyFileCount?: number;
+  packageRootCount?: number;
+  existingTestCount?: number;
+  testCandidateCount?: number;
+  checkedAbsentCount?: number;
+  evidenceSpecPath?: string | null;
+};
+
+type DiscoveryBudgetPayload = {
+  skill?: string;
+  checkedAbsentCount?: number;
+  runId?: string;
 };
 
 type WrongSurfaceGuardPayload = {
@@ -321,6 +337,87 @@ export function InvestigationContextInjectedEvent({ event }: { event: AgentEvent
       )}
       {shortRunId != null && (
         <div className="mt-1 text-[11px] font-mono text-fg-4">investigation {shortRunId}</div>
+      )}
+    </li>
+  );
+}
+
+export function RelatedSurfaceManifestEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as RelatedSurfacePayload | null;
+  const evidenceSpecPath = p?.evidenceSpecPath ?? null;
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <Route size={13} className="shrink-0 text-[color:var(--accent)]" />
+        <span className="font-mono uppercase tracking-wider">Related surface manifest</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12.5px] text-fg-2">
+        <span>{p?.skill ?? 'agent'}</span>
+        {typeof p?.keyFileCount === 'number' && (
+          <span>
+            {p.keyFileCount} key file{p.keyFileCount === 1 ? '' : 's'}
+          </span>
+        )}
+        {typeof p?.existingTestCount === 'number' && (
+          <span>
+            {p.existingTestCount} existing test{p.existingTestCount === 1 ? '' : 's'}
+          </span>
+        )}
+        {typeof p?.testCandidateCount === 'number' && (
+          <span>
+            {p.testCandidateCount} candidate{p.testCandidateCount === 1 ? '' : 's'}
+          </span>
+        )}
+        {typeof p?.checkedAbsentCount === 'number' && (
+          <span>{p.checkedAbsentCount} absent checked</span>
+        )}
+        {typeof p?.packageRootCount === 'number' && (
+          <span>
+            {p.packageRootCount} package root{p.packageRootCount === 1 ? '' : 's'}
+          </span>
+        )}
+      </div>
+      {evidenceSpecPath != null && evidenceSpecPath.length > 0 && (
+        <div className="mt-2 text-[11.5px] text-fg-3">
+          Evidence spec: <span className="font-mono text-fg-2">{evidenceSpecPath}</span>
+        </div>
+      )}
+    </li>
+  );
+}
+
+export function DiscoveryBudgetExceededEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as DiscoveryBudgetPayload | null;
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-warning bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <AlertTriangle size={13} className="shrink-0 text-amber-400" />
+        <span className="font-mono uppercase tracking-wider">Discovery budget exceeded</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="text-[12.5px] text-fg-2">
+        {p?.skill ?? 'agent'} repeated discovery for manifest-resolved paths
+        {typeof p?.checkedAbsentCount === 'number' && (
+          <>
+            <span className="text-fg-4 mx-1">·</span>
+            {p.checkedAbsentCount} absent path{p.checkedAbsentCount === 1 ? '' : 's'} were already
+            checked
+          </>
+        )}
+      </div>
+      {formatShortId(p?.runId ?? undefined) != null && (
+        <div className="mt-1 text-[11px] font-mono text-fg-4">
+          run {formatShortId(p?.runId ?? undefined)}
+        </div>
       )}
     </li>
   );

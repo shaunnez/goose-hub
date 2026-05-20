@@ -260,7 +260,7 @@ describe('runSprintReviewWorkflow', () => {
     ]);
   });
 
-  it('creates a sprint review issue with the correct title', async () => {
+  it('creates a terminal milestone sprint review artifact', async () => {
     const doneItem = makeWorkItem({ externalId: '42', state: 'factory:done' });
     const source = makeMockSource([doneItem]);
     mockRun.mockResolvedValueOnce(makeAgentResult(makeSprintReviewOutput()));
@@ -277,6 +277,10 @@ describe('runSprintReviewWorkflow', () => {
       expect.objectContaining({
         title: `Sprint Review: ${MILESTONE_TITLE}`,
         type: 'chore',
+        priority: 'low',
+        milestoneId: String(MILESTONE_NUMBER),
+        initialState: 'factory:done',
+        extraLabels: ['factory:docs'],
       }),
     );
   });
@@ -305,7 +309,7 @@ describe('runSprintReviewWorkflow', () => {
     expect(createCall.body).toContain('#42: Shipped feature A');
   });
 
-  it('calls addLabels with factory:docs on the created issue', async () => {
+  it('moves the created sprint review artifact out of schedule:current', async () => {
     const doneItem = makeWorkItem({ externalId: '42', state: 'factory:done' });
     const source = makeMockSource([doneItem]);
     mockRun.mockResolvedValueOnce(makeAgentResult(makeSprintReviewOutput()));
@@ -318,11 +322,11 @@ describe('runSprintReviewWorkflow', () => {
       stateSource: source,
     });
 
-    expect(source.addLabels).toHaveBeenCalledTimes(1);
-    expect(source.addLabels).toHaveBeenCalledWith('99', ['factory:docs']);
+    expect(source.setLabelInGroup).toHaveBeenCalledTimes(1);
+    expect(source.setLabelInGroup).toHaveBeenCalledWith('99', 'schedule', 'later');
   });
 
-  it('transitions created issue from factory:triaging to factory:done', async () => {
+  it('does not transition the created sprint review artifact after creation', async () => {
     const doneItem = makeWorkItem({ externalId: '42', state: 'factory:done' });
     const source = makeMockSource([doneItem]);
     mockRun.mockResolvedValueOnce(makeAgentResult(makeSprintReviewOutput()));
@@ -335,7 +339,7 @@ describe('runSprintReviewWorkflow', () => {
       stateSource: source,
     });
 
-    expect(source.transitionState).toHaveBeenCalledWith('99', 'factory:triaging', 'factory:done');
+    expect(source.transitionState).not.toHaveBeenCalled();
   });
 
   it('throws and emits agent.run-failed when schema validation fails', async () => {

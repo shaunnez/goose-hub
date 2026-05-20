@@ -156,12 +156,14 @@ export async function runSprintReviewWorkflow(input: RunSprintReviewInput): Prom
       title: `Sprint Review: ${milestoneTitle}`,
       body,
       type: 'chore',
+      priority: 'low',
+      milestoneId: String(milestoneNumber),
+      initialState: 'factory:done',
+      extraLabels: ['factory:docs'],
     });
 
-    // Step 7: Label the issue factory:docs and move out of factory:triaging so the
-    // orchestrator does not pick it up as a work item.
-    await stateSource.addLabels(created.externalId, ['factory:docs']);
-    await stateSource.transitionState(created.externalId, 'factory:triaging', 'factory:done');
+    // Step 7: Keep the review artifact out of the active work queue.
+    await stateSource.setLabelInGroup(created.externalId, 'schedule', 'later');
 
     // Step 8: Emit decision summaries
     reconcileDecisionSummaries(runId, projectId, null, skillName, decisionSummaries);

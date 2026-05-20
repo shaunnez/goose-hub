@@ -66,6 +66,48 @@ describe('Misc timeline events', () => {
     expect(rendered).not.toContain('"keyFiles"');
   });
 
+  it('renders agent.related-surface-manifest-created as summary text instead of raw JSON', () => {
+    const event = makeEvent('agent.related-surface-manifest-created', {
+      runId: 'ec9bd51c-5ab2-4b43-9c34-b81b18287fdb',
+      skill: 'implement',
+      keyFileCount: 3,
+      packageRootCount: 1,
+      existingTestCount: 1,
+      testCandidateCount: 8,
+      checkedAbsentCount: 8,
+      evidenceSpecPath: 'apps/web/e2e/issue-896.spec.ts',
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('Related surface manifest')).toBeTruthy();
+    const rendered = document.body.textContent ?? '';
+    expect(rendered).toContain('implement');
+    expect(rendered).toContain('3 key files');
+    expect(rendered).toContain('1 existing test');
+    expect(rendered).toContain('8 candidates');
+    expect(rendered).toContain('8 absent checked');
+    expect(rendered).toContain('apps/web/e2e/issue-896.spec.ts');
+    expect(rendered).not.toContain('"keyFileCount"');
+  });
+
+  it('renders agent.discovery-budget-exceeded as a compact warning', () => {
+    const event = makeEvent('agent.discovery-budget-exceeded', {
+      runId: 'ec9bd51c-5ab2-4b43-9c34-b81b18287fdb',
+      skill: 'implement',
+      checkedAbsentCount: 8,
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('Discovery budget exceeded')).toBeTruthy();
+    const rendered = document.body.textContent ?? '';
+    expect(rendered).toContain('implement repeated discovery for manifest-resolved paths');
+    expect(rendered).toContain('8 absent paths were already checked');
+    expect(rendered).toContain('run ec9bd51c');
+    expect(rendered).not.toContain('"checkedAbsentCount"');
+  });
+
   it('renders agent.wrong-surface-guard as summary text instead of raw JSON', () => {
     const event = makeEvent('agent.wrong-surface-guard', {
       skill: 'parallel-implement',

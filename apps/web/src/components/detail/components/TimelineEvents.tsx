@@ -50,10 +50,12 @@ import {
   AgentDisclosureEvent,
   AgentModelSelectedEvent,
   ContractDriftEvent,
+  DiscoveryBudgetExceededEvent,
   FallbackEvent,
   InvestigationContextInjectedEvent,
   ManualActionEvent,
   MilestoneActivatedEvent,
+  RelatedSurfaceManifestEvent,
   StateTransitionedEvent,
   SystemNoteEvent,
   WrongSurfaceGuardEvent,
@@ -172,6 +174,10 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <AgentBudgetExceededEvent key={event.id} event={event} />;
     case 'agent.investigation-context-injected':
       return <InvestigationContextInjectedEvent key={event.id} event={event} />;
+    case 'agent.related-surface-manifest-created':
+      return <RelatedSurfaceManifestEvent key={event.id} event={event} />;
+    case 'agent.discovery-budget-exceeded':
+      return <DiscoveryBudgetExceededEvent key={event.id} event={event} />;
     case 'agent.wrong-surface-guard':
       return <WrongSurfaceGuardEvent key={event.id} event={event} />;
     case 'agent.path-normalized':

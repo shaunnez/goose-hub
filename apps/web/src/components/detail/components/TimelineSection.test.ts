@@ -25,6 +25,27 @@ function makeCodexStdinNoiseLog(id: number): AgentEventDto {
   };
 }
 
+function makePromptContextTelemetryLog(id: number): AgentEventDto {
+  return {
+    id,
+    projectId: 'proj',
+    workItemId: 'wi-1',
+    kind: 'agent.log',
+    payload: {
+      runId: 'run-codex',
+      skill: 'investigate',
+      stream: 'telemetry',
+      metric: 'prompt_context_size',
+      contextChars: 815,
+      systemPromptChars: 14517,
+      totalPromptChars: 15332,
+      estimatedPromptTokens: 3833,
+    },
+    runId: 'run-codex',
+    createdAt: new Date().toISOString(),
+  };
+}
+
 function makeEvent(id: number, kind: string): AgentEventDto {
   return {
     id,
@@ -120,6 +141,28 @@ describe('groupEvents — agent.log collapsing', () => {
             item.event.kind === 'agent.log' &&
             (item.event.payload as { text?: string } | null)?.text ===
               'Reading additional input from stdin...',
+        ),
+      ).toBe(false);
+    }
+  });
+
+  it('filters prompt context telemetry before grouping', () => {
+    const result = groupEvents([
+      makeRunEvent(1, 'run-codex', 'agent.run-started', 'implement'),
+      makePromptContextTelemetryLog(2),
+      makeRunEvent(3, 'run-codex', 'agent.run-completed', 'implement'),
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].kind).toBe('run-group');
+    if (result[0].kind === 'run-group') {
+      expect(result[0].items).toHaveLength(2);
+      expect(
+        result[0].items.some(
+          (item) =>
+            item.kind === 'event' &&
+            item.event.kind === 'agent.log' &&
+            (item.event.payload as { metric?: string } | null)?.metric === 'prompt_context_size',
         ),
       ).toBe(false);
     }

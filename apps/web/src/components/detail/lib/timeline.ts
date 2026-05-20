@@ -49,6 +49,8 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'agent.triage-complete': 'Triage complete',
   'agent.investigation-complete': 'Investigation complete',
   'agent.investigation-context-injected': 'Investigation context injected',
+  'agent.related-surface-manifest-created': 'Related surface manifest',
+  'agent.discovery-budget-exceeded': 'Discovery budget exceeded',
   'agent.wrong-surface-guard': 'Wrong surface guard',
   'agent.output-repaired': 'Output repaired',
   'agent.output-fact-mismatch': 'Output fact mismatch',
@@ -328,7 +330,7 @@ export function groupEvents(
   events: AgentEventDto[],
   interventionDetails: InterventionTimelineDetail[] = [],
 ): RenderItem[] {
-  const collapsed = collapseLogRuns(events.filter((event) => !isNoisyCodexStderrLog(event)));
+  const collapsed = collapseLogRuns(events.filter((event) => !isHiddenAgentLog(event)));
   const grouped = groupByRunId(collapsed);
   const withInvestigationPhases = groupByInvestigationPhase([...grouped].sort(compareRenderItems));
   const withDevPhases = groupByDevPhase([...withInvestigationPhases].sort(compareRenderItems));
@@ -338,10 +340,13 @@ export function groupEvents(
   );
 }
 
-function isNoisyCodexStderrLog(event: AgentEventDto): boolean {
+function isHiddenAgentLog(event: AgentEventDto): boolean {
   if (event.kind !== 'agent.log') return false;
-  const payload = event.payload as { stream?: string; text?: string } | null;
-  return payload?.stream === 'stderr' && payload.text === 'Reading additional input from stdin...';
+  const payload = event.payload as { metric?: string; stream?: string; text?: string } | null;
+  return (
+    (payload?.stream === 'stderr' && payload.text === 'Reading additional input from stdin...') ||
+    (payload?.stream === 'telemetry' && payload.metric === 'prompt_context_size')
+  );
 }
 
 function collapseLogRuns(events: AgentEventDto[]): RenderItem[] {

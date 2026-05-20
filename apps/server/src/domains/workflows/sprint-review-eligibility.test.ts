@@ -46,4 +46,13 @@ describe('checkSprintReviewEligibility', () => {
     const result = await checkSprintReviewEligibility(source, 5, 'M5: Sprint');
     expect(result.alreadyExists).toBe(true);
   });
+
+  it('sets alreadyExists when a completed sprint-review artifact is no longer schedule:current', async () => {
+    const source = makeSource([
+      { schedule: 'current', state: 'factory:done', title: 'Task A' },
+      { schedule: 'later', state: 'factory:done', title: 'Sprint Review: M5: Sprint' },
+    ]);
+    const result = await checkSprintReviewEligibility(source, 5, 'M5: Sprint');
+    expect(result.alreadyExists).toBe(true);
+  });
 });
