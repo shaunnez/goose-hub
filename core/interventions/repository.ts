@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, inArray, isNull, lte, or } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import { db } from '../db/db.js';
 import { workItemInterventionEvents, workItemInterventions } from '../db/schema.js';
 import {
@@ -97,10 +97,35 @@ export function listInterventions(filter: {
   return rows.map(toIntervention);
 }
 
+export function listAllInterventions(filter: {
+  projectId?: string;
+  workItemId?: string;
+  status?: string | string[];
+}): WorkItemIntervention[] {
+  const conditions = [];
+  if (filter.projectId != null)
+    conditions.push(eq(workItemInterventions.projectId, filter.projectId));
+  if (filter.workItemId != null)
+    conditions.push(eq(workItemInterventions.workItemId, filter.workItemId));
+  if (filter.status != null) {
+    const statuses = Array.isArray(filter.status) ? filter.status : [filter.status];
+    conditions.push(inArray(workItemInterventions.status, statuses));
+  }
+
+  const rows = db
+    .select()
+    .from(workItemInterventions)
+    .where(conditions.length === 0 ? undefined : and(...conditions))
+    .orderBy(desc(workItemInterventions.updatedAt))
+    .all();
+  return rows.map(toIntervention);
+}
+
 export function listOpenInterventionsReadyForProposal(filter: {
   projectId?: string;
   now: string;
   limit?: number;
+  excludeGeneratedTestProjects?: boolean;
 }): WorkItemIntervention[] {
   const conditions = [
     eq(workItemInterventions.status, 'OPEN'),
@@ -111,6 +136,12 @@ export function listOpenInterventionsReadyForProposal(filter: {
   ];
   if (filter.projectId != null) {
     conditions.push(eq(workItemInterventions.projectId, filter.projectId));
+  }
+  if (filter.excludeGeneratedTestProjects === true) {
+    conditions.push(sql`${workItemInterventions.projectId} not like ${'test-%'}`);
+    conditions.push(
+      sql`${workItemInterventions.projectId} not like ${'goose-hub-self-discover-e2e-%'}`,
+    );
   }
 
   const rows = db

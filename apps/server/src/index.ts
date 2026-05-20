@@ -8,7 +8,10 @@ import {
   replayInterventionProjector,
   startInterventionProjector,
 } from '@goose-hub/core/interventions/projector.js';
-import { startInterventionProposerWorker } from '@goose-hub/core/interventions/proposer.js';
+import {
+  isGeneratedTestProjectId,
+  startInterventionProposerWorker,
+} from '@goose-hub/core/interventions/proposer.js';
 import {
   recoverStaleApplying,
   recoverStaleProposalLeases,
@@ -27,7 +30,6 @@ if (process.env.VITEST == null) {
   const recoveredApplyLeases = recoverStaleApplying();
   replayInterventionProjector();
   startInterventionProjector();
-  startInterventionProposerWorker();
   startServerInterventionApplierWorker();
   if (closed > 0) {
     logger.info('startup: closed orphaned agent runs', { count: closed });
@@ -47,6 +49,20 @@ if (process.env.VITEST == null) {
 
   loadProjects()
     .then((projects) => {
+      if (process.env.INTERVENTION_PROPOSER_ALL_PROJECTS === '1') {
+        startInterventionProposerWorker({ includeGeneratedTestProjects: true });
+        logger.info('intervention proposer worker started', { scope: 'all-projects-repair' });
+      } else {
+        const proposerProjects = projects.filter(
+          (project) => !isGeneratedTestProjectId(project.slug),
+        );
+        for (const project of proposerProjects) {
+          startInterventionProposerWorker({ projectId: project.slug });
+        }
+        logger.info('intervention proposer workers started', {
+          projects: proposerProjects.map((project) => project.slug),
+        });
+      }
       startPerProjectScheduler(projects, (slug) => dispatchTriageBatch(slug));
       logger.info('per-project tick scheduler started', { projects: projects.map((p) => p.slug) });
       // Nightly code-quality-audit (#698). Delays first fire by 60s so a

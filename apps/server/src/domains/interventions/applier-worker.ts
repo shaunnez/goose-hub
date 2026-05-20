@@ -93,5 +93,6 @@ export function startServerInterventionApplierWorker(): () => void {
   return startInterventionApplierWorker({
     deps: createServerInterventionApplierDeps(),
     leaseOwner: 'server-intervention-applier',
+    intervalMs: 2_000,
   });
 }

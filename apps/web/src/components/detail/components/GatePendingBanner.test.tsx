@@ -103,6 +103,34 @@ describe('GatePendingBanner', () => {
     expect(screen.queryByText('Human intervention required')).toBeNull();
   });
 
+  it('refetches interventions when the issue lifecycle state changes', async () => {
+    vi.mocked(fetchIssueInterventions)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([makeIntervention({ title: 'Issue moved to needs-human' })]);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <QueryClientProvider client={client}>
+          <GatePendingBanner state="factory:needs-qa" projectSlug="proj" id="42" />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(fetchIssueInterventions).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('gate-pending-banner')).toBeNull();
+
+    rerender(
+      <MemoryRouter>
+        <QueryClientProvider client={client}>
+          <GatePendingBanner state="factory:needs-human" projectSlug="proj" id="42" />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('Issue moved to needs-human');
+    expect(fetchIssueInterventions).toHaveBeenCalledTimes(2);
+  });
+
   it('submits a proposed option with the intervention version as CAS', async () => {
     const onTransitioned = vi.fn();
     const intervention = makeIntervention();
@@ -142,12 +170,13 @@ describe('GatePendingBanner', () => {
     ]);
     vi.mocked(fetchLegalTargets).mockResolvedValueOnce({
       from: 'factory:needs-human',
-      legalTargets: ['factory:triaging'],
+      legalTargets: ['factory:needs-qa', 'factory:triaging'],
     });
 
     render_(<GatePendingBanner state="factory:needs-human" projectSlug="proj" id="42" />);
 
     await screen.findByText('Proposal pending');
+    expect(await screen.findByTestId('gate-action-send-to-qa')).toBeTruthy();
     fireEvent.click(await screen.findByTestId('gate-action-manual-factory-triaging'));
 
     await waitFor(() => {
