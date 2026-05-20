@@ -85,12 +85,14 @@ export async function runSprintReviewWorkflow(input: RunSprintReviewInput): Prom
     });
   }
 
-  // Step 4: Collect improvement candidates from DB for this project
+  // Step 4: Collect improvement candidates scoped to the reviewed milestone
+  const reviewedWorkItemIds = new Set(closedItems.map((item) => item.id));
   const candidateRows = db
     .select()
     .from(improvementCandidates)
     .where(eq(improvementCandidates.projectId, projectId))
-    .all();
+    .all()
+    .filter((row) => row.sourceTaskId != null && reviewedWorkItemIds.has(row.sourceTaskId));
 
   const improvementCandidateList = candidateRows.map((row) => ({
     kind: row.suggestionType,
