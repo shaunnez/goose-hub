@@ -15,7 +15,6 @@ import { EngineeringSpecSchema } from './schema.js';
  *   <task>
  *     <workItem>{"title":"...","body":"...","number":123}</workItem>
  *     <issueType>feature|bug</issueType>
- *     <worktreePath>/abs/path/to/worktree</worktreePath>
  *     <prd>...</prd>?                      <!-- when type:feature, copied from #313 -->
  *     <scoutReports>[json]</scoutReports>?      <!-- M19.01 Wave-1 reports when present -->
  *     <wave2Reports>[json]</wave2Reports>?      <!-- M19.01 Wave-2 reports when present -->
@@ -31,7 +30,6 @@ export const SpecAuthorContextSchema = z.object({
   }),
   /** Drives the strict-vs-advisory AC→Journey rule. Defaults to feature in the validator. */
   issueType: z.enum(['feature', 'bug']).optional(),
-  worktreePath: z.string(),
   /** PRD body (copied from #313 for type:feature). Optional when type:bug. */
   prd: z.string().optional(),
   /** JSON-stringified Wave-1 scout reports (M19.01). Optional fall-back to manual investigation. */
@@ -52,7 +50,6 @@ const config: SkillConfig = {
     'workItem.body',
     'workItem.number',
     'issueType',
-    'worktreePath',
     'prd',
     'scoutReports',
     'wave2Reports',

@@ -54,7 +54,6 @@ type SpecAuthorContext = {
     title: string;
     body: string;
   };
-  worktreePath: string;
   issueType: 'feature' | 'bug';
   scoutReports?: string;
   wave2Reports?: string;
@@ -324,7 +323,6 @@ export async function runSpecAuthorWorkflow(
 
     const baseContext: SpecAuthorContext = {
       workItem: workItemCtx,
-      worktreePath,
       issueType: workItem.type === 'bug' ? 'bug' : 'feature',
       scoutReports,
       wave2Reports,

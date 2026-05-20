@@ -13,7 +13,7 @@ You have **read and search access only**.
 
 - `<workItem>` — JSON payload for the work item, with `title`, `body`, and `number`
 - `<scoutFocus>` — one sentence telling you which symbol to trace
-- `<worktreePath>` — the worktree to read from
+- Tools are already rooted at the workspace to read from.
 - `<symbolIndexHints>` *(optional)* — pre-resolved symbol locations from the local symbol index. Each entry has `name`, `definedIn` (file path), `line`, `kind`, and `callers` (files that import this symbol). The index is a starting point, not authority. Read files before reporting.
 
 ## Discipline

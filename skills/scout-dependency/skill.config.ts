@@ -14,7 +14,6 @@ export const ScoutDependencyContextSchema = z.object({
   scoutFocus: z
     .string()
     .describe('One sentence describing the module whose dependency graph to map'),
-  worktreePath: z.string(),
   symbolIndexHints: z
     .array(
       z.object({
@@ -42,7 +41,6 @@ const config: SkillConfig = {
     'workItem.body',
     'workItem.number',
     'scoutFocus',
-    'worktreePath',
     'symbolIndexHints',
   ],
   toolBundles: ['read'],

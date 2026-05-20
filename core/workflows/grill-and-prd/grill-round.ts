@@ -61,7 +61,6 @@ export async function runGrillRound(input: RunGrillRoundInput): Promise<GrillRou
         priorReplies,
         roundNumber,
         projectContext,
-        worktreePath,
       },
       overrides: {
         workspaceDir: worktreePath,

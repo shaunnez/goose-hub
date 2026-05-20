@@ -10,7 +10,6 @@ You are an **auditor agent**. You have read-only access to the working tree and 
 
 The context contains:
 
-- `<worktreePath>` — absolute path to the checked-out codebase to audit
 - `<metricsJson>` — pre-computed automated metrics for Cat 5/6/8 (if provided). **Do not re-score automated categories — consume the JSON scores directly.**
 - `<workItem>` — optional JSON payload with issue context
 
@@ -35,7 +34,7 @@ The context contains:
 
 ## Mandatory pre-work: orient before scoring
 
-1. List `<worktreePath>` top-level directories to understand layout.
+1. List the rooted workspace top-level directories to understand layout.
 2. Identify `core/`, `apps/`, `slices/`, `skills/` (or language equivalents).
 3. Find the registration/dispatch mechanism — where new capabilities are added.
 4. Identify the top-5 largest source files by SLOC using `find` + `wc -l`.
@@ -147,9 +146,7 @@ Evidence: list all files at critical fan-out with their import count and violati
 Run git history analysis (read-only):
 
 ```bash
-git -C <worktreePath> log --pretty=format:"%ad" --date=format:"%Y-%m" | sort | uniq -c
-git -C <worktreePath> log --pretty=format:"%H %s" --shortstat | head -40
-git -C <worktreePath> log --diff-filter=A --pretty=format:"%ad %f" --date=short | sort | head -30
+Use the read-only git/diff tools rooted at the workspace for history evidence.
 ```
 
 Look for:

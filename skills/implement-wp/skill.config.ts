@@ -40,7 +40,6 @@ export const ImplementWpContextSchema = z.object({
       investigationRunId: z.string().optional(),
     })
     .optional(),
-  worktreePath: z.string().describe('Absolute path to the WP scratch worktree'),
   stack: z.object({
     testCommand: z.string(),
     lintCommand: z.string().optional(),
@@ -61,7 +60,6 @@ const config: SkillConfig = {
     'wp.dependsOn',
     'codeSnippets',
     'investigation',
-    'worktreePath',
     'stack.testCommand',
     'stack.lintCommand',
     'stack.typecheckCommand',

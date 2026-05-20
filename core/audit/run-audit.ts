@@ -139,7 +139,7 @@ export async function runCodeQualityAudit(input: RunAuditInput): Promise<AuditRe
   const pipelineRunId =
     input.pipelineRunId ?? syntheticNightlyPipelineRunId(input.projectId, new Date());
 
-  const context: Record<string, unknown> = { worktreePath: input.worktreePath };
+  const context: Record<string, unknown> = {};
   if (input.metricsJson != null) context.metricsJson = input.metricsJson;
   if (input.workItem != null) context.workItem = input.workItem;
 
@@ -152,6 +152,7 @@ export async function runCodeQualityAudit(input: RunAuditInput): Promise<AuditRe
       runId,
       context,
       overrides: {
+        workspaceDir: input.worktreePath,
         extraEventPayload: { trigger: input.trigger, pipelineRunId },
       },
     });

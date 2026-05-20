@@ -162,11 +162,13 @@ describe('chore-shipping end-to-end (#187)', () => {
     });
 
     // ── Acceptance: worktree created ───────────────────────────────────────
-    // (asserted indirectly — implement was run with a worktreePath)
+    // (asserted indirectly — implement was rooted at the worktree)
     const implementCall = vi.mocked(runtime.run).mock.calls[0][0] as {
       context: Record<string, unknown>;
+      workspaceDir?: string;
     };
-    expect(implementCall.context.worktreePath).toBe('/work/wt');
+    expect(implementCall.context.worktreePath).toBeUndefined();
+    expect(implementCall.workspaceDir).toBe('/work/wt');
 
     // ── Acceptance: advisor SKIPPED for priority:medium ────────────────────
     expect(runtime.run).toHaveBeenCalledTimes(1);

@@ -257,7 +257,6 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
         dependsOn: wp.dependsOn,
       },
       investigation: opts.investigation,
-      worktreePath: opts.scratchWorktreePath,
       stack: opts.stack,
     },
     contextAllowlist: [
@@ -270,7 +269,6 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
       'wp.changes',
       'wp.dependsOn',
       'investigation',
-      'worktreePath',
       'stack.testCommand',
       'stack.lintCommand',
       'stack.typecheckCommand',

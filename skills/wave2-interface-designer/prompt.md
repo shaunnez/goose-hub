@@ -13,7 +13,7 @@ You have **read access only**. You never write files. The implementer (M19.03) d
 
 - `<workItem>` — JSON payload for the work item, with `title`, `body`, and `number`
 - `<scoutReports>` — JSON-stringified Wave-1 scout report handoff data. Small reports may include full findings; large reports may include summaries, previews, and `artifactRef` metadata.
-- `<worktreePath>` — the worktree to read from (use it to verify scout claims when needed; do not re-investigate broadly)
+- Tools are already rooted at the workspace to verify scout claims when needed; do not re-investigate broadly.
 
 ## Discipline
 

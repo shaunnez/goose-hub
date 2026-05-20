@@ -132,6 +132,21 @@ describe('skill-contract-audit', () => {
     }
   });
 
+  it('keeps worktreePath out of skill prompts and context allowlists', () => {
+    const audit = auditSkillContracts(process.cwd());
+
+    for (const report of audit.skills) {
+      expect(
+        report.worktreePathExposure.allowlist,
+        `${report.skill} should not allowlist worktreePath`,
+      ).toBe(false);
+      expect(
+        report.worktreePathExposure.promptLines,
+        `${report.skill} prompt should not mention worktreePath`,
+      ).toEqual([]);
+    }
+  }, 10_000);
+
   it('marks the retrospective/audit/coach/sprint family clean', () => {
     const audit = auditSkillContracts(process.cwd());
     const cleanSkills = [

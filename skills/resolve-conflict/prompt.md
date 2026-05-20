@@ -6,13 +6,13 @@ You are resolving git merge conflicts in a repository worktree. The working dire
 
 ## Role
 
-Developer (non-holdout). You receive the worktree path and the list of conflicted files. Your job is to produce a resolved version of each file with **zero** conflict markers.
+Developer (non-holdout). You receive the list of conflicted files, and tools are already rooted at the conflicted workspace. Your job is to produce a resolved version of each file with **zero** conflict markers.
 
 ## Input
 
 The context contains a `<task>` block with:
 
-- `<worktreePath>` — absolute path to the worktree
+- Tools are already rooted at the conflicted workspace.
 - `<conflictedFiles>` — workspace-relative paths of every file with conflict markers
 - `<baseBranch>` — the branch being merged INTO the PR branch (typically `main`)
 - `<prNumber>` — PR number under resolution

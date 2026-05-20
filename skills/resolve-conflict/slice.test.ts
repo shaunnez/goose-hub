@@ -47,7 +47,6 @@ describe('ResolveConflictSchema', () => {
 describe('ResolveConflictContextSchema', () => {
   it('accepts a complete context', () => {
     const result = ResolveConflictContextSchema.safeParse({
-      worktreePath: '/abs/path/to/worktree',
       conflictedFiles: ['src/foo.ts'],
       baseBranch: 'main',
       prNumber: 42,
@@ -57,7 +56,6 @@ describe('ResolveConflictContextSchema', () => {
 
   it('rejects non-integer prNumber', () => {
     const result = ResolveConflictContextSchema.safeParse({
-      worktreePath: '/p',
       conflictedFiles: [],
       baseBranch: 'main',
       prNumber: 1.5,
@@ -74,11 +72,6 @@ describe('config', () => {
     expect(config.modelPin).toBe('sonnet');
   });
   it('lists exactly the four context keys', () => {
-    expect(config.contextAllowlist).toStrictEqual([
-      'worktreePath',
-      'conflictedFiles',
-      'baseBranch',
-      'prNumber',
-    ]);
+    expect(config.contextAllowlist).toStrictEqual(['conflictedFiles', 'baseBranch', 'prNumber']);
   });
 });

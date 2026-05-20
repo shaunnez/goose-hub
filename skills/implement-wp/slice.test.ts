@@ -89,7 +89,7 @@ describe('implement-wp skill.config', () => {
     expect(allowlist).toContain('wp.id');
     expect(allowlist).toContain('wp.filesOwned');
     expect(allowlist).toContain('wp.changes');
-    expect(allowlist).toContain('worktreePath');
+    expect(allowlist).not.toContain('worktreePath');
   });
 
   it('context allowlist excludes full-spec fields (narrow context)', () => {
@@ -101,7 +101,6 @@ describe('implement-wp skill.config', () => {
   it('validates context schema rejects missing wp fields', () => {
     const result = config.contextSchema.safeParse({
       workItem: { title: 't', body: 'b', number: 1, priority: 'low' },
-      worktreePath: '/tmp/wt',
       stack: { testCommand: 'pnpm test' },
       // wp is missing
     });
@@ -117,7 +116,6 @@ describe('implement-wp skill.config', () => {
         changes: 'Add helper',
         dependsOn: [],
       },
-      worktreePath: '/tmp/wt',
       stack: { testCommand: 'pnpm test' },
     });
     expect(result.success).toBe(true);

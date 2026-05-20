@@ -13,7 +13,7 @@ You have **read access only**.
 
 - `<workItem>` — JSON payload for the work item, with `title`, `body`, and `number`
 - `<scoutReports>` — JSON-stringified Wave-1 scout report handoff data. Small reports may include full findings; large reports may include summaries, previews, and `artifactRef` metadata.
-- `<worktreePath>` — the worktree to consult when scout findings need verification (do not re-investigate broadly)
+- Tools are already rooted at the workspace to verify scout findings when needed; do not re-investigate broadly.
 
 ## Discipline
 

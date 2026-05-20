@@ -13,7 +13,7 @@ You have **read and search access only**.
 
 - `<workItem>` — JSON payload for the work item, with `title`, `body`, and `number`
 - `<scoutFocus>` — one sentence naming the user-facing flow
-- `<worktreePath>` — the worktree to read from
+- Tools are already rooted at the workspace to read from.
 
 ## Discipline
 

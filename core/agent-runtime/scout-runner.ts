@@ -61,7 +61,6 @@ export const SCOUT_CONTEXT_ALLOWLIST: readonly string[] = [
   'workItem.body',
   'workItem.number',
   'scoutFocus',
-  'worktreePath',
   'scoutReports',
   'symbolIndexHints',
 ];
@@ -98,7 +97,6 @@ export async function runOneScout(
     ...(spec.contextSchema ?? {}),
     workItem: ctx.workItem,
     scoutFocus: spec.scoutFocus,
-    worktreePath: ctx.worktreePath,
     projectId: ctx.projectId,
     workItemId: ctx.workItemId,
   };

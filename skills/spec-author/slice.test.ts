@@ -231,7 +231,6 @@ describe('EngineeringSpecSchema (shape)', () => {
     const ctx = SpecAuthorContextSchema.safeParse({
       workItem: { title: 't', body: 'b', number: 559 },
       issueType: 'feature',
-      worktreePath: '/tmp/wt',
     });
     expect(ctx.success).toBe(true);
   });
