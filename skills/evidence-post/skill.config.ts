@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { EvidencePostPlanSchema } from './schema.js';
 
 /**
  * Context expected by the evidence-post agent. Rendered as XML in the user prompt:
@@ -36,6 +37,7 @@ export const EvidencePostContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: EvidencePostContextSchema,
+  outputSchema: EvidencePostPlanSchema,
   contextAllowlist: [
     'workItem.number',
     'workItem.repo',

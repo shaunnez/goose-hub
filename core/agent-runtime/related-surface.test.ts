@@ -40,6 +40,17 @@ describe('buildRelatedSurfaceManifest', () => {
     expect(manifest?.targetedTestPaths).toEqual([
       'apps/web/src/components/chrome/Sidebar.test.tsx',
     ]);
+    expect(manifest?.readFirst).toEqual([
+      'apps/web/src/components/chrome/Sidebar.tsx',
+      'apps/web/src/components/chrome/Sidebar.test.tsx',
+    ]);
+    expect(manifest?.primaryTestPath).toBe('apps/web/src/components/chrome/Sidebar.test.tsx');
+    expect(manifest?.testMode).toBe('update-existing');
+    expect(manifest?.doNotSearchFor).toEqual([
+      'apps/web/src/components/chrome/Sidebar.spec.tsx',
+      'apps/web/src/components/chrome/__tests__/Sidebar.test.tsx',
+      'apps/web/src/components/chrome/__tests__/Sidebar.spec.tsx',
+    ]);
     expect(manifest?.evidenceSpecPath).toBe('apps/web/e2e/issue-876.spec.ts');
   });
 
@@ -60,6 +71,13 @@ describe('buildRelatedSurfaceManifest', () => {
     expect(manifest?.testCandidates[0]).toBe('core/agent-runtime/foo.test.ts');
     expect(manifest?.checkedAbsent).toContain('core/agent-runtime/foo.test.ts');
     expect(manifest?.targetedTestPaths).toEqual(['core/agent-runtime/foo.test.ts']);
+    expect(manifest?.readFirst).toEqual([
+      'core/agent-runtime/foo.ts',
+      'core/agent-runtime/foo.test.ts',
+    ]);
+    expect(manifest?.primaryTestPath).toBe('core/agent-runtime/foo.test.ts');
+    expect(manifest?.testMode).toBe('create-candidate');
+    expect(manifest?.doNotSearchFor).toEqual(manifest?.checkedAbsent);
     expect(manifest?.evidenceSpecPath).toBeNull();
   });
 });
@@ -76,6 +94,13 @@ describe('discoveryCallsRepeatRelatedSurface', () => {
           evidenceSpecPath: 'apps/web/e2e/issue-876.spec.ts',
           checkedAbsent: ['apps/web/src/components/chrome/Sidebar.test.tsx'],
           targetedTestPaths: ['apps/web/src/components/chrome/Sidebar.test.tsx'],
+          readFirst: [
+            'apps/web/src/components/chrome/Sidebar.tsx',
+            'apps/web/src/components/chrome/Sidebar.test.tsx',
+          ],
+          primaryTestPath: 'apps/web/src/components/chrome/Sidebar.test.tsx',
+          testMode: 'create-candidate',
+          doNotSearchFor: ['apps/web/src/components/chrome/Sidebar.test.tsx'],
         },
         toolEvents: [
           {

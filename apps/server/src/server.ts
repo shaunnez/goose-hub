@@ -48,6 +48,10 @@ app.route('/events', eventsRouter); // GET /events
 app.route('/webhooks', webhooksRouter); // POST /webhooks/github
 app.route('/api/decisions', decisionsRouter); // POST /api/decisions (M19.23)
 app.route('/api/changelog', changelogRouter); // GET /api/changelog?days=7 (M14.XX)
+// Mounted at /changelog (no /api prefix) so the vite dev-server proxy's
+// `rewrite: (p) => p.replace(/^\/api/, '')` resolves correctly: frontend
+// fetches /api/changelog → vite strips /api → server sees /changelog.
+app.route('/changelog', changelogRouter); // GET /changelog?days=7 (#904)
 app.route('/chat', chatRouter); // GET/POST/DELETE /chat/** (M20 — Hub Chat)
 // Mounted at /search (no /api prefix) so the vite dev-server proxy's
 // `rewrite: (p) => p.replace(/^\/api/, '')` resolves correctly: frontend

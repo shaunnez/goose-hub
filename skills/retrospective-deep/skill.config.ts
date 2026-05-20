@@ -1,6 +1,7 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { DecisionSummarySchema } from '@goose-hub/core/retrospective/schemas.js';
 import { z } from 'zod';
+import { DeepRetroSchema } from './schema.js';
 
 export const DeepRetroContextSchema = z.object({
   workItem: z.object({
@@ -32,6 +33,7 @@ export const DeepRetroContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: DeepRetroContextSchema,
+  outputSchema: DeepRetroSchema,
   contextAllowlist: [
     'workItem.title',
     'workItem.body',

@@ -424,7 +424,6 @@ export async function runDevReviewResponse(
       workItem: input.workItem,
       prDiff: preparedDiff.prDiffContext,
       devReviewFindings: input.devReviewFindings,
-      worktreePath: input.worktreePath,
       stack: input.stack,
     },
     contextAllowlist: devReviewResponseConfig.contextAllowlist ?? [],

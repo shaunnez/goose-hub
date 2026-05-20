@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { DecomposeOutputSchema } from './schema.js';
 
 export const DecomposeIssuesContextSchema = z.object({
   parentIssue: z.object({
@@ -12,6 +13,7 @@ export const DecomposeIssuesContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: DecomposeIssuesContextSchema,
+  outputSchema: DecomposeOutputSchema,
   toolBundles: ['core'],
   modelPin: 'sonnet',
   freshContext: false,

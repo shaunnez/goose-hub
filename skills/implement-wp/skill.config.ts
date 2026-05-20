@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { ImplementWpSchema } from './schema.js';
 
 /**
  * Context injected into each WP builder at spawn time (M19.03, ADR 0031).
@@ -40,7 +41,6 @@ export const ImplementWpContextSchema = z.object({
       investigationRunId: z.string().optional(),
     })
     .optional(),
-  worktreePath: z.string().describe('Absolute path to the WP scratch worktree'),
   stack: z.object({
     testCommand: z.string(),
     lintCommand: z.string().optional(),
@@ -50,6 +50,7 @@ export const ImplementWpContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: ImplementWpContextSchema,
+  outputSchema: ImplementWpSchema,
   contextAllowlist: [
     'workItem.title',
     'workItem.body',
@@ -61,7 +62,6 @@ const config: SkillConfig = {
     'wp.dependsOn',
     'codeSnippets',
     'investigation',
-    'worktreePath',
     'stack.testCommand',
     'stack.lintCommand',
     'stack.typecheckCommand',

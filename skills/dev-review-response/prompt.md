@@ -38,5 +38,4 @@ Your terminal JSON must include:
 | `<workItem>` | JSON payload for the original GitHub issue you were implementing, with `title`, `body`, `number`, and `priority` |
 | `<prDiff>` | Git diff of the integration worktree vs base branch |
 | `<devReviewFindings>` | Structured finding list from Codex dev-review |
-| `<worktreePath>` | Absolute path to the integration worktree |
 | `<stack>` | JSON payload with `testCommand`, optional `lintCommand`, and optional `typecheckCommand` |

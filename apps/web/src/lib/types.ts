@@ -51,6 +51,15 @@ export interface IssueCommentDto {
   createdAt: string;
 }
 
+export interface ChangelogEntryDto {
+  number: number;
+  title: string;
+  mergedAt: string;
+  url: string;
+  repo: string;
+  author: string;
+}
+
 export interface MilestoneDto {
   id: string;
   title: string;
@@ -723,6 +732,27 @@ export interface PipelineSettingsDto {
   configDefaults?: {
     useInvestigationSwarm: boolean;
   };
+}
+
+export interface LearningLoopSettingsDto {
+  projectId: string;
+  coachPolicy: {
+    enabled: boolean;
+    consistencyThreshold: number;
+    minLifecycles: number;
+  };
+  configDefaults: {
+    enabled: boolean;
+    consistencyThreshold: number;
+    minLifecycles: number;
+  };
+  dbOverrides: {
+    enabled: boolean | null;
+    consistencyThreshold: number | null;
+    minLifecycles: number | null;
+    updatedAt: string;
+    updatedBy: string | null;
+  } | null;
 }
 
 export type ReviewerSlotModel = 'claude' | 'codex';

@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { SkillCoachOutputSchema } from './schema.js';
 
 export const SkillCoachContextSchema = z.object({
   projectId: z.string().min(1),
@@ -34,6 +35,7 @@ export const SkillCoachContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: SkillCoachContextSchema,
+  outputSchema: SkillCoachOutputSchema,
   contextAllowlist: [
     'projectId',
     'targetSkillName',

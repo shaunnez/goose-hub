@@ -1,6 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
-import { TestRunSchema, VerificationSummarySchema } from './schema.js';
+import { QaOutputSchema, TestRunSchema, VerificationSummarySchema } from './schema.js';
 
 /**
  * Context keys provided to the QA holdout agent, formatted as structured XML.
@@ -85,6 +85,7 @@ export const QaContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: QaContextSchema,
+  outputSchema: QaOutputSchema,
   /**
    * Tool bundles:
    * - 'read'     — read source files to understand what changed

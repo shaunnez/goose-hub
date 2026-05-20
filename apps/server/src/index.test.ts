@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { app } from './server.js';
 
+const { mockGetChangelog } = vi.hoisted(() => ({
+  mockGetChangelog: vi.fn(),
+}));
+
 // Mock the event store so appendEvent is a no-op in tests.
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   eventStore: { appendEvent: vi.fn(), replay: vi.fn().mockReturnValue([]) },
@@ -103,6 +107,16 @@ vi.mock('./shared/source.js', () => ({
   }),
 }));
 
+vi.mock('./domains/changelog/service.js', async () => {
+  const actual = await vi.importActual<typeof import('./domains/changelog/service.js')>(
+    './domains/changelog/service.js',
+  );
+  return {
+    ...actual,
+    getChangelog: mockGetChangelog,
+  };
+});
+
 describe('GET /projects/:slug/milestones/:milestone/closed-issues', () => {
   it('returns closed work items for the milestone', async () => {
     const res = await app.request('/projects/goose-hub-self/milestones/3/closed-issues');
@@ -142,6 +156,58 @@ describe('GET /projects/:slug/milestones/:milestone/issues', () => {
     vi.mocked(getSourceForSlug).mockResolvedValueOnce(null);
     const res = await app.request('/projects/unknown/milestones/3/issues');
     expect(res.status).toBe(404);
+  });
+});
+
+describe('GET /api/changelog and /changelog', () => {
+  it('serves changelog entries through the canonical /api mount', async () => {
+    mockGetChangelog.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        entries: [
+          {
+            number: 7,
+            title: 'A',
+            mergedAt: '2026-05-12T10:00:00Z',
+            url: 'u',
+            repo: 'o/r',
+            author: 'octocat',
+          },
+        ],
+      },
+    });
+
+    const res = await app.request('/api/changelog?days=7');
+
+    expect(res.status).toBe(200);
+    expect(mockGetChangelog).toHaveBeenCalledWith(7);
+    const body = (await res.json()) as unknown[];
+    expect(body).toHaveLength(1);
+  });
+
+  it('serves changelog entries through the rewritten /changelog mount', async () => {
+    mockGetChangelog.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        entries: [
+          {
+            number: 8,
+            title: 'B',
+            mergedAt: '2026-05-13T10:00:00Z',
+            url: 'u2',
+            repo: 'o/r',
+            author: 'octocat',
+          },
+        ],
+      },
+    });
+
+    const res = await app.request('/changelog?days=7');
+
+    expect(res.status).toBe(200);
+    expect(mockGetChangelog).toHaveBeenCalledWith(7);
+    const body = (await res.json()) as unknown[];
+    expect(body).toHaveLength(1);
   });
 });
 

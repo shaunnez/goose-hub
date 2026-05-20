@@ -12,6 +12,9 @@ if (strict) {
       s.snakeCaseTags.length > 0 ||
       s.missingFromPrompt.length > 0 ||
       s.extraPromptTags.length > 0 ||
+      !s.outputSchema.configured ||
+      s.worktreePathExposure.allowlist ||
+      s.worktreePathExposure.promptLines.length > 0 ||
       (enforcePathLanguageFor.has(s.skill) &&
         (s.pathLanguage.vagueWorkspaceRelative.length > 0 ||
           s.pathLanguage.packageRelativeExamples.length > 0)),
@@ -27,6 +30,14 @@ if (strict) {
           `snakeCase=${violation.snakeCaseTags.join(',') || '(none)'}`,
           `missing=${violation.missingFromPrompt.join(',') || '(none)'}`,
           `extra=${violation.extraPromptTags.join(',') || '(none)'}`,
+          `outputSchema=${
+            violation.outputSchema.configured
+              ? (violation.outputSchema.configuredSchema ?? '(configured)')
+              : '(missing)'
+          }`,
+          `worktreePathExposure=${violation.worktreePathExposure.allowlist ? 'allowlist' : ''}:${
+            violation.worktreePathExposure.promptLines.length
+          }`,
           `pathLanguageWorkspaceRelative=${violation.pathLanguage.vagueWorkspaceRelative.length}`,
           `pathLanguagePackageRelativeExamples=${
             violation.pathLanguage.packageRelativeExamples.join(',') || '(none)'

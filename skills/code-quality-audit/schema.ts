@@ -101,7 +101,6 @@ export const CodeQualityAuditOutputSchema = z
 // ─── Context schema ───────────────────────────────────────────────────────────
 
 export const CodeQualityAuditContextSchema = z.object({
-  worktreePath: z.string().min(1),
   metricsJson: z
     .object({
       locDiscipline: z.object({ score: z.number(), pctUnder200: z.number() }),

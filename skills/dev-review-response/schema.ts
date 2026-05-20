@@ -43,7 +43,6 @@ export const DevReviewResponseContextSchema = z.object({
   devReviewFindings: z
     .array(DevReviewFindingSchema)
     .describe('Findings from the Codex dev-review pass'),
-  worktreePath: z.string().describe('Absolute path to the integration worktree'),
   stack: z
     .object({
       testCommand: z.string().optional(),

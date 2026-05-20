@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { EchoOutputSchema } from '../echo-test/schema.js';
 
 export const EchoHoldoutContextSchema = z.object({
   message: z.string(),
@@ -8,6 +9,7 @@ export const EchoHoldoutContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: EchoHoldoutContextSchema,
+  outputSchema: EchoOutputSchema,
   toolBundles: [],
   modelPin: 'sonnet',
   freshContext: true,

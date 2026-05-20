@@ -1,6 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
-import { InvestigationReproPacketSchema } from './schema.js';
+import { InvestigationReproPacketSchema, PlaywrightReproSpecSchema } from './schema.js';
 
 export const PlaywrightReproContextSchema = z.object({
   workItem: z.object({
@@ -29,6 +29,7 @@ export const PlaywrightReproContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: PlaywrightReproContextSchema,
+  outputSchema: PlaywrightReproSpecSchema,
   contextAllowlist: [
     'workItem.title',
     'workItem.body',

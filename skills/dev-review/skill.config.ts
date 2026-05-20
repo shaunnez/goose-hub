@@ -1,5 +1,5 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
-import { DevReviewContextSchema } from './schema.js';
+import { DevReviewContextSchema, DevReviewOutputSchema } from './schema.js';
 
 /**
  * Codex pre-QA dev-review skill (M19.11). This is an **advisor to the
@@ -20,6 +20,7 @@ import { DevReviewContextSchema } from './schema.js';
  */
 const config: SkillConfig = {
   contextSchema: DevReviewContextSchema,
+  outputSchema: DevReviewOutputSchema,
   toolBundles: ['read'],
   modelPin: 'sonnet',
   provider: 'codex',

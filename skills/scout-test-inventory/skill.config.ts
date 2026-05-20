@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { ScoutOutputSchema } from './schema.js';
 
 /**
  * Wave-1 scout-test-inventory agent: catalog existing tests covering the
@@ -12,7 +13,6 @@ export const ScoutTestInventoryContextSchema = z.object({
     number: z.number(),
   }),
   scoutFocus: z.string().describe('One sentence describing the test surface to inventory'),
-  worktreePath: z.string(),
   symbolIndexHints: z
     .array(
       z.object({
@@ -30,12 +30,12 @@ export const ScoutTestInventoryContextSchema = z.object({
 
 const config: SkillConfig = {
   contextSchema: ScoutTestInventoryContextSchema,
+  outputSchema: ScoutOutputSchema,
   contextAllowlist: [
     'workItem.title',
     'workItem.body',
     'workItem.number',
     'scoutFocus',
-    'worktreePath',
     'symbolIndexHints',
   ],
   toolBundles: ['read'],

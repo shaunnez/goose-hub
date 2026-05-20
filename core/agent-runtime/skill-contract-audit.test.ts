@@ -13,6 +13,7 @@ describe('skill-contract-audit', () => {
     expect(output).toContain('## implement');
     expect(output).toContain('allowlistTags:');
     expect(output).toContain('schemaFields:');
+    expect(output).toContain('outputSchema:');
     expect(output).toContain('outputExample:');
     expect(output).toContain('pathLanguageWorkspaceRelative:');
     expect(output).toContain('pathLanguagePackageRelativeExamples:');
@@ -33,6 +34,17 @@ describe('skill-contract-audit', () => {
         report.extraPromptTags,
         `${report.skill} should only reference allowlisted tags`,
       ).toEqual([]);
+    }
+  });
+
+  it('requires every runtime skill to declare its output schema in skill.config.ts', () => {
+    const audit = auditSkillContracts(process.cwd());
+
+    for (const report of audit.skills) {
+      expect(
+        report.outputSchema.configured,
+        `${report.skill} should declare outputSchema in skill.config.ts`,
+      ).toBe(true);
     }
   });
 
@@ -131,6 +143,21 @@ describe('skill-contract-audit', () => {
       ).toEqual([]);
     }
   });
+
+  it('keeps worktreePath out of skill prompts and context allowlists', () => {
+    const audit = auditSkillContracts(process.cwd());
+
+    for (const report of audit.skills) {
+      expect(
+        report.worktreePathExposure.allowlist,
+        `${report.skill} should not allowlist worktreePath`,
+      ).toBe(false);
+      expect(
+        report.worktreePathExposure.promptLines,
+        `${report.skill} prompt should not mention worktreePath`,
+      ).toEqual([]);
+    }
+  }, 10_000);
 
   it('marks the retrospective/audit/coach/sprint family clean', () => {
     const audit = auditSkillContracts(process.cwd());

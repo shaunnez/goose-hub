@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { Wave2RiskAnalystSchema } from './schema.js';
 
 /**
  * Wave-2 risk-analyst agent. Consumes cross-validated Wave-1 scout reports
@@ -13,18 +14,12 @@ export const Wave2RiskAnalystContextSchema = z.object({
   }),
   /** Cross-validated scout reports rendered as a JSON string. */
   scoutReports: z.string(),
-  worktreePath: z.string(),
 });
 
 const config: SkillConfig = {
   contextSchema: Wave2RiskAnalystContextSchema,
-  contextAllowlist: [
-    'workItem.title',
-    'workItem.body',
-    'workItem.number',
-    'scoutReports',
-    'worktreePath',
-  ],
+  outputSchema: Wave2RiskAnalystSchema,
+  contextAllowlist: ['workItem.title', 'workItem.body', 'workItem.number', 'scoutReports'],
   toolBundles: ['read'],
   modelPin: 'sonnet',
   freshContext: true,

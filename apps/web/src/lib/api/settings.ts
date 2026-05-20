@@ -1,6 +1,7 @@
 import type {
   CodexAuthStatusDto,
   DevReviewSettingsDto,
+  LearningLoopSettingsDto,
   ModelProvider,
   ModelTier,
   PipelineSettingsDto,
@@ -97,6 +98,24 @@ export async function patchPipelineSettings(
   patch: { useMultiAgentPipeline?: boolean; useInvestigationSwarm?: boolean },
 ): Promise<void> {
   await patchJson(`/projects/${slug}/settings/pipeline`, patch);
+}
+
+export async function fetchLearningLoopSettings(
+  slug: string,
+  signal?: AbortSignal,
+): Promise<LearningLoopSettingsDto> {
+  return getJson<LearningLoopSettingsDto>(`/projects/${slug}/settings/learning-loop`, signal);
+}
+
+export async function patchLearningLoopSettings(
+  slug: string,
+  patch: Partial<{
+    enabled: boolean | null;
+    consistencyThreshold: number | null;
+    minLifecycles: number | null;
+  }>,
+): Promise<void> {
+  await patchJson(`/projects/${slug}/settings/learning-loop`, patch);
 }
 
 export async function fetchReviewSettings(

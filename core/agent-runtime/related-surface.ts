@@ -12,6 +12,10 @@ export interface RelatedSurfaceManifest {
   evidenceSpecPath: string | null;
   checkedAbsent: string[];
   targetedTestPaths: string[];
+  readFirst: string[];
+  primaryTestPath: string | null;
+  testMode: 'update-existing' | 'create-candidate' | 'no-test-surface';
+  doNotSearchFor: string[];
 }
 
 function unique(values: string[]): string[] {
@@ -79,6 +83,13 @@ export function buildRelatedSurfaceManifest(input: {
       ? `apps/web/e2e/issue-${input.workItemNumber}.spec.ts`
       : null;
   const targetedTestPaths = existingTests.length > 0 ? existingTests : testCandidates.slice(0, 1);
+  const primaryTestPath = targetedTestPaths[0] ?? null;
+  const testMode =
+    existingTests.length > 0
+      ? 'update-existing'
+      : primaryTestPath != null
+        ? 'create-candidate'
+        : 'no-test-surface';
 
   return {
     keyFiles,
@@ -88,6 +99,10 @@ export function buildRelatedSurfaceManifest(input: {
     evidenceSpecPath,
     checkedAbsent,
     targetedTestPaths,
+    readFirst: unique([...keyFiles.map((file) => file.path), ...targetedTestPaths]),
+    primaryTestPath,
+    testMode,
+    doNotSearchFor: checkedAbsent,
   };
 }
 

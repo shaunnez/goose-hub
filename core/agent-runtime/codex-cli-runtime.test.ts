@@ -144,7 +144,7 @@ describe('CodexCliRuntime timeout handling', () => {
       }),
     );
     expect(call?.systemPrompt).toContain(
-      'All repo exploration must stay under workspaceDir / <worktreePath>.',
+      'All repo exploration must stay inside the workspace already configured for your tools.',
     );
     expect(call?.systemPrompt).toContain(
       'If prior context is needed, use only context provided by Factory.',
@@ -159,6 +159,27 @@ describe('CodexCliRuntime timeout handling', () => {
       expect.objectContaining({
         effort: 'high',
       }),
+    );
+  });
+
+  it('writes AgentSpec outputJsonSchema to a per-run file and passes it to Codex', async () => {
+    const { mkdirSync, writeFileSync } = await import('node:fs');
+    await runSuccessfulCodexSpec({
+      workspaceDir: '/tmp/factory-worktree',
+      outputJsonSchema: { type: 'object', properties: { status: { enum: ['ok'] } } },
+    });
+
+    const call = vi.mocked(buildCodexArgv).mock.calls[0]?.[0];
+    expect(call?.outputSchemaPath).toMatch(
+      /^\/tmp\/factory-worktree\/\.factory\/output-schemas\/[a-f0-9]{16}\.schema\.json$/,
+    );
+    expect(mkdirSync).toHaveBeenCalledWith('/tmp/factory-worktree/.factory/output-schemas', {
+      recursive: true,
+    });
+    expect(writeFileSync).toHaveBeenCalledWith(
+      call?.outputSchemaPath,
+      `${JSON.stringify({ type: 'object', properties: { status: { enum: ['ok'] } } }, null, 2)}\n`,
+      { flag: 'w' },
     );
   });
 
@@ -402,6 +423,111 @@ describe('CodexCliRuntime timeout handling', () => {
         }),
         personaId: 'test-project/developer/0',
       }),
+    );
+  });
+
+  it('audits a failed MCP resource read without killing the Codex run', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec({ skill: 'scout-code-path' }));
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        `${JSON.stringify({
+          type: 'item.completed',
+          item: { type: 'agent_message', text: '{"ok":true}' },
+        })}\n`,
+      ),
+    );
+    child.stderr.emit('data', Buffer.from('resources/read failed: file://memory\n'));
+    child.emit('close', 0);
+
+    await expect(run).resolves.toMatchObject({ output: { ok: true } });
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.tool-call',
+        payload: expect.objectContaining({
+          tool_name: 'resources/read',
+          blocked: true,
+          block_reason: 'blocked-runtime-surface: resources/read failed',
+          status: 'failed',
+        }),
+        personaId: 'test-project/developer/0',
+      }),
+    );
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent.run-completed' }),
+    );
+  });
+
+  it('does not fail on the startup resources/list probe', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec());
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        `${JSON.stringify({
+          type: 'item.completed',
+          item: { type: 'agent_message', text: '{"ok":true}' },
+        })}\n`,
+      ),
+    );
+    child.stderr.emit('data', Buffer.from('resources/list failed: startup probe\n'));
+    child.emit('close', 0);
+
+    await expect(run).resolves.toMatchObject({ output: { ok: true } });
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.log',
+        payload: expect.objectContaining({
+          stream: 'stderr',
+          text: 'resources/list failed: startup probe',
+        }),
+      }),
+    );
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent.run-completed' }),
+    );
+  });
+
+  it('logs normal Codex stderr without failing the run', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec());
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        `${JSON.stringify({
+          type: 'item.completed',
+          item: { type: 'agent_message', text: '{"ok":true}' },
+        })}\n`,
+      ),
+    );
+    child.stderr.emit('data', Buffer.from('Reading additional input from stdin...\n'));
+    child.emit('close', 0);
+
+    await expect(run).resolves.toMatchObject({ output: { ok: true } });
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.log',
+        payload: expect.objectContaining({
+          stream: 'stderr',
+          text: 'Reading additional input from stdin...',
+        }),
+      }),
+    );
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent.run-completed' }),
     );
   });
 

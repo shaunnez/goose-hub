@@ -1,5 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { logger } from '../../logger.js';
+import type { CoachPolicy } from '../../types.js';
 import { db } from '../db.js';
 import { projectSettings, projectSkillSettings } from '../schema.js';
 
@@ -17,6 +18,9 @@ export type GlobalBudgetPatch = {
   perBashCommandMaxSeconds?: number | null;
   useMultiAgentPipeline?: number | null;
   useInvestigationSwarm?: number | null;
+  coachPolicyEnabled?: number | null;
+  coachPolicyConsistencyThreshold?: number | null;
+  coachPolicyMinLifecycles?: number | null;
   recordDecisionTool?: number | null;
   qaE2eMode?: 'off' | 'ui-changed' | 'always' | null;
   playwrightReproEnabled?: number | null;
@@ -30,6 +34,12 @@ export type SkillBudgetPatch = {
   modelTier?: string | null;
   modelProvider?: string | null;
   effort?: string | null;
+};
+
+export const DEFAULT_COACH_POLICY: CoachPolicy = {
+  enabled: false,
+  consistencyThreshold: 0.8,
+  minLifecycles: 3,
 };
 
 export function readProjectSettings(projectId: string): ProjectSettingsRow | null {
@@ -84,6 +94,37 @@ export function getUseInvestigationSwarm(projectId: string, configDefault = true
 
 export function setUseInvestigationSwarm(projectId: string, enabled: boolean, by: string): void {
   writeProjectSettings(projectId, { useInvestigationSwarm: enabled ? 1 : 0 }, by);
+}
+
+export function deriveCoachPolicy(
+  row: ProjectSettingsRow | null,
+  configDefault: CoachPolicy | null | undefined,
+): CoachPolicy {
+  const base = configDefault ?? DEFAULT_COACH_POLICY;
+  return {
+    enabled: row?.coachPolicyEnabled == null ? base.enabled : row.coachPolicyEnabled === 1,
+    consistencyThreshold:
+      row?.coachPolicyConsistencyThreshold == null
+        ? base.consistencyThreshold
+        : row.coachPolicyConsistencyThreshold,
+    minLifecycles:
+      row?.coachPolicyMinLifecycles == null ? base.minLifecycles : row.coachPolicyMinLifecycles,
+  };
+}
+
+export function getCoachPolicy(
+  projectId: string,
+  configDefault: CoachPolicy | null | undefined,
+): CoachPolicy {
+  try {
+    return deriveCoachPolicy(readProjectSettings(projectId), configDefault);
+  } catch (err) {
+    logger.warn('getCoachPolicy: read failed, defaulting to config value', {
+      projectId,
+      error: String(err),
+    });
+    return configDefault ?? DEFAULT_COACH_POLICY;
+  }
 }
 
 export function deriveRecordDecisionTool(row: ProjectSettingsRow | null): boolean {

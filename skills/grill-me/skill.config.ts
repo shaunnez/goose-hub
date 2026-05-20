@@ -1,5 +1,6 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
+import { GrillMeOutputSchema } from './schema.js';
 
 export const ProjectContextSchema = z.object({
   stackSummary: z.string(),
@@ -30,16 +31,16 @@ export const GrillMeContextSchema = z.object({
   priorReplies: z.array(GrillPriorReplyEntrySchema),
   roundNumber: z.number().int().min(1),
   projectContext: ProjectContextSchema,
-  worktreePath: z.string(),
 });
 
 const config: SkillConfig = {
   contextSchema: GrillMeContextSchema,
+  outputSchema: GrillMeOutputSchema,
   toolBundles: ['read'],
   modelPin: 'sonnet',
   freshContext: false,
   role: 'griller',
-  contextAllowlist: ['workItem', 'priorReplies', 'roundNumber', 'projectContext', 'worktreePath'],
+  contextAllowlist: ['workItem', 'priorReplies', 'roundNumber', 'projectContext'],
 };
 
 export default config;

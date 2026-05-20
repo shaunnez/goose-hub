@@ -9,8 +9,10 @@ export type SkillContractReport = {
   missingFromPrompt: string[];
   extraPromptTags: string[];
   schemaFields: string[];
+  outputSchema: OutputSchemaReport;
   outputExample: OutputExampleReport;
   pathLanguage: PathLanguageReport;
+  worktreePathExposure: WorktreePathExposureReport;
   consumerPaths: string[];
 };
 
@@ -30,9 +32,20 @@ export type OutputExampleReport = {
   extraExampleFields: string[];
 };
 
+export type OutputSchemaReport = {
+  configured: boolean;
+  configuredSchema: string | null;
+};
+
 export type PathLanguageReport = {
   vagueWorkspaceRelative: string[];
   packageRelativeExamples: string[];
+};
+
+export type WorktreePathExposureReport = {
+  allowlist: boolean;
+  promptLines: string[];
+  configLines: string[];
 };
 
 function extractTags(input: string): string[] {
@@ -45,6 +58,10 @@ function extractAllowlistTags(configSource: string): string[] {
   if (!match) return [];
   const keys = Array.from(match[1].matchAll(/["'`]([a-zA-Z0-9_.-]+)["'`]/g), (m) => m[1]);
   return Array.from(new Set(keys.map((k) => k.split('.')[0]))).sort();
+}
+
+function extractConfiguredOutputSchema(configSource: string): string | null {
+  return configSource.match(/outputSchema\s*:\s*([A-Za-z][A-Za-z0-9_]*)/)?.[1] ?? null;
 }
 
 function findMatchingBrace(source: string, openIndex: number): number {
@@ -137,7 +154,7 @@ function extractFieldsFromFirstObjectExpression(source: string, startIndex: numb
 }
 
 function extractSchemaFields(schemaSource: string, configSource: string): string[] {
-  const configuredSchema = configSource.match(/outputSchema\s*:\s*([A-Za-z][A-Za-z0-9_]*)/)?.[1];
+  const configuredSchema = extractConfiguredOutputSchema(configSource);
   const exportedSchemas = Array.from(
     schemaSource.matchAll(/export const ([A-Za-z][A-Za-z0-9_]*Schema)\s*=/g),
     (m) => ({ name: m[1], index: m.index ?? 0 }),
@@ -227,6 +244,20 @@ function auditPathLanguage(prompt: string, schema: string): PathLanguageReport {
   return {
     vagueWorkspaceRelative,
     packageRelativeExamples: Array.from(new Set(packageRelativeExamples)).sort(),
+  };
+}
+
+function mentionsModelVisibleWorktreePath(line: string): boolean {
+  return /\bworktreePath\b|\bworktree[-\s]+path\b/i.test(line);
+}
+
+function auditWorktreePathExposure(prompt: string, config: string): WorktreePathExposureReport {
+  const promptLines = lineHits(prompt, mentionsModelVisibleWorktreePath);
+  const configLines = lineHits(config, mentionsModelVisibleWorktreePath);
+  return {
+    allowlist: extractAllowlistTags(config).includes('worktreePath'),
+    promptLines,
+    configLines,
   };
 }
 
@@ -362,6 +393,7 @@ export function auditSkillContracts(repoRoot: string): SkillContractAudit {
     const extraPromptTags = promptTags.filter((t) => t !== 'task' && !allowlistTags.includes(t));
 
     const schemaFields = extractSchemaFields(schema, config);
+    const configuredOutputSchema = extractConfiguredOutputSchema(config);
 
     return {
       skill,
@@ -371,8 +403,13 @@ export function auditSkillContracts(repoRoot: string): SkillContractAudit {
       missingFromPrompt,
       extraPromptTags,
       schemaFields,
+      outputSchema: {
+        configured: configuredOutputSchema != null,
+        configuredSchema: configuredOutputSchema,
+      },
       outputExample: auditOutputExample(prompt, schemaFields),
       pathLanguage: auditPathLanguage(prompt, schema),
+      worktreePathExposure: auditWorktreePathExposure(prompt, config),
       consumerPaths: existsSync(schemaPath)
         ? collectConsumers(repoRoot, schemaPath, schema, skill)
         : [],
@@ -393,12 +430,18 @@ export function formatSkillContractAudit(audit: SkillContractAudit): string {
         `missingFromPrompt: ${r.missingFromPrompt.join(', ') || '(none)'}`,
         `extraPromptTags: ${r.extraPromptTags.join(', ') || '(none)'}`,
         `schemaFields: ${r.schemaFields.join(', ') || '(none)'}`,
+        `outputSchema: ${
+          r.outputSchema.configured
+            ? (r.outputSchema.configuredSchema ?? '(configured)')
+            : '(missing)'
+        }`,
         `outputExample: ${r.outputExample.status}`,
         `outputExampleParseable: ${r.outputExample.parseableExamples}`,
         `outputExampleMissingFields: ${r.outputExample.missingSchemaFields.join(', ') || '(none)'}`,
         `outputExampleExtraFields: ${r.outputExample.extraExampleFields.join(', ') || '(none)'}`,
         `pathLanguageWorkspaceRelative: ${r.pathLanguage.vagueWorkspaceRelative.length}`,
         `pathLanguagePackageRelativeExamples: ${r.pathLanguage.packageRelativeExamples.join(', ') || '(none)'}`,
+        `worktreePathExposure: allowlist=${r.worktreePathExposure.allowlist} prompt=${r.worktreePathExposure.promptLines.length} config=${r.worktreePathExposure.configLines.length}`,
         `consumers: ${r.consumerPaths.length}`,
       ];
       for (const c of r.consumerPaths) lines.push(`- ${c}`);

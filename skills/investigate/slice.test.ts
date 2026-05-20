@@ -174,10 +174,9 @@ describe('investigate skill config', () => {
     expect(config.freshContext).toBe(false);
   });
 
-  it('contextSchema validates required workItem and worktreePath fields', () => {
+  it('contextSchema validates required workItem fields without worktreePath', () => {
     const valid = InvestigateContextSchema.safeParse({
       workItem: { title: 'Fix auth bug', body: 'Auth breaks on login.', number: 42 },
-      worktreePath: '/tmp/worktrees/42',
     });
     expect(valid.success).toBe(true);
   });
@@ -185,7 +184,6 @@ describe('investigate skill config', () => {
   it('contextSchema rejects missing workItem.title', () => {
     const invalid = InvestigateContextSchema.safeParse({
       workItem: { body: 'body', number: 1 },
-      worktreePath: '/tmp/worktrees/1',
     });
     expect(invalid.success).toBe(false);
   });
@@ -193,7 +191,6 @@ describe('investigate skill config', () => {
   it('contextSchema rejects missing workItem.body', () => {
     const invalid = InvestigateContextSchema.safeParse({
       workItem: { title: 'title', number: 1 },
-      worktreePath: '/tmp/worktrees/1',
     });
     expect(invalid.success).toBe(false);
   });
@@ -201,32 +198,29 @@ describe('investigate skill config', () => {
   it('contextSchema rejects missing workItem.number', () => {
     const invalid = InvestigateContextSchema.safeParse({
       workItem: { title: 'title', body: 'body' },
-      worktreePath: '/tmp/worktrees/1',
     });
     expect(invalid.success).toBe(false);
   });
 
-  it('contextSchema rejects missing worktreePath', () => {
-    const invalid = InvestigateContextSchema.safeParse({
+  it('contextSchema accepts missing worktreePath', () => {
+    const valid = InvestigateContextSchema.safeParse({
       workItem: { title: 'title', body: 'body', number: 1 },
     });
-    expect(invalid.success).toBe(false);
+    expect(valid.success).toBe(true);
   });
 
   it('contextSchema rejects missing workItem entirely', () => {
-    const invalid = InvestigateContextSchema.safeParse({
-      worktreePath: '/tmp/worktrees/1',
-    });
+    const invalid = InvestigateContextSchema.safeParse({});
     expect(invalid.success).toBe(false);
   });
 });
 
 describe('investigate prompt workspace boundary', () => {
-  it('forbids memory quick passes and requires exploration under worktreePath', () => {
+  it('forbids memory quick passes and requires exploration inside the rooted workspace', () => {
     expect(PROMPT).toContain('No memory quick pass');
     expect(PROMPT).toContain('Do not perform memory quick passes');
     expect(PROMPT).toContain(
-      'All list, read, and search operations must stay inside the provided `<worktreePath>`',
+      'All list, read, and search operations must stay inside the workspace already configured for your tools',
     );
     expect(PROMPT).toContain('Do not inspect sibling repos');
     expect(PROMPT).toContain('~/.codex');

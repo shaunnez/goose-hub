@@ -5,6 +5,7 @@ const mockAppendEvent = vi.fn().mockReturnValue({ id: 1 });
 const mockComputeGateThresholds = vi.fn();
 const mockComputeCostBaselines = vi.fn();
 const mockFetchLifecyclesInWindow = vi.fn();
+const mockGetCoachPolicy = vi.fn();
 const mockGetProjectBySlug = vi.fn().mockResolvedValue(null);
 const mockSelectPersona = vi
   .fn()
@@ -23,6 +24,7 @@ const { mockDb } = vi.hoisted(() => {
 
 vi.mock('../db/db.js', () => ({ db: mockDb }));
 vi.mock('../db/repositories/project-settings.js', () => ({
+  getCoachPolicy: (...args: unknown[]) => mockGetCoachPolicy(...args),
   readProjectSettings: vi.fn().mockReturnValue(null),
   readProjectSkillSettings: vi.fn().mockReturnValue(new Map()),
 }));
@@ -101,6 +103,12 @@ beforeEach(() => {
   mockComputeGateThresholds.mockReset().mockReturnValue([]);
   mockComputeCostBaselines.mockReset().mockReturnValue([]);
   mockFetchLifecyclesInWindow.mockReset().mockReturnValue([]);
+  mockGetCoachPolicy
+    .mockReset()
+    .mockImplementation(
+      (_projectId, configDefault) =>
+        configDefault ?? { enabled: false, consistencyThreshold: 0.8, minLifecycles: 3 },
+    );
   mockSelectPersona.mockClear();
   for (const method of ['select', 'from', 'where', 'orderBy', 'insert', 'values', 'returning']) {
     mockDb[method] = vi.fn().mockReturnValue(mockDb);
@@ -391,6 +399,94 @@ describe('runCrossRunRetroWorkflow', () => {
     });
 
     expect(mockCoachRunner).not.toHaveBeenCalled();
+  });
+
+  it('dispatches coach from DB-resolved policy when config policy is disabled', async () => {
+    const mockCoachRunner = vi.fn().mockResolvedValue({ ok: true });
+    mockGetCoachPolicy.mockReturnValueOnce({
+      enabled: true,
+      consistencyThreshold: 0.8,
+      minLifecycles: 3,
+    });
+    mockFetchLifecyclesInWindow.mockReturnValue([
+      {
+        id: 1,
+        projectId: 'p',
+        workItemId: 'w1',
+        closedAt: '2026-04-10T00:00:00Z',
+        decisionSummaries: '[]',
+        learningEntries: '[]',
+        qualityScores: '[]',
+        costsUsd: 0,
+        runIds: '[]',
+      },
+      {
+        id: 2,
+        projectId: 'p',
+        workItemId: 'w2',
+        closedAt: '2026-04-11T00:00:00Z',
+        decisionSummaries: '[]',
+        learningEntries: '[]',
+        qualityScores: '[]',
+        costsUsd: 0,
+        runIds: '[]',
+      },
+      {
+        id: 3,
+        projectId: 'p',
+        workItemId: 'w3',
+        closedAt: '2026-04-12T00:00:00Z',
+        decisionSummaries: '[]',
+        learningEntries: '[]',
+        qualityScores: '[]',
+        costsUsd: 0,
+        runIds: '[]',
+      },
+    ]);
+    mockComputeGateThresholds.mockReturnValue([]);
+    mockComputeCostBaselines.mockReturnValue([]);
+    mockDb.all = vi.fn().mockReturnValue([{ id: 78 }]);
+    mockGetProjectBySlug.mockResolvedValueOnce({
+      budgets: {},
+      agentConfig: {
+        coachPolicy: { enabled: false, consistencyThreshold: 0.8, minLifecycles: 3 },
+      },
+    });
+    mockRun.mockResolvedValueOnce(
+      makeManifestOutput({
+        topPatterns: [
+          {
+            patternId: 'PLAN::developer',
+            pattern: 'x',
+            occurrenceCount: 3,
+            consistencyScore: 0.95,
+            exampleWorkItemIds: [],
+          },
+        ],
+        improvementCandidates: [
+          {
+            kind: 'skill-prompt',
+            targetPath: 'skills/implement/prompt.md',
+            suggestionText: 's',
+            evidence: 'pattern:PLAN::developer',
+            confidence: 'high',
+          },
+        ],
+      }),
+    );
+
+    await runCrossRunRetroWorkflow({
+      projectId: 'p',
+      dateRange: { startAt: '2026-04-01T00:00:00Z', endAt: '2026-05-01T00:00:00Z' },
+      deps: { coachWorkflowRunner: mockCoachRunner },
+    });
+
+    expect(mockGetCoachPolicy).toHaveBeenCalledWith('p', {
+      enabled: false,
+      consistencyThreshold: 0.8,
+      minLifecycles: 3,
+    });
+    expect(mockCoachRunner).toHaveBeenCalledOnce();
   });
 
   it('passes precomputed gate thresholds + cost baselines into the skill context', async () => {

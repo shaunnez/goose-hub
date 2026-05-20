@@ -97,7 +97,6 @@ describe('DevReviewResponseContextSchema', () => {
           suggestion: 'Add null check',
         },
       ],
-      worktreePath: '/tmp/wt-123',
     });
     expect(result.success).toBe(true);
   });
@@ -106,7 +105,6 @@ describe('DevReviewResponseContextSchema', () => {
     const result = DevReviewResponseContextSchema.safeParse({
       workItem: { title: 'x', body: 'y', number: 1, priority: 'low' },
       prDiff: 'diff',
-      worktreePath: '/tmp/wt',
     });
     expect(result.success).toBe(false);
   });
