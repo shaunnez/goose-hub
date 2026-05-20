@@ -105,7 +105,7 @@ Do not inspect old e2e specs, Playwright config, or screenshot conventions befor
 ### 5. Refactor, Score, Verify
 
 - Refactor only if required for clarity or correctness, then re-run targeted tests.
-- If behavioural tests were written, score `selfQualityScore` against the schema categories and emit one `SELF_SCORE` summary with aggregate and lowest category. If below threshold, do one focused quality refactor, retest, and set `selfScoreBelowThreshold` if still below.
+- If behavioural tests were written, score `selfQualityScore` against the schema categories and emit one `SELF_SCORE` summary with aggregate and lowest category. Field ranges are `openClosed: 0-20`; `conceptCount`, `timeToCapability`, and `complecting: 0-15`; `loc`, `coupling`, and `gallsLaw: 0-10`; `cyclomaticComplexity: 0-5`. Individual fields are not percentages; only the aggregate is out of 100. If below threshold, do one focused quality refactor, retest, and set `selfScoreBelowThreshold` if still below.
 - Run lint/typecheck when commands are provided.
 - Emit `[decision] LINT: Lint/typecheck complete` or the relevant blocker summary.
 

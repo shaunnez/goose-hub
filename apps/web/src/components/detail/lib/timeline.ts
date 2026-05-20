@@ -53,6 +53,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'agent.discovery-budget-exceeded': 'Discovery budget exceeded',
   'agent.wrong-surface-guard': 'Wrong surface guard',
   'agent.output-repaired': 'Output repaired',
+  'agent.output-repair-failed': 'Output repair failed',
   'agent.output-fact-mismatch': 'Output fact mismatch',
   'agent.contract-gate-blocked': 'Contract gate blocked',
   'symbol-index.lookup': 'Symbol index lookup',

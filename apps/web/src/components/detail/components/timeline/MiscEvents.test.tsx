@@ -165,12 +165,23 @@ describe('Misc timeline events', () => {
       },
       13,
     );
+    const repairFailed = makeEvent(
+      'agent.output-repair-failed',
+      {
+        skill: 'implement',
+        reason: 'terminal-output-validation-failed-after-repair-retry',
+        message:
+          'Implementation/tool execution may have succeeded; the failure is terminal JSON output validation.',
+      },
+      14,
+    );
 
     render(
       <ul>
         {renderTimelineItem({ kind: 'event', event: normalized }, 0)}
         {renderTimelineItem({ kind: 'event', event: mismatch }, 1)}
         {renderTimelineItem({ kind: 'event', event: blocked }, 2)}
+        {renderTimelineItem({ kind: 'event', event: repairFailed }, 3)}
       </ul>,
     );
 
@@ -184,6 +195,8 @@ describe('Misc timeline events', () => {
     expect(rendered).toContain('Observed not declared');
     expect(rendered).toContain('Contract gate blocked');
     expect(rendered).toContain('ambiguous-files-owned');
+    expect(rendered).toContain('Output repair failed');
+    expect(rendered).toContain('terminal-output-validation-failed-after-repair-retry');
     expect(rendered).not.toContain('"observedChangedFiles"');
   });
 

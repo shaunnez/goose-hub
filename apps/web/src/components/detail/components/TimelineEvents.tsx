@@ -182,6 +182,7 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <WrongSurfaceGuardEvent key={event.id} event={event} />;
     case 'agent.path-normalized':
     case 'agent.output-repaired':
+    case 'agent.output-repair-failed':
     case 'agent.output-fact-mismatch':
     case 'agent.contract-gate-blocked':
       return <ContractDriftEvent key={event.id} event={event} />;
