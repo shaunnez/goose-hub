@@ -67,7 +67,6 @@ const FORBIDDEN_RUNTIME_SURFACE_PATTERNS: Array<{
   re: RegExp;
 }> = [
   { surface: 'resources/read failed', toolName: 'resources/read', re: /resources\/read\s+failed/i },
-  { surface: 'resources/list failed', toolName: 'resources/list', re: /resources\/list\s+failed/i },
   { surface: 'collab spawn failed', toolName: 'collab.spawn', re: /collab\s+spawn\s+failed/i },
   {
     surface: 'full-history fork/spawn failed',
@@ -150,6 +149,14 @@ function detectForbiddenRuntimeSurface(stderr: string): {
     }
   }
   return null;
+}
+
+function handleForbiddenRuntimeSurface(line: string): {
+  surface: string;
+  toolName: string;
+  blockReason: string;
+} | null {
+  return detectForbiddenRuntimeSurface(line);
 }
 
 export class CodexCliRuntime implements AgentRuntime {
@@ -308,6 +315,7 @@ export class CodexCliRuntime implements AgentRuntime {
       let stdout = '';
       let stderr = '';
       let stdoutLineBuffer = '';
+      let stderrLineBuffer = '';
       let truncated = false;
       let settled = false;
       let toolCallCount = 0;
@@ -358,6 +366,32 @@ export class CodexCliRuntime implements AgentRuntime {
           runId,
           personaId,
         });
+      };
+
+      const failForbiddenRuntimeSurface = (violation: {
+        surface: string;
+        toolName: string;
+        blockReason: string;
+      }) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        emitForbiddenRuntimeSurfaceBlocked(violation);
+        eventStore.appendEvent({
+          projectId,
+          workItemId,
+          kind: 'agent.run-failed',
+          payload: {
+            runId,
+            skill: spec.skill,
+            reason: 'forbidden-runtime-surface',
+            error: violation.blockReason,
+          },
+          runId,
+          personaId,
+        });
+        killProcessGroupOrChild(child);
+        reject(new Error(violation.blockReason));
       };
 
       const handleStdoutLine = (line: string) => {
@@ -527,7 +561,18 @@ export class CodexCliRuntime implements AgentRuntime {
       };
 
       child.stderr?.on('data', (chunk: Buffer) => {
-        stderr += chunk.toString();
+        const text = chunk.toString();
+        stderr += text;
+        stderrLineBuffer += text;
+        const lines = stderrLineBuffer.split(/\r?\n/);
+        stderrLineBuffer = lines.pop() ?? '';
+        for (const line of lines) {
+          const violation = handleForbiddenRuntimeSurface(line);
+          if (violation != null) {
+            failForbiddenRuntimeSurface(violation);
+            return;
+          }
+        }
       });
 
       child.stdout.on('data', (chunk: Buffer) => {
@@ -593,28 +638,29 @@ export class CodexCliRuntime implements AgentRuntime {
         clearTimeout(timeout);
         handleStdoutLine(stdoutLineBuffer);
         stdoutLineBuffer = '';
+        if (stderrLineBuffer.length > 0) {
+          const violation = handleForbiddenRuntimeSurface(stderrLineBuffer);
+          if (violation != null) {
+            emitForbiddenRuntimeSurfaceBlocked(violation);
+            eventStore.appendEvent({
+              projectId,
+              workItemId,
+              kind: 'agent.run-failed',
+              payload: {
+                runId,
+                skill: spec.skill,
+                reason: 'forbidden-runtime-surface',
+                error: violation.blockReason,
+              },
+              runId,
+              personaId,
+            });
+            reject(new Error(violation.blockReason));
+            return;
+          }
+        }
 
         const envelope = parseCodexEnvelope(stdout);
-        const forbiddenRuntimeSurface = detectForbiddenRuntimeSurface(stderr);
-
-        if (forbiddenRuntimeSurface != null) {
-          emitForbiddenRuntimeSurfaceBlocked(forbiddenRuntimeSurface);
-          eventStore.appendEvent({
-            projectId,
-            workItemId,
-            kind: 'agent.run-failed',
-            payload: {
-              runId,
-              skill: spec.skill,
-              reason: 'forbidden-runtime-surface',
-              error: forbiddenRuntimeSurface.blockReason,
-            },
-            runId,
-            personaId,
-          });
-          reject(new Error(forbiddenRuntimeSurface.blockReason));
-          return;
-        }
 
         if (code !== 0 && envelope == null) {
           if (stderrIncludesNativePatchRejection(stderr)) emitNativePatchBlocked();

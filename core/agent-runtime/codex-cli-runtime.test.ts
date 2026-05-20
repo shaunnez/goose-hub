@@ -422,7 +422,6 @@ describe('CodexCliRuntime timeout handling', () => {
       ),
     );
     child.stderr.emit('data', Buffer.from('resources/read failed: file://memory\n'));
-    child.emit('close', 0);
 
     await expect(run).rejects.toThrow('forbidden-runtime-surface');
     expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
@@ -447,6 +446,40 @@ describe('CodexCliRuntime timeout handling', () => {
       }),
     );
     expect(mockEventStore.appendEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent.run-completed' }),
+    );
+  });
+
+  it('does not fail on the startup resources/list probe', async () => {
+    const child = makeHangingChild();
+    mockSpawn.mockReturnValue(child);
+
+    const runtime = new CodexCliRuntime();
+    const run = runtime.run(makeSpec());
+
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        `${JSON.stringify({
+          type: 'item.completed',
+          item: { type: 'agent_message', text: '{"ok":true}' },
+        })}\n`,
+      ),
+    );
+    child.stderr.emit('data', Buffer.from('resources/list failed: startup probe\n'));
+    child.emit('close', 0);
+
+    await expect(run).resolves.toMatchObject({ output: { ok: true } });
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.log',
+        payload: expect.objectContaining({
+          stream: 'stderr',
+          text: 'resources/list failed: startup probe',
+        }),
+      }),
+    );
+    expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'agent.run-completed' }),
     );
   });
