@@ -42,7 +42,11 @@ vi.mock('node:fs', () => ({
   existsSync: vi.fn().mockReturnValue(false),
   readFileSync: vi.fn(),
 }));
-vi.mock('node:os', () => ({ homedir: vi.fn().mockReturnValue('/mock-home') }));
+ vi.mock('node:os', () => ({
+  homedir: vi.fn().mockReturnValue('/mock-home'),
+  tmpdir: vi.fn().mockReturnValue('/mock-tmp'),
+}));
+
 vi.mock('../event-stream/store.js', () => ({
   eventStore: {
     appendEvent: vi
