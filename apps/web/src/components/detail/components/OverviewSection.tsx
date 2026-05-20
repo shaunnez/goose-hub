@@ -100,7 +100,7 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
       </div>
 
       {/* Main content grid */}
-      <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1.4fr' }}>
+      <div className="grid gap-4">
         {/* Brief card */}
         <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
           <div className="px-4 py-3 border-b border-line bg-bg-elev-2">
@@ -125,28 +125,27 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
             )}
           </div>
         </div>
-
-        {/* Dependencies */}
-        {item != null && projectSlug != null && (
-          <DependenciesSection item={item} projectSlug={projectSlug} />
-        )}
-
-        {/* Comments card */}
-        {item != null && projectSlug != null && (
-          <div className="rounded-lg border border-line bg-bg-elev overflow-hidden flex flex-col">
-            <div className="px-4 py-3 border-b border-line bg-bg-elev-2 flex items-center justify-between shrink-0">
-              <div className="text-[10.5px] uppercase tracking-wider text-fg-2">Comments</div>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              <CommentsSection
-                projectSlug={projectSlug}
-                id={item.externalId}
-                externalId={item.externalId}
-              />
-            </div>
-          </div>
-        )}
       </div>
+      {/* Dependencies */}
+      {item != null && projectSlug != null && (
+        <DependenciesSection item={item} projectSlug={projectSlug} />
+      )}
+
+      {/* Comments card */}
+      {item != null && projectSlug != null && (
+        <div className="rounded-lg border border-line bg-bg-elev overflow-hidden flex flex-col">
+          <div className="px-4 py-3 border-b border-line bg-bg-elev-2 flex items-center justify-between shrink-0">
+            <div className="text-[10.5px] uppercase tracking-wider text-fg-2">Comments</div>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <CommentsSection
+              projectSlug={projectSlug}
+              id={item.externalId}
+              externalId={item.externalId}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

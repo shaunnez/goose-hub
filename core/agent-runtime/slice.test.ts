@@ -42,7 +42,7 @@ vi.mock('node:fs', () => ({
   existsSync: vi.fn().mockReturnValue(false),
   readFileSync: vi.fn(),
 }));
- vi.mock('node:os', () => ({
+vi.mock('node:os', () => ({
   homedir: vi.fn().mockReturnValue('/mock-home'),
   tmpdir: vi.fn().mockReturnValue('/mock-tmp'),
 }));
