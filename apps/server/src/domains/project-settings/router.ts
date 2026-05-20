@@ -91,7 +91,7 @@ const RuntimeProfilerQuerySchema = z.object({
 });
 
 const SKILL_CALLERS: Record<string, string[]> = {
-  triage: ['triage-batch workflow', 'fake-run/debug route'],
+  triage: ['triage-batch workflow', 'debug route'],
   'repo-match': ['triage-batch workflow'],
   'bug-enhance': ['inbox promotion'],
   'evidence-post': ['post-QA evidence workflow'],
@@ -99,7 +99,7 @@ const SKILL_CALLERS: Record<string, string[]> = {
   qa: ['post-implementation QA gate'],
   review: ['final review gate'],
   'resolve-conflict': ['conflict resolution workflow'],
-  investigate: ['bug investigation workflow', 'fake-run/debug route'],
+  investigate: ['bug investigation workflow', 'debug route'],
   'playwright-repro': ['bug evidence workflow'],
   'advise-on-plan': ['advisor gate'],
   'spec-author': ['parallel implementation workflow'],

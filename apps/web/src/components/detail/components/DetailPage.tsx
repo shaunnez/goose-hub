@@ -1,5 +1,5 @@
 import { ProjectBudgetBanner } from '@/components/ui/ProjectBudgetBanner';
-import { fetchIssue, fetchIssues, startFakeRun } from '@/lib/api';
+import { fetchIssue, fetchIssues } from '@/lib/api';
 import { LANES, laneForState, sortLaneItems } from '@/lib/lanes.config';
 import { useProjectBudgetStatus } from '@/lib/project-budget';
 import { useActiveMilestone } from '@/state/active-milestone';
@@ -110,17 +110,8 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onBack, onNext, onPrev]);
 
-  const [fakeRunInProgress, setFakeRunInProgress] = useState(false);
   const hasOpenDep = useHasOpenDep(item, slug);
   const { data: budgetStatus } = useProjectBudgetStatus(slug);
-
-  const onFakeRun = useCallback(() => {
-    if (fakeRunInProgress) return;
-    setFakeRunInProgress(true);
-    startFakeRun(slug, id, 'triage').finally(() => {
-      setTimeout(() => setFakeRunInProgress(false), 4000);
-    });
-  }, [fakeRunInProgress, slug, id]);
 
   const currentSection = SECTIONS.find((s) => s.key === section) ?? SECTIONS[0];
   const workItemId = item != null ? `github:${item.repoRef}#${item.externalId}` : '';
@@ -187,15 +178,6 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
             <span className="text-fg font-semibold">#{item?.externalId}</span>
           </span>
           <span className="grow" />
-          <button
-            type="button"
-            onClick={onFakeRun}
-            disabled={fakeRunInProgress}
-            data-testid="fake-run-btn"
-            className="h-7 px-2.5 rounded-md border border-line text-[12px] text-fg-2 hover:text-fg hover:bg-bg-hover disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {fakeRunInProgress ? 'Running...' : 'Start fake triage'}
-          </button>
           <button
             type="button"
             onClick={onPrev}

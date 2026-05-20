@@ -37,7 +37,7 @@ Workflow-owned operations (commit, open PR, transition state, publish evidence) 
  */
 export const FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX = `## Factory tools
 
-Prefer the Factory MCP tools (exposed by the \`factory-tools\` MCP server) over native shell / file primitives:
+Use the Factory MCP tools exposed by the \`factory-tools\` MCP server. Do not use native shell or file primitives unless this run explicitly allows \`Bash\`.
 
 - File reads: \`read_file\`, \`read_many_files\`, \`list_dir\`, \`list_files\`, \`file_exists\`, \`file_info\`
 - Text search: \`search_text\` (not \`rg\` via shell)

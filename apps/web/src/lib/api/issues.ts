@@ -176,14 +176,6 @@ export async function resumeIssue(slug: string, id: string): Promise<void> {
   await postJson(`/projects/${slug}/issues/${id}/resume`, {});
 }
 
-export async function startFakeRun(
-  slug: string,
-  id: string,
-  skill: 'triage' | 'investigate',
-): Promise<void> {
-  await postJson(`/projects/${slug}/issues/${id}/fake-run`, { skill });
-}
-
 export async function transitionState(
   slug: string,
   id: string,
