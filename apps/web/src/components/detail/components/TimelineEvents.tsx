@@ -96,7 +96,7 @@ import {
   SwarmScoutTimeoutEvent,
   SwarmWaveEvent,
 } from './timeline/SwarmEvents';
-import { SymbolIndexHintsUsedEvent } from './timeline/SymbolIndexEvents';
+import { SymbolIndexHintsUsedEvent, SymbolIndexLookupEvent } from './timeline/SymbolIndexEvents';
 import { AgentVerifyCommandEvent, ToolWarningEvent } from './timeline/VerifyToolEvents';
 
 export function renderTimelineItem(item: RenderItem, idx: number, context?: TimelineContext) {
@@ -185,6 +185,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
     case 'agent.output-fact-mismatch':
     case 'agent.contract-gate-blocked':
       return <ContractDriftEvent key={event.id} event={event} />;
+    case 'symbol-index.lookup':
+      return <SymbolIndexLookupEvent key={event.id} event={event} />;
     case 'symbol-index.hints-used':
       return <SymbolIndexHintsUsedEvent key={event.id} event={event} />;
     case 'agent.spawned':

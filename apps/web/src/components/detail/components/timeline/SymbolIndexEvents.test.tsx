@@ -6,10 +6,10 @@ import { renderTimelineItem } from '../TimelineEvents';
 
 afterEach(cleanup);
 
-function makeEvent(payload: unknown): AgentEventDto {
+function makeEvent(payload: unknown, kind = 'symbol-index.hints-used'): AgentEventDto {
   return {
     id: 1,
-    kind: 'symbol-index.hints-used',
+    kind,
     payload,
     runId: 'run-1',
     createdAt: '2026-05-14T02:41:57Z',
@@ -17,6 +17,44 @@ function makeEvent(payload: unknown): AgentEventDto {
     projectId: 'goose-hub-self',
   };
 }
+
+describe('SymbolIndexLookupEvent', () => {
+  it('renders symbol-index.lookup as a useful summary instead of raw JSON', () => {
+    const event = makeEvent(
+      {
+        consumerSkill: 'scout-code-path',
+        identifierCount: 10,
+        hintCount: 0,
+        rawHintCount: 0,
+        consumerHintCounts: {
+          'scout-code-path': 0,
+          'scout-dependency': 0,
+          'scout-schema': 0,
+          'scout-test-inventory': 0,
+        },
+        dbAgeMs: 21_879_393.627685547,
+        stale: false,
+      },
+      'symbol-index.lookup',
+    );
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('Symbol index lookup')).toBeTruthy();
+    expect(
+      screen.getByText('Scout Code Path looked up 10 identifiers and found 0 usable hints'),
+    ).toBeTruthy();
+    expect(screen.getByText('Identifiers')).toBeTruthy();
+    expect(screen.getByText('This scout')).toBeTruthy();
+    expect(screen.getByText('Raw hints')).toBeTruthy();
+    expect(screen.getByText('Index age')).toBeTruthy();
+    expect(document.body.textContent).toContain('6h 4m · Fresh');
+    expect(document.body.textContent).toContain('scout-code-path: 0');
+    expect(document.body.textContent).toContain('scout-test-inventory: 0');
+    expect(screen.getByText('No scout received symbol hints.')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('"consumerHintCounts"');
+  });
+});
 
 describe('SymbolIndexHintsUsedEvent', () => {
   it('renders symbol-index.hints-used as a card instead of raw JSON', () => {

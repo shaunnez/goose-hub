@@ -31,6 +31,17 @@ const SEARCH_MAX_MATCHES = 200;
 const SEARCH_TIMEOUT_MS = 15_000;
 const LIST_FILES_TIMEOUT_MS = 10_000;
 
+const FALLBACK_SKIP_DIRS = new Set([
+  '.codex',
+  '.factory',
+  '.git',
+  '.hg',
+  '.svn',
+  '.agents',
+  '.claude',
+  'node_modules',
+]);
+
 export type FileKind = 'file' | 'dir' | 'symlink' | 'other';
 
 export interface ReadFileResult {
@@ -122,6 +133,126 @@ function rgAuditStatus(result: CommandResult): CommandStatus {
 
 function rgNoMatches(result: CommandResult): boolean {
   return result.status === 'failed' && result.exitCode === 1;
+}
+
+function rgSpawnFailed(result: CommandResult): boolean {
+  return result.status === 'failed' && result.exitCode == null;
+}
+
+function globToRegExp(glob: string): RegExp {
+  let source = '^';
+  for (let i = 0; i < glob.length; i += 1) {
+    const char = glob[i];
+    if (char === '*') {
+      if (glob[i + 1] === '*') {
+        source += '.*';
+        i += 1;
+      } else {
+        source += '.*';
+      }
+      continue;
+    }
+    if (char === '?') {
+      source += '.';
+      continue;
+    }
+    source += char.replace(/[|\\{}()[\]^$+?.]/g, '\\$&');
+  }
+  source += '$';
+  return new RegExp(source);
+}
+
+function matchesOptionalGlob(path: string, glob: string | undefined): boolean {
+  if (glob == null || glob.trim().length === 0) return true;
+  const matcher = globToRegExp(glob);
+  return matcher.test(path);
+}
+
+async function walkFilePaths(input: {
+  workspaceRoot: string;
+  searchPath: string;
+  limit: number;
+  glob?: string;
+}): Promise<{ files: RepoRelativePath[]; truncated: boolean }> {
+  const files: RepoRelativePath[] = [];
+  let truncated = false;
+
+  async function walk(repoRelativeDir: string): Promise<void> {
+    if (files.length >= input.limit) {
+      truncated = true;
+      return;
+    }
+
+    const absoluteDir =
+      repoRelativeDir.length === 0
+        ? input.workspaceRoot
+        : join(input.workspaceRoot, repoRelativeDir);
+    const dirents = await readdir(absoluteDir, { withFileTypes: true });
+
+    for (const dirent of dirents) {
+      if (files.length >= input.limit) {
+        truncated = true;
+        return;
+      }
+      if (dirent.isDirectory() && FALLBACK_SKIP_DIRS.has(dirent.name)) continue;
+
+      const repoRelativePath =
+        repoRelativeDir.length === 0 ? dirent.name : `${repoRelativeDir}/${dirent.name}`;
+      if (dirent.isDirectory()) {
+        await walk(repoRelativePath);
+        continue;
+      }
+      if (!dirent.isFile() || !matchesOptionalGlob(repoRelativePath, input.glob)) continue;
+      files.push(rawPathToCanonical(repoRelativePath, input.workspaceRoot));
+    }
+  }
+
+  await walk(input.searchPath === '.' ? '' : input.searchPath);
+  return { files, truncated };
+}
+
+function queryToRegExp(query: string): RegExp {
+  try {
+    return new RegExp(query);
+  } catch {
+    return new RegExp(query.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&'));
+  }
+}
+
+async function fallbackSearchText(input: {
+  workspaceRoot: string;
+  searchPath: string;
+  query: string;
+  limit: number;
+  glob?: string;
+}): Promise<SearchTextResult> {
+  const matches: SearchMatch[] = [];
+  const listing = await walkFilePaths({
+    workspaceRoot: input.workspaceRoot,
+    searchPath: input.searchPath,
+    limit: Number.MAX_SAFE_INTEGER,
+    glob: input.glob,
+  });
+  const query = queryToRegExp(input.query);
+
+  for (const file of listing.files) {
+    if (matches.length >= input.limit) break;
+    let content: string;
+    try {
+      content = await readFile(join(input.workspaceRoot, file.path), 'utf8');
+    } catch {
+      continue;
+    }
+    const lines = content.split(/\r?\n/);
+    for (let index = 0; index < lines.length; index += 1) {
+      if (matches.length >= input.limit) break;
+      query.lastIndex = 0;
+      if (!query.test(lines[index])) continue;
+      matches.push({ path: file, line: index + 1, text: lines[index] });
+    }
+  }
+
+  return { matches, truncated: listing.truncated || matches.length >= input.limit };
 }
 
 /**
@@ -301,24 +432,36 @@ export async function listFilesTool(
     env: minimalEnv(),
   });
 
-  const lines = result.stdout
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
+  let truncated: boolean;
+  let files: RepoRelativePath[];
 
-  const truncated = result.truncated || lines.length > limit;
-  const rawFiles = lines.slice(0, limit);
-  const files: RepoRelativePath[] = rawFiles.map((rawPath) =>
-    rawPathToCanonical(rawPath, ctx.workspaceRoot),
-  );
+  if (rgSpawnFailed(result)) {
+    const fallback = await walkFilePaths({
+      workspaceRoot: ctx.workspaceRoot,
+      searchPath,
+      limit,
+      glob: input.glob,
+    });
+    truncated = fallback.truncated;
+    files = fallback.files;
+  } else {
+    const lines = result.stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    truncated = result.truncated || lines.length > limit;
+    const rawFiles = lines.slice(0, limit);
+    files = rawFiles.map((rawPath) => rawPathToCanonical(rawPath, ctx.workspaceRoot));
+  }
 
   emitToolCall(ctx, {
     tool: 'list_files',
     input: { path: input.path ?? null, glob: input.glob ?? null },
-    status: rgAuditStatus(result),
+    status: rgSpawnFailed(result) ? 'ok' : rgAuditStatus(result),
     durationMs: result.durationMs,
     truncated,
-    noMatches: rgNoMatches(result),
+    noMatches: files.length === 0 && (rgSpawnFailed(result) || rgNoMatches(result)),
   });
   return { files, truncated };
 }
@@ -368,34 +511,48 @@ export async function searchTextTool(
   });
 
   const limit = Math.min(input.maxMatches ?? SEARCH_MAX_MATCHES, SEARCH_MAX_MATCHES);
-  const matches: SearchMatch[] = [];
+  let matches: SearchMatch[];
+  let truncated: boolean;
 
-  for (const line of result.stdout.split('\n')) {
-    if (matches.length >= limit) break;
-    if (line.length === 0) continue;
-    // rg format: `<path>:<line>:<text>`. Path can contain colons on Windows
-    // but the worktree is POSIX in practice. Split on the first two colons
-    // only so the text payload preserves any colons it contains.
-    const firstColon = line.indexOf(':');
-    if (firstColon === -1) continue;
-    const secondColon = line.indexOf(':', firstColon + 1);
-    if (secondColon === -1) continue;
-    const rawPath = line.slice(0, firstColon);
-    const lineNum = Number.parseInt(line.slice(firstColon + 1, secondColon), 10);
-    const text = line.slice(secondColon + 1);
-    if (!Number.isFinite(lineNum)) continue;
-    matches.push({ path: rawPathToCanonical(rawPath, ctx.workspaceRoot), line: lineNum, text });
+  if (rgSpawnFailed(result)) {
+    const fallback = await fallbackSearchText({
+      workspaceRoot: ctx.workspaceRoot,
+      searchPath,
+      query: input.query,
+      limit,
+      glob: input.glob,
+    });
+    matches = fallback.matches;
+    truncated = fallback.truncated;
+  } else {
+    matches = [];
+    for (const line of result.stdout.split('\n')) {
+      if (matches.length >= limit) break;
+      if (line.length === 0) continue;
+      // rg format: `<path>:<line>:<text>`. Path can contain colons on Windows
+      // but the worktree is POSIX in practice. Split on the first two colons
+      // only so the text payload preserves any colons it contains.
+      const firstColon = line.indexOf(':');
+      if (firstColon === -1) continue;
+      const secondColon = line.indexOf(':', firstColon + 1);
+      if (secondColon === -1) continue;
+      const rawPath = line.slice(0, firstColon);
+      const lineNum = Number.parseInt(line.slice(firstColon + 1, secondColon), 10);
+      const text = line.slice(secondColon + 1);
+      if (!Number.isFinite(lineNum)) continue;
+      matches.push({ path: rawPathToCanonical(rawPath, ctx.workspaceRoot), line: lineNum, text });
+    }
+
+    truncated = result.truncated || matches.length >= limit;
   }
-
-  const truncated = result.truncated || matches.length >= limit;
 
   emitToolCall(ctx, {
     tool: 'search_text',
     input: { query: input.query, path: input.path ?? null, glob: input.glob ?? null },
-    status: rgAuditStatus(result),
+    status: rgSpawnFailed(result) ? 'ok' : rgAuditStatus(result),
     durationMs: result.durationMs,
     truncated,
-    noMatches: rgNoMatches(result),
+    noMatches: matches.length === 0 && (rgSpawnFailed(result) || rgNoMatches(result)),
   });
   return { matches, truncated };
 }
