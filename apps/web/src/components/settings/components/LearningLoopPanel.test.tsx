@@ -28,6 +28,11 @@ function renderPanel() {
 }
 
 describe('LearningLoopPanel', () => {
+  afterEach(() => {
+    mockFetchLearningLoopSettings.mockReset();
+    mockPatchLearningLoopSettings.mockClear();
+  });
+
   it('renders coach policy and patches toggle/numeric controls', async () => {
     mockFetchLearningLoopSettings.mockResolvedValue({
       projectId: 'goose-hub-self',
@@ -64,6 +69,43 @@ describe('LearningLoopPanel', () => {
     await waitFor(() =>
       expect(mockPatchLearningLoopSettings).toHaveBeenCalledWith('goose-hub-self', {
         consistencyThreshold: 0.9,
+      }),
+    );
+  });
+
+  it('skips unchanged numeric blur and can reset overrides to config defaults', async () => {
+    mockFetchLearningLoopSettings.mockResolvedValue({
+      projectId: 'goose-hub-self',
+      coachPolicy: { enabled: true, consistencyThreshold: 0.8, minLifecycles: 3 },
+      configDefaults: { enabled: false, consistencyThreshold: 0.8, minLifecycles: 3 },
+      dbOverrides: {
+        enabled: true,
+        consistencyThreshold: 0.8,
+        minLifecycles: 3,
+        updatedAt: '2026-05-20T00:00:00Z',
+        updatedBy: 'ui',
+      },
+    });
+
+    renderPanel();
+
+    await waitFor(() => expect(screen.getByText('Skill-Coach Auto-Dispatch')).toBeTruthy());
+
+    fireEvent.blur(screen.getByTestId('coach-policy-min-lifecycles-input'));
+    expect(mockPatchLearningLoopSettings).not.toHaveBeenCalled();
+
+    const resetButtons = screen.getAllByRole('button', { name: 'Reset' });
+    fireEvent.click(resetButtons[0]);
+    await waitFor(() =>
+      expect(mockPatchLearningLoopSettings).toHaveBeenCalledWith('goose-hub-self', {
+        enabled: null,
+      }),
+    );
+
+    fireEvent.click(resetButtons[1]);
+    await waitFor(() =>
+      expect(mockPatchLearningLoopSettings).toHaveBeenCalledWith('goose-hub-self', {
+        minLifecycles: null,
       }),
     );
   });

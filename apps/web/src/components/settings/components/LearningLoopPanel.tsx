@@ -18,6 +18,7 @@ function NumberPolicyInput({
   max,
   disabled,
   onCommit,
+  onReset,
 }: {
   label: string;
   testId: string;
@@ -29,6 +30,7 @@ function NumberPolicyInput({
   max: number;
   disabled: boolean;
   onCommit: (value: number | null) => void;
+  onReset: () => void;
 }) {
   const [draft, setDraft] = useState(String(value));
 
@@ -38,11 +40,11 @@ function NumberPolicyInput({
 
   function handleBlur() {
     if (draft === '') {
-      onCommit(null);
+      if (overridden) onCommit(null);
       return;
     }
     const next = step.includes('.') ? Number.parseFloat(draft) : Number.parseInt(draft, 10);
-    if (!Number.isNaN(next)) onCommit(next);
+    if (!Number.isNaN(next) && next !== value) onCommit(next);
   }
 
   return (
@@ -65,6 +67,16 @@ function NumberPolicyInput({
           ].join(' ')}
         />
         {overridden && <span className="text-[10px] font-medium text-accent">override</span>}
+        {overridden && (
+          <button
+            type="button"
+            onClick={onReset}
+            disabled={disabled}
+            className="text-[10px] text-fg-3 underline-offset-2 hover:text-fg hover:underline disabled:opacity-40"
+          >
+            Reset
+          </button>
+        )}
       </div>
       <span className="text-[10px] text-fg-3 font-mono">default: {defaultValue}</span>
     </label>
@@ -122,6 +134,16 @@ export function LearningLoopPanel({ slug }: Props) {
           {overrides?.enabled != null && (
             <span className="text-[10px] font-medium text-accent">override</span>
           )}
+          {overrides?.enabled != null && (
+            <button
+              type="button"
+              onClick={() => patch.mutate({ enabled: null })}
+              disabled={patch.isPending}
+              className="text-[10px] text-fg-3 underline-offset-2 hover:text-fg hover:underline disabled:opacity-40"
+            >
+              Reset
+            </button>
+          )}
         </label>
         <div className="flex min-w-0 flex-wrap gap-5">
           <NumberPolicyInput
@@ -135,6 +157,7 @@ export function LearningLoopPanel({ slug }: Props) {
             step="1"
             disabled={patch.isPending}
             onCommit={(minLifecycles) => patch.mutate({ minLifecycles })}
+            onReset={() => patch.mutate({ minLifecycles: null })}
           />
           <NumberPolicyInput
             label="Consistency threshold"
@@ -147,6 +170,7 @@ export function LearningLoopPanel({ slug }: Props) {
             step="0.01"
             disabled={patch.isPending}
             onCommit={(consistencyThreshold) => patch.mutate({ consistencyThreshold })}
+            onReset={() => patch.mutate({ consistencyThreshold: null })}
           />
         </div>
       </section>
