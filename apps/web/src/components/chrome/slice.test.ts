@@ -17,13 +17,13 @@ const DEFERRED_SURFACES = [
 describe('chrome slice — sidebar brand label', () => {
   const sidebarSource = readFileSync(join(import.meta.dirname, 'Sidebar.tsx'), 'utf-8');
 
-  it('sidebar header reads "Goose Hub"', () => {
-    expect(sidebarSource).toContain('Goose Hub');
+  it('sidebar header reads "The Goose"', () => {
+    expect(sidebarSource).toContain('The Goose');
   });
 
-  it('sidebar header does not read "Agentic OS"', () => {
+  it('sidebar header no longer reads "Goose Hub"', () => {
     const labelMatch = sidebarSource.match(/<span[^>]*text-\[14px\][^>]*>[\s\S]*?<\/span>/);
-    expect(labelMatch?.[0]).not.toContain('Agentic OS');
+    expect(labelMatch?.[0]).not.toContain('Goose Hub');
   });
 });
 
