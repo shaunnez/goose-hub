@@ -101,6 +101,16 @@ function makePlainEvent(id: number, createdAt: string): AgentEventDto {
   };
 }
 
+function makeCodexTransportWarning(id: number, runId: string): AgentEventDto {
+  return makeRunEvent(id, runId, 'agent.log', {
+    stream: 'stderr',
+    text: JSON.stringify({
+      source: 'responses_websocket',
+      message: 'failed to connect to websocket: 503 Service Unavailable',
+    }),
+  });
+}
+
 function makeIntervention(overrides: Partial<InterventionDto> = {}): InterventionDto {
   return {
     id: 'intervention-123456789',
@@ -269,6 +279,34 @@ describe('TimelineSection — expand/collapse all', () => {
     expect(await screen.findByText('gpt-5.4-mini')).toBeTruthy();
     expect(screen.getByText('codex-cli')).toBeTruthy();
     expect(screen.getByText(/Started .* Running for/)).toBeTruthy();
+  });
+
+  it('renders recovered Codex websocket 503 stderr as a warning without changing completed status', async () => {
+    const { fetchEventsPage } = await import('@/lib/api');
+    const rawWarning = JSON.stringify({
+      source: 'responses_websocket',
+      message: 'failed to connect to websocket: 503 Service Unavailable',
+    });
+    vi.mocked(fetchEventsPage).mockResolvedValue({
+      events: [
+        makeRunEvent(1, 'run-codex', 'agent.run-started', { skill: 'implement' }),
+        makeCodexTransportWarning(2, 'run-codex'),
+        makeRunEvent(3, 'run-codex', 'agent.run-completed', { skill: 'implement' }),
+      ],
+      hasMore: false,
+    });
+
+    const { TimelineSection } = await import('./TimelineSection');
+    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
+
+    await screen.findByTestId('timeline-expand-all');
+    fireEvent.click(screen.getByTestId('timeline-expand-all'));
+
+    expect(await screen.findByText('Complete')).toBeTruthy();
+    expect(
+      await screen.findByText('Codex transport warning: websocket 503; run recovered'),
+    ).toBeTruthy();
+    expect(screen.queryByText(rawWarning)).toBeNull();
   });
 
   it('invalidates issue costs when a run terminal event arrives over SSE', async () => {

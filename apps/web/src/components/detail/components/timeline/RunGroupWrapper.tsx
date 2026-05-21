@@ -1,6 +1,6 @@
 import { resumeIssue } from '@/lib/api';
 import { getPersonaLabel, usePersonaMap } from '@/lib/usePersonaMap';
-import { ChevronDown, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import {
   type RenderItem,
@@ -8,6 +8,8 @@ import {
   computeIsWritePrdStuck,
   formatDuration,
   formatSkillName,
+  getAgentLogDisplayText,
+  isCodexTransportWarningLog,
 } from '../../lib/timeline';
 import { CostBadge } from '../CostBadge';
 
@@ -61,16 +63,33 @@ export function RunGroupWrapper({
     setOpen(expandOpen);
   }, [expandTick, expandOpen]);
 
-  const displayItems = items.map((item) => {
-    if (
-      item.kind === 'event' &&
-      (item.event.kind === 'agent.run-completed' || item.event.kind === 'agent.run-failed') &&
-      lastEventAt != null
-    ) {
-      return { ...item, event: { ...item.event, createdAt: lastEventAt } };
-    }
-    return item;
-  });
+  const groupEventList = items
+    .filter((item): item is Extract<RenderItem, { kind: 'event' }> => item.kind === 'event')
+    .map((item) => item.event);
+  const hasCompleted = groupEventList.some((event) => event.kind === 'agent.run-completed');
+  const isFailed = groupEventList.some((event) => event.kind === 'agent.run-failed');
+  const codexTransportWarnings = groupEventList.filter(isCodexTransportWarningLog);
+  const codexTransportWarning = codexTransportWarnings[0] ?? null;
+  const warningRecovered = codexTransportWarning != null && hasCompleted;
+
+  const displayItems = items
+    .filter(
+      (item) =>
+        !(
+          item.kind === 'event' &&
+          codexTransportWarnings.some((event) => event.id === item.event.id)
+        ),
+    )
+    .map((item) => {
+      if (
+        item.kind === 'event' &&
+        (item.event.kind === 'agent.run-completed' || item.event.kind === 'agent.run-failed') &&
+        lastEventAt != null
+      ) {
+        return { ...item, event: { ...item.event, createdAt: lastEventAt } };
+      }
+      return item;
+    });
   const getItemTs = (item: RenderItem): number => {
     if (item.kind === 'event') {
       const base = new Date(item.event.createdAt).getTime();
@@ -92,10 +111,6 @@ export function RunGroupWrapper({
   const liveDuration = startMs != null ? formatDuration(now - startMs) : null;
   const completeDuration =
     startMs != null && endMs != null ? formatDuration((lastMs ?? endMs) - startMs) : null;
-  const isFailed = items.some(
-    (item) => item.kind === 'event' && item.event.kind === 'agent.run-failed',
-  );
-
   const isOrphaned = items.some(
     (item) =>
       item.kind === 'event' &&
@@ -103,9 +118,6 @@ export function RunGroupWrapper({
       (item.event.payload as { orphaned?: boolean } | null)?.orphaned === true,
   );
 
-  const groupEventList = items
-    .filter((item): item is Extract<RenderItem, { kind: 'event' }> => item.kind === 'event')
-    .map((item) => item.event);
   const isWritePrdStuck = computeIsWritePrdStuck(groupEventList);
   const isLatestRun = context?.latestRunId === runId;
   const canResume =
@@ -246,6 +258,25 @@ export function RunGroupWrapper({
             <li className="rounded-md border border-dashed border-[color:var(--accent)]/30 bg-[color:var(--accent)]/5 px-3 py-2 flex items-center gap-2 text-[10.5px] text-[color:var(--accent)]">
               <Loader2 size={12} className="shrink-0 animate-spin" />
               <span className="font-mono uppercase tracking-wider">Agent running…</span>
+            </li>
+          )}
+          {codexTransportWarning != null && (
+            <li
+              className={
+                isFailed && !warningRecovered
+                  ? 'rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 flex items-center gap-2 text-[10.5px] text-[color:var(--danger)]'
+                  : 'rounded-md border border-yellow-500/20 bg-yellow-500/5 px-3 py-2 flex items-center gap-2 text-[10.5px] text-yellow-400'
+              }
+              title={getAgentLogDisplayText(codexTransportWarning)}
+            >
+              <AlertTriangle size={12} className="shrink-0" />
+              <span className="font-mono uppercase tracking-wider">
+                {warningRecovered
+                  ? 'Codex transport warning: websocket 503; run recovered'
+                  : isFailed
+                    ? 'Codex transport warning: websocket 503; run failed after warning'
+                    : 'Codex transport warning: websocket 503; run still active'}
+              </span>
             </li>
           )}
           {sorted.map((item, i) => renderItem(item, idx * 1000 + i, context))}

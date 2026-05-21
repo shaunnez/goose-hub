@@ -46,6 +46,24 @@ function makePromptContextTelemetryLog(id: number): AgentEventDto {
   };
 }
 
+function makeCodexTransportWarningLog(id: number): AgentEventDto {
+  return {
+    id,
+    projectId: 'proj',
+    workItemId: 'wi-1',
+    kind: 'agent.log',
+    payload: {
+      stream: 'stderr',
+      text: JSON.stringify({
+        source: 'responses_websocket',
+        message: 'failed to connect to websocket: 503 Service Unavailable',
+      }),
+    },
+    runId: 'run-codex',
+    createdAt: new Date().toISOString(),
+  };
+}
+
 function makeEvent(id: number, kind: string): AgentEventDto {
   return {
     id,
@@ -146,6 +164,34 @@ describe('groupEvents — agent.log collapsing', () => {
     }
   });
 
+  it('strips the Codex stdin stderr banner from multiline logs before grouping', () => {
+    const stderrLog: AgentEventDto = {
+      ...makeCodexStdinNoiseLog(2),
+      payload: {
+        stream: 'stderr',
+        text: 'Reading additional input from stdin...\nreal warning\nsecond line',
+      },
+    };
+
+    const result = groupEvents([
+      makeRunEvent(1, 'run-codex', 'agent.run-started', 'implement'),
+      stderrLog,
+      makeRunEvent(3, 'run-codex', 'agent.run-completed', 'implement'),
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].kind).toBe('run-group');
+    if (result[0].kind === 'run-group') {
+      const log = result[0].items.find(
+        (item) => item.kind === 'event' && item.event.kind === 'agent.log',
+      );
+      expect(log?.kind).toBe('event');
+      if (log?.kind === 'event') {
+        expect((log.event.payload as { text?: string }).text).toBe('real warning\nsecond line');
+      }
+    }
+  });
+
   it('filters prompt context telemetry before grouping', () => {
     const result = groupEvents([
       makeRunEvent(1, 'run-codex', 'agent.run-started', 'implement'),
@@ -180,6 +226,31 @@ describe('groupEvents — agent.log collapsing', () => {
     expect(result[0].kind).toBe('event');
     if (result[0].kind === 'event') {
       expect(result[0].event).toBe(stderrLog);
+    }
+  });
+
+  it('keeps Codex websocket transport warnings inside the run group instead of a log group', () => {
+    const result = groupEvents([
+      makeRunEvent(1, 'run-codex', 'agent.run-started', 'implement'),
+      { ...makeLogEvent(2), runId: 'run-codex' },
+      makeCodexTransportWarningLog(3),
+      { ...makeLogEvent(4), runId: 'run-codex' },
+      { ...makeLogEvent(5), runId: 'run-codex' },
+      { ...makeLogEvent(6), runId: 'run-codex' },
+      makeRunEvent(7, 'run-codex', 'agent.run-completed', 'implement'),
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].kind).toBe('run-group');
+    if (result[0].kind === 'run-group') {
+      expect(
+        result[0].items.some(
+          (item) =>
+            item.kind === 'event' &&
+            item.event.kind === 'agent.log' &&
+            (item.event.payload as { text?: string }).text?.includes('responses_websocket'),
+        ),
+      ).toBe(true);
     }
   });
 });
