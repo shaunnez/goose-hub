@@ -5,6 +5,7 @@ import {
   computeIsLive,
   computeIsWritePrdStuck,
   groupByDevPhase,
+  groupByReviewWorkflow,
   groupEvents,
 } from './timeline';
 
@@ -647,6 +648,138 @@ describe('groupByDevPhase', () => {
     expect(result.some((item) => item.kind === 'run-group' && item.runId === REPAIR_RUN)).toBe(
       true,
     );
+  });
+});
+
+describe('groupEvents — convergent review runs', () => {
+  it('groups reviewer child runs and review lifecycle events into one review-group', () => {
+    const REVIEW_RUN = 'review-workflow-123';
+    const SLOT_A = 'review-slot-a';
+    const SLOT_B = 'review-slot-b';
+    const events: AgentEventDto[] = [
+      makeEvent(1, 'agent.run-started', SLOT_A, {
+        payload: { skill: 'review', reviewWorkflowRunId: REVIEW_RUN, round: 1, slotIndex: 0 },
+      }),
+      makeEvent(2, 'review.slot-completed', SLOT_A, {
+        payload: {
+          reviewWorkflowRunId: REVIEW_RUN,
+          round: 1,
+          slotIndex: 0,
+          slotModel: 'claude',
+          promptVariant: 'default',
+          verdict: 'approved',
+          confidence: 0.9,
+          findingsCount: 0,
+          criteriaChecks: [],
+        },
+      }),
+      makeEvent(3, 'agent.run-started', SLOT_B, {
+        payload: { skill: 'review', reviewWorkflowRunId: REVIEW_RUN, round: 1, slotIndex: 1 },
+      }),
+      makeEvent(4, 'review.slot-completed', SLOT_B, {
+        payload: {
+          reviewWorkflowRunId: REVIEW_RUN,
+          round: 1,
+          slotIndex: 1,
+          slotModel: 'codex',
+          promptVariant: 'unconstrained',
+          verdict: 'approved',
+          confidence: 0.85,
+          findingsCount: 0,
+          criteriaChecks: [],
+        },
+      }),
+      makeEvent(5, 'review.wave-completed', null, {
+        payload: { reviewWorkflowRunId: REVIEW_RUN, round: 1, roundFindingsCount: 0 },
+      }),
+      makeEvent(6, 'review.converged', null, {
+        payload: { reviewWorkflowRunId: REVIEW_RUN, totalRounds: 1 },
+      }),
+      makeEvent(7, 'review.completed', null, {
+        payload: { reviewWorkflowRunId: REVIEW_RUN, verdict: 'approved', confidence: 0.88 },
+      }),
+      makeEvent(8, 'state.transitioned', null, {
+        payload: { reviewWorkflowRunId: REVIEW_RUN, to: 'factory:approved' },
+      }),
+    ];
+
+    const result = groupEvents(events);
+    expect(result).toHaveLength(1);
+    expect(result[0].kind).toBe('review-group');
+    if (result[0].kind !== 'review-group') return;
+
+    expect(result[0].reviewWorkflowRunId).toBe(REVIEW_RUN);
+    expect(result[0].status).toBe('completed');
+    expect(result[0].items.some((item) => item.kind === 'run-group' && item.runId === SLOT_A)).toBe(
+      true,
+    );
+    expect(result[0].items.some((item) => item.kind === 'run-group' && item.runId === SLOT_B)).toBe(
+      true,
+    );
+    const parentEventKinds = result[0].items
+      .filter((item) => item.kind === 'event')
+      .map((item) => (item as Extract<typeof item, { kind: 'event' }>).event.kind);
+    expect(parentEventKinds).toEqual(
+      expect.arrayContaining([
+        'review.wave-completed',
+        'review.converged',
+        'review.completed',
+        'state.transitioned',
+      ]),
+    );
+  });
+
+  it('marks review-group terminal on review.completed needs-human', () => {
+    const REVIEW_RUN = 'review-workflow-needs-human';
+    const result = groupByReviewWorkflow([
+      {
+        kind: 'event',
+        event: makeEvent(1, 'review.completed', null, {
+          payload: { reviewWorkflowRunId: REVIEW_RUN, verdict: 'needs-human' },
+        }),
+      },
+    ]);
+
+    expect(result[0].kind).toBe('review-group');
+    if (result[0].kind === 'review-group') {
+      expect(result[0].status).toBe('needs-human');
+      expect(result[0].endedAt).toBe(result[0].lastEventAt);
+    }
+  });
+
+  it('keeps child reviewer output inside the review parent group', () => {
+    const REVIEW_RUN = 'review-workflow-output';
+    const SLOT_RUN = 'review-slot-output';
+    const result = groupEvents([
+      makeEvent(1, 'agent.run-started', SLOT_RUN, {
+        payload: { skill: 'review', reviewWorkflowRunId: REVIEW_RUN },
+      }),
+      makeEvent(2, 'review.slot-completed', SLOT_RUN, {
+        payload: {
+          reviewWorkflowRunId: REVIEW_RUN,
+          round: 1,
+          slotIndex: 0,
+          verdict: 'needs-fix',
+          confidence: 0.7,
+          findingsCount: 1,
+          criteriaChecks: [{ criterion: 'AC1', status: 'unmet' }],
+        },
+      }),
+    ]);
+
+    expect(result[0].kind).toBe('review-group');
+    if (result[0].kind !== 'review-group') return;
+    const childRun = result[0].items.find(
+      (item) => item.kind === 'run-group' && item.runId === SLOT_RUN,
+    ) as Extract<(typeof result)[0], { kind: 'review-group' }>['items'][number] | undefined;
+    expect(childRun?.kind).toBe('run-group');
+    if (childRun?.kind === 'run-group') {
+      expect(
+        childRun.items.some(
+          (item) => item.kind === 'event' && item.event.kind === 'review.slot-completed',
+        ),
+      ).toBe(true);
+    }
   });
 });
 

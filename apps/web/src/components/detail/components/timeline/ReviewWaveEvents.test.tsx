@@ -108,6 +108,21 @@ describe('ReviewWaveEvents', () => {
       'Review escalated',
       'cap-with-new-critical',
     ],
+    [
+      'review.slot-completed',
+      {
+        round: 1,
+        slotIndex: 0,
+        slotModel: 'claude',
+        promptVariant: 'default',
+        verdict: 'approved',
+        confidence: 0.92,
+        findingsCount: 0,
+        criteriaChecks: [{ criterion: 'AC1', status: 'met' }],
+      },
+      'Review slot 1 completed',
+      '92%',
+    ],
   ])('routes %s through a custom timeline renderer', (kind, payload, title, detail) => {
     render(
       <ul>

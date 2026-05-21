@@ -3,6 +3,7 @@ import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { assembleSpawnContext } from '@goose-hub/core/agent-runtime/context-assembly.js';
 import type { AgentResult, AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
+import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
@@ -68,7 +69,16 @@ function getQaVerdict(
  * Divergent verdicts (approved + needs-fix) → verdictsDiverge: true.
  */
 export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<ReviewWaveResult> {
-  const { pr, qaResult, round, priorFindings, workItem, projectSlug, runtimeForSlot } = opts;
+  const {
+    pr,
+    qaResult,
+    round,
+    priorFindings,
+    workItem,
+    projectSlug,
+    reviewWorkflowRunId,
+    runtimeForSlot,
+  } = opts;
 
   const projectConfig = await getProjectBySlug(projectSlug);
   const reviewJsonSchema = toJsonSchema(ReviewOutputSchema);
@@ -97,7 +107,13 @@ export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<
       reviewPrompt,
       reviewJsonSchema,
       resolvedBudgets,
-      extraEventPayload: { round, slotModel: slot.model, promptVariant: slot.prompt },
+      extraEventPayload: {
+        reviewWorkflowRunId,
+        round,
+        slotIndex: i,
+        slotModel: slot.model,
+        promptVariant: slot.prompt,
+      },
     });
   });
 
@@ -115,6 +131,48 @@ export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<
   const parsed = rawResults.map((r) =>
     r instanceof Error ? null : ReviewOutputSchema.safeParse((r as AgentResult).output),
   );
+
+  const successfulReviewerOutputs = parsed.flatMap((p, i) => {
+    if (p == null || !p.success) return [];
+    const slot = slots[i];
+    return [
+      {
+        parsed: p.data,
+        runId: runIds[i],
+        round,
+        slotIndex: i,
+        slotModel: slot.model,
+        promptVariant: slot.prompt,
+      },
+    ];
+  });
+
+  for (const output of successfulReviewerOutputs) {
+    eventStore.appendEvent({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      kind: 'review.slot-completed',
+      payload: {
+        reviewWorkflowRunId,
+        round: output.round,
+        slotIndex: output.slotIndex,
+        slotModel: output.slotModel,
+        promptVariant: output.promptVariant,
+        verdict: output.parsed.verdict,
+        confidence: output.parsed.confidence,
+        findingsCount: output.parsed.findings.length,
+        criteriaChecks: output.parsed.criteriaChecks,
+      },
+      runId: output.runId,
+    });
+    reconcileDecisionSummaries(
+      output.runId,
+      projectSlug,
+      workItem.id,
+      'review',
+      output.parsed.decisionSummaries,
+    );
+  }
 
   if (parsed.some((p) => p == null || !p.success)) {
     const errors = rawResults
@@ -158,7 +216,7 @@ export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<
   return {
     roundFindings,
     newCriticalFindings,
-    reviewerOutputs: parsedData.map((d, i) => ({ parsed: d, runId: runIds[i] })),
+    reviewerOutputs: successfulReviewerOutputs,
     parseFailure: false,
     anyNeedsHuman,
     anyNeedsFix,
@@ -179,6 +237,8 @@ export async function runConvergentReviewWorkflow(
   _targetRepo: string,
   deps: { runtime?: AgentRuntime } = {},
 ): Promise<void> {
+  const reviewWorkflowRunId = crypto.randomUUID();
+  const reviewWorkflowPayload = { reviewWorkflowRunId };
   const injectedRuntime = deps.runtime;
   const runtimeForSlot = injectedRuntime
     ? () => injectedRuntime
@@ -220,6 +280,7 @@ export async function runConvergentReviewWorkflow(
         priorFindings: previousRoundFindings,
         workItem,
         projectSlug,
+        reviewWorkflowRunId,
         runtimeForSlot,
       });
 
@@ -228,7 +289,7 @@ export async function runConvergentReviewWorkflow(
           projectId: projectSlug,
           workItemId: workItem.id,
           kind: 'review.wave-failed',
-          payload: { round, error: waveResult.parseFailureError },
+          payload: { ...reviewWorkflowPayload, round, error: waveResult.parseFailureError },
           runId: crypto.randomUUID(),
         });
         await stateSource.comment(
@@ -251,6 +312,7 @@ export async function runConvergentReviewWorkflow(
           from: 'factory:needs-review',
           to: 'factory:needs-human',
           by: 'convergent-review',
+          extraPayload: reviewWorkflowPayload,
         });
         return;
       }
@@ -260,6 +322,7 @@ export async function runConvergentReviewWorkflow(
         workItemId: workItem.id,
         kind: 'review.wave-completed',
         payload: {
+          ...reviewWorkflowPayload,
           round,
           roundFindingsCount: waveResult.roundFindings.length,
           newCriticalCount: waveResult.newCriticalFindings.length,
@@ -283,7 +346,12 @@ export async function runConvergentReviewWorkflow(
           projectId: projectSlug,
           workItemId: workItem.id,
           kind: 'review.escalated',
-          payload: { reason: 'reviewer-needs-human', round, escalationReason },
+          payload: {
+            ...reviewWorkflowPayload,
+            reason: 'reviewer-needs-human',
+            round,
+            escalationReason,
+          },
           runId,
         });
         eventStore.appendEvent({
@@ -291,6 +359,7 @@ export async function runConvergentReviewWorkflow(
           workItemId: workItem.id,
           kind: 'review.completed',
           payload: {
+            ...reviewWorkflowPayload,
             verdict: 'needs-human',
             confidence: humanReviewer?.parsed.confidence ?? 0,
             criteriaChecks: humanReviewer?.parsed.criteriaChecks ?? [],
@@ -321,6 +390,7 @@ export async function runConvergentReviewWorkflow(
           to: 'factory:needs-human',
           by: 'convergent-review',
           runId,
+          extraPayload: reviewWorkflowPayload,
         });
         return;
       }
@@ -332,7 +402,7 @@ export async function runConvergentReviewWorkflow(
           projectId: projectSlug,
           workItemId: workItem.id,
           kind: 'review.escalated',
-          payload: { reason: 'divergent-verdicts', round },
+          payload: { ...reviewWorkflowPayload, reason: 'divergent-verdicts', round },
           runId,
         });
         eventStore.appendEvent({
@@ -340,6 +410,7 @@ export async function runConvergentReviewWorkflow(
           workItemId: workItem.id,
           kind: 'review.completed',
           payload: {
+            ...reviewWorkflowPayload,
             verdict: 'needs-human',
             confidence: 0,
             criteriaChecks: [],
@@ -370,6 +441,7 @@ export async function runConvergentReviewWorkflow(
           to: 'factory:needs-human',
           by: 'convergent-review',
           runId,
+          extraPayload: reviewWorkflowPayload,
         });
         return;
       }
@@ -397,7 +469,7 @@ export async function runConvergentReviewWorkflow(
           projectId: projectSlug,
           workItemId: workItem.id,
           kind: 'review.converged',
-          payload: { totalRounds: round },
+          payload: { ...reviewWorkflowPayload, totalRounds: round },
           runId,
         });
 
@@ -422,6 +494,7 @@ export async function runConvergentReviewWorkflow(
           workItemId: workItem.id,
           kind: 'review.completed',
           payload: {
+            ...reviewWorkflowPayload,
             verdict: finalVerdict,
             confidence: avgConfidence,
             criteriaChecks: [],
@@ -451,6 +524,7 @@ export async function runConvergentReviewWorkflow(
             to: 'factory:needs-human',
             by: 'convergent-review',
             runId,
+            extraPayload: reviewWorkflowPayload,
           });
           return;
         }
@@ -476,6 +550,7 @@ export async function runConvergentReviewWorkflow(
           to: 'factory:approved',
           by: 'convergent-review',
           runId,
+          extraPayload: reviewWorkflowPayload,
         });
         return;
       }
@@ -488,6 +563,7 @@ export async function runConvergentReviewWorkflow(
           workItemId: workItem.id,
           kind: 'review.escalated',
           payload: {
+            ...reviewWorkflowPayload,
             reason: 'cap-with-new-critical',
             round,
             unconvergedFindingsCount: waveResult.newCriticalFindings.length,
@@ -501,6 +577,7 @@ export async function runConvergentReviewWorkflow(
           workItemId: workItem.id,
           kind: 'review.completed',
           payload: {
+            ...reviewWorkflowPayload,
             verdict: 'needs-human',
             confidence: 0,
             criteriaChecks: [],
@@ -534,6 +611,7 @@ export async function runConvergentReviewWorkflow(
           to: 'factory:needs-human',
           by: 'convergent-review',
           runId,
+          extraPayload: reviewWorkflowPayload,
         });
         return;
       }
@@ -551,6 +629,7 @@ export async function runConvergentReviewWorkflow(
       from: 'factory:needs-review',
       to: 'factory:needs-human',
       by: 'convergent-review',
+      extraPayload: reviewWorkflowPayload,
     });
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
@@ -559,7 +638,7 @@ export async function runConvergentReviewWorkflow(
       projectId: projectSlug,
       workItemId: workItem.id,
       kind: 'agent.run-failed',
-      payload: { error: error.message, skill: 'review' },
+      payload: { ...reviewWorkflowPayload, error: error.message, skill: 'review' },
       runId: catchRunId,
     });
     await stateSource.comment(
@@ -583,6 +662,7 @@ export async function runConvergentReviewWorkflow(
       to: 'factory:needs-human',
       by: 'convergent-review',
       runId: catchRunId,
+      extraPayload: reviewWorkflowPayload,
     });
   }
 }

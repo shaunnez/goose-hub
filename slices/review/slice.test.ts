@@ -883,6 +883,136 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
     expect(completedEvents[0]?.[0].payload).toMatchObject({ verdict: 'approved' });
   });
 
+  it('shares one reviewWorkflowRunId across review lifecycle, state transition, and child output events', async () => {
+    const item = makeWorkItem();
+    const source = makeMockSource({
+      getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+added'),
+    });
+
+    for (let i = 0; i < 6; i++) mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings());
+
+    const { runConvergentReviewWorkflow } = await import('./workflow.js');
+    const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+    await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+    const events = vi.mocked(eventStore.appendEvent).mock.calls.map(([event]) => event);
+    const correlatedEvents = events.filter((event) =>
+      [
+        'review.wave-completed',
+        'review.slot-completed',
+        'review.converged',
+        'review.completed',
+        'state.transitioned',
+      ].includes(event.kind),
+    );
+    const workflowIds = new Set(
+      correlatedEvents.map(
+        (event) => (event.payload as { reviewWorkflowRunId?: string }).reviewWorkflowRunId,
+      ),
+    );
+
+    expect(correlatedEvents.length).toBeGreaterThan(0);
+    expect(workflowIds.size).toBe(1);
+    expect([...workflowIds][0]).toEqual(expect.any(String));
+
+    const firstSpec = mockRun.mock.calls[0][0] as AgentSpec;
+    expect(firstSpec.extraEventPayload).toMatchObject({
+      reviewWorkflowRunId: [...workflowIds][0],
+      round: 1,
+      slotIndex: 0,
+      slotModel: 'claude',
+      promptVariant: 'default',
+    });
+  });
+
+  it('emits review.slot-completed for every reviewer with slot, round, and verdict metadata', async () => {
+    const item = makeWorkItem();
+    const source = makeMockSource({
+      getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+added'),
+    });
+
+    for (let i = 0; i < 6; i++) mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings());
+
+    const { runConvergentReviewWorkflow } = await import('./workflow.js');
+    const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+    await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+    const slotEvents = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(([event]) => event.kind === 'review.slot-completed');
+
+    expect(slotEvents).toHaveLength(mockRun.mock.calls.length);
+    expect(slotEvents[0]?.[0]).toMatchObject({
+      runId: expect.any(String),
+      payload: {
+        round: 1,
+        slotIndex: 0,
+        slotModel: 'claude',
+        promptVariant: 'default',
+        verdict: 'approved',
+        confidence: 0.95,
+        findingsCount: 0,
+        criteriaChecks: [],
+        reviewWorkflowRunId: expect.any(String),
+      },
+    });
+    expect(slotEvents[1]?.[0].payload).toMatchObject({
+      round: 1,
+      slotIndex: 1,
+      promptVariant: 'unconstrained',
+    });
+  });
+
+  it('reconciles each reviewer decision summary under the child reviewer runId', async () => {
+    const item = makeWorkItem();
+    const source = makeMockSource({
+      getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+added'),
+    });
+
+    mockRun.mockResolvedValueOnce({
+      output: {
+        verdict: 'needs-human',
+        confidence: 0.2,
+        criteriaChecks: [],
+        findings: [],
+        decisionSummaries: [{ kind: 'VERDICT', summary: 'slot A needs human' }],
+        escalationReason: 'Spec is ambiguous',
+      },
+      decisionSummaries: [],
+      events: [],
+    } satisfies AgentResult);
+    mockRun.mockResolvedValueOnce({
+      output: {
+        verdict: 'approved',
+        confidence: 0.9,
+        criteriaChecks: [],
+        findings: [],
+        decisionSummaries: [{ kind: 'VERDICT', summary: 'slot B approves' }],
+      },
+      decisionSummaries: [],
+      events: [],
+    } satisfies AgentResult);
+
+    const { runConvergentReviewWorkflow } = await import('./workflow.js');
+    const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+    await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+    const slotRunIds = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(([event]) => event.kind === 'review.slot-completed')
+      .map(([event]) => event.runId);
+    const decisionEvents = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.filter(([event]) => event.kind === 'agent.decision-summary');
+
+    expect(slotRunIds).toHaveLength(2);
+    expect(decisionEvents).toHaveLength(2);
+    expect(decisionEvents.map(([event]) => event.runId).sort()).toEqual([...slotRunIds].sort());
+    expect(
+      decisionEvents.map(([event]) => (event.payload as { summary?: string }).summary),
+    ).toEqual(['slot A needs human', 'slot B approves']);
+  });
+
   // M19.20: configurable reviewer slots — divergent verdicts escalate immediately
   describe('configurable reviewer slots (M19.20)', () => {
     beforeEach(() => {

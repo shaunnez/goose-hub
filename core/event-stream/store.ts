@@ -127,6 +127,7 @@ export type EventKind =
   | 'review.wave-failed'
   | 'review.converged'
   | 'review.escalated'
+  | 'review.slot-completed'
   // M19.12 dev-review advisor — Codex pre-QA pass lifecycle events (#596)
   | 'dev-review.started'
   | 'dev-review.completed'
