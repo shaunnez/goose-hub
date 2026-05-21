@@ -320,6 +320,7 @@ describe('grill-and-prd: round 1 (not ready)', () => {
     const qPosted = evs.find((e) => e.kind === 'grill.question-posted');
     expect(qPosted).toBeDefined();
     expect((qPosted?.payload as { roundNumber: number }).roundNumber).toBe(1);
+    expect((qPosted?.payload as { displaySkill?: string }).displaySkill).toBe('grill-me');
 
     // No write-prd or advisor calls happened
     expect(runtime.run).toHaveBeenCalledTimes(1);
@@ -373,7 +374,9 @@ describe('grill-and-prd: round 2 reaches PRD (advisor skipped by priority)', () 
     // grill.completed and prd.drafted events emitted; advisor skipped with reason 'priority'
     const evs = eventStore.replay({ projectId, workItemId: workItem.id });
     expect(evs.find((e) => e.kind === 'grill.completed')).toBeDefined();
-    expect(evs.find((e) => e.kind === 'prd.drafted')).toBeDefined();
+    const drafted = evs.find((e) => e.kind === 'prd.drafted');
+    expect(drafted).toBeDefined();
+    expect((drafted?.payload as { displaySkill?: string }).displaySkill).toBe('write-prd');
     const skipped = evs.find((e) => e.kind === 'prd.advisor-skipped');
     expect(skipped).toBeDefined();
     expect((skipped?.payload as { reason: string }).reason).toBe('priority');
@@ -602,6 +605,7 @@ describe('grill-and-prd: max rounds reached, proceed straight to PRD', () => {
     const completed = evs.find((e) => e.kind === 'grill.completed');
     expect(completed).toBeDefined();
     expect((completed?.payload as { rounds: number }).rounds).toBe(8); // 7 prior + this round
+    expect((completed?.payload as { displaySkill?: string }).displaySkill).toBe('grill-me');
 
     // No new question-posted event
     expect(evs.find((e) => e.kind === 'grill.question-posted')).toBeUndefined();
@@ -866,6 +870,7 @@ describe('grill-and-prd: crystallization', () => {
     expect(crystEv).toBeDefined();
     expect((crystEv?.payload as { roundNumber: number }).roundNumber).toBe(1);
     expect((crystEv?.payload as { decision: string }).decision).toBe('Audience: admin users only.');
+    expect((crystEv?.payload as { displaySkill?: string }).displaySkill).toBe('grill-me');
   });
 
   it('attaches prior crystallizations to priorReplies before invoking grill-me', async () => {

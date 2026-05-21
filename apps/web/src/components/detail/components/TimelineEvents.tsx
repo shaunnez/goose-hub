@@ -148,7 +148,7 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
   if (item.kind === 'phase-group') {
     return (
       <PhaseGroupWrapper
-        key={`phase-group-${item.pipelineRunId}`}
+        key={`phase-group-${item.phase}-${item.pipelineRunId}`}
         phase={item.phase}
         pipelineRunId={item.pipelineRunId}
         items={item.items}

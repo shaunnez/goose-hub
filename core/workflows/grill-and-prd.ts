@@ -432,6 +432,7 @@ export async function runGrillAndPrdWorkflow(
             workItemId: workItem.id,
             runId: workflowRunId,
             payload: {
+              displaySkill: 'grill-me',
               workflowRunId,
               roundNumber: roundNumber - 1,
               decision: grillOutput.crystallizedDecision.trim(),
@@ -468,7 +469,12 @@ export async function runGrillAndPrdWorkflow(
             projectId,
             workItemId: workItem.id,
             runId: workflowRunId,
-            payload: { workflowRunId, roundNumber, question: outcome.question },
+            payload: {
+              displaySkill: 'grill-me',
+              workflowRunId,
+              roundNumber,
+              question: outcome.question,
+            },
           });
           grillPhaseReturn = { phase: 'grilling', questionPosted: outcome.question };
           return;
@@ -482,6 +488,7 @@ export async function runGrillAndPrdWorkflow(
           workItemId: workItem.id,
           runId: workflowRunId,
           payload: {
+            displaySkill: 'grill-me',
             workflowRunId,
             refinedIntent: outcome.refinedIntent,
             rounds: roundNumber,
@@ -725,7 +732,7 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
       projectId,
       workItemId: workItem.id,
       runId: workflowRunId,
-      payload: { workflowRunId, prd: prdOutput, advisorConcerns },
+      payload: { displaySkill: 'write-prd', workflowRunId, prd: prdOutput, advisorConcerns },
     });
   } catch (err) {
     eventStore.appendEvent({
