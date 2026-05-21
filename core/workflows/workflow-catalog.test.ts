@@ -119,6 +119,28 @@ describe('workflow catalog', () => {
     ]);
   });
 
+  it('shows the legacy bug acceptance-contract gate before implementation', () => {
+    const bug = byKind('bug');
+    const delivery = bug.stages.find((stage) => stage.id === 'delivery-router');
+    const legacy = delivery?.variants?.find((variant) => variant.id === 'legacy-delivery');
+    const simpleBug = delivery?.branches?.find((branch) => branch.id === 'simple-bug-legacy');
+    const acceptanceNode = bug.nodes.find((node) => node.id === 'acceptance-contract-skill');
+
+    expect(acceptanceNode).toMatchObject({
+      skill: 'acceptance-contract',
+      state: 'factory:investigation-complete',
+      mode: 'legacy',
+    });
+    expect(legacy?.nodes).toContain('acceptance-contract-skill');
+    expect(simpleBug?.nodes).toContain('acceptance-contract-skill');
+    expect(
+      bug.edges.some(
+        (edge) =>
+          edge.from === 'investigation-complete' && edge.to === 'acceptance-contract-skill',
+      ),
+    ).toBe(true);
+  });
+
   it('keeps node ids and normal paths internally consistent', () => {
     for (const entry of WORKFLOW_CATALOG) {
       const ids = entry.nodes.map((node) => node.id);

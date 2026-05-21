@@ -114,7 +114,8 @@ function sanitizeSchemaNode(value: unknown): unknown {
     const requiredProperties: string[] = [];
 
     for (const key of Object.keys(properties)) {
-      if (required.has(key)) requiredProperties.push(key);
+      if (!required.has(key)) properties[key] = allowNullSchema(properties[key]);
+      requiredProperties.push(key);
     }
 
     next.properties = properties;
@@ -129,6 +130,39 @@ function isObjectSchema(value: Record<string, unknown>): boolean {
   return (
     value.type === 'object' || isRecord(value.properties) || value.additionalProperties != null
   );
+}
+
+function allowNullSchema(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+
+  const next = { ...value };
+  if (schemaAllowsNull(next)) return next;
+
+  if ('const' in next) {
+    return { anyOf: [next, { type: 'null' }] };
+  }
+
+  if (Array.isArray(next.enum) && !next.enum.includes(null)) {
+    next.enum = [...next.enum, null];
+  }
+
+  if (typeof next.type === 'string') {
+    next.type = [next.type, 'null'];
+    return next;
+  }
+
+  if (Array.isArray(next.type)) {
+    next.type = [...next.type, 'null'];
+    return next;
+  }
+
+  return { anyOf: [next, { type: 'null' }] };
+}
+
+function schemaAllowsNull(value: Record<string, unknown>): boolean {
+  if (value.type === 'null') return true;
+  if (Array.isArray(value.type) && value.type.includes('null')) return true;
+  return false;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

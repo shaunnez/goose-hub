@@ -159,6 +159,35 @@ describe('runTriageBatch', () => {
     expect(mockRuntime.run).toHaveBeenCalledTimes(2);
   });
 
+  it('accepts Codex nullable optional evidence in triage output', async () => {
+    const item = makeWorkItem();
+    const source = makeMockSource([item]);
+
+    mockRuntime.run
+      .mockResolvedValueOnce({
+        output: {
+          ...makeTriageOutput(),
+          decisionSummaries: [{ kind: 'PLAN', summary: 'Bug', evidence: null }],
+        },
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult)
+      .mockResolvedValueOnce({
+        output: makeRepoMatchOutput(),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+    const { runTriageBatch } = await import('./triage-batch.js');
+    await runTriageBatch('goose-hub-self', source);
+
+    expect(mockRuntime.run).toHaveBeenCalledTimes(2);
+    expect(source.transitionState).toHaveBeenCalledWith('42', 'factory:triaging', 'factory:accepted');
+    expect(mockAccumulatePersonaStats).toHaveBeenCalledWith(
+      expect.objectContaining({ role: 'triager', outcome: 'success' }),
+    );
+  });
+
   it('passes repos context to repo-match skill', async () => {
     const item = makeWorkItem();
     const source = makeMockSource([item]);

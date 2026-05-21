@@ -22,6 +22,7 @@ import {
   offeredHintsFromSymbolImpact,
 } from '../symbol-index/hints-used.js';
 import { lookupChangedExportImpact } from '../symbol-index/lookup.js';
+import { omitNullObjectProperties } from './output-normalization.js';
 import type { AgentConfig } from '../types.js';
 import { GIT_ENV } from '../workspaces/git-env.js';
 import { type DiffDigest, buildDiffDigest, formatDiffDigestSummary } from './diff-digest.js';
@@ -312,7 +313,7 @@ export async function runDevReview(input: RunDevReviewInput): Promise<DevReviewO
     appendEvent: input.appendEvent,
   });
 
-  const parsed = DevReviewOutputSchema.safeParse(result.output);
+  const parsed = DevReviewOutputSchema.safeParse(omitNullObjectProperties(result.output));
   if (!parsed.success) {
     input.appendEvent({
       projectId: input.projectId,
@@ -437,7 +438,7 @@ export async function runDevReviewResponse(
     workspaceDir: input.worktreePath,
   });
 
-  const parsed = DevReviewResponseOutputSchema.safeParse(result.output);
+  const parsed = DevReviewResponseOutputSchema.safeParse(omitNullObjectProperties(result.output));
   if (!parsed.success) {
     input.appendEvent({
       projectId: input.projectId,

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { ImplementSchema } from '../../skills/implement/schema.js';
 import { InterventionProposerOutputSchema } from '../../skills/intervention-proposer/schema.js';
 import { ReviewOutputSchema } from '../../skills/review/schema.js';
+import { TriageOutputSchema } from '../../skills/triage/schema.js';
 import { PRDOutputSchema } from '../../skills/write-prd/schema.js';
 import { toJsonSchema } from './schema-bridge.js';
 
@@ -21,7 +22,7 @@ describe('toJsonSchema', () => {
     });
   });
 
-  it('preserves optional object properties without marking them required', () => {
+  it('preserves optional object properties, marks them required, and allows null', () => {
     const schema = z.object({
       decisionSummaries: z.array(
         z.object({
@@ -38,7 +39,21 @@ describe('toJsonSchema', () => {
     const item = field.items as { properties?: Record<string, unknown>; required?: string[] };
 
     expect(item.properties).toHaveProperty('evidence');
-    expect(item.required).toEqual(['kind', 'summary']);
+    expect(item.properties?.evidence).toEqual({ type: ['string', 'null'] });
+    expect(item.required).toEqual(['kind', 'summary', 'evidence']);
+  });
+
+  it('allows null for nested optional decision summary evidence in triage output', () => {
+    const result = toJsonSchema(TriageOutputSchema);
+    const properties = result.properties as Record<string, unknown>;
+    const decisionSummaries = properties.decisionSummaries as { items?: unknown };
+    const item = decisionSummaries.items as {
+      properties?: Record<string, unknown>;
+      required?: string[];
+    };
+
+    expect(item.properties?.evidence).toEqual({ type: ['string', 'null'] });
+    expect(item.required).toEqual(['kind', 'summary', 'evidence']);
   });
 
   it('strips unsupported propertyNames keywords', () => {
@@ -72,6 +87,17 @@ describe('toJsonSchema', () => {
     });
   });
 
+  it('allows null through optional enum schemas', () => {
+    const result = toJsonSchema(z.object({ priority: z.enum(['p1', 'p2']).optional() }));
+    const properties = result.properties as Record<string, unknown>;
+
+    expect(properties.priority).toEqual({
+      type: ['string', 'null'],
+      enum: ['p1', 'p2', null],
+    });
+    expect(result.required).toEqual(['priority']);
+  });
+
   it('keeps implement output schema acceptable for Codex response schemas', () => {
     const result = JSON.stringify(toJsonSchema(ImplementSchema));
 
@@ -98,7 +124,18 @@ describe('toJsonSchema', () => {
       'crossCutting',
       'verifyCommand',
     ]);
-    expect(acceptanceCriterion.required).toEqual(['id', 'statement']);
+    expect(acceptanceCriterion.properties?.journeyId).toEqual({ type: ['string', 'null'] });
+    expect(acceptanceCriterion.properties?.stepIdx).toMatchObject({ type: ['integer', 'null'] });
+    expect(acceptanceCriterion.properties?.crossCutting).toEqual({ type: ['boolean', 'null'] });
+    expect(acceptanceCriterion.properties?.verifyCommand).toEqual({ type: ['string', 'null'] });
+    expect(acceptanceCriterion.required).toEqual([
+      'id',
+      'statement',
+      'journeyId',
+      'stepIdx',
+      'crossCutting',
+      'verifyCommand',
+    ]);
     expect(acceptanceCriterion.additionalProperties).toBe(false);
 
     const implementationDecisions = properties.implementationDecisions as { items?: unknown };
@@ -109,7 +146,9 @@ describe('toJsonSchema', () => {
 
     expect(implementationDecision.properties).toHaveProperty('rationale');
     expect(implementationDecision.properties).toHaveProperty('moduleRef');
-    expect(implementationDecision.required).toEqual(['decision']);
+    expect(implementationDecision.properties?.rationale).toEqual({ type: ['string', 'null'] });
+    expect(implementationDecision.properties?.moduleRef).toEqual({ type: ['string', 'null'] });
+    expect(implementationDecision.required).toEqual(['decision', 'rationale', 'moduleRef']);
 
     const testingDecisions = properties.testingDecisions as {
       properties?: Record<string, unknown>;
@@ -117,7 +156,8 @@ describe('toJsonSchema', () => {
     };
 
     expect(testingDecisions.properties).toHaveProperty('priorArt');
-    expect(testingDecisions.required).toEqual(['approach', 'modulesToTest']);
+    expect(testingDecisions.properties?.priorArt).toEqual({ type: ['string', 'null'] });
+    expect(testingDecisions.required).toEqual(['approach', 'modulesToTest', 'priorArt']);
   });
 
   it('keeps intervention proposer output schema acceptable for Codex response schemas', () => {

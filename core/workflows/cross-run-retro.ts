@@ -4,6 +4,7 @@ import {
   CrossRunRetroOutputSchema,
 } from '../../skills/retrospective-cross-run/schema.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
+import { omitNullObjectProperties } from '../agent-runtime/output-normalization.js';
 import { readPromptWithContext } from '../agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
 import { resolveProjectAgentExecution } from '../agent-runtime/resolve-runtime-for-project.js';
@@ -351,7 +352,7 @@ export async function runCrossRunRetroWorkflow(
       },
     });
 
-    const parsed = CrossRunRetroOutputSchema.safeParse(result.output);
+    const parsed = CrossRunRetroOutputSchema.safeParse(omitNullObjectProperties(result.output));
     if (!parsed.success) {
       eventStore.appendEvent({
         kind: 'agent.run-failed',

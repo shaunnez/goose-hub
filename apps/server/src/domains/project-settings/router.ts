@@ -108,6 +108,7 @@ const SKILL_CALLERS: Record<string, string[]> = {
   review: ['final review gate'],
   'resolve-conflict': ['conflict resolution workflow'],
   investigate: ['bug investigation workflow', 'debug route'],
+  'acceptance-contract': ['legacy bug acceptance contract gate'],
   'playwright-repro': ['bug evidence workflow'],
   'advise-on-plan': ['advisor gate'],
   'spec-author': ['parallel implementation workflow'],
@@ -147,6 +148,7 @@ function roleForSkill(skill: string): Role | undefined {
     skill === 'evidence-post' ||
     skill === 'implement' ||
     skill === 'implement-wp' ||
+    skill === 'acceptance-contract' ||
     skill === 'resolve-conflict' ||
     skill === 'spec-author'
   )

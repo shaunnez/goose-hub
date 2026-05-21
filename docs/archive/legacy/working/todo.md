@@ -168,40 +168,9 @@ Problem: Blocked factory:dev-ready issues are never re-dispatched
 # Pretty sure our bootstrap is out of data with agents
 fix
 
-# GO through settings
-
-# Should be able to set agents to codex ones?
-
-# Budgets not showing defaults
-
-# Review this...
-
-⏺ Full picture (ignoring worktrees):
-
-  ┌─────────────────────────────────────────┬──────────────────────┬─────────────────────────────────────────┐
-  │                Consumer                 │       Bundles        │                 Broken?                 │
-  ├─────────────────────────────────────────┼──────────────────────┼─────────────────────────────────────────┤
-  │ core/agent-runtime/swarm.ts:271         │ ['read']             │                   yes                   │
-  ├─────────────────────────────────────────┼──────────────────────┼─────────────────────────────────────────┤
-  │ core/workflows/grill-and-prd.ts:442     │ ['read']             │                   yes                   │
-  ├─────────────────────────────────────────┼──────────────────────┼─────────────────────────────────────────┤
-  │ core/workflows/grill-and-prd.ts:748,837 │ ['read', 'core']     │            yes (core=empty)             │
-  ├─────────────────────────────────────────┼──────────────────────┼─────────────────────────────────────────┤
-  │ slices/qa/workflow.ts:451               │ ['read', 'qa-tools'] │ no — qa-tools has native Read/Glob/Grep │
-  ├─────────────────────────────────────────┼──────────────────────┼─────────────────────────────────────────┤
-  │ slices/review/workflow.ts:293           │ ['read', 'validate'] │     no — validate has native tools      │
-  └─────────────────────────────────────────┴──────────────────────┴─────────────────────────────────────────┘
-
-  Advice: Update read bundle definition to ['Read', 'Glob', 'Grep', 'Bash(cat *)', 'Bash(ls *)'] — same as read-only. One change fixes all broken consumers. QA and Review unaffected (their
-  native-tool bundles dominate already; read tools were dead weight there anyway).
-
-  Don't change individual callsites — the bundle abstraction exists for this reason. Update the comment to note it's temporary until MCP server is wired.
-  
 # Costs page in detail
 -- might need to improve this, both persona and stage (other)
 
-# Chat 
-Implement this...
 
 # Researcher
 Implement this
@@ -212,19 +181,6 @@ Playwright repro and evidence, nice to somehow see images here
 # General
 Comments on home page doesn't feel right - overview
 Chore - need to ensure the right tabs are shown in sidebar + transition drop down
-Playwright repo run - images posted to github but didn't exist? Maybe on weird branch or wrong path or something
-
-string values everywhere
-orkItem.priority === 'high' || workItem.priority === 'critical'
- 'factory:needs-qa',
-      'factory:needs-human', --->centralise
-
-....././././././. -> fix?
-
-# PRD 
-Use can APPROVE or DECLINE
-- They can free edit the PRD or ADD comments 
-- Approve moves it forward, decline moves it to "blocked" or done.  
 
 # Overview
 Should show states "compelted" or "blocked" of each state 

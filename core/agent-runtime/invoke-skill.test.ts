@@ -121,6 +121,23 @@ describe('invokeSkill', () => {
     ).rejects.toBeInstanceOf(OutputValidationError);
   });
 
+  it('normalizes null object properties before output validation', async () => {
+    const runtime = mockRuntime({
+      echo: 'hello',
+      decisionSummaries: [{ kind: 'PLAN', summary: 'test run', evidence: null }],
+    });
+
+    const result = await invokeSkill({
+      skillName: 'echo-test',
+      projectId: uid(),
+      runId: uid(),
+      context: VALID_ECHO_CTX,
+      overrides: { runtimeOverride: runtime },
+    });
+
+    expect(result.output).toEqual(VALID_ECHO_OUTPUT);
+  });
+
   it('OutputValidationError includes runId in telemetry', async () => {
     const runId = uid();
     const badOutputRuntime = mockRuntime({ notEcho: true });

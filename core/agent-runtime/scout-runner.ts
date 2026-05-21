@@ -2,6 +2,7 @@ import type { AgentEvent, AppendEventInput } from '../event-stream/store.js';
 import type { ResolvedBudget, SkillBudgetOverride } from './budgets.js';
 import { assembleSpawnContext } from './context-assembly.js';
 import type { AgentResult, AgentRuntime, AgentSpec, DecisionSummary } from './interface.js';
+import { omitNullObjectProperties } from './output-normalization.js';
 import { resolveBudgetsForProject } from './resolve-for-project.js';
 import { ScoutOutputSchema, normalizeScoutOutput } from './scout-output.js';
 
@@ -219,7 +220,7 @@ export async function runOneScout(
   // scout that ran without `--json-schema` could return arbitrary text and
   // the swarm would silently treat it as an empty-findings success — which
   // would let invalid Wave-1 results drive Wave-2 dispatch.
-  const parsed = ScoutOutputSchema.safeParse(result.output);
+  const parsed = ScoutOutputSchema.safeParse(omitNullObjectProperties(result.output));
   if (!parsed.success) {
     const reason = `scout output failed schema validation: ${parsed.error.issues
       .map((i) => `${i.path.join('.')}: ${i.message}`)

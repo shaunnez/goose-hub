@@ -1,5 +1,6 @@
 import { DecomposeOutputSchema } from '../../skills/decompose-issues/schema.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
+import { omitNullObjectProperties } from '../agent-runtime/output-normalization.js';
 import { readPromptWithContext } from '../agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
 import { resolveProjectAgentExecution } from '../agent-runtime/resolve-runtime-for-project.js';
@@ -100,7 +101,7 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
       outputJsonSchema: jsonSchema,
     });
 
-    const parsed = DecomposeOutputSchema.safeParse(result.output);
+    const parsed = DecomposeOutputSchema.safeParse(omitNullObjectProperties(result.output));
 
     if (!parsed.success) {
       eventStore.appendEvent({

@@ -576,6 +576,19 @@ const bugEntry: WorkflowCatalogEntry = {
       },
     ),
     skillNode(
+      'acceptance-contract-skill',
+      'acceptance-contract',
+      'acceptance-contract',
+      'developer',
+      'factory:investigation-complete',
+      {
+        group: 'delivery',
+        mode: 'legacy',
+        activation: activeWhen('useMultiAgentPipeline', false, 'legacy delivery path'),
+        notes: 'Normalizes legacy issue-body acceptance criteria before implementation.',
+      },
+    ),
+    skillNode(
       'scout-code-path-skill',
       'scout-code-path',
       'scout-code-path',
@@ -688,6 +701,7 @@ const bugEntry: WorkflowCatalogEntry = {
     optional('investigating', 'needs-human', 'Investigation blocked'),
     summary('investigating', 'investigate-skill'),
     summary('investigating', 'playwright-repro-skill', 'browser repro'),
+    summary('investigation-complete', 'acceptance-contract-skill', 'legacy contract'),
     ...deliveryEdges,
   ],
   normalPath: [
@@ -750,6 +764,17 @@ const bugEntry: WorkflowCatalogEntry = {
     },
     {
       ...deliveryStages[0],
+      nodes: ['acceptance-contract-skill', ...deliveryStages[0].nodes],
+      variants: deliveryStages[0].variants?.map((variant) =>
+        variant.id === 'legacy-delivery'
+          ? {
+              ...variant,
+              description:
+                'Acceptance contract normalizes criteria, then a single developer agent ships directly from dev-ready.',
+              nodes: ['acceptance-contract-skill', ...variant.nodes],
+            }
+          : variant,
+      ),
       branches: [
         {
           id: 'simple-bug-legacy',
@@ -757,7 +782,7 @@ const bugEntry: WorkflowCatalogEntry = {
           description:
             'Even with the multi-agent pipeline enabled, simple high-confidence bugs can route to legacy implement.',
           kind: 'conditional',
-          nodes: ['implement-skill'],
+          nodes: ['acceptance-contract-skill', 'implement-skill'],
           activation: activeWhen('workItem.simpleBug', true, 'simple high-confidence bug'),
         },
       ],
