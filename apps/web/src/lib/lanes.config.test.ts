@@ -23,7 +23,7 @@ describe('lanes config', () => {
     expect(laneForState('factory:merge-conflict')).toBe('review');
   });
 
-  it('sortLaneItems sorts by priority then issue number', () => {
+  it('sortLaneItems sorts by priority then newest issue number first', () => {
     const sorted = sortLaneItems([
       { externalId: '40', priority: 'medium' },
       { externalId: '12', priority: 'low' },
@@ -31,29 +31,37 @@ describe('lanes config', () => {
       { externalId: '99', priority: 'critical' },
       { externalId: '5', priority: 'high' },
     ]);
-    expect(sorted.map((s) => s.externalId)).toEqual(['99', '5', '7', '40', '12']);
+    expect(sorted.map((s) => s.externalId)).toEqual(['99', '7', '5', '40', '12']);
   });
 
   it('sortLaneItems treats unknown priority as rank 9 (sorts last)', () => {
-    // Line 126: the ?? 9 fallback branch — items with unknown priority rank last
     const sorted = sortLaneItems([
       { externalId: '1', priority: 'high' },
       { externalId: '2', priority: 'unknown-future-priority' },
       { externalId: '3', priority: 'critical' },
     ]);
-    // critical(0) < high(1) < unknown(9)
     expect(sorted[0].externalId).toBe('3');
     expect(sorted[1].externalId).toBe('1');
     expect(sorted[2].externalId).toBe('2');
   });
 
-  it('sortLaneItems stable-sorts items with the same priority by externalId ascending', () => {
+  it('sortLaneItems orders items with the same priority by externalId descending', () => {
     const sorted = sortLaneItems([
       { externalId: '30', priority: 'medium' },
       { externalId: '10', priority: 'medium' },
       { externalId: '20', priority: 'medium' },
     ]);
-    expect(sorted.map((s) => s.externalId)).toEqual(['10', '20', '30']);
+    expect(sorted.map((s) => s.externalId)).toEqual(['30', '20', '10']);
+  });
+
+  it('sortLaneItems does not fall back to ascending externalId ordering within a lane', () => {
+    const sorted = sortLaneItems([
+      { externalId: '101', priority: 'high' },
+      { externalId: '103', priority: 'high' },
+      { externalId: '102', priority: 'high' },
+    ]);
+    expect(sorted.map((s) => s.externalId)).not.toEqual(['101', '102', '103']);
+    expect(sorted.map((s) => s.externalId)).toEqual(['103', '102', '101']);
   });
 
   it('laneForState returns undefined for an unknown state', () => {
