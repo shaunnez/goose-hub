@@ -17,7 +17,7 @@ import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { DEFAULT_MAX_RETRIES, shouldEscalateQa } from '@goose-hub/core/retry/retry-counter.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
-import type { RegressionPolicy } from '@goose-hub/core/verify/tiers.js';
+import type { RegressionPolicy, TierResult } from '@goose-hub/core/verify/tiers.js';
 import { runTier as defaultRunTier } from '@goose-hub/core/verify/tiers.js';
 import { type QaOutput, QaOutputSchema, type TestRun } from '@goose-hub/skills/qa/schema.js';
 import type { EngineeringSpec } from '@goose-hub/skills/spec-author/schema.js';
@@ -58,6 +58,32 @@ export interface QaWorkflowDeps {
 }
 
 const DEFAULT_TEST_COMMAND = 'pnpm test --reporter=json';
+
+function classifyVerificationInfrastructureFailure(
+  result: TierResult | null,
+): { reason: string; findings: string[] } | null {
+  if (result == null || result.passed) return null;
+  const infrastructureFindings = result.findings.filter((finding) => {
+    if (finding.category === 'verification-infrastructure') return true;
+    const detail = `${finding.code ?? ''}\n${finding.message}`.toLowerCase();
+    return (
+      detail.includes('malformed verification command') ||
+      detail.includes('permission denied') ||
+      detail.includes('eacces') ||
+      detail.includes('command not found') ||
+      detail.includes('verification-runner-missing') ||
+      detail.includes('verification-harness-config') ||
+      detail.includes('no test files found') ||
+      detail.includes('missing script') ||
+      detail.includes('failed to load config')
+    );
+  });
+  if (infrastructureFindings.length === 0) return null;
+  return {
+    reason: infrastructureFindings[0]?.code ?? 'verification-infrastructure-failure',
+    findings: infrastructureFindings.map((finding) => finding.message),
+  };
+}
 
 /**
  * Runs the QA holdout workflow for a work item in `factory:needs-qa` state.
@@ -157,6 +183,60 @@ export async function runQaWorkflow(
     // escalates to needs-human exactly like a non-deterministic QA failure.
     if (deterministic?.shortCircuitTier != null) {
       const failedTier = deterministic.shortCircuitTier;
+      const infrastructureFailure = classifyVerificationInfrastructureFailure(
+        deterministic.tierResults[failedTier],
+      );
+      if (infrastructureFailure != null) {
+        eventStore.appendEvent({
+          projectId: projectSlug,
+          workItemId: workItem.id,
+          kind: 'qa.verification-blocked',
+          payload: {
+            failedTier,
+            reason: infrastructureFailure.reason,
+            findings: infrastructureFailure.findings,
+            deterministic: true,
+            agentSkipped: true,
+            ...(prHints.pipelineRunId != null ? { pipelineRunId: prHints.pipelineRunId } : {}),
+          },
+          runId,
+        });
+        await stateSource.comment(
+          workItem.externalId,
+          buildAgentComment(
+            'QA',
+            'Verification Blocked',
+            'Deterministic verification failed because the verifier infrastructure is misconfigured. QA agent and fix-feedback were skipped.',
+            [
+              `Tier: ${failedTier}`,
+              `Reason: ${infrastructureFailure.reason}`,
+              'Next state: factory:needs-human',
+              ...infrastructureFailure.findings.slice(0, 3).map((finding) => `Finding: ${finding}`),
+            ],
+          ),
+        );
+        accumulatePersonaStats({
+          personaName: personaId,
+          role: 'qa',
+          outcome: 'failure',
+          qualityScore: 0,
+        });
+        await stateSource.transitionState(
+          workItem.externalId,
+          'factory:needs-qa',
+          'factory:needs-human',
+        );
+        emitStateTransitionEvent({
+          projectId: projectSlug,
+          workItemId: workItem.id,
+          from: 'factory:needs-qa',
+          to: 'factory:needs-human',
+          by: 'qa',
+          runId,
+        });
+        return;
+      }
+
       const synthetic = buildSyntheticQaOutput({
         tierResults: deterministic.tierResults,
         failedTier,

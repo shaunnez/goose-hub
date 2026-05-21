@@ -260,7 +260,7 @@ describe('runSpecAuthorWorkflow', () => {
           verificationTooling: [
             {
               name: 'spec-check',
-              scriptPath: 'scripts/spec-check.ts',
+              command: 'pnpm tsx scripts/spec-check.ts',
               expectedExitCodes: [0],
               inputSpec: null,
             },
@@ -345,7 +345,7 @@ describe('runSpecAuthorWorkflow', () => {
           verificationTooling: [
             {
               name: 'web-check',
-              scriptPath: 'scripts/check.ts',
+              command: 'pnpm tsx scripts/check.ts',
               expectedExitCodes: [0],
               inputSpec: null,
             },
@@ -362,12 +362,12 @@ describe('runSpecAuthorWorkflow', () => {
         schemaChanges: { migrations: string[] };
         interfaceContracts: Array<{ file: string }>;
         workPackages: Array<{ filesOwned: string[] }>;
-        verificationTooling: Array<{ scriptPath: string }>;
+        verificationTooling: Array<{ command: string }>;
       };
       expect(persistedSpec.schemaChanges.migrations).toEqual(['apps/web/migrations/001.sql']);
       expect(persistedSpec.interfaceContracts[0]?.file).toBe('apps/web/src/api.ts');
       expect(persistedSpec.workPackages[0]?.filesOwned).toEqual(['apps/web/src/api.ts']);
-      expect(persistedSpec.verificationTooling[0]?.scriptPath).toBe('apps/web/scripts/check.ts');
+      expect(persistedSpec.verificationTooling[0]?.command).toBe('pnpm tsx scripts/check.ts');
 
       const repaired = vi
         .mocked(eventStore.appendEvent)
@@ -392,12 +392,6 @@ describe('runSpecAuthorWorkflow', () => {
             field: 'workPackages[0].filesOwned[0]',
             from: 'src/api.ts',
             to: 'apps/web/src/api.ts',
-            source: 'package-root',
-          },
-          {
-            field: 'verificationTooling[0].scriptPath',
-            from: 'scripts/check.ts',
-            to: 'apps/web/scripts/check.ts',
             source: 'package-root',
           },
         ]),

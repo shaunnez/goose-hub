@@ -27,7 +27,6 @@ export function normalizeEngineeringSpecPaths(input: {
   const referencePaths = [
     ...input.spec.workPackages.flatMap((wp) => wp.filesOwned),
     ...input.spec.interfaceContracts.map((contract) => contract.file),
-    ...input.spec.verificationTooling.map((tool) => tool.scriptPath),
     ...input.spec.schemaChanges.migrations,
     ...(input.referencePaths ?? []),
   ];
@@ -68,10 +67,6 @@ export function normalizeEngineeringSpecPaths(input: {
       filesOwned: wp.filesOwned.map((path, pathIndex) =>
         normalizeField(`workPackages[${wpIndex}].filesOwned[${pathIndex}]`, path),
       ),
-    })),
-    verificationTooling: input.spec.verificationTooling.map((tool, index) => ({
-      ...tool,
-      scriptPath: normalizeField(`verificationTooling[${index}].scriptPath`, tool.scriptPath),
     })),
   };
 

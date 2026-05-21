@@ -51,7 +51,7 @@ A single JSON object conforming to `EngineeringSpecSchema` (`skills/spec-author/
 6. **`interfaceContracts`** — paste-ready `signature` (function decl, type alias, or full Zod block) + `file` it lives in. ≥1 entry required when there are ≥2 WPs (cross-WP boundaries need typed contracts).
 7. **`workPackages`** — see rules below.
 8. **`executionOrder`** — DAG of batches: `[{batch: 0, wpIds: ['WP1', 'WP2']}, {batch: 1, wpIds: ['WP3']}]`. Every WP appears exactly once.
-9. **`verificationTooling`** — required when there are >2 WPs. Each tool: `name`, `scriptPath`, `expectedExitCodes`, optional `inputSpec`.
+9. **`verificationTooling`** — required when there are >2 WPs. Each tool: `name`, `command`, `expectedExitCodes`, optional `inputSpec`. `command` must be an executable repo-root command such as `pnpm vitest run apps/web/src/lib/lanes.config.test.ts`; never emit a bare file path.
 10. **`acceptanceCriteria`** — see rules below.
 11. **`constraints`** — see rules below.
 12. **`riskRegister`** — at least one risk when the spec touches `auth | session | crypto | secret` paths.
@@ -176,7 +176,7 @@ Emit: `[decision] PLAN: Wrote <N> falsifiable ACs covering <M> journey steps`
 
 ### Step 8 — Verification tooling and risk register
 
-If `>2` WPs, declare ≥1 verification tool with a `scriptPath` + `expectedExitCodes`. If any sensitive path is touched (`auth|session|crypto|secret`), declare ≥1 risk with mitigation.
+If `>2` WPs, declare ≥1 verification tool with a `command` + `expectedExitCodes`. If any sensitive path is touched (`auth|session|crypto|secret`), declare ≥1 risk with mitigation.
 
 Emit: `[decision] INSIGHT: Verification + risk coverage complete`
 
@@ -232,7 +232,7 @@ Live marker format: `[decision] KIND: <one sentence>`. Example: `[decision] PLAN
   ],
   "executionOrder": [{ "batch": 0, "wpIds": ["WP1"] }],
   "verificationTooling": [
-    { "name": "skill-contract audit", "scriptPath": "scripts/audit-skill-contracts.ts", "expectedExitCodes": [0] }
+    { "name": "skill-contract audit", "command": "pnpm tsx scripts/audit-skill-contracts.ts", "expectedExitCodes": [0] }
   ],
   "acceptanceCriteria": [
     {

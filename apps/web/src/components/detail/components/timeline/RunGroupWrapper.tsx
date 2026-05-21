@@ -66,7 +66,16 @@ export function RunGroupWrapper({
   const groupEventList = items
     .filter((item): item is Extract<RenderItem, { kind: 'event' }> => item.kind === 'event')
     .map((item) => item.event);
-  const isFailed = groupEventList.some((event) => event.kind === 'agent.run-failed');
+  const isFailed = groupEventList.some(
+    (event) =>
+      event.kind === 'agent.run-failed' ||
+      event.kind === 'qa.verification-blocked' ||
+      event.kind === 'parallel-implement.exhausted' ||
+      event.kind === 'parallel-implement.wp-failed' ||
+      event.kind === 'parallel-implement.wp-timeout' ||
+      event.kind === 'parallel-implement.wp-commit-failed' ||
+      /^qa\..*-failed$/.test(event.kind),
+  );
   const codexTransportWarnings = groupEventList.filter(isCodexTransportWarningLog);
   const codexTransportWarning = codexTransportWarnings[0] ?? null;
   const warningRecovered = codexTransportWarning != null && endedAt != null && !isFailed;

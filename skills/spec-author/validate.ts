@@ -39,6 +39,7 @@ export type ValidationRule =
   | 'self-check-falsifiable-acs'
   | 'self-check-builder-independence'
   | 'self-check-verification-tooling'
+  | 'verification-tool-command-malformed'
   | 'wp-missing-test-file';
 
 export type ValidationResult = { ok: true } | { ok: false; errors: ValidationError[] };
@@ -61,6 +62,12 @@ export interface ValidationOptions {
 }
 
 const DEFAULT_SENSITIVE_PATTERN = /(auth|session|crypto|secret)/i;
+const BARE_REPO_PATH_PATTERN = /^(?:\.\/)?[\w@./-]+\.[A-Za-z0-9]+$/;
+
+function isBareRepoPathCommand(command: string): boolean {
+  const trimmed = command.trim();
+  return !/\s/.test(trimmed) && BARE_REPO_PATH_PATTERN.test(trimmed) && trimmed.includes('/');
+}
 
 export function validateEngineeringSpec(
   spec: EngineeringSpec,
@@ -266,6 +273,16 @@ export function validateEngineeringSpec(
       rule: 'self-check-verification-tooling',
       message: `${spec.workPackages.length} WPs in spec but verificationTooling is empty (Steve self-check #6)`,
     });
+  }
+
+  for (const [index, tool] of spec.verificationTooling.entries()) {
+    if (isBareRepoPathCommand(tool.command)) {
+      errors.push({
+        rule: 'verification-tool-command-malformed',
+        message: `verificationTooling[${index}].command must be an executable command, not a bare file path: ${tool.command}`,
+        ref: `verificationTooling[${index}].command`,
+      });
+    }
   }
 
   // 3. Complete interfaces — every cross-WP boundary has a typed contract.

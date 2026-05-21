@@ -574,6 +574,60 @@ describe('groupEvents — run-group metadata', () => {
     }
   });
 
+  it('infers parent parallel implement run label and completion from PR opened', () => {
+    const events: AgentEventDto[] = [
+      makeRunEvent(1, 'pipeline-1', 'parallel-implement.iteration-started'),
+      makeRunEvent(2, 'pipeline-1', 'parallel-implement.wp-committed'),
+      makeRunEvent(3, 'pipeline-1', 'pr.opened'),
+    ];
+
+    const result = groupEvents(events);
+
+    expect(result).toHaveLength(1);
+    if (result[0].kind === 'run-group') {
+      expect(result[0].skill).toBe('parallel-implement');
+      expect(result[0].startedAt).toBe(events[0].createdAt);
+      expect(result[0].endedAt).toBe(events[2].createdAt);
+    }
+  });
+
+  it('infers deterministic QA run label and completion from qa.completed', () => {
+    const events: AgentEventDto[] = [
+      makeRunEvent(1, 'qa-run-1', 'qa.functional-failed'),
+      {
+        ...makeRunEvent(2, 'qa-run-1', 'qa.completed'),
+        payload: { verdict: 'fail', deterministic: true, agentSkipped: true },
+      },
+    ];
+
+    const result = groupEvents(events);
+
+    expect(result).toHaveLength(1);
+    if (result[0].kind === 'run-group') {
+      expect(result[0].skill).toBe('qa');
+      expect(result[0].startedAt).toBe(events[0].createdAt);
+      expect(result[0].endedAt).toBe(events[1].createdAt);
+    }
+  });
+
+  it('treats verification-blocked deterministic QA as terminal instead of live', () => {
+    const events: AgentEventDto[] = [
+      makeRunEvent(1, 'qa-run-1', 'qa.functional-failed'),
+      {
+        ...makeRunEvent(2, 'qa-run-1', 'qa.verification-blocked'),
+        payload: { failedTier: 2, reason: 'malformed-verification-command', agentSkipped: true },
+      },
+    ];
+
+    const result = groupEvents(events);
+
+    expect(result).toHaveLength(1);
+    if (result[0].kind === 'run-group') {
+      expect(result[0].skill).toBe('qa');
+      expect(result[0].endedAt).toBe(events[1].createdAt);
+    }
+  });
+
   it('resolves skill from any event payload, not just lifecycle events', () => {
     const events: AgentEventDto[] = [
       { ...makeRunEvent(1, 'run-abc', 'agent.tool-call'), payload: { skill: 'implement' } },

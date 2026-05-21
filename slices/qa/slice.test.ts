@@ -1746,6 +1746,22 @@ describe('runQaWorkflow', () => {
         ],
       };
     }
+    function makeInfrastructureFailingTier(tier: 1 | 2 | 3) {
+      return {
+        tier,
+        passed: false,
+        evidence: [],
+        findings: [
+          {
+            message:
+              "Verification tool 'bad-path' failed (command: apps/web/src/foo.test.ts): Permission denied",
+            severity: 'error' as const,
+            category: 'verification-infrastructure' as const,
+            code: 'malformed-verification-command',
+          },
+        ],
+      };
+    }
 
     it('runs deterministic tiers before invoking the QA agent when spec + worktree are present', async () => {
       const item = makeWorkItem();
@@ -1891,6 +1907,68 @@ describe('runQaWorkflow', () => {
         'factory:needs-qa',
         'factory:qa-failed',
       );
+    });
+
+    it('routes verification infrastructure failures to needs-human without qa.completed or retry escalation', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: { worktreePath: '/wt/abc', devRunId: 'dev-run-1' },
+          createdAt: '',
+        },
+        {
+          id: 2,
+          kind: 'qa.completed',
+          payload: { verdict: 'fail', overallScore: 0 },
+          createdAt: '',
+        },
+        {
+          id: 3,
+          kind: 'qa.completed',
+          payload: { verdict: 'fail', overallScore: 0 },
+          createdAt: '',
+        },
+      ]);
+      mockGetEngineeringSpec.mockReturnValue(makeSpecRow());
+
+      const runTierImpl = vi.fn(
+        async (tier: 1 | 2 | 3, _spec: unknown, _artifacts: unknown, _deps?: unknown) =>
+          tier === 2 ? makeInfrastructureFailingTier(2) : makePassingTier(tier),
+      );
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+        runTests: vi.fn().mockResolvedValue(null),
+        runTierImpl,
+      });
+
+      expect(mockRun).not.toHaveBeenCalled();
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:needs-qa',
+        'factory:needs-human',
+      );
+      expect(
+        vi.mocked(eventStore.appendEvent).mock.calls.some(([e]) => e.kind === 'qa.completed'),
+      ).toBe(false);
+      expect(
+        vi
+          .mocked(eventStore.appendEvent)
+          .mock.calls.some(([e]) => e.kind === 'agent.retry-escalated'),
+      ).toBe(false);
+      const blocked = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'qa.verification-blocked');
+      expect(blocked).toBeDefined();
+      expect(blocked?.[0].payload).toMatchObject({
+        failedTier: 2,
+        reason: 'malformed-verification-command',
+        agentSkipped: true,
+      });
     });
 
     it('tier 3 fail with regressionPolicy=ignore continues to the agent', async () => {
