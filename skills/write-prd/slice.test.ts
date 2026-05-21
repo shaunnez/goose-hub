@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { toJSONSchema } from 'zod';
+import { toJsonSchema } from '../../core/agent-runtime/schema-bridge.js';
 import { PRDOutputSchema } from './schema.js';
 import config, { WritePRDContextSchema } from './skill.config.js';
 
@@ -211,6 +212,30 @@ describe('PRD schema', () => {
     expect(typeof jsonSchema).toBe('object');
     expect(jsonSchema).not.toBeNull();
     expect(jsonSchema).toHaveProperty('properties');
+  });
+
+  it('generated Codex response schema allows AC cross-reference fields', () => {
+    if (config.outputSchema == null) throw new Error('write-prd outputSchema is required');
+
+    const jsonSchema = toJsonSchema(config.outputSchema);
+    const properties = jsonSchema.properties as Record<string, unknown>;
+    const acceptanceCriteria = properties.acceptanceCriteria as { items?: unknown };
+    const acceptanceCriterion = acceptanceCriteria.items as {
+      properties?: Record<string, unknown>;
+      required?: string[];
+      additionalProperties?: boolean;
+    };
+
+    expect(acceptanceCriterion.properties).toMatchObject({
+      id: expect.any(Object),
+      statement: expect.any(Object),
+      journeyId: expect.any(Object),
+      crossCutting: expect.any(Object),
+      stepIdx: expect.any(Object),
+      verifyCommand: expect.any(Object),
+    });
+    expect(acceptanceCriterion.required).toEqual(['id', 'statement']);
+    expect(acceptanceCriterion.additionalProperties).toBe(false);
   });
 });
 

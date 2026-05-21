@@ -1325,6 +1325,81 @@ describe('skipGrill mode — retry write-prd directly', () => {
     expect(callArgs.skill).toBe('write-prd');
   });
 
+  it('includes output validation issues on write-prd run failure events', async () => {
+    const projectId = uniqueProjectId('skip-grill-invalid-prd');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await source.seedIssue({
+      title: 'Retry PRD',
+      body: 'Some feature request.',
+      type: 'feature',
+      priority: 'medium',
+      state: 'factory:prd-drafting',
+    });
+    const workItem = await source.getItem(item.externalId);
+
+    eventStore.appendEvent({
+      projectId,
+      workItemId: workItem.id,
+      kind: 'grill.completed',
+      payload: { refinedIntent: 'Retry PRD with recovered intent', rounds: 2 },
+    });
+
+    const prdOutput = validPRD({
+      acceptanceCriteria: [
+        {
+          id: 'AC-1',
+          statement: 'This AC is missing its journey link.',
+        },
+      ] as unknown as ReturnType<typeof basePRD>['acceptanceCriteria'],
+    });
+    const runtime = makeQueuedRuntime([prdOutput]);
+
+    const result = await runGrillAndPrdWorkflow({
+      workItem,
+      stateSource: source,
+      projectId,
+      priorReplies: [],
+      skipGrill: true,
+      deps: {
+        runtime,
+        projectConfig: null,
+        totalSpendForSkill: () => 0,
+        buildContext: async () => ({
+          stackSummary: '',
+          contextMd: '',
+          adrSummaries: [],
+          claudeMd: '',
+        }),
+        createWorktreeImpl: () => {
+          throw new Error('should not create worktree in skipGrill mode');
+        },
+        cleanupWorktreeImpl: () => {
+          throw new Error('should not clean worktree in skipGrill mode');
+        },
+      },
+    });
+
+    expect(result.phase).toBe('needs-human');
+
+    const evs = eventStore.replay({ projectId, workItemId: workItem.id });
+    const failed = evs.find(
+      (e) =>
+        e.kind === 'agent.run-failed' &&
+        (e.payload as { skill?: string }).skill === 'write-prd',
+    );
+
+    expect(failed).toBeDefined();
+    expect(failed?.payload).toMatchObject({
+      skill: 'write-prd',
+      error: "invokeSkill: output validation failed for 'write-prd'",
+      issues: [
+        expect.stringContaining(
+          'acceptanceCriteria.0: acceptanceCriteria[0] (id="AC-1") has no journeyId',
+        ),
+      ],
+    });
+  });
+
   it('uses refinedIntent from grill.completed event when skipGrill:true', async () => {
     const projectId = uniqueProjectId('skip-grill-intent');
     const source = new InMemoryLabelsSource(projectId, REPO_REF);

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { ImplementSchema } from '../../skills/implement/schema.js';
 import { InterventionProposerOutputSchema } from '../../skills/intervention-proposer/schema.js';
 import { ReviewOutputSchema } from '../../skills/review/schema.js';
+import { PRDOutputSchema } from '../../skills/write-prd/schema.js';
 import { toJsonSchema } from './schema-bridge.js';
 
 describe('toJsonSchema', () => {
@@ -20,7 +21,7 @@ describe('toJsonSchema', () => {
     });
   });
 
-  it('removes optional properties from the runtime schema', () => {
+  it('preserves optional object properties without marking them required', () => {
     const schema = z.object({
       decisionSummaries: z.array(
         z.object({
@@ -36,7 +37,7 @@ describe('toJsonSchema', () => {
     const field = decisionSummaries.decisionSummaries as { items?: unknown };
     const item = field.items as { properties?: Record<string, unknown>; required?: string[] };
 
-    expect(item.properties).not.toHaveProperty('evidence');
+    expect(item.properties).toHaveProperty('evidence');
     expect(item.required).toEqual(['kind', 'summary']);
   });
 
@@ -76,6 +77,47 @@ describe('toJsonSchema', () => {
 
     expect(result).not.toContain('"format":"uri"');
     expect(result).not.toContain('"format": "uri"');
+  });
+
+  it('preserves optional PRD output fields needed by write-prd validation', () => {
+    const result = toJsonSchema(PRDOutputSchema);
+    const properties = result.properties as Record<string, unknown>;
+
+    const acceptanceCriteria = properties.acceptanceCriteria as { items?: unknown };
+    const acceptanceCriterion = acceptanceCriteria.items as {
+      properties?: Record<string, unknown>;
+      required?: string[];
+      additionalProperties?: boolean;
+    };
+
+    expect(Object.keys(acceptanceCriterion.properties ?? {})).toEqual([
+      'id',
+      'statement',
+      'journeyId',
+      'stepIdx',
+      'crossCutting',
+      'verifyCommand',
+    ]);
+    expect(acceptanceCriterion.required).toEqual(['id', 'statement']);
+    expect(acceptanceCriterion.additionalProperties).toBe(false);
+
+    const implementationDecisions = properties.implementationDecisions as { items?: unknown };
+    const implementationDecision = implementationDecisions.items as {
+      properties?: Record<string, unknown>;
+      required?: string[];
+    };
+
+    expect(implementationDecision.properties).toHaveProperty('rationale');
+    expect(implementationDecision.properties).toHaveProperty('moduleRef');
+    expect(implementationDecision.required).toEqual(['decision']);
+
+    const testingDecisions = properties.testingDecisions as {
+      properties?: Record<string, unknown>;
+      required?: string[];
+    };
+
+    expect(testingDecisions.properties).toHaveProperty('priorArt');
+    expect(testingDecisions.required).toEqual(['approach', 'modulesToTest']);
   });
 
   it('keeps intervention proposer output schema acceptable for Codex response schemas', () => {

@@ -8,8 +8,20 @@ import type { ProjectContextBundle } from '../grill-and-prd.js';
 
 export type PrdDraftOutcome =
   | { status: 'ok'; prdOutput: PRDOutput }
-  | { status: 'invalid'; error: string }
+  | { status: 'invalid'; error: string; issues?: string[] }
   | { status: 'failed'; error: string };
+
+type OutputValidationIssue = {
+  path: Array<string | number>;
+  message: string;
+};
+
+function formatOutputValidationIssues(error: OutputValidationError): string[] {
+  return error.issues.flatMap((issue: OutputValidationIssue) => {
+    const path = issue.path.length > 0 ? issue.path.join('.') : '<root>';
+    return `${path}: ${issue.message}`;
+  });
+}
 
 export interface RunPrdDraftInput {
   workItem: { id: string; title: string; body: string; externalId: string; priority: Priority };
@@ -68,7 +80,7 @@ export async function runPrdDraft(input: RunPrdDraftInput): Promise<PrdDraftOutc
     });
   } catch (err) {
     if (err instanceof OutputValidationError) {
-      return { status: 'invalid', error: err.message };
+      return { status: 'invalid', error: err.message, issues: formatOutputValidationIssues(err) };
     }
     return { status: 'failed', error: String(err) };
   }
