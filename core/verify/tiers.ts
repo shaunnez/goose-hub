@@ -134,10 +134,33 @@ export function verifyStructural(
 // ─── Tier 2: Functional ───────────────────────────────────────────────────────
 
 const BARE_REPO_PATH_PATTERN = /^(?:\.\/)?[\w@./-]+\.[A-Za-z0-9]+$/;
+const LAUNCH_ERROR_MARKER = 'GOOSE_VERIFICATION_COMMAND_LAUNCH_ERROR';
 
-export function isBareVerificationPath(command: string): boolean {
+export function isBareVerificationPath(command: unknown): boolean {
+  if (typeof command !== 'string') return false;
   const trimmed = command.trim();
   return !/\s/.test(trimmed) && trimmed.includes('/') && BARE_REPO_PATH_PATTERN.test(trimmed);
+}
+
+function commandLauncher(command: string): string {
+  return (
+    command
+      .trim()
+      .split(/\s+/)[0]
+      ?.replace(/^['"`]/, '')
+      .replace(/['"`]$/, '') ?? ''
+  );
+}
+
+function isLauncherMissing(command: string, output: string): boolean {
+  if (output.includes(LAUNCH_ERROR_MARKER)) return true;
+  const launcher = commandLauncher(command);
+  if (launcher === '') return false;
+  const escaped = escapeRegex(launcher);
+  return new RegExp(
+    `(^|\\n|\\s)(?:sh:\\s+\\d+:\\s+)?${escaped}:\\s+(?:command not found|not found|no such file or directory)`,
+    'i',
+  ).test(output);
 }
 
 function classifyVerificationCommandFailure(
@@ -154,7 +177,7 @@ function classifyVerificationCommandFailure(
   ) {
     return { category: 'verification-infrastructure', code: 'verification-permission-denied' };
   }
-  if (/(command not found|not found:|enoent|no such file or directory)/i.test(detail)) {
+  if (isLauncherMissing(command, output)) {
     return { category: 'verification-infrastructure', code: 'verification-runner-missing' };
   }
   if (
@@ -191,7 +214,11 @@ async function defaultRunVerificationCommand(
       resolve({ passed: expectedExitCodes.includes(exitCode), output });
     });
     child.on('error', (err) => {
-      resolve({ passed: false, output: err.message });
+      const code = (err as NodeJS.ErrnoException).code;
+      resolve({
+        passed: false,
+        output: `${LAUNCH_ERROR_MARKER}${code != null ? ` ${code}` : ''}: ${err.message}`,
+      });
     });
   });
 }
@@ -215,6 +242,15 @@ export async function verifyFunctional(
   }
 
   for (const tool of spec.verificationTooling) {
+    if (typeof tool.command !== 'string' || tool.command.trim() === '') {
+      findings.push({
+        message: `Verification tool '${tool.name}' is missing executable command`,
+        severity: 'error',
+        category: 'verification-infrastructure',
+        code: 'malformed-verification-command',
+      });
+      continue;
+    }
     const result = await runCommand(tool.command, worktreePath, tool.expectedExitCodes);
     if (result.passed) {
       evidence.push(`tool-passed: ${tool.name}`);

@@ -182,6 +182,69 @@ describe('Tier 2 (Functional) — golden test', () => {
     expect(result.findings[0]?.code).toBe('malformed-verification-command');
   });
 
+  it('classifies missing command on malformed persisted specs as verification infrastructure', async () => {
+    const spec = makeSpec({
+      verificationTooling: [
+        {
+          name: 'old persisted verifier',
+          scriptPath: 'apps/web/src/foo.test.ts',
+          expectedExitCodes: [0],
+        } as unknown as EngineeringSpec['verificationTooling'][number],
+      ],
+    });
+
+    const result = await verifyFunctional(spec, '/tmp');
+
+    expect(result.passed).toBe(false);
+    expect(result.findings[0]?.category).toBe('verification-infrastructure');
+    expect(result.findings[0]?.code).toBe('malformed-verification-command');
+  });
+
+  it('does not classify product ENOENT output as verification infrastructure', async () => {
+    const spec = makeSpec({
+      verificationTooling: [
+        {
+          name: 'focused test',
+          command: 'pnpm vitest run src/foo.test.ts',
+          expectedExitCodes: [0],
+        },
+      ],
+    });
+
+    const result = await verifyFunctional(spec, '/tmp', {
+      runVerificationCommandImpl: async () => ({
+        passed: false,
+        output: "Error: ENOENT: no such file or directory, open 'missing-product-file.json'",
+      }),
+    });
+
+    expect(result.passed).toBe(false);
+    expect(result.findings[0]?.category).toBe('product');
+  });
+
+  it('classifies command launcher missing as verification infrastructure', async () => {
+    const spec = makeSpec({
+      verificationTooling: [
+        {
+          name: 'focused test',
+          command: 'pnpm vitest run src/foo.test.ts',
+          expectedExitCodes: [0],
+        },
+      ],
+    });
+
+    const result = await verifyFunctional(spec, '/tmp', {
+      runVerificationCommandImpl: async () => ({
+        passed: false,
+        output: 'sh: pnpm: command not found',
+      }),
+    });
+
+    expect(result.passed).toBe(false);
+    expect(result.findings[0]?.category).toBe('verification-infrastructure');
+    expect(result.findings[0]?.code).toBe('verification-runner-missing');
+  });
+
   it('passes vacuously when no verificationTooling is declared', async () => {
     const spec = makeSpec({ verificationTooling: [] });
     const result = await verifyFunctional(spec, '/tmp');

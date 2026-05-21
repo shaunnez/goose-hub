@@ -1,5 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import {
+  discoverPackageRoots,
+  normalizeRepoRelativePath,
+} from '@goose-hub/core/workspaces/path-normalization.js';
 import { CONSTRAINT_SOURCE_PATTERN, type EngineeringSpec } from './schema.js';
 
 /**
@@ -40,6 +44,7 @@ export type ValidationRule =
   | 'self-check-builder-independence'
   | 'self-check-verification-tooling'
   | 'verification-tool-command-malformed'
+  | 'verification-tool-command-package-relative'
   | 'wp-missing-test-file';
 
 export type ValidationResult = { ok: true } | { ok: false; errors: ValidationError[] };
@@ -67,6 +72,21 @@ const BARE_REPO_PATH_PATTERN = /^(?:\.\/)?[\w@./-]+\.[A-Za-z0-9]+$/;
 function isBareRepoPathCommand(command: string): boolean {
   const trimmed = command.trim();
   return !/\s/.test(trimmed) && BARE_REPO_PATH_PATTERN.test(trimmed) && trimmed.includes('/');
+}
+
+function commandPathTokens(command: string): string[] {
+  const tokens = command
+    .trim()
+    .split(/\s+/)
+    .slice(1)
+    .map((token) => token.replace(/^['"`]/, '').replace(/['"`]$/, ''));
+  return tokens.filter(
+    (token) =>
+      !token.startsWith('-') &&
+      token.includes('/') &&
+      BARE_REPO_PATH_PATTERN.test(token) &&
+      !token.includes('*'),
+  );
 }
 
 export function validateEngineeringSpec(
@@ -282,6 +302,24 @@ export function validateEngineeringSpec(
         message: `verificationTooling[${index}].command must be an executable command, not a bare file path: ${tool.command}`,
         ref: `verificationTooling[${index}].command`,
       });
+    }
+    if (options.repoRoot != null) {
+      const packageRoots = discoverPackageRoots(options.repoRoot);
+      for (const pathToken of commandPathTokens(tool.command)) {
+        if (existsSync(join(options.repoRoot, pathToken))) continue;
+        const normalized = normalizeRepoRelativePath({
+          rawPath: pathToken,
+          worktreePath: options.repoRoot,
+          packageRoots,
+        });
+        if (normalized.source === 'package-root') {
+          errors.push({
+            rule: 'verification-tool-command-package-relative',
+            message: `verificationTooling[${index}].command uses package-relative path '${pathToken}'; use repo-root path '${normalized.path}'`,
+            ref: `verificationTooling[${index}].command`,
+          });
+        }
+      }
     }
   }
 

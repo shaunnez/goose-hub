@@ -620,6 +620,38 @@ describe('validateEngineeringSpec — repoRoot-backed checks', () => {
     if (result.ok) return;
     expect(result.errors.some((e) => e.rule === 'constraint-source-symbol-missing')).toBe(true);
   });
+
+  it('rejects package-relative verification command path arguments', () => {
+    mkdirSync(join(tmpRepo, 'apps/web/scripts'), { recursive: true });
+    writeFileSync(join(tmpRepo, 'apps/web/scripts/check.ts'), 'export {};\n');
+    const spec = baseSpec({
+      constraints: [
+        {
+          kind: 'phase',
+          name: 'healthz endpoint',
+          source: 'apps/server/src/routes/healthz.ts:healthzHandler',
+        },
+      ],
+      verificationTooling: [
+        {
+          name: 'web check',
+          command: 'pnpm tsx scripts/check.ts',
+          expectedExitCodes: [0],
+        },
+      ],
+    });
+
+    const result = validateEngineeringSpec(spec, { repoRoot: tmpRepo });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({
+        rule: 'verification-tool-command-package-relative',
+        ref: 'verificationTooling[0].command',
+      }),
+    );
+  });
 });
 
 // ─── TDD contract: wp-missing-test-file ──────────────────────────────────────
