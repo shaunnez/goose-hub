@@ -309,6 +309,32 @@ describe('TimelineSection — expand/collapse all', () => {
     expect(screen.queryByText(rawWarning)).toBeNull();
   });
 
+  it('renders non-lifecycle terminal runs with transport warnings as recovered', async () => {
+    const { fetchEventsPage } = await import('@/lib/api');
+    vi.mocked(fetchEventsPage).mockResolvedValue({
+      events: [
+        makeRunEvent(1, 'run-prd', 'agent.run-started', { skill: 'write-prd' }),
+        makeCodexTransportWarning(2, 'run-prd'),
+        makeRunEvent(3, 'run-prd', 'prd.approved', { skill: 'write-prd' }),
+      ],
+      hasMore: false,
+    });
+
+    const { TimelineSection } = await import('./TimelineSection');
+    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
+
+    await screen.findByTestId('timeline-expand-all');
+    fireEvent.click(screen.getByTestId('timeline-expand-all'));
+
+    expect(await screen.findByText('Complete')).toBeTruthy();
+    expect(
+      await screen.findByText('Codex transport warning: websocket 503; run recovered'),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText('Codex transport warning: websocket 503; run still active'),
+    ).toBeNull();
+  });
+
   it('invalidates issue costs when a run terminal event arrives over SSE', async () => {
     const { fetchEventsPage } = await import('@/lib/api');
     vi.mocked(fetchEventsPage).mockResolvedValue({

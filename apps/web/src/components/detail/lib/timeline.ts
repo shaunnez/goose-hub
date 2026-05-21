@@ -182,7 +182,9 @@ export function normalizeAgentLogEvent(event: AgentEventDto): AgentEventDto | nu
 export function getAgentLogDisplayText(event: AgentEventDto): string {
   const normalized = normalizeAgentLogEvent(event) ?? event;
   const payload = normalized.payload as AgentLogPayload | null;
-  return payload?.line ?? payload?.text ?? getPayloadStr(normalized.payload);
+  if (payload?.line != null && (payload.line !== '' || payload.text == null)) return payload.line;
+  if (payload?.text != null) return payload.text;
+  return getPayloadStr(normalized.payload);
 }
 
 export function isCodexTransportWarningLog(event: AgentEventDto): boolean {
