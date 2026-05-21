@@ -1,17 +1,17 @@
 import type { AgentEventDto } from '@/lib/types';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
-import { getPayloadStr } from '../../lib/timeline';
+import { getAgentLogDisplayText, normalizeAgentLogEvent } from '../../lib/timeline';
 
 export function AgentLogEvent({ event }: { event: AgentEventDto }) {
   const p = event.payload as {
-    line?: string;
     metric?: string;
     stream?: string;
-    text?: string;
   } | null;
   if (p?.stream === 'telemetry' && p.metric === 'prompt_context_size') return null;
-  const line = p?.line ?? p?.text ?? getPayloadStr(event.payload);
+  const normalized = normalizeAgentLogEvent(event);
+  if (normalized == null) return null;
+  const line = getAgentLogDisplayText(normalized);
   return (
     <li
       data-event-kind={event.kind}
@@ -40,13 +40,13 @@ export function AgentLogGroupEvent({ events }: { events: AgentEventDto[] }) {
         <div className="mt-1 flex flex-col gap-0.5">
           {events.map((ev) => {
             const p = ev.payload as {
-              line?: string;
               metric?: string;
               stream?: string;
-              text?: string;
             } | null;
             if (p?.stream === 'telemetry' && p.metric === 'prompt_context_size') return null;
-            const line = p?.line ?? p?.text ?? getPayloadStr(ev.payload);
+            const normalized = normalizeAgentLogEvent(ev);
+            if (normalized == null) return null;
+            const line = getAgentLogDisplayText(normalized);
             return (
               <div key={ev.id} className="font-mono text-[11.5px] text-fg-2">
                 {line}
