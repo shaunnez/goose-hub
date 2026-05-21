@@ -85,11 +85,18 @@ test.describe('Pipeline e2e (MOCK_AGENTS=true)', () => {
   test('chore pipeline: inbox capture → factory:approved', async ({ page }) => {
     test.setTimeout(180_000);
     const choreTitle = `[E2E Pipeline] Chore ${Date.now()}`;
+    const choreBody = [
+      'Need to tidy the promotion flow copy.',
+      '',
+      'The AI enhancement option should work outside bug promotion too.',
+    ].join('\n');
 
     // 1. Capture an inbox idea via the top-bar button.
     await page.goto(`/projects/${PROJECT_SLUG}`);
     await page.getByTestId('capture-button').click();
     await page.getByTestId('capture-title-input').fill(choreTitle);
+    await page.getByLabel('Type').selectOption('chore');
+    await page.getByPlaceholder('Any additional context…').fill(choreBody);
     await page.getByTestId('capture-submit').click();
 
     // 2. Confirm capture modal closed, then go to inbox.
@@ -103,6 +110,9 @@ test.describe('Pipeline e2e (MOCK_AGENTS=true)', () => {
     await inboxRow.getByTestId('promote-button').click();
 
     await page.getByTestId('promote-project-select').selectOption(PROJECT_SLUG);
+    const enhanceCheckbox = page.getByRole('checkbox', { name: /enhance/i });
+    await expect(enhanceCheckbox).toBeVisible();
+    await expect(enhanceCheckbox).toBeChecked();
     await page.getByTestId('promote-next').click();
     await page.getByTestId('promote-confirm').click();
 
@@ -123,6 +133,13 @@ test.describe('Pipeline e2e (MOCK_AGENTS=true)', () => {
     const cardNumberAttr = await card.getAttribute('data-issue-number');
     if (!cardNumberAttr) throw new Error('issue-card missing data-issue-number');
     choreIssueNumber = Number(cardNumberAttr);
+    const createdIssue = (await gh(`/repos/${REPO}/issues/${choreIssueNumber}`)) as {
+      body?: string | null;
+    };
+    expect(createdIssue.body).toBeTruthy();
+    expect(createdIssue.body).toContain(choreBody);
+    expect(createdIssue.body).not.toBe(choreBody);
+    expect(createdIssue.body).toContain('\n\n---\n\n');
 
     // 6. Open the detail page; switch to Timeline.
     await card.click();
