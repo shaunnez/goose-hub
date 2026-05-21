@@ -420,6 +420,7 @@ describe('parallel-implement repo-relative path normalization', () => {
     });
     const spec = makeSpec([makeWp('WP1', ['apps/web/src/foo.ts'])]);
     const { fn: appendEvent, events } = makeAppendEvent();
+    const revertedFiles: string[][] = [];
     const replaySpy = vi.spyOn(eventStore, 'replay').mockReturnValue([]);
 
     try {
@@ -461,7 +462,9 @@ describe('parallel-implement repo-relative path normalization', () => {
           createWpWorktreeImpl: () => scratchWorktree,
           cleanupWpWorktreesImpl: () => undefined,
           orchestratorCommitWpImpl: vi.fn(),
-          revertWpChangesImpl: () => undefined,
+          revertWpChangesImpl: (_worktreePath, files) => {
+            revertedFiles.push(files);
+          },
           recordIterationImpl: () => undefined,
           getLastStatusImpl: () => 'failed',
           devReviewConfigOverride: {
@@ -483,6 +486,7 @@ describe('parallel-implement repo-relative path normalization', () => {
         reason: 'observed-changes-outside-files-owned',
         outsideOwned: { paths: ['apps/web/src/outside.ts'] },
       });
+      expect(revertedFiles).toContainEqual(['apps/web/src/foo.ts', 'apps/web/src/outside.ts']);
     } finally {
       replaySpy.mockRestore();
     }

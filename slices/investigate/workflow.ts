@@ -466,6 +466,37 @@ export async function runInvestigateWorkflow(
         );
         return;
       }
+      if (!wave1Result.shouldAdvance) {
+        eventStore.appendEvent({
+          projectId,
+          workItemId: workItem.id,
+          kind: 'agent.run-failed',
+          payload: {
+            skill: 'investigate',
+            runId,
+            error: `Wave incomplete — only ${wave1Result.reports.filter((report) => report.status === 'ok').length} scouts succeeded`,
+          },
+          runId,
+        });
+        await stateSource.comment(
+          workItem.externalId,
+          buildAgentComment(
+            'Investigate',
+            'Escalated',
+            'Not enough scouts succeeded — escalating to needs-human',
+            [
+              `Required scouts: ${initialPlan.minSuccessfulScouts}`,
+              `Failed scouts: ${wave1Result.failedScouts.join(', ') || '(none)'}`,
+            ],
+          ),
+        );
+        await stateSource.transitionState(
+          workItem.externalId,
+          'factory:investigating',
+          'factory:needs-human',
+        );
+        return;
+      }
 
       // Cross-validate Wave 1 before dispatching Wave 2
       const cvResult = crossValidate(wave1Result.reports);

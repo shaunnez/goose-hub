@@ -132,4 +132,34 @@ describe('investigation planner', () => {
     expect(plan.scoutEffortHints['wave2-interface-designer']).toBe('medium');
     expect(plan.scoutEffortHints['wave2-risk-analyst']).toBe('medium');
   });
+
+  it('detects Wave 2 signals from mixed-case scout findings', () => {
+    const plan = planInvestigation({
+      swarmEnabled: true,
+      workItem: {
+        type: 'bug',
+        title: 'Unexpected behavior',
+        body: 'Needs another look.',
+      },
+      wave1Reports: [
+        {
+          ...report('scout-code-path', 'apps/server/src/auth.ts'),
+          findings: [
+            {
+              file: 'apps/server/src/auth.ts',
+              fact: 'Auth Session API contract changed',
+              confidence: 'high',
+            },
+          ],
+        },
+      ],
+      contradictions: [],
+      scoutReportsContext: '{"wave1":[]}',
+    });
+
+    expect(plan.selectedWave2Scouts.map((scout) => scout.scoutName).sort()).toEqual([
+      'wave2-interface-designer',
+      'wave2-risk-analyst',
+    ]);
+  });
 });

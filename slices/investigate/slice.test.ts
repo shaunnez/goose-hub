@@ -762,6 +762,46 @@ describe('runInvestigateWorkflow', () => {
       );
     });
 
+    it('escalates when Wave 1 is incomplete and shouldAdvance is false', async () => {
+      mockDispatchWave.mockResolvedValueOnce(
+        makeWaveResult({
+          status: 'incomplete',
+          shouldAdvance: false,
+          shouldEscalate: false,
+          reports: [
+            makeScoutReport('scout-code-path'),
+            makeScoutReport('scout-test-inventory', {
+              status: 'timeout',
+              findings: [],
+              runId: 't',
+            }),
+          ],
+          failedScouts: ['scout-test-inventory'],
+        }),
+      );
+
+      const source = makeMockSource();
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(
+        makeWorkItem({
+          title: 'Fix apps/web/src/LoginModal.tsx disabled button',
+          body: 'Localized component bug with known path.',
+        }),
+        source,
+        'goose-hub-self',
+        '/repo',
+      );
+
+      expect(mockDispatchWave).toHaveBeenCalledTimes(1);
+      expect(mockCrossValidate).not.toHaveBeenCalled();
+      expect(mockInvokeSkill).not.toHaveBeenCalled();
+      expect(source.transitionState).toHaveBeenCalledWith(
+        '42',
+        'factory:investigating',
+        'factory:needs-human',
+      );
+    });
+
     it('does not persist timed-out scout reports', async () => {
       const wave1 = makeWaveResult({
         reports: [

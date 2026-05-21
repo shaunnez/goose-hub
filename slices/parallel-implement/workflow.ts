@@ -447,7 +447,7 @@ export async function runParallelImplementWorkflow(
                 payload: { wpId: wp.id, wpRunId, errorReason: reason },
                 runId: wpRunId,
               });
-              revertFn(scratchWorktreePath, wp.filesOwned);
+              revertFn(scratchWorktreePath, changedPaths);
               recordFn(runId, wp.id, iteration, 'failed', reason);
               allWpResults.push({
                 wpId: wp.id,
@@ -497,7 +497,7 @@ export async function runParallelImplementWorkflow(
                 payload: { wpId: wp.id, wpRunId, errorReason: reason },
                 runId: wpRunId,
               });
-              revertFn(scratchWorktreePath, wp.filesOwned);
+              revertFn(scratchWorktreePath, changedPaths);
               recordFn(runId, wp.id, iteration, 'failed', reason);
               allWpResults.push({
                 wpId: wp.id,

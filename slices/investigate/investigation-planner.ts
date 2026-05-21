@@ -122,7 +122,9 @@ function selectWave2(input: InvestigationPlannerInput): ScoutSpec[] {
       report.scoutName,
       ...report.findings.flatMap((finding) => [finding.file, finding.fact]),
     ]),
-  ].join('\n');
+  ]
+    .join('\n')
+    .toLowerCase();
 
   if (wave1IsLocalizedHighConfidence(input) && !implicatesInterfaceBoundaries(text)) {
     return [];
