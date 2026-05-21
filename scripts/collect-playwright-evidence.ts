@@ -236,6 +236,7 @@ function isAssertionFailure(message: string): boolean {
 function isSetupFailure(message: string): boolean {
   return (
     /webServer|server.*failed|ECONNREFUSED|ERR_CONNECTION|net::ERR|Cannot find module/i.test(message) ||
+    /fetch failed|AggregateError/i.test(message) ||
     /Timeout .*waiting for|waiting for selector|locator\(|page\.goto|Navigation|Target closed/i.test(
       message,
     )

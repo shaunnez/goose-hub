@@ -37,11 +37,17 @@ describe('issue timeline event-kind contract', () => {
     }
   });
 
-  it('keeps hub-chat runtime events out of issue timelines', () => {
+  it('keeps non-issue runtime skills out of issue timelines', () => {
     expect(
       isIssueTimelineEvent({
         kind: 'agent.run-started',
         payload: { skill: 'hub-chat' },
+      }),
+    ).toBe(false);
+    expect(
+      isIssueTimelineEvent({
+        kind: 'agent.run-failed',
+        payload: { skill: 'intervention-proposer' },
       }),
     ).toBe(false);
     expect(

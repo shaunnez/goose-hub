@@ -1,6 +1,7 @@
 import { parseIssueBodyAcceptanceCriteria } from '@goose-hub/core/acceptance-contracts/issue-body.js';
 import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/types.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
+import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
@@ -16,6 +17,18 @@ import {
 
 export interface AcceptanceContractWorkflowDeps {
   runtime?: AgentRuntime;
+}
+
+export class AcceptanceContractValidationError extends Error {
+  runId: string;
+  personaId: string;
+
+  constructor(message: string, runId: string, personaId: string) {
+    super(message);
+    this.name = 'AcceptanceContractValidationError';
+    this.runId = runId;
+    this.personaId = personaId;
+  }
 }
 
 type InvestigationPayload = {
@@ -132,10 +145,12 @@ export async function runAcceptanceContractWorkflow(
             })
           ).output;
 
-  const parsed = AcceptanceContractOutputSchema.safeParse(rawOutput);
+  const parsed = safeParseOutputForSchema(AcceptanceContractOutputSchema, rawOutput);
   if (!parsed.success) {
-    throw new Error(
+    throw new AcceptanceContractValidationError(
       `Acceptance contract output validation failed: ${JSON.stringify(parsed.error.issues)}`,
+      runId,
+      personaId,
     );
   }
 

@@ -352,6 +352,8 @@ describe('playwright-repro prompt discipline', () => {
     expect(PROMPT).toContain('specSource');
     expect(PROMPT).toContain('run it at most once');
     expect(PROMPT).toContain('REPRO_EXPECTED_BUG');
+    expect(PROMPT).toContain('/projects/test/.../seed-issue');
+    expect(PROMPT).toContain('route interception');
   });
 
   it('does not instruct the agent to publish evidence or comment on GitHub', () => {

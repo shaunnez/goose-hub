@@ -3,6 +3,26 @@ import { z } from 'zod';
 
 export { DecisionSummarySchema };
 
+const ManualTransitionPayloadSchema = z.object({
+  from: z.string().min(1),
+  to: z.string().min(1),
+  reason: z.string().min(1).optional(),
+});
+
+const ReasonPayloadSchema = z.object({
+  reason: z.string().min(1).optional(),
+});
+
+const RequiredReasonPayloadSchema = z.object({
+  reason: z.string().min(1),
+});
+
+const InterventionProposalPayloadSchema = z.union([
+  ManualTransitionPayloadSchema,
+  ReasonPayloadSchema,
+  RequiredReasonPayloadSchema,
+]);
+
 export const InterventionProposalOptionSchema = z.object({
   actionType: z.enum([
     'manual_transition',
@@ -14,7 +34,7 @@ export const InterventionProposalOptionSchema = z.object({
   ]),
   label: z.string().min(1),
   description: z.string().min(1),
-  payload: z.unknown(),
+  payload: InterventionProposalPayloadSchema,
   risk: z.enum(['low', 'medium', 'high']),
 });
 

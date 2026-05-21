@@ -362,6 +362,7 @@ describe('dispatchInvestigationComplete', () => {
         externalId: '42',
         state: 'factory:investigation-complete',
       }),
+      comment: vi.fn().mockResolvedValue(undefined),
       transitionState: vi.fn().mockResolvedValue(undefined),
     };
   }
@@ -467,6 +468,40 @@ describe('dispatchInvestigationComplete', () => {
       ([event]) => event.kind === 'state.transitioned',
     );
     expect(stateEvents).toHaveLength(1);
+  });
+
+  it('attaches acceptance-contract run metadata to validation failure events', async () => {
+    const source = investigationCompleteSource();
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockEventStoreReplay.mockReturnValue([
+      {
+        kind: 'agent.investigation-complete',
+        payload: { investigate: { confidence: 'high' } },
+      },
+    ]);
+    const error = new Error('Acceptance contract output validation failed');
+    Object.assign(error, {
+      runId: 'contract-run-1',
+      personaId: 'goose/developer/0',
+    });
+    mockRunAcceptanceContractWorkflow.mockRejectedValue(error);
+
+    const { dispatchInvestigationComplete } = await import('./dispatch.js');
+    await dispatchInvestigationComplete('goose-hub-self', 42);
+
+    expect(mockEventStoreAppendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'agent.run-failed',
+        runId: 'contract-run-1',
+        personaId: 'goose/developer/0',
+        payload: expect.objectContaining({ skill: 'acceptance-contract' }),
+      }),
+    );
+    expect(source.transitionState).toHaveBeenCalledWith(
+      'github:shaunnez/goose-hub#42',
+      'factory:investigation-complete',
+      'factory:gate-pending',
+    );
   });
 });
 

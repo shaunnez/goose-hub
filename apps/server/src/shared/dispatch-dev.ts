@@ -221,6 +221,14 @@ export async function dispatchInvestigationComplete(
           await runAcceptanceContractWorkflow(item, source, slug, item.repoRef ?? slug);
         } catch (err) {
           const error = err instanceof Error ? err : new Error(String(err));
+          const runId =
+            error != null && typeof (error as { runId?: unknown }).runId === 'string'
+              ? (error as { runId: string }).runId
+              : undefined;
+          const personaId =
+            error != null && typeof (error as { personaId?: unknown }).personaId === 'string'
+              ? (error as { personaId: string }).personaId
+              : undefined;
           eventStore.appendEvent({
             projectId: slug,
             workItemId,
@@ -230,6 +238,8 @@ export async function dispatchInvestigationComplete(
               error: error.message,
               reason: 'legacy acceptance contract could not be authored',
             },
+            ...(runId != null ? { runId } : {}),
+            ...(personaId != null ? { personaId } : {}),
           });
           await source.comment(
             item.externalId,

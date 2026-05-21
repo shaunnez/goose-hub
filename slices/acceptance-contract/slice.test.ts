@@ -108,4 +108,30 @@ describe('acceptance-contract workflow', () => {
       verifyCommand: 'pnpm test',
     });
   });
+
+  it('normalizes nullable optional fields returned by Codex response schemas', async () => {
+    runtimeRun.mockResolvedValue({
+      output: {
+        criteria: [
+          {
+            id: 'AC-1',
+            statement: 'Cards sort newest first',
+            verifyCommand: null,
+            expected: null,
+            tolerance: null,
+          },
+        ],
+        issueBodyPatchRecommended: true,
+        decisionSummaries: [{ kind: 'PLAN', summary: 'Authored contract' }],
+      },
+    });
+
+    const contract = await runAcceptanceContractWorkflow(workItem, {} as never, 'goose', 'repo');
+
+    expect(contract.criteria[0]).toEqual({
+      id: 'AC-1',
+      statement: 'Cards sort newest first',
+      sourceRef: 'acceptance-contract',
+    });
+  });
 });

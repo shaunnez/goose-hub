@@ -47,6 +47,7 @@ Do not read local assistant memory, skill, config, or session files. Never inspe
 4. The spec must navigate using `{ waitUntil: 'domcontentloaded' }`, never `networkidle`.
 5. The spec must collect console errors, take screenshots under `/tmp/repro-<slug>/step-N.png`, and use `expect.soft(...)` with `REPRO_EXPECTED_BUG` in assertions that represent the reported bug.
 6. If setup is required, encode it before navigation when possible. If auth or external state cannot be encoded safely, include that in `notes`.
+   - Do not call Goose Hub server seed endpoints such as `/projects/test/.../seed-issue` or direct `SERVER_URL` setup requests. This evidence runner is not the pipeline mock harness. For controlled data, use Playwright route interception inside the spec or explain the missing setup in `notes`.
 7. Do not write files or modify app source code. The workflow writes `specSource` to `specPath`.
 8. Do not publish evidence, create branches, or post issue comments.
 9. Do not perform a memory or skill quick pass.

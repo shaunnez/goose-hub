@@ -9,7 +9,12 @@ export function AgentInvestigationCompleteEvent({ event }: { event: AgentEventDt
       keyFiles?: unknown[];
       openQuestions?: string[];
     };
-    playwrightRepro?: { reproduced?: boolean; notes?: string };
+    playwrightRepro?: {
+      reproduced?: boolean;
+      notes?: string;
+      runnerErrors?: string[];
+      testErrors?: string[];
+    };
   } | null;
   const inv = p?.investigate;
   const confidence = inv?.confidence ?? 'unknown';
@@ -22,6 +27,15 @@ export function AgentInvestigationCompleteEvent({ event }: { event: AgentEventDt
   const keyFileCount = inv?.keyFiles?.length ?? 0;
   const openQuestionCount = inv?.openQuestions?.length ?? 0;
   const repro = p?.playwrightRepro;
+  const reproSetupError = repro?.runnerErrors?.find((error) => error.trim().length > 0);
+  const reproAssertionError = repro?.testErrors?.find((error) => error.trim().length > 0);
+  const reproDetail = compactReproDetail(reproSetupError ?? reproAssertionError ?? repro?.notes);
+  const reproDetailLabel =
+    reproSetupError != null
+      ? 'repro setup failed'
+      : reproAssertionError != null
+        ? 'repro assertion'
+        : 'repro note';
 
   const confidenceColor =
     confidence === 'high'
@@ -66,9 +80,22 @@ export function AgentInvestigationCompleteEvent({ event }: { event: AgentEventDt
           </span>
         )}
       </div>
-      {repro?.notes != null && !repro.reproduced && (
-        <p className="mt-1.5 text-[11px] text-fg-2 italic">{repro.notes}</p>
+      {reproDetail != null && !repro?.reproduced && (
+        <p className="mt-1.5 text-[11px] text-fg-2 italic">
+          <span className="font-mono not-italic text-fg-3">{reproDetailLabel}: </span>
+          {reproDetail}
+        </p>
       )}
     </li>
   );
+}
+
+function compactReproDetail(value: string | undefined): string | null {
+  if (value == null) return null;
+  const firstLine = value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+  if (firstLine == null) return null;
+  return firstLine.length > 160 ? `${firstLine.slice(0, 159)}…` : firstLine;
 }

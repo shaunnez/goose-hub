@@ -194,7 +194,7 @@ describe('GatePendingBanner', () => {
     });
   });
 
-  it('keeps the Grill link for gate-pending interventions', async () => {
+  it('does not render Grill as a generic gate-pending intervention action', async () => {
     vi.mocked(fetchIssueInterventions).mockResolvedValueOnce([
       makeIntervention({
         interventionType: 'gate_pending',
@@ -207,8 +207,7 @@ describe('GatePendingBanner', () => {
     render_(<GatePendingBanner state="factory:gate-pending" projectSlug="proj" id="42" />);
 
     const banner = await screen.findByTestId('gate-pending-banner');
-    const grill = screen.getByTestId('gate-action-grill') as HTMLAnchorElement;
     expect(banner.getAttribute('data-variant')).toBe('info');
-    expect(grill.getAttribute('href')).toBe('/projects/proj/items/42/grill');
+    expect(screen.queryByTestId('gate-action-grill')).toBeNull();
   });
 });

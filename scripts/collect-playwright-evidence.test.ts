@@ -181,7 +181,10 @@ describe('collect-playwright-evidence', () => {
     const dir = makeTmpDir();
     try {
       const resultsPath = writeResults(dir, {
-        errors: [{ message: 'webServer failed to start: ECONNREFUSED 127.0.0.1:5173' }],
+        errors: [
+          { message: 'webServer failed to start: ECONNREFUSED 127.0.0.1:5173' },
+          { message: 'TypeError: fetch failed\n[cause]: AggregateError:' },
+        ],
       });
 
       const evidence = collect({ resultsPath, evidenceDir: dir });
@@ -189,6 +192,7 @@ describe('collect-playwright-evidence', () => {
       expect(evidence.classification).toBe('setup_failed');
       expect(evidence.runnerErrors).toEqual([
         'webServer failed to start: ECONNREFUSED 127.0.0.1:5173',
+        'TypeError: fetch failed\n[cause]: AggregateError:',
       ]);
       expect(evidence.testErrors).toEqual([]);
       expect(evidence.consoleErrors).toEqual([]);

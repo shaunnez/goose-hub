@@ -170,10 +170,12 @@ describe('toJsonSchema', () => {
     const properties = result.properties as Record<string, unknown>;
     const options = properties.options as { items?: unknown };
     const item = options.items as { properties?: Record<string, unknown> };
+    const payload = item.properties?.payload as { anyOf?: unknown[] };
 
-    expect(item.properties?.payload).toEqual({
-      type: ['string', 'number', 'integer', 'boolean', 'object', 'array', 'null'],
-    });
+    expect(payload.anyOf?.length).toBeGreaterThan(0);
+    for (const variant of payload.anyOf ?? []) {
+      expect(variant).toMatchObject({ type: 'object', additionalProperties: false });
+    }
     expect(JSON.stringify(result)).not.toContain('"payload":{}');
   });
 

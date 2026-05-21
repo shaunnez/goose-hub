@@ -3,9 +3,8 @@ import { cn } from '@/lib/cn';
 import { interventionKeys, invalidateInterventionDecision } from '@/lib/query-keys';
 import type { InterventionDto, InterventionOptionDto } from '@/lib/types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Info, MessageCircleQuestion, ShieldAlert } from 'lucide-react';
+import { Info, ShieldAlert } from 'lucide-react';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 
 const ACTIVE_INTERVENTION_STATUSES = ['OPEN', 'PROPOSED'] as const;
 
@@ -77,7 +76,6 @@ export function GatePendingBanner({
   if (!primary || !projectSlug || !id) return null;
 
   const variant = interventionVariant(primary.interventionType);
-  const showGrillLink = primary.interventionType === 'gate_pending';
   const options = primary.status === 'PROPOSED' ? primary.proposedOptions : [];
   const manualTargets =
     primary.status === 'OPEN' && legalTargets != null ? legalTargets.legalTargets : [];
@@ -172,20 +170,6 @@ export function GatePendingBanner({
         {error && <span className="text-[color:var(--danger)] ml-2">{error}</span>}
         <span className="grow" />
         <span className="flex items-center gap-2">
-          {showGrillLink && (
-            <Link
-              to={`/projects/${projectSlug}/items/${id}/grill`}
-              data-testid="gate-action-grill"
-              className={cn(
-                'flex items-center gap-1 h-6 px-2.5 rounded text-[11.5px] font-medium border',
-                'border-[color:var(--info)]/60 text-[color:var(--info)]',
-                'hover:bg-[color:var(--info)]/20',
-              )}
-            >
-              <MessageCircleQuestion size={12} />
-              Grill
-            </Link>
-          )}
           {options.map(renderOption)}
           {manualTargets.map((target) => (
             <button
