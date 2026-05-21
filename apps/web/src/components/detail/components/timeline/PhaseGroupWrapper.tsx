@@ -16,7 +16,7 @@ export function PhaseGroupWrapper({
   context,
   renderItem,
 }: {
-  phase: 'contract' | 'dev';
+  phase: 'grill' | 'prd' | 'contract' | 'dev';
   pipelineRunId: string;
   items: RenderItem[];
   status: 'started' | 'live' | 'completed' | 'failed';
@@ -51,8 +51,15 @@ export function PhaseGroupWrapper({
   const completeDuration =
     startMs != null && endMs != null ? formatDuration((lastMs ?? endMs) - startMs) : null;
   const shortId = pipelineRunId.length > 8 ? pipelineRunId.slice(0, 8) : pipelineRunId;
-  const phaseLabel = phase === 'contract' ? 'Contract Phase' : 'Dev Phase';
-  const idLabel = phase === 'contract' ? 'contract' : 'pipeline';
+  const phaseLabel =
+    phase === 'grill'
+      ? 'Grill Phase'
+      : phase === 'prd'
+        ? 'PRD Phase'
+        : phase === 'contract'
+          ? 'Contract Phase'
+          : 'Dev Phase';
+  const idLabel = phase === 'contract' ? 'contract' : phase === 'dev' ? 'pipeline' : 'workflow';
 
   const statusBadge = isStalled ? (
     <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">

@@ -495,6 +495,37 @@ describe('groupEvents — run-group metadata', () => {
     }
   });
 
+  it('labels parent grill workflow groups from display skill metadata', () => {
+    const events: AgentEventDto[] = [
+      {
+        ...makeRunEvent(1, 'workflow-run', 'grill.decision-crystallized'),
+        payload: {
+          displaySkill: 'grill-me',
+          workflowRunId: 'workflow-run',
+          roundNumber: 1,
+          decision: 'Reuse the existing enhancement flow.',
+        },
+      },
+      {
+        ...makeRunEvent(2, 'workflow-run', 'grill.question-posted'),
+        payload: {
+          displaySkill: 'grill-me',
+          workflowRunId: 'workflow-run',
+          roundNumber: 2,
+          question: 'Should enhancement be generic or type-specific?',
+        },
+      },
+    ];
+
+    const result = groupEvents(events);
+
+    expect(result).toHaveLength(1);
+    if (result[0].kind === 'phase-group') {
+      expect(result[0].phase).toBe('grill');
+      expect(result[0].items).toHaveLength(2);
+    }
+  });
+
   it('infers fix-feedback display skill from the completion marker for legacy runs', () => {
     const events: AgentEventDto[] = [
       makeRunEvent(3, 'run-fix', 'agent.fix-feedback-complete'),

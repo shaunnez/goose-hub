@@ -430,6 +430,131 @@ describe('computeIsWritePrdStuck', () => {
   });
 });
 
+describe('groupEvents — discover phase groups', () => {
+  it('wraps grill child runs and parent grill workflow events into a grill phase', () => {
+    const WID = 'discover-workflow-grill';
+    const result = groupEvents([
+      makeEvent(1, 'agent.run-started', `${WID}:grill-me`, {
+        payload: { skill: 'grill-me', workflowRunId: WID },
+      }),
+      makeEvent(2, 'agent.run-completed', `${WID}:grill-me`, {
+        payload: { skill: 'grill-me', workflowRunId: WID },
+      }),
+      makeEvent(3, 'grill.decision-crystallized', WID, {
+        payload: {
+          displaySkill: 'grill-me',
+          workflowRunId: WID,
+          roundNumber: 1,
+          decision: 'Use the generic enhancement flow.',
+        },
+      }),
+      makeEvent(4, 'grill.completed', WID, {
+        payload: { displaySkill: 'grill-me', workflowRunId: WID, refinedIntent: 'Ship it.' },
+      }),
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].kind).toBe('phase-group');
+    if (result[0].kind !== 'phase-group') return;
+    expect(result[0].phase).toBe('grill');
+    expect(result[0].pipelineRunId).toBe(WID);
+    expect(result[0].status).toBe('completed');
+    expect(
+      result[0].items.some((item) => item.kind === 'run-group' && item.runId.endsWith(':grill-me')),
+    ).toBe(true);
+    expect(
+      result[0].items.some(
+        (item) => item.kind === 'event' && item.event.kind === 'grill.completed',
+      ),
+    ).toBe(true);
+  });
+
+  it('wraps write-prd and advisor activity with parent PRD events into a PRD phase', () => {
+    const WID = 'discover-workflow-prd';
+    const result = groupEvents([
+      makeEvent(1, 'agent.run-started', `${WID}:write-prd`, {
+        payload: { skill: 'write-prd', workflowRunId: WID },
+      }),
+      makeEvent(2, 'agent.run-completed', `${WID}:write-prd`, {
+        payload: { skill: 'write-prd', workflowRunId: WID },
+      }),
+      makeEvent(3, 'prd.advisor-skipped', WID, {
+        payload: { workflowRunId: WID, reason: 'priority' },
+      }),
+      makeEvent(4, 'prd.drafted', WID, {
+        payload: { displaySkill: 'write-prd', workflowRunId: WID, prd: { title: 'Draft' } },
+      }),
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].kind).toBe('phase-group');
+    if (result[0].kind !== 'phase-group') return;
+    expect(result[0].phase).toBe('prd');
+    expect(result[0].pipelineRunId).toBe(WID);
+    expect(result[0].status).toBe('completed');
+    expect(
+      result[0].items.some(
+        (item) => item.kind === 'run-group' && item.runId.endsWith(':write-prd'),
+      ),
+    ).toBe(true);
+    const prdEventKinds = result[0].items.flatMap((item) =>
+      item.kind === 'event' ? [item.event.kind] : [],
+    );
+    expect(prdEventKinds).toEqual(expect.arrayContaining(['prd.advisor-skipped', 'prd.drafted']));
+  });
+
+  it('keeps Grill and PRD phases separate for the same discover workflow', () => {
+    const WID = 'discover-workflow-complete';
+    const result = groupEvents([
+      makeEvent(1, 'agent.run-started', `${WID}:grill-me`, {
+        payload: { skill: 'grill-me', workflowRunId: WID },
+      }),
+      makeEvent(2, 'agent.run-completed', `${WID}:grill-me`, {
+        payload: { skill: 'grill-me', workflowRunId: WID },
+      }),
+      makeEvent(3, 'grill.completed', WID, {
+        payload: { displaySkill: 'grill-me', workflowRunId: WID, refinedIntent: 'Draft it.' },
+      }),
+      makeEvent(4, 'agent.run-started', `${WID}:write-prd`, {
+        payload: { skill: 'write-prd', workflowRunId: WID },
+      }),
+      makeEvent(5, 'agent.run-completed', `${WID}:write-prd`, {
+        payload: { skill: 'write-prd', workflowRunId: WID },
+      }),
+      makeEvent(6, 'prd.drafted', WID, {
+        payload: { displaySkill: 'write-prd', workflowRunId: WID, prd: { title: 'Draft' } },
+      }),
+    ]);
+
+    const phaseGroups = result.filter((item) => item.kind === 'phase-group');
+    expect(phaseGroups).toHaveLength(2);
+    expect(phaseGroups.map((item) => (item.kind === 'phase-group' ? item.phase : null))).toEqual([
+      'prd',
+      'grill',
+    ]);
+  });
+
+  it('hides grill reply manual actions from the timeline', () => {
+    const result = groupEvents([
+      makeEvent(1, 'manual.action', null, {
+        payload: {
+          action: 'comment',
+          preview: '<!-- factory:grill-reply -->\nRecommended: Proceed.',
+        },
+      }),
+      makeEvent(2, 'state.transitioned', null, {
+        payload: { from: 'factory:gate-pending', to: 'factory:grilling', by: 'ui' },
+      }),
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].kind).toBe('event');
+    if (result[0].kind === 'event') {
+      expect(result[0].event.kind).toBe('state.transitioned');
+    }
+  });
+});
+
 describe('groupByDevPhase', () => {
   it('returns items unchanged when no spec.completed event exists', () => {
     const events: AgentEventDto[] = [
