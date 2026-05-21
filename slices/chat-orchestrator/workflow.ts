@@ -7,6 +7,7 @@
  */
 import { invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
 import { defaultModelForTierAndProvider } from '@goose-hub/core/agent-runtime/models.js';
+import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
 import { listToolManifests } from '@goose-hub/core/chat-tools/registry.js';
 import { listToolInvocations } from '@goose-hub/core/conversations/repository.js';
 import type {
@@ -430,7 +431,7 @@ export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<Cha
     telemetry.durationMs.modelInvocation = elapsedSince(modelStarted);
     emitThinking(conversation, runId, 'structured-output-received');
     const parsingStarted = Date.now();
-    const parsed = HubChatOutputSchema.safeParse(result.output);
+    const parsed = safeParseOutputForSchema(HubChatOutputSchema, result.output);
     if (!parsed.success) {
       telemetry.durationMs.postModelParsing = elapsedSince(parsingStarted);
       telemetry.durationMs.total = elapsedSince(totalStarted);

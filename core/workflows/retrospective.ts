@@ -1,7 +1,7 @@
 import { DeepRetroSchema } from '../../skills/retrospective-deep/schema.js';
 import { LightRetroSchema } from '../../skills/retrospective-light/schema.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
-import { omitNullObjectProperties } from '../agent-runtime/output-normalization.js';
+import { safeParseOutputForSchema } from '../agent-runtime/output-normalization.js';
 import { readPromptWithContext } from '../agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
 import { resolveProjectAgentExecution } from '../agent-runtime/resolve-runtime-for-project.js';
@@ -191,9 +191,10 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
       extraEventPayload: { tier },
     });
 
-    const output = omitNullObjectProperties(result.output);
     const parsed =
-      tier === 'deep' ? DeepRetroSchema.safeParse(output) : LightRetroSchema.safeParse(output);
+      tier === 'deep'
+        ? safeParseOutputForSchema(DeepRetroSchema, result.output)
+        : safeParseOutputForSchema(LightRetroSchema, result.output);
 
     if (!parsed.success) {
       eventStore.appendEvent({

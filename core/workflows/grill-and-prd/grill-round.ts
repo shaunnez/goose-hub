@@ -2,6 +2,7 @@ import type { GrillMeOutput } from '../../../skills/grill-me/schema.js';
 import { GrillMeOutputSchema } from '../../../skills/grill-me/schema.js';
 import type { AgentRuntime } from '../../agent-runtime/interface.js';
 import { OutputValidationError, invokeSkill } from '../../agent-runtime/invoke-skill.js';
+import { safeParseOutputForSchema } from '../../agent-runtime/output-normalization.js';
 import type { ProjectConfig } from '../../types.js';
 import type { ProjectContextBundle } from '../grill-and-prd.js';
 
@@ -76,7 +77,7 @@ export async function runGrillRound(input: RunGrillRoundInput): Promise<GrillRou
     return { status: 'failed', error: String(err) };
   }
 
-  const parsed = GrillMeOutputSchema.safeParse(result.output);
+  const parsed = safeParseOutputForSchema(GrillMeOutputSchema, result.output);
   if (!parsed.success) {
     return { status: 'invalid', error: parsed.error.message };
   }

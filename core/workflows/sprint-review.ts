@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { SprintReviewOutputSchema } from '../../skills/sprint-review/schema.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
-import { omitNullObjectProperties } from '../agent-runtime/output-normalization.js';
+import { safeParseOutputForSchema } from '../agent-runtime/output-normalization.js';
 import { readPromptWithContext } from '../agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
 import { resolveProjectAgentExecution } from '../agent-runtime/resolve-runtime-for-project.js';
@@ -128,7 +128,7 @@ export async function runSprintReviewWorkflow(input: RunSprintReviewInput): Prom
       outputJsonSchema: jsonSchema,
     });
 
-    const parsed = SprintReviewOutputSchema.safeParse(omitNullObjectProperties(result.output));
+    const parsed = safeParseOutputForSchema(SprintReviewOutputSchema, result.output);
 
     if (!parsed.success) {
       eventStore.appendEvent({

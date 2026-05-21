@@ -5,7 +5,7 @@ import { getProjectBySlug } from '../projects/loader.js';
 import type { ProjectConfig } from '../types.js';
 import type { ResolvedBudget } from './budgets.js';
 import type { AgentResult, AgentRuntime, SkillConfig } from './interface.js';
-import { omitNullObjectProperties } from './output-normalization.js';
+import { safeParseOutputForSchema } from './output-normalization.js';
 import { readPromptWithContext } from './read-prompt.js';
 import { toJsonSchema } from './schema-bridge.js';
 import { selectPersona } from './select-persona.js';
@@ -190,8 +190,7 @@ export async function invokeSkill(input: InvokeSkillInput): Promise<InvokeSkillR
   // 11. Validate output when skill declares an outputSchema
   let output = result.output;
   if (skillConfig.outputSchema != null) {
-    output = omitNullObjectProperties(result.output);
-    const outResult = skillConfig.outputSchema.safeParse(output);
+    const outResult = safeParseOutputForSchema(skillConfig.outputSchema, result.output);
     if (!outResult.success) {
       throw new OutputValidationError(
         outResult.error.issues.map((i) => ({

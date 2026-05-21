@@ -5,39 +5,59 @@ export { DecisionSummarySchema };
 
 const ConfidenceSchema = z.enum(['low', 'medium', 'high']);
 
-/**
- * Advisor verdict — canonical typed union per CONTEXT.md "Advisor Flow".
- *
- * - `proceed`: plan is sound; primary continues.
- * - `revise`: plan has a fixable issue; primary re-spawned with `feedback`.
- * - `abort`:  plan is unsafe / out of scope; immediate escalation. NOT revisable.
- *
- * Pass discipline: at most one revise pass before escalation
- * (FACTORY_RULES rule 21, CONTEXT.md state-machine table).
- */
-export const AdvisorVerdictSchema = z.discriminatedUnion('verdict', [
-  z.object({
-    verdict: z.literal('proceed'),
-    confidence: ConfidenceSchema,
-  }),
-  z.object({
-    verdict: z.literal('revise'),
-    feedback: z.string().min(1).describe('Concrete feedback the primary must address on retry'),
-    confidence: ConfidenceSchema,
-  }),
-  z.object({
-    verdict: z.literal('abort'),
-    reason: z.string().min(1).describe('Why this plan is unsafe; surfaced to human reviewer'),
-    confidence: ConfidenceSchema,
-  }),
-]);
+const AdvisorVerdictBaseSchema = z.object({
+  verdict: z.enum(['proceed', 'revise', 'abort']),
+  confidence: ConfidenceSchema,
+  feedback: z
+    .string()
+    .nullable()
+    .optional()
+    .describe('Concrete feedback the primary must address on retry'),
+  reason: z
+    .string()
+    .nullable()
+    .optional()
+    .describe('Why this plan is unsafe; surfaced to human reviewer'),
+});
 
-export const AdviseOnPlanSchema = z.intersection(
-  AdvisorVerdictSchema,
-  z.object({
+function refineAdvisorVerdict(val: z.infer<typeof AdvisorVerdictBaseSchema>, ctx: z.RefinementCtx) {
+  if (val.verdict === 'revise') {
+    if (typeof val.feedback === 'string' && val.feedback.trim().length > 0) return;
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'revise verdicts must include non-blank feedback',
+      path: ['feedback'],
+    });
+  }
+  if (val.verdict === 'abort') {
+    if (typeof val.reason === 'string' && val.reason.trim().length > 0) return;
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'abort verdicts must include a non-blank reason',
+      path: ['reason'],
+    });
+  }
+}
+
+export const AdvisorVerdictSchema = AdvisorVerdictBaseSchema.superRefine(refineAdvisorVerdict);
+
+export const AdviseOnPlanSchema = z
+  .object({
+    verdict: z.enum(['proceed', 'revise', 'abort']),
+    confidence: ConfidenceSchema,
+    feedback: z
+      .string()
+      .nullable()
+      .optional()
+      .describe('Concrete feedback the primary must address on retry'),
+    reason: z
+      .string()
+      .nullable()
+      .optional()
+      .describe('Why this plan is unsafe; surfaced to human reviewer'),
     decisionSummaries: z.array(DecisionSummarySchema).min(1),
-  }),
-);
+  })
+  .superRefine(refineAdvisorVerdict);
 
 export type AdvisorVerdict = z.infer<typeof AdvisorVerdictSchema>;
 export type AdviseOnPlanOutput = z.infer<typeof AdviseOnPlanSchema>;

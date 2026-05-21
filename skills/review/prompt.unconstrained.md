@@ -113,7 +113,7 @@ Return a JSON object with the same schema as the constrained reviewer:
 }
 ```
 
-`needs-human` requires a non-empty `escalationReason`. Optional fields must be OMITTED, not null.
+`needs-human` requires a non-empty `escalationReason`. Optional fields that do not apply should be omitted when possible; if the response schema requires a value, use `null`.
 
 ## Important reminders
 

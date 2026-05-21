@@ -4,6 +4,7 @@ import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/ty
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { findFreePort } from '@goose-hub/core/agent-runtime/find-free-port.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
+import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
@@ -440,7 +441,7 @@ export async function runQaWorkflow(
       appendSystemPrompt: qaPrompt,
     });
 
-    const qaParsed = QaOutputSchema.safeParse(qaResult.output);
+    const qaParsed = safeParseOutputForSchema(QaOutputSchema, qaResult.output);
     if (!qaParsed.success) {
       throw new Error(`QA output validation failed: ${JSON.stringify(qaParsed.error.issues)}`);
     }

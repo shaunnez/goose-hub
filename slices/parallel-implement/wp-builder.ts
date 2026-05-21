@@ -6,6 +6,7 @@ import type {
   AgentSpec,
 } from '@goose-hub/core/agent-runtime/interface.js';
 import type { InvestigationContext } from '@goose-hub/core/agent-runtime/investigation-context.js';
+import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
 import { getRecordDecisionTool } from '@goose-hub/core/db/repositories/project-settings.js';
 import type { AgentEvent, AppendEventInput } from '@goose-hub/core/event-stream/store.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
@@ -345,7 +346,7 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
     return { status: 'failed', wpId: wp.id, errorReason: errorReason ?? 'unknown', runId: wpRunId };
   }
 
-  const parsed = ImplementWpSchema.safeParse(result.output);
+  const parsed = safeParseOutputForSchema(ImplementWpSchema, result.output);
   if (!parsed.success) {
     const reason = `schema validation failed: ${parsed.error.issues
       .map((i) => `${i.path.join('.')}: ${i.message}`)

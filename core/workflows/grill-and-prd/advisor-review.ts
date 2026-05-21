@@ -3,6 +3,7 @@ import { AdvisePRDOutputSchema } from '../../../skills/advise-on-prd/schema.js';
 import type { PRDOutput } from '../../../skills/write-prd/schema.js';
 import type { AgentRuntime } from '../../agent-runtime/interface.js';
 import { OutputValidationError, invokeSkill } from '../../agent-runtime/invoke-skill.js';
+import { safeParseOutputForSchema } from '../../agent-runtime/output-normalization.js';
 import {
   resolveBudgetsForProject,
   resolveGlobalSettingsForProject,
@@ -95,7 +96,7 @@ export async function runAdvisorReview(input: RunAdvisorReviewInput): Promise<Ad
     return { status: 'failed', error: String(err) };
   }
 
-  const parsed = AdvisePRDOutputSchema.safeParse(result.output);
+  const parsed = safeParseOutputForSchema(AdvisePRDOutputSchema, result.output);
   if (!parsed.success) {
     return { status: 'invalid', error: parsed.error.message };
   }

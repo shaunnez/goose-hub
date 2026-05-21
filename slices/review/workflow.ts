@@ -1,6 +1,7 @@
 import { resolveAcceptanceContract } from '@goose-hub/core/acceptance-contracts/resolver.js';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
+import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
@@ -116,7 +117,7 @@ export async function runReviewWorkflow(
     });
     const result = await runtime.run(spec);
 
-    const parsed = ReviewOutputSchema.safeParse(result.output);
+    const parsed = safeParseOutputForSchema(ReviewOutputSchema, result.output);
     if (!parsed.success) {
       throw new Error(`Review output validation failed: ${JSON.stringify(parsed.error.issues)}`);
     }

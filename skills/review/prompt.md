@@ -270,7 +270,8 @@ For `approved` or `needs-fix`:
     { "kind": "DIFF_READ", "summary": "Read PR diff: 5 files changed in skills/review/" },
     { "kind": "CRITERIA_CHECK", "summary": "All 5 criteria met: schema, config, tests, prompt.md, README present" },
     { "kind": "VERDICT", "summary": "Verdict: approved, confidence 0.92 — all criteria met, no blockers" }
-  ]
+  ],
+  "escalationReason": null
 }
 ```
 
@@ -314,5 +315,5 @@ For `needs-human` (escalationReason is REQUIRED):
 - `confidence` is your honest assessment, not what you wish it were.
 - If a criterion appears trivially met, still document why — "README.md present with all required sections on lines 1–45."
 - The QA verdict is context, not directive. A QA `pass` does not guarantee your `approved`.
-- **Optional fields must be OMITTED, not null.** When a finding has no specific source location, omit `file` and `line` entirely — never write `"file": null` or `"line": null`. Same applies to `escalationReason` on non-`needs-human` verdicts — omit it entirely.
+- **Optional fields that do not apply should be omitted when possible.** If the response schema requires a value for an irrelevant optional field, use `null`. Same applies to `escalationReason` on non-`needs-human` verdicts.
 - **`criteriaChecks` must have one entry per criterion from Step 1.** `criteriaChecks: []` is never valid when criteria exist — populate it from your Step 3 verification before returning.

@@ -6,7 +6,7 @@ import type { SkillBudgetOverride } from './budgets.js';
 import type { AgentResult, AgentRuntime, AgentSpec } from './interface.js';
 import { HoldoutFallbackForbiddenError } from './interface.js';
 import { defaultModelForTierAndProvider, providerOf, tierOf } from './models.js';
-import { omitNullObjectProperties } from './output-normalization.js';
+import { safeParseOutputForSchema } from './output-normalization.js';
 import { resolveEscalatedBudgetsForProject } from './resolve-for-project.js';
 import { HOLDOUT_ROLES } from './roles.js';
 
@@ -59,7 +59,7 @@ export async function runWithEscalation<T>(
   const { runtime, spec, schema, projectId, workItemId, projectBudgets } = input;
 
   const result = await runtime.run(spec);
-  const parsed = schema.safeParse(omitNullObjectProperties(result.output));
+  const parsed = safeParseOutputForSchema(schema, result.output);
   if (parsed.success) {
     return { output: parsed.data, result, escalated: false };
   }
@@ -119,7 +119,7 @@ export async function runWithEscalation<T>(
   });
 
   const retryResult = await runtime.run(retrySpec);
-  const retryParsed = schema.safeParse(omitNullObjectProperties(retryResult.output));
+  const retryParsed = safeParseOutputForSchema(schema, retryResult.output);
   if (!retryParsed.success) {
     eventStore.appendEvent({
       projectId,

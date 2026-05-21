@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toJSONSchema } from 'zod';
+import { toJsonSchema } from '../../core/agent-runtime/schema-bridge.js';
 import { AdviseOnPlanSchema, AdvisorVerdictSchema } from './schema.js';
 import config, { AdviseOnPlanContextSchema } from './skill.config.js';
 
@@ -52,6 +52,26 @@ describe('advise-on-plan output schema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects revise with whitespace-only feedback', () => {
+    const result = AdviseOnPlanSchema.safeParse({
+      verdict: 'revise',
+      confidence: 'medium',
+      feedback: ' ',
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'something' }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects revise with null feedback from Codex-shaped output', () => {
+    const result = AdviseOnPlanSchema.safeParse({
+      verdict: 'revise',
+      confidence: 'medium',
+      feedback: null,
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'something' }],
+    });
+    expect(result.success).toBe(false);
+  });
+
   it('rejects abort without reason', () => {
     const result = AdviseOnPlanSchema.safeParse({
       verdict: 'abort',
@@ -71,16 +91,33 @@ describe('advise-on-plan output schema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects proceed with extra revise/abort fields', () => {
-    // discriminated union strictly excludes fields not on the matched variant.
+  it('rejects abort with whitespace-only reason', () => {
+    const result = AdviseOnPlanSchema.safeParse({
+      verdict: 'abort',
+      confidence: 'high',
+      reason: ' ',
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'something' }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects abort with null reason from Codex-shaped output', () => {
+    const result = AdviseOnPlanSchema.safeParse({
+      verdict: 'abort',
+      confidence: 'high',
+      reason: null,
+      decisionSummaries: [{ kind: 'VERDICT', summary: 'something' }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts proceed with irrelevant optional revise/abort fields', () => {
     const result = AdviseOnPlanSchema.safeParse({
       verdict: 'proceed',
       confidence: 'high',
       feedback: 'extra field that should not be present',
       decisionSummaries: [{ kind: 'VERDICT', summary: 'something' }],
     });
-    // Zod discriminated unions are non-strict by default — extra fields pass.
-    // What we *must* reject is `verdict` not being one of the three literals.
     expect(result.success).toBe(true);
   });
 
@@ -111,10 +148,13 @@ describe('advise-on-plan output schema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('zod toJSONSchema roundtrip produces a valid JSON Schema object', () => {
-    const jsonSchema = toJSONSchema(AdviseOnPlanSchema);
+  it('generated Codex schema has no top-level composition', () => {
+    const jsonSchema = toJsonSchema(AdviseOnPlanSchema);
     expect(typeof jsonSchema).toBe('object');
     expect(jsonSchema).not.toBeNull();
+    expect(jsonSchema).not.toHaveProperty('oneOf');
+    expect(jsonSchema).not.toHaveProperty('anyOf');
+    expect(jsonSchema).not.toHaveProperty('allOf');
   });
 
   it('AdvisorVerdictSchema is exported and usable independently', () => {

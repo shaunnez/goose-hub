@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { findFreePort } from '@goose-hub/core/agent-runtime/find-free-port.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
+import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
 import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { getEvidencePostEnabled } from '@goose-hub/core/db/repositories/project-settings.js';
@@ -130,8 +131,8 @@ export async function runEvidencePost(input: RunEvidencePostInput): Promise<void
       appendSystemPrompt: input.appendSystemPrompt,
     });
 
-    const planParsed = EvidencePostPlanSchema.safeParse(result.output);
-    const finalParsed = EvidencePostSchema.safeParse(result.output);
+    const planParsed = safeParseOutputForSchema(EvidencePostPlanSchema, result.output);
+    const finalParsed = safeParseOutputForSchema(EvidencePostSchema, result.output);
     const output = planParsed.success
       ? runEvidencePostPlan({
           plan: planParsed.data,
