@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockRunTriageBatch = vi.fn();
 const mockRunInvestigateWorkflow = vi.fn();
+const mockRunAcceptanceContractWorkflow = vi.fn();
 const mockGetSourceForSlug = vi.fn();
 const mockGetProject = vi.fn();
 const mockLoggerError = vi.fn();
@@ -57,6 +58,10 @@ vi.mock('../domains/workflows/triage-batch.js', () => ({
 
 vi.mock('../../../../slices/investigate/workflow.js', () => ({
   runInvestigateWorkflow: mockRunInvestigateWorkflow,
+}));
+
+vi.mock('../../../../slices/acceptance-contract/workflow.js', () => ({
+  runAcceptanceContractWorkflow: mockRunAcceptanceContractWorkflow,
 }));
 
 vi.mock('../domains/workflows/retro-batch.js', () => ({
@@ -112,6 +117,7 @@ beforeEach(() => {
   }
   mockRunTriageBatch.mockResolvedValue(undefined);
   mockRunInvestigateWorkflow.mockResolvedValue(undefined);
+  mockRunAcceptanceContractWorkflow.mockResolvedValue(undefined);
   mockRunRetroForItem.mockResolvedValue(undefined);
   mockRunGrillAndPrdWorkflow.mockResolvedValue(undefined);
   mockRunDecomposePrdWorkflow.mockResolvedValue(undefined);

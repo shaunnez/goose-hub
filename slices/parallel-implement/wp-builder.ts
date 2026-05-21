@@ -1,3 +1,4 @@
+import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/types.js';
 import type {
   AgentBudgets,
   AgentResult,
@@ -54,6 +55,7 @@ export interface RunOneWpBuilderOptions {
   implementWpPrompt: string;
   implementWpJsonSchema: Record<string, unknown>;
   investigation?: InvestigationContext;
+  acceptanceContract?: AcceptanceContract;
 }
 
 type NormalizedPathField = {
@@ -257,6 +259,7 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
         dependsOn: wp.dependsOn,
       },
       investigation: opts.investigation,
+      acceptanceContract: opts.acceptanceContract,
       stack: opts.stack,
     },
     contextAllowlist: [
@@ -269,6 +272,7 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
       'wp.changes',
       'wp.dependsOn',
       'investigation',
+      'acceptanceContract',
       'stack.testCommand',
       'stack.lintCommand',
       'stack.typecheckCommand',

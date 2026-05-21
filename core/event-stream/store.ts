@@ -35,6 +35,7 @@ export type EventKind =
   | 'agent.output-repair-failed'
   | 'agent.output-fact-mismatch'
   | 'agent.contract-gate-blocked'
+  | 'acceptance.contract-authored'
   // Three-tier verification framework (M19.05, issue #562)
   | 'qa.structural-passed'
   | 'qa.structural-failed'

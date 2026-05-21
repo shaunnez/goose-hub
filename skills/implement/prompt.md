@@ -16,6 +16,7 @@ The `<task>` block can include:
 - `<stack>` — `testCommand`, optional `lintCommand`, optional `typecheckCommand`.
 - `<advisorFeedback>` — revision guidance, if this is a respawn.
 - `<investigation>` — prior findings, `keyFiles`, open questions, and run id.
+- `<acceptanceContract>` — resolved acceptance criteria that must be satisfied before QA/Review.
 - `<relatedSurface>` — deterministic execution lane from the workflow.
 - `<revisionPass>` — `0` or `1`.
 - `<evidencePostEnabled>` — whether frontend evidence specs should be produced.
@@ -45,6 +46,7 @@ If the handoff is stale, emit a `PLAN` decision summary with concrete evidence b
 ### 1. Read
 
 - Read `<workItem>`, `<advisorFeedback>`, and `<investigation>` if present.
+- If `<acceptanceContract>` is present, treat its criteria as the behavioral contract for the implementation and tests.
 - If `<relatedSurface>` exists, read `readFirst` first. Prefer `existingTests` and `primaryTestPath`; otherwise use `testCandidates[0]` when `testMode` is `create-candidate`.
 - If an investigation has key files and no open questions, treat it as the implementation contract. Patch that surface unless the files are missing or contradict the finding.
 - Emit `[decision] READ: Loaded #<number> and <N> relevant files`.
@@ -92,7 +94,7 @@ report files that were only read.
 
 ### 4. Green
 
-- Implement the smallest slice that satisfies the tests and acceptance criteria.
+- Implement the smallest slice that satisfies the tests and every criterion in `<acceptanceContract>` when present.
 - Re-run targeted tests only after a real write has occurred, then iterate until green or blocked.
 - For frontend changes with evidence enabled, create/update `apps/web/e2e/issue-<number>.spec.ts` or the provided `relatedSurface.evidenceSpecPath`. Use bounded discovery; if blocked, return `evidenceSpecPath: null` with `TOOL_FAILURE` or `UNCERTAINTY`.
 - If evidence is disabled, return `evidenceSpecPath: null` with a `SKIP_GATE` summary.

@@ -45,6 +45,7 @@ The context contains a `<task>` block with:
 - `<e2eDecision>` (optional) — JSON payload for e2e policy: `{ mode, command?, reason }`
 - `<sliceTests>` (optional) — JSON array of paths to slice-level test files
 - `<evidenceCommentUrl>` (optional) — permalink to the evidence-post comment on the GitHub issue, containing SHA-pinned screenshots and a walkthrough GIF
+- `<acceptanceContract>` (optional) — resolved acceptance criteria from a normalized contract, engineering spec, PRD, or issue body
 - `<verifyCommands>` (optional) — JSON array of per-AC verify commands extracted from the issue body
 - `<devTestsRun>` (optional) — JSON payload with the targeted test command and paths the developer ran
 - `<testRun>` (optional) — structured test results pre-run by the workflow before you started, or `null` if the run failed to produce a report. When present:

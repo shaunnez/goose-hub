@@ -41,6 +41,24 @@ export const ImplementWpContextSchema = z.object({
       investigationRunId: z.string().optional(),
     })
     .optional(),
+  acceptanceContract: z
+    .object({
+      source: z.enum(['normalized', 'engineering-spec', 'prd', 'issue-body']),
+      criteria: z.array(
+        z.object({
+          id: z.string(),
+          statement: z.string(),
+          verifyCommand: z.string().optional(),
+          expected: z.string().optional(),
+          tolerance: z.string().optional(),
+          journeyRef: z.string().optional().nullable(),
+          stepIdx: z.number().optional().nullable(),
+          crossCutting: z.boolean().optional().nullable(),
+          sourceRef: z.string().optional(),
+        }),
+      ),
+    })
+    .optional(),
   stack: z.object({
     testCommand: z.string(),
     lintCommand: z.string().optional(),
@@ -62,6 +80,7 @@ const config: SkillConfig = {
     'wp.dependsOn',
     'codeSnippets',
     'investigation',
+    'acceptanceContract',
     'stack.testCommand',
     'stack.lintCommand',
     'stack.typecheckCommand',

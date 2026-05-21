@@ -1,3 +1,4 @@
+import { resolveAcceptanceContract } from '@goose-hub/core/acceptance-contracts/resolver.js';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { adviseOnPlan } from '@goose-hub/core/agent-runtime/advisor.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
@@ -125,6 +126,11 @@ export async function runFixIssueWorkflow(
     workItemId: workItem.id,
     worktreePath,
   });
+  const acceptanceContract = resolveAcceptanceContract({
+    projectId,
+    workItemId: workItem.id,
+    issueBody: workItem.body,
+  });
   const symbolKeyFiles =
     investigation == null
       ? []
@@ -214,6 +220,7 @@ export async function runFixIssueWorkflow(
         outputJsonSchema: implementJsonSchema,
         personaId: implementPersonaId,
         investigation: implementInvestigation,
+        acceptanceContract,
         relatedSurface,
         surfaceGuardInvestigation: investigation,
         symbolIndexKeyFiles: symbolKeyFiles,
@@ -304,6 +311,7 @@ export async function runFixIssueWorkflow(
       outputJsonSchema: implementJsonSchema,
       personaId: implementPersonaId,
       investigation: implementInvestigation,
+      acceptanceContract,
       relatedSurface,
       surfaceGuardInvestigation: investigation,
       symbolIndexKeyFiles: symbolKeyFiles,

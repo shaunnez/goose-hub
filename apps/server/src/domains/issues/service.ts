@@ -1,3 +1,4 @@
+import { resolveAcceptanceContract } from '@goose-hub/core/acceptance-contracts/resolver.js';
 import { getArtifact } from '@goose-hub/core/agent-artifacts/repository.js';
 import { getEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
 import { type AgentEvent, eventStore } from '@goose-hub/core/event-stream/store.js';
@@ -124,6 +125,15 @@ export async function getIssueSpec(
       pipelineRunId: string;
       objective: string;
       workPackages: Array<{ id: string; filesOwned: string[]; builderTier: string }>;
+      acceptanceCriteria: Array<{
+        id: string;
+        statement: string;
+        verifyCommand?: string;
+        tolerance?: string | null;
+        journeyRef?: string | null;
+        stepIdx?: number | null;
+        crossCutting?: boolean | null;
+      }>;
       acceptanceCriteriaCount: number;
     } | null;
   }>
@@ -139,6 +149,26 @@ export async function getIssueSpec(
     workPackages: Array<{ id: string; filesOwned: string[]; builderTier: string }>;
     acceptanceCriteria: unknown[];
   };
+  const acceptanceCriteria = s.acceptanceCriteria.map((raw, index) => {
+    const ac = raw as {
+      id?: string;
+      statement?: string;
+      verifyCommand?: string;
+      tolerance?: string | null;
+      journeyRef?: string | null;
+      stepIdx?: number | null;
+      crossCutting?: boolean | null;
+    };
+    return {
+      id: ac.id ?? `AC-${index + 1}`,
+      statement: ac.statement ?? '',
+      ...(ac.verifyCommand != null ? { verifyCommand: ac.verifyCommand } : {}),
+      ...(ac.tolerance != null ? { tolerance: ac.tolerance } : {}),
+      ...(ac.journeyRef != null ? { journeyRef: ac.journeyRef } : {}),
+      ...(ac.stepIdx != null ? { stepIdx: ac.stepIdx } : {}),
+      ...(ac.crossCutting != null ? { crossCutting: ac.crossCutting } : {}),
+    };
+  });
   return {
     ok: true,
     data: {
@@ -146,10 +176,30 @@ export async function getIssueSpec(
         pipelineRunId: record.pipelineRunId,
         objective: s.objective,
         workPackages: s.workPackages,
-        acceptanceCriteriaCount: s.acceptanceCriteria.length,
+        acceptanceCriteria,
+        acceptanceCriteriaCount: acceptanceCriteria.length,
       },
     },
   };
+}
+
+export async function getIssueAcceptanceContract(
+  slug: string,
+  id: string,
+): Promise<
+  Result<{
+    acceptanceContract: ReturnType<typeof resolveAcceptanceContract>;
+  }>
+> {
+  const source = await getSourceForSlug(slug);
+  if (source == null) return { ok: false, error: 'project not found', status: 404 };
+  const item = await source.getItem(id);
+  const contract = resolveAcceptanceContract({
+    projectId: slug,
+    workItemId: item.id,
+    issueBody: item.body,
+  });
+  return { ok: true, data: { acceptanceContract: contract } };
 }
 
 export async function getIssuePrd(

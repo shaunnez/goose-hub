@@ -468,11 +468,23 @@ describe('groupByDevPhase', () => {
     const result = groupByDevPhase(grouped);
 
     const phaseGroups = result.filter((item) => item.kind === 'phase-group');
-    expect(phaseGroups).toHaveLength(1);
+    expect(phaseGroups).toHaveLength(2);
 
-    const pg = phaseGroups[0] as Extract<(typeof phaseGroups)[0], { kind: 'phase-group' }>;
+    const contractGroup = phaseGroups.find(
+      (item) => item.kind === 'phase-group' && item.phase === 'contract',
+    ) as Extract<(typeof phaseGroups)[0], { kind: 'phase-group' }>;
+    expect(contractGroup).toBeDefined();
+    expect(
+      contractGroup.items.some((item) => item.kind === 'run-group' && item.runId === PID),
+    ).toBe(true);
+
+    const pg = phaseGroups.find(
+      (item) => item.kind === 'phase-group' && item.phase === 'dev',
+    ) as Extract<(typeof phaseGroups)[0], { kind: 'phase-group' }>;
+    expect(pg).toBeDefined();
     expect(pg.phase).toBe('dev');
     expect(pg.pipelineRunId).toBe(PID);
+    expect(pg.items.some((item) => item.kind === 'run-group' && item.runId === PID)).toBe(false);
 
     const ungrouped = result.filter((item) => item.kind !== 'phase-group');
     expect(

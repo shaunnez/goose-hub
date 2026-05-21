@@ -1,7 +1,8 @@
+import { acceptanceCriteriaToVerifyCommands } from '@goose-hub/core/acceptance-contracts/issue-body.js';
+import { resolveAcceptanceContract } from '@goose-hub/core/acceptance-contracts/resolver.js';
 import { getUseMultiAgentPipeline } from '@goose-hub/core/db/repositories/project-settings.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { logger } from '@goose-hub/core/logger.js';
-import { parseAcceptanceCriteria } from '../domains/issues/parse-acceptance.js';
 import { runRetroForItem } from '../domains/workflows/retro-batch.js';
 import { withParallelLock } from './dispatch-lock.js';
 import { getProject } from './projects.js';
@@ -33,6 +34,7 @@ export async function dispatchQa(slug: string, issueNumber: number): Promise<voi
             expected: string;
             tolerance: string;
           }>;
+          acceptanceContract?: unknown;
           runTests?: (() => Promise<null>) | undefined;
         },
       ) => Promise<unknown>;
@@ -43,10 +45,16 @@ export async function dispatchQa(slug: string, issueNumber: number): Promise<voi
       return;
     }
     const item = await source.getItem(issueNumber.toString());
-    const verifyCommands = parseAcceptanceCriteria(item.body ?? '');
+    const acceptanceContract = resolveAcceptanceContract({
+      projectId: slug,
+      workItemId: item.id,
+      issueBody: item.body,
+    });
+    const verifyCommands = acceptanceCriteriaToVerifyCommands(acceptanceContract?.criteria ?? []);
     const qaRunTests = process.env.MOCK_SOURCE === 'true' ? () => Promise.resolve(null) : undefined;
     await runQaWorkflow(item, source, slug, item.repoRef ?? slug, {
       verifyCommands,
+      acceptanceContract: acceptanceContract ?? undefined,
       runTests: qaRunTests,
     });
   });
