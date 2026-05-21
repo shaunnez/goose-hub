@@ -154,6 +154,32 @@ function makeTempRepo(paths: string[] = []): string {
   return repoPath;
 }
 
+function runGit(repoPath: string, args: string[]): void {
+  const result = spawnSync('git', args, {
+    cwd: repoPath,
+    encoding: 'utf8',
+    env: process.env,
+  });
+  if (result.status !== 0) {
+    throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
+  }
+}
+
+function makeGitRepo(paths: Record<string, string> = {}): string {
+  const repoPath = makeTempRepo();
+  runGit(repoPath, ['init']);
+  runGit(repoPath, ['config', 'user.email', 'test@example.com']);
+  runGit(repoPath, ['config', 'user.name', 'Test User']);
+  for (const [path, contents] of Object.entries(paths)) {
+    const absPath = join(repoPath, path);
+    mkdirSync(dirname(absPath), { recursive: true });
+    writeFileSync(absPath, contents);
+  }
+  runGit(repoPath, ['add', '.']);
+  runGit(repoPath, ['commit', '-m', 'initial']);
+  return repoPath;
+}
+
 function makeStateSource(
   overrides: Partial<{
     transitionState: (...args: unknown[]) => Promise<void>;
@@ -295,6 +321,326 @@ describe('parallel-implement repo-relative path normalization', () => {
 
       expect(result.status).toBe('success');
       expect(committedFiles).toEqual([['apps/web/src/foo.ts']]);
+    } finally {
+      replaySpy.mockRestore();
+    }
+  });
+
+  it('commits only observed changed files, so uncreated filesOwned paths do not break WP commit', async () => {
+    const repoPath = makeGitRepo({ 'apps/web/src/foo.ts': 'export const foo = 1;\n' });
+    const issueWorktree = makeTempRepo();
+    const scratchWorktree = makeGitRepo({ 'apps/web/src/foo.ts': 'export const foo = 1;\n' });
+    const spec = makeSpec([makeWp('WP1', ['apps/web/src/foo.ts', 'apps/web/src/uncreated.ts'])]);
+    const committedFiles: string[][] = [];
+    const iterations: Array<{ wpId: string; status: string }> = [];
+    const { fn: appendEvent } = makeAppendEvent();
+    const replaySpy = vi.spyOn(eventStore, 'replay').mockReturnValue([]);
+
+    try {
+      const result = await runParallelImplementWorkflow(
+        makeWorkItem({ priority: 'medium' }),
+        spec,
+        'pipeline-run-observed-only',
+        makeStateSource(),
+        'goose-hub-self',
+        repoPath,
+        {
+          runtime: makeRuntime({
+            WP1: async () => {
+              writeFileSync(
+                join(scratchWorktree, 'apps/web/src/foo.ts'),
+                'export const foo = 2;\n',
+              );
+              const output = makeOkResult('WP1').output as ImplementWpOutput;
+              return {
+                output: {
+                  ...output,
+                  filesWritten: [
+                    { path: 'apps/web/src/foo.ts', reason: 'updated component' },
+                    { path: 'apps/web/src/uncreated.ts', reason: 'declared but not created' },
+                  ],
+                },
+                decisionSummaries: [],
+                events: [],
+              };
+            },
+          }),
+          resolveWorkflowBaseImpl: () => ({
+            branch: 'main',
+            ref: 'origin/main',
+            source: 'configured-default',
+          }),
+          createIssueWorktreeImpl: () => issueWorktree,
+          createWpWorktreeImpl: () => scratchWorktree,
+          cleanupWpWorktreesImpl: () => undefined,
+          orchestratorCommitWpImpl: (_wt, files) => {
+            committedFiles.push(files);
+            return 'sha1';
+          },
+          revertWpChangesImpl: () => undefined,
+          recordIterationImpl: (_runId, wpId, _iteration, status) => {
+            iterations.push({ wpId, status });
+          },
+          getLastStatusImpl: (_runId, wpId) => {
+            const last = [...iterations].reverse().find((entry) => entry.wpId === wpId);
+            return (last?.status as 'ok' | 'failed' | 'in-progress' | null) ?? null;
+          },
+          openPRImpl: async () => ({
+            prNumber: 1,
+            prUrl: 'https://gh/pr/1',
+            branch: 'b',
+            base: 'main',
+          }),
+          devReviewConfigOverride: {
+            enabled: false,
+            triggerOn: 'priority:high+',
+            perCycleMaxUsd: 0,
+            maxRevisionTurns: 1,
+            timeoutMs: 1_000,
+          },
+          appendEvent,
+        },
+      );
+
+      expect(result.status).toBe('success');
+      expect(committedFiles).toEqual([['apps/web/src/foo.ts']]);
+    } finally {
+      replaySpy.mockRestore();
+    }
+  });
+
+  it('blocks observed changed files outside filesOwned', async () => {
+    const repoPath = makeGitRepo({
+      'apps/web/src/foo.ts': 'export const foo = 1;\n',
+      'apps/web/src/outside.ts': 'export const outside = 1;\n',
+    });
+    const scratchWorktree = makeGitRepo({
+      'apps/web/src/foo.ts': 'export const foo = 1;\n',
+      'apps/web/src/outside.ts': 'export const outside = 1;\n',
+    });
+    const spec = makeSpec([makeWp('WP1', ['apps/web/src/foo.ts'])]);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const replaySpy = vi.spyOn(eventStore, 'replay').mockReturnValue([]);
+
+    try {
+      await runParallelImplementWorkflow(
+        makeWorkItem({ priority: 'medium' }),
+        spec,
+        'pipeline-run-outside-owned',
+        makeStateSource(),
+        'goose-hub-self',
+        repoPath,
+        {
+          runtime: makeRuntime({
+            WP1: async () => {
+              writeFileSync(
+                join(scratchWorktree, 'apps/web/src/foo.ts'),
+                'export const foo = 2;\n',
+              );
+              writeFileSync(
+                join(scratchWorktree, 'apps/web/src/outside.ts'),
+                'export const outside = 2;\n',
+              );
+              const output = makeOkResult('WP1').output as ImplementWpOutput;
+              return {
+                output: {
+                  ...output,
+                  filesWritten: [{ path: 'apps/web/src/foo.ts', reason: 'updated component' }],
+                },
+                decisionSummaries: [],
+                events: [],
+              };
+            },
+          }),
+          resolveWorkflowBaseImpl: () => ({
+            branch: 'main',
+            ref: 'origin/main',
+            source: 'configured-default',
+          }),
+          createIssueWorktreeImpl: () => makeTempRepo(),
+          createWpWorktreeImpl: () => scratchWorktree,
+          cleanupWpWorktreesImpl: () => undefined,
+          orchestratorCommitWpImpl: vi.fn(),
+          revertWpChangesImpl: () => undefined,
+          recordIterationImpl: () => undefined,
+          getLastStatusImpl: () => 'failed',
+          devReviewConfigOverride: {
+            enabled: false,
+            triggerOn: 'priority:high+',
+            perCycleMaxUsd: 0,
+            maxRevisionTurns: 1,
+            timeoutMs: 1_000,
+          },
+          appendEvent,
+        },
+      );
+
+      const blocked = events.find((event) => event.kind === 'agent.contract-gate-blocked');
+      expect(blocked?.payload).toMatchObject({
+        skill: 'implement-wp',
+        wpId: 'WP1',
+        gate: 'implement-wp-observed-changes',
+        reason: 'observed-changes-outside-files-owned',
+        outsideOwned: { paths: ['apps/web/src/outside.ts'] },
+      });
+    } finally {
+      replaySpy.mockRestore();
+    }
+  });
+
+  it('emits mismatch telemetry but commits valid observed files inside filesOwned', async () => {
+    const repoPath = makeGitRepo({
+      'apps/web/src/foo.ts': 'export const foo = 1;\n',
+      'apps/web/src/bar.ts': 'export const bar = 1;\n',
+    });
+    const scratchWorktree = makeGitRepo({
+      'apps/web/src/foo.ts': 'export const foo = 1;\n',
+      'apps/web/src/bar.ts': 'export const bar = 1;\n',
+    });
+    const spec = makeSpec([makeWp('WP1', ['apps/web/src/foo.ts', 'apps/web/src/bar.ts'])]);
+    const committedFiles: string[][] = [];
+    const iterations: Array<{ wpId: string; status: string }> = [];
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const replaySpy = vi.spyOn(eventStore, 'replay').mockReturnValue([]);
+
+    try {
+      const result = await runParallelImplementWorkflow(
+        makeWorkItem({ priority: 'medium' }),
+        spec,
+        'pipeline-run-mismatch',
+        makeStateSource(),
+        'goose-hub-self',
+        repoPath,
+        {
+          runtime: makeRuntime({
+            WP1: async () => {
+              writeFileSync(
+                join(scratchWorktree, 'apps/web/src/foo.ts'),
+                'export const foo = 2;\n',
+              );
+              const output = makeOkResult('WP1').output as ImplementWpOutput;
+              return {
+                output: {
+                  ...output,
+                  filesWritten: [{ path: 'apps/web/src/bar.ts', reason: 'declared wrong file' }],
+                },
+                decisionSummaries: [],
+                events: [],
+              };
+            },
+          }),
+          resolveWorkflowBaseImpl: () => ({
+            branch: 'main',
+            ref: 'origin/main',
+            source: 'configured-default',
+          }),
+          createIssueWorktreeImpl: () => makeTempRepo(),
+          createWpWorktreeImpl: () => scratchWorktree,
+          cleanupWpWorktreesImpl: () => undefined,
+          orchestratorCommitWpImpl: (_wt, files) => {
+            committedFiles.push(files);
+            return 'sha1';
+          },
+          revertWpChangesImpl: () => undefined,
+          recordIterationImpl: (_runId, wpId, _iteration, status) => {
+            iterations.push({ wpId, status });
+          },
+          getLastStatusImpl: (_runId, wpId) => {
+            const last = [...iterations].reverse().find((entry) => entry.wpId === wpId);
+            return (last?.status as 'ok' | 'failed' | 'in-progress' | null) ?? null;
+          },
+          openPRImpl: async () => ({
+            prNumber: 1,
+            prUrl: 'https://gh/pr/1',
+            branch: 'b',
+            base: 'main',
+          }),
+          devReviewConfigOverride: {
+            enabled: false,
+            triggerOn: 'priority:high+',
+            perCycleMaxUsd: 0,
+            maxRevisionTurns: 1,
+            timeoutMs: 1_000,
+          },
+          appendEvent,
+        },
+      );
+
+      expect(result.status).toBe('success');
+      expect(committedFiles).toEqual([['apps/web/src/foo.ts']]);
+      const mismatch = events.find((event) => event.kind === 'agent.output-fact-mismatch');
+      expect(mismatch?.payload).toMatchObject({
+        skill: 'implement-wp',
+        wpId: 'WP1',
+        mismatches: {
+          observedNotDeclared: { paths: ['apps/web/src/foo.ts'] },
+          declaredNotObserved: { paths: ['apps/web/src/bar.ts'] },
+        },
+      });
+    } finally {
+      replaySpy.mockRestore();
+    }
+  });
+
+  it('emits telemetry and fails the WP when git reports no observed changes', async () => {
+    const repoPath = makeGitRepo({ 'apps/web/src/foo.ts': 'export const foo = 1;\n' });
+    const scratchWorktree = makeGitRepo({ 'apps/web/src/foo.ts': 'export const foo = 1;\n' });
+    const spec = makeSpec([makeWp('WP1', ['apps/web/src/foo.ts'])]);
+    const { fn: appendEvent, events } = makeAppendEvent();
+    const replaySpy = vi.spyOn(eventStore, 'replay').mockReturnValue([]);
+
+    try {
+      const result = await runParallelImplementWorkflow(
+        makeWorkItem({ priority: 'medium' }),
+        spec,
+        'pipeline-run-no-observed',
+        makeStateSource(),
+        'goose-hub-self',
+        repoPath,
+        {
+          runtime: makeRuntime({
+            WP1: async () => {
+              const output = makeOkResult('WP1').output as ImplementWpOutput;
+              return {
+                output: {
+                  ...output,
+                  filesWritten: [{ path: 'apps/web/src/foo.ts', reason: 'claimed update' }],
+                },
+                decisionSummaries: [],
+                events: [],
+              };
+            },
+          }),
+          resolveWorkflowBaseImpl: () => ({
+            branch: 'main',
+            ref: 'origin/main',
+            source: 'configured-default',
+          }),
+          createIssueWorktreeImpl: () => makeTempRepo(),
+          createWpWorktreeImpl: () => scratchWorktree,
+          cleanupWpWorktreesImpl: () => undefined,
+          orchestratorCommitWpImpl: vi.fn(),
+          revertWpChangesImpl: () => undefined,
+          recordIterationImpl: () => undefined,
+          getLastStatusImpl: () => 'failed',
+          devReviewConfigOverride: {
+            enabled: false,
+            triggerOn: 'priority:high+',
+            perCycleMaxUsd: 0,
+            maxRevisionTurns: 1,
+            timeoutMs: 1_000,
+          },
+          appendEvent,
+        },
+      );
+
+      expect(result.status).toBe('failed');
+      const mismatch = events.find((event) => event.kind === 'agent.output-fact-mismatch');
+      expect(mismatch?.payload).toMatchObject({
+        skill: 'implement-wp',
+        wpId: 'WP1',
+        reason: 'no-observed-changed-files',
+      });
     } finally {
       replaySpy.mockRestore();
     }

@@ -143,36 +143,42 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     maxBudgetUsd: 1,
     timeoutMs: 120_000,
     modelTier: 'haiku',
+    effort: 'low',
   },
   'scout-code-path': {
     maxTurns: 20,
     maxBudgetUsd: 1,
     timeoutMs: 240_000,
     modelTier: 'haiku',
+    effort: 'low',
   },
   'scout-pattern': {
     maxTurns: 20,
     maxBudgetUsd: 1,
     timeoutMs: 240_000,
     modelTier: 'haiku',
+    effort: 'low',
   },
   'scout-test-inventory': {
     maxTurns: 20,
     maxBudgetUsd: 1,
     timeoutMs: 240_000,
     modelTier: 'haiku',
+    effort: 'low',
   },
   'scout-dependency': {
     maxTurns: 20,
     maxBudgetUsd: 1,
     timeoutMs: 240_000,
     modelTier: 'haiku',
+    effort: 'low',
   },
   'scout-user-journey': {
     maxTurns: 20,
     maxBudgetUsd: 1,
     timeoutMs: 240_000,
     modelTier: 'haiku',
+    effort: 'low',
   },
   // M19.01 — Wave-2 deep agents. Synthesise paste-ready artefacts from
   // scout reports; sonnet-tier for the reasoning step. Higher turn cap
@@ -183,12 +189,14 @@ export const SKILL_BUDGETS: Record<string, SkillBudget> = {
     maxBudgetUsd: 1.0,
     timeoutMs: 240_000,
     modelTier: 'sonnet',
+    effort: 'medium',
   },
   'wave2-risk-analyst': {
     maxTurns: 30,
     maxBudgetUsd: 1.0,
     timeoutMs: 240_000,
     modelTier: 'sonnet',
+    effort: 'medium',
   },
   // M19.11/M19.12 — Codex pre-QA diff review. Single-pass, read-only.
   // Codex CLI is fast for diffing; 3-min timeout with room for moderately

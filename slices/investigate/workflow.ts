@@ -39,6 +39,7 @@ import {
   lookupWorkItemSymbols,
   shapeSymbolIndexHintsForScout,
 } from '@goose-hub/core/symbol-index/lookup.js';
+import type { RuntimeEffort } from '@goose-hub/core/types.js';
 import {
   cleanupWorktree,
   createWorktree,
@@ -54,8 +55,8 @@ import {
   PlaywrightReproSpecSchema,
 } from '@goose-hub/skills/playwright-repro/schema.js';
 import type { z } from 'zod';
+import { type InvestigationPlan, planInvestigation } from './investigation-planner.js';
 import { runPlaywrightReproPlan, shouldSkipBeforeEvidence } from './playwright-repro-evidence.js';
-import { WAVE_1_SCOUTS, selectWave2Scouts } from './wave2-selection.js';
 
 type InvestigateOutput = z.infer<typeof InvestigateSchema>;
 
@@ -243,6 +244,8 @@ export async function runInvestigateWorkflow(
   };
 
   const scoutJsonSchema = toJsonSchema(ScoutOutputSchema);
+  let scoutEffortHints: Record<string, RuntimeEffort> = {};
+  let finalInvestigationPlan: InvestigationPlan | undefined;
 
   function loadSkillAssets(scoutName: string) {
     return {
@@ -265,6 +268,7 @@ export async function runInvestigateWorkflow(
     });
     return {
       ...resolved,
+      effort: resolved.effort ?? scoutEffortHints[skill],
       modelOverride: chooseScoutModelOverride({
         resolvedBudget: resolved,
         forcedRuntimeProvider,
@@ -292,6 +296,13 @@ export async function runInvestigateWorkflow(
     let allScoutReports: string | undefined;
 
     if (investigationSwarmEnabled) {
+      const initialPlan = planInvestigation({
+        workItem: { ...workItemCtx, type: workItem.type },
+        swarmEnabled: true,
+      });
+      finalInvestigationPlan = initialPlan;
+      scoutEffortHints = initialPlan.scoutEffortHints;
+
       // Pre-fetch symbol index hints for scout-code-path. Freshness and lookup are best-effort:
       // a missing, stale, or corrupt index must never block investigation.
       const symbolIndexFreshness = ensureSymbolIndexFresh({ repoRoot: process.cwd() });
@@ -354,7 +365,7 @@ export async function runInvestigateWorkflow(
           ? `Find existing usages of: ${patternTokens.join(', ')} — patterns this fix must follow`
           : 'Identify existing patterns the fix should follow';
 
-      const wave1Scouts = WAVE_1_SCOUTS.map((spec) => {
+      const wave1Scouts = initialPlan.selectedWave1Scouts.map((spec) => {
         const shapedHints =
           spec.scoutName === 'scout-code-path' ||
           spec.scoutName === 'scout-dependency' ||
@@ -396,6 +407,7 @@ export async function runInvestigateWorkflow(
         personaId,
         maxScoutAgents: globalSettings.maxScoutAgents,
         projectBudgets: projectConfig?.budgets,
+        minSuccessfulScouts: initialPlan.minSuccessfulScouts,
         resolveScoutBudget: resolveInvestigateScoutBudget,
         loadSkillAssets,
       });
@@ -462,58 +474,84 @@ export async function runInvestigateWorkflow(
         contradictions: cvResult.contradictions,
       });
 
-      const wave2Scouts = selectWave2Scouts({
+      const wave2Plan = planInvestigation({
         workItem: workItemCtx,
-        reports: wave1Result.reports,
+        swarmEnabled: true,
+        wave1Reports: wave1Result.reports,
         contradictions: cvResult.contradictions,
         scoutReportsContext: wave1Context,
       });
-
-      // Wave 2 — deep synthesis agents with cross-validated context
-      const wave2Result = await dispatchWave({
-        parentRunId: runId,
-        scoutSpecs: wave2Scouts,
-        workItem: workItemCtx,
-        worktreePath,
-        projectId,
-        workItemId: workItem.id,
-        runtime,
-        resolveScoutRuntime:
-          deps.runtime != null
-            ? undefined
-            : (resolved) => selectRuntime({ configRuntime, model: resolved.modelOverride }),
-        personaId,
-        maxScoutAgents: globalSettings.maxScoutAgents,
-        projectBudgets: projectConfig?.budgets,
-        minSuccessfulScouts: wave2Scouts.length,
-        resolveScoutBudget: resolveInvestigateScoutBudget,
-        loadSkillAssets,
-      });
-      emitScoutSymbolHintUsage({
-        parentRunId: runId,
-        projectId,
-        workItemId: workItem.id,
-        worktreePath,
-        personaId,
-        scoutSpecs: wave2Scouts,
-        reports: wave2Result.reports,
-      });
+      finalInvestigationPlan = wave2Plan;
+      scoutEffortHints = wave2Plan.scoutEffortHints;
+      const wave2Scouts = wave2Plan.selectedWave2Scouts;
 
       const wave2HandoffReports: unknown[] = [];
-      for (const report of wave2Result.reports) {
-        if (report.status === 'ok') {
-          const storedReport = persistScoutReport(projectId, workItem.id, runId, report.scoutName, {
-            findings: report.findings,
-            decisionSummaries: report.decisionSummaries,
-          });
-          wave2HandoffReports.push({
-            scoutName: report.scoutName,
-            status: report.status,
-            ...((storedReport ?? {}) as object),
-          });
-        } else {
-          wave2HandoffReports.push(report);
+      if (wave2Scouts.length > 0) {
+        // Wave 2 — deep synthesis agents with cross-validated context
+        const wave2Result = await dispatchWave({
+          parentRunId: runId,
+          scoutSpecs: wave2Scouts,
+          workItem: workItemCtx,
+          worktreePath,
+          projectId,
+          workItemId: workItem.id,
+          runtime,
+          resolveScoutRuntime:
+            deps.runtime != null
+              ? undefined
+              : (resolved) => selectRuntime({ configRuntime, model: resolved.modelOverride }),
+          personaId,
+          maxScoutAgents: globalSettings.maxScoutAgents,
+          projectBudgets: projectConfig?.budgets,
+          minSuccessfulScouts: wave2Scouts.length,
+          resolveScoutBudget: resolveInvestigateScoutBudget,
+          loadSkillAssets,
+        });
+        emitScoutSymbolHintUsage({
+          parentRunId: runId,
+          projectId,
+          workItemId: workItem.id,
+          worktreePath,
+          personaId,
+          scoutSpecs: wave2Scouts,
+          reports: wave2Result.reports,
+        });
+
+        for (const report of wave2Result.reports) {
+          if (report.status === 'ok') {
+            const storedReport = persistScoutReport(
+              projectId,
+              workItem.id,
+              runId,
+              report.scoutName,
+              {
+                findings: report.findings,
+                decisionSummaries: report.decisionSummaries,
+              },
+            );
+            wave2HandoffReports.push({
+              scoutName: report.scoutName,
+              status: report.status,
+              ...((storedReport ?? {}) as object),
+            });
+          } else {
+            wave2HandoffReports.push(report);
+          }
         }
+      } else {
+        eventStore.appendEvent({
+          projectId,
+          workItemId: workItem.id,
+          kind: 'agent.log',
+          payload: {
+            level: 'info',
+            message: 'investigation planner skipped Wave 2',
+            runId,
+            selectedWave1Scouts: wave1Scouts.map((scout) => scout.scoutName),
+          },
+          runId,
+          personaId,
+        });
       }
 
       // Build full context for the synthesis investigator
@@ -716,6 +754,28 @@ export async function runInvestigateWorkflow(
         investigate: findings,
         playwrightRepro: reproOutput,
         investigationRunId: runId,
+        investigationPlan:
+          finalInvestigationPlan != null
+            ? {
+                mode: finalInvestigationPlan.mode,
+                selectedWave1Scouts: finalInvestigationPlan.selectedWave1Scouts.map(
+                  (scout) => scout.scoutName,
+                ),
+                wave2Needed: finalInvestigationPlan.wave2Needed,
+                selectedWave2Scouts: finalInvestigationPlan.selectedWave2Scouts.map(
+                  (scout) => scout.scoutName,
+                ),
+                minSuccessfulScouts: finalInvestigationPlan.minSuccessfulScouts,
+                scoutEffortHints: finalInvestigationPlan.scoutEffortHints,
+              }
+            : {
+                mode: 'single',
+                selectedWave1Scouts: [],
+                wave2Needed: false,
+                selectedWave2Scouts: [],
+                minSuccessfulScouts: 1,
+                scoutEffortHints: {},
+              },
         baseBranch: workflowBase.branch,
       },
       runId,

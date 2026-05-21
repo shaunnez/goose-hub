@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import {
@@ -24,6 +24,10 @@ import type { AgentEvent, AppendEventInput } from '@goose-hub/core/event-stream/
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
+import {
+  type ObservedChangedFilesPacket,
+  deriveObservedChangedFiles,
+} from '@goose-hub/core/workspaces/observed-changes.js';
 import {
   cleanupAllWpWorktrees,
   createWpScratchWorktree,
@@ -85,6 +89,100 @@ export interface ParallelImplementDeps {
   commitDevReviewResponseImpl?: (worktreePath: string, msg: string) => string;
   /** Override persona selection for tests that should not touch SQLite routing state. */
   selectPersonaImpl?: typeof selectPersona;
+  /** Override observed changed-file derivation for tests. */
+  deriveObservedChangedFilesImpl?: typeof deriveObservedChangedFiles;
+}
+
+function uniqueSorted(paths: string[]): string[] {
+  return [...new Set(paths)].sort();
+}
+
+function compactPaths(paths: string[], limit = 40): { count: number; paths: string[] } {
+  const sorted = uniqueSorted(paths);
+  return {
+    count: sorted.length,
+    paths: sorted.slice(0, limit),
+  };
+}
+
+function filterWpObservedFiles(
+  packet: ObservedChangedFilesPacket,
+): ObservedChangedFilesPacket['files'] {
+  return packet.files.filter(
+    (file) => file.path !== '.claude/settings.local.json' && file.path !== '.codex/hooks.json',
+  );
+}
+
+function declaredWpFilesWritten(paths: Array<{ path: string }>): string[] {
+  return uniqueSorted(paths.map((file) => file.path));
+}
+
+function emitWpObservedMismatch(input: {
+  append: (input: AppendEventInput) => AgentEvent;
+  projectId: string;
+  workItemId: string;
+  wpId: string;
+  wpRunId: string;
+  modelDeclaredPaths: string[];
+  observedPaths: string[];
+  reason?: string;
+}): void {
+  const declared = new Set(input.modelDeclaredPaths);
+  const observed = new Set(input.observedPaths);
+  const observedNotDeclared = input.observedPaths.filter((path) => !declared.has(path));
+  const declaredNotObserved = input.modelDeclaredPaths.filter((path) => !observed.has(path));
+  if (
+    input.reason == null &&
+    observedNotDeclared.length === 0 &&
+    declaredNotObserved.length === 0
+  ) {
+    return;
+  }
+
+  input.append({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    kind: 'agent.output-fact-mismatch',
+    payload: {
+      runId: input.wpRunId,
+      skill: 'implement-wp',
+      wpId: input.wpId,
+      reason: input.reason ?? 'declared-files-written-differ-from-observed-changes',
+      modelDeclaredFiles: compactPaths(input.modelDeclaredPaths),
+      observedChangedFiles: compactPaths(input.observedPaths),
+      mismatches: {
+        observedNotDeclared: compactPaths(observedNotDeclared),
+        declaredNotObserved: compactPaths(declaredNotObserved),
+      },
+    },
+    runId: input.wpRunId,
+  });
+}
+
+function observedOutsideOwned(input: { observedPaths: string[]; filesOwned: string[] }): string[] {
+  const owned = new Set(input.filesOwned);
+  return input.observedPaths.filter((path) => !owned.has(path));
+}
+
+function applyObservedFileToIssueWorktree(input: {
+  issueWorktreePath: string;
+  scratchWorktreePath: string;
+  observedFile: ObservedChangedFilesPacket['files'][number];
+}): void {
+  const destPath = join(input.issueWorktreePath, input.observedFile.path);
+  if (input.observedFile.status === 'deleted') {
+    rmSync(destPath, { force: true });
+    return;
+  }
+
+  const sourcePath = join(input.scratchWorktreePath, input.observedFile.path);
+  if (!existsSync(sourcePath)) {
+    throw new Error(
+      `observed changed file missing from scratch worktree: ${input.observedFile.path}`,
+    );
+  }
+  mkdirSync(dirname(destPath), { recursive: true });
+  copyFileSync(sourcePath, destPath);
 }
 
 // ─── Main workflow ─────────────────────────────────────────────────────────────
@@ -118,6 +216,8 @@ export async function runParallelImplementWorkflow(
   const revertFn = deps.revertWpChangesImpl ?? revertWpChanges;
   const recordFn = deps.recordIterationImpl ?? recordWpIteration;
   const getStatusFn = deps.getLastStatusImpl ?? getLastWpStatus;
+  const deriveObservedChangedFilesFn =
+    deps.deriveObservedChangedFilesImpl ?? deriveObservedChangedFiles;
 
   const projectConfig = await getProjectBySlug(projectId);
   const workflowBase = resolveWorkflowBaseFn(targetRepo, projectConfig?.targetRepo?.defaultBranch);
@@ -304,16 +404,126 @@ export async function runParallelImplementWorkflow(
 
           const { wp, parsedFilesWritten, wpRunId, commitMsg, scratchWorktreePath } = buildResult;
           const issueWt = issueWorktreePath ?? '/tmp/missing-issue';
+          const observedChangedFiles = deriveObservedChangedFilesFn(scratchWorktreePath);
+          const filteredObservedFiles = filterWpObservedFiles(observedChangedFiles);
+          const changedPaths = uniqueSorted(filteredObservedFiles.map((file) => file.path));
+          const modelDeclaredPaths = declaredWpFilesWritten(parsedFilesWritten);
 
-          for (const fileWritten of parsedFilesWritten) {
-            const destPath = join(issueWt, fileWritten.path);
-            mkdirSync(dirname(destPath), { recursive: true });
-            copyFileSync(join(scratchWorktreePath, fileWritten.path), destPath);
+          if (!observedChangedFiles.gitAvailable) {
+            emitWpObservedMismatch({
+              append,
+              projectId,
+              workItemId: workItem.id,
+              wpId: wp.id,
+              wpRunId,
+              modelDeclaredPaths,
+              observedPaths: changedPaths,
+              reason: 'observed-changes-unavailable',
+            });
+            for (const fileWritten of parsedFilesWritten) {
+              const sourcePath = join(scratchWorktreePath, fileWritten.path);
+              if (!existsSync(sourcePath)) continue;
+              const destPath = join(issueWt, fileWritten.path);
+              mkdirSync(dirname(destPath), { recursive: true });
+              copyFileSync(sourcePath, destPath);
+            }
+          } else {
+            if (changedPaths.length === 0) {
+              emitWpObservedMismatch({
+                append,
+                projectId,
+                workItemId: workItem.id,
+                wpId: wp.id,
+                wpRunId,
+                modelDeclaredPaths,
+                observedPaths: changedPaths,
+                reason: 'no-observed-changed-files',
+              });
+              const reason = 'no observed changed files in WP scratch worktree';
+              append({
+                projectId,
+                workItemId: workItem.id,
+                kind: 'parallel-implement.wp-commit-failed',
+                payload: { wpId: wp.id, wpRunId, errorReason: reason },
+                runId: wpRunId,
+              });
+              revertFn(scratchWorktreePath, wp.filesOwned);
+              recordFn(runId, wp.id, iteration, 'failed', reason);
+              allWpResults.push({
+                wpId: wp.id,
+                status: 'failed',
+                errorReason: reason,
+                runId: wpRunId,
+              });
+              continue;
+            }
+
+            emitWpObservedMismatch({
+              append,
+              projectId,
+              workItemId: workItem.id,
+              wpId: wp.id,
+              wpRunId,
+              modelDeclaredPaths,
+              observedPaths: changedPaths,
+            });
+
+            const outsideOwned = observedOutsideOwned({
+              observedPaths: changedPaths,
+              filesOwned: wp.filesOwned,
+            });
+            if (outsideOwned.length > 0) {
+              const reason = `observed changes outside filesOwned: ${outsideOwned.join(', ')}`;
+              append({
+                projectId,
+                workItemId: workItem.id,
+                kind: 'agent.contract-gate-blocked',
+                payload: {
+                  runId: wpRunId,
+                  skill: 'implement-wp',
+                  wpId: wp.id,
+                  gate: 'implement-wp-observed-changes',
+                  reason: 'observed-changes-outside-files-owned',
+                  filesOwned: compactPaths(wp.filesOwned),
+                  observedChangedFiles: compactPaths(changedPaths),
+                  outsideOwned: compactPaths(outsideOwned),
+                },
+                runId: wpRunId,
+              });
+              append({
+                projectId,
+                workItemId: workItem.id,
+                kind: 'parallel-implement.wp-commit-failed',
+                payload: { wpId: wp.id, wpRunId, errorReason: reason },
+                runId: wpRunId,
+              });
+              revertFn(scratchWorktreePath, wp.filesOwned);
+              recordFn(runId, wp.id, iteration, 'failed', reason);
+              allWpResults.push({
+                wpId: wp.id,
+                status: 'failed',
+                errorReason: reason,
+                runId: wpRunId,
+              });
+              continue;
+            }
+
+            for (const observedFile of filteredObservedFiles) {
+              applyObservedFileToIssueWorktree({
+                issueWorktreePath: issueWt,
+                scratchWorktreePath,
+                observedFile,
+              });
+            }
           }
 
           let commitSha: string | undefined;
           try {
-            commitSha = commitWpFn(issueWt, wp.filesOwned, commitMsg);
+            const commitPaths =
+              observedChangedFiles.gitAvailable && changedPaths.length > 0
+                ? changedPaths
+                : modelDeclaredPaths;
+            commitSha = commitWpFn(issueWt, commitPaths, commitMsg);
           } catch (commitErr) {
             const reason = commitErr instanceof Error ? commitErr.message : String(commitErr);
             append({
