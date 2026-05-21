@@ -256,8 +256,8 @@ describe('chat-orchestrator slice', () => {
         output: {
           say: 'Doing things.',
           proposals: [
-            { toolName: 'list_projects', input: {}, rationale: 'see all projects' },
-            { toolName: 'i_made_this_up', input: {}, rationale: 'nope' },
+            { toolName: 'list_projects', input: '{}', rationale: 'see all projects' },
+            { toolName: 'i_made_this_up', input: '{}', rationale: 'nope' },
           ],
           done: false,
           decisionSummaries: [{ kind: 'PLAN', summary: 'Proposing two tools.' }],
@@ -270,6 +270,40 @@ describe('chat-orchestrator slice', () => {
       runId: 'chat_test_run_2',
     });
     expect(result.reply?.proposals.map((p) => p.toolName)).toEqual(['list_projects']);
+  });
+
+  it('decodes proposal input JSON before returning dispatcher-ready proposals', async () => {
+    mockInvokeOnce({
+      resolve: {
+        ...baseInvokeResult,
+        output: {
+          say: 'Checking the issue.',
+          proposals: [
+            {
+              toolName: 'get_issue',
+              input: '{"projectSlug":"goose-hub-self","issueNumber":918}',
+              rationale: 'Checking issue 918.',
+            },
+          ],
+          done: false,
+          decisionSummaries: [{ kind: 'PLAN', summary: 'Proposing one tool.' }],
+        },
+      },
+    });
+
+    const result = await runChatOrchestratorTurn({
+      conversation: stubConversation,
+      history: [],
+      runId: 'chat_test_run_decode',
+    });
+
+    expect(result.reply?.proposals).toEqual([
+      {
+        toolName: 'get_issue',
+        input: { projectSlug: 'goose-hub-self', issueNumber: 918 },
+        rationale: 'Checking issue 918.',
+      },
+    ]);
   });
 
   it('returns a graceful error message on schema validation failure', async () => {

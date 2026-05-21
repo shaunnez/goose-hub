@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
+import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { describe, expect, it } from 'vitest';
-import { toJSONSchema } from 'zod';
 import { TriageOutputSchema } from './schema.js';
 import config, { TriageContextSchema } from './skill.config.js';
 
@@ -89,11 +89,19 @@ describe('triage schema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('zod toJSONSchema roundtrip produces valid JSON Schema object', () => {
-    const jsonSchema = toJSONSchema(TriageOutputSchema);
+  it('runtime JSON Schema omits optional decision summary evidence', () => {
+    const jsonSchema = toJsonSchema(TriageOutputSchema);
     expect(typeof jsonSchema).toBe('object');
     expect(jsonSchema).not.toBeNull();
     expect(jsonSchema).toHaveProperty('properties');
+    const properties = jsonSchema.properties as Record<string, unknown>;
+    const decisionSummaries = properties.decisionSummaries as { items?: unknown };
+    const item = decisionSummaries.items as {
+      properties?: Record<string, unknown>;
+      required?: string[];
+    };
+    expect(item.properties).not.toHaveProperty('evidence');
+    expect(item.required).toEqual(['kind', 'summary']);
   });
 });
 

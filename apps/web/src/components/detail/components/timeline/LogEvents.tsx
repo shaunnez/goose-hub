@@ -4,7 +4,13 @@ import { useState } from 'react';
 import { getPayloadStr } from '../../lib/timeline';
 
 export function AgentLogEvent({ event }: { event: AgentEventDto }) {
-  const p = event.payload as { line?: string; text?: string } | null;
+  const p = event.payload as {
+    line?: string;
+    metric?: string;
+    stream?: string;
+    text?: string;
+  } | null;
+  if (p?.stream === 'telemetry' && p.metric === 'prompt_context_size') return null;
   const line = p?.line ?? p?.text ?? getPayloadStr(event.payload);
   return (
     <li
@@ -33,7 +39,13 @@ export function AgentLogGroupEvent({ events }: { events: AgentEventDto[] }) {
         </summary>
         <div className="mt-1 flex flex-col gap-0.5">
           {events.map((ev) => {
-            const p = ev.payload as { line?: string; text?: string } | null;
+            const p = ev.payload as {
+              line?: string;
+              metric?: string;
+              stream?: string;
+              text?: string;
+            } | null;
+            if (p?.stream === 'telemetry' && p.metric === 'prompt_context_size') return null;
             const line = p?.line ?? p?.text ?? getPayloadStr(ev.payload);
             return (
               <div key={ev.id} className="font-mono text-[11.5px] text-fg-2">

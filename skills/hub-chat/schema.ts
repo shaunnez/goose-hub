@@ -9,8 +9,9 @@ export { DecisionSummarySchema };
  * The agent ALWAYS returns a discriminated union of replies. Each turn is a
  * single reply that may include:
  *  - `say`: a chat message the user sees (always present)
- *  - `proposals`: zero or more proposed tool calls; the orchestrator decides
- *    whether to auto-run (read-only) or wait for human approval (mutating)
+ *  - `proposals`: zero or more proposed tool calls; the orchestrator decodes
+ *    `input` from JSON text, then decides whether to auto-run (read-only) or
+ *    wait for human approval (mutating)
  *  - `done`: true when the assistant believes the conversation has a natural
  *    pause point — UI uses this for visual affordances; not a hard stop
  *
@@ -22,8 +23,9 @@ export { DecisionSummarySchema };
 export const HubChatProposalSchema = z.object({
   toolName: z.string().describe('Must match a name in core/chat-tools/registry.ts'),
   input: z
-    .record(z.string(), z.unknown())
-    .describe("Object matching the tool's declared inputSchema."),
+    .string()
+    .min(2)
+    .describe("JSON-encoded object matching the tool's declared inputSchema."),
   rationale: z
     .string()
     .describe(
@@ -43,5 +45,11 @@ export const HubChatOutputSchema = z.object({
   decisionSummaries: z.array(DecisionSummarySchema).min(1),
 });
 
-export type HubChatOutput = z.infer<typeof HubChatOutputSchema>;
-export type HubChatProposal = z.infer<typeof HubChatProposalSchema>;
+export type HubChatWireOutput = z.infer<typeof HubChatOutputSchema>;
+export type HubChatWireProposal = z.infer<typeof HubChatProposalSchema>;
+export type HubChatProposal = Omit<HubChatWireProposal, 'input'> & {
+  input: Record<string, unknown>;
+};
+export type HubChatOutput = Omit<HubChatWireOutput, 'proposals'> & {
+  proposals: HubChatProposal[];
+};

@@ -24,7 +24,7 @@ Your context contains:
 
 1. **Read** `<conversationSummary>`, `<priorMessages>`, and `<toolResults>` end-to-end. Treat your own previous replies as commitments — do not contradict them.
 2. **Answer first, propose second.** Most user turns want an answer, not a tool call. Reply in `say` with what you already know from `<issueContext>`, `<recentEvents>`, `<toolResults>`, and `<governanceDigest>`.
-3. **Propose tools sparingly** — only when the answer genuinely requires fresh data or an action. Each proposal includes `toolName`, `input`, and a one-sentence `rationale` shown in the tool card.
+3. **Propose tools sparingly** — only when the answer genuinely requires fresh data or an action. Each proposal includes `toolName`, `input`, and a one-sentence `rationale` shown in the tool card. `input` must be a JSON-encoded object string, not a nested object.
 4. **Mutating tools always require human approval.** The UI shows an Approve / Reject card. Do NOT pre-announce success — write mutating-tool `rationale` in the conditional ("If you approve, this will…").
 5. **Read-only tools auto-run.** Their results arrive in `<toolResults>` on your next invocation. Write read-only-tool `rationale` as immediate status text, not approval text: "Checking the full timeline so I can confirm whether…" Do not propose the same read-only tool twice in a row if its prior result is still relevant.
 6. **Link generously.** When you mention a work item, include the in-app path using the external issue number only (`/projects/<slug>/items/<n>`). Never put the internal repo-qualified `workItemId` (`github:owner/repo#n`) in an app URL. When you mention a skill, name it exactly as it appears under `skills/`. When you mention an ADR, cite the filename.
@@ -78,7 +78,7 @@ Return a single JSON object conforming exactly to the output schema. Free-text-o
   "proposals": [
     {
       "toolName": "<one of CHAT_TOOL_REGISTRY names>",
-      "input": { "...": "..." },
+      "input": "{\"...\":\"...\"}",
       "rationale": "<one sentence shown in the tool card; conditional only for mutating tools>"
     }
   ],

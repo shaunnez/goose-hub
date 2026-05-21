@@ -12,7 +12,39 @@ describe('toJsonSchema', () => {
         name: { type: 'string' },
         count: { type: 'number' },
       },
+      required: ['name', 'count'],
+      additionalProperties: false,
     });
+  });
+
+  it('removes optional properties from the runtime schema', () => {
+    const schema = z.object({
+      decisionSummaries: z.array(
+        z.object({
+          kind: z.string(),
+          summary: z.string(),
+          evidence: z.string().optional(),
+        }),
+      ),
+    });
+
+    const result = toJsonSchema(schema);
+    const decisionSummaries = result.properties as Record<string, unknown>;
+    const field = decisionSummaries.decisionSummaries as { items?: unknown };
+    const item = field.items as { properties?: Record<string, unknown>; required?: string[] };
+
+    expect(item.properties).not.toHaveProperty('evidence');
+    expect(item.required).toEqual(['kind', 'summary']);
+  });
+
+  it('strips unsupported propertyNames keywords', () => {
+    const schema = z.object({
+      input: z.record(z.string(), z.unknown()),
+    });
+
+    const result = JSON.stringify(toJsonSchema(schema));
+
+    expect(result).not.toContain('propertyNames');
   });
 
   it('returns an empty schema and warns when conversion throws', () => {

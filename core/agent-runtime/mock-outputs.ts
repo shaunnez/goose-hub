@@ -684,7 +684,7 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
           proposals: [
             {
               toolName: 'open_url',
-              input: { path: '/projects/goose-hub-self', rationale: 'navigate to kanban' },
+              input: '{"path":"/projects/goose-hub-self","rationale":"navigate to kanban"}',
               rationale: 'If you approve, the panel will navigate to the kanban.',
             },
           ],
@@ -696,7 +696,7 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
           proposals: [
             {
               toolName: 'list_projects',
-              input: {},
+              input: '{}',
               rationale: 'Auto-running list_projects to answer your question.',
             },
           ],
@@ -708,11 +708,8 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
           proposals: [
             {
               toolName: 'comment_on_issue',
-              input: {
-                projectSlug: 'goose-hub-self',
-                issueNumber: 1,
-                body: 'mock comment from e2e',
-              },
+              input:
+                '{"projectSlug":"goose-hub-self","issueNumber":1,"body":"mock comment from e2e"}',
               rationale: 'If you approve, the chat will post a comment on issue #1.',
             },
           ],
@@ -791,7 +788,7 @@ function extractLastUserMessage(context: AgentSpec['context']): string {
 
 function mockChatReply(opts: {
   say: string;
-  proposals: Array<{ toolName: string; input: Record<string, unknown>; rationale: string }>;
+  proposals: Array<{ toolName: string; input: string; rationale: string }>;
 }): AgentResult {
   const decisionSummaries = [
     { kind: 'PLAN' as const, summary: 'Mock hub-chat reply for e2e test' },

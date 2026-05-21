@@ -21,6 +21,7 @@ import {
   type HubChatOutput,
   HubChatOutputSchema,
   type HubChatProposal,
+  type HubChatWireProposal,
 } from '@goose-hub/skills/hub-chat/schema.js';
 
 export interface ChatTurnInput {
@@ -457,12 +458,11 @@ export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<Cha
         telemetry,
       };
     }
-    // Reconcile proposals: drop any whose toolName is unknown. The skill's
-    // schema permits arbitrary strings for forwards-compat; this is the
-    // hard gate before we hand off to the dispatcher.
-    const validProposals = parsed.data.proposals.filter((p: HubChatProposal) =>
-      manifestHas(p.toolName),
-    );
+    // Reconcile proposals: drop unknown tools and malformed JSON inputs before
+    // handing off to the dispatcher.
+    const validProposals = parsed.data.proposals
+      .map(decodeProposalInput)
+      .filter((p): p is HubChatProposal => p != null && manifestHas(p.toolName));
     telemetry.durationMs.postModelParsing = elapsedSince(parsingStarted);
     telemetry.durationMs.total = elapsedSince(totalStarted);
     Object.assign(telemetry.tokens, readActualTokens(runId));
@@ -495,6 +495,16 @@ export async function runChatOrchestratorTurn(input: ChatTurnInput): Promise<Cha
     // so we skip in that case — there's no persona to penalise.
     tryAccumulate('failure');
     return { reply: null, telemetry };
+  }
+}
+
+function decodeProposalInput(proposal: HubChatWireProposal): HubChatProposal | null {
+  try {
+    const input = JSON.parse(proposal.input) as unknown;
+    if (input == null || typeof input !== 'object' || Array.isArray(input)) return null;
+    return { ...proposal, input: input as Record<string, unknown> };
+  } catch {
+    return null;
   }
 }
 
