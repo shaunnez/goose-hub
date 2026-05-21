@@ -2,11 +2,15 @@ import { fetchEventsPage, fetchIntervention, fetchIssueInterventions } from '@/l
 import type { InterventionDetailDto } from '@/lib/api/interventions';
 import { interventionKeys } from '@/lib/query-keys';
 import type { AgentEventDto } from '@/lib/types';
+import {
+  ISSUE_TIMELINE_EVENT_KINDS,
+  isIssueTimelineEvent,
+} from '@goose-hub/core/event-stream/issue-timeline.js';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIssueCostsBreakdown } from '../lib/costs';
-import { EVENT_KIND_LABEL, groupEvents } from '../lib/timeline';
+import { groupEvents } from '../lib/timeline';
 import type { RenderItem } from '../lib/timeline';
 import { SectionEmptyState } from './SectionEmptyState';
 import { renderTimelineItem } from './TimelineEvents';
@@ -102,6 +106,7 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
     const handler = (msg: MessageEvent<string>) => {
       try {
         const parsed = JSON.parse(msg.data) as AgentEventDto;
+        if (!isIssueTimelineEvent(parsed)) return;
         setEvents((prev) => {
           if (prev.find((e) => e.id === parsed.id) != null) return prev;
           return [parsed, ...prev];
@@ -124,9 +129,9 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
         // ignore
       }
     };
-    // Default 'message' fires for events without an `event:` field; named
-    // events fire on the type. Subscribe to all known kinds.
-    for (const kind of Object.keys(EVENT_KIND_LABEL)) {
+    // Default 'message' fires only for SSE records without an `event:` field;
+    // named events fire on their event type.
+    for (const kind of ISSUE_TIMELINE_EVENT_KINDS) {
       es.addEventListener(kind, handler as EventListener);
     }
     es.onmessage = handler;

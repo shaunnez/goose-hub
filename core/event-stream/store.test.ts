@@ -2,9 +2,56 @@ import { sql } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { db } from '../db/db.js';
 import { events } from '../db/schema.js';
+import {
+  INTENTIONALLY_FILTERED_ISSUE_TIMELINE_EVENT_KINDS,
+  ISSUE_TIMELINE_EVENT_KINDS,
+  isIssueTimelineEvent,
+} from './issue-timeline.js';
+import { EVENT_KINDS } from './kinds.js';
 import { type AgentEvent, eventStore } from './store.js';
 
 const PROJECT = 'test-event-store';
+
+describe('issue timeline event-kind contract', () => {
+  it('keeps event kind values unique', () => {
+    expect(new Set(EVENT_KINDS).size).toBe(EVENT_KINDS.length);
+  });
+
+  it('documents every chat event as intentionally filtered', () => {
+    const intentionallyFiltered = new Set(INTENTIONALLY_FILTERED_ISSUE_TIMELINE_EVENT_KINDS);
+    const chatKinds = EVENT_KINDS.filter((kind) => kind.startsWith('chat.'));
+
+    expect(chatKinds.length).toBeGreaterThan(0);
+    for (const kind of chatKinds) {
+      expect(intentionallyFiltered.has(kind)).toBe(true);
+    }
+  });
+
+  it('includes every non-filtered event kind in issue timeline subscriptions', () => {
+    const intentionallyFiltered = new Set(INTENTIONALLY_FILTERED_ISSUE_TIMELINE_EVENT_KINDS);
+    const subscribed = new Set(ISSUE_TIMELINE_EVENT_KINDS);
+
+    for (const kind of EVENT_KINDS) {
+      if (intentionallyFiltered.has(kind)) continue;
+      expect(subscribed.has(kind)).toBe(true);
+    }
+  });
+
+  it('keeps hub-chat runtime events out of issue timelines', () => {
+    expect(
+      isIssueTimelineEvent({
+        kind: 'agent.run-started',
+        payload: { skill: 'hub-chat' },
+      }),
+    ).toBe(false);
+    expect(
+      isIssueTimelineEvent({
+        kind: 'agent.run-started',
+        payload: { skill: 'investigate' },
+      }),
+    ).toBe(true);
+  });
+});
 
 describe('eventStore.appendEvent', () => {
   beforeAll(() => {

@@ -5,6 +5,7 @@ import {
   fetchProjectConfigs,
   fetchProjectInterventions,
 } from '@/lib/api';
+import type { ProjectConfigDto } from '@/lib/types';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -34,19 +35,33 @@ function renderPage() {
   );
 }
 
+function makeProjectConfig(): ProjectConfigDto {
+  return {
+    slug: 'proj-a',
+    name: 'Proj A',
+    source: { kind: 'github', repo: 'owner/repo' },
+    targetRepo: {
+      cloneUrl: 'https://github.com/owner/repo.git',
+      defaultBranch: 'main',
+      localPath: '/tmp/owner-repo',
+    },
+    stack: {
+      runtime: 'node',
+      packageManager: 'pnpm',
+      testCommand: 'pnpm test',
+    },
+    activeMilestone: null,
+    colorStripe: '#f00',
+    budgets: { perWorkflowMaxUsd: 1, dailyTokens: 100, perAdvisorMaxUsd: 1 },
+    mode: 'supervised',
+    storage: { path: '/tmp/factory.db' },
+    isolation: { mode: 'worktree' },
+  };
+}
+
 describe('OperatorQueuePage', () => {
   it('groups interventions by project and type', async () => {
-    vi.mocked(fetchProjectConfigs).mockResolvedValue([
-      {
-        slug: 'proj-a',
-        name: 'Proj A',
-        source: { kind: 'github', repo: 'owner/repo' },
-        activeMilestone: null,
-        colorStripe: '#f00',
-        budgets: { perWorkflowMaxUsd: 1, dailyTokens: 100, perAdvisorMaxUsd: 1 },
-        mode: 'supervised',
-      },
-    ]);
+    vi.mocked(fetchProjectConfigs).mockResolvedValue([makeProjectConfig()]);
     vi.mocked(fetchIssues).mockResolvedValue([
       {
         id: 'github:owner/repo#42',
@@ -103,17 +118,7 @@ describe('OperatorQueuePage', () => {
   });
 
   it('submits proposed decisions with the row version', async () => {
-    vi.mocked(fetchProjectConfigs).mockResolvedValue([
-      {
-        slug: 'proj-a',
-        name: 'Proj A',
-        source: { kind: 'github', repo: 'owner/repo' },
-        activeMilestone: null,
-        colorStripe: '#f00',
-        budgets: { perWorkflowMaxUsd: 1, dailyTokens: 100, perAdvisorMaxUsd: 1 },
-        mode: 'supervised',
-      },
-    ]);
+    vi.mocked(fetchProjectConfigs).mockResolvedValue([makeProjectConfig()]);
     vi.mocked(fetchIssues).mockResolvedValue([]);
     vi.mocked(fetchProjectInterventions).mockResolvedValue([
       {
@@ -170,17 +175,7 @@ describe('OperatorQueuePage', () => {
   });
 
   it('retries downstream queue queries from the error state', async () => {
-    vi.mocked(fetchProjectConfigs).mockResolvedValue([
-      {
-        slug: 'proj-a',
-        name: 'Proj A',
-        source: { kind: 'github', repo: 'owner/repo' },
-        activeMilestone: null,
-        colorStripe: '#f00',
-        budgets: { perWorkflowMaxUsd: 1, dailyTokens: 100, perAdvisorMaxUsd: 1 },
-        mode: 'supervised',
-      },
-    ]);
+    vi.mocked(fetchProjectConfigs).mockResolvedValue([makeProjectConfig()]);
     vi.mocked(fetchIssues).mockResolvedValue([]);
     vi.mocked(fetchProjectInterventions)
       .mockRejectedValueOnce(new Error('queue unavailable'))
