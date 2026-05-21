@@ -465,8 +465,7 @@ describe('runPrdDraft', () => {
         [
           {
             path: ['acceptanceCriteria', 0],
-            message:
-              'acceptanceCriteria[0] has no journeyId and is not marked crossCutting:true',
+            message: 'acceptanceCriteria[0] has no journeyId and is not marked crossCutting:true',
           },
         ],
         'write-prd',
