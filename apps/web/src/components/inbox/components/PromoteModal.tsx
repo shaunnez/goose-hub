@@ -5,6 +5,33 @@ import { ArrowLeft, ChevronDown } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { resolveActiveMilestone } from '../lib/promote';
 
+const enhanceConfigByType = {
+  bug: {
+    testId: 'enhance-bug-checkbox',
+    label: 'Enhance bug report',
+    title:
+      'AI will analyze the bug and append structured sections (Repro steps, Expected, Actual, Location) before creating the GitHub issue. Designed for UI/web bugs.',
+  },
+  feature: {
+    testId: 'enhance-feature-checkbox',
+    label: 'Enhance feature spec',
+    title:
+      'AI will expand the feature request into a clearer issue before creating the GitHub issue.',
+  },
+  chore: {
+    testId: 'enhance-chore-checkbox',
+    label: 'Enhance chore brief',
+    title:
+      'AI will tighten the chore description into a clearer implementation brief before promotion.',
+  },
+  research: {
+    testId: 'enhance-research-checkbox',
+    label: 'Enhance research brief',
+    title:
+      'AI will structure the research request into a clearer investigation brief before promotion.',
+  },
+} as const;
+
 type ModalStep = 'picker' | 'confirm';
 
 interface PromoteModalProps {
@@ -16,7 +43,7 @@ export function PromoteModal({ item, onClose }: PromoteModalProps) {
   const [step, setStep] = useState<ModalStep>('picker');
   const [selectedSlug, setSelectedSlug] = useState<string>('');
   const [selectedMilestoneNumber, setSelectedMilestoneNumber] = useState<number | null>(null);
-  const [enhanceBug, setEnhanceBug] = useState(true);
+  const [enhance, setEnhance] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const {
@@ -52,16 +79,11 @@ export function PromoteModal({ item, onClose }: PromoteModalProps) {
   // Only send an explicit milestoneNumber once we have a confirmed loaded list.
   // While loading or on error, omit it so the server falls back to its persisted active milestone.
   const milestoneArg = milestonesLoaded && !milestonesError ? selectedMilestoneNumber : undefined;
+  const enhanceConfig = enhanceConfigByType[item.type as keyof typeof enhanceConfigByType];
 
   const queryClient = useQueryClient();
   const mutation = useMutation({
-    mutationFn: () =>
-      promoteInboxItem(
-        item.id,
-        selectedSlug,
-        milestoneArg,
-        item.type === 'bug' ? enhanceBug : undefined,
-      ),
+    mutationFn: () => promoteInboxItem(item.id, selectedSlug, milestoneArg, enhance),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['inbox'] });
       onClose();
@@ -230,9 +252,9 @@ export function PromoteModal({ item, onClose }: PromoteModalProps) {
                   </div>
                 )}
 
-                {item.type === 'bug' && (
+                {enhanceConfig && (
                   <label
-                    title="AI will analyze the bug and append structured sections (Repro steps, Expected, Actual, Location) before creating the GitHub issue. Designed for UI/web bugs."
+                    title={enhanceConfig.title}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -246,12 +268,12 @@ export function PromoteModal({ item, onClose }: PromoteModalProps) {
                   >
                     <input
                       type="checkbox"
-                      data-testid="enhance-bug-checkbox"
-                      checked={enhanceBug}
-                      onChange={(e) => setEnhanceBug(e.target.checked)}
+                      data-testid={enhanceConfig.testId}
+                      checked={enhance}
+                      onChange={(e) => setEnhance(e.target.checked)}
                       style={{ cursor: 'pointer' }}
                     />
-                    Enhance bug report
+                    {enhanceConfig.label}
                   </label>
                 )}
               </>
