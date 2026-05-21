@@ -1,15 +1,11 @@
-import { approvePRD, declinePRD, fetchComments, fetchEvents, revisePRD } from '@/lib/api';
+import { approvePRD, declinePRD, fetchEvents, fetchPRD, revisePRD } from '@/lib/api';
 import { renderMarkdownToHtml } from '@/lib/markdown';
-import type { AgentEventDto, IssueCommentDto } from '@/lib/types';
+import type { AgentEventDto, PrdReadModelDto } from '@/lib/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, ChevronDown, ChevronRight, FileText, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  type ParsedPRDView,
-  findLatestPRDCommentBody,
-  parsePRDComment,
-} from '../lib/parse-prd-comment';
+import type { ParsedPRDView } from '../lib/parse-prd-comment';
 import { SectionEmptyState } from './SectionEmptyState';
 
 interface PRDSectionProps {
@@ -33,11 +29,11 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
   const [concernsText, setConcernsText] = useState('');
   const [showDeclineConfirm, setShowDeclineConfirm] = useState(false);
   const [submittedConcerns, setSubmittedConcerns] = useState<string[] | null>(null);
-  const baselinePrdBodyRef = useRef<string | null>(null);
+  const baselinePrdKeyRef = useRef<string | null>(null);
 
-  const { data: comments = [], isLoading } = useQuery<IssueCommentDto[]>({
-    queryKey: ['comments', projectSlug, id],
-    queryFn: () => fetchComments(projectSlug, id),
+  const { data: prdResult = null, isLoading } = useQuery<PrdReadModelDto | null>({
+    queryKey: ['prd', projectSlug, id],
+    queryFn: () => fetchPRD(projectSlug, id),
     refetchInterval: submittedConcerns !== null ? 3000 : false,
   });
 
@@ -56,7 +52,7 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['issue', projectSlug, id] });
     void queryClient.invalidateQueries({ queryKey: ['issues', projectSlug] });
-    void queryClient.invalidateQueries({ queryKey: ['comments', projectSlug, id] });
+    void queryClient.invalidateQueries({ queryKey: ['prd', projectSlug, id] });
     void queryClient.invalidateQueries({ queryKey: ['events', projectSlug, id] });
   };
 
@@ -86,13 +82,16 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
     onError: (err: unknown) => setErrorMsg(err instanceof Error ? err.message : String(err)),
   });
 
-  const currentBody = findLatestPRDCommentBody(comments);
+  const currentPrdKey =
+    prdResult != null
+      ? `${prdResult.source}:${prdResult.createdAt}:${prdResult.runId ?? ''}`
+      : null;
 
   useEffect(() => {
-    if (submittedConcerns !== null && currentBody !== baselinePrdBodyRef.current) {
+    if (submittedConcerns !== null && currentPrdKey !== baselinePrdKeyRef.current) {
       setSubmittedConcerns(null);
     }
-  }, [currentBody, submittedConcerns]);
+  }, [currentPrdKey, submittedConcerns]);
 
   if (isLoading) {
     return (
@@ -105,7 +104,7 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
   // Drafting state — show a friendly waiting message even before any PRD has
   // been posted.
   if (state === 'factory:prd-drafting') {
-    if (currentBody == null) {
+    if (prdResult == null) {
       return (
         <div className="px-8 py-6">
           <div className="mb-5">
@@ -125,7 +124,7 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
     }
   }
 
-  if (currentBody == null) {
+  if (prdResult == null) {
     return (
       <div className="px-8 py-6">
         <div className="mb-5">
@@ -144,7 +143,8 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
     );
   }
 
-  const { prd, advisorConcerns } = parsePRDComment(currentBody);
+  const prd = prdResult.prd as ParsedPRDView | null;
+  const advisorConcerns = prdResult.advisorConcerns;
 
   if (prd == null) {
     return (
@@ -176,7 +176,7 @@ export function PRDSection({ projectSlug, id, state }: PRDSectionProps) {
       .split(/\n|;/)
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
-    baselinePrdBodyRef.current = currentBody;
+    baselinePrdKeyRef.current = currentPrdKey;
     requestChanges.mutate(concerns);
   };
 

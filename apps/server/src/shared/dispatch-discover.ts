@@ -1,4 +1,5 @@
 import { logger } from '@goose-hub/core/logger.js';
+import { resolveLatestPrd } from '@goose-hub/core/prd/read-model.js';
 import { parallelLock } from '@goose-hub/core/projects/parallel-lock.js';
 import { runDecomposePrdWorkflow } from '@goose-hub/core/workflows/decompose-prd.js';
 import { runGrillAndPrdWorkflow } from '@goose-hub/core/workflows/grill-and-prd.js';
@@ -11,29 +12,6 @@ const PRD_MARKER = '<!-- factory:prd -->';
 const GRILL_QUESTION_MARKER = '<!-- factory:grill-question -->';
 const SYSTEM_MARKER = '<!-- factory:system -->';
 const CHILD_ISSUES_MARKER = '## Child issues';
-const PRD_JSON_FENCE_RE = /```json\s*\n([\s\S]*?)\n```/;
-
-/**
- * Extract the PRDOutput JSON from the latest `<!-- factory:prd -->` marker
- * comment. Returns `null` if no marker comment exists or the JSON fence
- * fails to parse. The decompose-prd workflow validates the parsed shape
- * against `DecomposeOutputSchema`'s upstream `PRDOutputSchema` itself.
- */
-function extractPrdFromComments(
-  comments: ReadonlyArray<{ body: string; createdAt: string }>,
-): unknown {
-  const matches = comments.filter((c) => c.body.startsWith(PRD_MARKER));
-  if (matches.length === 0) return null;
-  const sorted = [...matches].sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
-  const fence = sorted[sorted.length - 1].body.match(PRD_JSON_FENCE_RE);
-  if (fence == null) return null;
-  try {
-    return JSON.parse(fence[1]);
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Build the `priorReplies` array for grill-and-prd from issue comments.
  * Agent messages: grill questions (<!-- factory:grill-question -->) and PRD
@@ -217,20 +195,36 @@ export async function dispatchDecomposePrd(slug: string, issueNumber: number): P
         });
         return;
       }
-      const comments = await source.listComments(issueNumber.toString());
-      const prdOutput = extractPrdFromComments(comments);
+      const prdOutput = await resolveLatestPrd({
+        projectId: slug,
+        workItemId: item.id,
+        loadLegacyComments: () => source.listComments(issueNumber.toString()),
+      });
       if (prdOutput == null) {
-        logger.error('dispatchDecomposePrd: no PRD marker comment found', { slug, issueNumber });
+        logger.error('dispatchDecomposePrd: no PRD draft found', { slug, issueNumber });
         await source.comment(
           issueNumber.toString(),
-          'decompose-prd: no PRD comment found on this issue. Returning to needs-human.',
+          'decompose-prd: no PRD draft found on this issue. Returning to needs-human.',
+        );
+        await source.forceState(issueNumber.toString(), 'factory:needs-human');
+        return;
+      }
+      if (prdOutput.prd == null) {
+        logger.error('dispatchDecomposePrd: PRD draft could not be parsed', {
+          slug,
+          issueNumber,
+          source: prdOutput.source,
+        });
+        await source.comment(
+          issueNumber.toString(),
+          'decompose-prd: PRD draft could not be parsed. Returning to needs-human.',
         );
         await source.forceState(issueNumber.toString(), 'factory:needs-human');
         return;
       }
       await runDecomposePrdWorkflow({
         workItem: item,
-        prdOutput,
+        prdOutput: prdOutput.prd,
         stateSource: source,
         projectId: slug,
       });

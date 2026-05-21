@@ -1,15 +1,16 @@
 /** @vitest-environment jsdom */
-import { approvePRD, declinePRD, fetchComments, revisePRD } from '@/lib/api';
-import type { IssueCommentDto } from '@/lib/types';
+import { approvePRD, declinePRD, fetchEvents, fetchPRD, revisePRD } from '@/lib/api';
+import type { PrdReadModelDto } from '@/lib/types';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PRDSection } from './PRDSection';
 
 afterEach(cleanup);
 
 vi.mock('@/lib/api', () => ({
-  fetchComments: vi.fn(),
+  fetchPRD: vi.fn(),
+  fetchEvents: vi.fn(),
   approvePRD: vi.fn(),
   revisePRD: vi.fn(),
   declinePRD: vi.fn(),
@@ -76,10 +77,14 @@ const PRD_FIXTURE = {
   },
 };
 
-function makePRDComment(advisor?: string): IssueCommentDto {
-  let body = `<!-- factory:prd -->\n# PRD\n\n\`\`\`json\n${JSON.stringify(PRD_FIXTURE, null, 2)}\n\`\`\``;
-  if (advisor != null) body += `\n\n## Advisor concerns\n${advisor}`;
-  return { id: 1, body, authorLogin: 'factory-bot', createdAt: '2026-05-07T10:00:00Z' };
+function makePRDReadModel(advisor?: string): PrdReadModelDto {
+  return {
+    prd: PRD_FIXTURE,
+    advisorConcerns: advisor ?? null,
+    source: 'event',
+    createdAt: '2026-05-07T10:00:00Z',
+    runId: 'run-1',
+  };
 }
 
 function render_(jsx: React.ReactNode) {
@@ -88,8 +93,12 @@ function render_(jsx: React.ReactNode) {
 }
 
 describe('PRDSection', () => {
+  beforeEach(() => {
+    vi.mocked(fetchEvents).mockResolvedValue([]);
+  });
+
   it('renders the empty state when no PRD comment is present', async () => {
-    vi.mocked(fetchComments).mockResolvedValueOnce([]);
+    vi.mocked(fetchPRD).mockResolvedValueOnce(null);
     render_(<PRDSection projectSlug="proj" id="42" state="factory:prd-review" />);
     await waitFor(() => {
       expect(screen.getByTestId('prd-empty-state')).toBeTruthy();
@@ -97,7 +106,7 @@ describe('PRDSection', () => {
   });
 
   it('renders Drafting state when state is factory:prd-drafting and no PRD yet', async () => {
-    vi.mocked(fetchComments).mockResolvedValueOnce([]);
+    vi.mocked(fetchPRD).mockResolvedValueOnce(null);
     render_(<PRDSection projectSlug="proj" id="42" state="factory:prd-drafting" />);
     await waitFor(() => {
       expect(screen.getByTestId('prd-drafting')).toBeTruthy();
@@ -105,7 +114,7 @@ describe('PRDSection', () => {
   });
 
   it('renders title, problem, vertical slices, and complexity badge from PRD comment', async () => {
-    vi.mocked(fetchComments).mockResolvedValueOnce([makePRDComment()]);
+    vi.mocked(fetchPRD).mockResolvedValueOnce(makePRDReadModel());
     render_(<PRDSection projectSlug="proj" id="42" state="factory:prd-review" />);
     await waitFor(() => {
       expect(screen.getByTestId('prd-title').textContent).toBe('Inline validation in onboarding');
@@ -120,9 +129,7 @@ describe('PRDSection', () => {
   });
 
   it('renders Advisor notes panel when advisor concerns are present', async () => {
-    vi.mocked(fetchComments).mockResolvedValueOnce([
-      makePRDComment('- Quantify the success metric.'),
-    ]);
+    vi.mocked(fetchPRD).mockResolvedValueOnce(makePRDReadModel('- Quantify the success metric.'));
     render_(<PRDSection projectSlug="proj" id="42" state="factory:prd-review" />);
     await waitFor(() => {
       expect(screen.getByTestId('prd-advisor-panel').textContent).toContain('Quantify');
@@ -130,7 +137,7 @@ describe('PRDSection', () => {
   });
 
   it('shows Approve, Request Changes, and Decline buttons only when state is factory:prd-review', async () => {
-    vi.mocked(fetchComments).mockResolvedValue([makePRDComment()]);
+    vi.mocked(fetchPRD).mockResolvedValue(makePRDReadModel());
     const { unmount } = render_(
       <PRDSection projectSlug="proj" id="42" state="factory:prd-review" />,
     );
@@ -150,7 +157,7 @@ describe('PRDSection', () => {
   });
 
   it('Approve PRD button calls approvePRD API', async () => {
-    vi.mocked(fetchComments).mockResolvedValue([makePRDComment()]);
+    vi.mocked(fetchPRD).mockResolvedValue(makePRDReadModel());
     vi.mocked(approvePRD).mockResolvedValueOnce({ ok: true });
     render_(<PRDSection projectSlug="proj" id="42" state="factory:prd-review" />);
     await waitFor(() => {
@@ -163,7 +170,7 @@ describe('PRDSection', () => {
   });
 
   it('Request Changes opens the concern form and submits revisePRD', async () => {
-    vi.mocked(fetchComments).mockResolvedValue([makePRDComment()]);
+    vi.mocked(fetchPRD).mockResolvedValue(makePRDReadModel());
     vi.mocked(revisePRD).mockResolvedValueOnce({ ok: true });
     render_(<PRDSection projectSlug="proj" id="42" state="factory:prd-review" />);
     await waitFor(() => expect(screen.getByTestId('prd-request-changes-btn')).toBeTruthy());
@@ -181,7 +188,7 @@ describe('PRDSection', () => {
   });
 
   it('Decline Feature shows confirmation and calls declinePRD on confirm', async () => {
-    vi.mocked(fetchComments).mockResolvedValue([makePRDComment()]);
+    vi.mocked(fetchPRD).mockResolvedValue(makePRDReadModel());
     vi.mocked(declinePRD).mockResolvedValueOnce({ ok: true });
     render_(<PRDSection projectSlug="proj" id="42" state="factory:prd-review" />);
     await waitFor(() => expect(screen.getByTestId('prd-decline-btn')).toBeTruthy());
@@ -196,14 +203,13 @@ describe('PRDSection', () => {
   });
 
   it('renders parse-error state when JSON block is malformed', async () => {
-    vi.mocked(fetchComments).mockResolvedValueOnce([
-      {
-        id: 1,
-        body: '<!-- factory:prd -->\n# PRD\n\n```json\nnot-json\n```',
-        authorLogin: 'factory-bot',
-        createdAt: '2026-05-07T10:00:00Z',
-      },
-    ]);
+    vi.mocked(fetchPRD).mockResolvedValueOnce({
+      prd: null,
+      advisorConcerns: null,
+      source: 'legacy-comment',
+      createdAt: '2026-05-07T10:00:00Z',
+      runId: null,
+    });
     render_(<PRDSection projectSlug="proj" id="42" state="factory:prd-review" />);
     await waitFor(() => {
       expect(screen.getByTestId('prd-parse-error')).toBeTruthy();
@@ -211,7 +217,7 @@ describe('PRDSection', () => {
   });
 
   it('renders Implementation Decisions section when present', async () => {
-    vi.mocked(fetchComments).mockResolvedValueOnce([makePRDComment()]);
+    vi.mocked(fetchPRD).mockResolvedValueOnce(makePRDReadModel());
     render_(<PRDSection projectSlug="proj" id="42" state="factory:prd-review" />);
     await waitFor(() => {
       expect(screen.getByTestId('prd-implementation-decisions')).toBeTruthy();
@@ -223,7 +229,7 @@ describe('PRDSection', () => {
   });
 
   it('renders Testing Approach section when present', async () => {
-    vi.mocked(fetchComments).mockResolvedValueOnce([makePRDComment()]);
+    vi.mocked(fetchPRD).mockResolvedValueOnce(makePRDReadModel());
     render_(<PRDSection projectSlug="proj" id="42" state="factory:prd-review" />);
     await waitFor(() => {
       expect(screen.getByTestId('prd-testing-decisions')).toBeTruthy();

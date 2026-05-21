@@ -51,6 +51,14 @@ export interface IssueCommentDto {
   createdAt: string;
 }
 
+export interface PrdReadModelDto {
+  prd: unknown | null;
+  advisorConcerns: string | null;
+  source: 'event' | 'legacy-comment';
+  createdAt: string;
+  runId: string | null;
+}
+
 export interface ChangelogEntryDto {
   number: number;
   title: string;
