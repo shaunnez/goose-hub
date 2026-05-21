@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockRunTriageBatch = vi.fn();
 const mockRunInvestigateWorkflow = vi.fn();
 const mockRunAcceptanceContractWorkflow = vi.fn();
+const mockRunQaWorkflow = vi.fn();
 const mockGetSourceForSlug = vi.fn();
 const mockGetProject = vi.fn();
 const mockLoggerError = vi.fn();
@@ -62,6 +63,10 @@ vi.mock('../../../../slices/investigate/workflow.js', () => ({
 
 vi.mock('../../../../slices/acceptance-contract/workflow.js', () => ({
   runAcceptanceContractWorkflow: mockRunAcceptanceContractWorkflow,
+}));
+
+vi.mock('../../../../slices/qa/workflow.js', () => ({
+  runQaWorkflow: mockRunQaWorkflow,
 }));
 
 vi.mock('../domains/workflows/retro-batch.js', () => ({
@@ -118,6 +123,7 @@ beforeEach(() => {
   mockRunTriageBatch.mockResolvedValue(undefined);
   mockRunInvestigateWorkflow.mockResolvedValue(undefined);
   mockRunAcceptanceContractWorkflow.mockResolvedValue(undefined);
+  mockRunQaWorkflow.mockResolvedValue(undefined);
   mockRunRetroForItem.mockResolvedValue(undefined);
   mockRunGrillAndPrdWorkflow.mockResolvedValue(undefined);
   mockRunDecomposePrdWorkflow.mockResolvedValue(undefined);
@@ -986,6 +992,57 @@ describe('pending queue: cap-full queuing and drain', () => {
     await vi.waitFor(() => {
       expect(mockGetSourceForSlug).toHaveBeenCalledTimes(3);
     });
+  });
+});
+
+describe('dispatchQa acceptance commands', () => {
+  it('preserves issue-body verify commands when engineering spec acceptance criteria win precedence', async () => {
+    const source = {
+      getItem: vi.fn().mockResolvedValue({
+        id: 'github:o/r#42',
+        repoRef: 'o/r',
+        body: `## Acceptance criteria
+
+- [ ] Kanban cards sort newest first
+      Verify: pnpm vitest run apps/web/src/lib/lanes.config.test.ts
+      Expected: pass
+      Tolerance: exact`,
+      }),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockGetEngineeringSpec.mockReturnValue({
+      pipelineRunId: 'spec-run',
+      updatedAt: '2026-05-21T00:00:00Z',
+      spec: {
+        acceptanceCriteria: [
+          {
+            id: 'AC-S',
+            statement: 'Spec criterion without full verify fields',
+            verifyCommand: 'pnpm test',
+          },
+        ],
+      },
+    });
+
+    const { dispatchQa } = await import('./dispatch.js');
+    await dispatchQa('slug', 42);
+
+    expect(mockRunQaWorkflow).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'github:o/r#42' }),
+      source,
+      'slug',
+      'o/r',
+      expect.objectContaining({
+        verifyCommands: [
+          {
+            ac: 'Kanban cards sort newest first',
+            command: 'pnpm vitest run apps/web/src/lib/lanes.config.test.ts',
+            expected: 'pass',
+            tolerance: 'exact',
+          },
+        ],
+      }),
+    );
   });
 });
 

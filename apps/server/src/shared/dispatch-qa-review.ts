@@ -1,4 +1,7 @@
-import { acceptanceCriteriaToVerifyCommands } from '@goose-hub/core/acceptance-contracts/issue-body.js';
+import {
+  acceptanceCriteriaToVerifyCommands,
+  parseIssueBodyVerifyCommands,
+} from '@goose-hub/core/acceptance-contracts/issue-body.js';
 import { resolveAcceptanceContract } from '@goose-hub/core/acceptance-contracts/resolver.js';
 import { getUseMultiAgentPipeline } from '@goose-hub/core/db/repositories/project-settings.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
@@ -8,6 +11,22 @@ import { withParallelLock } from './dispatch-lock.js';
 import { getProject } from './projects.js';
 import { REPO_ROOT, sliceUrl } from './slice-url.js';
 import { getSourceForSlug } from './source.js';
+
+type VerifyCommand = {
+  ac: string;
+  command: string;
+  expected: string;
+  tolerance: string;
+};
+
+function mergeVerifyCommands(...groups: VerifyCommand[][]): VerifyCommand[] {
+  const merged = new Map<string, VerifyCommand>();
+  for (const command of groups.flat()) {
+    const key = `${command.command}\0${command.ac}`;
+    if (!merged.has(key)) merged.set(key, command);
+  }
+  return [...merged.values()];
+}
 
 /** Run the QA holdout workflow for a single issue. Drops duplicate triggers for the same issue. */
 export async function dispatchQa(slug: string, issueNumber: number): Promise<void> {
@@ -28,12 +47,7 @@ export async function dispatchQa(slug: string, issueNumber: number): Promise<voi
         projectSlug: string,
         targetRepo: string,
         deps?: {
-          verifyCommands?: Array<{
-            ac: string;
-            command: string;
-            expected: string;
-            tolerance: string;
-          }>;
+          verifyCommands?: VerifyCommand[];
           acceptanceContract?: unknown;
           runTests?: (() => Promise<null>) | undefined;
         },
@@ -50,7 +64,10 @@ export async function dispatchQa(slug: string, issueNumber: number): Promise<voi
       workItemId: item.id,
       issueBody: item.body,
     });
-    const verifyCommands = acceptanceCriteriaToVerifyCommands(acceptanceContract?.criteria ?? []);
+    const verifyCommands = mergeVerifyCommands(
+      acceptanceCriteriaToVerifyCommands(acceptanceContract?.criteria ?? []),
+      parseIssueBodyVerifyCommands(item.body ?? ''),
+    );
     const qaRunTests = process.env.MOCK_SOURCE === 'true' ? () => Promise.resolve(null) : undefined;
     await runQaWorkflow(item, source, slug, item.repoRef ?? slug, {
       verifyCommands,
