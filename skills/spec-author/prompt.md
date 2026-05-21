@@ -64,6 +64,18 @@ The same file path **cannot appear in `filesOwned` of two WPs anywhere in the sp
 
 (Steve `03-lifecycle-harness.md:155-156` — "file ownership prevents conflicts", no scoping qualifier.)
 
+#### TDD ownership
+
+If a WP owns production `.ts` or `.tsx` files, that same WP must also include a
+relevant `*.test.ts`, `*.test.tsx`, `*.spec.ts`, or `*.spec.tsx` file in
+`filesOwned`. Do not put the test file only in `verificationTooling` or
+`acceptanceCriteria`; it must be owned by the WP that owns the production edit.
+
+Test-only WPs are allowed. Files that are not implementation surfaces, such as
+`*.config.ts`, `*.d.ts`, `*types.ts`, `*interfaces.ts`, `*schema.ts`,
+`*index.ts`, `*constants.ts`, and `*errors.ts`, do not need a paired test file
+unless the work item genuinely changes executable behavior there.
+
 #### Constraint inventory cites real code
 
 Every entry in `constraints` must have `source` in the form `path/to/file.ts:LINE` or `path/to/file.ts:SYMBOL`. The validator checks the file exists and contains the cited symbol. Mocked or pseudo references are rejected.
@@ -113,6 +125,8 @@ The validator runs:
 4. **Falsifiable ACs** — schema-enforced (`verifyCommand: z.string().min(1)`).
 5. **Builder independence** — `changes` field non-trivial.
 6. **Verification tooling** — >2 WPs ⇒ ≥1 `verificationTooling` entry.
+7. **TDD ownership** — each WP that owns production `.ts` or `.tsx` files also
+   owns a relevant test/spec file.
 
 ## Process
 
@@ -151,6 +165,8 @@ Decompose the change into WPs. Each WP names the files it owns; **no path appear
 For each WP:
 - `id`: `WP1`, `WP2`, ... (deterministic ordering).
 - `filesOwned`: array of repo-root/worktree-root relative POSIX paths. ≥1 required.
+- If `filesOwned` includes production `.ts`/`.tsx`, include the relevant test
+  or spec file in the same WP.
 - `changes`: file:line citations + before/after sketch. Builder must be able to act without re-exploring.
 - `dependsOn`: WP ids this one depends on.
 - `builderTier`: `haiku` for mechanical edits, `sonnet` for moderate logic, `opus` for novel design.
