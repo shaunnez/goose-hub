@@ -58,7 +58,7 @@ export async function promoteInboxItem(
   }
 
   let body = item.body ?? '';
-  if (enhance && item.type === 'bug') {
+  if (enhance) {
     const enhancement = await runBugEnhance(source.projectId, item.id, item.title, body);
     if (enhancement != null) {
       body = `${body}\n\n---\n\n${enhancement}`;

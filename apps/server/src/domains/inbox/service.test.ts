@@ -15,6 +15,10 @@ vi.mock('./repository.js', () => ({
   deleteInboxItem: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('./enhance.js', () => ({
+  runBugEnhance: vi.fn(),
+}));
+
 vi.mock('@goose-hub/core/db/db.js', () => ({
   db: {
     select: () => ({ from: () => ({ where: () => ({ all: () => [] }) }) }),
@@ -23,6 +27,7 @@ vi.mock('@goose-hub/core/db/db.js', () => ({
 
 import { dispatchTriageBatch } from '#shared/dispatch.js';
 import { getSourceForSlug } from '#shared/source.js';
+import { runBugEnhance } from './enhance.js';
 import { deleteInboxItem, getInboxItem, insertInboxItem, listInboxItems } from './repository.js';
 import {
   createInboxItem,
@@ -36,7 +41,9 @@ const mockSource = { createIssue: vi.fn().mockResolvedValue(undefined) };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockSource.createIssue.mockResolvedValue(undefined);
   vi.mocked(getSourceForSlug).mockResolvedValue(mockSource as never);
+  vi.mocked(runBugEnhance).mockResolvedValue(null);
 });
 
 describe('createInboxItem', () => {
@@ -149,6 +156,54 @@ describe('promoteInboxItem', () => {
     await promoteInboxItem(3, 'my-proj');
     expect(mockSource.createIssue).toHaveBeenCalledWith(expect.objectContaining({ body: '' }));
   });
+
+  it('runs enhancement for bug promotions when requested and appends the returned markdown', async () => {
+    vi.mocked(getInboxItem).mockResolvedValueOnce({
+      id: 4,
+      title: 'Fix bug',
+      body: 'Original bug body',
+      type: 'bug',
+      createdAt: '2026-05-01',
+    });
+    vi.mocked(runBugEnhance).mockResolvedValueOnce('## AI analysis');
+
+    await promoteInboxItem(4, 'my-proj', undefined, true);
+
+    expect(runBugEnhance).toHaveBeenCalledWith(
+      expect.anything(),
+      4,
+      'Fix bug',
+      'Original bug body',
+    );
+    expect(mockSource.createIssue).toHaveBeenCalledWith(
+      expect.objectContaining({ body: 'Original bug body\n\n---\n\n## AI analysis' }),
+    );
+  });
+
+  it.each([
+    ['feature', 'Feature body'],
+    ['chore', 'Chore body'],
+    ['research', 'Research body'],
+  ] as const)(
+    'runs enhancement for %s promotions when requested and appends the returned markdown',
+    async (type, body) => {
+      vi.mocked(getInboxItem).mockResolvedValueOnce({
+        id: 5,
+        title: `${type} title`,
+        body,
+        type,
+        createdAt: '2026-05-01',
+      });
+      vi.mocked(runBugEnhance).mockResolvedValueOnce(`Enhanced ${type}`);
+
+      await promoteInboxItem(5, 'my-proj', undefined, true);
+
+      expect(runBugEnhance).toHaveBeenCalledWith(expect.anything(), 5, `${type} title`, body);
+      expect(mockSource.createIssue).toHaveBeenCalledWith(
+        expect.objectContaining({ type, body: `${body}\n\n---\n\nEnhanced ${type}` }),
+      );
+    },
+  );
 });
 
 describe('deleteInboxItem (service)', () => {
