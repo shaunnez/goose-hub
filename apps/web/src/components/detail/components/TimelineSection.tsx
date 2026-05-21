@@ -13,7 +13,7 @@ import { renderTimelineItem } from './TimelineEvents';
 
 export type { RenderItem } from '../lib/timeline';
 
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 200;
 
 interface TimelineSectionProps {
   projectSlug: string;

@@ -598,11 +598,33 @@ function getInvestigationChildParentRunId(item: RenderItem): string | null {
   return runId.slice(0, markerIndex);
 }
 
+function getInvestigationPayloadParentRunIds(item: RenderItem): string[] {
+  const parentRunIds = new Set<string>();
+  for (const event of eventFromRenderItem(item)) {
+    if (!event.kind.startsWith('swarm.')) continue;
+    const payload = event.payload as { parentRunId?: unknown } | null;
+    if (typeof payload?.parentRunId === 'string' && payload.parentRunId.trim() !== '') {
+      parentRunIds.add(payload.parentRunId);
+    }
+  }
+  return [...parentRunIds];
+}
+
 function isInvestigationParentItem(item: RenderItem): boolean {
   if (item.kind === 'run-group') return item.skill === 'investigate';
   if (item.kind !== 'event') return false;
   const payload = item.event.payload as { skill?: string } | null;
-  return item.event.kind === 'agent.run-started' && payload?.skill === 'investigate';
+  return (
+    (item.event.kind === 'agent.run-started' && payload?.skill === 'investigate') ||
+    item.event.kind === 'agent.investigation-complete'
+  );
+}
+
+function withInvestigationParentSkill(item: RenderItem, investigationRunId: string): RenderItem {
+  if (item.kind === 'run-group' && item.runId === investigationRunId && item.skill == null) {
+    return { ...item, skill: 'investigate' };
+  }
+  return item;
 }
 
 function eventFromRenderItem(item: RenderItem): AgentEventDto[] {
@@ -740,6 +762,13 @@ export function groupByInvestigationPhase(items: RenderItem[]): RenderItem[] {
     if (runId != null && isInvestigationParentItem(item)) {
       parentRunIds.add(runId);
     }
+    const childParentRunId = getInvestigationChildParentRunId(item);
+    if (childParentRunId != null) {
+      parentRunIds.add(childParentRunId);
+    }
+    for (const payloadParentRunId of getInvestigationPayloadParentRunIds(item)) {
+      parentRunIds.add(payloadParentRunId);
+    }
   }
   if (parentRunIds.size === 0) return items;
 
@@ -757,10 +786,16 @@ export function groupByInvestigationPhase(items: RenderItem[]): RenderItem[] {
       if (parentRunId != null && parentRunIds.has(parentRunId)) {
         phaseRunId = parentRunId;
       }
+      for (const payloadParentRunId of getInvestigationPayloadParentRunIds(item)) {
+        if (parentRunIds.has(payloadParentRunId)) {
+          phaseRunId = payloadParentRunId;
+          break;
+        }
+      }
     }
 
     if (phaseRunId != null) {
-      phaseItems.get(phaseRunId)?.push(item);
+      phaseItems.get(phaseRunId)?.push(withInvestigationParentSkill(item, phaseRunId));
     } else {
       ungrouped.push(item);
     }
