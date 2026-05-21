@@ -1,6 +1,6 @@
 import type { AgentEventDto } from '@/lib/types';
 import { describe, expect, it } from 'vitest';
-import { groupEvents } from '../lib/timeline';
+import { getAgentLogDisplayText, groupEvents } from '../lib/timeline';
 
 function makeLogEvent(id: number): AgentEventDto {
   return {
@@ -251,6 +251,40 @@ describe('groupEvents — agent.log collapsing', () => {
             (item.event.payload as { text?: string }).text?.includes('responses_websocket'),
         ),
       ).toBe(true);
+    }
+  });
+
+  it('uses non-empty stderr text when the normalized line field becomes empty', () => {
+    const result = groupEvents([
+      {
+        ...makeCodexStdinNoiseLog(1),
+        payload: {
+          stream: 'stderr',
+          line: 'Reading additional input from stdin...',
+          text: 'real warning',
+        },
+      },
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].kind).toBe('event');
+    if (result[0].kind === 'event') {
+      expect(getAgentLogDisplayText(result[0].event)).toBe('real warning');
+    }
+  });
+
+  it('preserves intentionally empty log lines when no text fallback exists', () => {
+    const result = groupEvents([
+      {
+        ...makeLogEvent(1),
+        payload: { stream: 'stdout', line: '' },
+      },
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].kind).toBe('event');
+    if (result[0].kind === 'event') {
+      expect(getAgentLogDisplayText(result[0].event)).toBe('');
     }
   });
 });

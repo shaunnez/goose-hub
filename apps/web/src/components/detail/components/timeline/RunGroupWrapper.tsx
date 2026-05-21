@@ -66,11 +66,10 @@ export function RunGroupWrapper({
   const groupEventList = items
     .filter((item): item is Extract<RenderItem, { kind: 'event' }> => item.kind === 'event')
     .map((item) => item.event);
-  const hasCompleted = groupEventList.some((event) => event.kind === 'agent.run-completed');
   const isFailed = groupEventList.some((event) => event.kind === 'agent.run-failed');
   const codexTransportWarnings = groupEventList.filter(isCodexTransportWarningLog);
   const codexTransportWarning = codexTransportWarnings[0] ?? null;
-  const warningRecovered = codexTransportWarning != null && hasCompleted;
+  const warningRecovered = codexTransportWarning != null && endedAt != null && !isFailed;
 
   const displayItems = items
     .filter(
