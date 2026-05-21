@@ -1,6 +1,7 @@
 import { getArtifact } from '@goose-hub/core/agent-artifacts/repository.js';
 import { getEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
 import { type AgentEvent, eventStore } from '@goose-hub/core/event-stream/store.js';
+import { resolveLatestPrd } from '@goose-hub/core/prd/read-model.js';
 import { STATES } from '@goose-hub/core/state-machine/states.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { legalTargets } from '@goose-hub/core/state-machine/transitions.js';
@@ -149,6 +150,32 @@ export async function getIssueSpec(
       },
     },
   };
+}
+
+export async function getIssuePrd(
+  slug: string,
+  id: string,
+): Promise<
+  Result<{
+    prd: {
+      prd: unknown | null;
+      advisorConcerns: string | null;
+      source: 'event' | 'legacy-comment';
+      createdAt: string;
+      runId: string | null;
+    } | null;
+  }>
+> {
+  const source = await getSourceForSlug(slug);
+  if (source == null) return { ok: false, error: 'project not found', status: 404 };
+  const repoRef = await getRepoRef(slug);
+  const workItemId = `github:${repoRef}#${id}`;
+  const prd = await resolveLatestPrd({
+    projectId: slug,
+    workItemId,
+    loadLegacyComments: () => source.listComments(id),
+  });
+  return { ok: true, data: { prd } };
 }
 
 export async function getIssueArtifact(

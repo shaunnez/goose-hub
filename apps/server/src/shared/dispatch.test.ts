@@ -20,6 +20,7 @@ const mockRunRetroForItem = vi.fn();
 const mockFilterEligibleByDependencies = vi.fn();
 const mockCreateProjectAwareTargetSource = vi.fn();
 const mockRunGrillAndPrdWorkflow = vi.fn();
+const mockRunDecomposePrdWorkflow = vi.fn();
 const mockGetUseMultiAgentPipeline = vi.fn();
 const mockGetEngineeringSpec = vi.fn();
 const mockRunParallelImplementWorkflow = vi.fn();
@@ -85,6 +86,10 @@ vi.mock('@goose-hub/core/workflows/grill-and-prd.js', () => ({
   runGrillAndPrdWorkflow: mockRunGrillAndPrdWorkflow,
 }));
 
+vi.mock('@goose-hub/core/workflows/decompose-prd.js', () => ({
+  runDecomposePrdWorkflow: mockRunDecomposePrdWorkflow,
+}));
+
 vi.mock('@goose-hub/core/event-stream/store.js', () => ({
   eventStore: {
     replay: mockEventStoreReplay,
@@ -109,6 +114,7 @@ beforeEach(() => {
   mockRunInvestigateWorkflow.mockResolvedValue(undefined);
   mockRunRetroForItem.mockResolvedValue(undefined);
   mockRunGrillAndPrdWorkflow.mockResolvedValue(undefined);
+  mockRunDecomposePrdWorkflow.mockResolvedValue(undefined);
   mockRunParallelImplementWorkflow.mockResolvedValue({ status: 'success' });
   mockGetSourceForSlug.mockResolvedValue(null);
   // Default: single-workflow-per-project (backward-compat) for tests that don't override.
@@ -1328,9 +1334,45 @@ describe('dispatchGrillAndPrd: buildPriorReplies filtering', () => {
 // ─── dispatchDecomposePrd — no-PRD escape ────────────────────────────────
 
 describe('dispatchDecomposePrd: no-PRD escape', () => {
-  it('posts a comment and forces needs-human when no PRD comment is found', async () => {
+  it('runs decompose from a local prd.drafted event without reading a marker comment', async () => {
+    const item = { id: 'github:owner/repo#54', state: 'factory:decomposing' };
+    const prd = { title: 'Local PRD' };
     const source = {
-      getItem: vi.fn().mockResolvedValue({ state: 'factory:decomposing' }),
+      getItem: vi.fn().mockResolvedValue(item),
+      listComments: vi.fn().mockResolvedValue([]),
+    };
+    mockGetSourceForSlug.mockResolvedValue(source);
+    mockEventStoreReplay.mockReturnValue([
+      {
+        id: 100,
+        projectId: 'slug',
+        workItemId: item.id,
+        kind: 'prd.drafted',
+        payload: { prd, advisorConcerns: null },
+        runId: 'run-1',
+        personaId: null,
+        createdAt: '2026-05-21T00:00:00.000Z',
+      },
+    ]);
+
+    const { dispatchDecomposePrd } = await import('./dispatch.js');
+    await dispatchDecomposePrd('slug', 54);
+
+    expect(source.listComments).not.toHaveBeenCalled();
+    expect(mockRunDecomposePrdWorkflow).toHaveBeenCalledWith({
+      workItem: item,
+      prdOutput: prd,
+      stateSource: source,
+      projectId: 'slug',
+    });
+  });
+
+  it('posts a comment and forces needs-human when no PRD draft is found', async () => {
+    const source = {
+      getItem: vi.fn().mockResolvedValue({
+        id: 'github:owner/repo#55',
+        state: 'factory:decomposing',
+      }),
       listComments: vi.fn().mockResolvedValue([]),
       comment: vi.fn().mockResolvedValue(undefined),
       forceState: vi.fn().mockResolvedValue(undefined),
@@ -1341,12 +1383,12 @@ describe('dispatchDecomposePrd: no-PRD escape', () => {
     await dispatchDecomposePrd('slug', 55);
 
     expect(mockLoggerError).toHaveBeenCalledWith(
-      'dispatchDecomposePrd: no PRD marker comment found',
+      'dispatchDecomposePrd: no PRD draft found',
       expect.objectContaining({ slug: 'slug', issueNumber: 55 }),
     );
     expect(source.comment).toHaveBeenCalledWith(
       '55',
-      expect.stringContaining('no PRD comment found'),
+      expect.stringContaining('no PRD draft found'),
     );
     expect(source.forceState).toHaveBeenCalledWith('55', 'factory:needs-human');
   });

@@ -11,22 +11,13 @@
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
+import { resolveLatestPrd } from '@goose-hub/core/prd/read-model.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import type { PRDOutput } from '@goose-hub/skills/write-prd/schema.js';
 import { dispatchDecomposePrd, dispatchGrillAndPrd, dispatchRevisePrd } from '#shared/dispatch.js';
 import type { Result } from '#shared/middleware.js';
 import { getSourceForSlug } from '#shared/source.js';
 import { getRepoRef } from './internal.js';
-
-function parsePrdFromCommentBody(body: string): PRDOutput | null {
-  const fenceMatch = body.match(/```json\s*\n([\s\S]*?)\n```/);
-  if (fenceMatch == null) return null;
-  try {
-    return JSON.parse(fenceMatch[1]) as PRDOutput;
-  } catch {
-    return null;
-  }
-}
 
 async function moveOrForce(
   source: import('@goose-hub/core/state-source/interface.js').StateSource,
@@ -105,10 +96,20 @@ export async function revisePRD(
     };
   }
 
-  // Fetch the latest PRD comment and parse its JSON blob.
-  const comments = await source.listComments(id);
-  const prdComment = [...comments].reverse().find((c) => c.body.startsWith('<!-- factory:prd -->'));
-  const priorPrd = prdComment != null ? parsePrdFromCommentBody(prdComment.body) : null;
+  const latestPrd = await resolveLatestPrd({
+    projectId: slug,
+    workItemId,
+    loadLegacyComments: () => source.listComments(id),
+  });
+  const priorPrd = latestPrd?.prd != null ? (latestPrd.prd as PRDOutput) : undefined;
+  if (priorPrd == null) {
+    await source.comment(
+      id,
+      'revise-prd: no PRD draft found for this issue. Returning to needs-human.',
+    );
+    await source.forceState(id, 'factory:needs-human');
+    return { ok: false, error: 'no PRD draft found for revision', status: 409 };
+  }
 
   eventStore.appendEvent({
     projectId: slug,
@@ -118,7 +119,7 @@ export async function revisePRD(
   });
 
   // Re-dispatch write-prd with concerns; state stays prd-review.
-  dispatchRevisePrd(slug, Number(id), priorPrd ?? undefined, concerns).catch((err: unknown) => {
+  dispatchRevisePrd(slug, Number(id), priorPrd, concerns).catch((err: unknown) => {
     logger.error('dispatchRevisePrd after revisePRD failed', {
       slug,
       id,

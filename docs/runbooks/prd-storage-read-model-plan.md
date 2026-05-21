@@ -42,7 +42,7 @@ Recommended target:
 
 ## Slice 1: Centralize Latest-PRD Lookup
 
-Status: not started.
+Status: completed in `codex/prd-storage-read-model`.
 
 Create one server/core function for resolving the latest PRD for a work item.
 Initial implementation may read from existing sources in this order:
@@ -63,7 +63,7 @@ Acceptance criteria:
 
 ## Slice 2: Add A PRD API Read Surface
 
-Status: not started.
+Status: completed in `codex/prd-storage-read-model`.
 
 Add an issue-scoped endpoint such as:
 
@@ -87,7 +87,7 @@ Acceptance criteria:
 
 ## Slice 3: Move Revision And Decompose To Structured Lookup
 
-Status: not started.
+Status: completed in `codex/prd-storage-read-model`.
 
 Update backend workflow actions to use the centralized latest-PRD resolver:
 
