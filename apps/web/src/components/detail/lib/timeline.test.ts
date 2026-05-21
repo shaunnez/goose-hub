@@ -196,7 +196,7 @@ describe('groupEvents — investigation runs', () => {
     }
   });
 
-  it('leaves orphan scout runs flat when no parent investigation run exists', () => {
+  it('infers an investigation phase from scout child run ids', () => {
     const events: AgentEventDto[] = [
       makeEvent(1, 'agent.run-started', 'run-missing:scout:pattern:0', {
         payload: { skill: 'scout-pattern' },
@@ -206,8 +206,62 @@ describe('groupEvents — investigation runs', () => {
 
     const items = groupEvents(events);
 
-    expect(items.some((item) => item.kind === 'investigation-phase')).toBe(false);
-    expect(items[0]?.kind).toBe('run-group');
+    const phase = items[0];
+    expect(phase?.kind).toBe('investigation-phase');
+    if (phase?.kind === 'investigation-phase') {
+      expect(phase.investigationRunId).toBe('run-missing');
+      expect(
+        phase.items.some(
+          (item) => item.kind === 'run-group' && item.runId === 'run-missing:scout:pattern:0',
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('infers a live investigation phase from a partial swarm window', () => {
+    const parentRunId = 'run-investigate-partial';
+    const wave2RiskRunId = `${parentRunId}:scout:wave2-risk-analyst:1`;
+    const wave2UxRunId = `${parentRunId}:scout:wave2-ux-scout:2`;
+    const events: AgentEventDto[] = [
+      makeEvent(1, 'swarm.heartbeat', parentRunId, {
+        payload: { parentRunId, wave: 2, activeScouts: [wave2RiskRunId, wave2UxRunId] },
+      }),
+      makeEvent(2, 'swarm.wave-completed', parentRunId, {
+        payload: { parentRunId, wave: 1, completedScouts: ['scout-pattern'] },
+      }),
+      makeEvent(3, 'agent.run-started', wave2RiskRunId, {
+        payload: { skill: 'wave2-risk-analyst' },
+      }),
+      makeEvent(4, 'swarm.heartbeat', wave2RiskRunId, {
+        payload: { parentRunId, wave: 2, scoutName: 'wave2-risk-analyst' },
+      }),
+      makeEvent(5, 'agent.run-started', wave2UxRunId, {
+        payload: { skill: 'wave2-ux-scout' },
+      }),
+      makeEvent(6, 'swarm.heartbeat', wave2UxRunId, {
+        payload: { parentRunId, wave: 2, scoutName: 'wave2-ux-scout' },
+      }),
+    ];
+
+    const items = groupEvents(events);
+    const phases = items.filter((item) => item.kind === 'investigation-phase');
+
+    expect(phases).toHaveLength(1);
+    const phase = phases[0];
+    expect(phase.kind).toBe('investigation-phase');
+    if (phase.kind === 'investigation-phase') {
+      expect(phase.investigationRunId).toBe(parentRunId);
+      expect(phase.status).toBe('live');
+      const childRunIds = phase.items
+        .filter((item) => item.kind === 'run-group')
+        .map((item) => (item.kind === 'run-group' ? item.runId : null));
+      expect(childRunIds).toEqual(expect.arrayContaining([wave2RiskRunId, wave2UxRunId]));
+    }
+    expect(
+      items.some(
+        (item) => item.kind === 'run-group' && item.runId === parentRunId && item.skill == null,
+      ),
+    ).toBe(false);
   });
 
   it('marks an investigation phase as started before child runs appear', () => {
