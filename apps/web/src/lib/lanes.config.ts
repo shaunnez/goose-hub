@@ -111,26 +111,41 @@ export function laneForState(state: string): string | undefined {
   return STATE_TO_LANE.get(state);
 }
 
-const PRIORITY_RANK: Record<string, number> = {
-  critical: 0,
-  high: 1,
-  medium: 2,
-  low: 3,
-};
-
 interface SortableItem {
   externalId: string;
-  priority: string;
+  createdAt: string;
+  repoRef?: string;
+}
+
+function timestampOf(createdAt: string): number {
+  const ts = Date.parse(createdAt);
+  return Number.isFinite(ts) ? ts : Number.NEGATIVE_INFINITY;
+}
+
+function compareExternalIdDesc(a: string, b: string): number {
+  const aNum = Number(a);
+  const bNum = Number(b);
+  if (Number.isFinite(aNum) && Number.isFinite(bNum) && aNum !== bNum) {
+    return bNum - aNum;
+  }
+  return b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' });
 }
 
 /**
- * Order matches the scheduler's eligibility sort: priority desc, then issue
- * number asc.
+ * Newest cards appear first in each lane, with deterministic fallbacks for
+ * equal or missing timestamps.
  */
 export function sortLaneItems<T extends SortableItem>(items: readonly T[]): T[] {
   return [...items].sort((a, b) => {
-    const prDiff = (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9);
-    if (prDiff !== 0) return prDiff;
-    return Number(a.externalId) - Number(b.externalId);
+    const timeDiff = timestampOf(b.createdAt) - timestampOf(a.createdAt);
+    if (timeDiff !== 0) return timeDiff;
+
+    const externalDiff = compareExternalIdDesc(a.externalId, b.externalId);
+    if (externalDiff !== 0) return externalDiff;
+
+    return (a.repoRef ?? '').localeCompare(b.repoRef ?? '', undefined, {
+      numeric: true,
+      sensitivity: 'base',
+    });
   });
 }
