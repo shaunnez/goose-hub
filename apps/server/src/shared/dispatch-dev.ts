@@ -17,7 +17,15 @@ import { getProject } from './projects.js';
 import { REPO_ROOT, sliceUrl } from './slice-url.js';
 import { getSourceForSlug } from './source.js';
 
-type InvCompletePayload = { investigate?: InvestigateOutput; investigationRunId?: string };
+type InvCompletePayload = {
+  investigate?: InvestigateOutput;
+  investigationRunId?: string;
+  investigationPlan?: {
+    mode?: 'single' | 'swarm';
+    selectedWave1Scouts?: string[];
+    wave2Needed?: boolean;
+  };
+};
 
 function hasEquivalentInvestigationCompleteTransition(
   events: Array<{ kind: string; payload: unknown }>,
@@ -65,9 +73,19 @@ function resolveFixIssuePipelineForBug(
   if (latestInv == null) return 'legacy';
   const investigate = (latestInv.payload as InvCompletePayload).investigate;
   if (investigate == null) return 'legacy';
+  const investigationPlan = (latestInv.payload as InvCompletePayload).investigationPlan;
+  const plannerLocalized =
+    investigationPlan?.mode === 'single' ||
+    (investigationPlan?.mode === 'swarm' &&
+      investigationPlan.wave2Needed === false &&
+      (investigationPlan.selectedWave1Scouts?.length ?? 0) <= 3);
   // Test files are co-changed with their source; exclude from complexity count.
   const nonTestFiles = investigate.keyFiles.filter((f) => !/\.(test|spec)\.[jt]sx?$/.test(f.path));
-  return nonTestFiles.length <= 3 && investigate.confidence === 'high' ? 'legacy' : 'spec-author';
+  return nonTestFiles.length <= 3 &&
+    investigate.confidence === 'high' &&
+    (investigationPlan == null || plannerLocalized)
+    ? 'legacy'
+    : 'spec-author';
 }
 
 /** Run the investigate workflow for a single issue. Drops duplicate triggers for the same issue. */

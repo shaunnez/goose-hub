@@ -89,7 +89,7 @@ describe('triage schema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('runtime JSON Schema omits optional decision summary evidence', () => {
+  it('runtime JSON Schema keeps decision summary evidence optional', () => {
     const jsonSchema = toJsonSchema(TriageOutputSchema);
     expect(typeof jsonSchema).toBe('object');
     expect(jsonSchema).not.toBeNull();
@@ -100,7 +100,7 @@ describe('triage schema', () => {
       properties?: Record<string, unknown>;
       required?: string[];
     };
-    expect(item.properties).not.toHaveProperty('evidence');
+    expect(item.properties?.evidence).toEqual({ type: 'string' });
     expect(item.required).toEqual(['kind', 'summary']);
   });
 });

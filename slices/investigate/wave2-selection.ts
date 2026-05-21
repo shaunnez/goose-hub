@@ -65,7 +65,7 @@ export function selectWave2Scouts(opts: SelectWave2ScoutsOptions) {
     });
   }
 
-  if (implicatesRiskAnalysis(signalText) || specs.length === 0) {
+  if (implicatesRiskAnalysis(signalText) || opts.contradictions.length > 0) {
     specs.push({
       ...WAVE_2_RISK_SPEC,
       extraContext: { scoutReports: opts.scoutReportsContext },

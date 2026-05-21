@@ -1384,8 +1384,7 @@ describe('skipGrill mode — retry write-prd directly', () => {
     const evs = eventStore.replay({ projectId, workItemId: workItem.id });
     const failed = evs.find(
       (e) =>
-        e.kind === 'agent.run-failed' &&
-        (e.payload as { skill?: string }).skill === 'write-prd',
+        e.kind === 'agent.run-failed' && (e.payload as { skill?: string }).skill === 'write-prd',
     );
 
     expect(failed).toBeDefined();
