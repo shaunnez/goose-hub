@@ -124,13 +124,13 @@ interface SortableItem {
 }
 
 /**
- * Order matches the scheduler's eligibility sort: priority desc, then issue
- * number asc.
+ * Order matches the board contract: priority rank first, then newest issue
+ * number first within the same priority.
  */
 export function sortLaneItems<T extends SortableItem>(items: readonly T[]): T[] {
   return [...items].sort((a, b) => {
     const prDiff = (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9);
     if (prDiff !== 0) return prDiff;
-    return Number(a.externalId) - Number(b.externalId);
+    return Number(b.externalId) - Number(a.externalId);
   });
 }
