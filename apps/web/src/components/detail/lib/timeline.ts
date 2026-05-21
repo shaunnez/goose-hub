@@ -421,10 +421,12 @@ export function groupEvents(
   const collapsed = collapseLogRuns(normalizedEvents);
   const grouped = groupByRunId(collapsed);
   const withInvestigationPhases = groupByInvestigationPhase([...grouped].sort(compareRenderItems));
-  const withDevPhases = groupByDevPhase([...withInvestigationPhases].sort(compareRenderItems));
-  const withReviewGroups = groupByReviewWorkflow([...withDevPhases].sort(compareRenderItems));
-  if (interventionDetails.length === 0) return withReviewGroups;
-  return [...withReviewGroups, ...interventionDetails.map(buildInterventionGroup)].sort(
+  const withReviewGroups = groupByReviewWorkflow(
+    [...withInvestigationPhases].sort(compareRenderItems),
+  );
+  const withDevPhases = groupByDevPhase([...withReviewGroups].sort(compareRenderItems));
+  if (interventionDetails.length === 0) return withDevPhases;
+  return [...withDevPhases, ...interventionDetails.map(buildInterventionGroup)].sort(
     compareRenderItems,
   );
 }
@@ -848,6 +850,17 @@ function resolveReviewStatus(items: RenderItem[]): 'live' | 'completed' | 'needs
   if (events.some((event) => event.kind === 'review.wave-failed')) return 'failed';
   if (events.some((event) => event.kind === 'agent.run-failed')) return 'failed';
   if (events.some((event) => event.kind === 'review.escalated')) return 'needs-human';
+  if (
+    events.some((event) => {
+      const payload = event.payload as { to?: string; toState?: string } | null;
+      return (
+        event.kind === 'state.transitioned' &&
+        (payload?.to === 'factory:needs-human' || payload?.toState === 'factory:needs-human')
+      );
+    })
+  ) {
+    return 'needs-human';
+  }
 
   const completed = events
     .filter((event) => event.kind === 'review.completed')

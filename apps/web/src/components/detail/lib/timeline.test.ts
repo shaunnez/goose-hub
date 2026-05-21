@@ -747,6 +747,95 @@ describe('groupEvents — convergent review runs', () => {
     }
   });
 
+  it('marks review-group terminal on review-linked needs-human state transition', () => {
+    const REVIEW_RUN = 'review-workflow-transition-needs-human';
+    const result = groupByReviewWorkflow([
+      {
+        kind: 'event',
+        event: makeEvent(1, 'state.transitioned', null, {
+          payload: { reviewWorkflowRunId: REVIEW_RUN, to: 'factory:needs-human' },
+        }),
+      },
+    ]);
+
+    expect(result[0].kind).toBe('review-group');
+    if (result[0].kind === 'review-group') {
+      expect(result[0].status).toBe('needs-human');
+      expect(result[0].endedAt).toBe(result[0].lastEventAt);
+    }
+  });
+
+  it('keeps review grouping separate from dev phase grouping when review events carry pipelineRunId', () => {
+    const PID = 'pipe-review-parent';
+    const REVIEW_RUN = 'review-workflow-pipeline';
+    const result = groupEvents([
+      makeEvent(1, 'agent.run-started', PID, { payload: { skill: 'spec-author' } }),
+      makeEvent(2, 'spec.completed', PID, { payload: { pipelineRunId: PID } }),
+      makeEvent(3, 'agent.run-completed', PID),
+      makeEvent(4, 'review.completed', null, {
+        payload: {
+          pipelineRunId: PID,
+          reviewWorkflowRunId: REVIEW_RUN,
+          verdict: 'approved',
+          confidence: 0.9,
+        },
+      }),
+      makeEvent(5, 'state.transitioned', null, {
+        payload: { pipelineRunId: PID, reviewWorkflowRunId: REVIEW_RUN, to: 'factory:approved' },
+      }),
+    ]);
+
+    const reviewGroup = result.find((item) => item.kind === 'review-group');
+    const phaseGroup = result.find((item) => item.kind === 'phase-group');
+
+    expect(reviewGroup).toBeDefined();
+    expect(phaseGroup).toBeDefined();
+    if (reviewGroup?.kind === 'review-group') {
+      const reviewEventKinds = reviewGroup.items.flatMap((item) =>
+        item.kind === 'event' ? [item.event.kind] : [],
+      );
+      expect(reviewEventKinds).toEqual(['state.transitioned', 'review.completed']);
+      expect(
+        reviewGroup.items.some((item) => item.kind === 'run-group' && item.runId === PID),
+      ).toBe(false);
+    }
+    if (phaseGroup?.kind === 'phase-group') {
+      expect(
+        phaseGroup.items.some(
+          (item) =>
+            item.kind === 'event' &&
+            (item.event.kind === 'review.completed' || item.event.kind === 'state.transitioned'),
+        ),
+      ).toBe(false);
+      expect(phaseGroup.items.some((item) => item.kind === 'run-group' && item.runId === PID)).toBe(
+        true,
+      );
+    }
+  });
+
+  it('keeps multiple reviewWorkflowRunIds on one pipeline as separate review groups', () => {
+    const PID = 'pipe-review-multi';
+    const result = groupEvents([
+      makeEvent(1, 'agent.run-started', PID, { payload: { skill: 'spec-author' } }),
+      makeEvent(2, 'spec.completed', PID, { payload: { pipelineRunId: PID } }),
+      makeEvent(3, 'agent.run-completed', PID),
+      makeEvent(4, 'review.completed', null, {
+        payload: { pipelineRunId: PID, reviewWorkflowRunId: 'review-one', verdict: 'needs-fix' },
+      }),
+      makeEvent(5, 'review.completed', null, {
+        payload: { pipelineRunId: PID, reviewWorkflowRunId: 'review-two', verdict: 'approved' },
+      }),
+    ]);
+
+    const reviewGroups = result.filter((item) => item.kind === 'review-group');
+    expect(reviewGroups).toHaveLength(2);
+    expect(
+      reviewGroups.map((item) =>
+        item.kind === 'review-group' ? item.reviewWorkflowRunId : 'not-review',
+      ),
+    ).toEqual(expect.arrayContaining(['review-one', 'review-two']));
+  });
+
   it('keeps child reviewer output inside the review parent group', () => {
     const REVIEW_RUN = 'review-workflow-output';
     const SLOT_RUN = 'review-slot-output';
