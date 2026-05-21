@@ -6,8 +6,110 @@ import { resolveSkillRuntimeForProject } from '@goose-hub/core/agent-runtime/ski
 import { logger } from '@goose-hub/core/logger.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { BugEnhanceOutputSchema } from '@goose-hub/skills/bug-enhance/schema.js';
+import { IssueEnhanceOutputSchema } from '@goose-hub/skills/issue-enhance/schema.js';
 
-const jsonSchema = toJsonSchema(BugEnhanceOutputSchema);
+const bugEnhanceJsonSchema = toJsonSchema(BugEnhanceOutputSchema);
+const issueEnhanceJsonSchema = toJsonSchema(IssueEnhanceOutputSchema);
+
+type EnhancableInboxItemType = 'feature' | 'bug' | 'chore' | 'research';
+type GenericEnhanceType = Exclude<EnhancableInboxItemType, 'bug'>;
+type EnhanceSkillName = 'bug-enhance' | 'issue-enhance';
+
+type EnhanceOutput = {
+  enhancedContent: string;
+  decisionSummaries: unknown[];
+};
+
+type EnhanceOptions = {
+  skill: EnhanceSkillName;
+  projectId: string;
+  inboxItemId: number;
+  title: string;
+  body: string;
+  type?: GenericEnhanceType;
+  outputJsonSchema: object;
+  parseOutput: (
+    output: unknown,
+  ) => { success: true; data: EnhanceOutput } | { success: false; error: { issues: unknown } };
+};
+
+async function runEnhance({
+  skill,
+  projectId,
+  inboxItemId,
+  title,
+  body,
+  type,
+  outputJsonSchema,
+  parseOutput,
+}: EnhanceOptions): Promise<string | null> {
+  const projectConfig = await getProjectBySlug(projectId);
+  const skillRuntime = resolveSkillRuntimeForProject({
+    skill,
+    projectBudgets: projectConfig?.budgets,
+    projectId,
+    configRuntime: projectConfig?.agentConfig?.runtime ?? 'auto',
+    role: 'triager',
+    allowHoldoutOverride: projectConfig?.agentConfig?.allowHoldoutOverride,
+  });
+  const runtime = selectRuntime({
+    configRuntime: projectConfig?.agentConfig?.runtime ?? 'auto',
+    model: skillRuntime.modelOverride,
+    skillProvider: skillRuntime.provider,
+  });
+  const runId = crypto.randomUUID();
+  const { personaId } = selectPersona(projectId, 'triager');
+  const workItemId = `inbox:${inboxItemId}`;
+
+  let prompt: string;
+  try {
+    prompt = readPromptWithContext(skill, projectId);
+  } catch (err) {
+    logger.error(`${skill}: failed to read prompt`, { err: String(err) });
+    return null;
+  }
+
+  const workItem = type == null ? { title, body } : { type, title, body };
+
+  try {
+    const result = await runtime.run({
+      runId,
+      role: 'triager',
+      skill,
+      context: { projectId, workItemId, workItem },
+      contextAllowlist: ['workItem'],
+      freshContext: false,
+      toolBundles: [],
+      toolExtras: [],
+      budgets: skillRuntime.budgets,
+      modelOverride: skillRuntime.modelOverride,
+      personaId,
+      outputJsonSchema,
+      appendSystemPrompt: prompt,
+    });
+
+    const parsed = parseOutput(result.output);
+    if (!parsed.success) {
+      logger.warn(`${skill}: output validation failed`, {
+        errors: parsed.error.issues,
+        raw: JSON.stringify(result.output),
+      });
+      return null;
+    }
+
+    const content = parsed.data.enhancedContent.trim();
+    if (content.length === 0) {
+      logger.warn(`${skill}: enhancedContent empty after trim`, {
+        runId,
+        decisions: parsed.data.decisionSummaries,
+      });
+    }
+    return content.length > 0 ? content : null;
+  } catch (err) {
+    logger.error(`${skill}: agent run failed`, { err: String(err) });
+    return null;
+  }
+}
 
 /**
  * Runs the bug-enhance agent on a UI/web bug report.
@@ -22,68 +124,46 @@ export async function runBugEnhance(
   title: string,
   body: string,
 ): Promise<string | null> {
-  const projectConfig = await getProjectBySlug(projectId);
-  const bugEnhanceRuntime = resolveSkillRuntimeForProject({
+  return runEnhance({
     skill: 'bug-enhance',
-    projectBudgets: projectConfig?.budgets,
     projectId,
-    configRuntime: projectConfig?.agentConfig?.runtime ?? 'auto',
-    role: 'triager',
-    allowHoldoutOverride: projectConfig?.agentConfig?.allowHoldoutOverride,
+    inboxItemId,
+    title,
+    body,
+    outputJsonSchema: bugEnhanceJsonSchema,
+    parseOutput: (output) => BugEnhanceOutputSchema.safeParse(output),
   });
-  const runtime = selectRuntime({
-    configRuntime: projectConfig?.agentConfig?.runtime ?? 'auto',
-    model: bugEnhanceRuntime.modelOverride,
-    skillProvider: bugEnhanceRuntime.provider,
-  });
-  const runId = crypto.randomUUID();
-  const { personaId } = selectPersona(projectId, 'triager');
-  const workItemId = `inbox:${inboxItemId}`;
+}
 
-  let prompt: string;
-  try {
-    prompt = readPromptWithContext('bug-enhance', projectId);
-  } catch (err) {
-    logger.error('bug-enhance: failed to read prompt', { err: String(err) });
-    return null;
+export async function runIssueEnhance(
+  projectId: string,
+  inboxItemId: number,
+  type: GenericEnhanceType,
+  title: string,
+  body: string,
+): Promise<string | null> {
+  return runEnhance({
+    skill: 'issue-enhance',
+    projectId,
+    inboxItemId,
+    type,
+    title,
+    body,
+    outputJsonSchema: issueEnhanceJsonSchema,
+    parseOutput: (output) => IssueEnhanceOutputSchema.safeParse(output),
+  });
+}
+
+export async function runInboxEnhance(
+  projectId: string,
+  inboxItemId: number,
+  type: EnhancableInboxItemType,
+  title: string,
+  body: string,
+): Promise<string | null> {
+  if (type === 'bug') {
+    return runBugEnhance(projectId, inboxItemId, title, body);
   }
 
-  try {
-    const result = await runtime.run({
-      runId,
-      role: 'triager',
-      skill: 'bug-enhance',
-      context: { projectId, workItemId, workItem: { title, body } },
-      contextAllowlist: ['workItem'],
-      freshContext: false,
-      toolBundles: [],
-      toolExtras: [],
-      budgets: bugEnhanceRuntime.budgets,
-      modelOverride: bugEnhanceRuntime.modelOverride,
-      personaId,
-      outputJsonSchema: jsonSchema,
-      appendSystemPrompt: prompt,
-    });
-
-    const parsed = BugEnhanceOutputSchema.safeParse(result.output);
-    if (!parsed.success) {
-      logger.warn('bug-enhance: output validation failed', {
-        errors: parsed.error.issues,
-        raw: JSON.stringify(result.output),
-      });
-      return null;
-    }
-
-    const content = parsed.data.enhancedContent.trim();
-    if (content.length === 0) {
-      logger.warn('bug-enhance: enhancedContent empty after trim', {
-        runId,
-        decisions: parsed.data.decisionSummaries,
-      });
-    }
-    return content.length > 0 ? content : null;
-  } catch (err) {
-    logger.error('bug-enhance: agent run failed', { err: String(err) });
-    return null;
-  }
+  return runIssueEnhance(projectId, inboxItemId, type, title, body);
 }
