@@ -32,11 +32,15 @@ class MockEventSource {
   onmessage: ((event: MessageEvent<string>) => void) | null = null;
   onerror: ((event: Event) => void) | null = null;
 
-  emit(event: AgentEventDto) {
+  emitNamed(event: AgentEventDto) {
     const message = new MessageEvent(event.kind, { data: JSON.stringify(event) });
     for (const listener of this.listeners.get(event.kind) ?? []) {
       listener(message);
     }
+  }
+
+  emitMessage(event: AgentEventDto) {
+    const message = new MessageEvent('message', { data: JSON.stringify(event) });
     this.onmessage?.(message);
   }
 }
@@ -98,6 +102,21 @@ function makePlainEvent(id: number, createdAt: string): AgentEventDto {
     kind: 'system.note',
     payload: { text: `note ${id}` },
     createdAt,
+  };
+}
+
+function makeEvent(
+  id: number,
+  kind: string,
+  payload: AgentEventDto['payload'] = {},
+): AgentEventDto {
+  return {
+    id,
+    projectId: 'proj',
+    workItemId: 'wi-1',
+    kind,
+    payload,
+    createdAt: new Date(Date.now() + id * 1000).toISOString(),
   };
 }
 
@@ -350,11 +369,75 @@ describe('TimelineSection — expand/collapse all', () => {
     await screen.findByTestId('timeline-section');
     await waitFor(() => expect(MockEventSource.instances.length).toBeGreaterThan(0));
 
-    MockEventSource.instances[0].emit(makeRunEvent(2, 'run-live', 'agent.run-completed'));
+    MockEventSource.instances[0].emitNamed(makeRunEvent(2, 'run-live', 'agent.run-completed'));
 
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issue-costs', 'p', '1'] });
     });
+  });
+
+  it('renders named SSE events that are visible in REST reloads', async () => {
+    const { fetchEventsPage } = await import('@/lib/api');
+    vi.mocked(fetchEventsPage).mockResolvedValue({ events: [], hasMore: false });
+
+    const { TimelineSection } = await import('./TimelineSection');
+    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
+
+    await screen.findByText('No timeline events yet.');
+    await waitFor(() => expect(MockEventSource.instances.length).toBeGreaterThan(0));
+
+    MockEventSource.instances[0].emitNamed(
+      makeEvent(2, 'grill.decision-crystallized', {
+        roundNumber: 2,
+        decision: 'Use the shared event-kind contract.',
+      }),
+    );
+
+    expect(await screen.findByText('Decision crystallized')).toBeTruthy();
+    expect(screen.getByText('Use the shared event-kind contract.')).toBeTruthy();
+  });
+
+  it('does not render named chat events in issue timelines', async () => {
+    const { fetchEventsPage } = await import('@/lib/api');
+    vi.mocked(fetchEventsPage).mockResolvedValue({ events: [], hasMore: false });
+
+    const { TimelineSection } = await import('./TimelineSection');
+    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
+
+    await screen.findByText('No timeline events yet.');
+    await waitFor(() => expect(MockEventSource.instances.length).toBeGreaterThan(0));
+
+    MockEventSource.instances[0].emitNamed(
+      makeEvent(2, 'chat.agent-message', {
+        conversationId: 'conv_1',
+        text: 'chat reply should stay in chat',
+      }),
+    );
+
+    expect(screen.queryByText('chat reply should stay in chat')).toBeNull();
+    expect(screen.getByText('No timeline events yet.')).toBeTruthy();
+  });
+
+  it('does not render live non-chat events emitted by the hub-chat skill', async () => {
+    const { fetchEventsPage } = await import('@/lib/api');
+    vi.mocked(fetchEventsPage).mockResolvedValue({ events: [], hasMore: false });
+
+    const { TimelineSection } = await import('./TimelineSection');
+    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
+
+    await screen.findByText('No timeline events yet.');
+    await waitFor(() => expect(MockEventSource.instances.length).toBeGreaterThan(0));
+
+    MockEventSource.instances[0].emitNamed(
+      makeRunEvent(2, 'chat-run', 'agent.run-started', {
+        skill: 'hub-chat',
+        modelId: 'gpt-5.4',
+        runtime: 'codex-cli',
+      }),
+    );
+
+    expect(screen.queryByText('hub-chat')).toBeNull();
+    expect(screen.getByText('No timeline events yet.')).toBeTruthy();
   });
 
   it('renders intervention groups inside the main timeline instead of a top audit panel', async () => {

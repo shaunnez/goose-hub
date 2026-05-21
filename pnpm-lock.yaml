@@ -96,6 +96,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@goose-hub/core':
+        specifier: workspace:*
+        version: link:../../core
       '@radix-ui/react-dialog':
         specifier: ^1.1.6
         version: 1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)

@@ -18,9 +18,8 @@ export type InterventionTimelineDetail = {
 
 /**
  * Maps event-kind strings (`agent.run-started`, `state.transitioned`, …) to
- * human-readable labels. Doubles as the canonical list of event kinds the
- * timeline renders — `Object.keys(EVENT_KIND_LABEL)` is what the SSE listener
- * subscribes to.
+ * human-readable labels. This is only a label registry; timeline subscription
+ * and visibility are governed by @goose-hub/core/event-stream/issue-timeline.
  *
  * NOTE: this is event-kind labelling. `STATE_LABEL` in `@/lib/constants`
  * separately maps `factory:*` work-item state names; keep them apart.
@@ -52,6 +51,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'agent.related-surface-manifest-created': 'Related surface manifest',
   'agent.discovery-budget-exceeded': 'Discovery budget exceeded',
   'agent.wrong-surface-guard': 'Wrong surface guard',
+  'agent.path-normalized': 'Path normalized',
   'agent.output-repaired': 'Output repaired',
   'agent.output-repair-failed': 'Output repair failed',
   'agent.output-fact-mismatch': 'Output fact mismatch',
@@ -91,6 +91,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'retrospective.completed': 'Retrospective completed',
   'grill.question-posted': 'Grill question posted',
   'grill.completed': 'Grill completed',
+  'grill.decision-crystallized': 'Grill decision crystallized',
   'prd.drafted': 'PRD drafted',
   'prd.advisor-skipped': 'Advisor skipped',
   'prd.approved': 'PRD approved',
@@ -314,7 +315,8 @@ function isContractPhaseItem(item: RenderItem): boolean {
 function contractPhaseId(item: RenderItem): string | null {
   if (!isContractPhaseItem(item)) return null;
   if (item.kind === 'run-group') return item.runId;
-  return item.event.runId ?? item.event.kind;
+  if (item.kind === 'event') return item.event.runId ?? item.event.kind;
+  return null;
 }
 
 function resolveContractPhaseStatus(

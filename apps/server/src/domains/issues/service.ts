@@ -1,6 +1,7 @@
 import { resolveAcceptanceContract } from '@goose-hub/core/acceptance-contracts/resolver.js';
 import { getArtifact } from '@goose-hub/core/agent-artifacts/repository.js';
 import { getEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
+import { isIssueTimelineEvent } from '@goose-hub/core/event-stream/issue-timeline.js';
 import { type AgentEvent, eventStore } from '@goose-hub/core/event-stream/store.js';
 import { resolveLatestPrd } from '@goose-hub/core/prd/read-model.js';
 import { STATES } from '@goose-hub/core/state-machine/states.js';
@@ -335,12 +336,6 @@ function fetchVisibleIssueTimelineEvents(input: {
   }
 
   return visible;
-}
-
-function isIssueTimelineEvent(event: AgentEvent): boolean {
-  if (event.kind.startsWith('chat.')) return false;
-  const payload = event.payload as { skill?: unknown } | null;
-  return payload?.skill !== 'hub-chat';
 }
 
 export async function getIssueComments(
