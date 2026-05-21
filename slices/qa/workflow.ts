@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/types.js';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { findFreePort } from '@goose-hub/core/agent-runtime/find-free-port.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
@@ -51,6 +52,8 @@ export interface QaWorkflowDeps {
   runCommand?: RunQaCommand;
   /** Per-AC verify commands extracted from the issue body before QA spawn. */
   verifyCommands?: VerifyCommand[];
+  /** Resolved acceptance contract from normalized event/spec/PRD/issue body. */
+  acceptanceContract?: AcceptanceContract;
   /** Inject for tests — return the spec for this work item, or null. */
   getEngineeringSpecImpl?: typeof defaultGetEngineeringSpec;
   /** Inject for tests — run a single deterministic verify tier. */
@@ -121,6 +124,7 @@ export async function runQaWorkflow(
   const runTests = deps.runTests ?? defaultRunTests;
   const runCommand = deps.runCommand;
   const verifyCommands = deps.verifyCommands;
+  const acceptanceContract = deps.acceptanceContract;
   const getSpec = deps.getEngineeringSpecImpl ?? defaultGetEngineeringSpec;
   const runTier = deps.runTierImpl ?? defaultRunTier;
   const qaPrompt = readPromptWithContext('qa', projectSlug);
@@ -406,6 +410,7 @@ export async function runQaWorkflow(
         verificationSummary,
         e2eDecision,
         ...(verifyCommands != null && verifyCommands.length > 0 ? { verifyCommands } : {}),
+        ...(acceptanceContract != null ? { acceptanceContract } : {}),
         testRun,
         ...(evidenceCommentUrl != null ? { evidenceCommentUrl } : {}),
         ...(devTestsRun != null ? { devTestsRun } : {}),
@@ -419,6 +424,7 @@ export async function runQaWorkflow(
         'e2eDecision',
         'testRun',
         'verifyCommands',
+        ...(acceptanceContract != null ? ['acceptanceContract'] : []),
         ...(evidenceCommentUrl != null ? ['evidenceCommentUrl'] : []),
         ...(devTestsRun != null ? ['devTestsRun'] : []),
         ...(deterministicTierResults != null ? ['deterministicTierResults'] : []),

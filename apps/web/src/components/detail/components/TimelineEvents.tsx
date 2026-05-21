@@ -46,6 +46,7 @@ import { InterventionGroupWrapper } from './timeline/InterventionGroupWrapper';
 import { InvestigationPhaseWrapper } from './timeline/InvestigationPhaseWrapper';
 import { AgentLogEvent, AgentLogGroupEvent } from './timeline/LogEvents';
 import {
+  AcceptanceContractAuthoredEvent,
   AgentBudgetExceededEvent,
   AgentDisclosureEvent,
   AgentModelSelectedEvent,
@@ -148,6 +149,7 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
     return (
       <PhaseGroupWrapper
         key={`phase-group-${item.pipelineRunId}`}
+        phase={item.phase}
         pipelineRunId={item.pipelineRunId}
         items={item.items}
         status={item.status}
@@ -210,6 +212,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
     case 'agent.output-fact-mismatch':
     case 'agent.contract-gate-blocked':
       return <ContractDriftEvent key={event.id} event={event} />;
+    case 'acceptance.contract-authored':
+      return <AcceptanceContractAuthoredEvent key={event.id} event={event} />;
     case 'symbol-index.lookup':
       return <SymbolIndexLookupEvent key={event.id} event={event} />;
     case 'symbol-index.hints-used':

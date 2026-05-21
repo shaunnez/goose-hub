@@ -51,6 +51,20 @@ function hasEquivalentInvestigationCompleteTransition(
   });
 }
 
+function hasAcceptanceContractAfterLatestInvestigation(events: Array<{ kind: string }>): boolean {
+  let latestInvestigationIndex = -1;
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    if (events[i]?.kind === 'agent.investigation-complete') {
+      latestInvestigationIndex = i;
+      break;
+    }
+  }
+  if (latestInvestigationIndex === -1) return false;
+  return events
+    .slice(latestInvestigationIndex + 1)
+    .some((event) => event.kind === 'acceptance.contract-authored');
+}
+
 /**
  * For bugs in the M19 pipeline: read the latest investigation event and decide
  * whether the fix warrants the full spec-author → parallel-build pipeline or
@@ -179,6 +193,62 @@ export async function dispatchInvestigationComplete(
           targetState,
         });
         return;
+      }
+
+      const projectForFlag = await getProject(slug);
+      const useMultiAgent =
+        projectForFlag != null ? getUseMultiAgentPipeline(projectForFlag.id) : false;
+      const usesLegacyImplementation =
+        !useMultiAgent ||
+        (item.type === 'bug' && resolveFixIssuePipelineForBug(slug, workItemId) === 'legacy');
+      if (
+        targetState === 'factory:dev-ready' &&
+        usesLegacyImplementation &&
+        !hasAcceptanceContractAfterLatestInvestigation(allEvents)
+      ) {
+        try {
+          const { runAcceptanceContractWorkflow } = (await import(
+            sliceUrl('acceptance-contract')
+          )) as {
+            runAcceptanceContractWorkflow: (
+              item: unknown,
+              source: unknown,
+              slug: string,
+              targetRepo: string,
+              deps?: Record<string, unknown>,
+            ) => Promise<unknown>;
+          };
+          await runAcceptanceContractWorkflow(item, source, slug, item.repoRef ?? slug);
+        } catch (err) {
+          const error = err instanceof Error ? err : new Error(String(err));
+          eventStore.appendEvent({
+            projectId: slug,
+            workItemId,
+            kind: 'agent.run-failed',
+            payload: {
+              skill: 'acceptance-contract',
+              error: error.message,
+              reason: 'legacy acceptance contract could not be authored',
+            },
+          });
+          await source.comment(
+            item.externalId,
+            `Acceptance contract authoring failed before implementation. Holding at gate-pending.\n\nError: ${error.message}`,
+          );
+          await source.transitionState(
+            workItemId,
+            'factory:investigation-complete',
+            'factory:gate-pending',
+          );
+          emitStateTransitionEvent({
+            projectId: slug,
+            workItemId,
+            from: 'factory:investigation-complete',
+            to: 'factory:gate-pending',
+            by: 'acceptance-contract',
+          });
+          return;
+        }
       }
 
       await source.transitionState(workItemId, 'factory:investigation-complete', targetState);

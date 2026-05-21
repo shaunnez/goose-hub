@@ -27,6 +27,21 @@ export const ImplementContextSchema = z.object({
   advisorFeedback: z.string().optional(),
   revisionPass: z.union([z.literal(0), z.literal(1)]).optional(),
   evidencePostEnabled: z.boolean().optional(),
+  acceptanceContract: z
+    .object({
+      source: z.enum(['normalized', 'engineering-spec', 'prd', 'issue-body']),
+      criteria: z.array(
+        z.object({
+          id: z.string(),
+          statement: z.string(),
+          verifyCommand: z.string().optional(),
+          expected: z.string().optional(),
+          tolerance: z.string().optional(),
+          sourceRef: z.string().optional(),
+        }),
+      ),
+    })
+    .optional(),
 });
 
 const config: SkillConfig = {
@@ -76,6 +91,7 @@ const config: SkillConfig = {
     'advisorFeedback',
     'revisionPass',
     'evidencePostEnabled',
+    'acceptanceContract',
   ],
   /**
    * `dev-tools` bundle — read, search, work-item-read, write, bash, test

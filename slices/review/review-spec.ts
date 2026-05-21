@@ -1,3 +1,4 @@
+import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/types.js';
 import type { AgentRuntime, AgentSpec } from '@goose-hub/core/agent-runtime/interface.js';
 // slices/review/review-spec.ts
 import type { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
@@ -39,6 +40,7 @@ export interface ReviewWaveResult {
 export interface DispatchReviewWaveOpts {
   pr: { externalId: string; prDiff: string };
   qaResult?: { verdict: string; overallScore: number };
+  acceptanceContract?: AcceptanceContract | null;
   round: number;
   /** Findings from the immediately prior round (empty for round 1). */
   priorFindings: FindingKey[];
@@ -105,6 +107,7 @@ export function buildReviewSpec(params: {
   workItem: WorkItem;
   prDiff: string;
   qaResult?: { verdict: string; overallScore: number };
+  acceptanceContract?: AcceptanceContract | null;
   personaId: string;
   reviewPrompt: string;
   reviewJsonSchema: Record<string, unknown>;
@@ -125,8 +128,9 @@ export function buildReviewSpec(params: {
       },
       prDiff: params.prDiff,
       qaVerdict: params.qaResult,
+      acceptanceContract: params.acceptanceContract ?? undefined,
     },
-    contextAllowlist: ['workItem', 'prDiff', 'qaVerdict'],
+    contextAllowlist: ['workItem', 'prDiff', 'qaVerdict', 'acceptanceContract'],
     freshContext: true,
     toolBundles: ['read', 'validate'],
     toolExtras: [],

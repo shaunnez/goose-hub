@@ -14,6 +14,7 @@ const SKILL_TO_STAGE: Record<string, Stage> = {
   'decompose-issues': 'discover',
   investigate: 'investigate',
   investigation: 'investigate',
+  'acceptance-contract': 'investigate',
   implement: 'dev',
   'implement-wp': 'dev',
   fix: 'dev',

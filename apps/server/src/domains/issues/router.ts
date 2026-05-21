@@ -8,6 +8,7 @@ import {
   commentOnIssue,
   declinePRD,
   getIssue,
+  getIssueAcceptanceContract,
   getIssueArtifact,
   getIssueComments,
   getIssueEvents,
@@ -72,6 +73,11 @@ router.get('/:slug/issues/:id/triage', async (c) => {
 
 router.get('/:slug/issues/:id/spec', async (c) => {
   const result = await getIssueSpec(c.req.param('slug'), c.req.param('id'));
+  return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);
+});
+
+router.get('/:slug/issues/:id/acceptance-contract', async (c) => {
+  const result = await getIssueAcceptanceContract(c.req.param('slug'), c.req.param('id'));
   return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);
 });
 

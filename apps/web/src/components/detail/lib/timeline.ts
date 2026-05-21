@@ -56,6 +56,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'agent.output-repair-failed': 'Output repair failed',
   'agent.output-fact-mismatch': 'Output fact mismatch',
   'agent.contract-gate-blocked': 'Contract gate blocked',
+  'acceptance.contract-authored': 'Acceptance contract authored',
   'symbol-index.lookup': 'Symbol index lookup',
   'symbol-index.hints-used': 'Symbol hints used',
   'agent.implement-complete': 'Implement complete',
@@ -244,7 +245,7 @@ export type RenderItem =
     }
   | {
       kind: 'phase-group';
-      phase: 'dev';
+      phase: 'contract' | 'dev';
       pipelineRunId: string;
       items: RenderItem[];
       status: 'started' | 'live' | 'completed' | 'failed';
@@ -302,6 +303,64 @@ function compareRenderItems(a: RenderItem, b: RenderItem): number {
   return 0;
 }
 
+function isContractPhaseItem(item: RenderItem): boolean {
+  if (item.kind === 'run-group') {
+    return item.skill === 'spec-author' || item.skill === 'acceptance-contract';
+  }
+  if (item.kind !== 'event') return false;
+  return item.event.kind === 'spec.completed' || item.event.kind === 'acceptance.contract-authored';
+}
+
+function contractPhaseId(item: RenderItem): string | null {
+  if (!isContractPhaseItem(item)) return null;
+  if (item.kind === 'run-group') return item.runId;
+  return item.event.runId ?? item.event.kind;
+}
+
+function resolveContractPhaseStatus(
+  items: RenderItem[],
+): 'started' | 'live' | 'completed' | 'failed' {
+  const events = items.flatMap(eventFromRenderItem);
+  if (events.some((event) => event.kind === 'agent.run-failed')) return 'failed';
+  if (events.some((event) => event.kind === 'spec.completed')) return 'completed';
+  if (events.some((event) => event.kind === 'acceptance.contract-authored')) return 'completed';
+  if (events.some((event) => event.kind === 'agent.run-completed')) return 'completed';
+  return items.some(hasLiveRunGroup) ? 'live' : 'started';
+}
+
+export function groupByContractPhase(items: RenderItem[]): RenderItem[] {
+  const phaseItems = new Map<string, RenderItem[]>();
+  const ungrouped: RenderItem[] = [];
+
+  for (const item of items) {
+    const id = contractPhaseId(item);
+    if (id == null) {
+      ungrouped.push(item);
+      continue;
+    }
+    const group = phaseItems.get(id) ?? [];
+    group.push(item);
+    phaseItems.set(id, group);
+  }
+
+  if (phaseItems.size === 0) return items;
+
+  const phases: RenderItem[] = [];
+  for (const [id, phaseItemList] of phaseItems) {
+    const times = extractPhaseTimes(phaseItemList);
+    phases.push({
+      kind: 'phase-group',
+      phase: 'contract',
+      pipelineRunId: id,
+      items: phaseItemList.sort(compareRenderItems),
+      status: resolveContractPhaseStatus(phaseItemList),
+      ...times,
+    });
+  }
+
+  return [...ungrouped, ...phases].sort(compareRenderItems);
+}
+
 export function groupByDevPhase(items: RenderItem[]): RenderItem[] {
   const pipelines = new Set<string>();
 
@@ -311,6 +370,8 @@ export function groupByDevPhase(items: RenderItem[]): RenderItem[] {
         const p = item.event.payload as { pipelineRunId?: string } | null;
         if (p?.pipelineRunId != null) pipelines.add(p.pipelineRunId);
       } else if (item.kind === 'run-group') {
+        findSpecCompleted(item.items);
+      } else if (item.kind === 'phase-group' && item.phase === 'contract') {
         findSpecCompleted(item.items);
       }
     }
@@ -322,7 +383,6 @@ export function groupByDevPhase(items: RenderItem[]): RenderItem[] {
 
   function resolvedPipelineId(item: RenderItem): string | null {
     if (item.kind === 'run-group') {
-      if (pipelines.has(item.runId)) return item.runId;
       for (const pid of pipelines) {
         if (item.runId.startsWith(`${pid}:wp:`) || item.runId.startsWith(`${pid}:dev-review`)) {
           return pid;
@@ -426,7 +486,8 @@ export function groupEvents(
   const withReviewGroups = groupByReviewWorkflow(
     [...withInvestigationPhases].sort(compareRenderItems),
   );
-  const withDevPhases = groupByDevPhase([...withReviewGroups].sort(compareRenderItems));
+  const withContractPhases = groupByContractPhase([...withReviewGroups].sort(compareRenderItems));
+  const withDevPhases = groupByDevPhase([...withContractPhases].sort(compareRenderItems));
   if (interventionDetails.length === 0) return withDevPhases;
   return [...withDevPhases, ...interventionDetails.map(buildInterventionGroup)].sort(
     compareRenderItems,

@@ -6,6 +6,7 @@ import { formatDuration } from '../../lib/timeline';
 const STALL_MS = 15 * 60 * 1000;
 
 export function PhaseGroupWrapper({
+  phase,
   pipelineRunId,
   items,
   status,
@@ -15,6 +16,7 @@ export function PhaseGroupWrapper({
   context,
   renderItem,
 }: {
+  phase: 'contract' | 'dev';
   pipelineRunId: string;
   items: RenderItem[];
   status: 'started' | 'live' | 'completed' | 'failed';
@@ -49,6 +51,8 @@ export function PhaseGroupWrapper({
   const completeDuration =
     startMs != null && endMs != null ? formatDuration((lastMs ?? endMs) - startMs) : null;
   const shortId = pipelineRunId.length > 8 ? pipelineRunId.slice(0, 8) : pipelineRunId;
+  const phaseLabel = phase === 'contract' ? 'Contract Phase' : 'Dev Phase';
+  const idLabel = phase === 'contract' ? 'contract' : 'pipeline';
 
   const statusBadge = isStalled ? (
     <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
@@ -109,10 +113,12 @@ export function PhaseGroupWrapper({
             {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           </span>
           <span className="font-mono uppercase tracking-wider text-[color:var(--accent)] text-[10.5px]">
-            Dev Phase
+            {phaseLabel}
           </span>
           <span aria-hidden className="w-[3px] h-[3px] shrink-0 rounded-full bg-fg-4" />
-          <span className="font-mono text-fg-5 text-[10.5px]">pipeline {shortId}</span>
+          <span className="font-mono text-fg-5 text-[10.5px]">
+            {idLabel} {shortId}
+          </span>
           <span aria-hidden className="w-[3px] h-[3px] shrink-0 rounded-full bg-fg-4" />
           <span className="w-[72px] shrink-0 flex justify-start">{statusBadge}</span>
           <span className="flex-1 min-w-0 truncate">{metaLine}</span>

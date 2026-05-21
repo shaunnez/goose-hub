@@ -1,3 +1,4 @@
+import { resolveAcceptanceContract } from '@goose-hub/core/acceptance-contracts/resolver.js';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
@@ -95,6 +96,11 @@ export async function runReviewWorkflow(
   try {
     const prDiff = await getPrDiff(workItem, stateSource);
     const qaVerdict = getQaVerdict(priorEvents);
+    const acceptanceContract = resolveAcceptanceContract({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      issueBody: workItem.body,
+    });
 
     const spec = buildReviewSpec({
       runId,
@@ -102,6 +108,7 @@ export async function runReviewWorkflow(
       workItem,
       prDiff,
       qaResult: qaVerdict,
+      acceptanceContract,
       personaId,
       reviewPrompt,
       reviewJsonSchema,

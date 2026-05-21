@@ -37,10 +37,31 @@ export interface WorkPackageDto {
   builderTier: string;
 }
 
+export interface AcceptanceCriterionDto {
+  id: string;
+  statement: string;
+  verifyCommand?: string;
+  expected?: string;
+  tolerance?: string | null;
+  journeyRef?: string | null;
+  stepIdx?: number | null;
+  crossCutting?: boolean | null;
+  sourceRef?: string;
+}
+
+export interface AcceptanceContractDto {
+  source: 'normalized' | 'engineering-spec' | 'prd' | 'issue-body';
+  criteria: AcceptanceCriterionDto[];
+  runId?: string | null;
+  eventId?: number;
+  createdAt?: string;
+}
+
 export interface EngineeringSpecDto {
   pipelineRunId: string;
   objective: string;
   workPackages: WorkPackageDto[];
+  acceptanceCriteria: AcceptanceCriterionDto[];
   acceptanceCriteriaCount: number;
 }
 

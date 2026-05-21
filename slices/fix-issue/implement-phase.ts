@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
+import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/types.js';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import {
@@ -57,6 +58,7 @@ export interface RunImplementInput {
   relatedSurface?: RelatedSurfaceManifest;
   surfaceGuardInvestigation?: InvestigationContext;
   symbolIndexKeyFiles?: SymbolKeyFileHint[];
+  acceptanceContract?: AcceptanceContract | null;
   revisionPass?: 0 | 1;
 }
 
@@ -624,6 +626,7 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
         stack: input.stack,
         investigation: input.investigation,
         relatedSurface: input.relatedSurface,
+        acceptanceContract: input.acceptanceContract,
         advisorFeedback: input.advisorFeedback,
         revisionPass: input.revisionPass ?? 0,
         evidencePostEnabled,
@@ -638,6 +641,7 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
         'stack.typecheckCommand',
         'investigation',
         'relatedSurface',
+        'acceptanceContract',
         'advisorFeedback',
         'revisionPass',
         'evidencePostEnabled',

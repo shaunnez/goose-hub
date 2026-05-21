@@ -26,10 +26,11 @@ The context contains a `<task>` block with:
 - `<workItem>` — JSON payload for the original GitHub issue, with `title`, `body`, and `number`
 - `<prDiff>` — complete git diff of the PR being reviewed
 - `<qaVerdict>` (optional) — JSON payload for the prior QA holdout run, with `verdict` and `overallScore`
+- `<acceptanceContract>` (optional) — resolved acceptance criteria from a normalized contract, engineering spec, PRD, or issue body
 
 ## Step 1 — Parse the acceptance criteria
 
-Read `workItem.body` carefully. Find every acceptance criterion marked with a checkbox:
+If `<acceptanceContract>` is present, use its `criteria` array as the authoritative acceptance criteria. Otherwise, read `workItem.body` carefully and find every acceptance criterion marked with a checkbox:
 
 ```
 - [ ] Criterion text here

@@ -61,6 +61,21 @@ export const QaContextSchema = z.object({
       }),
     )
     .optional(),
+  acceptanceContract: z
+    .object({
+      source: z.enum(['normalized', 'engineering-spec', 'prd', 'issue-body']),
+      criteria: z.array(
+        z.object({
+          id: z.string(),
+          statement: z.string(),
+          verifyCommand: z.string().optional(),
+          expected: z.string().optional(),
+          tolerance: z.string().optional(),
+          sourceRef: z.string().optional(),
+        }),
+      ),
+    })
+    .optional(),
   /**
    * The targeted test command and paths the developer actually ran (#467).
    * Sourced from the implement skill's `testsRun` output. QA cross-references
@@ -122,6 +137,7 @@ const config: SkillConfig = {
     'sliceTests',
     'evidenceCommentUrl',
     'verifyCommands',
+    'acceptanceContract',
     'devTestsRun',
     'testRun',
     'verificationSummary',
