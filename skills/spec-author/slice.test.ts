@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -657,6 +657,17 @@ describe('validateEngineeringSpec — repoRoot-backed checks', () => {
 // ─── TDD contract: wp-missing-test-file ──────────────────────────────────────
 
 describe('validateEngineeringSpec — TDD contract (wp-missing-test-file)', () => {
+  it('documents TDD ownership in the spec-author prompt', () => {
+    const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+
+    expect(prompt).toContain('#### TDD ownership');
+    expect(prompt).toContain('production `.ts` or `.tsx` files');
+    expect(prompt).toContain('`*.test.ts`');
+    expect(prompt).toContain('`*.spec.ts`');
+    expect(prompt).toContain('Do not put the test file only in `verificationTooling`');
+    expect(prompt).toContain('Test-only WPs are allowed');
+  });
+
   it('rejects WP with production .ts files but no test file', () => {
     const spec = baseSpec({
       workPackages: [
