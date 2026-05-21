@@ -102,6 +102,15 @@ Mid-run, also emit live `[decision] KIND: <one sentence>` markers.
 
 Return a single JSON object conforming to `PRDOutputSchema`. Free-text-only output fails the run. Your entire response must be valid JSON — no prose, no preamble, no explanation outside the object. Every required field must be present, `journeys[]` and `verticalSlices[]` must each have at least one entry, and every AC must satisfy the cross-reference rule above.
 
+Acceptance-criteria output contract:
+
+- Every non-cross-cutting AC must include `journeyId`.
+- `journeyId` must match one of the emitted `journeys[].id` values.
+- Cross-cutting ACs must include `crossCutting: true`.
+- Do not emit ACs with only `id` and `statement`.
+
+Invalid example in prose: an acceptance criterion shaped only like `{ id, statement }` fails because it has neither `journeyId` nor `crossCutting: true`.
+
 Exact field names (use these verbatim):
 
 <!-- output-example -->

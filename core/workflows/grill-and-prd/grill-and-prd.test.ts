@@ -459,6 +459,32 @@ describe('runPrdDraft', () => {
     expect(result.status).toBe('invalid');
   });
 
+  it('preserves formatted output validation issues', async () => {
+    mockInvokeSkill.mockRejectedValueOnce(
+      new OutputValidationError(
+        [
+          {
+            path: ['acceptanceCriteria', 0],
+            message:
+              'acceptanceCriteria[0] has no journeyId and is not marked crossCutting:true',
+          },
+        ],
+        'write-prd',
+        'run-prd-1',
+      ),
+    );
+
+    const result = await runPrdDraft(baseInput());
+
+    expect(result.status).toBe('invalid');
+    if (result.status === 'invalid') {
+      expect(result.error).toBe("invokeSkill: output validation failed for 'write-prd'");
+      expect(result.issues).toEqual([
+        'acceptanceCriteria.0: acceptanceCriteria[0] has no journeyId and is not marked crossCutting:true',
+      ]);
+    }
+  });
+
   it('returns failed on runtime error', async () => {
     mockInvokeSkill.mockRejectedValueOnce(new Error('timeout'));
 

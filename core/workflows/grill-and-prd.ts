@@ -626,7 +626,14 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
       projectId,
       workItemId: workItem.id,
       runId: prdRunId,
-      payload: { skill: 'write-prd', workflowRunId, error: prdDraftOutcome.error },
+      payload: {
+        skill: 'write-prd',
+        workflowRunId,
+        error: prdDraftOutcome.error,
+        ...(prdDraftOutcome.status === 'invalid' && prdDraftOutcome.issues != null
+          ? { issues: prdDraftOutcome.issues }
+          : {}),
+      },
     });
     return { phase: 'needs-human' };
   }
