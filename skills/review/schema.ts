@@ -59,34 +59,26 @@ export const ReviewFindingSchema = z
     }
   });
 
-/**
- * Discriminated union on `verdict` so that `needs-human` REQUIRES
- * `escalationReason` — the other two verdicts do not have this field.
- */
-export const ReviewOutputSchema = z.discriminatedUnion('verdict', [
-  z.object({
-    verdict: z.literal('approved'),
+export const ReviewOutputSchema = z
+  .object({
+    verdict: z.enum(['approved', 'needs-fix', 'needs-human']),
     confidence: z.number().min(0).max(1),
     criteriaChecks: z.array(CriterionCheckSchema),
     findings: z.array(ReviewFindingSchema),
     decisionSummaries: z.array(DecisionSummarySchema),
-  }),
-  z.object({
-    verdict: z.literal('needs-fix'),
-    confidence: z.number().min(0).max(1),
-    criteriaChecks: z.array(CriterionCheckSchema),
-    findings: z.array(ReviewFindingSchema),
-    decisionSummaries: z.array(DecisionSummarySchema),
-  }),
-  z.object({
-    verdict: z.literal('needs-human'),
-    confidence: z.number().min(0).max(1),
-    criteriaChecks: z.array(CriterionCheckSchema),
-    findings: z.array(ReviewFindingSchema),
-    decisionSummaries: z.array(DecisionSummarySchema),
-    escalationReason: z.string().min(1),
-  }),
-]);
+    escalationReason: z.string().nullable().optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.verdict !== 'needs-human') return;
+    if (typeof val.escalationReason === 'string' && val.escalationReason.trim().length > 0) {
+      return;
+    }
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'needs-human verdicts must include a non-blank escalationReason',
+      path: ['escalationReason'],
+    });
+  });
 
 export type { Disposition } from '@goose-hub/core/findings/disposition.js';
 export type { Priority } from '@goose-hub/core/findings/priority.js';

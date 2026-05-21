@@ -43,7 +43,7 @@ The context contains a `<task>` block with:
 
 ## Output format
 
-Return a JSON object conforming to `AdviseOnPlanSchema`. The schema is a discriminated union — only the variant matching your `verdict` is valid.
+Return a JSON object conforming to `AdviseOnPlanSchema`. `revise` requires non-blank `feedback`; `abort` requires a non-blank `reason`. Use `null` for irrelevant optional fields when the response schema requires a value.
 
 ### proceed
 
@@ -52,6 +52,8 @@ Return a JSON object conforming to `AdviseOnPlanSchema`. The schema is a discrim
 {
   "verdict": "proceed",
   "confidence": "high",
+  "feedback": null,
+  "reason": null,
   "decisionSummaries": [
     { "kind": "VERDICT", "summary": "Plan correctly targets src/api/handlers.ts; no conflicts with existing patterns" }
   ]
@@ -66,6 +68,7 @@ Return a JSON object conforming to `AdviseOnPlanSchema`. The schema is a discrim
   "verdict": "revise",
   "confidence": "medium",
   "feedback": "The plan adds a new validation helper, but core/validation/zod.ts:42 already exposes parseZodSafe() with the same shape. Re-use the existing helper instead of duplicating.",
+  "reason": null,
   "decisionSummaries": [
     { "kind": "VERDICT", "summary": "Plan duplicates existing validation helper in core/validation/zod.ts:42" }
   ]
@@ -79,6 +82,7 @@ Return a JSON object conforming to `AdviseOnPlanSchema`. The schema is a discrim
 {
   "verdict": "abort",
   "confidence": "high",
+  "feedback": null,
   "reason": "Plan proposes modifying FACTORY_RULES.md to relax rule 12, but per rule 12 itself governance files are immutable from Factory PRs.",
   "decisionSummaries": [
     { "kind": "VERDICT", "summary": "Plan violates FACTORY_RULES rule 12 (governance immutability); not revisable" }

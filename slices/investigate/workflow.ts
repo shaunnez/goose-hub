@@ -9,6 +9,7 @@ import {
   tierOf,
   tryProviderOf,
 } from '@goose-hub/core/agent-runtime/models.js';
+import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
@@ -734,8 +735,14 @@ export async function runInvestigateWorkflow(
             appendSystemPrompt: playwrightReproPrompt,
           });
 
-          const planParsed = PlaywrightReproSpecSchema.safeParse(playwrightResult.output);
-          const finalParsed = PlaywrightReproSchema.safeParse(playwrightResult.output);
+          const planParsed = safeParseOutputForSchema(
+            PlaywrightReproSpecSchema,
+            playwrightResult.output,
+          );
+          const finalParsed = safeParseOutputForSchema(
+            PlaywrightReproSchema,
+            playwrightResult.output,
+          );
           if (planParsed.success) {
             reproOutput = (deps.playwrightEvidenceRunner ?? runPlaywrightReproPlan)({
               plan: planParsed.data,

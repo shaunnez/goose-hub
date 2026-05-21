@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { omitNullObjectProperties } from '@goose-hub/core/agent-runtime/output-normalization.js';
+import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
@@ -144,9 +144,7 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       appendSystemPrompt: triagePrompt,
     });
 
-    const triageParsed = TriageOutputSchema.safeParse(
-      omitNullObjectProperties(triageResult.output),
-    );
+    const triageParsed = safeParseOutputForSchema(TriageOutputSchema, triageResult.output);
     if (!triageParsed.success) {
       logger.error('triage-batch triage output invalid', {
         slug,
@@ -234,9 +232,7 @@ export async function runTriageBatch(slug: string, source?: StateSource): Promis
       appendSystemPrompt: repoMatchPrompt,
     });
 
-    const repoMatchParsed = RepoMatchOutputSchema.safeParse(
-      omitNullObjectProperties(repoMatchResult.output),
-    );
+    const repoMatchParsed = safeParseOutputForSchema(RepoMatchOutputSchema, repoMatchResult.output);
     if (!repoMatchParsed.success) {
       logger.warn('triage-batch repo-match output invalid, using empty candidates', {
         slug,

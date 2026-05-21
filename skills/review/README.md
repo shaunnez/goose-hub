@@ -92,7 +92,7 @@ When `needs-human` is returned, the `escalationReason` field is **mandatory** an
 
 ## Schema
 
-Output is validated against `ReviewOutputSchema` in `schema.ts`. The schema uses a Zod `discriminatedUnion` on `verdict` so that `needs-human` structurally requires `escalationReason` — the other two verdicts do not have this field.
+Output is validated against `ReviewOutputSchema` in `schema.ts`. The schema is a single Zod object for Codex response-schema compatibility, with `superRefine` requiring a non-blank `escalationReason` when `verdict === 'needs-human'`.
 
 ```typescript
 import { ReviewOutputSchema, type ReviewOutput } from './schema.js';

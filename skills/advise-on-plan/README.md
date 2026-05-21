@@ -25,7 +25,7 @@ Reviews a developer's plan for `priority:high` and `priority:critical` work item
 
 ## Outputs
 
-`AdviseOnPlanSchema` is a discriminated union on `verdict`:
+`AdviseOnPlanSchema` is a single object for Codex response-schema compatibility, with verdict-specific semantic validation:
 
 | Verdict | Required fields | Meaning |
 |---|---|---|

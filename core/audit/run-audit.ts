@@ -23,6 +23,7 @@ import {
   type Recommendation,
 } from '../../skills/code-quality-audit/schema.js';
 import { OutputValidationError, invokeSkill } from '../agent-runtime/invoke-skill.js';
+import { safeParseOutputForSchema } from '../agent-runtime/output-normalization.js';
 import { eventStore } from '../event-stream/store.js';
 import { insertAuditOnlyRow, updateAuditScoreByPipelineRun } from '../quality-score/repository.js';
 import type { ImprovementCandidate } from '../retrospective/schemas.js';
@@ -156,7 +157,7 @@ export async function runCodeQualityAudit(input: RunAuditInput): Promise<AuditRe
         extraEventPayload: { trigger: input.trigger, pipelineRunId },
       },
     });
-    const parsed = CodeQualityAuditOutputSchema.safeParse(result.output);
+    const parsed = safeParseOutputForSchema(CodeQualityAuditOutputSchema, result.output);
     if (!parsed.success) {
       throw new OutputValidationError(
         parsed.error.issues.map((i) => ({

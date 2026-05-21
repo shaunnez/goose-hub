@@ -2,6 +2,7 @@ import type { PRDOutput } from '../../../skills/write-prd/schema.js';
 import { PRDOutputSchema } from '../../../skills/write-prd/schema.js';
 import type { AgentRuntime } from '../../agent-runtime/interface.js';
 import { OutputValidationError, invokeSkill } from '../../agent-runtime/invoke-skill.js';
+import { safeParseOutputForSchema } from '../../agent-runtime/output-normalization.js';
 import type { Priority } from '../../state-source/interface.js';
 import type { ProjectConfig } from '../../types.js';
 import type { ProjectContextBundle } from '../grill-and-prd.js';
@@ -85,7 +86,7 @@ export async function runPrdDraft(input: RunPrdDraftInput): Promise<PrdDraftOutc
     return { status: 'failed', error: String(err) };
   }
 
-  const parsed = PRDOutputSchema.safeParse(result.output);
+  const parsed = safeParseOutputForSchema(PRDOutputSchema, result.output);
   if (!parsed.success) {
     return { status: 'invalid', error: parsed.error.message };
   }

@@ -26,7 +26,7 @@ import type { AgentConfig } from '../types.js';
 import { GIT_ENV } from '../workspaces/git-env.js';
 import { type DiffDigest, buildDiffDigest, formatDiffDigestSummary } from './diff-digest.js';
 import type { AgentRuntime } from './interface.js';
-import { omitNullObjectProperties } from './output-normalization.js';
+import { safeParseOutputForSchema } from './output-normalization.js';
 import { readPromptWithContext } from './read-prompt.js';
 import { reconcileDecisionSummaries } from './reconcile-decisions.js';
 import { resolveBudgetsForProject } from './resolve-for-project.js';
@@ -313,7 +313,7 @@ export async function runDevReview(input: RunDevReviewInput): Promise<DevReviewO
     appendEvent: input.appendEvent,
   });
 
-  const parsed = DevReviewOutputSchema.safeParse(omitNullObjectProperties(result.output));
+  const parsed = safeParseOutputForSchema(DevReviewOutputSchema, result.output);
   if (!parsed.success) {
     input.appendEvent({
       projectId: input.projectId,
@@ -438,7 +438,7 @@ export async function runDevReviewResponse(
     workspaceDir: input.worktreePath,
   });
 
-  const parsed = DevReviewResponseOutputSchema.safeParse(omitNullObjectProperties(result.output));
+  const parsed = safeParseOutputForSchema(DevReviewResponseOutputSchema, result.output);
   if (!parsed.success) {
     input.appendEvent({
       projectId: input.projectId,

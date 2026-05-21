@@ -1,4 +1,4 @@
-import { omitNullObjectProperties } from '@goose-hub/core/agent-runtime/output-normalization.js';
+import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
@@ -66,7 +66,7 @@ export async function runBugEnhance(
       appendSystemPrompt: prompt,
     });
 
-    const parsed = BugEnhanceOutputSchema.safeParse(omitNullObjectProperties(result.output));
+    const parsed = safeParseOutputForSchema(BugEnhanceOutputSchema, result.output);
     if (!parsed.success) {
       logger.warn('bug-enhance: output validation failed', {
         errors: parsed.error.issues,

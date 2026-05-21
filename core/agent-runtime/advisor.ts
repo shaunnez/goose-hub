@@ -6,6 +6,7 @@ import { eventStore } from '../event-stream/store.js';
 import type { AgentRuntime } from './interface.js';
 import type { AgentResult } from './interface.js';
 import { OutputValidationError, invokeSkill } from './invoke-skill.js';
+import { safeParseOutputForSchema } from './output-normalization.js';
 import { reconcileDecisionSummaries } from './reconcile-decisions.js';
 import { ADVISOR_GATED_PRIORITIES } from './roles.js';
 
@@ -75,15 +76,18 @@ export async function adviseOnPlan(input: AdviseOnPlanInput): Promise<AdviseOnPl
   }
 
   // invokeSkill already validated result.output against AdviseOnPlanSchema via outputSchema
-  const parsed = AdviseOnPlanSchema.parse(result.output);
+  const parsed = safeParseOutputForSchema(AdviseOnPlanSchema, result.output);
+  if (!parsed.success) {
+    throw new Error('advise-on-plan output validation failed');
+  }
 
   reconcileDecisionSummaries(
     input.runId,
     input.projectId,
     input.workItemId,
     'advise-on-plan',
-    parsed.decisionSummaries,
+    parsed.data.decisionSummaries,
   );
 
-  return parsed;
+  return parsed.data;
 }

@@ -1,5 +1,10 @@
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { skillsRoot } from '@goose-hub/skills';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { AdviseOnPlanSchema } from '../../skills/advise-on-plan/schema.js';
 import { ImplementSchema } from '../../skills/implement/schema.js';
 import { InterventionProposerOutputSchema } from '../../skills/intervention-proposer/schema.js';
 import { ReviewOutputSchema } from '../../skills/review/schema.js';
@@ -172,7 +177,7 @@ describe('toJsonSchema', () => {
     expect(JSON.stringify(result)).not.toContain('"payload":{}');
   });
 
-  it('collapses top-level object unions into an object schema for Codex response formats', () => {
+  it('keeps review escalationReason visible in the Codex response schema', () => {
     const result = toJsonSchema(ReviewOutputSchema);
 
     expect(result.type).toBe('object');
@@ -185,9 +190,48 @@ describe('toJsonSchema', () => {
         findings: { type: 'array' },
         decisionSummaries: { type: 'array' },
       },
-      required: ['verdict', 'confidence', 'criteriaChecks', 'findings', 'decisionSummaries'],
+      required: [
+        'verdict',
+        'confidence',
+        'criteriaChecks',
+        'findings',
+        'decisionSummaries',
+        'escalationReason',
+      ],
       additionalProperties: false,
     });
+    const properties = result.properties as Record<string, unknown>;
+    expect(schemaAllowsNull(properties.escalationReason)).toBe(true);
+  });
+
+  it('keeps advise-on-plan top-level schema composition-free for Codex', () => {
+    const result = toJsonSchema(AdviseOnPlanSchema);
+
+    expect(result.type).toBe('object');
+    expect(result).not.toHaveProperty('oneOf');
+    expect(result).not.toHaveProperty('anyOf');
+    expect(result).not.toHaveProperty('allOf');
+    expect(result).toMatchObject({
+      properties: {
+        verdict: { type: 'string', enum: ['proceed', 'revise', 'abort'] },
+      },
+      required: ['verdict', 'confidence', 'feedback', 'reason', 'decisionSummaries'],
+      additionalProperties: false,
+    });
+    const properties = result.properties as Record<string, unknown>;
+    expect(schemaAllowsNull(properties.feedback)).toBe(true);
+    expect(schemaAllowsNull(properties.reason)).toBe(true);
+  });
+
+  it('keeps active skill output schemas strict enough for Codex response schemas', async () => {
+    const configs = await loadActiveSkillConfigs();
+
+    const issues = configs.flatMap(({ skillName, outputSchema }) => {
+      if (outputSchema == null) return [];
+      return assertCodexCompatibleSchema(skillName, toJsonSchema(outputSchema));
+    });
+
+    expect(issues).toEqual([]);
   });
 
   it('returns an empty schema and warns when conversion throws', () => {
@@ -205,3 +249,84 @@ describe('toJsonSchema', () => {
     warnSpy.mockRestore();
   });
 });
+
+async function loadActiveSkillConfigs(): Promise<
+  Array<{ skillName: string; outputSchema?: z.ZodType }>
+> {
+  const skillNames = readdirSync(skillsRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+
+  const configs: Array<{ skillName: string; outputSchema?: z.ZodType }> = [];
+  for (const skillName of skillNames) {
+    const configPath = join(skillsRoot, skillName, 'skill.config.ts');
+    const mod = (await import(pathToFileURL(configPath).href)) as {
+      default?: { outputSchema?: unknown };
+    };
+    configs.push({
+      skillName,
+      outputSchema: mod.default?.outputSchema as z.ZodType | undefined,
+    });
+  }
+  return configs;
+}
+
+function assertCodexCompatibleSchema(skillName: string, schema: Record<string, unknown>): string[] {
+  const issues: string[] = [];
+  if ('oneOf' in schema) issues.push(`${skillName}: top-level oneOf is not allowed`);
+  if ('anyOf' in schema) issues.push(`${skillName}: top-level anyOf is not allowed`);
+  if ('allOf' in schema) issues.push(`${skillName}: top-level allOf is not allowed`);
+  visitSchema(skillName, schema, skillName, issues);
+  return issues;
+}
+
+function visitSchema(skillName: string, node: unknown, path: string, issues: string[]): void {
+  if (Array.isArray(node)) {
+    node.forEach((child, index) => visitSchema(skillName, child, `${path}[${index}]`, issues));
+    return;
+  }
+  if (!isRecord(node)) return;
+
+  if ('propertyNames' in node) issues.push(`${path}: propertyNames is not allowed`);
+  if (node.format === 'uri') issues.push(`${path}: format uri is not allowed`);
+
+  if (isObjectSchema(node)) {
+    const properties = isRecord(node.properties) ? node.properties : {};
+    const required = Array.isArray(node.required)
+      ? node.required.filter((key): key is string => typeof key === 'string')
+      : [];
+    const propertyKeys = Object.keys(properties);
+    const missingRequired = propertyKeys.filter((key) => !required.includes(key));
+    if (missingRequired.length > 0) {
+      issues.push(`${path}: properties missing from required: ${missingRequired.join(', ')}`);
+    }
+    if (node.additionalProperties !== false) {
+      issues.push(`${path}: additionalProperties must be false`);
+    }
+  }
+
+  for (const [key, child] of Object.entries(node)) {
+    visitSchema(skillName, child, `${path}.${key}`, issues);
+  }
+}
+
+function isObjectSchema(node: Record<string, unknown>): boolean {
+  return node.type === 'object' || isRecord(node.properties) || node.additionalProperties != null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function schemaAllowsNull(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (value.type === 'null') return true;
+  if (Array.isArray(value.type) && value.type.includes('null')) return true;
+  const variants = Array.isArray(value.anyOf)
+    ? value.anyOf
+    : Array.isArray(value.oneOf)
+      ? value.oneOf
+      : [];
+  return variants.some(schemaAllowsNull);
+}

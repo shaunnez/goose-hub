@@ -88,6 +88,11 @@ describe('ReviewOutputSchema — approved verdict', () => {
     expect(result.success).toBe(true);
   });
 
+  it('approved result accepts null escalationReason from Codex-shaped output', () => {
+    const result = ReviewOutputSchema.safeParse(makeApprovedOutput({ escalationReason: null }));
+    expect(result.success).toBe(true);
+  });
+
   it('accepts decision summaries with valid kinds (#466)', () => {
     const result = ReviewOutputSchema.safeParse(
       makeApprovedOutput({
@@ -135,6 +140,11 @@ describe('ReviewOutputSchema — needs-fix verdict', () => {
     const result = ReviewOutputSchema.safeParse(output);
     expect(result.success).toBe(true);
   });
+
+  it('needs-fix result accepts null escalationReason from Codex-shaped output', () => {
+    const result = ReviewOutputSchema.safeParse(makeNeedsFixOutput({ escalationReason: null }));
+    expect(result.success).toBe(true);
+  });
 });
 
 // ─── ReviewOutputSchema — needs-human ────────────────────────────────────────
@@ -156,11 +166,14 @@ describe('ReviewOutputSchema — needs-human verdict', () => {
     expect(result.success).toBe(false);
   });
 
-  it('needs-human with whitespace-only escalationReason passes min(1) check', () => {
-    // min(1) means at least 1 character; a space technically passes
-    // This tests the literal schema constraint, not business logic
+  it('needs-human with null escalationReason is REJECTED', () => {
+    const result = ReviewOutputSchema.safeParse(makeNeedsHumanOutput({ escalationReason: null }));
+    expect(result.success).toBe(false);
+  });
+
+  it('needs-human with whitespace-only escalationReason is REJECTED', () => {
     const result = ReviewOutputSchema.safeParse(makeNeedsHumanOutput({ escalationReason: ' ' }));
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
   });
 });
 

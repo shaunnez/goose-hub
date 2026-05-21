@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { eq, inArray } from 'drizzle-orm';
 import { SkillCoachOutputSchema } from '../../skills/skill-coach/schema.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
-import { omitNullObjectProperties } from '../agent-runtime/output-normalization.js';
+import { safeParseOutputForSchema } from '../agent-runtime/output-normalization.js';
 import { readPromptWithContext } from '../agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
 import { resolveProjectAgentExecution } from '../agent-runtime/resolve-runtime-for-project.js';
@@ -219,7 +219,7 @@ export async function runSkillCoachingWorkflow(
       },
     });
 
-    const parsed = SkillCoachOutputSchema.safeParse(omitNullObjectProperties(result.output));
+    const parsed = safeParseOutputForSchema(SkillCoachOutputSchema, result.output);
     if (!parsed.success) {
       eventStore.appendEvent({
         kind: 'agent.run-failed',

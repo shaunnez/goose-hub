@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
+import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
@@ -139,7 +140,7 @@ export async function runResolveConflictWorkflow(
           workspaceDir: wtPath,
         });
 
-        const parsed = ResolveConflictSchema.safeParse(agentResult.output);
+        const parsed = safeParseOutputForSchema(ResolveConflictSchema, agentResult.output);
         if (!parsed.success) {
           throw new Error('Agent output failed schema validation');
         }

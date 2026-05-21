@@ -3,6 +3,7 @@ import { resolveAcceptanceContract } from '@goose-hub/core/acceptance-contracts/
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { assembleSpawnContext } from '@goose-hub/core/agent-runtime/context-assembly.js';
 import type { AgentResult, AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
+import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import { resolveBudgetsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
@@ -132,7 +133,7 @@ export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<
   );
 
   const parsed = rawResults.map((r) =>
-    r instanceof Error ? null : ReviewOutputSchema.safeParse((r as AgentResult).output),
+    r instanceof Error ? null : safeParseOutputForSchema(ReviewOutputSchema, r.output),
   );
 
   const successfulReviewerOutputs = parsed.flatMap((p, i) => {

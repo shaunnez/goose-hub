@@ -269,6 +269,9 @@ export async function runFixIssueWorkflow(
       }
 
       if (verdict.verdict === 'revise') {
+        if (typeof verdict.feedback !== 'string' || verdict.feedback.trim().length === 0) {
+          throw new Error('advise-on-plan revise verdict missing feedback after validation');
+        }
         advisorFeedback = verdict.feedback;
         revisionPass = 1;
         // Fall through to step 4 to re-spawn implement with the feedback.
