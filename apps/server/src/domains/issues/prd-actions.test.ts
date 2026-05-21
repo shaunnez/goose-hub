@@ -196,6 +196,13 @@ describe('revisePRD', () => {
       state: 'factory:prd-review',
     });
     vi.mocked(getSourceForSlug).mockResolvedValue(source);
+    const priorPrd = { title: 'Stored PRD' };
+    eventStore.appendEvent({
+      projectId,
+      workItemId: item.id,
+      kind: 'prd.drafted',
+      payload: { prd: priorPrd, advisorConcerns: null },
+    });
 
     const concerns = ['Journey J-1 step 2 is unclear', 'Missing error state for network timeout'];
     const result = await revisePRD(projectId, item.externalId, concerns);
@@ -214,9 +221,36 @@ describe('revisePRD', () => {
     expect(dispatchRevisePrdMock).toHaveBeenCalledWith(
       projectId,
       Number(item.externalId),
-      undefined,
+      priorPrd,
       concerns,
     );
+  });
+
+  it('returns 409 and moves to needs-human when no PRD draft can be resolved', async () => {
+    const projectId = uniqueProjectId('revise-no-prd');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await source.seedIssue({
+      title: 'Build feature with missing PRD',
+      body: 'desc',
+      type: 'feature',
+      priority: 'medium',
+      state: 'factory:prd-review',
+    });
+    vi.mocked(getSourceForSlug).mockResolvedValue(source);
+
+    const result = await revisePRD(projectId, item.externalId, ['Missing detail']);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(409);
+      expect(result.error).toContain('no PRD draft found');
+    }
+    await expect(source.getItem(item.externalId)).resolves.toMatchObject({
+      state: 'factory:needs-human',
+    });
+    const comments = await source.listComments(item.externalId);
+    expect(comments.at(-1)?.body).toContain('revise-prd: no PRD draft found');
+    expect(dispatchRevisePrdMock).not.toHaveBeenCalled();
   });
 
   it('returns 409 when the issue is not in factory:prd-review', async () => {

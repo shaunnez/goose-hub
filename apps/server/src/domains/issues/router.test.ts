@@ -10,6 +10,7 @@ const {
   mockGetIssueEvents,
   mockGetIssueArtifact,
   mockGetIssueComments,
+  mockGetIssuePrd,
   mockGetIssueTriage,
   mockGetIssueWorktreeDiff,
   mockTransitionIssue,
@@ -33,6 +34,7 @@ const {
   mockGetIssueEvents: vi.fn(),
   mockGetIssueArtifact: vi.fn(),
   mockGetIssueComments: vi.fn(),
+  mockGetIssuePrd: vi.fn(),
   mockGetIssueTriage: vi.fn(),
   mockGetIssueWorktreeDiff: vi.fn(),
   mockTransitionIssue: vi.fn(),
@@ -58,6 +60,7 @@ vi.mock('./service.js', () => ({
   getIssueEvents: mockGetIssueEvents,
   getIssueArtifact: mockGetIssueArtifact,
   getIssueComments: mockGetIssueComments,
+  getIssuePrd: mockGetIssuePrd,
   getIssueTriage: mockGetIssueTriage,
   getIssueWorktreeDiff: mockGetIssueWorktreeDiff,
   transitionIssue: mockTransitionIssue,
@@ -203,6 +206,38 @@ describe('GET /projects/:slug/issues/:id/comments', () => {
 
     const app = makeApp();
     const res = await app.request('/projects/unknown/issues/1/comments', { method: 'GET' });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('GET /projects/:slug/issues/:id/prd', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns 200 with the latest PRD read model on success', async () => {
+    const prd = {
+      prd: { title: 'Stored PRD' },
+      advisorConcerns: null,
+      source: 'event',
+      createdAt: '2026-05-21T00:00:00.000Z',
+      runId: 'run-1',
+    };
+    mockGetIssuePrd.mockResolvedValue({ ok: true, data: { prd } });
+
+    const app = makeApp();
+    const res = await app.request('/projects/my-project/issues/42/prd', { method: 'GET' });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { prd: unknown };
+    expect(body.prd).toEqual(prd);
+    expect(mockGetIssuePrd).toHaveBeenCalledWith('my-project', '42');
+  });
+
+  it('returns 404 when project not found', async () => {
+    mockGetIssuePrd.mockResolvedValue({ ok: false, error: 'project not found', status: 404 });
+
+    const app = makeApp();
+    const res = await app.request('/projects/unknown/issues/1/prd', { method: 'GET' });
     expect(res.status).toBe(404);
   });
 });

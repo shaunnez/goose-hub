@@ -12,6 +12,7 @@ API + SSE host for the Goose Hub web UI. Stands up the server process the UI tal
 | GET | `/workflow-catalog` | returns the maintained workflow map catalog used by Settings |
 | GET | `/projects/:slug/issues` | proxies `StateSource.listOpenWork()` |
 | GET | `/projects/:slug/issues/:id` | proxies `StateSource.getItem()` |
+| GET | `/projects/:slug/issues/:id/prd` | returns latest PRD read model, preferring local structured events with legacy comment fallback |
 | GET | `/projects/:slug/milestones` | proxies `StateSource.listMilestones()` |
 | GET | `/projects/:slug/active-milestone` | reads `project_state.activeMilestoneNumber` (falls back to GitHub default) |
 | POST | `/projects/:slug/active-milestone` | writes `project_state.activeMilestoneNumber`; emits `milestone.activated` |

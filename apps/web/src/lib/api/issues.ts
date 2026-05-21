@@ -3,6 +3,7 @@ import type {
   EngineeringSpecDto,
   IssueCommentDto,
   IssueDiffDto,
+  PrdReadModelDto,
   TransitionResult,
   TriageResultDto,
   WorkItemCostsDto,
@@ -29,6 +30,13 @@ export async function fetchEngineeringSpec(
     `/projects/${slug}/issues/${id}/spec`,
   );
   return spec;
+}
+
+export async function fetchPRD(slug: string, id: string): Promise<PrdReadModelDto | null> {
+  const { prd } = await getJson<{ prd: PrdReadModelDto | null }>(
+    `/projects/${slug}/issues/${id}/prd`,
+  );
+  return prd;
 }
 
 export async function fetchClosedIssues(
