@@ -14,10 +14,11 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `server` | yes | API + SSE host for the Goose Hub web UI. Stands up the server process the UI talks to. Closes M2.01 (#26). |
 | `web` | yes | Vite + React 19 + Tailwind 4 + React Router v6. Closes M2.02 (#27). |
 
-## core/ (33 entries, 3 missing README)
+## core/ (34 entries, 4 missing README)
 
 | Name | README | Summary |
 |---|---|---|
+| `acceptance-contracts` | **missing** | _(no README)_ |
 | `agent-artifacts` | **missing** | _(no README)_ |
 | `agent-comment` | yes | Builds structured GitHub-issue comment markdown for agent status updates. One small pure function so every agent posts comments in the same shape. |
 | `agent-runtime` | yes | Typed contracts and model registry for all agent runtime code. |
@@ -52,10 +53,11 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `workflows` | yes | Orchestration workflows that compose skills, persist results, and transition work-item state. |
 | `workspaces` | yes | Git worktree lifecycle management for Factory investigation runs. |
 
-## slices/ (38 entries, 0 missing README)
+## slices/ (39 entries, 1 missing README)
 
 | Name | README | Summary |
 |---|---|---|
+| `acceptance-contract` | **missing** | _(no README)_ |
 | `bootstrap-project` | yes | End-to-end project bootstrap workflow. Closes M12.04 (#307). |
 | `bootstrap-wizard` | yes | End-to-end UI for adding a new project to Factory's roster (M12.07, issue #308). |
 | `chat-orchestrator` | yes | M20 — drives one turn of a conversation between the user and the `hub-chat` assistant skill. |
@@ -95,10 +97,11 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `stack-detector` | yes | Stack detector for target project repositories. Closes M12.01 (#304). |
 | `webhook-runbook` | yes | **Status:** Documentation slice for M12 project bootstrap. |
 
-## skills/ (37 entries, 0 missing README)
+## skills/ (38 entries, 1 missing README)
 
 | Name | README | Summary |
 |---|---|---|
+| `acceptance-contract` | **missing** | _(no README)_ |
 | `advise-on-plan` | yes | Reviews a developer's plan for `priority:high` and `priority:critical` work items before implementation begins. Produces a typed advisor verdict (`proceed \| revise \| abort`) per CONTEXT.md "Advisor Flow". |
 | `advise-on-prd` | yes | Reviews a PRD produced by `write-prd` for `priority:high` and `priority:critical` work items. Produces a typed verdict (`approve \| revise`) and optionally patches only the changed sections. |
 | `bug-enhance` | yes | Analyzes a UI/web bug report and appends structured sections (Repro steps, Expected, Actual, Location) that are absent or too vague. |
