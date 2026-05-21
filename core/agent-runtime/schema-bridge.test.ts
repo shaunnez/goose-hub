@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { ImplementSchema } from '../../skills/implement/schema.js';
 import { InterventionProposerOutputSchema } from '../../skills/intervention-proposer/schema.js';
+import { ReviewOutputSchema } from '../../skills/review/schema.js';
 import { toJsonSchema } from './schema-bridge.js';
 
 describe('toJsonSchema', () => {
@@ -87,6 +88,24 @@ describe('toJsonSchema', () => {
       type: ['string', 'number', 'integer', 'boolean', 'object', 'array', 'null'],
     });
     expect(JSON.stringify(result)).not.toContain('"payload":{}');
+  });
+
+  it('collapses top-level object unions into an object schema for Codex response formats', () => {
+    const result = toJsonSchema(ReviewOutputSchema);
+
+    expect(result.type).toBe('object');
+    expect(result).not.toHaveProperty('oneOf');
+    expect(result).toMatchObject({
+      properties: {
+        verdict: { type: 'string', enum: ['approved', 'needs-fix', 'needs-human'] },
+        confidence: { type: 'number' },
+        criteriaChecks: { type: 'array' },
+        findings: { type: 'array' },
+        decisionSummaries: { type: 'array' },
+      },
+      required: ['verdict', 'confidence', 'criteriaChecks', 'findings', 'decisionSummaries'],
+      additionalProperties: false,
+    });
   });
 
   it('returns an empty schema and warns when conversion throws', () => {

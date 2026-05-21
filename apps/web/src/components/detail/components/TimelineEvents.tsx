@@ -88,6 +88,12 @@ import {
 import { RetroCompletedEvent } from './timeline/RetroCompletedEvent';
 import { AgentRetryEscalatedEvent } from './timeline/RetryEvents';
 import { ReviewCompletedEvent } from './timeline/ReviewCompletedEvent';
+import {
+  ReviewConvergedEvent,
+  ReviewEscalatedEvent,
+  ReviewWaveCompletedEvent,
+  ReviewWaveFailedEvent,
+} from './timeline/ReviewWaveEvents';
 import { RunGroupWrapper } from './timeline/RunGroupWrapper';
 import {
   SwarmHeartbeatEvent,
@@ -245,6 +251,14 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <PrOpenedEvent key={event.id} event={event} />;
     case 'review.completed':
       return <ReviewCompletedEvent key={event.id} event={event} />;
+    case 'review.wave-completed':
+      return <ReviewWaveCompletedEvent key={event.id} event={event} />;
+    case 'review.wave-failed':
+      return <ReviewWaveFailedEvent key={event.id} event={event} />;
+    case 'review.converged':
+      return <ReviewConvergedEvent key={event.id} event={event} />;
+    case 'review.escalated':
+      return <ReviewEscalatedEvent key={event.id} event={event} />;
     case 'retrospective.completed':
       return <RetroCompletedEvent key={event.id} event={event} />;
     case 'pr.merged':
