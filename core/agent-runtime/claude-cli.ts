@@ -118,6 +118,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
       runId,
       projectId,
       workItemId,
+      skill: spec.skill,
       toolBundles: spec.toolBundles,
     });
     const recordDecisionTool = getRecordDecisionTool(projectId);

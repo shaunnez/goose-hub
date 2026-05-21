@@ -29,6 +29,7 @@ describe('buildFactoryMcpConfig', () => {
       runId: 'run-123',
       projectId: 'demo',
       workItemId: 'github:demo/repo#7',
+      skill: 'investigate',
       toolBundles: [],
       orchestratorRoot,
     });
@@ -43,6 +44,7 @@ describe('buildFactoryMcpConfig', () => {
     expect(entry.env.FACTORY_RUN_ID).toBe('run-123');
     expect(entry.env.FACTORY_PROJECT_ID).toBe('demo');
     expect(entry.env.FACTORY_WORK_ITEM_ID).toBe('github:demo/repo#7');
+    expect(entry.env.FACTORY_SKILL).toBe('investigate');
     expect(entry.env.FACTORY_PERSONA_ID).toBe('');
     expect(entry.env.FACTORY_WORKSPACE_DIR).toBe(workspace);
     expect(entry.env.FACTORY_SERVER_PORT).toBe('3001');

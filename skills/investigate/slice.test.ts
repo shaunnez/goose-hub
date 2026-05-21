@@ -228,3 +228,11 @@ describe('investigate prompt workspace boundary', () => {
     expect(PROMPT).toContain('~/.claude');
   });
 });
+
+describe('investigate prompt live decisions', () => {
+  it('uses record_decision as the primary live timeline signal', () => {
+    expect(PROMPT).toContain('mcp__factory-tools__record_decision');
+    expect(PROMPT).toContain('The tool call is the primary live timeline signal');
+    expect(PROMPT).toContain('do not rely on text markers alone');
+  });
+});

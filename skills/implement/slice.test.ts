@@ -489,4 +489,10 @@ describe('implement prompt', () => {
     expect(prompt).toContain('~/.agents');
     expect(prompt).toContain('~/.claude');
   });
+
+  it('uses record_decision as the primary live timeline signal', () => {
+    expect(prompt).toContain('mcp__factory-tools__record_decision');
+    expect(prompt).toContain('The tool call is the primary live timeline signal');
+    expect(prompt).toContain('do not rely on text markers alone');
+  });
 });

@@ -148,4 +148,12 @@ Return JSON conforming to `ImplementSchema`. `prUrl` must be a valid placeholder
 }
 ```
 
-`decisionSummaries` is required. Use uppercase enum kinds from `core/agent-runtime/decision-types.ts`. Live markers are concise progress/rationale lines: `[decision] KIND: <one sentence>`.
+`decisionSummaries` is required. Use uppercase enum kinds from `core/agent-runtime/decision-types.ts`.
+
+For every workflow checkpoint that says `Emit [decision] ...`, call `mcp__factory-tools__record_decision` first:
+
+- `kind`: the uppercase decision kind (`READ`, `PLAN`, `RED`, `GREEN`, `LINT`, etc.)
+- `what`: the concise progress/rationale sentence
+- `why`: brief evidence or rationale, such as the file/test/command result that supports it
+
+The tool call is the primary live timeline signal. You may also print the compatible marker line `[decision] KIND: <one sentence>` when emitting text before the final JSON, but do not rely on text markers alone.

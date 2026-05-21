@@ -16,6 +16,7 @@ export interface FactoryContext {
   runId: string;
   projectId: string;
   workItemId: string;
+  skill?: string | null;
   personaId?: string | null;
   workspaceRoot: string;
   serverPort: number;
@@ -64,6 +65,7 @@ export function loadFactoryContext(env: NodeJS.ProcessEnv = process.env): Factor
     projectId: (env.FACTORY_PROJECT_ID as string).trim(),
     // Empty string means "no work item" for project-level / ad-hoc runs.
     workItemId: (env.FACTORY_WORK_ITEM_ID ?? '').trim(),
+    skill: (env.FACTORY_SKILL ?? '').trim() || null,
     personaId: (env.FACTORY_PERSONA_ID ?? '').trim() || null,
     workspaceRoot,
     serverPort,

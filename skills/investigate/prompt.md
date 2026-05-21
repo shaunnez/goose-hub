@@ -143,7 +143,13 @@ Return a JSON object with this exact structure:
 
 ## Decision-summary pattern
 
-Emit sparse live markers in your text turn before major search/read pivots, after important findings, and when uncertainty changes the investigation path:
+When an instruction says `Emit: [decision] ...`, record that live decision by calling `mcp__factory-tools__record_decision` first:
+
+- `kind`: the uppercase decision kind (`READ`, `INSIGHT`, or `UNCERTAINTY`)
+- `what`: the one-sentence decision summary
+- `why`: brief evidence or rationale, such as the file/path/signal that justifies the decision
+
+The tool call is the primary live timeline signal. You may also print the compatible marker line below when you are emitting text before the final JSON, but do not rely on text markers alone:
 
 ```
 [decision] KIND: <one sentence>

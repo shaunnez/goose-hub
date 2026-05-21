@@ -220,8 +220,14 @@ describe('context', () => {
     expect(ctx.runId).toBe('run-1');
     expect(ctx.projectId).toBe('proj-1');
     expect(ctx.workItemId).toBe('github:owner/repo#42');
+    expect(ctx.skill).toBeNull();
     expect(ctx.workspaceRoot).toBe(workspace);
     expect(ctx.serverPort).toBe(3001);
+  });
+
+  it('loads optional skill attribution when present', () => {
+    const ctx = loadFactoryContext(baseEnv({ FACTORY_SKILL: 'investigate' }));
+    expect(ctx.skill).toBe('investigate');
   });
 
   it('loads optional persona attribution when present', () => {

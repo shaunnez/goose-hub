@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ImplementWpSchema } from './schema.js';
 import config from './skill.config.js';
@@ -119,5 +120,15 @@ describe('implement-wp skill.config', () => {
       stack: { testCommand: 'pnpm test' },
     });
     expect(result.success).toBe(true);
+  });
+});
+
+describe('implement-wp prompt live decisions', () => {
+  const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+
+  it('uses record_decision as the primary live timeline signal', () => {
+    expect(prompt).toContain('mcp__factory-tools__record_decision');
+    expect(prompt).toContain('The tool call is the primary live timeline signal');
+    expect(prompt).toContain('do not rely on text markers alone');
   });
 });

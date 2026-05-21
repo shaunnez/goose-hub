@@ -217,6 +217,7 @@ export class CodexCliRuntime implements AgentRuntime {
       runId,
       projectId,
       workItemId,
+      skill: spec.skill,
       personaId,
       toolBundles: spec.toolBundles,
     });

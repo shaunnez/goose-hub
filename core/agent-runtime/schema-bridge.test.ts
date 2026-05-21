@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { ImplementSchema } from '../../skills/implement/schema.js';
+import { InterventionProposerOutputSchema } from '../../skills/intervention-proposer/schema.js';
 import { toJsonSchema } from './schema-bridge.js';
 
 describe('toJsonSchema', () => {
@@ -45,6 +47,46 @@ describe('toJsonSchema', () => {
     const result = JSON.stringify(toJsonSchema(schema));
 
     expect(result).not.toContain('propertyNames');
+  });
+
+  it('strips uri string formats rejected by Codex response schemas', () => {
+    const result = toJsonSchema(z.object({ prUrl: z.string().url() }));
+
+    const properties = result.properties as Record<string, unknown>;
+    const prUrl = properties.prUrl as Record<string, unknown>;
+
+    expect(prUrl).toMatchObject({ type: 'string' });
+    expect(prUrl).not.toHaveProperty('format');
+  });
+
+  it('replaces unconstrained schema nodes with an explicit JSON value type', () => {
+    const result = toJsonSchema(z.object({ payload: z.unknown() }));
+
+    const properties = result.properties as Record<string, unknown>;
+    const payload = properties.payload as Record<string, unknown>;
+
+    expect(payload).toEqual({
+      type: ['string', 'number', 'integer', 'boolean', 'object', 'array', 'null'],
+    });
+  });
+
+  it('keeps implement output schema acceptable for Codex response schemas', () => {
+    const result = JSON.stringify(toJsonSchema(ImplementSchema));
+
+    expect(result).not.toContain('"format":"uri"');
+    expect(result).not.toContain('"format": "uri"');
+  });
+
+  it('keeps intervention proposer output schema acceptable for Codex response schemas', () => {
+    const result = toJsonSchema(InterventionProposerOutputSchema);
+    const properties = result.properties as Record<string, unknown>;
+    const options = properties.options as { items?: unknown };
+    const item = options.items as { properties?: Record<string, unknown> };
+
+    expect(item.properties?.payload).toEqual({
+      type: ['string', 'number', 'integer', 'boolean', 'object', 'array', 'null'],
+    });
+    expect(JSON.stringify(result)).not.toContain('"payload":{}');
   });
 
   it('returns an empty schema and warns when conversion throws', () => {

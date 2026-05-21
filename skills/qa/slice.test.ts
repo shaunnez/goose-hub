@@ -740,6 +740,16 @@ describe('qa prompt verificationSummary guidance', () => {
   });
 });
 
+describe('qa prompt live decisions', () => {
+  it('uses record_decision as the primary live timeline signal', () => {
+    const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+
+    expect(prompt).toContain('mcp__factory-tools__record_decision');
+    expect(prompt).toContain('The tool call is the primary live timeline signal');
+    expect(prompt).toContain('do not rely on text markers alone');
+  });
+});
+
 // ─── #467 — full-suite-fails-outside-dev-paths produces an error finding ─────
 
 describe('QaOutputSchema with cross-checked targeted regressions (#467)', () => {

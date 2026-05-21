@@ -61,7 +61,7 @@ describe('getStackCommands', () => {
 
 describe('recordDecisionTool', () => {
   it('persists a decision and emits a tool-call audit event', () => {
-    const ctx = makeCtx();
+    const ctx = makeCtx({ skill: 'investigate', personaId: 'goose-hub-self/investigator/0' });
     const result = recordDecisionTool(ctx, {
       kind: 'PLAN',
       what: `Picked option A ${ctx.runId}`,
@@ -75,6 +75,25 @@ describe('recordDecisionTool', () => {
       (e) => (e.payload as { tool_name?: string }).tool_name === 'record_decision',
     );
     expect(audit).toBeTruthy();
+
+    const liveEvents = eventStore.replay({
+      runId: ctx.runId,
+      kind: 'agent.decision-summary-live',
+    });
+    expect(liveEvents).toHaveLength(1);
+    expect(liveEvents[0]).toMatchObject({
+      projectId: REAL_PROJECT_SLUG,
+      workItemId: 'github:shaunnez/goose-hub#1',
+      personaId: 'goose-hub-self/investigator/0',
+      payload: {
+        run_id: ctx.runId,
+        kind: 'PLAN',
+        summary: `Picked option A ${ctx.runId}`,
+        evidence: 'Smallest blast radius',
+        skill: 'investigate',
+        personaId: 'goose-hub-self/investigator/0',
+      },
+    });
   });
 
   it('returns recorded=false with reason=duplicate for the same (runId,kind,what)', () => {
@@ -90,5 +109,8 @@ describe('recordDecisionTool', () => {
     expect(second.recorded).toBe(false);
     expect(second.reason).toBe('duplicate');
     expect(second.id).toBe(first.id);
+    expect(
+      eventStore.replay({ runId: ctx.runId, kind: 'agent.decision-summary-live' }),
+    ).toHaveLength(1);
   });
 });

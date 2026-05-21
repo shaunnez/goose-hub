@@ -134,6 +134,12 @@ Use the canonical `DecisionKindSchema` enum from `core/agent-runtime/decision-ty
 Common for this skill: `READ`, `PLAN`, `RED`, `GREEN`, `REFACTOR`, `LINT`, `BLOCKER`,
 `UNCERTAINTY`, `TOOL_FAILURE`.
 
-Live marker format: `[decision] KIND: what — why` where ` — ` (space, em-dash, space) separates the decision from its rationale. Example: `[decision] PLAN: Add helper in core/foo/bar.ts — mirrors existing baz pattern`.
+For every workflow checkpoint that says `Emit: [decision] ...`, call `mcp__factory-tools__record_decision` first:
+
+- `kind`: the uppercase decision kind (`READ`, `PLAN`, `RED`, `GREEN`, `LINT`, etc.)
+- `what`: the concise progress/rationale sentence
+- `why`: brief evidence or rationale, such as the file/test/command result that supports it
+
+The tool call is the primary live timeline signal. You may also print the compatible marker line `[decision] KIND: what — why` when emitting text before the final JSON, but do not rely on text markers alone. In the text marker, ` — ` (space, em-dash, space) separates the decision from its rationale. Example: `[decision] PLAN: Add helper in core/foo/bar.ts — mirrors existing baz pattern`.
 
 [decision] VERDICT: WP builder returned structured output; orchestrator commits

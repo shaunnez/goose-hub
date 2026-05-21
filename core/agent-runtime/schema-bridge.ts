@@ -3,6 +3,12 @@ import type { ZodType } from 'zod';
 
 export type JsonSchema = Record<string, unknown>;
 
+const ANY_JSON_VALUE_SCHEMA: JsonSchema = {
+  type: ['string', 'number', 'integer', 'boolean', 'object', 'array', 'null'],
+};
+
+const UNSUPPORTED_CODEX_FORMATS = new Set(['uri']);
+
 export function toJsonSchema(schema: ZodType): JsonSchema {
   try {
     return toCodexResponseSchema(toJSONSchema(schema) as JsonSchema);
@@ -23,9 +29,14 @@ function sanitizeSchemaNode(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sanitizeSchemaNode);
   if (!isRecord(value)) return value;
 
+  if (Object.keys(value).length === 0) return { ...ANY_JSON_VALUE_SCHEMA };
+
   const next: Record<string, unknown> = {};
   for (const [key, child] of Object.entries(value)) {
     if (key === 'propertyNames') continue;
+    if (key === 'format' && typeof child === 'string' && UNSUPPORTED_CODEX_FORMATS.has(child)) {
+      continue;
+    }
     next[key] = sanitizeSchemaNode(child);
   }
 

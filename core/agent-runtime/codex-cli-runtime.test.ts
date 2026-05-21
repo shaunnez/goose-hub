@@ -220,6 +220,7 @@ describe('CodexCliRuntime timeout handling', () => {
         'factory-tools': expect.objectContaining({
           enabledTools: ['read_file', 'run_tests'],
           env: expect.objectContaining({
+            FACTORY_SKILL: 'fix-issue',
             FACTORY_PERSONA_ID: 'test-project/developer/0',
           }),
         }),

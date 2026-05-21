@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import { eventStore } from '../../../event-stream/store.js';
 import { getProjectBySlug } from '../../../projects/loader.js';
 import type { WorkItem } from '../../../state-source/interface.js';
 import { recordDecision } from '../../tools/record-decision.js';
@@ -194,6 +195,24 @@ export function recordDecisionTool(
     status: 'ok',
   });
 
-  if (result.recorded) return { recorded: true, id: result.id };
+  if (result.recorded) {
+    eventStore.appendEvent({
+      projectId: ctx.projectId,
+      workItemId: ctx.workItemId,
+      runId: ctx.runId,
+      personaId: ctx.personaId ?? null,
+      kind: 'agent.decision-summary-live',
+      payload: {
+        run_id: ctx.runId,
+        kind: input.kind,
+        summary: input.what,
+        evidence: input.why,
+        timestamp: new Date().toISOString(),
+        ...(ctx.skill != null ? { skill: ctx.skill } : {}),
+        ...(ctx.personaId != null ? { personaId: ctx.personaId } : {}),
+      },
+    });
+    return { recorded: true, id: result.id };
+  }
   return { recorded: false, id: result.id, reason: result.reason };
 }

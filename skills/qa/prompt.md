@@ -288,7 +288,13 @@ Set `verdict` based on the following rules, in order:
 
 ## Decision-summary pattern
 
-Emit sparse live markers in your text turn before major read/verification pivots, after important findings, and when uncertainty changes the QA path:
+When an instruction says `Emit: [decision] ...`, record that live decision by calling `mcp__factory-tools__record_decision` first:
+
+- `kind`: the uppercase decision kind (`READ`, `DIFF_READ`, `STRUCTURAL_CHECK`, `FUNCTIONAL_CHECK`, `REGRESSION_CHECK`, `CRITERIA_CHECK`, `QUALITY_SCORE`, `VERDICT`, etc.)
+- `what`: the one-sentence verification summary
+- `why`: brief evidence or rationale, such as the structured verification packet, diff signal, command result, or acceptance-criteria check that supports it
+
+The tool call is the primary live timeline signal. You may also print the compatible marker line below when you are emitting text before the final JSON, but do not rely on text markers alone:
 
 ```
 [decision] KIND: <one sentence summary>
