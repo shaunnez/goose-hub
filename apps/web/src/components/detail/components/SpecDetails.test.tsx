@@ -14,6 +14,17 @@ const SPEC: EngineeringSpecDto = {
     { id: 'WP1', filesOwned: ['src/auth/login.ts', 'src/auth/token.ts'], builderTier: 'sonnet' },
     { id: 'WP2', filesOwned: ['src/auth/middleware.ts'], builderTier: 'haiku' },
   ],
+  acceptanceCriteria: [
+    {
+      id: 'AC-1',
+      statement: 'Users can log in with a valid refresh token.',
+      verifyCommand: 'pnpm vitest run src/auth/login.test.ts',
+    },
+    { id: 'AC-2', statement: 'Expired tokens are rejected.' },
+    { id: 'AC-3', statement: 'Middleware forwards authenticated requests.' },
+    { id: 'AC-4', statement: 'Refresh failures are reported.' },
+    { id: 'AC-5', statement: 'No credentials are logged.' },
+  ],
   acceptanceCriteriaCount: 5,
 };
 
@@ -41,6 +52,8 @@ describe('SpecDetails', () => {
     expect(screen.getByText('sonnet')).toBeTruthy();
     expect(screen.getByText('haiku')).toBeTruthy();
     expect(screen.getByText('5 acceptance criteria')).toBeTruthy();
+    expect(screen.getByText('Users can log in with a valid refresh token.')).toBeTruthy();
+    expect(screen.getByText('pnpm vitest run src/auth/login.test.ts')).toBeTruthy();
   });
 
   it('renders when state is factory:in-progress', () => {

@@ -1,5 +1,6 @@
 import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/types.js';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import {
   type EffectiveDevReviewConfig,
@@ -115,6 +116,26 @@ function filterWpObservedFiles(
 
 function declaredWpFilesWritten(paths: Array<{ path: string }>): string[] {
   return uniqueSorted(paths.map((file) => file.path));
+}
+
+function acceptanceContractFromSpec(
+  spec: EngineeringSpec,
+  pipelineRunId: string,
+): AcceptanceContract {
+  return {
+    source: 'engineering-spec',
+    runId: pipelineRunId,
+    criteria: spec.acceptanceCriteria.map((ac, index) => ({
+      id: ac.id ?? `AC-${index + 1}`,
+      statement: ac.statement,
+      verifyCommand: ac.verifyCommand,
+      ...(ac.tolerance != null ? { tolerance: ac.tolerance } : {}),
+      ...(ac.journeyRef != null ? { journeyRef: ac.journeyRef } : {}),
+      ...(ac.stepIdx != null ? { stepIdx: ac.stepIdx } : {}),
+      ...(ac.crossCutting != null ? { crossCutting: ac.crossCutting } : {}),
+      sourceRef: 'engineering_specs.spec.acceptanceCriteria',
+    })),
+  };
 }
 
 function emitWpObservedMismatch(input: {
@@ -284,6 +305,7 @@ export async function runParallelImplementWorkflow(
     };
   }
   const specForRun = normalizedSpec.spec;
+  const acceptanceContract = acceptanceContractFromSpec(specForRun, pipelineRunId);
 
   const stack = projectConfig?.stack
     ? {
@@ -386,6 +408,7 @@ export async function runParallelImplementWorkflow(
             implementWpPrompt,
             implementWpJsonSchema,
             investigation,
+            acceptanceContract,
           }),
         );
 

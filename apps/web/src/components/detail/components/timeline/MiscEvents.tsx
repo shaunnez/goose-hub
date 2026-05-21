@@ -1,6 +1,16 @@
 import type { AgentEventDto } from '@/lib/types';
 import { formatCost, formatTokens } from '@/lib/utils';
-import { AlertTriangle, ArrowRight, Cpu, FileStack, Info, Route, Target, User } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowRight,
+  ClipboardCheck,
+  Cpu,
+  FileStack,
+  Info,
+  Route,
+  Target,
+  User,
+} from 'lucide-react';
 import { EVENT_KIND_LABEL, getPayloadStr } from '../../lib/timeline';
 
 type BudgetExceededPayload = {
@@ -83,6 +93,15 @@ type DisclosurePayload = {
   rawBytes?: number;
   contextBytes?: number;
   artifactKeys?: string[];
+};
+
+type AcceptanceContractPayload = {
+  criteriaCount?: number;
+  issueBodyPatchRecommended?: boolean;
+  contract?: {
+    source?: string;
+    criteria?: Array<{ id?: string; statement?: string; verifyCommand?: string }>;
+  };
 };
 
 function formatShortId(value: string | undefined): string | null {
@@ -178,6 +197,45 @@ export function SystemNoteEvent({ event }: { event: AgentEventDto }) {
         <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
       </div>
       <div className="text-[12.5px] text-fg-2">{getPayloadStr(event.payload)}</div>
+    </li>
+  );
+}
+
+export function AcceptanceContractAuthoredEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as AcceptanceContractPayload | null;
+  const criteria = p?.contract?.criteria ?? [];
+  const count = p?.criteriaCount ?? criteria.length;
+  const source = p?.contract?.source ?? 'normalized';
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-[color:var(--accent)]/25 bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex items-center gap-2 mb-2 text-[11px] text-fg-3">
+        <ClipboardCheck size={13} className="shrink-0 text-[color:var(--accent)]" />
+        <span className="font-mono uppercase tracking-wider">Acceptance contract authored</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="text-[12.5px] text-fg-2">
+        {count} acceptance criteria from {source}
+        {p?.issueBodyPatchRecommended ? (
+          <span className="text-fg-4"> · issue body patch recommended</span>
+        ) : null}
+      </div>
+      {criteria.length > 0 && (
+        <ol className="mt-2 flex flex-col gap-1.5">
+          {criteria.slice(0, 4).map((criterion, index) => (
+            <li
+              key={criterion.id ?? index}
+              className="grid grid-cols-[3rem_1fr] gap-2 text-[11.5px] text-fg-3"
+            >
+              <span className="font-mono">{criterion.id ?? `AC-${index + 1}`}</span>
+              <span className="min-w-0">{criterion.statement}</span>
+            </li>
+          ))}
+        </ol>
+      )}
     </li>
   );
 }

@@ -1,4 +1,5 @@
 import type {
+  AcceptanceContractDto,
   AgentEventDto,
   EngineeringSpecDto,
   IssueCommentDto,
@@ -30,6 +31,16 @@ export async function fetchEngineeringSpec(
     `/projects/${slug}/issues/${id}/spec`,
   );
   return spec;
+}
+
+export async function fetchAcceptanceContract(
+  slug: string,
+  id: string,
+): Promise<AcceptanceContractDto | null> {
+  const { acceptanceContract } = await getJson<{
+    acceptanceContract: AcceptanceContractDto | null;
+  }>(`/projects/${slug}/issues/${id}/acceptance-contract`);
+  return acceptanceContract;
 }
 
 export async function fetchPRD(slug: string, id: string): Promise<PrdReadModelDto | null> {

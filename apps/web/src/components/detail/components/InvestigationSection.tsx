@@ -1,5 +1,6 @@
 import {
   addComment,
+  fetchAcceptanceContract,
   fetchComments,
   fetchEngineeringSpec,
   fetchEvents,
@@ -24,6 +25,7 @@ import {
   extractInvestigationPayload,
   latestInvestigationEvent,
 } from '../lib/investigation';
+import { AcceptanceContractDetails } from './AcceptanceContractDetails';
 import { ConfidenceBadge } from './ConfidenceBadge';
 import { CostBadge } from './CostBadge';
 import { FindingCard } from './FindingCard';
@@ -73,6 +75,11 @@ export function InvestigationSection({
   const { data: spec } = useQuery<EngineeringSpecDto | null>({
     queryKey: ['spec', projectSlug, id],
     queryFn: () => fetchEngineeringSpec(projectSlug, id),
+  });
+
+  const { data: acceptanceContract } = useQuery({
+    queryKey: ['acceptance-contract', projectSlug, id],
+    queryFn: () => fetchAcceptanceContract(projectSlug, id),
   });
 
   const humanNotes = comments.filter((c) => c.body.startsWith('Human review notes:'));
@@ -263,6 +270,8 @@ export function InvestigationSection({
           })}
         </div>
       )}
+
+      <AcceptanceContractDetails contract={acceptanceContract} />
 
       {/* Engineering spec */}
       {spec != null && <SpecDetails spec={spec} itemState={itemState} />}

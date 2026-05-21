@@ -38,6 +38,21 @@ export const ReviewContextSchema = z.object({
       overallScore: z.number(),
     })
     .optional(),
+  acceptanceContract: z
+    .object({
+      source: z.enum(['normalized', 'engineering-spec', 'prd', 'issue-body']),
+      criteria: z.array(
+        z.object({
+          id: z.string(),
+          statement: z.string(),
+          verifyCommand: z.string().optional(),
+          expected: z.string().optional(),
+          tolerance: z.string().optional(),
+          sourceRef: z.string().optional(),
+        }),
+      ),
+    })
+    .optional(),
 });
 
 const config: SkillConfig = {
@@ -67,7 +82,7 @@ const config: SkillConfig = {
    * Explicitly EXCLUDED: devDecisionSummaries, investigationFindings.
    * The Review agent must independently verify criteria, not rubber-stamp developer reasoning.
    */
-  contextAllowlist: ['workItem', 'prDiff', 'qaVerdict'],
+  contextAllowlist: ['workItem', 'prDiff', 'qaVerdict', 'acceptanceContract'],
 };
 
 export default config;

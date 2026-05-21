@@ -87,9 +87,31 @@ export function SpecDetails({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-[11.5px] text-fg-3">
-            <ClipboardCheck size={12} className="text-fg-4 shrink-0" />
-            <span>{spec.acceptanceCriteriaCount} acceptance criteria</span>
+          <div>
+            <div className="flex items-center gap-2 text-[11.5px] text-fg-3 mb-2">
+              <ClipboardCheck size={12} className="text-fg-4 shrink-0" />
+              <span>{spec.acceptanceCriteriaCount} acceptance criteria</span>
+            </div>
+            {spec.acceptanceCriteria.length > 0 && (
+              <ol className="flex flex-col gap-2">
+                {spec.acceptanceCriteria.map((ac) => (
+                  <li
+                    key={ac.id}
+                    className="grid grid-cols-[3.5rem_1fr] gap-3 text-[12px] text-fg-2"
+                  >
+                    <span className="font-mono text-[11px] text-fg-4">{ac.id}</span>
+                    <div className="min-w-0">
+                      <div className="leading-relaxed">{ac.statement}</div>
+                      {ac.verifyCommand != null && (
+                        <div className="mt-1 font-mono text-[10.5px] text-fg-4 break-words">
+                          {ac.verifyCommand}
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
           </div>
         </div>
       )}

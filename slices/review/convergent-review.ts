@@ -1,3 +1,4 @@
+import { resolveAcceptanceContract } from '@goose-hub/core/acceptance-contracts/resolver.js';
 // slices/review/convergent-review.ts
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { assembleSpawnContext } from '@goose-hub/core/agent-runtime/context-assembly.js';
@@ -72,6 +73,7 @@ export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<
   const {
     pr,
     qaResult,
+    acceptanceContract,
     round,
     priorFindings,
     workItem,
@@ -103,6 +105,7 @@ export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<
       workItem,
       prDiff: pr.prDiff,
       qaResult,
+      acceptanceContract,
       personaId: personaIds[i],
       reviewPrompt,
       reviewJsonSchema,
@@ -252,6 +255,11 @@ export async function runConvergentReviewWorkflow(
     const changedFilePaths = extractChangedFilePaths(prDiff);
     const { minRounds } = classifyTopic(changedFilePaths);
     const qaResult = getQaVerdict(eventStore.replay({ workItemId: workItem.id }));
+    const acceptanceContract = resolveAcceptanceContract({
+      projectId: projectSlug,
+      workItemId: workItem.id,
+      issueBody: workItem.body,
+    });
     const pr = { externalId: workItem.externalId, prDiff };
     const pipelineRunId = findPipelineRunId(projectSlug, workItem.id);
     const pipelineRunIdPayload = pipelineRunId != null ? { pipelineRunId } : {};
@@ -276,6 +284,7 @@ export async function runConvergentReviewWorkflow(
       const waveResult = await dispatchReviewWave({
         pr,
         qaResult,
+        acceptanceContract,
         round,
         priorFindings: previousRoundFindings,
         workItem,
@@ -497,7 +506,7 @@ export async function runConvergentReviewWorkflow(
             ...reviewWorkflowPayload,
             verdict: finalVerdict,
             confidence: avgConfidence,
-            criteriaChecks: [],
+            criteriaChecks: lastOutputs.flatMap((r) => r.parsed.criteriaChecks),
             findings: lastOutputs.flatMap((r) => r.parsed.findings),
             ...pipelineRunIdPayload,
             ...(escalationReason != null ? { escalationReason } : {}),
