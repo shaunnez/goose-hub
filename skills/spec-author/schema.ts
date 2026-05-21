@@ -5,6 +5,8 @@ export { DecisionSummarySchema };
 
 const RepoRelativePathDescription =
   'Repo-root/worktree-root relative POSIX path. Do not use package-relative paths like src/... for files under apps/web; use apps/web/src/....';
+const VerificationCommandDescription =
+  'Executable repo-root/worktree-root command, for example: pnpm vitest run apps/web/src/lib/lanes.config.test.ts. Do not use a bare file path.';
 
 /**
  * Engineering Spec schema (M19.02, issue #559).
@@ -88,8 +90,8 @@ export const ExecutionBatchSchema = z.object({
 
 export const VerificationToolSchema = z.object({
   name: z.string().min(1),
-  /** Repo-root/worktree-root relative path to the script that runs this verification. */
-  scriptPath: z.string().min(1).describe(RepoRelativePathDescription),
+  /** Executable repo-root/worktree-root command that runs this verification. */
+  command: z.string().min(1).describe(VerificationCommandDescription),
   /** Exit codes that count as success. */
   expectedExitCodes: z.array(z.number().int()).min(1),
   /** Optional input format spec (e.g. JSON schema for stdin). */

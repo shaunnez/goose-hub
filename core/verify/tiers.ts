@@ -18,6 +18,8 @@ export interface VerifyFinding {
   file?: string;
   line?: number;
   severity: 'error' | 'warning' | 'info';
+  category?: 'product' | 'verification-infrastructure';
+  code?: string;
 }
 
 export interface TierResult {
@@ -41,8 +43,8 @@ export interface RunArtifacts {
 export interface TierDeps {
   appendEvent?: (input: AppendEventInput) => AgentEvent;
   getLastWpStatusImpl?: (runId: string, wpId: string) => 'ok' | 'failed' | 'in-progress' | null;
-  runVerificationScriptImpl?: (
-    scriptPath: string,
+  runVerificationCommandImpl?: (
+    command: string,
     worktreePath: string,
     expectedExitCodes: number[],
   ) => Promise<{ passed: boolean; output: string }>;
@@ -131,14 +133,75 @@ export function verifyStructural(
 
 // ─── Tier 2: Functional ───────────────────────────────────────────────────────
 
-async function defaultRunVerificationScript(
-  scriptPath: string,
+const BARE_REPO_PATH_PATTERN = /^(?:\.\/)?[\w@./-]+\.[A-Za-z0-9]+$/;
+const LAUNCH_ERROR_MARKER = 'GOOSE_VERIFICATION_COMMAND_LAUNCH_ERROR';
+
+export function isBareVerificationPath(command: unknown): boolean {
+  if (typeof command !== 'string') return false;
+  const trimmed = command.trim();
+  return !/\s/.test(trimmed) && trimmed.includes('/') && BARE_REPO_PATH_PATTERN.test(trimmed);
+}
+
+function commandLauncher(command: string): string {
+  return (
+    command
+      .trim()
+      .split(/\s+/)[0]
+      ?.replace(/^['"`]/, '')
+      .replace(/['"`]$/, '') ?? ''
+  );
+}
+
+function isLauncherMissing(command: string, output: string): boolean {
+  if (output.includes(LAUNCH_ERROR_MARKER)) return true;
+  const launcher = commandLauncher(command);
+  if (launcher === '') return false;
+  const escaped = escapeRegex(launcher);
+  return new RegExp(
+    `(^|\\n|\\s)(?:sh:\\s+\\d+:\\s+)?${escaped}:\\s+(?:command not found|not found|no such file or directory)`,
+    'i',
+  ).test(output);
+}
+
+function classifyVerificationCommandFailure(
+  command: string,
+  output: string,
+): Pick<VerifyFinding, 'category' | 'code'> {
+  const detail = `${command}\n${output}`.toLowerCase();
+  if (isBareVerificationPath(command)) {
+    return { category: 'verification-infrastructure', code: 'malformed-verification-command' };
+  }
+  if (
+    /(permission denied|eacces)/i.test(detail) &&
+    /(?:^|\s|\/)(?:apps|src|core|slices|skills)\/|(?:\.test|\.spec)?\.[cm]?[jt]sx?\b/.test(detail)
+  ) {
+    return { category: 'verification-infrastructure', code: 'verification-permission-denied' };
+  }
+  if (isLauncherMissing(command, output)) {
+    return { category: 'verification-infrastructure', code: 'verification-runner-missing' };
+  }
+  if (
+    /(no test files found|missing script|err_pnpm_no_script|failed to load config)/i.test(detail)
+  ) {
+    return { category: 'verification-infrastructure', code: 'verification-harness-config' };
+  }
+  return { category: 'product' };
+}
+
+async function defaultRunVerificationCommand(
+  command: string,
   worktreePath: string,
   expectedExitCodes: number[],
 ): Promise<{ passed: boolean; output: string }> {
+  if (isBareVerificationPath(command)) {
+    return {
+      passed: false,
+      output: `Malformed verification command: expected an executable command, got bare file path '${command}'`,
+    };
+  }
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
-    const child = spawn('sh', ['-c', scriptPath], {
+    const child = spawn('sh', ['-c', command], {
       cwd: worktreePath,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, CI: '1' },
@@ -151,7 +214,11 @@ async function defaultRunVerificationScript(
       resolve({ passed: expectedExitCodes.includes(exitCode), output });
     });
     child.on('error', (err) => {
-      resolve({ passed: false, output: err.message });
+      const code = (err as NodeJS.ErrnoException).code;
+      resolve({
+        passed: false,
+        output: `${LAUNCH_ERROR_MARKER}${code != null ? ` ${code}` : ''}: ${err.message}`,
+      });
     });
   });
 }
@@ -163,11 +230,11 @@ async function defaultRunVerificationScript(
 export async function verifyFunctional(
   spec: EngineeringSpec,
   worktreePath: string,
-  deps: Pick<TierDeps, 'runVerificationScriptImpl'> = {},
+  deps: Pick<TierDeps, 'runVerificationCommandImpl'> = {},
 ): Promise<TierResult> {
   const evidence: string[] = [];
   const findings: VerifyFinding[] = [];
-  const runScript = deps.runVerificationScriptImpl ?? defaultRunVerificationScript;
+  const runCommand = deps.runVerificationCommandImpl ?? defaultRunVerificationCommand;
 
   if (spec.verificationTooling.length === 0) {
     evidence.push('no-verification-tooling-declared');
@@ -175,13 +242,24 @@ export async function verifyFunctional(
   }
 
   for (const tool of spec.verificationTooling) {
-    const result = await runScript(tool.scriptPath, worktreePath, tool.expectedExitCodes);
+    if (typeof tool.command !== 'string' || tool.command.trim() === '') {
+      findings.push({
+        message: `Verification tool '${tool.name}' is missing executable command`,
+        severity: 'error',
+        category: 'verification-infrastructure',
+        code: 'malformed-verification-command',
+      });
+      continue;
+    }
+    const result = await runCommand(tool.command, worktreePath, tool.expectedExitCodes);
     if (result.passed) {
       evidence.push(`tool-passed: ${tool.name}`);
     } else {
+      const classification = classifyVerificationCommandFailure(tool.command, result.output);
       findings.push({
-        message: `Verification tool '${tool.name}' failed (script: ${tool.scriptPath}): ${result.output.slice(0, 256)}`,
+        message: `Verification tool '${tool.name}' failed (command: ${tool.command}): ${result.output.slice(0, 256)}`,
         severity: 'error',
+        ...classification,
       });
     }
   }

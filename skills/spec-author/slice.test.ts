@@ -150,7 +150,7 @@ describe('EngineeringSpecSchema (shape)', () => {
       verificationTooling: [
         {
           name: 'healthz-check',
-          scriptPath: 'scripts/check-healthz.ts',
+          command: 'pnpm tsx scripts/check-healthz.ts',
           expectedExitCodes: [0],
           inputSpec: null,
         },
@@ -216,6 +216,22 @@ describe('EngineeringSpecSchema (shape)', () => {
 
   it('accepts SpecAuthorSchema as alias for EngineeringSpecSchema (backwards-compat)', () => {
     const result = SpecAuthorSchema.safeParse(baseSpec());
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts executable verification tooling commands', () => {
+    const result = EngineeringSpecSchema.safeParse(
+      baseSpec({
+        verificationTooling: [
+          {
+            name: 'focused vitest',
+            command: 'pnpm vitest run apps/web/src/lib/lanes.config.test.ts',
+            expectedExitCodes: [0],
+          },
+        ],
+      }),
+    );
+
     expect(result.success).toBe(true);
   });
 
@@ -493,6 +509,29 @@ describe('validateEngineeringSpec — hard rules', () => {
     expect(result.errors.some((e) => e.rule === 'self-check-verification-tooling')).toBe(true);
   });
 
+  it('rejects verification tooling commands that are bare repo-relative file paths', () => {
+    const result = validateEngineeringSpec(
+      baseSpec({
+        verificationTooling: [
+          {
+            name: 'bad focused test',
+            command: 'apps/web/src/foo.test.ts',
+            expectedExitCodes: [0],
+          },
+        ],
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({
+        rule: 'verification-tool-command-malformed',
+        ref: 'verificationTooling[0].command',
+      }),
+    );
+  });
+
   it('rejects self-check-builder-independence when WP changes is too short', () => {
     const wp2 = baseSpec().workPackages[1];
     if (wp2 === undefined) throw new Error('baseSpec must have ≥2 WPs');
@@ -580,6 +619,38 @@ describe('validateEngineeringSpec — repoRoot-backed checks', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.errors.some((e) => e.rule === 'constraint-source-symbol-missing')).toBe(true);
+  });
+
+  it('rejects package-relative verification command path arguments', () => {
+    mkdirSync(join(tmpRepo, 'apps/web/scripts'), { recursive: true });
+    writeFileSync(join(tmpRepo, 'apps/web/scripts/check.ts'), 'export {};\n');
+    const spec = baseSpec({
+      constraints: [
+        {
+          kind: 'phase',
+          name: 'healthz endpoint',
+          source: 'apps/server/src/routes/healthz.ts:healthzHandler',
+        },
+      ],
+      verificationTooling: [
+        {
+          name: 'web check',
+          command: 'pnpm tsx scripts/check.ts',
+          expectedExitCodes: [0],
+        },
+      ],
+    });
+
+    const result = validateEngineeringSpec(spec, { repoRoot: tmpRepo });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({
+        rule: 'verification-tool-command-package-relative',
+        ref: 'verificationTooling[0].command',
+      }),
+    );
   });
 });
 

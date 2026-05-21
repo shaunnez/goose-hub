@@ -123,19 +123,19 @@ describe('Tier 1 (Structural) — golden test', () => {
 // ─── Tier 2: Functional ──────────────────────────────────────────────────────
 
 describe('Tier 2 (Functional) — golden test', () => {
-  it('fails when a verification tool script exits with unexpected code', async () => {
+  it('fails when a verification command exits with unexpected code', async () => {
     const spec = makeSpec({
       verificationTooling: [
         {
           name: 'import-smoke',
-          scriptPath: 'node -e "require(\'./broken\')"',
+          command: 'node -e "require(\'./broken\')"',
           expectedExitCodes: [0],
         },
       ],
     });
 
     const result = await verifyFunctional(spec, '/tmp', {
-      runVerificationScriptImpl: async (_script, _cwd, expectedExitCodes) => ({
+      runVerificationCommandImpl: async (_command, _cwd, expectedExitCodes) => ({
         passed: !expectedExitCodes.includes(0),
         output: "Error: Cannot find module './broken'",
       }),
@@ -151,17 +151,98 @@ describe('Tier 2 (Functional) — golden test', () => {
   it('passes when all verification tools succeed', async () => {
     const spec = makeSpec({
       verificationTooling: [
-        { name: 'lint', scriptPath: 'pnpm lint', expectedExitCodes: [0] },
-        { name: 'typecheck', scriptPath: 'pnpm typecheck', expectedExitCodes: [0] },
+        { name: 'lint', command: 'pnpm lint', expectedExitCodes: [0] },
+        { name: 'typecheck', command: 'pnpm typecheck', expectedExitCodes: [0] },
       ],
     });
 
     const result = await verifyFunctional(spec, '/tmp', {
-      runVerificationScriptImpl: async () => ({ passed: true, output: '' }),
+      runVerificationCommandImpl: async () => ({ passed: true, output: '' }),
     });
 
     expect(result.passed).toBe(true);
     expect(result.evidence).toHaveLength(2);
+  });
+
+  it('classifies a bare test file path as verification infrastructure failure', async () => {
+    const spec = makeSpec({
+      verificationTooling: [
+        {
+          name: 'bad-path',
+          command: 'apps/web/src/foo.test.ts',
+          expectedExitCodes: [0],
+        },
+      ],
+    });
+
+    const result = await verifyFunctional(spec, '/tmp');
+
+    expect(result.passed).toBe(false);
+    expect(result.findings[0]?.category).toBe('verification-infrastructure');
+    expect(result.findings[0]?.code).toBe('malformed-verification-command');
+  });
+
+  it('classifies missing command on malformed persisted specs as verification infrastructure', async () => {
+    const spec = makeSpec({
+      verificationTooling: [
+        {
+          name: 'old persisted verifier',
+          scriptPath: 'apps/web/src/foo.test.ts',
+          expectedExitCodes: [0],
+        } as unknown as EngineeringSpec['verificationTooling'][number],
+      ],
+    });
+
+    const result = await verifyFunctional(spec, '/tmp');
+
+    expect(result.passed).toBe(false);
+    expect(result.findings[0]?.category).toBe('verification-infrastructure');
+    expect(result.findings[0]?.code).toBe('malformed-verification-command');
+  });
+
+  it('does not classify product ENOENT output as verification infrastructure', async () => {
+    const spec = makeSpec({
+      verificationTooling: [
+        {
+          name: 'focused test',
+          command: 'pnpm vitest run src/foo.test.ts',
+          expectedExitCodes: [0],
+        },
+      ],
+    });
+
+    const result = await verifyFunctional(spec, '/tmp', {
+      runVerificationCommandImpl: async () => ({
+        passed: false,
+        output: "Error: ENOENT: no such file or directory, open 'missing-product-file.json'",
+      }),
+    });
+
+    expect(result.passed).toBe(false);
+    expect(result.findings[0]?.category).toBe('product');
+  });
+
+  it('classifies command launcher missing as verification infrastructure', async () => {
+    const spec = makeSpec({
+      verificationTooling: [
+        {
+          name: 'focused test',
+          command: 'pnpm vitest run src/foo.test.ts',
+          expectedExitCodes: [0],
+        },
+      ],
+    });
+
+    const result = await verifyFunctional(spec, '/tmp', {
+      runVerificationCommandImpl: async () => ({
+        passed: false,
+        output: 'sh: pnpm: command not found',
+      }),
+    });
+
+    expect(result.passed).toBe(false);
+    expect(result.findings[0]?.category).toBe('verification-infrastructure');
+    expect(result.findings[0]?.code).toBe('verification-runner-missing');
   });
 
   it('passes vacuously when no verificationTooling is declared', async () => {

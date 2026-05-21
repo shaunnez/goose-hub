@@ -1,6 +1,6 @@
 import { cn } from '@/lib/cn';
 import type { AgentEventDto } from '@/lib/types';
-import { CheckCircle, Circle, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Circle, XCircle } from 'lucide-react';
 
 type TierResult = {
   passed: boolean;
@@ -223,6 +223,8 @@ export function QaVerificationSummaryBuiltEvent({ event }: { event: AgentEventDt
 
 export function QaCompletedEvent({ event }: { event: AgentEventDto }) {
   const p = event.payload as {
+    agentSkipped?: boolean;
+    deterministic?: boolean;
     verdict?: string;
     overallScore?: number;
     threshold?: number;
@@ -271,6 +273,11 @@ export function QaCompletedEvent({ event }: { event: AgentEventDto }) {
         >
           {verdict.toUpperCase()}
         </span>
+        {p?.agentSkipped === true && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border border-fg-5/20 bg-fg-5/10 text-fg-3">
+            Agent skipped
+          </span>
+        )}
         {score != null && (
           <span className="text-[11.5px] text-fg-3 font-mono">
             <span className={score >= threshold ? 'text-green-400' : 'text-[color:var(--danger)]'}>
@@ -304,6 +311,55 @@ export function QaCompletedEvent({ event }: { event: AgentEventDto }) {
             );
           })}
         </div>
+      )}
+    </li>
+  );
+}
+
+export function QaVerificationBlockedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as {
+    failedTier?: number;
+    findings?: string[];
+    reason?: string;
+    agentSkipped?: boolean;
+  } | null;
+  const findings = p?.findings ?? [];
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-yellow-500/20 bg-yellow-500/5 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-2 text-[11px] text-fg-3">
+        <AlertTriangle size={13} className="shrink-0 text-yellow-400" />
+        <span className="font-mono uppercase tracking-wider">QA verification blocked</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="mb-2 flex flex-wrap gap-2">
+        {p?.failedTier != null && (
+          <span className="rounded border border-yellow-500/20 bg-yellow-500/10 px-1.5 py-0.5 font-mono text-[10px] uppercase text-yellow-400">
+            Tier {p.failedTier}
+          </span>
+        )}
+        {p?.reason != null && (
+          <span className="rounded border border-line bg-bg/40 px-1.5 py-0.5 font-mono text-[10px] text-fg-3">
+            {p.reason}
+          </span>
+        )}
+        {p?.agentSkipped === true && (
+          <span className="rounded border border-fg-5/20 bg-fg-5/10 px-1.5 py-0.5 font-mono text-[10px] uppercase text-fg-3">
+            Agent skipped
+          </span>
+        )}
+      </div>
+      {findings.length > 0 && (
+        <ul className="flex flex-col gap-1.5">
+          {findings.slice(0, 3).map((finding) => (
+            <li key={finding} className="text-[11.5px] leading-relaxed text-fg-2">
+              {finding}
+            </li>
+          ))}
+        </ul>
       )}
     </li>
   );

@@ -396,6 +396,7 @@ export async function runSpecAuthorWorkflow(
         spec: normalized.spec,
         validation: validateEngineeringSpec(normalized.spec, {
           issueType: workItem.type === 'bug' ? 'bug' : 'feature',
+          repoRoot: worktreePath,
         }),
       };
     };

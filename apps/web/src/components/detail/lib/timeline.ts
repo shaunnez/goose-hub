@@ -86,6 +86,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'qa.regression-passed': 'QA regression passed',
   'qa.regression-failed': 'QA regression failed',
   'qa.verification-summary-built': 'QA verification summary built',
+  'qa.verification-blocked': 'QA verification blocked',
   'retrospective.completed': 'Retrospective completed',
   'grill.question-posted': 'Grill question posted',
   'grill.completed': 'Grill completed',
@@ -124,6 +125,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
 
 export function formatSkillName(skill: string | null): string {
   if (skill == null) return '(Unknown)';
+  if (skill === 'qa') return 'QA';
   return skill
     .split('-')
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
@@ -549,6 +551,32 @@ function extractRunMeta(items: RenderItem[]): {
       if (endedAt == null) endedAt = ev.createdAt;
     } else if (ev.kind === 'decompose.completed') {
       if (endedAt == null) endedAt = ev.createdAt;
+    } else if (ev.kind === 'parallel-implement.iteration-started') {
+      if (startedAt == null) startedAt = ev.createdAt;
+      if (displaySkill == null) displaySkill = 'parallel-implement';
+    } else if (
+      ev.kind.startsWith('parallel-implement.') ||
+      ev.kind === 'pr.opened' ||
+      (ev.kind === 'state.transitioned' &&
+        ((ev.payload as { to?: string; toState?: string } | null)?.to === 'factory:needs-qa' ||
+          (ev.payload as { to?: string; toState?: string } | null)?.toState === 'factory:needs-qa'))
+    ) {
+      if (displaySkill == null) displaySkill = 'parallel-implement';
+      if (
+        ev.kind === 'pr.opened' ||
+        ev.kind === 'parallel-implement.exhausted' ||
+        (ev.kind === 'state.transitioned' &&
+          ((ev.payload as { to?: string; toState?: string } | null)?.to === 'factory:needs-qa' ||
+            (ev.payload as { to?: string; toState?: string } | null)?.toState ===
+              'factory:needs-qa'))
+      ) {
+        if (endedAt == null || ms > new Date(endedAt).getTime()) endedAt = ev.createdAt;
+      }
+    } else if (ev.kind.startsWith('qa.')) {
+      if (displaySkill == null) displaySkill = 'qa';
+      if (ev.kind === 'qa.completed' || ev.kind === 'qa.verification-blocked') {
+        if (endedAt == null || ms > new Date(endedAt).getTime()) endedAt = ev.createdAt;
+      }
     }
   }
 
@@ -922,6 +950,10 @@ const TERMINAL_EVENTS = new Set([
   'decompose.completed',
   'retrospective.completed',
   'prd.drafted',
+  'pr.opened',
+  'parallel-implement.exhausted',
+  'qa.completed',
+  'qa.verification-blocked',
 ]);
 
 export function computeIsLive(events: AgentEventDto[]): boolean {

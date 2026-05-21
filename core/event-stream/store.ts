@@ -43,6 +43,7 @@ export type EventKind =
   | 'qa.regression-passed'
   | 'qa.regression-failed'
   | 'qa.verification-summary-built'
+  | 'qa.verification-blocked'
   // M7 fix-issue workflow lifecycle (#183) + evidence-post wiring (#234)
   | 'agent.implement-complete'
   | 'pr.opened'

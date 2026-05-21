@@ -83,6 +83,7 @@ import {
   QaCompletedEvent,
   QaFailedEvent,
   QaPassedEvent,
+  QaVerificationBlockedEvent,
   QaVerificationSummaryBuiltEvent,
 } from './timeline/QaEvents';
 import { RetroCompletedEvent } from './timeline/RetroCompletedEvent';
@@ -250,6 +251,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <ToolWarningEvent key={event.id} event={event} />;
     case 'qa.completed':
       return <QaCompletedEvent key={event.id} event={event} />;
+    case 'qa.verification-blocked':
+      return <QaVerificationBlockedEvent key={event.id} event={event} />;
     case 'qa.verification-summary-built':
       return <QaVerificationSummaryBuiltEvent key={event.id} event={event} />;
     case 'qa.structural-passed':
