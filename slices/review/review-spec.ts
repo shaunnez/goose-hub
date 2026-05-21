@@ -18,7 +18,14 @@ export interface FindingKey {
 export interface ReviewWaveResult {
   roundFindings: FindingKey[];
   newCriticalFindings: FindingKey[];
-  reviewerOutputs: Array<{ parsed: ReviewOutput; runId: string }>;
+  reviewerOutputs: Array<{
+    parsed: ReviewOutput;
+    runId: string;
+    round: number;
+    slotIndex: number;
+    slotModel: ReviewerSlot['model'];
+    promptVariant: ReviewerSlot['prompt'];
+  }>;
   parseFailure: boolean;
   parseFailureError?: string;
   /** True if any reviewer returned verdict: 'needs-human' — must escalate immediately. */
@@ -37,6 +44,7 @@ export interface DispatchReviewWaveOpts {
   priorFindings: FindingKey[];
   workItem: WorkItem;
   projectSlug: string;
+  reviewWorkflowRunId: string;
   /** Returns the runtime to use for a given slot model. */
   runtimeForSlot: (model: ReviewerSlot['model']) => AgentRuntime;
 }

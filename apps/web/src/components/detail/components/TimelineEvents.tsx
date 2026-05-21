@@ -88,9 +88,11 @@ import {
 import { RetroCompletedEvent } from './timeline/RetroCompletedEvent';
 import { AgentRetryEscalatedEvent } from './timeline/RetryEvents';
 import { ReviewCompletedEvent } from './timeline/ReviewCompletedEvent';
+import { ReviewGroupWrapper } from './timeline/ReviewGroupWrapper';
 import {
   ReviewConvergedEvent,
   ReviewEscalatedEvent,
+  ReviewSlotCompletedEvent,
   ReviewWaveCompletedEvent,
   ReviewWaveFailedEvent,
 } from './timeline/ReviewWaveEvents';
@@ -161,6 +163,21 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       <InvestigationPhaseWrapper
         key={`investigation-phase-${item.investigationRunId}`}
         investigationRunId={item.investigationRunId}
+        items={item.items}
+        status={item.status}
+        startedAt={item.startedAt}
+        endedAt={item.endedAt}
+        lastEventAt={item.lastEventAt}
+        context={context}
+        renderItem={renderTimelineItem}
+      />
+    );
+  }
+  if (item.kind === 'review-group') {
+    return (
+      <ReviewGroupWrapper
+        key={`review-group-${item.reviewWorkflowRunId}`}
+        reviewWorkflowRunId={item.reviewWorkflowRunId}
         items={item.items}
         status={item.status}
         startedAt={item.startedAt}
@@ -259,6 +276,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <ReviewConvergedEvent key={event.id} event={event} />;
     case 'review.escalated':
       return <ReviewEscalatedEvent key={event.id} event={event} />;
+    case 'review.slot-completed':
+      return <ReviewSlotCompletedEvent key={event.id} event={event} />;
     case 'retrospective.completed':
       return <RetroCompletedEvent key={event.id} event={event} />;
     case 'pr.merged':

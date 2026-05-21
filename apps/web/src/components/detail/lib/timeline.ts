@@ -70,6 +70,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'review.wave-failed': 'Review wave failed',
   'review.converged': 'Review converged',
   'review.escalated': 'Review escalated',
+  'review.slot-completed': 'Review slot completed',
   'evidence.no-spec-declared': 'Evidence — no spec declared',
   'evidence.playwright-repro-skipped': 'Playwright repro skipped',
   'evidence.playwright-ran': 'Playwright evidence ran',
@@ -248,6 +249,15 @@ export type RenderItem =
       startedAt: string | null;
       endedAt: string | null;
       lastEventAt: string | null;
+    }
+  | {
+      kind: 'review-group';
+      reviewWorkflowRunId: string;
+      items: RenderItem[];
+      status: 'live' | 'completed' | 'needs-human' | 'failed';
+      startedAt: string | null;
+      endedAt: string | null;
+      lastEventAt: string | null;
     };
 
 /**
@@ -267,6 +277,9 @@ function effectiveTimestamp(item: RenderItem): number {
   }
   if (item.kind === 'event') return new Date(item.event.createdAt).getTime();
   if (item.kind === 'phase-group') return new Date(item.startedAt ?? 0).getTime();
+  if (item.kind === 'review-group') {
+    return new Date(item.lastEventAt ?? item.startedAt ?? 0).getTime();
+  }
   return new Date(item.events[0]?.createdAt ?? 0).getTime();
 }
 
@@ -408,7 +421,10 @@ export function groupEvents(
   const collapsed = collapseLogRuns(normalizedEvents);
   const grouped = groupByRunId(collapsed);
   const withInvestigationPhases = groupByInvestigationPhase([...grouped].sort(compareRenderItems));
-  const withDevPhases = groupByDevPhase([...withInvestigationPhases].sort(compareRenderItems));
+  const withReviewGroups = groupByReviewWorkflow(
+    [...withInvestigationPhases].sort(compareRenderItems),
+  );
+  const withDevPhases = groupByDevPhase([...withReviewGroups].sort(compareRenderItems));
   if (interventionDetails.length === 0) return withDevPhases;
   return [...withDevPhases, ...interventionDetails.map(buildInterventionGroup)].sort(
     compareRenderItems,
@@ -632,6 +648,7 @@ function eventFromRenderItem(item: RenderItem): AgentEventDto[] {
   if (item.kind === 'run-group') return item.items.flatMap(eventFromRenderItem);
   if (item.kind === 'investigation-phase') return item.items.flatMap(eventFromRenderItem);
   if (item.kind === 'phase-group') return item.items.flatMap(eventFromRenderItem);
+  if (item.kind === 'review-group') return item.items.flatMap(eventFromRenderItem);
   if (item.kind === 'intervention-group') return [];
   return item.events;
 }
@@ -815,6 +832,84 @@ export function groupByInvestigationPhase(items: RenderItem[]): RenderItem[] {
   }
 
   return [...ungrouped, ...phases].sort(compareRenderItems);
+}
+
+function reviewWorkflowRunIdsForItem(item: RenderItem): string[] {
+  const ids = new Set<string>();
+  for (const event of eventFromRenderItem(item)) {
+    const payload = event.payload as { reviewWorkflowRunId?: unknown } | null;
+    if (typeof payload?.reviewWorkflowRunId === 'string' && payload.reviewWorkflowRunId !== '') {
+      ids.add(payload.reviewWorkflowRunId);
+    }
+  }
+  return [...ids];
+}
+
+function resolveReviewStatus(items: RenderItem[]): 'live' | 'completed' | 'needs-human' | 'failed' {
+  const events = items.flatMap(eventFromRenderItem);
+  if (events.some((event) => event.kind === 'review.wave-failed')) return 'failed';
+  if (events.some((event) => event.kind === 'agent.run-failed')) return 'failed';
+  if (events.some((event) => event.kind === 'review.escalated')) return 'needs-human';
+  if (
+    events.some((event) => {
+      const payload = event.payload as { to?: string; toState?: string } | null;
+      return (
+        event.kind === 'state.transitioned' &&
+        (payload?.to === 'factory:needs-human' || payload?.toState === 'factory:needs-human')
+      );
+    })
+  ) {
+    return 'needs-human';
+  }
+
+  const completed = events
+    .filter((event) => event.kind === 'review.completed')
+    .sort((a, b) => a.id - b.id)
+    .at(-1);
+  const verdict = (completed?.payload as { verdict?: string } | null)?.verdict;
+  if (verdict === 'needs-human') return 'needs-human';
+  if (verdict === 'approved' || verdict === 'needs-fix') return 'completed';
+  return 'live';
+}
+
+export function groupByReviewWorkflow(items: RenderItem[]): RenderItem[] {
+  const reviewWorkflowRunIds = new Set<string>();
+  for (const item of items) {
+    for (const id of reviewWorkflowRunIdsForItem(item)) {
+      reviewWorkflowRunIds.add(id);
+    }
+  }
+  if (reviewWorkflowRunIds.size === 0) return items;
+
+  const reviewItems = new Map<string, RenderItem[]>();
+  for (const id of reviewWorkflowRunIds) reviewItems.set(id, []);
+
+  const ungrouped: RenderItem[] = [];
+  for (const item of items) {
+    const ids = reviewWorkflowRunIdsForItem(item).filter((id) => reviewWorkflowRunIds.has(id));
+    if (ids.length === 0) {
+      ungrouped.push(item);
+      continue;
+    }
+    reviewItems.get(ids[0])?.push(item);
+  }
+
+  const groups: RenderItem[] = [];
+  for (const [reviewWorkflowRunId, groupedItems] of reviewItems) {
+    if (groupedItems.length === 0) continue;
+    const times = extractPhaseTimes(groupedItems);
+    const status = resolveReviewStatus(groupedItems);
+    groups.push({
+      kind: 'review-group',
+      reviewWorkflowRunId,
+      items: groupedItems.sort(compareRenderItems),
+      status,
+      ...times,
+      endedAt: status === 'live' ? null : (times.endedAt ?? times.lastEventAt),
+    });
+  }
+
+  return [...ungrouped, ...groups].sort(compareRenderItems);
 }
 
 // ─── run-state detection ─────────────────────────────────────────────────────

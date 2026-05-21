@@ -12,6 +12,13 @@ type ReviewWavePayload = {
   reason?: string;
   escalationReason?: string;
   unconvergedFindingsCount?: number;
+  slotIndex?: number;
+  slotModel?: string;
+  promptVariant?: string;
+  verdict?: string;
+  confidence?: number;
+  findingsCount?: number;
+  criteriaChecks?: unknown[];
 };
 
 function TimelineDot() {
@@ -195,6 +202,59 @@ export function ReviewEscalatedEvent({ event }: { event: AgentEventDto }) {
             Unconverged findings{' '}
             <span className="font-mono text-amber-300">{payload.unconvergedFindingsCount}</span>
           </div>
+        )}
+      </div>
+    </ReviewEventShell>
+  );
+}
+
+export function ReviewSlotCompletedEvent({ event }: { event: AgentEventDto }) {
+  const payload = event.payload as ReviewWavePayload | null;
+  const verdict = payload?.verdict ?? 'unknown';
+  const confidencePct =
+    typeof payload?.confidence === 'number' ? `${Math.round(payload.confidence * 100)}%` : null;
+  const checksCount = Array.isArray(payload?.criteriaChecks) ? payload.criteriaChecks.length : 0;
+  const findingsCount =
+    typeof payload?.findingsCount === 'number' ? payload.findingsCount : undefined;
+  const slotNumber = typeof payload?.slotIndex === 'number' ? payload.slotIndex + 1 : null;
+  const isApproved = verdict === 'approved';
+  const isNeedsHuman = verdict === 'needs-human';
+
+  return (
+    <ReviewEventShell
+      event={event}
+      icon={
+        isApproved ? (
+          <CheckCircle size={13} className="shrink-0 text-green-400" />
+        ) : (
+          <AlertTriangle
+            size={13}
+            className={`shrink-0 ${isNeedsHuman ? 'text-[color:var(--danger)]' : 'text-amber-400'}`}
+          />
+        )
+      }
+      title={slotNumber == null ? 'Review slot completed' : `Review slot ${slotNumber} completed`}
+      tone={isApproved ? 'success' : isNeedsHuman ? 'danger' : 'warning'}
+      round={payload?.round}
+    >
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-fg-3">
+        <MetricRow
+          label="Verdict"
+          value={verdict}
+          tone={isNeedsHuman ? 'danger' : isApproved ? 'normal' : 'warning'}
+        />
+        {confidencePct != null && <MetricRow label="Confidence" value={confidencePct} />}
+        {findingsCount != null && (
+          <MetricRow
+            label="Findings"
+            value={findingsCount}
+            tone={findingsCount > 0 ? 'warning' : 'normal'}
+          />
+        )}
+        <MetricRow label="Criteria checks" value={checksCount} />
+        {payload?.slotModel != null && <MetricRow label="Model" value={payload.slotModel} />}
+        {payload?.promptVariant != null && (
+          <MetricRow label="Prompt" value={payload.promptVariant} />
         )}
       </div>
     </ReviewEventShell>
