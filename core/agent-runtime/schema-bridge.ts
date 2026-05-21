@@ -111,14 +111,14 @@ function sanitizeSchemaNode(value: unknown): unknown {
     const required = new Set(
       Array.isArray(next.required) ? next.required.filter((key) => typeof key === 'string') : [],
     );
-    const strictProperties: Record<string, unknown> = {};
+    const requiredProperties: string[] = [];
 
-    for (const [key, child] of Object.entries(properties)) {
-      if (required.has(key)) strictProperties[key] = child;
+    for (const key of Object.keys(properties)) {
+      if (required.has(key)) requiredProperties.push(key);
     }
 
-    next.properties = strictProperties;
-    next.required = Object.keys(strictProperties);
+    next.properties = properties;
+    next.required = requiredProperties;
     next.additionalProperties = false;
   }
 
