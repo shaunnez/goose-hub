@@ -135,8 +135,7 @@ describe('workflow catalog', () => {
     expect(simpleBug?.nodes).toContain('acceptance-contract-skill');
     expect(
       bug.edges.some(
-        (edge) =>
-          edge.from === 'investigation-complete' && edge.to === 'acceptance-contract-skill',
+        (edge) => edge.from === 'investigation-complete' && edge.to === 'acceptance-contract-skill',
       ),
     ).toBe(true);
   });

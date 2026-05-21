@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { omitNullObjectProperties } from '@goose-hub/core/agent-runtime/output-normalization.js';
+import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';

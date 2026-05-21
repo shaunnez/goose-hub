@@ -182,7 +182,11 @@ describe('runTriageBatch', () => {
     await runTriageBatch('goose-hub-self', source);
 
     expect(mockRuntime.run).toHaveBeenCalledTimes(2);
-    expect(source.transitionState).toHaveBeenCalledWith('42', 'factory:triaging', 'factory:accepted');
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:triaging',
+      'factory:accepted',
+    );
     expect(mockAccumulatePersonaStats).toHaveBeenCalledWith(
       expect.objectContaining({ role: 'triager', outcome: 'success' }),
     );

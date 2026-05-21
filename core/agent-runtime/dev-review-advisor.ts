@@ -22,11 +22,11 @@ import {
   offeredHintsFromSymbolImpact,
 } from '../symbol-index/hints-used.js';
 import { lookupChangedExportImpact } from '../symbol-index/lookup.js';
-import { omitNullObjectProperties } from './output-normalization.js';
 import type { AgentConfig } from '../types.js';
 import { GIT_ENV } from '../workspaces/git-env.js';
 import { type DiffDigest, buildDiffDigest, formatDiffDigestSummary } from './diff-digest.js';
 import type { AgentRuntime } from './interface.js';
+import { omitNullObjectProperties } from './output-normalization.js';
 import { readPromptWithContext } from './read-prompt.js';
 import { reconcileDecisionSummaries } from './reconcile-decisions.js';
 import { resolveBudgetsForProject } from './resolve-for-project.js';
