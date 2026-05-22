@@ -20,11 +20,25 @@ export interface DecisionSummaryWire {
 export interface InvestigationPayload {
   investigate: {
     findings: string;
-    keyFiles: KeyFile[];
-    confidence: 'low' | 'medium' | 'high';
-    openQuestions: string[];
-    decisionSummaries: DecisionSummaryWire[];
+    keyFiles?: KeyFile[];
+    confidence?: 'low' | 'medium' | 'high';
+    openQuestions?: string[];
+    decisionSummaries?: DecisionSummaryWire[];
+    repro?: {
+      status?: string;
+    };
   };
+}
+
+export interface InvestigationSummary {
+  event: AgentEventDto;
+  payload: InvestigationPayload['investigate'];
+  confidence: 'low' | 'medium' | 'high' | 'unknown';
+  keyFileCount: number;
+  openQuestionCount: number;
+  readCount: number;
+  searchCount: number;
+  reproStatus: string;
 }
 
 /** Returns `kind` (new) or `step` (legacy) for backward compatibility (#466). */
@@ -70,6 +84,10 @@ export function extractInvestigationPayload(event: AgentEventDto): Investigation
   return p as unknown as InvestigationPayload;
 }
 
+function asArray<T>(value: T[] | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
 export function latestInvestigationEvent(events: AgentEventDto[]): AgentEventDto | null {
   return events
     .filter((e) => e.kind === 'agent.investigation-complete')
@@ -78,6 +96,24 @@ export function latestInvestigationEvent(events: AgentEventDto[]): AgentEventDto
       if (event.id !== latest.id) return event.id > latest.id ? event : latest;
       return event.createdAt > latest.createdAt ? event : latest;
     }, null);
+}
+
+export function getInvestigationSummary(events: AgentEventDto[]): InvestigationSummary | null {
+  const event = latestInvestigationEvent(events);
+  if (event == null) return null;
+  const payload = extractInvestigationPayload(event)?.investigate;
+  if (payload == null) return null;
+
+  return {
+    event,
+    payload,
+    confidence: payload.confidence ?? 'unknown',
+    keyFileCount: asArray(payload.keyFiles).length,
+    openQuestionCount: asArray(payload.openQuestions).length,
+    readCount: countToolCalls(events, READ_TOOLS),
+    searchCount: countToolCalls(events, SEARCH_TOOLS),
+    reproStatus: payload.repro?.status ?? 'unknown',
+  };
 }
 
 function isReadBucket(names: Set<string>): boolean {

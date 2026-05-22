@@ -1,6 +1,12 @@
 import { AlertCircle, CheckCircle, XCircle } from 'lucide-react';
 import { describe, expect, it } from 'vitest';
-import { CONFIDENCE_COLOR, outcomeMeta, scoreGrade } from './retrospective';
+import {
+  CONFIDENCE_COLOR,
+  getRetrospectiveSummary,
+  latestRetrospectivePayload,
+  outcomeMeta,
+  scoreGrade,
+} from './retrospective';
 
 describe('scoreGrade', () => {
   it('returns "Excellent" for scores >= 0.9', () => {
@@ -60,5 +66,143 @@ describe('CONFIDENCE_COLOR', () => {
     expect(CONFIDENCE_COLOR.high).toContain('green');
     expect(CONFIDENCE_COLOR.medium).toContain('yellow');
     expect(CONFIDENCE_COLOR.low).toContain('blue');
+  });
+});
+
+describe('latestRetrospectivePayload', () => {
+  it('prefers the latest retrospective completion payload', () => {
+    const older = latestRetrospectivePayload([
+      {
+        id: 1,
+        kind: 'retrospective.completed',
+        payload: {
+          retrospective: {
+            tier: 'light',
+            output: {
+              outcome: 'partial',
+              workItemNumber: 980,
+              summary: { wentWell: '', didNotGoWell: '', architecturalTakeaway: '' },
+              improvementCandidates: [],
+              decisionSummaries: [],
+            },
+          },
+        },
+        projectId: 'proj',
+        workItemId: 'wi-1',
+        createdAt: '2026-05-18T01:00:00Z',
+      },
+      {
+        id: 2,
+        kind: 'retrospective.completed',
+        payload: {
+          retrospective: {
+            tier: 'deep',
+            output: {
+              outcome: 'success',
+              workItemNumber: 980,
+              summary: { wentWell: '', didNotGoWell: '', architecturalTakeaway: '' },
+              improvementCandidates: [],
+              decisionSummaries: [],
+              triggerReasons: [],
+              personaQualityScores: [],
+              learningEntries: [],
+              decisionPatterns: [],
+            },
+          },
+        },
+        projectId: 'proj',
+        workItemId: 'wi-1',
+        createdAt: '2026-05-18T02:00:00Z',
+      },
+    ] as never);
+
+    expect(older?.tier).toBe('deep');
+  });
+});
+
+describe('getRetrospectiveSummary', () => {
+  it('omits deep-only metrics for light retrospectives and counts high-confidence candidates', () => {
+    const summary = getRetrospectiveSummary({
+      tier: 'light',
+      output: {
+        outcome: 'partial',
+        workItemNumber: 980,
+        summary: { wentWell: 'a', didNotGoWell: 'b', architecturalTakeaway: 'c' },
+        decisionSummaries: [],
+        improvementCandidates: [
+          {
+            kind: 'workflow',
+            targetPath: 'docs/a.md',
+            suggestionText: 'a',
+            confidence: 'high',
+          },
+          {
+            kind: 'persona',
+            targetPath: 'docs/b.md',
+            suggestionText: 'b',
+            confidence: 'medium',
+          },
+        ],
+      },
+    });
+
+    expect(summary).toMatchObject({
+      tier: 'light',
+      outcome: 'partial',
+      candidateCount: 2,
+      highConfidenceCandidateCount: 1,
+      qualityScoreCount: 0,
+      patternCount: 0,
+      learningCount: 0,
+    });
+  });
+
+  it('includes deep-only metrics for deep retrospectives', () => {
+    const summary = getRetrospectiveSummary({
+      tier: 'deep',
+      output: {
+        outcome: 'success',
+        workItemNumber: 980,
+        summary: { wentWell: 'a', didNotGoWell: 'b', architecturalTakeaway: 'c' },
+        decisionSummaries: [],
+        improvementCandidates: [
+          {
+            kind: 'workflow',
+            targetPath: 'docs/a.md',
+            suggestionText: 'a',
+            confidence: 'high',
+          },
+        ],
+        triggerReasons: ['quality'],
+        personaQualityScores: [
+          {
+            personaId: 'reviewer',
+            score: 0.8,
+            trend: 'improving',
+            sampleCount: 3,
+          },
+        ],
+        learningEntries: [
+          {
+            observation: 'o',
+            rationale: 'r',
+            improvementKind: 'workflow',
+            confidence: 'medium',
+          },
+        ],
+        decisionPatterns: [{ pattern: 'p', occurrences: 2, confidence: 'high' }],
+      },
+    });
+
+    expect(summary).toMatchObject({
+      tier: 'deep',
+      outcome: 'success',
+      candidateCount: 1,
+      highConfidenceCandidateCount: 1,
+      qualityScoreCount: 1,
+      patternCount: 1,
+      learningCount: 1,
+      triggerReasonCount: 1,
+    });
   });
 });

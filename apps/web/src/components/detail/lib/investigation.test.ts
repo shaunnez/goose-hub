@@ -10,6 +10,7 @@ import {
   countToolCalls,
   decisionLabel,
   extractInvestigationPayload,
+  getInvestigationSummary,
   latestInvestigationEvent,
 } from './investigation';
 
@@ -166,6 +167,86 @@ describe('latestInvestigationEvent', () => {
 
     expect(latestInvestigationEvent([newer, older])).toBe(newer);
     expect(latestInvestigationEvent([older, newer])).toBe(newer);
+  });
+});
+
+describe('getInvestigationSummary', () => {
+  it('uses the latest terminal investigation event and derives counts from the full event history', () => {
+    const older = event({
+      id: 10,
+      kind: 'agent.investigation-complete',
+      createdAt: '2026-05-18T01:00:00Z',
+      payload: {
+        investigate: {
+          findings: 'older',
+          keyFiles: [{ path: 'src/old.ts', reason: 'old' }],
+          confidence: 'low',
+          openQuestions: ['first'],
+          decisionSummaries: [],
+          repro: { status: 'not_reproduced' },
+        },
+      },
+    });
+    const newer = event({
+      id: 11,
+      kind: 'agent.investigation-complete',
+      createdAt: '2026-05-18T02:00:00Z',
+      payload: {
+        investigate: {
+          findings: 'newer',
+          keyFiles: [
+            { path: 'src/a.ts', reason: 'a' },
+            { path: 'src/b.ts', reason: 'b' },
+          ],
+          confidence: 'high',
+          openQuestions: ['first', 'second'],
+          decisionSummaries: [],
+          repro: { status: 'reproduced' },
+        },
+      },
+    });
+
+    const summary = getInvestigationSummary([
+      event({ kind: 'agent.tool-call', payload: { tool_name: 'Read' } }),
+      event({ kind: 'agent.tool-call', payload: { tool_name: 'Grep' } }),
+      older,
+      newer,
+    ]);
+
+    expect(summary).toMatchObject({
+      confidence: 'high',
+      keyFileCount: 2,
+      openQuestionCount: 2,
+      readCount: 1,
+      searchCount: 1,
+      reproStatus: 'reproduced',
+    });
+    expect(summary?.event).toBe(newer);
+  });
+
+  it('handles missing repro and array fields safely', () => {
+    const summary = getInvestigationSummary([
+      event({
+        id: 12,
+        kind: 'agent.investigation-complete',
+        payload: {
+          investigate: {
+            findings: 'partial',
+            confidence: 'medium',
+            decisionSummaries: [],
+          },
+        },
+      }),
+    ]);
+
+    expect(summary).toMatchObject({
+      confidence: 'medium',
+      keyFileCount: 0,
+      openQuestionCount: 0,
+      readCount: 0,
+      searchCount: 0,
+      reproStatus: 'unknown',
+    });
   });
 });
 
