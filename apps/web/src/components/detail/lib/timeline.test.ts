@@ -1093,6 +1093,9 @@ describe('groupTimelineEventsByCanonicalSection', () => {
           repairCycle: 1,
         },
       }),
+      makeEvent(8, 'agent.tool-call', FIX_RUN, {
+        payload: { tool: 'read_file', status: 'ok' },
+      }),
     ]);
 
     const implementationSections = items.filter(
@@ -1109,6 +1112,15 @@ describe('groupTimelineEventsByCanonicalSection', () => {
     expect(collectRunIdsForTimelineSection(implementationSections[1].items)).toEqual(
       new Set([PIPELINE_RUN, IMPLEMENT_RUN]),
     );
+    expect(
+      implementationSections[0].items.some(
+        (item) =>
+          item.kind === 'run-group' &&
+          item.items.some(
+            (child) => child.kind === 'event' && child.event.kind === 'agent.tool-call',
+          ),
+      ),
+    ).toBe(true);
     expect(implementationSections[0].items[0]).toMatchObject({
       kind: 'run-group',
       runId: FIX_RUN,

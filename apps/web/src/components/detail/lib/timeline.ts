@@ -1264,6 +1264,9 @@ function fixFeedbackSegmentIdForEvent(
   event: AgentEventDto,
   fixFeedbackAttemptByRunId: ReadonlyMap<string, string>,
 ): string | null {
+  const inheritedAttemptId =
+    event.runId == null ? null : (fixFeedbackAttemptByRunId.get(event.runId) ?? null);
+  if (inheritedAttemptId != null) return `fix-feedback:${inheritedAttemptId}`;
   if (!isFixFeedbackRelatedEvent(event)) return null;
   const attemptId =
     eventPayloadString(event, 'attemptId') ??
