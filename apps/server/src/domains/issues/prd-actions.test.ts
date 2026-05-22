@@ -15,10 +15,17 @@ vi.mock('../../shared/source.js', () => ({
   getSourceForSlug: vi.fn(),
   isValidSlug: (slug: string) => /^[a-z0-9-]+$/.test(slug),
 }));
+const { getUseMultiAgentPipelineMock } = vi.hoisted(() => ({
+  getUseMultiAgentPipelineMock: vi.fn(),
+}));
 vi.mock('../../shared/projects.js', () => ({
-  getProject: vi
-    .fn()
-    .mockResolvedValue({ source: { kind: 'github', repo: 'test-owner/test-repo' } }),
+  getProject: vi.fn().mockResolvedValue({
+    id: 'goose-hub-self',
+    source: { kind: 'github', repo: 'test-owner/test-repo' },
+  }),
+}));
+vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
+  getUseMultiAgentPipeline: getUseMultiAgentPipelineMock,
 }));
 // Stub the discover-lane dispatchers so the fire-and-forget calls in
 // prd-actions don't pull the real workflows into these unit tests.
@@ -60,6 +67,7 @@ function openPrdReviewIntervention(projectId: string, workItemId: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  getUseMultiAgentPipelineMock.mockReturnValue(false);
 });
 
 describe('approvePRD', () => {
@@ -85,7 +93,9 @@ describe('approvePRD', () => {
 
     const evs = eventStore.replay({ projectId, workItemId: item.id });
     expect(evs.find((e) => e.kind === 'prd.approved')).toBeDefined();
-    expect(evs.find((e) => e.kind === 'prd.lifecycle-routed')).toBeDefined();
+    expect(evs.find((e) => e.kind === 'prd.lifecycle-routed')?.payload).toMatchObject({
+      next: 'fix-issue',
+    });
     const transitioned = evs.find(
       (e) =>
         e.kind === 'state.transitioned' && (e.payload as { to: string }).to === 'factory:dev-ready',
@@ -96,6 +106,28 @@ describe('approvePRD', () => {
     // chain to resolve before asserting on the mock.
     await Promise.resolve();
     expect(dispatchFixIssueMock).toHaveBeenCalledWith(projectId, Number(item.externalId));
+  });
+
+  it('emits spec-author as the lifecycle route when multi-agent pipeline is enabled', async () => {
+    getUseMultiAgentPipelineMock.mockReturnValue(true);
+    const projectId = uniqueProjectId('approve-multi-agent');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await source.seedIssue({
+      title: 'Build feature X',
+      body: 'desc',
+      type: 'feature',
+      priority: 'medium',
+      state: 'factory:prd-review',
+    });
+    vi.mocked(getSourceForSlug).mockResolvedValue(source);
+
+    const result = await approvePRD(projectId, item.externalId);
+    expect(result.ok).toBe(true);
+
+    const evs = eventStore.replay({ projectId, workItemId: item.id });
+    expect(evs.find((e) => e.kind === 'prd.lifecycle-routed')?.payload).toMatchObject({
+      next: 'spec-author',
+    });
   });
 
   it('returns 409 when the issue is not in factory:prd-review', async () => {

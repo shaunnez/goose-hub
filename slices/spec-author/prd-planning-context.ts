@@ -13,9 +13,11 @@ export type PrdPlanningContext = {
   title: string;
   problem: string;
   proposedSolution: string;
+  outOfScope: string[];
   successCriteria: string[];
   acceptanceCriteria: unknown[];
   journeys: unknown[];
+  functionalSpec: unknown | null;
   verticalSlices: unknown[];
   implementationDecisions: unknown[];
   testingDecisions: unknown | null;
@@ -83,9 +85,11 @@ export function buildPrdPlanningContext(
     title: stringField(prd, 'title'),
     problem: stringField(prd, 'problem'),
     proposedSolution: stringField(prd, 'proposedSolution'),
+    outOfScope: stringArrayField(prd, 'outOfScope'),
     successCriteria: stringArrayField(prd, 'successCriteria'),
     acceptanceCriteria: arrayField(prd, 'acceptanceCriteria'),
     journeys: arrayField(prd, 'journeys'),
+    functionalSpec: prd.functionalSpec ?? null,
     verticalSlices: arrayField(prd, 'verticalSlices'),
     implementationDecisions: arrayField(prd, 'implementationDecisions'),
     testingDecisions: prd.testingDecisions ?? null,

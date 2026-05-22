@@ -8,6 +8,7 @@
  * `rejectPRD` is kept for backwards compatibility but is a no-op alias for
  * `declinePRD`.
  */
+import { getUseMultiAgentPipeline } from '@goose-hub/core/db/repositories/project-settings.js';
 import {
   emitStateTransitionEvent,
   transitionAndEmitState,
@@ -26,6 +27,7 @@ import {
 import type { PRDOutput } from '@goose-hub/skills/write-prd/schema.js';
 import { dispatchFixIssue, dispatchRetryWritePrd, dispatchRevisePrd } from '#shared/dispatch.js';
 import type { Result } from '#shared/middleware.js';
+import { getProject } from '#shared/projects.js';
 import { getSourceForSlug } from '#shared/source.js';
 import { getRepoRef } from './internal.js';
 
@@ -78,6 +80,12 @@ function clearActivePrdReviewInterventions(input: {
   }
 }
 
+async function approvedPrdNextStep(slug: string): Promise<'spec-author' | 'fix-issue'> {
+  const project = await getProject(slug);
+  const useMultiAgent = project != null ? getUseMultiAgentPipeline(project.id) : false;
+  return useMultiAgent ? 'spec-author' : 'fix-issue';
+}
+
 export async function approvePRD(slug: string, id: string): Promise<Result<{ ok: true }>> {
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
@@ -118,6 +126,7 @@ export async function approvePRD(slug: string, id: string): Promise<Result<{ ok:
     extraPayload: sessionPayload,
   });
 
+  const next = await approvedPrdNextStep(slug);
   eventStore.appendEvent({
     projectId: slug,
     workItemId,
@@ -126,7 +135,7 @@ export async function approvePRD(slug: string, id: string): Promise<Result<{ ok:
       from: 'factory:prd-review',
       to: 'factory:dev-ready',
       skipped: 'decompose-issues',
-      next: 'spec-author',
+      next,
       source: 'ui',
       ...sessionPayload,
     },
