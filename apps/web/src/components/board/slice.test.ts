@@ -8,7 +8,7 @@ import type { WorkItemWithProject } from './lib/all-projects';
 // Here we lock the sort/ordering rule and grouping logic.
 
 describe('issue card lane ordering', () => {
-  it('orders by priority desc, then issue number asc', () => {
+  it('orders by priority desc, then newest issue number first', () => {
     const sorted = sortLaneItems([
       { externalId: '40', priority: 'medium' },
       { externalId: '12', priority: 'low' },
@@ -16,7 +16,7 @@ describe('issue card lane ordering', () => {
       { externalId: '99', priority: 'critical' },
       { externalId: '5', priority: 'high' },
     ]);
-    expect(sorted.map((s) => s.externalId)).toEqual(['99', '5', '7', '40', '12']);
+    expect(sorted.map((s) => s.externalId)).toEqual(['99', '7', '5', '40', '12']);
   });
 });
 
