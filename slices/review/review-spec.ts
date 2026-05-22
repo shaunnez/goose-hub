@@ -94,6 +94,17 @@ export function extractChangedFilePaths(prDiff: string): string[] {
   return paths;
 }
 
+export function hasCanonicalCriteriaCoverage(
+  output: ReviewOutput,
+  acceptanceContract?: AcceptanceContract | null,
+): boolean {
+  if (output.verdict === 'needs-human') return true;
+  const criteria = acceptanceContract?.criteria ?? [];
+  if (criteria.length === 0) return true;
+  const checkedIds = new Set(output.criteriaChecks.map((check) => check.criterionId));
+  return criteria.every((criterion) => checkedIds.has(criterion.id));
+}
+
 /** Default reviewer slots: constrained + unconstrained, both on claude. */
 export const DEFAULT_REVIEWER_SLOTS: ReviewerSlot[] = [
   { model: 'claude', prompt: 'default' },

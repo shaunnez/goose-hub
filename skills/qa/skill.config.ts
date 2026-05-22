@@ -1,3 +1,4 @@
+import { AcceptanceCriterionContractSchema } from '@goose-hub/core/acceptance-contracts/types.js';
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
 import { QaOutputSchema, TestRunSchema, VerificationSummarySchema } from './schema.js';
@@ -48,32 +49,35 @@ export const QaContextSchema = z.object({
   /** Permalink to the evidence-post comment (screenshots + GIF) on the GitHub issue; absent for backend-only changes or when evidence capture failed */
   evidenceCommentUrl: z.string().url().optional(),
   /**
-   * Per-AC verify commands extracted from the issue body by the orchestrator.
-   * The QA agent runs each command and records a criteriaResult per entry.
+   * Workflow-owned executable check results. The QA agent grades/explains
+   * these results but must not override command truth.
    */
-  verifyCommands: z
+  criteriaResults: z
     .array(
       z.object({
+        criterionId: z.string(),
+        checkId: z.string(),
         ac: z.string(),
         command: z.string(),
-        expected: z.string(),
-        tolerance: z.string(),
+        expectedExitCodes: z.array(z.number().int()).min(1),
+        exitCode: z.number().int().nullable(),
+        actual: z.string(),
+        passed: z.boolean(),
+        outputExpectation: z
+          .object({
+            mode: z.enum(['exact', 'contains', 'regex']),
+            value: z.string(),
+          })
+          .optional(),
+        durationMs: z.number().int().min(0).optional(),
+        error: z.string().optional(),
       }),
     )
     .optional(),
   acceptanceContract: z
     .object({
       source: z.enum(['normalized', 'engineering-spec', 'prd', 'issue-body']),
-      criteria: z.array(
-        z.object({
-          id: z.string(),
-          statement: z.string(),
-          verifyCommand: z.string().optional(),
-          expected: z.string().optional(),
-          tolerance: z.string().optional(),
-          sourceRef: z.string().optional(),
-        }),
-      ),
+      criteria: z.array(AcceptanceCriterionContractSchema),
     })
     .optional(),
   /**
@@ -136,7 +140,7 @@ const config: SkillConfig = {
     'e2eDecision',
     'sliceTests',
     'evidenceCommentUrl',
-    'verifyCommands',
+    'criteriaResults',
     'acceptanceContract',
     'devTestsRun',
     'testRun',

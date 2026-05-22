@@ -1,5 +1,5 @@
 import type { EngineeringSpecDto } from '@/lib/types';
-import { ChevronDown, ChevronRight, ClipboardCheck, Package } from 'lucide-react';
+import { ChevronDown, ChevronRight, ClipboardCheck, Package, Terminal } from 'lucide-react';
 import { useState } from 'react';
 
 const DEV_OR_LATER_STATES = new Set([
@@ -102,9 +102,25 @@ export function SpecDetails({
                     <span className="font-mono text-[11px] text-fg-4">{ac.id}</span>
                     <div className="min-w-0">
                       <div className="leading-relaxed">{ac.statement}</div>
-                      {ac.verifyCommand != null && (
-                        <div className="mt-1 font-mono text-[10.5px] text-fg-4 break-words">
-                          {ac.verifyCommand}
+                      {(ac.executableChecks?.length ?? 0) > 0 && (
+                        <div className="mt-2 flex flex-col gap-1">
+                          {ac.executableChecks?.map((check) => (
+                            <div
+                              key={check.id}
+                              className="flex items-start gap-2 rounded border border-line bg-bg-elev-2 px-2 py-1.5"
+                            >
+                              <Terminal size={10} className="mt-0.5 shrink-0 text-fg-4" />
+                              <div className="min-w-0">
+                                <div className="font-mono text-[10.5px] text-fg-4 break-words">
+                                  {check.command}
+                                </div>
+                                <div className="text-[10px] text-fg-5">
+                                  {(check.kind ?? 'custom').toUpperCase()} · exit{' '}
+                                  {(check.expectedExitCodes ?? [0]).join(', ')}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>

@@ -197,12 +197,12 @@ export function QASection({ projectSlug, id }: QASectionProps) {
         </div>
       )}
 
-      {/* Acceptance criteria results */}
+      {/* Executable acceptance-check results */}
       {qa.criteriaResults != null && qa.criteriaResults.length > 0 && (
         <div data-testid="qa-criteria-results">
           <div className="flex items-baseline justify-between mb-2">
             <div className="text-[10.5px] uppercase tracking-wider text-fg-2">
-              Acceptance Criteria
+              Executable AC checks
             </div>
             <div className="text-[11px] text-fg-2 mono tnum">
               {qa.criteriaResults.filter((r) => r.passed).length} / {qa.criteriaResults.length}{' '}
@@ -243,7 +243,16 @@ export function QASection({ projectSlug, id }: QASectionProps) {
                     <div className="mt-1 space-y-1">
                       <div>
                         <span className="text-fg-2">expected: </span>
-                        <span className="mono">{r.expected}</span>
+                        <span className="mono">
+                          exit {(r.expectedExitCodes ?? [0]).join(', ')}
+                          {r.outputExpectation != null
+                            ? `, ${r.outputExpectation.mode} ${r.outputExpectation.value}`
+                            : ''}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-fg-2">exit code: </span>
+                        <span className="mono">{r.exitCode ?? 'none'}</span>
                       </div>
                       <div>
                         <span className="text-fg-2">actual: </span>

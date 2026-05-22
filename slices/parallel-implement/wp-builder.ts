@@ -1,4 +1,7 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { basename } from 'node:path';
 import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/types.js';
+import type { ExecutableCheck } from '@goose-hub/core/acceptance-contracts/types.js';
 import type {
   AgentBudgets,
   AgentResult,
@@ -59,8 +62,16 @@ export interface RunOneWpBuilderOptions {
   implementWpJsonSchema: Record<string, unknown>;
   investigation?: InvestigationContext;
   acceptanceContract?: AcceptanceContract;
+  verificationCommands?: ExecutableCheck[];
   parentPrdContext?: PrdPlanningContext;
 }
+
+type CodeSnippet = {
+  path: string;
+  label: string;
+  content: string;
+  truncated?: boolean;
+};
 
 type NormalizedPathField = {
   field: string;
@@ -165,6 +176,56 @@ function normalizeImplementWpOutputPaths(input: {
   };
 }
 
+function commandMentionsWpFile(command: string, filesOwned: string[]): boolean {
+  return filesOwned.some((path) => command.includes(path) || command.includes(basename(path)));
+}
+
+function wpRelevantExecutableChecks(input: {
+  acceptanceContract?: AcceptanceContract;
+  verificationCommands?: ExecutableCheck[];
+  filesOwned: string[];
+}): ExecutableCheck[] {
+  const fromCriteria =
+    input.acceptanceContract?.criteria.flatMap((criterion) => criterion.executableChecks ?? []) ??
+    [];
+  const candidates = [...fromCriteria, ...(input.verificationCommands ?? [])];
+  const seen = new Set<string>();
+  return candidates.filter((check) => {
+    if (!commandMentionsWpFile(check.command, input.filesOwned)) return false;
+    const key = `${check.id}\0${check.command}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function buildCodeSnippets(input: {
+  worktreePath: string;
+  filesOwned: string[];
+  maxChars?: number;
+}): CodeSnippet[] {
+  const maxChars = input.maxChars ?? 6_000;
+  const maxPerFile = 1_500;
+  const snippets: CodeSnippet[] = [];
+  let remaining = maxChars;
+  for (const path of input.filesOwned) {
+    if (remaining <= 0) break;
+    const abs = `${input.worktreePath}/${path}`;
+    if (!existsSync(abs)) continue;
+    const content = readFileSync(abs, 'utf8');
+    const slice = content.slice(0, Math.min(maxPerFile, remaining));
+    if (slice.trim().length === 0) continue;
+    snippets.push({
+      path,
+      label: 'owned file preview',
+      content: slice,
+      ...(slice.length < content.length ? { truncated: true } : {}),
+    });
+    remaining -= slice.length;
+  }
+  return snippets;
+}
+
 // ─── Single-WP builder runner ─────────────────────────────────────────────────
 
 export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpBuildPhaseResult> {
@@ -241,6 +302,15 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
       runId: wpRunId,
     });
   }
+  const codeSnippets = buildCodeSnippets({
+    worktreePath: opts.scratchWorktreePath,
+    filesOwned: wp.filesOwned,
+  });
+  const verificationCommands = wpRelevantExecutableChecks({
+    acceptanceContract: opts.acceptanceContract,
+    verificationCommands: opts.verificationCommands,
+    filesOwned: wp.filesOwned,
+  });
 
   const spawnSpec: AgentSpec = {
     runId: wpRunId,
@@ -262,6 +332,8 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
         changes: wp.changes,
         dependsOn: wp.dependsOn,
       },
+      ...(codeSnippets.length > 0 ? { codeSnippets } : {}),
+      ...(verificationCommands.length > 0 ? { verificationCommands } : {}),
       investigation: opts.investigation,
       acceptanceContract: opts.acceptanceContract,
       parentPrdContext:
@@ -297,6 +369,8 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
       'wp.filesOwned',
       'wp.changes',
       'wp.dependsOn',
+      'codeSnippets',
+      'verificationCommands',
       'investigation',
       'acceptanceContract',
       'parentPrdContext',

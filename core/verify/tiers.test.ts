@@ -29,7 +29,12 @@ function makeSpec(overrides: Partial<EngineeringSpec> = {}): EngineeringSpec {
     executionOrder: [{ batch: 0, wpIds: ['WP1'] }],
     verificationTooling: [],
     acceptanceCriteria: [
-      { id: 'AC1', statement: 'Works', verifyCommand: 'pnpm test', crossCutting: true },
+      {
+        id: 'AC1',
+        statement: 'Works',
+        executableChecks: [{ id: 'AC1-check-1', command: 'pnpm test' }],
+        crossCutting: true,
+      },
     ],
     constraints: [],
     riskRegister: [],

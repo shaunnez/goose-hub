@@ -627,35 +627,40 @@ describe('qa skill config', () => {
     expect(invalid.success).toBe(false);
   });
 
-  it('contextSchema accepts optional verifyCommands array', () => {
+  it('contextSchema accepts optional criteriaResults array', () => {
     const valid = QaContextSchema.safeParse({
       workItem: { title: 'title', body: 'body', number: 1 },
       prDiff: 'diff',
       projectCommands: { testCommand: 'pnpm test ' },
-      verifyCommands: [
+      criteriaResults: [
         {
+          criterionId: 'AC-1',
+          checkId: 'AC-1-check-1',
           ac: 'Loader returns two projects',
           command: 'pnpm test ',
-          expected: '2 tests passed',
-          tolerance: 'contains',
+          expectedExitCodes: [0],
+          exitCode: 0,
+          actual: '2 tests passed',
+          outputExpectation: { mode: 'contains', value: '2 tests passed' },
+          passed: true,
         },
       ],
     });
     expect(valid.success).toBe(true);
   });
 
-  it('contextSchema accepts empty verifyCommands array', () => {
+  it('contextSchema accepts empty criteriaResults array', () => {
     const valid = QaContextSchema.safeParse({
       workItem: { title: 'title', body: 'body', number: 1 },
       prDiff: 'diff',
       projectCommands: { testCommand: 'pnpm test ' },
-      verifyCommands: [],
+      criteriaResults: [],
     });
     expect(valid.success).toBe(true);
   });
 
-  it('contextAllowlist contains verifyCommands', () => {
-    expect(config.contextAllowlist).toContain('verifyCommands');
+  it('contextAllowlist contains criteriaResults', () => {
+    expect(config.contextAllowlist).toContain('criteriaResults');
   });
 
   it('contextAllowlist contains devTestsRun (#467)', () => {
@@ -792,11 +797,14 @@ describe('QaOutputSchema with cross-checked targeted regressions (#467)', () => 
 describe('CriteriaResultSchema', () => {
   it('accepts a passing criteria result', () => {
     const result = CriteriaResultSchema.safeParse({
+      criterionId: 'AC-1',
+      checkId: 'AC-1-check-1',
       ac: 'Loader returns two projects',
       command: 'pnpm test ',
-      expected: '2 tests passed',
+      expectedExitCodes: [0],
+      exitCode: 0,
       actual: '2 tests passed, 0 failed',
-      tolerance: 'contains',
+      outputExpectation: { mode: 'contains', value: '2 tests passed' },
       passed: true,
     });
     expect(result.success).toBe(true);
@@ -804,11 +812,14 @@ describe('CriteriaResultSchema', () => {
 
   it('accepts a failing criteria result', () => {
     const result = CriteriaResultSchema.safeParse({
+      criterionId: 'AC-2',
+      checkId: 'AC-2-check-1',
       ac: 'Loader deduplicates slugs',
       command: 'pnpm test  core/projects',
-      expected: 'DuplicateSlugError thrown',
+      expectedExitCodes: [0],
+      exitCode: 1,
       actual: 'Test failed: expected DuplicateSlugError',
-      tolerance: 'exact',
+      outputExpectation: { mode: 'exact', value: 'DuplicateSlugError thrown' },
       passed: false,
     });
     expect(result.success).toBe(true);
@@ -845,11 +856,14 @@ describe('QaOutputSchema with criteriaResults', () => {
       makeValidOutput({
         criteriaResults: [
           {
+            criterionId: 'AC-1',
+            checkId: 'AC-1-check-1',
             ac: 'AC one',
             command: 'pnpm test',
-            expected: 'pass',
+            expectedExitCodes: [0],
+            exitCode: 0,
             actual: 'pass',
-            tolerance: 'exact',
+            outputExpectation: { mode: 'exact', value: 'pass' },
             passed: true,
           },
         ],
@@ -875,7 +889,15 @@ describe('QaOutputSchema with criteriaResults', () => {
     const result = QaOutputSchema.safeParse(
       makeValidOutput({
         criteriaResults: [
-          { ac: 'AC', command: 'cmd', expected: 'exp', actual: 'act', tolerance: 'exact' },
+          {
+            criterionId: 'AC',
+            checkId: 'AC-check-1',
+            ac: 'AC',
+            command: 'cmd',
+            expectedExitCodes: [0],
+            exitCode: 0,
+            actual: 'act',
+          },
         ],
       }),
     );

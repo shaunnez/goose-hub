@@ -55,10 +55,12 @@ describe('parseAcceptanceCriteria', () => {
     const result = parseAcceptanceCriteria(body);
     expect(result).toHaveLength(1);
     expect(result[0]).toEqual({
+      criterionId: 'AC-1',
+      checkId: 'AC-1-check-1',
       ac: 'Thing works',
       command: 'pnpm test',
-      expected: 'pass',
-      tolerance: 'exact',
+      expectedExitCodes: [0],
+      outputExpectation: { mode: 'exact', value: 'pass' },
     });
   });
 
@@ -69,9 +71,15 @@ describe('parseAcceptanceCriteria', () => {
     expect(result[1].ac).toBe('Second AC with full verify block');
   });
 
-  it('skips ACs with a partial block (Verify + Expected but no Tolerance)', () => {
+  it('keeps command-only executable checks and defaults exit code to 0', () => {
     const result = parseAcceptanceCriteria(PARTIAL_BLOCK);
-    expect(result).toHaveLength(0);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      criterionId: 'AC-1',
+      checkId: 'AC-1-check-1',
+      command: 'pnpm test',
+      expectedExitCodes: [0],
+    });
   });
 
   it('parses both checked [x] and unchecked [ ] ACs', () => {
@@ -87,8 +95,44 @@ describe('parseAcceptanceCriteria', () => {
     const result = parseAcceptanceCriteria(body);
     expect(result).toHaveLength(1);
     expect(result[0].command).toBe('pnpm test');
-    expect(result[0].expected).toBe('pass');
-    expect(result[0].tolerance).toBe('exact');
+    expect(result[0].outputExpectation).toEqual({ mode: 'exact', value: 'pass' });
+  });
+
+  it('parses executable check markdown blocks', () => {
+    const body = `
+## Acceptance criteria
+
+- [ ] API returns the created item
+  Executable check:
+  - Command: pnpm vitest run apps/server/src/items.test.ts
+  - Expected exit codes: 0, 2
+  - Output expectation: contains: created
+  - Timeout ms: 45000
+  - Kind: api
+`;
+    expect(parseAcceptanceCriteria(body)).toEqual([
+      {
+        criterionId: 'AC-1',
+        checkId: 'AC-1-check-1',
+        ac: 'API returns the created item',
+        command: 'pnpm vitest run apps/server/src/items.test.ts',
+        expectedExitCodes: [0, 2],
+        outputExpectation: { mode: 'contains', value: 'created' },
+        timeoutMs: 45_000,
+      },
+    ]);
+  });
+
+  it('rejects executable check blocks with blank expected exit-code tokens', () => {
+    const body = `
+## Acceptance criteria
+
+- [ ] API returns the created item
+  Executable check:
+  - Command: pnpm vitest run apps/server/src/items.test.ts
+  - Expected exit codes: 1,
+`;
+    expect(parseAcceptanceCriteria(body)).toEqual([]);
   });
 
   it('handles extra blank lines between the AC text and verify fields', () => {

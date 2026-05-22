@@ -1129,7 +1129,17 @@ describe('dispatchQa acceptance commands', () => {
           {
             id: 'AC-S',
             statement: 'Spec criterion without full verify fields',
-            verifyCommand: 'pnpm test',
+            executableChecks: [
+              {
+                id: 'AC-S-check-1',
+                command: 'pnpm test',
+              },
+              {
+                id: 'AC-S-check-2',
+                command: 'pnpm test',
+                outputExpectation: { mode: 'contains', value: 'ok' },
+              },
+            ],
           },
         ],
       },
@@ -1144,12 +1154,29 @@ describe('dispatchQa acceptance commands', () => {
       'slug',
       'o/r',
       expect.objectContaining({
-        verifyCommands: [
+        executableChecks: [
           {
+            criterionId: 'AC-S',
+            checkId: 'AC-S-check-1',
+            ac: 'Spec criterion without full verify fields',
+            command: 'pnpm test',
+            expectedExitCodes: [0],
+          },
+          {
+            criterionId: 'AC-S',
+            checkId: 'AC-S-check-2',
+            ac: 'Spec criterion without full verify fields',
+            command: 'pnpm test',
+            expectedExitCodes: [0],
+            outputExpectation: { mode: 'contains', value: 'ok' },
+          },
+          {
+            criterionId: 'AC-1',
+            checkId: 'AC-1-check-1',
             ac: 'Kanban cards sort newest first',
             command: 'pnpm vitest run apps/web/src/lib/lanes.config.test.ts',
-            expected: 'pass',
-            tolerance: 'exact',
+            expectedExitCodes: [0],
+            outputExpectation: { mode: 'exact', value: 'pass' },
           },
         ],
       }),
@@ -1255,7 +1282,12 @@ describe('dispatchForLabel', () => {
       executionOrder: [{ batch: 0, wpIds: ['WP1'] }],
       verificationTooling: [],
       acceptanceCriteria: [
-        { id: 'AC1', statement: 'Dispatches', verifyCommand: 'pnpm test', crossCutting: true },
+        {
+          id: 'AC1',
+          statement: 'Dispatches',
+          crossCutting: true,
+          executableChecks: [{ id: 'AC1-check-1', command: 'pnpm test' }],
+        },
       ],
       constraints: [],
       riskRegister: [],
@@ -1383,7 +1415,12 @@ describe('dispatchForLabel', () => {
       executionOrder: [{ batch: 0, wpIds: ['WP1'] }],
       verificationTooling: [],
       acceptanceCriteria: [
-        { id: 'AC1', statement: 'Dispatches', verifyCommand: 'pnpm test', crossCutting: true },
+        {
+          id: 'AC1',
+          statement: 'Dispatches',
+          crossCutting: true,
+          executableChecks: [{ id: 'AC1-check-1', command: 'pnpm test' }],
+        },
       ],
       constraints: [],
       riskRegister: [],

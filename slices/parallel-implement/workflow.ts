@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/types.js';
+import type { ExecutableCheck } from '@goose-hub/core/acceptance-contracts/types.js';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import {
   type EffectiveDevReviewConfig,
@@ -133,14 +134,24 @@ function acceptanceContractFromSpec(
     criteria: spec.acceptanceCriteria.map((ac, index) => ({
       id: ac.id ?? `AC-${index + 1}`,
       statement: ac.statement,
-      verifyCommand: ac.verifyCommand,
-      ...(ac.tolerance != null ? { tolerance: ac.tolerance } : {}),
+      ...(ac.executableChecks != null && ac.executableChecks.length > 0
+        ? { executableChecks: ac.executableChecks }
+        : {}),
       ...(ac.journeyRef != null ? { journeyRef: ac.journeyRef } : {}),
       ...(ac.stepIdx != null ? { stepIdx: ac.stepIdx } : {}),
       ...(ac.crossCutting != null ? { crossCutting: ac.crossCutting } : {}),
       sourceRef: 'engineering_specs.spec.acceptanceCriteria',
     })),
   };
+}
+
+function verificationCommandsFromSpec(spec: EngineeringSpec): ExecutableCheck[] {
+  return spec.verificationTooling.map((tool, index) => ({
+    id: `verification-tool-${index + 1}`,
+    command: tool.command,
+    expectedExitCodes: tool.expectedExitCodes,
+    kind: 'custom',
+  }));
 }
 
 function emitWpObservedMismatch(input: {
@@ -333,6 +344,7 @@ export async function runParallelImplementWorkflow(
   }
   const specForRun = normalizedSpec.spec;
   const acceptanceContract = acceptanceContractFromSpec(specForRun, pipelineRunId);
+  const verificationCommands = verificationCommandsFromSpec(specForRun);
 
   const stack = projectConfig?.stack
     ? {
@@ -438,6 +450,7 @@ export async function runParallelImplementWorkflow(
             implementWpJsonSchema,
             investigation,
             acceptanceContract,
+            verificationCommands,
             parentPrdContext,
           }),
         );

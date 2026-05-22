@@ -108,10 +108,7 @@ ACs that don't sit on any user step (architectural, non-functional) must declare
 
 For `issueType: bug` the journey link is advisory; orphan ACs are accepted.
 
-Every AC must have a `verifyCommand` — a single shell command (or grep pattern, or test invocation) that decides pass/fail. **No subjective criteria.** Numerical or time-based ACs use `tolerance` to declare the band (e.g. `"<= 50ms"`).
-
-If no tolerance applies to an AC, omit `tolerance`; do not set it to `null` or
-an empty string.
+ACs are behavioral criteria. Add `executableChecks` only when you know an exact repo-root command that decides pass/fail. Criteria without executable checks are valid when Review can judge them from the diff and product behavior.
 
 #### Risk register on sensitive paths
 
@@ -123,7 +120,7 @@ The validator runs:
 1. **Journey coverage** — every journey step has at least one AC.
 2. **Grounded in code** — soft check: WP `filesOwned` paths whose parent dir exists but the file doesn't may be typos.
 3. **Complete interfaces** — ≥2 WPs ⇒ ≥1 `interfaceContracts` entry.
-4. **Falsifiable ACs** — schema-enforced (`verifyCommand: z.string().min(1)`).
+4. **Falsifiable ACs** — every AC must be concrete enough for Review; any executable check present must be a real repo-root command.
 5. **Builder independence** — `changes` field non-trivial.
 6. **Verification tooling** — >2 WPs ⇒ ≥1 `verificationTooling` entry.
 7. **TDD ownership** — each WP that owns production `.ts` or `.tsx` files also
@@ -183,7 +180,7 @@ Group WPs into batches. WPs with no dependencies on each other can share a batch
 For every step in every journey, write at least one AC with:
 - `journeyRef` = the journey's `id` (exact string)
 - `stepIdx` = the step's `idx` (exact integer)
-- `verifyCommand` = a single falsifiable shell command
+- `executableChecks` = zero or more grounded repo-root commands. Do not invent commands from filenames alone.
 
 Before emitting, do a self-check: for each `journey.id` + `step.idx` pair in `userJourneys`, confirm at least one AC in your `acceptanceCriteria` array has matching `journeyRef` and `stepIdx`. If any step is uncovered, add the missing AC before finalising.
 
@@ -205,7 +202,7 @@ Return a single JSON object conforming to `EngineeringSpecSchema`. Do not includ
 
 Live markers are short progress/rationale markers, not raw thinking. Emit them before major evidence reads, after important spec-shaping findings, and on uncertainty/pivots. Do not emit before every command. Keep each marker to one sentence with no secrets, hidden reasoning, raw output, or file dumps.
 
-Live marker format: `[decision] KIND: <one sentence>`. Example: `[decision] PLAN: Defining falsifiable ACs around the checkout journey and verifyCommand coverage`.
+Live marker format: `[decision] KIND: <one sentence>`. Example: `[decision] PLAN: Defining falsifiable ACs around the checkout journey and executable checks`.
 
 <!-- output-example -->
 ```json
@@ -257,7 +254,14 @@ Live marker format: `[decision] KIND: <one sentence>`. Example: `[decision] PLAN
       "statement": "Marked output examples fail the audit when they do not satisfy the configured output schema.",
       "journeyRef": "J1",
       "stepIdx": 2,
-      "verifyCommand": "pnpm skill-contract:audit",
+      "executableChecks": [
+        {
+          "id": "AC1-check-1",
+          "command": "pnpm skill-contract:audit",
+          "expectedExitCodes": [0],
+          "kind": "custom"
+        }
+      ],
       "source": "user-journey"
     }
   ],

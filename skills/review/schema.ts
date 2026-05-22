@@ -8,6 +8,7 @@ export { DispositionSchema };
 export { PrioritySchema };
 
 export const CriterionCheckSchema = z.object({
+  criterionId: z.string().optional(),
   criterion: z.string(),
   status: z.enum(['met', 'unmet', 'unclear']),
   notes: z.string().optional(),

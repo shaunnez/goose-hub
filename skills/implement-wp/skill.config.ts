@@ -1,3 +1,7 @@
+import {
+  AcceptanceCriterionContractSchema,
+  ExecutableCheckSchema,
+} from '@goose-hub/core/acceptance-contracts/types.js';
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
 import { ImplementWpSchema } from './schema.js';
@@ -24,8 +28,18 @@ export const ImplementWpContextSchema = z.object({
     changes: z.string().min(1),
     dependsOn: z.array(z.string()),
   }),
-  /** Code snippets from the spec-author scout wave, narrowed to this WP's scope. */
-  codeSnippets: z.array(z.string()).optional(),
+  /** Code snippets from spec/investigation, narrowed to this WP's scope. */
+  codeSnippets: z
+    .array(
+      z.object({
+        path: z.string(),
+        label: z.string(),
+        content: z.string(),
+        truncated: z.boolean().optional(),
+      }),
+    )
+    .optional(),
+  verificationCommands: z.array(ExecutableCheckSchema).optional(),
   investigation: z
     .object({
       findings: z.string().optional(),
@@ -44,19 +58,7 @@ export const ImplementWpContextSchema = z.object({
   acceptanceContract: z
     .object({
       source: z.enum(['normalized', 'engineering-spec', 'prd', 'issue-body']),
-      criteria: z.array(
-        z.object({
-          id: z.string(),
-          statement: z.string(),
-          verifyCommand: z.string().optional(),
-          expected: z.string().optional(),
-          tolerance: z.string().optional(),
-          journeyRef: z.string().optional().nullable(),
-          stepIdx: z.number().optional().nullable(),
-          crossCutting: z.boolean().optional().nullable(),
-          sourceRef: z.string().optional(),
-        }),
-      ),
+      criteria: z.array(AcceptanceCriterionContractSchema),
     })
     .optional(),
   parentPrdContext: z
@@ -106,6 +108,7 @@ const config: SkillConfig = {
     'wp.changes',
     'wp.dependsOn',
     'codeSnippets',
+    'verificationCommands',
     'investigation',
     'acceptanceContract',
     'parentPrdContext',
