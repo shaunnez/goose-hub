@@ -24,6 +24,9 @@ vi.mock('@goose-hub/core/event-stream/store.js', () => ({
 vi.mock('@goose-hub/core/agent-artifacts/repository.js', () => ({
   getArtifact: vi.fn(),
 }));
+vi.mock('@goose-hub/core/engineering-specs/repository.js', () => ({
+  getEngineeringSpec: vi.fn(),
+}));
 vi.mock('@goose-hub/core/workspaces/worktree.js', () => ({
   cleanupWorktree: vi.fn(),
 }));
@@ -71,6 +74,7 @@ vi.mock('../../shared/resolve-milestone.js', () => ({
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { getArtifact } from '@goose-hub/core/agent-artifacts/repository.js';
+import { getEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { open } from '@goose-hub/core/interventions/reducer.js';
 import {
@@ -87,6 +91,7 @@ import {
   getIssue,
   getIssueArtifact,
   getIssueLegalTargets,
+  getIssueSpec,
   listIssues,
   overrideIssueRepo,
   setIssueLabel,
@@ -109,6 +114,185 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getSourceForSlug).mockResolvedValue(mockSource as never);
   vi.mocked(getArtifact).mockReturnValue(null);
+  vi.mocked(getEngineeringSpec).mockReturnValue(null);
+});
+
+describe('getIssueSpec', () => {
+  it('returns the expanded explicit Engineering Spec DTO', async () => {
+    vi.mocked(getEngineeringSpec).mockReturnValue({
+      id: 1,
+      projectId: 'test-proj',
+      workItemId: 'github:owner/repo#42',
+      pipelineRunId: 'pipe-123',
+      createdAt: '2026-05-22T09:00:00Z',
+      updatedAt: '2026-05-22T10:00:00Z',
+      spec: {
+        objective: 'Build the authentication flow with token refresh.',
+        architecture: {
+          current: 'Refresh logic lives in the route.',
+          new: 'Move refresh logic into middleware.',
+          decisionRationale: 'Centralized session enforcement is easier to verify.',
+        },
+        schemaChanges: {
+          ddl: ['ALTER TABLE sessions ADD COLUMN refreshed_at TEXT;'],
+          migrations: ['migrations/20260522100000_refresh_sessions.sql'],
+        },
+        interfaceContracts: [
+          {
+            name: 'validateRefreshToken',
+            signature: 'export function validateRefreshToken(token: string): Promise<AuthSession>;',
+            file: 'src/auth/token.ts',
+            lineRange: '12-20',
+          },
+        ],
+        workPackages: [
+          {
+            id: 'WP1',
+            filesOwned: ['src/auth/login.ts'],
+            changes: 'Update login refresh flow.',
+            dependsOn: [],
+            builderTier: 'sonnet',
+          },
+        ],
+        executionOrder: [{ batch: 0, wpIds: ['WP1'] }],
+        verificationTooling: [
+          {
+            name: 'Auth unit tests',
+            command: 'pnpm vitest run src/auth/login.test.ts',
+            expectedExitCodes: [0],
+            inputSpec: 'Run from repo root.',
+          },
+        ],
+        acceptanceCriteria: [
+          {
+            id: 'AC-1',
+            statement: 'Users can log in with a valid refresh token.',
+            executableChecks: [],
+          },
+          {
+            id: 'AC-2',
+            statement: 'Expired tokens are rejected.',
+            executableChecks: [
+              {
+                id: 'AC-2-check-1',
+                command: 'pnpm vitest run src/auth/token.test.ts',
+                expectedExitCodes: [0],
+                kind: 'unit',
+              },
+              {
+                id: 'AC-2-check-2',
+                command: 'pnpm vitest run src/auth/middleware.test.ts',
+                expectedExitCodes: [0, 1],
+                kind: 'integration',
+              },
+            ],
+          },
+        ],
+        constraints: [
+          {
+            kind: 'phase',
+            name: 'Investigation tab owns spec display',
+            source: 'apps/web/src/components/detail/components/InvestigationSection.tsx:277',
+          },
+        ],
+        riskRegister: [
+          {
+            risk: 'Refresh middleware could reject valid legacy sessions.',
+            mitigation: 'Keep legacy fallback covered by tests.',
+            severity: 'medium',
+          },
+        ],
+        decisionSummaries: [{ kind: 'PLAN', summary: 'Keep DTO projection explicit.' }],
+      },
+    });
+
+    const result = await getIssueSpec('test-proj', '42');
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(getEngineeringSpec).toHaveBeenCalledWith('test-proj', 'github:owner/repo#42');
+    expect(result.data.spec).toMatchObject({
+      pipelineRunId: 'pipe-123',
+      updatedAt: '2026-05-22T10:00:00Z',
+      objective: 'Build the authentication flow with token refresh.',
+      architecture: {
+        current: 'Refresh logic lives in the route.',
+        new: 'Move refresh logic into middleware.',
+        decisionRationale: 'Centralized session enforcement is easier to verify.',
+      },
+      workPackages: [
+        {
+          id: 'WP1',
+          filesOwned: ['src/auth/login.ts'],
+          changes: 'Update login refresh flow.',
+          dependsOn: [],
+          builderTier: 'sonnet',
+        },
+      ],
+      executionOrder: [{ batch: 0, wpIds: ['WP1'] }],
+      verificationTooling: [
+        {
+          name: 'Auth unit tests',
+          command: 'pnpm vitest run src/auth/login.test.ts',
+          expectedExitCodes: [0],
+          inputSpec: 'Run from repo root.',
+        },
+      ],
+      interfaceContracts: [
+        {
+          name: 'validateRefreshToken',
+          signature: 'export function validateRefreshToken(token: string): Promise<AuthSession>;',
+          file: 'src/auth/token.ts',
+          lineRange: '12-20',
+        },
+      ],
+      schemaChanges: {
+        ddl: ['ALTER TABLE sessions ADD COLUMN refreshed_at TEXT;'],
+        migrations: ['migrations/20260522100000_refresh_sessions.sql'],
+      },
+      constraints: [
+        {
+          kind: 'phase',
+          name: 'Investigation tab owns spec display',
+          source: 'apps/web/src/components/detail/components/InvestigationSection.tsx:277',
+        },
+      ],
+      riskRegister: [
+        {
+          risk: 'Refresh middleware could reject valid legacy sessions.',
+          mitigation: 'Keep legacy fallback covered by tests.',
+          severity: 'medium',
+        },
+      ],
+    });
+    expect(result.data.spec?.acceptanceCriteria).toEqual([
+      {
+        id: 'AC-1',
+        statement: 'Users can log in with a valid refresh token.',
+        executableChecks: [],
+      },
+      {
+        id: 'AC-2',
+        statement: 'Expired tokens are rejected.',
+        executableChecks: [
+          {
+            id: 'AC-2-check-1',
+            command: 'pnpm vitest run src/auth/token.test.ts',
+            expectedExitCodes: [0],
+            kind: 'unit',
+          },
+          {
+            id: 'AC-2-check-2',
+            command: 'pnpm vitest run src/auth/middleware.test.ts',
+            expectedExitCodes: [0, 1],
+            kind: 'integration',
+          },
+        ],
+      },
+    ]);
+    expect(result.data.spec?.acceptanceCriteriaCount).toBe(2);
+    expect(result.data.spec).not.toHaveProperty('decisionSummaries');
+  });
 });
 
 describe('transitionIssue — validation', () => {

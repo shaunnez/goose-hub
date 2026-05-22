@@ -121,6 +121,18 @@ describe('applyIssueTimelineEvent', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['comments', 'p', '1'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issue-costs', 'p', '1'] });
   });
+
+  it('invalidates spec and acceptance contract when spec.completed arrives', () => {
+    const queryClient = new QueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    applyIssueTimelineEvent(queryClient, 'p', '1', makeEvent(2, 'spec.completed'));
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['spec', 'p', '1'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['acceptance-contract', 'p', '1'],
+    });
+  });
 });
 
 describe('backfillIssueTimelineEvents', () => {

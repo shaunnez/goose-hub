@@ -34,7 +34,51 @@ export interface WorkItemDto {
 export interface WorkPackageDto {
   id: string;
   filesOwned: string[];
+  changes: string;
+  dependsOn: string[];
   builderTier: string;
+}
+
+export interface EngineeringSpecArchitectureDto {
+  current: string;
+  new: string;
+  decisionRationale: string;
+}
+
+export interface ExecutionBatchDto {
+  batch: number;
+  wpIds: string[];
+}
+
+export interface VerificationToolDto {
+  name: string;
+  command: string;
+  expectedExitCodes: number[];
+  inputSpec?: string | null;
+}
+
+export interface InterfaceContractDto {
+  name: string;
+  signature: string;
+  file: string;
+  lineRange?: string | null;
+}
+
+export interface SchemaChangesDto {
+  ddl: string[];
+  migrations: string[];
+}
+
+export interface ConstraintDto {
+  kind: string;
+  name: string;
+  source: string;
+}
+
+export interface RiskEntryDto {
+  risk: string;
+  mitigation: string;
+  severity: string;
 }
 
 export interface AcceptanceCriterionDto {
@@ -44,6 +88,7 @@ export interface AcceptanceCriterionDto {
   stepIdx?: number | null;
   crossCutting?: boolean | null;
   sourceRef?: string;
+  source?: string;
   executableChecks?: ExecutableCheckDto[];
 }
 
@@ -69,10 +114,18 @@ export interface AcceptanceContractDto {
 
 export interface EngineeringSpecDto {
   pipelineRunId: string;
+  updatedAt: string;
   objective: string;
+  architecture?: EngineeringSpecArchitectureDto;
   workPackages: WorkPackageDto[];
+  executionOrder: ExecutionBatchDto[];
+  verificationTooling: VerificationToolDto[];
   acceptanceCriteria: AcceptanceCriterionDto[];
   acceptanceCriteriaCount: number;
+  interfaceContracts: InterfaceContractDto[];
+  schemaChanges?: SchemaChangesDto;
+  constraints: ConstraintDto[];
+  riskRegister: RiskEntryDto[];
 }
 
 export interface IssueCommentDto {
