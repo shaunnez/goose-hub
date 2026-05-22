@@ -25,7 +25,7 @@ import {
   extractInvestigationPayload,
   latestInvestigationEvent,
 } from '../lib/investigation';
-import { AcceptanceContractDetails } from './AcceptanceContractDetails';
+import { AcceptanceContractDetails, DetailAccordionSection } from './AcceptanceContractDetails';
 import { ConfidenceBadge } from './ConfidenceBadge';
 import { CostBadge } from './CostBadge';
 import { FindingCard } from './FindingCard';
@@ -230,45 +230,57 @@ export function InvestigationSection({
         <StatCard label="Conf" value={investigate.confidence} sub={confSub} />
       </div>
 
-      {/* Root-cause finding card */}
-      {investigate.findings.trim().length > 0 && (
-        <FindingCard
-          severity={investigate.confidence}
-          title="Root cause hypothesis"
-          body={
-            <div
-              data-testid="findings-content"
-              className="prose prose-sm prose-invert max-w-none text-[13px] text-fg-2 [&_p]:mb-2 [&_ul]:mb-2 [&_li]:ml-4 [&_li]:list-disc [&_code]:font-mono [&_code]:text-[12px]"
-              // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized by renderMarkdownToHtml
-              dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(investigate.findings) }}
-            />
-          }
-          conf={conf}
-          personaInitials={initials}
-          personaName={personaLabel}
-        />
-      )}
-
-      {/* Key files as long finding cards */}
-      {investigate.keyFiles.length > 0 && (
-        <div data-testid="key-files-list" className="flex flex-col gap-3">
-          {investigate.keyFiles.map((f) => {
-            const basename = f.path.split('/').pop() ?? f.path;
-            return (
+      {(investigate.findings.trim().length > 0 || investigate.keyFiles.length > 0) && (
+        <DetailAccordionSection
+          defaultOpen
+          icon={Search}
+          sectionTestId="findings-section"
+          subtitle={`${findingsCount} item${findingsCount !== 1 ? 's' : ''}`}
+          title="Findings"
+        >
+          <div className="flex flex-col gap-3">
+            {investigate.findings.trim().length > 0 && (
               <FindingCard
-                key={f.path}
                 severity={investigate.confidence}
-                title={basename}
-                body={f.reason ? <span>{f.reason}</span> : <span className="text-fg-2">—</span>}
-                filePath={f.path}
-                viewUrl={githubBase != null ? `${githubBase}/${f.path}` : undefined}
+                title="Root cause hypothesis"
+                body={
+                  <div
+                    data-testid="findings-content"
+                    className="prose prose-sm prose-invert max-w-none text-[13px] text-fg-2 [&_p]:mb-2 [&_ul]:mb-2 [&_li]:ml-4 [&_li]:list-disc [&_code]:font-mono [&_code]:text-[12px]"
+                    // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized by renderMarkdownToHtml
+                    dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(investigate.findings) }}
+                  />
+                }
                 conf={conf}
                 personaInitials={initials}
                 personaName={personaLabel}
               />
-            );
-          })}
-        </div>
+            )}
+
+            {investigate.keyFiles.length > 0 && (
+              <div data-testid="key-files-list" className="flex flex-col gap-3">
+                {investigate.keyFiles.map((f) => {
+                  const basename = f.path.split('/').pop() ?? f.path;
+                  return (
+                    <FindingCard
+                      key={f.path}
+                      severity={investigate.confidence}
+                      title={basename}
+                      body={
+                        f.reason ? <span>{f.reason}</span> : <span className="text-fg-2">—</span>
+                      }
+                      filePath={f.path}
+                      viewUrl={githubBase != null ? `${githubBase}/${f.path}` : undefined}
+                      conf={conf}
+                      personaInitials={initials}
+                      personaName={personaLabel}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </DetailAccordionSection>
       )}
 
       <AcceptanceContractDetails contract={acceptanceContract} />
@@ -278,10 +290,11 @@ export function InvestigationSection({
 
       {/* Open questions */}
       {investigate.openQuestions.length > 0 && (
-        <div className="rounded-lg border border-line bg-bg-elev px-4 py-4">
-          <div className="text-[10.5px] uppercase tracking-wider text-fg-2 mb-2">
-            Open questions
-          </div>
+        <DetailAccordionSection
+          sectionTestId="open-questions-section"
+          subtitle={`${investigate.openQuestions.length} pending`}
+          title="Open Questions"
+        >
           <ul data-testid="open-questions-list" className="space-y-1 list-disc list-inside">
             {investigate.openQuestions.map((q) => (
               <li key={q} className="text-[12.5px] text-fg-2">
@@ -289,18 +302,16 @@ export function InvestigationSection({
               </li>
             ))}
           </ul>
-        </div>
+        </DetailAccordionSection>
       )}
 
       {/* Investigation trail */}
       {investigate.decisionSummaries.length > 0 && (
-        <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
-          <div className="px-4 py-3 border-b border-line bg-bg-elev-2 flex items-baseline gap-2">
-            <div className="text-[10.5px] uppercase tracking-wider text-fg-2">
-              Investigation trail
-            </div>
-            <div className="text-[12px] text-fg-3">What was looked at, in order</div>
-          </div>
+        <DetailAccordionSection
+          sectionTestId="investigation-trail-section"
+          subtitle="What was looked at, in order"
+          title="Investigation Trail"
+        >
           <ol data-testid="investigation-trail" className="px-4 py-3 flex flex-col gap-2">
             {investigate.decisionSummaries.map((s, i) => (
               <li
@@ -333,15 +344,16 @@ export function InvestigationSection({
               </li>
             ))}
           </ol>
-        </div>
+        </DetailAccordionSection>
       )}
 
       {/* Human review notes posted via the investigation gate */}
       {humanNotes.length > 0 && (
-        <div data-testid="investigation-human-notes">
-          <h4 className="text-[11px] font-medium text-fg-3 mb-2 uppercase tracking-wide">
-            Human review notes
-          </h4>
+        <DetailAccordionSection
+          sectionTestId="investigation-human-notes"
+          subtitle={`${humanNotes.length} note${humanNotes.length !== 1 ? 's' : ''}`}
+          title="Human Review Notes"
+        >
           <div className="space-y-2">
             {humanNotes.map((note) => (
               <div
@@ -361,12 +373,17 @@ export function InvestigationSection({
               </div>
             ))}
           </div>
-        </div>
+        </DetailAccordionSection>
       )}
 
       {/* Playwright captures (bug items only) */}
       {itemType === 'bug' && (
-        <PlaywrightCaptureSection projectSlug={projectSlug} id={id} itemType={itemType} />
+        <DetailAccordionSection
+          sectionTestId="playwright-capture-wrapper"
+          title="Playwright Capture"
+        >
+          <PlaywrightCaptureSection projectSlug={projectSlug} id={id} itemType={itemType} />
+        </DetailAccordionSection>
       )}
 
       {/* Human proceed gate */}

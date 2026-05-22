@@ -46,6 +46,20 @@ test.describe('Bug investigation (MOCK_AGENTS + MOCK_SOURCE)', () => {
     // Investigate (high-confidence) → dev-ready
     await postServer(`/projects/${SLUG}/dispatch/${issueNumber}`);
     await expect(statePill).toHaveText('dev-ready', { timeout: 15_000 });
+
+    const findingsButton = page.getByRole('button', { name: /findings/i });
+    const acceptanceButton = page.getByRole('button', { name: /acceptance contract/i });
+    const specButton = page.getByRole('button', { name: /engineering spec/i });
+
+    await expect(findingsButton).toHaveAttribute('aria-expanded', 'true');
+    await expect(acceptanceButton).toHaveAttribute('aria-expanded', 'false');
+    await expect(specButton).toHaveAttribute('aria-expanded', 'false');
+
+    await expect(page.getByTestId('findings-content')).toBeVisible();
+    await expect(page.getByText(/Root cause hypothesis/i)).toBeVisible();
+
+    await acceptanceButton.click();
+    await expect(acceptanceButton).toHaveAttribute('aria-expanded', 'true');
   });
 
   test('low-confidence investigate → gate-pending', async ({ page }) => {
