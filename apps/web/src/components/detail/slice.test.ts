@@ -3,7 +3,7 @@ import { parseDependencies } from '@/lib/dependency-parser';
 import { renderMarkdownToHtml } from '@/lib/markdown';
 import { describe, expect, it } from 'vitest';
 import { extractPlaywrightRepro } from './lib/playwright-capture';
-import { SECTIONS } from './lib/sections';
+import { SECTIONS, buildWorkflowSnapshotCards } from './lib/sections';
 
 describe('detail page — sections config', () => {
   it('lists the 11 design sections in order (chat removed post-M20)', () => {
@@ -19,6 +19,25 @@ describe('detail page — sections config', () => {
       'retrospective',
       'timeline',
       'costs',
+    ]);
+  });
+
+  it('builds the overview workflow snapshot cards in a fixed six-card order', () => {
+    const cards = buildWorkflowSnapshotCards({
+      item: {
+        mode: 'discover',
+        state: 'factory:grilling',
+      },
+    });
+
+    expect(cards).toHaveLength(6);
+    expect(cards.map((card) => card.key)).toEqual([
+      'triage',
+      'investigation',
+      'grill',
+      'prd',
+      'review',
+      'retro',
     ]);
   });
 

@@ -1,14 +1,20 @@
-import { fetchEvents, fetchIssueDiff } from '@/lib/api';
+import { fetchEvents, fetchIssueDiff, fetchPRD, fetchTriageResult } from '@/lib/api';
 import { laneForState } from '@/lib/lanes.config';
 import { renderMarkdownToHtml } from '@/lib/markdown';
-import type { AgentEventDto, IssueDiffDto, WorkItemDto } from '@/lib/types';
+import type {
+  AgentEventDto,
+  IssueDiffDto,
+  PrdReadModelDto,
+  TriageResultDto,
+  WorkItemDto,
+} from '@/lib/types';
 import { getPersonaInitials, getPersonaLabel, usePersonaMap } from '@/lib/usePersonaMap';
-import { formatCost, formatTokens } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { parseDiff } from '../lib/code-diff';
 import { useIssueCostsBreakdown } from '../lib/costs';
+import { buildWorkflowSnapshotCards } from '../lib/sections';
 import { CommentsSection } from './CommentsSection';
 import { DependenciesSection } from './DependenciesSection';
 import { StatCard } from './StatCard';
@@ -24,16 +30,8 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
   const personaMap = usePersonaMap();
 
   const lane = item?.state ? (laneForState(item.state) ?? item.state.replace('factory:', '')) : '—';
-  const depsCount = item?.dependsOn?.length ?? 0;
-  const blocksCount = item?.blocks?.length ?? 0;
-  const lastAgentLabel = getPersonaLabel(personaMap, item?.lastPersonaId) ?? '—';
 
   const costs = useIssueCostsBreakdown(slug, id);
-  const spentValue = costs.runCount === 0 ? '—' : formatCost(costs.total, costs.totalLabel);
-  const spentSub =
-    costs.runCount === 0
-      ? 'no runs yet'
-      : `${formatTokens(costs.totalTokens)} tokens · ${costs.runCount} run${costs.runCount === 1 ? '' : 's'}`;
 
   const { data: diffData } = useQuery<IssueDiffDto>({
     queryKey: ['issue-diff', slug, id],
@@ -51,10 +49,29 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
     staleTime: 10_000,
     enabled: id !== '',
   });
-  const qaPayload = events.find((e) => e.kind === 'qa.completed')?.payload as
-    | { testRun?: { passed: number; failed: number; skipped: number } }
-    | undefined;
-  const testRun = qaPayload?.testRun ?? null;
+  const { data: triage } = useQuery<TriageResultDto | null>({
+    queryKey: ['triage', slug, id],
+    queryFn: () => fetchTriageResult(slug, id),
+    staleTime: 10_000,
+    enabled: id !== '',
+  });
+  const { data: prd } = useQuery<PrdReadModelDto | null>({
+    queryKey: ['prd', slug, id],
+    queryFn: () => fetchPRD(slug, id),
+    staleTime: 10_000,
+    enabled: id !== '',
+  });
+  const workflowCards = useMemo(
+    () =>
+      buildWorkflowSnapshotCards({
+        item,
+        triage,
+        prd,
+        events,
+        stageCosts: costs.byStage,
+      }),
+    [costs.byStage, events, item, prd, triage],
+  );
 
   return (
     <div data-testid="overview-section" className="px-8 py-6 flex flex-col gap-5">
@@ -71,32 +88,31 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
         </div>
       </div>
 
-      {/* Stat row */}
-      <div className="grid grid-cols-3 lg:grid-cols-7 gap-3">
-        <StatCard label="Stage" value={lane} />
-        <StatCard
-          label="Files"
-          value={files.length === 0 ? '—' : String(files.length)}
-          sub={files.length > 0 ? `+${totalAdds} / −${totalDels} lines` : undefined}
-        />
-        <StatCard
-          label="Tests"
-          value={testRun ? `${testRun.passed} pass` : '—'}
-          sub={testRun ? `${testRun.failed} failing · ${testRun.skipped} skipped` : undefined}
-          color={testRun && testRun.failed === 0 ? 'var(--success)' : undefined}
-        />
-        <StatCard
-          label="Depends on"
-          value={depsCount === 0 ? '—' : String(depsCount)}
-          sub={depsCount > 0 ? item?.dependsOn.map((d) => `#${d}`).join(', ') : undefined}
-        />
-        <StatCard
-          label="Blocks"
-          value={blocksCount === 0 ? '—' : String(blocksCount)}
-          sub={blocksCount > 0 ? item?.blocks.map((d) => `#${d}`).join(', ') : undefined}
-        />
-        <StatCard label="Last agent" value={lastAgentLabel} />
-        <StatCard label="Spent" value={spentValue} sub={spentSub} />
+      <div className="rounded-lg border border-line bg-bg-elev overflow-hidden">
+        <div className="px-4 py-3 border-b border-line bg-bg-elev-2 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[10.5px] uppercase tracking-wider text-fg-2">
+              Workflow snapshot
+            </div>
+            <div className="text-[12px] text-fg-3 mt-1">{lane}</div>
+          </div>
+          <div className="text-[11px] text-fg-3">
+            {files.length === 0
+              ? 'No diff yet'
+              : `${files.length} files · +${totalAdds} / −${totalDels}`}
+          </div>
+        </div>
+        <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {workflowCards.map((card) => (
+            <StatCard
+              key={card.key}
+              label={card.label}
+              value={card.value}
+              sub={card.sub}
+              color={cardColor(card.tone)}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Main content grid */}
@@ -148,4 +164,14 @@ export function OverviewSection({ item, projectSlug }: OverviewSectionProps) {
       )}
     </div>
   );
+}
+
+function cardColor(
+  tone: 'default' | 'muted' | 'success' | 'warning' | 'danger',
+): string | undefined {
+  if (tone === 'muted') return 'var(--fg-3)';
+  if (tone === 'success') return 'var(--success)';
+  if (tone === 'warning') return 'var(--warning)';
+  if (tone === 'danger') return 'var(--danger)';
+  return undefined;
 }

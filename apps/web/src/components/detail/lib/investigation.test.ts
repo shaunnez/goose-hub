@@ -12,6 +12,7 @@ import {
   extractInvestigationPayload,
   latestInvestigationEvent,
 } from './investigation';
+import { buildWorkflowSnapshotCards } from './sections';
 
 function event(partial: Partial<AgentEventDto>): AgentEventDto {
   return {
@@ -179,5 +180,251 @@ describe('investigation constants', () => {
     }
     expect(CONFIDENCE_NUM.high).toBeGreaterThan(CONFIDENCE_NUM.medium);
     expect(CONFIDENCE_NUM.medium).toBeGreaterThan(CONFIDENCE_NUM.low);
+  });
+});
+
+describe('buildWorkflowSnapshotCards', () => {
+  it('returns stable muted fallbacks for sparse inputs', () => {
+    const cards = buildWorkflowSnapshotCards({});
+
+    expect(cards).toHaveLength(6);
+    expect(cards.map((card) => card.label)).toEqual([
+      'Triage',
+      'Investigation',
+      'Grill',
+      'PRD',
+      'Review',
+      'Retro',
+    ]);
+    expect(cards.map((card) => card.value)).toEqual([
+      'Not run',
+      'Not run',
+      'N/A',
+      'N/A',
+      'Not run',
+      'Not run',
+    ]);
+    expect(cards.every((card) => typeof card.sub === 'string')).toBe(true);
+  });
+
+  it('prefers canonical triage fields when available', () => {
+    const cards = buildWorkflowSnapshotCards({
+      item: {
+        priority: 'medium',
+        type: 'bug',
+        repoRef: 'repo-from-item',
+      },
+      triage: {
+        priority: 'high',
+        type: 'discover',
+        overrideRepo: 'repo-from-override',
+        candidates: [
+          { repo: 'repo-a', confidence: 0.91, evidence: 'strong match', tier: 1 },
+          { repo: 'repo-b', confidence: 0.44, evidence: 'weak match', tier: 2 },
+        ],
+      },
+    });
+
+    expect(cards[0]).toMatchObject({
+      key: 'triage',
+      value: 'High priority',
+      tone: 'default',
+    });
+    expect(cards[0].sub).toContain('Discover');
+    expect(cards[0].sub).toContain('repo-from-override');
+    expect(cards[0].sub).toContain('91% confidence');
+    expect(cards[0].sub).toContain('2 candidates');
+    expect(cards[0].sub).toContain('Override');
+  });
+
+  it('renders discover-lane grill and PRD fallbacks consistently', () => {
+    const discoverCards = buildWorkflowSnapshotCards({
+      item: {
+        mode: 'discover',
+        state: 'factory:grilling',
+      },
+    });
+
+    expect(discoverCards[2]).toMatchObject({ key: 'grill', value: 'Not run', tone: 'muted' });
+    expect(discoverCards[3]).toMatchObject({ key: 'prd', value: 'Not run', tone: 'muted' });
+
+    const nonDiscoverCards = buildWorkflowSnapshotCards({
+      item: {
+        mode: 'execute',
+        state: 'factory:in-progress',
+      },
+    });
+
+    expect(nonDiscoverCards[2]).toMatchObject({ key: 'grill', value: 'N/A', tone: 'muted' });
+    expect(nonDiscoverCards[3]).toMatchObject({ key: 'prd', value: 'N/A', tone: 'muted' });
+  });
+
+  it('prefers canonical PRD counts and state-aware status', () => {
+    const cards = buildWorkflowSnapshotCards({
+      item: {
+        mode: 'discover',
+        state: 'factory:prd-review',
+      },
+      prd: {
+        prd: {
+          estimatedComplexity: 'high',
+          acceptanceCriteria: [
+            { id: 'AC1', statement: 'One' },
+            { id: 'AC2', statement: 'Two' },
+          ],
+          journeys: [
+            {
+              id: 'J1',
+              persona: 'Owner',
+              trigger: 'Open',
+              steps: [],
+              successState: '',
+              errorStates: [],
+              edgeCases: [],
+            },
+          ],
+          verticalSlices: [
+            { title: 'Slice A', goal: 'A', estimatedSize: 'S', journeyRefs: ['J1'] },
+            { title: 'Slice B', goal: 'B', estimatedSize: 'M', journeyRefs: ['J1'] },
+          ],
+        },
+        advisorConcerns: '- Concern one\n- Concern two',
+        source: 'event',
+        createdAt: '2026-05-22T00:00:00Z',
+        runId: 'run-1',
+      },
+    });
+
+    expect(cards[3]).toMatchObject({
+      key: 'prd',
+      value: 'In review',
+      tone: 'warning',
+    });
+    expect(cards[3].sub).toContain('High complexity');
+    expect(cards[3].sub).toContain('2 AC');
+    expect(cards[3].sub).toContain('1 journey');
+    expect(cards[3].sub).toContain('2 slices');
+    expect(cards[3].sub).toContain('2 concerns');
+  });
+
+  it('summarizes latest review event severity counts', () => {
+    const cards = buildWorkflowSnapshotCards({
+      events: [
+        event({
+          id: 10,
+          kind: 'agent.review-complete',
+          payload: { verdict: 'approved', confidence: 0.8, criteriaChecks: [], findings: [] },
+        }),
+        event({
+          id: 11,
+          kind: 'agent.review-complete',
+          payload: {
+            verdict: 'needs-fix',
+            confidence: 0.72,
+            criteriaChecks: [],
+            findings: [
+              { severity: 'blocker', description: 'A' },
+              { severity: 'major', description: 'B' },
+              { severity: 'major', description: 'C' },
+              { severity: 'minor', description: 'D' },
+            ],
+          },
+        }),
+      ],
+    });
+
+    expect(cards[4]).toMatchObject({
+      key: 'review',
+      value: 'Needs fix',
+      tone: 'danger',
+    });
+    expect(cards[4].sub).toContain('1 blocker');
+    expect(cards[4].sub).toContain('2 major');
+    expect(cards[4].sub).toContain('1 minor');
+  });
+
+  it('distinguishes light and deep retro payloads from the latest event', () => {
+    const lightCards = buildWorkflowSnapshotCards({
+      events: [
+        event({
+          id: 20,
+          kind: 'agent.retrospective-complete',
+          payload: {
+            tier: 'light',
+            output: {
+              outcome: 'success',
+              workItemNumber: 1,
+              summary: {
+                wentWell: 'A',
+                didNotGoWell: 'B',
+                architecturalTakeaway: 'C',
+              },
+              improvementCandidates: [
+                {
+                  kind: 'workflow',
+                  targetPath: 'docs/x',
+                  suggestionText: 'Do x',
+                  confidence: 'high',
+                },
+              ],
+              decisionSummaries: [],
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(lightCards[5]).toMatchObject({
+      key: 'retro',
+      value: 'Light retro',
+      tone: 'default',
+    });
+    expect(lightCards[5].sub).toContain('Success');
+    expect(lightCards[5].sub).toContain('1 improvement');
+
+    const deepCards = buildWorkflowSnapshotCards({
+      events: [
+        event({
+          id: 21,
+          kind: 'agent.retro-complete',
+          payload: {
+            retrospective: {
+              tier: 'deep',
+              output: {
+                outcome: 'partial',
+                workItemNumber: 1,
+                summary: {
+                  wentWell: 'A',
+                  didNotGoWell: 'B',
+                  architecturalTakeaway: 'C',
+                },
+                improvementCandidates: [],
+                decisionSummaries: [],
+                triggerReasons: ['Needs escalation'],
+                personaQualityScores: [],
+                learningEntries: [
+                  {
+                    observation: 'O',
+                    rationale: 'R',
+                    improvementKind: 'workflow',
+                    confidence: 'medium',
+                  },
+                ],
+                decisionPatterns: [{ pattern: 'P', occurrences: 2, confidence: 'medium' }],
+              },
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(deepCards[5]).toMatchObject({
+      key: 'retro',
+      value: 'Deep retro',
+      tone: 'default',
+    });
+    expect(deepCards[5].sub).toContain('Partial');
+    expect(deepCards[5].sub).toContain('1 learning');
+    expect(deepCards[5].sub).toContain('1 pattern');
   });
 });
