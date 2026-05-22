@@ -1,10 +1,104 @@
 import { sql } from 'drizzle-orm';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getArtifact } from '../agent-artifacts/repository.js';
 import { db } from '../db/db.js';
 import { agentArtifacts } from '../db/schema.js';
-import { preparePrDiffContext } from './dev-review-advisor.js';
+import { preparePrDiffContext, runDevReviewResponse } from './dev-review-advisor.js';
 import { buildDiffDigest } from './diff-digest.js';
+import type { AgentSpec } from './interface.js';
+
+const runtimeCalls = vi.hoisted(() => ({
+  codex: [] as AgentSpec[],
+  claude: [] as AgentSpec[],
+}));
+
+vi.mock('../projects/loader.js', () => ({
+  getProjectBySlug: vi.fn().mockResolvedValue({
+    id: 'test-dev-review-artifacts',
+    slug: 'test-dev-review-artifacts',
+    agentConfig: { runtime: 'auto' },
+  }),
+}));
+
+vi.mock('../db/repositories/project-settings.js', () => ({
+  readProjectSettings: vi.fn().mockReturnValue(null),
+  readProjectSkillSettings: vi.fn().mockReturnValue(
+    new Map([
+      [
+        'dev-review-response',
+        {
+          projectId: 'test-dev-review-artifacts',
+          skillName: 'dev-review-response',
+          modelProvider: 'codex',
+          modelTier: null,
+          maxTurns: null,
+          maxBudgetUsd: null,
+          timeoutMs: null,
+          effort: null,
+          updatedAt: '2026-05-22T00:00:00.000Z',
+          updatedBy: 'test',
+        },
+      ],
+    ]),
+  ),
+}));
+
+vi.mock('./select-persona.js', () => ({
+  selectPersona: vi.fn().mockReturnValue({
+    personaId: 'test-dev-review-artifacts/developer/0',
+    codename: 'Test Developer',
+  }),
+}));
+
+vi.mock('./codex-cli.js', () => ({
+  CodexCliRuntime: class {
+    async run(spec: AgentSpec) {
+      runtimeCalls.codex.push(spec);
+      return {
+        output: {
+          findingDispositions: [
+            {
+              findingRef: 'src/a.ts:1',
+              severity: 'P1',
+              disposition: 'dismissed',
+              reason: 'Not applicable in test fixture',
+            },
+          ],
+          decisionSummaries: [
+            {
+              kind: 'DEV_REVIEW_DISMISSED',
+              summary: 'Dismissed P1 test finding at src/a.ts:1',
+              evidence: 'src/a.ts:1',
+            },
+          ],
+        },
+        decisionSummaries: [],
+        events: [],
+      };
+    }
+  },
+}));
+
+vi.mock('./claude-cli.js', () => ({
+  ClaudeCliRuntime: class {
+    async run(spec: AgentSpec) {
+      runtimeCalls.claude.push(spec);
+      return {
+        output: {
+          findingDispositions: [],
+          decisionSummaries: [
+            {
+              kind: 'DEV_REVIEW_DISMISSED',
+              summary: 'Claude should not run for this test',
+            },
+          ],
+        },
+        decisionSummaries: [],
+        events: [],
+      };
+    }
+  },
+}));
 
 const PROJECT = 'test-dev-review-artifacts';
 const WORK_ITEM = 'github:owner/repo#77';
@@ -31,6 +125,8 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  runtimeCalls.codex.length = 0;
+  runtimeCalls.claude.length = 0;
   db.delete(agentArtifacts).where(sql`project_id = ${PROJECT}`).run();
 });
 
@@ -116,5 +212,38 @@ describe('preparePrDiffContext', () => {
     expect(db.select().from(agentArtifacts).where(sql`project_id = ${PROJECT}`).all()).toHaveLength(
       1,
     );
+  });
+});
+
+describe('runDevReviewResponse runtime resolution', () => {
+  it('honours project skill provider settings when no runtime is injected', async () => {
+    await runDevReviewResponse({
+      runId: RUN_ID,
+      projectId: PROJECT,
+      workItemId: WORK_ITEM,
+      workItem: { title: 'Fix ordering', body: 'body', number: 77, priority: 'high' },
+      prDiff: 'diff --git a/src/a.ts b/src/a.ts\n+++ b/src/a.ts\n+export const a = 1;\n',
+      devReviewFindings: [
+        {
+          severity: 'P1',
+          category: 'correctness',
+          file: 'src/a.ts',
+          line: 1,
+          summary: 'Broken behavior',
+          suggestion: 'Fix it',
+        },
+      ],
+      worktreePath: '/tmp/dev-review-response-worktree',
+      appendEvent: (input) => ({ ...input, id: 1, createdAt: new Date().toISOString() }),
+    });
+
+    expect(runtimeCalls.codex).toHaveLength(1);
+    expect(runtimeCalls.claude).toHaveLength(0);
+    expect(runtimeCalls.codex[0]).toMatchObject({
+      skill: 'dev-review-response',
+      role: 'developer',
+      modelOverride: 'gpt-5.4',
+      workspaceDir: '/tmp/dev-review-response-worktree',
+    });
   });
 });

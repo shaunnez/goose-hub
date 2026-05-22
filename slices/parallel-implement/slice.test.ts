@@ -326,6 +326,97 @@ describe('parallel-implement repo-relative path normalization', () => {
     }
   });
 
+  it('prewarms the integration and WP scratch worktrees before running WP agents', async () => {
+    const repoPath = makeTempRepo(['core/a.ts']);
+    const issueWorktree = makeTempRepo();
+    const scratchWorktree = makeTempRepo(['core/a.ts']);
+    const spec = makeSpec([makeWp('WP1', ['core/a.ts'])]);
+    const prewarmed: string[] = [];
+    const iterations: Array<{ wpId: string; status: string }> = [];
+    const replaySpy = vi.spyOn(eventStore, 'replay').mockReturnValue([]);
+
+    try {
+      const result = await runParallelImplementWorkflow(
+        makeWorkItem({ priority: 'medium' }),
+        spec,
+        'pipeline-run-prewarm',
+        makeStateSource(),
+        'goose-hub-self',
+        repoPath,
+        {
+          runtime: {
+            run: async (agentSpec) => {
+              expect(prewarmed).toEqual([issueWorktree, scratchWorktree]);
+              expect(agentSpec.workspaceDir).toBe(scratchWorktree);
+              writeFileSync(join(scratchWorktree, 'core/a.ts'), 'export const a = 2;\n');
+              const output = makeOkResult('WP1').output as ImplementWpOutput;
+              return {
+                output: {
+                  ...output,
+                  filesWritten: [{ path: 'core/a.ts', reason: 'updated file' }],
+                },
+                decisionSummaries: [],
+                events: [],
+              };
+            },
+          },
+          resolveWorkflowBaseImpl: () => ({
+            branch: 'main',
+            ref: 'origin/main',
+            source: 'configured-default',
+          }),
+          createIssueWorktreeImpl: () => issueWorktree,
+          createWpWorktreeImpl: () => scratchWorktree,
+          prewarmWorktreeImpl: (worktreePath) => {
+            prewarmed.push(worktreePath);
+          },
+          cleanupWpWorktreesImpl: () => undefined,
+          orchestratorCommitWpImpl: () => 'sha1',
+          revertWpChangesImpl: () => undefined,
+          recordIterationImpl: (_runId, wpId, _iteration, status) => {
+            iterations.push({ wpId, status });
+          },
+          getLastStatusImpl: (_runId, wpId) => {
+            const last = [...iterations].reverse().find((entry) => entry.wpId === wpId);
+            return (last?.status as 'ok' | 'failed' | 'in-progress' | null) ?? null;
+          },
+          deriveObservedChangedFilesImpl: () => ({
+            count: 1,
+            paths: ['core/a.ts'],
+            gitAvailable: true,
+            files: [
+              {
+                path: 'core/a.ts',
+                rawPath: 'core/a.ts',
+                status: 'modified',
+                sources: ['git-status'],
+                normalizationSource: 'as-is',
+              },
+            ],
+          }),
+          openPRImpl: async () => ({
+            prNumber: 1,
+            prUrl: 'https://gh/pr/1',
+            branch: 'b',
+            base: 'main',
+          }),
+          devReviewConfigOverride: {
+            enabled: false,
+            triggerOn: 'priority:high+',
+            perCycleMaxUsd: 0,
+            maxRevisionTurns: 1,
+            timeoutMs: 1_000,
+          },
+        },
+      );
+
+      expect(result.status).toBe('success');
+      expect(prewarmed).toEqual([issueWorktree, scratchWorktree]);
+    } finally {
+      replaySpy.mockRestore();
+    }
+  });
+
   it('commits only observed changed files, so uncreated filesOwned paths do not break WP commit', async () => {
     const repoPath = makeGitRepo({ 'apps/web/src/foo.ts': 'export const foo = 1;\n' });
     const issueWorktree = makeTempRepo();

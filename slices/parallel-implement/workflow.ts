@@ -39,6 +39,7 @@ import {
 import {
   type cleanupWorktree,
   createWorktree,
+  prewarmWorktree,
   resolveWorkflowBase,
 } from '@goose-hub/core/workspaces/worktree.js';
 import { ImplementWpSchema } from '@goose-hub/skills/implement-wp/schema.js';
@@ -65,11 +66,13 @@ export interface ParallelImplementDeps {
   runtime?: AgentRuntime;
   /** Separate runtime for the dev-review Codex pass (defaults to auto-selected Codex runtime). */
   devReviewRuntime?: AgentRuntime;
-  /** Separate runtime for the dev-review-response Claude pass (defaults to Claude runtime). */
+  /** Separate runtime for the dev-review-response pass (defaults to project skill settings). */
   devReviewResponseRuntime?: AgentRuntime;
   openPRImpl?: typeof openPR;
   createWpWorktreeImpl?: typeof createWpScratchWorktree;
   createIssueWorktreeImpl?: typeof createWorktree;
+  /** Override dependency prewarm for tests or alternate package managers. */
+  prewarmWorktreeImpl?: typeof prewarmWorktree;
   resolveWorkflowBaseImpl?: typeof resolveWorkflowBase;
   cleanupWpWorktreesImpl?: typeof cleanupAllWpWorktrees;
   cleanupIssueWorktreeImpl?: typeof cleanupWorktree;
@@ -229,6 +232,11 @@ export async function runParallelImplementWorkflow(
   const openPRFn = deps.openPRImpl ?? openPR;
   const createWpFn = deps.createWpWorktreeImpl ?? createWpScratchWorktree;
   const createIssueFn = deps.createIssueWorktreeImpl ?? createWorktree;
+  const prewarmWtFn =
+    deps.prewarmWorktreeImpl ??
+    (deps.createIssueWorktreeImpl == null && deps.createWpWorktreeImpl == null
+      ? prewarmWorktree
+      : () => undefined);
   const resolveWorkflowBaseFn = deps.resolveWorkflowBaseImpl ?? resolveWorkflowBase;
   const cleanupWpsFn = deps.cleanupWpWorktreesImpl ?? cleanupAllWpWorktrees;
   // cleanupIssueWorktreeImpl is available for test injection but unused in production:
@@ -351,11 +359,13 @@ export async function runParallelImplementWorkflow(
 
     // Create the integration worktree (all WP commits land here).
     issueWorktreePath = createIssueFn(targetRepo, runId, workflowBase.ref);
+    prewarmWtFn(issueWorktreePath);
 
     // Create per-WP scratch worktrees. Sandbox is written in runOneWpBuilder
     // (per-spawn, so retries always get a fresh sandbox with correct opts).
     for (const wp of specForRun.workPackages) {
       const wtPath = createWpFn(targetRepo, runId, wp.id, workflowBase.ref);
+      prewarmWtFn(wtPath);
       scratchWorktrees.set(wp.id, wtPath);
     }
 

@@ -30,6 +30,7 @@ import { safeParseOutputForSchema } from './output-normalization.js';
 import { readPromptWithContext } from './read-prompt.js';
 import { reconcileDecisionSummaries } from './reconcile-decisions.js';
 import { resolveBudgetsForProject } from './resolve-for-project.js';
+import { resolveProjectAgentExecution } from './resolve-runtime-for-project.js';
 import { toJsonSchema } from './schema-bridge.js';
 import { selectPersona } from './select-persona.js';
 import { selectRuntime } from './select-runtime.js';
@@ -214,7 +215,7 @@ export interface RunDevReviewResponseInput {
   devReviewFindings: DevReviewOutput['findings'];
   worktreePath: string;
   stack?: { testCommand?: string; lintCommand?: string; typecheckCommand?: string };
-  /** Optional runtime override — defaults to ClaudeCliRuntime (Claude developer). */
+  /** Optional runtime override — otherwise resolved from project skill runtime settings. */
   runtime?: AgentRuntime;
   appendEvent: (input: AppendEventInput) => AgentEvent;
 }
@@ -351,9 +352,9 @@ export async function runDevReview(input: RunDevReviewInput): Promise<DevReviewO
 // ─── runDevReviewResponse ─────────────────────────────────────────────────────
 
 /**
- * Runs the `dev-review-response` Claude skill in the integration worktree.
- * The developer receives findings in context, may make code changes, and
- * returns a structured disposition per finding.
+ * Runs the `dev-review-response` skill in the integration worktree. The
+ * developer receives findings in context, may make code changes, and returns a
+ * structured disposition per finding.
  *
  * For each finding disposition, emits an `agent.decision-summary` event of
  * kind `DEV_REVIEW_ADDRESSED` or `DEV_REVIEW_DISMISSED`. These events are
@@ -364,21 +365,19 @@ export async function runDevReviewResponse(
   input: RunDevReviewResponseInput,
 ): Promise<DevReviewResponseOutput> {
   const projectConfig = await getProjectBySlug(input.projectId);
-  const configRuntime = projectConfig?.agentConfig?.runtime ?? 'claude-cli';
+  const role = devReviewResponseConfig.role ?? 'developer';
+  const { runtime, resolvedBudget } = resolveProjectAgentExecution({
+    skill: 'dev-review-response',
+    role,
+    projectId: input.projectId,
+    projectConfig,
+    injectedRuntime: input.runtime,
+    skillProvider: devReviewResponseConfig.provider,
+  });
 
-  const runtime =
-    input.runtime ??
-    // dev-review-response uses Claude (developer role) — not Codex.
-    selectRuntime({ configRuntime: configRuntime === 'codex-cli' ? 'claude-cli' : configRuntime });
-
-  const { personaId } = selectPersona(input.projectId, devReviewResponseConfig.role ?? 'developer');
+  const { personaId } = selectPersona(input.projectId, role);
   const prompt = readPromptWithContext('dev-review-response', input.projectId);
   const outputJsonSchema = toJsonSchema(DevReviewResponseOutputSchema) as Record<string, unknown>;
-  const budgets = resolveBudgetsForProject(
-    'dev-review-response',
-    projectConfig?.budgets,
-    input.projectId,
-  );
 
   const responseRunId = `${input.runId}:dev-review-response`;
   const preparedDiff = preparePrDiffContext({
@@ -417,7 +416,7 @@ export async function runDevReviewResponse(
 
   const result = await runtime.run({
     runId: responseRunId,
-    role: devReviewResponseConfig.role ?? 'developer',
+    role,
     skill: 'dev-review-response',
     context: {
       projectId: input.projectId,
@@ -431,7 +430,7 @@ export async function runDevReviewResponse(
     freshContext: false,
     toolBundles: devReviewResponseConfig.toolBundles,
     toolExtras: [],
-    ...budgets,
+    ...resolvedBudget,
     personaId,
     outputJsonSchema,
     appendSystemPrompt: prompt,
