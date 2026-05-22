@@ -260,7 +260,7 @@ describe('TimelineSection — expand/collapse all', () => {
     });
   });
 
-  it('does not render control bar when there are no run-groups', async () => {
+  it('renders control bar for canonical section accordions even when there are no run-groups', async () => {
     const { fetchEventsPage } = await import('@/lib/api');
     // Only plain events, no runId → no run-groups
     vi.mocked(fetchEventsPage).mockResolvedValue({
@@ -280,11 +280,9 @@ describe('TimelineSection — expand/collapse all', () => {
     const { TimelineSection } = await import('./TimelineSection');
     renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
 
-    // Wait for loading to complete (section container appears) then assert no expand button.
     await screen.findByTestId('timeline-section');
-    await waitFor(() => {
-      expect(screen.queryByTestId('timeline-expand-all')).toBeNull();
-    });
+    expect(await screen.findByTestId('timeline-expand-all')).toBeTruthy();
+    expect(screen.getByTestId('timeline-collapse-all')).toBeTruthy();
   });
 
   it('shows model and runtime for a live run before cost rows exist', async () => {
@@ -504,10 +502,10 @@ describe('TimelineSection — expand/collapse all', () => {
     const timelineList = document.querySelector('[data-testid="timeline-section"] > ol');
     expect(timelineList).toBeTruthy();
     const children = Array.from(timelineList?.children ?? []);
-    expect(children).toHaveLength(3);
-    expect(children[0].getAttribute('data-event-kind')).toBe('system.note');
-    expect(children[1].getAttribute('data-intervention-id')).toBe(intervention.id);
-    expect(children[2].getAttribute('data-event-kind')).toBe('system.note');
+    expect(children).toHaveLength(2);
+    expect(children[0].getAttribute('data-intervention-id')).toBe(intervention.id);
+    expect(children[1].getAttribute('data-timeline-section')).toBe('system');
+    expect(children[1].querySelectorAll('[data-event-kind="system.note"]')).toHaveLength(2);
   });
 
   it('shows intervention groups instead of the empty state when there are no agent events', async () => {

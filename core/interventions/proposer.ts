@@ -63,6 +63,8 @@ function expectedStatesForType(type: InterventionType): readonly StateName[] | n
       return ['factory:needs-human', 'factory:gate-pending'];
     case 'gate_pending':
       return ['factory:gate-pending'];
+    case 'prd_review':
+      return ['factory:prd-review'];
     case 'merge_conflict':
       return ['factory:merge-conflict'];
     case 'qa_disagreement':

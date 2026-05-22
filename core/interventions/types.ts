@@ -34,6 +34,7 @@ export const CLOSED_INTERVENTION_STATUSES: ReadonlySet<InterventionStatus> = new
 export const InterventionTypeSchema = z.enum([
   'needs_human',
   'gate_pending',
+  'prd_review',
   'merge_conflict',
   'qa_disagreement',
   'manual_override',

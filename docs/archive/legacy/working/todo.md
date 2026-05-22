@@ -1,8 +1,11 @@
+# Should the contract phase  spec author run emit content visible in investigation or prd? 
+http://localhost:5173/projects/goose-hub-self/items/957/timeline
+
 # Compare chore, bug
 Compare chore, bug, feature on siple task
 
 # Decline PR ??
-
+W
 # Investigation group
 needs to sum up costs and tokens
 

@@ -107,11 +107,27 @@ import {
   SwarmWaveEvent,
 } from './timeline/SwarmEvents';
 import { SymbolIndexHintsUsedEvent, SymbolIndexLookupEvent } from './timeline/SymbolIndexEvents';
+import { TimelineSectionGroupWrapper } from './timeline/TimelineSectionGroupWrapper';
 import { AgentVerifyCommandEvent, ToolWarningEvent } from './timeline/VerifyToolEvents';
 
 export function renderTimelineItem(item: RenderItem, idx: number, context?: TimelineContext) {
   if (item.kind === 'log-group') {
     return <AgentLogGroupEvent key={`log-group-${idx}`} events={item.events} />;
+  }
+  if (item.kind === 'timeline-section') {
+    return (
+      <TimelineSectionGroupWrapper
+        key={`timeline-section-${item.segmentId}-${idx}`}
+        segmentId={item.segmentId}
+        section={item.section}
+        items={item.items}
+        startedAt={item.startedAt}
+        endedAt={item.endedAt}
+        lastEventAt={item.lastEventAt}
+        context={context}
+        renderItem={renderTimelineItem}
+      />
+    );
   }
   if (item.kind === 'intervention-group') {
     return (

@@ -59,6 +59,15 @@ describe('intervention projector', () => {
       'merge_conflict',
     ],
     [
+      'factory:prd-review',
+      event({
+        id: 16,
+        payload: { from: 'factory:prd-drafting', to: 'factory:prd-review' },
+        workItemId: 'github:owner/repo#prd-review',
+      }),
+      'prd_review',
+    ],
+    [
       'qa.tier-disagreement',
       event({
         id: 15,

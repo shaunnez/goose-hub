@@ -51,7 +51,7 @@ A single JSON object conforming to `EngineeringSpecSchema` (`skills/spec-author/
 6. **`interfaceContracts`** — paste-ready `signature` (function decl, type alias, or full Zod block) + `file` it lives in. ≥1 entry required when there are ≥2 WPs (cross-WP boundaries need typed contracts).
 7. **`workPackages`** — see rules below.
 8. **`executionOrder`** — DAG of batches: `[{batch: 0, wpIds: ['WP1', 'WP2']}, {batch: 1, wpIds: ['WP3']}]`. Every WP appears exactly once.
-9. **`verificationTooling`** — required when there are >2 WPs. Each tool: `name`, `command`, `expectedExitCodes`, optional `inputSpec`. `command` must be an executable repo-root command such as `pnpm vitest run apps/web/src/lib/lanes.config.test.ts`; never emit a bare file path.
+9. **`verificationTooling`** — required when there are >2 WPs. Each tool: `name`, `command`, `expectedExitCodes`, optional `inputSpec`. `command` must be an executable repo-root command such as `pnpm vitest run apps/web/src/lib/lanes.config.test.ts`; never emit a bare file path. For Playwright specs under `apps/web/e2e`, run the web package binary, for example `pnpm --filter @goose-hub/web exec playwright test e2e/<spec>.spec.ts`; for `chat.spec.ts`, include `--config playwright-chat.config.ts`.
 10. **`acceptanceCriteria`** — see rules below.
 11. **`constraints`** — see rules below.
 12. **`riskRegister`** — at least one risk when the spec touches `auth | session | crypto | secret` paths.

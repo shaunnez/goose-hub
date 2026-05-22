@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { WorkflowGroup as WebWorkflowGroup } from '../../apps/web/src/lib/types.js';
 import { SKILL_BUDGETS } from '../agent-runtime/budgets.js';
 import { STATES } from '../state-machine/states.js';
 import { isLegalTransition } from '../state-machine/transitions.js';
@@ -7,7 +8,16 @@ import {
   WORKFLOW_CATALOG,
   type WorkflowActivationSetting,
   type WorkflowCatalogEntry,
+  type WorkflowGroup,
 } from './workflow-catalog.js';
+
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+  ? (<T>() => T extends B ? 1 : 2) extends <T>() => T extends A ? 1 : 2
+    ? true
+    : false
+  : false;
+type Assert<T extends true> = T;
+const _workflowGroupTypeParity: Assert<Equal<WorkflowGroup, WebWorkflowGroup>> = true;
 
 const stateSet = new Set<string>(STATES);
 const registeredSkillSet = new Set<string>(Object.keys(SKILL_BUDGETS));
@@ -138,6 +148,37 @@ describe('workflow catalog', () => {
         (edge) => edge.from === 'investigation-complete' && edge.to === 'acceptance-contract-skill',
       ),
     ).toBe(true);
+  });
+
+  it('represents Grill, PRD, Decompose, Delivery Router, Implementation, Conflict, and Dev Review as distinct stages', () => {
+    const feature = byKind('feature');
+    expect(feature.stages.map((stage) => stage.id)).toEqual(
+      expect.arrayContaining([
+        'grill',
+        'prd',
+        'decompose',
+        'delivery-router',
+        'implementation',
+        'dev-review-advisor',
+      ]),
+    );
+    expect(feature.stages.find((stage) => stage.id === 'grill')?.group).toBe('grill');
+    expect(feature.stages.find((stage) => stage.id === 'prd')?.group).toBe('prd');
+    expect(feature.stages.find((stage) => stage.id === 'decompose')?.group).toBe('decompose');
+    expect(feature.stages.find((stage) => stage.id === 'delivery-router')?.group).toBe(
+      'delivery-router',
+    );
+    expect(feature.stages.find((stage) => stage.id === 'implementation')?.group).toBe(
+      'implementation',
+    );
+
+    for (const kind of ['bug', 'feature', 'chore'] as const) {
+      const entry = byKind(kind);
+      expect(entry.stages.find((stage) => stage.id === 'conflict')?.group).toBe('conflict');
+      expect(entry.stages.find((stage) => stage.id === 'dev-review-advisor')?.group).toBe(
+        'dev-review',
+      );
+    }
   });
 
   it('keeps node ids and normal paths internally consistent', () => {

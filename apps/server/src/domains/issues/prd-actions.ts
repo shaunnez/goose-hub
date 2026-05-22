@@ -13,6 +13,9 @@ import {
   transitionAndEmitState,
 } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { resolve, supersede } from '@goose-hub/core/interventions/reducer.js';
+import { listInterventions } from '@goose-hub/core/interventions/repository.js';
+import { ACTIVE_INTERVENTION_STATUSES } from '@goose-hub/core/interventions/types.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { resolveLatestPrd } from '@goose-hub/core/prd/read-model.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
@@ -21,7 +24,11 @@ import {
   latestDiscoverSessionId,
 } from '@goose-hub/core/workflows/grill-and-prd/discover-session.js';
 import type { PRDOutput } from '@goose-hub/skills/write-prd/schema.js';
-import { dispatchDecomposePrd, dispatchGrillAndPrd, dispatchRevisePrd } from '#shared/dispatch.js';
+import {
+  dispatchDecomposePrd,
+  dispatchRetryWritePrd,
+  dispatchRevisePrd,
+} from '#shared/dispatch.js';
 import type { Result } from '#shared/middleware.js';
 import { getSourceForSlug } from '#shared/source.js';
 import { getRepoRef } from './internal.js';
@@ -36,6 +43,42 @@ async function moveOrForce(
     await source.transitionState(itemId, from, to);
   } catch {
     await source.forceState(itemId, to);
+  }
+}
+
+function clearActivePrdReviewInterventions(input: {
+  projectId: string;
+  workItemId: string;
+  reason: string;
+}): void {
+  const interventions = listInterventions({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    status: [...ACTIVE_INTERVENTION_STATUSES],
+  }).filter((intervention) => intervention.interventionType === 'prd_review');
+
+  for (const intervention of interventions) {
+    const actor = 'prd-actions';
+    if (['OPEN', 'PROPOSED', 'APPLIED', 'VERIFIED'].includes(intervention.status)) {
+      const resolved = resolve({
+        id: intervention.id,
+        expectedVersion: intervention.version,
+        actor,
+        reason: input.reason,
+      });
+      if (resolved.ok) continue;
+    }
+    supersede({
+      id: intervention.id,
+      expectedVersion: intervention.version,
+      actor,
+      supersededBy: input.reason,
+      evidence: {
+        reason: input.reason,
+        workItemId: input.workItemId,
+        interventionType: intervention.interventionType,
+      },
+    });
   }
 }
 
@@ -54,6 +97,11 @@ export async function approvePRD(slug: string, id: string): Promise<Result<{ ok:
     };
   }
 
+  clearActivePrdReviewInterventions({
+    projectId: slug,
+    workItemId,
+    reason: 'PRD approved',
+  });
   await moveOrForce(source, id, 'factory:prd-review', 'factory:decomposing');
   const discoverSessionId = latestDiscoverSessionId(slug, workItemId);
   const sessionPayload =
@@ -107,6 +155,11 @@ export async function revisePRD(
     };
   }
 
+  clearActivePrdReviewInterventions({
+    projectId: slug,
+    workItemId,
+    reason: 'PRD revision requested',
+  });
   const latestPrd = await resolveLatestPrd({
     projectId: slug,
     workItemId,
@@ -171,6 +224,11 @@ export async function declinePRD(slug: string, id: string): Promise<Result<{ ok:
     };
   }
 
+  clearActivePrdReviewInterventions({
+    projectId: slug,
+    workItemId,
+    reason: 'PRD declined',
+  });
   await moveOrForce(source, id, 'factory:prd-review', 'factory:done');
   const discoverSessionId = latestDiscoverSessionId(slug, workItemId);
   const sessionPayload =
@@ -209,7 +267,7 @@ export async function proceedToPrd(slug: string, id: string): Promise<Result<{ o
     };
   }
 
-  await moveOrForce(source, id, 'factory:gate-pending', 'factory:grilling');
+  await moveOrForce(source, id, 'factory:gate-pending', 'factory:prd-drafting');
   const discoverSessionId = activeDiscoverSessionId(slug, workItemId);
   const sessionPayload =
     discoverSessionId != null ? { discoverSessionId } : ({} as Record<string, never>);
@@ -218,18 +276,13 @@ export async function proceedToPrd(slug: string, id: string): Promise<Result<{ o
     projectId: slug,
     workItemId,
     from: 'factory:gate-pending',
-    to: 'factory:grilling',
+    to: 'factory:prd-drafting',
     by: 'ui-proceed',
     extraPayload: sessionPayload,
   });
 
-  // Dispatch grill-and-prd with readyForPRD forced by marking priorReplies as complete.
-  // We achieve this by dispatching normally — the griller will see the prior replies
-  // and determine readyForPRD=true given the context. The /proceed-to-prd action
-  // simply moves to grilling so the orchestrator picks it up on the next tick.
-  // For immediate dispatch, fire dispatchGrillAndPrd.
-  dispatchGrillAndPrd(slug, Number(id)).catch((err: unknown) => {
-    logger.error('dispatchGrillAndPrd after proceedToPrd failed', {
+  dispatchRetryWritePrd(slug, Number(id)).catch((err: unknown) => {
+    logger.error('dispatchRetryWritePrd after proceedToPrd failed', {
       slug,
       id,
       error: String(err),

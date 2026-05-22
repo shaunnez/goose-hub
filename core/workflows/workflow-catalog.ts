@@ -6,12 +6,16 @@ export type WorkflowKind = 'bug' | 'feature' | 'chore' | 'research';
 export type WorkflowEdgeKind = 'primary' | 'optional' | 'retry' | 'summary';
 export type WorkflowGroup =
   | 'triage'
-  | 'discovery'
   | 'investigation'
-  | 'delivery'
+  | 'grill'
+  | 'prd'
+  | 'decompose'
+  | 'delivery-router'
+  | 'implementation'
   | 'dev-review'
   | 'qa'
   | 'review'
+  | 'conflict'
   | 'retro'
   | 'research'
   | 'terminal';
@@ -195,14 +199,14 @@ const triageNodes: WorkflowNode[] = [
 ];
 
 const deliveryNodes: WorkflowNode[] = [
-  stateNode('dev-ready', 'Dev ready', 'factory:dev-ready', { group: 'delivery' }),
+  stateNode('dev-ready', 'Dev ready', 'factory:dev-ready', { group: 'delivery-router' }),
   stateNode('spec-ready', 'Spec ready', 'factory:spec-ready', {
-    group: 'delivery',
+    group: 'implementation',
     mode: 'multi-agent',
     activation: activeWhen('useMultiAgentPipeline', true, 'multi-agent pipeline enabled'),
     notes: 'M19 parallel path only.',
   }),
-  stateNode('in-progress', 'In progress', 'factory:in-progress', { group: 'delivery' }),
+  stateNode('in-progress', 'In progress', 'factory:in-progress', { group: 'implementation' }),
   stateNode('needs-qa', 'QA', 'factory:needs-qa', {
     group: 'qa',
     visual: 'gate',
@@ -210,7 +214,7 @@ const deliveryNodes: WorkflowNode[] = [
   }),
   stateNode('qa-failed', 'QA failed', 'factory:qa-failed', { group: 'qa', visual: 'loop' }),
   stateNode('needs-fix', 'Needs fix', 'factory:needs-fix', {
-    group: 'delivery',
+    group: 'implementation',
     visual: 'loop',
   }),
   stateNode('needs-review', 'Review', 'factory:needs-review', {
@@ -220,7 +224,7 @@ const deliveryNodes: WorkflowNode[] = [
   }),
   stateNode('approved', 'Approved', 'factory:approved', { group: 'review' }),
   stateNode('merge-conflict', 'Conflict', 'factory:merge-conflict', {
-    group: 'terminal',
+    group: 'conflict',
     visual: 'loop',
   }),
   stateNode('retrospecting', 'Retro', 'factory:retrospecting', { group: 'retro' }),
@@ -236,18 +240,18 @@ const deliveryNodes: WorkflowNode[] = [
     'researcher',
     'factory:dev-ready',
     {
-      group: 'delivery',
+      group: 'delivery-router',
       mode: 'legacy',
       activation: activeWhen('priority.highCritical', true, 'high/critical legacy path'),
     },
   ),
   skillNode('spec-author-skill', 'spec-author', 'spec-author', 'developer', 'factory:dev-ready', {
-    group: 'delivery',
+    group: 'delivery-router',
     mode: 'multi-agent',
     activation: activeWhen('useMultiAgentPipeline', true, 'multi-agent pipeline enabled'),
   }),
   skillNode('implement-skill', 'implement', 'implement', 'developer', 'factory:dev-ready', {
-    group: 'delivery',
+    group: 'implementation',
     mode: 'legacy',
     activation: activeWhen('useMultiAgentPipeline', false, 'legacy delivery path'),
   }),
@@ -258,7 +262,7 @@ const deliveryNodes: WorkflowNode[] = [
     'developer',
     'factory:spec-ready',
     {
-      group: 'delivery',
+      group: 'implementation',
       mode: 'multi-agent',
       visual: 'fanout',
       activation: activeWhen('useMultiAgentPipeline', true, 'parallel work packages'),
@@ -327,7 +331,7 @@ const deliveryNodes: WorkflowNode[] = [
     'resolve-conflict',
     'developer',
     'factory:merge-conflict',
-    { group: 'terminal', mode: 'conditional' },
+    { group: 'conflict', mode: 'conditional' },
   ),
   skillNode(
     'retro-light-skill',
@@ -391,24 +395,59 @@ const deliveryStages: WorkflowStage[] = [
     id: 'delivery-router',
     title: 'Delivery router',
     description: 'Chooses legacy implementation or the M19 spec-author/parallel path.',
-    group: 'delivery',
+    group: 'delivery-router',
     nodes: ['dev-ready'],
     variants: [
       {
         id: 'legacy-delivery',
+        title: 'Legacy route',
+        description: 'Routes directly from dev-ready to a single developer agent.',
+        mode: 'legacy',
+        activation: activeWhen('useMultiAgentPipeline', false, 'multi-agent pipeline off'),
+        nodes: ['advise-on-plan-skill'],
+      },
+      {
+        id: 'multi-agent-delivery',
+        title: 'Multi-agent route',
+        description:
+          'Spec author creates the implementation contract before parallel builders run.',
+        mode: 'multi-agent',
+        activation: activeWhen('useMultiAgentPipeline', true, 'multi-agent pipeline on'),
+        nodes: ['spec-author-skill'],
+      },
+    ],
+  },
+  {
+    id: 'implementation',
+    title: 'Implementation',
+    description: 'Developer agents make code changes, commit work packages, and repair feedback.',
+    group: 'implementation',
+    nodes: ['spec-ready', 'in-progress'],
+    variants: [
+      {
+        id: 'legacy-implementation',
         title: 'Legacy implement',
         description: 'Single developer agent ships directly from dev-ready.',
         mode: 'legacy',
         activation: activeWhen('useMultiAgentPipeline', false, 'multi-agent pipeline off'),
-        nodes: ['advise-on-plan-skill', 'implement-skill', 'in-progress'],
+        nodes: ['implement-skill', 'in-progress'],
       },
       {
-        id: 'multi-agent-delivery',
-        title: 'Multi-agent pipeline',
-        description: 'Spec author creates work packages, then builders run in parallel.',
+        id: 'parallel-implementation',
+        title: 'Parallel implementation',
+        description: 'Builders run work packages in parallel after the spec is ready.',
         mode: 'multi-agent',
         activation: activeWhen('useMultiAgentPipeline', true, 'multi-agent pipeline on'),
-        nodes: ['spec-author-skill', 'spec-ready', 'implement-wp-skill', 'in-progress'],
+        nodes: ['implement-wp-skill', 'in-progress'],
+      },
+    ],
+    branches: [
+      {
+        id: 'feedback-repair',
+        title: 'Feedback repair',
+        description: 'QA or Review findings route through needs-fix and back to implementation.',
+        kind: 'retry',
+        nodes: ['needs-fix', 'implement-skill'],
       },
     ],
   },
@@ -511,20 +550,27 @@ const deliveryStages: WorkflowStage[] = [
     ],
   },
   {
+    id: 'conflict',
+    title: 'Conflict',
+    description: 'Post-approval merge conflict resolution runs separately from review and retro.',
+    group: 'conflict',
+    nodes: ['merge-conflict', 'resolve-conflict-skill'],
+    branches: [
+      {
+        id: 'conflict-escalation',
+        title: 'Cannot resolve',
+        description: 'Unresolvable conflicts move to human follow-up.',
+        kind: 'failure',
+        nodes: ['needs-human'],
+      },
+    ],
+  },
+  {
     id: 'retro',
     title: 'Retro',
     description: 'Approved work records a light or deep retrospective before done.',
     group: 'retro',
     nodes: ['retrospecting', 'retro-light-skill', 'retro-deep-skill', 'done'],
-    branches: [
-      {
-        id: 'merge-conflict',
-        title: 'Merge conflict',
-        description: 'Post-approval merge conflict can run resolver or escalate.',
-        kind: 'conditional',
-        nodes: ['merge-conflict', 'resolve-conflict-skill', 'needs-human'],
-      },
-    ],
   },
 ];
 
@@ -582,7 +628,7 @@ const bugEntry: WorkflowCatalogEntry = {
       'developer',
       'factory:investigation-complete',
       {
-        group: 'delivery',
+        group: 'delivery-router',
         mode: 'legacy',
         activation: activeWhen('useMultiAgentPipeline', false, 'legacy delivery path'),
         notes: 'Normalizes legacy issue-body acceptance criteria before implementation.',
@@ -798,18 +844,18 @@ const featureEntry: WorkflowCatalogEntry = {
     'Fresh feature work enters discovery, turns into a PRD, decomposes into child issues, then each child ships through development, QA, review, and retro.',
   nodes: [
     ...triageNodes,
-    stateNode('grilling', 'Grilling', 'factory:grilling', { group: 'discovery' }),
-    stateNode('prd-drafting', 'PRD draft', 'factory:prd-drafting', { group: 'discovery' }),
-    stateNode('prd-review', 'PRD review', 'factory:prd-review', { group: 'discovery' }),
-    stateNode('decomposing', 'Decompose', 'factory:decomposing', { group: 'discovery' }),
+    stateNode('grilling', 'Grilling', 'factory:grilling', { group: 'grill' }),
+    stateNode('prd-drafting', 'PRD draft', 'factory:prd-drafting', { group: 'prd' }),
+    stateNode('prd-review', 'PRD review', 'factory:prd-review', { group: 'prd' }),
+    stateNode('decomposing', 'Decompose', 'factory:decomposing', { group: 'decompose' }),
     stateNode('issues-created', 'Child issues', 'factory:issues-created', {
-      group: 'discovery',
+      group: 'decompose',
     }),
     skillNode('grill-me-skill', 'grill-me', 'grill-me', 'griller', 'factory:grilling', {
-      group: 'discovery',
+      group: 'grill',
     }),
     skillNode('write-prd-skill', 'write-prd', 'write-prd', 'prd-writer', 'factory:prd-drafting', {
-      group: 'discovery',
+      group: 'prd',
     }),
     skillNode(
       'advise-on-prd-skill',
@@ -817,7 +863,7 @@ const featureEntry: WorkflowCatalogEntry = {
       'advise-on-prd',
       'prd-writer',
       'factory:prd-review',
-      { group: 'discovery' },
+      { group: 'prd' },
     ),
     skillNode(
       'decompose-issues-skill',
@@ -825,7 +871,7 @@ const featureEntry: WorkflowCatalogEntry = {
       'decompose-issues',
       'decomposer',
       'factory:decomposing',
-      { group: 'discovery' },
+      { group: 'decompose' },
     ),
     ...deliveryNodes,
   ],
@@ -864,21 +910,25 @@ const featureEntry: WorkflowCatalogEntry = {
   stages: [
     triageStage,
     {
-      id: 'feature-discovery',
-      title: 'Discovery',
-      description: 'Fresh features are grilled, written into a PRD, advised, and decomposed.',
-      group: 'discovery',
-      nodes: [
-        'grilling',
-        'grill-me-skill',
-        'prd-drafting',
-        'write-prd-skill',
-        'prd-review',
-        'advise-on-prd-skill',
-        'decomposing',
-        'decompose-issues-skill',
-        'issues-created',
-      ],
+      id: 'grill',
+      title: 'Grill',
+      description: 'Fresh feature work is clarified through operator questions and answers.',
+      group: 'grill',
+      nodes: ['grilling', 'grill-me-skill'],
+    },
+    {
+      id: 'prd',
+      title: 'PRD',
+      description: 'The clarified feature is drafted, reviewed, revised, or declined.',
+      group: 'prd',
+      nodes: ['prd-drafting', 'write-prd-skill', 'prd-review', 'advise-on-prd-skill'],
+    },
+    {
+      id: 'decompose',
+      title: 'Decompose',
+      description: 'Approved PRDs become implementation-ready child issues.',
+      group: 'decompose',
+      nodes: ['decomposing', 'decompose-issues-skill', 'issues-created'],
     },
     ...deliveryStages,
   ],
@@ -923,7 +973,7 @@ const researchEntry: WorkflowCatalogEntry = {
     stateNode('research-complete', 'Research complete', 'factory:research-complete', {
       group: 'research',
     }),
-    stateNode('dev-ready', 'Dev ready', 'factory:dev-ready', { group: 'delivery' }),
+    stateNode('dev-ready', 'Dev ready', 'factory:dev-ready', { group: 'delivery-router' }),
     stateNode('needs-human', 'Needs human', 'factory:needs-human', {
       group: 'terminal',
       visual: 'terminal',
@@ -966,7 +1016,7 @@ const researchEntry: WorkflowCatalogEntry = {
       id: 'research-outcome',
       title: 'Outcome',
       description: 'Actionable research can become development-ready follow-up work.',
-      group: 'delivery',
+      group: 'delivery-router',
       nodes: ['dev-ready'],
     },
   ],

@@ -74,6 +74,13 @@ export function classifyActionableEvent(
         reason: 'The issue is waiting at a human gate.',
       };
     }
+    if (payload.to === 'factory:prd-review') {
+      return {
+        interventionType: 'prd_review',
+        title: 'PRD review required',
+        reason: 'Approve, request changes, or decline the PRD to continue.',
+      };
+    }
     if (payload.to === 'factory:merge-conflict') {
       return {
         interventionType: 'merge_conflict',

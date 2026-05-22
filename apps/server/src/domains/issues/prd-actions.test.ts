@@ -6,6 +6,8 @@
  * the actual state machine.
  */
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { open } from '@goose-hub/core/interventions/reducer.js';
+import { getIntervention } from '@goose-hub/core/interventions/repository.js';
 import { InMemoryLabelsSource } from '@goose-hub/core/state-source/in-memory-labels.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -20,16 +22,16 @@ vi.mock('../../shared/projects.js', () => ({
 }));
 // Stub the discover-lane dispatchers so the fire-and-forget calls in
 // prd-actions don't pull the real workflows into these unit tests.
-const { dispatchDecomposePrdMock, dispatchGrillAndPrdMock, dispatchRevisePrdMock } = vi.hoisted(
+const { dispatchDecomposePrdMock, dispatchRetryWritePrdMock, dispatchRevisePrdMock } = vi.hoisted(
   () => ({
     dispatchDecomposePrdMock: vi.fn().mockResolvedValue(undefined),
-    dispatchGrillAndPrdMock: vi.fn().mockResolvedValue(undefined),
+    dispatchRetryWritePrdMock: vi.fn().mockResolvedValue(undefined),
     dispatchRevisePrdMock: vi.fn().mockResolvedValue(undefined),
   }),
 );
 vi.mock('../../shared/dispatch.js', () => ({
   dispatchDecomposePrd: dispatchDecomposePrdMock,
-  dispatchGrillAndPrd: dispatchGrillAndPrdMock,
+  dispatchRetryWritePrd: dispatchRetryWritePrdMock,
   dispatchRevisePrd: dispatchRevisePrdMock,
 }));
 
@@ -40,6 +42,20 @@ const REPO_REF = 'test-owner/test-repo';
 
 function uniqueProjectId(label: string): string {
   return `prd-actions-${label}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function openPrdReviewIntervention(projectId: string, workItemId: string) {
+  const result = open({
+    projectId,
+    workItemId,
+    interventionType: 'prd_review',
+    title: 'PRD review required',
+    reason: 'Approve, request changes, or decline the PRD to continue.',
+    rootCauseSignature: `state.transitioned|factory:prd-drafting|factory:prd-review|${workItemId}`,
+    actor: 'test',
+  });
+  if (!result.ok) throw new Error(result.error);
+  return result.intervention;
 }
 
 beforeEach(() => {
@@ -58,12 +74,14 @@ describe('approvePRD', () => {
       state: 'factory:prd-review',
     });
     vi.mocked(getSourceForSlug).mockResolvedValue(source);
+    const intervention = openPrdReviewIntervention(projectId, item.id);
 
     const result = await approvePRD(projectId, item.externalId);
     expect(result.ok).toBe(true);
 
     const after = await source.getItem(item.externalId);
     expect(after.state).toBe('factory:decomposing');
+    expect(getIntervention(intervention.id)?.status).toBe('RESOLVED');
 
     const evs = eventStore.replay({ projectId, workItemId: item.id });
     expect(evs.find((e) => e.kind === 'prd.approved')).toBeDefined();
@@ -120,12 +138,14 @@ describe('declinePRD', () => {
       state: 'factory:prd-review',
     });
     vi.mocked(getSourceForSlug).mockResolvedValue(source);
+    const intervention = openPrdReviewIntervention(projectId, item.id);
 
     const result = await declinePRD(projectId, item.externalId);
     expect(result.ok).toBe(true);
 
     const after = await source.getItem(item.externalId);
     expect(after.state).toBe('factory:done');
+    expect(getIntervention(intervention.id)?.status).toBe('RESOLVED');
 
     const evs = eventStore.replay({ projectId, workItemId: item.id });
     expect(evs.find((e) => e.kind === 'prd.declined')).toBeDefined();
@@ -197,6 +217,7 @@ describe('revisePRD', () => {
     });
     vi.mocked(getSourceForSlug).mockResolvedValue(source);
     const priorPrd = { title: 'Stored PRD' };
+    const intervention = openPrdReviewIntervention(projectId, item.id);
     eventStore.appendEvent({
       projectId,
       workItemId: item.id,
@@ -211,6 +232,7 @@ describe('revisePRD', () => {
     // State must remain prd-review
     const after = await source.getItem(item.externalId);
     expect(after.state).toBe('factory:prd-review');
+    expect(getIntervention(intervention.id)?.status).toBe('RESOLVED');
 
     const evs = eventStore.replay({ projectId, workItemId: item.id });
     const revised = evs.find((e) => e.kind === 'prd.revised');
@@ -282,7 +304,7 @@ describe('revisePRD', () => {
 });
 
 describe('proceedToPrd', () => {
-  it('transitions gate-pending → grilling and fires dispatchGrillAndPrd', async () => {
+  it('transitions gate-pending → prd-drafting and fires dispatchRetryWritePrd', async () => {
     const projectId = uniqueProjectId('proceed-happy');
     const source = new InMemoryLabelsSource(projectId, REPO_REF);
     const item = await source.seedIssue({
@@ -305,12 +327,13 @@ describe('proceedToPrd', () => {
     expect(result.ok).toBe(true);
 
     const after = await source.getItem(item.externalId);
-    expect(after.state).toBe('factory:grilling');
+    expect(after.state).toBe('factory:prd-drafting');
 
     const evs = eventStore.replay({ projectId, workItemId: item.id });
     const transitioned = evs.find(
       (e) =>
-        e.kind === 'state.transitioned' && (e.payload as { to: string }).to === 'factory:grilling',
+        e.kind === 'state.transitioned' &&
+        (e.payload as { to: string }).to === 'factory:prd-drafting',
     );
     expect(transitioned).toBeDefined();
     expect((transitioned?.payload as { discoverSessionId?: string }).discoverSessionId).toBe(
@@ -318,7 +341,7 @@ describe('proceedToPrd', () => {
     );
 
     await Promise.resolve();
-    expect(dispatchGrillAndPrdMock).toHaveBeenCalledWith(projectId, Number(item.externalId));
+    expect(dispatchRetryWritePrdMock).toHaveBeenCalledWith(projectId, Number(item.externalId));
   });
 
   it('returns 409 when the issue is not in factory:gate-pending', async () => {

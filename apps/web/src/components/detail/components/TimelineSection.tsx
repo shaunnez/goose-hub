@@ -8,7 +8,7 @@ import { Clock } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { useIssueCostsBreakdown } from '../lib/costs';
 import { mergeIssueEvents } from '../lib/live-events';
-import { groupEvents } from '../lib/timeline';
+import { groupTimelineEventsByCanonicalSection } from '../lib/timeline';
 import type { RenderItem } from '../lib/timeline';
 import { SectionEmptyState } from './SectionEmptyState';
 import { renderTimelineItem } from './TimelineEvents';
@@ -91,7 +91,7 @@ export function TimelineSection({ projectSlug, id }: TimelineSectionProps) {
       </div>
     );
   }
-  const items = groupEvents(visibleEvents, interventionDetails);
+  const items = groupTimelineEventsByCanonicalSection(visibleEvents, interventionDetails);
   if (items.length === 0) {
     return (
       <div data-testid="timeline-section" className="px-8 py-6">
@@ -110,14 +110,18 @@ export function TimelineSection({ projectSlug, id }: TimelineSectionProps) {
 
   const flattenRunItems = (renderItems: RenderItem[]): RenderItem[] =>
     renderItems.flatMap((item: RenderItem): RenderItem[] =>
-      item.kind === 'phase-group' || item.kind === 'investigation-phase'
+      item.kind === 'timeline-section' ||
+      item.kind === 'phase-group' ||
+      item.kind === 'investigation-phase' ||
+      item.kind === 'review-group'
         ? flattenRunItems(item.items)
         : [item],
     );
   const allRunItems = flattenRunItems(items);
-  const hasExpandableGroups = allRunItems.some(
-    (item: RenderItem) => item.kind === 'run-group' || item.kind === 'intervention-group',
-  );
+  const hasExpandableGroups =
+    allRunItems.some(
+      (item: RenderItem) => item.kind === 'run-group' || item.kind === 'intervention-group',
+    ) || items.some((item: RenderItem) => item.kind === 'timeline-section');
   const latestRunId =
     allRunItems.find((item: RenderItem) => item.kind === 'run-group')?.runId ?? null;
   const context = { slug: projectSlug, issueId: id, latestRunId, runCosts, expandSignal };

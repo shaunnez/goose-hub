@@ -2,11 +2,13 @@ import type { AgentEventDto, InterventionDto, InterventionEventDto } from '@/lib
 import { describe, expect, it } from 'vitest';
 import {
   EVENT_KIND_LABEL,
+  collectRunIdsForTimelineSection,
   computeIsLive,
   computeIsWritePrdStuck,
   groupByDevPhase,
   groupByReviewWorkflow,
   groupEvents,
+  groupTimelineEventsByCanonicalSection,
 } from './timeline';
 
 function makeEvent(
@@ -681,6 +683,660 @@ describe('groupEvents — discover phase groups', () => {
     if (result[0].kind === 'event') {
       expect(result[0].event.kind).toBe('state.transitioned');
     }
+  });
+});
+
+describe('groupTimelineEventsByCanonicalSection', () => {
+  function section(
+    items: ReturnType<typeof groupTimelineEventsByCanonicalSection>,
+    id: string,
+  ): Extract<(typeof items)[number], { kind: 'timeline-section' }> | undefined {
+    return items.find(
+      (item): item is Extract<(typeof items)[number], { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === id,
+    );
+  }
+
+  it('assigns raw events to canonical sections before section-specific grouping runs', () => {
+    const WID = 'discover-canonical-prd';
+    const PID = 'pipeline-canonical-1';
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'agent.run-started', `${WID}:write-prd`, {
+        payload: { skill: 'write-prd', workflowRunId: WID },
+      }),
+      makeEvent(2, 'agent.run-completed', `${WID}:write-prd`),
+      makeEvent(3, 'prd.drafted', WID, { payload: { workflowRunId: WID } }),
+      makeEvent(4, 'spec.completed', PID, { payload: { pipelineRunId: PID } }),
+      makeEvent(5, 'parallel-implement.wp-started', `${PID}:wp:WP1:iter:1`, {
+        payload: { pipelineRunId: PID, wpId: 'WP1' },
+      }),
+    ]);
+
+    const prd = section(items, 'prd');
+    const delivery = section(items, 'delivery-router');
+    const implementation = section(items, 'implementation');
+
+    expect(prd?.items.some((item) => item.kind === 'phase-group')).toBe(false);
+    expect(
+      prd?.items.some((item) => item.kind === 'event' && item.event.kind === 'prd.drafted'),
+    ).toBe(true);
+    expect(delivery?.items.some((item) => item.kind === 'phase-group')).toBe(false);
+    expect(
+      delivery?.items.some((item) => item.kind === 'event' && item.event.kind === 'spec.completed'),
+    ).toBe(true);
+    expect(
+      implementation?.items.some(
+        (item) => item.kind === 'event' && item.event.kind === 'parallel-implement.wp-started',
+      ),
+    ).toBe(true);
+    expect(
+      implementation?.items
+        .flatMap((item) => (item.kind === 'phase-group' ? item.items : [item]))
+        .some((item) => item.kind === 'event' && item.event.kind === 'spec.completed'),
+    ).toBe(false);
+  });
+
+  it('orders top-level timeline items by latest start time with transitions standalone', () => {
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'parallel-implement.wp-started', 'pipe-order:wp:WP1:iter:1', {
+        payload: { pipelineRunId: 'pipe-order' },
+      }),
+      makeEvent(2, 'grill.completed', 'discover-order', {
+        payload: { workflowRunId: 'discover-order' },
+      }),
+      makeEvent(3, 'review.completed', null, {
+        payload: { reviewWorkflowRunId: 'review-order', verdict: 'approved' },
+      }),
+      makeEvent(4, 'unknown.future-event', null),
+      makeEvent(5, 'state.transitioned', null),
+    ]);
+
+    expect(items.map((item) => (item.kind === 'timeline-section' ? item.section : null))).toEqual([
+      null,
+      'system',
+      'review',
+      'grill',
+      'implementation',
+    ]);
+    expect(items[0]).toMatchObject({ kind: 'event', event: { kind: 'state.transitioned' } });
+  });
+
+  it('splits repeated implicit triage episodes by time gap and sorts newest first', () => {
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'agent.run-started', 'triage-old', {
+        createdAt: '2026-05-22T10:00:00Z',
+        payload: { skill: 'triage' },
+      }),
+      makeEvent(2, 'agent.run-started', 'repo-old', {
+        createdAt: '2026-05-22T10:00:20Z',
+        payload: { skill: 'repo-match' },
+      }),
+      makeEvent(3, 'agent.run-started', 'triage-new', {
+        createdAt: '2026-05-22T10:20:00Z',
+        payload: { skill: 'triage' },
+      }),
+      makeEvent(4, 'agent.run-started', 'repo-new', {
+        createdAt: '2026-05-22T10:20:20Z',
+        payload: { skill: 'repo-match' },
+      }),
+    ]);
+
+    const triageSegments = items.filter(
+      (item): item is Extract<typeof item, { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'triage',
+    );
+
+    expect(triageSegments).toHaveLength(2);
+    expect(collectRunIdsForTimelineSection(triageSegments[0].items)).toEqual(
+      new Set(['triage-new', 'repo-new']),
+    );
+    expect(collectRunIdsForTimelineSection(triageSegments[1].items)).toEqual(
+      new Set(['triage-old', 'repo-old']),
+    );
+  });
+
+  it('sorts children inside a timeline segment by start time descending', () => {
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'agent.run-started', 'triage-run', {
+        createdAt: '2026-05-22T21:07:39Z',
+        payload: { skill: 'triage' },
+      }),
+      makeEvent(2, 'agent.run-completed', 'triage-run', {
+        createdAt: '2026-05-22T21:08:08Z',
+      }),
+      makeEvent(3, 'agent.run-started', 'repo-run', {
+        createdAt: '2026-05-22T21:07:58Z',
+        payload: { skill: 'repo-match' },
+      }),
+      makeEvent(4, 'agent.run-completed', 'repo-run', {
+        createdAt: '2026-05-22T21:08:04Z',
+      }),
+    ]);
+
+    const triage = section(items, 'triage');
+    expect(
+      triage?.items.map((item) => (item.kind === 'run-group' ? item.runId : item.kind)),
+    ).toEqual(['repo-run', 'triage-run']);
+  });
+
+  it('keeps repeated Grill rounds together but splits PRD revisions by workflow run', () => {
+    const SID = 'discover-session-canonical-loop';
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'agent.run-started', 'round-1:grill-me', {
+        payload: { skill: 'grill-me', workflowRunId: 'round-1', discoverSessionId: SID },
+      }),
+      makeEvent(2, 'grill.completed', 'round-1', {
+        payload: { workflowRunId: 'round-1', discoverSessionId: SID },
+      }),
+      makeEvent(3, 'prd.drafted', 'round-1', {
+        payload: { workflowRunId: 'round-1', discoverSessionId: SID },
+      }),
+      makeEvent(4, 'agent.run-started', 'round-2:grill-me', {
+        payload: { skill: 'grill-me', workflowRunId: 'round-2', discoverSessionId: SID },
+      }),
+      makeEvent(5, 'grill.completed', 'round-2', {
+        payload: { workflowRunId: 'round-2', discoverSessionId: SID },
+      }),
+      makeEvent(6, 'prd.revised', 'round-2', {
+        payload: { workflowRunId: 'round-2', discoverSessionId: SID },
+      }),
+    ]);
+
+    expect(
+      items.filter((item) => item.kind === 'timeline-section' && item.section === 'grill'),
+    ).toHaveLength(1);
+    const prdSections = items.filter(
+      (item): item is Extract<typeof item, { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'prd',
+    );
+    expect(prdSections).toHaveLength(2);
+    expect(section(items, 'grill')?.items.some((item) => item.kind === 'phase-group')).toBe(false);
+    expect(prdSections[0].segmentId).toBe('prd:round-2');
+    expect(prdSections[1].segmentId).toBe('prd:round-1');
+    expect(
+      section(items, 'grill')?.items.filter(
+        (item) => item.kind === 'event' && item.event.kind === 'grill.completed',
+      ),
+    ).toHaveLength(2);
+    expect(
+      prdSections[0].items.filter(
+        (item) => item.kind === 'event' && item.event.kind === 'prd.revised',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('attaches PRD review feedback to the next PRD workflow in the same discover session', () => {
+    const SID = 'discover-session-prd-feedback';
+    const FIRST_WID = 'prd-workflow-first';
+    const SECOND_WID = 'prd-workflow-revision';
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'agent.run-started', `${FIRST_WID}:write-prd`, {
+        payload: { skill: 'write-prd', workflowRunId: FIRST_WID, discoverSessionId: SID },
+      }),
+      makeEvent(2, 'prd.drafted', FIRST_WID, {
+        payload: { workflowRunId: FIRST_WID, discoverSessionId: SID },
+      }),
+      makeEvent(3, 'prd.revised', null, {
+        payload: { source: 'ui', concerns: ['tighten scope'], discoverSessionId: SID },
+      }),
+      makeEvent(4, 'agent.run-started', `${SECOND_WID}:write-prd`, {
+        payload: { skill: 'write-prd', workflowRunId: SECOND_WID, discoverSessionId: SID },
+      }),
+      makeEvent(5, 'prd.drafted', SECOND_WID, {
+        payload: { workflowRunId: SECOND_WID, discoverSessionId: SID },
+      }),
+    ]);
+
+    const prdSections = items.filter(
+      (item): item is Extract<typeof item, { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'prd',
+    );
+
+    expect(prdSections.map((item) => item.segmentId)).toEqual([
+      `prd:${SECOND_WID}`,
+      `prd:${FIRST_WID}`,
+    ]);
+    expect(
+      prdSections[0].items.some(
+        (item) => item.kind === 'event' && item.event.kind === 'prd.revised',
+      ),
+    ).toBe(true);
+    expect(collectRunIdsForTimelineSection(prdSections[0].items)).toEqual(
+      new Set([`${SECOND_WID}:write-prd`, SECOND_WID]),
+    );
+  });
+
+  it('flattens a single Grill phase and names sparse child runs from the section', () => {
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'agent.run-started', 'sparse-grill-run', {
+        payload: { workflowSection: 'grill', workflowRunId: 'discover-grill-sparse' },
+      }),
+      makeEvent(2, 'agent.log', 'sparse-grill-run', {
+        payload: { workflowRunId: 'discover-grill-sparse', stream: 'stdout', line: 'question' },
+      }),
+      makeEvent(3, 'agent.log', 'sparse-grill-run', {
+        payload: { workflowRunId: 'discover-grill-sparse', stream: 'stdout', line: 'answer' },
+      }),
+      makeEvent(4, 'grill.completed', 'sparse-grill-run', {
+        payload: { workflowRunId: 'discover-grill-sparse' },
+      }),
+    ]);
+
+    const grill = section(items, 'grill');
+    expect(grill?.items.some((item) => item.kind === 'phase-group')).toBe(false);
+    expect(grill?.items.find((item) => item.kind === 'run-group')).toMatchObject({
+      kind: 'run-group',
+      runId: 'sparse-grill-run',
+      skill: 'grill-me',
+    });
+  });
+
+  it('joins Grill runtime rows to discover session segments from workflow events', () => {
+    const SID = 'discover-session-grill-join';
+    const WID = 'discover-workflow-grill-join';
+    const RUN = 'grill-runtime-run';
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'agent.run-started', RUN, {
+        payload: { skill: 'grill-me', workflowRunId: WID },
+      }),
+      makeEvent(2, 'agent.log', RUN, {
+        payload: { workflowRunId: WID, stream: 'stdout', line: 'question' },
+      }),
+      makeEvent(3, 'grill.question-posted', WID, {
+        payload: { workflowRunId: WID, discoverSessionId: SID },
+      }),
+      makeEvent(4, 'agent.run-completed', RUN, {
+        payload: { workflowRunId: WID },
+      }),
+      makeEvent(5, 'grill.completed', WID, {
+        payload: { workflowRunId: WID, discoverSessionId: SID },
+      }),
+    ]);
+
+    const grillSections = items.filter(
+      (item): item is Extract<(typeof items)[number], { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'grill',
+    );
+
+    expect(grillSections).toHaveLength(1);
+    expect(grillSections[0]?.segmentId).toBe(`grill:${SID}`);
+    expect(grillSections[0]?.items.some((item) => item.kind === 'phase-group')).toBe(false);
+    expect(grillSections[0]?.items.find((item) => item.kind === 'run-group')).toMatchObject({
+      kind: 'run-group',
+      runId: RUN,
+      skill: 'grill-me',
+    });
+  });
+
+  it('keeps investigation, review, and implementation details inside their sections', () => {
+    const reviewRun = 'review-canonical';
+    const pipelineRun = 'pipeline-canonical';
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'agent.run-started', 'investigate-canonical:scout:pattern:0', {
+        payload: { skill: 'scout-pattern' },
+      }),
+      makeEvent(2, 'swarm.scout-completed', 'investigate-canonical:scout:pattern:0', {
+        payload: { parentRunId: 'investigate-canonical' },
+      }),
+      makeEvent(3, 'review.slot-completed', 'review-slot-canonical', {
+        payload: { reviewWorkflowRunId: reviewRun, verdict: 'approved' },
+      }),
+      makeEvent(4, 'parallel-implement.wp-started', `${pipelineRun}:wp:WP1:iter:1`, {
+        payload: { pipelineRunId: pipelineRun },
+      }),
+    ]);
+
+    expect(section(items, 'investigation')?.items[0]).toMatchObject({
+      kind: 'run-group',
+      runId: 'investigate-canonical:scout:pattern:0',
+    });
+    expect(section(items, 'review')?.items[0]).toMatchObject({ kind: 'event' });
+    expect(
+      section(items, 'review')?.items.some(
+        (item) => item.kind === 'event' && item.event.kind === 'review.slot-completed',
+      ),
+    ).toBe(true);
+    expect(section(items, 'implementation')?.items[0]).toMatchObject({ kind: 'event' });
+    expect(
+      section(items, 'implementation')?.items.some(
+        (item) => item.kind === 'event' && item.event.kind === 'parallel-implement.wp-started',
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps parallel implement parent and WP runs in the spec pipeline implementation segment', () => {
+    const PIPELINE_RUN = 'pipeline-implementation-123';
+    const PARALLEL_RUN = 'parallel-implement-run-456';
+    const WP_RUN = `${PARALLEL_RUN}:wp:WP1:iter:1`;
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'parallel-implement.iteration-started', PIPELINE_RUN, {
+        payload: { pipelineRunId: PIPELINE_RUN, iteration: 1, wpCount: 1, wpIds: ['WP1'] },
+      }),
+      makeEvent(2, 'agent.run-started', PARALLEL_RUN, {
+        payload: { skill: 'implement-wp' },
+      }),
+      makeEvent(3, 'agent.run-started', WP_RUN, {
+        payload: { skill: 'implement-wp' },
+      }),
+      makeEvent(4, 'parallel-implement.wp-started', WP_RUN, {
+        payload: { wpId: 'WP1', wpRunId: WP_RUN },
+      }),
+      makeEvent(5, 'agent.run-completed', WP_RUN),
+      makeEvent(6, 'parallel-implement.wp-committed', WP_RUN, {
+        payload: { wpId: 'WP1', wpRunId: WP_RUN, commitSha: 'abc1234' },
+      }),
+      makeEvent(7, 'agent.run-completed', PARALLEL_RUN),
+      makeEvent(8, 'pr.opened', PIPELINE_RUN, {
+        payload: { pipelineRunId: PIPELINE_RUN, number: 968 },
+      }),
+    ]);
+
+    const implementationSections = items.filter(
+      (item): item is Extract<typeof item, { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'implementation',
+    );
+    expect(implementationSections).toHaveLength(1);
+    expect(implementationSections[0].segmentId).toBe(`implementation:${PIPELINE_RUN}`);
+
+    expect(implementationSections[0].items.some((item) => item.kind === 'phase-group')).toBe(false);
+    expect(
+      implementationSections[0].items.some(
+        (item) => item.kind === 'run-group' && item.runId === PIPELINE_RUN,
+      ),
+    ).toBe(false);
+    expect(
+      implementationSections[0].items.some(
+        (item) => item.kind === 'event' && item.event.kind === 'pr.opened',
+      ),
+    ).toBe(true);
+    expect(collectRunIdsForTimelineSection(implementationSections[0].items)).toEqual(
+      new Set([PIPELINE_RUN, PARALLEL_RUN, WP_RUN]),
+    );
+  });
+
+  it('splits fix-feedback repair attempts from the original implementation pipeline segment', () => {
+    const PIPELINE_RUN = 'pipeline-fix-feedback-123';
+    const IMPLEMENT_RUN = 'parallel-implement-run-456';
+    const FIX_RUN = 'fix-feedback-run-789';
+    const ATTEMPT_ID = 'fix-feedback-attempt-1';
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'parallel-implement.iteration-started', PIPELINE_RUN, {
+        payload: { pipelineRunId: PIPELINE_RUN, iteration: 1 },
+      }),
+      makeEvent(2, 'agent.run-started', IMPLEMENT_RUN, {
+        payload: { skill: 'implement-wp' },
+      }),
+      makeEvent(3, 'agent.run-completed', IMPLEMENT_RUN),
+      makeEvent(4, 'pr.opened', PIPELINE_RUN, {
+        payload: { pipelineRunId: PIPELINE_RUN, number: 971 },
+      }),
+      makeEvent(5, 'state.transitioned', FIX_RUN, {
+        payload: {
+          pipelineRunId: PIPELINE_RUN,
+          attemptId: ATTEMPT_ID,
+          from: 'factory:needs-fix',
+          to: 'factory:in-progress',
+          by: 'fix-feedback',
+        },
+      }),
+      makeEvent(6, 'agent.run-started', FIX_RUN, {
+        payload: {
+          skill: 'implement',
+          displaySkill: 'fix-feedback',
+          workflowSkill: 'fix-feedback',
+        },
+      }),
+      makeEvent(7, 'agent.fix-feedback-complete', FIX_RUN, {
+        payload: {
+          pipelineRunId: PIPELINE_RUN,
+          attemptId: ATTEMPT_ID,
+          repairCycle: 1,
+        },
+      }),
+    ]);
+
+    const implementationSections = items.filter(
+      (item): item is Extract<typeof item, { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'implementation',
+    );
+
+    expect(implementationSections).toHaveLength(2);
+    expect(implementationSections[0].segmentId).toBe(`implementation:fix-feedback:${ATTEMPT_ID}`);
+    expect(implementationSections[1].segmentId).toBe(`implementation:${PIPELINE_RUN}`);
+    expect(collectRunIdsForTimelineSection(implementationSections[0].items)).toEqual(
+      new Set([FIX_RUN]),
+    );
+    expect(collectRunIdsForTimelineSection(implementationSections[1].items)).toEqual(
+      new Set([PIPELINE_RUN, IMPLEMENT_RUN]),
+    );
+    expect(implementationSections[0].items[0]).toMatchObject({
+      kind: 'run-group',
+      runId: FIX_RUN,
+      skill: 'fix-feedback',
+    });
+  });
+
+  it('keeps qa completion in the qa run section when it carries only pipeline metadata', () => {
+    const PIPELINE_RUN = 'pipeline-qa-123';
+    const QA_RUN = 'qa-run-456';
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'agent.run-started', QA_RUN, { payload: { skill: 'qa' } }),
+      makeEvent(2, 'agent.run-completed', QA_RUN),
+      makeEvent(3, 'qa.completed', QA_RUN, {
+        payload: { pipelineRunId: PIPELINE_RUN, verdict: 'pass', overallScore: 99, threshold: 70 },
+      }),
+    ]);
+
+    const qaSections = items.filter(
+      (item): item is Extract<typeof item, { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'qa',
+    );
+
+    expect(qaSections).toHaveLength(1);
+    expect(qaSections[0].segmentId).toBe(`qa:${QA_RUN}`);
+    expect(qaSections[0].items).toHaveLength(1);
+    expect(qaSections[0].items[0]).toMatchObject({ kind: 'run-group', runId: QA_RUN });
+    expect(collectRunIdsForTimelineSection(qaSections[0].items)).toEqual(new Set([QA_RUN]));
+  });
+
+  it('splits repeated QA attempts on the same pipeline into separate QA sections', () => {
+    const PIPELINE_RUN = 'pipeline-qa-repeat';
+    const QA_RUN_1 = 'qa-run-first';
+    const QA_RUN_2 = 'qa-run-second';
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'qa.structural-failed', QA_RUN_1, {
+        payload: { pipelineRunId: PIPELINE_RUN, tier: 'structural' },
+      }),
+      makeEvent(2, 'qa.completed', QA_RUN_1, {
+        payload: { pipelineRunId: PIPELINE_RUN, verdict: 'fail' },
+      }),
+      makeEvent(3, 'qa.structural-passed', QA_RUN_2, {
+        payload: { pipelineRunId: PIPELINE_RUN, tier: 'structural' },
+      }),
+      makeEvent(4, 'qa.verification-blocked', QA_RUN_2, {
+        payload: { pipelineRunId: PIPELINE_RUN, reason: 'verification-infrastructure-failure' },
+      }),
+    ]);
+
+    const qaSections = items.filter(
+      (item): item is Extract<typeof item, { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'qa',
+    );
+
+    expect(qaSections.map((item) => item.segmentId)).toEqual([`qa:${QA_RUN_2}`, `qa:${QA_RUN_1}`]);
+    expect(collectRunIdsForTimelineSection(qaSections[0].items)).toEqual(new Set([QA_RUN_2]));
+    expect(collectRunIdsForTimelineSection(qaSections[1].items)).toEqual(new Set([QA_RUN_1]));
+  });
+
+  it('keeps dev-review lifecycle and runtime rows in the pipeline dev-review section', () => {
+    const PIPELINE_RUN = 'pipeline-dev-review-123';
+    const DEV_REVIEW_RUN = 'dev-review-workflow-456:dev-review';
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'dev-review.started', DEV_REVIEW_RUN, {
+        payload: { runId: DEV_REVIEW_RUN, pipelineRunId: PIPELINE_RUN },
+      }),
+      makeEvent(2, 'agent.run-started', DEV_REVIEW_RUN, {
+        payload: { skill: 'dev-review', runId: DEV_REVIEW_RUN },
+      }),
+      makeEvent(3, 'agent.run-completed', DEV_REVIEW_RUN, {
+        payload: { skill: 'dev-review', runId: DEV_REVIEW_RUN },
+      }),
+      makeEvent(4, 'dev-review.completed', DEV_REVIEW_RUN, {
+        payload: { runId: DEV_REVIEW_RUN, pipelineRunId: PIPELINE_RUN, verdict: 'no-blockers' },
+      }),
+    ]);
+
+    const devReviewSections = items.filter(
+      (item): item is Extract<typeof item, { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'dev-review',
+    );
+
+    expect(devReviewSections).toHaveLength(1);
+    expect(devReviewSections[0].segmentId).toBe(`dev-review:${PIPELINE_RUN}`);
+    expect(devReviewSections[0].items).toHaveLength(1);
+    expect(devReviewSections[0].items[0]).toMatchObject({
+      kind: 'run-group',
+      runId: DEV_REVIEW_RUN,
+      skill: 'dev-review',
+      endedAt: expect.any(String),
+    });
+    expect(collectRunIdsForTimelineSection(devReviewSections[0].items)).toEqual(
+      new Set([DEV_REVIEW_RUN]),
+    );
+  });
+
+  it('keeps sparse reviewer runtime rows in the parent review workflow section', () => {
+    const REVIEW_RUN = 'review-workflow-123';
+    const SLOT_A = 'review-slot-a';
+    const SLOT_B = 'review-slot-b';
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'agent.run-started', SLOT_A, { payload: { skill: 'review' } }),
+      makeEvent(2, 'agent.run-started', SLOT_B, { payload: { skill: 'review' } }),
+      makeEvent(3, 'review.wave-completed', REVIEW_RUN, {
+        payload: { reviewWorkflowRunId: REVIEW_RUN, round: 1, roundFindingsCount: 1 },
+      }),
+      makeEvent(4, 'review.slot-completed', SLOT_A, {
+        payload: { reviewWorkflowRunId: REVIEW_RUN, round: 1, slotIndex: 0, verdict: 'needs-fix' },
+      }),
+      makeEvent(5, 'review.slot-completed', SLOT_B, {
+        payload: { reviewWorkflowRunId: REVIEW_RUN, round: 1, slotIndex: 1, verdict: 'needs-fix' },
+      }),
+      makeEvent(6, 'agent.run-completed', SLOT_A),
+      makeEvent(7, 'agent.run-completed', SLOT_B),
+      makeEvent(8, 'review.completed', REVIEW_RUN, {
+        payload: { reviewWorkflowRunId: REVIEW_RUN, verdict: 'needs-fix' },
+      }),
+    ]);
+
+    const reviewSections = items.filter(
+      (item): item is Extract<typeof item, { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'review',
+    );
+
+    expect(reviewSections).toHaveLength(1);
+    expect(reviewSections[0].segmentId).toBe(`review:${REVIEW_RUN}`);
+    expect(reviewSections[0].items.some((item) => item.kind === 'review-group')).toBe(false);
+    expect(collectRunIdsForTimelineSection(reviewSections[0].items)).toEqual(
+      new Set([REVIEW_RUN, SLOT_A, SLOT_B]),
+    );
+  });
+
+  it('renders review lifecycle-only run ids as event cards instead of unknown runs', () => {
+    const REVIEW_RUN = 'review-workflow-lifecycle';
+    const LIFECYCLE_RUN = 'review-lifecycle-run';
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'review.wave-completed', REVIEW_RUN, {
+        payload: { reviewWorkflowRunId: REVIEW_RUN, round: 1, roundFindingsCount: 1 },
+      }),
+      makeEvent(2, 'review.escalated', LIFECYCLE_RUN, {
+        payload: { reviewWorkflowRunId: REVIEW_RUN, reason: 'divergent-verdicts', round: 1 },
+      }),
+      makeEvent(3, 'review.completed', LIFECYCLE_RUN, {
+        payload: { reviewWorkflowRunId: REVIEW_RUN, verdict: 'needs-human', confidence: 0 },
+      }),
+    ]);
+
+    const review = section(items, 'review');
+    expect(review).toBeDefined();
+    expect(
+      review?.items.some((item) => item.kind === 'run-group' && item.runId === LIFECYCLE_RUN),
+    ).toBe(false);
+    expect(
+      review?.items.filter(
+        (item) =>
+          item.kind === 'event' &&
+          (item.event.kind === 'review.escalated' || item.event.kind === 'review.completed'),
+      ),
+    ).toHaveLength(2);
+  });
+
+  it('flattens redundant single investigation and contract phase wrappers', () => {
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'agent.run-started', 'investigate-flat:scout:pattern:0', {
+        payload: { skill: 'scout-pattern' },
+      }),
+      makeEvent(2, 'agent.run-completed', 'investigate-flat:scout:pattern:0'),
+      makeEvent(3, 'agent.run-started', 'contract-flat', {
+        payload: { skill: 'spec-author' },
+      }),
+      makeEvent(4, 'spec.completed', 'contract-flat', {
+        payload: { pipelineRunId: 'contract-flat' },
+      }),
+    ]);
+
+    expect(
+      section(items, 'investigation')?.items.some((item) => item.kind === 'investigation-phase'),
+    ).toBe(false);
+    expect(section(items, 'investigation')?.items[0]).toMatchObject({
+      kind: 'run-group',
+      runId: 'investigate-flat:scout:pattern:0',
+    });
+    expect(
+      section(items, 'delivery-router')?.items.some((item) => item.kind === 'phase-group'),
+    ).toBe(false);
+    expect(section(items, 'delivery-router')?.items[0]).toMatchObject({
+      kind: 'run-group',
+      runId: 'contract-flat',
+    });
+  });
+
+  it('uses run-started metadata before grouping sparse runtime events', () => {
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'agent.run-completed', 'run-prd-sparse'),
+      makeEvent(2, 'agent.log', 'run-prd-sparse', { payload: { stream: 'stdout', line: 'work' } }),
+      makeEvent(3, 'agent.tool-call', 'run-prd-sparse'),
+      makeEvent(4, 'agent.budget-exceeded', 'run-prd-sparse'),
+      makeEvent(5, 'agent.output-repair-failed', 'run-prd-sparse'),
+      makeEvent(6, 'agent.run-started', 'run-prd-sparse', { payload: { skill: 'write-prd' } }),
+    ]);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ kind: 'timeline-section', section: 'prd' });
+    if (items[0].kind !== 'timeline-section') return;
+    expect(collectRunIdsForTimelineSection(items[0].items)).toEqual(new Set(['run-prd-sparse']));
+  });
+
+  it('keeps section cost attribution limited to runs inside that section', () => {
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'agent.run-started', 'run-grill-cost', { payload: { skill: 'grill-me' } }),
+      makeEvent(2, 'agent.run-started', 'run-prd-cost', { payload: { skill: 'write-prd' } }),
+    ]);
+
+    expect(collectRunIdsForTimelineSection(section(items, 'grill')?.items ?? [])).toEqual(
+      new Set(['run-grill-cost']),
+    );
+    expect(collectRunIdsForTimelineSection(section(items, 'prd')?.items ?? [])).toEqual(
+      new Set(['run-prd-cost']),
+    );
+  });
+
+  it('lands unknown events under system', () => {
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'unknown.future-event', null),
+    ]);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ kind: 'timeline-section', section: 'system' });
   });
 });
 

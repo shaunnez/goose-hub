@@ -134,6 +134,7 @@ export type InterventionStatus =
 export type InterventionType =
   | 'needs_human'
   | 'gate_pending'
+  | 'prd_review'
   | 'merge_conflict'
   | 'qa_disagreement'
   | 'manual_override';
@@ -620,12 +621,16 @@ export type WorkflowKind = 'bug' | 'feature' | 'chore' | 'research';
 export type WorkflowEdgeKind = 'primary' | 'optional' | 'retry' | 'summary';
 export type WorkflowGroup =
   | 'triage'
-  | 'discovery'
   | 'investigation'
-  | 'delivery'
+  | 'grill'
+  | 'prd'
+  | 'decompose'
+  | 'delivery-router'
+  | 'implementation'
   | 'dev-review'
   | 'qa'
   | 'review'
+  | 'conflict'
   | 'retro'
   | 'research'
   | 'terminal';

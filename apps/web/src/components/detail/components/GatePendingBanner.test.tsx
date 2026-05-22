@@ -86,6 +86,17 @@ describe('GatePendingBanner', () => {
     expect(screen.queryByTestId('gate-pending-banner')).toBeNull();
   });
 
+  it('does not render or fetch interventions for archived issues', async () => {
+    vi.mocked(fetchIssueInterventions).mockResolvedValue([
+      makeIntervention({ title: 'Issue moved to needs-human' }),
+    ]);
+
+    render_(<GatePendingBanner state="factory:archived" projectSlug="proj" id="42" />);
+
+    expect(screen.queryByTestId('gate-pending-banner')).toBeNull();
+    expect(fetchIssueInterventions).not.toHaveBeenCalled();
+  });
+
   it('renders durable intervention title and reason instead of gate-state text', async () => {
     vi.mocked(fetchIssueInterventions).mockResolvedValueOnce([
       makeIntervention({
@@ -103,10 +114,10 @@ describe('GatePendingBanner', () => {
     expect(screen.queryByText('Human intervention required')).toBeNull();
   });
 
-  it('refetches interventions when the issue lifecycle state changes', async () => {
-    vi.mocked(fetchIssueInterventions)
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([makeIntervention({ title: 'Issue moved to needs-human' })]);
+  it('fetches interventions when the issue lifecycle changes into a gate state', async () => {
+    vi.mocked(fetchIssueInterventions).mockResolvedValueOnce([
+      makeIntervention({ title: 'Issue moved to needs-human' }),
+    ]);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
     const { rerender } = render(
@@ -116,8 +127,8 @@ describe('GatePendingBanner', () => {
         </QueryClientProvider>
       </MemoryRouter>,
     );
-    await waitFor(() => expect(fetchIssueInterventions).toHaveBeenCalledTimes(1));
     expect(screen.queryByTestId('gate-pending-banner')).toBeNull();
+    expect(fetchIssueInterventions).not.toHaveBeenCalled();
 
     rerender(
       <MemoryRouter>
@@ -128,7 +139,7 @@ describe('GatePendingBanner', () => {
     );
 
     await screen.findByText('Issue moved to needs-human');
-    expect(fetchIssueInterventions).toHaveBeenCalledTimes(2);
+    expect(fetchIssueInterventions).toHaveBeenCalledTimes(1);
   });
 
   it('submits a proposed option with the intervention version as CAS', async () => {
@@ -209,5 +220,29 @@ describe('GatePendingBanner', () => {
     const banner = await screen.findByTestId('gate-pending-banner');
     expect(banner.getAttribute('data-variant')).toBe('info');
     expect(screen.queryByTestId('gate-action-grill')).toBeNull();
+  });
+
+  it('renders PRD-review interventions with a Review PRD navigation action only', async () => {
+    vi.mocked(fetchIssueInterventions).mockResolvedValueOnce([
+      makeIntervention({
+        interventionType: 'prd_review',
+        status: 'OPEN',
+        title: 'PRD review required',
+        reason: 'Approve, request changes, or decline the PRD to continue.',
+        proposedOptions: [],
+      }),
+    ]);
+
+    render_(<GatePendingBanner state="factory:prd-review" projectSlug="proj" id="42" />);
+
+    await screen.findByText('PRD review required');
+    expect(screen.getByTestId('escalation-reason').textContent).toContain(
+      'Approve, request changes, or decline',
+    );
+    expect(screen.getByTestId('gate-action-review-prd').getAttribute('href')).toBe(
+      '/projects/proj/items/42/prd',
+    );
+    expect(screen.queryByTestId('gate-action-option-0')).toBeNull();
+    expect(fetchLegalTargets).not.toHaveBeenCalled();
   });
 });

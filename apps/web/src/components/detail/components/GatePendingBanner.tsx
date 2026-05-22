@@ -1,10 +1,12 @@
 import { decideIntervention, fetchIssueInterventions, fetchLegalTargets } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { GATE_STATES } from '@/lib/constants';
 import { interventionKeys, invalidateInterventionDecision } from '@/lib/query-keys';
 import type { InterventionDto, InterventionOptionDto } from '@/lib/types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Info, ShieldAlert } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 
 const ACTIVE_INTERVENTION_STATUSES = ['OPEN', 'PROPOSED'] as const;
 
@@ -13,6 +15,7 @@ function interventionVariant(
 ): 'danger' | 'warning' | 'info' {
   if (interventionType === 'needs_human') return 'danger';
   if (interventionType === 'gate_pending') return 'info';
+  if (interventionType === 'prd_review') return 'info';
   return 'warning';
 }
 
@@ -50,6 +53,7 @@ export function GatePendingBanner({
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isGateState = state != null && GATE_STATES[state] != null;
 
   const { data: interventions = [] } = useQuery({
     queryKey:
@@ -58,11 +62,13 @@ export function GatePendingBanner({
         : ['interventions', 'issue', 'missing'],
     queryFn: () =>
       fetchIssueInterventions(projectSlug ?? '', id ?? '', [...ACTIVE_INTERVENTION_STATUSES]),
-    enabled: !!projectSlug && !!id,
+    enabled: isGateState && !!projectSlug && !!id,
   });
 
   const primary = selectPrimaryIntervention(interventions);
-  const shouldFetchLegalTargets = primary?.status === 'OPEN' && !!projectSlug && !!id;
+  const isPrdReviewIntervention = primary?.interventionType === 'prd_review';
+  const shouldFetchLegalTargets =
+    isGateState && !isPrdReviewIntervention && primary?.status === 'OPEN' && !!projectSlug && !!id;
 
   const { data: legalTargets } = useQuery({
     queryKey:
@@ -73,12 +79,15 @@ export function GatePendingBanner({
     enabled: shouldFetchLegalTargets,
   });
 
-  if (!primary || !projectSlug || !id) return null;
+  if (!isGateState || !primary || !projectSlug || !id) return null;
 
   const variant = interventionVariant(primary.interventionType);
-  const options = primary.status === 'PROPOSED' ? primary.proposedOptions : [];
+  const options =
+    primary.status === 'PROPOSED' && !isPrdReviewIntervention ? primary.proposedOptions : [];
   const manualTargets =
-    primary.status === 'OPEN' && legalTargets != null ? legalTargets.legalTargets : [];
+    !isPrdReviewIntervention && primary.status === 'OPEN' && legalTargets != null
+      ? legalTargets.legalTargets
+      : [];
 
   const handleDecision = async (
     intervention: InterventionDto,
@@ -162,7 +171,7 @@ export function GatePendingBanner({
           <ShieldAlert size={14} className="shrink-0" />
         )}
         <span>{primary.title}</span>
-        {primary.status === 'OPEN' && (
+        {!isPrdReviewIntervention && primary.status === 'OPEN' && (
           <span className="text-[11.5px] opacity-70">
             {primary.leaseOwner ? 'Proposal running' : 'Proposal pending'}
           </span>
@@ -170,6 +179,19 @@ export function GatePendingBanner({
         {error && <span className="text-[color:var(--danger)] ml-2">{error}</span>}
         <span className="grow" />
         <span className="flex items-center gap-2">
+          {isPrdReviewIntervention && (
+            <Link
+              to={`/projects/${projectSlug}/items/${id}/prd`}
+              data-testid="gate-action-review-prd"
+              className={cn(
+                'h-6 px-2.5 rounded text-[11.5px] font-medium border',
+                'border-[color:var(--info)]/60 text-[color:var(--info)]',
+                'hover:bg-[color:var(--info)]/20',
+              )}
+            >
+              Review PRD
+            </Link>
+          )}
           {options.map(renderOption)}
           {manualTargets.map((target) => (
             <button

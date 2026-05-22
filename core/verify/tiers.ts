@@ -135,6 +135,7 @@ export function verifyStructural(
 
 const BARE_REPO_PATH_PATTERN = /^(?:\.\/)?[\w@./-]+\.[A-Za-z0-9]+$/;
 const LAUNCH_ERROR_MARKER = 'GOOSE_VERIFICATION_COMMAND_LAUNCH_ERROR';
+const ROOT_WEB_PLAYWRIGHT_PREFIX = 'pnpm exec playwright test apps/web/e2e/';
 
 export function isBareVerificationPath(command: unknown): boolean {
   if (typeof command !== 'string') return false;
@@ -188,6 +189,23 @@ function classifyVerificationCommandFailure(
   return { category: 'product' };
 }
 
+function normalizeVerificationCommand(command: string): string {
+  const trimmed = command.trim();
+  if (!trimmed.startsWith(ROOT_WEB_PLAYWRIGHT_PREFIX)) {
+    return command;
+  }
+
+  const webSpecAndArgs = trimmed.slice(ROOT_WEB_PLAYWRIGHT_PREFIX.length);
+  const specPath = webSpecAndArgs.split(/\s+/, 1)[0] ?? '';
+  const packageRelative = `e2e/${webSpecAndArgs}`;
+
+  if (specPath === 'chat.spec.ts') {
+    return `pnpm --filter @goose-hub/web exec playwright test --config playwright-chat.config.ts ${packageRelative}`;
+  }
+
+  return `pnpm --filter @goose-hub/web exec playwright test ${packageRelative}`;
+}
+
 async function defaultRunVerificationCommand(
   command: string,
   worktreePath: string,
@@ -201,7 +219,8 @@ async function defaultRunVerificationCommand(
   }
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
-    const child = spawn('sh', ['-c', command], {
+    const normalizedCommand = normalizeVerificationCommand(command);
+    const child = spawn('sh', ['-c', normalizedCommand], {
       cwd: worktreePath,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, CI: '1' },
@@ -251,13 +270,14 @@ export async function verifyFunctional(
       });
       continue;
     }
-    const result = await runCommand(tool.command, worktreePath, tool.expectedExitCodes);
+    const command = normalizeVerificationCommand(tool.command);
+    const result = await runCommand(command, worktreePath, tool.expectedExitCodes);
     if (result.passed) {
       evidence.push(`tool-passed: ${tool.name}`);
     } else {
-      const classification = classifyVerificationCommandFailure(tool.command, result.output);
+      const classification = classifyVerificationCommandFailure(command, result.output);
       findings.push({
-        message: `Verification tool '${tool.name}' failed (command: ${tool.command}): ${result.output.slice(0, 256)}`,
+        message: `Verification tool '${tool.name}' failed (command: ${command}): ${result.output.slice(0, 256)}`,
         severity: 'error',
         ...classification,
       });

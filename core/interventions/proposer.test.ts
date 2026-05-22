@@ -9,7 +9,10 @@ import { getIntervention, listInterventionEvents } from './repository.js';
 
 function openFixture(
   suffix: string,
-  options: { projectId?: string; interventionType?: 'needs_human' | 'gate_pending' } = {},
+  options: {
+    projectId?: string;
+    interventionType?: 'needs_human' | 'gate_pending' | 'prd_review';
+  } = {},
 ) {
   const result = open({
     projectId: options.projectId ?? `proj-${suffix}`,
@@ -286,6 +289,73 @@ describe('intervention proposer worker', () => {
       workItemId: intervention.workItemId,
       kind: 'state.transitioned',
       payload: { from: 'factory:gate-pending', to: 'factory:triaging' },
+    });
+    const invokeSkill = vi.fn(async () => skillResult({ options: [] }));
+
+    const result = await runInterventionProposerWorkerOnce({
+      projectId: intervention.projectId,
+      limit: 10,
+      leaseOwner: 'test-proposer',
+      deps: {
+        invokeSkill,
+        now: () => new Date('2026-05-20T00:00:00Z'),
+      },
+    });
+
+    expect(result).toEqual({ processed: 1, proposed: 0, failed: 0, skipped: 1 });
+    expect(invokeSkill).not.toHaveBeenCalled();
+    expect(getIntervention(intervention.id)?.status).toBe('SUPERSEDED');
+  });
+
+  it('keeps PRD review rows applicable while latest state is prd-review', async () => {
+    const intervention = openFixture('proposal-prd-review-current', {
+      interventionType: 'prd_review',
+    });
+    eventStore.appendEvent({
+      projectId: intervention.projectId,
+      workItemId: intervention.workItemId,
+      kind: 'state.transitioned',
+      payload: { from: 'factory:prd-drafting', to: 'factory:prd-review' },
+    });
+    const invokeSkill = vi.fn(async () =>
+      skillResult({
+        summary: 'Wait for PRD review',
+        options: [
+          {
+            actionType: 'no_action',
+            label: 'Wait',
+            description: 'Leave the PRD review intervention open.',
+            payload: { reason: 'awaiting PRD review' },
+            risk: 'low',
+          },
+        ],
+      }),
+    );
+
+    const result = await runInterventionProposerWorkerOnce({
+      projectId: intervention.projectId,
+      limit: 10,
+      leaseOwner: 'test-proposer',
+      deps: {
+        invokeSkill,
+        now: () => new Date('2026-05-20T00:00:00Z'),
+      },
+    });
+
+    expect(result).toEqual({ processed: 1, proposed: 1, failed: 0, skipped: 0 });
+    expect(invokeSkill).toHaveBeenCalledTimes(1);
+    expect(getIntervention(intervention.id)?.status).toBe('PROPOSED');
+  });
+
+  it('supersedes PRD review rows after the issue leaves prd-review', async () => {
+    const intervention = openFixture('proposal-prd-review-stale', {
+      interventionType: 'prd_review',
+    });
+    eventStore.appendEvent({
+      projectId: intervention.projectId,
+      workItemId: intervention.workItemId,
+      kind: 'state.transitioned',
+      payload: { from: 'factory:prd-review', to: 'factory:decomposing' },
     });
     const invokeSkill = vi.fn(async () => skillResult({ options: [] }));
 

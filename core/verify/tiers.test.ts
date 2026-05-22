@@ -164,6 +164,32 @@ describe('Tier 2 (Functional) — golden test', () => {
     expect(result.evidence).toHaveLength(2);
   });
 
+  it('normalizes root web Playwright chat commands to the web package runner', async () => {
+    const commands: string[] = [];
+    const spec = makeSpec({
+      verificationTooling: [
+        {
+          name: 'chat reopen regression e2e',
+          command:
+            'pnpm exec playwright test apps/web/e2e/chat.spec.ts --grep "reopens on the conversation list after launcher close"',
+          expectedExitCodes: [0],
+        },
+      ],
+    });
+
+    const result = await verifyFunctional(spec, '/tmp', {
+      runVerificationCommandImpl: async (command) => {
+        commands.push(command);
+        return { passed: true, output: '' };
+      },
+    });
+
+    expect(result.passed).toBe(true);
+    expect(commands).toEqual([
+      'pnpm --filter @goose-hub/web exec playwright test --config playwright-chat.config.ts e2e/chat.spec.ts --grep "reopens on the conversation list after launcher close"',
+    ]);
+  });
+
   it('classifies a bare test file path as verification infrastructure failure', async () => {
     const spec = makeSpec({
       verificationTooling: [
