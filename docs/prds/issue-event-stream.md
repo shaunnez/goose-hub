@@ -44,11 +44,24 @@ PRD: Centralize Issue Eventstream And Canonical Event Emission
       - Invalidate comments on grill.question-posted and comment-like events.
       - Invalidate costs on agent.run-completed, agent.run-failed, and budget terminal events.
       - Invalidate intervention timeline queries on intervention-linked transitions.
-  5. All state mutations emit state.transitioned.
-      - Add a shared helper that performs source-state mutation and emits state.transitioned.
-      - Support legal transitions and explicit forced transitions.
-      - Migrate known direct transitionState / forceState call sites in Grill/PRD, decompose, investigate, approve/merge,
-        retrospective, dispatch fallbacks, and MCP/chat transition tools.
+  5. All workflow-owned state mutations emit state.transitioned.
+      - Reuse and extend the existing `core/event-stream/state-transition.ts` seam instead of creating an unrelated second
+        event helper.
+      - Introduce one canonical transition wrapper that composes the existing `StateSource.transitionState` /
+        `StateSource.forceState` behavior with `emitStateTransitionEvent`.
+      - Do not move event emission into `StateSource` implementations. `StateSource` remains the source-of-truth mutation
+        adapter; workflow/server code remains responsible for Factory event emission.
+      - The wrapper must preserve current semantics: legal transitions still use `transitionState`, explicit forced transitions
+        still use `forceState`, existing notes/comments/intervention metadata remain supported, and no event is emitted if the
+        source-state mutation fails.
+      - Support explicit forced transitions with a required caller-supplied `from` state when known, or a clearly marked
+        forced-transition payload when the previous state cannot be known safely.
+      - Before migration, audit existing direct `transitionState` / `forceState` call sites and classify each as:
+        workflow-owned mutation to migrate, source/test setup to leave alone, or external/bootstrap/sweep path intentionally
+        outside issue timeline emission.
+      - Migrate known workflow-owned direct call sites in Grill/PRD, decompose, investigate, approve/merge, retrospective,
+        dispatch fallbacks, MCP/chat transition tools, and intervention appliers only after tests cover the wrapper's legal,
+        forced, and failure cases.
   6. All skill decisions become canonical when appropriate.
       - implement-wp parsed output decisionSummaries must reconcile to agent.decision-summary.
       - evidence-post final output decisionSummaries must reconcile to agent.decision-summary.
@@ -77,6 +90,10 @@ PRD: Centralize Issue Eventstream And Canonical Event Emission
   - [ ] Approved merge emits factory:approved -> factory:retrospecting.
   - [ ] Retrospective completion/failure emits factory:retrospecting -> factory:done or factory:needs-human.
   - [ ] MCP/chat transition tools emit state.transitioned when they mutate issue state.
+  - [ ] Existing transition semantics are preserved: illegal legal-transition attempts still fail, forced transitions still
+    bypass legality only where explicitly requested, and failed source mutations do not emit state.transitioned.
+  - [ ] Direct transition call sites are audited and documented in the PR: migrated workflow-owned calls are listed, and
+    intentionally-unmigrated source/test/bootstrap/sweep calls are justified.
   - [ ] implement-wp decision summaries become canonical agent.decision-summary events.
   - [ ] evidence-post final decision summaries become canonical agent.decision-summary events.
   - [ ] playwright-repro output includes decision summaries and emits canonical decision-summary events.
