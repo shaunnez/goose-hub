@@ -47,6 +47,7 @@ class MockEventSource {
 
 beforeEach(() => {
   MockEventSource.instances = [];
+  vi.clearAllMocks();
   vi.stubGlobal('EventSource', MockEventSource);
 });
 
@@ -55,6 +56,7 @@ afterEach(() => {
 });
 
 vi.mock('@/lib/api', () => ({
+  fetchEvents: vi.fn().mockResolvedValue([]),
   fetchEventsPage: vi.fn().mockResolvedValue({ events: [], hasMore: false }),
   fetchIntervention: vi.fn(),
   fetchIssueInterventions: vi.fn().mockResolvedValue([]),
@@ -127,6 +129,13 @@ function makeCodexTransportWarning(id: number, runId: string): AgentEventDto {
       source: 'responses_websocket',
       message: 'failed to connect to websocket: 503 Service Unavailable',
     }),
+  });
+}
+
+function invalidatedQueryKey(calls: readonly (readonly unknown[])[], queryKey: readonly unknown[]) {
+  return calls.some(([input]) => {
+    const candidate = input as { queryKey?: unknown };
+    return JSON.stringify(candidate.queryKey) === JSON.stringify(queryKey);
   });
 }
 
@@ -321,7 +330,7 @@ describe('TimelineSection — expand/collapse all', () => {
     await screen.findByTestId('timeline-expand-all');
     fireEvent.click(screen.getByTestId('timeline-expand-all'));
 
-    expect(await screen.findByText('Complete')).toBeTruthy();
+    expect((await screen.findAllByText('Complete')).length).toBeGreaterThan(0);
     expect(
       await screen.findByText('Codex transport warning: websocket 503; run recovered'),
     ).toBeTruthy();
@@ -345,7 +354,7 @@ describe('TimelineSection — expand/collapse all', () => {
     await screen.findByTestId('timeline-expand-all');
     fireEvent.click(screen.getByTestId('timeline-expand-all'));
 
-    expect(await screen.findByText('Complete')).toBeTruthy();
+    expect((await screen.findAllByText('Complete')).length).toBeGreaterThan(0);
     expect(
       await screen.findByText('Codex transport warning: websocket 503; run recovered'),
     ).toBeTruthy();
@@ -362,6 +371,7 @@ describe('TimelineSection — expand/collapse all', () => {
     });
 
     const queryClient = new QueryClient();
+    queryClient.setQueryData(['events', 'p', '1'], []);
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const { TimelineSection } = await import('./TimelineSection');
     renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />, queryClient);
@@ -374,6 +384,103 @@ describe('TimelineSection — expand/collapse all', () => {
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issue-costs', 'p', '1'] });
     });
+  });
+
+  it('writes named issue timeline SSE events into the shared events cache without invalidating it', async () => {
+    const { fetchEventsPage } = await import('@/lib/api');
+    vi.mocked(fetchEventsPage).mockResolvedValue({ events: [], hasMore: false });
+
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(['events', 'p', '1'], []);
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    const { TimelineSection } = await import('./TimelineSection');
+    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />, queryClient);
+
+    await screen.findByText('No timeline events yet.');
+    await waitFor(() => expect(MockEventSource.instances.length).toBeGreaterThan(0));
+
+    const event = makeEvent(2, 'agent.investigation-complete', {
+      investigate: { findings: [] },
+    });
+    MockEventSource.instances[0].emitNamed(event);
+    MockEventSource.instances[0].emitNamed(event);
+
+    await waitFor(() => {
+      expect(queryClient.getQueryData(['events', 'p', '1'])).toEqual([event]);
+    });
+    expect(invalidatedQueryKey(invalidateSpy.mock.calls, ['events', 'p', '1'])).toBe(false);
+  });
+
+  it('invalidates issue state caches, but not events, when a state transition arrives over SSE', async () => {
+    const { fetchEventsPage } = await import('@/lib/api');
+    vi.mocked(fetchEventsPage).mockResolvedValue({ events: [], hasMore: false });
+
+    const queryClient = new QueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    const { TimelineSection } = await import('./TimelineSection');
+    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />, queryClient);
+
+    await screen.findByText('No timeline events yet.');
+    await waitFor(() => expect(MockEventSource.instances.length).toBeGreaterThan(0));
+
+    MockEventSource.instances[0].emitNamed(
+      makeEvent(2, 'state.transitioned', {
+        from: 'factory:decomposing',
+        to: 'factory:done',
+      }),
+    );
+
+    await waitFor(() => {
+      expect(invalidatedQueryKey(invalidateSpy.mock.calls, ['issue', 'p', '1'])).toBe(true);
+      expect(invalidatedQueryKey(invalidateSpy.mock.calls, ['issues', 'p'])).toBe(true);
+    });
+    expect(invalidatedQueryKey(invalidateSpy.mock.calls, ['events', 'p', '1'])).toBe(false);
+  });
+
+  it('updates the Playwright capture section from live investigation SSE without refetching events', async () => {
+    const { fetchEvents, fetchEventsPage } = await import('@/lib/api');
+    vi.mocked(fetchEvents).mockResolvedValue([]);
+    vi.mocked(fetchEventsPage).mockResolvedValue({ events: [], hasMore: false });
+
+    const queryClient = new QueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    const { TimelineSection } = await import('./TimelineSection');
+    const { PlaywrightCaptureSection } = await import('./PlaywrightCaptureSection');
+    renderTimeline(
+      <>
+        <TimelineSection projectSlug="p" id="1" workItemId="w1" />
+        <PlaywrightCaptureSection projectSlug="p" id="1" itemType="bug" />
+      </>,
+      queryClient,
+    );
+
+    expect(await screen.findByText('Playwright capture has not run yet.')).toBeTruthy();
+    expect(fetchEvents).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(MockEventSource.instances.length).toBeGreaterThan(0));
+
+    MockEventSource.instances[0].emitNamed(
+      makeEvent(2, 'agent.investigation-complete', {
+        playwrightRepro: {
+          screenshots: [
+            {
+              path: '/tmp/repro.png',
+              caption: 'Live repro screenshot',
+              step: 1,
+            },
+          ],
+          gifPath: null,
+          consoleErrors: [],
+          reproSteps: ['Open the bug page'],
+          reproduced: true,
+          notes: 'Captured from the live investigation event.',
+        },
+      }),
+    );
+
+    expect(await screen.findByText('Open the bug page')).toBeTruthy();
+    expect(screen.getByText('Live repro screenshot')).toBeTruthy();
+    expect(fetchEvents).toHaveBeenCalledTimes(1);
+    expect(invalidatedQueryKey(invalidateSpy.mock.calls, ['events', 'p', '1'])).toBe(false);
   });
 
   it('renders named SSE events that are visible in REST reloads', async () => {
