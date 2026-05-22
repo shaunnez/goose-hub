@@ -2,16 +2,49 @@
 import type { AgentEventDto } from '@/lib/types';
 import { ActiveProjectProvider } from '@/state/active-project';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { cleanup } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InvestigationSection } from './InvestigationSection';
+
+vi.mock('react', async () => {
+  const actual = await vi.importActual<typeof import('react')>('react');
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      act: actual.act,
+    },
+  };
+});
 
 afterEach(cleanup);
 
 vi.mock('@/lib/api', () => ({
   fetchEvents: vi.fn().mockResolvedValue([]),
   fetchComments: vi.fn().mockResolvedValue([]),
+  fetchAcceptanceContract: vi.fn().mockResolvedValue({
+    source: 'engineering-spec',
+    criteria: [
+      {
+        id: 'AC1',
+        statement: 'Acceptance criterion statement',
+        verifyCommand: 'pnpm vitest',
+      },
+    ],
+  }),
+  fetchEngineeringSpec: vi.fn().mockResolvedValue({
+    objective: 'Ship the fix safely',
+    workPackages: [{ id: 'WP1', filesOwned: ['apps/web/src/example.ts'], builderTier: 'standard' }],
+    acceptanceCriteriaCount: 1,
+    acceptanceCriteria: [
+      {
+        id: 'AC1',
+        statement: 'Spec acceptance criterion',
+        verifyCommand: 'pnpm test',
+      },
+    ],
+  }),
   fetchPersonaNames: vi.fn().mockResolvedValue([]),
   fetchProjects: vi.fn().mockResolvedValue([
     {
@@ -77,13 +110,35 @@ function toolCallEvent(partial: Partial<AgentEventDto> = {}): AgentEventDto {
   };
 }
 
-function renderSection(events: AgentEventDto[] = []) {
+function renderSection(events: AgentEventDto[] = [], itemState = 'factory:dev-ready') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(['events', 'test-proj', '42'], events);
+  qc.setQueryData(['spec', 'test-proj', '42'], {
+    objective: 'Ship the fix safely',
+    workPackages: [{ id: 'WP1', filesOwned: ['apps/web/src/example.ts'], builderTier: 'standard' }],
+    acceptanceCriteriaCount: 1,
+    acceptanceCriteria: [
+      {
+        id: 'AC1',
+        statement: 'Spec acceptance criterion',
+        verifyCommand: 'pnpm test',
+      },
+    ],
+  });
+  qc.setQueryData(['acceptance-contract', 'test-proj', '42'], {
+    source: 'engineering-spec',
+    criteria: [
+      {
+        id: 'AC1',
+        statement: 'Acceptance criterion statement',
+        verifyCommand: 'pnpm vitest',
+      },
+    ],
+  });
   render(
     <QueryClientProvider client={qc}>
       <ActiveProjectProvider initialSlug="test-proj">
-        <InvestigationSection projectSlug="test-proj" id="42" />
+        <InvestigationSection projectSlug="test-proj" id="42" itemState={itemState} />
       </ActiveProjectProvider>
     </QueryClientProvider>,
   );
@@ -100,6 +155,10 @@ describe('InvestigationSection', () => {
     renderSection([INVESTIGATION_EVENT]);
     expect(screen.getByTestId('investigation-section')).toBeTruthy();
     expect(screen.getByTestId('findings-content')).toBeTruthy();
+    expect(screen.getByTestId('findings-accordion-trigger')).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
   });
 
   it('displays the correct confidence badge for high confidence', () => {
@@ -119,9 +178,45 @@ describe('InvestigationSection', () => {
 
   it('renders open questions list', () => {
     renderSection([INVESTIGATION_EVENT]);
+    expect(screen.getByTestId('open-questions-accordion-trigger')).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    fireEvent.click(screen.getByTestId('open-questions-accordion-trigger'));
     const questionsList = screen.getByTestId('open-questions-list');
     expect(questionsList).toBeTruthy();
     expect(screen.getByText('Does this affect the mobile app?')).toBeTruthy();
+  });
+
+  it('renders acceptance contract and engineering spec collapsed by default', () => {
+    renderSection([INVESTIGATION_EVENT]);
+
+    expect(screen.getByTestId('acceptance-contract-trigger')).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.queryByText('Acceptance criterion statement')).toBeNull();
+
+    expect(screen.getByTestId('engineering-spec-trigger')).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.queryByText('Ship the fix safely')).toBeNull();
+  });
+
+  it('toggles collapsed accordion sections open on click', () => {
+    renderSection([INVESTIGATION_EVENT]);
+
+    fireEvent.click(screen.getByTestId('acceptance-contract-trigger'));
+    expect(screen.getByTestId('acceptance-contract-trigger')).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByText('Acceptance criterion statement')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('engineering-spec-trigger'));
+    expect(screen.getByTestId('engineering-spec-trigger')).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Ship the fix safely')).toBeTruthy();
   });
 
   it('shows low confidence badge with appropriate styling', () => {
@@ -181,7 +276,26 @@ describe('InvestigationSection', () => {
       },
     };
     renderSection([noQuestionsEvent]);
+    expect(screen.queryByTestId('open-questions-accordion-trigger')).toBeNull();
     expect(screen.queryByTestId('open-questions-list')).toBeNull();
+  });
+
+  it('does not render empty optional section accordions', () => {
+    const sparseEvent = investigationEvent({
+      payload: {
+        investigate: {
+          ...(INVESTIGATION_EVENT.payload as { investigate: Record<string, unknown> }).investigate,
+          decisionSummaries: [],
+          openQuestions: [],
+          keyFiles: [],
+        },
+      },
+    });
+
+    renderSection([sparseEvent]);
+
+    expect(screen.queryByTestId('investigation-trail-accordion-trigger')).toBeNull();
+    expect(screen.queryByTestId('open-questions-accordion-trigger')).toBeNull();
   });
 
   it('renders the newest investigation event regardless of event order', () => {

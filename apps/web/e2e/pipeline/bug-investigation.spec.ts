@@ -46,6 +46,20 @@ test.describe('Bug investigation (MOCK_AGENTS + MOCK_SOURCE)', () => {
     // Investigate (high-confidence) → dev-ready
     await postServer(`/projects/${SLUG}/dispatch/${issueNumber}`);
     await expect(statePill).toHaveText('dev-ready', { timeout: 15_000 });
+
+    await expect(page.getByTestId('findings-accordion-trigger')).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    await expect(page.getByTestId('acceptance-contract-trigger')).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    await expect(page.getByTestId('engineering-spec-trigger')).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    await expect(page.getByTestId('investigation-trail-accordion-trigger')).toBeVisible();
   });
 
   test('low-confidence investigate → gate-pending', async ({ page }) => {

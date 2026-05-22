@@ -33,6 +33,8 @@ export function SpecDetails({
     <div className="rounded-lg border border-[color:var(--accent)]/20 bg-bg-elev overflow-hidden">
       <button
         type="button"
+        data-testid="engineering-spec-trigger"
+        aria-expanded={open}
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between px-4 py-3 bg-bg-elev-2 text-left cursor-pointer"
       >
@@ -49,7 +51,10 @@ export function SpecDetails({
       </button>
 
       {open && (
-        <div className="px-4 py-4 flex flex-col gap-4 border-t border-line">
+        <div
+          data-testid="engineering-spec-content"
+          className="px-4 py-4 flex flex-col gap-4 border-t border-line"
+        >
           <div>
             <div className="text-[10px] uppercase tracking-wider text-fg-3 mb-1">Objective</div>
             <p className="text-[12.5px] text-fg-2 leading-relaxed">{spec.objective}</p>
