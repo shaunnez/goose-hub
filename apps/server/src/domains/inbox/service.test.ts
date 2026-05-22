@@ -213,7 +213,7 @@ describe('promoteInboxItem', () => {
   it.each([
     ['missing', undefined],
     ['unsupported', 'epic'],
-  ])('returns 400 before enhancement for %s type', async (_label, type) => {
+  ])('returns 400 before enhancement for %s type when enhance is true', async (_label, type) => {
     const item = {
       id: 6,
       title: 'Bad type',
@@ -229,6 +229,29 @@ describe('promoteInboxItem', () => {
     expect(mockRunBugEnhance).not.toHaveBeenCalled();
     expect(mockSource.createIssue).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ['missing', undefined],
+    ['unsupported', 'epic'],
+  ])(
+    'returns 400 before issue creation for %s type when enhance is false',
+    async (_label, type) => {
+      const item = {
+        id: 7,
+        title: 'Bad type',
+        body: 'Original body',
+        type,
+        createdAt: '2026-05-01',
+      };
+
+      vi.mocked(getInboxItem).mockResolvedValueOnce(item as never);
+      const result = await promoteInboxItem(7, 'my-proj', undefined, false);
+
+      expect(result).toEqual({ ok: false, error: 'invalid promotion type', status: 400 });
+      expect(mockRunBugEnhance).not.toHaveBeenCalled();
+      expect(mockSource.createIssue).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('deleteInboxItem (service)', () => {

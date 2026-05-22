@@ -62,12 +62,11 @@ export async function promoteInboxItem(
     effectiveMilestoneNumber = stateRows[0]?.activeMilestoneNumber ?? null;
   }
 
+  if (!isValidPromotionType(item.type))
+    return { ok: false, error: 'invalid promotion type', status: 400 };
+
   let body = item.body ?? '';
   if (enhance) {
-    if (!isValidPromotionType(item.type)) {
-      return { ok: false, error: 'invalid promotion type', status: 400 };
-    }
-
     const enhancement = await runBugEnhance(source.projectId, item.id, item.title, body, item.type);
     if (enhancement != null) {
       body = `${body}\n\n---\n\n${enhancement}`;

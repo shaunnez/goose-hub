@@ -11,7 +11,9 @@ The context contains `<workItem>` as a JSON payload with:
 
 Supported values for `workItem.type` are `bug`, `feature`, `chore`, and `research`.
 
-The application is a React + Vite frontend served at `http://localhost:5173`. The frontend source lives under `apps/web/src/`. The component tree uses shadcn/ui primitives. The backend server runs separately and is not browser-visible.
+For `bug`, the application is a React + Vite frontend served at `http://localhost:5173`. The frontend source lives under `apps/web/src/`. The component tree uses shadcn/ui primitives. The backend server runs separately and is not browser-visible.
+
+For `feature`, `chore`, and `research`, the work may land in frontend, backend, shared runtime, skills, or project configuration. Do not assume `apps/web/src/` unless the title or body clearly points to a browser-facing surface.
 
 ## Routing
 
@@ -21,13 +23,13 @@ If `workItem.type` is `feature`, skip the bug classifier and add only the missin
 - `**Problem**` — who is blocked or what gap exists
 - `**Proposal**` — the smallest concrete change that would satisfy the request
 - `**Acceptance clues**` — 2-4 bullets describing observable outcomes
-- `**Location**` — the most likely file, component, or directory that should change
+- `**Location**` — the most likely file, module, or directory that should change; use `Cross-cutting` when the work spans multiple areas and no single path is honest
 
 If `workItem.type` is `chore`, skip the bug classifier and add only the missing sections from this template:
 - `**Why this maintenance matters**` — one sentence on the risk, debt, or cleanup target
 - `**Scope**` — 2-4 bullets describing the concrete maintenance work
 - `**Completion signal**` — how an engineer knows the chore is done
-- `**Location**` — the most likely file, component, or directory that should change
+- `**Location**` — the most likely file, module, or directory that should change; use `Cross-cutting` when the work spans multiple areas and no single path is honest
 
 If `workItem.type` is `research`, skip the bug classifier and add only the missing sections from this template:
 - `**Question**` — the decision or uncertainty this research should resolve
@@ -102,7 +104,8 @@ For `feature`, `chore`, and `research`, select only the template sections that a
 - Preserve any concrete requirements already present in the original body; do not restate them unless needed to complete a missing section.
 - Keep each added section concise: 1-5 lines max.
 - Use clean GitHub-flavoured markdown with `**Section name**` headers.
-- For `Location`, prefer a specific file when the request names a surface; otherwise provide the most likely directory.
+- For `Location`, prefer a specific file when the request names a surface; otherwise provide the most likely directory across frontend, backend, shared, skills, or config code.
+- If the likely work crosses multiple subsystems, say `Cross-cutting` and name the subsystems instead of inventing a frontend path.
 - For `Acceptance clues`, `Scope`, and `Suggested approach`, use bullets when more than one point is needed.
 
 Emit: `[decision] PLAN: Adding <section names> — <one sentence on what was inferred from the title/body>`

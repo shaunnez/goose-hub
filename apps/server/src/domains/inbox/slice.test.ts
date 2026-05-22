@@ -134,4 +134,25 @@ describe('inbox promotion slice', () => {
       expect.objectContaining({ body: 'Original body', type: 'feature' }),
     );
   });
+
+  it('rejects invalid promotion types even when enhancement is disabled', async () => {
+    mockGetInboxItem.mockResolvedValueOnce({
+      id: 10,
+      title: 'Bad type',
+      body: 'Original body',
+      type: 'epic',
+      createdAt: '2026-05-01',
+    });
+
+    const response = await makeApp().request('/inbox/10/promote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectSlug: 'goose-hub-self', enhance: false }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: 'invalid promotion type' });
+    expect(mockRunBugEnhance).not.toHaveBeenCalled();
+    expect(mockSource.createIssue).not.toHaveBeenCalled();
+  });
 });
