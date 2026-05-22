@@ -9,6 +9,7 @@ import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { filterEligibleByDependencies } from '@goose-hub/core/projects/dependency-scheduler.js';
 import { createProjectAwareTargetSource } from '@goose-hub/core/state-source/dependency-resolver.js';
+import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import type { InvestigateOutput } from '@goose-hub/skills/investigate/schema.js';
 import { EngineeringSpecSchema } from '@goose-hub/skills/spec-author/schema.js';
 import { withParallelLock } from './dispatch-lock.js';
@@ -100,6 +101,26 @@ function resolveFixIssuePipelineForBug(
     (investigationPlan == null || plannerLocalized)
     ? 'legacy'
     : 'spec-author';
+}
+
+async function readRoutingLabels(input: {
+  source: StateSource;
+  item: WorkItem;
+  slug: string;
+  issueNumber: number;
+}): Promise<string[]> {
+  if (input.source.listLabels == null) return [];
+  try {
+    return await input.source.listLabels(input.item.externalId);
+  } catch (err) {
+    logger.warn('dispatchFixIssue: listLabels failed, continuing with default routing', {
+      slug: input.slug,
+      issueNumber: input.issueNumber,
+      itemId: input.item.id,
+      error: String(err),
+    });
+    return [];
+  }
 }
 
 /** Run the investigate workflow for a single issue. Drops duplicate triggers for the same issue. */
@@ -348,7 +369,12 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
       return;
     }
     const routingItem = await routingSource.getItem(issueNumber.toString());
-    const routingLabels = (await routingSource.listLabels?.(routingItem.externalId)) ?? [];
+    const routingLabels = await readRoutingLabels({
+      source: routingSource,
+      item: routingItem,
+      slug,
+      issueNumber,
+    });
     if (routingLabels.includes('factory:from-prd')) {
       logger.info('dispatchFixIssue: PRD child projection → legacy single-agent path', {
         slug,

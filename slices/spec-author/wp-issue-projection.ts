@@ -7,6 +7,8 @@ type WpProjection = {
   body: string;
 };
 
+const PROJECTION_MARKER = '<!-- factory:wp-projection -->';
+
 function bulletList(items: string[]): string {
   return items.length > 0 ? items.map((item) => `- ${item}`).join('\n') : '- None';
 }
@@ -30,7 +32,8 @@ function buildProjectionBody(input: {
   batch: number | null;
 }): string {
   return [
-    '<!-- factory:wp-projection -->',
+    PROJECTION_MARKER,
+    `<!-- factory:wp-projection parent:${input.parent.externalId} wp:${input.wp.id} -->`,
     `Parent issue: #${input.parent.externalId}`,
     `Engineering Spec authority: parent issue #${input.parent.externalId}`,
     '',
@@ -78,6 +81,39 @@ export function buildWpIssueProjections(input: {
   }));
 }
 
+function projectionMatches(input: {
+  body: string;
+  parentExternalId: string;
+  wpId: string;
+}): boolean {
+  return (
+    input.body.includes(PROJECTION_MARKER) &&
+    input.body.includes(`Parent issue: #${input.parentExternalId}`) &&
+    input.body.includes(`## Work Package ${input.wpId}`)
+  );
+}
+
+async function listExistingProjectionIssues(input: {
+  source: StateSource;
+  parent: WorkItem;
+}): Promise<Map<string, WorkItem>> {
+  const existing = new Map<string, WorkItem>();
+  const openItems = await input.source.listOpenWork();
+
+  for (const item of openItems) {
+    if (!item.body.includes(PROJECTION_MARKER)) continue;
+    if (!item.body.includes(`Parent issue: #${input.parent.externalId}`)) continue;
+    for (const line of item.body.split('\n')) {
+      const match = /^## Work Package (.+)$/.exec(line.trim());
+      if (match == null) continue;
+      existing.set(match[1], item);
+      break;
+    }
+  }
+
+  return existing;
+}
+
 export async function createWpIssueProjections(input: {
   source: StateSource;
   parent: WorkItem;
@@ -85,13 +121,35 @@ export async function createWpIssueProjections(input: {
 }): Promise<Array<{ wpId: string; childWorkItemId: string; externalId: string }>> {
   const projections = buildWpIssueProjections({ parent: input.parent, spec: input.spec });
   const created: Array<{ wpId: string; childWorkItemId: string; externalId: string }> = [];
+  const existing = await listExistingProjectionIssues({
+    source: input.source,
+    parent: input.parent,
+  });
 
   for (const projection of projections) {
+    const existingProjection = existing.get(projection.wp.id);
+    if (
+      existingProjection != null &&
+      projectionMatches({
+        body: existingProjection.body,
+        parentExternalId: input.parent.externalId,
+        wpId: projection.wp.id,
+      })
+    ) {
+      created.push({
+        wpId: projection.wp.id,
+        childWorkItemId: existingProjection.id,
+        externalId: existingProjection.externalId,
+      });
+      continue;
+    }
+
     const child = await input.source.createIssue({
       title: `[${projection.wp.id}] ${input.parent.title}`,
       body: projection.body,
       type: 'chore',
       priority: input.parent.priority,
+      ...(input.parent.milestoneId != null ? { milestoneId: input.parent.milestoneId } : {}),
       initialState: 'factory:issues-created',
       extraLabels: ['factory:from-prd'],
     });
