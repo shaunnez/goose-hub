@@ -13,6 +13,38 @@ interface TriageResultsSectionProps {
 // Static allowlist — mirrors target-projects/goose-hub-self/repos.md
 const ALLOWLISTED_REPOS = ['shaunnez/goose-hub'];
 
+export function getTriageResultQueryKey(projectSlug: string, id: string) {
+  return ['triage', projectSlug, id] as const;
+}
+
+export interface CanonicalTriageSummary {
+  priority: string;
+  type: string;
+  candidateCount: number;
+  pickedRepo: string | null;
+  confidence: number | null;
+  isOverride: boolean;
+}
+
+export function getCanonicalTriageSummary(triage: TriageResultDto): CanonicalTriageSummary {
+  const pickedRepo = triage.overrideRepo ?? triage.candidates[0]?.repo ?? null;
+  const pickedCandidate =
+    (pickedRepo != null
+      ? triage.candidates.find((candidate) => candidate.repo === pickedRepo)
+      : null) ??
+    triage.candidates[0] ??
+    null;
+
+  return {
+    priority: triage.priority,
+    type: triage.type,
+    candidateCount: triage.candidates.length,
+    pickedRepo,
+    confidence: pickedCandidate?.confidence ?? null,
+    isOverride: triage.overrideRepo != null,
+  };
+}
+
 function ScoreBar({ value }: { value: number }) {
   const pct = Math.max(0, Math.min(100, value));
   const color = pct >= 70 ? 'var(--accent)' : pct >= 40 ? 'oklch(0.74 0.15 200)' : 'var(--fg-4)';
@@ -32,14 +64,14 @@ export function TriageResultsSection({ projectSlug, id }: TriageResultsSectionPr
   const [selectedRepo, setSelectedRepo] = useState('');
 
   const { data, isLoading } = useQuery<TriageResultDto | null>({
-    queryKey: ['triage', projectSlug, id],
+    queryKey: getTriageResultQueryKey(projectSlug, id),
     queryFn: () => fetchTriageResult(projectSlug, id),
   });
 
   const overrideMutation = useMutation({
     mutationFn: (repo: string) => setRepoOverride(projectSlug, id, repo),
     onSuccess: (updated) => {
-      queryClient.setQueryData(['triage', projectSlug, id], updated);
+      queryClient.setQueryData(getTriageResultQueryKey(projectSlug, id), updated);
       setSelectedRepo('');
       setOverrideMode(false);
     },
@@ -85,7 +117,8 @@ export function TriageResultsSection({ projectSlug, id }: TriageResultsSectionPr
   }
 
   const triage: TriageResultDto = data;
-  const pickedRepo = triage.overrideRepo ?? triage.candidates[0]?.repo;
+  const triageSummary = getCanonicalTriageSummary(triage);
+  const pickedRepo = triageSummary.pickedRepo;
 
   const priorityColor = PRIORITY_COLOR[triage.priority];
   const priorityBg = PRIORITY_BG[triage.priority];

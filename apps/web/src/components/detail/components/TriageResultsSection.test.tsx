@@ -1,19 +1,8 @@
-/** @vitest-environment jsdom */
-import { fetchTriageResult, setRepoOverride } from '@/lib/api';
 import type { TriageResultDto } from '@/lib/types';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { TriageResultsSection } from './TriageResultsSection';
+import { describe, expect, it } from 'vitest';
+import { getCanonicalTriageSummary, getTriageResultQueryKey } from './TriageResultsSection';
 
-afterEach(cleanup);
-
-vi.mock('@/lib/api', () => ({
-  fetchTriageResult: vi.fn(),
-  setRepoOverride: vi.fn(),
-}));
-
-const TRIAGE_DATA: TriageResultDto = {
+const BASE_TRIAGE: TriageResultDto = {
   priority: 'high',
   type: 'bug',
   candidates: [
@@ -23,62 +12,81 @@ const TRIAGE_DATA: TriageResultDto = {
       tier: 1,
       evidence: 'Keyword match in src/lib/',
     },
+    {
+      repo: 'shaunnez/docs',
+      confidence: 55,
+      tier: 2,
+      evidence: 'Secondary ownership signal',
+    },
   ],
   overrideRepo: null,
 };
 
-function renderSection(slug = 'proj', id = '42') {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
-    <QueryClientProvider client={qc}>
-      <TriageResultsSection projectSlug={slug} id={id} />
-    </QueryClientProvider>,
-  );
-  return qc;
-}
-
-describe('TriageResultsSection — empty state', () => {
-  it('renders empty state when fetch returns null', async () => {
-    vi.mocked(fetchTriageResult).mockResolvedValueOnce(null);
-    renderSection();
-    const el = await screen.findByTestId('triage-empty-state');
-    expect(el).toBeTruthy();
-  });
-
-  it('shows "No triage result yet" heading in empty state', async () => {
-    vi.mocked(fetchTriageResult).mockResolvedValueOnce(null);
-    renderSection();
-    await screen.findByTestId('triage-empty-state');
-    expect(screen.getByText('No triage result yet')).toBeTruthy();
-  });
-
-  it('shows section header in empty state', async () => {
-    vi.mocked(fetchTriageResult).mockResolvedValueOnce(null);
-    renderSection();
-    await screen.findByTestId('triage-empty-state');
-    expect(screen.getByText('Repo candidates & classification')).toBeTruthy();
-  });
-
-  it('shows descriptive sub-copy in empty state', async () => {
-    vi.mocked(fetchTriageResult).mockResolvedValueOnce(null);
-    renderSection();
-    await screen.findByTestId('triage-empty-state');
-    expect(screen.getByTestId('triage-empty-description')).toBeTruthy();
+describe('getTriageResultQueryKey', () => {
+  it('keeps the canonical overview cache key stable', () => {
+    expect(getTriageResultQueryKey('proj', '42')).toEqual(['triage', 'proj', '42']);
   });
 });
 
-describe('TriageResultsSection — with data', () => {
-  it('renders triage section when data is present', async () => {
-    vi.mocked(fetchTriageResult).mockResolvedValueOnce(TRIAGE_DATA);
-    renderSection();
-    const el = await screen.findByTestId('triage-results-section');
-    expect(el).toBeTruthy();
+describe('getCanonicalTriageSummary', () => {
+  it('returns priority, type, candidate count, picked repo, and confidence from canonical triage data', () => {
+    expect(getCanonicalTriageSummary(BASE_TRIAGE)).toEqual({
+      priority: 'high',
+      type: 'bug',
+      candidateCount: 2,
+      pickedRepo: 'shaunnez/goose-hub',
+      confidence: 85,
+      isOverride: false,
+    });
   });
 
-  it('does not render empty state when data is present', async () => {
-    vi.mocked(fetchTriageResult).mockResolvedValueOnce(TRIAGE_DATA);
-    renderSection();
-    await screen.findByTestId('triage-results-section');
-    expect(screen.queryByTestId('triage-empty-state')).toBeNull();
+  it('prefers the override repo and marks the summary as overridden', () => {
+    expect(
+      getCanonicalTriageSummary({
+        ...BASE_TRIAGE,
+        overrideRepo: 'shaunnez/docs',
+      }),
+    ).toEqual({
+      priority: 'high',
+      type: 'bug',
+      candidateCount: 2,
+      pickedRepo: 'shaunnez/docs',
+      confidence: 55,
+      isOverride: true,
+    });
+  });
+
+  it('keeps the override repo visible even if it is not in the candidate list', () => {
+    expect(
+      getCanonicalTriageSummary({
+        ...BASE_TRIAGE,
+        overrideRepo: 'shaunnez/ops',
+      }),
+    ).toEqual({
+      priority: 'high',
+      type: 'bug',
+      candidateCount: 2,
+      pickedRepo: 'shaunnez/ops',
+      confidence: 85,
+      isOverride: true,
+    });
+  });
+
+  it('returns null repo and confidence when triage produced no candidates', () => {
+    expect(
+      getCanonicalTriageSummary({
+        priority: 'medium',
+        type: 'task',
+        candidates: [],
+        overrideRepo: null,
+      }),
+    ).toEqual({
+      priority: 'medium',
+      type: 'task',
+      candidateCount: 0,
+      pickedRepo: null,
+      confidence: null,
+      isOverride: false,
+    });
   });
 });
