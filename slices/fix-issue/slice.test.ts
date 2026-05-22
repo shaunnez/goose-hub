@@ -510,7 +510,7 @@ describe('runFixIssueWorkflow (#183)', () => {
     );
     // worktree persists until merge — NOT cleaned up after PR open
     expect(cleanupWorktreeImpl).not.toHaveBeenCalled();
-    // pr.opened event recorded with worktreePath and devRunId for QA and merge cleanup
+    // pr.opened event recorded with lifecycle ids for QA, review, merge scoring, and cleanup.
     const opened = vi
       .mocked(eventStore.appendEvent)
       .mock.calls.find(([e]) => e.kind === 'pr.opened');
@@ -518,6 +518,7 @@ describe('runFixIssueWorkflow (#183)', () => {
     const openedPayload = opened?.[0].payload as Record<string, unknown>;
     expect(openedPayload).toHaveProperty('worktreePath');
     expect(openedPayload).toHaveProperty('devRunId');
+    expect(openedPayload).toHaveProperty('pipelineRunId', openedPayload.devRunId);
     expect(openedPayload).toHaveProperty('baseBranch', 'main');
     expect(mockAccumulatePersonaStats).toHaveBeenCalledWith({
       personaName: 'proj/developer/0',

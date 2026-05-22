@@ -861,6 +861,9 @@ export async function afterImplement(input: AfterImplementInput): Promise<void> 
       baseBranch: prResult.base,
       worktreePath,
       devRunId: runId,
+      // Legacy fix-issue has a single developer run, so the delivery
+      // lifecycle intentionally aliases the dev run id for M19 scoring.
+      pipelineRunId: runId,
     },
     runId,
   });

@@ -868,6 +868,18 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
     const source = makeMockSource({
       getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+added'),
     });
+    mockReplay.mockReturnValue([
+      {
+        id: 1,
+        projectId: 'test-project',
+        workItemId: 'github:owner/repo#42',
+        kind: 'pr.opened',
+        payload: { devRunId: 'legacy-dev-run', pipelineRunId: 'legacy-dev-run' },
+        runId: null,
+        personaId: null,
+        createdAt: '2026-05-11T00:00:00Z',
+      },
+    ]);
 
     // 3 rounds × 2 reviewers all returning approved with no findings → converge at round 3
     for (let i = 0; i < 6; i++) mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings());
@@ -880,7 +892,10 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
       .mocked(eventStore.appendEvent)
       .mock.calls.filter(([e]) => e.kind === 'review.completed');
     expect(completedEvents).toHaveLength(1);
-    expect(completedEvents[0]?.[0].payload).toMatchObject({ verdict: 'approved' });
+    expect(completedEvents[0]?.[0].payload).toMatchObject({
+      verdict: 'approved',
+      pipelineRunId: 'legacy-dev-run',
+    });
   });
 
   it('shares one reviewWorkflowRunId across review lifecycle, state transition, and child output events', async () => {
