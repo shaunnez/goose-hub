@@ -109,6 +109,13 @@ export function applyIssueTimelineEvent(
     void queryClient.invalidateQueries({ queryKey: ['comments', projectSlug, issueId] });
   }
 
+  if (event.kind === 'spec.completed') {
+    void queryClient.invalidateQueries({ queryKey: ['spec', projectSlug, issueId] });
+    void queryClient.invalidateQueries({
+      queryKey: ['acceptance-contract', projectSlug, issueId],
+    });
+  }
+
   if (
     event.kind === 'agent.run-completed' ||
     event.kind === 'agent.run-failed' ||

@@ -17,6 +17,141 @@ import { getSourceForSlug } from '#shared/source.js';
 import type { LegalTargetsDto } from '../interventions/dto.js';
 import { getLastPersonaIdsByWorkItem, getRepoRef } from './internal.js';
 
+type RawObject = Record<string, unknown>;
+
+function isObject(value: unknown): value is RawObject {
+  return value != null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function stringValue(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function numberValue(value: unknown, fallback = 0): number {
+  return typeof value === 'number' ? value : fallback;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+}
+
+function numberArray(value: unknown): number[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is number => typeof item === 'number')
+    : [];
+}
+
+function objectArray(value: unknown): RawObject[] {
+  return Array.isArray(value) ? value.filter(isObject) : [];
+}
+
+function projectExecutableChecks(value: unknown) {
+  return objectArray(value).map((check, index) => ({
+    id: stringValue(check.id, `check-${index + 1}`),
+    command: stringValue(check.command),
+    ...(Array.isArray(check.expectedExitCodes)
+      ? { expectedExitCodes: numberArray(check.expectedExitCodes) }
+      : {}),
+    ...(isObject(check.outputExpectation)
+      ? {
+          outputExpectation: {
+            mode: stringValue(check.outputExpectation.mode) as 'exact' | 'contains' | 'regex',
+            value: stringValue(check.outputExpectation.value),
+          },
+        }
+      : {}),
+    ...(typeof check.timeoutMs === 'number' ? { timeoutMs: check.timeoutMs } : {}),
+    ...(typeof check.kind === 'string'
+      ? {
+          kind: check.kind as
+            | 'unit'
+            | 'integration'
+            | 'e2e'
+            | 'api'
+            | 'lint'
+            | 'typecheck'
+            | 'custom',
+        }
+      : {}),
+  }));
+}
+
+function projectEngineeringSpec(record: NonNullable<ReturnType<typeof getEngineeringSpec>>) {
+  const s = isObject(record.spec) ? record.spec : {};
+  const acceptanceCriteria = objectArray(s.acceptanceCriteria).map((ac, index) => ({
+    id: stringValue(ac.id, `AC-${index + 1}`),
+    statement: stringValue(ac.statement),
+    ...(ac.executableChecks != null
+      ? { executableChecks: projectExecutableChecks(ac.executableChecks) }
+      : {}),
+    ...(ac.journeyRef != null ? { journeyRef: ac.journeyRef as string | null } : {}),
+    ...(ac.stepIdx != null ? { stepIdx: ac.stepIdx as number | null } : {}),
+    ...(ac.crossCutting != null ? { crossCutting: ac.crossCutting as boolean | null } : {}),
+    ...(typeof ac.sourceRef === 'string' ? { sourceRef: ac.sourceRef } : {}),
+    ...(typeof ac.source === 'string' ? { source: ac.source } : {}),
+  }));
+
+  const architecture = isObject(s.architecture)
+    ? {
+        current: stringValue(s.architecture.current),
+        new: stringValue(s.architecture.new),
+        decisionRationale: stringValue(s.architecture.decisionRationale),
+      }
+    : undefined;
+
+  const schemaChanges = isObject(s.schemaChanges)
+    ? {
+        ddl: stringArray(s.schemaChanges.ddl),
+        migrations: stringArray(s.schemaChanges.migrations),
+      }
+    : undefined;
+
+  return {
+    pipelineRunId: record.pipelineRunId,
+    updatedAt: record.updatedAt,
+    objective: stringValue(s.objective),
+    ...(architecture != null ? { architecture } : {}),
+    workPackages: objectArray(s.workPackages).map((wp, index) => ({
+      id: stringValue(wp.id, `WP${index + 1}`),
+      filesOwned: stringArray(wp.filesOwned),
+      changes: stringValue(wp.changes),
+      dependsOn: stringArray(wp.dependsOn),
+      builderTier: stringValue(wp.builderTier),
+    })),
+    executionOrder: objectArray(s.executionOrder).map((batch) => ({
+      batch: numberValue(batch.batch),
+      wpIds: stringArray(batch.wpIds),
+    })),
+    verificationTooling: objectArray(s.verificationTooling).map((tool) => ({
+      name: stringValue(tool.name),
+      command: stringValue(tool.command),
+      expectedExitCodes: numberArray(tool.expectedExitCodes),
+      ...(tool.inputSpec != null ? { inputSpec: tool.inputSpec as string | null } : {}),
+    })),
+    acceptanceCriteria,
+    acceptanceCriteriaCount: acceptanceCriteria.length,
+    interfaceContracts: objectArray(s.interfaceContracts).map((contract) => ({
+      name: stringValue(contract.name),
+      signature: stringValue(contract.signature),
+      file: stringValue(contract.file),
+      ...(contract.lineRange != null ? { lineRange: contract.lineRange as string | null } : {}),
+    })),
+    ...(schemaChanges != null ? { schemaChanges } : {}),
+    constraints: objectArray(s.constraints).map((constraint) => ({
+      kind: stringValue(constraint.kind),
+      name: stringValue(constraint.name),
+      source: stringValue(constraint.source),
+    })),
+    riskRegister: objectArray(s.riskRegister).map((risk) => ({
+      risk: stringValue(risk.risk),
+      mitigation: stringValue(risk.mitigation),
+      severity: stringValue(risk.severity),
+    })),
+  };
+}
+
 const TYPE_EXCLUDED_LEGAL_TARGETS: Readonly<Record<string, readonly StateName[]>> = {
   bug: ['factory:grilling', 'factory:research-pending'],
   feature: ['factory:investigating', 'factory:research-pending'],
@@ -124,8 +259,23 @@ export async function getIssueSpec(
   Result<{
     spec: {
       pipelineRunId: string;
+      updatedAt: string;
       objective: string;
-      workPackages: Array<{ id: string; filesOwned: string[]; builderTier: string }>;
+      architecture?: { current: string; new: string; decisionRationale: string };
+      workPackages: Array<{
+        id: string;
+        filesOwned: string[];
+        changes: string;
+        dependsOn: string[];
+        builderTier: string;
+      }>;
+      executionOrder: Array<{ batch: number; wpIds: string[] }>;
+      verificationTooling: Array<{
+        name: string;
+        command: string;
+        expectedExitCodes: number[];
+        inputSpec?: string | null;
+      }>;
       acceptanceCriteria: Array<{
         id: string;
         statement: string;
@@ -143,8 +293,19 @@ export async function getIssueSpec(
         journeyRef?: string | null;
         stepIdx?: number | null;
         crossCutting?: boolean | null;
+        sourceRef?: string;
+        source?: string;
       }>;
       acceptanceCriteriaCount: number;
+      interfaceContracts: Array<{
+        name: string;
+        signature: string;
+        file: string;
+        lineRange?: string | null;
+      }>;
+      schemaChanges?: { ddl: string[]; migrations: string[] };
+      constraints: Array<{ kind: string; name: string; source: string }>;
+      riskRegister: Array<{ risk: string; mitigation: string; severity: string }>;
     } | null;
   }>
 > {
@@ -154,49 +315,10 @@ export async function getIssueSpec(
   const workItemId = `github:${repoRef}#${id}`;
   const record = getEngineeringSpec(slug, workItemId);
   if (record == null) return { ok: true, data: { spec: null } };
-  const s = record.spec as {
-    objective: string;
-    workPackages: Array<{ id: string; filesOwned: string[]; builderTier: string }>;
-    acceptanceCriteria: unknown[];
-  };
-  const acceptanceCriteria = s.acceptanceCriteria.map((raw, index) => {
-    const ac = raw as {
-      id?: string;
-      statement?: string;
-      executableChecks?: Array<{
-        id: string;
-        command: string;
-        expectedExitCodes?: number[];
-        outputExpectation?: {
-          mode: 'exact' | 'contains' | 'regex';
-          value: string;
-        };
-        timeoutMs?: number;
-        kind?: 'unit' | 'integration' | 'e2e' | 'api' | 'lint' | 'typecheck' | 'custom';
-      }>;
-      journeyRef?: string | null;
-      stepIdx?: number | null;
-      crossCutting?: boolean | null;
-    };
-    return {
-      id: ac.id ?? `AC-${index + 1}`,
-      statement: ac.statement ?? '',
-      ...(ac.executableChecks != null ? { executableChecks: ac.executableChecks } : {}),
-      ...(ac.journeyRef != null ? { journeyRef: ac.journeyRef } : {}),
-      ...(ac.stepIdx != null ? { stepIdx: ac.stepIdx } : {}),
-      ...(ac.crossCutting != null ? { crossCutting: ac.crossCutting } : {}),
-    };
-  });
   return {
     ok: true,
     data: {
-      spec: {
-        pipelineRunId: record.pipelineRunId,
-        objective: s.objective,
-        workPackages: s.workPackages,
-        acceptanceCriteria,
-        acceptanceCriteriaCount: acceptanceCriteria.length,
-      },
+      spec: projectEngineeringSpec(record),
     },
   };
 }

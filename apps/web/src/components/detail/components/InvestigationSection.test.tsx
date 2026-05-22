@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import type { AgentEventDto } from '@/lib/types';
+import type { AgentEventDto, EngineeringSpecDto } from '@/lib/types';
 import { ActiveProjectProvider } from '@/state/active-project';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
@@ -12,6 +12,8 @@ afterEach(cleanup);
 vi.mock('@/lib/api', () => ({
   fetchEvents: vi.fn().mockResolvedValue([]),
   fetchComments: vi.fn().mockResolvedValue([]),
+  fetchEngineeringSpec: vi.fn().mockResolvedValue(null),
+  fetchAcceptanceContract: vi.fn().mockResolvedValue(null),
   fetchPersonaNames: vi.fn().mockResolvedValue([]),
   fetchProjects: vi.fn().mockResolvedValue([
     {
@@ -52,6 +54,28 @@ const INVESTIGATION_EVENT: AgentEventDto = {
   createdAt: new Date().toISOString(),
 };
 
+const ENGINEERING_SPEC: EngineeringSpecDto = {
+  pipelineRunId: 'pipe-test-123',
+  updatedAt: '2026-05-22T10:00:00Z',
+  objective: 'Build the authentication flow with token refresh.',
+  workPackages: [
+    {
+      id: 'WP1',
+      filesOwned: ['src/auth/login.ts'],
+      changes: 'Update login refresh flow.',
+      dependsOn: [],
+      builderTier: 'sonnet',
+    },
+  ],
+  executionOrder: [{ batch: 0, wpIds: ['WP1'] }],
+  verificationTooling: [],
+  acceptanceCriteria: [{ id: 'AC-1', statement: 'Users can log in.' }],
+  acceptanceCriteriaCount: 1,
+  interfaceContracts: [],
+  constraints: [],
+  riskRegister: [],
+};
+
 function investigationEvent(partial: Partial<AgentEventDto> = {}): AgentEventDto {
   return {
     ...INVESTIGATION_EVENT,
@@ -77,9 +101,10 @@ function toolCallEvent(partial: Partial<AgentEventDto> = {}): AgentEventDto {
   };
 }
 
-function renderSection(events: AgentEventDto[] = []) {
+function renderSection(events: AgentEventDto[] = [], spec?: EngineeringSpecDto | null) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(['events', 'test-proj', '42'], events);
+  if (spec !== undefined) qc.setQueryData(['spec', 'test-proj', '42'], spec);
   render(
     <QueryClientProvider client={qc}>
       <ActiveProjectProvider initialSlug="test-proj">
@@ -100,6 +125,12 @@ describe('InvestigationSection', () => {
     renderSection([INVESTIGATION_EVENT]);
     expect(screen.getByTestId('investigation-section')).toBeTruthy();
     expect(screen.getByTestId('findings-content')).toBeTruthy();
+  });
+
+  it('renders the Engineering Spec panel when a spec exists', () => {
+    renderSection([INVESTIGATION_EVENT], ENGINEERING_SPEC);
+    expect(screen.getByText('Engineering Spec')).toBeTruthy();
+    expect(screen.getByText('1 work package · 1 AC')).toBeTruthy();
   });
 
   it('displays the correct confidence badge for high confidence', () => {
