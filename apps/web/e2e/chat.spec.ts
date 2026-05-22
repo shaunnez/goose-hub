@@ -63,6 +63,29 @@ test.describe('hub-chat panel', () => {
     await expect(panel).toHaveClass(/translate-x-full/);
   });
 
+  test('closing via launcher resets the next open to the conversation list', async ({ page }) => {
+    await page.goto('/projects/goose-hub-self');
+    await openChatPanel(page);
+    await startNewConversation(page);
+    await waitForChatReady(page);
+
+    await page.locator('[data-testid="chat-toggle-view"]').click();
+    const list = page.locator('[data-testid="chat-conversation-list"]');
+    await expect(list).toBeVisible();
+
+    const row = list.locator('[data-testid="chat-conversation-select"]').first();
+    await expect(row).toBeVisible();
+    await row.click();
+    await expect(page.locator('[data-testid="chat-input"]')).toBeVisible();
+
+    await page.locator('[data-testid="chat-launcher"]').click();
+    await expect(page.locator('[data-testid="chat-panel"]')).toHaveClass(/translate-x-full/);
+
+    await openChatPanel(page);
+    await expect(page.locator('[data-testid="chat-conversation-list"]')).toBeVisible();
+    await expect(page.locator('[data-testid="chat-input"]')).toHaveCount(0);
+  });
+
   test('sending a message persists it and the user bubble renders', async ({ page }) => {
     await page.goto('/projects/goose-hub-self');
     await openChatPanel(page);

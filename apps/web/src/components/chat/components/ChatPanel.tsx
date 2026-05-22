@@ -31,14 +31,26 @@ import { ConversationList } from './ConversationList';
 
 const ACTIVE_CONVERSATION_STORAGE_KEY = 'hub-chat-active-conversation-id';
 
+export interface ChatPanelCloseOptions {
+  resetToList?: boolean;
+  clearActiveConversationId?: boolean;
+}
+
 interface ChatPanelProps {
   open: boolean;
-  onClose: () => void;
+  onClose: (options?: ChatPanelCloseOptions) => void;
+  closeRequestToken?: number;
+  closeRequestOptions?: ChatPanelCloseOptions;
 }
 
 type View = 'thread' | 'list';
 
-export function ChatPanel({ open, onClose }: ChatPanelProps) {
+export function ChatPanel({
+  open,
+  onClose,
+  closeRequestToken = 0,
+  closeRequestOptions,
+}: ChatPanelProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const resolved = useMemo(() => resolveScopeFromPath(location.pathname), [location.pathname]);
@@ -136,6 +148,30 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
     }
   }, []);
 
+  const resetConversationState = useCallback(
+    (options?: ChatPanelCloseOptions) => {
+      loadTokenRef.current += 1;
+      activeConversationIdRef.current = null;
+      inFlightRunByConversationRef.current.clear();
+      setConversation(null);
+      setMessages([]);
+      setInvocations([]);
+      setSendingConversationIds(new Set());
+      if (options?.clearActiveConversationId) {
+        writeActiveId(null);
+      }
+      if (options?.resetToList) {
+        setView('list');
+      }
+    },
+    [writeActiveId],
+  );
+
+  useEffect(() => {
+    if (closeRequestToken === 0 || closeRequestOptions == null) return;
+    resetConversationState(closeRequestOptions);
+  }, [closeRequestOptions, closeRequestToken, resetConversationState]);
+
   useEffect(() => {
     if (!open || toolManifest.length > 0) return;
     let cancelled = false;
@@ -208,10 +244,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
           }
         } else {
           if (cancelled) return;
-          setConversation(null);
-          setMessages([]);
-          setInvocations([]);
-          setView('list');
+          resetConversationState({ resetToList: true });
         }
       } catch (err) {
         if (!cancelled) setError(`Could not load conversations: ${String(err)}`);
@@ -220,7 +253,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [open, readActiveId, loadConversation]);
+  }, [open, readActiveId, loadConversation, resetConversationState]);
 
   const handleNewConversation = useCallback(async () => {
     setBusy(true);
@@ -258,11 +291,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         await deleteConversation(id);
         setConversations((prev) => prev.filter((c) => c.id !== id));
         if (conversation?.id === id) {
-          setConversation(null);
-          setMessages([]);
-          setInvocations([]);
-          writeActiveId(null);
-          setView('list');
+          resetConversationState({ resetToList: true, clearActiveConversationId: true });
         }
       } catch (err) {
         setError(`Delete failed: ${String(err)}`);
@@ -270,7 +299,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         setBusy(false);
       }
     },
-    [conversation, writeActiveId],
+    [conversation, resetConversationState],
   );
 
   // Subscribe to chat.* events for this conversation. The events drive two
@@ -463,7 +492,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         </select>
         <button
           type="button"
-          onClick={onClose}
+          onClick={() => onClose()}
           aria-label="Close chat"
           className="p-1 text-fg-2 hover:text-fg rounded"
         >

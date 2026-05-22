@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ChatLauncher } from './ChatLauncher';
-import { ChatPanel } from './ChatPanel';
+import { ChatPanel, type ChatPanelCloseOptions } from './ChatPanel';
 
 const STORAGE_KEY = 'hub-chat-open';
 
@@ -17,6 +17,10 @@ export function ChatDock() {
       return false;
     }
   });
+  const [closeRequestToken, setCloseRequestToken] = useState(0);
+  const [closeRequestOptions, setCloseRequestOptions] = useState<
+    ChatPanelCloseOptions | undefined
+  >();
 
   useEffect(() => {
     try {
@@ -24,10 +28,31 @@ export function ChatDock() {
     } catch {}
   }, [open]);
 
+  const handleChatClose = (options?: ChatPanelCloseOptions) => {
+    if (options != null) {
+      setCloseRequestOptions(options);
+      setCloseRequestToken((token) => token + 1);
+    }
+    setOpen(false);
+  };
+
+  const handleLauncherToggle = () => {
+    if (open) {
+      handleChatClose({ resetToList: true, clearActiveConversationId: true });
+      return;
+    }
+    setOpen(true);
+  };
+
   return (
     <>
-      <ChatPanel open={open} onClose={() => setOpen(false)} />
-      <ChatLauncher open={open} onToggle={() => setOpen((o) => !o)} />
+      <ChatPanel
+        open={open}
+        onClose={handleChatClose}
+        closeRequestToken={closeRequestToken}
+        closeRequestOptions={closeRequestOptions}
+      />
+      <ChatLauncher open={open} onToggle={handleLauncherToggle} />
     </>
   );
 }
