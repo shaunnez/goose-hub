@@ -54,7 +54,7 @@ Every entry in `acceptanceCriteria[]` must satisfy one of:
 
 Schema rejects ACs that have neither — every AC must back-reference a journey/step OR be marked `crossCutting: true`.
 
-`verifyCommand` is optional and, when present, should be a shell command a developer can run to verify the AC (e.g. `pnpm vitest run slices/0042/`).
+`executableChecks` is optional and should only be present when the PRD has a grounded repo-root command. Most PRD ACs are behavior statements with no executable checks.
 
 ## Sizing and scope
 
@@ -122,7 +122,20 @@ Exact field names (use these verbatim):
   "outOfScope": ["<string>"],
   "successCriteria": ["<string>"],
   "acceptanceCriteria": [
-    { "id": "<string>", "statement": "<string>", "journeyId": "<string>", "stepIdx": 0, "verifyCommand": "<optional string>" },
+    {
+      "id": "<string>",
+      "statement": "<string>",
+      "journeyId": "<string>",
+      "stepIdx": 0,
+      "executableChecks": [
+        {
+          "id": "<string>",
+          "command": "<optional repo-root command>",
+          "expectedExitCodes": [0],
+          "kind": "unit"
+        }
+      ]
+    },
     { "id": "<string>", "statement": "<string>", "crossCutting": true }
   ],
   "journeys": [

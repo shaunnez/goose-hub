@@ -105,7 +105,7 @@ describe('acceptance-contract workflow', () => {
     expect(runtimeRun).not.toHaveBeenCalled();
     expect(contract.criteria[0]).toMatchObject({
       statement: 'Cards sort newest first',
-      verifyCommand: 'pnpm test',
+      executableChecks: [{ command: 'pnpm test' }],
     });
   });
 
@@ -116,9 +116,6 @@ describe('acceptance-contract workflow', () => {
           {
             id: 'AC-1',
             statement: 'Cards sort newest first',
-            verifyCommand: null,
-            expected: null,
-            tolerance: null,
           },
         ],
         issueBodyPatchRecommended: true,

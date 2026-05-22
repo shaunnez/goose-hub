@@ -18,7 +18,7 @@ The context contains:
 - Write criteria as outcomes, not implementation steps.
 - Keep criteria specific enough for Review to mark `met`, `unmet`, or `unclear` from a PR diff.
 - Prefer one to four criteria for simple bugs/chores.
-- Add `verifyCommand`, `expected`, and `tolerance` when the investigation or issue names an obvious targeted command. Do not invent a command if no command is grounded.
+- Add `executableChecks` only when the investigation or issue names an obvious targeted repo-root command. Do not invent a command if no command is grounded.
 - Never include developer reasoning or raw investigation internals in the criterion text.
 - Set `issueBodyPatchRecommended` to true when the issue body had no usable checkbox criteria.
 
@@ -33,9 +33,14 @@ Return only JSON conforming to `AcceptanceContractOutputSchema`.
     {
       "id": "AC-1",
       "statement": "Kanban lane cards are ordered newest first within each lane.",
-      "verifyCommand": "pnpm vitest run apps/web/src/lib/lanes.config.test.ts",
-      "expected": "pass",
-      "tolerance": "exact",
+      "executableChecks": [
+        {
+          "id": "AC-1-check-1",
+          "command": "pnpm vitest run apps/web/src/lib/lanes.config.test.ts",
+          "expectedExitCodes": [0],
+          "kind": "unit"
+        }
+      ],
       "sourceRef": "investigation.keyFiles[0]"
     }
   ],

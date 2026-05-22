@@ -13,10 +13,16 @@ import { REPO_ROOT, sliceUrl } from './slice-url.js';
 import { getSourceForSlug } from './source.js';
 
 type VerifyCommand = {
+  criterionId: string;
+  checkId: string;
   ac: string;
   command: string;
-  expected: string;
-  tolerance: string;
+  expectedExitCodes: number[];
+  outputExpectation?: {
+    mode: 'exact' | 'contains' | 'regex';
+    value: string;
+  };
+  timeoutMs?: number;
 };
 
 function mergeVerifyCommands(...groups: VerifyCommand[][]): VerifyCommand[] {
@@ -47,7 +53,7 @@ export async function dispatchQa(slug: string, issueNumber: number): Promise<voi
         projectSlug: string,
         targetRepo: string,
         deps?: {
-          verifyCommands?: VerifyCommand[];
+          executableChecks?: VerifyCommand[];
           acceptanceContract?: unknown;
           runTests?: (() => Promise<null>) | undefined;
         },
@@ -64,13 +70,13 @@ export async function dispatchQa(slug: string, issueNumber: number): Promise<voi
       workItemId: item.id,
       issueBody: item.body,
     });
-    const verifyCommands = mergeVerifyCommands(
+    const executableChecks = mergeVerifyCommands(
       acceptanceCriteriaToVerifyCommands(acceptanceContract?.criteria ?? []),
       parseIssueBodyVerifyCommands(item.body ?? ''),
     );
     const qaRunTests = process.env.MOCK_SOURCE === 'true' ? () => Promise.resolve(null) : undefined;
     await runQaWorkflow(item, source, slug, item.repoRef ?? slug, {
-      verifyCommands,
+      executableChecks,
       acceptanceContract: acceptanceContract ?? undefined,
       runTests: qaRunTests,
     });

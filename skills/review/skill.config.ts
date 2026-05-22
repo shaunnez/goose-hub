@@ -1,3 +1,4 @@
+import { AcceptanceCriterionContractSchema } from '@goose-hub/core/acceptance-contracts/types.js';
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
 import { ReviewOutputSchema } from './schema.js';
@@ -41,16 +42,7 @@ export const ReviewContextSchema = z.object({
   acceptanceContract: z
     .object({
       source: z.enum(['normalized', 'engineering-spec', 'prd', 'issue-body']),
-      criteria: z.array(
-        z.object({
-          id: z.string(),
-          statement: z.string(),
-          verifyCommand: z.string().optional(),
-          expected: z.string().optional(),
-          tolerance: z.string().optional(),
-          sourceRef: z.string().optional(),
-        }),
-      ),
+      criteria: z.array(AcceptanceCriterionContractSchema),
     })
     .optional(),
 });

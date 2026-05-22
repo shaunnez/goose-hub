@@ -195,7 +195,6 @@ function normalizeSpecAuthorOutput(output: unknown): EngineeringSpec {
       const next = { ...criterion };
       if (next.journeyRef == null) next.journeyRef = undefined;
       if (next.stepIdx == null) next.stepIdx = undefined;
-      if (next.tolerance == null) next.tolerance = undefined;
       if (next.crossCutting == null) next.crossCutting = undefined;
       if (next.source == null) next.source = undefined;
       return next;

@@ -510,7 +510,7 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
               statement: 'Mock fixture file is created',
               journeyRef: 'J-1',
               stepIdx: 0,
-              verifyCommand: 'pnpm test',
+              executableChecks: [{ id: 'AC-1-check-1', command: 'pnpm test' }],
             },
           ],
           constraints: [],

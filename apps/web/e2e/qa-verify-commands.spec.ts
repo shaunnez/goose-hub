@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * QA verify-command e2e tests (#469).
+ * QA executable AC check e2e tests (#469).
  *
- * Full integration (file issue with verify blocks → run QA → inspect UI) requires
+ * Full integration (file issue with executable check blocks → run QA → inspect UI) requires
  * a live GitHub token and a running QA workflow. Those assertions live in the
  * pipeline suite (playwright-e2e-pipeline.config.ts). Tests here cover the UI
  * surface with fixture data served by the fake-run endpoint.
@@ -27,7 +27,7 @@ async function gh(path: string, method = 'GET', body?: unknown) {
   return res.json() as Promise<Record<string, unknown>>;
 }
 
-test.describe('QA verify-command UI', () => {
+test.describe('QA executable AC check UI', () => {
   test.skip(!TOKEN, 'GITHUB_TOKEN is required.');
 
   let issueNumber: number;
@@ -51,8 +51,8 @@ test.describe('QA verify-command UI', () => {
     milestoneNumber = ms.number;
 
     const issue = (await gh('/repos/shaunnez/goose-hub/issues', 'POST', {
-      title: '[E2E QA Verify] Test issue — safe to close',
-      body: '## Acceptance criteria\n\n- [ ] Server is reachable\n      Verify: curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/health\n      Expected: 200\n      Tolerance: contains\n',
+      title: '[E2E QA Executable Check] Test issue — safe to close',
+      body: '## Acceptance criteria\n\n- [ ] Server is reachable\n  Executable check:\n  - Command: curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/health\n  - Expected exit codes: 0\n  - Output expectation: contains: 200\n  - Kind: api\n',
       milestone: milestoneNumber,
       labels: [
         'factory:needs-qa',
@@ -95,7 +95,7 @@ test.describe('QA verify-command UI', () => {
     await expect(page.getByTestId('qa-empty-state')).toBeVisible();
   });
 
-  test('Timeline shows agent.verify-command events after QA run', async ({ page }) => {
+  test('Timeline shows executable check events after QA run', async ({ page }) => {
     test.setTimeout(30_000);
 
     await page.goto(`/projects/${PROJECT_SLUG}/items/${issueNumber}`);
@@ -104,7 +104,7 @@ test.describe('QA verify-command UI', () => {
     await page.getByRole('link', { name: 'Timeline' }).click();
     await expect(page.getByTestId('timeline-section')).toBeVisible({ timeout: 10_000 });
 
-    // No verify-command events exist yet (QA not run on this fixture). Assert the
+    // No executable check events exist yet (QA not run on this fixture). Assert the
     // event kind is handled without crashing by confirming the timeline renders.
     await expect(page.getByTestId('timeline-section')).toBeVisible();
   });

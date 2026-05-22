@@ -12,7 +12,14 @@ const CONTRACT: AcceptanceContractDto = {
     {
       id: 'AC-1',
       statement: 'Lane cards are ordered newest first.',
-      verifyCommand: 'pnpm vitest run apps/web/src/lib/lanes.config.test.ts',
+      executableChecks: [
+        {
+          id: 'AC-1-check-1',
+          command: 'pnpm vitest run apps/web/src/lib/lanes.config.test.ts',
+          expectedExitCodes: [0],
+          kind: 'unit',
+        },
+      ],
     },
   ],
 };

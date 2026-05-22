@@ -30,7 +30,7 @@ The context contains a `<task>` block with:
 
 ## Step 1 — Parse the acceptance criteria
 
-If `<acceptanceContract>` is present, use its `criteria` array as the authoritative acceptance criteria. Otherwise, read `workItem.body` carefully and find every acceptance criterion marked with a checkbox:
+If `<acceptanceContract>` is present, use its canonical `criteria` array as the authoritative acceptance criteria. Criteria may include zero or more `executableChecks`; those checks are evidence, not a substitute for Review coverage. Otherwise, read `workItem.body` carefully and find every acceptance criterion marked with a checkbox:
 
 ```
 - [ ] Criterion text here
@@ -75,7 +75,7 @@ For every criterion identified in Step 1, do the following:
    - **unmet** — the criterion is not satisfied by the diff (may be partially addressed)
    - **unclear** — you cannot determine from the diff alone whether the criterion is satisfied
 
-Record a `CriterionCheck` for every criterion.
+Record exactly one `CriterionCheck` for every criterion. When the criterion came from `<acceptanceContract>`, include its `id` as `criterionId` and its `statement` as `criterion`.
 
 **Never skip a criterion.** Partial coverage is still unmet. "Close enough" is not met.
 

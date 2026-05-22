@@ -1,3 +1,4 @@
+import { ExecutableCheckSchema } from '@goose-hub/core/acceptance-contracts/types.js';
 import { DecisionSummarySchema } from '@goose-hub/core/retrospective/schemas.js';
 import { z } from 'zod';
 
@@ -33,7 +34,7 @@ export const AcceptanceCriterionSchema = z.object({
   journeyId: z.string().optional(),
   stepIdx: z.number().int().optional(),
   crossCutting: z.boolean().optional(),
-  verifyCommand: z.string().optional(),
+  executableChecks: z.array(ExecutableCheckSchema).optional(),
 });
 
 export const FunctionalSpecBehaviorSchema = z.object({

@@ -1,3 +1,4 @@
+import { ExecutableCheckSchema } from '@goose-hub/core/acceptance-contracts/types.js';
 import { DecisionSummarySchema } from '@goose-hub/core/retrospective/schemas.js';
 import { z } from 'zod';
 
@@ -105,10 +106,8 @@ export const AcceptanceCriterionSchema = z.object({
   journeyRef: optionalAiString,
   /** Step index inside the journey (matches Journey.steps.idx). */
   stepIdx: optionalAiNumber,
-  /** Falsifiable verification command — Steve "no subjective criteria". */
-  verifyCommand: z.string().min(1),
-  /** Optional tolerance string (numerical, time, etc). */
-  tolerance: optionalAiString,
+  /** Zero or more executable checks grounded in exact repo-root commands. */
+  executableChecks: z.array(ExecutableCheckSchema).optional(),
   /** When true, AC is exempt from the journey-coverage rule. */
   crossCutting: optionalAiBoolean,
   /** Origin of this AC. */

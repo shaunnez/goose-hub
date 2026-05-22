@@ -60,7 +60,14 @@ function baseSpec(overrides: Partial<EngineeringSpec> = {}): EngineeringSpec {
         statement: 'GET /healthz returns 200 with body "ok"',
         journeyRef: 'J1',
         stepIdx: 0,
-        verifyCommand: 'curl -fsS http://localhost:3000/healthz',
+        executableChecks: [
+          {
+            id: 'AC1-check-1',
+            command: 'curl -fsS http://localhost:3000/healthz',
+            expectedExitCodes: [0],
+            kind: 'api',
+          },
+        ],
       },
     ],
     constraints: [],
@@ -121,7 +128,7 @@ describe('EngineeringSpecSchema (shape)', () => {
     expect(parsed.success).toBe(false);
   });
 
-  it('rejects empty AC verifyCommand (falsifiability rule)', () => {
+  it('rejects empty AC executable check command', () => {
     const result = EngineeringSpecSchema.safeParse(
       baseSpec({
         acceptanceCriteria: [
@@ -130,7 +137,7 @@ describe('EngineeringSpecSchema (shape)', () => {
             statement: 'works',
             journeyRef: 'J1',
             stepIdx: 0,
-            verifyCommand: '',
+            executableChecks: [{ id: 'AC1-check-1', command: '' }],
           },
         ],
       }),
@@ -161,8 +168,6 @@ describe('EngineeringSpecSchema (shape)', () => {
           statement: 'GET /healthz returns 200 with body "ok"',
           journeyRef: null,
           stepIdx: null,
-          verifyCommand: 'curl -fsS http://localhost:3000/healthz',
-          tolerance: null,
           crossCutting: null,
           source: null,
         },
@@ -175,18 +180,17 @@ describe('EngineeringSpecSchema (shape)', () => {
     expect(result.data.verificationTooling[0].inputSpec).toBeNull();
     expect(result.data.acceptanceCriteria[0].journeyRef).toBeNull();
     expect(result.data.acceptanceCriteria[0].stepIdx).toBeNull();
-    expect(result.data.acceptanceCriteria[0].tolerance).toBeNull();
     expect(result.data.acceptanceCriteria[0].crossCutting).toBeNull();
     expect(result.data.acceptanceCriteria[0].source).toBeNull();
   });
 
   it('keeps required spec-author contract fields strict against null', () => {
-    const verifyCommand = EngineeringSpecSchema.safeParse({
+    const executableCheck = EngineeringSpecSchema.safeParse({
       ...baseSpec(),
       acceptanceCriteria: [
         {
           ...baseSpec().acceptanceCriteria[0],
-          verifyCommand: null,
+          executableChecks: [{ id: 'AC1-check-1', command: null }],
         },
       ],
     });
@@ -203,7 +207,7 @@ describe('EngineeringSpecSchema (shape)', () => {
       constraints: null,
     });
 
-    expect(verifyCommand.success).toBe(false);
+    expect(executableCheck.success).toBe(false);
     expect(schemaChanges.success).toBe(false);
     expect(interfaceContracts.success).toBe(false);
     expect(constraints.success).toBe(false);
@@ -316,7 +320,6 @@ describe('validateEngineeringSpec — hard rules', () => {
         {
           id: 'AC1',
           statement: 'orphan ac',
-          verifyCommand: 'echo ok',
           // no journeyRef, no crossCutting
         },
       ],
@@ -334,7 +337,7 @@ describe('validateEngineeringSpec — hard rules', () => {
         {
           id: 'AC-CROSS',
           statement: 'budget cap is enforced',
-          verifyCommand: 'pnpm test core/cost',
+          executableChecks: [{ id: 'AC-CROSS-check-1', command: 'pnpm test core/cost' }],
           crossCutting: true,
         },
       ],
@@ -349,7 +352,6 @@ describe('validateEngineeringSpec — hard rules', () => {
         {
           id: 'AC1',
           statement: 'orphan ac',
-          verifyCommand: 'echo ok',
         },
       ],
     });
@@ -363,7 +365,6 @@ describe('validateEngineeringSpec — hard rules', () => {
         {
           id: 'AC1',
           statement: 's',
-          verifyCommand: 'echo ok',
           journeyRef: 'J-UNKNOWN',
         },
       ],
@@ -380,7 +381,6 @@ describe('validateEngineeringSpec — hard rules', () => {
         {
           id: 'AC1',
           statement: 's',
-          verifyCommand: 'echo ok',
           journeyRef: 'J1',
           stepIdx: 99,
         },

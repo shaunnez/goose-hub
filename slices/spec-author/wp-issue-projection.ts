@@ -15,8 +15,22 @@ function bulletList(items: string[]): string {
 
 function acLines(spec: EngineeringSpec): string[] {
   return spec.acceptanceCriteria.map((ac) => {
-    const verify = ac.verifyCommand != null ? `\n  - Verify: \`${ac.verifyCommand}\`` : '';
-    return `- ${ac.id}: ${ac.statement}${verify}`;
+    const checks = (ac.executableChecks ?? [])
+      .map((check) =>
+        [
+          '  Executable check:',
+          `  - Command: ${check.command}`,
+          `  - Expected exit codes: ${(check.expectedExitCodes ?? [0]).join(', ')}`,
+          check.kind != null ? `  - Kind: ${check.kind}` : '',
+          check.outputExpectation != null
+            ? `  - Output expectation: ${check.outputExpectation.mode}: ${check.outputExpectation.value}`
+            : '',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      )
+      .join('\n');
+    return `- ${ac.id}: ${ac.statement}${checks.length > 0 ? `\n${checks}` : ''}`;
   });
 }
 

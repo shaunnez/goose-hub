@@ -1,3 +1,4 @@
+import { AcceptanceCriterionContractSchema } from '@goose-hub/core/acceptance-contracts/types.js';
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
 import { z } from 'zod';
 import { AcceptanceContractOutputSchema } from './schema.js';
@@ -16,17 +17,7 @@ export const AcceptanceContractContextSchema = z.object({
     openQuestions: z.array(z.string()).optional(),
     confidence: z.enum(['low', 'medium', 'high']).optional(),
   }),
-  existingCriteria: z
-    .array(
-      z.object({
-        id: z.string(),
-        statement: z.string(),
-        verifyCommand: z.string().optional(),
-        expected: z.string().optional(),
-        tolerance: z.string().optional(),
-      }),
-    )
-    .optional(),
+  existingCriteria: z.array(AcceptanceCriterionContractSchema).optional(),
 });
 
 const config: SkillConfig = {

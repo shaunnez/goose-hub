@@ -17,7 +17,7 @@ import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interfa
 import { ReviewOutputSchema } from '@goose-hub/skills/review/schema.js';
 import type { ReviewVerdict } from '@goose-hub/skills/review/schema.js';
 
-import { buildReviewSpec } from './review-spec.js';
+import { buildReviewSpec, hasCanonicalCriteriaCoverage } from './review-spec.js';
 
 export type { FindingKey, ReviewWaveResult, DispatchReviewWaveOpts } from './review-spec.js';
 export { dispatchReviewWave, runConvergentReviewWorkflow } from './convergent-review.js';
@@ -122,6 +122,11 @@ export async function runReviewWorkflow(
       throw new Error(`Review output validation failed: ${JSON.stringify(parsed.error.issues)}`);
     }
     const reviewOutput = parsed.data;
+    if (!hasCanonicalCriteriaCoverage(reviewOutput, acceptanceContract)) {
+      throw new Error(
+        'Review output did not include one criteriaChecks entry per canonical criterion',
+      );
+    }
 
     const { decisionSummaries: _ds, ...reviewPayload } = reviewOutput;
     const pipelineRunId = findPipelineRunId(projectSlug, workItem.id);

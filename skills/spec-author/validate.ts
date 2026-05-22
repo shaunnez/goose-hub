@@ -253,7 +253,36 @@ export function validateEngineeringSpec(
     }
   }
 
-  // 4. Falsifiable ACs — covered by schema (`verifyCommand: z.string().min(1)`).
+  // 4. Falsifiable ACs — criteria may be judged by Review without an executable
+  //    check, but any executable check that is present must be runnable.
+  for (const ac of spec.acceptanceCriteria) {
+    for (const check of ac.executableChecks ?? []) {
+      if (isBareRepoPathCommand(check.command)) {
+        errors.push({
+          rule: 'verification-tool-command-malformed',
+          message: `AC '${ac.id}' executable check '${check.id}' is a bare file path, not an executable command`,
+          ref: ac.id,
+        });
+      }
+      const pathTokens = commandPathTokens(check.command);
+      for (const token of pathTokens) {
+        if (options.repoRoot == null) continue;
+        const normalized = normalizeRepoRelativePath({
+          rawPath: token,
+          worktreePath: options.repoRoot,
+          packageRoots: discoverPackageRoots(options.repoRoot),
+          referencePaths: allFilesOwned,
+        });
+        if (normalized.source === 'package-root') {
+          errors.push({
+            rule: 'verification-tool-command-package-relative',
+            message: `AC '${ac.id}' executable check '${check.id}' uses package-relative path '${token}'; use repo-root path '${normalized.path}'`,
+            ref: ac.id,
+          });
+        }
+      }
+    }
+  }
 
   // 5. Builder independence — every WP must declare ≥1 file owned (already
   //    enforced via `min(1)` in schema). We also surface a soft check that

@@ -74,7 +74,7 @@ export function ReviewSection({ projectSlug, id }: ReviewSectionProps) {
           : qaPayload?.tierResults?.functional?.passed,
     },
     {
-      label: 'Acceptance criteria',
+      label: 'Executable AC checks',
       passed:
         qaPayload?.criteriaResults != null && qaPayload.criteriaResults.length > 0
           ? qaPayload.criteriaResults.every((r) => r.passed)

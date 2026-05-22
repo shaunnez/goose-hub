@@ -38,9 +38,13 @@ describe('acceptance contracts', () => {
       {
         id: 'AC-1',
         statement: 'Lane order is newest first',
-        verifyCommand: 'pnpm vitest run apps/web/src/lib/lanes.config.test.ts',
-        expected: 'pass',
-        tolerance: 'exact',
+        executableChecks: [
+          {
+            id: 'AC-1-check-1',
+            command: 'pnpm vitest run apps/web/src/lib/lanes.config.test.ts',
+            outputExpectation: { mode: 'exact', value: 'pass' },
+          },
+        ],
         sourceRef: 'workItem.body',
       },
       {
@@ -98,8 +102,13 @@ describe('acceptance contracts', () => {
           {
             id: 'AC-S',
             statement: 'Spec criterion',
-            verifyCommand: 'pnpm test',
-            tolerance: 'exact',
+            executableChecks: [
+              {
+                id: 'AC-S-check-1',
+                command: 'pnpm test',
+                outputExpectation: { mode: 'exact', value: 'pass' },
+              },
+            ],
             crossCutting: true,
           },
         ],
@@ -115,8 +124,7 @@ describe('acceptance contracts', () => {
         {
           id: 'AC-S',
           statement: 'Spec criterion',
-          verifyCommand: 'pnpm test',
-          tolerance: 'exact',
+          executableChecks: [{ command: 'pnpm test' }],
           crossCutting: true,
         },
       ],
@@ -148,18 +156,25 @@ describe('acceptance contracts', () => {
     ).toMatchObject({ source: 'issue-body', criteria: [{ statement: 'Issue' }] });
   });
 
-  it('converts only fully verifiable criteria into verifyCommands', () => {
+  it('converts executable checks into verification commands with default exit code', () => {
     expect(
       acceptanceCriteriaToVerifyCommands([
         {
           id: 'AC-1',
           statement: 'Runs test',
-          verifyCommand: 'pnpm test',
-          expected: 'pass',
-          tolerance: 'exact',
+          executableChecks: [{ id: 'AC-1-check-1', command: 'pnpm test', timeoutMs: 30_000 }],
         },
         { id: 'AC-2', statement: 'No command' },
       ]),
-    ).toEqual([{ ac: 'Runs test', command: 'pnpm test', expected: 'pass', tolerance: 'exact' }]);
+    ).toEqual([
+      {
+        criterionId: 'AC-1',
+        checkId: 'AC-1-check-1',
+        ac: 'Runs test',
+        command: 'pnpm test',
+        expectedExitCodes: [0],
+        timeoutMs: 30_000,
+      },
+    ]);
   });
 });

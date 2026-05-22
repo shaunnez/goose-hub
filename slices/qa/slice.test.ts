@@ -1246,6 +1246,60 @@ describe('runQaWorkflow', () => {
       expect(completed?.[0].payload).toMatchObject({ pipelineRunId: 'legacy-dev-run' });
     });
 
+    it('runs executable AC checks and preserves pipelineRunId on qa.completed', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      const worktree = mkdtempSync(join(tmpdir(), 'qa-executable-checks-'));
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: {
+            prNumber: 99,
+            prUrl: 'https://github.com/owner/repo/pull/99',
+            worktreePath: worktree,
+            pipelineRunId: 'pipeline-run-criteria',
+          },
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      try {
+        const { runQaWorkflow } = await import('./workflow.js');
+        const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+        await runQaWorkflow(item, source, 'test-project', 'owner/repo', {
+          executableChecks: [
+            {
+              criterionId: 'AC-1',
+              checkId: 'AC-1-check-1',
+              ac: 'Command prints expected output',
+              command: 'printf expected',
+              expectedExitCodes: [0],
+              outputExpectation: { mode: 'exact', value: 'expected' },
+            },
+          ],
+        });
+
+        const completed = vi
+          .mocked(eventStore.appendEvent)
+          .mock.calls.find(([event]) => event.kind === 'qa.completed');
+        expect(completed?.[0].payload).toMatchObject({
+          pipelineRunId: 'pipeline-run-criteria',
+          criteriaResults: [
+            {
+              criterionId: 'AC-1',
+              checkId: 'AC-1-check-1',
+              passed: true,
+              exitCode: 0,
+            },
+          ],
+        });
+      } finally {
+        rmSync(worktree, { recursive: true, force: true });
+      }
+    });
+
     it('does not feed non-node stack test commands through the Vitest JSON runner', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();
@@ -1773,7 +1827,12 @@ describe('runQaWorkflow', () => {
           executionOrder: [{ batch: 0, wpIds: ['WP1'] }],
           verificationTooling: [],
           acceptanceCriteria: [
-            { id: 'AC1', statement: 'ok', verifyCommand: 'pnpm test', crossCutting: true },
+            {
+              id: 'AC1',
+              statement: 'ok',
+              executableChecks: [{ id: 'AC1-check-1', command: 'pnpm test' }],
+              crossCutting: true,
+            },
           ],
           constraints: [],
           riskRegister: [],

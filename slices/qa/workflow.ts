@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/types.js';
@@ -5,6 +6,7 @@ import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { findFreePort } from '@goose-hub/core/agent-runtime/find-free-port.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
+import { killProcessGroupOrChild } from '@goose-hub/core/agent-runtime/process-kill.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
@@ -21,7 +23,12 @@ import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import type { RegressionPolicy, TierResult } from '@goose-hub/core/verify/tiers.js';
 import { runTier as defaultRunTier } from '@goose-hub/core/verify/tiers.js';
-import { type QaOutput, QaOutputSchema, type TestRun } from '@goose-hub/skills/qa/schema.js';
+import {
+  type CriteriaResult,
+  type QaOutput,
+  QaOutputSchema,
+  type TestRun,
+} from '@goose-hub/skills/qa/schema.js';
 import type { EngineeringSpec } from '@goose-hub/skills/spec-author/schema.js';
 import {
   type DeterministicVerifyOutcome,
@@ -51,8 +58,8 @@ export interface QaWorkflowDeps {
   runTests?: (cwd: string, command: string) => Promise<TestRun | null>;
   /** Inject for tests — run compact lint/typecheck command summaries. */
   runCommand?: RunQaCommand;
-  /** Per-AC verify commands extracted from the issue body before QA spawn. */
-  verifyCommands?: VerifyCommand[];
+  /** Executable AC checks resolved before QA spawn. */
+  executableChecks?: VerifyCommand[];
   /** Resolved acceptance contract from normalized event/spec/PRD/issue body. */
   acceptanceContract?: AcceptanceContract;
   /** Inject for tests — return the spec for this work item, or null. */
@@ -62,6 +69,7 @@ export interface QaWorkflowDeps {
 }
 
 const DEFAULT_TEST_COMMAND = 'pnpm test --reporter=json';
+const EXECUTABLE_CHECK_OUTPUT_LIMIT = 4_000;
 
 function classifyVerificationInfrastructureFailure(
   result: TierResult | null,
@@ -87,6 +95,130 @@ function classifyVerificationInfrastructureFailure(
     reason: infrastructureFindings[0]?.code ?? 'verification-infrastructure-failure',
     findings: infrastructureFindings.map((finding) => finding.message),
   };
+}
+
+function matchesOutputExpectation(
+  actual: string,
+  expectation: VerifyCommand['outputExpectation'],
+): boolean {
+  if (expectation == null) return true;
+  const trimmed = actual.trim();
+  if (expectation.mode === 'exact') return trimmed === expectation.value.trim();
+  if (expectation.mode === 'contains') return actual.includes(expectation.value);
+  try {
+    return new RegExp(expectation.value).test(actual);
+  } catch {
+    return false;
+  }
+}
+
+async function runExecutableCheck(input: {
+  cwd: string;
+  check: VerifyCommand;
+  env?: NodeJS.ProcessEnv;
+  defaultTimeoutMs: number;
+}): Promise<CriteriaResult> {
+  const expectedExitCodes =
+    input.check.expectedExitCodes.length > 0 ? input.check.expectedExitCodes : [0];
+  const timeoutMs = input.check.timeoutMs ?? input.defaultTimeoutMs;
+  const started = Date.now();
+  return await new Promise((resolve) => {
+    let settled = false;
+    let output = '';
+    const finish = (result: Omit<CriteriaResult, 'durationMs'>) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve({ ...result, durationMs: Date.now() - started });
+    };
+    const child = spawn('sh', ['-c', input.check.command], {
+      cwd: input.cwd,
+      detached: process.platform !== 'win32',
+      env: { ...process.env, CI: 'true', ...input.env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const timeout = setTimeout(() => {
+      killProcessGroupOrChild(child);
+      const actual = output.slice(-EXECUTABLE_CHECK_OUTPUT_LIMIT);
+      finish({
+        criterionId: input.check.criterionId,
+        checkId: input.check.checkId,
+        ac: input.check.ac,
+        command: input.check.command,
+        expectedExitCodes,
+        exitCode: null,
+        actual,
+        passed: false,
+        ...(input.check.outputExpectation != null
+          ? { outputExpectation: input.check.outputExpectation }
+          : {}),
+        error: `command timed out after ${timeoutMs}ms`,
+      });
+    }, timeoutMs);
+    child.stdout?.on('data', (chunk: Buffer | string) => {
+      output = `${output}${chunk.toString()}`.slice(-EXECUTABLE_CHECK_OUTPUT_LIMIT);
+    });
+    child.stderr?.on('data', (chunk: Buffer | string) => {
+      output = `${output}${chunk.toString()}`.slice(-EXECUTABLE_CHECK_OUTPUT_LIMIT);
+    });
+    child.on('error', (err) => {
+      const actual = output.slice(-EXECUTABLE_CHECK_OUTPUT_LIMIT);
+      finish({
+        criterionId: input.check.criterionId,
+        checkId: input.check.checkId,
+        ac: input.check.ac,
+        command: input.check.command,
+        expectedExitCodes,
+        exitCode: null,
+        actual,
+        passed: false,
+        ...(input.check.outputExpectation != null
+          ? { outputExpectation: input.check.outputExpectation }
+          : {}),
+        error: err.message,
+      });
+    });
+    child.on('close', (code) => {
+      const exitCode = code ?? 1;
+      const actual = output.slice(-EXECUTABLE_CHECK_OUTPUT_LIMIT);
+      finish({
+        criterionId: input.check.criterionId,
+        checkId: input.check.checkId,
+        ac: input.check.ac,
+        command: input.check.command,
+        expectedExitCodes,
+        exitCode,
+        actual,
+        passed:
+          expectedExitCodes.includes(exitCode) &&
+          matchesOutputExpectation(actual, input.check.outputExpectation),
+        ...(input.check.outputExpectation != null
+          ? { outputExpectation: input.check.outputExpectation }
+          : {}),
+      });
+    });
+  });
+}
+
+async function runExecutableChecks(input: {
+  workspaceDir?: string;
+  checks?: VerifyCommand[];
+  env?: NodeJS.ProcessEnv;
+  defaultTimeoutMs: number;
+}): Promise<CriteriaResult[]> {
+  if (input.workspaceDir == null || input.checks == null || input.checks.length === 0) return [];
+  const results: CriteriaResult[] = [];
+  for (const check of input.checks) {
+    results.push(
+      await runExecutableCheck({
+        cwd: input.workspaceDir,
+        check,
+        env: input.env,
+        defaultTimeoutMs: input.defaultTimeoutMs,
+      }),
+    );
+  }
+  return results;
 }
 
 /**
@@ -124,7 +256,7 @@ export async function runQaWorkflow(
   const runId = crypto.randomUUID();
   const runTests = deps.runTests ?? defaultRunTests;
   const runCommand = deps.runCommand;
-  const verifyCommands = deps.verifyCommands;
+  const executableChecks = deps.executableChecks;
   const acceptanceContract = deps.acceptanceContract;
   const getSpec = deps.getEngineeringSpecImpl ?? defaultGetEngineeringSpec;
   const runTier = deps.runTierImpl ?? defaultRunTier;
@@ -368,6 +500,12 @@ export async function runQaWorkflow(
       runTests,
       ...(runCommand != null ? { runCommand } : {}),
     });
+    const criteriaResults = await runExecutableChecks({
+      workspaceDir,
+      checks: executableChecks,
+      ...(qaEnv != null ? { env: qaEnv } : {}),
+      defaultTimeoutMs: resolvedBudget.budgets.timeoutMs,
+    });
 
     eventStore.appendEvent({
       projectId: projectSlug,
@@ -382,6 +520,8 @@ export async function runQaWorkflow(
         testStatus: verificationSummary.commands.test.status,
         e2eStatus: verificationSummary.e2e.status,
         evidenceStatus: verificationSummary.evidence.status,
+        executableCheckCount: criteriaResults.length,
+        executableCheckPassedCount: criteriaResults.filter((result) => result.passed).length,
       },
       runId,
     });
@@ -410,7 +550,7 @@ export async function runQaWorkflow(
         },
         verificationSummary,
         e2eDecision,
-        ...(verifyCommands != null && verifyCommands.length > 0 ? { verifyCommands } : {}),
+        ...(criteriaResults.length > 0 ? { criteriaResults } : {}),
         ...(acceptanceContract != null ? { acceptanceContract } : {}),
         testRun,
         ...(evidenceCommentUrl != null ? { evidenceCommentUrl } : {}),
@@ -424,7 +564,7 @@ export async function runQaWorkflow(
         'verificationSummary',
         'e2eDecision',
         'testRun',
-        'verifyCommands',
+        'criteriaResults',
         ...(acceptanceContract != null ? ['acceptanceContract'] : []),
         ...(evidenceCommentUrl != null ? ['evidenceCommentUrl'] : []),
         ...(devTestsRun != null ? ['devTestsRun'] : []),
@@ -493,17 +633,22 @@ export async function runQaWorkflow(
     // testRun is the workflow-captured one (deterministic), not whatever the
     // agent might echo back — even if the schema accepts it from the agent,
     // we trust our own measurement.
+    const executableChecksPassed =
+      criteriaResults.length === 0 || criteriaResults.every((result) => result.passed);
+    const verdict = executableChecksPassed ? qaOutput.verdict : 'fail';
+
     eventStore.appendEvent({
       projectId: projectSlug,
       workItemId: workItem.id,
       kind: 'qa.completed',
       payload: {
-        verdict: qaOutput.verdict,
+        verdict,
         overallScore: qaOutput.overallScore,
         threshold: qaOutput.threshold,
         tierResults: groundTruthTierResults,
         qualityScores: qaOutput.qualityScores,
         findings: qaOutput.findings,
+        ...(criteriaResults.length > 0 ? { criteriaResults } : {}),
         ...(testRun ? { testRun } : {}),
         ...(deterministic != null ? { deterministic: true } : {}),
         ...(prHints.pipelineRunId != null ? { pipelineRunId: prHints.pipelineRunId } : {}),
@@ -511,12 +656,21 @@ export async function runQaWorkflow(
       runId,
     });
 
-    for (const cr of qaOutput.criteriaResults ?? []) {
+    for (const cr of criteriaResults) {
       eventStore.appendEvent({
         projectId: projectSlug,
         workItemId: workItem.id,
         kind: 'agent.verify-command',
-        payload: { runId, ac: cr.ac, command: cr.command, actual: cr.actual, passed: cr.passed },
+        payload: {
+          runId,
+          criterionId: cr.criterionId,
+          checkId: cr.checkId,
+          ac: cr.ac,
+          command: cr.command,
+          exitCode: cr.exitCode,
+          actual: cr.actual,
+          passed: cr.passed,
+        },
         runId,
       });
     }
@@ -526,8 +680,7 @@ export async function runQaWorkflow(
     // Determine next state. Use priorEvents (snapshotted before this run) so the
     // retry count reflects completed prior failures, not the current one.
     const passes =
-      qaOutput.verdict === 'pass' ||
-      (qaOutput.verdict === 'partial' && qaOutput.overallScore >= qaOutput.threshold);
+      verdict === 'pass' || (verdict === 'partial' && qaOutput.overallScore >= qaOutput.threshold);
 
     let nextState: StateName;
     if (passes) {

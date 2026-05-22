@@ -127,19 +127,18 @@ describe('toJsonSchema', () => {
       'journeyId',
       'stepIdx',
       'crossCutting',
-      'verifyCommand',
+      'executableChecks',
     ]);
     expect(acceptanceCriterion.properties?.journeyId).toEqual({ type: ['string', 'null'] });
     expect(acceptanceCriterion.properties?.stepIdx).toMatchObject({ type: ['integer', 'null'] });
     expect(acceptanceCriterion.properties?.crossCutting).toEqual({ type: ['boolean', 'null'] });
-    expect(acceptanceCriterion.properties?.verifyCommand).toEqual({ type: ['string', 'null'] });
     expect(acceptanceCriterion.required).toEqual([
       'id',
       'statement',
       'journeyId',
       'stepIdx',
       'crossCutting',
-      'verifyCommand',
+      'executableChecks',
     ]);
     expect(acceptanceCriterion.additionalProperties).toBe(false);
 

@@ -173,12 +173,22 @@ export const QualityScoresSchema = z.object({
 });
 
 export const CriteriaResultSchema = z.object({
+  criterionId: z.string(),
+  checkId: z.string(),
   ac: z.string(),
   command: z.string(),
-  expected: z.string(),
+  expectedExitCodes: z.array(z.number().int()).min(1),
+  exitCode: z.number().int().nullable(),
   actual: z.string(),
-  tolerance: z.string(),
   passed: z.boolean(),
+  outputExpectation: z
+    .object({
+      mode: z.enum(['exact', 'contains', 'regex']),
+      value: z.string(),
+    })
+    .optional(),
+  durationMs: z.number().int().min(0).optional(),
+  error: z.string().optional(),
 });
 
 export const QaOutputSchema = z.object({
@@ -201,9 +211,9 @@ export const QaOutputSchema = z.object({
   /** Per-step audit trail of QA decisions */
   decisionSummaries: z.array(DecisionSummarySchema),
   /**
-   * Optional: per-AC verify-command results. One entry per AC that had a
-   * Verify/Expected/Tolerance block in the issue body. Any `passed: false`
-   * here forces verdict = 'fail' regardless of tier scores.
+   * Optional: workflow-owned executable check results. One entry per executable
+   * check. The workflow computes pass/fail before the agent runs; the agent may
+   * echo the results but cannot override them.
    */
   criteriaResults: z.array(CriteriaResultSchema).optional(),
   /**

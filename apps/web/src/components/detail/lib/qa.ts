@@ -40,12 +40,20 @@ export interface TestRun {
 }
 
 export interface CriteriaResult {
+  criterionId: string;
+  checkId: string;
   ac: string;
   command: string;
-  expected: string;
+  expectedExitCodes: number[];
+  exitCode: number | null;
   actual: string;
-  tolerance: string;
   passed: boolean;
+  outputExpectation?: {
+    mode: 'exact' | 'contains' | 'regex';
+    value: string;
+  };
+  durationMs?: number;
+  error?: string;
 }
 
 export interface QaPayload {

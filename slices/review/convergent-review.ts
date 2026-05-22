@@ -34,6 +34,7 @@ import {
   deduplicateFindings,
   extractChangedFilePaths,
   findingKeyStr,
+  hasCanonicalCriteriaCoverage,
 } from './review-spec.js';
 
 export type { DispatchReviewWaveOpts, FindingKey, ReviewWaveResult };
@@ -138,6 +139,7 @@ export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<
 
   const successfulReviewerOutputs = parsed.flatMap((p, i) => {
     if (p == null || !p.success) return [];
+    if (!hasCanonicalCriteriaCoverage(p.data, acceptanceContract)) return [];
     const slot = slots[i];
     return [
       {

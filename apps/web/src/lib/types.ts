@@ -40,13 +40,23 @@ export interface WorkPackageDto {
 export interface AcceptanceCriterionDto {
   id: string;
   statement: string;
-  verifyCommand?: string;
-  expected?: string;
-  tolerance?: string | null;
   journeyRef?: string | null;
   stepIdx?: number | null;
   crossCutting?: boolean | null;
   sourceRef?: string;
+  executableChecks?: ExecutableCheckDto[];
+}
+
+export interface ExecutableCheckDto {
+  id: string;
+  command: string;
+  expectedExitCodes?: number[];
+  outputExpectation?: {
+    mode: 'exact' | 'contains' | 'regex';
+    value: string;
+  };
+  timeoutMs?: number;
+  kind?: 'unit' | 'integration' | 'e2e' | 'api' | 'lint' | 'typecheck' | 'custom';
 }
 
 export interface AcceptanceContractDto {

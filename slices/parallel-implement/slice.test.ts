@@ -74,7 +74,12 @@ function makeSpec(workPackages: WorkPackage[]): EngineeringSpec {
     executionOrder: [{ batch: 0, wpIds: workPackages.map((w) => w.id) }],
     verificationTooling: [],
     acceptanceCriteria: [
-      { id: 'AC1', statement: 'Works', verifyCommand: 'pnpm test', crossCutting: true },
+      {
+        id: 'AC1',
+        statement: 'Works',
+        executableChecks: [{ id: 'AC1-check-1', command: 'pnpm test' }],
+        crossCutting: true,
+      },
     ],
     constraints: [],
     riskRegister: [],

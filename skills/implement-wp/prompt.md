@@ -41,6 +41,7 @@ The context contains a `<task>` block with:
 - `<workItem>` — JSON payload for the issue, with `title`, `body`, `number`, and `priority`
 - `<wp>` — JSON payload with `id`, `filesOwned`, `changes`, and `dependsOn`
 - `<codeSnippets>` (optional) — JSON array of relevant code excerpts pre-loaded by the scout wave
+- `<verificationCommands>` (optional) — executable checks relevant to this WP, projected from canonical acceptance criteria and verification tooling
 - `<investigation>` (optional) — original bug-investigation findings, key files, and open questions
 - `<acceptanceContract>` (optional) — resolved acceptance criteria relevant to this implementation path
 - `<parentPrdContext>` (optional) — compact summary and artifact refs for the approved parent PRD. Use it for product intent and out-of-scope boundaries, but keep your implementation inside `<wp>.filesOwned`.
@@ -58,7 +59,8 @@ Path contract: all output paths must be repo-root/worktree-root relative POSIX p
   `filesOwned` remains authoritative, but if it appears unrelated to the
   investigation key files, stop and return `confidence: low` with a `BLOCKER`
   decision summary.
-- If `<acceptanceContract>` is present, use it as the behavioral contract for tests and implementation. Satisfy all cross-cutting criteria and any criteria that obviously apply to your filesOwned.
+- If `<acceptanceContract>` is present, use `criteria[]` as the behavioral contract for tests and implementation. Satisfy all cross-cutting criteria and any criteria that obviously apply to your filesOwned.
+- Treat `executableChecks` and `<verificationCommands>` as targeted verification guidance. Run applicable executable checks before broad stack commands. Do not rediscover test commands when executable checks are present.
 - If `<parentPrdContext>` is present, use it to avoid drifting beyond the approved PRD and to understand the parent journey, slice, implementation, and testing decisions.
 - Read the files in `<wp>.filesOwned` to understand the current state.
 - Use `mcp__factory-tools__read_file` and `mcp__factory-tools__search_text` to load test files for the surfaces you will touch FIRST.
@@ -95,6 +97,7 @@ Only refactor if required to make the test pass cleanly.
 - If `stack.lintCommand` is provided, run it. Fix failures.
 - If `stack.typecheckCommand` is provided, run it. Fix errors.
 - Re-run targeted tests one final time to confirm still green. In `testsRun.paths`, return the canonical `paths[].path` values from `mcp__factory-tools__run_tests`.
+- If executable checks fail because of infrastructure or tooling, retry once only. If the same infrastructure/tooling failure repeats, return `confidence: low` with a `BLOCKER` or `UNCERTAINTY` decision summary instead of searching for alternate commands.
 - Emit: `[decision] LINT: Lint and typecheck clean`
 
 ### 7 — Return (no commit — orchestrator commits)

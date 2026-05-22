@@ -100,7 +100,11 @@ type AcceptanceContractPayload = {
   issueBodyPatchRecommended?: boolean;
   contract?: {
     source?: string;
-    criteria?: Array<{ id?: string; statement?: string; verifyCommand?: string }>;
+    criteria?: Array<{
+      id?: string;
+      statement?: string;
+      executableChecks?: Array<{ id?: string; command?: string }>;
+    }>;
   };
 };
 
@@ -231,7 +235,12 @@ export function AcceptanceContractAuthoredEvent({ event }: { event: AgentEventDt
               className="grid grid-cols-[3rem_1fr] gap-2 text-[11.5px] text-fg-3"
             >
               <span className="font-mono">{criterion.id ?? `AC-${index + 1}`}</span>
-              <span className="min-w-0">{criterion.statement}</span>
+              <span className="min-w-0">
+                {criterion.statement}
+                {(criterion.executableChecks?.length ?? 0) > 0 ? (
+                  <span className="text-fg-4"> · {criterion.executableChecks?.length} checks</span>
+                ) : null}
+              </span>
             </li>
           ))}
         </ol>

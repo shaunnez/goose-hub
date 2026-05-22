@@ -1,12 +1,11 @@
+import { ExecutableCheckSchema } from '@goose-hub/core/acceptance-contracts/types.js';
 import { DecisionSummarySchema } from '@goose-hub/core/retrospective/schemas.js';
 import { z } from 'zod';
 
 export const AcceptanceContractCriterionSchema = z.object({
   id: z.string().min(1),
   statement: z.string().min(1),
-  verifyCommand: z.string().min(1).optional(),
-  expected: z.string().min(1).optional(),
-  tolerance: z.string().min(1).optional(),
+  executableChecks: z.array(ExecutableCheckSchema).optional(),
   sourceRef: z.string().min(1).optional(),
 });
 

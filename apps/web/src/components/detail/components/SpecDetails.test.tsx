@@ -18,7 +18,14 @@ const SPEC: EngineeringSpecDto = {
     {
       id: 'AC-1',
       statement: 'Users can log in with a valid refresh token.',
-      verifyCommand: 'pnpm vitest run src/auth/login.test.ts',
+      executableChecks: [
+        {
+          id: 'AC-1-check-1',
+          command: 'pnpm vitest run src/auth/login.test.ts',
+          expectedExitCodes: [0],
+          kind: 'unit',
+        },
+      ],
     },
     { id: 'AC-2', statement: 'Expired tokens are rejected.' },
     { id: 'AC-3', statement: 'Middleware forwards authenticated requests.' },

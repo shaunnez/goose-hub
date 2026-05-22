@@ -129,8 +129,17 @@ export async function getIssueSpec(
       acceptanceCriteria: Array<{
         id: string;
         statement: string;
-        verifyCommand?: string;
-        tolerance?: string | null;
+        executableChecks?: Array<{
+          id: string;
+          command: string;
+          expectedExitCodes?: number[];
+          outputExpectation?: {
+            mode: 'exact' | 'contains' | 'regex';
+            value: string;
+          };
+          timeoutMs?: number;
+          kind?: 'unit' | 'integration' | 'e2e' | 'api' | 'lint' | 'typecheck' | 'custom';
+        }>;
         journeyRef?: string | null;
         stepIdx?: number | null;
         crossCutting?: boolean | null;
@@ -154,8 +163,17 @@ export async function getIssueSpec(
     const ac = raw as {
       id?: string;
       statement?: string;
-      verifyCommand?: string;
-      tolerance?: string | null;
+      executableChecks?: Array<{
+        id: string;
+        command: string;
+        expectedExitCodes?: number[];
+        outputExpectation?: {
+          mode: 'exact' | 'contains' | 'regex';
+          value: string;
+        };
+        timeoutMs?: number;
+        kind?: 'unit' | 'integration' | 'e2e' | 'api' | 'lint' | 'typecheck' | 'custom';
+      }>;
       journeyRef?: string | null;
       stepIdx?: number | null;
       crossCutting?: boolean | null;
@@ -163,8 +181,7 @@ export async function getIssueSpec(
     return {
       id: ac.id ?? `AC-${index + 1}`,
       statement: ac.statement ?? '',
-      ...(ac.verifyCommand != null ? { verifyCommand: ac.verifyCommand } : {}),
-      ...(ac.tolerance != null ? { tolerance: ac.tolerance } : {}),
+      ...(ac.executableChecks != null ? { executableChecks: ac.executableChecks } : {}),
       ...(ac.journeyRef != null ? { journeyRef: ac.journeyRef } : {}),
       ...(ac.stepIdx != null ? { stepIdx: ac.stepIdx } : {}),
       ...(ac.crossCutting != null ? { crossCutting: ac.crossCutting } : {}),

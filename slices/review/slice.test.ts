@@ -91,7 +91,7 @@ function makeApprovedResult(): AgentResult {
     output: {
       verdict: 'approved',
       confidence: 0.9,
-      criteriaChecks: [{ criterion: 'Add foo', status: 'met' }],
+      criteriaChecks: [{ criterionId: 'AC-1', criterion: 'Add foo', status: 'met' }],
       findings: [],
       decisionSummaries: [],
     },
@@ -105,7 +105,7 @@ function makeNeedsFixResult(): AgentResult {
     output: {
       verdict: 'needs-fix',
       confidence: 0.7,
-      criteriaChecks: [{ criterion: 'Add foo', status: 'unmet' }],
+      criteriaChecks: [{ criterionId: 'AC-1', criterion: 'Add foo', status: 'unmet' }],
       findings: [
         {
           severity: 'blocker',
@@ -126,7 +126,7 @@ function makeNeedsHumanResult(): AgentResult {
     output: {
       verdict: 'needs-human',
       confidence: 0.3,
-      criteriaChecks: [],
+      criteriaChecks: [{ criterionId: 'AC-1', criterion: 'Add foo', status: 'unmet' }],
       findings: [],
       decisionSummaries: [],
       escalationReason: 'spec is ambiguous',
@@ -678,7 +678,7 @@ function makeCriticalResult(description: string): AgentResult {
     output: {
       verdict: 'needs-fix',
       confidence: 0.6,
-      criteriaChecks: [],
+      criteriaChecks: [{ criterionId: 'AC-1', criterion: 'Add foo', status: 'met' }],
       findings: [
         {
           severity: 'blocker',
@@ -701,7 +701,7 @@ function makeApprovedResultNoFindings(): AgentResult {
     output: {
       verdict: 'approved',
       confidence: 0.95,
-      criteriaChecks: [],
+      criteriaChecks: [{ criterionId: 'AC-1', criterion: 'Add foo', status: 'met' }],
       findings: [],
       decisionSummaries: [],
     },
@@ -831,7 +831,7 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
       output: {
         verdict: 'needs-human',
         confidence: 0.2,
-        criteriaChecks: [],
+        criteriaChecks: [{ criterionId: 'AC-1', criterion: 'Add foo', status: 'met' }],
         findings: [],
         decisionSummaries: [],
         escalationReason: 'Spec is fundamentally ambiguous',
@@ -967,7 +967,7 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
         verdict: 'approved',
         confidence: 0.95,
         findingsCount: 0,
-        criteriaChecks: [],
+        criteriaChecks: [{ criterionId: 'AC-1', criterion: 'Add foo', status: 'met' }],
         reviewWorkflowRunId: expect.any(String),
       },
     });
@@ -1000,7 +1000,7 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
       output: {
         verdict: 'approved',
         confidence: 0.9,
-        criteriaChecks: [],
+        criteriaChecks: [{ criterionId: 'AC-1', criterion: 'Add foo', status: 'met' }],
         findings: [],
         decisionSummaries: [{ kind: 'VERDICT', summary: 'slot B approves' }],
       },
