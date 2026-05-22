@@ -409,6 +409,32 @@ describe('TimelineSection — expand/collapse all', () => {
     expect(invalidatedQueryKey(invalidateSpy.mock.calls, ['events', 'p', '1'])).toBe(false);
   });
 
+  it('invalidates issue state caches, but not events, when a state transition arrives over SSE', async () => {
+    const { fetchEventsPage } = await import('@/lib/api');
+    vi.mocked(fetchEventsPage).mockResolvedValue({ events: [], hasMore: false });
+
+    const queryClient = new QueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    const { TimelineSection } = await import('./TimelineSection');
+    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />, queryClient);
+
+    await screen.findByText('No timeline events yet.');
+    await waitFor(() => expect(MockEventSource.instances.length).toBeGreaterThan(0));
+
+    MockEventSource.instances[0].emitNamed(
+      makeEvent(2, 'state.transitioned', {
+        from: 'factory:decomposing',
+        to: 'factory:done',
+      }),
+    );
+
+    await waitFor(() => {
+      expect(invalidatedQueryKey(invalidateSpy.mock.calls, ['issue', 'p', '1'])).toBe(true);
+      expect(invalidatedQueryKey(invalidateSpy.mock.calls, ['issues', 'p'])).toBe(true);
+    });
+    expect(invalidatedQueryKey(invalidateSpy.mock.calls, ['events', 'p', '1'])).toBe(false);
+  });
+
   it('updates the Playwright capture section from live investigation SSE without refetching events', async () => {
     const { fetchEvents, fetchEventsPage } = await import('@/lib/api');
     vi.mocked(fetchEvents).mockResolvedValue([]);

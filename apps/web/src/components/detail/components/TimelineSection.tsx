@@ -117,6 +117,8 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
           void queryClient.invalidateQueries({ queryKey: ['issue-costs', projectSlug, id] });
         }
         if (parsed.kind === 'state.transitioned') {
+          void queryClient.invalidateQueries({ queryKey: ['issue', projectSlug, id] });
+          void queryClient.invalidateQueries({ queryKey: ['issues', projectSlug] });
           const payload = parsed.payload as {
             interventionId?: string;
             causedByInterventionId?: string;
