@@ -256,6 +256,7 @@ export type RenderItem =
       kind: 'phase-group';
       phase: 'grill' | 'prd' | 'contract' | 'dev';
       pipelineRunId: string;
+      idKind: 'session' | 'workflow' | 'contract' | 'pipeline';
       items: RenderItem[];
       status: 'started' | 'live' | 'completed' | 'failed';
       startedAt: string | null;
@@ -312,6 +313,14 @@ function compareRenderItems(a: RenderItem, b: RenderItem): number {
   return 0;
 }
 
+function getDiscoverSessionId(event: AgentEventDto): string | null {
+  const payload = event.payload as { discoverSessionId?: unknown } | null;
+  if (typeof payload?.discoverSessionId === 'string' && payload.discoverSessionId.trim() !== '') {
+    return payload.discoverSessionId;
+  }
+  return null;
+}
+
 function getWorkflowRunId(event: AgentEventDto): string | null {
   const payload = event.payload as { workflowRunId?: unknown } | null;
   if (typeof payload?.workflowRunId === 'string' && payload.workflowRunId.trim() !== '') {
@@ -320,8 +329,20 @@ function getWorkflowRunId(event: AgentEventDto): string | null {
   return event.runId ?? null;
 }
 
+function getDiscoverPhaseId(
+  event: AgentEventDto,
+): { id: string; idKind: 'session' | 'workflow' } | null {
+  const discoverSessionId = getDiscoverSessionId(event);
+  if (discoverSessionId != null) return { id: discoverSessionId, idKind: 'session' };
+  const workflowRunId = getWorkflowRunId(event);
+  return workflowRunId != null ? { id: workflowRunId, idKind: 'workflow' } : null;
+}
+
 function isGrillPhaseEvent(event: AgentEventDto): boolean {
-  return event.kind.startsWith('grill.');
+  if (event.kind.startsWith('grill.')) return true;
+  if (event.kind !== 'state.transitioned' || getDiscoverSessionId(event) == null) return false;
+  const payload = event.payload as { from?: unknown; to?: unknown } | null;
+  return payload?.from === 'factory:gate-pending' && payload.to === 'factory:grilling';
 }
 
 function isPrdPhaseEvent(event: AgentEventDto): boolean {
@@ -350,60 +371,115 @@ function resolveDiscoverPhaseStatus(
 }
 
 function appendDiscoverPhaseItem(
-  phaseItems: Map<string, { grill: RenderItem[]; prd: RenderItem[] }>,
-  workflowRunId: string,
+  phaseItems: Map<
+    string,
+    { id: string; idKind: 'session' | 'workflow'; grill: RenderItem[]; prd: RenderItem[] }
+  >,
+  phaseId: { id: string; idKind: 'session' | 'workflow' },
   phase: 'grill' | 'prd',
   item: RenderItem,
 ): void {
-  const group = phaseItems.get(workflowRunId) ?? { grill: [], prd: [] };
+  const key = `${phaseId.idKind}:${phaseId.id}`;
+  const group = phaseItems.get(key) ?? { ...phaseId, grill: [], prd: [] };
   group[phase].push(item);
-  phaseItems.set(workflowRunId, group);
+  phaseItems.set(key, group);
+}
+
+function discoverSessionIdFromUnknown(value: unknown): string | null {
+  if (value == null || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.discoverSessionId === 'string' && record.discoverSessionId.trim() !== '') {
+    return record.discoverSessionId;
+  }
+  for (const key of ['evidence', 'actionPayload', 'result', 'verification']) {
+    const nested = discoverSessionIdFromUnknown(record[key]);
+    if (nested != null) return nested;
+  }
+  return null;
+}
+
+function interventionDiscoverSessionId(
+  item: Extract<RenderItem, { kind: 'intervention-group' }>,
+): string | null {
+  if (item.intervention.interventionType !== 'manual_override') return null;
+  for (const value of [
+    item.intervention.decidedActionPayload,
+    item.intervention.applicationResult,
+    item.intervention.verification,
+    ...item.events.map((event) => event.payload),
+  ]) {
+    const discoverSessionId = discoverSessionIdFromUnknown(value);
+    if (discoverSessionId != null) return discoverSessionId;
+  }
+  return null;
 }
 
 function childDiscoverPhase(
   item: RenderItem,
-): { workflowRunId: string; phase: 'grill' | 'prd' } | null {
+): { id: string; idKind: 'session' | 'workflow'; phase: 'grill' | 'prd' } | null {
+  if (item.kind === 'intervention-group') {
+    const discoverSessionId = interventionDiscoverSessionId(item);
+    if (discoverSessionId != null) {
+      return { id: discoverSessionId, idKind: 'session', phase: 'grill' };
+    }
+    return null;
+  }
   if (item.kind !== 'run-group') return null;
+  for (const event of eventFromRenderItem(item)) {
+    const phaseId = getDiscoverPhaseId(event);
+    if (phaseId == null) continue;
+    const payload = event.payload as { skill?: string } | null;
+    if (payload?.skill === 'grill-me') return { ...phaseId, phase: 'grill' };
+    if (payload?.skill === 'write-prd' || payload?.skill === 'advise-on-prd') {
+      return { ...phaseId, phase: 'prd' };
+    }
+  }
   if (item.runId.endsWith(':grill-me')) {
-    return { workflowRunId: item.runId.slice(0, -':grill-me'.length), phase: 'grill' };
+    return {
+      id: item.runId.slice(0, -':grill-me'.length),
+      idKind: 'workflow',
+      phase: 'grill',
+    };
   }
   if (item.runId.endsWith(':write-prd')) {
-    return { workflowRunId: item.runId.slice(0, -':write-prd'.length), phase: 'prd' };
+    return {
+      id: item.runId.slice(0, -':write-prd'.length),
+      idKind: 'workflow',
+      phase: 'prd',
+    };
   }
   if (item.runId.endsWith(':advise-on-prd')) {
-    return { workflowRunId: item.runId.slice(0, -':advise-on-prd'.length), phase: 'prd' };
-  }
-  for (const event of eventFromRenderItem(item)) {
-    const workflowRunId = getWorkflowRunId(event);
-    if (workflowRunId == null) continue;
-    const payload = event.payload as { skill?: string } | null;
-    if (payload?.skill === 'grill-me') return { workflowRunId, phase: 'grill' };
-    if (payload?.skill === 'write-prd' || payload?.skill === 'advise-on-prd') {
-      return { workflowRunId, phase: 'prd' };
-    }
+    return {
+      id: item.runId.slice(0, -':advise-on-prd'.length),
+      idKind: 'workflow',
+      phase: 'prd',
+    };
   }
   return null;
 }
 
 export function groupByDiscoverPhase(items: RenderItem[]): RenderItem[] {
-  const phaseItems = new Map<string, { grill: RenderItem[]; prd: RenderItem[] }>();
+  const phaseItems = new Map<
+    string,
+    { id: string; idKind: 'session' | 'workflow'; grill: RenderItem[]; prd: RenderItem[] }
+  >();
   const ungrouped: RenderItem[] = [];
 
   for (const item of items) {
     const childPhase = childDiscoverPhase(item);
     if (childPhase != null) {
-      appendDiscoverPhaseItem(phaseItems, childPhase.workflowRunId, childPhase.phase, item);
+      appendDiscoverPhaseItem(phaseItems, childPhase, childPhase.phase, item);
       continue;
     }
 
     if (item.kind === 'event') {
-      const workflowRunId = getWorkflowRunId(item.event);
-      if (workflowRunId != null && isGrillPhaseEvent(item.event)) {
-        appendDiscoverPhaseItem(phaseItems, workflowRunId, 'grill', item);
+      const phaseId = getDiscoverPhaseId(item.event);
+      if (phaseId != null && isGrillPhaseEvent(item.event)) {
+        appendDiscoverPhaseItem(phaseItems, phaseId, 'grill', item);
         continue;
       }
-      if (workflowRunId != null && isPrdPhaseEvent(item.event)) {
-        appendDiscoverPhaseItem(phaseItems, workflowRunId, 'prd', item);
+      if (phaseId != null && isPrdPhaseEvent(item.event)) {
+        appendDiscoverPhaseItem(phaseItems, phaseId, 'prd', item);
         continue;
       }
       ungrouped.push(item);
@@ -414,12 +490,12 @@ export function groupByDiscoverPhase(items: RenderItem[]): RenderItem[] {
       const remaining: RenderItem[] = [];
       let consumedDiscoverEvent = false;
       for (const event of eventFromRenderItem(item)) {
-        const workflowRunId = getWorkflowRunId(event);
-        if (workflowRunId != null && isGrillPhaseEvent(event)) {
-          appendDiscoverPhaseItem(phaseItems, workflowRunId, 'grill', { kind: 'event', event });
+        const phaseId = getDiscoverPhaseId(event);
+        if (phaseId != null && isGrillPhaseEvent(event)) {
+          appendDiscoverPhaseItem(phaseItems, phaseId, 'grill', { kind: 'event', event });
           consumedDiscoverEvent = true;
-        } else if (workflowRunId != null && isPrdPhaseEvent(event)) {
-          appendDiscoverPhaseItem(phaseItems, workflowRunId, 'prd', { kind: 'event', event });
+        } else if (phaseId != null && isPrdPhaseEvent(event)) {
+          appendDiscoverPhaseItem(phaseItems, phaseId, 'prd', { kind: 'event', event });
           consumedDiscoverEvent = true;
         } else {
           remaining.push({ kind: 'event', event });
@@ -437,7 +513,7 @@ export function groupByDiscoverPhase(items: RenderItem[]): RenderItem[] {
   }
 
   const phases: RenderItem[] = [];
-  for (const [workflowRunId, grouped] of phaseItems) {
+  for (const grouped of phaseItems.values()) {
     for (const phase of ['grill', 'prd'] as const) {
       const phaseItemList = grouped[phase];
       if (phaseItemList.length === 0) continue;
@@ -445,7 +521,8 @@ export function groupByDiscoverPhase(items: RenderItem[]): RenderItem[] {
       phases.push({
         kind: 'phase-group',
         phase,
-        pipelineRunId: workflowRunId,
+        pipelineRunId: grouped.id,
+        idKind: grouped.idKind,
         items: phaseItemList.sort(compareRenderItems),
         status: resolveDiscoverPhaseStatus(phase, phaseItemList),
         ...times,
@@ -506,6 +583,7 @@ export function groupByContractPhase(items: RenderItem[]): RenderItem[] {
       kind: 'phase-group',
       phase: 'contract',
       pipelineRunId: id,
+      idKind: 'contract',
       items: phaseItemList.sort(compareRenderItems),
       status: resolveContractPhaseStatus(phaseItemList),
       ...times,
@@ -577,6 +655,7 @@ export function groupByDevPhase(items: RenderItem[]): RenderItem[] {
       kind: 'phase-group',
       phase: 'dev',
       pipelineRunId: pid,
+      idKind: 'pipeline',
       items: phaseItemList,
       status: resolveDevPhaseStatus(pid, phaseItemList),
       ...times,
@@ -637,7 +716,10 @@ export function groupEvents(
   });
   const collapsed = collapseLogRuns(normalizedEvents);
   const grouped = groupByRunId(collapsed);
-  const withDiscoverPhases = groupByDiscoverPhase([...grouped].sort(compareRenderItems));
+  const interventionGroups = interventionDetails.map(buildInterventionGroup);
+  const withDiscoverPhases = groupByDiscoverPhase(
+    [...grouped, ...interventionGroups].sort(compareRenderItems),
+  );
   const withInvestigationPhases = groupByInvestigationPhase(
     [...withDiscoverPhases].sort(compareRenderItems),
   );
@@ -645,11 +727,7 @@ export function groupEvents(
     [...withInvestigationPhases].sort(compareRenderItems),
   );
   const withContractPhases = groupByContractPhase([...withReviewGroups].sort(compareRenderItems));
-  const withDevPhases = groupByDevPhase([...withContractPhases].sort(compareRenderItems));
-  if (interventionDetails.length === 0) return withDevPhases;
-  return [...withDevPhases, ...interventionDetails.map(buildInterventionGroup)].sort(
-    compareRenderItems,
-  );
+  return groupByDevPhase([...withContractPhases].sort(compareRenderItems));
 }
 
 function collapseLogRuns(events: AgentEventDto[]): RenderItem[] {

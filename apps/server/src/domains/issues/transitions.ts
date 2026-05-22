@@ -24,6 +24,7 @@ import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { STATES, TERMINAL_STATES } from '@goose-hub/core/state-machine/states.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { isLegalTransition, legalTargets } from '@goose-hub/core/state-machine/transitions.js';
+import { activeDiscoverSessionId } from '@goose-hub/core/workflows/grill-and-prd/discover-session.js';
 import { cleanupWorktree } from '@goose-hub/core/workspaces/worktree.js';
 import { CACHE_KEY, bustCache } from '#shared/cache.js';
 import { dispatchRetro } from '#shared/dispatch.js';
@@ -390,6 +391,12 @@ export async function transitionIssue(
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
 
   const workItemId = `github:${source.repoRef}#${id}`;
+  const discoverSessionId =
+    fromState === 'factory:gate-pending' && toState === 'factory:grilling'
+      ? activeDiscoverSessionId(slug, workItemId)
+      : null;
+  const sessionPayload =
+    discoverSessionId != null ? { discoverSessionId } : ({} as Record<string, never>);
   const manual = open({
     projectId: slug,
     workItemId,
@@ -398,11 +405,16 @@ export async function transitionIssue(
     reason: `Operator requested ${fromState} -> ${toState}`,
     rootCauseSignature: `manual_override|${slug}|${workItemId}|${fromState}|${toState}|${Date.now()}`,
     actor: 'ui',
-    evidence: { from: fromState, to: toState },
+    evidence: { from: fromState, to: toState, ...sessionPayload },
   });
   if (!manual.ok) return { ok: false, error: manual.error, status: manual.status };
 
-  const payload = { from: fromState, to: toState, reason: 'manual operator transition' };
+  const payload = {
+    from: fromState,
+    to: toState,
+    reason: 'manual operator transition',
+    ...sessionPayload,
+  };
   const validation = validateInterventionAction('manual_transition', payload);
   if (!validation.ok) return { ok: false, error: validation.error, status: 422 };
 
@@ -447,13 +459,14 @@ export async function transitionIssue(
       interventionId: manual.intervention.id,
       causedByInterventionId: manual.intervention.id,
       correlationId: manual.intervention.correlationId,
+      ...sessionPayload,
     },
   });
   const applied = recordApplicationResult({
     id: manual.intervention.id,
     expectedVersion: applying.intervention.version,
     ok: true,
-    result: { from: fromState, to: toState },
+    result: { from: fromState, to: toState, ...sessionPayload },
     actor: 'ui',
   });
   let manualResolved = false;

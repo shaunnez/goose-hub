@@ -31,6 +31,8 @@ vi.mock('@goose-hub/core/state-machine/states.js', () => ({
   STATES: [
     'factory:triaging',
     'factory:accepted',
+    'factory:gate-pending',
+    'factory:grilling',
     'factory:in-progress',
     'factory:needs-human',
     'factory:done',
@@ -176,6 +178,46 @@ describe('transitionIssue — validation', () => {
       'verify',
       'resolve',
     ]);
+  });
+
+  it('attaches active discover session metadata to manual gate-pending → grilling transitions', async () => {
+    const discoverSessionId = 'discover-session-manual-resume';
+    vi.mocked(eventStore.replay).mockReturnValueOnce([
+      {
+        id: 1,
+        projectId: 'proj-manual-grill',
+        workItemId: 'github:owner/repo#888',
+        kind: 'grill.question-posted',
+        runId: 'workflow-1',
+        payload: { discoverSessionId },
+        createdAt: '2026-05-22T00:00:00Z',
+      },
+    ]);
+
+    const result = await transitionIssue(
+      'proj-manual-grill',
+      '888',
+      'factory:gate-pending',
+      'factory:grilling',
+    );
+
+    expect(result.ok).toBe(true);
+    expect(eventStore.appendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'state.transitioned',
+        payload: expect.objectContaining({ discoverSessionId }),
+      }),
+    );
+    const interventions = listInterventions({
+      projectId: 'proj-manual-grill',
+      workItemId: 'github:owner/repo#888',
+    });
+    expect(interventions[0].decidedActionPayload).toMatchObject({ discoverSessionId });
+    expect(interventions[0].applicationResult).toMatchObject({
+      result: { discoverSessionId },
+    });
+    const events = listInterventionEvents(interventions[0].id);
+    expect(events[0].payload).toMatchObject({ evidence: { discoverSessionId } });
   });
 
   it('supersedes stale active interventions when a manual transition archives the issue', async () => {

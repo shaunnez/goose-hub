@@ -18,6 +18,7 @@ export interface RunGrillRoundInput {
   workItemId: string;
   runId: string;
   workflowRunId: string;
+  discoverSessionId: string;
   worktreePath: string;
   priorReplies: Array<{ role: 'user' | 'agent'; content: string; crystallized?: string }>;
   projectContext: ProjectContextBundle;
@@ -32,6 +33,7 @@ export async function runGrillRound(input: RunGrillRoundInput): Promise<GrillRou
     workItemId,
     runId,
     workflowRunId,
+    discoverSessionId,
     worktreePath,
     priorReplies,
     projectContext,
@@ -66,7 +68,7 @@ export async function runGrillRound(input: RunGrillRoundInput): Promise<GrillRou
       overrides: {
         workspaceDir: worktreePath,
         runtimeOverride: deps?.runtime,
-        extraEventPayload: { roundNumber, workflowRunId },
+        extraEventPayload: { roundNumber, workflowRunId, discoverSessionId },
         ...(projectConfig != null && { projectConfigOverride: projectConfig }),
       },
     });

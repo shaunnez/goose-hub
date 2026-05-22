@@ -32,6 +32,7 @@ export interface RunAdvisorReviewInput {
   workItemId: string;
   runId: string;
   workflowRunId: string;
+  discoverSessionId: string;
   prdOutput: PRDOutput;
   projectConfig?: Pick<ProjectConfig, 'budgets' | 'stack' | 'targetRepo'> | null;
   totalSpendForSkill: (projectId: string, skill: string) => number;
@@ -45,6 +46,7 @@ export async function runAdvisorReview(input: RunAdvisorReviewInput): Promise<Ad
     workItemId,
     runId,
     workflowRunId,
+    discoverSessionId,
     prdOutput,
     projectConfig,
     totalSpendForSkill,
@@ -87,7 +89,10 @@ export async function runAdvisorReview(input: RunAdvisorReviewInput): Promise<Ad
         prdOutput,
         priority: workItem.priority,
       },
-      overrides: { runtimeOverride: deps?.runtime, extraEventPayload: { workflowRunId } },
+      overrides: {
+        runtimeOverride: deps?.runtime,
+        extraEventPayload: { workflowRunId, discoverSessionId },
+      },
     });
   } catch (err) {
     if (err instanceof OutputValidationError) {

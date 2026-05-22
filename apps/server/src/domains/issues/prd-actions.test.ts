@@ -293,6 +293,13 @@ describe('proceedToPrd', () => {
       state: 'factory:gate-pending',
     });
     vi.mocked(getSourceForSlug).mockResolvedValue(source);
+    eventStore.appendEvent({
+      projectId,
+      workItemId: item.id,
+      kind: 'grill.question-posted',
+      runId: 'workflow-1',
+      payload: { discoverSessionId: 'discover-session-proceed' },
+    });
 
     const result = await proceedToPrd(projectId, item.externalId);
     expect(result.ok).toBe(true);
@@ -306,6 +313,9 @@ describe('proceedToPrd', () => {
         e.kind === 'state.transitioned' && (e.payload as { to: string }).to === 'factory:grilling',
     );
     expect(transitioned).toBeDefined();
+    expect((transitioned?.payload as { discoverSessionId?: string }).discoverSessionId).toBe(
+      'discover-session-proceed',
+    );
 
     await Promise.resolve();
     expect(dispatchGrillAndPrdMock).toHaveBeenCalledWith(projectId, Number(item.externalId));

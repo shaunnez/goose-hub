@@ -30,6 +30,7 @@ export interface RunPrdDraftInput {
   workItemId: string;
   runId: string;
   workflowRunId: string;
+  discoverSessionId: string;
   refinedIntent: string;
   fullProjectContext: ProjectContextBundle;
   projectConfig?: Pick<ProjectConfig, 'budgets' | 'stack' | 'targetRepo'> | null;
@@ -46,6 +47,7 @@ export async function runPrdDraft(input: RunPrdDraftInput): Promise<PrdDraftOutc
     workItemId,
     runId,
     workflowRunId,
+    discoverSessionId,
     refinedIntent,
     fullProjectContext,
     priorReplies,
@@ -77,7 +79,10 @@ export async function runPrdDraft(input: RunPrdDraftInput): Promise<PrdDraftOutc
         ...(priorPrd != null ? { priorPrd } : {}),
         ...(humanConcerns != null ? { humanConcerns } : {}),
       },
-      overrides: { runtimeOverride: deps?.runtime, extraEventPayload: { workflowRunId } },
+      overrides: {
+        runtimeOverride: deps?.runtime,
+        extraEventPayload: { workflowRunId, discoverSessionId },
+      },
     });
   } catch (err) {
     if (err instanceof OutputValidationError) {

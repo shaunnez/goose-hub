@@ -13,6 +13,10 @@ import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { resolveLatestPrd } from '@goose-hub/core/prd/read-model.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
+import {
+  activeDiscoverSessionId,
+  latestDiscoverSessionId,
+} from '@goose-hub/core/workflows/grill-and-prd/discover-session.js';
 import type { PRDOutput } from '@goose-hub/skills/write-prd/schema.js';
 import { dispatchDecomposePrd, dispatchGrillAndPrd, dispatchRevisePrd } from '#shared/dispatch.js';
 import type { Result } from '#shared/middleware.js';
@@ -48,12 +52,15 @@ export async function approvePRD(slug: string, id: string): Promise<Result<{ ok:
   }
 
   await moveOrForce(source, id, 'factory:prd-review', 'factory:decomposing');
+  const discoverSessionId = latestDiscoverSessionId(slug, workItemId);
+  const sessionPayload =
+    discoverSessionId != null ? { discoverSessionId } : ({} as Record<string, never>);
 
   eventStore.appendEvent({
     projectId: slug,
     workItemId,
     kind: 'prd.approved',
-    payload: { source: 'ui' },
+    payload: { source: 'ui', ...sessionPayload },
   });
   emitStateTransitionEvent({
     projectId: slug,
@@ -61,6 +68,7 @@ export async function approvePRD(slug: string, id: string): Promise<Result<{ ok:
     from: 'factory:prd-review',
     to: 'factory:decomposing',
     by: 'ui',
+    extraPayload: sessionPayload,
   });
 
   // Fire decompose-prd outside the response path. Mirrors the
@@ -111,11 +119,16 @@ export async function revisePRD(
     return { ok: false, error: 'no PRD draft found for revision', status: 409 };
   }
 
+  const discoverSessionId = latestDiscoverSessionId(slug, workItemId);
   eventStore.appendEvent({
     projectId: slug,
     workItemId,
     kind: 'prd.revised',
-    payload: { source: 'ui', concerns },
+    payload: {
+      source: 'ui',
+      concerns,
+      ...(discoverSessionId != null ? { discoverSessionId } : {}),
+    },
   });
 
   // Re-dispatch write-prd with concerns; state stays prd-review.
@@ -146,12 +159,15 @@ export async function declinePRD(slug: string, id: string): Promise<Result<{ ok:
   }
 
   await moveOrForce(source, id, 'factory:prd-review', 'factory:done');
+  const discoverSessionId = latestDiscoverSessionId(slug, workItemId);
+  const sessionPayload =
+    discoverSessionId != null ? { discoverSessionId } : ({} as Record<string, never>);
 
   eventStore.appendEvent({
     projectId: slug,
     workItemId,
     kind: 'prd.declined',
-    payload: { source: 'ui' },
+    payload: { source: 'ui', ...sessionPayload },
   });
   emitStateTransitionEvent({
     projectId: slug,
@@ -159,6 +175,7 @@ export async function declinePRD(slug: string, id: string): Promise<Result<{ ok:
     from: 'factory:prd-review',
     to: 'factory:done',
     by: 'ui',
+    extraPayload: sessionPayload,
   });
 
   return { ok: true, data: { ok: true } };
@@ -180,6 +197,9 @@ export async function proceedToPrd(slug: string, id: string): Promise<Result<{ o
   }
 
   await moveOrForce(source, id, 'factory:gate-pending', 'factory:grilling');
+  const discoverSessionId = activeDiscoverSessionId(slug, workItemId);
+  const sessionPayload =
+    discoverSessionId != null ? { discoverSessionId } : ({} as Record<string, never>);
 
   emitStateTransitionEvent({
     projectId: slug,
@@ -187,6 +207,7 @@ export async function proceedToPrd(slug: string, id: string): Promise<Result<{ o
     from: 'factory:gate-pending',
     to: 'factory:grilling',
     by: 'ui-proceed',
+    extraPayload: sessionPayload,
   });
 
   // Dispatch grill-and-prd with readyForPRD forced by marking priorReplies as complete.
