@@ -77,6 +77,7 @@ import {
   PrdApprovedEvent,
   PrdDeclinedEvent,
   PrdDraftedEvent,
+  PrdLifecycleRoutedEvent,
   PrdRejectedEvent,
   PrdRevisedEvent,
 } from './timeline/PrdEvents';
@@ -345,6 +346,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <PrdRevisedEvent key={event.id} event={event} />;
     case 'prd.declined':
       return <PrdDeclinedEvent key={event.id} event={event} />;
+    case 'prd.lifecycle-routed':
+      return <PrdLifecycleRoutedEvent key={event.id} event={event} />;
     case 'decompose.completed':
       return <DecomposeCompletedEvent key={event.id} event={event} context={context} />;
     case 'swarm.heartbeat':

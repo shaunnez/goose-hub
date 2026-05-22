@@ -4,12 +4,18 @@ import {
   CheckCircle2,
   FileText,
   MessageSquareDiff,
+  Route,
   SkipForward,
   XCircle,
 } from 'lucide-react';
 
 type Ac = { id?: string; statement?: string };
 type Slice = { title?: string; estimatedSize?: string };
+
+function shortId(value: string | undefined): string | null {
+  if (value == null || value.length === 0) return null;
+  return value.length <= 12 ? value : value.slice(0, 8);
+}
 
 export function PrdDraftedEvent({ event }: { event: AgentEventDto }) {
   const p = event.payload as {
@@ -204,6 +210,65 @@ export function PrdDeclinedEvent({ event }: { event: AgentEventDto }) {
         )}
         <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
         <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+    </li>
+  );
+}
+
+export function PrdLifecycleRoutedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as {
+    from?: string;
+    to?: string;
+    skipped?: string;
+    next?: string;
+    source?: string;
+    discoverSessionId?: string;
+  } | null;
+  const discoverSessionId = shortId(p?.discoverSessionId);
+
+  return (
+    <li
+      data-event-kind={event.kind}
+      data-testid="prd-lifecycle-routed-event"
+      className="rounded-md border border-[color:var(--accent)]/25 bg-[color:var(--accent)]/5 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-2 text-[11px] text-fg-3">
+        <Route size={13} className="shrink-0 text-[color:var(--accent)]" />
+        <span className="font-mono uppercase tracking-wider">PRD routed to delivery</span>
+        {p?.source != null && (
+          <>
+            <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+            <span className="text-fg-3">via {p.source}</span>
+          </>
+        )}
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-fg-2">
+        {p?.from != null && p?.to != null && (
+          <span>
+            <span className="font-mono">{p.from}</span>
+            <span className="text-fg-4 mx-1">→</span>
+            <span className="font-mono">{p.to}</span>
+          </span>
+        )}
+        {p?.next != null && (
+          <span>
+            Next <span className="font-mono text-fg-1">{p.next}</span>
+          </span>
+        )}
+      </div>
+      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-fg-3">
+        {p?.skipped != null && (
+          <span>
+            Skipped <span className="font-mono text-fg-2">{p.skipped}</span>
+          </span>
+        )}
+        {discoverSessionId != null && (
+          <span>
+            Discover session <span className="font-mono text-fg-2">{discoverSessionId}</span>
+          </span>
+        )}
       </div>
     </li>
   );

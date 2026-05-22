@@ -2,7 +2,7 @@ import type { AgentEventDto } from '@/lib/types';
 /** @vitest-environment jsdom */
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { PrdDeclinedEvent, PrdRevisedEvent } from './PrdEvents';
+import { PrdDeclinedEvent, PrdLifecycleRoutedEvent, PrdRevisedEvent } from './PrdEvents';
 
 afterEach(cleanup);
 
@@ -72,5 +72,34 @@ describe('PrdDeclinedEvent', () => {
       </ul>,
     );
     expect(screen.getByTestId('prd-declined-event').textContent).toContain('via ui');
+  });
+});
+
+describe('PrdLifecycleRoutedEvent', () => {
+  it('renders the PRD approval route without falling back to JSON', () => {
+    render(
+      <ul>
+        <PrdLifecycleRoutedEvent
+          event={makeEvent('prd.lifecycle-routed', {
+            from: 'factory:prd-review',
+            to: 'factory:dev-ready',
+            skipped: 'decompose-issues',
+            next: 'spec-author',
+            source: 'ui',
+            discoverSessionId: 'b2bf4343-8dd1-4364-9c3e-7b33f0d0077c',
+          })}
+        />
+      </ul>,
+    );
+
+    const el = screen.getByTestId('prd-lifecycle-routed-event');
+    expect(el.textContent).toContain('PRD routed to delivery');
+    expect(el.textContent).toContain('factory:prd-review');
+    expect(el.textContent).toContain('factory:dev-ready');
+    expect(el.textContent).toContain('Next spec-author');
+    expect(el.textContent).toContain('Skipped decompose-issues');
+    expect(el.textContent).toContain('via ui');
+    expect(el.textContent).toContain('b2bf4343');
+    expect(el.textContent).not.toContain('"discoverSessionId"');
   });
 });

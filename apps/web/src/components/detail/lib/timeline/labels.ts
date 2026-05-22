@@ -80,6 +80,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'prd.rejected': 'PRD rejected',
   'prd.revised': 'PRD revision requested',
   'prd.declined': 'Feature declined',
+  'prd.lifecycle-routed': 'PRD routed to delivery',
   'decompose.completed': 'Decompose complete',
   'spec.completed': 'Spec authored',
   'agent.model-selected': 'Model selected',
