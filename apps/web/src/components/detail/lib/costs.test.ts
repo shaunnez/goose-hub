@@ -46,6 +46,7 @@ describe('useIssueCostsBreakdown', () => {
     expect(result.current.runCount).toBe(0);
     expect(result.current.byRun.size).toBe(0);
     expect(result.current.byStage.size).toBe(0);
+    expect(result.current.bySkill.size).toBe(0);
   });
 
   it('keys cost rows by runId and aggregates by stage', async () => {
@@ -99,5 +100,103 @@ describe('useIssueCostsBreakdown', () => {
 
     expect(result.current.totalLabel).toBe('estimated');
     expect(result.current.byStage.get('review')?.label).toBe('estimated');
+  });
+
+  it('aggregates discover costs by skill while preserving byStage totals', async () => {
+    const data: WorkItemCostsDto = {
+      workItemId: 'wi-1',
+      totalUsd: 0.17,
+      hasEstimated: false,
+      rows: [
+        row({
+          runId: 'r-grill-1',
+          stage: 'discover',
+          skill: 'grill-me',
+          costUsd: 0.03,
+          inputTokens: 120,
+          outputTokens: 80,
+        }),
+        row({
+          runId: 'r-grill-2',
+          stage: 'discover',
+          skill: 'grill-me',
+          costUsd: 0.02,
+          inputTokens: 90,
+          outputTokens: 60,
+        }),
+        row({
+          runId: 'r-prd-1',
+          stage: 'discover',
+          skill: 'write-prd',
+          costUsd: 0.12,
+          inputTokens: 400,
+          outputTokens: 250,
+        }),
+      ],
+    };
+    vi.mocked(fetchIssueCosts).mockResolvedValueOnce(data);
+
+    const { result } = renderHook(() => useIssueCostsBreakdown('proj', '42'), { wrapper });
+    await waitFor(() => {
+      expect(result.current.runCount).toBe(3);
+    });
+
+    const discover = result.current.byStage.get('discover');
+    expect(discover?.runCount).toBe(3);
+    expect(discover?.usd).toBeCloseTo(0.17, 5);
+    expect(discover?.tokens).toBe(1000);
+
+    const grill = result.current.bySkill.get('grill-me');
+    expect(grill?.stage).toBe('discover');
+    expect(grill?.runCount).toBe(2);
+    expect(grill?.usd).toBeCloseTo(0.05, 5);
+    expect(grill?.tokens).toBe(350);
+
+    const prd = result.current.bySkill.get('write-prd');
+    expect(prd?.stage).toBe('discover');
+    expect(prd?.runCount).toBe(1);
+    expect(prd?.usd).toBeCloseTo(0.12, 5);
+    expect(prd?.tokens).toBe(650);
+  });
+
+  it("flips a skill label to 'estimated' when any row in it is estimated", async () => {
+    const data: WorkItemCostsDto = {
+      workItemId: 'wi-1',
+      totalUsd: 0.2,
+      hasEstimated: true,
+      rows: [
+        row({
+          runId: 'r-grill-1',
+          stage: 'discover',
+          skill: 'grill-me',
+          costUsd: 0.04,
+          costLabel: 'exact',
+        }),
+        row({
+          runId: 'r-grill-2',
+          stage: 'discover',
+          skill: 'grill-me',
+          costUsd: 0.06,
+          costLabel: 'estimated',
+        }),
+        row({
+          runId: 'r-prd-1',
+          stage: 'discover',
+          skill: 'write-prd',
+          costUsd: 0.1,
+          costLabel: 'exact',
+        }),
+      ],
+    };
+    vi.mocked(fetchIssueCosts).mockResolvedValueOnce(data);
+
+    const { result } = renderHook(() => useIssueCostsBreakdown('proj', '42'), { wrapper });
+    await waitFor(() => {
+      expect(result.current.runCount).toBe(3);
+    });
+
+    expect(result.current.byStage.get('discover')?.label).toBe('estimated');
+    expect(result.current.bySkill.get('grill-me')?.label).toBe('estimated');
+    expect(result.current.bySkill.get('write-prd')?.label).toBe('exact');
   });
 });
