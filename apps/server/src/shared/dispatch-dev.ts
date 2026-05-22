@@ -222,8 +222,7 @@ export async function dispatchInvestigationComplete(
         } catch (err) {
           const error = err instanceof Error ? err : new Error(String(err));
           const errorMetadata = error as Error & { runId?: unknown; personaId?: unknown };
-          const runId =
-            typeof errorMetadata.runId === 'string' ? errorMetadata.runId : undefined;
+          const runId = typeof errorMetadata.runId === 'string' ? errorMetadata.runId : undefined;
           const personaId =
             typeof errorMetadata.personaId === 'string' ? errorMetadata.personaId : undefined;
           eventStore.appendEvent({
