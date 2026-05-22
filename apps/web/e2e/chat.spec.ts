@@ -63,6 +63,30 @@ test.describe('hub-chat panel', () => {
     await expect(panel).toHaveClass(/translate-x-full/);
   });
 
+  test('launcher close resets reopened chat to list view', async ({ page }) => {
+    await page.goto('/projects/goose-hub-self');
+    await openChatPanel(page);
+    await startNewConversation(page);
+    await waitForChatReady(page);
+
+    await page.locator('[data-testid="chat-toggle-view"]').click();
+    const list = page.locator('[data-testid="chat-conversation-list"]');
+    await expect(list).toBeVisible();
+
+    const firstConversation = list.locator('[data-testid="chat-conversation-select"]').first();
+    await firstConversation.click();
+    await expect(page.locator('[data-testid="chat-input"]')).toBeVisible();
+
+    const launcher = page.locator('[data-testid="chat-launcher"]');
+    await launcher.click();
+    await expect(page.locator('[data-testid="chat-panel"]')).toHaveClass(/translate-x-full/);
+
+    await launcher.click();
+    await expect(page.locator('[data-testid="chat-panel"]')).toHaveClass(/translate-x-0/);
+    await expect(page.locator('[data-testid="chat-conversation-list"]')).toBeVisible();
+    await expect(page.locator('[data-testid="chat-input"]')).toHaveCount(0);
+  });
+
   test('sending a message persists it and the user bubble renders', async ({ page }) => {
     await page.goto('/projects/goose-hub-self');
     await openChatPanel(page);
