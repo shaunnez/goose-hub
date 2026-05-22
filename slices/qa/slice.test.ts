@@ -315,6 +315,28 @@ describe('qa helpers', () => {
     });
   });
 
+  it('reads pipelineRunId from a legacy fix-issue pr.opened payload', async () => {
+    mockReplay.mockReturnValue([
+      {
+        id: 1,
+        kind: 'pr.opened',
+        payload: {
+          worktreePath: '/wt/legacy',
+          devRunId: 'legacy-dev-run',
+          pipelineRunId: 'legacy-dev-run',
+        },
+        createdAt: '',
+      },
+    ]);
+
+    const { findPrOpenedHints } = await import('./qa-helpers.js');
+
+    expect(findPrOpenedHints('github:owner/repo#42')).toMatchObject({
+      devRunId: 'legacy-dev-run',
+      pipelineRunId: 'legacy-dev-run',
+    });
+  });
+
   it('classifies significant UI changes from changed file paths', async () => {
     const { classifyUiChanges } = await import('./qa-helpers.js');
 
@@ -1192,6 +1214,36 @@ describe('runQaWorkflow', () => {
       expect(runTests).toHaveBeenCalledWith('/wt/parallel-abc', expect.any(String));
       const spec = mockRun.mock.calls[0][0] as { workspaceDir?: string };
       expect(spec.workspaceDir).toBe('/wt/parallel-abc');
+    });
+
+    it('emits qa.completed with pipelineRunId from a legacy fix-issue pr.opened payload', async () => {
+      const item = makeWorkItem();
+      const source = makeMockSource();
+      mockReplay.mockReturnValue([
+        {
+          id: 1,
+          kind: 'pr.opened',
+          payload: {
+            prNumber: 99,
+            prUrl: 'https://github.com/owner/repo/pull/99',
+            branch: 'factory/legacy-dev-run',
+            worktreePath: '/wt/legacy',
+            devRunId: 'legacy-dev-run',
+            pipelineRunId: 'legacy-dev-run',
+          },
+          createdAt: '',
+        },
+      ]);
+      mockRun.mockResolvedValueOnce(makePassResult());
+
+      const { runQaWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      await runQaWorkflow(item, source, 'test-project', 'owner/repo');
+
+      const completed = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([event]) => event.kind === 'qa.completed');
+      expect(completed?.[0].payload).toMatchObject({ pipelineRunId: 'legacy-dev-run' });
     });
 
     it('does not feed non-node stack test commands through the Vitest JSON runner', async () => {

@@ -116,6 +116,8 @@ export async function approveIssue(
   id: string,
   options: {
     mergePRImpl?: typeof defaultMergePR;
+    runMergeDecisionImpl?: RunMergeDecisionFn;
+    pipelineEnabledOverride?: boolean;
     intervention?: { id: string; correlationId: string };
   } = {},
 ): Promise<Result<{ ok: true; sha: string; prNumber: number }>> {
@@ -156,12 +158,14 @@ export async function approveIssue(
   // Human escape hatch: merging directly via the GitHub UI bypasses this gate
   // entirely (we only run it inside the Goose Hub approve action).
   const projectCfg = await getProjectBySlug(slug);
-  const pipelineEnabled = projectCfg != null ? getUseMultiAgentPipeline(projectCfg.id) : false;
+  const pipelineEnabled =
+    options.pipelineEnabledOverride ??
+    (projectCfg != null ? getUseMultiAgentPipeline(projectCfg.id) : false);
 
   if (pipelineEnabled && pipelineRunId != null) {
     let decision: MergeDecisionResult;
     try {
-      const runMergeDecisionFn = await loadMergeDecision();
+      const runMergeDecisionFn = options.runMergeDecisionImpl ?? (await loadMergeDecision());
       decision = runMergeDecisionFn({
         pipelineRunId,
         // Use the slug — that's the same key all qa.completed/review.completed

@@ -802,6 +802,56 @@ describe('approveIssue / rejectIssue (#186)', () => {
     expect(cleanupWorktree).toHaveBeenCalledWith('dev-run-123');
   });
 
+  it('approveIssue runs merge-decision and emits its result for a legacy pipelineRunId', async () => {
+    const prOpenedEvent = {
+      id: 1,
+      projectId: 'proj',
+      workItemId: 'github:owner/repo#1',
+      kind: 'pr.opened',
+      runId: 'legacy-dev-run',
+      payload: {
+        prNumber: 99,
+        prUrl: 'u',
+        branch: 'b',
+        worktreePath: '/wt/legacy-dev-run',
+        devRunId: 'legacy-dev-run',
+        pipelineRunId: 'legacy-dev-run',
+      },
+      createdAt: '2026-05-02T22:00:00Z',
+    };
+    vi.mocked(eventStore.replay).mockReturnValue([prOpenedEvent] as never);
+    const mergePRImpl = vi.fn().mockResolvedValueOnce({ sha: 'abc1234', merged: true });
+    const runMergeDecisionImpl = vi.fn().mockReturnValueOnce({
+      passed: true,
+      score: 100,
+      reason: 'score-only-pass',
+    });
+
+    const { approveIssue } = await import('./service.js');
+    const result = await approveIssue('proj', '1', {
+      mergePRImpl,
+      runMergeDecisionImpl,
+      pipelineEnabledOverride: true,
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(runMergeDecisionImpl).toHaveBeenCalledWith({
+      pipelineRunId: 'legacy-dev-run',
+      projectId: 'proj',
+      workItemId: 'github:owner/repo#1',
+    });
+    const mergeDecision = vi
+      .mocked(eventStore.appendEvent)
+      .mock.calls.find(([event]) => event.kind === 'merge-decision.completed');
+    expect(mergeDecision?.[0].payload).toMatchObject({
+      passed: true,
+      score: 100,
+      reason: 'score-only-pass',
+      pipelineRunId: 'legacy-dev-run',
+      prNumber: 99,
+    });
+  });
+
   it('approveIssue returns 409 and transitions to merge-conflict when GitHub 405', async () => {
     vi.mocked(eventStore.replay).mockReturnValueOnce([
       {
