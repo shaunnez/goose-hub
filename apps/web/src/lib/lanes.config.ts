@@ -111,26 +111,24 @@ export function laneForState(state: string): string | undefined {
   return STATE_TO_LANE.get(state);
 }
 
-const PRIORITY_RANK: Record<string, number> = {
-  critical: 0,
-  high: 1,
-  medium: 2,
-  low: 3,
-};
-
 interface SortableItem {
   externalId: string;
-  priority: string;
+  createdAt: string;
+}
+
+function toTimestamp(createdAt: string): number {
+  const ts = Date.parse(createdAt);
+  return Number.isNaN(ts) ? 0 : ts;
 }
 
 /**
- * Order matches the scheduler's eligibility sort: priority desc, then issue
- * number asc.
+ * Order matches the kanban UI: newest items first, then higher issue number
+ * when creation time ties.
  */
 export function sortLaneItems<T extends SortableItem>(items: readonly T[]): T[] {
   return [...items].sort((a, b) => {
-    const prDiff = (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9);
-    if (prDiff !== 0) return prDiff;
-    return Number(a.externalId) - Number(b.externalId);
+    const timeDiff = toTimestamp(b.createdAt) - toTimestamp(a.createdAt);
+    if (timeDiff !== 0) return timeDiff;
+    return Number(b.externalId) - Number(a.externalId);
   });
 }
