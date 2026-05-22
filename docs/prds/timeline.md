@@ -13,6 +13,13 @@
   Runtime events such as logs, tool calls, run failures, budget exceeded, and output repair failures inherit the logical section
   of their parent run. Unknown events default to System.
 
+  ## Dependency
+
+  Run this after `docs/prds/issue-event-stream.md` lands, or rebase onto that work before implementation.
+
+  This PRD assumes issue detail timeline data comes from the shared DetailPage event cache, not a private TimelineSection SSE
+  connection. Do not reintroduce a TimelineSection-owned EventSource while implementing canonical timeline sections.
+
   ## User Stories
 
   1. As an operator, I want Grill events and Grill runs grouped together, so I can read the full conversation even after manual
