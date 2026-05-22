@@ -8,15 +8,15 @@ import type { WorkItemWithProject } from './lib/all-projects';
 // Here we lock the sort/ordering rule and grouping logic.
 
 describe('issue card lane ordering', () => {
-  it('orders by priority desc, then issue number asc', () => {
+  it('orders newest cards first within a lane', () => {
     const sorted = sortLaneItems([
-      { externalId: '40', priority: 'medium' },
-      { externalId: '12', priority: 'low' },
-      { externalId: '7', priority: 'high' },
-      { externalId: '99', priority: 'critical' },
-      { externalId: '5', priority: 'high' },
+      { externalId: '40', createdAt: '2024-01-01T09:00:00.000Z' },
+      { externalId: '12', createdAt: '2024-01-01T12:00:00.000Z' },
+      { externalId: '7', createdAt: '2024-01-01T11:00:00.000Z' },
+      { externalId: '99', createdAt: '2024-01-01T14:00:00.000Z' },
+      { externalId: '5', createdAt: '2024-01-01T13:00:00.000Z' },
     ]);
-    expect(sorted.map((s) => s.externalId)).toEqual(['99', '5', '7', '40', '12']);
+    expect(sorted.map((s) => s.externalId)).toEqual(['99', '5', '12', '7', '40']);
   });
 });
 
@@ -36,7 +36,7 @@ function makeItem(overrides: Partial<WorkItemWithProject> = {}): WorkItemWithPro
     exec: 'serial',
     dependsOn: [],
     blocks: [],
-    createdAt: new Date().toISOString(),
+    createdAt: '2024-01-01T00:00:00.000Z',
     projectSlug: 'proj-a',
     projectColor: '#f00',
     ...overrides,
@@ -56,26 +56,32 @@ describe('groupAllProjectsItems (#284)', () => {
     expect(map.get('qa')?.map((i) => i.externalId)).toEqual(['3']);
   });
 
-  it('aggregates items from two projects into shared lanes', () => {
+  it('orders shared lane items newest-first across projects', () => {
     const items: WorkItemWithProject[] = [
       makeItem({
         externalId: '10',
         state: 'factory:triaging',
         projectSlug: 'proj-a',
         projectColor: '#f00',
+        createdAt: '2024-01-01T08:00:00.000Z',
       }),
       makeItem({
         externalId: '20',
         state: 'factory:triaging',
         projectSlug: 'proj-b',
         projectColor: '#0f0',
+        createdAt: '2024-01-01T10:00:00.000Z',
+      }),
+      makeItem({
+        externalId: '30',
+        state: 'factory:triaging',
+        projectSlug: 'proj-c',
+        projectColor: '#00f',
+        createdAt: '2024-01-01T09:00:00.000Z',
       }),
     ];
     const map = groupAllProjectsItems(items, LANES);
-    const triageLane = map.get('triage') ?? [];
-    expect(triageLane).toHaveLength(2);
-    expect(triageLane.map((i) => i.projectSlug)).toContain('proj-a');
-    expect(triageLane.map((i) => i.projectSlug)).toContain('proj-b');
+    expect(map.get('triage')?.map((i) => i.externalId)).toEqual(['20', '30', '10']);
   });
 
   it('preserves projectColor on items', () => {

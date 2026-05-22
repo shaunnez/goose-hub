@@ -111,26 +111,23 @@ export function laneForState(state: string): string | undefined {
   return STATE_TO_LANE.get(state);
 }
 
-const PRIORITY_RANK: Record<string, number> = {
-  critical: 0,
-  high: 1,
-  medium: 2,
-  low: 3,
-};
-
 interface SortableItem {
   externalId: string;
-  priority: string;
+  createdAt: string;
 }
 
 /**
- * Order matches the scheduler's eligibility sort: priority desc, then issue
- * number asc.
+ * Order lane cards newest-first by creation time, then by issue number to keep
+ * the display deterministic when timestamps collide.
  */
 export function sortLaneItems<T extends SortableItem>(items: readonly T[]): T[] {
   return [...items].sort((a, b) => {
-    const prDiff = (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9);
-    if (prDiff !== 0) return prDiff;
-    return Number(a.externalId) - Number(b.externalId);
+    const createdDiff = Date.parse(b.createdAt) - Date.parse(a.createdAt);
+    if (createdDiff !== 0 && !Number.isNaN(createdDiff)) return createdDiff;
+
+    const externalDiff = Number(b.externalId) - Number(a.externalId);
+    if (externalDiff !== 0 && !Number.isNaN(externalDiff)) return externalDiff;
+
+    return b.externalId.localeCompare(a.externalId, undefined, { numeric: true });
   });
 }
