@@ -28,7 +28,15 @@ type VerifyCommand = {
 function mergeVerifyCommands(...groups: VerifyCommand[][]): VerifyCommand[] {
   const merged = new Map<string, VerifyCommand>();
   for (const command of groups.flat()) {
-    const key = `${command.command}\0${command.ac}`;
+    const key = JSON.stringify({
+      criterionId: command.criterionId,
+      checkId: command.checkId,
+      ac: command.ac,
+      command: command.command,
+      expectedExitCodes: command.expectedExitCodes,
+      outputExpectation: command.outputExpectation,
+      timeoutMs: command.timeoutMs,
+    });
     if (!merged.has(key)) merged.set(key, command);
   }
   return [...merged.values()];

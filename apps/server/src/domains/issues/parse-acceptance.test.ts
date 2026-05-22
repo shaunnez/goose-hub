@@ -123,6 +123,18 @@ describe('parseAcceptanceCriteria', () => {
     ]);
   });
 
+  it('rejects executable check blocks with blank expected exit-code tokens', () => {
+    const body = `
+## Acceptance criteria
+
+- [ ] API returns the created item
+  Executable check:
+  - Command: pnpm vitest run apps/server/src/items.test.ts
+  - Expected exit codes: 1,
+`;
+    expect(parseAcceptanceCriteria(body)).toEqual([]);
+  });
+
   it('handles extra blank lines between the AC text and verify fields', () => {
     const body =
       '- [ ] AC with blank lines\n\n      Verify: pnpm build\n      Expected: built ok\n      Tolerance: contains';

@@ -230,7 +230,7 @@ describe('runReviewWorkflow', () => {
         output: {
           verdict: 'approved',
           confidence: 0.9,
-          criteriaChecks: [{ criterion: 'Add foo', status: 'met' }],
+          criteriaChecks: [{ criterionId: 'AC-1', criterion: 'Add foo', status: 'met' }],
           findings: [],
           decisionSummaries: [
             { kind: 'CRITERIA_CHECK', summary: 'criteria met' },
@@ -279,7 +279,7 @@ describe('runReviewWorkflow', () => {
         output: {
           verdict: 'needs-fix',
           confidence: 0.5,
-          criteriaChecks: [{ criterion: 'Add foo', status: 'unmet' }],
+          criteriaChecks: [{ criterionId: 'AC-1', criterion: 'Add foo', status: 'unmet' }],
           findings: [
             {
               severity: 'blocker',
@@ -862,6 +862,39 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
     expect(completedEvents[0]?.[0].payload).toMatchObject({ verdict: 'needs-human' });
   });
 
+  it('escalates when reviewer outputs omit canonical criterion IDs', async () => {
+    const item = makeWorkItem();
+    const source = makeMockSource({
+      getPrDiff: vi.fn().mockResolvedValue('diff --git a/src/utils.ts b/src/utils.ts\n+added'),
+    });
+
+    mockRun.mockResolvedValueOnce({
+      output: {
+        verdict: 'approved',
+        confidence: 0.9,
+        criteriaChecks: [{ criterion: 'Add foo', status: 'met' }],
+        findings: [],
+        decisionSummaries: [],
+      },
+      decisionSummaries: [],
+      events: [],
+    } satisfies AgentResult);
+    mockRun.mockResolvedValueOnce(makeApprovedResultNoFindings());
+
+    const { runConvergentReviewWorkflow } = await import('./workflow.js');
+    await runConvergentReviewWorkflow(item, source, 'test-project', 'owner/repo');
+
+    expect(source.transitionState).toHaveBeenCalledWith(
+      '42',
+      'factory:needs-review',
+      'factory:needs-human',
+    );
+    expect(source.comment).toHaveBeenCalledWith(
+      '42',
+      expect.stringContaining('missing canonical acceptance criteria coverage'),
+    );
+  });
+
   // Test for P2 fix: review.completed emitted on convergence path
   it('emits review.completed with verdict approved when converging', async () => {
     const item = makeWorkItem();
@@ -1054,7 +1087,7 @@ describe('runConvergentReviewWorkflow (M19.04)', () => {
         output: {
           verdict: 'needs-fix',
           confidence: 0.6,
-          criteriaChecks: [{ criterion: 'Add foo', status: 'unmet' }],
+          criteriaChecks: [{ criterionId: 'AC-1', criterion: 'Add foo', status: 'unmet' }],
           findings: [{ severity: 'minor', description: 'style nit' }],
           decisionSummaries: [],
         },

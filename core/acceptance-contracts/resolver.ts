@@ -46,6 +46,7 @@ function normalizeExecutableChecks(value: unknown, criterionId: string): Executa
     };
     if (
       Array.isArray(check.expectedExitCodes) &&
+      check.expectedExitCodes.length > 0 &&
       check.expectedExitCodes.every((code) => Number.isInteger(code))
     ) {
       normalized.expectedExitCodes = check.expectedExitCodes as number[];

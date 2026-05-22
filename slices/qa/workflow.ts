@@ -124,7 +124,11 @@ async function runExecutableCheck(input: {
   const started = Date.now();
   return await new Promise((resolve) => {
     let settled = false;
-    let output = '';
+    let fullOutput = '';
+    const appendOutput = (chunk: Buffer | string) => {
+      fullOutput = `${fullOutput}${chunk.toString()}`;
+    };
+    const actualOutput = () => fullOutput.slice(-EXECUTABLE_CHECK_OUTPUT_LIMIT);
     const finish = (result: Omit<CriteriaResult, 'durationMs'>) => {
       if (settled) return;
       settled = true;
@@ -139,7 +143,6 @@ async function runExecutableCheck(input: {
     });
     const timeout = setTimeout(() => {
       killProcessGroupOrChild(child);
-      const actual = output.slice(-EXECUTABLE_CHECK_OUTPUT_LIMIT);
       finish({
         criterionId: input.check.criterionId,
         checkId: input.check.checkId,
@@ -147,7 +150,7 @@ async function runExecutableCheck(input: {
         command: input.check.command,
         expectedExitCodes,
         exitCode: null,
-        actual,
+        actual: actualOutput(),
         passed: false,
         ...(input.check.outputExpectation != null
           ? { outputExpectation: input.check.outputExpectation }
@@ -156,13 +159,12 @@ async function runExecutableCheck(input: {
       });
     }, timeoutMs);
     child.stdout?.on('data', (chunk: Buffer | string) => {
-      output = `${output}${chunk.toString()}`.slice(-EXECUTABLE_CHECK_OUTPUT_LIMIT);
+      appendOutput(chunk);
     });
     child.stderr?.on('data', (chunk: Buffer | string) => {
-      output = `${output}${chunk.toString()}`.slice(-EXECUTABLE_CHECK_OUTPUT_LIMIT);
+      appendOutput(chunk);
     });
     child.on('error', (err) => {
-      const actual = output.slice(-EXECUTABLE_CHECK_OUTPUT_LIMIT);
       finish({
         criterionId: input.check.criterionId,
         checkId: input.check.checkId,
@@ -170,7 +172,7 @@ async function runExecutableCheck(input: {
         command: input.check.command,
         expectedExitCodes,
         exitCode: null,
-        actual,
+        actual: actualOutput(),
         passed: false,
         ...(input.check.outputExpectation != null
           ? { outputExpectation: input.check.outputExpectation }
@@ -180,7 +182,6 @@ async function runExecutableCheck(input: {
     });
     child.on('close', (code) => {
       const exitCode = code ?? 1;
-      const actual = output.slice(-EXECUTABLE_CHECK_OUTPUT_LIMIT);
       finish({
         criterionId: input.check.criterionId,
         checkId: input.check.checkId,
@@ -188,10 +189,10 @@ async function runExecutableCheck(input: {
         command: input.check.command,
         expectedExitCodes,
         exitCode,
-        actual,
+        actual: actualOutput(),
         passed:
           expectedExitCodes.includes(exitCode) &&
-          matchesOutputExpectation(actual, input.check.outputExpectation),
+          matchesOutputExpectation(fullOutput, input.check.outputExpectation),
         ...(input.check.outputExpectation != null
           ? { outputExpectation: input.check.outputExpectation }
           : {}),
@@ -206,7 +207,21 @@ async function runExecutableChecks(input: {
   env?: NodeJS.ProcessEnv;
   defaultTimeoutMs: number;
 }): Promise<CriteriaResult[]> {
-  if (input.workspaceDir == null || input.checks == null || input.checks.length === 0) return [];
+  if (input.checks == null || input.checks.length === 0) return [];
+  if (input.workspaceDir == null) {
+    return input.checks.map((check) => ({
+      criterionId: check.criterionId,
+      checkId: check.checkId,
+      ac: check.ac,
+      command: check.command,
+      expectedExitCodes: check.expectedExitCodes.length > 0 ? check.expectedExitCodes : [0],
+      exitCode: null,
+      actual: '',
+      passed: false,
+      ...(check.outputExpectation != null ? { outputExpectation: check.outputExpectation } : {}),
+      error: 'workspaceDir unavailable; executable check was not run',
+    }));
+  }
   const results: CriteriaResult[] = [];
   for (const check of input.checks) {
     results.push(

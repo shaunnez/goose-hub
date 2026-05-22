@@ -177,4 +177,33 @@ describe('acceptance contracts', () => {
       },
     ]);
   });
+
+  it('preserves criteria when an optional executable check has empty expectedExitCodes', () => {
+    getEngineeringSpec.mockReturnValue({
+      pipelineRunId: 'spec-run',
+      updatedAt: '2026-05-21T01:00:00Z',
+      spec: {
+        acceptanceCriteria: [
+          {
+            id: 'AC-S',
+            statement: 'Spec criterion',
+            executableChecks: [{ id: 'AC-S-check-1', command: 'pnpm test', expectedExitCodes: [] }],
+          },
+        ],
+      },
+    });
+
+    expect(
+      resolveAcceptanceContract({ projectId: 'p', workItemId: 'w', issueBody: '' }),
+    ).toMatchObject({
+      source: 'engineering-spec',
+      criteria: [
+        {
+          id: 'AC-S',
+          statement: 'Spec criterion',
+          executableChecks: [{ id: 'AC-S-check-1', command: 'pnpm test' }],
+        },
+      ],
+    });
+  });
 });

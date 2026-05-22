@@ -180,7 +180,14 @@ export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<
     );
   }
 
-  if (parsed.some((p) => p == null || !p.success)) {
+  const coverageFailures = parsed.flatMap((p, i) => {
+    if (p == null || !p.success) return [];
+    return hasCanonicalCriteriaCoverage(p.data, acceptanceContract)
+      ? []
+      : [`slot ${i} missing canonical acceptance criteria coverage`];
+  });
+
+  if (parsed.some((p) => p == null || !p.success) || coverageFailures.length > 0) {
     const errors = rawResults
       .map((r, i) => {
         if (r instanceof Error) return r.message;
@@ -194,14 +201,14 @@ export async function dispatchReviewWave(opts: DispatchReviewWaveOpts): Promise<
       newCriticalFindings: [],
       reviewerOutputs: [],
       parseFailure: true,
-      parseFailureError: errors.join('; '),
+      parseFailureError: [...errors, ...coverageFailures].join('; '),
       anyNeedsHuman: false,
       anyNeedsFix: false,
       verdictsDiverge: false,
     };
   }
 
-  const parsedData = (parsed as Array<{ success: true; data: ReviewOutput }>).map((p) => p.data);
+  const parsedData = successfulReviewerOutputs.map((output) => output.parsed);
   const allFindings = parsedData.flatMap((d) => d.findings);
   const roundFindings = deduplicateFindings(allFindings);
 

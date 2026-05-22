@@ -102,13 +102,7 @@ export function hasCanonicalCriteriaCoverage(
   const criteria = acceptanceContract?.criteria ?? [];
   if (criteria.length === 0) return true;
   const checkedIds = new Set(output.criteriaChecks.map((check) => check.criterionId));
-  const checkedStatements = new Set(output.criteriaChecks.map((check) => check.criterion));
-  return (
-    output.criteriaChecks.length >= criteria.length &&
-    criteria.every(
-      (criterion) => checkedIds.has(criterion.id) || checkedStatements.has(criterion.statement),
-    )
-  );
+  return criteria.every((criterion) => checkedIds.has(criterion.id));
 }
 
 /** Default reviewer slots: constrained + unconstrained, both on claude. */

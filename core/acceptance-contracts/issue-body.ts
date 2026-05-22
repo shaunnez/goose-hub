@@ -22,11 +22,11 @@ function extractField(lines: string[], prefix: string): string | undefined {
 
 function parseExpectedExitCodes(value: string | undefined): number[] | undefined {
   if (value == null) return undefined;
-  const parsed = value
-    .split(',')
-    .map((part) => Number(part.trim()))
-    .filter((n) => Number.isInteger(n));
-  return parsed.length > 0 ? parsed : undefined;
+  const parts = value.split(',').map((part) => part.trim());
+  if (parts.length === 0 || parts.some((part) => part.length === 0)) return undefined;
+  const parsed = parts.map((part) => Number(part));
+  if (parsed.some((n) => !Number.isInteger(n))) return undefined;
+  return parsed;
 }
 
 function parseExecutableCheckBlocks(
@@ -53,11 +53,15 @@ function parseExecutableCheckBlocks(
       return match?.[1] != null && match[1].trim().length > 0 ? [match[1].trim()] : [];
     })[0];
     if (command != null) {
-      const expectedExitCodes = block.flatMap((line) => {
+      const expectedExitCodesRaw = block.flatMap((line) => {
         const match = EXPECTED_EXIT_CODES_FIELD.exec(line);
-        const parsed = parseExpectedExitCodes(match?.[1]);
-        return parsed == null ? [] : [parsed];
+        return match?.[1] != null ? [match[1]] : [];
       })[0];
+      const expectedExitCodes = parseExpectedExitCodes(expectedExitCodesRaw);
+      if (expectedExitCodesRaw != null && expectedExitCodes == null) {
+        i = j;
+        continue;
+      }
       const kind = block.flatMap((line) => {
         const match = KIND_FIELD.exec(line);
         const value = match?.[1]?.trim();

@@ -1134,6 +1134,11 @@ describe('dispatchQa acceptance commands', () => {
                 id: 'AC-S-check-1',
                 command: 'pnpm test',
               },
+              {
+                id: 'AC-S-check-2',
+                command: 'pnpm test',
+                outputExpectation: { mode: 'contains', value: 'ok' },
+              },
             ],
           },
         ],
@@ -1156,6 +1161,14 @@ describe('dispatchQa acceptance commands', () => {
             ac: 'Spec criterion without full verify fields',
             command: 'pnpm test',
             expectedExitCodes: [0],
+          },
+          {
+            criterionId: 'AC-S',
+            checkId: 'AC-S-check-2',
+            ac: 'Spec criterion without full verify fields',
+            command: 'pnpm test',
+            expectedExitCodes: [0],
+            outputExpectation: { mode: 'contains', value: 'ok' },
           },
           {
             criterionId: 'AC-1',
