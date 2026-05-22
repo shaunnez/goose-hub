@@ -172,6 +172,12 @@ function makePlaywrightReproOutput() {
     reproSteps: ['Navigate to /login', 'Enter credentials', 'Click submit'],
     reproduced: true,
     notes: 'Bug reproduced consistently.',
+    decisionSummaries: [
+      {
+        kind: 'PLAN',
+        summary: 'Captured Playwright evidence for the browser repro.',
+      },
+    ],
   };
 }
 

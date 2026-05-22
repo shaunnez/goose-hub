@@ -210,7 +210,7 @@ export async function dispatchDecomposePrd(slug: string, issueNumber: number): P
         await transitionAndEmitState({
           source,
           projectId: slug,
-          itemId: item.id,
+          itemId: issueNumber.toString(),
           workItemId: item.id,
           from: 'factory:decomposing',
           to: 'factory:needs-human',
@@ -233,7 +233,7 @@ export async function dispatchDecomposePrd(slug: string, issueNumber: number): P
         await transitionAndEmitState({
           source,
           projectId: slug,
-          itemId: item.id,
+          itemId: issueNumber.toString(),
           workItemId: item.id,
           from: 'factory:decomposing',
           to: 'factory:needs-human',

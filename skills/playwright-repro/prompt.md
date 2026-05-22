@@ -68,7 +68,13 @@ Return only JSON conforming to the spec-plan schema:
   "expectedAssertion": "Login error remains visible after submitting credentials",
   "reproSteps": ["Navigate to /login", "Submit credentials", "Assert reported error state"],
   "evidenceIntent": "Capture BEFORE-state screenshots proving the login error remains visible.",
-  "notes": "No auth seed required."
+  "notes": "No auth seed required.",
+  "decisionSummaries": [
+    {
+      "kind": "PLAN",
+      "summary": "Planned a bounded Playwright repro for the reported login error."
+    }
+  ]
 }
 ```
 
