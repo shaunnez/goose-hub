@@ -3,15 +3,15 @@ import { fetchEventsPage, fetchIssue, fetchIssues } from '@/lib/api';
 import { LANES, laneForState, sortLaneItems } from '@/lib/lanes.config';
 import { useProjectBudgetStatus } from '@/lib/project-budget';
 import type { AgentEventDto } from '@/lib/types';
-import { ISSUE_TIMELINE_EVENT_KINDS } from '@goose-hub/core/event-stream/issue-timeline.js';
 import { useActiveMilestone } from '@/state/active-milestone';
+import { ISSUE_TIMELINE_EVENT_KINDS } from '@goose-hub/core/event-stream/issue-timeline.js';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  applyLatestEventState,
   applyIssueTimelineEvent,
+  applyLatestEventState,
   backfillIssueTimelineEvents,
   mergeIssueEvents,
 } from '../lib/live-events';

@@ -4,8 +4,8 @@ import { db } from '../db/db.js';
 import { events } from '../db/schema.js';
 import type { StateName } from '../state-machine/states.js';
 import type { StateSource } from '../state-source/interface.js';
-import { eventStore } from './store.js';
 import { transitionAndEmitState } from './state-transition.js';
+import { eventStore } from './store.js';
 
 const PROJECT = 'test-state-transition-wrapper';
 const WORK_ITEM_ID = 'github:owner/repo#42';

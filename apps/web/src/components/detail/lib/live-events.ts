@@ -1,5 +1,5 @@
-import type { AgentEventDto, WorkItemDto } from '@/lib/types';
 import { interventionKeys } from '@/lib/query-keys';
+import type { AgentEventDto, WorkItemDto } from '@/lib/types';
 import { isIssueTimelineEvent } from '@goose-hub/core/event-stream/issue-timeline.js';
 import type { QueryClient } from '@tanstack/react-query';
 
