@@ -371,6 +371,7 @@ describe('TimelineSection — expand/collapse all', () => {
     });
 
     const queryClient = new QueryClient();
+    queryClient.setQueryData(['events', 'p', '1'], []);
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const { TimelineSection } = await import('./TimelineSection');
     renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />, queryClient);
@@ -390,6 +391,7 @@ describe('TimelineSection — expand/collapse all', () => {
     vi.mocked(fetchEventsPage).mockResolvedValue({ events: [], hasMore: false });
 
     const queryClient = new QueryClient();
+    queryClient.setQueryData(['events', 'p', '1'], []);
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const { TimelineSection } = await import('./TimelineSection');
     renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />, queryClient);

@@ -15,9 +15,19 @@ function makeEvent(id: number, kind = 'agent.investigation-complete'): AgentEven
 }
 
 describe('upsertIssueEvent', () => {
-  it('inserts a live event into the issue events cache', () => {
+  it('does not seed the issue events cache before the full events query loads', () => {
     const queryClient = new QueryClient();
     const event = makeEvent(2);
+
+    upsertIssueEvent(queryClient, 'p', '1', event);
+
+    expect(queryClient.getQueryData(['events', 'p', '1'])).toBeUndefined();
+  });
+
+  it('inserts a live event into an existing issue events cache', () => {
+    const queryClient = new QueryClient();
+    const event = makeEvent(2);
+    queryClient.setQueryData(['events', 'p', '1'], []);
 
     upsertIssueEvent(queryClient, 'p', '1', event);
 
@@ -28,6 +38,7 @@ describe('upsertIssueEvent', () => {
     const queryClient = new QueryClient();
     const event = makeEvent(2);
     const duplicate = { ...event, payload: { changed: true } };
+    queryClient.setQueryData(['events', 'p', '1'], []);
 
     upsertIssueEvent(queryClient, 'p', '1', event);
     upsertIssueEvent(queryClient, 'p', '1', duplicate);
