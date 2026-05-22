@@ -31,6 +31,14 @@ async function openChatPanel(page: Page) {
   await expect(page.locator('[data-testid="chat-panel"]')).toHaveClass(/translate-x-0/);
 }
 
+async function closeChatPanelWithLauncher(page: Page) {
+  await hideDevtools(page);
+  const launcher = page.locator('[data-testid="chat-launcher"]');
+  await expect(launcher).toBeVisible();
+  await launcher.click();
+  await expect(page.locator('[data-testid="chat-panel"]')).toHaveClass(/translate-x-full/);
+}
+
 async function startNewConversation(page: Page) {
   await page.locator('[data-testid="chat-new-conversation"]').click();
 }
@@ -77,6 +85,20 @@ test.describe('hub-chat panel', () => {
       .locator('[data-testid="chat-user-message"]')
       .filter({ hasText: 'hello hub chat' });
     await expect(userBubble).toBeVisible();
+  });
+
+  test('reopens on the conversation list after launcher close', async ({ page }) => {
+    await page.goto('/projects/goose-hub-self');
+    await openChatPanel(page);
+    await startNewConversation(page);
+    await waitForChatReady(page);
+
+    await expect(page.locator('[data-testid="chat-conversation-list"]')).toHaveCount(0);
+
+    await closeChatPanelWithLauncher(page);
+    await openChatPanel(page);
+
+    await expect(page.locator('[data-testid="chat-conversation-list"]')).toBeVisible();
   });
 
   test('a read-only tool proposal auto-runs and renders a result card', async ({ page }) => {
