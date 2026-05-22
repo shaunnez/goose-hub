@@ -46,12 +46,13 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
   }, [state, projectSlug, id, queryClient]);
 
   const send = useMutation({
-    mutationFn: async (body: string) => {
+    mutationFn: async (input: { body: string; shouldTransitionToGrilling: boolean }) => {
+      const { body, shouldTransitionToGrilling } = input;
       await addComment(projectSlug, externalId, body);
       // After posting a reply during gate-pending, advance the issue back to
       // grilling so the orchestrator can pick it up on the next tick. This is
       // a no-op when the issue is already in a non-gate state.
-      if (state === 'factory:gate-pending') {
+      if (shouldTransitionToGrilling) {
         await transitionState(projectSlug, id, 'factory:gate-pending', 'factory:grilling');
       }
     },
@@ -82,20 +83,25 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
 
   const grillComments = selectGrillThreadComments(comments);
   const merged: Array<IssueCommentDto | OptimisticReply> = [...grillComments, ...optimisticReplies];
+  const latestThreadComment = merged.at(-1);
+  const hasLatestUnansweredQuestion =
+    latestThreadComment != null && isGrillQuestion(latestThreadComment.body);
+  const effectiveState =
+    state === 'factory:grilling' && hasLatestUnansweredQuestion ? 'factory:gate-pending' : state;
 
   // The last agent question in the thread (used for recommended-answer pill).
   const lastAgentQuestionId = [...merged].reverse().find((c) => isGrillQuestion(c.body))?.id;
 
   const grillingComplete =
-    state === 'factory:prd-drafting' ||
-    state === 'factory:prd-review' ||
-    state === 'factory:decomposing' ||
-    state === 'factory:issues-created' ||
-    state === 'factory:done';
+    effectiveState === 'factory:prd-drafting' ||
+    effectiveState === 'factory:prd-review' ||
+    effectiveState === 'factory:decomposing' ||
+    effectiveState === 'factory:issues-created' ||
+    effectiveState === 'factory:done';
 
   // Griller is processing a reply — hide the form but don't show "complete" yet.
-  const grillingInProgress = state === 'factory:grilling';
-  const awaitingReply = state === 'factory:gate-pending';
+  const grillingInProgress = effectiveState === 'factory:grilling';
+  const awaitingReply = effectiveState === 'factory:gate-pending';
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,6 +109,7 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
     if (trimmed.length === 0 || send.isPending) return;
     const replyBody = `${GRILL_REPLY_MARKER}\n${trimmed}`;
     setErrorMsg(null);
+    const shouldTransitionToGrilling = effectiveState === 'factory:gate-pending';
     // Optimistic insert.
     const reply: OptimisticReply = {
       id: -Date.now(),
@@ -112,7 +119,7 @@ export function GrillSection({ projectSlug, externalId, id, state }: GrillSectio
       __optimistic: true,
     };
     setOptimisticReplies((prev) => [...prev, reply]);
-    send.mutate(replyBody);
+    send.mutate({ body: replyBody, shouldTransitionToGrilling });
   };
 
   if (isLoading) {

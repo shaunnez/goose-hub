@@ -70,6 +70,7 @@ describe('playwright repro evidence workflow helper', () => {
         expectedAssertion: 'Error banner remains visible',
         reproSteps: ['Navigate to /login'],
         evidenceIntent: 'Capture the BEFORE login error.',
+        decisionSummaries: [{ kind: 'PLAN', summary: 'Generate a browser repro spec.' }],
       },
       publisher: { execFileSync: execFileSync as never, spawnSync: spawnSync as never, collect },
     });
@@ -110,6 +111,7 @@ describe('playwright repro evidence workflow helper', () => {
         expectedAssertion: 'Error banner remains visible',
         reproSteps: ['Navigate to /login'],
         evidenceIntent: 'Capture the BEFORE login error.',
+        decisionSummaries: [{ kind: 'PLAN', summary: 'Assemble browser repro evidence.' }],
       },
       evidence: {
         issue: 42,
@@ -154,6 +156,7 @@ describe('playwright repro evidence workflow helper', () => {
           expectedAssertion: 'Error banner remains visible',
           reproSteps: ['Navigate to /login'],
           evidenceIntent: 'Capture the BEFORE login error.',
+          decisionSummaries: [{ kind: 'PLAN', summary: 'Reject unsafe repro paths.' }],
         },
         publisher: { spawnSync: spawnSync as never },
       }),

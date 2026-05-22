@@ -1009,6 +1009,60 @@ describe('getIssueEvents', () => {
       expect(result.data.hasMore).toBe(true);
     }
   });
+
+  it('keeps after-cursor backfill pages full after filtering hidden rows', async () => {
+    vi.mocked(eventStore.replay)
+      .mockReturnValueOnce(
+        Array.from({ length: 100 }, (_, index) => ({
+          id: 11 + index,
+          kind: 'chat.agent-message',
+          payload: { conversationId: 'conv_1' },
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#1',
+          createdAt: '2026-01-01T00:00:11Z',
+        })) as never,
+      )
+      .mockReturnValueOnce([
+        {
+          id: 111,
+          kind: 'state.transitioned',
+          payload: { to: 'factory:triaging' },
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#1',
+          createdAt: '2026-01-01T00:00:13Z',
+        },
+        {
+          id: 112,
+          kind: 'agent.run-started',
+          payload: { skill: 'investigate', runId: 'run_1' },
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#1',
+          createdAt: '2026-01-01T00:00:14Z',
+        },
+        {
+          id: 113,
+          kind: 'agent.run-completed',
+          payload: { skill: 'investigate', runId: 'run_1' },
+          projectId: 'proj',
+          workItemId: 'github:owner/repo#1',
+          createdAt: '2026-01-01T00:00:15Z',
+        },
+      ] as never);
+
+    const { getIssueEvents } = await import('./service.js');
+    const result = await getIssueEvents('proj', '1', { limit: 1, after: 10 });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const events = result.data.events as Array<{ id: number }>;
+      expect(events.map((event) => event.id)).toEqual([111]);
+      expect(result.data.hasMore).toBe(true);
+      expect(eventStore.replay).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ sinceId: 110 }),
+      );
+    }
+  });
 });
 
 describe('getIssueArtifact', () => {

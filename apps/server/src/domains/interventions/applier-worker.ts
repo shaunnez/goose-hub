@@ -1,4 +1,4 @@
-import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
+import { transitionAndEmitState } from '@goose-hub/core/event-stream/state-transition.js';
 import {
   type InterventionApplierDeps,
   startInterventionApplierWorker,
@@ -33,18 +33,16 @@ export function createServerInterventionApplierDeps(): InterventionApplierDeps {
           `state changed before apply: expected ${input.from}, found ${current.state}`,
         );
       }
-      await source.transitionState(
-        input.workItemId,
-        input.from,
-        input.to,
-        input.reason ?? 'operator intervention',
-      );
-      emitStateTransitionEvent({
+      await transitionAndEmitState({
+        source,
         projectId: input.projectId,
+        itemId: input.workItemId,
         workItemId: input.workItemId,
         from: input.from,
         to: input.to,
         by: 'intervention-applier',
+        mode: 'legal',
+        note: input.reason ?? 'operator intervention',
         extraPayload: {
           interventionId: input.interventionId,
           causedByInterventionId: input.interventionId,

@@ -8,10 +8,12 @@ const mocks = vi.hoisted(() => ({
   emitStateTransitionEvent: vi.fn(),
   getSourceForSlug: vi.fn(),
   rejectIssue: vi.fn(),
+  transitionAndEmitState: vi.fn(),
 }));
 
 vi.mock('@goose-hub/core/event-stream/state-transition.js', () => ({
   emitStateTransitionEvent: mocks.emitStateTransitionEvent,
+  transitionAndEmitState: mocks.transitionAndEmitState,
 }));
 
 vi.mock('#shared/cache.js', () => ({
@@ -45,6 +47,7 @@ describe('server intervention applier deps', () => {
     vi.clearAllMocks();
     source.getItem.mockResolvedValue({ state: 'factory:needs-human' });
     source.transitionState.mockResolvedValue(undefined);
+    mocks.transitionAndEmitState.mockResolvedValue(undefined);
     mocks.getSourceForSlug.mockResolvedValue(source);
     mocks.approveIssue.mockResolvedValue({ ok: true, data: { ok: true, sha: 'abc', prNumber: 1 } });
     mocks.rejectIssue.mockResolvedValue({ ok: true, data: { ok: true } });
@@ -65,18 +68,17 @@ describe('server intervention applier deps', () => {
       reason: 'retry triage',
     });
 
-    expect(source.transitionState).toHaveBeenCalledWith(
-      'github:owner/repo#42',
-      'factory:needs-human',
-      'factory:triaging',
-      'retry triage',
-    );
-    expect(mocks.emitStateTransitionEvent).toHaveBeenCalledWith(
+    expect(mocks.transitionAndEmitState).toHaveBeenCalledWith(
       expect.objectContaining({
+        source,
         projectId: 'proj',
+        itemId: 'github:owner/repo#42',
         workItemId: 'github:owner/repo#42',
         from: 'factory:needs-human',
         to: 'factory:triaging',
+        by: 'intervention-applier',
+        mode: 'legal',
+        note: 'retry triage',
         extraPayload: {
           interventionId: 'i1',
           causedByInterventionId: 'i1',
@@ -103,6 +105,7 @@ describe('server intervention applier deps', () => {
 
     expect(source.transitionState).not.toHaveBeenCalled();
     expect(mocks.emitStateTransitionEvent).not.toHaveBeenCalled();
+    expect(mocks.transitionAndEmitState).not.toHaveBeenCalled();
   });
 
   it('passes intervention identity into gate appliers and resume dispatch', async () => {

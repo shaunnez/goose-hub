@@ -13,6 +13,7 @@ import {
   type MergePrInput,
   mergePR as defaultMergePR,
 } from '@goose-hub/core/connectors/github/merge-pr.js';
+import { transitionAndEmitState } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
@@ -61,7 +62,16 @@ export async function runResolveConflictWorkflow(
   const events = eventStore.replay({ workItemId });
   const prEvent = [...events].reverse().find((e) => e.kind === 'pr.opened');
   if (prEvent == null) {
-    await stateSource.transitionState(issueNumber, 'factory:merge-conflict', 'factory:needs-human');
+    await transitionAndEmitState({
+      source: stateSource,
+      projectId: slug,
+      itemId: issueNumber,
+      workItemId,
+      from: 'factory:merge-conflict',
+      to: 'factory:needs-human',
+      by: 'resolve-conflict',
+      mode: 'legal',
+    });
     await stateSource.comment(
       issueNumber,
       buildAgentComment(
@@ -190,11 +200,16 @@ export async function runResolveConflictWorkflow(
       payload: { prNumber, sha: merged.sha },
     });
 
-    await stateSource.transitionState(
-      issueNumber,
-      'factory:merge-conflict',
-      'factory:retrospecting',
-    );
+    await transitionAndEmitState({
+      source: stateSource,
+      projectId: slug,
+      itemId: issueNumber,
+      workItemId,
+      from: 'factory:merge-conflict',
+      to: 'factory:retrospecting',
+      by: 'resolve-conflict',
+      mode: 'legal',
+    });
     await stateSource.comment(
       issueNumber,
       buildAgentComment(
@@ -211,7 +226,16 @@ export async function runResolveConflictWorkflow(
       kind: 'merge.conflict-unresolvable',
       payload: { prNumber, prUrl, error: String(err) },
     });
-    await stateSource.transitionState(issueNumber, 'factory:merge-conflict', 'factory:needs-human');
+    await transitionAndEmitState({
+      source: stateSource,
+      projectId: slug,
+      itemId: issueNumber,
+      workItemId,
+      from: 'factory:merge-conflict',
+      to: 'factory:needs-human',
+      by: 'resolve-conflict',
+      mode: 'legal',
+    });
     await stateSource.comment(
       issueNumber,
       buildAgentComment(

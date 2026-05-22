@@ -2,15 +2,12 @@ import { fetchEventsPage, fetchIntervention, fetchIssueInterventions } from '@/l
 import type { InterventionDetailDto } from '@/lib/api/interventions';
 import { interventionKeys } from '@/lib/query-keys';
 import type { AgentEventDto } from '@/lib/types';
-import {
-  ISSUE_TIMELINE_EVENT_KINDS,
-  isIssueTimelineEvent,
-} from '@goose-hub/core/event-stream/issue-timeline.js';
+import { isIssueTimelineEvent } from '@goose-hub/core/event-stream/issue-timeline.js';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useIssueCostsBreakdown } from '../lib/costs';
-import { upsertIssueEvent } from '../lib/live-events';
+import { mergeIssueEvents } from '../lib/live-events';
 import { groupEvents } from '../lib/timeline';
 import type { RenderItem } from '../lib/timeline';
 import { SectionEmptyState } from './SectionEmptyState';
@@ -23,20 +20,33 @@ const PAGE_SIZE = 200;
 interface TimelineSectionProps {
   projectSlug: string;
   id: string;
-  workItemId: string;
+  workItemId?: string;
 }
 
-export function TimelineSection({ projectSlug, id, workItemId }: TimelineSectionProps) {
-  const [events, setEvents] = useState<AgentEventDto[]>([]);
-  const [loading, setLoading] = useState(true);
+export function TimelineSection({ projectSlug, id }: TimelineSectionProps) {
   const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
-  const [cursor, setCursor] = useState<number | undefined>(undefined);
-  const [error, setError] = useState<string | null>(null);
-  // Set to max event id after initial REST fetch; triggers SSE open with lastEventId.
-  const [sseReadyAfter, setSseReadyAfter] = useState<number | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const [hasMore, setHasMore] = useState(true);
   const queryClient = useQueryClient();
+  const {
+    data: events = [],
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ['events', projectSlug, id],
+    queryFn: async ({ signal }) => {
+      const { events: list, hasMore: more } = await fetchEventsPage(
+        projectSlug,
+        id,
+        { limit: PAGE_SIZE },
+        signal,
+      );
+      setHasMore(more);
+      return mergeIssueEvents(
+        queryClient.getQueryData<AgentEventDto[]>(['events', projectSlug, id]),
+        list,
+      );
+    },
+  });
   const { byRun: runCosts } = useIssueCostsBreakdown(projectSlug, id);
   const { data: interventionDetails = [], isLoading: interventionsLoading } = useQuery({
     queryKey: interventionKeys.timeline(projectSlug, id),
@@ -50,34 +60,8 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
     open: true,
   });
 
-  useEffect(() => {
-    const controller = new AbortController();
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setSseReadyAfter(null);
-    fetchEventsPage(projectSlug, id, { limit: PAGE_SIZE }, controller.signal)
-      .then(({ events: list, hasMore: more }) => {
-        if (cancelled) return;
-        setEvents(list);
-        setHasMore(more);
-        setCursor(list.at(-1)?.id);
-        // Open SSE from here — skip replay of events we already have.
-        setSseReadyAfter(list[0]?.id ?? 0);
-        setLoading(false);
-      })
-      .catch((err: Error) => {
-        if (cancelled) return;
-        setError(err.message);
-        setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [projectSlug, id]);
-
   const loadMore = useCallback(async () => {
+    const cursor = events.at(-1)?.id;
     if (!hasMore || loadingMore || cursor == null) return;
     setLoadingMore(true);
     try {
@@ -85,79 +69,29 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
         limit: PAGE_SIZE,
         before: cursor,
       });
-      setEvents((prev) => [...prev, ...older]);
+      queryClient.setQueryData<AgentEventDto[]>(['events', projectSlug, id], (prev) =>
+        mergeIssueEvents(prev, older),
+      );
       setHasMore(more);
-      setCursor(older.at(-1)?.id);
     } finally {
       setLoadingMore(false);
     }
-  }, [hasMore, loadingMore, cursor, projectSlug, id]);
+  }, [events, hasMore, loadingMore, projectSlug, id, queryClient]);
 
-  // Live updates via SSE. Opens only after initial REST fetch so lastEventId
-  // skips the replay of events already loaded — no double-fetch.
-  useEffect(() => {
-    if (sseReadyAfter === null || !workItemId) return;
-    const params = new URLSearchParams({
-      projectId: projectSlug,
-      workItemId,
-      lastEventId: String(sseReadyAfter),
-    });
-    const es = new EventSource(`/events?${params}`);
-    eventSourceRef.current = es;
-    const handler = (msg: MessageEvent<string>) => {
-      try {
-        const parsed = JSON.parse(msg.data) as AgentEventDto;
-        if (!isIssueTimelineEvent(parsed)) return;
-        upsertIssueEvent(queryClient, projectSlug, id, parsed);
-        setEvents((prev) => {
-          if (prev.find((e) => e.id === parsed.id) != null) return prev;
-          return [parsed, ...prev];
-        });
-        if (parsed.kind === 'agent.run-completed' || parsed.kind === 'agent.run-failed') {
-          void queryClient.invalidateQueries({ queryKey: ['issue-costs', projectSlug, id] });
-        }
-        if (parsed.kind === 'state.transitioned') {
-          void queryClient.invalidateQueries({ queryKey: ['issue', projectSlug, id] });
-          void queryClient.invalidateQueries({ queryKey: ['issues', projectSlug] });
-          const payload = parsed.payload as {
-            interventionId?: string;
-            causedByInterventionId?: string;
-          } | null;
-          if (payload?.interventionId != null || payload?.causedByInterventionId != null) {
-            void queryClient.invalidateQueries({
-              queryKey: interventionKeys.timeline(projectSlug, id),
-            });
-          }
-        }
-      } catch {
-        // ignore
-      }
-    };
-    // Default 'message' fires only for SSE records without an `event:` field;
-    // named events fire on their event type.
-    for (const kind of ISSUE_TIMELINE_EVENT_KINDS) {
-      es.addEventListener(kind, handler as EventListener);
-    }
-    es.onmessage = handler;
-    es.onerror = () => {
-      // Connection blip; EventSource auto-reconnects.
-    };
-    return () => {
-      es.close();
-      eventSourceRef.current = null;
-    };
-  }, [projectSlug, workItemId, sseReadyAfter, queryClient, id]);
+  const visibleEvents = events.filter(isIssueTimelineEvent);
 
-  if (loading || (events.length === 0 && interventionsLoading)) {
+  if (isLoading || (visibleEvents.length === 0 && interventionsLoading)) {
     return <div className="px-8 py-6 text-fg-3">Loading timeline…</div>;
   }
 
   if (error != null) {
     return (
-      <div className="px-8 py-6 text-[color:var(--danger)]">Couldn't load timeline: {error}</div>
+      <div className="px-8 py-6 text-[color:var(--danger)]">
+        Couldn't load timeline: {error instanceof Error ? error.message : String(error)}
+      </div>
     );
   }
-  const items = groupEvents(events, interventionDetails);
+  const items = groupEvents(visibleEvents, interventionDetails);
   if (items.length === 0) {
     return (
       <div data-testid="timeline-section" className="px-8 py-6">
@@ -227,7 +161,7 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
         {items.map((item: RenderItem, idx: number) => renderTimelineItem(item, idx, context))}
       </ol>
 
-      {hasMore && (
+      {hasMore && visibleEvents.length >= PAGE_SIZE && (
         <div className="mt-4 flex justify-center">
           <button
             type="button"

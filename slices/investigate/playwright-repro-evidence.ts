@@ -193,6 +193,7 @@ export function assemblePlaywrightReproPayload(params: {
     reproduced: params.evidence.classification === 'reproduced',
     notes: params.evidence.notes,
     ...(params.commentUrl != null ? { commentUrl: params.commentUrl } : {}),
+    decisionSummaries: params.plan.decisionSummaries,
   };
 }
 

@@ -23,7 +23,7 @@ import {
   getPlaywrightReproEnabled,
   getUseInvestigationSwarm,
 } from '@goose-hub/core/db/repositories/project-settings.js';
-import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
+import { transitionAndEmitState } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
@@ -460,11 +460,18 @@ export async function runInvestigateWorkflow(
             [`Failed scouts: ${wave1Result.failedScouts.join(', ')}`],
           ),
         );
-        await stateSource.transitionState(
-          workItem.externalId,
-          'factory:investigating',
-          'factory:needs-human',
-        );
+        await transitionAndEmitState({
+          mode: 'legal',
+          source: stateSource,
+          itemId: workItem.externalId,
+          projectId,
+          workItemId: workItem.id,
+          from: 'factory:investigating',
+          to: 'factory:needs-human',
+          by: 'investigate',
+          runId,
+          extraPayload: { reason: 'wave-halted' },
+        });
         return;
       }
       if (!wave1Result.shouldAdvance) {
@@ -491,11 +498,18 @@ export async function runInvestigateWorkflow(
             ],
           ),
         );
-        await stateSource.transitionState(
-          workItem.externalId,
-          'factory:investigating',
-          'factory:needs-human',
-        );
+        await transitionAndEmitState({
+          mode: 'legal',
+          source: stateSource,
+          itemId: workItem.externalId,
+          projectId,
+          workItemId: workItem.id,
+          from: 'factory:investigating',
+          to: 'factory:needs-human',
+          by: 'investigate',
+          runId,
+          extraPayload: { reason: 'wave-incomplete' },
+        });
         return;
       }
 
@@ -744,6 +758,13 @@ export async function runInvestigateWorkflow(
             playwrightResult.output,
           );
           if (planParsed.success) {
+            reconcileDecisionSummaries(
+              playwrightRunId,
+              projectId,
+              workItem.id,
+              'playwright-repro',
+              planParsed.data.decisionSummaries,
+            );
             reproOutput = (deps.playwrightEvidenceRunner ?? runPlaywrightReproPlan)({
               plan: planParsed.data,
               workspaceDir: worktreePath,
@@ -752,6 +773,13 @@ export async function runInvestigateWorkflow(
             });
           } else if (finalParsed.success) {
             // Backward-compatible while older agents still return the final payload.
+            reconcileDecisionSummaries(
+              playwrightRunId,
+              projectId,
+              workItem.id,
+              'playwright-repro',
+              finalParsed.data.decisionSummaries,
+            );
             reproOutput = finalParsed.data;
           } else {
             const preview =
@@ -820,17 +848,15 @@ export async function runInvestigateWorkflow(
     });
 
     accumulatePersonaStats({ personaName: personaId, role: 'investigator', outcome: 'success' });
-    await stateSource.transitionState(
-      workItem.externalId,
-      'factory:investigating',
-      'factory:investigation-complete',
-    );
-    emitStateTransitionEvent({
+    await transitionAndEmitState({
+      mode: 'legal',
+      source: stateSource,
+      itemId: workItem.externalId,
       projectId,
       workItemId: workItem.id,
       from: 'factory:investigating',
       to: 'factory:investigation-complete',
-      by: 'agent',
+      by: 'investigate',
       runId,
     });
   } catch (err) {
@@ -858,11 +884,18 @@ export async function runInvestigateWorkflow(
       ),
     );
 
-    await stateSource.transitionState(
-      workItem.externalId,
-      'factory:investigating',
-      'factory:needs-human',
-    );
+    await transitionAndEmitState({
+      mode: 'legal',
+      source: stateSource,
+      itemId: workItem.externalId,
+      projectId,
+      workItemId: workItem.id,
+      from: 'factory:investigating',
+      to: 'factory:needs-human',
+      by: 'investigate',
+      runId,
+      extraPayload: { reason: 'workflow-error' },
+    });
   } finally {
     cleanupWorktree(runId);
   }

@@ -104,11 +104,12 @@ export async function fetchEvents(
 export async function fetchEventsPage(
   slug: string,
   id: string,
-  opts?: { limit?: number; before?: number },
+  opts?: { limit?: number; before?: number; after?: number },
   signal?: AbortSignal,
 ): Promise<{ events: AgentEventDto[]; hasMore: boolean }> {
   const params = new URLSearchParams({ limit: String(opts?.limit ?? 200) });
   if (opts?.before != null) params.set('before', String(opts.before));
+  if (opts?.after != null) params.set('after', String(opts.after));
   return getJson<{ events: AgentEventDto[]; hasMore: boolean }>(
     `/projects/${slug}/issues/${id}/events?${params}`,
     signal,

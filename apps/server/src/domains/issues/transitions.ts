@@ -5,7 +5,7 @@ import {
   mergePR as defaultMergePR,
 } from '@goose-hub/core/connectors/github/merge-pr.js';
 import { getUseMultiAgentPipeline } from '@goose-hub/core/db/repositories/project-settings.js';
-import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
+import { transitionAndEmitState } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { validateInterventionAction } from '@goose-hub/core/interventions/actions.js';
 import {
@@ -205,8 +205,10 @@ export async function approveIssue(
           decision.detail,
         ]),
       );
-      await source.transitionState(id, 'factory:approved', 'factory:needs-human');
-      emitStateTransitionEvent({
+      await transitionAndEmitState({
+        mode: 'legal',
+        source,
+        itemId: id,
         projectId: slug,
         workItemId,
         from: 'factory:approved',
@@ -229,8 +231,10 @@ export async function approveIssue(
       kind: 'merge.conflict',
       payload: { prNumber, ...interventionEventPayload(options.intervention) },
     });
-    await source.transitionState(id, 'factory:approved', 'factory:merge-conflict');
-    emitStateTransitionEvent({
+    await transitionAndEmitState({
+      mode: 'legal',
+      source,
+      itemId: id,
       projectId: slug,
       workItemId,
       from: 'factory:approved',
@@ -252,8 +256,10 @@ export async function approveIssue(
         kind: 'merge.conflict',
         payload: { prNumber, ...interventionEventPayload(options.intervention) },
       });
-      await source.transitionState(id, 'factory:approved', 'factory:merge-conflict');
-      emitStateTransitionEvent({
+      await transitionAndEmitState({
+        mode: 'legal',
+        source,
+        itemId: id,
         projectId: slug,
         workItemId,
         from: 'factory:approved',
@@ -290,7 +296,17 @@ export async function approveIssue(
     if (typeof devRunId === 'string') cleanupWorktree(devRunId);
   }
 
-  await source.transitionState(id, 'factory:approved', 'factory:retrospecting');
+  await transitionAndEmitState({
+    mode: 'legal',
+    source,
+    itemId: id,
+    projectId: slug,
+    workItemId,
+    from: 'factory:approved',
+    to: 'factory:retrospecting',
+    by: 'ui',
+    extraPayload: interventionEventPayload(options.intervention),
+  });
   await source.comment(
     id,
     buildAgentComment('Gate', 'Approved', `PR #${prNumber} merged via Goose Hub UI`, [
@@ -339,8 +355,10 @@ export async function rejectIssue(
     id,
     buildAgentComment('Gate', 'Rejected', 'Rejected at approval gate', [`Reason: ${reason}`]),
   );
-  await source.transitionState(id, 'factory:approved', 'factory:needs-fix');
-  emitStateTransitionEvent({
+  await transitionAndEmitState({
+    mode: 'legal',
+    source,
+    itemId: id,
     projectId: slug,
     workItemId,
     from: 'factory:approved',
@@ -441,7 +459,22 @@ export async function transitionIssue(
   if (!applying.ok) return { ok: false, error: applying.error, status: applying.status };
 
   try {
-    await source.transitionState(workItemId, fromState, toState);
+    await transitionAndEmitState({
+      mode: 'legal',
+      source,
+      itemId: workItemId,
+      projectId: slug,
+      workItemId,
+      from: fromState,
+      to: toState,
+      by: 'ui',
+      extraPayload: {
+        interventionId: manual.intervention.id,
+        causedByInterventionId: manual.intervention.id,
+        correlationId: manual.intervention.correlationId,
+        ...sessionPayload,
+      },
+    });
   } catch (err) {
     recordApplicationResult({
       id: manual.intervention.id,
@@ -453,19 +486,6 @@ export async function transitionIssue(
     throw err;
   }
 
-  emitStateTransitionEvent({
-    projectId: slug,
-    workItemId,
-    from: fromState,
-    to: toState,
-    by: 'ui',
-    extraPayload: {
-      interventionId: manual.intervention.id,
-      causedByInterventionId: manual.intervention.id,
-      correlationId: manual.intervention.correlationId,
-      ...sessionPayload,
-    },
-  });
   const applied = recordApplicationResult({
     id: manual.intervention.id,
     expectedVersion: applying.intervention.version,

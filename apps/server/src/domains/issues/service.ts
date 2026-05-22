@@ -283,7 +283,7 @@ export async function getIssueArtifact(
 export async function getIssueEvents(
   slug: string,
   id: string,
-  opts?: { limit?: number; before?: number },
+  opts?: { limit?: number; before?: number; after?: number },
 ): Promise<Result<{ events: unknown[]; hasMore: boolean }>> {
   const source = await getSourceForSlug(slug);
   if (source == null) return { ok: false, error: 'project not found', status: 404 };
@@ -296,6 +296,7 @@ export async function getIssueEvents(
       workItemId,
       limit: opts.limit + 1,
       before: opts.before,
+      after: opts.after,
     });
     const hasMore = fetched.length > opts.limit;
     return {
@@ -316,7 +317,31 @@ function fetchVisibleIssueTimelineEvents(input: {
   workItemId: string;
   limit: number;
   before?: number;
+  after?: number;
 }): AgentEvent[] {
+  if (input.after != null) {
+    const visible: AgentEvent[] = [];
+    let sinceId = input.after;
+    const batchSize = Math.max(input.limit, 100);
+
+    while (visible.length < input.limit) {
+      const batch = eventStore.replay({
+        projectId: input.projectId,
+        workItemId: input.workItemId,
+        sinceId,
+        limit: batchSize,
+      });
+      if (batch.length === 0) break;
+      visible.push(...batch.filter(isIssueTimelineEvent));
+      const lastId = batch.at(-1)?.id;
+      if (lastId == null || lastId <= sinceId) break;
+      sinceId = lastId;
+      if (batch.length < batchSize) break;
+    }
+
+    return visible;
+  }
+
   const visible: AgentEvent[] = [];
   let before = input.before;
   const batchSize = Math.max(input.limit, 100);

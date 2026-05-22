@@ -7,6 +7,7 @@ import type {
 } from '@goose-hub/core/agent-runtime/interface.js';
 import type { InvestigationContext } from '@goose-hub/core/agent-runtime/investigation-context.js';
 import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
+import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import { getRecordDecisionTool } from '@goose-hub/core/db/repositories/project-settings.js';
 import type { AgentEvent, AppendEventInput } from '@goose-hub/core/event-stream/store.js';
 import type { WorkItem } from '@goose-hub/core/state-source/interface.js';
@@ -398,6 +399,13 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
     return { status: 'failed', wpId: wp.id, errorReason: reason, runId: wpRunId };
   }
   const output = ImplementWpSchema.parse(normalized.output);
+  reconcileDecisionSummaries(
+    wpRunId,
+    projectId,
+    workItemId ?? null,
+    'implement-wp',
+    output.decisionSummaries,
+  );
 
   // Build succeeded — return files for the serial commit phase.
   const commitMsg = `M:${wp.id} ${wp.changes.slice(0, 60)}\n\nBuilt by ${opts.personaId}`;
