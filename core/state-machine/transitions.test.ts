@@ -19,6 +19,8 @@ describe('isLegalTransition — section 9.1 happy paths', () => {
     expect(isLegalTransition('factory:prd-drafting', 'factory:prd-review')).toBe(true));
   it('prd-review → decomposing', () =>
     expect(isLegalTransition('factory:prd-review', 'factory:decomposing')).toBe(true));
+  it('prd-review → dev-ready', () =>
+    expect(isLegalTransition('factory:prd-review', 'factory:dev-ready')).toBe(true));
   it('decomposing → issues-created', () =>
     expect(isLegalTransition('factory:decomposing', 'factory:issues-created')).toBe(true));
   it('issues-created → dev-ready', () =>

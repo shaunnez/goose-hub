@@ -43,7 +43,7 @@ const GlobalBudgetPatchSchema = z.object({
   perWorkflowMaxUsd: z.number().min(0).max(1000).nullable().optional(),
   perAgentMaxUsd: z.number().min(0).max(1000).nullable().optional(),
   perAdvisorMaxUsd: z.number().min(0).max(1000).nullable().optional(),
-  dailyTokens: z.number().int().min(0).max(100_000_000).nullable().optional(),
+  dailyTokens: z.number().int().min(0).max(900_000_000).nullable().optional(),
   maxParallelAgents: z.number().int().min(0).max(50).nullable().optional(),
   maxScoutAgents: z.number().int().min(1).max(50).nullable().optional(),
   maxRetries: z.number().int().min(0).max(20).nullable().optional(),

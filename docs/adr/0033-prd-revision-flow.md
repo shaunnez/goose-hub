@@ -2,6 +2,12 @@
 
 **Status:** Accepted, 2026-05-08
 
+**Supersession note, 2026-05-22:** ADR 0047 changes the Approve path from
+`factory:prd-review -> factory:decomposing` to
+`factory:prd-review -> factory:dev-ready` so the parent issue enters the
+spec-author lifecycle. The Request Changes and Decline decisions in this ADR
+still stand.
+
 ## Context
 
 M13 shipped the Discover Lane with two outcomes at `factory:prd-review`:

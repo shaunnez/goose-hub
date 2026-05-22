@@ -22,15 +22,15 @@ vi.mock('../../shared/projects.js', () => ({
 }));
 // Stub the discover-lane dispatchers so the fire-and-forget calls in
 // prd-actions don't pull the real workflows into these unit tests.
-const { dispatchDecomposePrdMock, dispatchRetryWritePrdMock, dispatchRevisePrdMock } = vi.hoisted(
+const { dispatchFixIssueMock, dispatchRetryWritePrdMock, dispatchRevisePrdMock } = vi.hoisted(
   () => ({
-    dispatchDecomposePrdMock: vi.fn().mockResolvedValue(undefined),
+    dispatchFixIssueMock: vi.fn().mockResolvedValue(undefined),
     dispatchRetryWritePrdMock: vi.fn().mockResolvedValue(undefined),
     dispatchRevisePrdMock: vi.fn().mockResolvedValue(undefined),
   }),
 );
 vi.mock('../../shared/dispatch.js', () => ({
-  dispatchDecomposePrd: dispatchDecomposePrdMock,
+  dispatchFixIssue: dispatchFixIssueMock,
   dispatchRetryWritePrd: dispatchRetryWritePrdMock,
   dispatchRevisePrd: dispatchRevisePrdMock,
 }));
@@ -63,7 +63,7 @@ beforeEach(() => {
 });
 
 describe('approvePRD', () => {
-  it('transitions prd-review → decomposing and emits prd.approved + state.transitioned', async () => {
+  it('transitions prd-review → dev-ready and emits prd.approved + lifecycle route', async () => {
     const projectId = uniqueProjectId('approve-happy');
     const source = new InMemoryLabelsSource(projectId, REPO_REF);
     const item = await source.seedIssue({
@@ -80,22 +80,22 @@ describe('approvePRD', () => {
     expect(result.ok).toBe(true);
 
     const after = await source.getItem(item.externalId);
-    expect(after.state).toBe('factory:decomposing');
+    expect(after.state).toBe('factory:dev-ready');
     expect(getIntervention(intervention.id)?.status).toBe('RESOLVED');
 
     const evs = eventStore.replay({ projectId, workItemId: item.id });
     expect(evs.find((e) => e.kind === 'prd.approved')).toBeDefined();
+    expect(evs.find((e) => e.kind === 'prd.lifecycle-routed')).toBeDefined();
     const transitioned = evs.find(
       (e) =>
-        e.kind === 'state.transitioned' &&
-        (e.payload as { to: string }).to === 'factory:decomposing',
+        e.kind === 'state.transitioned' && (e.payload as { to: string }).to === 'factory:dev-ready',
     );
     expect(transitioned).toBeDefined();
 
     // Wait a microtask cycle for the fire-and-forget dispatcher promise
     // chain to resolve before asserting on the mock.
     await Promise.resolve();
-    expect(dispatchDecomposePrdMock).toHaveBeenCalledWith(projectId, Number(item.externalId));
+    expect(dispatchFixIssueMock).toHaveBeenCalledWith(projectId, Number(item.externalId));
   });
 
   it('returns 409 when the issue is not in factory:prd-review', async () => {

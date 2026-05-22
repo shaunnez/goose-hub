@@ -10,7 +10,8 @@ The `<task>` block contains:
 
 - `<workItem>` — JSON payload for the work item, with `title`, `body`, and `number`
 - `<issueType>` — `feature` or `bug` (drives strictness of AC→Journey mapping)
-- `<prd>` (optional) — copied from PRD issue (#313 lineage). Use as the source of `userJourneys` and `functionalRequirements`. When absent and `issueType: feature`, derive minimal journeys from the work item.
+- `<prdContext>` (optional) — canonical compact PRD planning context from the approved parent PRD. Treat this as authoritative for journeys, requirements, acceptance criteria, slice boundaries, implementation decisions, testing decisions, and out-of-scope constraints. If it includes `artifactRef`, the full raw PRD was stored outside prompt context; use the inline fields as the planning contract and targeted repo reads for implementation details.
+- `<prd>` (optional) — legacy compact PRD context string. Prefer `<prdContext>` when both are present. When absent and `issueType: feature`, derive minimal journeys from the work item.
 - `<investigationSynthesis>` (optional) — JSON-stringified `InvestigateOutput` (`findings`, `keyFiles`, `confidence`, `openQuestions`) produced by the synthesis step of the investigate workflow. **Read this first.** It is the distilled signal: use `findings` to understand the root cause or intent, `keyFiles` to orient your architecture section, and `openQuestions` to flag risks. When present, treat it as authoritative; use scout reports only for file:line citations.
 - `<scoutReports>` (optional) — JSON-stringified Wave-1 scout report digest metadata (M19.01). This is `scout-report-digest-v1`, not the raw scout report JSON. It includes top findings, high-confidence facts, files referenced, risks, contradictions, and artifact keys for full reports when they were offloaded.
 - `<wave2Reports>` (optional) — JSON-stringified Wave-2 deep-agent report digest metadata (interface-designer artefacts, risk-analyst register). This is also digest-first and may include artifact keys for full reports.
@@ -44,8 +45,8 @@ A single JSON object conforming to `EngineeringSpecSchema` (`skills/spec-author/
 ### Required sections (Steve `01-planning-phase.md:287-300`)
 
 1. **`objective`** — one paragraph naming the change in user-visible terms.
-2. **`userJourneys`** — copied from the PRD or derived from the work item. Each journey has `id`, `actor`, `steps[].idx`, `steps[].description`.
-3. **`functionalRequirements`** — copied from the PRD when present. Each entry has `id` + `statement`.
+2. **`userJourneys`** — copied from `<prdContext>.journeys` when present, or derived from the work item. Each journey has `id`, `actor`, `steps[].idx`, `steps[].description`.
+3. **`functionalRequirements`** — copied from `<prdContext>` and the PRD functional/acceptance material when present. Each entry has `id` + `statement`.
 4. **`architecture`** — `current` (one paragraph), `new` (one paragraph), `decisionRationale` (why this shape).
 5. **`schemaChanges`** — exact DDL strings (no pseudocode) and repo-relative migration file paths. Empty arrays if no schema change.
 6. **`interfaceContracts`** — paste-ready `signature` (function decl, type alias, or full Zod block) + `file` it lives in. ≥1 entry required when there are ≥2 WPs (cross-WP boundaries need typed contracts).

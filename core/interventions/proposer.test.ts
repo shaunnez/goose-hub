@@ -355,7 +355,7 @@ describe('intervention proposer worker', () => {
       projectId: intervention.projectId,
       workItemId: intervention.workItemId,
       kind: 'state.transitioned',
-      payload: { from: 'factory:prd-review', to: 'factory:decomposing' },
+      payload: { from: 'factory:prd-review', to: 'factory:dev-ready' },
     });
     const invokeSkill = vi.fn(async () => skillResult({ options: [] }));
 

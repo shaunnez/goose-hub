@@ -15,7 +15,8 @@ import { EngineeringSpecSchema } from './schema.js';
  *   <task>
  *     <workItem>{"title":"...","body":"...","number":123}</workItem>
  *     <issueType>feature|bug</issueType>
- *     <prd>...</prd>?                      <!-- when type:feature, copied from #313 -->
+ *     <prdContext>{...}</prdContext>?      <!-- canonical compact PRD planning context -->
+ *     <prd>...</prd>?                      <!-- legacy compact PRD context string -->
  *     <scoutReports>[json]</scoutReports>?      <!-- M19.01 Wave-1 reports when present -->
  *     <wave2Reports>[json]</wave2Reports>?      <!-- M19.01 Wave-2 reports when present -->
  *     <investigationSynthesis>[json]</investigationSynthesis>?  <!-- investigate synthesis -->
@@ -32,6 +33,32 @@ export const SpecAuthorContextSchema = z.object({
   issueType: z.enum(['feature', 'bug']).optional(),
   /** PRD body (copied from #313 for type:feature). Optional when type:bug. */
   prd: z.string().optional(),
+  /** Canonical compact PRD planning context, derived from the latest PRD read model. */
+  prdContext: z
+    .object({
+      source: z.enum(['event', 'legacy-comment']),
+      parentWorkItemId: z.string(),
+      prdRunId: z.string().nullable(),
+      title: z.string(),
+      problem: z.string(),
+      proposedSolution: z.string(),
+      successCriteria: z.array(z.string()),
+      acceptanceCriteria: z.array(z.unknown()),
+      journeys: z.array(z.unknown()),
+      verticalSlices: z.array(z.unknown()),
+      implementationDecisions: z.array(z.unknown()),
+      testingDecisions: z.unknown().nullable(),
+      artifactRef: z
+        .object({
+          artifactKey: z.string(),
+          kind: z.string(),
+          summary: z.string(),
+          bytes: z.number(),
+          stored: z.literal(true),
+        })
+        .optional(),
+    })
+    .optional(),
   /** JSON-stringified Wave-1 scout reports (M19.01). Optional fall-back to manual investigation. */
   scoutReports: z.string().optional(),
   /** JSON-stringified Wave-2 deep-agent reports (M19.01). Optional. */
@@ -50,6 +77,7 @@ const config: SkillConfig = {
     'workItem.body',
     'workItem.number',
     'issueType',
+    'prdContext',
     'prd',
     'scoutReports',
     'wave2Reports',

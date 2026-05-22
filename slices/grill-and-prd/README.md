@@ -32,7 +32,7 @@ factory:gate-pending  (waiting for the human to reply on the issue)
         │  from stateSource.listComments(), invokes runGrillAndPrdWorkflow
         │  again. Each call is one round.
         ▼
-factory:prd-drafting → factory:prd-review (ready for M13.06 decompose-prd)
+factory:prd-drafting → factory:prd-review (human approval routes parent to dev-ready/spec-author)
 ```
 
 A round is one invocation of `grill-me`. Round 1 happens when `priorReplies` contains zero `agent` entries. Each subsequent invocation increments the round counter. The skill itself caps the loop at 7 rounds — at `roundNumber >= 7` it must return `readyForPRD: true` regardless of whether intent has stabilised. The workflow does not enforce the cap independently; it trusts the skill output.

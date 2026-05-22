@@ -210,5 +210,7 @@ export interface ProjectConfig {
   experimental?: {
     /** M19.06 — ship record-decision MCP tool for A/B evaluation. Default false. */
     recordDecisionTool?: boolean;
+    /** Create tracking-only child issues from Engineering Spec WPs after spec-author. Default false. */
+    wpIssueProjection?: boolean;
   };
 }

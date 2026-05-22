@@ -228,4 +228,22 @@ describe('workflow catalog', () => {
       }
     }
   });
+
+  it('shows feature PRD approval routing the parent issue to dev-ready before spec-author', () => {
+    const feature = byKind('feature');
+
+    expect(feature.normalPath).toEqual(
+      expect.arrayContaining(['prd-review', 'dev-ready', 'spec-ready']),
+    );
+    expect(feature.normalPath.indexOf('prd-review')).toBeLessThan(
+      feature.normalPath.indexOf('dev-ready'),
+    );
+    expect(feature.normalPath).not.toContain('decomposing');
+    expect(feature.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ from: 'prd-review', to: 'dev-ready', kind: 'primary' }),
+        expect.objectContaining({ from: 'prd-review', to: 'decomposing', kind: 'optional' }),
+      ]),
+    );
+  });
 });

@@ -48,10 +48,11 @@ Server:
 
 - `apps/server/src/domains/issues/prd-actions.ts` — implements `approvePRD`
   and `rejectPRD`. `approvePRD` advances `factory:prd-review →
-  factory:decomposing` (a legal transition); `rejectPRD` returns the issue
-  to `factory:grilling` and posts the `User rejected the PRD; returning to
-  grill.` comment. Both use a `transitionState`-then-`forceState` fallback
-  to be robust against future legal-table changes.
+  factory:dev-ready` so the parent issue enters the spec-author / delivery
+  path; `rejectPRD` returns the issue to `factory:grilling` and posts the
+  `User rejected the PRD; returning to grill.` comment. Both use a
+  `transitionState`-then-`forceState` fallback to be robust against future
+  legal-table changes.
 - `apps/server/src/domains/issues/router.ts` — exposes
   `POST /:slug/issues/:id/approve-prd` and
   `POST /:slug/issues/:id/reject-prd`.
@@ -65,10 +66,13 @@ Workflow:
 ## Approve flow contract
 
 The Approve PRD button calls `POST /approve-prd`, which transitions the
-issue from `factory:prd-review` to `factory:decomposing`. **This slice does
-NOT trigger the decompose-prd workflow synchronously.** The orchestrator
-picks up issues in `factory:decomposing` on its next tick and dispatches
-`runDecomposePrdWorkflow` (slice `decompose-prd`) at that point.
+issue from `factory:prd-review` to `factory:dev-ready` and emits
+`prd.lifecycle-routed`. The server dispatches the parent issue into delivery;
+with the multi-agent pipeline enabled this means `spec-author` runs once on
+the parent issue before `parallel-implement`.
+
+`decompose-prd` is now manual/backcompat. It is no longer the automatic
+post-approval path.
 
 ## Reject flow contract
 

@@ -5,9 +5,12 @@ M13 follow-up (#592): triage → grilling entry point.
 
 ## What this slice tests
 
-This is the **M13 exit-criterion integration test**. It wires the two
-Discover-Lane workflows together and verifies every required state transition
-across the full lane. A second test suite verifies the triage entry-point
+This is the **legacy M13 exit-criterion integration test**. It wires the
+original Discover-Lane workflows together and verifies every required state
+transition across the manual/backcompat decomposition lane. The default PRD
+approval path is now spec-first: approval routes the parent issue to
+`factory:dev-ready`, where spec-author produces Engineering Spec work packages
+before parallel implementation. A second test suite verifies the triage entry-point
 added in #592: a fresh `type:feature` issue seeded at `factory:triaging` is
 routed through `factory:accepted` → `factory:grilling` (legal state-machine
 arc) and continues through the Discover Lane normally.
@@ -35,7 +38,7 @@ factory:grilling
         → factory:grilling
   → runGrillAndPrdWorkflow (round 3 — ready for PRD)
     → write-prd → factory:prd-review
-  → human approve (transitionState prd-review → prd-review)
+  → manual legacy approval path (transitionState prd-review → decomposing)
   → runDecomposePrdWorkflow
     → 2 child issues created
     → sibling refs resolved
@@ -46,6 +49,11 @@ factory:grilling
     → SprintReviewOutput validates
     → sprint-review artefact issue created
 ```
+
+The current spec-first approval path is covered by the PRD approval,
+spec-author, parallel implementation, workflow catalog, and ADR 0047 tests/docs.
+This slice remains as explicit backcompat coverage for the manual
+`decompose-prd` workflow.
 
 ## Deferrals
 
@@ -94,8 +102,8 @@ presentation layer.
 | 3 | User reply; re-enter `factory:grilling` | Comment posted by non-bot author; state forced back |
 | 4 | Round 2 grill — still not ready | Second question posted; two total `grill.question-posted` events |
 | 5 | Round 3 grill → ready; write-prd; advisor skipped (priority=medium) | `phase=prd-review`; `<!-- factory:prd -->` comment; PRD round-trips via inline parser; `prd.advisor-skipped` reason=priority |
-| 6 | Human approves PRD | `transitionState(prd-review → decomposing)` succeeds |
-| 7 | Decompose — 2 child issues; sibling dep resolved | Children created; child 2 body contains `#<child1>`; parent → `factory:issues-created`; `## Child issues` comment; `decompose.completed` event |
+| 6 | Human chooses manual legacy decomposition | `transitionState(prd-review → decomposing)` succeeds |
+| 7 | Decompose — 2 child issues; sibling dep resolved | Children created; child 2 body contains `#<child1>`; parent → `factory:done`; `## Child issues` comment; `decompose.completed` event |
 | 8 | Child lifecycle stub | Each child traverses `accepted → … → done`; `factory:done` confirmed |
 | 9 | Sprint review skill | `listOpenWork()` returns `[]`; `SprintReviewOutputSchema` validates; sprint-review artefact issue created |
 | 10 | Final event log assertions | `agent.run-started` ≥ 3; `grill.question-posted` = 2; `grill.completed` = 1; `prd.drafted` = 1; `prd.advisor-skipped` = 1; `decompose.completed` = 1 |
@@ -106,8 +114,8 @@ presentation layer.
 # This slice only
 pnpm vitest run slices/discover-lane-e2e
 
-# Full Discover-Lane suite
-pnpm vitest run core/workflows slices/grill-and-prd slices/decompose-prd slices/discover-lane-e2e
+# Full Discover-Lane / PRD lifecycle suite
+pnpm vitest run core/workflows slices/grill-and-prd slices/spec-author slices/decompose-prd slices/discover-lane-e2e
 ```
 
 ## Surfaces touched

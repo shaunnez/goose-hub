@@ -43,6 +43,7 @@ The context contains a `<task>` block with:
 - `<codeSnippets>` (optional) — JSON array of relevant code excerpts pre-loaded by the scout wave
 - `<investigation>` (optional) — original bug-investigation findings, key files, and open questions
 - `<acceptanceContract>` (optional) — resolved acceptance criteria relevant to this implementation path
+- `<parentPrdContext>` (optional) — compact summary and artifact refs for the approved parent PRD. Use it for product intent and out-of-scope boundaries, but keep your implementation inside `<wp>.filesOwned`.
 - Tools are already rooted at your scratch workspace.
 - `<stack>` — JSON payload with `testCommand`, optional `lintCommand`, and optional `typecheckCommand`
 
@@ -58,6 +59,7 @@ Path contract: all output paths must be repo-root/worktree-root relative POSIX p
   investigation key files, stop and return `confidence: low` with a `BLOCKER`
   decision summary.
 - If `<acceptanceContract>` is present, use it as the behavioral contract for tests and implementation. Satisfy all cross-cutting criteria and any criteria that obviously apply to your filesOwned.
+- If `<parentPrdContext>` is present, use it to avoid drifting beyond the approved PRD and to understand the parent journey, slice, implementation, and testing decisions.
 - Read the files in `<wp>.filesOwned` to understand the current state.
 - Use `mcp__factory-tools__read_file` and `mcp__factory-tools__search_text` to load test files for the surfaces you will touch FIRST.
 - Emit: `[decision] READ: Loaded WP <id> context and N relevant files`

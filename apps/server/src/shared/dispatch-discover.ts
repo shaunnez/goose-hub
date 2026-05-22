@@ -172,8 +172,8 @@ export async function dispatchRevisePrd(
 /**
  * Run the decompose-prd workflow for a single issue. Drops duplicate
  * triggers via parallel-lock. Webhook fires this when the issue lands
- * in `factory:decomposing`; the approvePRD handler fires it after the
- * human approves the PRD comment.
+ * in `factory:decomposing`. This is now a manual/backcompat path; PRD
+ * approval routes the parent issue to `factory:dev-ready`.
  */
 export async function dispatchDecomposePrd(slug: string, issueNumber: number): Promise<void> {
   await withParallelLock(

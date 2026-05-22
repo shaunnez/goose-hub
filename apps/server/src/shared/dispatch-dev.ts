@@ -348,7 +348,13 @@ export async function dispatchFixIssue(slug: string, issueNumber: number): Promi
       return;
     }
     const routingItem = await routingSource.getItem(issueNumber.toString());
-    if (
+    const routingLabels = (await routingSource.listLabels?.(routingItem.externalId)) ?? [];
+    if (routingLabels.includes('factory:from-prd')) {
+      logger.info('dispatchFixIssue: PRD child projection → legacy single-agent path', {
+        slug,
+        issueNumber,
+      });
+    } else if (
       routingItem.type === 'bug' &&
       resolveFixIssuePipelineForBug(slug, routingItem.id) === 'legacy'
     ) {

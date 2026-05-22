@@ -1,7 +1,7 @@
 /**
  * PRD review actions (M13.08 + M13.12).
  *
- * `approvePRD` advances a `factory:prd-review` issue to `factory:decomposing`.
+ * `approvePRD` advances a `factory:prd-review` issue to `factory:dev-ready`.
  * `revisePRD` re-dispatches write-prd with human concerns, staying in prd-review.
  * `declinePRD` closes the work item (transitions to factory:done).
  * `proceedToPrd` skips remaining grill rounds and goes straight to write-prd.
@@ -24,11 +24,7 @@ import {
   latestDiscoverSessionId,
 } from '@goose-hub/core/workflows/grill-and-prd/discover-session.js';
 import type { PRDOutput } from '@goose-hub/skills/write-prd/schema.js';
-import {
-  dispatchDecomposePrd,
-  dispatchRetryWritePrd,
-  dispatchRevisePrd,
-} from '#shared/dispatch.js';
+import { dispatchFixIssue, dispatchRetryWritePrd, dispatchRevisePrd } from '#shared/dispatch.js';
 import type { Result } from '#shared/middleware.js';
 import { getSourceForSlug } from '#shared/source.js';
 import { getRepoRef } from './internal.js';
@@ -102,7 +98,7 @@ export async function approvePRD(slug: string, id: string): Promise<Result<{ ok:
     workItemId,
     reason: 'PRD approved',
   });
-  await moveOrForce(source, id, 'factory:prd-review', 'factory:decomposing');
+  await moveOrForce(source, id, 'factory:prd-review', 'factory:dev-ready');
   const discoverSessionId = latestDiscoverSessionId(slug, workItemId);
   const sessionPayload =
     discoverSessionId != null ? { discoverSessionId } : ({} as Record<string, never>);
@@ -117,16 +113,27 @@ export async function approvePRD(slug: string, id: string): Promise<Result<{ ok:
     projectId: slug,
     workItemId,
     from: 'factory:prd-review',
-    to: 'factory:decomposing',
+    to: 'factory:dev-ready',
     by: 'ui',
     extraPayload: sessionPayload,
   });
 
-  // Fire decompose-prd outside the response path. Mirrors the
-  // dispatchRetro-after-approve pattern in resolve-conflict so the
-  // workflow runs without waiting on webhook delivery.
-  dispatchDecomposePrd(slug, Number(id)).catch((err: unknown) => {
-    logger.error('dispatchDecomposePrd after approvePRD failed', {
+  eventStore.appendEvent({
+    projectId: slug,
+    workItemId,
+    kind: 'prd.lifecycle-routed',
+    payload: {
+      from: 'factory:prd-review',
+      to: 'factory:dev-ready',
+      skipped: 'decompose-issues',
+      next: 'spec-author',
+      source: 'ui',
+      ...sessionPayload,
+    },
+  });
+
+  dispatchFixIssue(slug, Number(id)).catch((err: unknown) => {
+    logger.error('dispatchFixIssue after approvePRD failed', {
       slug,
       id,
       error: String(err),

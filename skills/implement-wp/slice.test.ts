@@ -90,6 +90,7 @@ describe('implement-wp skill.config', () => {
     expect(allowlist).toContain('wp.id');
     expect(allowlist).toContain('wp.filesOwned');
     expect(allowlist).toContain('wp.changes');
+    expect(allowlist).toContain('parentPrdContext');
     expect(allowlist).not.toContain('worktreePath');
   });
 
@@ -116,6 +117,18 @@ describe('implement-wp skill.config', () => {
         filesOwned: ['core/foo/bar.ts'],
         changes: 'Add helper',
         dependsOn: [],
+      },
+      parentPrdContext: {
+        source: 'event',
+        parentWorkItemId: 'github:owner/repo#1',
+        prdRunId: 'prd-run',
+        title: 'PRD',
+        problem: 'Problem',
+        proposedSolution: 'Solution',
+        successCriteria: ['Works'],
+        verticalSlices: [],
+        implementationDecisions: [],
+        testingDecisions: null,
       },
       stack: { testCommand: 'pnpm test' },
     });

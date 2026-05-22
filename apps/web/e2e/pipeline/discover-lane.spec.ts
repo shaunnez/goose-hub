@@ -3,7 +3,7 @@
  *
  * Tests the UI-visible Discover Lane flow: a fresh type:feature issue is seeded
  * and walked through triaging → grilling → gate-pending (grill chat) →
- * prd-review (PRD rendered) → decomposing → issues-created using the
+ * prd-review (PRD rendered) → dev-ready/spec-author using the
  * MOCK_AGENTS + MOCK_SOURCE harness.
  *
  * What this covers vs. the unit-level grill-prd-flow.spec.ts:
@@ -12,12 +12,11 @@
  *   - Grill chat: agent question renders, user reply posts + transitions state
  *   - PRD tab appears once state is factory:prd-review
  *   - PRD content (title, problem, slices) renders from the mock comment
- *   - Approve PRD: POSTs /approve-prd and advances to factory:decomposing
+ *   - Approve PRD: POSTs /approve-prd and advances to factory:dev-ready
  *
  * What is intentionally deferred (see TODO comments below):
- *   - Child issue cards with factory:from-prd label (mock doesn't yet seed
- *     decomposed children — follow-up ticket needed once decompose-prd mock
- *     support lands).
+ *   - Optional WP projection issue cards with factory:from-prd label after
+ *     spec-author.
  *   - Sprint-review issue filing (covered by slices/discover-lane-e2e/slice.test.ts).
  *
  * NOTE on triage→grilling routing (#592): the routing from factory:triaging to
@@ -317,12 +316,12 @@ test.describe('Discover Lane (MOCK_AGENTS + MOCK_SOURCE)', () => {
     const slices = page.getByTestId('prd-slice');
     await expect(slices).toHaveCount(1);
 
-    // Approve PRD → decomposing
+    // Approve PRD → dev-ready/spec-author
     const approveBtn = page.getByTestId('prd-approve-btn');
     await expect(approveBtn).toBeVisible();
     await approveBtn.click();
-    // After approve-prd: the mock decompose-prd workflow runs synchronously and
-    // advances decomposing → issues-created → done before the UI polls.
+    // After approve-prd: the mock delivery workflow advances the parent toward
+    // done before the UI polls.
     await expect(statePill).toHaveText('done', { timeout: 30_000 });
   });
 });

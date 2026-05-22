@@ -53,9 +53,9 @@ export const PRIORITY_BORDER: Record<string, string> = {
 
 export const RETRO_ACTIVE_STATES = new Set(['factory:retrospecting', 'factory:done']);
 
-// PRD tab is visible across the discover lane after grilling — drafting,
-// review, and the post-approval decompose / issues-created stages so the
-// user can scroll back to the most recent PRD draft.
+// PRD tab is visible while a feature is in the discover/review lane and on
+// the manual legacy decomposition path so the user can scroll back to the most
+// recent PRD draft.
 export const PRD_ACTIVE_STATES = new Set([
   'factory:prd-drafting',
   'factory:prd-review',

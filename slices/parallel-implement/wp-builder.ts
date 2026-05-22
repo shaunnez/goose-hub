@@ -21,6 +21,7 @@ import {
 import { ImplementWpSchema } from '@goose-hub/skills/implement-wp/schema.js';
 import type { ImplementWpOutput } from '@goose-hub/skills/implement-wp/schema.js';
 import type { WorkPackage } from '@goose-hub/skills/spec-author/schema.js';
+import type { PrdPlanningContext } from '../spec-author/prd-planning-context.js';
 import type { recordWpIteration } from './parallel-helpers.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -58,6 +59,7 @@ export interface RunOneWpBuilderOptions {
   implementWpJsonSchema: Record<string, unknown>;
   investigation?: InvestigationContext;
   acceptanceContract?: AcceptanceContract;
+  parentPrdContext?: PrdPlanningContext;
 }
 
 type NormalizedPathField = {
@@ -262,6 +264,24 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
       },
       investigation: opts.investigation,
       acceptanceContract: opts.acceptanceContract,
+      parentPrdContext:
+        opts.parentPrdContext != null
+          ? {
+              source: opts.parentPrdContext.source,
+              parentWorkItemId: opts.parentPrdContext.parentWorkItemId,
+              prdRunId: opts.parentPrdContext.prdRunId,
+              title: opts.parentPrdContext.title,
+              problem: opts.parentPrdContext.problem,
+              proposedSolution: opts.parentPrdContext.proposedSolution,
+              successCriteria: opts.parentPrdContext.successCriteria,
+              verticalSlices: opts.parentPrdContext.verticalSlices,
+              implementationDecisions: opts.parentPrdContext.implementationDecisions,
+              testingDecisions: opts.parentPrdContext.testingDecisions,
+              ...(opts.parentPrdContext.artifactRef != null && {
+                artifactRef: opts.parentPrdContext.artifactRef,
+              }),
+            }
+          : undefined,
       stack: opts.stack,
     },
     contextAllowlist: [
@@ -275,6 +295,7 @@ export async function runOneWpBuilder(opts: RunOneWpBuilderOptions): Promise<WpB
       'wp.dependsOn',
       'investigation',
       'acceptanceContract',
+      'parentPrdContext',
       'stack.testCommand',
       'stack.lintCommand',
       'stack.typecheckCommand',

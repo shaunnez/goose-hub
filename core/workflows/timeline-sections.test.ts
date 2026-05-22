@@ -111,6 +111,7 @@ describe('timeline sections', () => {
     for (const kind of ISSUE_TIMELINE_EVENT_KINDS) {
       const decision = TIMELINE_EVENT_CLASSIFICATION[kind];
       expect(decision, `${kind} classification`).toBeDefined();
+      if (decision == null) throw new Error(`${kind} classification missing`);
       expect(allowed.has(decision), `${kind} decision kind`).toBe(true);
       expect(decision, `${kind} must not be hidden while visible`).not.toBe('hidden');
     }

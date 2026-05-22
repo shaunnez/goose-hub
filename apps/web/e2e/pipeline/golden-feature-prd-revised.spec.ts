@@ -6,7 +6,7 @@
  * M13.12 (#631) shipped the three-path PRD review flow defined in ADR 0033,
  * replacing the legacy single "Reject / re-grill" button with:
  *
- *   - Approve         → prd-review → decomposing → done (covered by
+ *   - Approve         → prd-review → dev-ready/spec-author → done (covered by
  *                       golden-feature.spec.ts)
  *   - Request Changes → re-runs write-prd with priorPrd + humanConcerns,
  *                       state remains prd-review, new PRD comment posted.
