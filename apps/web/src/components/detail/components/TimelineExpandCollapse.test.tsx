@@ -363,87 +363,67 @@ describe('TimelineSection — expand/collapse all', () => {
     ).toBeNull();
   });
 
-  it('invalidates issue costs when a run terminal event arrives over SSE', async () => {
-    const { fetchEventsPage } = await import('@/lib/api');
-    vi.mocked(fetchEventsPage).mockResolvedValue({
-      events: [makeRunEvent(1, 'run-live', 'agent.run-started')],
-      hasMore: false,
-    });
-
-    const queryClient = new QueryClient();
-    queryClient.setQueryData(['events', 'p', '1'], []);
-    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
-    const { TimelineSection } = await import('./TimelineSection');
-    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />, queryClient);
-
-    await screen.findByTestId('timeline-section');
-    await waitFor(() => expect(MockEventSource.instances.length).toBeGreaterThan(0));
-
-    MockEventSource.instances[0].emitNamed(makeRunEvent(2, 'run-live', 'agent.run-completed'));
-
-    await waitFor(() => {
-      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issue-costs', 'p', '1'] });
-    });
-  });
-
-  it('writes named issue timeline SSE events into the shared events cache without invalidating it', async () => {
+  it('does not create its own EventSource', async () => {
     const { fetchEventsPage } = await import('@/lib/api');
     vi.mocked(fetchEventsPage).mockResolvedValue({ events: [], hasMore: false });
 
+    const { TimelineSection } = await import('./TimelineSection');
+    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
+
+    await screen.findByText('No timeline events yet.');
+    expect(MockEventSource.instances).toHaveLength(0);
+  });
+
+  it('renders named events from the shared events cache', async () => {
+    const { fetchEventsPage } = await import('@/lib/api');
+    const event = makeEvent(2, 'grill.decision-crystallized', {
+      roundNumber: 2,
+      decision: 'Use the shared event-kind contract.',
+    });
+    vi.mocked(fetchEventsPage).mockResolvedValue({ events: [event], hasMore: false });
+
     const queryClient = new QueryClient();
-    queryClient.setQueryData(['events', 'p', '1'], []);
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const { TimelineSection } = await import('./TimelineSection');
     renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />, queryClient);
 
-    await screen.findByText('No timeline events yet.');
-    await waitFor(() => expect(MockEventSource.instances.length).toBeGreaterThan(0));
-
-    const event = makeEvent(2, 'agent.investigation-complete', {
-      investigate: { findings: [] },
-    });
-    MockEventSource.instances[0].emitNamed(event);
-    MockEventSource.instances[0].emitNamed(event);
-
-    await waitFor(() => {
-      expect(queryClient.getQueryData(['events', 'p', '1'])).toEqual([event]);
-    });
+    expect(await screen.findByText('Decision crystallized')).toBeTruthy();
+    expect(screen.getByText('Use the shared event-kind contract.')).toBeTruthy();
+    expect(MockEventSource.instances).toHaveLength(0);
     expect(invalidatedQueryKey(invalidateSpy.mock.calls, ['events', 'p', '1'])).toBe(false);
   });
 
-  it('invalidates issue state caches, but not events, when a state transition arrives over SSE', async () => {
+  it('renders the Playwright capture section from the shared events cache', async () => {
     const { fetchEventsPage } = await import('@/lib/api');
     vi.mocked(fetchEventsPage).mockResolvedValue({ events: [], hasMore: false });
 
     const queryClient = new QueryClient();
-    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
-    const { TimelineSection } = await import('./TimelineSection');
-    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />, queryClient);
-
-    await screen.findByText('No timeline events yet.');
-    await waitFor(() => expect(MockEventSource.instances.length).toBeGreaterThan(0));
-
-    MockEventSource.instances[0].emitNamed(
-      makeEvent(2, 'state.transitioned', {
-        from: 'factory:decomposing',
-        to: 'factory:done',
-      }),
+    queryClient.setQueryData(
+      ['events', 'p', '1'],
+      [
+        makeEvent(2, 'state.transitioned', {
+          from: 'factory:decomposing',
+          to: 'factory:done',
+        }),
+        makeEvent(3, 'agent.investigation-complete', {
+          playwrightRepro: {
+            screenshots: [
+              {
+                path: '/tmp/repro.png',
+                caption: 'Live repro screenshot',
+                step: 1,
+              },
+            ],
+            gifPath: null,
+            consoleErrors: [],
+            reproSteps: ['Open the bug page'],
+            reproduced: true,
+            notes: 'Captured from the live investigation event.',
+          },
+        }),
+      ],
     );
 
-    await waitFor(() => {
-      expect(invalidatedQueryKey(invalidateSpy.mock.calls, ['issue', 'p', '1'])).toBe(true);
-      expect(invalidatedQueryKey(invalidateSpy.mock.calls, ['issues', 'p'])).toBe(true);
-    });
-    expect(invalidatedQueryKey(invalidateSpy.mock.calls, ['events', 'p', '1'])).toBe(false);
-  });
-
-  it('updates the Playwright capture section from live investigation SSE without refetching events', async () => {
-    const { fetchEvents, fetchEventsPage } = await import('@/lib/api');
-    vi.mocked(fetchEvents).mockResolvedValue([]);
-    vi.mocked(fetchEventsPage).mockResolvedValue({ events: [], hasMore: false });
-
-    const queryClient = new QueryClient();
-    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const { TimelineSection } = await import('./TimelineSection');
     const { PlaywrightCaptureSection } = await import('./PlaywrightCaptureSection');
     renderTimeline(
@@ -454,97 +434,50 @@ describe('TimelineSection — expand/collapse all', () => {
       queryClient,
     );
 
-    expect(await screen.findByText('Playwright capture has not run yet.')).toBeTruthy();
-    expect(fetchEvents).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(MockEventSource.instances.length).toBeGreaterThan(0));
-
-    MockEventSource.instances[0].emitNamed(
-      makeEvent(2, 'agent.investigation-complete', {
-        playwrightRepro: {
-          screenshots: [
-            {
-              path: '/tmp/repro.png',
-              caption: 'Live repro screenshot',
-              step: 1,
-            },
-          ],
-          gifPath: null,
-          consoleErrors: [],
-          reproSteps: ['Open the bug page'],
-          reproduced: true,
-          notes: 'Captured from the live investigation event.',
-        },
-      }),
-    );
-
     expect(await screen.findByText('Open the bug page')).toBeTruthy();
     expect(screen.getByText('Live repro screenshot')).toBeTruthy();
-    expect(fetchEvents).toHaveBeenCalledTimes(1);
-    expect(invalidatedQueryKey(invalidateSpy.mock.calls, ['events', 'p', '1'])).toBe(false);
-  });
-
-  it('renders named SSE events that are visible in REST reloads', async () => {
-    const { fetchEventsPage } = await import('@/lib/api');
-    vi.mocked(fetchEventsPage).mockResolvedValue({ events: [], hasMore: false });
-
-    const { TimelineSection } = await import('./TimelineSection');
-    renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
-
-    await screen.findByText('No timeline events yet.');
-    await waitFor(() => expect(MockEventSource.instances.length).toBeGreaterThan(0));
-
-    MockEventSource.instances[0].emitNamed(
-      makeEvent(2, 'grill.decision-crystallized', {
-        roundNumber: 2,
-        decision: 'Use the shared event-kind contract.',
-      }),
-    );
-
-    expect(await screen.findByText('Decision crystallized')).toBeTruthy();
-    expect(screen.getByText('Use the shared event-kind contract.')).toBeTruthy();
+    expect(MockEventSource.instances).toHaveLength(0);
   });
 
   it('does not render named chat events in issue timelines', async () => {
     const { fetchEventsPage } = await import('@/lib/api');
-    vi.mocked(fetchEventsPage).mockResolvedValue({ events: [], hasMore: false });
+    vi.mocked(fetchEventsPage).mockResolvedValue({
+      events: [
+        makeEvent(2, 'chat.agent-message', {
+          conversationId: 'conv_1',
+          text: 'chat reply should stay in chat',
+        }),
+      ],
+      hasMore: false,
+    });
 
     const { TimelineSection } = await import('./TimelineSection');
     renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
 
     await screen.findByText('No timeline events yet.');
-    await waitFor(() => expect(MockEventSource.instances.length).toBeGreaterThan(0));
-
-    MockEventSource.instances[0].emitNamed(
-      makeEvent(2, 'chat.agent-message', {
-        conversationId: 'conv_1',
-        text: 'chat reply should stay in chat',
-      }),
-    );
-
     expect(screen.queryByText('chat reply should stay in chat')).toBeNull();
-    expect(screen.getByText('No timeline events yet.')).toBeTruthy();
+    expect(MockEventSource.instances).toHaveLength(0);
   });
 
-  it('does not render live non-chat events emitted by the hub-chat skill', async () => {
+  it('does not render non-chat events emitted by the hub-chat skill', async () => {
     const { fetchEventsPage } = await import('@/lib/api');
-    vi.mocked(fetchEventsPage).mockResolvedValue({ events: [], hasMore: false });
+    vi.mocked(fetchEventsPage).mockResolvedValue({
+      events: [
+        makeRunEvent(2, 'chat-run', 'agent.run-started', {
+          skill: 'hub-chat',
+          modelId: 'gpt-5.4',
+          runtime: 'codex-cli',
+        }),
+      ],
+      hasMore: false,
+    });
 
     const { TimelineSection } = await import('./TimelineSection');
     renderTimeline(<TimelineSection projectSlug="p" id="1" workItemId="w1" />);
 
     await screen.findByText('No timeline events yet.');
-    await waitFor(() => expect(MockEventSource.instances.length).toBeGreaterThan(0));
-
-    MockEventSource.instances[0].emitNamed(
-      makeRunEvent(2, 'chat-run', 'agent.run-started', {
-        skill: 'hub-chat',
-        modelId: 'gpt-5.4',
-        runtime: 'codex-cli',
-      }),
-    );
-
     expect(screen.queryByText('hub-chat')).toBeNull();
-    expect(screen.getByText('No timeline events yet.')).toBeTruthy();
+    expect(MockEventSource.instances).toHaveLength(0);
   });
 
   it('renders intervention groups inside the main timeline instead of a top audit panel', async () => {

@@ -1,13 +1,22 @@
 import { ProjectBudgetBanner } from '@/components/ui/ProjectBudgetBanner';
-import { fetchIssue, fetchIssues } from '@/lib/api';
+import { fetchEventsPage, fetchIssue, fetchIssues } from '@/lib/api';
 import { LANES, laneForState, sortLaneItems } from '@/lib/lanes.config';
 import { useProjectBudgetStatus } from '@/lib/project-budget';
+import type { AgentEventDto } from '@/lib/types';
+import { ISSUE_TIMELINE_EVENT_KINDS } from '@goose-hub/core/event-stream/issue-timeline.js';
 import { useActiveMilestone } from '@/state/active-milestone';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import {
+  applyLatestEventState,
+  applyIssueTimelineEvent,
+  backfillIssueTimelineEvents,
+  mergeIssueEvents,
+} from '../lib/live-events';
 import { SECTIONS } from '../lib/sections';
+import { computeIsLive } from '../lib/timeline';
 import { useHasOpenDep } from '../lib/useHasOpenDep';
 import { ApprovalGateSection } from './ApprovalGateSection';
 import { CodeDiffSection } from './CodeDiffSection';
@@ -27,6 +36,8 @@ import { TaskHeader } from './TaskHeader';
 import { TimelineSection } from './TimelineSection';
 import { TriageResultsSection } from './TriageResultsSection';
 
+const TIMELINE_PAGE_SIZE = 200;
+
 interface DetailPageProps {
   section?: string;
 }
@@ -43,17 +54,38 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
     // isLoading,
     isError,
     error,
-    refetch,
   } = useQuery({
     queryKey: ['issue', slug, id],
-    queryFn: () => fetchIssue(slug, id),
+    queryFn: async () =>
+      applyLatestEventState(
+        await fetchIssue(slug, id),
+        queryClient.getQueryData<AgentEventDto[]>(['events', slug, id]),
+      ),
+    enabled: id.length > 0,
+  });
+
+  const eventsQuery = useQuery({
+    queryKey: ['events', slug, id],
+    queryFn: async ({ signal }) => {
+      const { events } = await fetchEventsPage(slug, id, { limit: TIMELINE_PAGE_SIZE }, signal);
+      return mergeIssueEvents(
+        queryClient.getQueryData<AgentEventDto[]>(['events', slug, id]),
+        events,
+      );
+    },
     enabled: id.length > 0,
   });
 
   // Reuse the board's cached issues list for sibling navigation — no extra fetch.
   const { data: allIssues = [] } = useQuery({
     queryKey: ['issues', slug],
-    queryFn: () => fetchIssues(slug),
+    queryFn: async () => {
+      const issues = await fetchIssues(slug);
+      const issueEvents = queryClient.getQueryData<AgentEventDto[]>(['events', slug, id]);
+      return issues.map((issue) =>
+        issue.externalId === id ? applyLatestEventState(issue, issueEvents) : issue,
+      );
+    },
   });
 
   const siblings = useMemo(() => {
@@ -116,27 +148,80 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
   const currentSection = SECTIONS.find((s) => s.key === section) ?? SECTIONS[0];
   const workItemId = item != null ? `github:${item.repoRef}#${item.externalId}` : '';
 
-  const refetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Re-fetch the issue when an agent transitions its state (e.g. after triage).
+  const safetyRefetchTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const backfillMissedEvents = useCallback(
+    () =>
+      backfillIssueTimelineEvents({
+        queryClient,
+        projectSlug: slug,
+        issueId: id,
+        fetchPage: fetchEventsPage,
+        limit: TIMELINE_PAGE_SIZE,
+      }),
+    [queryClient, slug, id],
+  );
+
   useEffect(() => {
-    if (!workItemId) return;
-    const url = `/events?projectId=${encodeURIComponent(slug)}&workItemId=${encodeURIComponent(workItemId)}`;
-    const es = new EventSource(url);
-    const onTransitioned = () => {
-      if (refetchTimer.current) clearTimeout(refetchTimer.current);
-      refetchTimer.current = setTimeout(() => {
-        void refetch();
-      }, 150);
-    };
-    es.addEventListener('state.transitioned', onTransitioned);
-    es.addEventListener('gate.rejected', onTransitioned);
+    if (!computeIsLive(eventsQuery.data ?? [])) return;
+    safetyRefetchTimer.current = setInterval(() => {
+      void eventsQuery.refetch();
+    }, 30_000);
     return () => {
-      if (refetchTimer.current) clearTimeout(refetchTimer.current);
-      es.removeEventListener('state.transitioned', onTransitioned);
-      es.removeEventListener('gate.rejected', onTransitioned);
+      if (safetyRefetchTimer.current != null) clearInterval(safetyRefetchTimer.current);
+      safetyRefetchTimer.current = null;
+    };
+  }, [eventsQuery.data, eventsQuery.refetch]);
+
+  // DetailPage owns the issue-level SSE stream. Child sections consume the
+  // shared ['events', slug, id] cache and their own query invalidations.
+  useEffect(() => {
+    if (!workItemId || !eventsQuery.isSuccess) return;
+    const cached = queryClient.getQueryData<AgentEventDto[]>(['events', slug, id]) ?? [];
+    const lastEventId = cached[0]?.id ?? 0;
+    const params = new URLSearchParams({
+      projectId: slug,
+      workItemId,
+      lastEventId: String(lastEventId),
+    });
+    const es = new EventSource(`/events?${params}`);
+    let hadConnectionError = false;
+
+    const handleEvent = (msg: MessageEvent<string>) => {
+      try {
+        const parsed = JSON.parse(msg.data) as AgentEventDto;
+        applyIssueTimelineEvent(queryClient, slug, id, parsed);
+      } catch {
+        // Ignore malformed SSE payloads; the next backfill/refetch recovers.
+      }
+    };
+
+    for (const kind of ISSUE_TIMELINE_EVENT_KINDS) {
+      es.addEventListener(kind, handleEvent as EventListener);
+    }
+    es.onmessage = handleEvent;
+    es.onopen = () => {
+      if (!hadConnectionError) return;
+      hadConnectionError = false;
+      void backfillMissedEvents();
+    };
+    es.onerror = () => {
+      hadConnectionError = true;
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void backfillMissedEvents();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      for (const kind of ISSUE_TIMELINE_EVENT_KINDS) {
+        es.removeEventListener(kind, handleEvent as EventListener);
+      }
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       es.close();
     };
-  }, [slug, workItemId, refetch]);
+  }, [slug, id, workItemId, eventsQuery.isSuccess, queryClient, backfillMissedEvents]);
 
   if (isError) {
     return (
@@ -231,7 +316,7 @@ export function DetailPage({ section = 'overview' }: DetailPageProps) {
             ) : currentSection.key === 'repo' ? (
               <TriageResultsSection projectSlug={slug} id={id} />
             ) : currentSection.key === 'timeline' ? (
-              <TimelineSection projectSlug={slug} id={id} workItemId={workItemId} />
+              <TimelineSection projectSlug={slug} id={id} />
             ) : currentSection.key === 'investigation' ? (
               <InvestigationSection
                 projectSlug={slug}

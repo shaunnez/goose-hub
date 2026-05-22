@@ -1,27 +1,35 @@
-import type { AgentEventDto } from '@/lib/types';
+import type { AgentEventDto, WorkItemDto } from '@/lib/types';
 import { QueryClient } from '@tanstack/react-query';
-import { describe, expect, it } from 'vitest';
-import { upsertIssueEvent } from './live-events';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  applyIssueTimelineEvent,
+  backfillIssueTimelineEvents,
+  upsertIssueEvent,
+} from './live-events';
 
-function makeEvent(id: number, kind = 'agent.investigation-complete'): AgentEventDto {
+function makeEvent(
+  id: number,
+  kind = 'agent.investigation-complete',
+  payload: AgentEventDto['payload'] = {},
+): AgentEventDto {
   return {
     id,
     projectId: 'p',
     workItemId: 'w1',
     kind,
-    payload: {},
+    payload,
     createdAt: new Date(Date.now() + id * 1000).toISOString(),
   };
 }
 
 describe('upsertIssueEvent', () => {
-  it('does not seed the issue events cache before the full events query loads', () => {
+  it('seeds the shared issue events cache when the first live event arrives', () => {
     const queryClient = new QueryClient();
     const event = makeEvent(2);
 
     upsertIssueEvent(queryClient, 'p', '1', event);
 
-    expect(queryClient.getQueryData(['events', 'p', '1'])).toBeUndefined();
+    expect(queryClient.getQueryData(['events', 'p', '1'])).toEqual([event]);
   });
 
   it('inserts a live event into an existing issue events cache', () => {
@@ -66,5 +74,94 @@ describe('upsertIssueEvent', () => {
     upsertIssueEvent(queryClient, 'p', '1', makeEvent(2));
 
     expect(queryClient.getQueryData(['events', 'p', '2'])).toEqual([otherEvent]);
+  });
+});
+
+describe('applyIssueTimelineEvent', () => {
+  it('patches state and invalidates dependent issue queries', () => {
+    const queryClient = new QueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    const issue = {
+      externalId: '1',
+      state: 'factory:in-progress',
+    } as WorkItemDto;
+    queryClient.setQueryData(['issue', 'p', '1'], issue);
+    queryClient.setQueryData(['issues', 'p'], [issue]);
+
+    applyIssueTimelineEvent(
+      queryClient,
+      'p',
+      '1',
+      makeEvent(2, 'state.transitioned', {
+        to: 'factory:needs-qa',
+        interventionId: 'int_1',
+      }),
+    );
+
+    expect(queryClient.getQueryData<WorkItemDto>(['issue', 'p', '1'])?.state).toBe(
+      'factory:needs-qa',
+    );
+    expect(queryClient.getQueryData<WorkItemDto[]>(['issues', 'p'])?.[0]?.state).toBe(
+      'factory:needs-qa',
+    );
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issue', 'p', '1'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issues', 'p'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['intervention-timeline', 'p', '1'],
+    });
+  });
+
+  it('invalidates comments and costs for matching event kinds', () => {
+    const queryClient = new QueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    applyIssueTimelineEvent(queryClient, 'p', '1', makeEvent(2, 'pr.opened'));
+    applyIssueTimelineEvent(queryClient, 'p', '1', makeEvent(3, 'agent.run-completed'));
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['comments', 'p', '1'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issue-costs', 'p', '1'] });
+  });
+});
+
+describe('backfillIssueTimelineEvents', () => {
+  it('pages after the cached cursor and applies transitions chronologically', async () => {
+    const queryClient = new QueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    queryClient.setQueryData(['events', 'p', '1'], [makeEvent(1, 'agent.run-started')]);
+    queryClient.setQueryData(['issue', 'p', '1'], {
+      externalId: '1',
+      state: 'factory:in-progress',
+    } as WorkItemDto);
+    const fetchPage = vi
+      .fn()
+      .mockResolvedValueOnce({
+        events: [
+          makeEvent(3, 'state.transitioned', { to: 'factory:needs-qa' }),
+          makeEvent(2, 'pr.opened'),
+        ],
+        hasMore: true,
+      })
+      .mockResolvedValueOnce({
+        events: [makeEvent(5, 'state.transitioned', { to: 'factory:approved' })],
+        hasMore: false,
+      });
+
+    await backfillIssueTimelineEvents({
+      queryClient,
+      projectSlug: 'p',
+      issueId: '1',
+      fetchPage,
+      limit: 2,
+    });
+
+    expect(fetchPage).toHaveBeenNthCalledWith(1, 'p', '1', { after: 1, limit: 2 });
+    expect(fetchPage).toHaveBeenNthCalledWith(2, 'p', '1', { after: 3, limit: 2 });
+    expect(queryClient.getQueryData<WorkItemDto>(['issue', 'p', '1'])?.state).toBe(
+      'factory:approved',
+    );
+    expect(
+      queryClient.getQueryData<AgentEventDto[]>(['events', 'p', '1'])?.map((e) => e.id),
+    ).toEqual([5, 3, 2, 1]);
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['comments', 'p', '1'] });
   });
 });

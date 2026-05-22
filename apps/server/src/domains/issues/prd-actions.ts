@@ -8,7 +8,10 @@
  * `rejectPRD` is kept for backwards compatibility but is a no-op alias for
  * `declinePRD`.
  */
-import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
+import {
+  emitStateTransitionEvent,
+  transitionAndEmitState,
+} from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { resolveLatestPrd } from '@goose-hub/core/prd/read-model.js';
@@ -115,7 +118,17 @@ export async function revisePRD(
       id,
       'revise-prd: no PRD draft found for this issue. Returning to needs-human.',
     );
-    await source.forceState(id, 'factory:needs-human');
+    await transitionAndEmitState({
+      source,
+      projectId: slug,
+      itemId: id,
+      workItemId,
+      from: 'factory:prd-review',
+      to: 'factory:needs-human',
+      by: 'ui',
+      mode: 'forced',
+      reason: 'no PRD draft found for revision',
+    });
     return { ok: false, error: 'no PRD draft found for revision', status: 409 };
   }
 

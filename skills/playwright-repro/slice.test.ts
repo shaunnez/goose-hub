@@ -7,6 +7,7 @@ import { PlaywrightReproSchema, PlaywrightReproSpecSchema } from './schema.js';
 import config, { PlaywrightReproContextSchema } from './skill.config.js';
 
 const PROMPT = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'prompt.md'), 'utf8');
+const decisionSummaries = [{ kind: 'PLAN', summary: 'Captured browser repro evidence.' }];
 
 describe('playwright-repro schema', () => {
   it('accepts valid spec-plan output', () => {
@@ -19,6 +20,7 @@ describe('playwright-repro schema', () => {
       expectedAssertion: 'Login error remains visible after submit',
       reproSteps: ['Navigate to /login', 'Submit credentials'],
       evidenceIntent: 'Capture the login error before the fix.',
+      decisionSummaries,
     });
     expect(result.success).toBe(true);
   });
@@ -51,6 +53,7 @@ describe('playwright-repro schema', () => {
       reproduced: true,
       notes: 'Bug reproduced consistently on step 2.',
       commentUrl: 'https://github.com/shaunnez/goose-hub/issues/42#issuecomment-9876543210',
+      decisionSummaries,
     });
     expect(result.success).toBe(true);
   });
@@ -63,6 +66,7 @@ describe('playwright-repro schema', () => {
       reproSteps: ['Navigate to /login', 'Enter credentials'],
       reproduced: false,
       notes: 'Could not reproduce — login succeeded with provided credentials.',
+      decisionSummaries,
     });
     expect(result.success).toBe(true);
   });
@@ -74,6 +78,7 @@ describe('playwright-repro schema', () => {
       consoleErrors: [],
       reproSteps: ['Navigate to /dashboard'],
       reproduced: true,
+      decisionSummaries,
     });
     expect(result.success).toBe(true);
   });
@@ -85,6 +90,7 @@ describe('playwright-repro schema', () => {
       consoleErrors: [],
       reproSteps: ['Navigate to /home'],
       reproduced: false,
+      decisionSummaries,
     });
     expect(result.success).toBe(true);
   });
@@ -96,6 +102,7 @@ describe('playwright-repro schema', () => {
       consoleErrors: [{ message: 'Warning: something deprecated', type: 'warning' }],
       reproSteps: ['Navigate to /settings'],
       reproduced: false,
+      decisionSummaries,
     });
     expect(result.success).toBe(true);
   });
@@ -111,6 +118,7 @@ describe('playwright-repro schema', () => {
       ],
       reproSteps: ['Navigate to /'],
       reproduced: false,
+      decisionSummaries,
     });
     expect(result.success).toBe(true);
   });

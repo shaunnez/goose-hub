@@ -176,6 +176,42 @@ describe('GrillSection', () => {
     expect(transitionState).not.toHaveBeenCalled();
   });
 
+  it('shows the reply form when raw state is stale but the latest grill comment is unanswered', async () => {
+    vi.mocked(fetchComments).mockResolvedValue([comment(1, `${GRILL_QUESTION_MARKER}\nQ?`)]);
+
+    render_(<GrillSection projectSlug="proj" externalId="42" id="42" state="factory:grilling" />);
+
+    await waitFor(() => expect(screen.getByTestId('grill-reply-form')).toBeTruthy());
+    expect(screen.queryByTestId('grill-processing-footer')).toBeNull();
+  });
+
+  it('uses effective gate-pending state when replying after a stale factory:grilling render', async () => {
+    vi.mocked(fetchComments).mockResolvedValue([comment(1, `${GRILL_QUESTION_MARKER}\nQ?`)]);
+    vi.mocked(addComment).mockResolvedValueOnce(undefined);
+    vi.mocked(transitionState).mockResolvedValueOnce({
+      status: 200,
+      data: { ok: true },
+    });
+
+    render_(<GrillSection projectSlug="proj" externalId="42" id="42" state="factory:grilling" />);
+    await waitFor(() => expect(screen.getByTestId('grill-reply-input')).toBeTruthy());
+
+    fireEvent.change(screen.getByTestId('grill-reply-input'), { target: { value: 'Answer.' } });
+    await waitFor(() => {
+      expect((screen.getByTestId('grill-send-btn') as HTMLButtonElement).disabled).toBe(false);
+    });
+    fireEvent.click(screen.getByTestId('grill-send-btn'));
+
+    await waitFor(() => {
+      expect(transitionState).toHaveBeenCalledWith(
+        'proj',
+        '42',
+        'factory:gate-pending',
+        'factory:grilling',
+      );
+    });
+  });
+
   it('shows the optimistic reply in the thread before round-trip resolves', async () => {
     vi.mocked(fetchComments).mockResolvedValue([comment(1, `${GRILL_QUESTION_MARKER}\nQ?`)]);
     const pending = new Promise<void>((resolve) => {

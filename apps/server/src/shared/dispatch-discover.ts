@@ -1,3 +1,4 @@
+import { transitionAndEmitState } from '@goose-hub/core/event-stream/state-transition.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { resolveLatestPrd } from '@goose-hub/core/prd/read-model.js';
 import { parallelLock } from '@goose-hub/core/projects/parallel-lock.js';
@@ -206,7 +207,17 @@ export async function dispatchDecomposePrd(slug: string, issueNumber: number): P
           issueNumber.toString(),
           'decompose-prd: no PRD draft found on this issue. Returning to needs-human.',
         );
-        await source.forceState(issueNumber.toString(), 'factory:needs-human');
+        await transitionAndEmitState({
+          source,
+          projectId: slug,
+          itemId: item.id,
+          workItemId: item.id,
+          from: 'factory:decomposing',
+          to: 'factory:needs-human',
+          by: 'decompose-prd',
+          mode: 'forced',
+          reason: 'no PRD draft found',
+        });
         return;
       }
       if (prdOutput.prd == null) {
@@ -219,7 +230,17 @@ export async function dispatchDecomposePrd(slug: string, issueNumber: number): P
           issueNumber.toString(),
           'decompose-prd: PRD draft could not be parsed. Returning to needs-human.',
         );
-        await source.forceState(issueNumber.toString(), 'factory:needs-human');
+        await transitionAndEmitState({
+          source,
+          projectId: slug,
+          itemId: item.id,
+          workItemId: item.id,
+          from: 'factory:decomposing',
+          to: 'factory:needs-human',
+          by: 'decompose-prd',
+          mode: 'forced',
+          reason: 'PRD draft could not be parsed',
+        });
         return;
       }
       await runDecomposePrdWorkflow({

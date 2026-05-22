@@ -6,6 +6,7 @@ import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions
 import { resolveProjectAgentExecution } from '../agent-runtime/resolve-runtime-for-project.js';
 import { toJsonSchema } from '../agent-runtime/schema-bridge.js';
 import { selectPersona } from '../agent-runtime/select-persona.js';
+import { transitionAndEmitState } from '../event-stream/state-transition.js';
 import { eventStore } from '../event-stream/store.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import type { StateSource, WorkItem } from '../state-source/interface.js';
@@ -113,7 +114,18 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
       });
       // factory:decomposing only allows factory:issues-created or factory:archived as
       // legal transitions, so we use forceState to escape to factory:needs-human.
-      await stateSource.forceState(workItem.externalId, 'factory:needs-human');
+      await transitionAndEmitState({
+        mode: 'forced',
+        source: stateSource,
+        itemId: workItem.externalId,
+        projectId,
+        workItemId: workItem.id,
+        from: 'factory:decomposing',
+        to: 'factory:needs-human',
+        by: skillName,
+        runId,
+        reason: 'invalid-output',
+      });
       return { childIssueNumbers: [] };
     }
 
@@ -130,7 +142,18 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
         );
         // Use forceState because factory:decomposing → factory:needs-human is not a
         // legal transition in the state machine; forceState bypasses the guard.
-        await stateSource.forceState(workItem.externalId, 'factory:needs-human');
+        await transitionAndEmitState({
+          mode: 'forced',
+          source: stateSource,
+          itemId: workItem.externalId,
+          projectId,
+          workItemId: workItem.id,
+          from: 'factory:decomposing',
+          to: 'factory:needs-human',
+          by: skillName,
+          runId,
+          reason: 'duplicate-child-title',
+        });
         return { childIssueNumbers: [] };
       }
       seen.add(title);
@@ -275,16 +298,28 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
     // setLabelInGroup only supports 'priority' | 'schedule' | 'type', so
     // 'factory:issues-created' cannot be applied via that method.
     // Posting a comment to note the intended label, then transitioning state.
-    await stateSource.transitionState(
-      workItem.externalId,
-      'factory:decomposing',
-      'factory:issues-created',
-    );
-    await stateSource.transitionState(
-      workItem.externalId,
-      'factory:issues-created',
-      'factory:done',
-    );
+    await transitionAndEmitState({
+      mode: 'legal',
+      source: stateSource,
+      itemId: workItem.externalId,
+      projectId,
+      workItemId: workItem.id,
+      from: 'factory:decomposing',
+      to: 'factory:issues-created',
+      by: skillName,
+      runId,
+    });
+    await transitionAndEmitState({
+      mode: 'legal',
+      source: stateSource,
+      itemId: workItem.externalId,
+      projectId,
+      workItemId: workItem.id,
+      from: 'factory:issues-created',
+      to: 'factory:done',
+      by: skillName,
+      runId,
+    });
 
     // Step 8: Emit decision summaries
     reconcileDecisionSummaries(runId, projectId, workItem.id, skillName, decisionSummaries);
@@ -307,7 +342,18 @@ export async function runDecomposePrdWorkflow(input: RunDecomposeInput): Promise
       runId,
       payload: { skill: skillName, error: String(err) },
     });
-    await stateSource.forceState(workItem.externalId, 'factory:needs-human');
+    await transitionAndEmitState({
+      mode: 'forced',
+      source: stateSource,
+      itemId: workItem.externalId,
+      projectId,
+      workItemId: workItem.id,
+      from: 'factory:decomposing',
+      to: 'factory:needs-human',
+      by: skillName,
+      runId,
+      reason: 'workflow-error',
+    });
     throw err;
   }
 }

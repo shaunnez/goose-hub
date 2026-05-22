@@ -9,9 +9,11 @@ import {
   readProjectSettings,
   writeProjectSettings,
 } from '@goose-hub/core/db/repositories/project-settings.js';
+import { transitionAndEmitState } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { loadProjects } from '@goose-hub/core/projects/loader.js';
+import type { StateName } from '@goose-hub/core/state-machine/states.js';
 import { skillsRoot } from '@goose-hub/skills';
 import { runBootstrapViaBridge } from '#shared/bootstrap-bridge.js';
 import { searchPrsOrLog } from '#shared/github-pr-search.js';
@@ -424,8 +426,17 @@ async function transitionIssue(input: {
   const id = String(input.issueNumber);
   const current = await source.getItem(id);
   try {
-    // biome-ignore lint/suspicious/noExplicitAny: StateName narrowing handled by transitionState
-    await source.transitionState(id, current.state as any, input.toState as any);
+    await transitionAndEmitState({
+      mode: 'legal',
+      source,
+      itemId: id,
+      projectId: input.projectSlug,
+      workItemId: current.id,
+      from: current.state,
+      to: input.toState as StateName,
+      by: 'chat.transition_issue',
+      extraPayload: { rationale: input.rationale },
+    });
   } catch (err) {
     throw new ToolExecutionError(`transition failed: ${String(err)}`, 400);
   }

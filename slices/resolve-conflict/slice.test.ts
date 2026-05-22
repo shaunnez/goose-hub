@@ -110,6 +110,28 @@ const SUCCESS_AGENT_OUTPUT: AgentResult = {
   events: [],
 };
 
+function expectStateTransitionEvent(to: string) {
+  const event = vi
+    .mocked(eventStore.appendEvent)
+    .mock.calls.find(
+      ([candidate]) =>
+        candidate.kind === 'state.transitioned' &&
+        (candidate.payload as { to?: string } | undefined)?.to === to,
+    )?.[0];
+  expect(event).toEqual(
+    expect.objectContaining({
+      projectId: 'proj',
+      workItemId: 'github:owner/repo#42',
+      kind: 'state.transitioned',
+      payload: expect.objectContaining({
+        from: 'factory:merge-conflict',
+        to,
+        by: 'resolve-conflict',
+      }),
+    }),
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   // Default: file content is clean (no conflict markers).
@@ -131,6 +153,7 @@ describe('runResolveConflictWorkflow', () => {
       'factory:merge-conflict',
       'factory:needs-human',
     );
+    expectStateTransitionEvent('factory:needs-human');
     expect(source.comment).toHaveBeenCalledWith(
       '42',
       expect.stringContaining('No pr.opened event found'),
@@ -171,6 +194,7 @@ describe('runResolveConflictWorkflow', () => {
       'factory:merge-conflict',
       'factory:retrospecting',
     );
+    expectStateTransitionEvent('factory:retrospecting');
     const resolvedEvent = vi
       .mocked(eventStore.appendEvent)
       .mock.calls.find(([e]) => e.kind === 'merge.conflict-resolved');
@@ -220,6 +244,7 @@ describe('runResolveConflictWorkflow', () => {
       'factory:merge-conflict',
       'factory:needs-human',
     );
+    expectStateTransitionEvent('factory:needs-human');
     expect(source.comment).toHaveBeenCalledWith(
       '42',
       expect.stringContaining('https://github.com/owner/repo/pull/99'),
@@ -265,6 +290,7 @@ describe('runResolveConflictWorkflow', () => {
       'factory:merge-conflict',
       'factory:needs-human',
     );
+    expectStateTransitionEvent('factory:needs-human');
   });
 
   it('defensive scan: resolved file still has markers → transitions to needs-human', async () => {
@@ -304,6 +330,7 @@ describe('runResolveConflictWorkflow', () => {
       'factory:merge-conflict',
       'factory:needs-human',
     );
+    expectStateTransitionEvent('factory:needs-human');
     const unresolvable = vi
       .mocked(eventStore.appendEvent)
       .mock.calls.find(([e]) => e.kind === 'merge.conflict-unresolvable');
@@ -334,5 +361,6 @@ describe('runResolveConflictWorkflow', () => {
       'factory:merge-conflict',
       'factory:needs-human',
     );
+    expectStateTransitionEvent('factory:needs-human');
   });
 });

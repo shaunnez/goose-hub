@@ -18,6 +18,7 @@
  */
 import type { z } from 'zod';
 import { openPR } from '../../../connectors/github/open-pr.js';
+import { transitionAndEmitState } from '../../../event-stream/state-transition.js';
 import type { StateName } from '../../../state-machine/states.js';
 import { emitBlockedToolCall, emitToolCall } from '../audit.js';
 import { type CommandResult, minimalEnv, runCommand } from '../command-policy.js';
@@ -325,7 +326,17 @@ export async function transitionStateTool(
   const itemId = `github:${source.repoRef}#${input.issueNumber}`;
   const current = await source.getItem(itemId);
   const to = input.to as StateName;
-  await source.transitionState(itemId, current.state, to);
+  await transitionAndEmitState({
+    mode: 'legal',
+    source,
+    itemId,
+    projectId: ctx.projectId,
+    workItemId: current.id,
+    from: current.state,
+    to,
+    by: 'mcp.transition_state',
+    runId: ctx.runId,
+  });
 
   emitToolCall(ctx, {
     tool: 'transition_state',

@@ -10,6 +10,7 @@ import { selectPersona } from '../agent-runtime/select-persona.js';
 import { runCodeQualityAudit } from '../audit/run-audit.js';
 import { db } from '../db/db.js';
 import { improvementCandidates } from '../db/schema.js';
+import { transitionAndEmitState } from '../event-stream/state-transition.js';
 import { eventStore } from '../event-stream/store.js';
 import { archiveLifecycle } from '../learning/archive.js';
 import { computeTrend } from '../learning/convergence.js';
@@ -205,11 +206,17 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
         payload: { skill: skillName, error: parsed.error.message },
       });
       accumulatePersonaStats({ personaName: personaId, role: 'retrospector', outcome: 'failure' });
-      await stateSource.transitionState(
-        workItem.externalId,
-        'factory:retrospecting',
-        'factory:needs-human',
-      );
+      await transitionAndEmitState({
+        mode: 'legal',
+        source: stateSource,
+        itemId: workItem.externalId,
+        projectId,
+        workItemId: workItem.id,
+        from: 'factory:retrospecting',
+        to: 'factory:needs-human',
+        by: skillName,
+        runId,
+      });
       return;
     }
 
@@ -276,16 +283,33 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
     }
 
     if (auditAutonomyGateFired) {
-      await stateSource.transitionState(
-        workItem.externalId,
-        'factory:retrospecting',
-        'factory:needs-human',
-      );
+      await transitionAndEmitState({
+        mode: 'legal',
+        source: stateSource,
+        itemId: workItem.externalId,
+        projectId,
+        workItemId: workItem.id,
+        from: 'factory:retrospecting',
+        to: 'factory:needs-human',
+        by: skillName,
+        runId,
+        extraPayload: { auditAutonomyGateFired: true },
+      });
       // Skip archive — the lifecycle hasn't reached factory:done.
       return;
     }
 
-    await stateSource.transitionState(workItem.externalId, 'factory:retrospecting', 'factory:done');
+    await transitionAndEmitState({
+      mode: 'legal',
+      source: stateSource,
+      itemId: workItem.externalId,
+      projectId,
+      workItemId: workItem.id,
+      from: 'factory:retrospecting',
+      to: 'factory:done',
+      by: skillName,
+      runId,
+    });
     // Archive only after the state transition succeeds — otherwise a transition
     // failure would leave a phantom archive row for a lifecycle that never
     // reached factory:done, skewing future mining and trend output.
@@ -309,10 +333,16 @@ export async function runRetrospectiveWorkflow(input: RunRetrospectiveInput): Pr
       runId,
       payload: { skill: skillName, error: String(err) },
     });
-    await stateSource.transitionState(
-      workItem.externalId,
-      'factory:retrospecting',
-      'factory:needs-human',
-    );
+    await transitionAndEmitState({
+      mode: 'legal',
+      source: stateSource,
+      itemId: workItem.externalId,
+      projectId,
+      workItemId: workItem.id,
+      from: 'factory:retrospecting',
+      to: 'factory:needs-human',
+      by: skillName,
+      runId,
+    });
   }
 }

@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { DecisionSummarySchema } from '@goose-hub/core/retrospective/schemas.js';
+
+export { DecisionSummarySchema };
 
 const RepoRelativePathDescription =
   'Repo-root/worktree-root relative POSIX path. Do not use package-relative paths like src/... for files under apps/web; use apps/web/src/....';
@@ -33,6 +36,7 @@ export const PlaywrightReproSpecSchema = z.object({
     .string()
     .describe('Short statement of the evidence this spec is intended to capture'),
   notes: z.string().optional(),
+  decisionSummaries: z.array(DecisionSummarySchema).min(1),
 });
 
 export const PlaywrightReproSchema = z.object({
@@ -75,6 +79,7 @@ export const PlaywrightReproSchema = z.object({
     .url()
     .optional()
     .describe('Permalink to the BEFORE-state comment posted on the linked issue'),
+  decisionSummaries: z.array(DecisionSummarySchema).min(1),
 });
 
 export type InvestigationReproPacket = z.infer<typeof InvestigationReproPacketSchema>;

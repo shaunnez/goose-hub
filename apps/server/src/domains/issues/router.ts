@@ -53,9 +53,14 @@ router.get('/:slug/issues/:id/legal-targets', async (c) => {
 router.get('/:slug/issues/:id/events', async (c) => {
   const limitStr = c.req.query('limit');
   const beforeStr = c.req.query('before');
+  const afterStr = c.req.query('after');
   const opts =
     limitStr != null
-      ? { limit: Number(limitStr), before: beforeStr != null ? Number(beforeStr) : undefined }
+      ? {
+          limit: Number(limitStr),
+          before: beforeStr != null ? Number(beforeStr) : undefined,
+          after: afterStr != null ? Number(afterStr) : undefined,
+        }
       : undefined;
   const result = await getIssueEvents(c.req.param('slug'), c.req.param('id'), opts);
   return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 404);

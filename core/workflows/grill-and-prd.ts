@@ -14,7 +14,7 @@ import type { PRDOutput } from '../../skills/write-prd/schema.js';
 import type { AgentRuntime } from '../agent-runtime/interface.js';
 import { reconcileDecisionSummaries } from '../agent-runtime/reconcile-decisions.js';
 import { totalSpendForSkill as _totalSpendForSkill } from '../cost/repository.js';
-import { emitStateTransitionEvent } from '../event-stream/state-transition.js';
+import { transitionAndEmitState } from '../event-stream/state-transition.js';
 import { eventStore } from '../event-stream/store.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import type { StateName } from '../state-machine/states.js';
@@ -213,18 +213,31 @@ async function ensureGatePending(
 ): Promise<void> {
   if (fromState === 'factory:gate-pending') return;
   try {
-    await stateSource.transitionState(externalId, fromState, 'factory:gate-pending');
+    await transitionAndEmitState({
+      mode: 'legal',
+      source: stateSource,
+      itemId: externalId,
+      projectId,
+      workItemId,
+      from: fromState,
+      to: 'factory:gate-pending',
+      by: 'grill-and-prd',
+      extraPayload: { discoverSessionId },
+    });
   } catch {
-    await stateSource.forceState(externalId, 'factory:gate-pending');
+    await transitionAndEmitState({
+      mode: 'forced',
+      source: stateSource,
+      itemId: externalId,
+      projectId,
+      workItemId,
+      from: fromState,
+      to: 'factory:gate-pending',
+      by: 'grill-and-prd',
+      reason: 'gate-pending-legal-transition-unavailable',
+      extraPayload: { discoverSessionId },
+    });
   }
-  emitStateTransitionEvent({
-    projectId,
-    workItemId,
-    from: fromState,
-    to: 'factory:gate-pending',
-    by: 'grill-and-prd',
-    extraPayload: { discoverSessionId },
-  });
 }
 
 export async function runGrillAndPrdWorkflow(
@@ -356,7 +369,18 @@ export async function runGrillAndPrdWorkflow(
       workItem.externalId,
       '<!-- factory:system -->\nGrill cannot run: project is missing `targetRepo.localPath`. Configure it in `target-projects/<slug>/project.config.ts` and resume.',
     );
-    await stateSource.forceState(workItem.externalId, 'factory:needs-human');
+    await transitionAndEmitState({
+      mode: 'forced',
+      source: stateSource,
+      itemId: workItem.externalId,
+      projectId,
+      workItemId: workItem.id,
+      from: workItem.state,
+      to: 'factory:needs-human',
+      by: 'grill-and-prd',
+      runId: workflowRunId,
+      reason: 'target-repo-local-path-missing',
+    });
     return { phase: 'needs-human' };
   }
 
@@ -618,16 +642,44 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
 
   try {
     if (workItem.state === 'factory:grilling') {
-      await stateSource.transitionState(
-        workItem.externalId,
-        'factory:grilling',
-        'factory:prd-drafting',
-      );
+      await transitionAndEmitState({
+        mode: 'legal',
+        source: stateSource,
+        itemId: workItem.externalId,
+        projectId,
+        workItemId: workItem.id,
+        from: 'factory:grilling',
+        to: 'factory:prd-drafting',
+        by: 'grill-and-prd',
+        runId: workflowRunId,
+      });
     } else {
-      await stateSource.forceState(workItem.externalId, 'factory:prd-drafting');
+      await transitionAndEmitState({
+        mode: 'forced',
+        source: stateSource,
+        itemId: workItem.externalId,
+        projectId,
+        workItemId: workItem.id,
+        from: workItem.state,
+        to: 'factory:prd-drafting',
+        by: 'grill-and-prd',
+        runId: workflowRunId,
+        reason: 'resume-prd-draft',
+      });
     }
   } catch {
-    await stateSource.forceState(workItem.externalId, 'factory:prd-drafting');
+    await transitionAndEmitState({
+      mode: 'forced',
+      source: stateSource,
+      itemId: workItem.externalId,
+      projectId,
+      workItemId: workItem.id,
+      from: workItem.state,
+      to: 'factory:prd-drafting',
+      by: 'grill-and-prd',
+      runId: workflowRunId,
+      reason: 'legal-draft-transition-failed',
+    });
   }
 
   const prdRunId = `${workflowRunId}:write-prd`;
@@ -715,7 +767,18 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
         error: advisorOutcome.error,
       },
     });
-    await stateSource.forceState(workItem.externalId, 'factory:needs-human');
+    await transitionAndEmitState({
+      mode: 'forced',
+      source: stateSource,
+      itemId: workItem.externalId,
+      projectId,
+      workItemId: workItem.id,
+      from: 'factory:prd-drafting',
+      to: 'factory:needs-human',
+      by: 'write-prd',
+      runId: advisorRunId,
+      reason: 'advisor-failed',
+    });
     return { phase: 'needs-human' };
   } else {
     prdOutput = advisorOutcome.prdOutput;
@@ -737,11 +800,17 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
 
   try {
     await stateSource.comment(workItem.externalId, commentBody);
-    await stateSource.transitionState(
-      workItem.externalId,
-      'factory:prd-drafting',
-      'factory:prd-review',
-    );
+    await transitionAndEmitState({
+      mode: 'legal',
+      source: stateSource,
+      itemId: workItem.externalId,
+      projectId,
+      workItemId: workItem.id,
+      from: 'factory:prd-drafting',
+      to: 'factory:prd-review',
+      by: 'write-prd',
+      runId: prdRunId,
+    });
   } catch (err) {
     eventStore.appendEvent({
       kind: 'agent.run-failed',
@@ -750,7 +819,18 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
       runId: workflowRunId,
       payload: { skill: 'grill-and-prd', workflowRunId, discoverSessionId, error: String(err) },
     });
-    await stateSource.forceState(workItem.externalId, 'factory:needs-human');
+    await transitionAndEmitState({
+      mode: 'forced',
+      source: stateSource,
+      itemId: workItem.externalId,
+      projectId,
+      workItemId: workItem.id,
+      from: 'factory:prd-drafting',
+      to: 'factory:needs-human',
+      by: 'write-prd',
+      runId: prdRunId,
+      reason: 'prd-comment-or-transition-failed',
+    });
     return { phase: 'needs-human' };
   }
 

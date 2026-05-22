@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { findFreePort } from '@goose-hub/core/agent-runtime/find-free-port.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
+import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { getEvidencePostEnabled } from '@goose-hub/core/db/repositories/project-settings.js';
@@ -155,6 +156,13 @@ export async function runEvidencePost(input: RunEvidencePostInput): Promise<void
     if (!parsed.data.commentUrl) {
       throw new Error('evidence-post returned no commentUrl — evidence comment was not posted');
     }
+    reconcileDecisionSummaries(
+      evidenceRunId,
+      input.projectId,
+      input.workItem.id,
+      'evidence-post',
+      parsed.data.decisionSummaries,
+    );
     eventStore.appendEvent({
       projectId: input.projectId,
       workItemId: input.workItem.id,
