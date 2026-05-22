@@ -107,4 +107,4 @@ PRD: Centralize Issue Eventstream And Canonical Event Emission
 
   Run focused unit/component tests for DetailPage live cache patching, Timeline shared cache rendering, Grill stale-state
   behavior, transition helper emission, and skill decision reconciliation. Then manually verify Grill loop, PRD draft/review, PRD
-  approval/decompose, implement-WP live timeline, and bug investigation Playwright capture.
+  approval/lifecycle routing, implement-WP live timeline, and bug investigation Playwright capture.

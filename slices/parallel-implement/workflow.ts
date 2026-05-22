@@ -23,6 +23,7 @@ import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { openPR } from '@goose-hub/core/connectors/github/open-pr.js';
 import type { AgentEvent, AppendEventInput } from '@goose-hub/core/event-stream/store.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { resolveLatestPrd } from '@goose-hub/core/prd/read-model.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import {
@@ -45,6 +46,7 @@ import {
 import { ImplementWpSchema } from '@goose-hub/skills/implement-wp/schema.js';
 import type { EngineeringSpec } from '@goose-hub/skills/spec-author/schema.js';
 import { normalizeEngineeringSpecPaths } from '../spec-author/path-normalization.js';
+import { buildPrdPlanningContext } from '../spec-author/prd-planning-context.js';
 import {
   type WpDispatchResult,
   buildParallelPrBody,
@@ -279,6 +281,23 @@ export async function runParallelImplementWorkflow(
     workItemId: workItem.id,
     worktreePath: targetRepo,
   });
+  const latestPrd =
+    workItem.type === 'feature'
+      ? await resolveLatestPrd({
+          projectId,
+          workItemId: workItem.id,
+          loadLegacyComments: () => stateSource.listComments(workItem.externalId),
+        })
+      : null;
+  const parentPrdContext =
+    latestPrd != null
+      ? (buildPrdPlanningContext({
+          projectId,
+          parentWorkItemId: workItem.id,
+          pipelineRunId,
+          latestPrd,
+        }) ?? undefined)
+      : undefined;
   const normalizedSpec = normalizeEngineeringSpecPaths({
     spec,
     worktreePath: targetRepo,
@@ -419,6 +438,7 @@ export async function runParallelImplementWorkflow(
             implementWpJsonSchema,
             investigation,
             acceptanceContract,
+            parentPrdContext,
           }),
         );
 

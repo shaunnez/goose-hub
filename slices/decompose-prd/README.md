@@ -2,9 +2,14 @@
 
 ## What this slice does
 
-Implements the `runDecomposePrdWorkflow` in `core/workflows/decompose-prd.ts`. The workflow:
+Implements the manual/backcompat `runDecomposePrdWorkflow` in
+`core/workflows/decompose-prd.ts`. PRD approval no longer invokes this
+workflow automatically; the default approved-PRD lifecycle routes the parent
+issue to `factory:dev-ready` for spec-author.
 
-1. Pre-condition: the parent work item must be in `factory:prd-review`. Transitions it to `factory:decomposing`.
+The workflow:
+
+1. Pre-condition: the parent work item must already be in `factory:decomposing`.
 2. Runs the `decompose-issues` skill via the injected `AgentRuntime` to produce a list of `DecomposedIssue` objects from the PRD output.
 3. Validates the output against `DecomposeOutputSchema` (Zod). On failure: `forceState` to `factory:needs-human`.
 4. Enforces a duplicate-title guard: if any two child issues share the same title (case-insensitive), posts a comment explaining the problem and transitions to `factory:needs-human` without creating any children.

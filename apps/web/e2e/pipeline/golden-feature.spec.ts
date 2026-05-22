@@ -12,8 +12,10 @@
  *      core/state-machine/transitions.ts) to bypass the multi-round grill loop —
  *      that loop is already covered by discover-lane.spec.ts.
  *   6. Plant a PRD comment so PRDSection renders content; assert it.
- *   7. Click prd-approve-btn. Mock decompose-prd runs synchronously: parent goes
- *      decomposing → issues-created → done and child issues are created.
+ *   7. Click prd-approve-btn. Legacy mock decompose-prd runs synchronously:
+ *      parent goes decomposing → issues-created → done and child issues are
+ *      created. The spec-first PRD approval path is covered by
+ *      discover-lane.spec.ts and workflow/slice tests.
  *   8. Read parent comments to extract child issue numbers.
  *   9. Return to the board, confirm child cards exist.
  *  10. Walk the FIRST child through its dev cycle:
@@ -111,7 +113,7 @@ function buildMockPrdCommentBody(title: string): string {
         steps: [
           {
             userAction: 'Approves the PRD',
-            systemResponse: 'Decomposes into child issues',
+            systemResponse: 'Legacy mock decomposition creates child issues',
             dataShown: 'Child issue list',
             stateChange: 'Parent → done',
           },
@@ -127,7 +129,7 @@ function buildMockPrdCommentBody(title: string): string {
           when: 'Approve PRD is clicked',
           given: 'state is prd-review',
           // biome-ignore lint/suspicious/noThenProperty: BDD then clause, not Promise#then
-          then: 'mock decompose-prd creates child issues',
+          then: 'legacy mock path creates child issues for delivery',
         },
       ],
     },
@@ -228,8 +230,8 @@ test.describe('Golden Feature flow (MOCK_AGENTS + MOCK_SOURCE + MOCK_OPEN_PR)', 
     await expect(page.getByTestId('prd-title')).toHaveText(title);
     await expect(page.getByTestId('prd-slice')).toHaveCount(1);
 
-    // ── 7. Approve PRD. Mock decompose-prd runs synchronously: parent advances
-    //      decomposing → issues-created → done and creates child issues.
+    // ── 7. Approve PRD. Legacy mock delivery decomposes the parent into child
+    //      issues and advances the parent to done.
     await page.getByTestId('prd-approve-btn').click();
     await expect(statePill).toHaveText('done', { timeout: 30_000 });
 

@@ -3,6 +3,7 @@ import { invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
 import { persistEngineeringSpec } from '@goose-hub/core/engineering-specs/repository.js';
 import { emitStateTransitionEvent } from '@goose-hub/core/event-stream/state-transition.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
+import { resolveLatestPrd } from '@goose-hub/core/prd/read-model.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import { buildScoutReportDigestBundle } from '@goose-hub/core/scout-reports/digest.js';
 import { listScoutReportsForInvestigation } from '@goose-hub/core/scout-reports/repository.js';
@@ -21,10 +22,14 @@ import {
   validateEngineeringSpec,
 } from '@goose-hub/skills/spec-author/validate.js';
 import { normalizeEngineeringSpecPaths } from './path-normalization.js';
+import { type PrdPlanningContext, buildPrdPlanningContext } from './prd-planning-context.js';
+import { createWpIssueProjections } from './wp-issue-projection.js';
 
 export interface SpecAuthorWorkflowDeps {
   createWorktreeImpl?: typeof createWorktree;
   resolveWorkflowBaseImpl?: typeof resolveWorkflowBase;
+  prdArtifactThresholdBytes?: number;
+  createWpIssueProjections?: boolean;
 }
 
 type OutputValidationIssue = {
@@ -55,6 +60,8 @@ type SpecAuthorContext = {
     body: string;
   };
   issueType: 'feature' | 'bug';
+  prd?: string;
+  prdContext?: PrdPlanningContext;
   scoutReports?: string;
   wave2Reports?: string;
   investigationSynthesis?: string;
@@ -321,13 +328,61 @@ export async function runSpecAuthorWorkflow(
       body: workItem.body,
     };
 
+    let prdContext: PrdPlanningContext | undefined;
+    if (workItem.type === 'feature') {
+      const latestPrd = await resolveLatestPrd({
+        projectId,
+        workItemId: workItem.id,
+        loadLegacyComments: () => stateSource.listComments(workItem.externalId),
+      });
+      if (latestPrd != null) {
+        prdContext =
+          buildPrdPlanningContext({
+            projectId,
+            parentWorkItemId: workItem.id,
+            pipelineRunId,
+            latestPrd,
+            artifactThresholdBytes: deps.prdArtifactThresholdBytes,
+          }) ?? undefined;
+      }
+    }
+
     const baseContext: SpecAuthorContext = {
       workItem: workItemCtx,
       issueType: workItem.type === 'bug' ? 'bug' : 'feature',
+      ...(prdContext != null && {
+        prdContext,
+        prd: JSON.stringify(prdContext),
+      }),
       scoutReports,
       wave2Reports,
       investigationSynthesis,
     };
+
+    if (prdContext != null) {
+      eventStore.appendEvent({
+        projectId,
+        workItemId: workItem.id,
+        kind: 'spec.prd-context-attached',
+        payload: {
+          source: prdContext.source,
+          prdRunId: prdContext.prdRunId,
+          artifactKey: prdContext.artifactRef?.artifactKey ?? null,
+          inlineSections: [
+            'title',
+            'problem',
+            'proposedSolution',
+            'successCriteria',
+            'acceptanceCriteria',
+            'journeys',
+            'verticalSlices',
+            'implementationDecisions',
+            'testingDecisions',
+          ],
+        },
+        runId: pipelineRunId,
+      });
+    }
 
     const runAttempt = async (
       runId: string,
@@ -476,6 +531,44 @@ export async function runSpecAuthorWorkflow(
       payload: { pipelineRunId: attempt.runId, workItemId: workItem.id },
       runId: attempt.runId,
     });
+
+    const shouldProjectWpIssues =
+      deps.createWpIssueProjections ?? projectConfig?.experimental?.wpIssueProjection === true;
+    if (shouldProjectWpIssues) {
+      try {
+        const created = await createWpIssueProjections({
+          source: stateSource,
+          parent: workItem,
+          spec: attempt.spec,
+        });
+        eventStore.appendEvent({
+          projectId,
+          workItemId: workItem.id,
+          kind: 'spec.wp-issues-created',
+          payload: {
+            pipelineRunId: attempt.runId,
+            count: created.length,
+            issues: created,
+          },
+          runId: attempt.runId,
+        });
+      } catch (projectionErr) {
+        const error =
+          projectionErr instanceof Error ? projectionErr : new Error(String(projectionErr));
+        eventStore.appendEvent({
+          projectId,
+          workItemId: workItem.id,
+          kind: 'agent.log',
+          payload: {
+            runId: attempt.runId,
+            skill: 'spec-author',
+            stream: 'wp-issue-projection',
+            text: `WP issue projection failed: ${error.message}`,
+          },
+          runId: attempt.runId,
+        });
+      }
+    }
 
     await stateSource.transitionState(
       workItem.externalId,

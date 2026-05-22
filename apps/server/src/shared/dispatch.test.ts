@@ -648,6 +648,7 @@ describe('dispatchFixIssue: bug routing', () => {
     setLabelInGroup: vi.fn().mockResolvedValue(undefined),
     comment: vi.fn().mockResolvedValue(undefined),
     transitionState: vi.fn().mockResolvedValue(undefined),
+    listLabels: vi.fn().mockResolvedValue([]),
   });
 
   const simpleInvEvent = {
@@ -848,6 +849,38 @@ describe('dispatchFixIssue: bug routing', () => {
     expect(mockLoggerInfo).not.toHaveBeenCalledWith(
       'dispatchFixIssue: simple bug → legacy single-agent path',
       expect.anything(),
+    );
+  });
+
+  it('routes factory:from-prd child issues to legacy implementation even when multi-agent is enabled', async () => {
+    mockGetUseMultiAgentPipeline.mockReturnValue(true);
+    mockGetProject.mockResolvedValue({
+      id: 'slug',
+      budgets: { maxParallelAgents: 1 },
+      source: { repo: 'shaunnez/goose-hub', type: 'github' },
+    });
+    const featureItem = {
+      id: 'item-feat-child',
+      externalId: '103',
+      title: 'child feature',
+      body: '',
+      state: 'factory:dev-ready',
+      schedule: 'current',
+      type: 'feature',
+    };
+    mockGetSourceForSlug.mockResolvedValue({
+      ...makeSource(featureItem),
+      listLabels: vi.fn().mockResolvedValue(['factory:dev-ready', 'factory:from-prd']),
+    });
+
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    await dispatchFixIssue('slug', 103).catch(() => {
+      /* legacy dynamic import may fail */
+    });
+
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      'dispatchFixIssue: PRD child projection → legacy single-agent path',
+      expect.objectContaining({ slug: 'slug', issueNumber: 103 }),
     );
   });
 });

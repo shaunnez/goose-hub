@@ -494,7 +494,7 @@ describe('Discover Lane end-to-end integration', () => {
     expect(qPostedEvs).toHaveLength(2);
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Phase 6 — Human approves PRD: transition to factory:decomposing
+    // Phase 6 — Manual legacy decomposition: transition to factory:decomposing
     // ─────────────────────────────────────────────────────────────────────────
     await source.transitionState(seeded.externalId, 'factory:prd-review', 'factory:decomposing');
     const afterApprove = await source.getItem(seeded.externalId);

@@ -65,7 +65,7 @@ A flat, machine-readable map of every package and slice in this repo. The point:
 | `cli-bootstrap` | yes | `goose project bootstrap` CLI command. Closes M12.06 (#309). |
 | `codex-runtime` | yes | Workflow-only slice — owns coverage for the Codex CLI runtime sibling introduced |
 | `cost-tracking` | yes | Per-run cost persistence and dashboard surfaces. Closes M9.08. |
-| `decompose-prd` | yes | Implements the `runDecomposePrdWorkflow` in `core/workflows/decompose-prd.ts`. The workflow: |
+| `decompose-prd` | yes | Implements the manual/backcompat `runDecomposePrdWorkflow` in |
 | `dep-scheduling-integration` | yes | M11.10: Integration tests for dependency-aware scheduling (#301). |
 | `dependency-scheduler` | yes | Scheduler dependency-satisfaction filter. Closes M11.03 (#292). |
 | `description-loop` | yes | Skill auto-trigger description loop (eval Layer 1). Closes M11.19 (#557). |

@@ -19,7 +19,7 @@ flowchart TB
     R -->|factory:qa-failed| QF[dispatchQaFailed]
     R -->|factory:needs-fix| NF[dispatchNeedsFix]
     R -->|factory:grilling| GR[dispatchGrillAndPrd]
-    R -->|factory:decomposing| DC[dispatchDecomposePrd]
+    R -->|factory:decomposing| DC[dispatchDecomposePrd<br/>manual/backcompat]
     R -->|factory:merge-conflict| MC[dispatchResolveConflict]
     R -->|factory:archived /<br/>factory:rejected| TL[dispatchTerminalLabel<br/>fires sprint-review trigger]
     R -->|unknown label| NOOP[logger.info, no-op]
@@ -123,8 +123,11 @@ stateDiagram-v2
     factory_accepted --> factory_investigating : type:bug | type:chore
     factory_accepted --> factory_grilling : vague feature
     factory_grilling --> factory_prd_drafting : grill complete
-    factory_prd_drafting --> factory_decomposing : prd approved
-    factory_decomposing --> factory_dev_ready : sub-issues filed
+    factory_prd_drafting --> factory_prd_review : prd drafted
+    factory_prd_review --> factory_dev_ready : prd approved
+    factory_prd_review --> factory_decomposing : manual legacy decomposition
+    factory_decomposing --> factory_issues_created : child issues filed
+    factory_issues_created --> factory_dev_ready : legacy child delivery
     factory_investigating --> factory_investigation_complete
     factory_investigation_complete --> factory_dev_ready
     factory_dev_ready --> factory_in_progress : fix-issue picks up

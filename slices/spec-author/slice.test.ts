@@ -15,6 +15,8 @@ afterAll(() => {
 const mockInvokeSkill = vi.fn();
 const mockValidateEngineeringSpec = vi.fn();
 const mockPersistEngineeringSpec = vi.fn();
+const mockMaybeStoreLargePayload = vi.fn();
+const mockDeterministicArtifactKey = vi.fn();
 
 vi.mock('@goose-hub/core/agent-runtime/invoke-skill.js', () => ({
   invokeSkill: (...args: unknown[]) => mockInvokeSkill(...args),
@@ -26,6 +28,12 @@ vi.mock('@goose-hub/skills/spec-author/validate.js', () => ({
 
 vi.mock('@goose-hub/core/engineering-specs/repository.js', () => ({
   persistEngineeringSpec: (...args: unknown[]) => mockPersistEngineeringSpec(...args),
+}));
+
+vi.mock('@goose-hub/core/agent-artifacts/repository.js', () => ({
+  DEFAULT_ARTIFACT_THRESHOLD_BYTES: 25 * 1024,
+  deterministicArtifactKey: (...args: unknown[]) => mockDeterministicArtifactKey(...args),
+  maybeStoreLargePayload: (...args: unknown[]) => mockMaybeStoreLargePayload(...args),
 }));
 
 vi.mock('@goose-hub/core/projects/loader.js', () => ({
@@ -171,6 +179,8 @@ beforeEach(() => {
   mockInvokeSkill.mockReset();
   mockValidateEngineeringSpec.mockReset();
   mockPersistEngineeringSpec.mockReset();
+  mockMaybeStoreLargePayload.mockReset();
+  mockDeterministicArtifactKey.mockReset();
   vi.clearAllMocks();
 
   // Default happy path
@@ -181,6 +191,22 @@ beforeEach(() => {
   } satisfies AgentResult);
 
   mockValidateEngineeringSpec.mockReturnValue({ ok: true });
+  mockDeterministicArtifactKey.mockReturnValue('prd-planning-context.raw-prd:test');
+  mockMaybeStoreLargePayload.mockImplementation(
+    (input: { payload: unknown; thresholdBytes?: number }) => {
+      const bytes = Buffer.byteLength(JSON.stringify(input.payload ?? null), 'utf8');
+      if (bytes > (input.thresholdBytes ?? 25 * 1024)) {
+        return {
+          stored: true,
+          artifactKey: 'prd-planning-context.raw-prd:test',
+          kind: 'prd-planning-context.raw-prd',
+          summary: 'Full PRD',
+          bytes,
+        };
+      }
+      return { stored: false, payload: input.payload };
+    },
+  );
 });
 
 // ─── tests ────────────────────────────────────────────────────────────────────
@@ -413,6 +439,120 @@ describe('runSpecAuthorWorkflow', () => {
       expect(payload.workItemId).toBe('github:shaunnez/goose-hub#55');
     });
 
+    it('attaches compact PRD planning context from the canonical PRD read model', async () => {
+      vi.mocked(eventStore.replay).mockImplementation((query?: { kind?: string }) => {
+        if (query?.kind === 'prd.drafted') {
+          return [
+            {
+              id: 10,
+              projectId: 'goose-hub-self',
+              workItemId: 'github:shaunnez/goose-hub#55',
+              kind: 'prd.drafted',
+              payload: {
+                prd: {
+                  title: 'Spec-first PRD lifecycle',
+                  problem: 'Child issues lose context.',
+                  proposedSolution: 'Route approved PRDs to spec-author.',
+                  successCriteria: ['Parent reaches spec-author'],
+                  acceptanceCriteria: [{ id: 'AC1', statement: 'Routes to dev-ready' }],
+                  journeys: [{ id: 'J1', persona: 'operator', steps: [] }],
+                  verticalSlices: [{ title: 'Lifecycle routing' }],
+                  implementationDecisions: [{ decision: 'Skip pre-spec decomposition' }],
+                  testingDecisions: { approach: 'workflow tests', modulesToTest: ['spec-author'] },
+                },
+              },
+              runId: 'prd-run-1',
+              personaId: null,
+              createdAt: '2026-05-22T00:00:00.000Z',
+            },
+          ];
+        }
+        return [];
+      });
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(
+        makeWorkItem({ type: 'feature' }),
+        makeMockSource(),
+        'goose-hub-self',
+        '/repo',
+      );
+
+      expect(mockInvokeSkill).toHaveBeenCalledWith(
+        expect.objectContaining({
+          context: expect.objectContaining({
+            prdContext: expect.objectContaining({
+              prdRunId: 'prd-run-1',
+              title: 'Spec-first PRD lifecycle',
+              problem: 'Child issues lose context.',
+              successCriteria: ['Parent reaches spec-author'],
+            }),
+          }),
+        }),
+      );
+      expect(
+        vi
+          .mocked(eventStore.appendEvent)
+          .mock.calls.some(([event]) => event.kind === 'spec.prd-context-attached'),
+      ).toBe(true);
+    });
+
+    it('stores a large raw PRD as an artifact ref while keeping compact PRD context inline', async () => {
+      vi.mocked(eventStore.replay).mockImplementation((query?: { kind?: string }) => {
+        if (query?.kind === 'prd.drafted') {
+          return [
+            {
+              id: 11,
+              projectId: 'goose-hub-self',
+              workItemId: 'github:shaunnez/goose-hub#55',
+              kind: 'prd.drafted',
+              payload: {
+                prd: {
+                  title: 'Large PRD',
+                  problem: 'x'.repeat(200),
+                  proposedSolution: 'Keep raw PRD out of prompt context.',
+                  successCriteria: ['Artifact ref is passed'],
+                  acceptanceCriteria: [],
+                  journeys: [],
+                  verticalSlices: [],
+                  implementationDecisions: [],
+                  testingDecisions: null,
+                },
+              },
+              runId: 'prd-run-large',
+              personaId: null,
+              createdAt: '2026-05-22T00:00:00.000Z',
+            },
+          ];
+        }
+        return [];
+      });
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(
+        makeWorkItem({ type: 'feature' }),
+        makeMockSource(),
+        'goose-hub-self',
+        '/repo',
+        { prdArtifactThresholdBytes: 1 },
+      );
+
+      const context = mockInvokeSkill.mock.calls[0]?.[0]?.context as {
+        prdContext?: { artifactRef?: unknown; problem?: string };
+      };
+      expect(context.prdContext?.artifactRef).toMatchObject({
+        stored: true,
+        artifactKey: 'prd-planning-context.raw-prd:test',
+      });
+      expect(context.prdContext?.problem).toBe('x'.repeat(200));
+      expect(mockMaybeStoreLargePayload).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'prd-planning-context.raw-prd',
+          thresholdBytes: 1,
+        }),
+      );
+    });
+
     it('transitions to factory:spec-ready on success', async () => {
       const source = makeMockSource();
       const { runSpecAuthorWorkflow } = await import('./workflow.js');
@@ -423,6 +563,70 @@ describe('runSpecAuthorWorkflow', () => {
         'factory:dev-ready',
         'factory:spec-ready',
       );
+    });
+
+    it('optionally creates tracking-only child issues from Engineering Spec WPs after spec completion', async () => {
+      const source = makeMockSource({
+        createIssue: vi
+          .fn()
+          .mockResolvedValueOnce({
+            ...makeWorkItem({ externalId: '101', id: 'github:shaunnez/goose-hub#101' }),
+          })
+          .mockResolvedValueOnce({
+            ...makeWorkItem({ externalId: '102', id: 'github:shaunnez/goose-hub#102' }),
+          }),
+      });
+      mockInvokeSkill.mockResolvedValueOnce({
+        output: makeSpecOutput({
+          workPackages: [
+            {
+              id: 'WP1',
+              filesOwned: ['core/a.ts'],
+              changes: 'Change A.',
+              dependsOn: [],
+              builderTier: 'sonnet',
+            },
+            {
+              id: 'WP2',
+              filesOwned: ['core/b.ts'],
+              changes: 'Change B.',
+              dependsOn: ['WP1'],
+              builderTier: 'haiku',
+            },
+          ],
+          executionOrder: [
+            { batch: 0, wpIds: ['WP1'] },
+            { batch: 1, wpIds: ['WP2'] },
+          ],
+        }),
+        decisionSummaries: [],
+        events: [],
+      } satisfies AgentResult);
+
+      const { runSpecAuthorWorkflow } = await import('./workflow.js');
+      await runSpecAuthorWorkflow(makeWorkItem(), source, 'goose-hub-self', '/repo', {
+        createWpIssueProjections: true,
+      });
+
+      expect(source.createIssue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: '[WP1] Add spec-author workflow',
+          initialState: 'factory:issues-created',
+          extraLabels: ['factory:from-prd'],
+          body: expect.stringContaining('<!-- factory:wp-projection -->'),
+        }),
+      );
+      expect(source.createIssue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: '[WP2] Add spec-author workflow',
+          body: expect.stringContaining('Dependency batch: 1'),
+        }),
+      );
+      expect(
+        vi
+          .mocked(eventStore.appendEvent)
+          .mock.calls.some(([event]) => event.kind === 'spec.wp-issues-created'),
+      ).toBe(true);
     });
 
     it('creates worktree and always cleans it up', async () => {
@@ -453,17 +657,53 @@ describe('runSpecAuthorWorkflow', () => {
         .mockReturnValueOnce({ ok: true });
 
       const source = makeMockSource();
+      vi.mocked(eventStore.replay).mockImplementation((query?: { kind?: string }) => {
+        if (query?.kind === 'prd.drafted') {
+          return [
+            {
+              id: 12,
+              projectId: 'goose-hub-self',
+              workItemId: 'github:shaunnez/goose-hub#55',
+              kind: 'prd.drafted',
+              payload: {
+                prd: {
+                  title: 'Retry PRD',
+                  problem: 'Retry must keep context.',
+                  proposedSolution: 'Keep base context stable.',
+                  successCriteria: [],
+                  acceptanceCriteria: [],
+                  journeys: [],
+                  verticalSlices: [],
+                  implementationDecisions: [],
+                  testingDecisions: null,
+                },
+              },
+              runId: 'prd-run-retry',
+              personaId: null,
+              createdAt: '2026-05-22T00:00:00.000Z',
+            },
+          ];
+        }
+        return [];
+      });
       const { runSpecAuthorWorkflow } = await import('./workflow.js');
-      await runSpecAuthorWorkflow(makeWorkItem(), source, 'goose-hub-self', '/repo');
+      await runSpecAuthorWorkflow(
+        makeWorkItem({ type: 'feature' }),
+        source,
+        'goose-hub-self',
+        '/repo',
+      );
 
       expect(mockInvokeSkill).toHaveBeenCalledTimes(2);
       const retryInput = mockInvokeSkill.mock.calls[1]?.[0] as {
+        context?: { prdContext?: { prdRunId?: string | null } };
         overrides?: {
           appendContext?: { repairFeedback?: string };
           extraEventPayload?: Record<string, unknown>;
           workspaceDir?: string;
         };
       };
+      expect(retryInput.context?.prdContext?.prdRunId).toBe('prd-run-retry');
       expect(retryInput.overrides?.appendContext?.repairFeedback).toContain(
         'core/agent-runtime/event-types.ts:SYMBOL:EventLike',
       );

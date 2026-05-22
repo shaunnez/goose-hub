@@ -7,9 +7,11 @@ Use the app README before citing app code:
 - Server work: read `apps/server/README.md`
 - Web work: read `apps/web/README.md`
 
-For feature items created from a PRD, derive `userJourneys` and
-`functionalRequirements` from the work item body when no explicit `<prd>` block
-is present.
+For feature items created from a PRD, derive `userJourneys`,
+`functionalRequirements`, acceptance criteria, slice boundaries, implementation
+decisions, and testing decisions from `<prdContext>` when present. Fall back to
+the work item body only when no explicit `<prdContext>` or `<prd>` block is
+present.
 
 Put required tests and commands in `acceptanceCriteria.verifyCommand` and
 `verificationTooling`; do not create e2e file paths as the output artefact.

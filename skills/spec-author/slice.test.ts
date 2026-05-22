@@ -247,6 +247,20 @@ describe('EngineeringSpecSchema (shape)', () => {
     const ctx = SpecAuthorContextSchema.safeParse({
       workItem: { title: 't', body: 'b', number: 559 },
       issueType: 'feature',
+      prdContext: {
+        source: 'event',
+        parentWorkItemId: 'github:owner/repo#1',
+        prdRunId: 'prd-run',
+        title: 'PRD',
+        problem: 'Problem',
+        proposedSolution: 'Solution',
+        successCriteria: ['Works'],
+        acceptanceCriteria: [{ id: 'AC1', statement: 'Works' }],
+        journeys: [],
+        verticalSlices: [],
+        implementationDecisions: [],
+        testingDecisions: null,
+      },
     });
     expect(ctx.success).toBe(true);
   });

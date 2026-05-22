@@ -6,7 +6,7 @@ import { ImplementWpSchema } from './schema.js';
  * Context injected into each WP builder at spawn time (M19.03, ADR 0031).
  *
  * Contains only what a single builder needs: its WP identity, the files it owns,
- * the ACs it must satisfy, and the stack commands to run tests and lint.
+ * the ACs it must satisfy, parent PRD summary, and the stack commands to run tests and lint.
  *
  * Full-repo context is intentionally excluded — the builder sees only its slice
  * of the problem plus the code snippets pre-loaded by the spec-author scout wave.
@@ -59,6 +59,29 @@ export const ImplementWpContextSchema = z.object({
       ),
     })
     .optional(),
+  parentPrdContext: z
+    .object({
+      source: z.enum(['event', 'legacy-comment']),
+      parentWorkItemId: z.string(),
+      prdRunId: z.string().nullable(),
+      title: z.string(),
+      problem: z.string(),
+      proposedSolution: z.string(),
+      successCriteria: z.array(z.string()),
+      verticalSlices: z.array(z.unknown()),
+      implementationDecisions: z.array(z.unknown()),
+      testingDecisions: z.unknown().nullable(),
+      artifactRef: z
+        .object({
+          artifactKey: z.string(),
+          kind: z.string(),
+          summary: z.string(),
+          bytes: z.number(),
+          stored: z.literal(true),
+        })
+        .optional(),
+    })
+    .optional(),
   stack: z.object({
     testCommand: z.string(),
     lintCommand: z.string().optional(),
@@ -81,6 +104,7 @@ const config: SkillConfig = {
     'codeSnippets',
     'investigation',
     'acceptanceContract',
+    'parentPrdContext',
     'stack.testCommand',
     'stack.lintCommand',
     'stack.typecheckCommand',
