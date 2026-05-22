@@ -21,6 +21,10 @@ describe('chrome slice — sidebar brand label', () => {
     expect(sidebarSource).toContain('Goose Hub');
   });
 
+  it('sidebar source no longer includes the Local-first footer copy', () => {
+    expect(sidebarSource).not.toContain('Local-first');
+  });
+
   it('sidebar header does not read "Agentic OS"', () => {
     const labelMatch = sidebarSource.match(/<span[^>]*text-\[14px\][^>]*>[\s\S]*?<\/span>/);
     expect(labelMatch?.[0]).not.toContain('Agentic OS');
