@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import { dispatchTriageBatch } from '#shared/dispatch.js';
 import type { Result } from '#shared/middleware.js';
 import { getSourceForSlug } from '#shared/source.js';
-import { runBugEnhance } from './enhance.js';
+import { type PromotionType, isSupportedPromotionType, runPromotionEnhance } from './enhance.js';
 import {
   type InboxItem,
   getInboxItem,
@@ -14,15 +14,13 @@ import {
   deleteInboxItem as repoDeleteInboxItem,
 } from './repository.js';
 
-const VALID_TYPES = ['feature', 'bug', 'chore', 'research'] as const;
-
 export async function createInboxItem(
   title: string | undefined,
   body: string | undefined,
   type: string | undefined,
 ): Promise<Result<{ item: InboxItem }>> {
   if (!title?.trim()) return { ok: false, error: 'title is required', status: 400 };
-  const safeType = VALID_TYPES.includes(type as never) ? (type as string) : 'feature';
+  const safeType = isSupportedPromotionType(type) ? type : 'feature';
   const item = await insertInboxItem({ title: title.trim(), body: body ?? '', type: safeType });
   return { ok: true, data: { item } };
 }
@@ -57,20 +55,34 @@ export async function promoteInboxItem(
     effectiveMilestoneNumber = stateRows[0]?.activeMilestoneNumber ?? null;
   }
 
+  if (!isSupportedPromotionType(item.type)) {
+    return { ok: false, error: 'unsupported promotion type', status: 400 };
+  }
+
+  const promotionType: PromotionType = item.type;
   let body = item.body ?? '';
-  if (enhance && item.type === 'bug') {
-    const enhancement = await runBugEnhance(source.projectId, item.id, item.title, body);
+  if (enhance) {
+    const enhancement = await runPromotionEnhance(
+      source.projectId,
+      item.id,
+      promotionType,
+      item.title,
+      body,
+    );
     if (enhancement != null) {
-      body = `${body}\n\n---\n\n${enhancement}`;
+      body = promotionType === 'bug' ? `${body}\n\n---\n\n${enhancement}` : enhancement;
     } else {
-      logger.warn('bug-enhance: no enhancement produced, using original body', { id });
+      logger.warn('promotion-enhance: no enhancement produced, using original body', {
+        id,
+        promotionType,
+      });
     }
   }
 
   await source.createIssue({
     title: item.title,
     body,
-    type: item.type as 'feature' | 'bug' | 'chore' | 'research',
+    type: promotionType,
     ...(effectiveMilestoneNumber != null ? { milestoneId: String(effectiveMilestoneNumber) } : {}),
   });
   void dispatchTriageBatch(projectSlug);
