@@ -1,5 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { InvokeSkillInput, InvokeSkillResult } from '../agent-runtime/invoke-skill.js';
+import { db } from '../db/db.js';
+import { events, workItemInterventionEvents, workItemInterventions } from '../db/schema.js';
 import { eventStore } from '../event-stream/store.js';
 import { runInterventionProposerWorkerOnce } from './proposer.js';
 import { leaseForProposal, open } from './reducer.js';
@@ -33,6 +35,12 @@ function skillResult(output: unknown): InvokeSkillResult {
 }
 
 describe('intervention proposer worker', () => {
+  beforeEach(() => {
+    db.delete(events).run();
+    db.delete(workItemInterventionEvents).run();
+    db.delete(workItemInterventions).run();
+  });
+
   it('leases open interventions, invokes the proposer skill, and stores validated options', async () => {
     const intervention = openFixture('proposal-success');
     eventStore.appendEvent({
