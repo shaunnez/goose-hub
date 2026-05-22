@@ -612,6 +612,33 @@ export function resolveMockOutput(spec: AgentSpec): AgentResult {
         events: [],
       };
 
+    case 'idea-promotion-enhance': {
+      const workItem = (spec.context?.workItem ?? {}) as { type?: string };
+      const type =
+        workItem.type === 'feature' || workItem.type === 'research' || workItem.type === 'chore'
+          ? workItem.type
+          : 'chore';
+      const titleCaseType = `${type[0]?.toUpperCase() ?? 'C'}${type.slice(1)}`;
+      const trailingSection =
+        type === 'feature'
+          ? 'Acceptance Notes'
+          : type === 'research'
+            ? 'Investigation Notes'
+            : 'Execution Notes';
+      return {
+        output: {
+          enhancedContent: `**${titleCaseType} Summary**\n\nMock ${type} enhancement\n\n**${trailingSection}**\n- Mock ${type} detail`,
+          decisionSummaries: [
+            { kind: 'INSIGHT', summary: `Mock idea-promotion-enhance for ${type} e2e test` },
+          ],
+        },
+        decisionSummaries: [
+          { kind: 'INSIGHT', summary: `Mock idea-promotion-enhance for ${type} e2e test` },
+        ],
+        events: [],
+      };
+    }
+
     // retrospective-cross-run — triggered by the nightly playbook service.
     case 'retrospective-cross-run': {
       const now = new Date().toISOString();

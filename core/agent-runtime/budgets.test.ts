@@ -6,6 +6,7 @@ describe('SKILL_BUDGETS', () => {
     const expected = [
       'triage',
       'repo-match',
+      'idea-promotion-enhance',
       'bug-enhance',
       'evidence-post',
       'implement',
@@ -30,6 +31,15 @@ describe('SKILL_BUDGETS', () => {
       expect(budget.maxBudgetUsd, `${skill}.maxBudgetUsd`).toBeGreaterThan(0);
       expect(budget.timeoutMs, `${skill}.timeoutMs`).toBeGreaterThan(0);
     }
+  });
+
+  it('registers idea-promotion-enhance with the same bounded runtime profile as bug-enhance', () => {
+    expect(SKILL_BUDGETS['idea-promotion-enhance']).toMatchObject({
+      maxTurns: 20,
+      maxBudgetUsd: 1,
+      timeoutMs: 120_000,
+      modelTier: 'haiku',
+    });
   });
 
   it('keeps scout-schema bounded enough to force early exit instead of runtime tracing', () => {

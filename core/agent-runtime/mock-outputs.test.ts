@@ -98,6 +98,35 @@ describe('resolveMockOutput — review', () => {
   });
 });
 
+describe('resolveMockOutput — idea-promotion-enhance', () => {
+  it('returns deterministic enhanced content for supported promotion types', () => {
+    for (const type of ['feature', 'chore', 'research'] as const) {
+      const r = resolveMockOutput(
+        makeSpec({
+          skill: 'idea-promotion-enhance',
+          context: { workItem: { type, title: `${type} title`, body: `${type} body` } },
+        }),
+      );
+      const out = r.output as {
+        enhancedContent: string;
+        decisionSummaries: Array<{ summary: string }>;
+      };
+      expect(out.enhancedContent).toContain(`**${type[0].toUpperCase()}${type.slice(1)} Summary**`);
+      expect(out.decisionSummaries[0]?.summary).toContain(type);
+      expect(r.decisionSummaries[0]?.summary).toContain(type);
+    }
+  });
+
+  it('falls back to chore framing when the type is omitted in MOCK_AGENTS mode', () => {
+    const r = resolveMockOutput(
+      makeSpec({ skill: 'idea-promotion-enhance', context: { workItem: {} } }),
+    );
+    expect((r.output as { enhancedContent: string }).enhancedContent).toContain(
+      '**Chore Summary**',
+    );
+  });
+});
+
 describe('resolveMockOutput — unknown skill', () => {
   it('throws when no preset matches', () => {
     expect(() => resolveMockOutput(makeSpec({ skill: 'made-up-skill' }))).toThrow(
