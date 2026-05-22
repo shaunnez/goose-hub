@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import type { AgentResult } from '@goose-hub/core/agent-runtime/interface.js';
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
+import type { EngineeringSpec } from '@goose-hub/skills/spec-author/schema.js';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 process.env.MOCK_AGENTS = 'true';
@@ -453,9 +454,11 @@ describe('runSpecAuthorWorkflow', () => {
                   title: 'Spec-first PRD lifecycle',
                   problem: 'Child issues lose context.',
                   proposedSolution: 'Route approved PRDs to spec-author.',
+                  outOfScope: ['Legacy decompose-prd child issue generation'],
                   successCriteria: ['Parent reaches spec-author'],
                   acceptanceCriteria: [{ id: 'AC1', statement: 'Routes to dev-ready' }],
                   journeys: [{ id: 'J1', persona: 'operator', steps: [] }],
+                  functionalSpec: { dataConstraints: ['State label remains canonical'] },
                   verticalSlices: [{ title: 'Lifecycle routing' }],
                   implementationDecisions: [{ decision: 'Skip pre-spec decomposition' }],
                   testingDecisions: { approach: 'workflow tests', modulesToTest: ['spec-author'] },
@@ -485,7 +488,11 @@ describe('runSpecAuthorWorkflow', () => {
               prdRunId: 'prd-run-1',
               title: 'Spec-first PRD lifecycle',
               problem: 'Child issues lose context.',
+              outOfScope: ['Legacy decompose-prd child issue generation'],
               successCriteria: ['Parent reaches spec-author'],
+              acceptanceCriteria: [{ id: 'AC1', statement: 'Routes to dev-ready' }],
+              journeys: [{ id: 'J1', persona: 'operator', steps: [] }],
+              functionalSpec: { dataConstraints: ['State label remains canonical'] },
             }),
           }),
         }),
@@ -511,9 +518,11 @@ describe('runSpecAuthorWorkflow', () => {
                   title: 'Large PRD',
                   problem: 'x'.repeat(200),
                   proposedSolution: 'Keep raw PRD out of prompt context.',
+                  outOfScope: [],
                   successCriteria: ['Artifact ref is passed'],
                   acceptanceCriteria: [],
                   journeys: [],
+                  functionalSpec: null,
                   verticalSlices: [],
                   implementationDecisions: [],
                   testingDecisions: null,
@@ -604,13 +613,20 @@ describe('runSpecAuthorWorkflow', () => {
       } satisfies AgentResult);
 
       const { runSpecAuthorWorkflow } = await import('./workflow.js');
-      await runSpecAuthorWorkflow(makeWorkItem(), source, 'goose-hub-self', '/repo', {
-        createWpIssueProjections: true,
-      });
+      await runSpecAuthorWorkflow(
+        makeWorkItem({ milestoneId: '7', milestoneTitle: 'M7' }),
+        source,
+        'goose-hub-self',
+        '/repo',
+        {
+          createWpIssueProjections: true,
+        },
+      );
 
       expect(source.createIssue).toHaveBeenCalledWith(
         expect.objectContaining({
           title: '[WP1] Add spec-author workflow',
+          milestoneId: '7',
           initialState: 'factory:issues-created',
           extraLabels: ['factory:from-prd'],
           body: expect.stringContaining('<!-- factory:wp-projection -->'),
@@ -627,6 +643,45 @@ describe('runSpecAuthorWorkflow', () => {
           .mocked(eventStore.appendEvent)
           .mock.calls.some(([event]) => event.kind === 'spec.wp-issues-created'),
       ).toBe(true);
+    });
+
+    it('reuses existing projected WP issues for the same parent and WP id', async () => {
+      const parent = makeWorkItem({ externalId: '55' });
+      const spec = makeSpecOutput({
+        workPackages: [
+          {
+            id: 'WP1',
+            filesOwned: ['core/a.ts'],
+            changes: 'Change A.',
+            dependsOn: [],
+            builderTier: 'sonnet' as const,
+          },
+        ],
+        executionOrder: [{ batch: 0, wpIds: ['WP1'] }],
+      }) as EngineeringSpec;
+      const existingChild = makeWorkItem({
+        id: 'github:shaunnez/goose-hub#120',
+        externalId: '120',
+        body: ['<!-- factory:wp-projection -->', 'Parent issue: #55', '## Work Package WP1'].join(
+          '\n',
+        ),
+      });
+      const source = makeMockSource({
+        listOpenWork: vi.fn().mockResolvedValue([existingChild]),
+        createIssue: vi.fn().mockRejectedValue(new Error('duplicate create')),
+      });
+
+      const { createWpIssueProjections } = await import('./wp-issue-projection.js');
+      const result = await createWpIssueProjections({ source, parent, spec });
+
+      expect(source.createIssue).not.toHaveBeenCalled();
+      expect(result).toEqual([
+        {
+          wpId: 'WP1',
+          childWorkItemId: 'github:shaunnez/goose-hub#120',
+          externalId: '120',
+        },
+      ]);
     });
 
     it('creates worktree and always cleans it up', async () => {

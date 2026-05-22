@@ -184,12 +184,14 @@ function makeStateSource(
   overrides: Partial<{
     transitionState: (...args: unknown[]) => Promise<void>;
     comment: (...args: unknown[]) => Promise<void>;
+    listComments: (...args: unknown[]) => Promise<unknown[]>;
   }> = {},
 ) {
   return {
     repoRef: 'shaunnez/goose-hub',
     transitionState: vi.fn().mockResolvedValue(undefined),
     comment: vi.fn().mockResolvedValue(undefined),
+    listComments: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as import('@goose-hub/core/state-source/interface.js').StateSource;
 }
@@ -829,11 +831,33 @@ describe('implement-wp ownership gate', () => {
       recordIterationFn: () => undefined,
       implementWpPrompt: '# prompt',
       implementWpJsonSchema: {},
+      parentPrdContext: {
+        source: 'event',
+        parentWorkItemId: 'github:shaunnez/goose-hub#55',
+        prdRunId: 'prd-run',
+        title: 'Parent PRD',
+        problem: 'Problem',
+        proposedSolution: 'Solution',
+        outOfScope: ['Do not rebuild settings.'],
+        successCriteria: ['User can approve the PRD.'],
+        acceptanceCriteria: [{ id: 'AC1', statement: 'Approval routes correctly.' }],
+        journeys: [{ id: 'J1', steps: [] }],
+        functionalSpec: { dataConstraints: ['Preserve state labels.'] },
+        verticalSlices: [{ title: 'Slice 1' }],
+        implementationDecisions: [{ decision: 'Use existing dispatch.' }],
+        testingDecisions: { approach: 'unit' },
+      },
     });
 
     expect(result).toMatchObject({ status: 'failed', wpId: 'WP1' });
     expect(specs[0]?.context).toMatchObject({
       wp: { id: 'WP1', filesOwned: ['apps/web/src/foo.ts'] },
+      parentPrdContext: {
+        outOfScope: ['Do not rebuild settings.'],
+        acceptanceCriteria: [{ id: 'AC1', statement: 'Approval routes correctly.' }],
+        journeys: [{ id: 'J1', steps: [] }],
+        functionalSpec: { dataConstraints: ['Preserve state labels.'] },
+      },
     });
     expect(specs[0]?.env).toMatchObject({
       FACTORY_WP_FILESOWNED: 'apps/web/src/foo.ts',

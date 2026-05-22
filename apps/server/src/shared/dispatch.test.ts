@@ -883,6 +883,49 @@ describe('dispatchFixIssue: bug routing', () => {
       expect.objectContaining({ slug: 'slug', issueNumber: 103 }),
     );
   });
+
+  it('continues default multi-agent routing when label lookup fails', async () => {
+    mockGetUseMultiAgentPipeline.mockReturnValue(true);
+    mockGetProject.mockResolvedValue({
+      id: 'slug',
+      budgets: { maxParallelAgents: 1 },
+      source: { repo: 'shaunnez/goose-hub', type: 'github' },
+    });
+    const featureItem = {
+      id: 'item-feat-label-failure',
+      externalId: '104',
+      title: 'feature with transient label failure',
+      body: '',
+      state: 'factory:dev-ready',
+      schedule: 'current',
+      type: 'feature',
+    };
+    mockGetSourceForSlug.mockResolvedValue({
+      ...makeSource(featureItem),
+      listLabels: vi.fn().mockRejectedValue(new Error('rate limited')),
+    });
+    mockFilterEligibleByDependencies.mockResolvedValue({
+      eligible: [],
+      blocked: [],
+      unregistered: [],
+    });
+
+    const { dispatchFixIssue } = await import('./dispatch.js');
+    await dispatchFixIssue('slug', 104);
+
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      'dispatchFixIssue: listLabels failed, continuing with default routing',
+      expect.objectContaining({
+        slug: 'slug',
+        issueNumber: 104,
+        error: 'Error: rate limited',
+      }),
+    );
+    expect(mockLoggerInfo).not.toHaveBeenCalledWith(
+      'dispatchFixIssue: PRD child projection → legacy single-agent path',
+      expect.anything(),
+    );
+  });
 });
 
 // ─── pending-queue behaviour ──────────────────────────────────────────────
