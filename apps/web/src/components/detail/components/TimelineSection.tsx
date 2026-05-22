@@ -10,6 +10,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIssueCostsBreakdown } from '../lib/costs';
+import { upsertIssueEvent } from '../lib/live-events';
 import { groupEvents } from '../lib/timeline';
 import type { RenderItem } from '../lib/timeline';
 import { SectionEmptyState } from './SectionEmptyState';
@@ -107,6 +108,7 @@ export function TimelineSection({ projectSlug, id, workItemId }: TimelineSection
       try {
         const parsed = JSON.parse(msg.data) as AgentEventDto;
         if (!isIssueTimelineEvent(parsed)) return;
+        upsertIssueEvent(queryClient, projectSlug, id, parsed);
         setEvents((prev) => {
           if (prev.find((e) => e.id === parsed.id) != null) return prev;
           return [parsed, ...prev];
