@@ -7,7 +7,7 @@ import {
   ISSUE_TIMELINE_EVENT_KINDS,
   isIssueTimelineEvent,
 } from './issue-timeline.js';
-import { EVENT_KINDS } from './kinds.js';
+import { EVENT_KINDS, type EventKind } from './kinds.js';
 import { type AgentEvent, eventStore } from './store.js';
 
 const PROJECT = 'test-event-store';
@@ -18,7 +18,9 @@ describe('issue timeline event-kind contract', () => {
   });
 
   it('documents every chat event as intentionally filtered', () => {
-    const intentionallyFiltered = new Set(INTENTIONALLY_FILTERED_ISSUE_TIMELINE_EVENT_KINDS);
+    const intentionallyFiltered = new Set<EventKind>(
+      INTENTIONALLY_FILTERED_ISSUE_TIMELINE_EVENT_KINDS,
+    );
     const chatKinds = EVENT_KINDS.filter((kind) => kind.startsWith('chat.'));
 
     expect(chatKinds.length).toBeGreaterThan(0);
@@ -28,7 +30,9 @@ describe('issue timeline event-kind contract', () => {
   });
 
   it('includes every non-filtered event kind in issue timeline subscriptions', () => {
-    const intentionallyFiltered = new Set(INTENTIONALLY_FILTERED_ISSUE_TIMELINE_EVENT_KINDS);
+    const intentionallyFiltered = new Set<EventKind>(
+      INTENTIONALLY_FILTERED_ISSUE_TIMELINE_EVENT_KINDS,
+    );
     const subscribed = new Set(ISSUE_TIMELINE_EVENT_KINDS);
 
     for (const kind of EVENT_KINDS) {

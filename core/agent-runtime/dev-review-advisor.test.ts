@@ -234,7 +234,12 @@ describe('runDevReviewResponse runtime resolution', () => {
         },
       ],
       worktreePath: '/tmp/dev-review-response-worktree',
-      appendEvent: (input) => ({ ...input, id: 1, createdAt: new Date().toISOString() }),
+      appendEvent: (input) => ({
+        ...input,
+        workItemId: input.workItemId ?? null,
+        id: 1,
+        createdAt: new Date().toISOString(),
+      }),
     });
 
     expect(runtimeCalls.codex).toHaveLength(1);
