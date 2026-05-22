@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ChatLauncher } from './ChatLauncher';
-import { ChatPanel } from './ChatPanel';
+import { ChatPanel, type ChatPanelCloseOptions } from './ChatPanel';
 
 const STORAGE_KEY = 'hub-chat-open';
 
@@ -17,6 +17,7 @@ export function ChatDock() {
       return false;
     }
   });
+  const [closeOptions, setCloseOptions] = useState<ChatPanelCloseOptions | null>(null);
 
   useEffect(() => {
     try {
@@ -24,10 +25,28 @@ export function ChatDock() {
     } catch {}
   }, [open]);
 
+  const handleOpen = useCallback(() => {
+    setCloseOptions(null);
+    setOpen(true);
+  }, []);
+
+  const handleClose = useCallback((options: ChatPanelCloseOptions = {}) => {
+    setCloseOptions(options.resetToList ? { resetToList: true } : null);
+    setOpen(false);
+  }, []);
+
+  const handleLauncherToggle = useCallback(() => {
+    if (open) {
+      handleClose({ resetToList: true });
+      return;
+    }
+    handleOpen();
+  }, [handleClose, handleOpen, open]);
+
   return (
     <>
-      <ChatPanel open={open} onClose={() => setOpen(false)} />
-      <ChatLauncher open={open} onToggle={() => setOpen((o) => !o)} />
+      <ChatPanel open={open} closeOptions={closeOptions} onClose={handleClose} />
+      <ChatLauncher open={open} onToggle={handleLauncherToggle} />
     </>
   );
 }

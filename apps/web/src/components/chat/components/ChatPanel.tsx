@@ -31,14 +31,19 @@ import { ConversationList } from './ConversationList';
 
 const ACTIVE_CONVERSATION_STORAGE_KEY = 'hub-chat-active-conversation-id';
 
+export interface ChatPanelCloseOptions {
+  resetToList?: boolean;
+}
+
 interface ChatPanelProps {
   open: boolean;
-  onClose: () => void;
+  closeOptions?: ChatPanelCloseOptions | null;
+  onClose: (options?: ChatPanelCloseOptions) => void;
 }
 
 type View = 'thread' | 'list';
 
-export function ChatPanel({ open, onClose }: ChatPanelProps) {
+export function ChatPanel({ open, closeOptions = null, onClose }: ChatPanelProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const resolved = useMemo(() => resolveScopeFromPath(location.pathname), [location.pathname]);
@@ -135,6 +140,36 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
       // localStorage unavailable — accept the loss; selection is best-effort.
     }
   }, []);
+
+  const resetPanelState = useCallback(() => {
+    loadTokenRef.current += 1;
+    activeConversationIdRef.current = null;
+    inFlightRunByConversationRef.current.clear();
+    setConversation(null);
+    setMessages([]);
+    setInvocations([]);
+    setSendingConversationIds(new Set());
+    setPendingDecision(null);
+    setError(null);
+    setView('list');
+    writeActiveId(null);
+  }, [writeActiveId]);
+
+  const handleClose = useCallback(
+    (options: ChatPanelCloseOptions = {}) => {
+      if (options.resetToList) {
+        resetPanelState();
+      }
+      onClose(options);
+    },
+    [onClose, resetPanelState],
+  );
+
+  useEffect(() => {
+    if (!open && closeOptions?.resetToList) {
+      resetPanelState();
+    }
+  }, [closeOptions, open, resetPanelState]);
 
   useEffect(() => {
     if (!open || toolManifest.length > 0) return;
@@ -377,7 +412,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
           const path = (res.invocation.result as { path?: string }).path;
           if (typeof path === 'string' && path.startsWith('/')) {
             navigate(path);
-            onClose();
+            handleClose();
           }
         }
       } catch (err) {
@@ -386,7 +421,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         setPendingDecision(null);
       }
     },
-    [conversation, navigate, onClose],
+    [conversation, handleClose, navigate],
   );
 
   const handleReject = useCallback(
@@ -410,9 +445,9 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
   const handleNavigate = useCallback(
     (path: string) => {
       navigate(path);
-      onClose();
+      handleClose();
     },
-    [navigate, onClose],
+    [handleClose, navigate],
   );
 
   const toggleView = useCallback(() => {
@@ -463,7 +498,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         </select>
         <button
           type="button"
-          onClick={onClose}
+          onClick={() => handleClose()}
           aria-label="Close chat"
           className="p-1 text-fg-2 hover:text-fg rounded"
         >
