@@ -1,6 +1,7 @@
 import { db } from '@goose-hub/core/db/db.js';
 import { projectState } from '@goose-hub/core/db/schema.js';
 import { logger } from '@goose-hub/core/logger.js';
+import type { WorkItemType } from '@goose-hub/core/state-source/interface.js';
 import { eq } from 'drizzle-orm';
 import { dispatchTriageBatch } from '#shared/dispatch.js';
 import type { Result } from '#shared/middleware.js';
@@ -15,6 +16,10 @@ import {
 } from './repository.js';
 
 const VALID_TYPES = ['feature', 'bug', 'chore', 'research'] as const;
+
+function isValidPromotionType(type: string | null | undefined): type is WorkItemType {
+  return VALID_TYPES.includes(type as WorkItemType);
+}
 
 export async function createInboxItem(
   title: string | undefined,
@@ -58,19 +63,26 @@ export async function promoteInboxItem(
   }
 
   let body = item.body ?? '';
-  if (enhance && item.type === 'bug') {
-    const enhancement = await runBugEnhance(source.projectId, item.id, item.title, body);
+  if (enhance) {
+    if (!isValidPromotionType(item.type)) {
+      return { ok: false, error: 'invalid promotion type', status: 400 };
+    }
+
+    const enhancement = await runBugEnhance(source.projectId, item.id, item.title, body, item.type);
     if (enhancement != null) {
       body = `${body}\n\n---\n\n${enhancement}`;
     } else {
-      logger.warn('bug-enhance: no enhancement produced, using original body', { id });
+      logger.warn('bug-enhance: no enhancement produced, using original body', {
+        id,
+        type: item.type,
+      });
     }
   }
 
   await source.createIssue({
     title: item.title,
     body,
-    type: item.type as 'feature' | 'bug' | 'chore' | 'research',
+    type: item.type as WorkItemType,
     ...(effectiveMilestoneNumber != null ? { milestoneId: String(effectiveMilestoneNumber) } : {}),
   });
   void dispatchTriageBatch(projectSlug);

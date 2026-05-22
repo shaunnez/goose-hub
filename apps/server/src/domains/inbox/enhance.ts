@@ -6,12 +6,13 @@ import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
 import { resolveSkillRuntimeForProject } from '@goose-hub/core/agent-runtime/skill-runtime-resolver.js';
 import { logger } from '@goose-hub/core/logger.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
+import type { WorkItemType } from '@goose-hub/core/state-source/interface.js';
 import { BugEnhanceOutputSchema } from '@goose-hub/skills/bug-enhance/schema.js';
 
 const jsonSchema = toJsonSchema(BugEnhanceOutputSchema);
 
 /**
- * Runs the bug-enhance agent on a UI/web bug report.
+ * Runs the bug-enhance agent for a validated promotion type.
  * Returns the markdown string to append after the original body, or null on failure.
  *
  * inboxItemId is the local DB id of the inbox item. Because the GitHub issue doesn't
@@ -22,6 +23,7 @@ export async function runBugEnhance(
   inboxItemId: number,
   title: string,
   body: string,
+  type: WorkItemType,
 ): Promise<string | null> {
   const projectConfig = await getProjectBySlug(projectId);
   const bugEnhanceRuntime = resolveSkillRuntimeForProject({
@@ -54,7 +56,7 @@ export async function runBugEnhance(
       runId,
       role: 'triager',
       skill: 'bug-enhance',
-      context: { projectId, workItemId, workItem: { title, body } },
+      context: { projectId, workItemId, workItem: { title, body, type } },
       contextAllowlist: ['workItem'],
       freshContext: false,
       toolBundles: [],
@@ -80,11 +82,12 @@ export async function runBugEnhance(
       logger.warn('bug-enhance: enhancedContent empty after trim', {
         runId,
         decisions: parsed.data.decisionSummaries,
+        type,
       });
     }
     return content.length > 0 ? content : null;
   } catch (err) {
-    logger.error('bug-enhance: agent run failed', { err: String(err) });
+    logger.error('bug-enhance: agent run failed', { err: String(err), type });
     return null;
   }
 }

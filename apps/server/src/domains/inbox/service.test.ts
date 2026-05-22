@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { mockRunBugEnhance } = vi.hoisted(() => ({
+  mockRunBugEnhance: vi.fn(),
+}));
+
 vi.mock('../../shared/source.js', () => ({
   getSourceForSlug: vi.fn(),
 }));
@@ -21,6 +25,10 @@ vi.mock('@goose-hub/core/db/db.js', () => ({
   },
 }));
 
+vi.mock('./enhance.js', () => ({
+  runBugEnhance: mockRunBugEnhance,
+}));
+
 import { dispatchTriageBatch } from '#shared/dispatch.js';
 import { getSourceForSlug } from '#shared/source.js';
 import { deleteInboxItem, getInboxItem, insertInboxItem, listInboxItems } from './repository.js';
@@ -32,11 +40,15 @@ import {
 } from './service.js';
 
 const mockItem = { id: 1, title: 'Fix bug', body: '', type: 'bug', createdAt: '2026-05-01' };
-const mockSource = { createIssue: vi.fn().mockResolvedValue(undefined) };
+const mockSource = {
+  projectId: 'project-123',
+  createIssue: vi.fn().mockResolvedValue(undefined),
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getSourceForSlug).mockResolvedValue(mockSource as never);
+  mockRunBugEnhance.mockResolvedValue('**Expected**\nEnhanced output');
 });
 
 describe('createInboxItem', () => {
@@ -148,6 +160,74 @@ describe('promoteInboxItem', () => {
     vi.mocked(getInboxItem).mockResolvedValueOnce(itemWithNullBody);
     await promoteInboxItem(3, 'my-proj');
     expect(mockSource.createIssue).toHaveBeenCalledWith(expect.objectContaining({ body: '' }));
+  });
+
+  it('bypasses enhancement when enhance is false', async () => {
+    const item = {
+      id: 4,
+      title: 'Feature idea',
+      body: 'Original body',
+      type: 'feature',
+      createdAt: '2026-05-01',
+    };
+
+    vi.mocked(getInboxItem).mockResolvedValueOnce(item);
+    await promoteInboxItem(4, 'my-proj', undefined, false);
+
+    expect(mockRunBugEnhance).not.toHaveBeenCalled();
+    expect(mockSource.createIssue).toHaveBeenCalledWith(
+      expect.objectContaining({ body: 'Original body', type: 'feature' }),
+    );
+  });
+
+  it.each(['bug', 'feature', 'chore', 'research'] as const)(
+    'dispatches enhancement for supported type %s when enhance is true',
+    async (type) => {
+      const item = {
+        id: 5,
+        title: `${type} title`,
+        body: `${type} body`,
+        type,
+        createdAt: '2026-05-01',
+      };
+
+      vi.mocked(getInboxItem).mockResolvedValueOnce(item);
+      await promoteInboxItem(5, 'my-proj', undefined, true);
+
+      expect(mockRunBugEnhance).toHaveBeenCalledWith(
+        mockSource.projectId,
+        5,
+        `${type} title`,
+        `${type} body`,
+        type,
+      );
+      expect(mockSource.createIssue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type,
+          body: `${type} body\n\n---\n\n**Expected**\nEnhanced output`,
+        }),
+      );
+    },
+  );
+
+  it.each([
+    ['missing', undefined],
+    ['unsupported', 'epic'],
+  ])('returns 400 before enhancement for %s type', async (_label, type) => {
+    const item = {
+      id: 6,
+      title: 'Bad type',
+      body: 'Original body',
+      type,
+      createdAt: '2026-05-01',
+    };
+
+    vi.mocked(getInboxItem).mockResolvedValueOnce(item as never);
+    const result = await promoteInboxItem(6, 'my-proj', undefined, true);
+
+    expect(result).toEqual({ ok: false, error: 'invalid promotion type', status: 400 });
+    expect(mockRunBugEnhance).not.toHaveBeenCalled();
+    expect(mockSource.createIssue).not.toHaveBeenCalled();
   });
 });
 

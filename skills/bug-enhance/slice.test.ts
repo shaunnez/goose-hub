@@ -1,5 +1,40 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { BugEnhanceOutputSchema } from './schema.js';
+import config, { BugEnhanceContextSchema } from './skill.config.js';
+
+const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+
+describe('bug-enhance skill contract', () => {
+  it('requires workItem.type in the enhancement context', () => {
+    expect(
+      BugEnhanceContextSchema.safeParse({
+        workItem: {
+          title: 'Feature request',
+          body: 'Add bulk editing',
+        },
+      }).success,
+    ).toBe(false);
+
+    expect(
+      BugEnhanceContextSchema.safeParse({
+        workItem: {
+          title: 'Feature request',
+          body: 'Add bulk editing',
+          type: 'feature',
+        },
+      }).success,
+    ).toBe(true);
+    expect(config.contextSchema).toBe(BugEnhanceContextSchema);
+  });
+
+  it('includes type-specific prompt branches for each supported promotion type', () => {
+    expect(prompt).toContain('If `workItem.type` is `bug`');
+    expect(prompt).toContain('If `workItem.type` is `feature`');
+    expect(prompt).toContain('If `workItem.type` is `chore`');
+    expect(prompt).toContain('If `workItem.type` is `research`');
+  });
+});
 
 describe('BugEnhanceOutputSchema', () => {
   it('accepts valid output', () => {
@@ -17,13 +52,11 @@ describe('BugEnhanceOutputSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('rejects output with empty enhancedContent', () => {
+  it('allows empty enhancedContent when the prompt skips enhancement', () => {
     const result = BugEnhanceOutputSchema.safeParse({
       enhancedContent: '',
       decisionSummaries: [{ kind: 'PLAN', summary: 'nothing added' }],
     });
-    // enhancedContent is a string — empty string is technically valid per schema;
-    // the prompt instructs the agent to always include content.
     expect(result.success).toBe(true);
   });
 
