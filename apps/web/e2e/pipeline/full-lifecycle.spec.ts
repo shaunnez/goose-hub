@@ -88,7 +88,7 @@ test.describe('Full lifecycle (MOCK_AGENTS + MOCK_SOURCE)', () => {
 
     // Approve gate: approved → retrospecting → done
     await postServer(`/projects/${SLUG}/issues/${issueNumber}/approve`);
-    await expect(statePill).toHaveText('approved', { timeout: 60_000 });
+    await expect(statePill).toHaveText('done', { timeout: 60_000 });
 
     // // Timeline should show key agent events
     await page.getByRole('link', { name: 'Timeline' }).click();
