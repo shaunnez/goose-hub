@@ -15,7 +15,7 @@
  * This file covers the latter two via two tests.
  */
 
-import { expect, test, type Locator } from '@playwright/test';
+import { type Locator, expect, test } from '@playwright/test';
 
 const SLUG = process.env.PROJECT_SLUG ?? 'goose-hub-self';
 const SERVER_URL = process.env.SERVER_URL ?? 'http://localhost:3001';
