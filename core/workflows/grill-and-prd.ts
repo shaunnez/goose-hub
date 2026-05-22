@@ -22,6 +22,7 @@ import type { StateSource, WorkItem } from '../state-source/interface.js';
 import type { ProjectConfig, StackConfig } from '../types.js';
 import { cleanupWorktree, createWorktree } from '../workspaces/worktree.js';
 import { runAdvisorReview } from './grill-and-prd/advisor-review.js';
+import { resolveDiscoverSessionId } from './grill-and-prd/discover-session.js';
 import { runGrillRound } from './grill-and-prd/grill-round.js';
 import { runPrdDraft } from './grill-and-prd/prd-draft.js';
 import { WorktreeCreationError, withManagedWorktree } from './grill-and-prd/worktree-lifecycle.js';
@@ -208,6 +209,7 @@ async function ensureGatePending(
   fromState: StateName,
   projectId: string,
   workItemId: string,
+  discoverSessionId: string,
 ): Promise<void> {
   if (fromState === 'factory:gate-pending') return;
   try {
@@ -221,6 +223,7 @@ async function ensureGatePending(
     from: fromState,
     to: 'factory:gate-pending',
     by: 'grill-and-prd',
+    extraPayload: { discoverSessionId },
   });
 }
 
@@ -237,6 +240,7 @@ export async function runGrillAndPrdWorkflow(
     deps = {},
   } = input;
   const workflowRunId = crypto.randomUUID();
+  const discoverSessionId = resolveDiscoverSessionId(projectId, workItem.id);
   const childRunId = (skill: string) => `${workflowRunId}:${skill}`;
   const runtime = deps.runtime;
   const totalSpendForSkill = deps.totalSpendForSkill ?? _totalSpendForSkill;
@@ -264,6 +268,7 @@ export async function runGrillAndPrdWorkflow(
       payload: {
         skill: 'grill-and-prd',
         workflowRunId,
+        discoverSessionId,
         error: `expected workItem.state in {${validStates.join(', ')}}, got '${workItem.state}'`,
       },
     });
@@ -301,6 +306,7 @@ export async function runGrillAndPrdWorkflow(
       stateSource,
       projectId,
       workflowRunId,
+      discoverSessionId,
       runtime,
       projectConfig,
       totalSpendForSkill,
@@ -317,6 +323,7 @@ export async function runGrillAndPrdWorkflow(
       stateSource,
       projectId,
       workflowRunId,
+      discoverSessionId,
       runtime,
       projectConfig,
       totalSpendForSkill,
@@ -341,6 +348,7 @@ export async function runGrillAndPrdWorkflow(
       payload: {
         skill: 'grill-and-prd',
         workflowRunId,
+        discoverSessionId,
         error: 'cannot create worktree: targetRepo.localPath is missing',
       },
     });
@@ -388,6 +396,7 @@ export async function runGrillAndPrdWorkflow(
           workItemId: workItem.id,
           runId: grillRunId,
           workflowRunId,
+          discoverSessionId,
           worktreePath,
           priorReplies: augmentedPriorReplies,
           projectContext: fullProjectContext,
@@ -405,7 +414,7 @@ export async function runGrillAndPrdWorkflow(
             projectId,
             workItemId: workItem.id,
             runId: grillRunId,
-            payload: { skill: 'grill-me', workflowRunId, error: outcome.error },
+            payload: { skill: 'grill-me', workflowRunId, discoverSessionId, error: outcome.error },
           });
           await stateSource.comment(workItem.externalId, `<!-- factory:system -->\n${errMsg}`);
           await ensureGatePending(
@@ -414,6 +423,7 @@ export async function runGrillAndPrdWorkflow(
             workItem.state,
             projectId,
             workItem.id,
+            discoverSessionId,
           );
           grillPhaseReturn = { phase: 'grilling' };
           return;
@@ -434,6 +444,7 @@ export async function runGrillAndPrdWorkflow(
             payload: {
               displaySkill: 'grill-me',
               workflowRunId,
+              discoverSessionId,
               roundNumber: roundNumber - 1,
               decision: grillOutput.crystallizedDecision.trim(),
             },
@@ -463,6 +474,7 @@ export async function runGrillAndPrdWorkflow(
             workItem.state,
             projectId,
             workItem.id,
+            discoverSessionId,
           );
           eventStore.appendEvent({
             kind: 'grill.question-posted',
@@ -472,6 +484,7 @@ export async function runGrillAndPrdWorkflow(
             payload: {
               displaySkill: 'grill-me',
               workflowRunId,
+              discoverSessionId,
               roundNumber,
               question: outcome.question,
             },
@@ -490,6 +503,7 @@ export async function runGrillAndPrdWorkflow(
           payload: {
             displaySkill: 'grill-me',
             workflowRunId,
+            discoverSessionId,
             refinedIntent: outcome.refinedIntent,
             rounds: roundNumber,
             ...(forced && { forced: true }),
@@ -506,6 +520,7 @@ export async function runGrillAndPrdWorkflow(
           payload: {
             skill: 'grill-and-prd',
             workflowRunId,
+            discoverSessionId,
             error: `worktree cleanup failed: ${String(err)}`,
           },
         });
@@ -522,6 +537,7 @@ export async function runGrillAndPrdWorkflow(
       payload: {
         skill: 'grill-and-prd',
         workflowRunId,
+        discoverSessionId,
         error: isWorktreeCreation
           ? `worktree creation failed: ${String(err)}`
           : `grill round failed: ${String(err)}`,
@@ -539,6 +555,7 @@ export async function runGrillAndPrdWorkflow(
       workItem.state,
       projectId,
       workItem.id,
+      discoverSessionId,
     );
     return { phase: 'grilling' };
   }
@@ -552,6 +569,7 @@ export async function runGrillAndPrdWorkflow(
     stateSource,
     projectId,
     workflowRunId,
+    discoverSessionId,
     runtime,
     projectConfig,
     totalSpendForSkill,
@@ -570,6 +588,7 @@ interface WritePrdStepInput {
   stateSource: StateSource;
   projectId: string;
   workflowRunId: string;
+  discoverSessionId: string;
   runtime?: AgentRuntime;
   projectConfig: Pick<ProjectConfig, 'budgets' | 'stack' | 'targetRepo'> | null | undefined;
   totalSpendForSkill: (projectId: string, skill: string) => number;
@@ -586,6 +605,7 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
     stateSource,
     projectId,
     workflowRunId,
+    discoverSessionId,
     runtime,
     projectConfig,
     totalSpendForSkill,
@@ -618,6 +638,7 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
     workItemId: workItem.id,
     runId: prdRunId,
     workflowRunId,
+    discoverSessionId,
     refinedIntent,
     fullProjectContext,
     projectConfig,
@@ -636,6 +657,7 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
       payload: {
         skill: 'write-prd',
         workflowRunId,
+        discoverSessionId,
         error: prdDraftOutcome.error,
         ...(prdDraftOutcome.status === 'invalid' && prdDraftOutcome.issues != null
           ? { issues: prdDraftOutcome.issues }
@@ -663,6 +685,7 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
     workItemId: workItem.id,
     runId: advisorRunId,
     workflowRunId,
+    discoverSessionId,
     prdOutput,
     projectConfig,
     totalSpendForSkill,
@@ -677,7 +700,7 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
       projectId,
       workItemId: workItem.id,
       runId: workflowRunId,
-      payload: { workflowRunId, reason: advisorOutcome.reason },
+      payload: { workflowRunId, discoverSessionId, reason: advisorOutcome.reason },
     });
   } else if (advisorOutcome.status === 'invalid' || advisorOutcome.status === 'failed') {
     eventStore.appendEvent({
@@ -685,7 +708,12 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
       projectId,
       workItemId: workItem.id,
       runId: advisorRunId,
-      payload: { skill: 'advise-on-prd', workflowRunId, error: advisorOutcome.error },
+      payload: {
+        skill: 'advise-on-prd',
+        workflowRunId,
+        discoverSessionId,
+        error: advisorOutcome.error,
+      },
     });
     await stateSource.forceState(workItem.externalId, 'factory:needs-human');
     return { phase: 'needs-human' };
@@ -720,7 +748,7 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
       projectId,
       workItemId: workItem.id,
       runId: workflowRunId,
-      payload: { skill: 'grill-and-prd', workflowRunId, error: String(err) },
+      payload: { skill: 'grill-and-prd', workflowRunId, discoverSessionId, error: String(err) },
     });
     await stateSource.forceState(workItem.externalId, 'factory:needs-human');
     return { phase: 'needs-human' };
@@ -732,7 +760,13 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
       projectId,
       workItemId: workItem.id,
       runId: workflowRunId,
-      payload: { displaySkill: 'write-prd', workflowRunId, prd: prdOutput, advisorConcerns },
+      payload: {
+        displaySkill: 'write-prd',
+        workflowRunId,
+        discoverSessionId,
+        prd: prdOutput,
+        advisorConcerns,
+      },
     });
   } catch (err) {
     eventStore.appendEvent({
@@ -743,6 +777,7 @@ async function runWritePrdStep(input: WritePrdStepInput): Promise<GrillAndPrdRes
       payload: {
         skill: 'write-prd',
         workflowRunId,
+        discoverSessionId,
         error: `prd.drafted emit failed: ${String(err)}`,
       },
     });

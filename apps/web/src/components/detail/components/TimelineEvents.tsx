@@ -151,6 +151,7 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
         key={`phase-group-${item.phase}-${item.pipelineRunId}`}
         phase={item.phase}
         pipelineRunId={item.pipelineRunId}
+        idKind={item.idKind}
         items={item.items}
         status={item.status}
         startedAt={item.startedAt}

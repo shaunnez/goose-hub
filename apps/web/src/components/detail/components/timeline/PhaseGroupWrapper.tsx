@@ -8,6 +8,7 @@ const STALL_MS = 15 * 60 * 1000;
 export function PhaseGroupWrapper({
   phase,
   pipelineRunId,
+  idKind,
   items,
   status,
   startedAt,
@@ -18,6 +19,7 @@ export function PhaseGroupWrapper({
 }: {
   phase: 'grill' | 'prd' | 'contract' | 'dev';
   pipelineRunId: string;
+  idKind: 'session' | 'workflow' | 'contract' | 'pipeline';
   items: RenderItem[];
   status: 'started' | 'live' | 'completed' | 'failed';
   startedAt: string | null;
@@ -59,7 +61,7 @@ export function PhaseGroupWrapper({
         : phase === 'contract'
           ? 'Contract Phase'
           : 'Dev Phase';
-  const idLabel = phase === 'contract' ? 'contract' : phase === 'dev' ? 'pipeline' : 'workflow';
+  const idLabel = idKind;
 
   const statusBadge = isStalled ? (
     <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">

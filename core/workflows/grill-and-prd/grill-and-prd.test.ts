@@ -317,6 +317,7 @@ describe('runGrillRound', () => {
       workItemId: 'wi-1',
       runId: 'run-grill-1',
       workflowRunId: 'wf-1',
+      discoverSessionId: 'discover-session-1',
       worktreePath: '/wt/run-1',
       priorReplies: [] as Array<{ role: 'user' | 'agent'; content: string }>,
       projectContext: { stackSummary: '', contextMd: '', adrSummaries: [], claudeMd: '' },
@@ -435,6 +436,7 @@ describe('runPrdDraft', () => {
       workItemId: 'wi-1',
       runId: 'run-prd-1',
       workflowRunId: 'wf-1',
+      discoverSessionId: 'discover-session-1',
       refinedIntent: 'Do the thing.',
       fullProjectContext: { stackSummary: '', contextMd: '', adrSummaries: [], claudeMd: '' },
     };
@@ -512,6 +514,7 @@ describe('runAdvisorReview', () => {
       workItemId: 'wi-1',
       runId: 'run-advisor-1',
       workflowRunId: 'wf-1',
+      discoverSessionId: 'discover-session-1',
       prdOutput: minimalPrdOutput(),
       projectConfig: projectConfigWithBudget(10),
       totalSpendForSkill: vi.fn().mockReturnValue(0),

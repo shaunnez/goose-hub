@@ -384,6 +384,54 @@ describe('grill-and-prd: round 2 reaches PRD (advisor skipped by priority)', () 
     // grill-me + write-prd → 2 runtime calls (no advisor)
     expect(runtime.run).toHaveBeenCalledTimes(2);
   });
+
+  it('reuses the same discoverSessionId across resumed Grill invocations', async () => {
+    const projectId = uniqueProjectId('session-resume');
+    const source = new InMemoryLabelsSource(projectId, REPO_REF);
+    const item = await seedFeatureItem(source, { state: 'factory:grilling' });
+
+    const firstRuntime = makeQueuedRuntime([validGrillRound1NotReady()]);
+    await runGrillAndPrdWorkflow({
+      workItem: await source.getItem(item.externalId),
+      stateSource: source,
+      projectId,
+      priorReplies: [],
+      deps: { runtime: firstRuntime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
+    });
+
+    const secondRuntime = makeQueuedRuntime([validGrillReady(), validPRD()]);
+    await runGrillAndPrdWorkflow({
+      workItem: await source.getItem(item.externalId),
+      stateSource: source,
+      projectId,
+      priorReplies: [
+        { role: 'agent' as const, content: 'Round 1 question?' },
+        { role: 'user' as const, content: 'Reduce drop-off by 20% within 30 days.' },
+      ],
+      deps: { runtime: secondRuntime, projectConfig: injectedConfig(), ...noopWorktreeDeps() },
+    });
+
+    const evs = eventStore.replay({ projectId, workItemId: item.id });
+    const sessionIds = evs
+      .map((event) => (event.payload as { discoverSessionId?: string } | null)?.discoverSessionId)
+      .filter((value): value is string => typeof value === 'string');
+    expect(new Set(sessionIds).size).toBe(1);
+    expect(sessionIds.length).toBeGreaterThan(3);
+
+    const specs = [
+      ...(firstRuntime.run as ReturnType<typeof vi.fn>).mock.calls,
+      ...(secondRuntime.run as ReturnType<typeof vi.fn>).mock.calls,
+    ].map(([spec]) => spec as AgentSpec);
+    expect(
+      new Set(
+        specs.map(
+          (spec) =>
+            (spec.extraEventPayload as { discoverSessionId?: string } | undefined)
+              ?.discoverSessionId,
+        ),
+      ).size,
+    ).toBe(1);
+  });
 });
 
 // ---------------------------------------------------------------------------

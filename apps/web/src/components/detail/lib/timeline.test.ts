@@ -534,6 +534,135 @@ describe('groupEvents — discover phase groups', () => {
     ]);
   });
 
+  it('collapses multiple Grill rounds with different workflow ids into one session phase', () => {
+    const SID = 'discover-session-1';
+    const W1 = 'discover-workflow-round-1';
+    const W2 = 'discover-workflow-round-2';
+    const result = groupEvents([
+      makeEvent(1, 'agent.run-started', `${W1}:grill-me`, {
+        payload: { skill: 'grill-me', workflowRunId: W1, discoverSessionId: SID },
+      }),
+      makeEvent(2, 'agent.run-completed', `${W1}:grill-me`, {
+        payload: { skill: 'grill-me', workflowRunId: W1, discoverSessionId: SID },
+      }),
+      makeEvent(3, 'grill.question-posted', W1, {
+        payload: { displaySkill: 'grill-me', workflowRunId: W1, discoverSessionId: SID },
+      }),
+      makeEvent(4, 'agent.run-started', `${W2}:grill-me`, {
+        payload: { skill: 'grill-me', workflowRunId: W2, discoverSessionId: SID },
+      }),
+      makeEvent(5, 'agent.run-completed', `${W2}:grill-me`, {
+        payload: { skill: 'grill-me', workflowRunId: W2, discoverSessionId: SID },
+      }),
+      makeEvent(6, 'grill.completed', W2, {
+        payload: { displaySkill: 'grill-me', workflowRunId: W2, discoverSessionId: SID },
+      }),
+    ]);
+
+    const phaseGroups = result.filter((item) => item.kind === 'phase-group');
+    expect(phaseGroups).toHaveLength(1);
+    const grill = phaseGroups[0];
+    if (grill.kind !== 'phase-group') return;
+    expect(grill.phase).toBe('grill');
+    expect(grill.pipelineRunId).toBe(SID);
+    expect(grill.idKind).toBe('session');
+    expect(grill.items.filter((item) => item.kind === 'run-group')).toHaveLength(2);
+  });
+
+  it('nests manual Grill resume transitions and intervention groups in the session phase', () => {
+    const SID = 'discover-session-manual';
+    const WID = 'discover-workflow-manual';
+    const intervention = makeIntervention({
+      decidedActionPayload: {
+        from: 'factory:gate-pending',
+        to: 'factory:grilling',
+        discoverSessionId: SID,
+      },
+      applicationResult: {
+        ok: true,
+        result: {
+          from: 'factory:gate-pending',
+          to: 'factory:grilling',
+          discoverSessionId: SID,
+        },
+      },
+    });
+    const result = groupEvents(
+      [
+        makeEvent(1, 'grill.question-posted', WID, {
+          payload: { displaySkill: 'grill-me', workflowRunId: WID, discoverSessionId: SID },
+        }),
+        makeEvent(2, 'state.transitioned', null, {
+          payload: {
+            from: 'factory:gate-pending',
+            to: 'factory:grilling',
+            by: 'ui',
+            discoverSessionId: SID,
+          },
+        }),
+      ],
+      [
+        {
+          intervention,
+          events: [
+            makeInterventionEvent(1, 'open', '2026-05-04T10:00:00Z', {
+              payload: { evidence: { discoverSessionId: SID } },
+            }),
+            makeInterventionEvent(2, 'decide', '2026-05-04T10:01:00Z', {
+              payload: {
+                actionType: 'manual_transition',
+                actionPayload: { discoverSessionId: SID },
+              },
+            }),
+          ],
+        },
+      ],
+    );
+
+    expect(result).toHaveLength(1);
+    const grill = result[0];
+    expect(grill.kind).toBe('phase-group');
+    if (grill.kind !== 'phase-group') return;
+    expect(grill.phase).toBe('grill');
+    expect(grill.pipelineRunId).toBe(SID);
+    expect(
+      grill.items.some((item) => item.kind === 'event' && item.event.kind === 'state.transitioned'),
+    ).toBe(true);
+    expect(grill.items.some((item) => item.kind === 'intervention-group')).toBe(true);
+  });
+
+  it('keeps PRD separate from Grill while using the same discover session id', () => {
+    const SID = 'discover-session-prd';
+    const GRILL_WID = 'discover-workflow-grill-only';
+    const PRD_WID = 'discover-workflow-prd-only';
+    const result = groupEvents([
+      makeEvent(1, 'agent.run-started', `${GRILL_WID}:grill-me`, {
+        payload: { skill: 'grill-me', workflowRunId: GRILL_WID, discoverSessionId: SID },
+      }),
+      makeEvent(2, 'grill.completed', GRILL_WID, {
+        payload: { displaySkill: 'grill-me', workflowRunId: GRILL_WID, discoverSessionId: SID },
+      }),
+      makeEvent(3, 'agent.run-started', `${PRD_WID}:write-prd`, {
+        payload: { skill: 'write-prd', workflowRunId: PRD_WID, discoverSessionId: SID },
+      }),
+      makeEvent(4, 'prd.drafted', PRD_WID, {
+        payload: { displaySkill: 'write-prd', workflowRunId: PRD_WID, discoverSessionId: SID },
+      }),
+    ]);
+
+    const phaseGroups = result.filter((item) => item.kind === 'phase-group');
+    expect(phaseGroups).toHaveLength(2);
+    expect(phaseGroups.map((item) => (item.kind === 'phase-group' ? item.phase : null))).toEqual([
+      'prd',
+      'grill',
+    ]);
+    for (const phase of phaseGroups) {
+      if (phase.kind !== 'phase-group') continue;
+      expect(phase.pipelineRunId).toBe(SID);
+      expect(phase.idKind).toBe('session');
+    }
+  });
+
   it('hides grill reply manual actions from the timeline', () => {
     const result = groupEvents([
       makeEvent(1, 'manual.action', null, {
