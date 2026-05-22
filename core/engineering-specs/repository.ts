@@ -44,3 +44,11 @@ export function getEngineeringSpec(
   if (!row) return null;
   return { ...row, spec: JSON.parse(row.spec) as unknown };
 }
+
+export function deleteEngineeringSpec(projectId: string, workItemId: string): void {
+  db.delete(engineeringSpecs)
+    .where(
+      and(eq(engineeringSpecs.projectId, projectId), eq(engineeringSpecs.workItemId, workItemId)),
+    )
+    .run();
+}

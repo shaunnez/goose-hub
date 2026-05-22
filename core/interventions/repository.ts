@@ -277,3 +277,24 @@ export function isActiveStatus(status: string): boolean {
 export function isClosedStatus(status: string): boolean {
   return CLOSED_INTERVENTION_STATUSES.has(InterventionStatusSchema.parse(status));
 }
+
+export function deleteInterventionsForWorkItem(projectId: string, workItemId: string): number {
+  db.delete(workItemInterventionEvents)
+    .where(
+      and(
+        eq(workItemInterventionEvents.projectId, projectId),
+        eq(workItemInterventionEvents.workItemId, workItemId),
+      ),
+    )
+    .run();
+  const result = db
+    .delete(workItemInterventions)
+    .where(
+      and(
+        eq(workItemInterventions.projectId, projectId),
+        eq(workItemInterventions.workItemId, workItemId),
+      ),
+    )
+    .run();
+  return result.changes;
+}

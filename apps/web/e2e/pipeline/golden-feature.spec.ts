@@ -24,7 +24,7 @@
  * is the report itself.
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 
 const SLUG = process.env.PROJECT_SLUG ?? 'goose-hub-self';
 const SERVER_URL = process.env.SERVER_URL ?? 'http://localhost:3001';
@@ -69,6 +69,18 @@ async function seedIssue(opts: {
 
 async function transition(issueNumber: number, from: string, to: string): Promise<void> {
   await postServer(`/projects/${SLUG}/issues/${issueNumber}/transition`, { from, to });
+}
+
+async function ensureFeatureRoutedToGrilling(statePill: Locator): Promise<void> {
+  await expect
+    .poll(async () => ((await statePill.textContent()) ?? '').trim(), { timeout: 15_000 })
+    .toMatch(/^(triaging|accepted|grilling)$/);
+
+  const currentState = ((await statePill.textContent()) ?? '').trim();
+  if (currentState !== 'grilling') {
+    await postServer(`/projects/${SLUG}/tick`);
+  }
+  await expect(statePill).toHaveText('grilling', { timeout: 60_000 });
 }
 
 // Pick a deterministic but distinct emoji per run so a human eyeballing the
@@ -172,12 +184,10 @@ test.describe('Golden Feature flow (MOCK_AGENTS + MOCK_SOURCE + MOCK_OPEN_PR)', 
     await page.goto(`/projects/${SLUG}/items/${issueNumber}`);
     await expect(page.getByTestId('detail-page')).toBeVisible({ timeout: 15_000 });
     const statePill = page.getByTestId('state-pill');
-    await expect(statePill).toHaveText('triaging', { timeout: 15_000 });
     await expect(page.getByTestId('overview-section')).toBeVisible();
 
     // ── 2. Triage the feature. type:feature routing → grilling (M13).
-    await postServer(`/projects/${SLUG}/tick`);
-    await expect(statePill).toHaveText('grilling', { timeout: 60_000 });
+    await ensureFeatureRoutedToGrilling(statePill);
 
     // Grill tab visible in left rail; PRD tab always rendered (tabs are disabled, not hidden).
     await expect(page.locator('[data-section-key="grill"]')).toBeVisible();

@@ -1,5 +1,4 @@
 import { registerTestOutcomes } from '@goose-hub/core/agent-runtime/mock-test-registry.js';
-import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { minePatterns } from '@goose-hub/core/learning/mine.js';
 import { logger } from '@goose-hub/core/logger.js';
 import type { StateName } from '@goose-hub/core/state-machine/states.js';
@@ -201,14 +200,6 @@ if (process.env.MOCK_SOURCE === 'true') {
       dependsOn: body.data.dependsOn,
       prDiff: body.data.prDiff,
     });
-
-    // The InMemoryLabelsSource numbers issues sequentially from 1 and resets
-    // when the server process restarts. The event store is SQLite-backed and
-    // persists across restarts, so issue #1 from a prior run leaves
-    // qa.completed / review.completed rows that the retry counters would
-    // count toward the freshly-seeded issue #1, escalating it instantly.
-    // Wipe any events under this workItemId so each seed starts clean.
-    eventStore.deleteByWorkItem(item.id);
 
     if (body.data.outcomes != null || body.data.throwMergeConflict != null) {
       registerTestOutcomes(item.id, {

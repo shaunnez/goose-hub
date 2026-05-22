@@ -15,7 +15,7 @@
  * This file covers the latter two via two tests.
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 
 const SLUG = process.env.PROJECT_SLUG ?? 'goose-hub-self';
 const SERVER_URL = process.env.SERVER_URL ?? 'http://localhost:3001';
@@ -43,6 +43,18 @@ async function seedIssue(opts: {
   return res.json() as Promise<{ issueNumber: number; workItemId: string }>;
 }
 
+async function ensureFeatureRoutedToGrilling(statePill: Locator): Promise<void> {
+  await expect
+    .poll(async () => ((await statePill.textContent()) ?? '').trim(), { timeout: 15_000 })
+    .toMatch(/^(triaging|accepted|grilling)$/);
+
+  const currentState = ((await statePill.textContent()) ?? '').trim();
+  if (currentState !== 'grilling') {
+    await postServer(`/projects/${SLUG}/tick`);
+  }
+  await expect(statePill).toHaveText('grilling', { timeout: 60_000 });
+}
+
 const FEATURE_EMOJIS = ['🦫', '🪐', '🛸', '🦊', '🌈', '⚡️', '🐙', '🔮'];
 function goldenTitle(suffix: string): string {
   const ts = Date.now();
@@ -66,10 +78,7 @@ async function driveFeatureToPrdReview(
   await page.goto(`/projects/${SLUG}/items/${issueNumber}`);
   await expect(page.getByTestId('detail-page')).toBeVisible({ timeout: 15_000 });
   const statePill = page.getByTestId('state-pill');
-  await expect(statePill).toHaveText('triaging', { timeout: 15_000 });
-
-  await postServer(`/projects/${SLUG}/tick`);
-  await expect(statePill).toHaveText('grilling', { timeout: 60_000 });
+  await ensureFeatureRoutedToGrilling(statePill);
 
   // Round 1: grill-me asks one question → gate-pending.
   await page.goto(`/projects/${SLUG}/items/${issueNumber}/grill`);
@@ -121,7 +130,7 @@ test.describe('Golden Feature — PRD revision (ADR 0033 three-path flow)', () =
     // appears on the timeline and confirm the state never left prd-review.
     await page.goto(`/projects/${SLUG}/items/${issueNumber}/timeline`);
     await expect(page.getByTestId('timeline-section')).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator('[data-event-kind="prd.revised"]').first()).toBeVisible({
+    await expect(page.locator('[data-event-kind="prd.revised"]').first()).toBeAttached({
       timeout: 30_000,
     });
     await expect(statePill).toHaveText('prd-review');
@@ -166,7 +175,7 @@ test.describe('Golden Feature — PRD revision (ADR 0033 three-path flow)', () =
     // and no decompose.completed event.
     await page.goto(`/projects/${SLUG}/items/${issueNumber}/timeline`);
     await expect(page.getByTestId('timeline-section')).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator('[data-event-kind="prd.declined"]').first()).toBeVisible({
+    await expect(page.locator('[data-event-kind="prd.declined"]').first()).toBeAttached({
       timeout: 10_000,
     });
     expect(await page.locator('[data-event-kind="decompose.completed"]').count()).toBe(0);

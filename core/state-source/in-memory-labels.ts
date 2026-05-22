@@ -1,3 +1,6 @@
+import { deleteEngineeringSpec } from '../engineering-specs/repository.js';
+import { eventStore } from '../event-stream/store.js';
+import { deleteInterventionsForWorkItem } from '../interventions/repository.js';
 import { resolveState } from '../state-machine/conflict-resolver.js';
 import { STATES } from '../state-machine/states.js';
 import type { StateName } from '../state-machine/states.js';
@@ -290,6 +293,14 @@ export class InMemoryLabelsSource implements StateSource {
       extraLabels: new Set<string>(input.extraLabels ?? []),
     };
     this.store.set(externalId, issue);
+    if (process.env.MOCK_SOURCE === 'true') {
+      // The mock source reuses issue numbers across server restarts. Clear
+      // issue-scoped operational rows so fresh fixtures do not inherit history.
+      const workItemId = `github:${this.repoRef}#${externalId}`;
+      eventStore.deleteByWorkItem(workItemId);
+      deleteEngineeringSpec(this.projectId, workItemId);
+      deleteInterventionsForWorkItem(this.projectId, workItemId);
+    }
     return this.toWorkItem(issue);
   }
 
