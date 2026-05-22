@@ -76,7 +76,8 @@ export type AgentSpec<R extends RoleSpec = RoleSpec> = {
   phase?: string;
   /**
    * 'preconfigured': caller already wrote .claude/settings.local.json (e.g. writeWpBuilderSandbox).
-   * Runtime skips writeWorkspaceSandbox. deployHooks() still runs unconditionally.
+   * Runtime skips writeWorkspaceSandbox. Codex runtimes still write their .codex hook sandbox.
+   * deployHooks() still runs unconditionally.
    * Default ('default' or absent): runtime writes the generic workspace sandbox.
    */
   sandboxMode?: 'default' | 'preconfigured';

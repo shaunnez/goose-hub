@@ -193,11 +193,43 @@ describe('CodexCliRuntime timeout handling', () => {
     expect(writeCodexWorkspaceSandbox).toHaveBeenCalledWith('/tmp/factory-worktree');
   });
 
-  it('skips Codex workspace hook sandbox when sandboxMode is preconfigured', async () => {
-    await runSuccessfulCodexSpec({ sandboxMode: 'preconfigured' });
+  it('keeps Codex workspace hook sandbox when sandboxMode is preconfigured', async () => {
+    await runSuccessfulCodexSpec({
+      sandboxMode: 'preconfigured',
+      workspaceDir: '/tmp/factory-preconfigured-worktree',
+    });
 
     expect(writeWorkspaceSandbox).not.toHaveBeenCalled();
-    expect(writeCodexWorkspaceSandbox).not.toHaveBeenCalled();
+    expect(writeCodexWorkspaceSandbox).toHaveBeenCalledWith('/tmp/factory-preconfigured-worktree');
+  });
+
+  it('uses workspace-write command sandbox for implement dev-tools runs', async () => {
+    await runSuccessfulCodexSpec({ skill: 'implement', toolBundles: ['dev-tools'] });
+
+    expect(buildCodexArgv).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commandSandbox: 'workspace-write',
+        approvalPolicy: undefined,
+      }),
+    );
+  });
+
+  it('uses workspace-write command sandbox and preserves WP preconfigured sandbox', async () => {
+    await runSuccessfulCodexSpec({
+      skill: 'implement-wp',
+      toolBundles: ['dev-tools'],
+      sandboxMode: 'preconfigured',
+      workspaceDir: '/tmp/factory-wp-worktree',
+    });
+
+    expect(writeWorkspaceSandbox).not.toHaveBeenCalled();
+    expect(writeCodexWorkspaceSandbox).toHaveBeenCalledWith('/tmp/factory-wp-worktree');
+    expect(buildCodexArgv).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commandSandbox: 'workspace-write',
+        approvalPolicy: undefined,
+      }),
+    );
   });
 
   it('derives Codex MCP enabled_tools from the run allowlist', async () => {

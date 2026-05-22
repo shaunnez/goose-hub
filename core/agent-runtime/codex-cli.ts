@@ -238,8 +238,8 @@ export class CodexCliRuntime implements AgentRuntime {
     const recordDecisionTool = getRecordDecisionTool(projectId);
     if (spec.sandboxMode !== 'preconfigured') {
       writeWorkspaceSandbox(workspaceDir, { role: spec.role, recordDecisionTool });
-      writeCodexWorkspaceSandbox(workspaceDir);
     }
+    writeCodexWorkspaceSandbox(workspaceDir);
     deployHooks();
     if (recordDecisionTool) deployDecisionCaptureHook();
     const model = spec.modelOverride ?? defaultModelForTierAndProvider('sonnet', 'codex');
@@ -292,6 +292,12 @@ export class CodexCliRuntime implements AgentRuntime {
     });
     const needsBrowserProcessAccess =
       spec.toolBundles.includes('validate') && BROWSER_PROCESS_ACCESS_SKILLS.has(spec.skill);
+    const needsWorkspaceWriteSandbox = spec.toolBundles.includes('dev-tools');
+    const commandSandbox = needsBrowserProcessAccess
+      ? 'danger-full-access'
+      : needsWorkspaceWriteSandbox
+        ? 'workspace-write'
+        : undefined;
 
     const argv = buildCodexArgv({
       model,
@@ -300,7 +306,7 @@ export class CodexCliRuntime implements AgentRuntime {
       systemPrompt,
       effort: spec.effort,
       maxTurns: spec.budgets.maxTurns,
-      commandSandbox: needsBrowserProcessAccess ? 'danger-full-access' : undefined,
+      commandSandbox,
       approvalPolicy: needsBrowserProcessAccess ? 'never' : undefined,
       bypassHookTrust: true,
       disableShellTool: !toolAllowedByRunAllowlist('Bash', allowedTools),
