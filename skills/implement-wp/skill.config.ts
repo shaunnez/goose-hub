@@ -13,7 +13,7 @@ import { ImplementWpSchema } from './schema.js';
  * the ACs it must satisfy, parent PRD summary, and the stack commands to run tests and lint.
  *
  * Full-repo context is intentionally excluded — the builder sees only its slice
- * of the problem plus the code snippets pre-loaded by the spec-author scout wave.
+ * of the problem plus owned-file previews and line-precise investigation hunks.
  */
 export const ImplementWpContextSchema = z.object({
   workItem: z.object({
@@ -39,6 +39,17 @@ export const ImplementWpContextSchema = z.object({
       }),
     )
     .optional(),
+  /** Exact pre-read hunks for line-precise investigation key files owned by this WP. */
+  codeContext: z
+    .array(
+      z.object({
+        path: z.string(),
+        startLine: z.number().int().min(1),
+        endLine: z.number().int().min(1),
+        snippet: z.string(),
+      }),
+    )
+    .optional(),
   verificationCommands: z.array(ExecutableCheckSchema).optional(),
   investigation: z
     .object({
@@ -48,6 +59,9 @@ export const ImplementWpContextSchema = z.object({
           z.object({
             path: z.string(),
             reason: z.string().optional(),
+            line: z.number().int().min(1).optional(),
+            symbol: z.string().optional(),
+            snippet: z.string().optional(),
           }),
         )
         .optional(),
@@ -108,6 +122,7 @@ const config: SkillConfig = {
     'wp.changes',
     'wp.dependsOn',
     'codeSnippets',
+    'codeContext',
     'verificationCommands',
     'investigation',
     'acceptanceContract',

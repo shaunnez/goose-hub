@@ -1,6 +1,7 @@
 import { resolveAcceptanceContract } from '@goose-hub/core/acceptance-contracts/resolver.js';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import { adviseOnPlan } from '@goose-hub/core/agent-runtime/advisor.js';
+import { buildCodeContextBundle } from '@goose-hub/core/agent-runtime/code-context.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { buildRelatedSurfaceManifest } from '@goose-hub/core/agent-runtime/related-surface.js';
@@ -199,6 +200,11 @@ export async function runFixIssueWorkflow(
     // waste its first turn running pnpm install.
     prewarmWtFn(worktreePath);
 
+    const codeContext = buildCodeContextBundle({
+      worktreePath,
+      keyFiles: implementInvestigation?.keyFiles ?? [],
+    });
+
     // Step 3: optional advisor on plan (priority:high/critical only).
     let advisorFeedback: string | undefined;
     let revisionPass: 0 | 1 = 0;
@@ -220,6 +226,7 @@ export async function runFixIssueWorkflow(
         outputJsonSchema: implementJsonSchema,
         personaId: implementPersonaId,
         investigation: implementInvestigation,
+        codeContext,
         acceptanceContract,
         relatedSurface,
         surfaceGuardInvestigation: investigation,
@@ -314,6 +321,7 @@ export async function runFixIssueWorkflow(
       outputJsonSchema: implementJsonSchema,
       personaId: implementPersonaId,
       investigation: implementInvestigation,
+      codeContext,
       acceptanceContract,
       relatedSurface,
       surfaceGuardInvestigation: investigation,

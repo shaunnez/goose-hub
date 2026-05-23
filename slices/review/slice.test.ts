@@ -207,6 +207,10 @@ describe('runReviewWorkflow', () => {
       expect(getPrDiff).toHaveBeenCalledWith('42');
       const spec = mockRun.mock.calls[0][0] as { context: Record<string, unknown> };
       expect(spec.context.prDiff).toBe('diff --git a/foo.ts b/foo.ts\n+added line');
+      expect(spec.context.prDiffWithContext).toMatchObject({
+        changedFiles: ['foo.ts'],
+        diffCharCount: 40,
+      });
     });
 
     it('passes empty prDiff when stateSource returns empty string', async () => {

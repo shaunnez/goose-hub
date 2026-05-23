@@ -7,12 +7,26 @@ import {
 
 export interface InvestigationContext {
   findings?: string;
-  keyFiles: Array<{ path: string; reason?: string }>;
+  keyFiles: Array<{
+    path: string;
+    reason?: string;
+    line?: number;
+    symbol?: string;
+    snippet?: string;
+  }>;
   openQuestions: string[];
+  fixHint?: {
+    file: string;
+    line: number;
+    currentCode: string;
+    suggestedApproach: string;
+  };
   investigationRunId?: string;
 }
 
-function normalizeKeyFile(raw: unknown): { path: string; reason?: string } | null {
+function normalizeKeyFile(
+  raw: unknown,
+): { path: string; reason?: string; line?: number; symbol?: string; snippet?: string } | null {
   if (typeof raw === 'string' && raw.trim().length > 0) {
     return { path: raw.trim() };
   }
@@ -22,6 +36,41 @@ function normalizeKeyFile(raw: unknown): { path: string; reason?: string } | nul
   return {
     path: record.path.trim(),
     reason: typeof record.reason === 'string' ? record.reason : undefined,
+    line:
+      typeof record.line === 'number' && Number.isInteger(record.line) && record.line >= 1
+        ? record.line
+        : undefined,
+    symbol: typeof record.symbol === 'string' ? record.symbol : undefined,
+    snippet: typeof record.snippet === 'string' ? record.snippet.slice(0, 800) : undefined,
+  };
+}
+
+function normalizeFixHint(raw: unknown):
+  | {
+      file: string;
+      line: number;
+      currentCode: string;
+      suggestedApproach: string;
+    }
+  | undefined {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const record = raw as Record<string, unknown>;
+  if (
+    typeof record.file !== 'string' ||
+    record.file.trim().length === 0 ||
+    typeof record.line !== 'number' ||
+    !Number.isInteger(record.line) ||
+    record.line < 1 ||
+    typeof record.currentCode !== 'string' ||
+    typeof record.suggestedApproach !== 'string'
+  ) {
+    return undefined;
+  }
+  return {
+    file: record.file.trim(),
+    line: record.line,
+    currentCode: record.currentCode.slice(0, 1200),
+    suggestedApproach: record.suggestedApproach,
   };
 }
 
@@ -45,6 +94,7 @@ export function latestInvestigationContext(input: {
           findings?: unknown;
           keyFiles?: unknown;
           openQuestions?: unknown;
+          fixHint?: unknown;
         };
         investigationRunId?: unknown;
       }
@@ -73,11 +123,13 @@ export function latestInvestigationContext(input: {
     ? investigation.openQuestions.filter((q): q is string => typeof q === 'string')
     : [];
   const findings = typeof investigation.findings === 'string' ? investigation.findings : undefined;
+  const fixHint = normalizeFixHint(investigation.fixHint);
 
   if (
     (findings == null || findings.length === 0) &&
     keyFiles.length === 0 &&
-    openQuestions.length === 0
+    openQuestions.length === 0 &&
+    fixHint == null
   ) {
     return undefined;
   }
@@ -86,6 +138,18 @@ export function latestInvestigationContext(input: {
     findings,
     keyFiles,
     openQuestions,
+    fixHint:
+      fixHint == null || worktreePath == null
+        ? fixHint
+        : {
+            ...fixHint,
+            file: normalizeRepoRelativePath({
+              rawPath: fixHint.file,
+              worktreePath,
+              packageRoots,
+              referencePaths: [...rawKeyFiles.map((f) => f.path), fixHint.file],
+            }).path,
+          },
     investigationRunId:
       typeof payload?.investigationRunId === 'string'
         ? payload.investigationRunId

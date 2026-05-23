@@ -33,6 +33,7 @@ The context contains a `<task>` block with:
 
 - `<workItem>` — JSON payload for the original GitHub issue, with `title`, `body`, and `number`
 - `<prDiff>` — complete git diff of the PR being reviewed
+- `<prDiffWithContext>` — diff-derived changed-file and hunk metadata. Use it to orient before reading `prDiff`; it contains no developer reasoning.
 - `<verificationSummary>` — compact workflow-owned verification packet:
   - `changedFiles` — changed paths, count, diff character count, and diff stat
   - `pr` — PR number, base branch, and head SHA when available

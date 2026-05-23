@@ -17,6 +17,7 @@ import { ReviewOutputSchema } from './schema.js';
  *   <task>
  *     <workItem>{"title":"...","body":"...","number":123}</workItem>
  *     <prDiff>...</prDiff>
+ *     <prDiffWithContext>{"changedFiles":["..."],"hunks":[...]}</prDiffWithContext>
  *     <qaVerdict>{"verdict":"pass","overallScore":82}</qaVerdict>
  *   </task>
  */
@@ -29,6 +30,24 @@ export const ReviewContextSchema = z.object({
   }),
   /** The git diff of the PR being reviewed — what was actually changed */
   prDiff: z.string(),
+  /** Diff-derived changed-file and hunk metadata. Contains no developer or investigation reasoning. */
+  prDiffWithContext: z
+    .object({
+      changedFiles: z.array(z.string()),
+      hunkCount: z.number().int().min(0),
+      hunks: z.array(
+        z.object({
+          file: z.string(),
+          oldStart: z.number().int().min(0),
+          oldLines: z.number().int().min(0),
+          newStart: z.number().int().min(0),
+          newLines: z.number().int().min(0),
+          heading: z.string().optional(),
+        }),
+      ),
+      diffCharCount: z.number().int().min(0),
+    })
+    .optional(),
   /**
    * QA verdict from the prior QA holdout run — used as signal, not directive.
    * The reviewer forms its own independent judgement. QA verdict is context only.
@@ -74,7 +93,7 @@ const config: SkillConfig = {
    * Explicitly EXCLUDED: devDecisionSummaries, investigationFindings.
    * The Review agent must independently verify criteria, not rubber-stamp developer reasoning.
    */
-  contextAllowlist: ['workItem', 'prDiff', 'qaVerdict', 'acceptanceContract'],
+  contextAllowlist: ['workItem', 'prDiff', 'prDiffWithContext', 'qaVerdict', 'acceptanceContract'],
 };
 
 export default config;

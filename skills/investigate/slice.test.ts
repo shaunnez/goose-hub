@@ -58,6 +58,32 @@ describe('investigate schema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts line-precise key files and fix hints', () => {
+    const result = InvestigateSchema.safeParse({
+      findings: 'Root cause is clear: divide-by-zero in calculateRatio().',
+      keyFiles: [
+        {
+          path: 'core/math/ratio.ts',
+          reason: 'Divide-by-zero bug',
+          line: 42,
+          symbol: 'calculateRatio',
+          snippet: 'return numerator / denominator;',
+        },
+      ],
+      fixHint: {
+        file: 'core/math/ratio.ts',
+        line: 42,
+        currentCode: 'return numerator / denominator;',
+        suggestedApproach: 'Return null or throw before dividing when denominator is zero.',
+      },
+      confidence: 'high',
+      openQuestions: [],
+      requiresBrowserRepro: false,
+      decisionSummaries: [{ kind: 'INSIGHT', summary: 'Divide-by-zero in calculateRatio()' }],
+    });
+    expect(result.success).toBe(true);
+  });
+
   it('accepts evidence as optional on DecisionSummary', () => {
     const result = InvestigateSchema.safeParse({
       findings: 'Investigation complete.',

@@ -90,6 +90,7 @@ describe('implement-wp skill.config', () => {
     expect(allowlist).toContain('wp.id');
     expect(allowlist).toContain('wp.filesOwned');
     expect(allowlist).toContain('wp.changes');
+    expect(allowlist).toContain('codeContext');
     expect(allowlist).toContain('parentPrdContext');
     expect(allowlist).not.toContain('worktreePath');
   });
@@ -117,6 +118,28 @@ describe('implement-wp skill.config', () => {
         filesOwned: ['core/foo/bar.ts'],
         changes: 'Add helper',
         dependsOn: [],
+      },
+      codeContext: [
+        {
+          path: 'core/foo/bar.ts',
+          startLine: 10,
+          endLine: 16,
+          snippet: '10: export function bar() {',
+        },
+      ],
+      investigation: {
+        findings: 'bar needs a guard',
+        keyFiles: [
+          {
+            path: 'core/foo/bar.ts',
+            reason: 'guard lives here',
+            line: 10,
+            symbol: 'bar',
+            snippet: 'export function bar() {}',
+          },
+        ],
+        openQuestions: [],
+        investigationRunId: 'investigation-run-1',
       },
       parentPrdContext: {
         source: 'event',
@@ -147,5 +170,10 @@ describe('implement-wp prompt live decisions', () => {
     expect(prompt).toContain('mcp__factory-tools__record_decision');
     expect(prompt).toContain('The tool call is the primary live timeline signal');
     expect(prompt).toContain('do not rely on text markers alone');
+  });
+
+  it('documents line-precise code context', () => {
+    expect(prompt).toContain('<codeContext>');
+    expect(prompt).toContain('exact pre-read hunks');
   });
 });

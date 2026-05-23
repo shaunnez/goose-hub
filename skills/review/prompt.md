@@ -25,6 +25,7 @@ The context contains a `<task>` block with:
 
 - `<workItem>` — JSON payload for the original GitHub issue, with `title`, `body`, and `number`
 - `<prDiff>` — complete git diff of the PR being reviewed
+- `<prDiffWithContext>` — diff-derived changed-file and hunk metadata. Use it to orient before reading `prDiff`; it contains no developer reasoning.
 - `<qaVerdict>` (optional) — JSON payload for the prior QA holdout run, with `verdict` and `overallScore`
 - `<acceptanceContract>` (optional) — resolved acceptance criteria from a normalized contract, engineering spec, PRD, or issue body
 

@@ -321,6 +321,8 @@ No other code in `core/` may call `insertEvent` directly. Lint rule enforces. On
 
 **Scout Digest Handoff.** Wave-2 scouts and the final investigate synthesis receive `scoutDigest` (`ScoutReportDigestBundle`) instead of raw `scoutReports`. Raw scout reports remain persisted in `core/scout-reports/`; consumers fetch them on demand through `repo_intel.query` with `intent: 'prior-investigation'` when the digest is insufficient for a specific finding.
 
+**Line-Precise Handoff Context.** Investigation outputs may attach `line`, `symbol`, and short `snippet` fields to `keyFiles`, plus an optional `fixHint`. Before `implement` runs, `slices/fix-issue/workflow.ts` builds a bounded `codeContext` bundle from those line-marked key files (`core/agent-runtime/code-context.ts`) and injects it through the explicit implement allowlist. QA and Review receive `prDiffWithContext`, a diff-derived changed-file/hunk summary from `core/agent-runtime/pr-diff-context.ts`; it preserves holdout boundaries because it contains only PR diff metadata, not developer or investigation reasoning.
+
 **Two guards, different paths:**
 - `contextAllowlist: ContextKey[]` — the *manifest*. Filters which keys from `AgentSpec.context` render into the user-prompt XML. Guards against wrong keys at spec construction time. Now required (not optional) on `SkillConfig`.
 - `freshContext: boolean` — the *closure assertion*. When `true`, no other injection channel adds anything. Guards against runtime infrastructure adding ambient state the AgentSpec author doesn't control.

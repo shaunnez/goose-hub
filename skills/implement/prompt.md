@@ -16,6 +16,7 @@ The `<task>` block can include:
 - `<stack>` — `testCommand`, optional `lintCommand`, optional `typecheckCommand`.
 - `<advisorFeedback>` — revision guidance, if this is a respawn.
 - `<investigation>` — prior findings, `keyFiles`, open questions, and run id.
+- `<codeContext>` — exact pre-read hunks for line-precise investigation key files.
 - `<acceptanceContract>` — resolved acceptance criteria that must be satisfied before QA/Review.
 - `<relatedSurface>` — deterministic execution lane from the workflow.
 - `<revisionPass>` — `0` or `1`.
@@ -48,6 +49,7 @@ If the handoff is stale, emit a `PLAN` decision summary with concrete evidence b
 
 - Read `<workItem>`, `<advisorFeedback>`, and `<investigation>` if present.
 - If `<acceptanceContract>` is present, treat its criteria as the behavioral contract for the implementation and tests.
+- If `<codeContext>` is present, treat those snippets as the starting source context. Use them before broad reads, and call `read_file` only when the snippet is insufficient, stale, or contradicted by surrounding code.
 - If `<relatedSurface>` exists, read `readFirst` first. Prefer `existingTests` and `primaryTestPath`; otherwise use `testCandidates[0]` when `testMode` is `create-candidate`.
 - If an investigation has key files and no open questions, treat it as the implementation contract. Patch that surface unless the files are missing or contradict the finding.
 - Emit `[decision] READ: Loaded #<number> and <N> relevant files`.
