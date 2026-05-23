@@ -45,7 +45,7 @@ export interface SelectWave2ScoutsOptions {
   workItem: { number: number; title: string; body: string };
   reports: ScoutReportLike[];
   contradictions: unknown[];
-  scoutReportsContext: string;
+  scoutDigestContext: unknown;
 }
 
 interface ScoutReportLike {
@@ -55,20 +55,20 @@ interface ScoutReportLike {
 
 export function selectWave2Scouts(opts: SelectWave2ScoutsOptions) {
   const signalText = collectWave2SignalText(opts);
-  const specs: Array<typeof WAVE_2_INTERFACE_SPEC & { extraContext: { scoutReports: string } }> =
+  const specs: Array<typeof WAVE_2_INTERFACE_SPEC & { extraContext: { scoutDigest: unknown } }> =
     [];
 
   if (implicatesInterfaceBoundaries(signalText)) {
     specs.push({
       ...WAVE_2_INTERFACE_SPEC,
-      extraContext: { scoutReports: opts.scoutReportsContext },
+      extraContext: { scoutDigest: opts.scoutDigestContext },
     });
   }
 
   if (implicatesRiskAnalysis(signalText) || opts.contradictions.length > 0) {
     specs.push({
       ...WAVE_2_RISK_SPEC,
-      extraContext: { scoutReports: opts.scoutReportsContext },
+      extraContext: { scoutDigest: opts.scoutDigestContext },
     });
   }
 

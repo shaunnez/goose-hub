@@ -411,7 +411,7 @@ describe('runInvestigateWorkflow', () => {
       expect(mockCrossValidate).toHaveBeenCalledWith(wave1.reports);
     });
 
-    it('Wave 2 scouts receive scoutReports in extraContext', async () => {
+    it('Wave 2 scouts receive scoutDigest in extraContext', async () => {
       const { runInvestigateWorkflow } = await import('./workflow.js');
       await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
 
@@ -419,8 +419,13 @@ describe('runInvestigateWorkflow', () => {
         scoutSpecs: Array<{ extraContext?: Record<string, unknown> }>;
       };
       for (const spec of wave2Opts.scoutSpecs) {
-        expect(spec.extraContext).toHaveProperty('scoutReports');
-        expect(typeof spec.extraContext?.scoutReports).toBe('string');
+        expect(spec.extraContext).toHaveProperty('scoutDigest');
+        expect(spec.extraContext?.scoutDigest).toMatchObject({
+          reports: expect.any(Array),
+          contradictions: expect.any(Array),
+          bytesSaved: expect.any(Number),
+        });
+        expect(spec.extraContext).not.toHaveProperty('scoutReports');
       }
     });
 
@@ -664,7 +669,7 @@ describe('runInvestigateWorkflow', () => {
   });
 
   describe('cross-validate surfaces contradiction — acceptance criterion 3', () => {
-    it('passes contradiction data to synthesis via scoutReports context', async () => {
+    it('passes digest data to synthesis via scoutDigest context', async () => {
       const contradiction = {
         file: 'src/auth.ts',
         line: 42,
@@ -683,12 +688,15 @@ describe('runInvestigateWorkflow', () => {
       await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
 
       const invokeOpts = mockInvokeSkill.mock.calls[0][0] as {
-        context: { scoutReports: string };
+        context: {
+          scoutDigest: { reports: unknown[]; contradictions: string[]; bytesSaved: number };
+        };
       };
-      const scoutReports = JSON.parse(invokeOpts.context.scoutReports) as {
-        contradictions: unknown[];
-      };
-      expect(scoutReports.contradictions).toHaveLength(1);
+      expect(invokeOpts.context.scoutDigest.reports.length).toBeGreaterThan(0);
+      expect(invokeOpts.context.scoutDigest.contradictions).toEqual([
+        'src/auth.ts:42: scout-code-path: Token check exists | scout-pattern: Token check missing',
+      ]);
+      expect(invokeOpts.context.scoutDigest.bytesSaved).toBeGreaterThanOrEqual(0);
     });
 
     it('passes compact artifact refs, not full large scout JSON, to synthesis', async () => {
@@ -733,10 +741,64 @@ describe('runInvestigateWorkflow', () => {
       await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
 
       const invokeOpts = mockInvokeSkill.mock.calls[0][0] as {
-        context: { scoutReports: string };
+        context: { scoutDigest: { artifactKeys: string[] } };
       };
-      expect(invokeOpts.context.scoutReports).toContain('scout-report:scout-code-path');
-      expect(invokeOpts.context.scoutReports).not.toContain('LARGE_FULL_SCOUT_BODY');
+      expect(invokeOpts.context.scoutDigest.artifactKeys).toContain('scout-report:scout-code-path');
+      expect(JSON.stringify(invokeOpts.context.scoutDigest)).not.toContain('LARGE_FULL_SCOUT_BODY');
+    });
+
+    it('emits digest-applied events with byte savings', async () => {
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      mockDispatchWave
+        .mockResolvedValueOnce(
+          makeWaveResult({
+            reports: [
+              makeScoutReport('scout-code-path', {
+                findings: [
+                  {
+                    file: 'src/auth.ts',
+                    line: 42,
+                    fact: 'large finding '.repeat(200),
+                    confidence: 'high',
+                  },
+                ],
+              }),
+              makeScoutReport('scout-schema'),
+              makeScoutReport('scout-pattern'),
+            ],
+          }),
+        )
+        .mockResolvedValueOnce(makeWaveResult());
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      const digestEvents = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.filter(([event]) => event.kind === 'investigation.digest-applied');
+      expect(digestEvents.map(([event]) => event.payload)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            wave: 'wave-1-to-wave-2',
+            scoutCount: expect.any(Number),
+            rawBytes: expect.any(Number),
+            digestBytes: expect.any(Number),
+            bytesSaved: expect.any(Number),
+          }),
+          expect.objectContaining({
+            wave: 'wave-1-to-synthesis',
+            scoutCount: expect.any(Number),
+            bytesSaved: expect.any(Number),
+          }),
+        ]),
+      );
+      expect(
+        digestEvents.some(
+          ([event]) =>
+            typeof (event.payload as { bytesSaved?: unknown }).bytesSaved === 'number' &&
+            ((event.payload as { bytesSaved: number }).bytesSaved ?? 0) > 0,
+        ),
+      ).toBe(true);
     });
   });
 
@@ -901,7 +963,7 @@ describe('runInvestigateWorkflow', () => {
         const extraKeys = Object.keys(spec.extraContext ?? {});
         expect(extraKeys).not.toContain('investigationFindings');
         expect(extraKeys).not.toContain('devDecisionSummaries');
-        expect(extraKeys).toEqual(['scoutReports', 'investigationSeed']);
+        expect(extraKeys).toEqual(['scoutDigest', 'investigationSeed']);
       }
     });
 

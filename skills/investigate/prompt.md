@@ -11,7 +11,7 @@ You have **read and search access only**. You must not attempt to write, create,
 The context contains a `<task>` block with:
 
 - `<workItem>` — JSON payload for the issue being investigated, with `title`, `body`, and `number`
-- `<scoutReports>` (optional) — JSON-stringified Wave-1 scout reports and contradictions passed by the orchestrator
+- `<scoutDigest>` (optional) — typed Wave-1/Wave-2 scout digest passed by the orchestrator
 
 Path contract: all output paths must be repo-root/worktree-root relative POSIX paths. Do not use package-relative paths like `src/...` for files under `apps/web`; use `apps/web/src/...`.
 
@@ -67,7 +67,7 @@ Emit: `[decision] READ: Issue #<number> — <one-sentence summary of the bug>`
 - Use search tools to locate files relevant to the symptom area
 - Read directory structure to understand the code organisation
 
-**Wave-aware mode:** if `<scoutReports>` is present in your context, read the cross-validated Wave-1 reports first. Small reports may include full findings; large reports may include only summaries, previews, and `artifactRef` metadata. Treat full findings as primary evidence. Treat summarized artifact refs as orientation and verify exact file:line claims with targeted reads before relying on them. **Do not perform general code exploration.** You may make at most 2 targeted tool calls total — only to verify a specific file:line citation from the reports where your confidence in that citation is low or where the full report was summarized. If `crossValidate` has flagged contradictions across scouts, surface them in `openQuestions` rather than re-investigating. Wave-1 partial-failure rules (informational — the orchestrator enforces them before you see the reports):
+**Wave-aware mode:** if `<scoutDigest>` is present in your context, read the cross-validated scout digest first. You receive a `scoutDigest` summarising each Wave-1 scout: top findings, high-confidence facts, referenced files, risks, contradictions. Default to the digest; if it is insufficient or ambiguous for a specific finding, use supported `repo_intel.query` inputs such as `targetFile`/`workItemId` or a targeted read of the cited file. **Do not perform general code exploration.** You may make at most 2 targeted tool calls total — only to verify a specific file:line citation from the digest where your confidence in that citation is low. If the digest has contradictions across scouts, surface them in `openQuestions` rather than re-investigating. Wave-1 partial-failure rules (informational — the orchestrator enforces them before you see the reports):
 - ≥3 scouts succeeded AND ≤1 failed → wave advanced; reports are usable.
 - 2+ scouts failed → orchestrator halted the wave and escalated; you should not be running.
 

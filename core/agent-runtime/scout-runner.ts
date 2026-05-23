@@ -63,6 +63,7 @@ export const SCOUT_CONTEXT_ALLOWLIST: readonly string[] = [
   'workItem.number',
   'scoutFocus',
   'scoutReports',
+  'scoutDigest',
   'symbolIndexHints',
   'investigationSeed',
 ];

@@ -101,7 +101,7 @@ describe('investigation planner', () => {
       },
       wave1Reports: [report('scout-code-path'), report('scout-test-inventory')],
       contradictions: [],
-      scoutReportsContext: '{"wave1":[]}',
+      scoutDigestContext: { reports: [] },
     });
 
     expect(plan.wave2Needed).toBe(false);
@@ -121,7 +121,7 @@ describe('investigation planner', () => {
         report('scout-schema', 'apps/server/src/auth/schema.ts'),
       ],
       contradictions: [{ file: 'apps/server/src/auth.ts', facts: ['conflict'] }],
-      scoutReportsContext: '{"wave1":[]}',
+      scoutDigestContext: { reports: [] },
     });
 
     expect(plan.wave2Needed).toBe(true);
@@ -154,7 +154,7 @@ describe('investigation planner', () => {
         },
       ],
       contradictions: [],
-      scoutReportsContext: '{"wave1":[]}',
+      scoutDigestContext: { reports: [] },
     });
 
     expect(plan.selectedWave2Scouts.map((scout) => scout.scoutName).sort()).toEqual([
