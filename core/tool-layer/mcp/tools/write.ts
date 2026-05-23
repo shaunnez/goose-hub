@@ -10,6 +10,7 @@ import { emitBlockedToolCall, emitToolCall } from '../audit.js';
 import { minimalEnv, runCommand } from '../command-policy.js';
 import type { FactoryContext } from '../context.js';
 import { PathPolicyViolation, resolveWorkspacePath } from '../path-policy.js';
+import { invalidateRunCacheForPaths } from '../run-cache.js';
 import type {
   ApplyPatchInput,
   CreateDirectoryInput,
@@ -107,6 +108,7 @@ export async function writeFileTool(
 
   await mkdir(dirname(resolved.absolute), { recursive: true });
   await writeFile(resolved.absolute, input.content, 'utf8');
+  invalidateRunCacheForPaths(ctx.runId, [resolved.canonical.path]);
 
   emitToolCall(ctx, {
     tool: 'write_file',
@@ -172,6 +174,7 @@ export async function editFileTool(
   }
 
   await writeFile(resolved.absolute, next, 'utf8');
+  invalidateRunCacheForPaths(ctx.runId, [resolved.canonical.path]);
 
   emitToolCall(ctx, {
     tool: 'edit_file',
@@ -265,7 +268,7 @@ export async function applyPatchTool(
     // run it against the same patch file for a structured filesChanged list.
     const statResult = await runCommand({
       command: 'git',
-      args: ['apply', '--numstat', '--summary', patchFile],
+      args: ['apply', '--numstat', '-z', '--summary', patchFile],
       cwd: ctx.workspaceRoot,
       timeoutMs: APPLY_PATCH_TIMEOUT_MS,
       env: minimalEnv(),
@@ -273,6 +276,10 @@ export async function applyPatchTool(
     const rawFiles = parseNumstat(statResult.stdout);
     const filesChanged: RepoRelativePath[] = rawFiles.map((rawPath) =>
       rawPathToCanonical(rawPath, ctx.workspaceRoot),
+    );
+    invalidateRunCacheForPaths(
+      ctx.runId,
+      filesChanged.map((path) => path.path),
     );
 
     emitToolCall(ctx, {
@@ -289,14 +296,24 @@ export async function applyPatchTool(
 
 function parseNumstat(stdout: string): string[] {
   const out: string[] = [];
-  for (const line of stdout.split('\n')) {
-    // numstat lines: "<added>\t<removed>\t<path>"; summary lines start with " "
-    const cols = line.split('\t');
-    if (cols.length === 3 && cols[2].length > 0 && /^\d+|-$/.test(cols[0])) {
-      out.push(cols[2]);
+  const records = stdout.includes('\0') ? stdout.split('\0') : stdout.split('\n');
+  for (const record of records) {
+    // numstat records: "<added>\t<removed>\t<path>"; with -z, path may contain tabs.
+    const firstTab = record.indexOf('\t');
+    const secondTab = firstTab === -1 ? -1 : record.indexOf('\t', firstTab + 1);
+    if (firstTab === -1 || secondTab === -1) continue;
+    const added = record.slice(0, firstTab);
+    const removed = record.slice(firstTab + 1, secondTab);
+    const filePath = record.slice(secondTab + 1);
+    if (filePath.length > 0 && isNumstatCount(added) && isNumstatCount(removed)) {
+      out.push(filePath);
     }
   }
   return out;
+}
+
+function isNumstatCount(value: string): boolean {
+  return value === '-' || /^\d+$/.test(value);
 }
 
 export interface CreateDirectoryResult {
@@ -326,6 +343,7 @@ export async function createDirectoryTool(
   }
 
   await mkdir(resolved.absolute, { recursive: true });
+  invalidateRunCacheForPaths(ctx.runId, [resolved.canonical.path]);
 
   emitToolCall(ctx, {
     tool: 'create_directory',
@@ -356,6 +374,7 @@ export async function moveFileTool(
 
   await mkdir(dirname(toResolved.absolute), { recursive: true });
   await rename(fromResolved.absolute, toResolved.absolute);
+  invalidateRunCacheForPaths(ctx.runId, [fromResolved.canonical.path, toResolved.canonical.path]);
 
   emitToolCall(ctx, {
     tool: 'move_file',
@@ -403,6 +422,7 @@ export async function deleteFileTool(
   }
 
   if (existed) await rm(resolved.absolute, { force: true });
+  invalidateRunCacheForPaths(ctx.runId, [resolved.canonical.path]);
 
   emitToolCall(ctx, {
     tool: 'delete_file',
