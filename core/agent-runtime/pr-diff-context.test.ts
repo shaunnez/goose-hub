@@ -34,4 +34,20 @@ describe('buildPrDiffWithContext', () => {
       },
     ]);
   });
+
+  it('parses quoted diff headers and unescapes unusual path characters', () => {
+    const context = buildPrDiffWithContext(
+      [
+        'diff --git "a/src/foo b/bar\\tfile.ts" "b/src/foo b/bar\\tfile.ts"',
+        '@@ -5 +5 @@ function quoted()',
+        '-old',
+        '+new',
+      ].join('\n'),
+    );
+
+    expect(context.changedFiles).toEqual(['src/foo b/bar\tfile.ts']);
+    expect(context.hunks).toMatchObject([
+      { file: 'src/foo b/bar\tfile.ts', oldStart: 5, newStart: 5 },
+    ]);
+  });
 });

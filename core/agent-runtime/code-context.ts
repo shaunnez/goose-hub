@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 
 export interface CodeContextKeyFile {
@@ -25,6 +25,7 @@ export function buildCodeContextBundle(input: {
   const maxEntries = input.maxEntries ?? 8;
   const maxSnippetChars = input.maxSnippetChars ?? 12_000;
   const root = resolve(input.worktreePath);
+  const realRoot = safeRealpath(root) ?? root;
   const entries: CodeContextEntry[] = [];
   const seen = new Set<string>();
 
@@ -47,27 +48,81 @@ export function buildCodeContextBundle(input: {
     if (seen.has(cacheKey)) continue;
     seen.add(cacheKey);
     if (!existsSync(absolutePath)) continue;
-    const stat = statSync(absolutePath);
-    if (!stat.isFile()) continue;
+    const realPath = safeRealpath(absolutePath);
+    if (realPath == null || !isWithinRoot(realRoot, realPath)) continue;
 
-    const lines = readFileSync(absolutePath, 'utf8').split(/\r?\n/);
+    let stat: ReturnType<typeof statSync>;
+    let contents: string;
+    try {
+      stat = statSync(realPath);
+      if (!stat.isFile()) continue;
+      contents = readFileSync(realPath, 'utf8');
+    } catch {
+      continue;
+    }
+
+    const lines = contents.split(/\r?\n/);
     if (keyFile.line > lines.length) continue;
     const targetLine = keyFile.line;
     const startLine = Math.max(1, targetLine - radius);
     const endLine = Math.min(lines.length, targetLine + radius);
-    const snippet = lines
-      .slice(startLine - 1, endLine)
-      .map((line, index) => `${startLine + index}: ${line}`)
-      .join('\n')
-      .slice(0, maxSnippetChars);
+    const snippet = buildSnippet({ lines, startLine, endLine, targetLine, maxSnippetChars });
 
     entries.push({
       path: keyFile.path,
-      startLine,
-      endLine,
-      snippet,
+      startLine: snippet.startLine,
+      endLine: snippet.endLine,
+      snippet: snippet.text,
     });
   }
 
   return entries;
+}
+
+function safeRealpath(path: string): string | null {
+  try {
+    return realpathSync(path);
+  } catch {
+    return null;
+  }
+}
+
+function isWithinRoot(root: string, candidate: string): boolean {
+  const rel = relative(root, candidate);
+  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+}
+
+function buildSnippet(input: {
+  lines: string[];
+  startLine: number;
+  endLine: number;
+  targetLine: number;
+  maxSnippetChars: number;
+}): { startLine: number; endLine: number; text: string } {
+  let startLine = input.startLine;
+  let endLine = input.endLine;
+  let text = renderSnippet(input.lines, startLine, endLine);
+
+  while (text.length > input.maxSnippetChars && startLine < input.targetLine) {
+    startLine += 1;
+    text = renderSnippet(input.lines, startLine, endLine);
+  }
+  while (text.length > input.maxSnippetChars && endLine > input.targetLine) {
+    endLine -= 1;
+    text = renderSnippet(input.lines, startLine, endLine);
+  }
+  if (text.length > input.maxSnippetChars) {
+    startLine = input.targetLine;
+    endLine = input.targetLine;
+    text = renderSnippet(input.lines, startLine, endLine).slice(0, input.maxSnippetChars);
+  }
+
+  return { startLine, endLine, text };
+}
+
+function renderSnippet(lines: string[], startLine: number, endLine: number): string {
+  return lines
+    .slice(startLine - 1, endLine)
+    .map((line, index) => `${startLine + index}: ${line}`)
+    .join('\n');
 }

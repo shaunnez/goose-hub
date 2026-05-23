@@ -156,10 +156,6 @@ export async function runFixIssueWorkflow(
     investigation: implementInvestigation,
     evidencePostEnabled,
   });
-  const codeContext = buildCodeContextBundle({
-    worktreePath,
-    keyFiles: implementInvestigation?.keyFiles ?? [],
-  });
   if (relatedSurface != null) {
     eventStore.appendEvent({
       projectId,
@@ -203,6 +199,11 @@ export async function runFixIssueWorkflow(
     // Pre-warm: install dependencies before spawning the agent so it doesn't
     // waste its first turn running pnpm install.
     prewarmWtFn(worktreePath);
+
+    const codeContext = buildCodeContextBundle({
+      worktreePath,
+      keyFiles: implementInvestigation?.keyFiles ?? [],
+    });
 
     // Step 3: optional advisor on plan (priority:high/critical only).
     let advisorFeedback: string | undefined;
