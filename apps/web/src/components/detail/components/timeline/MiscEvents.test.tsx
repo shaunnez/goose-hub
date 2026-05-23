@@ -69,6 +69,44 @@ describe('Misc timeline events', () => {
     expect(rendered).not.toContain('"readCount"');
   });
 
+  it('renders tool.violation as a compact blocked-context warning', () => {
+    const event = makeEvent('tool.violation', {
+      role: 'scout',
+      disallowedKey: 'scoutDigest',
+      runId: 'a43c3f8f-c568-41d0-baab-4618658e7154:scout:wave2-interface-designer:0',
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('Tool violation')).toBeTruthy();
+    const rendered = document.body.textContent ?? '';
+    expect(rendered).toContain('scout');
+    expect(rendered).toContain('blocked key scoutDigest');
+    expect(rendered).toContain('run a43c3f8f');
+    expect(rendered).not.toContain('"disallowedKey"');
+  });
+
+  it('renders agent.investigation-seed-built as seed counts instead of raw JSON', () => {
+    const event = makeEvent('agent.investigation-seed-built', {
+      candidateFileCount: 0,
+      candidateSymbolCount: 3,
+      recentlyChangedCount: 2,
+      priorInvestigationCount: 1,
+      builtMs: 12,
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('Investigation seed built')).toBeTruthy();
+    const rendered = document.body.textContent ?? '';
+    expect(rendered).toContain('0 candidate files');
+    expect(rendered).toContain('3 symbol hints');
+    expect(rendered).toContain('2 recent changes');
+    expect(rendered).toContain('1 prior investigation');
+    expect(rendered).toContain('12 ms');
+    expect(rendered).not.toContain('"candidateFileCount"');
+  });
+
   it('renders agent.investigation-context-injected as summary text instead of raw JSON', () => {
     const event = makeEvent('agent.investigation-context-injected', {
       skill: 'implement-wp',
@@ -89,6 +127,27 @@ describe('Misc timeline events', () => {
     expect(rendered).toContain('2 open questions');
     expect(rendered).toContain('apps/server/src/domains/workflows/triage-batch.ts');
     expect(rendered).not.toContain('"keyFiles"');
+  });
+
+  it('renders investigation.digest-applied as digest savings instead of raw JSON', () => {
+    const event = makeEvent('investigation.digest-applied', {
+      wave: 'wave-1-to-synthesis',
+      scoutCount: 4,
+      rawBytes: 8192,
+      digestBytes: 2048,
+      bytesSaved: 6144,
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('Investigation digest applied')).toBeTruthy();
+    const rendered = document.body.textContent ?? '';
+    expect(rendered).toContain('wave-1-to-synthesis');
+    expect(rendered).toContain('4 scouts');
+    expect(rendered).toContain('8.0 KB raw');
+    expect(rendered).toContain('2.0 KB digest');
+    expect(rendered).toContain('6.0 KB saved (75%)');
+    expect(rendered).not.toContain('"rawBytes"');
   });
 
   it('renders agent.related-surface-manifest-created as summary text instead of raw JSON', () => {

@@ -20,6 +20,18 @@ vi.mock('@goose-hub/core/persona/accumulate.js', () => ({
 vi.mock('@goose-hub/core/agent-runtime/schema-bridge.js', () => ({
   toJsonSchema: vi.fn().mockReturnValue({}),
 }));
+const { mockLatestInvestigationContext, mockGetChangedFilesSince } = vi.hoisted(() => ({
+  mockLatestInvestigationContext: vi.fn().mockReturnValue(undefined),
+  mockGetChangedFilesSince: vi.fn().mockReturnValue([]),
+}));
+vi.mock('@goose-hub/core/agent-runtime/investigation-context.js', () => ({
+  latestInvestigationContext: mockLatestInvestigationContext,
+}));
+vi.mock('@goose-hub/core/agent-runtime/git-intel.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@goose-hub/core/agent-runtime/git-intel.js')>();
+  return { ...actual, getChangedFilesSince: mockGetChangedFilesSince };
+});
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
   return { ...actual, readFileSync: vi.fn().mockReturnValue('# mock skill prompt') };
@@ -370,5 +382,135 @@ describe('runFixFeedbackWorkflow', () => {
     });
 
     expect(customRun).toHaveBeenCalledOnce();
+  });
+
+  describe('prior context inheritance', () => {
+    function makeDecisionSummaryEvent(runId: string, kind: string, summary: string, id = 4) {
+      return {
+        id,
+        kind: 'agent.decision-summary' as EventKind,
+        payload: { runId, kind, summary, evidence: 'should-not-leak' },
+        projectId: 'proj',
+        workItemId: 'github:owner/repo#42',
+        createdAt: new Date().toISOString(),
+        runId,
+      };
+    }
+
+    beforeEach(() => {
+      mockLatestInvestigationContext.mockReset().mockReturnValue(undefined);
+      mockGetChangedFilesSince.mockReset().mockReturnValue([]);
+    });
+
+    it('injects prior investigation findings + keyFiles into implement context', async () => {
+      mockLatestInvestigationContext.mockReturnValue({
+        findings: 'Reset state on close',
+        keyFiles: [
+          { path: 'apps/web/src/components/chat/ChatDock.tsx' },
+          { path: 'apps/web/src/components/chat/ChatPanel.tsx' },
+        ],
+        openQuestions: ['Should close clear persisted id?'],
+        investigationRunId: 'investigation-1',
+      });
+      vi.mocked(eventStore.replay).mockReturnValue([makePrOpenedEvent(), makeQaCompletedEvent()]);
+      mockClaudeCliRun.mockResolvedValue({ output: makeImplementOutput() });
+
+      await runFixFeedbackWorkflow(makeWorkItem(), stateSource, 'proj', 'owner/repo');
+
+      const runCall = mockClaudeCliRun.mock.calls[0][0];
+      expect(runCall.context.priorInvestigation).toMatchObject({
+        findings: 'Reset state on close',
+        keyFiles: [
+          'apps/web/src/components/chat/ChatDock.tsx',
+          'apps/web/src/components/chat/ChatPanel.tsx',
+        ],
+        openQuestions: ['Should close clear persisted id?'],
+      });
+      expect(runCall.contextAllowlist).toEqual(
+        expect.arrayContaining([
+          'priorInvestigation.findings',
+          'priorInvestigation.keyFiles',
+          'priorInvestigation.openQuestions',
+        ]),
+      );
+    });
+
+    it('injects prior dev decisionSummaries (kind+summary only, no evidence)', async () => {
+      vi.mocked(eventStore.replay).mockReturnValue([
+        makePrOpenedEvent(),
+        makeQaCompletedEvent(),
+        makeDecisionSummaryEvent('run-abc', 'PLAN', 'Patch ChatPanel onClose'),
+        makeDecisionSummaryEvent('run-abc', 'RED', 'Added close/reopen regression test', 5),
+        makeDecisionSummaryEvent('run-other', 'PLAN', 'Should NOT be included', 6),
+      ]);
+      mockClaudeCliRun.mockResolvedValue({ output: makeImplementOutput() });
+
+      await runFixFeedbackWorkflow(makeWorkItem(), stateSource, 'proj', 'owner/repo');
+
+      const runCall = mockClaudeCliRun.mock.calls[0][0];
+      expect(runCall.context.priorDevDecisions).toEqual([
+        { kind: 'PLAN', summary: 'Patch ChatPanel onClose' },
+        { kind: 'RED', summary: 'Added close/reopen regression test' },
+      ]);
+      expect(JSON.stringify(runCall.context.priorDevDecisions)).not.toContain('should-not-leak');
+      expect(JSON.stringify(runCall.context.priorDevDecisions)).not.toContain(
+        'Should NOT be included',
+      );
+      expect(runCall.contextAllowlist).toContain('priorDevDecisions');
+    });
+
+    it('injects prior dev changed files into implement context', async () => {
+      mockGetChangedFilesSince.mockReturnValue([
+        'apps/web/src/components/chat/ChatDock.tsx',
+        'apps/web/src/components/chat/ChatPanel.tsx',
+      ]);
+      vi.mocked(eventStore.replay).mockReturnValue([makePrOpenedEvent(), makeQaCompletedEvent()]);
+      mockClaudeCliRun.mockResolvedValue({ output: makeImplementOutput() });
+
+      await runFixFeedbackWorkflow(makeWorkItem(), stateSource, 'proj', 'owner/repo');
+
+      const runCall = mockClaudeCliRun.mock.calls[0][0];
+      expect(runCall.context.priorDevChangedFiles).toEqual([
+        'apps/web/src/components/chat/ChatDock.tsx',
+        'apps/web/src/components/chat/ChatPanel.tsx',
+      ]);
+      expect(runCall.contextAllowlist).toContain('priorDevChangedFiles');
+    });
+
+    it('emits agent.investigation-context-injected for the fix-feedback run when context exists', async () => {
+      mockLatestInvestigationContext.mockReturnValue({
+        findings: 'Reset on close',
+        keyFiles: [{ path: 'apps/web/src/components/chat/ChatDock.tsx' }],
+        openQuestions: [],
+        investigationRunId: 'investigation-1',
+      });
+      mockGetChangedFilesSince.mockReturnValue(['apps/web/src/components/chat/ChatDock.tsx']);
+      vi.mocked(eventStore.replay).mockReturnValue([makePrOpenedEvent(), makeQaCompletedEvent()]);
+      mockClaudeCliRun.mockResolvedValue({ output: makeImplementOutput() });
+
+      await runFixFeedbackWorkflow(makeWorkItem(), stateSource, 'proj', 'owner/repo');
+
+      const injectionEvent = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.map(([event]) => event)
+        .find((event) => event.kind === 'agent.investigation-context-injected');
+      expect(injectionEvent).toBeDefined();
+      expect(injectionEvent?.payload).toMatchObject({
+        skill: 'fix-feedback',
+        investigationRunId: 'investigation-1',
+        keyFileCount: 1,
+        priorDevChangedFileCount: 1,
+      });
+    });
+
+    it('omits priorInvestigation when none recorded', async () => {
+      vi.mocked(eventStore.replay).mockReturnValue([makePrOpenedEvent(), makeQaCompletedEvent()]);
+      mockClaudeCliRun.mockResolvedValue({ output: makeImplementOutput() });
+
+      await runFixFeedbackWorkflow(makeWorkItem(), stateSource, 'proj', 'owner/repo');
+
+      const runCall = mockClaudeCliRun.mock.calls[0][0];
+      expect(runCall.context.priorInvestigation).toBeUndefined();
+    });
   });
 });

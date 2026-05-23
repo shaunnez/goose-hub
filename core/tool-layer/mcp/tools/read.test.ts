@@ -79,6 +79,71 @@ describe('readFileTool', () => {
   });
 });
 
+describe('readFileTool redundant-read detection', () => {
+  it('emits agent.redundant-read after the threshold of distinct reads on the same path', async () => {
+    const lines = Array.from({ length: 200 }, (_, i) => `line${i + 1}`).join('\n');
+    writeFileSync(join(workspace, 'big.txt'), lines);
+
+    for (let i = 0; i < 4; i++) {
+      await readFileTool(ctx, { path: 'big.txt', startLine: i * 10 + 1, lineCount: 5 });
+    }
+
+    const redundantEvents = eventStore.replay({
+      runId: ctx.runId,
+      kind: 'agent.redundant-read',
+    });
+    expect(redundantEvents.length).toBeGreaterThanOrEqual(1);
+    const payload = redundantEvents[0].payload as {
+      path?: string;
+      count?: number;
+      runId?: string;
+    };
+    expect(payload.path).toBe('big.txt');
+    expect(payload.count).toBeGreaterThanOrEqual(4);
+  });
+
+  it('attaches a redundantReadNudge once the threshold is crossed', async () => {
+    writeFileSync(join(workspace, 'big.txt'), 'a\nb\nc\nd\n');
+    let last = await readFileTool(ctx, { path: 'big.txt', startLine: 1, lineCount: 1 });
+    last = await readFileTool(ctx, { path: 'big.txt', startLine: 2, lineCount: 1 });
+    last = await readFileTool(ctx, { path: 'big.txt', startLine: 3, lineCount: 1 });
+    expect(last.redundantReadNudge).toBeUndefined();
+    last = await readFileTool(ctx, { path: 'big.txt', startLine: 4, lineCount: 1 });
+    expect(last.redundantReadNudge).toBeDefined();
+    expect(last.redundantReadNudge).toMatch(/big\.txt/);
+  });
+
+  it('counters are per-path — reads on different files do not aggregate', async () => {
+    writeFileSync(join(workspace, 'a.txt'), 'x');
+    writeFileSync(join(workspace, 'b.txt'), 'y');
+    for (let i = 0; i < 3; i++) {
+      await readFileTool(ctx, { path: 'a.txt' });
+      await readFileTool(ctx, { path: 'b.txt' });
+    }
+    const redundantEvents = eventStore.replay({
+      runId: ctx.runId,
+      kind: 'agent.redundant-read',
+    });
+    expect(redundantEvents).toHaveLength(0);
+  });
+
+  it('a write to the same path resets the redundant-read counter', async () => {
+    const { writeFileTool } = await import('./write.js');
+    const { invalidateRunCacheForPaths } = await import('../run-cache.js');
+    writeFileSync(join(workspace, 'big.txt'), 'a\nb\nc\n');
+    for (let i = 0; i < 3; i++) {
+      await readFileTool(ctx, { path: 'big.txt', startLine: i + 1, lineCount: 1 });
+    }
+    // Simulate write or just call the invalidator directly.
+    invalidateRunCacheForPaths(ctx.runId, ['big.txt']);
+    // Optionally exercise the real write tool to confirm wiring.
+    await writeFileTool(ctx, { path: 'big.txt', content: 'fresh content\n' });
+
+    const fresh = await readFileTool(ctx, { path: 'big.txt' });
+    expect(fresh.redundantReadNudge).toBeUndefined();
+  });
+});
+
 describe('readManyFilesTool', () => {
   it('returns successes and errors side-by-side', async () => {
     const result = await readManyFilesTool(ctx, {

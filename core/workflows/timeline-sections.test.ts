@@ -87,6 +87,10 @@ describe('timeline sections', () => {
     expect(resolveTimelineSection({ kind: 'unknown.future-event' })).toBe('system');
   });
 
+  it('routes investigation digest events to the investigation section', () => {
+    expect(resolveTimelineSection({ kind: 'investigation.digest-applied' })).toBe('investigation');
+  });
+
   it('keeps historical run id parsing isolated as a compatibility fallback', () => {
     expect(
       resolveTimelineSection({ kind: 'agent.run-completed', runId: 'discover-1:write-prd' }),

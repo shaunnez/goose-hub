@@ -33,6 +33,73 @@ const duplicateCounters = new Map<
   string,
   Map<string, { count: number; nudged: boolean; paths: string[] }>
 >();
+const testRetryCounters = new Map<string, Map<string, number>>();
+const redundantReadCounters = new Map<string, Map<string, { count: number; nudged: boolean }>>();
+
+/**
+ * Threshold of distinct `read_file` calls on the same canonical path
+ * before the harness emits `agent.redundant-read` and injects a nudge.
+ * Different offsets/line slices count toward the same path because the
+ * underlying cost (re-injecting file content into the kv-cache) is the
+ * same and the agent should remember what it has already read.
+ */
+export function redundantReadThreshold(env: NodeJS.ProcessEnv = process.env): number {
+  const value = Number.parseInt(env.FACTORY_REDUNDANT_READ_THRESHOLD ?? '', 10);
+  return Number.isFinite(value) && value >= 2 ? value : 4;
+}
+
+export interface RedundantReadRecord {
+  count: number;
+  nudge?: string;
+}
+
+/**
+ * Records a read on the given canonical path and returns the post-increment
+ * count plus an optional one-shot nudge message when the run first crosses
+ * the redundancy threshold.
+ */
+export function recordRead(runId: string, canonicalPath: string): RedundantReadRecord {
+  let runMap = redundantReadCounters.get(runId);
+  if (runMap == null) {
+    runMap = new Map();
+    redundantReadCounters.set(runId, runMap);
+  }
+  const existing = runMap.get(canonicalPath) ?? { count: 0, nudged: false };
+  existing.count += 1;
+  runMap.set(canonicalPath, existing);
+  const threshold = redundantReadThreshold();
+  if (!existing.nudged && existing.count >= threshold) {
+    existing.nudged = true;
+    return {
+      count: existing.count,
+      nudge: `[harness] You have read '${canonicalPath}' ${existing.count} times this run. Subsequent reads return the same content — consult what you have already loaded or request a wider line range in one call.`,
+    };
+  }
+  return { count: existing.count };
+}
+
+export function readCount(runId: string, canonicalPath: string): number {
+  return redundantReadCounters.get(runId)?.get(canonicalPath)?.count ?? 0;
+}
+
+/**
+ * Maximum consecutive `run_tests` failures permitted on the same path
+ * without an intervening Edit/Write. Hit, and the 4th attempt is blocked
+ * with a synthetic failure so the agent must inspect and edit before
+ * looping again. Tuneable for flaky suites via env.
+ */
+export function testRetryCap(env: NodeJS.ProcessEnv = process.env): number {
+  const value = Number.parseInt(env.FACTORY_RUN_TESTS_RETRY_CAP ?? '', 10);
+  return Number.isFinite(value) && value >= 1 ? value : 3;
+}
+
+/** Sentinel key for `run_tests` invocations without a narrowed path. */
+export const TEST_RETRY_ALL_KEY = '<all>';
+
+function normalizeTestPathKey(canonicalPath: string | null | undefined): string {
+  if (canonicalPath == null || canonicalPath.trim().length === 0) return TEST_RETRY_ALL_KEY;
+  return normalizePathForOverlap(canonicalPath);
+}
 
 eventStore.subscribe((event) => {
   if (
@@ -132,7 +199,8 @@ export function setCachedRunResult<T>(runId: string, key: NormalizedRunCacheKey,
 export function invalidateRunCacheForPaths(runId: string, rawPaths: string[]): void {
   const cache = runCaches.get(runId);
   const duplicateMap = duplicateCounters.get(runId);
-  if ((cache == null && duplicateMap == null) || rawPaths.length === 0) return;
+  const retryMap = testRetryCounters.get(runId);
+  if ((cache == null && duplicateMap == null && retryMap == null) || rawPaths.length === 0) return;
   const changedPaths = rawPaths.map(normalizePathForOverlap);
   for (const [key, entry] of cache ?? []) {
     if (
@@ -154,11 +222,74 @@ export function invalidateRunCacheForPaths(runId: string, rawPaths: string[]): v
     }
   }
   if (duplicateMap?.size === 0) duplicateCounters.delete(runId);
+  // Writes invalidate the retry cap for any path they touch — and for the
+  // full-suite sentinel, since the next full run may now produce different
+  // results.
+  for (const [retryKey] of retryMap ?? []) {
+    if (
+      retryKey === TEST_RETRY_ALL_KEY ||
+      changedPaths.some((changedPath) => pathsOverlap(retryKey, changedPath))
+    ) {
+      retryMap?.delete(retryKey);
+    }
+  }
+  if (retryMap?.size === 0) testRetryCounters.delete(runId);
+
+  // Writes also reset redundant-read counters for overlapping paths: the
+  // file has changed, so reading it again is no longer redundant.
+  const readMap = redundantReadCounters.get(runId);
+  for (const [readKey] of readMap ?? []) {
+    if (changedPaths.some((changedPath) => pathsOverlap(readKey, changedPath))) {
+      readMap?.delete(readKey);
+    }
+  }
+  if (readMap?.size === 0) redundantReadCounters.delete(runId);
 }
 
 export function clearRunCache(runId: string): void {
   runCaches.delete(runId);
   duplicateCounters.delete(runId);
+  testRetryCounters.delete(runId);
+  redundantReadCounters.delete(runId);
+}
+
+/**
+ * Records a `run_tests` failure for the given canonical path. Returns the
+ * current consecutive-failure count. The all-suite sentinel is used when
+ * the agent runs the full suite (no narrowed path).
+ */
+export function recordTestFailure(runId: string, canonicalPath: string | null): number {
+  const key = normalizeTestPathKey(canonicalPath);
+  let runMap = testRetryCounters.get(runId);
+  if (runMap == null) {
+    runMap = new Map();
+    testRetryCounters.set(runId, runMap);
+  }
+  const next = (runMap.get(key) ?? 0) + 1;
+  runMap.set(key, next);
+  return next;
+}
+
+/**
+ * Clears the consecutive-failure counter for the given path. Call on
+ * successful test runs and on writes/edits that mutate the target file
+ * so the agent's next attempt is not pre-blocked.
+ */
+export function clearTestFailureCounter(runId: string, canonicalPath: string | null): void {
+  const key = normalizeTestPathKey(canonicalPath);
+  const runMap = testRetryCounters.get(runId);
+  if (runMap == null) return;
+  runMap.delete(key);
+  if (runMap.size === 0) testRetryCounters.delete(runId);
+}
+
+/**
+ * Returns the current consecutive-failure count for the given path.
+ * Zero means no prior failures recorded.
+ */
+export function consecutiveTestFailures(runId: string, canonicalPath: string | null): number {
+  const key = normalizeTestPathKey(canonicalPath);
+  return testRetryCounters.get(runId)?.get(key) ?? 0;
 }
 
 export function recordDuplicateToolCall(

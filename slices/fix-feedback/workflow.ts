@@ -1,5 +1,10 @@
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
+import { getChangedFilesSince } from '@goose-hub/core/agent-runtime/git-intel.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
+import {
+  type InvestigationContext,
+  latestInvestigationContext,
+} from '@goose-hub/core/agent-runtime/investigation-context.js';
 import { readPromptWithContext } from '@goose-hub/core/agent-runtime/read-prompt.js';
 import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
 import { resolveProjectAgentExecution } from '@goose-hub/core/agent-runtime/resolve-runtime-for-project.js';
@@ -12,6 +17,60 @@ import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { ImplementSchema } from '@goose-hub/skills/implement/schema.js';
+
+/** Maximum prior dev decision-summaries surfaced to the repair agent. */
+const PRIOR_DECISION_LIMIT = 20;
+/** Maximum prior changed-file paths surfaced. Keeps the prompt focused. */
+const PRIOR_CHANGED_FILES_LIMIT = 30;
+
+interface PriorDevDecision {
+  kind: string;
+  summary: string;
+}
+
+function collectPriorDevDecisions(
+  events: ReturnType<typeof eventStore.replay>,
+  devRunId: string | undefined,
+): PriorDevDecision[] {
+  if (devRunId == null) return [];
+  const out: PriorDevDecision[] = [];
+  for (const event of events) {
+    if (event.kind !== 'agent.decision-summary') continue;
+    if (event.runId != null && event.runId !== devRunId) continue;
+    const payload = event.payload as { runId?: unknown; kind?: unknown; summary?: unknown } | null;
+    if (payload == null) continue;
+    if (event.runId == null && payload.runId !== devRunId) continue;
+    if (typeof payload.kind !== 'string' || typeof payload.summary !== 'string') continue;
+    out.push({ kind: payload.kind, summary: payload.summary });
+    if (out.length >= PRIOR_DECISION_LIMIT) break;
+  }
+  return out;
+}
+
+function collectPriorChangedFiles(worktreePath: string): string[] {
+  try {
+    return getChangedFilesSince(worktreePath).slice(0, PRIOR_CHANGED_FILES_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
+function buildPriorInvestigationPayload(investigation: InvestigationContext | undefined):
+  | {
+      findings?: string;
+      keyFiles: string[];
+      openQuestions: string[];
+      investigationRunId?: string;
+    }
+  | undefined {
+  if (investigation == null) return undefined;
+  return {
+    findings: investigation.findings,
+    keyFiles: investigation.keyFiles.map((f) => f.path).filter((p) => p.length > 0),
+    openQuestions: investigation.openQuestions,
+    investigationRunId: investigation.investigationRunId,
+  };
+}
 
 export interface FixFeedbackDeps {
   runtime?: AgentRuntime;
@@ -249,6 +308,15 @@ export async function runFixFeedbackWorkflow(
   const { personaId } = selectPersona(projectId, 'developer');
   const advisorFeedback = sourceFailure?.feedback ?? '';
 
+  const priorInvestigation = latestInvestigationContext({
+    projectId,
+    workItemId: workItem.id,
+    worktreePath,
+  });
+  const priorInvestigationPayload = buildPriorInvestigationPayload(priorInvestigation);
+  const priorDevDecisions = collectPriorDevDecisions(events, prLifecycle?.devRunId);
+  const priorDevChangedFiles = collectPriorChangedFiles(worktreePath);
+
   await stateSource.transitionState(
     workItem.externalId,
     'factory:needs-fix',
@@ -263,6 +331,28 @@ export async function runFixFeedbackWorkflow(
     runId,
     extraPayload: repairPayload,
   });
+
+  if (priorInvestigationPayload != null || priorDevChangedFiles.length > 0) {
+    eventStore.appendEvent({
+      projectId,
+      workItemId: workItem.id,
+      kind: 'agent.investigation-context-injected',
+      payload: {
+        runId,
+        skill: 'fix-feedback',
+        investigationRunId: priorInvestigationPayload?.investigationRunId ?? null,
+        keyFiles: priorInvestigationPayload?.keyFiles ?? [],
+        keyFileCount: priorInvestigationPayload?.keyFiles.length ?? 0,
+        findingsChars: priorInvestigationPayload?.findings?.length ?? 0,
+        openQuestionCount: priorInvestigationPayload?.openQuestions.length ?? 0,
+        priorDevRunId: prLifecycle?.devRunId ?? null,
+        priorDevDecisionCount: priorDevDecisions.length,
+        priorDevChangedFileCount: priorDevChangedFiles.length,
+      },
+      runId,
+      personaId,
+    });
+  }
 
   try {
     const { output: implementOutput } = await runWithEscalation({
@@ -292,6 +382,9 @@ export async function runFixFeedbackWorkflow(
           },
           advisorFeedback: advisorFeedback || undefined,
           revisionPass: 1,
+          priorInvestigation: priorInvestigationPayload,
+          priorDevDecisions: priorDevDecisions.length > 0 ? priorDevDecisions : undefined,
+          priorDevChangedFiles: priorDevChangedFiles.length > 0 ? priorDevChangedFiles : undefined,
         },
         contextAllowlist: [
           'workItem.title',
@@ -303,6 +396,11 @@ export async function runFixFeedbackWorkflow(
           'stack.typecheckCommand',
           'advisorFeedback',
           'revisionPass',
+          'priorInvestigation.findings',
+          'priorInvestigation.keyFiles',
+          'priorInvestigation.openQuestions',
+          'priorDevDecisions',
+          'priorDevChangedFiles',
         ],
         freshContext: false,
         toolBundles: ['dev-tools'],

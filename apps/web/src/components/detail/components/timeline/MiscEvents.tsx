@@ -7,6 +7,7 @@ import {
   Cpu,
   FileStack,
   Info,
+  Network,
   Route,
   Target,
   User,
@@ -34,6 +35,15 @@ type ToolIntensityAnomalyPayload = {
   redundantReads?: number;
 };
 
+type ToolViolationPayload = {
+  role?: string;
+  runId?: string;
+  disallowedKey?: string;
+  leakedKey?: string;
+  leak?: string;
+  source?: string;
+};
+
 type InvestigationContextInjectedPayload = {
   skill?: string;
   wpId?: string;
@@ -42,6 +52,22 @@ type InvestigationContextInjectedPayload = {
   keyFileCount?: number;
   findingsChars?: number;
   openQuestionCount?: number;
+};
+
+type InvestigationSeedBuiltPayload = {
+  candidateFileCount?: number;
+  candidateSymbolCount?: number;
+  recentlyChangedCount?: number;
+  priorInvestigationCount?: number;
+  builtMs?: number;
+};
+
+type InvestigationDigestAppliedPayload = {
+  wave?: string;
+  scoutCount?: number;
+  rawBytes?: number;
+  digestBytes?: number;
+  bytesSaved?: number;
 };
 
 type RelatedSurfacePayload = {
@@ -370,6 +396,34 @@ export function ToolIntensityAnomalyEvent({ event }: { event: AgentEventDto }) {
   );
 }
 
+export function ToolViolationEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as ToolViolationPayload | null;
+  const key = p?.disallowedKey ?? p?.leakedKey ?? null;
+  const shortRunId = formatShortId(p?.runId ?? event.runId ?? undefined);
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-warning bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <AlertTriangle size={13} className="shrink-0 text-amber-400" />
+        <span className="font-mono uppercase tracking-wider">Tool violation</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12.5px] text-fg-2">
+        {p?.role != null && <span>{p.role}</span>}
+        {key != null && <span>blocked key {key}</span>}
+        {p?.leak != null && <span>{p.leak} leak</span>}
+        {p?.source != null && <span>{p.source}</span>}
+      </div>
+      {shortRunId != null && (
+        <div className="mt-1 text-[11px] font-mono text-fg-4">run {shortRunId}</div>
+      )}
+    </li>
+  );
+}
+
 export function AgentDisclosureEvent({ event }: { event: AgentEventDto }) {
   const p = event.payload as DisclosurePayload | null;
   const artifactKeys = p?.artifactKeys ?? [];
@@ -399,6 +453,54 @@ export function AgentDisclosureEvent({ event }: { event: AgentEventDto }) {
           ))}
         </div>
       )}
+    </li>
+  );
+}
+
+export function InvestigationSeedBuiltEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as InvestigationSeedBuiltPayload | null;
+  const candidateFiles = typeof p?.candidateFileCount === 'number' ? p.candidateFileCount : null;
+  const candidateSymbols =
+    typeof p?.candidateSymbolCount === 'number' ? p.candidateSymbolCount : null;
+  const recentChanges = typeof p?.recentlyChangedCount === 'number' ? p.recentlyChangedCount : null;
+  const priorInvestigations =
+    typeof p?.priorInvestigationCount === 'number' ? p.priorInvestigationCount : null;
+  const builtMs = typeof p?.builtMs === 'number' ? p.builtMs : null;
+
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <FileStack size={13} className="shrink-0 text-[color:var(--accent)]" />
+        <span className="font-mono uppercase tracking-wider">Investigation seed built</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12.5px] text-fg-2">
+        {candidateFiles != null && (
+          <span>
+            {candidateFiles} candidate file{candidateFiles === 1 ? '' : 's'}
+          </span>
+        )}
+        {candidateSymbols != null && (
+          <span>
+            {candidateSymbols} symbol hint{candidateSymbols === 1 ? '' : 's'}
+          </span>
+        )}
+        {recentChanges != null && (
+          <span>
+            {recentChanges} recent change{recentChanges === 1 ? '' : 's'}
+          </span>
+        )}
+        {priorInvestigations != null && (
+          <span>
+            {priorInvestigations} prior investigation{priorInvestigations === 1 ? '' : 's'}
+          </span>
+        )}
+        {builtMs != null && <span>{builtMs} ms</span>}
+      </div>
     </li>
   );
 }
@@ -448,6 +550,51 @@ export function InvestigationContextInjectedEvent({ event }: { event: AgentEvent
       {shortRunId != null && (
         <div className="mt-1 text-[11px] font-mono text-fg-4">investigation {shortRunId}</div>
       )}
+    </li>
+  );
+}
+
+export function InvestigationDigestAppliedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as InvestigationDigestAppliedPayload | null;
+  const scoutCount = typeof p?.scoutCount === 'number' ? p.scoutCount : null;
+  const rawBytes = typeof p?.rawBytes === 'number' ? p.rawBytes : null;
+  const digestBytes = typeof p?.digestBytes === 'number' ? p.digestBytes : null;
+  const bytesSaved = typeof p?.bytesSaved === 'number' ? p.bytesSaved : null;
+  const savedPercent =
+    rawBytes != null && rawBytes > 0 && bytesSaved != null
+      ? Math.round((bytesSaved / rawBytes) * 100)
+      : null;
+
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-line bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-1 text-[11px] text-fg-3">
+        <Network size={13} className="shrink-0 text-[color:var(--accent)]" />
+        <span className="font-mono uppercase tracking-wider">Investigation digest applied</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12.5px] text-fg-2">
+        {p?.wave != null && <span className="font-mono">{p.wave}</span>}
+        {scoutCount != null && (
+          <span>
+            {scoutCount} scout{scoutCount === 1 ? '' : 's'}
+          </span>
+        )}
+        {rawBytes != null && digestBytes != null && (
+          <span>
+            {formatByteCount(rawBytes)} raw → {formatByteCount(digestBytes)} digest
+          </span>
+        )}
+        {bytesSaved != null && (
+          <span>
+            {formatByteCount(bytesSaved)} saved
+            {savedPercent != null ? ` (${savedPercent}%)` : ''}
+          </span>
+        )}
+      </div>
     </li>
   );
 }

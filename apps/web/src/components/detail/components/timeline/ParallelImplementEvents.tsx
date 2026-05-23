@@ -25,6 +25,13 @@ type ParallelPayload = {
   runId?: string;
 };
 
+type SpecPrdContextAttachedPayload = {
+  source?: string;
+  prdRunId?: string;
+  artifactKey?: string;
+  inlineSections?: string[];
+};
+
 function formatShortId(value: string | undefined): string | null {
   if (value == null || value.length === 0) return null;
   return value.length <= 12 ? value : value.slice(0, 8);
@@ -111,6 +118,45 @@ export function SpecCompletedEvent({ event }: { event: AgentEventDto }) {
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-fg-3">
         {issue != null && <span>Work item {issue}</span>}
         <PipelineChip pipelineRunId={p?.pipelineRunId} />
+      </div>
+    </ParallelEventShell>
+  );
+}
+
+export function SpecPrdContextAttachedEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as SpecPrdContextAttachedPayload | null;
+  const inlineSections = p?.inlineSections ?? [];
+  const shortPrdRunId = formatShortId(p?.prdRunId);
+
+  return (
+    <ParallelEventShell
+      event={event}
+      icon={<ScrollText size={13} className="shrink-0 text-[color:var(--accent)]" />}
+      title="PRD context attached"
+      tone="info"
+    >
+      <div className="space-y-1">
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-fg-3">
+          {p?.source != null && <span>{p.source}</span>}
+          {shortPrdRunId != null && (
+            <span className="font-mono text-fg-4">prd {shortPrdRunId}</span>
+          )}
+          {inlineSections.length > 0 && (
+            <span>
+              {inlineSections.length} inline section{inlineSections.length === 1 ? '' : 's'}
+            </span>
+          )}
+        </div>
+        {p?.artifactKey != null && (
+          <DetailRow>
+            Artifact: <span className="font-mono text-fg-2">{p.artifactKey}</span>
+          </DetailRow>
+        )}
+        {inlineSections.length > 0 && (
+          <DetailRow>
+            Sections: <span className="font-mono text-fg-2">{inlineSections.join(', ')}</span>
+          </DetailRow>
+        )}
       </div>
     </ParallelEventShell>
   );

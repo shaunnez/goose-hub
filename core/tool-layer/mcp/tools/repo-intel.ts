@@ -1,12 +1,14 @@
 import type { z } from 'zod';
 import { getArtifact } from '../../../agent-artifacts/repository.js';
-import { gitRecentChanges } from '../../../agent-runtime/git-intel.js';
+import { gitRecentChanges, gitRecentlyTouched } from '../../../agent-runtime/git-intel.js';
 import { latestInvestigationContext } from '../../../agent-runtime/investigation-context.js';
 import { buildRelatedSurfaceManifest } from '../../../agent-runtime/related-surface.js';
 import { eventStore } from '../../../event-stream/store.js';
 import {
   findComponentUsages,
+  fuzzyFindComponents,
   lookupRoute,
+  lookupRouteForUrl,
   routeForComponent,
 } from '../../../route-index/lookup.js';
 import { listScoutReportsForInvestigation } from '../../../scout-reports/repository.js';
@@ -26,7 +28,11 @@ import {
   recordDuplicateToolCall,
   setCachedRunResult,
 } from '../run-cache.js';
-import type { RepoIntelQueryInput } from '../schemas.js';
+import {
+  REPO_INTEL_EXAMPLES,
+  type RepoIntelQueryInput,
+  RepoIntelQueryRefined,
+} from '../schemas.js';
 
 export type RepoIntelQuery =
   | {
@@ -45,7 +51,10 @@ export type RepoIntelQuery =
   | { intent: 'related-files'; target: string }
   | { intent: 'recent-changes'; path?: string; sinceDays?: number }
   | { intent: 'prior-investigation'; workItemId?: string; targetFile?: string }
-  | { intent: 'fetch-artifact'; artifactKey: string };
+  | { intent: 'fetch-artifact'; artifactKey: string }
+  | { intent: 'route-for-url'; url: string }
+  | { intent: 'fuzzy-component'; phrase: string; limit?: number }
+  | { intent: 'recent-touched'; sinceDays?: number; limit?: number };
 
 export type RepoIntelIntent = RepoIntelQuery['intent'];
 type RepoIntelToolInput = z.infer<typeof RepoIntelQueryInput>;
@@ -80,6 +89,7 @@ export type RepoIntelResult =
 
 type RelatedSurface = typeof buildRelatedSurfaceManifest;
 type RecentChanges = typeof gitRecentChanges;
+type RecentlyTouched = typeof gitRecentlyTouched;
 type LookupSymbol = typeof lookupSymbol;
 type FindCallers = typeof findCallersOfSymbol;
 type LatestInvestigationContext = typeof latestInvestigationContext;
@@ -91,6 +101,8 @@ type FindImportersImporting = typeof findImportersImporting;
 type LookupRoute = typeof lookupRoute;
 type FindComponentUsages = typeof findComponentUsages;
 type RouteForComponent = typeof routeForComponent;
+type LookupRouteForUrl = typeof lookupRouteForUrl;
+type FuzzyFindComponents = typeof fuzzyFindComponents;
 
 export interface RepoIntelDeps {
   lookupSymbol?: LookupSymbol;
@@ -119,6 +131,13 @@ export interface RepoIntelDeps {
   routeForComponent?:
     | RouteForComponent
     | ((...args: Parameters<RouteForComponent>) => ReturnType<RouteForComponent> | null);
+  lookupRouteForUrl?:
+    | LookupRouteForUrl
+    | ((...args: Parameters<LookupRouteForUrl>) => ReturnType<LookupRouteForUrl> | null);
+  fuzzyFindComponents?:
+    | FuzzyFindComponents
+    | ((...args: Parameters<FuzzyFindComponents>) => ReturnType<FuzzyFindComponents> | null);
+  gitRecentlyTouched?: RecentlyTouched;
 }
 
 export async function repoIntelQueryTool(
@@ -126,6 +145,26 @@ export async function repoIntelQueryTool(
   input: RepoIntelToolInput,
   deps: RepoIntelDeps = {},
 ): Promise<RepoIntelResult> {
+  const inputKeys = sortedKeys(input);
+  const refined = RepoIntelQueryRefined.safeParse(input);
+  if (!refined.success) {
+    const result: RepoIntelResult = {
+      ok: false,
+      intent: input.intent,
+      reason: 'invalid-args',
+      fallbackHint: invalidArgsHint(input.intent, refined.error.issues),
+    };
+    emitToolCall(ctx, {
+      tool: 'repo_intel.query',
+      input: auditInput(input),
+      status: 'failed',
+      noMatches: false,
+      repo_intel_intent: input.intent,
+      inputKeys,
+    });
+    return result;
+  }
+
   const normalized = normalizePathInputs(ctx, input);
   const cacheKey = normalizeRunCacheKey({
     toolName: 'repo_intel.query',
@@ -142,6 +181,7 @@ export async function repoIntelQueryTool(
       status: 'ok',
       cached: true,
       repo_intel_intent: input.intent,
+      inputKeys,
       ...duplicateAuditFields(duplicate),
     });
     return { ...cached, cached: true as const, ...duplicateNudgeFields(duplicate) };
@@ -154,6 +194,7 @@ export async function repoIntelQueryTool(
     status: result.ok ? 'ok' : 'failed',
     noMatches: !result.ok && result.reason === 'not-found',
     repo_intel_intent: input.intent,
+    inputKeys,
     ...duplicateAuditFields(duplicate),
   });
   if (cacheKey != null) setCachedRunResult(ctx.runId, cacheKey, result);
@@ -271,6 +312,30 @@ async function dispatchRepoIntel(
         result == null ? [] : [stripHoldoutSensitive(ctx, result)],
         'Artifact not found.',
       );
+    }
+    case 'route-for-url': {
+      if (input.url == null) return invalid(input.intent, 'Provide url.');
+      const lookup = deps.lookupRouteForUrl ?? lookupRouteForUrl;
+      const results = lookup(input.url, { worktreePath: ctx.workspaceRoot });
+      return indexFound(input.intent, 'route-index', results, 'No route matched the URL.');
+    }
+    case 'fuzzy-component': {
+      if (input.phrase == null) return invalid(input.intent, 'Provide phrase.');
+      const fuzzy = deps.fuzzyFindComponents ?? fuzzyFindComponents;
+      const results = fuzzy(input.phrase, {
+        worktreePath: ctx.workspaceRoot,
+        ...(input.limit != null ? { limit: input.limit } : {}),
+      });
+      return indexFound(input.intent, 'route-index', results, 'No component matched the phrase.');
+    }
+    case 'recent-touched': {
+      const touched = deps.gitRecentlyTouched ?? gitRecentlyTouched;
+      const results = await touched({
+        worktreePath: ctx.workspaceRoot,
+        ...(input.sinceDays != null ? { sinceDays: input.sinceDays } : {}),
+        ...(input.limit != null ? { limit: input.limit } : {}),
+      });
+      return found(input.intent, 'git', results, 'No recently touched files found.');
     }
   }
 }
@@ -425,6 +490,29 @@ function unique(values: string[]): string[] {
 
 function auditInput(input: RepoIntelToolInput): Record<string, unknown> {
   return { intent: input.intent };
+}
+
+function sortedKeys(input: RepoIntelToolInput): string[] {
+  return Object.keys(input).sort();
+}
+
+function invalidArgsHint(
+  intent: RepoIntelIntent,
+  issues: ReadonlyArray<{ path: ReadonlyArray<PropertyKey>; message: string }>,
+): string {
+  const missingFields = new Set<string>();
+  for (const issue of issues) {
+    const head = issue.path[0];
+    if (typeof head === 'string' && head !== 'intent') missingFields.add(head);
+  }
+  const example = REPO_INTEL_EXAMPLES[intent] ?? '';
+  if (missingFields.size > 0) {
+    const fieldList = [...missingFields].sort().join(', ');
+    const exampleSuffix = example.length > 0 ? ` Example: ${example}` : '';
+    return `Required field(s) missing for intent '${intent}': ${fieldList}.${exampleSuffix}`;
+  }
+  const fallback = `Invalid arguments for intent '${intent}'.`;
+  return example.length > 0 ? `${fallback} Example: ${example}` : fallback;
 }
 
 function duplicateAuditFields(duplicate: ReturnType<typeof recordDuplicateToolCall> | null): {

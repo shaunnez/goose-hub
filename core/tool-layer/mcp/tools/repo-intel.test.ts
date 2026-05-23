@@ -338,4 +338,158 @@ describe('repoIntelQueryTool', () => {
       fallbackHint: expect.stringContaining('search_text'),
     });
   });
+
+  it.each([
+    ['find-symbol', 'name'],
+    ['find-callers', 'symbol'],
+    ['find-calls-of', 'symbol'],
+    ['find-jsx-usages', 'component'],
+    ['find-component', 'component'],
+    ['find-tests-for', 'target'],
+    ['related-files', 'target'],
+    ['fetch-artifact', 'artifactKey'],
+  ])(
+    'returns invalid-args with field-specific hint when %s missing %s',
+    async (intent, missingField) => {
+      const result = await repoIntelQueryTool(makeCtx(), {
+        intent,
+      } as unknown as RepoIntelQuery);
+
+      expect(result).toMatchObject({
+        ok: false,
+        intent,
+        reason: 'invalid-args',
+      });
+      if (!result.ok && result.reason === 'invalid-args') {
+        expect(result.fallbackHint).toContain(missingField);
+      }
+    },
+  );
+
+  it('audit event carries inputKeys for invalid-args calls', async () => {
+    const ctx = makeCtx({ runId: 'repo-intel-audit-invalid' });
+    await repoIntelQueryTool(ctx, { intent: 'find-symbol' } as unknown as RepoIntelQuery);
+    const events = eventStore.replay({ runId: ctx.runId, kind: 'agent.tool-call' });
+    expect(events.length).toBeGreaterThan(0);
+    expect(events[0].payload).toMatchObject({
+      tool_name: 'repo_intel.query',
+      repo_intel_intent: 'find-symbol',
+      status: 'failed',
+      inputKeys: ['intent'],
+    });
+  });
+
+  it('audit event carries inputKeys including all provided fields', async () => {
+    const ctx = makeCtx({ runId: 'repo-intel-audit-keys' });
+    await repoIntelQueryTool(
+      ctx,
+      { intent: 'find-symbol', name: 'AuthService', kind: 'function' },
+      { lookupSymbol: vi.fn(() => []) },
+    );
+    const events = eventStore.replay({ runId: ctx.runId, kind: 'agent.tool-call' });
+    const payload = events[0].payload as Record<string, unknown>;
+    expect(payload.tool_name).toBe('repo_intel.query');
+    expect(payload.inputKeys).toEqual(['intent', 'kind', 'name']);
+  });
+
+  describe('grounding intents', () => {
+    it('route-for-url normalizes scheme/host and returns matching routes', async () => {
+      const lookupRouteForUrl = vi.fn(() => [
+        {
+          pathPattern: '/projects/:slug',
+          filePath: 'apps/web/src/App.tsx',
+          line: 12,
+          component: 'ProjectPage',
+        },
+      ]);
+      const result = await repoIntelQueryTool(
+        makeCtx(),
+        { intent: 'route-for-url', url: 'http://localhost:5173/projects/goose-hub-self' },
+        { lookupRouteForUrl },
+      );
+      expect(result).toMatchObject({ ok: true, intent: 'route-for-url' });
+      expect(lookupRouteForUrl).toHaveBeenCalledWith(
+        'http://localhost:5173/projects/goose-hub-self',
+        expect.any(Object),
+      );
+    });
+
+    it('route-for-url returns not-found when no routes match', async () => {
+      const result = await repoIntelQueryTool(
+        makeCtx(),
+        { intent: 'route-for-url', url: '/no-such-route' },
+        { lookupRouteForUrl: vi.fn(() => []) },
+      );
+      expect(result).toMatchObject({ ok: false, reason: 'not-found' });
+    });
+
+    it('route-for-url is invalid without url field', async () => {
+      const result = await repoIntelQueryTool(makeCtx(), {
+        intent: 'route-for-url',
+      } as unknown as RepoIntelQuery);
+      expect(result).toMatchObject({ ok: false, reason: 'invalid-args' });
+      if (!result.ok && result.reason === 'invalid-args')
+        expect(result.fallbackHint).toContain('url');
+    });
+
+    it('fuzzy-component returns matches scored against the input phrase', async () => {
+      const fuzzyFindComponents = vi.fn(() => [
+        {
+          component: 'ChatPanel',
+          filePath: 'apps/web/src/components/chat/components/ChatPanel.tsx',
+          line: 8,
+          score: 2,
+        },
+        {
+          component: 'ChatDock',
+          filePath: 'apps/web/src/components/chat/components/ChatDock.tsx',
+          line: 4,
+          score: 1,
+        },
+      ]);
+      const result = await repoIntelQueryTool(
+        makeCtx(),
+        { intent: 'fuzzy-component', phrase: 'chat panel widget' },
+        { fuzzyFindComponents },
+      );
+      expect(result).toMatchObject({ ok: true, intent: 'fuzzy-component' });
+      expect(fuzzyFindComponents).toHaveBeenCalledWith('chat panel widget', expect.any(Object));
+      if (result.ok) expect(result.results).toHaveLength(2);
+    });
+
+    it('fuzzy-component is invalid without phrase', async () => {
+      const result = await repoIntelQueryTool(makeCtx(), {
+        intent: 'fuzzy-component',
+      } as unknown as RepoIntelQuery);
+      expect(result).toMatchObject({ ok: false, reason: 'invalid-args' });
+      if (!result.ok && result.reason === 'invalid-args')
+        expect(result.fallbackHint).toContain('phrase');
+    });
+
+    it('recent-touched returns files changed in the worktree without a candidate set', async () => {
+      const gitRecentlyTouched = vi.fn(async () => [
+        {
+          path: { path: 'apps/web/src/App.tsx', root: 'worktree' as const },
+          lastTouched: '2026-05-23T00:00:00Z',
+          lastCommitSha: 'abc',
+        },
+      ]);
+      const result = await repoIntelQueryTool(
+        makeCtx(),
+        { intent: 'recent-touched', sinceDays: 7 },
+        { gitRecentlyTouched },
+      );
+      expect(result).toMatchObject({ ok: true, intent: 'recent-touched' });
+      expect(gitRecentlyTouched).toHaveBeenCalledWith(expect.objectContaining({ sinceDays: 7 }));
+    });
+
+    it('recent-touched returns not-found when git reports no changes', async () => {
+      const result = await repoIntelQueryTool(
+        makeCtx(),
+        { intent: 'recent-touched' },
+        { gitRecentlyTouched: vi.fn(async () => []) },
+      );
+      expect(result).toMatchObject({ ok: false, reason: 'not-found' });
+    });
+  });
 });

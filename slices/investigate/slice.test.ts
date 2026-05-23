@@ -17,6 +17,10 @@ const mockInvokeSkill = vi.fn();
 const mockPersistScoutReport = vi.fn();
 const mockLookupWorkItemSymbols = vi.fn();
 const mockExtractIdentifiers = vi.fn();
+const mockRunBugEnhance = vi.fn();
+const mockPersistGroundedSeed = vi.fn();
+const mockGetArtifact = vi.fn();
+const mockStoreArtifact = vi.fn();
 const mockShapeSymbolIndexHintsForScout = vi.fn(
   (hints: Array<{ name: string; kind: string }>, consumer: string, _options?: unknown) =>
     consumer === 'scout-schema'
@@ -64,6 +68,16 @@ vi.mock('@goose-hub/core/agent-runtime/reconcile-decisions.js', () => ({
 
 vi.mock('@goose-hub/core/scout-reports/repository.js', () => ({
   persistScoutReport: (...args: unknown[]) => mockPersistScoutReport(...args),
+}));
+
+vi.mock('@goose-hub/core/agent-runtime/bug-enhance-runner.js', () => ({
+  runBugEnhance: (...args: unknown[]) => mockRunBugEnhance(...args),
+  persistGroundedSeed: (...args: unknown[]) => mockPersistGroundedSeed(...args),
+}));
+
+vi.mock('@goose-hub/core/agent-artifacts/repository.js', () => ({
+  getArtifact: (...args: unknown[]) => mockGetArtifact(...args),
+  storeArtifact: (...args: unknown[]) => mockStoreArtifact(...args),
 }));
 
 vi.mock('@goose-hub/core/db/repositories/project-settings.js', () => ({
@@ -249,6 +263,10 @@ beforeEach(() => {
   mockReadProjectSettings.mockReset();
   mockReadProjectSkillSettings.mockReset();
   mockRun.mockReset();
+  mockRunBugEnhance.mockReset();
+  mockPersistGroundedSeed.mockReset();
+  mockGetArtifact.mockReset();
+  mockStoreArtifact.mockReset();
   vi.clearAllMocks();
   mockAccumulatePersonaStats.mockClear();
   mockLookupWorkItemSymbols.mockReturnValue([]);
@@ -265,6 +283,8 @@ beforeEach(() => {
   mockGetUseInvestigationSwarm.mockReturnValue(true);
   mockReadProjectSettings.mockReturnValue(null);
   mockReadProjectSkillSettings.mockReturnValue(new Map());
+  mockGetArtifact.mockReturnValue(null);
+  mockRunBugEnhance.mockResolvedValue({ markdown: null, groundedHints: null });
 
   // Default happy path
   mockDispatchWave.mockResolvedValue(makeWaveResult());
@@ -1465,6 +1485,96 @@ describe('runInvestigateWorkflow', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('lazy bug-enhance (A7) — runs when no grounded seed artifact exists', () => {
+    it('skips bug-enhance when a promotion-time seed artifact already exists', async () => {
+      mockGetArtifact.mockReturnValue({
+        artifactKey: 'investigation-seed:promotion:github:shaunnez/goose-hub#42',
+        kind: 'investigation-seed',
+        payload: {},
+      });
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(mockGetArtifact).toHaveBeenCalledWith(
+        'investigation-seed:promotion:github:shaunnez/goose-hub#42',
+      );
+      expect(mockRunBugEnhance).not.toHaveBeenCalled();
+      expect(mockPersistGroundedSeed).not.toHaveBeenCalled();
+    });
+
+    it('runs bug-enhance and persists grounded seed when artifact is missing for a bug', async () => {
+      const hints = {
+        candidateFiles: [
+          {
+            path: 'apps/web/src/components/chat/ChatPanel.tsx',
+            confidence: 'high' as const,
+          },
+        ],
+        candidateComponents: [],
+        candidateRoutes: [],
+      };
+      mockGetArtifact.mockReturnValue(null);
+      mockRunBugEnhance.mockResolvedValue({ markdown: null, groundedHints: hints });
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      const workItem = makeWorkItem();
+      await runInvestigateWorkflow(workItem, makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(mockRunBugEnhance).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId: 'goose-hub-self',
+          workItemId: workItem.id,
+          title: workItem.title,
+          body: workItem.body,
+          workspaceDir: '/tmp/test-worktree',
+        }),
+      );
+      expect(mockPersistGroundedSeed).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId: 'goose-hub-self',
+          workItemId: workItem.id,
+          hints,
+        }),
+      );
+    });
+
+    it('skips persistence and emits non-producing event when bug-enhance yields no hints', async () => {
+      mockGetArtifact.mockReturnValue(null);
+      mockRunBugEnhance.mockResolvedValue({ markdown: null, groundedHints: null });
+
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
+
+      expect(mockRunBugEnhance).toHaveBeenCalledTimes(1);
+      expect(mockPersistGroundedSeed).not.toHaveBeenCalled();
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+      expect(eventStore.appendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'agent.bug-enhance-lazy',
+          payload: expect.objectContaining({
+            hadExistingSeed: false,
+            producedSeed: false,
+            candidateFileCount: 0,
+          }),
+        }),
+      );
+    });
+
+    it('does not run bug-enhance for non-bug work items', async () => {
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      await runInvestigateWorkflow(
+        makeWorkItem({ type: 'feature' }),
+        makeMockSource(),
+        'goose-hub-self',
+        '/repo',
+      );
+
+      expect(mockRunBugEnhance).not.toHaveBeenCalled();
+      expect(mockPersistGroundedSeed).not.toHaveBeenCalled();
     });
   });
 });

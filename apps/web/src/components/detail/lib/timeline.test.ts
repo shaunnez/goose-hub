@@ -978,18 +978,28 @@ describe('groupTimelineEventsByCanonicalSection', () => {
       makeEvent(2, 'swarm.scout-completed', 'investigate-canonical:scout:pattern:0', {
         payload: { parentRunId: 'investigate-canonical' },
       }),
-      makeEvent(3, 'review.slot-completed', 'review-slot-canonical', {
+      makeEvent(3, 'investigation.digest-applied', 'investigate-canonical', {
+        payload: { wave: 'wave-1-to-synthesis', scoutCount: 2 },
+      }),
+      makeEvent(4, 'review.slot-completed', 'review-slot-canonical', {
         payload: { reviewWorkflowRunId: reviewRun, verdict: 'approved' },
       }),
-      makeEvent(4, 'parallel-implement.wp-started', `${pipelineRun}:wp:WP1:iter:1`, {
+      makeEvent(5, 'parallel-implement.wp-started', `${pipelineRun}:wp:WP1:iter:1`, {
         payload: { pipelineRunId: pipelineRun },
       }),
     ]);
 
-    expect(section(items, 'investigation')?.items[0]).toMatchObject({
-      kind: 'run-group',
-      runId: 'investigate-canonical:scout:pattern:0',
-    });
+    expect(
+      section(items, 'investigation')?.items.some(
+        (item) =>
+          item.kind === 'run-group' && item.runId === 'investigate-canonical:scout:pattern:0',
+      ),
+    ).toBe(true);
+    expect(
+      section(items, 'investigation')?.items.some(
+        (item) => item.kind === 'event' && item.event.kind === 'investigation.digest-applied',
+      ),
+    ).toBe(true);
     expect(section(items, 'review')?.items[0]).toMatchObject({ kind: 'event' });
     expect(
       section(items, 'review')?.items.some(
@@ -1126,6 +1136,88 @@ describe('groupTimelineEventsByCanonicalSection', () => {
       runId: FIX_RUN,
       skill: 'fix-feedback',
     });
+  });
+
+  it('keeps model-retry runs inside the source fix-feedback repair attempt when later attempts exist', () => {
+    const PIPELINE_RUN = 'pipeline-fix-feedback-retry';
+    const FIRST_FIX_RUN = 'fix-feedback-run-first';
+    const RETRY_RUN = 'fix-feedback-run-retry';
+    const SECOND_FIX_RUN = 'fix-feedback-run-second';
+    const FIRST_ATTEMPT_ID = 'fix-feedback-attempt-first';
+    const SECOND_ATTEMPT_ID = 'fix-feedback-attempt-second';
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'state.transitioned', FIRST_FIX_RUN, {
+        payload: {
+          pipelineRunId: PIPELINE_RUN,
+          attemptId: FIRST_ATTEMPT_ID,
+          from: 'factory:needs-fix',
+          to: 'factory:in-progress',
+          by: 'fix-feedback',
+        },
+      }),
+      makeEvent(2, 'agent.run-started', FIRST_FIX_RUN, {
+        payload: {
+          skill: 'implement',
+          displaySkill: 'fix-feedback',
+          workflowSkill: 'fix-feedback',
+        },
+      }),
+      makeEvent(3, 'agent.retry-escalated', RETRY_RUN, {
+        payload: {
+          runId: FIRST_FIX_RUN,
+          retryRunId: RETRY_RUN,
+          skill: 'implement',
+          reason: 'schema-validation-failed',
+        },
+      }),
+      makeEvent(4, 'agent.run-started', RETRY_RUN, {
+        payload: {
+          skill: 'implement',
+          displaySkill: 'fix-feedback',
+          workflowSkill: 'fix-feedback',
+        },
+      }),
+      makeEvent(5, 'agent.run-completed', RETRY_RUN, {
+        payload: { skill: 'implement' },
+      }),
+      makeEvent(6, 'agent.fix-feedback-complete', FIRST_FIX_RUN, {
+        payload: {
+          pipelineRunId: PIPELINE_RUN,
+          attemptId: FIRST_ATTEMPT_ID,
+          repairCycle: 1,
+        },
+      }),
+      makeEvent(7, 'state.transitioned', SECOND_FIX_RUN, {
+        payload: {
+          pipelineRunId: PIPELINE_RUN,
+          attemptId: SECOND_ATTEMPT_ID,
+          from: 'factory:needs-fix',
+          to: 'factory:in-progress',
+          by: 'fix-feedback',
+        },
+      }),
+    ]);
+
+    const implementationSections = items.filter(
+      (item): item is Extract<typeof item, { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'implementation',
+    );
+    const firstAttempt = implementationSections.find(
+      (section) => section.segmentId === `implementation:fix-feedback:${FIRST_ATTEMPT_ID}`,
+    );
+
+    expect(firstAttempt).toBeDefined();
+    expect(collectRunIdsForTimelineSection(firstAttempt?.items ?? [])).toEqual(
+      new Set([FIRST_FIX_RUN, RETRY_RUN]),
+    );
+    expect(
+      implementationSections.some(
+        (section) => section.segmentId === `implementation:fix-feedback:${RETRY_RUN}`,
+      ),
+    ).toBe(false);
+    expect(
+      implementationSections.some((section) => section.segmentId === `implementation:${RETRY_RUN}`),
+    ).toBe(false);
   });
 
   it('keeps qa completion in the qa run section when it carries only pipeline metadata', () => {

@@ -50,7 +50,7 @@ export type SkillBudgetOverride = Partial<SkillBudget>;
 export const SKILL_BUDGETS: Record<string, SkillBudget> = {
   triage: { maxTurns: 25, maxBudgetUsd: 1, timeoutMs: 120_000, modelTier: 'haiku' },
   'repo-match': { maxTurns: 25, maxBudgetUsd: 1, timeoutMs: 60_000, modelTier: 'haiku' },
-  'bug-enhance': { maxTurns: 20, maxBudgetUsd: 1, timeoutMs: 120_000, modelTier: 'haiku' },
+  'bug-enhance': { maxTurns: 15, maxBudgetUsd: 0.5, timeoutMs: 120_000, modelTier: 'haiku' },
   'evidence-post': { maxTurns: 60, maxBudgetUsd: 2.0, timeoutMs: 300_000, modelTier: 'haiku' },
   implement: {
     maxTurns: 150,

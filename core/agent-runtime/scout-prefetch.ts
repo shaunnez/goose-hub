@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { getArtifact } from '../agent-artifacts/repository.js';
 import { eventStore } from '../event-stream/store.js';
 import { type SymbolHint, lookupWorkItemSymbols } from '../symbol-index/lookup.js';
 import type { RepoRelativePath } from '../tool-layer/path-contract.js';
@@ -41,6 +42,40 @@ export const InvestigationSeedSchema = z.object({
 
 export type InvestigationSeed = z.infer<typeof InvestigationSeedSchema>;
 
+/**
+ * Builds an `InvestigationSeed` from bug-enhance's `groundedHints`. Used
+ * at inbox promotion to persist a non-empty seed artifact for new bugs,
+ * so the downstream investigation/dev runs start with concrete files
+ * instead of brute-search.
+ *
+ * Only paths are carried over (component/route hints collapse into
+ * candidateFiles); the deterministic seed builder fills in symbols,
+ * tests, and recent-changes data when investigation actually runs.
+ */
+export function groundedHintsToSeed(input: {
+  candidateFiles?: Array<{ path: string }>;
+  candidateComponents?: Array<{ file?: string }>;
+  builtAt?: string;
+}): InvestigationSeed {
+  const paths = new Set<string>();
+  for (const file of input.candidateFiles ?? []) {
+    const trimmed = file.path?.trim();
+    if (trimmed != null && trimmed.length > 0) paths.add(trimmed);
+  }
+  for (const component of input.candidateComponents ?? []) {
+    const trimmed = component.file?.trim();
+    if (trimmed != null && trimmed.length > 0) paths.add(trimmed);
+  }
+  return {
+    candidateFiles: Array.from(paths).map((path) => ({ path, root: 'worktree' as const })),
+    candidateSymbols: [],
+    testFiles: [],
+    recentlyChangedFiles: [],
+    priorInvestigationRunIds: [],
+    builtAt: input.builtAt ?? new Date().toISOString(),
+  };
+}
+
 export async function buildInvestigationSeed(
   workItem: { title: string; body: string; externalId?: string | number; id?: string },
   project: { id?: string; worktreePath: string },
@@ -48,18 +83,26 @@ export async function buildInvestigationSeed(
     lookupSymbols?: typeof lookupWorkItemSymbols;
     recentChanges?: typeof gitRecentChanges;
     priorInvestigationIds?: typeof findPriorInvestigationRunIds;
+    loadGroundedSeed?: (workItemId: string) => InvestigationSeed | null;
     now?: () => Date;
   } = {},
 ): Promise<InvestigationSeed> {
   const lookupSymbols = deps.lookupSymbols ?? lookupWorkItemSymbols;
   const recentChanges = deps.recentChanges ?? gitRecentChanges;
   const priorInvestigationIds = deps.priorInvestigationIds ?? findPriorInvestigationRunIds;
+  const loadGroundedSeed = deps.loadGroundedSeed ?? defaultLoadGroundedSeed;
   const candidateSymbols = lookupSymbols(workItem.title, workItem.body, {
     worktreePath: project.worktreePath,
   }).slice(0, 20);
 
+  // Prefer bug-enhance's promotion-time grounding (if present) as the
+  // primary anchor; deterministic identifier extraction supplements it.
+  const groundedSeed = workItem.id != null ? loadGroundedSeed(workItem.id) : null;
+  const groundedPaths = groundedSeed?.candidateFiles.map((file) => file.path) ?? [];
+
   const candidateFiles = toRepoPaths(
     unique([
+      ...groundedPaths,
       ...candidateSymbols.map((symbol) => symbol.definedIn),
       ...candidateSymbols.flatMap((symbol) => symbol.callers),
     ]),
@@ -121,10 +164,41 @@ export function emitInvestigationSeedBuilt(input: {
       builtMs: input.builtMs,
     },
   });
+  if (
+    input.seed.candidateFiles.length === 0 &&
+    input.seed.candidateSymbols.length === 0 &&
+    input.seed.recentlyChangedFiles.length === 0
+  ) {
+    eventStore.appendEvent({
+      projectId: input.projectId,
+      workItemId: input.workItemId,
+      runId: input.runId,
+      personaId: input.personaId ?? null,
+      kind: 'agent.investigation-seed-empty',
+      payload: {
+        reason:
+          'No grounded seed artifact and identifier extraction produced no candidates. Scouts will brute-search.',
+        guidance:
+          'Run bug-enhance with toolBundles=read on this work item to ground UI references to files before investigation. See docs/cost-performance-improvements/bug-1011-cost-postmortem-and-plan.md (A7).',
+      },
+    });
+  }
 }
 
 function unique(values: string[]): string[] {
   return [...new Set(values.filter((value) => value.length > 0))];
+}
+
+/**
+ * Reads the bug-enhance investigation-seed artifact persisted at inbox
+ * promotion (see `apps/server/src/domains/inbox/service.ts`). Returns
+ * `null` when no seed exists or the payload is malformed.
+ */
+function defaultLoadGroundedSeed(workItemId: string): InvestigationSeed | null {
+  const artifact = getArtifact(`investigation-seed:promotion:${workItemId}`);
+  if (artifact == null) return null;
+  const parsed = InvestigationSeedSchema.safeParse(artifact.payload);
+  return parsed.success ? parsed.data : null;
 }
 
 function toRepoPaths(paths: string[]): RepoRelativePath[] {

@@ -1,6 +1,7 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { z } from 'zod';
+import { eventStore } from '../../../event-stream/store.js';
 import type { RepoRelativePath } from '../../path-contract.js';
 import { canonicalizeFactoryToolPath } from '../../path-contract.js';
 import { emitBlockedToolCall, emitToolCall } from '../audit.js';
@@ -17,6 +18,7 @@ import {
   getCachedRunResult,
   normalizeRunCacheKey,
   recordDuplicateToolCall,
+  recordRead,
   setCachedRunResult,
 } from '../run-cache.js';
 import type {
@@ -59,6 +61,7 @@ export interface ReadFileResult {
   totalLines: number;
   cached?: true;
   duplicateNudge?: string;
+  redundantReadNudge?: string;
 }
 
 export interface ReadManyFilesResult {
@@ -309,10 +312,33 @@ export async function readFileTool(
     workspaceRoot: ctx.workspaceRoot,
   });
   const duplicate = cacheKey == null ? null : recordDuplicateToolCall(ctx.runId, cacheKey);
+  const redundant = recordRead(ctx.runId, resolved.canonical.path);
+  if (redundant.nudge != null) {
+    eventStore.appendEvent({
+      projectId: ctx.projectId,
+      workItemId: ctx.workItemId,
+      runId: ctx.runId,
+      personaId: ctx.personaId ?? null,
+      kind: 'agent.redundant-read',
+      payload: {
+        path: resolved.canonical.path,
+        count: redundant.count,
+        guidance:
+          'Subsequent reads of the same file re-inject identical bytes into the kv-cache. Reuse what is already loaded or widen the line range in a single call.',
+      },
+    });
+  }
+  const redundantReadFields =
+    redundant.nudge != null ? { redundantReadNudge: redundant.nudge } : {};
   const cached =
     cacheKey == null ? null : getCachedRunResult<ReadFileResult>(ctx.runId, cacheKey.key);
   if (cached != null) {
-    const result = { ...cached, cached: true as const, ...duplicateNudgeFields(duplicate) };
+    const result = {
+      ...cached,
+      cached: true as const,
+      ...duplicateNudgeFields(duplicate),
+      ...redundantReadFields,
+    };
     emitToolCall(ctx, {
       tool: 'read_file',
       input: { path: input.path },
@@ -347,6 +373,7 @@ export async function readFileTool(
     startLine: startIndex + 1,
     endLine: startIndex + sliced.length,
     totalLines: allLines.length,
+    ...redundantReadFields,
   };
 
   emitToolCall(ctx, {

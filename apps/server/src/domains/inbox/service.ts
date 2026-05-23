@@ -1,11 +1,14 @@
+import { storeArtifact } from '@goose-hub/core/agent-artifacts/repository.js';
+import { runBugEnhance } from '@goose-hub/core/agent-runtime/bug-enhance-runner.js';
+import { groundedHintsToSeed } from '@goose-hub/core/agent-runtime/scout-prefetch.js';
 import { db } from '@goose-hub/core/db/db.js';
 import { projectState } from '@goose-hub/core/db/schema.js';
 import { logger } from '@goose-hub/core/logger.js';
+import type { GroundedHints } from '@goose-hub/skills/bug-enhance/schema.js';
 import { eq } from 'drizzle-orm';
 import { dispatchTriageBatch } from '#shared/dispatch.js';
 import type { Result } from '#shared/middleware.js';
 import { getSourceForSlug } from '#shared/source.js';
-import { runBugEnhance } from './enhance.js';
 import {
   type InboxItem,
   getInboxItem,
@@ -58,21 +61,31 @@ export async function promoteInboxItem(
   }
 
   let body = item.body ?? '';
+  let groundedHints: GroundedHints | null = null;
   if (enhance && item.type === 'bug') {
-    const enhancement = await runBugEnhance(source.projectId, item.id, item.title, body);
-    if (enhancement != null) {
-      body = `${body}\n\n---\n\n${enhancement}`;
+    const enhancement = await runBugEnhance({
+      projectId: source.projectId,
+      workItemId: `inbox:${item.id}`,
+      title: item.title,
+      body,
+    });
+    if (enhancement.markdown != null) {
+      body = `${body}\n\n---\n\n${enhancement.markdown}`;
     } else {
       logger.warn('bug-enhance: no enhancement produced, using original body', { id });
     }
+    groundedHints = enhancement.groundedHints;
   }
 
-  await source.createIssue({
+  const workItem = await source.createIssue({
     title: item.title,
     body,
     type: item.type as 'feature' | 'bug' | 'chore' | 'research',
     ...(effectiveMilestoneNumber != null ? { milestoneId: String(effectiveMilestoneNumber) } : {}),
   });
+  if (groundedHints != null && workItem != null) {
+    persistGroundedSeed(source.projectId, workItem.id, item.id, groundedHints);
+  }
   void dispatchTriageBatch(projectSlug);
 
   try {
@@ -85,6 +98,40 @@ export async function promoteInboxItem(
   }
 
   return { ok: true, data: { ok: true } };
+}
+
+/**
+ * Persists bug-enhance's grounded hints as an `investigation-seed`
+ * artifact keyed under the newly created GitHub work-item id. Lets the
+ * downstream investigation/dev runs start anchored to real files instead
+ * of brute-search — see `core/agent-runtime/scout-prefetch.ts`.
+ */
+function persistGroundedSeed(
+  projectId: string,
+  workItemId: string,
+  inboxItemId: number,
+  hints: GroundedHints,
+): void {
+  try {
+    const seed = groundedHintsToSeed({
+      candidateFiles: hints.candidateFiles,
+      candidateComponents: hints.candidateComponents,
+    });
+    storeArtifact({
+      projectId,
+      workItemId,
+      runId: `bug-enhance:inbox:${inboxItemId}`,
+      kind: 'investigation-seed',
+      artifactKey: `investigation-seed:promotion:${workItemId}`,
+      summary: `Grounded seed for ${workItemId} (bug-enhance, inbox #${inboxItemId})`,
+      payload: seed,
+    });
+  } catch (err) {
+    logger.warn('inbox promotion: failed to persist grounded seed', {
+      workItemId,
+      err: String(err),
+    });
+  }
 }
 
 export async function deleteInboxItem(id: number): Promise<Result<{ ok: true }>> {

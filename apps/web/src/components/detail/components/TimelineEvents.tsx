@@ -54,12 +54,15 @@ import {
   DiscoveryBudgetExceededEvent,
   FallbackEvent,
   InvestigationContextInjectedEvent,
+  InvestigationDigestAppliedEvent,
+  InvestigationSeedBuiltEvent,
   ManualActionEvent,
   MilestoneActivatedEvent,
   RelatedSurfaceManifestEvent,
   StateTransitionedEvent,
   SystemNoteEvent,
   ToolIntensityAnomalyEvent,
+  ToolViolationEvent,
   WrongSurfaceGuardEvent,
 } from './timeline/MiscEvents';
 import {
@@ -70,6 +73,7 @@ import {
   ParallelWpStartedEvent,
   ParallelWpTimeoutEvent,
   SpecCompletedEvent,
+  SpecPrdContextAttachedEvent,
 } from './timeline/ParallelImplementEvents';
 import { PhaseGroupWrapper } from './timeline/PhaseGroupWrapper';
 import { PrMergedEvent, PrOpenedEvent } from './timeline/PrEvents';
@@ -217,8 +221,12 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <AgentModelSelectedEvent key={event.id} event={event} />;
     case 'agent.budget-exceeded':
       return <AgentBudgetExceededEvent key={event.id} event={event} />;
+    case 'agent.investigation-seed-built':
+      return <InvestigationSeedBuiltEvent key={event.id} event={event} />;
     case 'agent.investigation-context-injected':
       return <InvestigationContextInjectedEvent key={event.id} event={event} />;
+    case 'investigation.digest-applied':
+      return <InvestigationDigestAppliedEvent key={event.id} event={event} />;
     case 'agent.related-surface-manifest-created':
       return <RelatedSurfaceManifestEvent key={event.id} event={event} />;
     case 'agent.discovery-budget-exceeded':
@@ -269,6 +277,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <AgentToolResultEvent key={event.id} event={event} />;
     case 'agent.tool-intensity-anomaly':
       return <ToolIntensityAnomalyEvent key={event.id} event={event} />;
+    case 'tool.violation':
+      return <ToolViolationEvent key={event.id} event={event} />;
     case 'agent.verify-command':
       return <AgentVerifyCommandEvent key={event.id} event={event} />;
     case 'tool.stdout-truncated':
@@ -367,6 +377,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <SwarmWaveEvent key={event.id} event={event} />;
     case 'spec.completed':
       return <SpecCompletedEvent key={event.id} event={event} />;
+    case 'spec.prd-context-attached':
+      return <SpecPrdContextAttachedEvent key={event.id} event={event} />;
     case 'parallel-implement.iteration-started':
       return <ParallelIterationStartedEvent key={event.id} event={event} />;
     case 'parallel-implement.wp-started':

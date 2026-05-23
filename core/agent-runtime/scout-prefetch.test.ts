@@ -3,9 +3,10 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { eventStore } from '../event-stream/store.js';
 import type { RepoRelativePath } from '../tool-layer/path-contract.js';
 import { gitRecentChanges } from './git-intel.js';
-import { buildInvestigationSeed } from './scout-prefetch.js';
+import { buildInvestigationSeed, emitInvestigationSeedBuilt } from './scout-prefetch.js';
 
 let workspace: string;
 
@@ -65,6 +66,75 @@ describe('buildInvestigationSeed', () => {
     expect(seed.builtAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
+  it('merges grounded seed paths from a persisted artifact ahead of identifier extraction', async () => {
+    const seed = await buildInvestigationSeed(
+      { title: 'Chat bug', body: 'natural language', id: 'github:owner/repo#100' },
+      { id: 'demo', worktreePath: workspace },
+      {
+        lookupSymbols: () => [],
+        recentChanges: async () => [],
+        priorInvestigationIds: () => [],
+        loadGroundedSeed: () => ({
+          candidateFiles: [
+            { path: 'apps/web/src/components/chat/ChatPanel.tsx', root: 'worktree' },
+            { path: 'apps/web/src/components/chat/ChatDock.tsx', root: 'worktree' },
+          ],
+          candidateSymbols: [],
+          testFiles: [],
+          recentlyChangedFiles: [],
+          priorInvestigationRunIds: [],
+          builtAt: '2026-05-23T00:00:00Z',
+        }),
+      },
+    );
+
+    expect(seed.candidateFiles).toEqual([
+      { path: 'apps/web/src/components/chat/ChatPanel.tsx', root: 'worktree' },
+      { path: 'apps/web/src/components/chat/ChatDock.tsx', root: 'worktree' },
+    ]);
+  });
+
+  it('deduplicates paths when grounded seed overlaps with identifier extraction', async () => {
+    const seed = await buildInvestigationSeed(
+      { title: 'Fix AuthService', body: 'AuthService fails', id: 'github:owner/repo#101' },
+      { id: 'demo', worktreePath: workspace },
+      {
+        lookupSymbols: () => [
+          { name: 'AuthService', definedIn: 'src/auth.ts', line: 3, kind: 'class', callers: [] },
+        ],
+        recentChanges: async () => [],
+        priorInvestigationIds: () => [],
+        loadGroundedSeed: () => ({
+          candidateFiles: [{ path: 'src/auth.ts', root: 'worktree' }],
+          candidateSymbols: [],
+          testFiles: [],
+          recentlyChangedFiles: [],
+          priorInvestigationRunIds: [],
+          builtAt: '2026-05-23T00:00:00Z',
+        }),
+      },
+    );
+
+    expect(seed.candidateFiles).toEqual([{ path: 'src/auth.ts', root: 'worktree' }]);
+  });
+
+  it('falls back to identifier extraction when no grounded seed exists', async () => {
+    const seed = await buildInvestigationSeed(
+      { title: 'Fix AuthService', body: 'AuthService fails', id: 'github:owner/repo#102' },
+      { id: 'demo', worktreePath: workspace },
+      {
+        lookupSymbols: () => [
+          { name: 'AuthService', definedIn: 'src/auth.ts', line: 3, kind: 'class', callers: [] },
+        ],
+        recentChanges: async () => [],
+        priorInvestigationIds: () => [],
+        loadGroundedSeed: () => null,
+      },
+    );
+
+    expect(seed.candidateFiles).toEqual([{ path: 'src/auth.ts', root: 'worktree' }]);
+  });
+
   it('includes prior overlapping investigation ids from the seed files', async () => {
     const seed = await buildInvestigationSeed(
       { title: 'Fix AuthService', body: 'AuthService fails' },
@@ -80,6 +150,50 @@ describe('buildInvestigationSeed', () => {
     );
 
     expect(seed.priorInvestigationRunIds).toEqual(['prior-run-1']);
+  });
+});
+
+describe('emitInvestigationSeedBuilt', () => {
+  it('emits agent.investigation-seed-empty when no candidates and no recent changes', () => {
+    const runId = `seed-empty-${Date.now()}`;
+    emitInvestigationSeedBuilt({
+      projectId: 'demo',
+      workItemId: 'github:demo/repo#42',
+      runId,
+      seed: {
+        candidateFiles: [],
+        candidateSymbols: [],
+        testFiles: [],
+        recentlyChangedFiles: [],
+        priorInvestigationRunIds: [],
+        builtAt: '2026-05-23T00:00:00Z',
+      },
+      builtMs: 1,
+    });
+    const events = eventStore.replay({ runId, kind: 'agent.investigation-seed-empty' });
+    expect(events.length).toBeGreaterThan(0);
+    const payload = events[0].payload as { reason?: string };
+    expect(payload.reason).toContain('brute-search');
+  });
+
+  it('does not emit the empty warning when at least one candidate is populated', () => {
+    const runId = `seed-populated-${Date.now()}`;
+    emitInvestigationSeedBuilt({
+      projectId: 'demo',
+      workItemId: 'github:demo/repo#43',
+      runId,
+      seed: {
+        candidateFiles: [{ path: 'src/x.ts', root: 'worktree' }],
+        candidateSymbols: [],
+        testFiles: [],
+        recentlyChangedFiles: [],
+        priorInvestigationRunIds: [],
+        builtAt: '2026-05-23T00:00:00Z',
+      },
+      builtMs: 1,
+    });
+    const events = eventStore.replay({ runId, kind: 'agent.investigation-seed-empty' });
+    expect(events).toHaveLength(0);
   });
 });
 

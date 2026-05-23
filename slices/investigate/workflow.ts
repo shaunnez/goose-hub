@@ -1,6 +1,10 @@
-import { storeArtifact } from '@goose-hub/core/agent-artifacts/repository.js';
+import { getArtifact, storeArtifact } from '@goose-hub/core/agent-artifacts/repository.js';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import type { ResolvedBudget } from '@goose-hub/core/agent-runtime/budgets.js';
+import {
+  persistGroundedSeed,
+  runBugEnhance,
+} from '@goose-hub/core/agent-runtime/bug-enhance-runner.js';
 import { crossValidate } from '@goose-hub/core/agent-runtime/cross-validate.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import { invokeSkill } from '@goose-hub/core/agent-runtime/invoke-skill.js';
@@ -369,6 +373,50 @@ export async function runInvestigateWorkflow(
         runId,
         personaId,
       });
+
+      // Lazy-run bug-enhance when a UI/web bug arrives without a
+      // promotion-time grounded seed (e.g. issue filed directly on GitHub,
+      // bypassing the inbox). Anchors scouts/dev to concrete files so they
+      // don't brute-search the repo. See
+      // docs/cost-performance-improvements/bug-1011-cost-postmortem-and-plan.md (A7).
+      if (workItem.type === 'bug') {
+        const seedKey = `investigation-seed:promotion:${workItem.id}`;
+        const existing = getArtifact(seedKey);
+        if (existing == null) {
+          const lazyStartedAt = Date.now();
+          const enhancement = await runBugEnhance({
+            projectId,
+            workItemId: workItem.id,
+            title: workItem.title,
+            body: workItem.body,
+            workspaceDir: worktreePath,
+          });
+          const hasUsable = enhancement.groundedHints != null;
+          if (hasUsable && enhancement.groundedHints != null) {
+            persistGroundedSeed({
+              projectId,
+              workItemId: workItem.id,
+              runId,
+              hints: enhancement.groundedHints,
+            });
+          }
+          eventStore.appendEvent({
+            projectId,
+            workItemId: workItem.id,
+            runId,
+            personaId,
+            kind: 'agent.bug-enhance-lazy',
+            payload: {
+              hadExistingSeed: false,
+              producedSeed: hasUsable,
+              candidateFileCount: enhancement.groundedHints?.candidateFiles.length ?? 0,
+              candidateComponentCount: enhancement.groundedHints?.candidateComponents.length ?? 0,
+              candidateRouteCount: enhancement.groundedHints?.candidateRoutes.length ?? 0,
+              ranMs: Date.now() - lazyStartedAt,
+            },
+          });
+        }
+      }
 
       const seedStartedAt = Date.now();
       const investigationSeed = await buildInvestigationSeed(workItem, {

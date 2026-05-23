@@ -60,6 +60,8 @@ const DIRECT_EVENT_KIND_SECTION: Record<string, TimelineSectionId> = {
   'agent.repo-override': 'triage',
   'agent.investigation-complete': 'investigation',
   'agent.investigation-context-injected': 'investigation',
+  'agent.investigation-seed-built': 'investigation',
+  'investigation.digest-applied': 'investigation',
   'agent.related-surface-manifest-created': 'investigation',
   'agent.discovery-budget-exceeded': 'investigation',
   'agent.wrong-surface-guard': 'investigation',
@@ -111,6 +113,7 @@ export const RUNTIME_INHERIT_TIMELINE_EVENT_KINDS = new Set<string>([
   'agent.run-failed',
   'agent.budget-exceeded',
   'agent.tool-call',
+  'agent.tool-intensity-anomaly',
   'agent.tool-result',
   'tool.stdout-truncated',
   'tool.timeout',
@@ -265,6 +268,7 @@ export function resolveTimelineSection(
   if (exactSection != null) return exactSection;
 
   if (event.kind.startsWith('repo-match.')) return 'triage';
+  if (event.kind.startsWith('investigation.')) return 'investigation';
   if (event.kind.startsWith('grill.')) return 'grill';
   if (event.kind.startsWith('prd.')) return 'prd';
   if (event.kind.startsWith('decompose.')) return 'decompose';

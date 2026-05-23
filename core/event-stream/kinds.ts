@@ -130,6 +130,9 @@ export const EVENT_KINDS = [
   'chat.tool-completed',
   'chat.tool-failed',
   'chat.run-failed',
+  'agent.redundant-read',
+  'agent.investigation-seed-empty',
+  'agent.bug-enhance-lazy',
 ] as const;
 
 export type EventKind = (typeof EVENT_KINDS)[number];
