@@ -422,6 +422,7 @@ describe('runInvestigateWorkflow', () => {
         expect(spec.extraContext).toHaveProperty('scoutDigest');
         expect(spec.extraContext?.scoutDigest).toMatchObject({
           reports: expect.any(Array),
+          contradictions: expect.any(Array),
           bytesSaved: expect.any(Number),
         });
         expect(spec.extraContext).not.toHaveProperty('scoutReports');
@@ -687,9 +688,14 @@ describe('runInvestigateWorkflow', () => {
       await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
 
       const invokeOpts = mockInvokeSkill.mock.calls[0][0] as {
-        context: { scoutDigest: { reports: unknown[]; bytesSaved: number } };
+        context: {
+          scoutDigest: { reports: unknown[]; contradictions: string[]; bytesSaved: number };
+        };
       };
       expect(invokeOpts.context.scoutDigest.reports.length).toBeGreaterThan(0);
+      expect(invokeOpts.context.scoutDigest.contradictions).toEqual([
+        'src/auth.ts:42: scout-code-path: Token check exists | scout-pattern: Token check missing',
+      ]);
       expect(invokeOpts.context.scoutDigest.bytesSaved).toBeGreaterThanOrEqual(0);
     });
 

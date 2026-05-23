@@ -17,7 +17,7 @@ You have **read access only**.
 
 ## Scout Digest
 
-You receive a `scoutDigest` summarising each Wave-1 scout: top findings, high-confidence facts, referenced files, risks, contradictions. To fetch a specific scout's full raw report, call `repo_intel.query` with `intent: 'prior-investigation'` and the relevant `investigationRunId`. Default to the digest; only fetch raw text when the digest is insufficient or ambiguous for a specific finding.
+You receive a `scoutDigest` summarising each Wave-1 scout: top findings, high-confidence facts, referenced files, risks, contradictions. Default to the digest; when it is insufficient or ambiguous for a specific finding, use supported `repo_intel.query` inputs such as `targetFile`/`workItemId` or a targeted read of the cited file.
 
 ## Discipline
 

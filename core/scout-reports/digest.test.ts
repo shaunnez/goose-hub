@@ -97,7 +97,30 @@ describe('buildScoutReportDigestBundle', () => {
     ]);
 
     expect(bundle.reports.map((report) => report.scoutName)).toEqual(['scout-a', 'scout-z']);
+    expect(bundle.contradictions).toEqual([]);
     expect(bundle.rawBytes).toBeGreaterThan(bundle.digestBytes);
     expect(bundle.bytesSaved).toBeGreaterThan(0);
+  });
+
+  it('carries cross-scout contradictions at bundle level', () => {
+    const bundle = buildScoutReportDigestBundle(
+      [makeReport({ scoutSkill: 'scout-a', report: { findings: [], status: 'ok' } })],
+      {
+        contradictions: [
+          {
+            file: 'core/auth.ts',
+            line: 42,
+            facts: [
+              { scoutName: 'scout-a', fact: 'Token check exists' },
+              { scoutName: 'scout-b', fact: 'Token check missing' },
+            ],
+          },
+        ],
+      },
+    );
+
+    expect(bundle.contradictions).toEqual([
+      'core/auth.ts:42: scout-a: Token check exists | scout-b: Token check missing',
+    ]);
   });
 });

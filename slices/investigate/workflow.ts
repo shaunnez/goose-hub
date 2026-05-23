@@ -550,6 +550,7 @@ export async function runInvestigateWorkflow(
       const cvResult = crossValidate(wave1Result.reports);
       const wave1Digest = buildScoutReportDigestBundle(
         toStoredScoutReports(projectId, workItem.id, runId, wave1HandoffReports),
+        { contradictions: cvResult.contradictions },
       );
       emitDigestApplied({
         projectId,
@@ -649,6 +650,7 @@ export async function runInvestigateWorkflow(
           ...wave1HandoffReports,
           ...wave2HandoffReports,
         ]),
+        { contradictions: cvResult.contradictions },
       );
       emitDigestApplied({
         projectId,

@@ -425,6 +425,40 @@ describe('swarm.dispatchWave', () => {
     expect(v.role).toBe('scout');
   });
 
+  it('allows scoutDigest in scout context without emitting a violation', async () => {
+    const { fn: appendEvent, events } = makeFakeAppendEvent();
+    const capturedSpecs: AgentSpec[] = [];
+    const runtime = makeRuntime({
+      'wave2-risk-analyst': (spec) => {
+        capturedSpecs.push(spec);
+        return Promise.resolve(okResult('wave2-risk-analyst'));
+      },
+    });
+
+    await dispatchWave({
+      parentRunId: 'parent-digest',
+      scoutSpecs: [
+        {
+          scoutName: 'wave2-risk-analyst',
+          scoutFocus: 'risks',
+          extraContext: { scoutDigest: { reports: [], contradictions: [] } },
+        },
+      ],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+    });
+
+    expect(events.filter((e) => e.kind === 'tool.violation')).toEqual([]);
+    expect(capturedSpecs[0]?.contextAllowlist).toContain('scoutDigest');
+  });
+
   it('marks status: "error" when a scout returns output that fails ScoutOutputSchema validation', async () => {
     const { fn: appendEvent, events } = makeFakeAppendEvent();
     const garbageRuntime = makeRuntime({

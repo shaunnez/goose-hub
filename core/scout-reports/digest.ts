@@ -25,6 +25,7 @@ export const ScoutReportDigestSchema = z.object({
 
 export const ScoutReportDigestBundleSchema = z.object({
   reports: z.array(ScoutReportDigestSchema),
+  contradictions: z.array(z.string()),
   artifactKeys: z.array(z.string()),
   rawBytes: z.number(),
   digestBytes: z.number(),
@@ -54,6 +55,7 @@ export type ScoutReportDigest = {
 
 export type ScoutReportDigestBundle = {
   reports: ScoutReportDigest[];
+  contradictions: string[];
   artifactKeys: string[];
   rawBytes: number;
   digestBytes: number;
@@ -185,6 +187,34 @@ function extractTextList(report: unknown, fieldNames: string[]): string[] {
   return [...new Set(values.map((value) => truncate(value, 300)))].sort();
 }
 
+function extractContradictionText(value: unknown): string | null {
+  if (typeof value === 'string' && value.length > 0) return truncate(value, 300);
+  const record = asRecord(value);
+  if (record == null) return null;
+
+  const location =
+    typeof record.file === 'string'
+      ? `${record.file}${typeof record.line === 'number' ? `:${record.line}` : ''}`
+      : '';
+  const facts = Array.isArray(record.facts)
+    ? record.facts.flatMap((fact) => {
+        if (typeof fact === 'string') return [fact];
+        const factRecord = asRecord(fact);
+        if (typeof factRecord?.fact !== 'string') return [];
+        return [
+          typeof factRecord.scoutName === 'string'
+            ? `${factRecord.scoutName}: ${factRecord.fact}`
+            : factRecord.fact,
+        ];
+      })
+    : [];
+
+  if (location.length > 0 && facts.length > 0) return truncate(`${location}: ${facts.join(' | ')}`);
+  if (location.length > 0) return truncate(location);
+  if (facts.length > 0) return truncate(facts.join(' | '));
+  return truncate(JSON.stringify(value), 300);
+}
+
 export function buildScoutReportDigest(report: ScoutReport): ScoutReportDigest {
   const findings = extractFindings(report.report);
   const artifactKeys = [...extractArtifactKeys(report.report)].sort();
@@ -206,18 +236,31 @@ export function buildScoutReportDigest(report: ScoutReport): ScoutReportDigest {
   };
 }
 
-export function buildScoutReportDigestBundle(reports: ScoutReport[]): ScoutReportDigestBundle {
+export function buildScoutReportDigestBundle(
+  reports: ScoutReport[],
+  opts: { contradictions?: unknown[] } = {},
+): ScoutReportDigestBundle {
   const orderedReports = [...reports].sort((a, b) => {
     const skillOrder = a.scoutSkill.localeCompare(b.scoutSkill);
     return skillOrder !== 0 ? skillOrder : a.id - b.id;
   });
   const digests = orderedReports.map(buildScoutReportDigest);
+  const contradictions = [
+    ...new Set([
+      ...digests.flatMap((digest) => digest.contradictions),
+      ...(opts.contradictions ?? []).flatMap((contradiction) => {
+        const text = extractContradictionText(contradiction);
+        return text == null ? [] : [text];
+      }),
+    ]),
+  ].slice(0, 10);
   const artifactKeys = [...new Set(digests.flatMap((digest) => digest.artifactKeys))].sort();
   const rawBytes = byteLength(orderedReports);
   const digestBytes = byteLength(digests);
 
   return {
     reports: digests,
+    contradictions,
     artifactKeys,
     rawBytes,
     digestBytes,
