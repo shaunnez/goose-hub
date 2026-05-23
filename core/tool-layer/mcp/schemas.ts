@@ -66,6 +66,29 @@ export const FileExistsInput = z.object({ path: WorkspacePath }).strict();
 
 export const FileInfoInput = z.object({ path: WorkspacePath }).strict();
 
+export const RepoIntelQueryInput = z
+  .object({
+    intent: z.enum([
+      'find-symbol',
+      'find-callers',
+      'find-tests-for',
+      'related-files',
+      'recent-changes',
+      'prior-investigation',
+      'fetch-artifact',
+    ]),
+    name: z.string().min(1).max(200).optional(),
+    kind: z.enum(['function', 'class', 'type', 'const', 'enum', 'variable']).optional(),
+    symbol: z.string().min(1).max(200).optional(),
+    target: WorkspacePath.optional(),
+    path: WorkspacePath.optional(),
+    sinceDays: z.number().int().min(1).max(365).optional(),
+    workItemId: z.string().min(1).max(200).optional(),
+    targetFile: WorkspacePath.optional(),
+    artifactKey: z.string().min(1).max(500).optional(),
+  })
+  .strict();
+
 // ─── write / edit ────────────────────────────────────────────────────────────
 
 export const WriteFileInput = z.object({ path: WorkspacePath, content: z.string() }).strict();
@@ -245,6 +268,7 @@ export const FACTORY_TOOL_NAMES = [
   'search_text',
   'file_exists',
   'file_info',
+  'repo_intel.query',
   // write / edit
   'write_file',
   'edit_file',
