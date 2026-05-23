@@ -1,3 +1,4 @@
+import { storeArtifact } from '@goose-hub/core/agent-artifacts/repository.js';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
 import type { ResolvedBudget } from '@goose-hub/core/agent-runtime/budgets.js';
 import { crossValidate } from '@goose-hub/core/agent-runtime/cross-validate.js';
@@ -15,6 +16,10 @@ import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconc
 import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { toJsonSchema } from '@goose-hub/core/agent-runtime/schema-bridge.js';
 import { ScoutOutputSchema } from '@goose-hub/core/agent-runtime/scout-output.js';
+import {
+  buildInvestigationSeed,
+  emitInvestigationSeedBuilt,
+} from '@goose-hub/core/agent-runtime/scout-prefetch.js';
 import { selectPersona } from '@goose-hub/core/agent-runtime/select-persona.js';
 import { selectRuntime } from '@goose-hub/core/agent-runtime/select-runtime.js';
 import { resolveSkillRuntimeForProject } from '@goose-hub/core/agent-runtime/skill-runtime-resolver.js';
@@ -360,6 +365,29 @@ export async function runInvestigateWorkflow(
         personaId,
       });
 
+      const seedStartedAt = Date.now();
+      const investigationSeed = await buildInvestigationSeed(workItem, {
+        id: projectId,
+        worktreePath,
+      });
+      storeArtifact({
+        projectId,
+        workItemId: workItem.id,
+        runId,
+        kind: 'investigation-seed',
+        artifactKey: `investigation-seed:${runId}`,
+        summary: `InvestigationSeed for #${workItem.externalId}`,
+        payload: investigationSeed,
+      });
+      emitInvestigationSeedBuilt({
+        projectId,
+        workItemId: workItem.id,
+        runId,
+        personaId,
+        seed: investigationSeed,
+        builtMs: Date.now() - seedStartedAt,
+      });
+
       const patternTokens = symbolIdentifiers.slice(0, 4);
       const patternFocus =
         patternTokens.length > 0
@@ -376,8 +404,8 @@ export async function runInvestigateWorkflow(
             : [];
         const specWithHints =
           shapedHints.length > 0
-            ? { ...spec, extraContext: { symbolIndexHints: shapedHints } }
-            : spec;
+            ? { ...spec, extraContext: { symbolIndexHints: shapedHints, investigationSeed } }
+            : { ...spec, extraContext: { investigationSeed } };
         if (
           spec.scoutName === 'scout-code-path' ||
           spec.scoutName === 'scout-dependency' ||
@@ -529,7 +557,10 @@ export async function runInvestigateWorkflow(
       });
       finalInvestigationPlan = wave2Plan;
       scoutEffortHints = wave2Plan.scoutEffortHints;
-      const wave2Scouts = wave2Plan.selectedWave2Scouts;
+      const wave2Scouts = wave2Plan.selectedWave2Scouts.map((spec) => ({
+        ...spec,
+        extraContext: { ...(spec.extraContext ?? {}), investigationSeed },
+      }));
 
       const wave2HandoffReports: unknown[] = [];
       if (wave2Scouts.length > 0) {

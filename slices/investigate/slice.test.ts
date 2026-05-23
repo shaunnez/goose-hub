@@ -890,7 +890,7 @@ describe('runInvestigateWorkflow', () => {
   });
 
   describe('holdout-key enforcement — acceptance criterion 6', () => {
-    it('Wave 2 scoutSpecs contain only scoutReports in extraContext (no disallowed keys)', async () => {
+    it('Wave 2 scoutSpecs contain only allowed context keys (no disallowed keys)', async () => {
       const { runInvestigateWorkflow } = await import('./workflow.js');
       await runInvestigateWorkflow(makeWorkItem(), makeMockSource(), 'goose-hub-self', '/repo');
 
@@ -901,7 +901,7 @@ describe('runInvestigateWorkflow', () => {
         const extraKeys = Object.keys(spec.extraContext ?? {});
         expect(extraKeys).not.toContain('investigationFindings');
         expect(extraKeys).not.toContain('devDecisionSummaries');
-        expect(extraKeys).toEqual(['scoutReports']);
+        expect(extraKeys).toEqual(['scoutReports', 'investigationSeed']);
       }
     });
 
@@ -1220,7 +1220,9 @@ describe('runInvestigateWorkflow', () => {
         scoutSpecs: Array<{ scoutName: string; extraContext?: Record<string, unknown> }>;
       };
       const codePath = wave1Opts.scoutSpecs.find((s) => s.scoutName === 'scout-code-path');
-      expect(codePath?.extraContext).toEqual({ symbolIndexHints: hints });
+      expect(codePath?.extraContext).toEqual(
+        expect.objectContaining({ symbolIndexHints: hints, investigationSeed: expect.any(Object) }),
+      );
     });
 
     it('does not inject extraContext when symbol index returns empty', async () => {
@@ -1233,7 +1235,7 @@ describe('runInvestigateWorkflow', () => {
         scoutSpecs: Array<{ scoutName: string; extraContext?: Record<string, unknown> }>;
       };
       const codePath = wave1Opts.scoutSpecs.find((s) => s.scoutName === 'scout-code-path');
-      expect(codePath?.extraContext).toBeUndefined();
+      expect(codePath?.extraContext).toEqual({ investigationSeed: expect.any(Object) });
     });
 
     it('injects shaped symbol hints into dependency and test-inventory scouts', async () => {
@@ -1253,9 +1255,13 @@ describe('runInvestigateWorkflow', () => {
         (s) => s.scoutName === 'scout-test-inventory',
       );
       const schema = wave1Opts.scoutSpecs.find((s) => s.scoutName === 'scout-schema');
-      expect(dependency?.extraContext).toEqual({ symbolIndexHints: hints });
-      expect(testInventory?.extraContext).toEqual({ symbolIndexHints: hints });
-      expect(schema?.extraContext).toBeUndefined();
+      expect(dependency?.extraContext).toEqual(
+        expect.objectContaining({ symbolIndexHints: hints, investigationSeed: expect.any(Object) }),
+      );
+      expect(testInventory?.extraContext).toEqual(
+        expect.objectContaining({ symbolIndexHints: hints, investigationSeed: expect.any(Object) }),
+      );
+      expect(schema?.extraContext).toEqual({ investigationSeed: expect.any(Object) });
     });
 
     it('injects schema scout hints only for schema-shaped symbols', async () => {
@@ -1277,7 +1283,9 @@ describe('runInvestigateWorkflow', () => {
         scoutSpecs: Array<{ scoutName: string; extraContext?: Record<string, unknown> }>;
       };
       const schema = wave1Opts.scoutSpecs.find((s) => s.scoutName === 'scout-schema');
-      expect(schema?.extraContext).toEqual({ symbolIndexHints: hints });
+      expect(schema?.extraContext).toEqual(
+        expect.objectContaining({ symbolIndexHints: hints, investigationSeed: expect.any(Object) }),
+      );
     });
 
     it('lookupWorkItemSymbols called with work item title, body, and worktreePath', async () => {

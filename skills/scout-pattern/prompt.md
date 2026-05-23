@@ -18,6 +18,11 @@ You have **read and search access only**.
 - `<workItem>` — JSON payload for the work item, with `title`, `body`, and `number`
 - `<scoutFocus>` — one sentence describing the pattern (e.g. "transitionState() callers", "SkillConfig consumers")
 - Tools are already rooted at the workspace to read from.
+- `<investigationSeed>` *(optional)* — orchestrator-owned starting context shared across scouts.
+
+## Investigation Seed
+
+- Start from `investigationSeed.candidateFiles` and `investigationSeed.candidateSymbols`. Only issue `search_text` calls when the seed is empty for your scoutFocus or when the seed contradicts what you read. Reads on seed-listed files do not count against your search budget.
 
 ## Discipline
 

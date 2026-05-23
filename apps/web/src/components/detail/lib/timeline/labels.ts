@@ -30,6 +30,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'agent.fallback-triggered': 'Fallback triggered',
   'agent.triage-complete': 'Triage complete',
   'agent.investigation-complete': 'Investigation complete',
+  'agent.investigation-seed-built': 'Investigation seed built',
   'agent.investigation-context-injected': 'Investigation context injected',
   'agent.related-surface-manifest-created': 'Related surface manifest',
   'agent.discovery-budget-exceeded': 'Discovery budget exceeded',

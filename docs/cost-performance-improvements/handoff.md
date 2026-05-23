@@ -127,3 +127,44 @@
   - The advisory currently covers cacheable MCP read/list/search calls that share #995 cache-key semantics; non-cacheable tools are not nudged.
   - The reminder is returned in the structured MCP result and forwarded by PostToolUse context; downstream clients that ignore PostToolUse `additionalContext` will still see `duplicateNudge` in the tool payload.
 - Next branch to create: `cost-perf/996-investigation-seed` from `cost-perf/998-duplicate-call-nudge`
+
+## Issue #996 - InvestigationSeed shared scout context
+
+- Branch name: `cost-perf/996-investigation-seed`
+- PR number/url: #1006 - https://github.com/shaunnez/goose-hub/pull/1006
+- Parent branch: `cost-perf/998-duplicate-call-nudge`
+- Files changed:
+  - `CONTEXT.md`
+  - `apps/web/src/components/detail/lib/timeline/labels.ts`
+  - `core/agent-runtime/git-intel.ts`
+  - `core/agent-runtime/scout-prefetch.ts`
+  - `core/agent-runtime/scout-prefetch.test.ts`
+  - `core/agent-runtime/scout-runner.ts`
+  - `core/agent-runtime/swarm.test.ts`
+  - `core/event-stream/kinds.ts`
+  - `skills/scout-code-path/prompt.md`
+  - `skills/scout-code-path/skill.config.ts`
+  - `skills/scout-dependency/prompt.md`
+  - `skills/scout-dependency/skill.config.ts`
+  - `skills/scout-pattern/prompt.md`
+  - `skills/scout-pattern/skill.config.ts`
+  - `skills/scout-schema/prompt.md`
+  - `skills/scout-schema/skill.config.ts`
+  - `skills/scout-test-inventory/prompt.md`
+  - `skills/scout-test-inventory/skill.config.ts`
+  - `skills/scout-user-journey/prompt.md`
+  - `skills/scout-user-journey/skill.config.ts`
+  - `slices/investigate/slice.test.ts`
+  - `slices/investigate/workflow.ts`
+- Tests run:
+  - `pnpm vitest run core/agent-runtime/scout-prefetch.test.ts core/agent-runtime/swarm.test.ts slices/investigate/slice.test.ts skills/scout-code-path/slice.test.ts skills/scout-dependency/slice.test.ts skills/scout-pattern/slice.test.ts skills/scout-schema/slice.test.ts skills/scout-test-inventory/slice.test.ts skills/scout-user-journey/slice.test.ts`
+  - `pnpm vitest run core/agent-runtime/scout-prefetch.test.ts core/agent-runtime/swarm.test.ts slices/investigate/slice.test.ts skills/scout-code-path/slice.test.ts skills/scout-dependency/slice.test.ts skills/scout-pattern/slice.test.ts skills/scout-schema/slice.test.ts skills/scout-test-inventory/slice.test.ts skills/scout-user-journey/slice.test.ts apps/web/src/components/detail/lib/timeline.test.ts -t "EVENT_KIND_LABEL"`
+  - `pnpm exec tsc --noEmit --pretty false`
+  - `pnpm skill-contract:audit`
+  - `pnpm audit-docs`
+  - `pnpm manifest --check`
+  - `pnpm exec biome check CONTEXT.md core/agent-runtime/git-intel.ts core/agent-runtime/scout-prefetch.ts core/agent-runtime/scout-prefetch.test.ts core/agent-runtime/scout-runner.ts core/agent-runtime/swarm.test.ts core/event-stream/kinds.ts apps/web/src/components/detail/lib/timeline/labels.ts slices/investigate/workflow.ts slices/investigate/slice.test.ts skills/scout-code-path/prompt.md skills/scout-code-path/skill.config.ts skills/scout-dependency/prompt.md skills/scout-dependency/skill.config.ts skills/scout-pattern/prompt.md skills/scout-pattern/skill.config.ts skills/scout-schema/prompt.md skills/scout-schema/skill.config.ts skills/scout-test-inventory/prompt.md skills/scout-test-inventory/skill.config.ts skills/scout-user-journey/prompt.md skills/scout-user-journey/skill.config.ts`
+- Remaining risks:
+  - A full `apps/web/src/components/detail/lib/timeline.test.ts` run still has the pre-existing fix-feedback section split failure; the #996 label path was verified with the `EVENT_KIND_LABEL` subset.
+  - InvestigationSeed reduces cross-scout rediscovery through shared context only. It does not extend #995's per-run cache across separate scout runs.
+- Next branch to create: `cost-perf/997-repo-intel-query` from `cost-perf/996-investigation-seed`
