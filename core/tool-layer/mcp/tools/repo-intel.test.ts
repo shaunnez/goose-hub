@@ -53,6 +53,64 @@ describe('repoIntelQueryTool', () => {
       { findCallersOfSymbol: vi.fn(() => ['src/login.ts']) },
     ],
     [
+      'find-calls-of',
+      { intent: 'find-calls-of', symbol: 'AuthService' },
+      {
+        findCallsOf: vi.fn(() => [{ path: 'src/auth.ts', line: 1, symbol: 'AuthService' }]),
+      },
+    ],
+    [
+      'find-jsx-usages',
+      { intent: 'find-jsx-usages', component: 'Button', withProp: { name: 'variant' } },
+      {
+        findJsxUsages: vi.fn(() => [{ path: 'src/button.tsx', line: 3, symbol: 'Button' }]),
+      },
+    ],
+    [
+      'find-importers',
+      { intent: 'find-importers', module: '@/lib/api', symbol: 'api' },
+      {
+        findImportersImporting: vi.fn(() => [{ path: 'src/app.ts', line: 1, symbol: 'api' }]),
+      },
+    ],
+    [
+      'find-route',
+      { intent: 'find-route', pathPattern: '/projects/:slug' },
+      {
+        lookupRoute: vi.fn(() => [
+          {
+            pathPattern: '/projects/:slug',
+            filePath: 'apps/web/src/App.tsx',
+            line: 12,
+            component: 'ProjectPage',
+          },
+        ]),
+      },
+    ],
+    [
+      'find-component',
+      { intent: 'find-component', component: 'Button' },
+      {
+        findComponentUsages: vi.fn(() => [
+          { component: 'Button', filePath: 'apps/web/src/App.tsx', line: 8 },
+        ]),
+      },
+    ],
+    [
+      'route-for-component',
+      { intent: 'route-for-component', component: 'ProjectPage' },
+      {
+        routeForComponent: vi.fn(() => [
+          {
+            pathPattern: '/projects/:slug',
+            filePath: 'apps/web/src/App.tsx',
+            line: 12,
+            component: 'ProjectPage',
+          },
+        ]),
+      },
+    ],
+    [
       'find-tests-for',
       { intent: 'find-tests-for', target: 'src/auth.ts' },
       {
@@ -163,6 +221,36 @@ describe('repoIntelQueryTool', () => {
       { findCallersOfSymbol: vi.fn(() => []) },
     ],
     [
+      'find-calls-of',
+      { intent: 'find-calls-of', symbol: 'Missing' },
+      { findCallsOf: vi.fn(() => []) },
+    ],
+    [
+      'find-jsx-usages',
+      { intent: 'find-jsx-usages', component: 'Missing' },
+      { findJsxUsages: vi.fn(() => []) },
+    ],
+    [
+      'find-importers',
+      { intent: 'find-importers', module: '@/lib/api', symbol: 'missing' },
+      { findImportersImporting: vi.fn(() => []) },
+    ],
+    [
+      'find-route',
+      { intent: 'find-route', pathPattern: '/missing' },
+      { lookupRoute: vi.fn(() => []) },
+    ],
+    [
+      'find-component',
+      { intent: 'find-component', component: 'Missing' },
+      { findComponentUsages: vi.fn(() => []) },
+    ],
+    [
+      'route-for-component',
+      { intent: 'route-for-component', component: 'Missing' },
+      { routeForComponent: vi.fn(() => []) },
+    ],
+    [
       'find-tests-for',
       { intent: 'find-tests-for', target: 'src/auth.ts' },
       { buildRelatedSurfaceManifest: vi.fn(() => undefined) },
@@ -234,5 +322,20 @@ describe('repoIntelQueryTool', () => {
     await expect(
       repoIntelQueryTool(makeCtx(), { intent: 'related-files', target: '../escape.ts' }),
     ).rejects.toBeInstanceOf(PathPolicyViolation);
+  });
+
+  it('returns index-stale when an AST or route helper fails', async () => {
+    const result = await repoIntelQueryTool(
+      makeCtx(),
+      { intent: 'find-calls-of', symbol: 'AuthService' },
+      { findCallsOf: vi.fn(() => null) },
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      intent: 'find-calls-of',
+      reason: 'index-stale',
+      fallbackHint: expect.stringContaining('search_text'),
+    });
   });
 });

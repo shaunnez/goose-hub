@@ -282,3 +282,48 @@
   - `codeContext` is best-effort and skips missing files or key files without line numbers; implement still receives the original investigation and related-surface handoff.
   - `prDiffWithContext` is deliberately diff-derived only, so QA/Review holdout agents may still need read-only tools when a diff hunk needs broader file context.
 - Next branch to create: `cost-perf/999-ast-route-index` from `cost-perf/993-handoff-precision`
+
+## Issue #999 - AST queries and route/component index
+
+- Branch name: `cost-perf/999-ast-route-index`
+- PR number/url: #1010 - https://github.com/shaunnez/goose-hub/pull/1010
+- Parent branch: `cost-perf/993-handoff-precision`
+- Files changed:
+  - `CONTEXT.md`
+  - `core/route-index/README.md`
+  - `core/route-index/builder.ts`
+  - `core/route-index/db.ts`
+  - `core/route-index/freshness.ts`
+  - `core/route-index/index.ts`
+  - `core/route-index/lookup.ts`
+  - `core/route-index/package.json`
+  - `core/route-index/slice.test.ts`
+  - `core/route-index/types.ts`
+  - `core/symbol-index/ast-query.ts`
+  - `core/symbol-index/ast-query.test.ts`
+  - `core/symbol-index/index.ts`
+  - `core/tool-layer/mcp/schemas.ts`
+  - `core/tool-layer/mcp/server.ts`
+  - `core/tool-layer/mcp/tools/repo-intel.ts`
+  - `core/tool-layer/mcp/tools/repo-intel.test.ts`
+  - `docs/adr/0049-treesitter-and-route-index.md`
+  - `docs/cost-performance-improvements/handoff.md`
+  - `docs/inventory.md`
+  - `package.json`
+  - `pnpm-lock.yaml`
+  - `pnpm-workspace.yaml`
+  - `scripts/build-route-index.ts`
+  - `scripts/query-route-index.ts`
+- Tests run:
+  - `pnpm vitest run core/symbol-index/ast-query.test.ts core/route-index/slice.test.ts core/tool-layer/mcp/tools/repo-intel.test.ts core/tool-layer/mcp/slice.test.ts core/tool-layer/mcp/schemas.test.ts core/symbol-index/slice.test.ts`
+  - `pnpm exec tsc --noEmit --pretty false`
+  - `pnpm route-index --db /private/tmp/goose-hub-route-index-test.db` (rerun with escalation because sandbox blocked tsx IPC pipe creation)
+  - `pnpm route find / --db /private/tmp/goose-hub-route-index-test.db` (rerun with escalation because sandbox blocked tsx IPC pipe creation)
+  - `pnpm audit-docs`
+  - `pnpm manifest --check`
+  - `pnpm skill-contract:audit`
+  - `pnpm exec biome check CONTEXT.md core/symbol-index/ast-query.ts core/symbol-index/ast-query.test.ts core/symbol-index/index.ts core/route-index/builder.ts core/route-index/db.ts core/route-index/freshness.ts core/route-index/index.ts core/route-index/lookup.ts core/route-index/slice.test.ts core/route-index/types.ts core/tool-layer/mcp/schemas.ts core/tool-layer/mcp/server.ts core/tool-layer/mcp/tools/repo-intel.ts core/tool-layer/mcp/tools/repo-intel.test.ts scripts/build-route-index.ts scripts/query-route-index.ts package.json pnpm-workspace.yaml docs/adr/0049-treesitter-and-route-index.md core/route-index/README.md`
+- Remaining risks:
+  - The issue requested a `CLAUDE.md` Stack update, but `CLAUDE.md`/FACTORY_RULES governance forbids Factory PRs from modifying governance files. The PR leaves that checkbox unresolved and needs a human decision or separate allowed governance process.
+  - ADR 0049 records the dependency decision as TypeScript-parser-backed structural AST queries for this slice instead of adding native tree-sitter packages immediately; revisit the ADR if native tree-sitter grammar support becomes necessary.
+- Next branch to create: none; this is the last issue in the requested Wave 2 cost-performance stack.
