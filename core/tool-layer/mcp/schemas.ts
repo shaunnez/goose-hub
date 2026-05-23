@@ -71,6 +71,12 @@ export const RepoIntelQueryInput = z
     intent: z.enum([
       'find-symbol',
       'find-callers',
+      'find-calls-of',
+      'find-jsx-usages',
+      'find-importers',
+      'find-route',
+      'find-component',
+      'route-for-component',
       'find-tests-for',
       'related-files',
       'recent-changes',
@@ -80,6 +86,23 @@ export const RepoIntelQueryInput = z
     name: z.string().min(1).max(200).optional(),
     kind: z.enum(['function', 'class', 'type', 'const', 'enum', 'variable']).optional(),
     symbol: z.string().min(1).max(200).optional(),
+    component: z.string().min(1).max(200).optional(),
+    module: z.string().min(1).max(500).optional(),
+    pathPattern: z.string().min(1).max(500).optional(),
+    literalArg: z
+      .object({
+        argIndex: z.number().int().min(0).max(20),
+        literal: z.string().min(0).max(500),
+      })
+      .strict()
+      .optional(),
+    withProp: z
+      .object({
+        name: z.string().min(1).max(200),
+        value: z.string().min(0).max(500).optional(),
+      })
+      .strict()
+      .optional(),
     target: WorkspacePath.optional(),
     path: WorkspacePath.optional(),
     sinceDays: z.number().int().min(1).max(365).optional(),

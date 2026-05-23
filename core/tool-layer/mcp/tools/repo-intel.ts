@@ -4,7 +4,17 @@ import { gitRecentChanges } from '../../../agent-runtime/git-intel.js';
 import { latestInvestigationContext } from '../../../agent-runtime/investigation-context.js';
 import { buildRelatedSurfaceManifest } from '../../../agent-runtime/related-surface.js';
 import { eventStore } from '../../../event-stream/store.js';
+import {
+  findComponentUsages,
+  lookupRoute,
+  routeForComponent,
+} from '../../../route-index/lookup.js';
 import { listScoutReportsForInvestigation } from '../../../scout-reports/repository.js';
+import {
+  findCallsOf,
+  findImportersImporting,
+  findJsxUsages,
+} from '../../../symbol-index/ast-query.js';
 import { findCallersOfSymbol, lookupSymbol } from '../../../symbol-index/lookup.js';
 import type { RepoRelativePath } from '../../path-contract.js';
 import { emitBlockedToolCall, emitToolCall } from '../audit.js';
@@ -25,6 +35,12 @@ export type RepoIntelQuery =
       kind?: 'function' | 'class' | 'type' | 'const' | 'enum' | 'variable';
     }
   | { intent: 'find-callers'; symbol: string }
+  | { intent: 'find-calls-of'; symbol: string; literalArg?: { argIndex: number; literal: string } }
+  | { intent: 'find-jsx-usages'; component: string; withProp?: { name: string; value?: string } }
+  | { intent: 'find-importers'; module: string; symbol: string }
+  | { intent: 'find-route'; pathPattern: string }
+  | { intent: 'find-component'; component: string }
+  | { intent: 'route-for-component'; component: string }
   | { intent: 'find-tests-for'; target: string }
   | { intent: 'related-files'; target: string }
   | { intent: 'recent-changes'; path?: string; sinceDays?: number }
@@ -37,6 +53,8 @@ type RepoIntelToolInput = z.infer<typeof RepoIntelQueryInput>;
 export type RepoIntelSource =
   | 'symbol-index'
   | 'git'
+  | 'ast-index'
+  | 'route-index'
   | 'scout-reports'
   | 'artifacts'
   | 'related-surface';
@@ -67,6 +85,12 @@ type FindCallers = typeof findCallersOfSymbol;
 type LatestInvestigationContext = typeof latestInvestigationContext;
 type ListScoutReports = typeof listScoutReportsForInvestigation;
 type GetArtifact = typeof getArtifact;
+type FindCallsOf = typeof findCallsOf;
+type FindJsxUsages = typeof findJsxUsages;
+type FindImportersImporting = typeof findImportersImporting;
+type LookupRoute = typeof lookupRoute;
+type FindComponentUsages = typeof findComponentUsages;
+type RouteForComponent = typeof routeForComponent;
 
 export interface RepoIntelDeps {
   lookupSymbol?: LookupSymbol;
@@ -77,6 +101,24 @@ export interface RepoIntelDeps {
   listScoutReportsForInvestigation?: ListScoutReports;
   getArtifact?: GetArtifact;
   replayInvestigationEvents?: typeof eventStore.replay;
+  findCallsOf?:
+    | FindCallsOf
+    | ((...args: Parameters<FindCallsOf>) => ReturnType<FindCallsOf> | null);
+  findJsxUsages?:
+    | FindJsxUsages
+    | ((...args: Parameters<FindJsxUsages>) => ReturnType<FindJsxUsages> | null);
+  findImportersImporting?:
+    | FindImportersImporting
+    | ((...args: Parameters<FindImportersImporting>) => ReturnType<FindImportersImporting> | null);
+  lookupRoute?:
+    | LookupRoute
+    | ((...args: Parameters<LookupRoute>) => ReturnType<LookupRoute> | null);
+  findComponentUsages?:
+    | FindComponentUsages
+    | ((...args: Parameters<FindComponentUsages>) => ReturnType<FindComponentUsages> | null);
+  routeForComponent?:
+    | RouteForComponent
+    | ((...args: Parameters<RouteForComponent>) => ReturnType<RouteForComponent> | null);
 }
 
 export async function repoIntelQueryTool(
@@ -130,6 +172,12 @@ async function dispatchRepoIntel(
   const latestContext = deps.latestInvestigationContext ?? latestInvestigationContext;
   const listReports = deps.listScoutReportsForInvestigation ?? listScoutReportsForInvestigation;
   const artifact = deps.getArtifact ?? getArtifact;
+  const callsOf = deps.findCallsOf ?? findCallsOf;
+  const jsxUsages = deps.findJsxUsages ?? findJsxUsages;
+  const importersImporting = deps.findImportersImporting ?? findImportersImporting;
+  const routeLookup = deps.lookupRoute ?? lookupRoute;
+  const componentUsages = deps.findComponentUsages ?? findComponentUsages;
+  const componentRoutes = deps.routeForComponent ?? routeForComponent;
 
   switch (input.intent) {
     case 'find-symbol': {
@@ -141,6 +189,46 @@ async function dispatchRepoIntel(
       if (input.symbol == null) return invalid(input.intent, 'Provide symbol.');
       const callers = findCallers(input.symbol, { worktreePath: ctx.workspaceRoot }).map(toPath);
       return found(input.intent, 'symbol-index', callers, 'No callers found.');
+    }
+    case 'find-calls-of': {
+      if (input.symbol == null) return invalid(input.intent, 'Provide symbol.');
+      const results = callsOf(input.symbol, {
+        worktreePath: ctx.workspaceRoot,
+        ...(input.literalArg != null ? { withLiteralArg: input.literalArg } : {}),
+      });
+      return indexFound(input.intent, 'ast-index', results, 'No calls found.');
+    }
+    case 'find-jsx-usages': {
+      if (input.component == null) return invalid(input.intent, 'Provide component.');
+      const results = jsxUsages(input.component, {
+        worktreePath: ctx.workspaceRoot,
+        ...(input.withProp != null ? { withProp: input.withProp } : {}),
+      });
+      return indexFound(input.intent, 'ast-index', results, 'No JSX usages found.');
+    }
+    case 'find-importers': {
+      if (input.module == null || input.symbol == null) {
+        return invalid(input.intent, 'Provide module and symbol.');
+      }
+      const results = importersImporting(input.module, input.symbol, {
+        worktreePath: ctx.workspaceRoot,
+      });
+      return indexFound(input.intent, 'ast-index', results, 'No importers found.');
+    }
+    case 'find-route': {
+      if (input.pathPattern == null) return invalid(input.intent, 'Provide pathPattern.');
+      const results = routeLookup(input.pathPattern, { worktreePath: ctx.workspaceRoot });
+      return indexFound(input.intent, 'route-index', results, 'No route found.');
+    }
+    case 'find-component': {
+      if (input.component == null) return invalid(input.intent, 'Provide component.');
+      const results = componentUsages(input.component, { worktreePath: ctx.workspaceRoot });
+      return indexFound(input.intent, 'route-index', results, 'No component usages found.');
+    }
+    case 'route-for-component': {
+      if (input.component == null) return invalid(input.intent, 'Provide component.');
+      const results = componentRoutes(input.component, { worktreePath: ctx.workspaceRoot });
+      return indexFound(input.intent, 'route-index', results, 'No route for component found.');
     }
     case 'find-tests-for': {
       if (input.target == null) return invalid(input.intent, 'Provide target.');
@@ -304,6 +392,23 @@ function found(
   return results.length > 0
     ? { ok: true, intent, source, results }
     : { ok: false, intent, reason: 'not-found', fallbackHint };
+}
+
+function indexFound(
+  intent: RepoIntelIntent,
+  source: Extract<RepoIntelSource, 'ast-index' | 'route-index'>,
+  results: unknown[] | null,
+  fallbackHint: string,
+): RepoIntelResult {
+  if (results == null) {
+    return {
+      ok: false,
+      intent,
+      reason: 'index-stale',
+      fallbackHint: `${fallbackHint} Use search_text with a narrow regex until the index is refreshed.`,
+    };
+  }
+  return found(intent, source, results, fallbackHint);
 }
 
 function invalid(intent: RepoIntelIntent, fallbackHint: string): RepoIntelResult {

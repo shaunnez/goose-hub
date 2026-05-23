@@ -312,7 +312,7 @@ export function buildFactoryMcpServer(ctx: FactoryContext): McpServer {
     'repo_intel.query',
     {
       description:
-        'Query repository intelligence helpers for symbols, callers, related files, tests, recent changes, prior scout reports, or artifacts before falling back to grep.',
+        'Query repository intelligence helpers for symbols, AST calls/imports/JSX, routes, related files, tests, recent changes, prior scout reports, or artifacts before falling back to grep.',
       inputSchema: RepoIntelQueryInput.shape,
     },
     async (input) => {

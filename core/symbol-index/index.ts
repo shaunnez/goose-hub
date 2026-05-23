@@ -15,5 +15,7 @@ export {
   listExportsOf,
   listImports,
 } from './query.js';
+export { findCallsOf, findImportersImporting, findJsxUsages } from './ast-query.js';
+export type { JsxPropFilter, LiteralArgFilter, SymbolHit } from './ast-query.js';
 export { extractIdentifiers, lookupWorkItemSymbols } from './lookup.js';
 export type { LookupOptions, SymbolHint } from './lookup.js';

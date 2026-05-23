@@ -1,5 +1,6 @@
 packages:
   - 'apps/*'
   - 'core'
+  - 'core/route-index'
   - 'skills'
   - 'target-projects'

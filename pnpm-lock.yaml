@@ -173,6 +173,15 @@ importers:
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.1)
 
+  core/route-index:
+    dependencies:
+      better-sqlite3:
+        specifier: ^12.9.0
+        version: 12.9.0
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+
   skills: {}
 
   target-projects: {}

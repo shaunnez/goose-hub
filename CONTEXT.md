@@ -607,6 +607,8 @@ Duplicate-call nudges are advisory only. `core/tool-layer/mcp/run-cache.ts` trac
 
 **Repo Intelligence Tool.** `mcp__factory-tools__repo_intel.query` is the preferred structured lookup before grep. It dispatches to existing harness helpers for `find-symbol`, `find-callers`, `find-tests-for`, `related-files`, `recent-changes`, `prior-investigation`, and `fetch-artifact`. Path-bearing inputs still go through MCP path policy. `recent-changes` reuses #996's `gitRecentChanges()` helper. `agent.tool-call` audit includes `repo_intel_intent` so telemetry can break down usage by intent. QA/review holdout callers receive prior-investigation and artifact payloads with decision-summary/implementation-reasoning fields stripped.
 
+**AST and Route Intelligence.** `repo_intel.query` also supports TypeScript/TSX structural intents for `find-calls-of`, `find-jsx-usages`, and `find-importers`, backed by `core/symbol-index/ast-query.ts`. Frontend route/component lookups live in `core/route-index/` as a regenerable SQLite cache at `~/.factory/route-index.db`; rebuild with `pnpm route-index` or `pnpm route refresh`, and query with `pnpm route find`, `pnpm route component`, or `pnpm route route-for-component`. Route/AST stale-index failures degrade to typed `index-stale` tool results with a `search_text` fallback hint.
+
 `core/tool-layer/tools/{read,write,bash,test}.ts` and their tests have been deleted (Phase 7 cleanup complete). `core/tool-layer/tools/record-decision.ts` is the surviving helper, wrapped by `mcp/tools/context.ts`.
 
 ## Flagged ambiguities
