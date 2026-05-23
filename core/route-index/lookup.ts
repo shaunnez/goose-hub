@@ -37,15 +37,21 @@ function componentRow(row: ComponentUsageRowDb): ComponentUsageRow {
 function withFreshDb<T>(
   options: LookupOptions,
   query: (db: ReturnType<typeof openRouteIndexDb>) => T,
-): T {
+): T | null {
   if (options.worktreePath != null) {
-    ensureRouteIndexFresh({
+    const freshness = ensureRouteIndexFresh({
       repoRoot: options.worktreePath,
       dbPath: options.dbPath,
       rebuild: (repoRoot, dbPath) => buildRouteIndex({ repoRoot, dbPath }),
     });
+    if (freshness.missing || freshness.stale || freshness.corrupt) return null;
   }
-  const db = openRouteIndexDb(options.dbPath);
+  let db: ReturnType<typeof openRouteIndexDb>;
+  try {
+    db = openRouteIndexDb(options.dbPath);
+  } catch {
+    return null;
+  }
   try {
     return query(db);
   } finally {
@@ -53,7 +59,7 @@ function withFreshDb<T>(
   }
 }
 
-export function lookupRoute(pathPattern: string, options: LookupOptions = {}): RouteRow[] {
+export function lookupRoute(pathPattern: string, options: LookupOptions = {}): RouteRow[] | null {
   return withFreshDb(options, (db) =>
     (
       db
@@ -68,7 +74,7 @@ export function lookupRoute(pathPattern: string, options: LookupOptions = {}): R
 export function findComponentUsages(
   componentName: string,
   options: LookupOptions = {},
-): ComponentUsageRow[] {
+): ComponentUsageRow[] | null {
   return withFreshDb(options, (db) =>
     (
       db
@@ -80,18 +86,20 @@ export function findComponentUsages(
   );
 }
 
-export function routeForComponent(component: string, options: LookupOptions = {}): RouteRow[] {
+export function routeForComponent(
+  component: string,
+  options: LookupOptions = {},
+): RouteRow[] | null {
   return withFreshDb(options, (db) =>
     (
       db
         .prepare(
-          `SELECT DISTINCT r.path_pattern, r.file_path, r.line, r.component
+          `SELECT r.path_pattern, r.file_path, r.line, r.component
            FROM routes r
-           LEFT JOIN component_usages u ON u.file_path = r.file_path
-           WHERE r.component = ? OR u.component = ?
+           WHERE r.component = ?
            ORDER BY r.file_path, r.line`,
         )
-        .all(component, component) as RouteRowDb[]
+        .all(component) as RouteRowDb[]
     ).map(routeRow),
   );
 }

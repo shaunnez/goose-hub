@@ -57,15 +57,27 @@ function main(): void {
 
   if (command === 'find') {
     const rows = lookupRoute(arg, { dbPath, worktreePath: repoRoot() });
+    if (rows == null) {
+      console.error('route-index is stale; run pnpm route refresh');
+      process.exit(1);
+    }
     for (const row of rows) console.log(`${row.pathPattern} ${row.filePath}:${row.line} ${row.component ?? ''}`);
     return;
   }
   if (command === 'component') {
     const rows = findComponentUsages(arg, { dbPath, worktreePath: repoRoot() });
+    if (rows == null) {
+      console.error('route-index is stale; run pnpm route refresh');
+      process.exit(1);
+    }
     for (const row of rows) console.log(`${row.component} ${row.filePath}:${row.line}`);
     return;
   }
   const rows = routeForComponent(arg, { dbPath, worktreePath: repoRoot() });
+  if (rows == null) {
+    console.error('route-index is stale; run pnpm route refresh');
+    process.exit(1);
+  }
   for (const row of rows) console.log(`${row.pathPattern} ${row.filePath}:${row.line} ${row.component ?? ''}`);
 }
 
