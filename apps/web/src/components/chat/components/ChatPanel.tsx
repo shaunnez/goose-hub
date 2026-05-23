@@ -63,6 +63,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
   //  * the open-panel roster effect clobbering a thread the user just clicked
   //    "New" to create while the list was still in flight.
   const loadTokenRef = useRef(0);
+  const wasOpenRef = useRef(open);
   const activeConversationIdRef = useRef<string | null>(null);
   const inFlightRunByConversationRef = useRef<Map<string, string>>(new Map());
 
@@ -135,6 +136,33 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
       // localStorage unavailable — accept the loss; selection is best-effort.
     }
   }, []);
+
+  const resetPanelState = useCallback(() => {
+    loadTokenRef.current += 1;
+    activeConversationIdRef.current = null;
+    inFlightRunByConversationRef.current.clear();
+    writeActiveId(null);
+    setConversation(null);
+    setMessages([]);
+    setInvocations([]);
+    setSendingConversationIds(new Set());
+    setBusy(false);
+    setPendingDecision(null);
+    setError(null);
+    setView('list');
+  }, [writeActiveId]);
+
+  useEffect(() => {
+    if (wasOpenRef.current && !open) {
+      resetPanelState();
+    }
+    wasOpenRef.current = open;
+  }, [open, resetPanelState]);
+
+  const handleClose = useCallback(() => {
+    resetPanelState();
+    onClose();
+  }, [onClose, resetPanelState]);
 
   useEffect(() => {
     if (!open || toolManifest.length > 0) return;
@@ -463,7 +491,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
         </select>
         <button
           type="button"
-          onClick={onClose}
+          onClick={handleClose}
           aria-label="Close chat"
           className="p-1 text-fg-2 hover:text-fg rounded"
         >

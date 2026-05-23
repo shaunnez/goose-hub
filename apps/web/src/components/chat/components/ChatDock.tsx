@@ -24,10 +24,22 @@ export function ChatDock() {
     } catch {}
   }, [open]);
 
+  function handleClose() {
+    setOpen(false);
+  }
+
+  function handleToggle() {
+    if (open) {
+      handleClose();
+      return;
+    }
+    setOpen(true);
+  }
+
   return (
     <>
-      <ChatPanel open={open} onClose={() => setOpen(false)} />
-      <ChatLauncher open={open} onToggle={() => setOpen((o) => !o)} />
+      <ChatPanel open={open} onClose={handleClose} />
+      <ChatLauncher open={open} onToggle={handleToggle} />
     </>
   );
 }
