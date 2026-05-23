@@ -15,6 +15,7 @@ export interface ToolCallAudit {
   durationMs?: number;
   truncated?: boolean;
   bytesRead?: number;
+  cached?: boolean;
   status?: 'ok' | 'failed' | 'timed_out';
   exitCode?: number | null;
   noMatches?: boolean;

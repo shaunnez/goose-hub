@@ -1,16 +1,26 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { eventStore } from '../../event-stream/store.js';
 import {
   DEFAULT_STDERR_LIMIT_BYTES,
   DEFAULT_STDOUT_LIMIT_BYTES,
   minimalEnv,
   runCommand,
 } from './command-policy.js';
+import type { FactoryContext } from './context.js';
 import { FactoryContextError, loadFactoryContext } from './context.js';
 import { PathPolicyViolation, resolveWorkspacePath } from './path-policy.js';
 import { buildFactoryMcpServer } from './server.js';
+import {
+  listDirTool,
+  listFilesTool,
+  readFileTool,
+  readManyFilesTool,
+  searchTextTool,
+} from './tools/read.js';
+import { writeFileTool } from './tools/write.js';
 
 let workspace: string;
 
@@ -21,6 +31,17 @@ beforeEach(() => {
 afterEach(() => {
   rmSync(workspace, { recursive: true, force: true });
 });
+
+function makeCtx(overrides: Partial<FactoryContext> = {}): FactoryContext {
+  return {
+    runId: `run-${Math.random().toString(36).slice(2, 12)}`,
+    projectId: 'demo',
+    workItemId: 'github:demo/repo#1',
+    workspaceRoot: workspace,
+    serverPort: 3001,
+    ...overrides,
+  };
+}
 
 describe('path-policy', () => {
   it('resolves a workspace-relative path to an absolute path under root', () => {
@@ -132,6 +153,107 @@ describe('server resources', () => {
         {},
       ),
     ).resolves.toEqual({ resourceTemplates: [] });
+  });
+});
+
+describe('per-run read cache', () => {
+  it('returns identical read_file bytes with cached=true on the second call', async () => {
+    const ctx = makeCtx();
+    writeFileSync(join(workspace, 'README.md'), '# Demo\n\nhello world\n');
+
+    const first = await readFileTool(ctx, { path: 'README.md' });
+    const second = await readFileTool(ctx, { path: './README.md' });
+
+    expect(second).toEqual({ ...first, cached: true });
+    const readEvents = eventStore
+      .replay({ runId: ctx.runId, kind: 'agent.tool-call' })
+      .filter((event) => (event.payload as { tool_name?: string }).tool_name === 'read_file');
+    expect(readEvents).toHaveLength(2);
+    expect(readEvents[0].payload).not.toMatchObject({ cached: true });
+    expect(readEvents[1].payload).toMatchObject({ cached: true });
+  });
+
+  it('caches read_many_files, list_dir, list_files, and search_text within one run', async () => {
+    const ctx = makeCtx();
+    mkdirSync(join(workspace, 'src'));
+    writeFileSync(join(workspace, 'README.md'), '# Demo\n');
+    writeFileSync(join(workspace, 'src', 'index.ts'), 'export const NEEDLE = 1;\n');
+
+    await readManyFilesTool(ctx, { paths: ['README.md', 'src/index.ts'] });
+    await listDirTool(ctx, { path: 'src' });
+    await listFilesTool(ctx, { path: 'src', glob: '*.ts' });
+    await searchTextTool(ctx, { query: 'NEEDLE', path: 'src' });
+
+    expect(
+      await readManyFilesTool(ctx, { paths: ['./README.md', './src/index.ts'] }),
+    ).toMatchObject({ cached: true });
+    expect(await listDirTool(ctx, { path: './src' })).toMatchObject({ cached: true });
+    expect(await listFilesTool(ctx, { path: './src', glob: '*.ts' })).toMatchObject({
+      cached: true,
+    });
+    expect(await searchTextTool(ctx, { query: 'NEEDLE', path: './src' })).toMatchObject({
+      cached: true,
+    });
+  });
+
+  it('invalidates overlapping entries after a write before re-reading', async () => {
+    const ctx = makeCtx();
+    writeFileSync(join(workspace, 'a.txt'), 'old\n');
+
+    await readFileTool(ctx, { path: 'a.txt' });
+    await writeFileTool(ctx, { path: 'a.txt', content: 'new\n' });
+    const reread = await readFileTool(ctx, { path: 'a.txt' });
+
+    expect(reread.content).toBe('new\n');
+    expect(reread).not.toHaveProperty('cached');
+    expect(readFileSync(join(workspace, 'a.txt'), 'utf8')).toBe('new\n');
+  });
+
+  it('does not share cached reads across different run ids', async () => {
+    writeFileSync(join(workspace, 'a.txt'), 'run one\n');
+    const firstRun = makeCtx({ runId: 'cache-run-one' });
+    const secondRun = makeCtx({ runId: 'cache-run-two' });
+
+    await readFileTool(firstRun, { path: 'a.txt' });
+    writeFileSync(join(workspace, 'a.txt'), 'run two\n');
+    const second = await readFileTool(secondRun, { path: 'a.txt' });
+
+    expect(second.content).toBe('run two\n');
+    expect(second).not.toHaveProperty('cached');
+  });
+
+  it('evicts a run cache when the run completes', async () => {
+    const ctx = makeCtx({ runId: 'cache-run-evict' });
+    writeFileSync(join(workspace, 'a.txt'), 'before\n');
+
+    await readFileTool(ctx, { path: 'a.txt' });
+    eventStore.appendEvent({
+      projectId: ctx.projectId,
+      workItemId: ctx.workItemId,
+      runId: ctx.runId,
+      kind: 'agent.run-completed',
+      payload: {},
+    });
+    writeFileSync(join(workspace, 'a.txt'), 'after\n');
+    const reread = await readFileTool(ctx, { path: 'a.txt' });
+
+    expect(reread.content).toBe('after\n');
+    expect(reread).not.toHaveProperty('cached');
+  });
+
+  it('caches a 200KB read payload and serves the second hit from memory', async () => {
+    const ctx = makeCtx();
+    mkdirSync(join(workspace, 'large'));
+    writeFileSync(join(workspace, 'large', 'payload.txt'), 'x'.repeat(200 * 1024));
+
+    const first = await readFileTool(ctx, { path: 'large/payload.txt' });
+    const start = performance.now();
+    const second = await readFileTool(ctx, { path: 'large/payload.txt' });
+    const elapsedMs = performance.now() - start;
+
+    expect(first.content).toHaveLength(200 * 1024);
+    expect(second).toEqual({ ...first, cached: true });
+    expect(elapsedMs).toBeLessThan(10);
   });
 });
 

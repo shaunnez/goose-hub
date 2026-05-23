@@ -76,3 +76,29 @@
   - `read_many_files` can be counted in addition to its internal `read_file` audit events when both are emitted in the same run.
   - The anomaly threshold uses the available same-project/same-skill p95 history; early sparse baselines can be noisy.
 - Next branch to create: `cost-perf/995-run-cache` from `cost-perf/994-tool-intensity-telemetry`
+
+## Issue #995 - Per-run MCP read/search cache
+
+- Branch name: `cost-perf/995-run-cache`
+- PR number/url: #1004 - https://github.com/shaunnez/goose-hub/pull/1004
+- Parent branch: `cost-perf/994-tool-intensity-telemetry`
+- Files changed:
+  - `CONTEXT.md`
+  - `core/tool-layer/mcp/audit.ts`
+  - `core/tool-layer/mcp/run-cache.ts`
+  - `core/tool-layer/mcp/slice.test.ts`
+  - `core/tool-layer/mcp/tools/read.ts`
+  - `core/tool-layer/mcp/tools/write.ts`
+- Tests run:
+  - `pnpm vitest run core/tool-layer/mcp/slice.test.ts core/tool-layer/mcp/tools/read.test.ts core/tool-layer/mcp/tools/write.test.ts core/cost/repository.test.ts apps/server/src/domains/costs/service.test.ts apps/server/src/domains/costs/router.test.ts`
+  - `pnpm exec tsc --noEmit --pretty false`
+  - `pnpm exec biome check core/tool-layer/mcp/run-cache.ts core/tool-layer/mcp/audit.ts core/tool-layer/mcp/tools/read.ts core/tool-layer/mcp/tools/write.ts core/tool-layer/mcp/slice.test.ts apps/server/src/domains/costs/repository.ts`
+  - `pnpm audit-docs`
+  - `pnpm manifest --check`
+- Remaining risks:
+  - Cache state is process-local by design; restarting the MCP process drops all entries.
+  - `list_files` keys include the effective `limit` as a correctness extension beyond the issue wording, because limit changes the returned payload.
+  - This cache only removes repeated disk/process work inside a single run; separate scouts still need #996's shared InvestigationSeed.
+- Notes:
+  - While verifying #995, `pnpm exec tsc --noEmit --pretty false` exposed a missing #994 server repository re-export. PR #1003 was amended and force-pushed with that parent-stack fix before #995 was rebased.
+- Next branch to create: `cost-perf/998-duplicate-call-nudge` from `cost-perf/995-run-cache`

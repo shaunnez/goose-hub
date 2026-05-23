@@ -13,6 +13,7 @@ import {
 } from '../command-policy.js';
 import type { FactoryContext } from '../context.js';
 import { PathPolicyViolation, resolveWorkspacePath } from '../path-policy.js';
+import { getCachedRunResult, normalizeRunCacheKey, setCachedRunResult } from '../run-cache.js';
 import type {
   FileExistsInput,
   FileInfoInput,
@@ -51,11 +52,13 @@ export interface ReadFileResult {
   startLine: number;
   endLine: number;
   totalLines: number;
+  cached?: true;
 }
 
 export interface ReadManyFilesResult {
   files: Array<{ path: RepoRelativePath; content: string; truncated: boolean }>;
   errors: Array<{ path: string; reason: string }>;
+  cached?: true;
 }
 
 export interface ListDirEntry {
@@ -67,11 +70,13 @@ export interface ListDirResult {
   path: RepoRelativePath;
   entries: ListDirEntry[];
   truncated: boolean;
+  cached?: true;
 }
 
 export interface ListFilesResult {
   files: RepoRelativePath[];
   truncated: boolean;
+  cached?: true;
 }
 
 export interface SearchMatch {
@@ -83,6 +88,7 @@ export interface SearchMatch {
 export interface SearchTextResult {
   matches: SearchMatch[];
   truncated: boolean;
+  cached?: true;
 }
 
 export interface FileInfoResult {
@@ -273,6 +279,26 @@ export async function readFileTool(
     throw err;
   }
 
+  const cacheKey = normalizeRunCacheKey({
+    toolName: 'read_file',
+    args: input,
+    workspaceRoot: ctx.workspaceRoot,
+  });
+  const cached =
+    cacheKey == null ? null : getCachedRunResult<ReadFileResult>(ctx.runId, cacheKey.key);
+  if (cached != null) {
+    const result = { ...cached, cached: true as const };
+    emitToolCall(ctx, {
+      tool: 'read_file',
+      input: { path: input.path },
+      status: 'ok',
+      truncated: result.truncated,
+      bytesRead: Buffer.byteLength(result.content, 'utf8'),
+      cached: true,
+    });
+    return result;
+  }
+
   const buffer = await readFile(resolved.absolute);
   const totalBytes = buffer.byteLength;
   const truncatedByBytes = totalBytes > READ_FILE_CAP_BYTES;
@@ -304,6 +330,7 @@ export async function readFileTool(
     truncated,
     bytesRead: Buffer.byteLength(result.content, 'utf8'),
   });
+  if (cacheKey != null) setCachedRunResult(ctx.runId, cacheKey, result);
   return result;
 }
 
@@ -316,6 +343,23 @@ export async function readManyFilesTool(
   ctx: FactoryContext,
   input: z.infer<typeof ReadManyFilesInput>,
 ): Promise<ReadManyFilesResult> {
+  const cacheKey = normalizeRunCacheKey({
+    toolName: 'read_many_files',
+    args: input,
+    workspaceRoot: ctx.workspaceRoot,
+  });
+  const cached =
+    cacheKey == null ? null : getCachedRunResult<ReadManyFilesResult>(ctx.runId, cacheKey.key);
+  if (cached != null) {
+    emitToolCall(ctx, {
+      tool: 'read_many_files',
+      input: { count: input.paths.length },
+      status: 'ok',
+      cached: true,
+    });
+    return { ...cached, cached: true as const };
+  }
+
   const files: ReadManyFilesResult['files'] = [];
   const errors: ReadManyFilesResult['errors'] = [];
 
@@ -334,7 +378,9 @@ export async function readManyFilesTool(
     input: { count: input.paths.length },
     status: 'ok',
   });
-  return { files, errors };
+  const result = { files, errors };
+  if (cacheKey != null) setCachedRunResult(ctx.runId, cacheKey, result);
+  return result;
 }
 
 /**
@@ -355,6 +401,24 @@ export async function listDirTool(
   }
 
   const depth = input.depth ?? 1;
+  const cacheKey = normalizeRunCacheKey({
+    toolName: 'list_dir',
+    args: { ...input, depth },
+    workspaceRoot: ctx.workspaceRoot,
+  });
+  const cached =
+    cacheKey == null ? null : getCachedRunResult<ListDirResult>(ctx.runId, cacheKey.key);
+  if (cached != null) {
+    emitToolCall(ctx, {
+      tool: 'list_dir',
+      input: { path: input.path, depth },
+      status: 'ok',
+      truncated: cached.truncated,
+      cached: true,
+    });
+    return { ...cached, cached: true as const };
+  }
+
   const entries: ListDirEntry[] = [];
   let truncated = false;
   const dirWorkspacePath = resolved.canonical.path;
@@ -398,7 +462,9 @@ export async function listDirTool(
     status: 'ok',
     truncated,
   });
-  return { path: resolved.canonical, entries, truncated };
+  const result = { path: resolved.canonical, entries, truncated };
+  if (cacheKey != null) setCachedRunResult(ctx.runId, cacheKey, result);
+  return result;
 }
 
 /**
@@ -424,6 +490,24 @@ export async function listFilesTool(
   args.push(searchPath);
 
   const limit = Math.min(input.limit ?? LIST_FILES_CAP, LIST_FILES_CAP);
+  const cacheKey = normalizeRunCacheKey({
+    toolName: 'list_files',
+    args: { ...input, limit },
+    workspaceRoot: ctx.workspaceRoot,
+  });
+  const cached =
+    cacheKey == null ? null : getCachedRunResult<ListFilesResult>(ctx.runId, cacheKey.key);
+  if (cached != null) {
+    emitToolCall(ctx, {
+      tool: 'list_files',
+      input: { path: input.path ?? null, glob: input.glob ?? null },
+      status: 'ok',
+      truncated: cached.truncated,
+      noMatches: cached.files.length === 0,
+      cached: true,
+    });
+    return { ...cached, cached: true as const };
+  }
 
   const result = await runCommand({
     command: 'rg',
@@ -464,7 +548,9 @@ export async function listFilesTool(
     truncated,
     noMatches: files.length === 0 && (rgSpawnFailed(result) || rgNoMatches(result)),
   });
-  return { files, truncated };
+  const output = { files, truncated };
+  if (cacheKey != null) setCachedRunResult(ctx.runId, cacheKey, output);
+  return output;
 }
 
 /**
@@ -502,6 +588,26 @@ export async function searchTextTool(
   }
   args.push('--', input.query, searchPath);
 
+  const limit = Math.min(input.maxMatches ?? SEARCH_MAX_MATCHES, SEARCH_MAX_MATCHES);
+  const cacheKey = normalizeRunCacheKey({
+    toolName: 'search_text',
+    args: { ...input, maxMatches: limit },
+    workspaceRoot: ctx.workspaceRoot,
+  });
+  const cached =
+    cacheKey == null ? null : getCachedRunResult<SearchTextResult>(ctx.runId, cacheKey.key);
+  if (cached != null) {
+    emitToolCall(ctx, {
+      tool: 'search_text',
+      input: { query: input.query, path: input.path ?? null, glob: input.glob ?? null },
+      status: 'ok',
+      truncated: cached.truncated,
+      noMatches: cached.matches.length === 0,
+      cached: true,
+    });
+    return { ...cached, cached: true as const };
+  }
+
   const result = await runCommand({
     command: 'rg',
     args,
@@ -511,7 +617,6 @@ export async function searchTextTool(
     env: minimalEnv(),
   });
 
-  const limit = Math.min(input.maxMatches ?? SEARCH_MAX_MATCHES, SEARCH_MAX_MATCHES);
   let matches: SearchMatch[];
   let truncated: boolean;
 
@@ -555,7 +660,9 @@ export async function searchTextTool(
     truncated,
     noMatches: matches.length === 0 && (rgSpawnFailed(result) || rgNoMatches(result)),
   });
-  return { matches, truncated };
+  const output = { matches, truncated };
+  if (cacheKey != null) setCachedRunResult(ctx.runId, cacheKey, output);
+  return output;
 }
 
 /**
