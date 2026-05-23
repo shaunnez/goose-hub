@@ -505,6 +505,8 @@ All cost logic lives in `core/cost/`: `extract.ts` (parsers), `repository.ts` (w
 
 **`agent_run_costs`** has a unique index on `runId` — duplicate inserts (retries, webhook redeliveries) are silently ignored. Every run produces exactly one row, even at `costUsd = 0`, so dashboards reflect every run.
 
+**Tool-intensity telemetry** lives in `agent_run_tool_stats`, keyed one-to-one by `runId`. The agent runtime calls `recordToolStatsForRun(runId)` synchronously after `recordCost()`, aggregating `agent.tool-call` rows into read/search/write/edit counts, returned bytes, unique paths read, and redundant reads. The per-issue costs API joins these stats back onto cost rows, and a high-read outlier emits `agent.tool-intensity-anomaly` when a run exceeds 2x the same-skill p95 read baseline.
+
 **Stages:** `triage`, `investigate`, `dev`, `qa`, `review`, `retrospective`, `other`. Stage is UI-only metadata; never influences workflow logic. Unknown skills fall into `other` (soft fallback).
 
 **UI convention:** `~$0.04` for estimated, `$0.04` for exact. Enforced in frontend, not DB.

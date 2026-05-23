@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { costFromCliEnvelope } from '../cost/extract.js';
-import { recordCost } from '../cost/repository.js';
+import { recordCost, recordToolStatsForRun } from '../cost/repository.js';
 import { stageForSkill } from '../cost/skill-stage.js';
 import { db } from '../db/db.js';
 import { getRecordDecisionTool } from '../db/repositories/project-settings.js';
@@ -402,6 +402,7 @@ export class ClaudeCliRuntime implements AgentRuntime {
           costLabel: usage?.costLabel ?? 'estimated',
           personaId: personaId ?? null,
         });
+        recordToolStatsForRun(runId);
 
         const costUsd = usage?.costUsd ?? 0;
         const inputTokens = usage?.inputTokens ?? 0;

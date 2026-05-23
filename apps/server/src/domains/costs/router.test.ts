@@ -1,13 +1,19 @@
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockGetCostSummary, mockGetCostsForWorkItem, mockGetProject, mockResolveGlobalSettings } =
-  vi.hoisted(() => ({
-    mockGetCostSummary: vi.fn(),
-    mockGetCostsForWorkItem: vi.fn(),
-    mockGetProject: vi.fn(),
-    mockResolveGlobalSettings: vi.fn(),
-  }));
+const {
+  mockGetCostSummary,
+  mockGetCostsForWorkItem,
+  mockGetToolStatsForWorkItem,
+  mockGetProject,
+  mockResolveGlobalSettings,
+} = vi.hoisted(() => ({
+  mockGetCostSummary: vi.fn(),
+  mockGetCostsForWorkItem: vi.fn(),
+  mockGetToolStatsForWorkItem: vi.fn(),
+  mockGetProject: vi.fn(),
+  mockResolveGlobalSettings: vi.fn(),
+}));
 
 vi.mock('@goose-hub/core/agent-runtime/resolve-for-project.js', () => ({
   resolveGlobalSettingsForProject: mockResolveGlobalSettings,
@@ -16,6 +22,7 @@ vi.mock('@goose-hub/core/agent-runtime/resolve-for-project.js', () => ({
 vi.mock('./service.js', () => ({
   getCostSummary: mockGetCostSummary,
   getCostsForWorkItem: mockGetCostsForWorkItem,
+  getToolStatsForWorkItem: mockGetToolStatsForWorkItem,
 }));
 
 vi.mock('#shared/projects.js', () => ({
@@ -131,5 +138,23 @@ describe('GET /:slug/issues/:id/costs', () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe('bad input');
+  });
+});
+
+describe('GET /:slug/issues/:id/tool-stats', () => {
+  it('returns joined run tool stats for a work item', async () => {
+    mockGetProject.mockResolvedValue({ source: { kind: 'github', repo: 'shaunnez/goose-hub' } });
+    const data = {
+      workItemId: 'github:shaunnez/goose-hub#42',
+      rows: [{ runId: 'r1', skill: 'implement', readCount: 4, bytesRead: 2048 }],
+    };
+    mockGetToolStatsForWorkItem.mockResolvedValue({ ok: true, data });
+
+    const app = makeApp();
+    const res = await app.request('/goose-hub-self/issues/42/tool-stats');
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(data);
+    expect(mockGetToolStatsForWorkItem).toHaveBeenCalledWith('github:shaunnez/goose-hub#42');
   });
 });

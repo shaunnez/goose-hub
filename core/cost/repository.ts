@@ -1,11 +1,38 @@
-import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, ne, sql } from 'drizzle-orm';
 import { db } from '../db/db.js';
-import { agentRunCosts } from '../db/schema.js';
+import { agentRunCosts, agentRunToolStats } from '../db/schema.js';
+import { eventStore } from '../event-stream/store.js';
+import { canonicalPathStringFromAuditPayload } from '../tool-layer/tool-call-audit.js';
 import type { CostLabel, CostRecord, Stage } from './types.js';
 
 export interface CostRow extends CostRecord {
   id: number;
   createdAt: string;
+}
+
+export interface AgentRunToolStatsRow {
+  runId: string;
+  readCount: number;
+  grepCount: number;
+  writeCount: number;
+  editCount: number;
+  bytesRead: number;
+  uniquePathsRead: number;
+  redundantReads: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkItemToolStatsRow extends AgentRunToolStatsRow {
+  workItemId: string | null;
+  stage: Stage;
+  skill: string;
+  modelId: string;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  costLabel: CostLabel;
+  personaId: string | null;
 }
 
 /**
@@ -39,6 +66,74 @@ export function listCostsForWorkItem(workItemId: string): CostRow[] {
     .orderBy(asc(agentRunCosts.createdAt))
     .all();
   return rows.map(toRow);
+}
+
+export function recordToolStatsForRun(runId: string): AgentRunToolStatsRow {
+  const stats = aggregateToolStatsForRun(runId);
+  const [row] = db
+    .insert(agentRunToolStats)
+    .values(stats)
+    .onConflictDoUpdate({
+      target: agentRunToolStats.runId,
+      set: {
+        readCount: stats.readCount,
+        grepCount: stats.grepCount,
+        writeCount: stats.writeCount,
+        editCount: stats.editCount,
+        bytesRead: stats.bytesRead,
+        uniquePathsRead: stats.uniquePathsRead,
+        redundantReads: stats.redundantReads,
+        updatedAt: sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`,
+      },
+    })
+    .returning()
+    .all();
+  const saved = toToolStatsRow(row);
+  emitToolIntensityAnomalyIfNeeded(saved);
+  return saved;
+}
+
+export function listToolStatsForWorkItem(workItemId: string): WorkItemToolStatsRow[] {
+  const rows = db
+    .select({
+      runId: agentRunToolStats.runId,
+      readCount: agentRunToolStats.readCount,
+      grepCount: agentRunToolStats.grepCount,
+      writeCount: agentRunToolStats.writeCount,
+      editCount: agentRunToolStats.editCount,
+      bytesRead: agentRunToolStats.bytesRead,
+      uniquePathsRead: agentRunToolStats.uniquePathsRead,
+      redundantReads: agentRunToolStats.redundantReads,
+      createdAt: agentRunToolStats.createdAt,
+      updatedAt: agentRunToolStats.updatedAt,
+      workItemId: agentRunCosts.workItemId,
+      stage: agentRunCosts.stage,
+      skill: agentRunCosts.skill,
+      modelId: agentRunCosts.modelId,
+      inputTokens: agentRunCosts.inputTokens,
+      outputTokens: agentRunCosts.outputTokens,
+      costUsd: agentRunCosts.costUsd,
+      costLabel: agentRunCosts.costLabel,
+      personaId: agentRunCosts.personaId,
+    })
+    .from(agentRunToolStats)
+    .innerJoin(agentRunCosts, eq(agentRunToolStats.runId, agentRunCosts.runId))
+    .where(eq(agentRunCosts.workItemId, workItemId))
+    .orderBy(asc(agentRunCosts.createdAt))
+    .all();
+
+  return rows.map((row) => ({
+    ...toToolStatsRow(row),
+    workItemId: row.workItemId,
+    stage: row.stage as Stage,
+    skill: row.skill,
+    modelId: row.modelId,
+    inputTokens: row.inputTokens,
+    outputTokens: row.outputTokens,
+    costUsd: row.costUsd,
+    costLabel: row.costLabel as CostLabel,
+    personaId: row.personaId,
+  }));
 }
 
 export function listCostsForProjectSince(projectId: string, sinceIso: string): CostRow[] {
@@ -131,4 +226,157 @@ function toRow(r: typeof agentRunCosts.$inferSelect): CostRow {
     personaId: r.personaId,
     createdAt: r.createdAt,
   };
+}
+
+function aggregateToolStatsForRun(
+  runId: string,
+): Omit<AgentRunToolStatsRow, 'createdAt' | 'updatedAt'> {
+  const readPaths = new Set<string>();
+  let readCount = 0;
+  let grepCount = 0;
+  let writeCount = 0;
+  let editCount = 0;
+  let bytesRead = 0;
+  let redundantReads = 0;
+
+  for (const event of eventStore.replay({ runId, kind: 'agent.tool-call' })) {
+    const payload = payloadRecord(event.payload);
+    const toolName = normalizeToolName(payload.tool_name ?? payload.toolName ?? payload.name);
+    if (isReadTool(toolName)) {
+      readCount += 1;
+      bytesRead += bytesReadFromPayload(payload);
+      const path = canonicalPathStringFromAuditPayload(payload) ?? pathFromPayload(payload);
+      if (path != null) {
+        if (readPaths.has(path)) redundantReads += 1;
+        readPaths.add(path);
+      }
+    } else if (isSearchTool(toolName)) {
+      grepCount += 1;
+    } else if (isWriteTool(toolName)) {
+      writeCount += 1;
+    } else if (isEditTool(toolName)) {
+      editCount += 1;
+    }
+  }
+
+  return {
+    runId,
+    readCount,
+    grepCount,
+    writeCount,
+    editCount,
+    bytesRead,
+    uniquePathsRead: readPaths.size,
+    redundantReads,
+  };
+}
+
+function toToolStatsRow(row: typeof agentRunToolStats.$inferSelect): AgentRunToolStatsRow {
+  return {
+    runId: row.runId,
+    readCount: row.readCount,
+    grepCount: row.grepCount,
+    writeCount: row.writeCount,
+    editCount: row.editCount,
+    bytesRead: row.bytesRead,
+    uniquePathsRead: row.uniquePathsRead,
+    redundantReads: row.redundantReads,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function normalizeToolName(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function isReadTool(name: string): boolean {
+  return name === 'read' || name === 'read_file' || name === 'read_many_files';
+}
+
+function isSearchTool(name: string): boolean {
+  return name === 'grep' || name === 'glob' || name === 'search_text';
+}
+
+function isWriteTool(name: string): boolean {
+  return name === 'write' || name === 'write_file';
+}
+
+function isEditTool(name: string): boolean {
+  return name === 'edit' || name === 'edit_file' || name === 'apply_patch';
+}
+
+function bytesReadFromPayload(payload: Record<string, unknown>): number {
+  const value = payload.bytesRead ?? payload.bytes_read ?? payload.bytes ?? payload.contentBytes;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0;
+}
+
+function pathFromPayload(payload: Record<string, unknown>): string | null {
+  const toolInput = payloadRecord(payload.tool_input ?? payload.toolInput);
+  const value = toolInput.path ?? toolInput.file_path ?? payload.path ?? payload.file_path;
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function payloadRecord(value: unknown): Record<string, unknown> {
+  return value != null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function emitToolIntensityAnomalyIfNeeded(stats: AgentRunToolStatsRow): void {
+  const [run] = db
+    .select()
+    .from(agentRunCosts)
+    .where(eq(agentRunCosts.runId, stats.runId))
+    .limit(1)
+    .all();
+  if (run == null) return;
+
+  const baseline = db
+    .select({ readCount: agentRunToolStats.readCount })
+    .from(agentRunToolStats)
+    .innerJoin(agentRunCosts, eq(agentRunToolStats.runId, agentRunCosts.runId))
+    .where(
+      and(
+        eq(agentRunCosts.projectId, run.projectId),
+        eq(agentRunCosts.skill, run.skill),
+        ne(agentRunCosts.runId, stats.runId),
+      ),
+    )
+    .all()
+    .map((row) => row.readCount);
+
+  const p95ReadCount = percentile(baseline, 0.95);
+  const thresholdReadCount = p95ReadCount * 2;
+  if (p95ReadCount <= 0 || stats.readCount <= thresholdReadCount) return;
+  const [existing] = eventStore.replay({
+    runId: stats.runId,
+    kind: 'agent.tool-intensity-anomaly',
+    limit: 1,
+  });
+  if (existing != null) return;
+
+  eventStore.appendEvent({
+    projectId: run.projectId,
+    workItemId: run.workItemId,
+    runId: stats.runId,
+    personaId: run.personaId,
+    kind: 'agent.tool-intensity-anomaly',
+    payload: {
+      runId: stats.runId,
+      skill: run.skill,
+      readCount: stats.readCount,
+      p95ReadCount,
+      thresholdReadCount,
+      bytesRead: stats.bytesRead,
+      redundantReads: stats.redundantReads,
+    },
+  });
+}
+
+function percentile(values: number[], p: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1);
+  return sorted[index] ?? 0;
 }

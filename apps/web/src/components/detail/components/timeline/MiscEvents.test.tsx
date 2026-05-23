@@ -44,6 +44,31 @@ describe('Misc timeline events', () => {
     expect(document.body.textContent).not.toContain('"costUsd"');
   });
 
+  it('renders agent.tool-intensity-anomaly as a compact warning', () => {
+    const event = makeEvent('agent.tool-intensity-anomaly', {
+      runId: 'e3bb94b3-4bf6-4c93-9407-9a2dc30c760d',
+      skill: 'investigate',
+      readCount: 34,
+      p95ReadCount: 12,
+      thresholdReadCount: 24,
+      bytesRead: 8192,
+      redundantReads: 5,
+    });
+
+    render(<ul>{renderTimelineItem({ kind: 'event', event }, 0)}</ul>);
+
+    expect(screen.getByText('Tool intensity anomaly')).toBeTruthy();
+    const rendered = document.body.textContent ?? '';
+    expect(rendered).toContain('investigate');
+    expect(rendered).toContain('34 reads');
+    expect(rendered).toContain('p95 12 reads');
+    expect(rendered).toContain('threshold 24 reads');
+    expect(rendered).toContain('8.0 KB read');
+    expect(rendered).toContain('5 redundant reads');
+    expect(rendered).toContain('run e3bb94b3');
+    expect(rendered).not.toContain('"readCount"');
+  });
+
   it('renders agent.investigation-context-injected as summary text instead of raw JSON', () => {
     const event = makeEvent('agent.investigation-context-injected', {
       skill: 'implement-wp',

@@ -115,6 +115,8 @@ function buildMetrics(
   const toolCounts = new Map<string, number>();
   const bashCommands = new Map<string, number>();
   const sequencesByRun = new Map<string, string[]>();
+  const readCountsByRun = new Map<string, number>();
+  const bytesReadByRun = new Map<string, number>();
 
   for (const event of eventsForRuns) {
     if (event.runId == null) continue;
@@ -144,8 +146,17 @@ function buildMetrics(
         const command = normalizeCommand(commandFromToolPayload(payload));
         if (command !== '') bashCommands.set(command, (bashCommands.get(command) ?? 0) + 1);
       }
+      if (isReadTool(toolName)) {
+        readCountsByRun.set(event.runId, (readCountsByRun.get(event.runId) ?? 0) + 1);
+        bytesReadByRun.set(
+          event.runId,
+          (bytesReadByRun.get(event.runId) ?? 0) + bytesReadFromPayload(payload),
+        );
+      }
     }
   }
+  const readCounts = runs.map((run) => readCountsByRun.get(run.runId) ?? 0);
+  const bytesRead = runs.map((run) => bytesReadByRun.get(run.runId) ?? 0);
 
   return {
     runCount,
@@ -155,6 +166,8 @@ function buildMetrics(
     p95OutputTokens: percentile(outputTokens, 0.95),
     medianCostUsd: percentile(costs, 0.5),
     p95CostUsd: percentile(costs, 0.95),
+    p95ReadCount: percentile(readCounts, 0.95),
+    p95BytesRead: percentile(bytesRead, 0.95),
     maxCostOutlier: maxRun == null ? null : { runId: maxRun.runId, costUsd: maxRun.costUsd },
     timeoutRate: rate(timeoutRuns.size, runCount),
     budgetExceededRate: rate(budgetRuns.size, runCount),
@@ -199,6 +212,16 @@ function commonSequences(
     .filter((entry) => entry.count > 1)
     .sort((a, b) => b.count - a.count)
     .slice(0, 5);
+}
+
+function isReadTool(toolName: string): boolean {
+  const name = toolName.toLowerCase();
+  return name === 'read' || name === 'read_file' || name === 'read_many_files';
+}
+
+function bytesReadFromPayload(payload: Record<string, unknown>): number {
+  const value = payload.bytesRead ?? payload.bytes_read ?? payload.bytes ?? payload.contentBytes;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0;
 }
 
 function toolNameFromPayload(payload: Record<string, unknown>): string {

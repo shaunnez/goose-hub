@@ -1,7 +1,7 @@
 import { resolveGlobalSettingsForProject } from '@goose-hub/core/agent-runtime/resolve-for-project.js';
 import { Hono } from 'hono';
 import { getProject } from '#shared/projects.js';
-import { getCostSummary, getCostsForWorkItem } from './service.js';
+import { getCostSummary, getCostsForWorkItem, getToolStatsForWorkItem } from './service.js';
 
 const router = new Hono();
 
@@ -28,6 +28,19 @@ router.get('/:slug/issues/:id/costs', async (c) => {
   const repoRef = cfg.source.kind === 'github' ? cfg.source.repo : slug;
   const workItemId = `github:${repoRef}#${id}`;
   const result = await getCostsForWorkItem(workItemId);
+  return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 400);
+});
+
+/** Per-task tool-intensity breakdown: every stats row scoped to a single work item. */
+router.get('/:slug/issues/:id/tool-stats', async (c) => {
+  const slug = c.req.param('slug');
+  const id = c.req.param('id');
+  const cfg = await getProject(slug);
+  if (cfg == null) return c.json({ error: 'project not found' }, 404);
+
+  const repoRef = cfg.source.kind === 'github' ? cfg.source.repo : slug;
+  const workItemId = `github:${repoRef}#${id}`;
+  const result = await getToolStatsForWorkItem(workItemId);
   return result.ok ? c.json(result.data) : c.json({ error: result.error }, result.status as 400);
 });
 

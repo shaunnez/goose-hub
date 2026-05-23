@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { recordCost } from '../cost/repository.js';
+import { recordCost, recordToolStatsForRun } from '../cost/repository.js';
 import { stageForSkill } from '../cost/skill-stage.js';
 import { getRecordDecisionTool } from '../db/repositories/project-settings.js';
 import { eventStore } from '../event-stream/store.js';
@@ -769,6 +769,7 @@ export class CodexCliRuntime implements AgentRuntime {
           costLabel,
           personaId: personaId ?? null,
         });
+        recordToolStatsForRun(runId);
 
         const exceededBudget = emitBudgetExceededIfNeeded({
           runId,

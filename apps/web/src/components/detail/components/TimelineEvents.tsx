@@ -59,6 +59,7 @@ import {
   RelatedSurfaceManifestEvent,
   StateTransitionedEvent,
   SystemNoteEvent,
+  ToolIntensityAnomalyEvent,
   WrongSurfaceGuardEvent,
 } from './timeline/MiscEvents';
 import {
@@ -266,6 +267,8 @@ export function renderTimelineItem(item: RenderItem, idx: number, context?: Time
       return <AgentToolCallEvent key={event.id} event={event} />;
     case 'agent.tool-result':
       return <AgentToolResultEvent key={event.id} event={event} />;
+    case 'agent.tool-intensity-anomaly':
+      return <ToolIntensityAnomalyEvent key={event.id} event={event} />;
     case 'agent.verify-command':
       return <AgentVerifyCommandEvent key={event.id} event={event} />;
     case 'tool.stdout-truncated':

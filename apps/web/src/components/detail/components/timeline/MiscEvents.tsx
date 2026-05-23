@@ -24,6 +24,16 @@ type BudgetExceededPayload = {
   overByUsd?: number;
 };
 
+type ToolIntensityAnomalyPayload = {
+  runId?: string;
+  skill?: string;
+  readCount?: number;
+  p95ReadCount?: number;
+  thresholdReadCount?: number;
+  bytesRead?: number;
+  redundantReads?: number;
+};
+
 type InvestigationContextInjectedPayload = {
   skill?: string;
   wpId?: string;
@@ -323,6 +333,39 @@ export function AgentBudgetExceededEvent({ event }: { event: AgentEventDto }) {
         {p?.skill != null && <span>{p.skill}</span>}
         {shortRunId != null && <span className="font-mono text-fg-4">run {shortRunId}</span>}
       </div>
+    </li>
+  );
+}
+
+export function ToolIntensityAnomalyEvent({ event }: { event: AgentEventDto }) {
+  const p = event.payload as ToolIntensityAnomalyPayload | null;
+  const shortRunId = formatShortId(p?.runId ?? event.runId ?? undefined);
+  return (
+    <li
+      data-event-kind={event.kind}
+      className="rounded-md border border-warning bg-bg-elev/60 px-4 py-3"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-2 text-[11px] text-fg-3">
+        <AlertTriangle size={13} className="shrink-0 text-amber-400" />
+        <span className="font-mono uppercase tracking-wider">Tool intensity anomaly</span>
+        <span aria-hidden className="w-[3px] h-[3px] rounded-full bg-fg-4" />
+        <span className="font-mono tnum">{new Date(event.createdAt).toLocaleString()}</span>
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-fg-2">
+        {p?.skill != null && <span>{p.skill}</span>}
+        {typeof p?.readCount === 'number' && <span>{p.readCount} reads</span>}
+        {typeof p?.p95ReadCount === 'number' && <span>p95 {p.p95ReadCount} reads</span>}
+        {typeof p?.thresholdReadCount === 'number' && (
+          <span className="text-amber-300">threshold {p.thresholdReadCount} reads</span>
+        )}
+        {typeof p?.bytesRead === 'number' && <span>{formatByteCount(p.bytesRead)} read</span>}
+        {typeof p?.redundantReads === 'number' && p.redundantReads > 0 && (
+          <span>{p.redundantReads} redundant reads</span>
+        )}
+      </div>
+      {shortRunId != null && (
+        <div className="mt-1 text-[11px] font-mono text-fg-4">run {shortRunId}</div>
+      )}
     </li>
   );
 }

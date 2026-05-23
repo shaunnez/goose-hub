@@ -302,6 +302,7 @@ export async function readFileTool(
     input: { path: input.path },
     status: 'ok',
     truncated,
+    bytesRead: Buffer.byteLength(result.content, 'utf8'),
   });
   return result;
 }

@@ -30,3 +30,49 @@
 - Notes:
   - Created dedicated issue #1001 because the prompt-guardrail work from `wave2-and-timeline-analysis.md` did not have an existing issue. This was implemented before #994 rather than folded into telemetry.
 - Next branch to create: `cost-perf/994-tool-intensity-telemetry` from `cost-perf/1001-prompt-guardrails`
+
+## Issue #994 - Tool-intensity telemetry
+
+- Branch name: `cost-perf/994-tool-intensity-telemetry`
+- PR number/url: #1003 - https://github.com/shaunnez/goose-hub/pull/1003
+- Parent branch: `cost-perf/1001-prompt-guardrails`
+- Files changed:
+  - `CONTEXT.md`
+  - `apps/server/src/domains/costs/router.test.ts`
+  - `apps/server/src/domains/costs/router.ts`
+  - `apps/server/src/domains/costs/service.test.ts`
+  - `apps/server/src/domains/costs/service.ts`
+  - `apps/web/src/components/detail/components/CostsSection.test.tsx`
+  - `apps/web/src/components/detail/components/CostsSection.tsx`
+  - `apps/web/src/components/detail/components/TimelineEvents.tsx`
+  - `apps/web/src/components/detail/components/timeline/MiscEvents.test.tsx`
+  - `apps/web/src/components/detail/components/timeline/MiscEvents.tsx`
+  - `apps/web/src/components/detail/lib/timeline/labels.ts`
+  - `apps/web/src/components/settings/components/ProjectBudgetPanel.test.tsx`
+  - `apps/web/src/components/settings/components/ProjectBudgetPanel.tsx`
+  - `apps/web/src/lib/types.ts`
+  - `core/agent-runtime/claude-cli.test.ts`
+  - `core/agent-runtime/claude-cli.ts`
+  - `core/agent-runtime/codex-cli-runtime.test.ts`
+  - `core/agent-runtime/codex-cli.ts`
+  - `core/cost/repository.test.ts`
+  - `core/cost/repository.ts`
+  - `core/db/migrations/0039_agent_run_tool_stats.sql`
+  - `core/db/migrations/meta/_journal.json`
+  - `core/db/schema.ts`
+  - `core/event-stream/kinds.ts`
+  - `core/runtime-profiler/profile-runs.test.ts`
+  - `core/runtime-profiler/profile-runs.ts`
+  - `core/runtime-profiler/types.ts`
+  - `core/tool-layer/mcp/audit.ts`
+  - `core/tool-layer/mcp/tools/read.ts`
+- Tests run:
+  - `pnpm vitest run core/cost/repository.test.ts core/agent-runtime/claude-cli.test.ts core/agent-runtime/codex-cli-runtime.test.ts apps/server/src/domains/costs/service.test.ts apps/server/src/domains/costs/router.test.ts core/runtime-profiler/profile-runs.test.ts apps/web/src/components/settings/components/ProjectBudgetPanel.test.tsx apps/web/src/components/detail/components/CostsSection.test.tsx apps/web/src/components/detail/lib/costs.test.ts apps/web/src/components/detail/components/timeline/MiscEvents.test.tsx`
+  - `pnpm --filter @goose-hub/web build`
+  - `pnpm manifest --check`
+  - `pnpm audit-docs`
+  - `DB_PATH=/private/tmp/goose-hub-tool-stats-migrate-2.db pnpm tsx core/db/migrate.ts` (sandbox `listen EPERM` first, then passed with escalation)
+- Remaining risks:
+  - `read_many_files` can be counted in addition to its internal `read_file` audit events when both are emitted in the same run.
+  - The anomaly threshold uses the available same-project/same-skill p95 history; early sparse baselines can be noisy.
+- Next branch to create: `cost-perf/995-run-cache` from `cost-perf/994-tool-intensity-telemetry`

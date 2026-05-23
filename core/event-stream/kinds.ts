@@ -10,6 +10,7 @@ export const EVENT_KINDS = [
   'system.note',
   'manual.action',
   'agent.tool-call',
+  'agent.tool-intensity-anomaly',
   'tool.stdout-truncated',
   'tool.timeout',
   'agent.run-started',
