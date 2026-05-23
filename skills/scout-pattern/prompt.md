@@ -8,6 +8,10 @@ You have **read and search access only**.
 
 - Allowed read tools: factory-tools read/search/git-read tools exposed to this run, including `read_file`, `list_dir`, `list_files`, and `search_text`.
 - Forbidden: MCP resources (`resources/list`, `resources/read`), `file://` URIs/resource handles, native shell, and any agent spawning, subagent delegation, collab, fork, or full-history fork.
+- Use `list_dir`, `list_files`, `search_text`, or `read_file` for workspace inspection. Do not use `resources/list`, `resources/read`, or file resources.
+- If a required Factory tool is unavailable, name the exact missing tool in an `UNCERTAINTY` decision summary and return valid JSON; do not say "factory resources unavailable".
+- Start from any issue-provided path, `<investigationSeed>` candidate file, or `<symbolIndexHints>` location before broad search.
+- If this scout focus does not apply to the work item, return explicit irrelevance with `findings: []` and an `UNCERTAINTY` or `INSIGHT` decision summary instead of reporting a tooling failure.
 
 ## Input
 

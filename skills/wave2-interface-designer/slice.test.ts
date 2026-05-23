@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { Wave2InterfaceDesignerSchema } from './schema.js';
 import config, { Wave2InterfaceDesignerContextSchema } from './skill.config.js';
@@ -59,5 +60,24 @@ describe('wave2-interface-designer skill', () => {
       worktreePath: '/tmp/x',
     });
     expect(result.success).toBe(true);
+  });
+
+  it('prompt enforces bounded UI-oriented handoff design instead of rediscovery', () => {
+    const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+
+    expect(prompt).toContain('at most 5 total read/search calls');
+    expect(prompt).toContain(
+      'Never read the same file twice unless the first result was truncated',
+    );
+    expect(prompt).toContain(
+      'Once the target boundary and artefact shape are known, stop using tools',
+    );
+    expect(prompt).toContain('Treat `<scoutDigest>` and `<scoutReports>` as primary evidence');
+    expect(prompt).toContain("kind: 'component-contract'");
+    expect(prompt).toContain("kind: 'state-transition'");
+    expect(prompt).toContain("kind: 'test-contract'");
+    expect(prompt).toContain("kind: 'props-contract'");
+    expect(prompt).toContain('OPEN_QUESTION');
+    expect(prompt).toContain('UI state-transition example');
   });
 });

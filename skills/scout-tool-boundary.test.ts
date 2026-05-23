@@ -25,8 +25,24 @@ function expectToolBoundary(prompt: string): void {
   expect(prompt).toMatch(/delegation/i);
 }
 
+function expectFactoryReadDiscipline(prompt: string): void {
+  expect(prompt).toContain('Use `list_dir`, `list_files`, `search_text`, or `read_file`');
+  expect(prompt).toContain('Do not use `resources/list`, `resources/read`, or file resources');
+  expect(prompt).toContain(
+    'If a required Factory tool is unavailable, name the exact missing tool',
+  );
+  expect(prompt).toContain('return explicit irrelevance');
+}
+
 describe('scout and Wave 2 prompt tool boundaries', () => {
   it.each(PROMPT_PATHS)('%s uses factory tools and forbids resource/delegation drift', (path) => {
     expectToolBoundary(readPrompt(path));
   });
+
+  it.each(PROMPT_PATHS.filter((path) => path.startsWith('scout-')))(
+    '%s tells scouts to use Factory read tools and avoid resource-failure reports',
+    (path) => {
+      expectFactoryReadDiscipline(readPrompt(path));
+    },
+  );
 });

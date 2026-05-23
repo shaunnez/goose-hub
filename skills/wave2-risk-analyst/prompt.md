@@ -22,6 +22,11 @@ You have **read access only**.
 - Mitigation must be **falsifiable** — a concrete change or a concrete test that would catch a regression.
 - Start from `<scoutReports>` as primary evidence when full findings are present. If a report is summarized with `artifactRef`, use the summary as orientation and targeted worktree reads to verify concrete evidence.
 - Cap worktree verification at **3 targeted reads/greps** unless scout reports directly contradict each other. Do not re-run Wave-1 discovery.
+- Count every non-output tool call against the cap, including `get_project_context`, `get_head_sha`, `list_dir`, and `list_files`, unless the prompt explicitly exempts it.
+- Read the owner/source file first when a concrete owner is named by scouts.
+- Read the closest test file second when risk depends on regression coverage.
+- Spend the final read on wiring/ownership only if the risk depends on it.
+- If the remaining open question is about handler ownership or wiring, use one remaining read on the owner file before returning.
 - Prefer a valid partial risk register with 2-4 high-signal findings over exhaustive analysis that risks timeout.
 - If evidence is thin, encode the gap as an `OPEN_QUESTION` finding and return valid JSON instead of continuing to investigate.
 - Do not duplicate `wave2-interface-designer` output. Focus on failure modes, missing tests, state/event regressions, security/data risks, and ambiguous implementation scope.
