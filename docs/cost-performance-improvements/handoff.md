@@ -205,3 +205,37 @@
   - MCP registration uses the tool-local Zod object shape, while the exported TypeScript `RepoIntelQuery` documents the stricter discriminated union; invalid/missing intent-specific fields return typed `invalid-args` results.
   - QA/review filtering strips decision-summary and implementation-reasoning fields from prior-investigation/artifact payloads, but does not yet route those payloads through the full prompt context assembly allowlist.
 - Next branch to create: `cost-perf/1000-scout-digest` from `cost-perf/997-repo-intel-query`
+
+## Issue #1000 - scoutDigest handoff
+
+- Branch name: `cost-perf/1000-scout-digest`
+- PR number/url: #1008 - https://github.com/shaunnez/goose-hub/pull/1008
+- Parent branch: `cost-perf/997-repo-intel-query`
+- Files changed:
+  - `CONTEXT.md`
+  - `apps/web/src/components/detail/lib/timeline/labels.ts`
+  - `core/event-stream/kinds.ts`
+  - `core/scout-reports/digest.ts`
+  - `skills/investigate/prompt.md`
+  - `skills/investigate/skill.config.ts`
+  - `skills/wave2-interface-designer/prompt.md`
+  - `skills/wave2-interface-designer/skill.config.ts`
+  - `skills/wave2-interface-designer/slice.test.ts`
+  - `skills/wave2-risk-analyst/prompt.md`
+  - `skills/wave2-risk-analyst/skill.config.ts`
+  - `slices/investigate/investigation-planner.test.ts`
+  - `slices/investigate/investigation-planner.ts`
+  - `slices/investigate/slice.test.ts`
+  - `slices/investigate/wave2-selection.ts`
+  - `slices/investigate/workflow.ts`
+- Tests run:
+  - `pnpm vitest run core/scout-reports/digest.test.ts slices/investigate/investigation-planner.test.ts slices/investigate/slice.test.ts skills/investigate/slice.test.ts skills/wave2-interface-designer/slice.test.ts skills/wave2-risk-analyst/slice.test.ts`
+  - `pnpm exec tsc --noEmit --pretty false`
+  - `pnpm exec biome check CONTEXT.md apps/web/src/components/detail/lib/timeline/labels.ts core/event-stream/kinds.ts core/scout-reports/digest.ts slices/investigate/workflow.ts slices/investigate/slice.test.ts slices/investigate/investigation-planner.ts slices/investigate/investigation-planner.test.ts slices/investigate/wave2-selection.ts skills/investigate/prompt.md skills/investigate/skill.config.ts skills/wave2-interface-designer/prompt.md skills/wave2-interface-designer/skill.config.ts skills/wave2-interface-designer/slice.test.ts skills/wave2-risk-analyst/prompt.md skills/wave2-risk-analyst/skill.config.ts`
+  - `pnpm skill-contract:audit`
+  - `pnpm audit-docs`
+  - `pnpm manifest --check`
+- Remaining risks:
+  - Cross-validation contradictions are represented through digest report fields and the new digest-applied event; there is no separate raw contradictions JSON in synthesis context anymore.
+  - Raw scout reports remain persisted unchanged, but any agent wanting full text now needs to request it through #997 `repo_intel.query`.
+- Next branch to create: `cost-perf/993-handoff-precision` from `cost-perf/1000-scout-digest`

@@ -319,6 +319,8 @@ No other code in `core/` may call `insertEvent` directly. Lint rule enforces. On
 
 **Investigation Seed.** Before Wave-1 scout fan-out, `slices/investigate/workflow.ts` builds one orchestrator-owned `InvestigationSeed` via `core/agent-runtime/scout-prefetch.ts`. The seed contains capped candidate files, symbol hits, related test files, recent git touches, and prior overlapping investigation ids. Scouts receive it through the explicit `investigationSeed` allowlist key and must start from seed files/symbols before issuing new searches. This reduces cross-scout rediscovery by shared context, not by sharing #995's per-run cache across separate scout runs.
 
+**Scout Digest Handoff.** Wave-2 scouts and the final investigate synthesis receive `scoutDigest` (`ScoutReportDigestBundle`) instead of raw `scoutReports`. Raw scout reports remain persisted in `core/scout-reports/`; consumers fetch them on demand through `repo_intel.query` with `intent: 'prior-investigation'` when the digest is insufficient for a specific finding.
+
 **Two guards, different paths:**
 - `contextAllowlist: ContextKey[]` — the *manifest*. Filters which keys from `AgentSpec.context` render into the user-prompt XML. Guards against wrong keys at spec construction time. Now required (not optional) on `SkillConfig`.
 - `freshContext: boolean` — the *closure assertion*. When `true`, no other injection channel adds anything. Guards against runtime infrastructure adding ambient state the AgentSpec author doesn't control.

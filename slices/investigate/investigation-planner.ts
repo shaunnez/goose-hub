@@ -15,7 +15,7 @@ export interface InvestigationPlannerInput {
   swarmEnabled: boolean;
   wave1Reports?: ScoutReport[];
   contradictions?: unknown[];
-  scoutReportsContext?: string;
+  scoutDigestContext?: unknown;
 }
 
 export interface InvestigationPlan {
@@ -132,7 +132,7 @@ function selectWave2(input: InvestigationPlannerInput): ScoutSpec[] {
 
   const scouts: ScoutSpec[] = [];
   const extraContext =
-    input.scoutReportsContext != null ? { scoutReports: input.scoutReportsContext } : undefined;
+    input.scoutDigestContext != null ? { scoutDigest: input.scoutDigestContext } : undefined;
 
   if (implicatesInterfaceBoundaries(text)) {
     scouts.push({ ...WAVE_2_INTERFACE_SPEC, ...(extraContext != null ? { extraContext } : {}) });

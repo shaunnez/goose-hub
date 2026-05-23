@@ -72,7 +72,7 @@ describe('wave2-interface-designer skill', () => {
     expect(prompt).toContain(
       'Once the target boundary and artefact shape are known, stop using tools',
     );
-    expect(prompt).toContain('Treat `<scoutDigest>` and `<scoutReports>` as primary evidence');
+    expect(prompt).toContain('Treat `<scoutDigest>` as primary evidence');
     expect(prompt).toContain("kind: 'component-contract'");
     expect(prompt).toContain("kind: 'state-transition'");
     expect(prompt).toContain("kind: 'test-contract'");

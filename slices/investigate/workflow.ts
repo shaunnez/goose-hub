@@ -32,7 +32,12 @@ import { transitionAndEmitState } from '@goose-hub/core/event-stream/state-trans
 import { eventStore } from '@goose-hub/core/event-stream/store.js';
 import { accumulatePersonaStats } from '@goose-hub/core/persona/accumulate.js';
 import { getProjectBySlug } from '@goose-hub/core/projects/loader.js';
+import {
+  type ScoutReportDigestBundle,
+  buildScoutReportDigestBundle,
+} from '@goose-hub/core/scout-reports/digest.js';
 import { persistScoutReport } from '@goose-hub/core/scout-reports/repository.js';
+import type { ScoutReport as StoredScoutReport } from '@goose-hub/core/scout-reports/types.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
 import { ensureSymbolIndexFresh } from '@goose-hub/core/symbol-index/freshness.js';
 import {
@@ -299,7 +304,7 @@ export async function runInvestigateWorkflow(
   });
 
   try {
-    let allScoutReports: string | undefined;
+    let synthesisScoutDigest: ScoutReportDigestBundle | undefined;
 
     if (investigationSwarmEnabled) {
       const initialPlan = planInvestigation({
@@ -543,9 +548,16 @@ export async function runInvestigateWorkflow(
 
       // Cross-validate Wave 1 before dispatching Wave 2
       const cvResult = crossValidate(wave1Result.reports);
-      const wave1Context = JSON.stringify({
-        wave1: wave1HandoffReports,
-        contradictions: cvResult.contradictions,
+      const wave1Digest = buildScoutReportDigestBundle(
+        toStoredScoutReports(projectId, workItem.id, runId, wave1HandoffReports),
+      );
+      emitDigestApplied({
+        projectId,
+        workItemId: workItem.id,
+        runId,
+        personaId,
+        wave: 'wave-1-to-wave-2',
+        digest: wave1Digest,
       });
 
       const wave2Plan = planInvestigation({
@@ -553,7 +565,7 @@ export async function runInvestigateWorkflow(
         swarmEnabled: true,
         wave1Reports: wave1Result.reports,
         contradictions: cvResult.contradictions,
-        scoutReportsContext: wave1Context,
+        scoutDigestContext: wave1Digest,
       });
       finalInvestigationPlan = wave2Plan;
       scoutEffortHints = wave2Plan.scoutEffortHints;
@@ -632,21 +644,30 @@ export async function runInvestigateWorkflow(
       }
 
       // Build full context for the synthesis investigator
-      allScoutReports = JSON.stringify({
-        wave1: wave1HandoffReports,
-        wave2: wave2HandoffReports,
-        contradictions: cvResult.contradictions,
+      synthesisScoutDigest = buildScoutReportDigestBundle(
+        toStoredScoutReports(projectId, workItem.id, runId, [
+          ...wave1HandoffReports,
+          ...wave2HandoffReports,
+        ]),
+      );
+      emitDigestApplied({
+        projectId,
+        workItemId: workItem.id,
+        runId,
+        personaId,
+        wave: 'wave-1-to-synthesis',
+        digest: synthesisScoutDigest,
       });
     }
 
     const investigateContext: {
       workItem: typeof workItemCtx;
-      scoutReports?: string;
+      scoutDigest?: ScoutReportDigestBundle;
     } = {
       workItem: workItemCtx,
     };
-    if (allScoutReports != null) {
-      investigateContext.scoutReports = allScoutReports;
+    if (synthesisScoutDigest != null) {
+      investigateContext.scoutDigest = synthesisScoutDigest;
     }
 
     // Synthesis — invoke investigate skill with scout evidence when swarm is enabled.
@@ -654,7 +675,7 @@ export async function runInvestigateWorkflow(
     // blob and writes findings, so we use a lighter model and fresh context (no
     // accumulated conversation history needed).
     const synthModelOverride =
-      investigationSwarmEnabled && allScoutReports != null
+      investigationSwarmEnabled && synthesisScoutDigest != null
         ? defaultModelForTierAndProvider(
             'sonnet',
             forcedRuntimeProvider ?? investigateBudget.provider,
@@ -672,7 +693,7 @@ export async function runInvestigateWorkflow(
         modelOverride: synthModelOverride,
         suppressRunStarted: true,
         freshContextOverride:
-          investigationSwarmEnabled && allScoutReports != null ? true : undefined,
+          investigationSwarmEnabled && synthesisScoutDigest != null ? true : undefined,
       },
     });
 
@@ -930,4 +951,48 @@ export async function runInvestigateWorkflow(
   } finally {
     cleanupWorktree(runId);
   }
+}
+
+function toStoredScoutReports(
+  projectId: string,
+  workItemId: string,
+  investigationRunId: string,
+  reports: unknown[],
+): StoredScoutReport[] {
+  return reports.map((report, index) => {
+    const record = report as { scoutName?: unknown; report?: unknown };
+    return {
+      id: index + 1,
+      projectId,
+      workItemId,
+      investigationRunId,
+      scoutSkill: typeof record.scoutName === 'string' ? record.scoutName : `scout-${index + 1}`,
+      report,
+      createdAt: new Date(0).toISOString(),
+    };
+  });
+}
+
+function emitDigestApplied(input: {
+  projectId: string;
+  workItemId: string;
+  runId: string;
+  personaId: string;
+  wave: 'wave-1-to-wave-2' | 'wave-1-to-synthesis';
+  digest: ScoutReportDigestBundle;
+}): void {
+  eventStore.appendEvent({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    runId: input.runId,
+    personaId: input.personaId,
+    kind: 'investigation.digest-applied',
+    payload: {
+      wave: input.wave,
+      scoutCount: input.digest.reports.length,
+      rawBytes: input.digest.rawBytes,
+      digestBytes: input.digest.digestBytes,
+      bytesSaved: input.digest.bytesSaved,
+    },
+  });
 }

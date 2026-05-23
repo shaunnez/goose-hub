@@ -1,5 +1,35 @@
+import { z } from 'zod';
 import type { ArtifactRef } from '../agent-artifacts/types.js';
 import type { ScoutReport } from './types.js';
+
+export const ScoutDigestFindingSchema = z.object({
+  file: z.string().optional(),
+  line: z.number().optional(),
+  fact: z.string(),
+  confidence: z.string().optional(),
+});
+
+export const ScoutReportDigestSchema = z.object({
+  scoutName: z.string(),
+  status: z.string(),
+  summary: z.string().optional(),
+  findingCount: z.number(),
+  decisionSummaryCount: z.number(),
+  topFindings: z.array(ScoutDigestFindingSchema),
+  highConfidenceFacts: z.array(ScoutDigestFindingSchema),
+  filesReferenced: z.array(z.string()),
+  risks: z.array(z.string()),
+  contradictions: z.array(z.string()),
+  artifactKeys: z.array(z.string()),
+});
+
+export const ScoutReportDigestBundleSchema = z.object({
+  reports: z.array(ScoutReportDigestSchema),
+  artifactKeys: z.array(z.string()),
+  rawBytes: z.number(),
+  digestBytes: z.number(),
+  bytesSaved: z.number(),
+});
 
 export type ScoutDigestFinding = {
   file?: string;
