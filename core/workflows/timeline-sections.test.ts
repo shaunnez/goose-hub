@@ -81,6 +81,25 @@ describe('timeline sections', () => {
     }
   });
 
+  it('uses earlier run metadata for tool violations', () => {
+    const events = [
+      { kind: 'tool.violation', runId: 'fix-feedback-run' },
+      {
+        kind: 'agent.run-started',
+        runId: 'fix-feedback-run',
+        payload: {
+          skill: 'implement',
+          displaySkill: 'fix-feedback',
+          workflowSkill: 'fix-feedback',
+        },
+      },
+    ];
+    const metadata = buildTimelineRunMetadataIndex(events);
+
+    expect(resolveTimelineSection(events[0], { runMetadata: metadata })).toBe('implementation');
+    expect(TIMELINE_EVENT_CLASSIFICATION['tool.violation']).toBe('runtime-inherits');
+  });
+
   it('maps control flow to transitions and unknown telemetry to system', () => {
     expect(resolveTimelineSection({ kind: 'state.transitioned' })).toBe('transitions');
     expect(resolveTimelineSection({ kind: 'manual.action' })).toBe('transitions');

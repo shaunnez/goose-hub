@@ -598,11 +598,11 @@ function buildFixFeedbackAttemptRunIndex(events: AgentEventDto[]): Map<string, s
   for (const event of events) {
     if (!isFixFeedbackRelatedEvent(event)) continue;
     const attemptId = eventPayloadString(event, 'attemptId');
+    if (event.runId != null && event.runId.trim() !== '') {
+      attemptByRunId.set(event.runId, attemptId ?? event.runId);
+    }
     if (attemptId == null) continue;
     attemptIds.add(attemptId);
-    if (event.runId != null && event.runId.trim() !== '') {
-      attemptByRunId.set(event.runId, attemptId);
-    }
   }
 
   for (const event of events) {

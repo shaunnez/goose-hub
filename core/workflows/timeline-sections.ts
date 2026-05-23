@@ -61,6 +61,8 @@ const DIRECT_EVENT_KIND_SECTION: Record<string, TimelineSectionId> = {
   'agent.investigation-complete': 'investigation',
   'agent.investigation-context-injected': 'investigation',
   'agent.investigation-seed-built': 'investigation',
+  'agent.investigation-seed-empty': 'investigation',
+  'agent.bug-enhance-lazy': 'investigation',
   'investigation.digest-applied': 'investigation',
   'agent.related-surface-manifest-created': 'investigation',
   'agent.discovery-budget-exceeded': 'investigation',
@@ -115,6 +117,7 @@ export const RUNTIME_INHERIT_TIMELINE_EVENT_KINDS = new Set<string>([
   'agent.tool-call',
   'agent.tool-intensity-anomaly',
   'agent.tool-result',
+  'agent.redundant-read',
   'tool.stdout-truncated',
   'tool.timeout',
   'agent.fallback-triggered',
@@ -127,6 +130,7 @@ export const RUNTIME_INHERIT_TIMELINE_EVENT_KINDS = new Set<string>([
   'agent.model-selected',
   'agent.verify-command',
   'agent.cancelled',
+  'tool.violation',
   'symbol-index.lookup',
   'symbol-index.hints-used',
 ]);
@@ -135,7 +139,6 @@ const INTENTIONALLY_SYSTEM_EVENT_KINDS = new Set<string>([
   'milestone.activated',
   'system.note',
   'project.budget-exceeded',
-  'tool.violation',
   'workflow.smoke-failed',
   'audit.autonomy-gate-fired',
 ]);

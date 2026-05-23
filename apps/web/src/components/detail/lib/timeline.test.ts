@@ -1420,6 +1420,40 @@ describe('groupTimelineEventsByCanonicalSection', () => {
     expect(collectRunIdsForTimelineSection(items[0].items)).toEqual(new Set(['run-prd-sparse']));
   });
 
+  it('keeps tool violations inside the owning runtime section', () => {
+    const items = groupTimelineEventsByCanonicalSection([
+      makeEvent(1, 'tool.violation', 'fix-feedback-with-violations', {
+        payload: { tool: 'run_tests', reason: 'excessive-test-retries' },
+      }),
+      makeEvent(2, 'agent.run-started', 'fix-feedback-with-violations', {
+        payload: {
+          skill: 'implement',
+          displaySkill: 'fix-feedback',
+          workflowSkill: 'fix-feedback',
+        },
+      }),
+    ]);
+
+    expect(
+      items.some((item) => item.kind === 'timeline-section' && item.section === 'system'),
+    ).toBe(false);
+    const implementation = items.find(
+      (item): item is Extract<typeof item, { kind: 'timeline-section' }> =>
+        item.kind === 'timeline-section' && item.section === 'implementation',
+    );
+    expect(implementation).toBeDefined();
+    expect(
+      implementation?.items.some(
+        (item) =>
+          item.kind === 'run-group' &&
+          item.runId === 'fix-feedback-with-violations' &&
+          item.items.some(
+            (child) => child.kind === 'event' && child.event.kind === 'tool.violation',
+          ),
+      ),
+    ).toBe(true);
+  });
+
   it('keeps section cost attribution limited to runs inside that section', () => {
     const items = groupTimelineEventsByCanonicalSection([
       makeEvent(1, 'agent.run-started', 'run-grill-cost', { payload: { skill: 'grill-me' } }),
