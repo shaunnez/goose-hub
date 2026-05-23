@@ -176,7 +176,7 @@ async function dispatchRepoIntel(
     }
     case 'fetch-artifact': {
       if (input.artifactKey == null) return invalid(input.intent, 'Provide artifactKey.');
-      const result = artifact(input.artifactKey);
+      const result = scopedArtifact(ctx, artifact(input.artifactKey));
       return found(
         input.intent,
         'artifacts',
@@ -284,15 +284,40 @@ function matchingInvestigationRefs(
     if (event.workItemId == null) return [];
     const payload = event.payload as {
       investigationRunId?: unknown;
-      investigate?: { keyFiles?: Array<{ path?: unknown }> };
+      investigate?: { keyFiles?: Array<string | { path?: unknown }> };
     };
-    const overlaps = (payload.investigate?.keyFiles ?? []).some((file) => file.path === targetFile);
+    const overlaps = (payload.investigate?.keyFiles ?? []).some(
+      (file) => normalizeHistoricalKeyFilePath(ctx, file) === targetFile,
+    );
     const investigationRunId =
       typeof payload.investigationRunId === 'string' ? payload.investigationRunId : event.runId;
     return overlaps && investigationRunId != null
       ? [{ workItemId: event.workItemId, investigationRunId }]
       : [];
   });
+}
+
+function normalizeHistoricalKeyFilePath(
+  ctx: FactoryContext,
+  file: string | { path?: unknown },
+): string | null {
+  const rawPath = typeof file === 'string' ? file : file.path;
+  if (typeof rawPath !== 'string' || rawPath.trim().length === 0) return null;
+  try {
+    return resolveWorkspacePath(ctx.workspaceRoot, rawPath).canonical.path;
+  } catch {
+    return null;
+  }
+}
+
+function scopedArtifact(
+  ctx: FactoryContext,
+  artifact: ReturnType<GetArtifact>,
+): ReturnType<GetArtifact> {
+  if (artifact == null) return null;
+  if (artifact.projectId !== ctx.projectId) return null;
+  if (artifact.workItemId !== ctx.workItemId) return null;
+  return artifact;
 }
 
 function found(

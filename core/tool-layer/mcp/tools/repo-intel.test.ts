@@ -133,7 +133,7 @@ describe('repoIntelQueryTool', () => {
           id: 1,
           artifactKey: 'scout-report:abc',
           projectId: 'demo',
-          workItemId: 'github:demo/repo#41',
+          workItemId: 'github:demo/repo#42',
           runId: 'run-1',
           kind: 'scout-report',
           summary: 'stored scout report',
@@ -234,5 +234,71 @@ describe('repoIntelQueryTool', () => {
     await expect(
       repoIntelQueryTool(makeCtx(), { intent: 'related-files', target: '../escape.ts' }),
     ).rejects.toBeInstanceOf(PathPolicyViolation);
+  });
+
+  it('matches prior investigations by normalized object and legacy string keyFiles', async () => {
+    const reports = vi.fn(() => [
+      {
+        id: 1,
+        projectId: 'demo',
+        workItemId: 'github:demo/repo#41',
+        investigationRunId: 'investigation-run-1',
+        scoutSkill: 'scout-code-path',
+        report: { findings: [{ file: 'src/auth.ts', fact: 'AuthService is exported' }] },
+        createdAt: '2026-05-23T00:00:00Z',
+      },
+    ]);
+    const replayInvestigationEvents = vi.fn(
+      (): ReturnType<typeof eventStore.replay> => [
+        {
+          id: 1,
+          projectId: 'demo',
+          workItemId: 'github:demo/repo#41',
+          kind: 'agent.investigation-complete',
+          payload: {
+            investigationRunId: 'investigation-run-1',
+            investigate: {
+              keyFiles: ['./src/auth.ts', { path: './src/other.ts' }],
+            },
+          },
+          runId: 'investigation-run-1',
+          personaId: null,
+          createdAt: '2026-05-23T00:00:00Z',
+        },
+      ],
+    );
+
+    const result = await repoIntelQueryTool(
+      makeCtx(),
+      { intent: 'prior-investigation', targetFile: './src/auth.ts' },
+      { listScoutReportsForInvestigation: reports, replayInvestigationEvents },
+    );
+
+    expect(result).toMatchObject({ ok: true, intent: 'prior-investigation' });
+    expect(reports).toHaveBeenCalledWith('demo', 'github:demo/repo#41', 'investigation-run-1');
+  });
+
+  it('does not return artifacts outside the current project or work item', async () => {
+    const result = await repoIntelQueryTool(
+      makeCtx(),
+      { intent: 'fetch-artifact', artifactKey: 'scout-report:other' },
+      {
+        getArtifact: vi.fn(() => ({
+          id: 1,
+          artifactKey: 'scout-report:other',
+          projectId: 'demo',
+          workItemId: 'github:demo/repo#999',
+          runId: 'run-1',
+          kind: 'scout-report',
+          summary: 'other work item',
+          payload: { findings: [] },
+          bytes: 42,
+          createdAt: '2026-05-23T00:00:00Z',
+          expiresAt: null,
+        })),
+      },
+    );
+
+    expect(result).toMatchObject({ ok: false, intent: 'fetch-artifact', reason: 'not-found' });
   });
 });
