@@ -268,7 +268,7 @@ export async function applyPatchTool(
     // run it against the same patch file for a structured filesChanged list.
     const statResult = await runCommand({
       command: 'git',
-      args: ['apply', '--numstat', '--summary', patchFile],
+      args: ['apply', '--numstat', '-z', '--summary', patchFile],
       cwd: ctx.workspaceRoot,
       timeoutMs: APPLY_PATCH_TIMEOUT_MS,
       env: minimalEnv(),
@@ -296,14 +296,24 @@ export async function applyPatchTool(
 
 function parseNumstat(stdout: string): string[] {
   const out: string[] = [];
-  for (const line of stdout.split('\n')) {
-    // numstat lines: "<added>\t<removed>\t<path>"; summary lines start with " "
-    const cols = line.split('\t');
-    if (cols.length === 3 && cols[2].length > 0 && /^\d+|-$/.test(cols[0])) {
-      out.push(cols[2]);
+  const records = stdout.includes('\0') ? stdout.split('\0') : stdout.split('\n');
+  for (const record of records) {
+    // numstat records: "<added>\t<removed>\t<path>"; with -z, path may contain tabs.
+    const firstTab = record.indexOf('\t');
+    const secondTab = firstTab === -1 ? -1 : record.indexOf('\t', firstTab + 1);
+    if (firstTab === -1 || secondTab === -1) continue;
+    const added = record.slice(0, firstTab);
+    const removed = record.slice(firstTab + 1, secondTab);
+    const filePath = record.slice(secondTab + 1);
+    if (filePath.length > 0 && isNumstatCount(added) && isNumstatCount(removed)) {
+      out.push(filePath);
     }
   }
   return out;
+}
+
+function isNumstatCount(value: string): boolean {
+  return value === '-' || /^\d+$/.test(value);
 }
 
 export interface CreateDirectoryResult {
@@ -333,6 +343,7 @@ export async function createDirectoryTool(
   }
 
   await mkdir(resolved.absolute, { recursive: true });
+  invalidateRunCacheForPaths(ctx.runId, [resolved.canonical.path]);
 
   emitToolCall(ctx, {
     tool: 'create_directory',

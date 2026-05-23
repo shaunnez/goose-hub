@@ -20,7 +20,7 @@ import {
   readManyFilesTool,
   searchTextTool,
 } from './tools/read.js';
-import { writeFileTool } from './tools/write.js';
+import { applyPatchTool, createDirectoryTool, writeFileTool } from './tools/write.js';
 
 let workspace: string;
 
@@ -207,6 +207,40 @@ describe('per-run read cache', () => {
     expect(reread.content).toBe('new\n');
     expect(reread).not.toHaveProperty('cached');
     expect(readFileSync(join(workspace, 'a.txt'), 'utf8')).toBe('new\n');
+  });
+
+  it('invalidates parent listing entries after creating a directory', async () => {
+    const ctx = makeCtx();
+    mkdirSync(join(workspace, 'src'));
+
+    await listDirTool(ctx, { path: 'src' });
+    await createDirectoryTool(ctx, { path: 'src/generated' });
+    const relisted = await listDirTool(ctx, { path: 'src' });
+
+    expect(relisted).not.toHaveProperty('cached');
+    expect(relisted.entries.map((entry) => entry.name.path)).toContain('src/generated');
+  });
+
+  it('invalidates patched files with tabs in their path names', async () => {
+    const ctx = makeCtx();
+    const weirdPath = 'weird\tname.txt';
+    writeFileSync(join(workspace, weirdPath), 'old\n');
+
+    await readFileTool(ctx, { path: weirdPath });
+    const patch = [
+      '--- "a/weird\\tname.txt"',
+      '+++ "b/weird\\tname.txt"',
+      '@@ -1 +1 @@',
+      '-old',
+      '+new',
+      '',
+    ].join('\n');
+    const result = await applyPatchTool(ctx, { path: weirdPath, patch });
+    const reread = await readFileTool(ctx, { path: weirdPath });
+
+    expect(result.filesChanged.map((path) => path.path)).toEqual([weirdPath]);
+    expect(reread.content).toBe('new\n');
+    expect(reread).not.toHaveProperty('cached');
   });
 
   it('does not share cached reads across different run ids', async () => {
