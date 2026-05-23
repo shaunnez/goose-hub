@@ -103,6 +103,22 @@ async function main() {
     } catch { /* best-effort */ }
   }
 
+  const duplicateNudge =
+    call?.tool_response != null &&
+    typeof call.tool_response === 'object' &&
+    typeof call.tool_response?.duplicateNudge === 'string'
+      ? call.tool_response.duplicateNudge
+      : '';
+
+  if (duplicateNudge.length > 0) {
+    process.stdout.write(JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PostToolUse',
+        additionalContext: duplicateNudge,
+      },
+    }));
+  }
+
   if (markers.length === 0) process.exit(0);
 
   for (const { kind, summary } of markers) {

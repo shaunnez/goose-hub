@@ -23,12 +23,17 @@ import {
 import { writeFileTool } from './tools/write.js';
 
 let workspace: string;
+let duplicateNudgeThresholdEnv: string | undefined;
 
 beforeEach(() => {
   workspace = mkdtempSync(join(tmpdir(), 'factory-mcp-'));
+  duplicateNudgeThresholdEnv = process.env.FACTORY_DUPLICATE_NUDGE_THRESHOLD;
+  process.env.FACTORY_DUPLICATE_NUDGE_THRESHOLD = undefined;
 });
 
 afterEach(() => {
+  if (duplicateNudgeThresholdEnv == null) process.env.FACTORY_DUPLICATE_NUDGE_THRESHOLD = undefined;
+  else process.env.FACTORY_DUPLICATE_NUDGE_THRESHOLD = duplicateNudgeThresholdEnv;
   rmSync(workspace, { recursive: true, force: true });
 });
 
@@ -254,6 +259,44 @@ describe('per-run read cache', () => {
     expect(first.content).toHaveLength(200 * 1024);
     expect(second).toEqual({ ...first, cached: true });
     expect(elapsedMs).toBeLessThan(10);
+  });
+
+  it('nudges once after the third identical cached tool call and emits duplicate telemetry', async () => {
+    const ctx = makeCtx();
+    writeFileSync(join(workspace, 'README.md'), '# Demo\n');
+
+    const first = await readFileTool(ctx, { path: 'README.md' });
+    const second = await readFileTool(ctx, { path: 'README.md' });
+    const third = await readFileTool(ctx, { path: 'README.md' });
+    const fourth = await readFileTool(ctx, { path: 'README.md' });
+
+    expect(first).not.toHaveProperty('duplicateNudge');
+    expect(second).not.toHaveProperty('duplicateNudge');
+    expect(third.duplicateNudge).toBe(
+      '[harness] You have invoked this tool with identical args 3 times this run. The cached result was returned. If you need different information, change your query.',
+    );
+    expect(fourth).not.toHaveProperty('duplicateNudge');
+    const readEvents = eventStore
+      .replay({ runId: ctx.runId, kind: 'agent.tool-call' })
+      .filter((event) => (event.payload as { tool_name?: string }).tool_name === 'read_file');
+    expect(
+      readEvents.map((event) => (event.payload as { duplicateCount?: number }).duplicateCount),
+    ).toEqual([undefined, 2, 3, 4]);
+  });
+
+  it('honours FACTORY_DUPLICATE_NUDGE_THRESHOLD without blocking duplicate calls', async () => {
+    process.env.FACTORY_DUPLICATE_NUDGE_THRESHOLD = '2';
+    const ctx = makeCtx();
+    writeFileSync(join(workspace, 'README.md'), '# Demo\n');
+
+    const first = await readFileTool(ctx, { path: 'README.md' });
+    const second = await readFileTool(ctx, { path: 'README.md' });
+    const third = await readFileTool(ctx, { path: 'README.md' });
+
+    expect(first).not.toHaveProperty('duplicateNudge');
+    expect(second.duplicateNudge).toContain('identical args 2 times this run');
+    expect(third.content).toBe('# Demo\n');
+    expect(third).not.toHaveProperty('duplicateNudge');
   });
 });
 

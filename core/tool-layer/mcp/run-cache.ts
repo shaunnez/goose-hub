@@ -19,7 +19,19 @@ export interface CachedResult<T> {
   paths: string[];
 }
 
+export interface DuplicateToolCallRecord {
+  duplicateCount: number;
+  duplicateNudge?: string;
+}
+
+export const DUPLICATE_NUDGE_REMINDER =
+  '[harness] You have invoked this tool with identical args {count} times this run. The cached result was returned. If you need different information, change your query.';
+
 const runCaches = new Map<string, Map<string, CachedResult<unknown>>>();
+const duplicateCounters = new Map<
+  string,
+  Map<string, { count: number; nudged: boolean; paths: string[] }>
+>();
 
 eventStore.subscribe((event) => {
   if (
@@ -114,22 +126,62 @@ export function setCachedRunResult<T>(runId: string, key: NormalizedRunCacheKey,
 
 export function invalidateRunCacheForPaths(runId: string, rawPaths: string[]): void {
   const cache = runCaches.get(runId);
-  if (cache == null || rawPaths.length === 0) return;
+  const duplicateMap = duplicateCounters.get(runId);
+  if ((cache == null && duplicateMap == null) || rawPaths.length === 0) return;
   const changedPaths = rawPaths.map(normalizePathForOverlap);
-  for (const [key, entry] of cache) {
+  for (const [key, entry] of cache ?? []) {
     if (
       entry.paths.some((entryPath) =>
         changedPaths.some((changedPath) => pathsOverlap(entryPath, changedPath)),
       )
     ) {
-      cache.delete(key);
+      cache?.delete(key);
     }
   }
-  if (cache.size === 0) runCaches.delete(runId);
+  if (cache?.size === 0) runCaches.delete(runId);
+  for (const [key, entry] of duplicateMap ?? []) {
+    if (
+      entry.paths.some((entryPath) =>
+        changedPaths.some((changedPath) => pathsOverlap(entryPath, changedPath)),
+      )
+    ) {
+      duplicateMap?.delete(key);
+    }
+  }
+  if (duplicateMap?.size === 0) duplicateCounters.delete(runId);
 }
 
 export function clearRunCache(runId: string): void {
   runCaches.delete(runId);
+  duplicateCounters.delete(runId);
+}
+
+export function recordDuplicateToolCall(
+  runId: string,
+  key: NormalizedRunCacheKey,
+  env: NodeJS.ProcessEnv = process.env,
+): DuplicateToolCallRecord {
+  let runMap = duplicateCounters.get(runId);
+  if (runMap == null) {
+    runMap = new Map();
+    duplicateCounters.set(runId, runMap);
+  }
+  const existing = runMap.get(key.key) ?? { count: 0, nudged: false, paths: key.paths };
+  existing.count += 1;
+  existing.paths = key.paths;
+  let duplicateNudge: string | undefined;
+  const threshold = duplicateNudgeThreshold(env);
+  if (!existing.nudged && existing.count === threshold) {
+    existing.nudged = true;
+    duplicateNudge = DUPLICATE_NUDGE_REMINDER.replace('{count}', String(existing.count));
+  }
+  runMap.set(key.key, existing);
+  return { duplicateCount: existing.count, duplicateNudge };
+}
+
+export function duplicateNudgeThreshold(env: NodeJS.ProcessEnv = process.env): number {
+  const value = Number.parseInt(env.FACTORY_DUPLICATE_NUDGE_THRESHOLD ?? '', 10);
+  return Number.isFinite(value) && value > 1 ? value : 3;
 }
 
 function key(

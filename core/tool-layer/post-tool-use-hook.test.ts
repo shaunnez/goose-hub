@@ -193,4 +193,20 @@ describe('deployPostHook', () => {
     const script = vi.mocked(writeFileSync).mock.calls[0][1] as string;
     expect(script).toContain('.length > 0');
   });
+
+  it('hook script forwards duplicate-call nudges as PostToolUse additionalContext', () => {
+    deployPostHook();
+    const script = vi.mocked(writeFileSync).mock.calls[0][1] as string;
+    expect(script).toContain('duplicateNudge');
+    expect(script).toContain("hookEventName: 'PostToolUse'");
+    expect(script).toContain('additionalContext: duplicateNudge');
+  });
+
+  it('hook script does not block or fail when emitting duplicate-call advice', () => {
+    deployPostHook();
+    const script = vi.mocked(writeFileSync).mock.calls[0][1] as string;
+    expect(script).toContain('process.stdout.write');
+    expect(script).not.toContain("decision: 'block'");
+    expect(script).not.toContain('process.exit(2)');
+  });
 });
