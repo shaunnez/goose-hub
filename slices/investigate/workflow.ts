@@ -366,10 +366,14 @@ export async function runInvestigateWorkflow(
       });
 
       const seedStartedAt = Date.now();
-      const investigationSeed = await buildInvestigationSeed(workItem, {
-        id: projectId,
-        worktreePath,
-      });
+      const investigationSeed = await buildInvestigationSeed(
+        workItem,
+        {
+          id: projectId,
+          worktreePath,
+        },
+        { symbolIndexHints },
+      );
       storeArtifact({
         projectId,
         workItemId: workItem.id,

@@ -18,7 +18,14 @@ export async function gitRecentChanges(input: {
 
   const result = await runCommand({
     command: 'git',
-    args: ['log', `--since=${input.since ?? '14d'}`, '--name-only', '--pretty=format:%H%x09%cI'],
+    args: [
+      'log',
+      `--since=${input.since ?? '14d'}`,
+      '--name-only',
+      '--pretty=format:%H%x09%cI',
+      '--',
+      ...candidateSet,
+    ],
     cwd: input.worktreePath,
     timeoutMs: 10_000,
     env: minimalEnv(),

@@ -46,6 +46,7 @@ export async function buildInvestigationSeed(
   project: { id?: string; worktreePath: string },
   deps: {
     lookupSymbols?: typeof lookupWorkItemSymbols;
+    symbolIndexHints?: SymbolHint[];
     recentChanges?: typeof gitRecentChanges;
     priorInvestigationIds?: typeof findPriorInvestigationRunIds;
     now?: () => Date;
@@ -54,9 +55,12 @@ export async function buildInvestigationSeed(
   const lookupSymbols = deps.lookupSymbols ?? lookupWorkItemSymbols;
   const recentChanges = deps.recentChanges ?? gitRecentChanges;
   const priorInvestigationIds = deps.priorInvestigationIds ?? findPriorInvestigationRunIds;
-  const candidateSymbols = lookupSymbols(workItem.title, workItem.body, {
-    worktreePath: project.worktreePath,
-  }).slice(0, 20);
+  const candidateSymbols = (
+    deps.symbolIndexHints ??
+    lookupSymbols(workItem.title, workItem.body, {
+      worktreePath: project.worktreePath,
+    })
+  ).slice(0, 20);
 
   const candidateFiles = toRepoPaths(
     unique([

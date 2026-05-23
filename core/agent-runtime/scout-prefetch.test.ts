@@ -65,6 +65,32 @@ describe('buildInvestigationSeed', () => {
     expect(seed.builtAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
+  it('uses precomputed symbol hints when provided', async () => {
+    const seed = await buildInvestigationSeed(
+      { title: 'Fix AuthService', body: 'AuthService fails' },
+      { worktreePath: workspace },
+      {
+        symbolIndexHints: [
+          {
+            name: 'AuthService',
+            definedIn: 'src/auth.ts',
+            line: 3,
+            kind: 'class',
+            callers: ['src/routes.ts'],
+          },
+        ],
+        lookupSymbols: () => {
+          throw new Error('lookupSymbols should not run when symbolIndexHints are provided');
+        },
+        recentChanges: async () => [],
+        priorInvestigationIds: () => [],
+      },
+    );
+
+    expect(seed.candidateFiles.map((file) => file.path)).toEqual(['src/auth.ts', 'src/routes.ts']);
+    expect(seed.candidateSymbols).toHaveLength(1);
+  });
+
   it('includes prior overlapping investigation ids from the seed files', async () => {
     const seed = await buildInvestigationSeed(
       { title: 'Fix AuthService', body: 'AuthService fails' },
