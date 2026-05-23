@@ -29,6 +29,8 @@ export interface RuntimeProfilerMetrics {
   p95OutputTokens: number;
   medianCostUsd: number;
   p95CostUsd: number;
+  p95ReadCount: number;
+  p95BytesRead: number;
   maxCostOutlier: { runId: string; costUsd: number } | null;
   timeoutRate: number;
   budgetExceededRate: number;

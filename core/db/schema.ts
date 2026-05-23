@@ -409,6 +409,19 @@ export const agentRunCosts = sqliteTable(
   }),
 );
 
+export const agentRunToolStats = sqliteTable('agent_run_tool_stats', {
+  runId: text('run_id').primaryKey(),
+  readCount: integer('read_count').notNull().default(0),
+  grepCount: integer('grep_count').notNull().default(0),
+  writeCount: integer('write_count').notNull().default(0),
+  editCount: integer('edit_count').notNull().default(0),
+  bytesRead: integer('bytes_read').notNull().default(0),
+  uniquePathsRead: integer('unique_paths_read').notNull().default(0),
+  redundantReads: integer('redundant_reads').notNull().default(0),
+  createdAt: text('created_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+  updatedAt: text('updated_at').notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`),
+});
+
 // One row per agent run. runId is unique — the same run is never recorded twice.
 export const agentRuns = sqliteTable(
   'agent_runs',

@@ -23,6 +23,7 @@ export const EVENT_KIND_LABEL: Record<string, string> = {
   'agent.run-failed': 'Agent run failed',
   'agent.budget-exceeded': 'Agent budget exceeded',
   'agent.tool-call': 'Tool call',
+  'agent.tool-intensity-anomaly': 'Tool intensity anomaly',
   'agent.tool-result': 'Tool result (error)',
   'tool.stdout-truncated': 'Stdout truncated',
   'tool.timeout': 'Timeout',

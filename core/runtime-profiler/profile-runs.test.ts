@@ -16,7 +16,9 @@ describe('profileRuntimeRows', () => {
         tool('r1', 'Bash', 'pnpm test'),
         tool('r1', 'Bash', 'pnpm test'),
         tool('r2', 'Bash', 'pnpm test'),
-        tool('r2', 'Read'),
+        tool('r1', 'Read', undefined, { canonical_path: { path: 'src/a.ts' }, bytesRead: 100 }),
+        tool('r2', 'Read', undefined, { canonical_path: { path: 'src/b.ts' }, bytesRead: 300 }),
+        tool('r2', 'Read', undefined, { canonical_path: { path: 'src/c.ts' }, bytesRead: 200 }),
         { runId: 'r2', kind: 'tool.timeout', payload: {}, createdAt: '2026-05-19T00:00:00Z' },
       ],
     });
@@ -26,6 +28,8 @@ describe('profileRuntimeRows', () => {
     expect(qa?.metrics.runCount).toBe(3);
     expect(qa?.metrics.medianInputTokens).toBe(200);
     expect(qa?.metrics.p95CostUsd).toBe(0.4);
+    expect(qa?.metrics.p95ReadCount).toBe(2);
+    expect(qa?.metrics.p95BytesRead).toBe(500);
     expect(qa?.metrics.timeoutRate).toBeCloseTo(1 / 3);
     expect(qa?.metrics.repeatedBashCommands[0]).toEqual({ command: 'pnpm test', count: 3 });
     expect(qa?.recommendations.some((rec) => rec.kind === 'workflow-helper')).toBe(true);
@@ -63,11 +67,16 @@ function run(
   };
 }
 
-function tool(runId: string, toolName: string, command?: string) {
+function tool(
+  runId: string,
+  toolName: string,
+  command?: string,
+  extra: Record<string, unknown> = {},
+) {
   return {
     runId,
     kind: 'agent.tool-call',
-    payload: { tool_name: toolName, tool_input: command == null ? {} : { command } },
+    payload: { tool_name: toolName, tool_input: command == null ? {} : { command }, ...extra },
     createdAt: '2026-05-19T00:00:00Z',
   };
 }

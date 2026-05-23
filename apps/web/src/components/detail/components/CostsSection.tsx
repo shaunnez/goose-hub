@@ -209,42 +209,69 @@ export function CostsSection({ projectSlug, id }: CostsSectionProps) {
 
         {/* Raw run table */}
         <div className="border border-line rounded-lg overflow-hidden min-w-0">
-          <div className="grid grid-cols-[100px_62px_1fr_80px_80px] px-4 py-2.5 border-b border-line bg-bg-elev/50 text-[10.5px] uppercase tracking-wider text-fg-2">
+          <div className="grid grid-cols-[82px_58px_1fr_64px_52px_70px_70px] px-4 py-2.5 border-b border-line bg-bg-elev/50 text-[10.5px] uppercase tracking-wider text-fg-2">
             <span className="pr-3">Stage</span>
             <span className="pr-3">Provider</span>
             <span className="pr-4">Skill</span>
             <span className="pr-4">Tokens</span>
+            <span className="pr-4">Reads</span>
+            <span className="pr-4">Bytes</span>
             <span>Cost</span>
           </div>
-          {data.rows.map((r) => (
-            <div
-              key={r.runId}
-              data-testid={`costs-row-${r.runId}`}
-              className="grid grid-cols-[100px_62px_1fr_80px_80px] px-4 py-2.5 border-t border-line items-center text-[12px]"
-            >
-              <span className="text-fg-2 pr-3">{STAGE_LABEL[r.stage]}</span>
-              <span className="pr-3">
+          {data.rows.map((r) => {
+            const redundantReads = r.redundantReads ?? 0;
+            const redundantTitle =
+              redundantReads > 0
+                ? `this run re-read ${redundantReads} files it had already loaded.`
+                : undefined;
+            return (
+              <div
+                key={r.runId}
+                data-testid={`costs-row-${r.runId}`}
+                className={`grid grid-cols-[82px_58px_1fr_64px_52px_70px_70px] px-4 py-2.5 border-t border-line items-center text-[12px] ${
+                  redundantReads > 0 ? 'bg-warning/5' : ''
+                }`}
+                title={redundantTitle}
+              >
+                <span className="text-fg-2 pr-3">{STAGE_LABEL[r.stage]}</span>
+                <span className="pr-3">
+                  <span
+                    className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                      r.provider === 'codex'
+                        ? 'bg-emerald-500/15 text-emerald-400'
+                        : 'bg-blue-500/15 text-blue-400'
+                    }`}
+                  >
+                    {r.provider === 'codex' ? 'Codex' : 'Claude'}
+                  </span>
+                </span>
+                <span className="font-mono text-fg-3 text-[11.5px] pr-4 truncate">{r.skill}</span>
+                <span className="font-mono text-fg-2 text-[11.5px] pr-4">
+                  {formatTokens(r.inputTokens + r.outputTokens)}
+                </span>
                 <span
-                  className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                    r.provider === 'codex'
-                      ? 'bg-emerald-500/15 text-emerald-400'
-                      : 'bg-blue-500/15 text-blue-400'
+                  className={`font-mono text-[11.5px] pr-4 ${
+                    redundantReads > 0 ? 'text-warning' : 'text-fg-2'
                   }`}
                 >
-                  {r.provider === 'codex' ? 'Codex' : 'Claude'}
+                  {r.readCount ?? 0}
                 </span>
-              </span>
-              <span className="font-mono text-fg-3 text-[11.5px] pr-4 truncate">{r.skill}</span>
-              <span className="font-mono text-fg-2 text-[11.5px] pr-4">
-                {formatTokens(r.inputTokens + r.outputTokens)}
-              </span>
-              <span className="font-mono text-fg-2 text-[11.5px]">
-                {formatCost(r.costUsd, r.costLabel)}
-              </span>
-            </div>
-          ))}
+                <span className="font-mono text-fg-2 text-[11.5px] pr-4">
+                  {formatByteCount(r.bytesRead ?? 0)}
+                </span>
+                <span className="font-mono text-fg-2 text-[11.5px]">
+                  {formatCost(r.costUsd, r.costLabel)}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
   );
+}
+
+function formatByteCount(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  return `${(bytes / 1024).toFixed(1)} KB`;
 }

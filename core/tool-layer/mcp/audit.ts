@@ -14,6 +14,7 @@ export interface ToolCallAudit {
   input: Record<string, unknown>;
   durationMs?: number;
   truncated?: boolean;
+  bytesRead?: number;
   status?: 'ok' | 'failed' | 'timed_out';
   exitCode?: number | null;
   noMatches?: boolean;
