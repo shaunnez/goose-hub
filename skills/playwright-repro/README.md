@@ -32,11 +32,11 @@ Called AFTER the investigate skill (M6.03) for `type:bug` issues only.
 | Field | Type | Description |
 |-------|------|-------------|
 | `screenshots` | `Screenshot[]` | Ordered screenshots per repro step |
-| `screenshots[].path` | `string` | Workspace-relative path under `evidence/issue-<N>/` |
+| `screenshots[].path` | `string` | Repo-root/worktree-root relative path under `evidence/issue-<N>/` |
 | `screenshots[].caption` | `string` | Description of what the screenshot shows |
 | `screenshots[].step` | `number` | Repro step number this screenshot corresponds to |
 | `screenshots[].githubUrl` | `string` (optional) | SHA-pinned `raw.githubusercontent.com` URL once pushed to the evidence branch |
-| `gifPath` | `string \| null` | Workspace-relative path to walkthrough GIF, or `null` if not captured |
+| `gifPath` | `string \| null` | Repo-root/worktree-root relative path to walkthrough GIF, or `null` if not captured |
 | `consoleErrors` | `ConsoleEntry[]` | Browser console errors/warnings/info captured from `REPRO_CONSOLE` |
 | `consoleErrors[].message` | `string` | Console message text |
 | `consoleErrors[].type` | `"error" \| "warning" \| "info"` | Console entry type |

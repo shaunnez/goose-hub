@@ -17,8 +17,10 @@ Put required tests and commands in `acceptanceCriteria.verifyCommand` and
 `verificationTooling`; do not create e2e file paths as the output artefact.
 Each `verificationTooling[]` entry must use `command`, not `scriptPath`, and
 the value must be a runnable repo-root command such as
-`pnpm vitest run apps/web/src/lib/lanes.config.test.ts`. Never emit a bare
-test/source file path.
+`pnpm vitest run apps/web/src/lib/lanes.config.test.ts` or
+`pnpm exec playwright test apps/web/e2e/pipeline/golden-bug.spec.ts`. Never
+emit a bare test/source file path, and never shorten Playwright paths to
+package-relative arguments such as `e2e/pipeline/golden-bug.spec.ts`.
 
 Strict shape reminders for fields that commonly fail schema validation:
 - Optional fields should be omitted when they do not apply. Do not emit `null`.

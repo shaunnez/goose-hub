@@ -6,7 +6,6 @@ const audit = await auditSkillContracts(process.cwd());
 console.log(formatSkillContractAudit(audit));
 
 if (strict) {
-  const enforcePathLanguageFor = new Set(['implement', 'implement-wp', 'spec-author']);
   const violations = audit.skills.filter(
     (s) =>
       s.snakeCaseTags.length > 0 ||
@@ -18,9 +17,9 @@ if (strict) {
       ['missing-output-example', 'invalid-output-example', 'no-marked-output-example'].includes(
         s.outputExample.status,
       ) ||
-      (enforcePathLanguageFor.has(s.skill) &&
-        (s.pathLanguage.vagueWorkspaceRelative.length > 0 ||
-          s.pathLanguage.packageRelativeExamples.length > 0)),
+      s.pathLanguage.vagueWorkspaceRelative.length > 0 ||
+      s.pathLanguage.packageRelativeExamples.length > 0 ||
+      s.pathLanguage.packageRelativeCommandGuidance.length > 0,
   );
   if (violations.length > 0) {
     console.error(
@@ -46,6 +45,9 @@ if (strict) {
           `pathLanguageWorkspaceRelative=${violation.pathLanguage.vagueWorkspaceRelative.length}`,
           `pathLanguagePackageRelativeExamples=${
             violation.pathLanguage.packageRelativeExamples.join(',') || '(none)'
+          }`,
+          `pathLanguagePackageRelativeCommandGuidance=${
+            violation.pathLanguage.packageRelativeCommandGuidance.join('|') || '(none)'
           }`,
         ].join(' '),
       );

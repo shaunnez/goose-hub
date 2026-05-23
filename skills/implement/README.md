@@ -34,7 +34,7 @@ TDD-first developer skill. Reads the issue, writes a plan, writes failing tests,
 | `filesWritten` | `FileWritten[]` | Each entry: `{ path, reason }` |
 | `testsWritten` | `TestWritten[]` | Each entry: `{ path, cases: number ≥ 0 }`. Empty array allowed for chore PRs |
 | `prUrl` | `string` (URL) | Filled in by orchestrator post-spawn; skill returns the workItem URL as placeholder |
-| `evidenceSpecPath` | `string \| null` | Workspace-relative Playwright spec for `evidence-post` (#234). `null` if none — workflow logs `evidence.no-spec-declared` and skips |
+| `evidenceSpecPath` | `string \| null` | Repo-root/worktree-root relative Playwright spec for `evidence-post` (#234). `null` if none — workflow logs `evidence.no-spec-declared` and skips |
 | `confidence` | `'low' \| 'medium' \| 'high'` | Self-reported confidence in the change |
 | `decisionSummaries` | `DecisionSummary[]` | Required, ≥ 1 entry. Plan / red / green / lint markers, one sentence each |
 
@@ -67,7 +67,7 @@ All four enforce the workspace boundary; lifecycle is governed by FACTORY_RULES 
 
 - Single slice, single issue. No scope creep into related issues.
 - TDD-first. A test added after the implementation does not count.
-- Workspace-bound paths only.
+- Repo-root/worktree-root paths only.
 - No shell. The `bash` tool spawns argv directly; no `&&` / `;` / pipes — invoke separate commands.
 - `decisionSummaries` is required. One sentence per entry. No chain-of-thought, no secrets, no PII.
 

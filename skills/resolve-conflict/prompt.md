@@ -13,7 +13,7 @@ Developer (non-holdout). You receive the list of conflicted files, and tools are
 The context contains a `<task>` block with:
 
 - Tools are already rooted at the conflicted workspace.
-- `<conflictedFiles>` — workspace-relative paths of every file with conflict markers
+- `<conflictedFiles>` — repo-root/worktree-root relative paths of every file with conflict markers
 - `<baseBranch>` — the branch being merged INTO the PR branch (typically `main`)
 - `<prNumber>` — PR number under resolution
 
@@ -44,7 +44,7 @@ If `unresolvable` is non-empty OR `confidence` is `low`, the slice will escalate
 <!-- output-example -->
 ```json
 {
-  "resolved": ["src/foo.ts", "src/bar.ts"],
+  "resolved": ["core/foo.ts", "apps/web/src/bar.ts"],
   "unresolvable": [],
   "confidence": "high",
   "decisionSummaries": [
@@ -57,6 +57,6 @@ If `unresolvable` is non-empty OR `confidence` is `low`, the slice will escalate
 
 - **No git commands.** The slice owns git fetch / merge / commit / push.
 - **Whole files.** Write the entire resolved file, not a diff or patch.
-- **Workspace-bound paths only.** No absolute paths, no `..` traversal.
+- **Repo-root/worktree-root paths only.** No absolute paths, no `..` traversal.
 - **No drive-by edits.** Touch only the files in `conflictedFiles`.
 - `decisionSummaries` is required. One sentence per entry. No chain-of-thought, no PII.

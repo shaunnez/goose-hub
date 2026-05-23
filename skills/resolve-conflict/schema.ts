@@ -2,7 +2,9 @@ import { DecisionSummarySchema } from '@goose-hub/core/retrospective/schemas.js'
 import { z } from 'zod';
 
 export const ResolveConflictContextSchema = z.object({
-  conflictedFiles: z.array(z.string()).describe('Workspace-relative paths of conflicted files'),
+  conflictedFiles: z
+    .array(z.string())
+    .describe('Repo-root/worktree-root relative paths of conflicted files'),
   baseBranch: z.string().describe('Branch being merged in (e.g. main)'),
   prNumber: z.number().int().describe('PR number under resolution (context only)'),
 });
@@ -10,10 +12,12 @@ export const ResolveConflictContextSchema = z.object({
 export const ResolveConflictSchema = z.object({
   resolved: z
     .array(z.string())
-    .describe('Workspace-relative paths of files the agent successfully resolved'),
+    .describe('Repo-root/worktree-root relative paths of files the agent successfully resolved'),
   unresolvable: z
     .array(z.string())
-    .describe('Workspace-relative paths of files the agent could not resolve confidently'),
+    .describe(
+      'Repo-root/worktree-root relative paths of files the agent could not resolve confidently',
+    ),
   confidence: z.enum(['low', 'medium', 'high']),
   decisionSummaries: z.array(DecisionSummarySchema).min(1),
 });

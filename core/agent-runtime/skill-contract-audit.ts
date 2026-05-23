@@ -15,6 +15,7 @@ export type SkillContractReport = {
   outputExample: OutputExampleReport;
   pathLanguage: PathLanguageReport;
   worktreePathExposure: WorktreePathExposureReport;
+  projectOverlayPaths: string[];
   consumerPaths: string[];
 };
 
@@ -44,6 +45,7 @@ export type OutputSchemaReport = {
 export type PathLanguageReport = {
   vagueWorkspaceRelative: string[];
   packageRelativeExamples: string[];
+  packageRelativeCommandGuidance: string[];
 };
 
 export type WorktreePathExposureReport = {
@@ -127,6 +129,19 @@ function collectJsonStrings(value: unknown, strings: string[] = []): string[] {
   return strings;
 }
 
+const PACKAGE_RELATIVE_OUTPUT_PATH = /^(?:src|e2e)\/[^/]/;
+const PACKAGE_RELATIVE_COMMAND_PATH =
+  /(?:^|[\s`"'])(?:src|e2e)\/[A-Za-z0-9_./{}<>-]+\.[cm]?[jt]sx?/i;
+const COMMAND_CONTRACT_LINE =
+  /\b(?:verificationTooling|executableChecks|verifyCommand|acceptanceCriteria|repo-root command|terminal JSON|output paths|passed forward|passed-forward|pass forward|command)\b/i;
+
+function isProhibitivePathExample(line: string): boolean {
+  const match = line.match(PACKAGE_RELATIVE_COMMAND_PATH);
+  if (match?.index == null) return false;
+  const beforePath = line.slice(Math.max(0, match.index - 96), match.index).toLowerCase();
+  return /\b(?:do not|don't|never|avoid|forbidden|wrong|bad)\b/.test(beforePath);
+}
+
 function auditPathLanguage(prompt: string, schema: string): PathLanguageReport {
   const combined = `${prompt}\n${schema}`;
   const vagueWorkspaceRelative = lineHits(combined, (line) => {
@@ -142,15 +157,23 @@ function auditPathLanguage(prompt: string, schema: string): PathLanguageReport {
 
   const packageRelativeExamples = extractJsonExamples(prompt).flatMap((example) => {
     try {
-      return collectJsonStrings(JSON.parse(example)).filter((value) => /^src\/[^/]/.test(value));
+      return collectJsonStrings(JSON.parse(example)).filter((value) =>
+        PACKAGE_RELATIVE_OUTPUT_PATH.test(value),
+      );
     } catch {
       return [];
     }
+  });
+  const packageRelativeCommandGuidance = lineHits(prompt, (line) => {
+    if (!COMMAND_CONTRACT_LINE.test(line)) return false;
+    if (!PACKAGE_RELATIVE_COMMAND_PATH.test(line)) return false;
+    return !isProhibitivePathExample(line);
   });
 
   return {
     vagueWorkspaceRelative,
     packageRelativeExamples: Array.from(new Set(packageRelativeExamples)).sort(),
+    packageRelativeCommandGuidance,
   };
 }
 
@@ -351,6 +374,24 @@ async function loadSkillConfig(configPath: string): Promise<SkillConfig | null> 
   return module.default ?? null;
 }
 
+function collectProjectOverlays(
+  repoRoot: string,
+  skill: string,
+): Array<{ path: string; source: string }> {
+  const targetProjectsDir = join(repoRoot, 'target-projects');
+  if (!existsSync(targetProjectsDir)) return [];
+
+  return readdirSync(targetProjectsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => join(targetProjectsDir, entry.name, 'agent-context', `${skill}.md`))
+    .filter((path) => existsSync(path))
+    .map((path) => ({
+      path: relative(repoRoot, path).replaceAll('\\', '/'),
+      source: readFileSync(path, 'utf8'),
+    }))
+    .sort((a, b) => a.path.localeCompare(b.path));
+}
+
 export async function auditSkillContracts(repoRoot: string): Promise<SkillContractAudit> {
   const skillsDir = join(repoRoot, 'skills');
   const skills = readdirSync(skillsDir, { withFileTypes: true })
@@ -369,6 +410,11 @@ export async function auditSkillContracts(repoRoot: string): Promise<SkillContra
     const prompt = existsSync(promptPath) ? readFileSync(promptPath, 'utf8') : '';
     const config = existsSync(configPath) ? readFileSync(configPath, 'utf8') : '';
     const schema = existsSync(schemaPath) ? readFileSync(schemaPath, 'utf8') : '';
+    const projectOverlays = collectProjectOverlays(repoRoot, skill);
+    const promptWithProjectOverlays = [
+      prompt,
+      ...projectOverlays.map((overlay) => `<!-- ${overlay.path} -->\n${overlay.source}`),
+    ].join('\n\n');
 
     const allowlistTags = extractAllowlistTags(config);
     const promptTags = filterContextTags(extractTags(prompt), allowlistTags);
@@ -393,8 +439,9 @@ export async function auditSkillContracts(repoRoot: string): Promise<SkillContra
         configuredSchema: configuredOutputSchema,
       },
       outputExample: auditOutputExample(prompt, skillConfig?.outputSchema, schemaFields),
-      pathLanguage: auditPathLanguage(prompt, schema),
-      worktreePathExposure: auditWorktreePathExposure(prompt, config),
+      pathLanguage: auditPathLanguage(promptWithProjectOverlays, schema),
+      worktreePathExposure: auditWorktreePathExposure(promptWithProjectOverlays, config),
+      projectOverlayPaths: projectOverlays.map((overlay) => overlay.path),
       consumerPaths: existsSync(schemaPath)
         ? collectConsumers(repoRoot, schemaPath, schema, skill)
         : [],
@@ -428,7 +475,9 @@ export function formatSkillContractAudit(audit: SkillContractAudit): string {
         `outputExampleIssues: ${r.outputExample.issues.join(' | ') || '(none)'}`,
         `pathLanguageWorkspaceRelative: ${r.pathLanguage.vagueWorkspaceRelative.length}`,
         `pathLanguagePackageRelativeExamples: ${r.pathLanguage.packageRelativeExamples.join(', ') || '(none)'}`,
+        `pathLanguagePackageRelativeCommandGuidance: ${r.pathLanguage.packageRelativeCommandGuidance.length}`,
         `worktreePathExposure: allowlist=${r.worktreePathExposure.allowlist} prompt=${r.worktreePathExposure.promptLines.length} config=${r.worktreePathExposure.configLines.length}`,
+        `projectOverlays: ${r.projectOverlayPaths.join(', ') || '(none)'}`,
         `consumers: ${r.consumerPaths.length}`,
       ];
       for (const c of r.consumerPaths) lines.push(`- ${c}`);

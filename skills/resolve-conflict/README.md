@@ -13,7 +13,7 @@ Resolves git merge conflicts in a worktree. The skill receives the worktree path
 | Field | Type | Description |
 |---|---|---|
 | `worktreePath` | `string` | Absolute path to the worktree where conflict markers are present |
-| `conflictedFiles` | `string[]` | Workspace-relative paths of conflicted files |
+| `conflictedFiles` | `string[]` | Repo-root/worktree-root relative paths of conflicted files |
 | `baseBranch` | `string` | Branch being merged INTO the PR branch (typically `main`) |
 | `prNumber` | `number` | PR number under resolution (context only) |
 
@@ -23,8 +23,8 @@ Resolves git merge conflicts in a worktree. The skill receives the worktree path
 
 | Field | Type | Description |
 |---|---|---|
-| `resolved` | `string[]` | Workspace-relative paths the agent successfully resolved |
-| `unresolvable` | `string[]` | Workspace-relative paths the agent could not resolve confidently |
+| `resolved` | `string[]` | Repo-root/worktree-root relative paths the agent successfully resolved |
+| `unresolvable` | `string[]` | Repo-root/worktree-root relative paths the agent could not resolve confidently |
 | `confidence` | `'low' \| 'medium' \| 'high'` | Self-reported confidence in the overall resolution |
 | `decisionSummaries` | `DecisionSummary[]` | Required, ≥ 1 entry. One per file or per resolution strategy |
 

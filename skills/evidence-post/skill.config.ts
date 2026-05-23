@@ -31,7 +31,7 @@ export const EvidencePostContextSchema = z.object({
   specPath: z
     .string()
     .describe(
-      'Workspace-relative path to the Playwright spec to run, e.g. apps/web/e2e/issue-N.spec.ts',
+      'Repo-root/worktree-root relative path to the Playwright spec to run, e.g. apps/web/e2e/issue-N.spec.ts',
     ),
 });
 

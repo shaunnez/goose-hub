@@ -26,7 +26,7 @@ Per ADR 0011 §4 and FACTORY_RULES rule 26: posting evidence is a product workfl
 | `workItem.beforeCommentUrl` | `string` (optional URL) | Permalink to the BEFORE-state comment from `playwright-repro` (`type:bug` only) |
 | `prNumber` | `number` | Pull request number |
 | `prHeadSha` | `string` (≥ 7 chars) | Head commit SHA — every raw URL pins to this SHA |
-| `specPath` | `string` | Workspace-relative path to the Playwright spec to run |
+| `specPath` | `string` | Repo-root/worktree-root relative path to the Playwright spec to run |
 
 ## Outputs
 
@@ -34,12 +34,12 @@ Per ADR 0011 §4 and FACTORY_RULES rule 26: posting evidence is a product workfl
 
 | Field | Type | Description |
 |---|---|---|
-| `screenshots` | `Screenshot[]` | Workspace-relative paths under `evidence/issue-<N>/` |
+| `screenshots` | `Screenshot[]` | Repo-root/worktree-root relative paths under `evidence/issue-<N>/` |
 | `screenshots[].path` | `string` | e.g. `evidence/issue-233/step-1.png` |
 | `screenshots[].caption` | `string` | What the screenshot shows |
 | `screenshots[].step` | `number` (integer) | Ordinal step in the walkthrough |
 | `screenshots[].githubUrl` | `string` (optional URL) | SHA-pinned `raw.githubusercontent.com` URL once pushed |
-| `gifPath` | `string \| null` | Workspace-relative GIF path, or `null` |
+| `gifPath` | `string \| null` | Repo-root/worktree-root relative GIF path, or `null` |
 | `commentUrl` | `string` (URL) | Permalink to the posted comment |
 | `commitSha` | `string` (≥ 7 chars) | SHA the raw URLs pin to |
 | `decisionSummaries` | `DecisionSummary[]` | Canonical decision-summary record |

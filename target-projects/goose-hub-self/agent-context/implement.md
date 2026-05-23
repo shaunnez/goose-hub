@@ -17,6 +17,11 @@ Not `apps/web/src/...`. Not a glob. Just `src/...`.
 | Lint | `pnpm lint` |
 | Typecheck | `pnpm typecheck` |
 
+This package-relative argument is only for the runnable test command. Every path
+you pass forward in terminal JSON (`filesWritten`, `testsWritten`,
+`testsRun.paths`, `evidenceSpecPath`) must remain repo-root/worktree-root
+relative, for example `apps/web/src/components/detail/components/TimelineExpandCollapse.test.tsx`.
+
 
 **First command in any worktree:** `cat package.json` to verify available scripts.
 

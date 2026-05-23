@@ -17,6 +17,8 @@ describe('skill-contract-audit', () => {
     expect(output).toContain('outputExample:');
     expect(output).toContain('pathLanguageWorkspaceRelative:');
     expect(output).toContain('pathLanguagePackageRelativeExamples:');
+    expect(output).toContain('pathLanguagePackageRelativeCommandGuidance:');
+    expect(output).toContain('projectOverlays:');
   });
 
   it('enforces deterministic context tag drift checks for every runtime skill', async () => {
@@ -137,22 +139,33 @@ describe('skill-contract-audit', () => {
     }
   });
 
-  it('keeps implement-family path language canonical and advisory-audited', async () => {
+  it('keeps path language canonical across base prompts and project overlays', async () => {
     const audit = await auditSkillContracts(process.cwd());
-    const implementFamily = ['implement', 'implement-wp', 'spec-author'];
 
-    for (const skill of implementFamily) {
-      const report = audit.skills.find((s: { skill: string }) => s.skill === skill);
-      expect(report, `${skill} should be audited`).toBeDefined();
+    for (const report of audit.skills) {
       expect(
-        report?.pathLanguage.vagueWorkspaceRelative,
-        `${skill} should avoid vague workspace-relative path language`,
+        report.pathLanguage.vagueWorkspaceRelative,
+        `${report.skill} should avoid vague workspace-relative path language`,
       ).toEqual([]);
       expect(
-        report?.pathLanguage.packageRelativeExamples,
-        `${skill} should avoid package-relative src/... output examples`,
+        report.pathLanguage.packageRelativeExamples,
+        `${report.skill} should avoid package-relative src/... or e2e/... output examples`,
+      ).toEqual([]);
+      expect(
+        report.pathLanguage.packageRelativeCommandGuidance,
+        `${report.skill} should avoid package-relative command guidance in path-bearing outputs`,
       ).toEqual([]);
     }
+  });
+
+  it('includes per-project overlays in the path-language audit', async () => {
+    const audit = await auditSkillContracts(process.cwd());
+    const specAuthor = audit.skills.find((s: { skill: string }) => s.skill === 'spec-author');
+
+    expect(specAuthor?.projectOverlayPaths).toContain(
+      'target-projects/goose-hub-self/agent-context/spec-author.md',
+    );
+    expect(specAuthor?.pathLanguage.packageRelativeCommandGuidance).toEqual([]);
   });
 
   it('keeps worktreePath out of skill prompts and context allowlists', async () => {

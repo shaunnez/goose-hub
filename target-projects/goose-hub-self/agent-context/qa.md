@@ -12,6 +12,11 @@
 pnpm test --reporter=json src/components/detail/components/TimelineExpandCollapse.test.tsx
 ```
 
+This package-relative argument is only for the runnable test command. Any path
+reported in findings, evidence, or acceptance-contract references must remain
+repo-root/worktree-root relative, for example
+`apps/web/src/components/detail/components/TimelineExpandCollapse.test.tsx`.
+
 **First command in any worktree:** `cat package.json` to verify available scripts.
 
 **Shell syntax is forbidden:** `2>&1`, `&&`, `;`, `|` are literal arguments with `shell: false` — they break the command. CWD is always worktree root, immutable between calls. Same command = same result, always. If a command fails, diagnose — do not retry.

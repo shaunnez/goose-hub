@@ -340,15 +340,15 @@ Return a JSON object conforming exactly to this structure:
         {
           "tier": "structural",
           "severity": "error",
-          "description": "Type error in src/foo.ts: Property 'x' does not exist on type 'Bar'",
-          "file": "src/foo.ts",
+          "description": "Type error in apps/web/src/foo.ts: Property 'x' does not exist on type 'Bar'",
+          "file": "apps/web/src/foo.ts",
           "line": 12,
           "disposition": "registered",
           "dispositionRef": "type error must be fixed before approval"
         }
       ],
       "command": "pnpm biome check .",
-      "output": "src/foo.ts:12 error TS2339: Property 'x' does not exist on type 'Bar'"
+      "output": "apps/web/src/foo.ts:12 error TS2339: Property 'x' does not exist on type 'Bar'"
     },
     "functional": {
       "passed": true,
@@ -375,8 +375,8 @@ Return a JSON object conforming exactly to this structure:
     {
       "tier": "structural",
       "severity": "error",
-      "description": "Type error in src/foo.ts: Property 'x' does not exist on type 'Bar'",
-      "file": "src/foo.ts",
+      "description": "Type error in apps/web/src/foo.ts: Property 'x' does not exist on type 'Bar'",
+      "file": "apps/web/src/foo.ts",
       "line": 12,
       "disposition": "registered",
       "dispositionRef": "type error must be fixed before approval"
