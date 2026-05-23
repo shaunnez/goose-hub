@@ -597,6 +597,8 @@ Every tool call emits `agent.tool-call`. The audit payload is normalized via `co
 
 Read-side MCP tools use a process-local per-`FACTORY_RUN_ID` cache in `core/tool-layer/mcp/run-cache.ts`. Only `read_file`, `read_many_files`, `list_dir`, `list_files`, and `search_text` are cached; cache keys are built from canonical tool paths plus the arguments that affect output. Cached hits still emit `agent.tool-call` with `cached: true`. `write_file`, `edit_file`, `apply_patch`, `move_file`, and `delete_file` invalidate overlapping read/list/search entries, and `agent.run-completed` / `agent.run-failed` evict the whole run cache. This never crosses separate scout or synthesis runs.
 
+Duplicate-call nudges are advisory only. `core/tool-layer/mcp/run-cache.ts` tracks identical cache-key calls per run and marks `agent.tool-call` with `duplicateCount` from the second call onward; at the configured threshold (`FACTORY_DUPLICATE_NUDGE_THRESHOLD`, default 3) the PostToolUse hook forwards a one-line `additionalContext` reminder. The hook never blocks, denies, aborts, or fails duplicate calls.
+
 `core/tool-layer/tools/{read,write,bash,test}.ts` and their tests have been deleted (Phase 7 cleanup complete). `core/tool-layer/tools/record-decision.ts` is the surviving helper, wrapped by `mcp/tools/context.ts`.
 
 ## Flagged ambiguities

@@ -13,7 +13,12 @@ import {
 } from '../command-policy.js';
 import type { FactoryContext } from '../context.js';
 import { PathPolicyViolation, resolveWorkspacePath } from '../path-policy.js';
-import { getCachedRunResult, normalizeRunCacheKey, setCachedRunResult } from '../run-cache.js';
+import {
+  getCachedRunResult,
+  normalizeRunCacheKey,
+  recordDuplicateToolCall,
+  setCachedRunResult,
+} from '../run-cache.js';
 import type {
   FileExistsInput,
   FileInfoInput,
@@ -53,12 +58,14 @@ export interface ReadFileResult {
   endLine: number;
   totalLines: number;
   cached?: true;
+  duplicateNudge?: string;
 }
 
 export interface ReadManyFilesResult {
   files: Array<{ path: RepoRelativePath; content: string; truncated: boolean }>;
   errors: Array<{ path: string; reason: string }>;
   cached?: true;
+  duplicateNudge?: string;
 }
 
 export interface ListDirEntry {
@@ -71,12 +78,14 @@ export interface ListDirResult {
   entries: ListDirEntry[];
   truncated: boolean;
   cached?: true;
+  duplicateNudge?: string;
 }
 
 export interface ListFilesResult {
   files: RepoRelativePath[];
   truncated: boolean;
   cached?: true;
+  duplicateNudge?: string;
 }
 
 export interface SearchMatch {
@@ -89,6 +98,7 @@ export interface SearchTextResult {
   matches: SearchMatch[];
   truncated: boolean;
   cached?: true;
+  duplicateNudge?: string;
 }
 
 export interface FileInfoResult {
@@ -125,6 +135,20 @@ function handleBlocked(
     message: err.message,
   });
   throw err;
+}
+
+function duplicateAuditFields(duplicate: ReturnType<typeof recordDuplicateToolCall> | null): {
+  duplicateCount?: number;
+} {
+  return duplicate != null && duplicate.duplicateCount >= 2
+    ? { duplicateCount: duplicate.duplicateCount }
+    : {};
+}
+
+function duplicateNudgeFields(duplicate: ReturnType<typeof recordDuplicateToolCall> | null): {
+  duplicateNudge?: string;
+} {
+  return duplicate?.duplicateNudge != null ? { duplicateNudge: duplicate.duplicateNudge } : {};
 }
 
 function rawPathToCanonical(rawPath: string, workspaceRoot: string): RepoRelativePath {
@@ -284,10 +308,11 @@ export async function readFileTool(
     args: input,
     workspaceRoot: ctx.workspaceRoot,
   });
+  const duplicate = cacheKey == null ? null : recordDuplicateToolCall(ctx.runId, cacheKey);
   const cached =
     cacheKey == null ? null : getCachedRunResult<ReadFileResult>(ctx.runId, cacheKey.key);
   if (cached != null) {
-    const result = { ...cached, cached: true as const };
+    const result = { ...cached, cached: true as const, ...duplicateNudgeFields(duplicate) };
     emitToolCall(ctx, {
       tool: 'read_file',
       input: { path: input.path },
@@ -295,6 +320,7 @@ export async function readFileTool(
       truncated: result.truncated,
       bytesRead: Buffer.byteLength(result.content, 'utf8'),
       cached: true,
+      ...duplicateAuditFields(duplicate),
     });
     return result;
   }
@@ -329,6 +355,7 @@ export async function readFileTool(
     status: 'ok',
     truncated,
     bytesRead: Buffer.byteLength(result.content, 'utf8'),
+    ...duplicateAuditFields(duplicate),
   });
   if (cacheKey != null) setCachedRunResult(ctx.runId, cacheKey, result);
   return result;
@@ -348,6 +375,7 @@ export async function readManyFilesTool(
     args: input,
     workspaceRoot: ctx.workspaceRoot,
   });
+  const duplicate = cacheKey == null ? null : recordDuplicateToolCall(ctx.runId, cacheKey);
   const cached =
     cacheKey == null ? null : getCachedRunResult<ReadManyFilesResult>(ctx.runId, cacheKey.key);
   if (cached != null) {
@@ -356,8 +384,9 @@ export async function readManyFilesTool(
       input: { count: input.paths.length },
       status: 'ok',
       cached: true,
+      ...duplicateAuditFields(duplicate),
     });
-    return { ...cached, cached: true as const };
+    return { ...cached, cached: true as const, ...duplicateNudgeFields(duplicate) };
   }
 
   const files: ReadManyFilesResult['files'] = [];
@@ -377,6 +406,7 @@ export async function readManyFilesTool(
     tool: 'read_many_files',
     input: { count: input.paths.length },
     status: 'ok',
+    ...duplicateAuditFields(duplicate),
   });
   const result = { files, errors };
   if (cacheKey != null) setCachedRunResult(ctx.runId, cacheKey, result);
@@ -406,6 +436,7 @@ export async function listDirTool(
     args: { ...input, depth },
     workspaceRoot: ctx.workspaceRoot,
   });
+  const duplicate = cacheKey == null ? null : recordDuplicateToolCall(ctx.runId, cacheKey);
   const cached =
     cacheKey == null ? null : getCachedRunResult<ListDirResult>(ctx.runId, cacheKey.key);
   if (cached != null) {
@@ -415,8 +446,9 @@ export async function listDirTool(
       status: 'ok',
       truncated: cached.truncated,
       cached: true,
+      ...duplicateAuditFields(duplicate),
     });
-    return { ...cached, cached: true as const };
+    return { ...cached, cached: true as const, ...duplicateNudgeFields(duplicate) };
   }
 
   const entries: ListDirEntry[] = [];
@@ -461,6 +493,7 @@ export async function listDirTool(
     input: { path: input.path, depth },
     status: 'ok',
     truncated,
+    ...duplicateAuditFields(duplicate),
   });
   const result = { path: resolved.canonical, entries, truncated };
   if (cacheKey != null) setCachedRunResult(ctx.runId, cacheKey, result);
@@ -495,6 +528,7 @@ export async function listFilesTool(
     args: { ...input, limit },
     workspaceRoot: ctx.workspaceRoot,
   });
+  const duplicate = cacheKey == null ? null : recordDuplicateToolCall(ctx.runId, cacheKey);
   const cached =
     cacheKey == null ? null : getCachedRunResult<ListFilesResult>(ctx.runId, cacheKey.key);
   if (cached != null) {
@@ -505,8 +539,9 @@ export async function listFilesTool(
       truncated: cached.truncated,
       noMatches: cached.files.length === 0,
       cached: true,
+      ...duplicateAuditFields(duplicate),
     });
-    return { ...cached, cached: true as const };
+    return { ...cached, cached: true as const, ...duplicateNudgeFields(duplicate) };
   }
 
   const result = await runCommand({
@@ -547,6 +582,7 @@ export async function listFilesTool(
     durationMs: result.durationMs,
     truncated,
     noMatches: files.length === 0 && (rgSpawnFailed(result) || rgNoMatches(result)),
+    ...duplicateAuditFields(duplicate),
   });
   const output = { files, truncated };
   if (cacheKey != null) setCachedRunResult(ctx.runId, cacheKey, output);
@@ -594,6 +630,7 @@ export async function searchTextTool(
     args: { ...input, maxMatches: limit },
     workspaceRoot: ctx.workspaceRoot,
   });
+  const duplicate = cacheKey == null ? null : recordDuplicateToolCall(ctx.runId, cacheKey);
   const cached =
     cacheKey == null ? null : getCachedRunResult<SearchTextResult>(ctx.runId, cacheKey.key);
   if (cached != null) {
@@ -604,8 +641,9 @@ export async function searchTextTool(
       truncated: cached.truncated,
       noMatches: cached.matches.length === 0,
       cached: true,
+      ...duplicateAuditFields(duplicate),
     });
-    return { ...cached, cached: true as const };
+    return { ...cached, cached: true as const, ...duplicateNudgeFields(duplicate) };
   }
 
   const result = await runCommand({
@@ -659,6 +697,7 @@ export async function searchTextTool(
     durationMs: result.durationMs,
     truncated,
     noMatches: matches.length === 0 && (rgSpawnFailed(result) || rgNoMatches(result)),
+    ...duplicateAuditFields(duplicate),
   });
   const output = { matches, truncated };
   if (cacheKey != null) setCachedRunResult(ctx.runId, cacheKey, output);
