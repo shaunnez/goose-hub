@@ -66,6 +66,10 @@ describe('wave2-risk-analyst skill', () => {
     const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
 
     expect(prompt).toContain('3 targeted reads/greps');
+    expect(prompt).toContain('Count every non-output tool call against the cap');
+    expect(prompt).toContain('Read the owner/source file first');
+    expect(prompt).toContain('Read the closest test file second');
+    expect(prompt).toContain('If the remaining open question is about handler ownership or wiring');
     expect(prompt).toContain('Do not re-run Wave-1 discovery');
     expect(prompt).toContain('valid partial risk register');
     expect(prompt).toContain('OPEN_QUESTION');

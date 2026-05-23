@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ScoutOutputSchema } from './schema.js';
 import config, { ScoutTestInventoryContextSchema } from './skill.config.js';
@@ -31,5 +32,13 @@ describe('scout-test-inventory skill', () => {
       worktreePath: '/tmp/x',
     });
     expect(result.success).toBe(true);
+  });
+
+  it('prompt requires search-first inventory before reading large test files', () => {
+    const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
+
+    expect(prompt).toContain('Search first for `describe(`, `it(`, and `test(` anchors');
+    expect(prompt).toContain('Do not full-read large test or e2e files before selecting an anchor');
+    expect(prompt).toContain('read only the closest matching test body');
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  FACTORY_READ_DISCIPLINE_INSTRUCTIONS,
   FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS,
   FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS_CODEX,
   FACTORY_WORKSPACE_ONLY_INSTRUCTIONS,
@@ -11,6 +12,7 @@ describe('withFactoryRuntimeInstructions', () => {
     const out = withFactoryRuntimeInstructions('skill body');
     expect(out).toContain(FACTORY_WORKSPACE_ONLY_INSTRUCTIONS);
     expect(out).toContain(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS);
+    expect(out).toContain(FACTORY_READ_DISCIPLINE_INSTRUCTIONS);
     expect(out).toContain('skill body');
   });
 
@@ -24,6 +26,23 @@ describe('withFactoryRuntimeInstructions', () => {
   it('returns the prelude alone for a whitespace-only system prompt', () => {
     const out = withFactoryRuntimeInstructions('   \n  ');
     expect(out).toContain(FACTORY_TOOLS_PREFERENCE_INSTRUCTIONS);
+  });
+});
+
+describe('FACTORY_READ_DISCIPLINE_INSTRUCTIONS', () => {
+  it('tells scout and Wave agents to use prior evidence, avoid duplicate reads, and return partial JSON', () => {
+    expect(FACTORY_READ_DISCIPLINE_INSTRUCTIONS).toContain(
+      'Treat provided context and prior reports as primary evidence',
+    );
+    expect(FACTORY_READ_DISCIPLINE_INSTRUCTIONS).toContain(
+      'Before using tools, decide the exact question',
+    );
+    expect(FACTORY_READ_DISCIPLINE_INSTRUCTIONS).toContain(
+      'Do not read the same file twice unless the first result was truncated',
+    );
+    expect(FACTORY_READ_DISCIPLINE_INSTRUCTIONS).toContain(
+      'prefer valid partial JSON plus OPEN_QUESTION over extra exploration',
+    );
   });
 });
 

@@ -54,6 +54,14 @@ Do not use MCP resource surfaces or delegation surfaces unless this run explicit
 
 Workflow-owned operations (commit, open PR, transition state, publish evidence) are not in your toolset — the orchestrator drives them.`;
 
+export const FACTORY_READ_DISCIPLINE_INSTRUCTIONS = `## Read discipline
+
+Treat provided context and prior reports as primary evidence.
+Do not restart discovery unless the reports contradict each other or lack the file needed for your schema.
+Before using tools, decide the exact question the tool call will answer.
+Do not read the same file twice unless the first result was truncated; name the missing section before rereading.
+For scout and Wave runs, prefer valid partial JSON plus OPEN_QUESTION over extra exploration.`;
+
 export type AgentRuntimeKind = 'claude-cli' | 'codex-cli';
 
 export function factoryToolsPreferenceFor(runtime: AgentRuntimeKind): string {
@@ -67,7 +75,7 @@ export function withFactoryRuntimeInstructions(
   opts: { runtime?: AgentRuntimeKind } = {},
 ): string {
   const toolsPreference = factoryToolsPreferenceFor(opts.runtime ?? 'claude-cli');
-  const prelude = `${FACTORY_WORKSPACE_ONLY_INSTRUCTIONS}\n\n${toolsPreference}`;
+  const prelude = `${FACTORY_WORKSPACE_ONLY_INSTRUCTIONS}\n\n${toolsPreference}\n\n${FACTORY_READ_DISCIPLINE_INSTRUCTIONS}`;
   if (systemPrompt == null || systemPrompt.trim().length === 0) {
     return prelude;
   }
