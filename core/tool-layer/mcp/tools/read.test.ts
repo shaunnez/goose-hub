@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { eventStore } from '../../../event-stream/store.js';
 import type { FactoryContext } from '../context.js';
 import { PathPolicyViolation } from '../path-policy.js';
+import { clearRunCache } from '../run-cache.js';
 import {
   fileExistsTool,
   fileInfoTool,
@@ -125,6 +126,31 @@ describe('readFileTool redundant-read detection', () => {
       kind: 'agent.redundant-read',
     });
     expect(redundantEvents).toHaveLength(0);
+  });
+
+  it('throws RedundancyAbortError and emits agent.run-aborted when >40% of reads are redundant and total >= 10', async () => {
+    // 4 unique files + 6 reads on the same file = 10 total, 5 redundant (50% > 40%)
+    for (const name of ['a.txt', 'b.txt', 'c.txt', 'd.txt', 'target.txt']) {
+      writeFileSync(join(workspace, name), `content of ${name}`);
+    }
+    // Reset counters so this test starts clean
+    clearRunCache(ctx.runId);
+    await readFileTool(ctx, { path: 'a.txt' });
+    await readFileTool(ctx, { path: 'b.txt' });
+    await readFileTool(ctx, { path: 'c.txt' });
+    await readFileTool(ctx, { path: 'd.txt' });
+    // 5 reads of target.txt: first is fine, each subsequent is redundant
+    for (let i = 0; i < 5; i++) {
+      await readFileTool(ctx, { path: 'target.txt' }).catch(() => {});
+    }
+    // 10th read should throw
+    await expect(readFileTool(ctx, { path: 'target.txt' })).rejects.toMatchObject({
+      name: 'RedundancyAbortError',
+    });
+    const abortedEvents = eventStore.replay({ runId: ctx.runId, kind: 'agent.run-aborted' });
+    expect(abortedEvents.length).toBeGreaterThanOrEqual(1);
+    const payload = abortedEvents[0].payload as { reason: string };
+    expect(payload.reason).toBe('excessive-redundant-reads');
   });
 
   it('a write to the same path resets the redundant-read counter', async () => {

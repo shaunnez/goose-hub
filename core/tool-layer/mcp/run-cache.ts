@@ -36,6 +36,24 @@ const duplicateCounters = new Map<
 const testRetryCounters = new Map<string, Map<string, number>>();
 const redundantReadCounters = new Map<string, Map<string, { count: number; nudged: boolean }>>();
 
+/** Total read_file calls per run (all paths, including first reads). */
+const totalReadCounters = new Map<string, number>();
+
+/** Minimum total reads before the redundancy ratio abort can trigger. */
+const REDUNDANCY_ABORT_MIN_READS = 10;
+/** Ratio threshold at which a run is aborted for excessive redundant reads. */
+const REDUNDANCY_ABORT_RATIO = 0.4;
+
+export class RedundancyAbortError extends Error {
+  readonly reason = 'excessive-redundant-reads';
+  constructor(redundantReads: number, totalReads: number) {
+    super(
+      `[harness] Run aborted: ${redundantReads}/${totalReads} reads (${Math.round((redundantReads / totalReads) * 100)}%) were redundant. Fix your read strategy.`,
+    );
+    this.name = 'RedundancyAbortError';
+  }
+}
+
 /**
  * Threshold of distinct `read_file` calls on the same canonical path
  * before the harness emits `agent.redundant-read` and injects a nudge.
@@ -54,11 +72,24 @@ export interface RedundantReadRecord {
 }
 
 /**
- * Records a read on the given canonical path and returns the post-increment
+ * Records a read on the given canonical path. Returns the post-increment
  * count plus an optional one-shot nudge message when the run first crosses
- * the redundancy threshold.
+ * the per-path redundancy threshold.
+ *
+ * Throws `RedundancyAbortError` when more than 40% of total reads this run
+ * are redundant AND the run has made at least 10 reads total.
  */
-export function recordRead(runId: string, canonicalPath: string): RedundantReadRecord {
+export function recordRead(
+  runId: string,
+  canonicalPath: string,
+  ctx?: { projectId: string; workItemId: string; personaId?: string | null },
+): RedundantReadRecord {
+  // Track total reads
+  const prevTotal = totalReadCounters.get(runId) ?? 0;
+  const newTotal = prevTotal + 1;
+  totalReadCounters.set(runId, newTotal);
+
+  // Track per-path redundant reads
   let runMap = redundantReadCounters.get(runId);
   if (runMap == null) {
     runMap = new Map();
@@ -67,6 +98,28 @@ export function recordRead(runId: string, canonicalPath: string): RedundantReadR
   const existing = runMap.get(canonicalPath) ?? { count: 0, nudged: false };
   existing.count += 1;
   runMap.set(canonicalPath, existing);
+
+  // Check redundancy abort threshold
+  if (newTotal >= REDUNDANCY_ABORT_MIN_READS) {
+    let redundantReads = 0;
+    for (const entry of runMap.values()) {
+      if (entry.count > 1) redundantReads += entry.count - 1;
+    }
+    if (redundantReads / newTotal > REDUNDANCY_ABORT_RATIO) {
+      if (ctx != null) {
+        eventStore.appendEvent({
+          projectId: ctx.projectId,
+          workItemId: ctx.workItemId,
+          runId,
+          personaId: ctx.personaId ?? null,
+          kind: 'agent.run-aborted',
+          payload: { reason: 'excessive-redundant-reads', redundantReads, totalReads: newTotal },
+        });
+      }
+      throw new RedundancyAbortError(redundantReads, newTotal);
+    }
+  }
+
   const threshold = redundantReadThreshold();
   if (!existing.nudged && existing.count >= threshold) {
     existing.nudged = true;
@@ -251,6 +304,7 @@ export function clearRunCache(runId: string): void {
   duplicateCounters.delete(runId);
   testRetryCounters.delete(runId);
   redundantReadCounters.delete(runId);
+  totalReadCounters.delete(runId);
 }
 
 /**

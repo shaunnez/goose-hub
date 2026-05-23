@@ -1,7 +1,7 @@
 import type { AgentResult, AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import type { ScoutReport, WaveResult } from '@goose-hub/core/agent-runtime/swarm.js';
 import type { StateSource, WorkItem } from '@goose-hub/core/state-source/interface.js';
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Skip playwright-test MCP pre-flight subprocess in workflow.ts
 process.env.MOCK_AGENTS = 'true';
@@ -1092,6 +1092,33 @@ describe('runInvestigateWorkflow', () => {
         expect.objectContaining({ outcome: 'success' }),
       );
     });
+
+    it('does not route to needs-human when transitionState throws fetch-failed after investigation-complete is emitted', async () => {
+      vi.useFakeTimers();
+      const source = makeMockSource({
+        transitionState: vi.fn().mockRejectedValue(new TypeError('fetch failed')),
+      });
+      const { runInvestigateWorkflow } = await import('./workflow.js');
+      const { eventStore } = await import('@goose-hub/core/event-stream/store.js');
+
+      const runPromise = runInvestigateWorkflow(makeWorkItem(), source, 'goose-hub-self', '/repo');
+      await vi.runAllTimersAsync();
+      await runPromise;
+
+      expect(source.transitionState).not.toHaveBeenCalledWith(
+        '42',
+        'factory:investigating',
+        'factory:needs-human',
+      );
+      const deferredCall = vi
+        .mocked(eventStore.appendEvent)
+        .mock.calls.find(([e]) => e.kind === 'state.transition-deferred');
+      expect(deferredCall).toBeDefined();
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe('type:bug — playwright-repro still runs', () => {

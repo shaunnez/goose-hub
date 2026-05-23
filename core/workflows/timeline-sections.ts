@@ -63,6 +63,8 @@ const DIRECT_EVENT_KIND_SECTION: Record<string, TimelineSectionId> = {
   'agent.investigation-seed-built': 'investigation',
   'agent.investigation-seed-empty': 'investigation',
   'agent.bug-enhance-lazy': 'investigation',
+  'agent.bug-enhance-hallucinated': 'investigation',
+  'agent.bug-enhance-workspace-empty': 'investigation',
   'investigation.digest-applied': 'investigation',
   'agent.related-surface-manifest-created': 'investigation',
   'agent.discovery-budget-exceeded': 'investigation',
@@ -97,6 +99,7 @@ const DIRECT_EVENT_KIND_SECTION: Record<string, TimelineSectionId> = {
 
 const TRANSITION_EVENT_KINDS = new Set([
   'state.transitioned',
+  'state.transition-deferred',
   'manual.action',
   'gate.awaiting-human',
   'gate.approved',
@@ -130,6 +133,7 @@ export const RUNTIME_INHERIT_TIMELINE_EVENT_KINDS = new Set<string>([
   'agent.model-selected',
   'agent.verify-command',
   'agent.cancelled',
+  'agent.run-aborted',
   'tool.violation',
   'symbol-index.lookup',
   'symbol-index.hints-used',

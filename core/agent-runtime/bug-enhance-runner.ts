@@ -1,8 +1,11 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   BugEnhanceOutputSchema,
   type GroundedHints,
 } from '@goose-hub/skills/bug-enhance/schema.js';
 import { storeArtifact } from '../agent-artifacts/repository.js';
+import { eventStore } from '../event-stream/store.js';
 import { logger } from '../logger.js';
 import { getProjectBySlug } from '../projects/loader.js';
 import { safeParseOutputForSchema } from './output-normalization.js';
@@ -107,17 +110,65 @@ export async function runBugEnhance(input: RunBugEnhanceInput): Promise<BugEnhan
         decisions: parsed.data.decisionSummaries,
       });
     }
-    const groundedHints = hasUsableHints(parsed.data.groundedHints)
-      ? parsed.data.groundedHints
-      : null;
+    const rawHints = hasUsableHints(parsed.data.groundedHints) ? parsed.data.groundedHints : null;
+    const groundedHints = rawHints != null ? pruneNonExistentPaths(rawHints, input, runId) : null;
     return {
       markdown: content.length > 0 ? content : null,
-      groundedHints: groundedHints ?? null,
+      groundedHints,
     };
   } catch (err) {
     logger.error('bug-enhance: agent run failed', { err: String(err) });
     return { markdown: null, groundedHints: null };
   }
+}
+
+function pruneNonExistentPaths(
+  hints: GroundedHints,
+  input: RunBugEnhanceInput,
+  runId: string,
+): GroundedHints | null {
+  const base = input.workspaceDir ?? process.cwd();
+
+  // If the workspace itself doesn't exist, don't prune — the worktree may not
+  // be initialised yet (inbox promotion path). Emit a warning and pass through.
+  if (!existsSync(base)) {
+    eventStore.appendEvent({
+      projectId: input.projectId,
+      workItemId: input.workItemId,
+      kind: 'agent.bug-enhance-workspace-empty',
+      payload: { workspaceDir: base, runId },
+      runId,
+    });
+    return hints;
+  }
+
+  const prunedFiles = hints.candidateFiles.filter((f) => existsSync(join(base, f.path)));
+  const prunedComponents = hints.candidateComponents.filter(
+    (c) => c.file == null || existsSync(join(base, c.file)),
+  );
+
+  const allFilesPruned = hints.candidateFiles.length > 0 && prunedFiles.length === 0;
+
+  if (allFilesPruned) {
+    eventStore.appendEvent({
+      projectId: input.projectId,
+      workItemId: input.workItemId,
+      kind: 'agent.bug-enhance-hallucinated',
+      payload: {
+        droppedCount: hints.candidateFiles.length,
+        originalCount: hints.candidateFiles.length,
+        runId,
+      },
+      runId,
+    });
+    return null;
+  }
+
+  return {
+    ...hints,
+    candidateFiles: prunedFiles,
+    candidateComponents: prunedComponents,
+  };
 }
 
 function hasUsableHints(hints: GroundedHints | undefined): hints is GroundedHints {

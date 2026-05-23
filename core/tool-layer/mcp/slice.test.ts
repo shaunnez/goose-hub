@@ -121,7 +121,7 @@ describe('path-policy', () => {
 });
 
 describe('server resources', () => {
-  it('installs empty resource handlers without registering workspace files', async () => {
+  it('registers workspace-files template and returns empty list for an empty workspace', async () => {
     const server = buildFactoryMcpServer({
       runId: 'run-1',
       projectId: 'demo',
@@ -144,20 +144,13 @@ describe('server resources', () => {
 
     expect(internals._resourceHandlersInitialized).toBe(true);
     expect(Object.keys(internals._registeredResources ?? {})).toEqual([]);
-    expect(Object.keys(internals._registeredResourceTemplates ?? {})).toEqual([]);
+    expect(Object.keys(internals._registeredResourceTemplates ?? {})).toContain('workspace-files');
 
-    await expect(
-      internals.server?._requestHandlers?.get('resources/list')?.(
-        { method: 'resources/list', params: {} },
-        {},
-      ),
-    ).resolves.toEqual({ resources: [] });
-    await expect(
-      internals.server?._requestHandlers?.get('resources/templates/list')?.(
-        { method: 'resources/templates/list', params: {} },
-        {},
-      ),
-    ).resolves.toEqual({ resourceTemplates: [] });
+    const listResult = await internals.server?._requestHandlers?.get('resources/list')?.(
+      { method: 'resources/list', params: {} },
+      {},
+    );
+    expect((listResult as { resources: unknown[] }).resources).toEqual([]);
   });
 });
 

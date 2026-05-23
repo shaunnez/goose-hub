@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { db } from '../db/db.js';
 import { events } from '../db/schema.js';
 import type { StateName } from '../state-machine/states.js';
@@ -40,6 +40,10 @@ function makeSource(overrides: Partial<StateSource> = {}): StateSource {
 }
 
 describe('transitionAndEmitState', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeAll(() => {
     db.run(sql`CREATE TABLE IF NOT EXISTS events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -160,5 +164,66 @@ describe('transitionAndEmitState', () => {
 
     const after = eventStore.replay({ projectId: PROJECT }).length;
     expect(after).toBe(before);
+  });
+
+  it('retries on fetch failed and succeeds on the third attempt', async () => {
+    vi.useFakeTimers();
+    const transitionState = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockResolvedValueOnce(undefined);
+    const source = makeSource({ transitionState });
+
+    const promise = transitionAndEmitState({
+      mode: 'legal',
+      source,
+      itemId: '42',
+      projectId: PROJECT,
+      workItemId: WORK_ITEM_ID,
+      from: 'factory:investigating',
+      to: 'factory:investigation-complete',
+      by: 'investigate',
+      runId: 'run-retry-ok',
+    });
+    await vi.runAllTimersAsync();
+    await promise;
+
+    expect(transitionState).toHaveBeenCalledTimes(3);
+    const [event] = eventStore.replay({ projectId: PROJECT, runId: 'run-retry-ok' });
+    expect(event).toMatchObject({
+      kind: 'state.transitioned',
+      payload: { to: 'factory:investigation-complete' },
+    });
+  });
+
+  it('emits state.transition-deferred when all retries fail on a transient error', async () => {
+    vi.useFakeTimers();
+    const source = makeSource({
+      transitionState: vi.fn().mockRejectedValue(new TypeError('fetch failed')),
+    });
+
+    const promise = transitionAndEmitState({
+      mode: 'legal',
+      source,
+      itemId: '42',
+      projectId: PROJECT,
+      workItemId: WORK_ITEM_ID,
+      from: 'factory:investigating',
+      to: 'factory:investigation-complete',
+      by: 'investigate',
+      runId: 'run-deferred',
+    });
+    await vi.runAllTimersAsync();
+    await promise;
+
+    const allEvents = eventStore.replay({ projectId: PROJECT, runId: 'run-deferred' });
+    expect(allEvents.find((e) => e.kind === 'state.transitioned')).toBeDefined();
+    const deferred = allEvents.find((e) => e.kind === 'state.transition-deferred');
+    expect(deferred).toBeDefined();
+    expect(deferred?.payload).toMatchObject({
+      to: 'factory:investigation-complete',
+      by: 'investigate',
+    });
   });
 });

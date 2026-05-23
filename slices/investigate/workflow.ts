@@ -307,6 +307,8 @@ export async function runInvestigateWorkflow(
     personaId,
   });
 
+  let investigationSucceeded = false;
+
   try {
     let synthesisScoutDigest: ScoutReportDigestBundle | undefined;
 
@@ -948,6 +950,7 @@ export async function runInvestigateWorkflow(
     });
 
     accumulatePersonaStats({ personaName: personaId, role: 'investigator', outcome: 'success' });
+    investigationSucceeded = true;
     await transitionAndEmitState({
       mode: 'legal',
       source: stateSource,
@@ -960,6 +963,10 @@ export async function runInvestigateWorkflow(
       runId,
     });
   } catch (err) {
+    // If agent.investigation-complete was already emitted, don't escalate to needs-human.
+    // The investigation succeeded; only the remote label flip failed.
+    if (investigationSucceeded) return;
+
     accumulatePersonaStats({ personaName: personaId, role: 'investigator', outcome: 'failure' });
     const error = err instanceof Error ? err : new Error(String(err));
 

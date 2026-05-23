@@ -133,6 +133,10 @@ export const EVENT_KINDS = [
   'agent.redundant-read',
   'agent.investigation-seed-empty',
   'agent.bug-enhance-lazy',
+  'state.transition-deferred',
+  'agent.bug-enhance-hallucinated',
+  'agent.bug-enhance-workspace-empty',
+  'agent.run-aborted',
 ] as const;
 
 export type EventKind = (typeof EVENT_KINDS)[number];

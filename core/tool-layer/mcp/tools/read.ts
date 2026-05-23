@@ -312,7 +312,11 @@ export async function readFileTool(
     workspaceRoot: ctx.workspaceRoot,
   });
   const duplicate = cacheKey == null ? null : recordDuplicateToolCall(ctx.runId, cacheKey);
-  const redundant = recordRead(ctx.runId, resolved.canonical.path);
+  const redundant = recordRead(ctx.runId, resolved.canonical.path, {
+    projectId: ctx.projectId,
+    workItemId: ctx.workItemId,
+    personaId: ctx.personaId,
+  });
   if (redundant.nudge != null) {
     eventStore.appendEvent({
       projectId: ctx.projectId,

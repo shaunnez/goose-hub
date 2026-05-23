@@ -729,4 +729,42 @@ describe('swarm.dispatchWave', () => {
       investigationSeed,
     );
   });
+
+  it('does not emit tool.violation when wave2 spec carries scoutDigest', async () => {
+    const { fn: appendEvent, events } = makeFakeAppendEvent();
+    const seenSpecs: AgentSpec[] = [];
+    const runtime: AgentRuntime = {
+      async run(spec: AgentSpec): Promise<AgentResult> {
+        seenSpecs.push(spec);
+        return okResult(spec.skill);
+      },
+    };
+    const scoutDigest = { summary: 'wave1 found 3 files', runIds: ['run-1', 'run-2'] };
+
+    await dispatchWave({
+      parentRunId: 'parent-digest',
+      scoutSpecs: [
+        {
+          scoutName: 'scout-code-path',
+          scoutFocus: 'Inspect code path.',
+          // No contextSchema so only scoutDigest (allowlisted) lands in fullContext
+          extraContext: { scoutDigest },
+        },
+      ],
+      workItem: makeWorkItem(),
+      worktreePath: '/tmp/wt',
+      projectId: 'goose-hub-self',
+      personaId: 'goose-hub-self/investigator/0',
+      runtime,
+      appendEvent,
+      scoutTimeoutMs: 1_000,
+      heartbeatIntervalMs: 60_000,
+      resolveScoutBudget: testBudgetResolver,
+    });
+
+    const violations = events.filter((e) => e.kind === 'tool.violation');
+    expect(violations).toHaveLength(0);
+    expect(seenSpecs[0].contextAllowlist).toContain('scoutDigest');
+    expect((seenSpecs[0].context as { scoutDigest?: unknown }).scoutDigest).toEqual(scoutDigest);
+  });
 });

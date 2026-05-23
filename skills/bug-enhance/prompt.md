@@ -4,7 +4,7 @@ You ground a bug report against the real codebase. Output: structured markdown s
 
 ## Context
 
-`workItem`: JSON with `title` and `body`. The workspace is the target repo. Key roots:
+`<workItem>`: JSON with `title` and `body`. The workspace is the target repo. Key roots:
 
 - `apps/web/src/` — React + Vite frontend (shadcn/ui), served at `http://localhost:5173/`
 - `apps/server/src/` — Node HTTP/API server
@@ -35,6 +35,8 @@ Emit: `[decision] READ: Issue "<title>" — classified as <category>`
 If `unknown`, return with empty `enhancedContent`, `category: "unknown"`, no `groundedHints`. Stop.
 
 ## Step 2 — Ground (tool-verified)
+
+**Minimum tool call requirement:** If `category` is not `unknown` and you have not yet made at least one `repo_intel.query` tool call, you MUST make one before emitting `candidateFiles`. If every tool call returns empty results, set `category:"unknown"` and return empty `groundedHints` (do not emit paths you have not verified).
 
 Pick the grounding strategy that fits `category`. Use intents from `repo_intel.query`. Every candidate path you emit in `groundedHints.candidateFiles` must come from a tool result — not from the bug body alone.
 
