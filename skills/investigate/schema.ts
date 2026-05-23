@@ -9,6 +9,9 @@ const RepoRelativePathDescription =
 export const KeyFileSchema = z.object({
   path: z.string().describe(RepoRelativePathDescription),
   reason: z.string(),
+  line: z.number().int().min(1).optional(),
+  symbol: z.string().optional(),
+  snippet: z.string().max(800).optional(),
 });
 
 export const InvestigateSchema = z.object({
@@ -22,6 +25,14 @@ export const InvestigateSchema = z.object({
       'True if the bug manifests in the browser UI and can be reproduced via Playwright. False for pure server-side/API bugs where a browser repro is meaningless.',
     ),
   decisionSummaries: z.array(DecisionSummarySchema).min(1),
+  fixHint: z
+    .object({
+      file: z.string().describe(RepoRelativePathDescription),
+      line: z.number().int().min(1),
+      currentCode: z.string().max(1200),
+      suggestedApproach: z.string(),
+    })
+    .optional(),
 });
 
 export type KeyFile = z.infer<typeof KeyFileSchema>;

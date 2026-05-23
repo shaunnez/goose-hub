@@ -476,6 +476,10 @@ describe('review skill config', () => {
     expect(config.contextAllowlist).toContain('prDiff');
   });
 
+  it('contextAllowlist contains prDiffWithContext', () => {
+    expect(config.contextAllowlist).toContain('prDiffWithContext');
+  });
+
   it('contextAllowlist contains qaVerdict', () => {
     expect(config.contextAllowlist).toContain('qaVerdict');
   });
@@ -496,6 +500,20 @@ describe('review skill config', () => {
         number: 240,
       },
       prDiff: 'diff --git a/skills/review/schema.ts b/skills/review/schema.ts\n...',
+      prDiffWithContext: {
+        changedFiles: ['skills/review/schema.ts'],
+        hunkCount: 1,
+        hunks: [
+          {
+            file: 'skills/review/schema.ts',
+            oldStart: 1,
+            oldLines: 1,
+            newStart: 1,
+            newLines: 2,
+          },
+        ],
+        diffCharCount: 64,
+      },
     });
     expect(valid.success).toBe(true);
   });

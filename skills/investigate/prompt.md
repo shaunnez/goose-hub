@@ -136,6 +136,8 @@ Return a JSON object with this exact structure:
 `decisionSummaries` must have at least one entry. Include one entry per major investigation step.
 
 `keyFiles` must list the files an implementer most likely needs to change or verify. Include materially relevant implementation files and existing test/spec files when you find them; exclude files you only skimmed or searched without finding actionable implementation signal.
+For medium or high confidence findings, add `line`, `symbol`, and a short `snippet` when the cited location is known. Keep `snippet` under 800 characters and copy only the smallest code fragment needed to anchor the fix.
+When the fix shape is clear, include `fixHint` with the most likely file, line, current code, and suggested approach. This is an implementation hint, not a substitute for tests.
 
 `confidence` reflects how certain you are about your root cause hypothesis:
 - `low` — symptom identified but root cause unclear; many unknowns remain

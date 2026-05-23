@@ -976,7 +976,7 @@ describe('runQaWorkflow', () => {
       expect(specUsed.freshContext).toBe(true);
     });
 
-    it('contextAllowlist contains "workItem" and "prDiff" but NOT "devDecisionSummaries"', async () => {
+    it('contextAllowlist contains diff context but NOT developer reasoning', async () => {
       const item = makeWorkItem();
       const source = makeMockSource();
       mockRun.mockResolvedValueOnce(makePassResult());
@@ -984,9 +984,19 @@ describe('runQaWorkflow', () => {
       const { runQaWorkflow } = await import('./workflow.js');
       await runQaWorkflow(item, source, 'test-project', 'owner/repo');
 
-      const specUsed = mockRun.mock.calls[0][0] as { contextAllowlist: string[] };
+      const specUsed = mockRun.mock.calls[0][0] as {
+        context: { prDiffWithContext?: { changedFiles: string[] } };
+        contextAllowlist: string[];
+      };
       expect(specUsed.contextAllowlist).toContain('workItem');
       expect(specUsed.contextAllowlist).toContain('prDiff');
+      expect(specUsed.contextAllowlist).toContain('prDiffWithContext');
+      expect(specUsed.context.prDiffWithContext).toEqual({
+        changedFiles: [],
+        hunkCount: 0,
+        hunks: [],
+        diffCharCount: 0,
+      });
       expect(specUsed.contextAllowlist).not.toContain('devDecisionSummaries');
     });
 

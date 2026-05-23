@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { AgentResult, AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
@@ -530,7 +530,23 @@ describe('runFixIssueWorkflow (#183)', () => {
   it('injects latest investigation findings into implement context and emits an audit event', async () => {
     const item = makeWorkItem({ priority: 'medium', type: 'bug' });
     const source = makeStateSource();
-    vi.mocked(eventStore.replay).mockReturnValue([makeInvestigationEvent(item)]);
+    vi.mocked(eventStore.replay).mockReturnValue([
+      makeInvestigationEvent(item, {
+        keyFiles: [
+          {
+            path: 'apps/server/src/domains/workflows/triage-batch.ts',
+            reason: 'owns failed triage state transitions',
+            line: 1,
+            symbol: 'transitionFailedTriage',
+            snippet: 'function transitionFailedTriage() {}',
+          },
+          {
+            path: 'core/agent-runtime/fallback.ts',
+            reason: 'owns maxAttempts handling',
+          },
+        ],
+      }),
+    ]);
 
     const runtime: AgentRuntime = {
       run: vi.fn().mockResolvedValueOnce({
@@ -558,6 +574,7 @@ describe('runFixIssueWorkflow (#183)', () => {
       } satisfies AgentResult),
     };
 
+    const worktreePath = makeTempWorktree(['apps/server/src/domains/workflows/triage-batch.ts']);
     const { runFixIssueWorkflow } = await import('./workflow.js');
     await runFixIssueWorkflow(item, source, 'proj', '/repo', {
       runtime,
@@ -568,8 +585,8 @@ describe('runFixIssueWorkflow (#183)', () => {
         base: 'main',
       }),
       adviseOnPlanImpl: vi.fn(),
-      createWorktreeImpl: vi.fn().mockReturnValue('/work/wt'),
-      cleanupWorktreeImpl: vi.fn(),
+      createWorktreeImpl: vi.fn().mockReturnValue(worktreePath),
+      cleanupWorktreeImpl: vi.fn(() => rmSync(worktreePath, { recursive: true, force: true })),
       resolveWorktreeHeadShaImpl: vi
         .fn()
         .mockReturnValue('abc1234567890abcdef1234567890abcdef1234'),
@@ -578,6 +595,12 @@ describe('runFixIssueWorkflow (#183)', () => {
     const implementSpec = vi.mocked(runtime.run).mock.calls[0][0] as {
       context: {
         investigation?: { findings?: string; keyFiles?: Array<{ path: string }> };
+        codeContext?: Array<{
+          path: string;
+          startLine: number;
+          endLine: number;
+          snippet: string;
+        }>;
         relatedSurface?: {
           keyFiles?: Array<{ path: string }>;
           testCandidates?: string[];
@@ -591,13 +614,20 @@ describe('runFixIssueWorkflow (#183)', () => {
       workspaceDir?: string;
       contextAllowlist: string[];
     };
-    expect(implementSpec.workspaceDir).toBe('/work/wt');
+    expect(implementSpec.workspaceDir).toBe(worktreePath);
     expect((implementSpec.context as { worktreePath?: string }).worktreePath).toBeUndefined();
     expect(implementSpec.context.investigation?.findings).toContain('triage-batch');
     expect(implementSpec.context.investigation?.keyFiles?.map((f) => f.path)).toContain(
       'apps/server/src/domains/workflows/triage-batch.ts',
     );
+    expect(implementSpec.context.codeContext?.[0]).toMatchObject({
+      path: 'apps/server/src/domains/workflows/triage-batch.ts',
+      startLine: 1,
+      endLine: expect.any(Number),
+    });
+    expect(implementSpec.context.codeContext?.[0]?.snippet).toContain('# mock skill prompt');
     expect(implementSpec.contextAllowlist).toContain('investigation');
+    expect(implementSpec.contextAllowlist).toContain('codeContext');
     expect(implementSpec.contextAllowlist).toContain('relatedSurface');
     expect(implementSpec.context.relatedSurface?.keyFiles?.map((f) => f.path)).toContain(
       'apps/server/src/domains/workflows/triage-batch.ts',

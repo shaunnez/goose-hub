@@ -239,3 +239,46 @@
   - Cross-validation contradictions are represented through digest report fields and the new digest-applied event; there is no separate raw contradictions JSON in synthesis context anymore.
   - Raw scout reports remain persisted unchanged, but any agent wanting full text now needs to request it through #997 `repo_intel.query`.
 - Next branch to create: `cost-perf/993-handoff-precision` from `cost-perf/1000-scout-digest`
+
+## Issue #993 - Handoff precision and codeContext
+
+- Branch name: `cost-perf/993-handoff-precision`
+- PR number/url: #1009 - https://github.com/shaunnez/goose-hub/pull/1009
+- Parent branch: `cost-perf/1000-scout-digest`
+- Files changed:
+  - `CONTEXT.md`
+  - `core/agent-runtime/code-context.ts`
+  - `core/agent-runtime/code-context.test.ts`
+  - `core/agent-runtime/investigation-context.ts`
+  - `core/agent-runtime/pr-diff-context.ts`
+  - `core/agent-runtime/pr-diff-context.test.ts`
+  - `docs/cost-performance-improvements/handoff.md`
+  - `skills/implement/prompt.md`
+  - `skills/implement/skill.config.ts`
+  - `skills/investigate/prompt.md`
+  - `skills/investigate/schema.ts`
+  - `skills/investigate/slice.test.ts`
+  - `skills/qa/prompt.md`
+  - `skills/qa/skill.config.ts`
+  - `skills/qa/slice.test.ts`
+  - `skills/review/prompt.md`
+  - `skills/review/skill.config.ts`
+  - `skills/review/slice.test.ts`
+  - `slices/fix-issue/implement-phase.ts`
+  - `slices/fix-issue/slice.test.ts`
+  - `slices/fix-issue/workflow.ts`
+  - `slices/qa/slice.test.ts`
+  - `slices/qa/workflow.ts`
+  - `slices/review/review-spec.ts`
+  - `slices/review/slice.test.ts`
+- Tests run:
+  - `pnpm vitest run core/agent-runtime/code-context.test.ts core/agent-runtime/pr-diff-context.test.ts skills/investigate/slice.test.ts slices/fix-issue/slice.test.ts skills/implement/slice.test.ts skills/qa/slice.test.ts skills/review/slice.test.ts slices/qa/slice.test.ts slices/review/slice.test.ts`
+  - `pnpm exec tsc --noEmit --pretty false`
+  - `pnpm skill-contract:audit`
+  - `pnpm audit-docs`
+  - `pnpm manifest --check`
+  - `pnpm exec biome check core/agent-runtime/code-context.ts core/agent-runtime/code-context.test.ts core/agent-runtime/pr-diff-context.ts core/agent-runtime/pr-diff-context.test.ts core/agent-runtime/investigation-context.ts skills/investigate/schema.ts skills/investigate/slice.test.ts skills/investigate/prompt.md skills/implement/skill.config.ts skills/implement/prompt.md slices/fix-issue/workflow.ts slices/fix-issue/implement-phase.ts slices/fix-issue/slice.test.ts skills/qa/skill.config.ts skills/qa/slice.test.ts skills/qa/prompt.md skills/review/skill.config.ts skills/review/slice.test.ts skills/review/prompt.md slices/qa/workflow.ts slices/qa/slice.test.ts slices/review/review-spec.ts slices/review/slice.test.ts`
+- Remaining risks:
+  - `codeContext` is best-effort and skips missing files or key files without line numbers; implement still receives the original investigation and related-surface handoff.
+  - `prDiffWithContext` is deliberately diff-derived only, so QA/Review holdout agents may still need read-only tools when a diff hunk needs broader file context.
+- Next branch to create: `cost-perf/999-ast-route-index` from `cost-perf/993-handoff-precision`

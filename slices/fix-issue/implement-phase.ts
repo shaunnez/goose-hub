@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/types.js';
 import { buildAgentComment } from '@goose-hub/core/agent-comment/index.js';
+import type { CodeContextEntry } from '@goose-hub/core/agent-runtime/code-context.js';
 import type { AgentRuntime } from '@goose-hub/core/agent-runtime/interface.js';
 import {
   type InvestigationContext,
@@ -55,6 +56,7 @@ export interface RunImplementInput {
   personaId: string;
   advisorFeedback?: string;
   investigation?: InvestigationContext;
+  codeContext?: CodeContextEntry[];
   relatedSurface?: RelatedSurfaceManifest;
   surfaceGuardInvestigation?: InvestigationContext;
   symbolIndexKeyFiles?: SymbolKeyFileHint[];
@@ -591,6 +593,7 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
         investigationRunId: input.investigation.investigationRunId ?? null,
         keyFiles: input.investigation.keyFiles.map((f) => f.path),
         keyFileCount: input.investigation.keyFiles.length,
+        codeContextCount: input.codeContext?.length ?? 0,
         findingsChars: input.investigation.findings?.length ?? 0,
         openQuestionCount: input.investigation.openQuestions.length,
       },
@@ -625,6 +628,7 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
         },
         stack: input.stack,
         investigation: input.investigation,
+        codeContext: input.codeContext,
         relatedSurface: input.relatedSurface,
         acceptanceContract: input.acceptanceContract,
         advisorFeedback: input.advisorFeedback,
@@ -640,6 +644,7 @@ export async function runImplement(input: RunImplementInput): Promise<ImplementO
         'stack.lintCommand',
         'stack.typecheckCommand',
         'investigation',
+        'codeContext',
         'relatedSurface',
         'acceptanceContract',
         'advisorFeedback',
