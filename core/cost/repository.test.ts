@@ -1,11 +1,11 @@
 import { like, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../db/db.js';
-import { agentRunCosts, agentRunToolStats, events } from '../db/schema.js';
+import { events, agentRunCosts, agentRunToolStats } from '../db/schema.js';
 import { eventStore } from '../event-stream/store.js';
 import {
-  listToolStatsForWorkItem,
   listCostsForWorkItem,
+  listToolStatsForWorkItem,
   recordCost,
   recordToolStatsForRun,
   totalSpendForSkill,

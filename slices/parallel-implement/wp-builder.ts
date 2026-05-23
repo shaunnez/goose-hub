@@ -2,13 +2,13 @@ import { existsSync, readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import type { AcceptanceContract } from '@goose-hub/core/acceptance-contracts/types.js';
 import type { ExecutableCheck } from '@goose-hub/core/acceptance-contracts/types.js';
+import { buildCodeContextBundle } from '@goose-hub/core/agent-runtime/code-context.js';
 import type {
   AgentBudgets,
   AgentResult,
   AgentRuntime,
   AgentSpec,
 } from '@goose-hub/core/agent-runtime/interface.js';
-import { buildCodeContextBundle } from '@goose-hub/core/agent-runtime/code-context.js';
 import type { InvestigationContext } from '@goose-hub/core/agent-runtime/investigation-context.js';
 import { safeParseOutputForSchema } from '@goose-hub/core/agent-runtime/output-normalization.js';
 import { reconcileDecisionSummaries } from '@goose-hub/core/agent-runtime/reconcile-decisions.js';
