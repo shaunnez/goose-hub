@@ -41,6 +41,7 @@ The context contains a `<task>` block with:
 - `<workItem>` — JSON payload for the issue, with `title`, `body`, `number`, and `priority`
 - `<wp>` — JSON payload with `id`, `filesOwned`, `changes`, and `dependsOn`
 - `<codeSnippets>` (optional) — JSON array of relevant code excerpts pre-loaded by the scout wave
+- `<codeContext>` (optional) — exact pre-read hunks for line-precise investigation key files owned by this WP
 - `<verificationCommands>` (optional) — executable checks relevant to this WP, projected from canonical acceptance criteria and verification tooling
 - `<investigation>` (optional) — original bug-investigation findings, key files, and open questions
 - `<acceptanceContract>` (optional) — resolved acceptance criteria relevant to this implementation path
@@ -62,6 +63,7 @@ Path contract: all output paths must be repo-root/worktree-root relative POSIX p
 - If `<acceptanceContract>` is present, use `criteria[]` as the behavioral contract for tests and implementation. Satisfy all cross-cutting criteria and any criteria that obviously apply to your filesOwned.
 - Treat `executableChecks` and `<verificationCommands>` as targeted verification guidance. Run applicable executable checks before broad stack commands. Do not rediscover test commands when executable checks are present.
 - If `<parentPrdContext>` is present, use it to avoid drifting beyond the approved PRD and to understand the parent journey, slice, implementation, and testing decisions.
+- If `<codeContext>` is present, treat those snippets as the starting source context. Use them before broad reads, and call `read_file` only when the snippet is insufficient, stale, or contradicted by surrounding code.
 - Read the files in `<wp>.filesOwned` to understand the current state.
 - Use `mcp__factory-tools__read_file` and `mcp__factory-tools__search_text` to load test files for the surfaces you will touch FIRST.
 - Emit: `[decision] READ: Loaded WP <id> context and N relevant files`

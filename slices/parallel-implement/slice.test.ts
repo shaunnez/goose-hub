@@ -100,6 +100,7 @@ function makeInvestigationEvent(workItem: WorkItem) {
           {
             path: 'apps/server/src/domains/workflows/triage-batch.ts',
             reason: 'owns failed triage state transitions',
+            line: 3,
           },
         ],
         openQuestions: ['Should repo-match fail immediately?'],
@@ -1110,6 +1111,20 @@ describe('parallel-implement investigation context', () => {
     const { fn: appendEvent, events } = makeAppendEvent();
     const specs: AgentSpec[] = [];
     const iterations: Array<{ wpId: string; status: string }> = [];
+    const scratch = mkdtempSync(join(tmpdir(), 'goose-hub-wp-code-context-'));
+    const investigatedFile = join(scratch, 'apps/server/src/domains/workflows/triage-batch.ts');
+    mkdirSync(dirname(investigatedFile), { recursive: true });
+    writeFileSync(
+      investigatedFile,
+      [
+        'export function transition(state: string) {',
+        "  if (state === 'failed') {",
+        "    return 'triage_failed';",
+        '  }',
+        "  return 'ok';",
+        '}',
+      ].join('\n'),
+    );
     const replaySpy = vi
       .spyOn(eventStore, 'replay')
       .mockReturnValue([makeInvestigationEvent(workItem)]);
@@ -1130,7 +1145,7 @@ describe('parallel-implement investigation context', () => {
             },
           },
           createIssueWorktreeImpl: () => '/tmp/issue-wt',
-          createWpWorktreeImpl: (_repo, _runId, wpId) => `/tmp/wp-${wpId}`,
+          createWpWorktreeImpl: () => scratch,
           cleanupWpWorktreesImpl: () => undefined,
           cleanupIssueWorktreeImpl: () => undefined,
           orchestratorCommitWpImpl: () => 'abc123',
@@ -1159,7 +1174,17 @@ describe('parallel-implement investigation context', () => {
           investigationRunId: 'investigation-run-1',
         },
       });
+      expect(specs[0]?.context).toMatchObject({
+        codeContext: [
+          expect.objectContaining({
+            path: 'apps/server/src/domains/workflows/triage-batch.ts',
+            startLine: 1,
+            snippet: expect.stringContaining("3:     return 'triage_failed';"),
+          }),
+        ],
+      });
       expect(specs[0]?.contextAllowlist).toContain('investigation');
+      expect(specs[0]?.contextAllowlist).toContain('codeContext');
       const injected = events.find((e) => e.kind === 'agent.investigation-context-injected');
       expect(injected?.payload).toMatchObject({
         skill: 'implement-wp',
