@@ -168,3 +168,40 @@
   - A full `apps/web/src/components/detail/lib/timeline.test.ts` run still has the pre-existing fix-feedback section split failure; the #996 label path was verified with the `EVENT_KIND_LABEL` subset.
   - InvestigationSeed reduces cross-scout rediscovery through shared context only. It does not extend #995's per-run cache across separate scout runs.
 - Next branch to create: `cost-perf/997-repo-intel-query` from `cost-perf/996-investigation-seed`
+
+## Issue #997 - repo_intel.query MCP tool
+
+- Branch name: `cost-perf/997-repo-intel-query`
+- PR number/url: #1007 - https://github.com/shaunnez/goose-hub/pull/1007
+- Parent branch: `cost-perf/996-investigation-seed`
+- Files changed:
+  - `CONTEXT.md`
+  - `core/symbol-index/lookup.ts`
+  - `core/tool-layer/bundles.ts`
+  - `core/tool-layer/mcp/audit.ts`
+  - `core/tool-layer/mcp/run-cache.ts`
+  - `core/tool-layer/mcp/schemas.ts`
+  - `core/tool-layer/mcp/server.ts`
+  - `core/tool-layer/mcp/tools/repo-intel.ts`
+  - `core/tool-layer/mcp/tools/repo-intel.test.ts`
+  - `docs/adr/0048-repo-intelligence-tool.md`
+  - `skills/implement/prompt.md`
+  - `skills/investigate/prompt.md`
+  - `skills/scout-code-path/prompt.md`
+  - `skills/scout-dependency/prompt.md`
+  - `skills/scout-pattern/prompt.md`
+  - `skills/scout-schema/prompt.md`
+  - `skills/scout-test-inventory/prompt.md`
+  - `skills/scout-user-journey/prompt.md`
+- Tests run:
+  - `pnpm vitest run core/tool-layer/mcp/tools/repo-intel.test.ts core/tool-layer/mcp/slice.test.ts core/tool-layer/mcp/tools/read.test.ts core/tool-layer/mcp/tools/write.test.ts skills/scout-code-path/slice.test.ts skills/scout-dependency/slice.test.ts skills/scout-pattern/slice.test.ts skills/scout-schema/slice.test.ts skills/scout-test-inventory/slice.test.ts skills/scout-user-journey/slice.test.ts skills/investigate/slice.test.ts skills/implement/slice.test.ts`
+  - `pnpm vitest run core/tool-layer/mcp/tools/repo-intel.test.ts core/tool-layer/mcp/slice.test.ts`
+  - `pnpm exec tsc --noEmit --pretty false`
+  - `pnpm exec biome check core/tool-layer/mcp/tools/repo-intel.ts core/tool-layer/mcp/tools/repo-intel.test.ts core/tool-layer/mcp/run-cache.ts core/tool-layer/mcp/audit.ts core/tool-layer/mcp/schemas.ts core/tool-layer/mcp/server.ts core/tool-layer/bundles.ts core/symbol-index/lookup.ts skills/scout-code-path/prompt.md skills/scout-dependency/prompt.md skills/scout-pattern/prompt.md skills/scout-schema/prompt.md skills/scout-test-inventory/prompt.md skills/scout-user-journey/prompt.md skills/investigate/prompt.md skills/implement/prompt.md CONTEXT.md docs/adr/0048-repo-intelligence-tool.md`
+  - `pnpm skill-contract:audit`
+  - `pnpm audit-docs`
+  - `pnpm manifest --check`
+- Remaining risks:
+  - MCP registration uses the tool-local Zod object shape, while the exported TypeScript `RepoIntelQuery` documents the stricter discriminated union; invalid/missing intent-specific fields return typed `invalid-args` results.
+  - QA/review filtering strips decision-summary and implementation-reasoning fields from prior-investigation/artifact payloads, but does not yet route those payloads through the full prompt context assembly allowlist.
+- Next branch to create: `cost-perf/1000-scout-digest` from `cost-perf/997-repo-intel-query`

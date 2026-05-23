@@ -17,6 +17,7 @@ export interface ToolCallAudit {
   bytesRead?: number;
   cached?: boolean;
   duplicateCount?: number;
+  repo_intel_intent?: string;
   status?: 'ok' | 'failed' | 'timed_out';
   exitCode?: number | null;
   noMatches?: boolean;

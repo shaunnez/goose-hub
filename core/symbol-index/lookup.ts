@@ -3,6 +3,7 @@ import path from 'node:path';
 import type Database from 'better-sqlite3';
 import { defaultDbPath, openIndexDb } from './db.js';
 import { findCallers, findCallersOfExport, findSymbol, listExportsOf } from './query.js';
+import type { SymbolKind, SymbolRow } from './types.js';
 
 export interface SymbolHint {
   name: string;
@@ -44,6 +45,10 @@ export interface LookupOptions {
   dbPath?: string;
   /** When provided, hints are filtered to only files that exist in this directory tree. */
   worktreePath?: string;
+}
+
+export interface LookupSymbolOptions extends LookupOptions {
+  kind?: Extract<SymbolKind, 'function' | 'class' | 'type' | 'const' | 'enum' | 'variable'>;
 }
 
 const SKIP_WORDS = new Set([
@@ -301,6 +306,45 @@ export function lookupChangedExportImpact(
     }
 
     return impacts;
+  } catch {
+    return [];
+  } finally {
+    db?.close();
+  }
+}
+
+export function lookupSymbol(name: string, options?: LookupSymbolOptions): SymbolRow[] {
+  const resolved = options?.dbPath ?? defaultDbPath();
+  if (!existsSync(resolved)) return [];
+
+  let db: Database.Database | null = null;
+  try {
+    db = openIndexDb(resolved);
+    return findSymbol(db, name)
+      .filter((symbol) => options?.kind == null || symbol.kind === options.kind)
+      .filter((symbol) => symbolExistsInWorktree(symbol.filePath, options?.worktreePath));
+  } catch {
+    return [];
+  } finally {
+    db?.close();
+  }
+}
+
+export function findCallersOfSymbol(symbol: string, options?: LookupOptions): string[] {
+  const resolved = options?.dbPath ?? defaultDbPath();
+  if (!existsSync(resolved)) return [];
+
+  let db: Database.Database | null = null;
+  try {
+    db = openIndexDb(resolved);
+    const callers = new Set<string>();
+    for (const exported of findSymbol(db, symbol).filter((row) => row.exported)) {
+      for (const caller of findCallersOfExport(db, exported.filePath, symbol)) {
+        if (!symbolExistsInWorktree(caller, options?.worktreePath)) continue;
+        callers.add(caller);
+      }
+    }
+    return [...callers].sort();
   } catch {
     return [];
   } finally {

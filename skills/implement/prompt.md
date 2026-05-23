@@ -36,6 +36,7 @@ If the handoff is stale, emit a `PLAN` decision summary with concrete evidence b
 
 - Use Factory tools, not shell syntax. Do not chain commands with `&&`, `;`, pipes, or redirects.
 - **No memory or skill quick pass.** Do not read local assistant memory, skill, config, session files, sibling repos, parent directories, or user home directories such as `~/.codex`, `~/.agents`, or `~/.claude`.
+- When you need to locate a symbol, call `repo_intel.query` with `intent: 'find-symbol'`. Use `search_text` only when `repo_intel` returns `not-found` or `index-stale`.
 - Do not retry commands that already returned the same useful failure. Emit `BLOCKER` or `TOOL_FAILURE` and return with low confidence.
 - Read before writing tests or code. Tests must mirror the real import/state patterns in the target file.
 - Targeted tests only. QA runs the broad suite.

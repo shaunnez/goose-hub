@@ -6,7 +6,8 @@ export type CacheableToolName =
   | 'read_many_files'
   | 'list_dir'
   | 'list_files'
-  | 'search_text';
+  | 'search_text'
+  | 'repo_intel.query';
 
 export interface NormalizedRunCacheKey {
   toolName: CacheableToolName;
@@ -103,6 +104,10 @@ export function normalizeRunCacheKey(input: {
         ],
         [canonicalPath],
       );
+    }
+    case 'repo_intel.query': {
+      const paths = repoIntelPaths(input.args, input.workspaceRoot);
+      return key(toolName, [JSON.stringify(input.args)], paths.length > 0 ? paths : ['.']);
     }
     default:
       return null;
@@ -204,6 +209,15 @@ function canonicalPathForKey(rawPath: string, workspaceRoot: string): string {
   if (rawPath === '.' || rawPath.trim() === '') return '.';
   const result = canonicalizeFactoryToolPath({ rawPath, worktreePath: workspaceRoot });
   return result.ok ? result.path.path : rawPath;
+}
+
+function repoIntelPaths(args: Record<string, unknown>, workspaceRoot: string): string[] {
+  const out: string[] = [];
+  for (const key of ['path', 'target', 'targetFile']) {
+    const value = stringArg(args[key]);
+    if (value != null) out.push(canonicalPathForKey(value, workspaceRoot));
+  }
+  return out;
 }
 
 function normalizePathForOverlap(path: string): string {

@@ -29,6 +29,7 @@ import {
   ReadFileInput,
   ReadManyFilesInput,
   RecordDecisionInput,
+  RepoIntelQueryInput,
   RunFullSuiteIfNeededInput,
   RunIsolatedTestInput,
   RunLintInput,
@@ -79,6 +80,7 @@ import {
   readManyFilesTool,
   searchTextTool,
 } from './tools/read.js';
+import { repoIntelQueryTool } from './tools/repo-intel.js';
 import {
   runLintTool,
   runPackageScriptTool,
@@ -299,6 +301,23 @@ export function buildFactoryMcpServer(ctx: FactoryContext): McpServer {
     async (input) => {
       try {
         const result = await fileInfoTool(ctx, input);
+        return { content: jsonContent(result), structuredContent: { ...result } };
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'repo_intel.query',
+    {
+      description:
+        'Query repository intelligence helpers for symbols, callers, related files, tests, recent changes, prior scout reports, or artifacts before falling back to grep.',
+      inputSchema: RepoIntelQueryInput.shape,
+    },
+    async (input) => {
+      try {
+        const result = await repoIntelQueryTool(ctx, input);
         return { content: jsonContent(result), structuredContent: { ...result } };
       } catch (err) {
         return errorResult(err);

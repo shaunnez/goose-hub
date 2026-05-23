@@ -45,7 +45,8 @@ When wired, dispatch the 4–6 scouts that are actually relevant. Do **not** dis
 - **Stay inside the rooted workspace.** All list, read, and search operations must stay inside the workspace already configured for your tools. Do not inspect sibling repos, parent directories, user home directories, or local assistant memory/config folders such as `~/.codex`, `~/.agents`, or `~/.claude`.
 - **No memory quick pass.** Do not perform memory quick passes or read local assistant memory files. If prior context is needed, use only the context Factory provided in this run.
 - **Read before hypothesising.** Read actual source files before forming hypotheses. File names and directory names are not evidence. Code is evidence.
-- **Search before assuming location.** Grep for symbol definitions before assuming a file path. A module named `Sidebar` may not be in `sidebar.ts` — search for the export.
+- **Ask repo intelligence before grep.** When you need to locate a symbol, call `repo_intel.query` with `intent: 'find-symbol'`. Use `search_text` only when `repo_intel` returns `not-found` or `index-stale`.
+- **Search before assuming location.** Use `repo_intel.query` or grep for symbol definitions before assuming a file path. A module named `Sidebar` may not be in `sidebar.ts` — search for the export.
 - **Widen before speculating.** If two search attempts return no relevant results, widen the search term or try a synonym. Do not speculate about root cause from empty search results.
 - **Holdout discipline per child spawn.** When wave-aware: you never inject your own decision summaries or chain-of-thought into a scout's context. Scouts get only the work item, their narrow `scoutFocus`, and any approved handoff context. Synthesis stays with you and Wave 2.
 
