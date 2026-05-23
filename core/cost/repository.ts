@@ -349,6 +349,12 @@ function emitToolIntensityAnomalyIfNeeded(stats: AgentRunToolStatsRow): void {
   const p95ReadCount = percentile(baseline, 0.95);
   const thresholdReadCount = p95ReadCount * 2;
   if (p95ReadCount <= 0 || stats.readCount <= thresholdReadCount) return;
+  const [existing] = eventStore.replay({
+    runId: stats.runId,
+    kind: 'agent.tool-intensity-anomaly',
+    limit: 1,
+  });
+  if (existing != null) return;
 
   eventStore.appendEvent({
     projectId: run.projectId,

@@ -233,6 +233,10 @@ describe('recordToolStatsForRun', () => {
       p95ReadCount: 2,
       thresholdReadCount: 4,
     });
+
+    recordToolStatsForRun(runId);
+
+    expect(eventStore.replay({ runId, kind: 'agent.tool-intensity-anomaly' })).toHaveLength(1);
   });
 });
 
