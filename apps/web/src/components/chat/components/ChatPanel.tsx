@@ -34,11 +34,12 @@ const ACTIVE_CONVERSATION_STORAGE_KEY = 'hub-chat-active-conversation-id';
 interface ChatPanelProps {
   open: boolean;
   onClose: () => void;
+  resetSignal: number;
 }
 
 type View = 'thread' | 'list';
 
-export function ChatPanel({ open, onClose }: ChatPanelProps) {
+export function ChatPanel({ open, onClose, resetSignal }: ChatPanelProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const resolved = useMemo(() => resolveScopeFromPath(location.pathname), [location.pathname]);
@@ -63,6 +64,7 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
   //  * the open-panel roster effect clobbering a thread the user just clicked
   //    "New" to create while the list was still in flight.
   const loadTokenRef = useRef(0);
+  const lastResetSignalRef = useRef(resetSignal);
   const activeConversationIdRef = useRef<string | null>(null);
   const inFlightRunByConversationRef = useRef<Map<string, string>>(new Map());
 
@@ -135,6 +137,21 @@ export function ChatPanel({ open, onClose }: ChatPanelProps) {
       // localStorage unavailable — accept the loss; selection is best-effort.
     }
   }, []);
+
+  const resetVisibleState = useCallback(() => {
+    loadTokenRef.current += 1;
+    setConversation(null);
+    setMessages([]);
+    setInvocations([]);
+    writeActiveId(null);
+    setView('list');
+  }, [writeActiveId]);
+
+  useEffect(() => {
+    if (resetSignal === lastResetSignalRef.current) return;
+    lastResetSignalRef.current = resetSignal;
+    resetVisibleState();
+  }, [resetSignal, resetVisibleState]);
 
   useEffect(() => {
     if (!open || toolManifest.length > 0) return;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ChatLauncher } from './ChatLauncher';
 import { ChatPanel } from './ChatPanel';
 
@@ -17,6 +17,7 @@ export function ChatDock() {
       return false;
     }
   });
+  const [resetSignal, setResetSignal] = useState(0);
 
   useEffect(() => {
     try {
@@ -24,10 +25,19 @@ export function ChatDock() {
     } catch {}
   }, [open]);
 
+  const handleOpenChange = useCallback((nextOpen: boolean) => {
+    setOpen((prevOpen) => {
+      if (prevOpen && !nextOpen) {
+        setResetSignal((prevSignal) => prevSignal + 1);
+      }
+      return nextOpen;
+    });
+  }, []);
+
   return (
     <>
-      <ChatPanel open={open} onClose={() => setOpen(false)} />
-      <ChatLauncher open={open} onToggle={() => setOpen((o) => !o)} />
+      <ChatPanel open={open} onClose={() => handleOpenChange(false)} resetSignal={resetSignal} />
+      <ChatLauncher open={open} onToggle={() => handleOpenChange(!open)} />
     </>
   );
 }
