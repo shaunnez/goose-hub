@@ -22,6 +22,7 @@ export const EVENT_KINDS = [
   'agent.repo-override',
   'agent.investigation-complete',
   'agent.investigation-context-injected',
+  'agent.investigation-seed-built',
   'agent.related-surface-manifest-created',
   'agent.discovery-budget-exceeded',
   'agent.wrong-surface-guard',

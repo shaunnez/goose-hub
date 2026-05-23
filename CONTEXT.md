@@ -317,6 +317,8 @@ No other code in `core/` may call `insertEvent` directly. Lint rule enforces. On
 
 **`invokeSkill()` is the canonical spawn entry point** for skill-driven agent runs (`core/agent-runtime/invoke-skill.ts`). It enforces contextSchema validation before spawn and outputSchema validation after. `contextAllowlist` is required on every `SkillConfig` — no silent empty-allowlist fallback. See ADR 0038.
 
+**Investigation Seed.** Before Wave-1 scout fan-out, `slices/investigate/workflow.ts` builds one orchestrator-owned `InvestigationSeed` via `core/agent-runtime/scout-prefetch.ts`. The seed contains capped candidate files, symbol hits, related test files, recent git touches, and prior overlapping investigation ids. Scouts receive it through the explicit `investigationSeed` allowlist key and must start from seed files/symbols before issuing new searches. This reduces cross-scout rediscovery by shared context, not by sharing #995's per-run cache across separate scout runs.
+
 **Two guards, different paths:**
 - `contextAllowlist: ContextKey[]` — the *manifest*. Filters which keys from `AgentSpec.context` render into the user-prompt XML. Guards against wrong keys at spec construction time. Now required (not optional) on `SkillConfig`.
 - `freshContext: boolean` — the *closure assertion*. When `true`, no other injection channel adds anything. Guards against runtime infrastructure adding ambient state the AgentSpec author doesn't control.

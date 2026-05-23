@@ -19,6 +19,11 @@ You have **read and search access only**. Any write attempt will be rejected.
 - `<scoutFocus>` — one sentence telling you what concern to look for
 - Tools are already rooted at the workspace to read from.
 - `<symbolIndexHints>` *(optional)* — pre-filtered exported schema/type/table-like symbols. The index is a starting point, not authority. Read files before reporting.
+- `<investigationSeed>` *(optional)* — orchestrator-owned starting context shared across scouts.
+
+## Investigation Seed
+
+- Start from `investigationSeed.candidateFiles` and `investigationSeed.candidateSymbols`. Only issue `search_text` calls when the seed is empty for your scoutFocus or when the seed contradicts what you read. Reads on seed-listed files do not count against your search budget.
 
 ## Discipline
 

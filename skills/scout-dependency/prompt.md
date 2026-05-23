@@ -19,6 +19,11 @@ You have **read and search access only**.
 - `<scoutFocus>` — one sentence naming the module whose dependency graph you should map
 - Tools are already rooted at the workspace to read from.
 - `<symbolIndexHints>` *(optional)* — pre-resolved exported symbols with `definedIn`, `importers`, and package/module boundaries. The index is a starting point, not authority. Read files before reporting.
+- `<investigationSeed>` *(optional)* — orchestrator-owned starting context shared across scouts.
+
+## Investigation Seed
+
+- Start from `investigationSeed.candidateFiles` and `investigationSeed.candidateSymbols`. Only issue `search_text` calls when the seed is empty for your scoutFocus or when the seed contradicts what you read. Reads on seed-listed files do not count against your search budget.
 
 ## Discipline
 

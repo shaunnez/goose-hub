@@ -1,4 +1,5 @@
 import type { SkillConfig } from '@goose-hub/core/agent-runtime/interface.js';
+import { InvestigationSeedSchema } from '@goose-hub/core/agent-runtime/scout-prefetch.js';
 import { z } from 'zod';
 import { ScoutOutputSchema } from './schema.js';
 
@@ -13,12 +14,19 @@ export const ScoutPatternContextSchema = z.object({
     number: z.number(),
   }),
   scoutFocus: z.string().describe('One sentence describing the pattern or idiom to find usages of'),
+  investigationSeed: InvestigationSeedSchema.optional(),
 });
 
 const config: SkillConfig = {
   contextSchema: ScoutPatternContextSchema,
   outputSchema: ScoutOutputSchema,
-  contextAllowlist: ['workItem.title', 'workItem.body', 'workItem.number', 'scoutFocus'],
+  contextAllowlist: [
+    'workItem.title',
+    'workItem.body',
+    'workItem.number',
+    'scoutFocus',
+    'investigationSeed',
+  ],
   toolBundles: ['read'],
   modelPin: 'haiku',
   freshContext: true,
