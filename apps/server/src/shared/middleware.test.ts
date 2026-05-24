@@ -32,4 +32,19 @@ describe('parseBody', () => {
     });
     expect(result).toMatchObject({ ok: false });
   });
+
+  it('returns ok:false for JSON null', async () => {
+    const app = new Hono();
+    let result: unknown;
+    app.post('/test', async (c) => {
+      result = await parseBody<{ name: string }>(c);
+      return c.json({});
+    });
+    await app.request('/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'null',
+    });
+    expect(result).toMatchObject({ ok: false });
+  });
 });
