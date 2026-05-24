@@ -80,7 +80,7 @@ function collectWorkspaceResources(ctx: FactoryContext): WorkspaceResource[] {
  * telemetry, path policy, and the run-cache all apply.
  */
 export function buildWorkspaceResourceTemplate(ctx: FactoryContext): ResourceTemplate {
-  return new ResourceTemplate(`${FACTORY_URI_PREFIX}{path}`, {
+  return new ResourceTemplate(`${FACTORY_URI_PREFIX}{+path}`, {
     list: () => {
       const resources = collectWorkspaceResources(ctx);
       return Promise.resolve({ resources });
