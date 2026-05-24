@@ -80,7 +80,17 @@ const BLOCKED_RUNTIME_SURFACE_PATTERNS: Array<{
   toolName: string;
   re: RegExp;
 }> = [
-  { surface: 'resources/read failed', toolName: 'resources/read', re: /resources\/read\s+failed/i },
+];
+const ADVISORY_RUNTIME_SURFACE_PATTERNS: Array<{
+  surface: string;
+  toolName: string;
+  re: RegExp;
+}> = [
+  {
+    surface: 'resources/read failed',
+    toolName: 'resources/read',
+    re: /resources\/read(?:\?path=[^\s]+)?(?:\s+failed|[^\n]*transient stderr)/i,
+  },
 ];
 
 function isPathUnderRoot(path: string, root: string): boolean {
@@ -182,6 +192,61 @@ function detectBlockedRuntimeSurface(line: string): {
     }
   }
   return null;
+}
+
+function parseRequestedPath(line: string): string | undefined {
+  const match = line.match(/resources\/read\?path=([^\s&]+)/i);
+  if (match == null) return undefined;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
+export function detectRuntimeAdvisorySurface(line: string): {
+  surface: string;
+  toolName: string;
+  requestedPath?: string;
+} | null {
+  for (const pattern of ADVISORY_RUNTIME_SURFACE_PATTERNS) {
+    if (pattern.re.test(line)) {
+      return {
+        surface: pattern.surface,
+        toolName: pattern.toolName,
+        requestedPath: parseRequestedPath(line),
+      };
+    }
+  }
+  return null;
+}
+
+export function appendRuntimeAdvisoryEvent(input: {
+  line: string;
+  projectId: string;
+  workItemId: string | null;
+  runId: string;
+  personaId?: string;
+  skill: string;
+}): boolean {
+  const advisory = detectRuntimeAdvisorySurface(input.line);
+  if (advisory == null) return false;
+  eventStore.appendEvent({
+    projectId: input.projectId,
+    workItemId: input.workItemId,
+    kind: 'agent.runtime-advisory',
+    payload: {
+      runId: input.runId,
+      skill: input.skill,
+      surface: advisory.surface,
+      stderr: input.line.slice(0, 4000),
+      toolName: advisory.toolName,
+      requestedPath: advisory.requestedPath,
+    },
+    runId: input.runId,
+    personaId: input.personaId,
+  });
+  return true;
 }
 
 function outputSchemaPathForRun(workspaceDir: string, runId: string): string {
@@ -620,10 +685,14 @@ export class CodexCliRuntime implements AgentRuntime {
             failForbiddenRuntimeSurface(violation);
             return;
           }
-          const blocked = detectBlockedRuntimeSurface(line);
-          if (blocked != null) {
-            emitForbiddenRuntimeSurfaceBlocked(blocked);
-          }
+          appendRuntimeAdvisoryEvent({
+            line,
+            projectId,
+            workItemId,
+            runId,
+            personaId,
+            skill: spec.skill,
+          });
         }
       });
 
@@ -710,10 +779,14 @@ export class CodexCliRuntime implements AgentRuntime {
             reject(new Error(violation.blockReason));
             return;
           }
-          const blocked = detectBlockedRuntimeSurface(stderrLineBuffer);
-          if (blocked != null) {
-            emitForbiddenRuntimeSurfaceBlocked(blocked);
-          }
+          appendRuntimeAdvisoryEvent({
+            line: stderrLineBuffer,
+            projectId,
+            workItemId,
+            runId,
+            personaId,
+            skill: spec.skill,
+          });
         }
 
         const envelope = parseCodexEnvelope(stdout);

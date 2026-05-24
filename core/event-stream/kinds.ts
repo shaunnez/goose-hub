@@ -11,6 +11,7 @@ export const EVENT_KINDS = [
   'manual.action',
   'agent.tool-call',
   'agent.tool-intensity-anomaly',
+  'agent.runtime-advisory',
   'tool.stdout-truncated',
   'tool.timeout',
   'agent.run-started',

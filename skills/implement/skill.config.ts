@@ -28,6 +28,15 @@ export const ImplementContextSchema = z.object({
   }),
   advisorFeedback: z.string().optional(),
   revisionPass: z.union([z.literal(0), z.literal(1)]).optional(),
+  priorEvidenceSpecPath: z.string().nullable().optional(),
+  existingFileManifest: z
+    .array(
+      z.object({
+        path: z.string(),
+        kind: z.enum(['file', 'dir']),
+      }),
+    )
+    .optional(),
   evidencePostEnabled: z.boolean().optional(),
   acceptanceContract: z
     .object({
@@ -105,6 +114,8 @@ const config: SkillConfig = {
     'relatedSurface',
     'advisorFeedback',
     'revisionPass',
+    'priorEvidenceSpecPath',
+    'existingFileManifest',
     'evidencePostEnabled',
     'acceptanceContract',
   ],

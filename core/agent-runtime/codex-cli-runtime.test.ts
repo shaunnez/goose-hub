@@ -463,7 +463,7 @@ describe('CodexCliRuntime timeout handling', () => {
     );
   });
 
-  it('audits a failed MCP resource read without killing the Codex run', async () => {
+  it('records resources/read failed as a non-fatal advisory event', async () => {
     const child = makeHangingChild();
     mockSpawn.mockReturnValue(child);
 
@@ -485,12 +485,11 @@ describe('CodexCliRuntime timeout handling', () => {
     await expect(run).resolves.toMatchObject({ output: { ok: true } });
     expect(mockEventStore.appendEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        kind: 'agent.tool-call',
+        kind: 'agent.runtime-advisory',
         payload: expect.objectContaining({
-          tool_name: 'resources/read',
-          blocked: true,
-          block_reason: 'blocked-runtime-surface: resources/read failed',
-          status: 'failed',
+          surface: 'resources/read failed',
+          stderr: 'resources/read failed: file://memory',
+          toolName: 'resources/read',
         }),
         personaId: 'test-project/developer/0',
       }),

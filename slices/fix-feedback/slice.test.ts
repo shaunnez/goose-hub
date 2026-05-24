@@ -610,12 +610,28 @@ describe('runFixFeedbackWorkflow', () => {
 
     it('covers the G1 G2 G3 cascade together in a fix-feedback run', async () => {
       const evidenceSpecPath = 'apps/web/e2e/issue-X.spec.ts';
-      const existingFileManifest = [
-        { path: 'apps/web/src/components/detail/TaskHeader.tsx', kind: 'file' },
-        { path: 'apps/web/src/components/detail', kind: 'dir' },
-      ];
-      vi.mocked(eventStore.replay).mockReturnValue([
-        makePrOpenedEvent(),
+      const worktreePath = process.cwd();
+      const investigationEvent = {
+        id: 4,
+        kind: 'agent.investigation-complete' as EventKind,
+        payload: {
+          investigate: {
+            findings: 'Keep task detail view stable after repair',
+            keyFiles: [
+              { path: 'apps/web/src/components/detail/components/DetailPage.tsx' },
+              { path: 'apps/web/src/components/detail/components/CommentsSection.tsx' },
+            ],
+            openQuestions: ['Can the existing issue spec be reused?'],
+          },
+          investigationRunId: 'investigation-1',
+        },
+        projectId: 'proj',
+        workItemId: 'github:owner/repo#42',
+        createdAt: new Date().toISOString(),
+        runId: 'investigation-1',
+      };
+      const workflowEvents = [
+        makePrOpenedEvent(worktreePath),
         makeQaCompletedEvent(),
         {
           id: 3,
@@ -626,45 +642,53 @@ describe('runFixFeedbackWorkflow', () => {
           createdAt: new Date().toISOString(),
           runId: 'run-abc',
         },
-      ]);
-      mockGetChangedFilesSince.mockReturnValue([
-        'apps/web/src/components/detail/TaskHeader.tsx',
-        'apps/web/src/components/detail/TaskBody.tsx',
-      ]);
-      mockLatestInvestigationContext.mockReturnValue({
-        findings: 'Keep task detail view stable after repair',
-        keyFiles: existingFileManifest.map(({ path }) => ({ path })),
-        openQuestions: ['Can the existing issue spec be reused?'],
-        investigationRunId: 'investigation-1',
+      ];
+      const { latestInvestigationContext: actualLatestInvestigationContext } =
+        await vi.importActual<typeof import('@goose-hub/core/agent-runtime/investigation-context.js')>(
+          '@goose-hub/core/agent-runtime/investigation-context.js',
+        );
+      const { appendRuntimeAdvisoryEvent } =
+        await vi.importActual<typeof import('@goose-hub/core/agent-runtime/codex-cli.js')>(
+          '@goose-hub/core/agent-runtime/codex-cli.js',
+        );
+      mockLatestInvestigationContext.mockImplementation(actualLatestInvestigationContext);
+      vi.mocked(eventStore.replay).mockImplementation((query) => {
+        if (query?.kind === 'agent.investigation-complete') {
+          return [investigationEvent];
+        }
+        return workflowEvents;
       });
-      mockClaudeCliRun.mockImplementation(async ({ spec }) => {
-        vi.mocked(eventStore.appendEvent).mockReturnValue({ id: 1 } as ReturnType<
-          typeof eventStore.appendEvent
-        >);
-        eventStore.appendEvent({
+      mockGetChangedFilesSince.mockReturnValue([
+        'apps/web/src/components/detail/components/DetailPage.tsx',
+        'apps/web/src/components/detail/components/CommentsSection.tsx',
+      ]);
+      const customRun = vi.fn().mockImplementation(async (spec) => {
+        appendRuntimeAdvisoryEvent({
+          line: 'resources/read failed: resources/read?path=foo.ts transient stderr',
           projectId: 'proj',
           workItemId: 'github:owner/repo#42',
-          kind: 'agent.runtime-advisory' as EventKind,
-          payload: {
-            surface: 'resources/read failed',
-            stderr: 'resources/read?path=foo.ts transient stderr',
-            toolName: 'resources/read',
-            requestedPath: 'foo.ts',
-            runId: spec.runId,
-          },
           runId: spec.runId,
+          personaId: spec.personaId,
+          skill: spec.skill,
         });
-        return { output: makeImplementOutput({ evidenceSpecPath }) };
+        return {
+          output: makeImplementOutput({ evidenceSpecPath }),
+          decisionSummaries: [],
+          events: [],
+        };
+      });
+      const customRuntime: AgentRuntime = { run: customRun };
+
+      await runFixFeedbackWorkflow(makeWorkItem(), stateSource, 'proj', 'owner/repo', {
+        runtime: customRuntime,
       });
 
-      await runFixFeedbackWorkflow(makeWorkItem(), stateSource, 'proj', 'owner/repo');
-
-      const runCall = mockClaudeCliRun.mock.calls[0][0];
+      const runCall = customRun.mock.calls[0][0];
       expect(runCall.context.priorEvidenceSpecPath).toBe(evidenceSpecPath);
       expect(runCall.context.existingFileManifest).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            path: expect.stringContaining('apps/web/src/'),
+            path: expect.stringContaining('apps/web/src/components/detail/components/'),
             kind: 'file',
           }),
         ]),
