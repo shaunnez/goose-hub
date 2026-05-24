@@ -75,12 +75,6 @@ const FORBIDDEN_RUNTIME_SURFACE_PATTERNS: Array<{
     re: /(?:full[- ]history.*(?:fork|spawn)|(?:fork|spawn).*full[- ]history).*(?:failed|error)/i,
   },
 ];
-const BLOCKED_RUNTIME_SURFACE_PATTERNS: Array<{
-  surface: string;
-  toolName: string;
-  re: RegExp;
-}> = [
-];
 const ADVISORY_RUNTIME_SURFACE_PATTERNS: Array<{
   surface: string;
   toolName: string;
@@ -175,23 +169,6 @@ function handleForbiddenRuntimeSurface(line: string): {
   blockReason: string;
 } | null {
   return detectForbiddenRuntimeSurface(line);
-}
-
-function detectBlockedRuntimeSurface(line: string): {
-  surface: string;
-  toolName: string;
-  blockReason: string;
-} | null {
-  for (const pattern of BLOCKED_RUNTIME_SURFACE_PATTERNS) {
-    if (pattern.re.test(line)) {
-      return {
-        surface: pattern.surface,
-        toolName: pattern.toolName,
-        blockReason: `blocked-runtime-surface: ${pattern.surface}`,
-      };
-    }
-  }
-  return null;
 }
 
 function parseRequestedPath(line: string): string | undefined {

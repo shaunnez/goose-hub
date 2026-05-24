@@ -120,6 +120,7 @@ export const RUNTIME_INHERIT_TIMELINE_EVENT_KINDS = new Set<string>([
   'agent.tool-call',
   'agent.tool-intensity-anomaly',
   'agent.tool-result',
+  'agent.runtime-advisory',
   'agent.redundant-read',
   'tool.stdout-truncated',
   'tool.timeout',

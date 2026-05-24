@@ -20,6 +20,8 @@ The `<task>` block can include:
 - `<acceptanceContract>` — resolved acceptance criteria that must be satisfied before QA/Review.
 - `<relatedSurface>` — deterministic execution lane from the workflow.
 - `<revisionPass>` — `0` or `1`.
+- `<priorEvidenceSpecPath>` — the last evidence spec path seen on a prior implement/fix-feedback completion, if any.
+- `<existingFileManifest>` — the current manifest of existing files and directories for the investigated scope, when fix-feedback reuses an existing worktree.
 - `<evidencePostEnabled>` — whether frontend evidence specs should be produced.
 
 `<relatedSurface>` is prescriptive unless stale:

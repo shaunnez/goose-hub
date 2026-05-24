@@ -152,7 +152,7 @@ function collectScopeManifest(
     try {
       visit(absoluteScopeRoot, scopeRoot);
     } catch {
-      continue;
+      // Ignore inaccessible scope roots and keep collecting the rest.
     }
   }
 

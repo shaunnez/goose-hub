@@ -644,13 +644,12 @@ describe('runFixFeedbackWorkflow', () => {
         },
       ];
       const { latestInvestigationContext: actualLatestInvestigationContext } =
-        await vi.importActual<typeof import('@goose-hub/core/agent-runtime/investigation-context.js')>(
-          '@goose-hub/core/agent-runtime/investigation-context.js',
-        );
-      const { appendRuntimeAdvisoryEvent } =
-        await vi.importActual<typeof import('@goose-hub/core/agent-runtime/codex-cli.js')>(
-          '@goose-hub/core/agent-runtime/codex-cli.js',
-        );
+        await vi.importActual<
+          typeof import('@goose-hub/core/agent-runtime/investigation-context.js')
+        >('@goose-hub/core/agent-runtime/investigation-context.js');
+      const { appendRuntimeAdvisoryEvent } = await vi.importActual<
+        typeof import('@goose-hub/core/agent-runtime/codex-cli.js')
+      >('@goose-hub/core/agent-runtime/codex-cli.js');
       mockLatestInvestigationContext.mockImplementation(actualLatestInvestigationContext);
       vi.mocked(eventStore.replay).mockImplementation((query) => {
         if (query?.kind === 'agent.investigation-complete') {
